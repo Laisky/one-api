@@ -9,7 +9,7 @@ import { useSystemStatus } from '@/hooks/useSystemStatus';
 import { api, isSafeInternalPath } from '@/lib/api';
 import { buildGitHubOAuthUrl, buildLarkOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';

@@ -3,7 +3,58 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const manualChunkGroups: Record<string, string[]> = {
+  vendor: ['react', 'react-dom'],
+  router: ['react-router-dom'],
+  'tanstack-query': ['@tanstack/react-query'],
+  'tanstack-table': ['@tanstack/react-table'],
+  'radix-ui-core': [
+    '@radix-ui/react-dialog',
+    '@radix-ui/react-dropdown-menu',
+    '@radix-ui/react-popover',
+    '@radix-ui/react-tooltip',
+  ],
+  'radix-ui-forms': [
+    '@radix-ui/react-checkbox',
+    '@radix-ui/react-label',
+    '@radix-ui/react-select',
+    '@radix-ui/react-switch',
+  ],
+  'radix-ui-layout': [
+    '@radix-ui/react-scroll-area',
+    '@radix-ui/react-separator',
+    '@radix-ui/react-slot',
+    '@radix-ui/react-tabs',
+    '@radix-ui/react-toast',
+    '@radix-ui/react-hover-card',
+  ],
+  'markdown-core': ['react-markdown', 'marked'],
+  'markdown-remark': ['remark-gfm', 'remark-math', 'remark-emoji'],
+  'markdown-rehype-highlight': ['rehype-highlight'],
+  'markdown-rehype-katex': ['rehype-katex', 'katex'],
+  'markdown-rehype-sanitize': ['rehype-sanitize'],
+  charts: ['recharts'],
+  'ui-utils': ['lucide-react', 'class-variance-authority', 'clsx', 'tailwind-merge', 'cmdk'],
+  forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
+  network: ['axios'],
+  'misc-utils': ['qrcode', 'zustand'],
+};
+
+function manualChunks(moduleId: string): string | undefined {
+  const normalizedId = moduleId.replaceAll('\\', '/');
+  if (!normalizedId.includes('/node_modules/')) return undefined;
+
+  for (const [chunkName, packages] of Object.entries(manualChunkGroups)) {
+    if (packages.some((packageName) => normalizedId.includes('/node_modules/' + packageName + '/'))) {
+      return chunkName;
+    }
+  }
+
+  return undefined;
+}
 
 // The build uses the latest locked caniuse-lite data. Suppress Browserslist's
 // age warning so CI stays deterministic when the system date is ahead of the
@@ -19,18 +70,13 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     outDir: '../build/modern',
-    // This is now correct; source maps should only be generated for development mode, not production
     sourcemap: mode === 'development',
-    // Increase chunk size warning limit to reduce noise for legitimate large chunks
-    chunkSizeWarningLimit: 500, // Reduced from 1000 to encourage better chunking
-    // Enable advanced minification and optimization
+    chunkSizeWarningLimit: 500,
     minify: 'esbuild',
     target: 'esnext',
-    // Additional build optimizations
-    cssCodeSplit: true, // Enable CSS code splitting
-    assetsInlineLimit: 4096, // Inline assets smaller than 4KB
-    reportCompressedSize: true, // Report compressed sizes in build output
-    // Enable advanced esbuild optimizations
+    cssCodeSplit: true,
+    assetsInlineLimit: 4096,
+    reportCompressedSize: true,
     esbuild: {
       legalComments: 'none',
       treeShaking: true,
@@ -39,72 +85,14 @@ export default defineConfig(({ mode }) => ({
       minifyWhitespace: true,
     },
     rollupOptions: {
-      // Improve tree shaking and dead code elimination
       treeshake: {
-        preset: 'recommended',
         moduleSideEffects: 'no-external',
         propertyReadSideEffects: false,
-        tryCatchDeoptimization: false,
       },
-      // Optimize external dependencies
       external: [],
       output: {
-        // Use both name and hash for chunk file names to aid debugging and cache busting
         chunkFileNames: '[name].[hash].js',
-        manualChunks: {
-          // Core React libraries - keep small and essential
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-
-          // TanStack libraries split for better caching
-          'tanstack-query': ['@tanstack/react-query'],
-          'tanstack-table': ['@tanstack/react-table'],
-
-          // Split Radix UI into logical groups to reduce chunk sizes
-          'radix-ui-core': [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-popover',
-            '@radix-ui/react-tooltip',
-          ],
-          'radix-ui-forms': ['@radix-ui/react-checkbox', '@radix-ui/react-label', '@radix-ui/react-select', '@radix-ui/react-switch'],
-          'radix-ui-layout': [
-            '@radix-ui/react-scroll-area',
-            '@radix-ui/react-separator',
-            '@radix-ui/react-slot',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-toast',
-            '@radix-ui/react-hover-card',
-          ],
-
-          // Markdown processing and syntax highlighting - heavy libraries
-          'markdown-core': ['react-markdown', 'marked'],
-          // Split markdown plugins into smaller chunks
-          'markdown-remark': ['remark-gfm', 'remark-math', 'remark-emoji'],
-          'markdown-rehype-highlight': ['rehype-highlight'],
-          'markdown-rehype-katex': ['rehype-katex', 'katex'],
-          'markdown-rehype-sanitize': ['rehype-sanitize'],
-
-          // Chart and visualization libraries
-          charts: ['recharts'],
-
-          // Icons and UI utilities
-          'ui-utils': ['lucide-react', 'class-variance-authority', 'clsx', 'tailwind-merge', 'cmdk'],
-
-          // Form handling
-          forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
-
-          // Internationalization
-          //
-          // Note: This currently unused
-          //i18n: ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
-
-          // Network and external services
-          network: ['axios'],
-
-          // Specialized utilities
-          'misc-utils': ['qrcode', 'zustand'],
-        },
+        manualChunks,
       },
     },
   },

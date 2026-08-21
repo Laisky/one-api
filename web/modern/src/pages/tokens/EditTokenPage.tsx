@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { logEditPageLayout } from '@/dev/layout-debug';
 import { api } from '@/lib/api';
 import { fromDateTimeLocal, toDateTimeLocal } from '@/lib/utils';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { Info } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -362,8 +362,7 @@ export function EditTokenPage() {
 
   return (
     // Trigger layout diagnostics after render
-    // eslint-disable-next-line react/jsx-no-useless-fragment
-    <>
+        <>
       {(() => {
         logEditPageLayout('EditTokenPage');
         return null;

@@ -84,7 +84,7 @@ describe('isSafeInternalPath', () => {
 });
 
 describe('axios 401 interceptor (handleAuthFailure)', () => {
-  let logoutSpy: ReturnType<typeof vi.fn>;
+  let logoutSpy: ReturnType<typeof vi.fn<() => void>>;
   const realLogout = useAuthStore.getState().logout;
 
   beforeEach(() => {
@@ -96,7 +96,7 @@ describe('axios 401 interceptor (handleAuthFailure)', () => {
       token: 'stale-token',
       isAuthenticated: true,
     });
-    logoutSpy = vi.fn(realLogout);
+    logoutSpy = vi.fn<() => void>(realLogout);
     useAuthStore.setState({ logout: logoutSpy });
     localStorage.setItem('token', 'legacy');
     localStorage.setItem('user', 'legacy');

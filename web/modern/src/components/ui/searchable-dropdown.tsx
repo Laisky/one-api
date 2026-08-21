@@ -75,7 +75,7 @@ export function SearchableDropdown({
   const [searchValue, setSearchValue] = React.useState('');
   const [apiOptions, setApiOptions] = React.useState<SearchOption[]>([]);
   const [apiLoading, setApiLoading] = React.useState(false);
-  const searchTimeoutRef = React.useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = React.useRef<NodeJS.Timeout | undefined>(undefined);
 
   // Use API options if available, otherwise use initial options
   const options = searchEndpoint && searchValue.length >= minQueryLength ? apiOptions : initialOptions;

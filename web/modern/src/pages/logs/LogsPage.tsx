@@ -20,7 +20,7 @@ import { buildCsv, fetchAllPaginatedResults, mapWithConcurrency } from '@/lib/ex
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, formatTimestamp, fromDateTimeLocal, renderQuota, toDateTimeLocal } from '@/lib/utils';
 import type { LogEntry, LogMetadata } from '@/types/log';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { Copy, Eye, EyeOff, FileDown, Filter, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';

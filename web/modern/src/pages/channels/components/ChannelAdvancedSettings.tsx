@@ -23,13 +23,13 @@ export const ChannelAdvancedSettings = ({ form, normalizedChannelType, tr }: Cha
 
   const _formatOtherConfig = () => {
     const current = form.getValues('other');
-    const formatted = formatJSON(current);
+    const formatted = formatJSON(current ?? '');
     form.setValue('other', formatted);
   };
 
   const formatInferenceProfileArnMap = () => {
     const current = form.getValues('inference_profile_arn_map');
-    const formatted = formatJSON(current);
+    const formatted = formatJSON(current ?? '');
     form.setValue('inference_profile_arn_map', formatted);
   };
 

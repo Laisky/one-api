@@ -120,7 +120,7 @@ describe('ChannelModelSettings', () => {
     const button = screen.getByRole('button', { name: 'Load Default' });
     await user.click(button);
 
-    expect(formRef?.getValues('model_configs')).toBe('{"gpt-4": {"ratio": 1}}');
+    expect(formRef!.getValues('model_configs')).toBe('{"gpt-4": {"ratio": 1}}');
   });
 
   it('shows non-blocking hidden-model warnings', () => {

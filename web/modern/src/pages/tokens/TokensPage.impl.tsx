@@ -18,7 +18,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, renderQuota } from '@/lib/utils';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { Ban, Check, CheckCircle, Copy, ExternalLink, Eye, EyeOff, Plus, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -148,7 +148,7 @@ export function TokensPage() {
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const initializedRef = useRef(false);
-  const [showKeys, setShowKeys] = useState<Record<number, boolean>>({});
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const { copiedTokens, manualCopyToken, handleCopySuccess, handleCopyFailure, clearManualCopyToken } = useClipboardManager();
   const formatQuotaLabel = useCallback(
     (quota: number, unlimited = false) => {

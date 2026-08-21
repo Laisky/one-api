@@ -1,9 +1,13 @@
-/* Import mobile responsive styles */
+@import 'tailwindcss';
 @import './styles/mobile.css';
+@config '../tailwind.config.js';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@custom-variant touch (@media (hover: none) and (pointer: coarse));
+@custom-variant no-touch (@media (hover: hover) and (pointer: fine));
+@custom-variant portrait (@media (orientation: portrait));
+@custom-variant landscape (@media (orientation: landscape));
+@custom-variant reduce-motion (@media (prefers-reduced-motion: reduce));
+@custom-variant high-contrast (@media (prefers-contrast: high));
 
 @layer base {
   :root {
@@ -212,12 +216,6 @@
     @apply bg-muted/30;
   }
 
-  /* Mobile table enhancements */
-  @media (max-width: 768px) {
-    .data-table {
-      @apply mobile-table;
-    }
-  }
 }
 
 /* Form enhancements */
