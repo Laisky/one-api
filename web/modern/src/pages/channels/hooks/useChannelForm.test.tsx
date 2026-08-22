@@ -180,10 +180,8 @@ describe('useChannelForm', () => {
     expect(result.current.form.getValues('hidden_models')).toEqual(['gpt-4o']);
 
     await act(async () => {
-      await result.current.onSubmit({
-        ...result.current.form.getValues(),
-        hidden_models: ['gpt-4o', 'hidden-b'],
-      });
+      result.current.form.setValue('hidden_models', ['gpt-4o', 'hidden-b']);
+      await result.current.form.handleSubmit(result.current.onSubmit)();
     });
 
     expect(mockApiPut).toHaveBeenCalledWith(
@@ -237,10 +235,8 @@ describe('useChannelForm', () => {
 
     // First attempt: mapping has a source alias not in Supported Models AND an unknown target.
     await act(async () => {
-      await result.current.onSubmit({
-        ...result.current.form.getValues(),
-        model_mapping: '{"ghost-alias":"gpt-4o","gpt-4o":"mystery-upstream"}',
-      });
+      result.current.form.setValue('model_mapping', '{"ghost-alias":"gpt-4o","gpt-4o":"mystery-upstream"}');
+      await result.current.form.handleSubmit(result.current.onSubmit)();
     });
 
     expect(mockApiPut).not.toHaveBeenCalled();
@@ -297,10 +293,8 @@ describe('useChannelForm', () => {
     });
 
     await act(async () => {
-      await result.current.onSubmit({
-        ...result.current.form.getValues(),
-        model_mapping: '{"public-alias":"gpt-4o"}',
-      });
+      result.current.form.setValue('model_mapping', '{"public-alias":"gpt-4o"}');
+      await result.current.form.handleSubmit(result.current.onSubmit)();
     });
 
     expect(mockApiPut).not.toHaveBeenCalled();

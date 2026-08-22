@@ -1,18 +1,8 @@
 import { zodResolver as createZodResolver } from '@hookform/resolvers/zod';
-import type { FieldValues, Resolver } from 'react-hook-form';
 
 /**
- * Preserve Modern's existing single-shape React Hook Form contract while
- * allowing Zod 4 schemas to coerce and default values internally.
+ * zodResolver creates a React Hook Form resolver from the supplied Zod schema,
+ * optional schema parsing settings, and optional resolver settings, returning
+ * a resolver that preserves the schema's distinct input and output types.
  */
-export function zodResolver<TFieldValues extends FieldValues = any>(
-  schema: any,
-  schemaOptions?: any,
-  resolverOptions?: any,
-): Resolver<TFieldValues> {
-  return createZodResolver(
-    schema,
-    schemaOptions,
-    resolverOptions,
-  ) as Resolver<TFieldValues>;
-}
+export const zodResolver: typeof createZodResolver = createZodResolver;

@@ -4,135 +4,23 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
-import { Input } from '@/components/ui/input';
 import { ListActionButton } from '@/components/ui/list-action-button';
 import { useNotifications } from '@/components/ui/notifications';
-import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { type SearchOption } from '@/components/ui/searchable-dropdown';
-import { TimestampDisplay } from '@/components/ui/timestamp';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
-import { cn, formatTimestamp } from '@/lib/utils';
-import { NameWithId } from '@/components/shared/NameWithId';
-import type { ModernColumnDef as ColumnDef } from '@/lib/table';
+import { cn } from '@/lib/utils';
 import { Ban, Banknote, CheckCircle, ChevronDown, Copy, FlaskConical, Plus, RefreshCw, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CHANNEL_TYPE_LABELS as CHANNEL_TYPES } from './constants';
 import { resolveChannelColor } from './utils/colorGenerator';
+import { channelRef, channelRefPayload, createChannelColumns, sameChannelRef, type Channel } from './channels-page-columns';
 
-interface Channel {
-  id?: number;
-  uuid?: string;
-  name: string;
-  type: number;
-  status: number;
-  response_time?: number;
-  created_time: number;
-  updated_time?: number;
-  priority?: number;
-  weight?: number;
-  models?: string;
-  test_models?: string[];
-  group?: string;
-  used_quota?: number;
-  test_time?: number;
-  testing_model?: string | null;
-  balance?: number;
-  balance_updated_time?: number;
-}
-
-const channelRef = (channel: Pick<Channel, 'id' | 'uuid'>): string | number => channel.uuid || channel.id || '';
-
-const channelRefPayload = (ref: string | number): { id: number } | { uuid: string } => {
-  return typeof ref === 'string' ? { uuid: ref } : { id: ref };
-};
-
-const sameChannelRef = (left: Pick<Channel, 'id' | 'uuid'>, right: Pick<Channel, 'id' | 'uuid'>) =>
-  String(channelRef(left)) === String(channelRef(right));
-
-const nonTextTestingModelMarkers = [
-  'embedding',
-  'rerank',
-  'sora',
-  'tts',
-  'transcribe',
-  'whisper',
-  'dall-e',
-  'gpt-image',
-  'imagen',
-  'veo',
-  'video',
-];
-
-/**
- * isTextTestingModelName rejects known non-chat model families when older APIs
- * do not provide the server-filtered test_models field.
- */
-const isTextTestingModelName = (modelName: string) => {
-  const lowerName = modelName.trim().toLowerCase();
-  if (!lowerName) return false;
-  return !nonTextTestingModelMarkers.some((marker) => lowerName.includes(marker));
-};
-
-/**
- * Channel options defined at relay/channeltype/define.go
- */
-const formatResponseTime = (time?: number) => {
-  if (!time) return '-';
-  const color = time < 1000 ? 'text-success' : time < 3000 ? 'text-warning' : 'text-destructive';
-  return <span className={cn('font-mono text-sm', color)}>{time}ms</span>;
-};
-
-interface PriorityCellProps {
-  value: number;
-  ariaLabel: string;
-  onCommit: (value: number) => void;
-}
-
-/**
- * PriorityCell renders an editable numeric input that commits on blur or Enter.
- * It only fires onCommit when the parsed value differs from the initial value
- * to avoid firing redundant PUT requests.
- */
-const PriorityCell = ({ value, ariaLabel, onCommit }: PriorityCellProps) => {
-  const [draft, setDraft] = useState<string>(String(value));
-  useEffect(() => {
-    setDraft(String(value));
-  }, [value]);
-
-  const commit = () => {
-    const trimmed = draft.trim();
-    const parsed = parseInt(trimmed, 10);
-    if (!Number.isFinite(parsed)) {
-      setDraft(String(value));
-      return;
-    }
-    if (parsed === value) return;
-    onCommit(parsed);
-  };
-
-  return (
-    <Input
-      type="number"
-      value={draft}
-      aria-label={ariaLabel}
-      className="h-8 w-20 font-mono text-sm"
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
-    />
-  );
-};
-
+/** ChannelsPage renders searchable channel administration, bulk actions, and pagination. */
 export function ChannelsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -721,193 +609,18 @@ export function ChannelsPage() {
     }
   };
 
-  const columns: ColumnDef<Channel>[] = [
-    {
-      accessorKey: 'name',
-      header: t('channels.columns.name'),
-      cell: ({ row }) => <NameWithId name={row.original.name} refId={channelRef(row.original)} idLabel={t('channels.columns.id')} />,
-    },
-    {
-      accessorKey: 'type',
-      header: t('channels.columns.type'),
-      cell: ({ row }) => renderChannelTypeBadge(row.original.type),
-    },
-    {
-      accessorKey: 'status',
-      header: t('channels.columns.status'),
-      cell: ({ row }) => renderStatusBadge(row.original.status, row.original.priority),
-    },
-    {
-      accessorKey: 'group',
-      header: t('channels.columns.group'),
-      cell: ({ row }) => <span className="text-sm">{row.original.group || t('channels.group_default')}</span>,
-    },
-    {
-      accessorKey: 'priority',
-      header: t('channels.columns.priority'),
-      cell: ({ row }) => (
-        <PriorityCell
-          value={row.original.priority ?? 0}
-          ariaLabel={t('channels.columns.priority_input_label', 'Priority for {{name}}', { name: row.original.name })}
-          onCommit={(next) => handlePriorityUpdate(row.original, next)}
-        />
-      ),
-    },
-    {
-      accessorKey: 'weight',
-      header: t('channels.columns.weight'),
-      cell: ({ row }) => <span className="font-mono text-sm">{row.original.weight || 0}</span>,
-    },
-    {
-      accessorKey: 'balance',
-      header: t('channels.columns.balance'),
-      cell: ({ row }) => {
-        const ch = row.original;
-        const refreshing = refreshingBalanceIds.has(channelRef(ch));
-        const formatted = typeof ch.balance === 'number' ? ch.balance.toFixed(2) : '-';
-        const updatedAt = ch.balance_updated_time ? ch.balance_updated_time * 1000 : null;
-        return (
-          <div className="flex items-center gap-2">
-            <div className="font-mono text-sm">{formatted}</div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => handleBalanceRefresh(ch)}
-              disabled={refreshing}
-              aria-label={t('channels.actions.refresh_balance', 'Refresh balance for {{name}}', { name: ch.name })}
-              title={t('channels.actions.refresh_balance', 'Refresh balance for {{name}}', { name: ch.name })}
-            >
-              <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
-            </Button>
-            {updatedAt && (
-              <span className="text-xs text-muted-foreground">
-                <TimestampDisplay timestamp={updatedAt} className="font-mono" />
-              </span>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      accessorKey: 'response_time',
-      header: t('channels.columns.response'),
-      cell: ({ row }) => {
-        const responseTime = row.original.response_time;
-        const testTime = row.original.test_time;
-        const responseTitle = `${t('channels.response.prefix')} ${responseTime ? `${responseTime}ms` : t('channels.response.not_tested')}${
-          testTime
-            ? ` (${t('channels.response.tested_at', {
-                local: formatTimestamp(testTime),
-                utc: formatTimestamp(testTime, { timeZone: 'UTC' }),
-              })})`
-            : ''
-        }`;
-        return (
-          <div className="text-center" title={responseTitle}>
-            {formatResponseTime(responseTime)}
-            {testTime && (
-              <div className="text-xs text-muted-foreground">
-                <TimestampDisplay timestamp={testTime} className="font-mono" />
-              </div>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      accessorKey: 'testing_model',
-      header: t('channels.columns.testing_model'),
-      cell: ({ row }) => {
-        const ch = row.original;
-        const models = (Array.isArray(ch.test_models) ? ch.test_models : (ch.models || '').split(','))
-          .map((m) => String(m).trim())
-          .filter(Boolean)
-          .filter(isTextTestingModelName)
-          .sort();
-        const value = ch.testing_model && models.includes(ch.testing_model) ? ch.testing_model : ''; // empty => Auto (cheapest)
-        return (
-          <div className="w-[140px] md:w-[160px] max-w-[220px]">
-            <select
-              className="w-full border rounded px-2 py-1 text-sm bg-background"
-              value={value}
-              aria-label={t('channels.columns.testing_model')}
-              onChange={(e) => {
-                const v = e.target.value;
-                updateTestingModel(ch, v === '' ? null : v);
-              }}
-            >
-              <option value="">{t('channels.testing.auto')}</option>
-              {models.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
-        );
-      },
-    },
-    {
-      accessorKey: 'created_time',
-      header: t('channels.columns.created'),
-      cell: ({ row }) => <TimestampDisplay timestamp={row.original.created_time} className="text-sm font-mono" />,
-    },
-    {
-      header: t('channels.columns.actions'),
-      cell: ({ row }) => {
-        const channel = row.original;
-        return (
-          <ResponsiveActionGroup className="sm:items-center">
-            <ListActionButton
-              variant="outline"
-              size="sm"
-              onClick={() => navigate(`/channels/edit/${channelRef(channel)}`)}
-              className="gap-1"
-              icon={<Settings className="h-3 w-3" />}
-            >
-              {t('channels.actions.edit')}
-            </ListActionButton>
-            <ListActionButton
-              variant="outline"
-              size="sm"
-              onClick={() => duplicateChannel(channel)}
-              className="gap-1"
-              icon={<Copy className="h-3 w-3" />}
-            >
-              {t('channels.actions.duplicate', 'Duplicate')}
-            </ListActionButton>
-            <ListActionButton
-              variant="outline"
-              size="sm"
-              onClick={() => manage(channelRef(channel), channel.status === 1 ? 'disable' : 'enable')}
-              className={cn('gap-1', channel.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80')}
-            >
-              {channel.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
-            </ListActionButton>
-            <ListActionButton
-              variant="outline"
-              size="sm"
-              onClick={() => manage(channelRef(channel), 'test', row.index)}
-              className="gap-1"
-              icon={<FlaskConical className="h-3 w-3" />}
-            >
-              {t('channels.actions.test')}
-            </ListActionButton>
-            <ListActionButton
-              variant="destructive"
-              size="sm"
-              onClick={() => manage(channelRef(channel), 'delete')}
-              className="gap-1"
-              icon={<Trash2 className="h-3 w-3" />}
-            >
-              {t('channels.actions.delete')}
-            </ListActionButton>
-          </ResponsiveActionGroup>
-        );
-      },
-    },
-  ];
+  const columns = createChannelColumns({
+    t,
+    navigate,
+    refreshingBalanceIds,
+    renderChannelTypeBadge,
+    renderStatusBadge,
+    onPriorityUpdate: handlePriorityUpdate,
+    onBalanceRefresh: handleBalanceRefresh,
+    onTestingModelUpdate: updateTestingModel,
+    onDuplicate: duplicateChannel,
+    onManage: manage,
+  });
 
   const handlePageChange = (newPageIndex: number, newPageSize: number) => {
     updateSearchParamPage(newPageIndex);

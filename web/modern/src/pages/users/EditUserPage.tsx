@@ -40,6 +40,12 @@ type UserForm = {
   password_locked: boolean;
 };
 
+type UserFormInput = Omit<UserForm, 'mcp_tool_blacklist' | 'password_locked' | 'quota'> & {
+  quota: string | number;
+  mcp_tool_blacklist?: string[];
+  password_locked?: boolean;
+};
+
 interface Group {
   key: string;
   text: string;
@@ -111,7 +117,7 @@ export function EditUserPage() {
             message: tr('validation.email_invalid', 'Valid email is required'),
           })
           .optional(),
-        quota: z.coerce.number().min(0, tr('validation.quota_min', 'Quota must be non-negative')),
+        quota: z.coerce.number<string | number>().min(0, tr('validation.quota_min', 'Quota must be non-negative')),
         group: z.string().min(1, tr('validation.group_required', 'Group is required')),
         mcp_tool_blacklist: z.array(z.string()).optional().default([]),
         password_locked: z.boolean().default(false),
@@ -119,7 +125,7 @@ export function EditUserPage() {
     [tr]
   );
 
-  const form = useForm<UserForm>({
+  const form = useForm<UserFormInput, unknown, UserForm>({
     resolver: zodResolver(userSchema),
     defaultValues: {
       username: '',

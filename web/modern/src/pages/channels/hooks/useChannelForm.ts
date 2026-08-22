@@ -15,8 +15,8 @@ import {
   toInt,
   validateModelConfigs,
 } from '../helpers';
-import { createChannelSchema, type ChannelConfigForm, type ChannelForm, type EndpointInfo } from '../schemas';
-
+import { createChannelSchema, type ChannelConfigForm, type ChannelForm, type ChannelFormInput, type EndpointInfo } from '../schemas';
+/** useChannelForm manages channel loading, validation, submission, and related UI state, returning the complete page model. */
 export const useChannelForm = () => {
   const params = useParams();
   const channelId = params.id;
@@ -28,7 +28,6 @@ export const useChannelForm = () => {
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`channels.edit.${key}`, { defaultValue, ...options }),
     [t]
   );
-
   const [loading, setLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modelsCatalog, setModelsCatalog] = useState<Record<number, string[]>>({});
@@ -52,10 +51,8 @@ export const useChannelForm = () => {
     unreachableMappingKeys: string[];
     unknownMappingTargets: { source: string; target: string }[];
   } | null>(null);
-
   const schema = useMemo(() => createChannelSchema((key, defaultValue) => tr(key, defaultValue)), [tr]);
-
-  const form = useForm<ChannelForm>({
+  const form = useForm<ChannelFormInput, unknown, ChannelForm>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: '',
@@ -96,11 +93,13 @@ export const useChannelForm = () => {
       inference_profile_arn_map: '',
     },
   });
-
   const watchType = form.watch('type');
-  const watchConfig = form.watch('config');
+  const watchConfig: ChannelConfigForm = {
+    auth_type: 'personal_access_token',
+    api_format: 'chat_completion',
+    ...(form.watch('config') ?? {}),
+  };
   const watchTooling = form.watch('tooling') ?? '';
-
   const normalizedChannelType = useMemo(() => normalizeChannelType(watchType), [watchType]);
 
   const loadDefaultPricing = useCallback(async (channelType: number) => {
@@ -540,7 +539,7 @@ export const useChannelForm = () => {
 
       // Only validate the Coze OAuth JWT payload when a key was actually
       // provided; an empty key is permitted like every other channel type.
-      if (watchType === 34 && watchConfig.auth_type === 'oauth_jwt' && data.key && data.key.trim() !== '') {
+      if (data.type === 34 && watchConfig.auth_type === 'oauth_jwt' && data.key && data.key.trim() !== '') {
         if (!isValidJSON(data.key)) {
           form.setError('key', {
             message: tr('validation.oauth_invalid_json', 'OAuth JWT configuration JSON is invalid.'),
@@ -618,7 +617,7 @@ export const useChannelForm = () => {
 
       const payload = buildChannelSubmitPayload(data, {
         isEdit,
-        watchType: watchType ?? null,
+        watchType: data.type,
         watchConfig,
       });
 
@@ -668,7 +667,7 @@ export const useChannelForm = () => {
    */
   const requestTypeChange = useCallback(
     (newType: number) => {
-      const currentType = getValues('type');
+      const currentType = normalizeChannelType(getValues('type')) ?? 1;
       if (isEdit && loadedChannelType !== null && currentType !== newType) {
         // In edit mode, show confirmation dialog
         setPendingTypeChange({

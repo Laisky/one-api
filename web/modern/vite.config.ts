@@ -11,18 +11,8 @@ const manualChunkGroups: Record<string, string[]> = {
   router: ['react-router-dom'],
   'tanstack-query': ['@tanstack/react-query'],
   'tanstack-table': ['@tanstack/react-table'],
-  'radix-ui-core': [
-    '@radix-ui/react-dialog',
-    '@radix-ui/react-dropdown-menu',
-    '@radix-ui/react-popover',
-    '@radix-ui/react-tooltip',
-  ],
-  'radix-ui-forms': [
-    '@radix-ui/react-checkbox',
-    '@radix-ui/react-label',
-    '@radix-ui/react-select',
-    '@radix-ui/react-switch',
-  ],
+  'radix-ui-core': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-popover', '@radix-ui/react-tooltip'],
+  'radix-ui-forms': ['@radix-ui/react-checkbox', '@radix-ui/react-label', '@radix-ui/react-select', '@radix-ui/react-switch'],
   'radix-ui-layout': [
     '@radix-ui/react-scroll-area',
     '@radix-ui/react-separator',
@@ -43,18 +33,22 @@ const manualChunkGroups: Record<string, string[]> = {
   'misc-utils': ['qrcode', 'zustand'],
 };
 
-function manualChunks(moduleId: string): string | undefined {
-  const normalizedId = moduleId.replaceAll('\\', '/');
-  if (!normalizedId.includes('/node_modules/')) return undefined;
+/** packagePattern builds a cross-platform module-id matcher for the supplied package names and returns it. */
+function packagePattern(packages: string[]): RegExp {
+  const packagePaths = packages.map((packageName) =>
+    packageName
+      .split('/')
+      .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('[\\\\/]')
+  );
 
-  for (const [chunkName, packages] of Object.entries(manualChunkGroups)) {
-    if (packages.some((packageName) => normalizedId.includes('/node_modules/' + packageName + '/'))) {
-      return chunkName;
-    }
-  }
-
-  return undefined;
+  return new RegExp(`[\\\\/]node_modules[\\\\/](?:${packagePaths.join('|')})(?:[\\\\/]|$)`);
 }
+
+const codeSplittingGroups = Object.entries(manualChunkGroups).map(([name, packages]) => ({
+  name,
+  test: packagePattern(packages),
+}));
 
 // The build uses the latest locked caniuse-lite data. Suppress Browserslist's
 // age warning so CI stays deterministic when the system date is ahead of the
@@ -84,7 +78,7 @@ export default defineConfig(({ mode }) => ({
       minifySyntax: true,
       minifyWhitespace: true,
     },
-    rollupOptions: {
+    rolldownOptions: {
       treeshake: {
         moduleSideEffects: 'no-external',
         propertyReadSideEffects: false,
@@ -92,7 +86,9 @@ export default defineConfig(({ mode }) => ({
       external: [],
       output: {
         chunkFileNames: '[name].[hash].js',
-        manualChunks,
+        codeSplitting: {
+          groups: codeSplittingGroups,
+        },
       },
     },
   },

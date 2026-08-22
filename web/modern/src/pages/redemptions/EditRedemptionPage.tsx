@@ -95,18 +95,19 @@ export function EditRedemptionPage() {
   const redemptionSchema = z.object({
     name: z.string().min(1, tr('validation.name_required', 'Name is required')).max(20, tr('validation.name_max', 'Max 20 chars')),
     // Coerce numeric fields so typing works and validation runs
-    quota: z.coerce.number().int().min(0, tr('validation.quota_min', 'Quota cannot be negative')),
+    quota: z.coerce.number<string | number>().int().min(0, tr('validation.quota_min', 'Quota cannot be negative')),
     count: z.coerce
-      .number()
+      .number<string | number>()
       .int()
       .min(isEdit ? 0 : 1, tr('validation.count_min', 'Count must be positive'))
       .max(100, tr('validation.count_max', 'Count cannot exceed 100'))
       .default(1),
   });
 
-  type RedemptionForm = z.infer<typeof redemptionSchema>;
+  type RedemptionFormInput = z.input<typeof redemptionSchema>;
+  type RedemptionForm = z.output<typeof redemptionSchema>;
 
-  const form = useForm<RedemptionForm>({
+  const form = useForm<RedemptionFormInput, unknown, RedemptionForm>({
     resolver: zodResolver(redemptionSchema),
     defaultValues: {
       name: '',

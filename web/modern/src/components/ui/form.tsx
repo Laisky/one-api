@@ -3,6 +3,7 @@ import * as React from 'react';
 import {
   Controller,
   type ControllerProps,
+  type FieldError,
   type FieldPath,
   type FieldValues,
   FormProvider,
@@ -11,24 +12,26 @@ import {
 
 export const Form = FormProvider;
 
-const FormFieldContext = React.createContext<{ name?: string }>({});
+const FormFieldContext = React.createContext<{ error?: FieldError; name?: string }>({});
 
+/** FormItem renders a consistently spaced container from the supplied div attributes and returns it. */
 export function FormItem({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('space-y-2', className)} {...props} />;
 }
 
+/** FormLabel renders a styled label from the supplied label attributes and returns it. */
 export function FormLabel({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
   return <label className={cn('text-sm font-medium leading-none', className)} {...props} />;
 }
 
+/** FormControl renders a styled control container from the supplied div attributes and returns it. */
 export function FormControl({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('space-y-2', className)} {...props} />;
 }
 
+/** FormMessage renders the current field error or supplied children from the paragraph attributes and returns it. */
 export function FormMessage({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
-  const { name } = React.useContext(FormFieldContext);
-  const form = useFormContext();
-  const error = name && form ? form.getFieldState(name, form.formState).error : undefined;
+  const { error } = React.useContext(FormFieldContext);
   const body = error?.message !== undefined ? String(error.message) : children;
 
   if (!body) return null;
@@ -43,15 +46,18 @@ export function FormMessage({ className, children, ...props }: React.HTMLAttribu
 type FormFieldProps<
   TFieldValues extends FieldValues = FieldValues,
   TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
-> = Omit<ControllerProps<TFieldValues, TName>, 'control'> & {
-  control?: ControllerProps<TFieldValues, TName>['control'];
+  TTransformedValues = TFieldValues,
+> = Omit<ControllerProps<TFieldValues, TName, TTransformedValues>, 'control'> & {
+  control?: ControllerProps<TFieldValues, TName, TTransformedValues>['control'];
 };
 
+/** FormField binds the supplied field props to an explicit or provider control and returns the controlled field. */
 export function FormField<
   TFieldValues extends FieldValues = FieldValues,
   TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
->({ control, ...props }: FormFieldProps<TFieldValues, TName>) {
-  const formContext = useFormContext<TFieldValues>();
+  TTransformedValues = TFieldValues,
+>({ control, render, ...props }: FormFieldProps<TFieldValues, TName, TTransformedValues>) {
+  const formContext = useFormContext<TFieldValues, unknown, TTransformedValues>();
   const resolvedControl = control ?? formContext?.control;
 
   if (!resolvedControl) {
@@ -59,8 +65,14 @@ export function FormField<
   }
 
   return (
-    <FormFieldContext.Provider value={{ name: props.name }}>
-      <Controller control={resolvedControl} {...props} />
-    </FormFieldContext.Provider>
+    <Controller<TFieldValues, TName, TTransformedValues>
+      control={resolvedControl}
+      {...props}
+      render={(fieldProps) => (
+        <FormFieldContext.Provider value={{ error: fieldProps.fieldState.error, name: props.name }}>
+          {render(fieldProps)}
+        </FormFieldContext.Provider>
+      )}
+    />
   );
 }

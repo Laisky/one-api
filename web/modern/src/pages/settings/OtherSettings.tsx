@@ -23,7 +23,8 @@ const otherSchema = z.object({
   Theme: z.string().default(''),
 });
 
-type OtherForm = z.infer<typeof otherSchema>;
+type OtherFormInput = z.input<typeof otherSchema>;
+type OtherForm = z.output<typeof otherSchema>;
 
 export function OtherSettings() {
   const { t } = useTranslation();
@@ -48,7 +49,7 @@ export function OtherSettings() {
     [t]
   );
 
-  const form = useForm<OtherForm>({
+  const form = useForm<OtherFormInput, unknown, OtherForm>({
     resolver: zodResolver(otherSchema),
     defaultValues: {
       Footer: '',
@@ -116,7 +117,7 @@ export function OtherSettings() {
   };
 
   const submitField = async (key: keyof OtherForm) => {
-    const value = form.getValues(key);
+    const value = form.getValues(key) ?? '';
     await updateOption(key, value);
   };
 
