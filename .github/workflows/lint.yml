@@ -79,7 +79,7 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: code-coverage
-          path: coverage.txt # Make sure to use the same name you chose above
+          path: coverage.txt # Make sure to use the same file name you chose for the "-coverprofile" in the "Test" step
 
   goroutine_context_guard:
     name: Goroutine *gin.Context guardrail
@@ -97,7 +97,7 @@ jobs:
         # and its `sg` alias. Bump ASG_VERSION + ASG_SHA256 together when upgrading.
         env:
           ASG_VERSION: 0.43.0
-          ASG_SHA256: a26253a9c821d935f7e383e40f0de2ca62a4121de1f73a6d81ec32eae631e0
+          ASG_SHA256: a26253a9c821d935f7e383e40f0de7c2ca62a4121de1f73a6d81ec32eae631e0
         run: |
           set -euo pipefail
           curl -fsSL -o ast-grep.zip \
