@@ -17,6 +17,7 @@ package model
 // test skips locally; CI's no-skip guard fails the run instead.
 
 import (
+	stderrors "errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +35,33 @@ const compactOldBinaryEnv = "COMPACT_UUID_TEST_OLD_BINARY"
 
 // compactOldBinaryPortEnv names the port the old binary should listen on during the corpus.
 const compactOldBinaryPortEnv = "COMPACT_UUID_TEST_OLD_BINARY_PORT"
+
+// terminatePinnedOldBinary stops a pinned server process and joins its output-copy goroutines.
+// Expected process-exit errors are accepted, while unexpected kill or wait failures are reported
+// through the supplied test handle.
+// Parameters:
+//   - t: test handle used to report unexpected process lifecycle failures.
+//   - command: started pinned binary command to terminate and join.
+//
+// Return values: none.
+func terminatePinnedOldBinary(t *testing.T, command *exec.Cmd) {
+	t.Helper()
+	require.NotNil(t, command.Process)
+
+	killErr := command.Process.Kill()
+	if killErr != nil && !stderrors.Is(killErr, os.ErrProcessDone) {
+		t.Errorf("kill pinned old binary: %v", killErr)
+	}
+
+	waitErr := command.Wait()
+	if waitErr == nil {
+		return
+	}
+	var exitErr *exec.ExitError
+	if !stderrors.As(waitErr, &exitErr) {
+		t.Errorf("wait for pinned old binary and its output: %v", waitErr)
+	}
+}
 
 // runPinnedOldBinary starts the pinned artifact against a DSN and waits for it to migrate.
 //
@@ -73,13 +101,13 @@ func runPinnedOldBinary(t *testing.T, binary string, dsn string, settleFor time.
 	// The binary must be stopped even if an assertion fails, or it keeps the port and a
 	// connection pool for the rest of the run.
 	waited := false
-	t.Cleanup(func() {
+	terminate := func() {
 		if command.Process != nil && !waited {
-			_ = command.Process.Kill()
-			_ = command.Wait()
+			terminatePinnedOldBinary(t, command)
 			waited = true
 		}
-	})
+	}
+	t.Cleanup(terminate)
 
 	time.Sleep(settleFor)
 	// Signal 0 is the portable liveness probe: it performs the permission and existence checks
@@ -87,19 +115,15 @@ func runPinnedOldBinary(t *testing.T, binary string, dsn string, settleFor time.
 	require.NotNil(t, command.Process)
 	livenessErr := command.Process.Signal(syscall.Signal(0))
 	if livenessErr != nil {
-		_ = command.Process.Kill()
-		_ = command.Wait()
-		waited = true
+		terminate()
 		require.NoError(t, livenessErr,
 			"the pinned old binary must still be running after startup and AutoMigrate; output:\n%s",
 			output.String())
 	}
 
-	_ = command.Process.Kill()
 	// Cmd.Wait, unlike Process.Wait, also joins os/exec's stdout and stderr copy goroutines.
 	// Reading the builder before those goroutines exit races with their final writes.
-	_ = command.Wait()
-	waited = true
+	terminate()
 	return output.String()
 }
 
