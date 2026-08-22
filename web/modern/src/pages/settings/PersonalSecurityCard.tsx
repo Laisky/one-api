@@ -55,10 +55,8 @@ export function PersonalSecurityCard({ t, passkey, totp, password }: PersonalSec
               {t('personal_settings.security.status.password_on')}
             </Badge>
           </div>
-          {securityScore < 3 && (
-            <p className="text-xs text-muted-foreground mt-2">
-              {securityScore === 1 ? t('personal_settings.passkey.no_passkeys_desc') : ''}
-            </p>
+          {securityScore === 1 && (
+            <p className="text-xs text-muted-foreground mt-2">{t('personal_settings.passkey.no_passkeys_desc')}</p>
           )}
         </div>
         <Separator />
