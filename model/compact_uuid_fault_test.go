@@ -389,12 +389,14 @@ func compactFaultKillAroundSideEffects(t *testing.T) {
 	t.Logf("phase two swept %d kill depths through the validation and marker side effects", swept)
 
 	// The restart after every kill reaches the exact final state, with no command.
-	require.Equal(t, compactStateReady, driveCompactToReady(t, newCompactCoordinator(topology)).state)
+	require.Equal(t, compactStateReady,
+		compactFaultAdvanceTo(t, ctx, newCompactCoordinator(topology), compactStateReady).state)
 	marked := readMarkerTimestamp(t, topology.primary, compactPrimaryMigrationKey)
 	for round := 0; round < 4; round++ {
 		compactFaultKill(newCompactCoordinator(topology),
 			compactFaultCancelDelays[round%len(compactFaultCancelDelays)])
-		require.Equal(t, compactStateReady, driveCompactToReady(t, newCompactCoordinator(topology)).state)
+		require.Equal(t, compactStateReady,
+			compactFaultAdvanceTo(t, ctx, newCompactCoordinator(topology), compactStateReady).state)
 		require.Equal(t, marked, readMarkerTimestamp(t, topology.primary, compactPrimaryMigrationKey),
 			"a marker timestamp must never move once written")
 	}

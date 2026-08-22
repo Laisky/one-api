@@ -72,10 +72,12 @@ func runPinnedOldBinary(t *testing.T, binary string, dsn string, settleFor time.
 	require.NoError(t, command.Start(), "the pinned old binary must start")
 	// The binary must be stopped even if an assertion fails, or it keeps the port and a
 	// connection pool for the rest of the run.
+	waited := false
 	t.Cleanup(func() {
-		if command.Process != nil {
+		if command.Process != nil && !waited {
 			_ = command.Process.Kill()
-			_, _ = command.Process.Wait()
+			_ = command.Wait()
+			waited = true
 		}
 	})
 
@@ -83,11 +85,21 @@ func runPinnedOldBinary(t *testing.T, binary string, dsn string, settleFor time.
 	// Signal 0 is the portable liveness probe: it performs the permission and existence checks
 	// without delivering anything. Passing a nil signal is not a probe and always errors.
 	require.NotNil(t, command.Process)
-	require.NoError(t, command.Process.Signal(syscall.Signal(0)),
-		"the pinned old binary must still be running after startup and AutoMigrate; output:\n%s", output.String())
+	livenessErr := command.Process.Signal(syscall.Signal(0))
+	if livenessErr != nil {
+		_ = command.Process.Kill()
+		_ = command.Wait()
+		waited = true
+		require.NoError(t, livenessErr,
+			"the pinned old binary must still be running after startup and AutoMigrate; output:\n%s",
+			output.String())
+	}
 
 	_ = command.Process.Kill()
-	_, _ = command.Process.Wait()
+	// Cmd.Wait, unlike Process.Wait, also joins os/exec's stdout and stderr copy goroutines.
+	// Reading the builder before those goroutines exit races with their final writes.
+	_ = command.Wait()
+	waited = true
 	return output.String()
 }
 
