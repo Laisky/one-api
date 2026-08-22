@@ -279,6 +279,9 @@ const (
 	gpt4oMiniLowDetailCost  = 2833
 	gpt4oMiniHighDetailCost = 5667
 	gpt4oMiniAdditionalCost = 2833
+	// DeepSeek documents a hard post-resize upper bound for each image. The
+	// upstream response usage remains authoritative for final billing.
+	deepseekV4VisionMaxImageTokens = 384
 )
 
 // getImageSizeFn is injected for testability
@@ -311,6 +314,14 @@ func getVisionBaseTile(model string) (base int, tile int) {
 }
 
 func countImageTokens(url string, detail string, model string) (_ int, err error) {
+	// DeepSeek's exact image-token count is returned by the API usage object.
+	// For pre-consume estimation, use the documented per-image upper bound rather
+	// than applying OpenAI's unrelated tile formula or fetching a remote image.
+	// Post-consume billing reconciles this estimate against upstream usage.
+	if model == "deepseek-v4-flash-vision-exp" {
+		return deepseekV4VisionMaxImageTokens, nil
+	}
+
 	var fetchSize = true
 	var width, height int
 
