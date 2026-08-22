@@ -19,10 +19,9 @@ var (
 	// deepseekProFeatures advertises DeepSeek V4 Pro capabilities across its
 	// Chat Completions and native Responses API endpoints.
 	deepseekProFeatures = []string{"tools", "json_mode", "logprobs", "reasoning", "web_search"}
-	// deepseekVisionFeatures advertises the capabilities documented for the
-	// experimental V4 Flash Vision model. It intentionally excludes web_search
-	// until DeepSeek documents that combination for the vision model.
-	deepseekVisionFeatures = []string{"tools", "json_mode", "logprobs", "reasoning"}
+	// deepseekVisionFeatures advertises only capabilities explicitly documented
+	// for the experimental V4 Flash Vision model.
+	deepseekVisionFeatures = []string{"tools", "json_mode", "reasoning"}
 
 	// deepseekSamplingParams lists the OpenAI-compatible sampling parameters
 	// accepted by DeepSeek Chat Completions. Temperature and top_p have no effect
@@ -154,7 +153,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: deepseekSamplingParams,
 		SupportedReasoningEfforts:   deepseekFlashReasoningEfforts,
 		DefaultReasoningEffort:      "high",
-		Quantization:                "fp4",
 		Description:                 "DeepSeek-V4-Flash-Vision-Exp, an experimental multimodal V4 Flash model with text and image input, thinking and non-thinking modes, 1M context, and Chat Completions, Responses, and Anthropic API support.",
 		TimeWindows:                 deepseekV4PricingWindows(0.22, 0.007, 0.66, 0.44, 0.014, 1.32),
 	},
