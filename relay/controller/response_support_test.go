@@ -39,6 +39,8 @@ func TestSupportsNativeResponseAPIDeepSeekContractForcesFallback(t *testing.T) {
 
 // TestSupportsNativeResponseAPIDeepSeekV4 verifies that all current DeepSeek
 // V4 models use the native Responses API for plaintext reasoning preservation.
+// Parameters: t is the testing handle used for assertions and test lifecycle control.
+// Returns: nothing; the test fails through t when a current model is routed through fallback.
 func TestSupportsNativeResponseAPIDeepSeekV4(t *testing.T) {
 	t.Parallel()
 

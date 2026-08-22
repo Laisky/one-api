@@ -13,6 +13,7 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
+	deepseekadaptor "github.com/Laisky/one-api/relay/adaptor/deepseek"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -515,6 +516,29 @@ func TestValidateRequestedBuiltins_OpenAIUsesProviderDefaults(t *testing.T) {
 	meta := &metalib.Meta{ChannelType: channeltype.OpenAI, ActualModelName: "gpt-4o"}
 	channel := &model.Channel{Type: channeltype.OpenAI}
 	require.NoError(t, ValidateRequestedBuiltins("gpt-4o", meta, channel, &openai.Adaptor{}, map[string]struct{}{"web_search": {}}))
+}
+
+// TestValidateRequestedBuiltins_DeepSeekNativeWebSearch verifies the native
+// DeepSeek web_search tool is allowed without a separate per-call charge.
+// Parameters: t is the testing handle used for assertions and test lifecycle control.
+// Returns: nothing; the test fails through t when a documented native tool is blocked.
+func TestValidateRequestedBuiltins_DeepSeekNativeWebSearch(t *testing.T) {
+	t.Parallel()
+
+	meta := &metalib.Meta{ChannelType: channeltype.DeepSeek, ActualModelName: "deepseek-v4-flash"}
+	provider := &deepseekadaptor.Adaptor{}
+	require.NoError(t, ValidateRequestedBuiltins(
+		"deepseek-v4-flash", meta, &model.Channel{Type: channeltype.DeepSeek}, provider,
+		map[string]struct{}{"web_search": {}},
+	))
+
+	request := &openai.ResponseAPIRequest{
+		Model: "deepseek-v4-flash",
+		Tools: []openai.ResponseAPITool{{Type: "web_search"}},
+	}
+	removed := PruneDisallowedResponseBuiltins(request, meta, &model.Channel{Type: channeltype.DeepSeek}, provider)
+	require.Empty(t, removed)
+	require.Len(t, request.Tools, 1)
 }
 
 func TestNormalizeBuiltinType_ToolSearchAliases(t *testing.T) {

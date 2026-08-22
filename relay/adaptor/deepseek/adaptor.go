@@ -92,6 +92,13 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	// DeepSeek is OpenAI-compatible, so we can pass the request through with minimal changes
+	if request == nil {
+		return nil, errors.New("request is nil")
+	}
+	if request.MaxCompletionTokens != nil && request.MaxTokens == 0 {
+		request.MaxTokens = *request.MaxCompletionTokens
+	}
+	request.MaxCompletionTokens = nil
 	normalizeDeepSeekReasoningEffort(request)
 	ensureDeepSeekStreamUsage(request)
 
@@ -132,10 +139,13 @@ func normalizeDeepSeekReasoningEffort(request *model.GeneralOpenAIRequest) {
 
 	effort := strings.ToLower(strings.TrimSpace(*request.ReasoningEffort))
 	switch effort {
-	case "low", "high", "max":
-	case "medium", "xhigh":
-		// DeepSeek accepts these compatibility aliases as high.
+	case "high", "max":
+	case "low", "medium":
+		// DeepSeek accepts low and medium as compatibility aliases for high.
 		effort = "high"
+	case "xhigh":
+		// DeepSeek accepts xhigh as a compatibility alias for max.
+		effort = "max"
 	default:
 		request.ReasoningEffort = nil
 		return

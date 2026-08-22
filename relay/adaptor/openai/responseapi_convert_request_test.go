@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // TestConvertResponseAPIToChatCompletionRequestMapsDeveloperRole verifies that
@@ -88,4 +90,49 @@ func TestConvertResponseAPIToChatCompletionRequestPreservesToolCallReasoning(t *
 	require.NotNil(t, chatReq.Messages[0].ReasoningContent)
 	require.Equal(t, "Inspect first.", *chatReq.Messages[0].ReasoningContent,
 		"older summary-only bridge output must remain replayable")
+}
+
+// TestConvertResponseAPIToChatCompletionRequestPreservesDeepSeekFileImages verifies
+// Responses API file-backed images survive fallback conversion to Chat Completions.
+// Parameters: t is the testing handle used for assertions and test lifecycle control.
+// Returns: nothing; the test fails through t when file image content is dropped.
+func TestConvertResponseAPIToChatCompletionRequestPreservesDeepSeekFileImages(t *testing.T) {
+	t.Parallel()
+
+	for name, source := range map[string]map[string]string{
+		"file_id":   {"file_id": "file-api-123"},
+		"file_data": {"file_data": "data:image/png;base64,AAAA", "filename": "image.png"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			request := &ResponseAPIRequest{
+				Model: "deepseek-v4-flash-vision-exp",
+				Input: ResponseAPIInput{
+					map[string]any{
+						"role": "user",
+						"content": []any{
+							map[string]any{"type": "input_text", "text": "describe"},
+							map[string]any{"type": "input_image"},
+						},
+					},
+				},
+			}
+			content := request.Input[0].(map[string]any)["content"].([]any)
+			for key, value := range source {
+				content[1].(map[string]any)[key] = value
+			}
+
+			converted, err := ConvertResponseAPIToChatCompletionRequest(request)
+			require.NoError(t, err)
+			require.Len(t, converted.Messages, 1)
+			blocks, ok := converted.Messages[0].Content.([]model.MessageContent)
+			require.True(t, ok)
+			require.Len(t, blocks, 2)
+			require.Equal(t, model.ContentTypeText, blocks[0].Type)
+			require.Equal(t, model.ContentTypeFile, blocks[1].Type)
+			require.Equal(t, source["file_id"], blocks[1].FileID)
+			require.Equal(t, source["file_data"], blocks[1].FileData)
+			require.Equal(t, source["filename"], blocks[1].Filename)
+		})
+	}
 }

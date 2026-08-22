@@ -6,6 +6,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestCountImageTokens_DeepSeekVisionUsesDocumentedUpperBound verifies image
+// estimation uses DeepSeek's fixed upper bound without fetching image data.
+// Parameters: t is the testing handle used for assertions and test lifecycle control.
+// Returns: nothing; the test fails through t when estimation fetches or miscounts an image.
 func TestCountImageTokens_DeepSeekVisionUsesDocumentedUpperBound(t *testing.T) {
 	old := getImageSizeFn
 	getImageSizeFn = func(_ string) (int, int, error) {
