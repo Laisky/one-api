@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { useEffect } from 'react';
-import { useForm, type UseFormReturn } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { getKeyPrompt } from '../../helpers';
-import type { ChannelForm } from '../../schemas';
+import type { ChannelForm, ChannelFormInput, ChannelFormMethods } from '../../schemas';
 import { ChannelBasicInfo } from '../ChannelBasicInfo';
 import { ChannelSpecificConfig } from '../ChannelSpecificConfig';
 
@@ -63,11 +63,11 @@ const baseDefaults: ChannelForm = {
 
 interface BasicHarnessProps {
   type: number;
-  onReady?: (form: UseFormReturn<ChannelForm>) => void;
+  onReady?: (form: ChannelFormMethods) => void;
 }
 
 const BasicHarness = ({ type, onReady }: BasicHarnessProps) => {
-  const form = useForm<ChannelForm>({
+  const form = useForm<ChannelFormInput, unknown, ChannelForm>({
     defaultValues: { ...baseDefaults, type },
   });
   useEffect(() => onReady?.(form), [onReady, form]);
@@ -83,7 +83,7 @@ interface SpecificHarnessProps {
 }
 
 const SpecificHarness = ({ type }: SpecificHarnessProps) => {
-  const form = useForm<ChannelForm>({
+  const form = useForm<ChannelFormInput, unknown, ChannelForm>({
     defaultValues: { ...baseDefaults, type },
   });
   return (

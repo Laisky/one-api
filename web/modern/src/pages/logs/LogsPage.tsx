@@ -1,5 +1,4 @@
 import { LogDetailsModal } from '@/components/LogDetailsModal';
-import { NameWithId } from '@/components/shared/NameWithId';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,33 +11,20 @@ import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { SearchableDropdown, type SearchOption } from '@/components/ui/searchable-dropdown';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TimestampDisplay } from '@/components/ui/timestamp';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { api } from '@/lib/api';
 import { LOG_TYPES, LOG_TYPE_OPTIONS } from '@/lib/constants/logs';
 import { buildCsv, fetchAllPaginatedResults, mapWithConcurrency } from '@/lib/export';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, formatTimestamp, fromDateTimeLocal, renderQuota, toDateTimeLocal } from '@/lib/utils';
-import type { LogEntry, LogMetadata } from '@/types/log';
-import type { ColumnDef } from '@tanstack/react-table';
-import { Copy, Eye, EyeOff, FileDown, Filter, RefreshCw } from 'lucide-react';
+import { Eye, EyeOff, FileDown, Filter, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { LogModelCell } from './components/LogModelCell';
+import { createLogColumns, formatLatency, getCacheWriteSummaries, logRef, type LogRow } from './logs-page-columns';
 
-type LogRow = LogEntry;
-
-const logRef = (log: Pick<LogRow, 'id' | 'uuid'>): string | number => log.uuid || log.id || '';
-
-// channelDisplayName returns the visible channel label for a log row.
-const channelDisplayName = (log: Pick<LogRow, 'channel_name' | 'channel_uuid' | 'channel'>, fallback: string) =>
-  log.channel_name || log.channel_uuid || log.channel || fallback;
-
-// channelDisplayRef returns the external channel reference exposed on name click.
-const channelDisplayRef = (log: Pick<LogRow, 'channel_uuid' | 'channel'>): string | number | null => log.channel_uuid || log.channel || null;
-
+/** LogStatistics describes the aggregate quota and request totals returned by log statistics APIs. */
 interface LogStatistics {
   quota: number;
   token_count?: number;
@@ -55,36 +41,7 @@ const LOG_TYPE_TRANSLATION_KEYS: Record<number, string> = {
   [LOG_TYPES.TOOL]: 'tool',
 };
 
-const formatLatency = (ms?: number, fallback: string = '-') => {
-  if (!ms) return fallback;
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-};
-
-const getLatencyColor = (ms?: number) => {
-  if (!ms) return '';
-  if (ms < 1000) return 'text-success';
-  if (ms < 3000) return 'text-warning';
-  return 'text-destructive';
-};
-
-const coerceTokenCount = (value: unknown) => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
-  return Math.trunc(value);
-};
-
-const getCacheWriteSummaries = (metadata?: LogMetadata) => {
-  const details = metadata?.cache_write_tokens;
-  if (!details) {
-    return { fiveMinute: 0, oneHour: 0 };
-  }
-
-  return {
-    fiveMinute: coerceTokenCount(details.ephemeral_5m),
-    oneHour: coerceTokenCount(details.ephemeral_1h),
-  };
-};
-
+/** ExportTracePayload describes trace data embedded in exported log CSV rows. */
 interface ExportTracePayload {
   id: number;
   trace_id: string;
@@ -99,6 +56,7 @@ interface ExportTracePayload {
   log?: Record<string, unknown>;
 }
 
+/** LogsPage renders log filters, statistics, export actions, pagination, and trace details. */
 export function LogsPage() {
   const { t } = useTranslation();
   const { notify } = useNotifications();
@@ -493,153 +451,14 @@ export function LogsPage() {
     }
   };
 
-  const CopyButton = ({ text }: { text: string }) => (
-    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => navigator.clipboard.writeText(text)}>
-      <Copy className="h-3 w-3" />
-    </Button>
-  );
-
-  const columns: ColumnDef<LogRow>[] = [
-    {
-      accessorKey: 'created_at',
-      header: t('logs.table.time'),
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <TimestampDisplay
-            timestamp={row.original.created_at}
-            className="font-mono text-xs"
-            title={row.original.request_id || undefined}
-          />
-          {row.original.request_id && <CopyButton text={row.original.request_id} />}
-        </div>
-      ),
-    },
-    ...(isAdminOrRoot
-      ? [
-          {
-            accessorKey: 'channel',
-            header: t('logs.table.channel'),
-            cell: ({ row }: { row: any }) => (
-              <NameWithId
-                name={channelDisplayName(row.original, t('logs.labels.missing'))}
-                refId={channelDisplayRef(row.original)}
-                idLabel={t('logs.table.channel')}
-              />
-            ),
-          } as ColumnDef<LogRow>,
-        ]
-      : []),
-    {
-      accessorKey: 'type',
-      header: t('logs.table.type'),
-      cell: ({ row }) => renderLogTypeBadge(row.original.type),
-    },
-    {
-      accessorKey: 'model_name',
-      header: t('logs.table.model'),
-      cell: ({ row }) => (
-        <LogModelCell
-          modelName={row.original.model_name}
-          originModelName={row.original.origin_model_name}
-          targetLabel={t('logs.table.model')}
-          originLabel={t('logs.details.origin_model')}
-        />
-      ),
-    },
-    ...(Number(filters.type) !== LOG_TYPES.TEST
-      ? [
-          // Always show user column; for non-admins fall back to current user if username missing
-          {
-            accessorKey: 'username',
-            header: t('logs.table.user'),
-            cell: ({ row }: { row: any }) => (
-              <span className="text-sm">{row.original.username || user?.username || t('logs.labels.missing')}</span>
-            ),
-          } as ColumnDef<LogRow>,
-          {
-            accessorKey: 'token_name',
-            header: t('logs.table.token'),
-            cell: ({ row }: { row: any }) => <span className="text-sm">{row.original.token_name || t('logs.labels.missing')}</span>,
-          },
-          {
-            accessorKey: 'prompt_tokens',
-            header: t('logs.table.prompt'),
-            cell: ({ row }: { row: any }) => (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="font-mono text-sm cursor-help">{row.original.prompt_tokens || 0}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="flex flex-col gap-1">
-                      <div>
-                        {t('logs.tooltip.input_tokens', {
-                          value: row.original.prompt_tokens ?? 0,
-                        })}
-                      </div>
-                      <div>
-                        {t('logs.tooltip.cached_tokens', {
-                          value: row.original.cached_prompt_tokens ?? 0,
-                        })}
-                      </div>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ),
-          },
-          {
-            accessorKey: 'completion_tokens',
-            header: t('logs.table.completion'),
-            cell: ({ row }: { row: any }) => {
-              const { fiveMinute, oneHour } = getCacheWriteSummaries(row.original.metadata);
-              return (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="font-mono text-sm cursor-help">{row.original.completion_tokens || 0}</span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <div className="flex flex-col gap-1">
-                        <div>
-                          {t('logs.tooltip.output_tokens', {
-                            value: row.original.completion_tokens ?? 0,
-                          })}
-                        </div>
-                        <div>
-                          {t('logs.tooltip.cache_write_5m', {
-                            value: fiveMinute,
-                          })}
-                        </div>
-                        <div>{t('logs.tooltip.cache_write_1h', { value: oneHour })}</div>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              );
-            },
-          },
-          {
-            accessorKey: 'quota',
-            header: t('logs.table.cost'),
-            cell: ({ row }: { row: any }) => (
-              <span className="font-mono text-sm" title={row.original.content || ''}>
-                {renderQuota(row.original.quota)}
-              </span>
-            ),
-          },
-          {
-            accessorKey: 'elapsed_time',
-            header: t('logs.table.latency'),
-            cell: ({ row }: { row: any }) => (
-              <span className={cn('font-mono text-sm', getLatencyColor(row.original.elapsed_time))}>
-                {formatLatency(row.original.elapsed_time, t('logs.labels.not_available'))}
-              </span>
-            ),
-          },
-        ]
-      : ([] as ColumnDef<LogRow>[])),
-  ];
+  const columns = createLogColumns({
+    t,
+    isAdminOrRoot,
+    filterType: filters.type,
+    currentUsername: user?.username,
+    testLogType: LOG_TYPES.TEST,
+    renderLogTypeBadge,
+  });
 
   const handlePageChange = (newPageIndex: number, newPageSize: number) => {
     setSearchParams((prev) => {

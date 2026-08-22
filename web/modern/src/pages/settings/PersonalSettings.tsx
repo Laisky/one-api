@@ -1,32 +1,25 @@
 import Turnstile from '@/components/Turnstile';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useNotifications } from '@/components/ui/notifications';
-import { Separator } from '@/components/ui/separator';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { buildLarkOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
 import { loadSystemStatus, type SystemStatus } from '@/lib/utils';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import QRCode from 'qrcode';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import * as z from 'zod';
-
-type PersonalForm = {
-  username: string;
-  display_name?: string;
-  email?: string;
-};
+import { PersonalAccessAndBindingsCards } from './PersonalAccessAndBindingsCards';
+import { PersonalSecurityCard } from './PersonalSecurityCard';
+import type { OAuthBindings, PasskeyInfo, PersonalForm } from './personal-settings-types';
 
 export function PersonalSettings() {
   const { t } = useTranslation();
@@ -38,7 +31,6 @@ export function PersonalSettings() {
   const [affLink, setAffLink] = useState('');
   const { isMobile } = useResponsive();
 
-  // TOTP related state
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [showTotpSetup, setShowTotpSetup] = useState(false);
   const [totpSecret, setTotpSecret] = useState('');
@@ -50,14 +42,6 @@ export function PersonalSettings() {
   const [confirmTotpError, setConfirmTotpError] = useState('');
   const [disableTotpError, setDisableTotpError] = useState('');
 
-  // Passkey related state
-  interface PasskeyInfo {
-    id?: number;
-    uuid?: string;
-    credential_name: string;
-    sign_count: number;
-    created_at: number;
-  }
   const [passkeys, setPasskeys] = useState<PasskeyInfo[]>([]);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [passkeyError, setPasskeyError] = useState('');
@@ -65,27 +49,17 @@ export function PersonalSettings() {
   const [passkeyName, setPasskeyName] = useState('');
   const passkeySupported = typeof window !== 'undefined' && browserSupportsWebAuthn();
 
-  // Password change state
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
 
-  // System status state
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({});
   const [emailVerificationCode, setEmailVerificationCode] = useState('');
   const [emailAction, setEmailAction] = useState<'send' | 'bind' | null>(null);
   const [emailVerificationError, setEmailVerificationError] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
 
-  // OAuth binding state — track third-party identifiers returned by /api/user/self.
-  // We track these locally because the shared auth store User type does not include them.
-  interface OAuthBindings {
-    github_id: string;
-    wechat_id: string;
-    lark_id: string;
-    oidc_id: string;
-  }
   const [oauthBindings, setOauthBindings] = useState<OAuthBindings>({
     github_id: '',
     wechat_id: '',
@@ -108,7 +82,6 @@ export function PersonalSettings() {
     [t]
   );
 
-  // Load system status
   const loadStatus = async () => {
     try {
       const status = await loadSystemStatus();
@@ -647,10 +620,6 @@ export function PersonalSettings() {
     }
   };
 
-  // Security status indicators
-  const hasPasskeys = passkeys.length > 0;
-  const securityScore = (hasPasskeys ? 1 : 0) + (totpEnabled ? 1 : 0) + 1; // password always counts as 1
-
   return (
     <div className="space-y-6">
       {/* Profile Information Card */}
@@ -758,367 +727,71 @@ export function PersonalSettings() {
         </CardContent>
       </Card>
 
-      {/* Access Token & Invitation Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('personal_settings.access_token.title')}</CardTitle>
-          <CardDescription>{t('personal_settings.access_token.description')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Button onClick={generateAccessToken} className="w-full">
-                {t('personal_settings.access_token.generate_token')}
-              </Button>
-              {systemToken && <div className="mt-2 p-2 bg-muted rounded text-sm font-mono break-all">{systemToken}</div>}
-            </div>
-
-            <div>
-              <Button onClick={getAffLink} variant="outline" className="w-full">
-                {t('personal_settings.access_token.get_invite_link')}
-              </Button>
-              {affLink && <div className="mt-2 p-2 bg-muted rounded text-sm break-all">{affLink}</div>}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ========== Account Bindings Card ========== */}
-      {(systemStatus.lark_client_id || systemStatus.oidc) && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('personal_settings.oauth_binding.title')}</CardTitle>
-            <CardDescription>{t('personal_settings.oauth_binding.description')}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {oauthBindingError && <div className="text-sm text-destructive font-medium">{oauthBindingError}</div>}
-
-            {/* Lark binding row */}
-            {systemStatus.lark_client_id && (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border bg-background p-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-medium">{t('personal_settings.oauth_binding.lark_label')}</span>
-                  {oauthBindings.lark_id ? (
-                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
-                      {t('personal_settings.oauth_binding.bound_lark')}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-muted-foreground border-dashed">
-                      {t('personal_settings.oauth_binding.not_bound')}
-                    </Badge>
-                  )}
-                </div>
-                {!oauthBindings.lark_id && (
-                  <Button onClick={onBindLark} disabled={oauthBindingPending !== null} className="w-full sm:w-auto">
-                    {oauthBindingPending === 'lark'
-                      ? t('personal_settings.oauth_binding.binding')
-                      : t('personal_settings.oauth_binding.bind_lark')}
-                  </Button>
-                )}
-                {/* TODO: backend has no /api/oauth/lark/unbind endpoint; add unbind button once backend supports it. */}
-              </div>
-            )}
-
-            {/* OIDC binding row */}
-            {systemStatus.oidc && (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border bg-background p-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-medium">{t('personal_settings.oauth_binding.oidc_label')}</span>
-                  {oauthBindings.oidc_id ? (
-                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
-                      {t('personal_settings.oauth_binding.bound_oidc')}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-muted-foreground border-dashed">
-                      {t('personal_settings.oauth_binding.not_bound')}
-                    </Badge>
-                  )}
-                </div>
-                {!oauthBindings.oidc_id && (
-                  <Button onClick={onBindOidc} disabled={oauthBindingPending !== null} className="w-full sm:w-auto">
-                    {oauthBindingPending === 'oidc'
-                      ? t('personal_settings.oauth_binding.binding')
-                      : t('personal_settings.oauth_binding.bind_oidc')}
-                  </Button>
-                )}
-                {/* TODO: backend has no /api/oauth/oidc/unbind endpoint; add unbind button once backend supports it. */}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ========== Account Security Card ========== */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('personal_settings.security.title')}</CardTitle>
-          <CardDescription>{t('personal_settings.security.description')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* --- Security Status Overview --- */}
-          <div className="rounded-lg border bg-muted/30 p-4">
-            <h4 className="text-sm font-medium mb-3">{t('personal_settings.security.status.title')}</h4>
-            <div className="flex flex-wrap gap-2">
-              {hasPasskeys ? (
-                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
-                  {t('personal_settings.security.status.passkey_on')}
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-muted-foreground border-dashed">
-                  {t('personal_settings.security.status.passkey_off')}
-                </Badge>
-              )}
-              {totpEnabled ? (
-                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
-                  {t('personal_settings.security.status.totp_on')}
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-muted-foreground border-dashed">
-                  {t('personal_settings.security.status.totp_off')}
-                </Badge>
-              )}
-              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
-                {t('personal_settings.security.status.password_on')}
-              </Badge>
-            </div>
-            {securityScore < 3 && (
-              <p className="text-xs text-muted-foreground mt-2">
-                {securityScore === 1 ? t('personal_settings.passkey.no_passkeys_desc') : ''}
-              </p>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* --- Passkeys Section (Primary / Recommended) --- */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-semibold">{t('personal_settings.passkey.title')}</h3>
-              <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">{t('personal_settings.passkey.recommended')}</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">{t('personal_settings.passkey.description')}</p>
-
-            {passkeyError && <div className="text-sm text-destructive font-medium">{passkeyError}</div>}
-
-            {!passkeySupported ? (
-              <Alert>
-                <AlertTitle>{t('personal_settings.passkey.errors.not_supported')}</AlertTitle>
-                <AlertDescription>{t('personal_settings.passkey.not_supported_desc')}</AlertDescription>
-              </Alert>
-            ) : (
-              <>
-                {passkeys.length > 0 ? (
-                  <div className="space-y-2">
-                    {passkeys.map((pk) => (
-                      <div key={pk.uuid || pk.id} className="flex items-center justify-between p-3 border rounded-lg bg-background">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">{pk.credential_name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {t('personal_settings.passkey.registered')}: {new Date(pk.created_at).toLocaleDateString()}
-                            {' · '}
-                            {t('personal_settings.passkey.sign_count')}: {pk.sign_count}
-                          </div>
-                        </div>
-                        <Button variant="destructive" size="sm" onClick={() => deletePasskey(pk)} disabled={passkeyLoading}>
-                          {t('personal_settings.passkey.delete_button')}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <Alert className="bg-info-muted border-info-border">
-                    <AlertTitle className="text-info-foreground">{t('personal_settings.passkey.no_passkeys')}</AlertTitle>
-                    <AlertDescription>{t('personal_settings.passkey.no_passkeys_desc')}</AlertDescription>
-                  </Alert>
-                )}
-
-                {showPasskeyName ? (
-                  <div className="flex flex-col space-y-2">
-                    <FormLabel>{t('personal_settings.passkey.name_label')}</FormLabel>
-                    <Input
-                      placeholder={t('personal_settings.passkey.name_placeholder')}
-                      value={passkeyName}
-                      onChange={(e) => setPasskeyName(e.target.value)}
-                      maxLength={128}
-                    />
-                    <div className="flex gap-2">
-                      <Button onClick={registerPasskey} disabled={passkeyLoading}>
-                        {passkeyLoading ? t('personal_settings.passkey.processing') : t('personal_settings.passkey.register_button')}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setShowPasskeyName(false);
-                          setPasskeyName('');
-                        }}
-                        disabled={passkeyLoading}
-                      >
-                        {t('personal_settings.totp.cancel')}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <Button onClick={() => setShowPasskeyName(true)} disabled={passkeyLoading} className="w-full md:w-auto">
-                    {t('personal_settings.passkey.register_button')}
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* --- TOTP Section --- */}
-          <div className="space-y-4">
-            <h3 className="text-base font-semibold">{t('personal_settings.totp.title')}</h3>
-            <p className="text-sm text-muted-foreground">{t('personal_settings.totp.description')}</p>
-
-            {totpError && <div className="text-sm text-destructive font-medium">{totpError}</div>}
-
-            {totpEnabled ? (
-              <Alert className="bg-success-muted border-success-border">
-                <div className="flex flex-col space-y-3">
-                  <div>
-                    <AlertTitle className="text-success-foreground">{t('personal_settings.totp.enabled_title')}</AlertTitle>
-                    <AlertDescription>{t('personal_settings.totp.enabled_desc')}</AlertDescription>
-                  </div>
-                  <div className="flex flex-col space-y-2">
-                    <Input
-                      placeholder={t('personal_settings.totp.disable_placeholder')}
-                      value={totpCode}
-                      onChange={(e) => setTotpCode(e.target.value)}
-                    />
-                    {disableTotpError && <div className="text-sm text-destructive font-medium">{disableTotpError}</div>}
-                    <Button variant="destructive" onClick={disableTotp} disabled={totpLoading} className="w-full md:w-auto">
-                      {totpLoading ? t('personal_settings.totp.processing') : t('personal_settings.totp.disable_button')}
-                    </Button>
-                  </div>
-                </div>
-              </Alert>
-            ) : (
-              <div className="space-y-2">
-                {setupTotpError && <div className="text-sm text-destructive font-medium">{setupTotpError}</div>}
-                <Button variant="default" onClick={setupTotp} disabled={totpLoading} className="w-full md:w-auto">
-                  {totpLoading ? t('personal_settings.totp.processing') : t('personal_settings.totp.enable_button')}
-                </Button>
-              </div>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* --- Password Section (Legacy / Fallback) --- */}
-          <div className="space-y-4">
-            <h3 className="text-base font-semibold">{t('personal_settings.security.password.title')}</h3>
-            <p className="text-sm text-muted-foreground">{t('personal_settings.security.password.description')}</p>
-
-            {passwordError && <div className="text-sm text-destructive font-medium">{passwordError}</div>}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <FormLabel>{t('personal_settings.security.password.new_password')}</FormLabel>
-                <Input
-                  type="password"
-                  placeholder={t('personal_settings.security.password.new_password_placeholder')}
-                  value={newPassword}
-                  onChange={(e) => {
-                    setNewPassword(e.target.value);
-                    if (passwordError) setPasswordError('');
-                  }}
-                />
-              </div>
-              <div className="space-y-1">
-                <FormLabel>{t('personal_settings.security.password.confirm_password')}</FormLabel>
-                <Input
-                  type="password"
-                  placeholder={t('personal_settings.security.password.confirm_password_placeholder')}
-                  value={confirmPassword}
-                  onChange={(e) => {
-                    setConfirmPassword(e.target.value);
-                    if (passwordError) setPasswordError('');
-                  }}
-                />
-              </div>
-            </div>
-            <Button onClick={updatePassword} disabled={passwordLoading || !newPassword} className="w-full md:w-auto">
-              {passwordLoading ? t('personal_settings.security.password.updating') : t('personal_settings.security.password.update_button')}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* TOTP Setup Dialog */}
-      <Dialog open={showTotpSetup} onOpenChange={(open) => !totpLoading && setShowTotpSetup(open)}>
-        <DialogContent className={`${isMobile ? 'max-w-[95vw] p-4 max-h-[90vh] overflow-y-auto' : 'max-w-[500px]'}`}>
-          <DialogHeader>
-            <DialogTitle className={isMobile ? 'text-base' : ''}>{t('personal_settings.totp.setup_title')}</DialogTitle>
-            <DialogDescription className={isMobile ? 'text-xs' : ''}>{t('personal_settings.totp.setup_desc')}</DialogDescription>
-          </DialogHeader>
-
-          <div className={`space-y-${isMobile ? '3' : '4'}`}>
-            <Alert className={isMobile ? 'text-xs' : ''}>
-              <AlertTitle className={isMobile ? 'text-sm' : ''}>{t('personal_settings.totp.setup_instructions_title')}</AlertTitle>
-              <AlertDescription>
-                <ol className={`${isMobile ? 'pl-3 mt-1 space-y-0.5 text-xs' : 'pl-4 mt-2 space-y-1'}`}>
-                  <li>{t('personal_settings.totp.setup_step1')}</li>
-                  <li>{t('personal_settings.totp.setup_step2')}</li>
-                  <li>{t('personal_settings.totp.setup_step3')}</li>
-                  <li>{t('personal_settings.totp.setup_step4')}</li>
-                </ol>
-              </AlertDescription>
-            </Alert>
-
-            {totpQRCode && (
-              <div className={`flex justify-center ${isMobile ? 'my-2' : 'my-4'}`}>
-                <img
-                  src={totpQRCode}
-                  alt={t('personal_settings.totp.qr_alt')}
-                  className={`rounded-lg shadow-md ${isMobile ? 'max-w-[240px] w-full h-auto' : 'max-w-full'}`}
-                />
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <FormLabel className={isMobile ? 'text-xs' : ''}>{t('personal_settings.totp.secret_key')}</FormLabel>
-              <Input value={totpSecret} readOnly className={`font-mono ${isMobile ? 'text-xs h-9' : ''}`} />
-            </div>
-
-            <div className="space-y-2">
-              <FormLabel className={isMobile ? 'text-xs' : ''}>{t('personal_settings.totp.verify_code')}</FormLabel>
-              <Input
-                placeholder={
-                  isMobile ? t('personal_settings.totp.verify_placeholder_mobile') : t('personal_settings.totp.verify_placeholder')
-                }
-                value={totpCode}
-                onChange={(e) => setTotpCode(e.target.value)}
-                maxLength={6}
-                className={isMobile ? 'text-base h-10' : ''}
-              />
-              {confirmTotpError && (
-                <div className={`${isMobile ? 'text-xs' : 'text-sm'} text-destructive font-medium mt-1`}>{confirmTotpError}</div>
-              )}
-            </div>
-          </div>
-
-          <DialogFooter className={isMobile ? 'flex-col space-y-2 sm:space-y-0' : ''}>
-            <Button
-              variant="outline"
-              onClick={() => setShowTotpSetup(false)}
-              disabled={totpLoading}
-              className={isMobile ? 'w-full h-10' : ''}
-            >
-              {t('personal_settings.totp.cancel')}
-            </Button>
-            <Button
-              onClick={confirmTotp}
-              disabled={!totpCode || totpCode.length !== 6 || totpLoading}
-              className={isMobile ? 'w-full h-10' : ''}
-            >
-              {totpLoading ? t('personal_settings.totp.processing') : t('personal_settings.totp.confirm')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <PersonalAccessAndBindingsCards
+        t={t}
+        systemToken={systemToken}
+        affLink={affLink}
+        onGenerateAccessToken={generateAccessToken}
+        onGetAffLink={getAffLink}
+        systemStatus={systemStatus}
+        oauthBindings={oauthBindings}
+        oauthBindingError={oauthBindingError}
+        oauthBindingPending={oauthBindingPending}
+        onBindLark={onBindLark}
+        onBindOidc={onBindOidc}
+      />
+      <PersonalSecurityCard
+        t={t}
+        passkey={{
+          passkeys,
+          passkeySupported,
+          passkeyError,
+          passkeyLoading,
+          showPasskeyName,
+          passkeyName,
+          onPasskeyNameChange: setPasskeyName,
+          onOpenPasskeyName: () => setShowPasskeyName(true),
+          onCancelPasskeyName: () => {
+            setShowPasskeyName(false);
+            setPasskeyName('');
+          },
+          onRegisterPasskey: registerPasskey,
+          onDeletePasskey: deletePasskey,
+        }}
+        totp={{
+          totpEnabled,
+          totpError,
+          setupTotpError,
+          disableTotpError,
+          totpCode,
+          onTotpCodeChange: setTotpCode,
+          totpLoading,
+          onSetupTotp: setupTotp,
+          onDisableTotp: disableTotp,
+          showTotpSetup,
+          onShowTotpSetupChange: (open) => !totpLoading && setShowTotpSetup(open),
+          totpQRCode,
+          totpSecret,
+          confirmTotpError,
+          onConfirmTotp: confirmTotp,
+          isMobile,
+        }}
+        password={{
+          newPassword,
+          confirmPassword,
+          passwordError,
+          passwordLoading,
+          onNewPasswordChange: (value) => {
+            setNewPassword(value);
+            if (passwordError) setPasswordError('');
+          },
+          onConfirmPasswordChange: (value) => {
+            setConfirmPassword(value);
+            if (passwordError) setPasswordError('');
+          },
+          onUpdatePassword: updatePassword,
+        }}
+      />
       <ConfirmActionDialog />
     </div>
   );

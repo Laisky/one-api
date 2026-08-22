@@ -1,10 +1,9 @@
 import { ToolListEditor } from '@/components/mcp/ToolListEditor';
 import { FormField, FormItem, FormMessage } from '@/components/ui/form';
-import type { UseFormReturn } from 'react-hook-form';
-import type { ChannelForm } from '../schemas';
+import type { ChannelFormMethods } from '../schemas';
 
 interface ChannelMCPSettingsProps {
-  form: UseFormReturn<ChannelForm>;
+  form: ChannelFormMethods;
   tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
 }
 

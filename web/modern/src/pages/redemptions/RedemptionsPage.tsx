@@ -15,8 +15,8 @@ import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { zodResolver } from '@hookform/resolvers/zod';
-import type { ColumnDef } from '@tanstack/react-table';
+import { zodResolver } from '@/lib/zod-resolver';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -84,14 +84,15 @@ export function RedemptionsPage() {
       .min(1, tr('edit.validation.name_required', 'Name is required'))
       .max(20, tr('edit.validation.name_max', 'Max 20 chars')),
     count: z.coerce
-      .number()
+      .number<string | number>()
       .int()
       .min(1, tr('edit.validation.count_min', 'Count must be positive'))
       .max(100, tr('edit.validation.count_max', 'Count cannot exceed 100')),
-    quota: z.coerce.number().int().min(0, tr('edit.validation.quota_min', 'Quota cannot be negative')),
+    quota: z.coerce.number<string | number>().int().min(0, tr('edit.validation.quota_min', 'Quota cannot be negative')),
   });
-  type CreateForm = z.infer<typeof schema>;
-  const form = useForm<CreateForm>({
+  type CreateFormInput = z.input<typeof schema>;
+  type CreateForm = z.output<typeof schema>;
+  const form = useForm<CreateFormInput, unknown, CreateForm>({
     resolver: zodResolver(schema),
     defaultValues: { name: '', count: 1, quota: 0 },
   });
@@ -150,13 +151,7 @@ export function RedemptionsPage() {
     {
       header: tr('columns.name', 'Name'),
       accessorKey: 'name',
-      cell: ({ row }) => (
-        <NameWithId
-          name={row.original.name}
-          refId={redemptionRef(row.original)}
-          idLabel={tr('columns.id', 'ID')}
-        />
-      ),
+      cell: ({ row }) => <NameWithId name={row.original.name} refId={redemptionRef(row.original)} idLabel={tr('columns.id', 'ID')} />,
     },
     { header: tr('columns.code', 'Code'), accessorKey: 'key' },
     {

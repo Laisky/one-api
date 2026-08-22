@@ -17,9 +17,11 @@ package model
 // test skips locally; CI's no-skip guard fails the run instead.
 
 import (
+	stderrors "errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -34,6 +36,31 @@ const compactOldBinaryEnv = "COMPACT_UUID_TEST_OLD_BINARY"
 
 // compactOldBinaryPortEnv names the port the old binary should listen on during the corpus.
 const compactOldBinaryPortEnv = "COMPACT_UUID_TEST_OLD_BINARY_PORT"
+
+// terminatePinnedOldBinary stops a pinned server process and joins its output-copy goroutines.
+// Expected process-exit errors are accepted, while unexpected kill or wait failures are reported
+// through the supplied test handle.
+// The t parameter reports unexpected process lifecycle failures.
+// The command parameter is the started pinned binary command to terminate and join.
+// This function does not return a value.
+func terminatePinnedOldBinary(t *testing.T, command *exec.Cmd) {
+	t.Helper()
+	require.NotNil(t, command.Process)
+
+	killErr := command.Process.Kill()
+	if killErr != nil && !stderrors.Is(killErr, os.ErrProcessDone) {
+		t.Errorf("kill pinned old binary: %v", killErr)
+	}
+
+	waitErr := command.Wait()
+	if waitErr == nil {
+		return
+	}
+	var exitErr *exec.ExitError
+	if !stderrors.As(waitErr, &exitErr) {
+		t.Errorf("wait for pinned old binary and its output: %v", waitErr)
+	}
+}
 
 // runPinnedOldBinary starts the pinned artifact against a DSN and waits for it to migrate.
 //
@@ -72,22 +99,33 @@ func runPinnedOldBinary(t *testing.T, binary string, dsn string, settleFor time.
 	require.NoError(t, command.Start(), "the pinned old binary must start")
 	// The binary must be stopped even if an assertion fails, or it keeps the port and a
 	// connection pool for the rest of the run.
-	t.Cleanup(func() {
-		if command.Process != nil {
-			_ = command.Process.Kill()
-			_, _ = command.Process.Wait()
+	waited := false
+	terminate := func() {
+		if command.Process != nil && !waited {
+			terminatePinnedOldBinary(t, command)
+			waited = true
 		}
-	})
+	}
+	t.Cleanup(terminate)
 
 	time.Sleep(settleFor)
-	// Signal 0 is the portable liveness probe: it performs the permission and existence checks
-	// without delivering anything. Passing a nil signal is not a probe and always errors.
-	require.NotNil(t, command.Process)
-	require.NoError(t, command.Process.Signal(syscall.Signal(0)),
-		"the pinned old binary must still be running after startup and AutoMigrate; output:\n%s", output.String())
+	// Signal 0 is a Unix-like liveness probe: it performs permission and existence checks
+	// without delivering anything. Windows does not implement it; the output and database
+	// assertions below still verify startup and AutoMigrate there.
+	if runtime.GOOS != "windows" {
+		require.NotNil(t, command.Process)
+		livenessErr := command.Process.Signal(syscall.Signal(0))
+		if livenessErr != nil {
+			terminate()
+			require.NoError(t, livenessErr,
+				"the pinned old binary must still be running after startup and AutoMigrate; output:\n%s",
+				output.String())
+		}
+	}
 
-	_ = command.Process.Kill()
-	_, _ = command.Process.Wait()
+	// Cmd.Wait, unlike Process.Wait, also joins os/exec's stdout and stderr copy goroutines.
+	// Reading the builder before those goroutines exit races with their final writes.
+	terminate()
 	return output.String()
 }
 

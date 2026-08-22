@@ -896,7 +896,11 @@
           "create_failed_message": "Unable to create user.",
           "create_failed_title": "Create failed"
         },
-        "title": "Create User"
+        "title": "Create User",
+        "validation": {
+          "password_min": "Password must be at least {{count}} characters.",
+          "username_required": "Enter a username."
+        }
       },
       "topup": {
         "actions": {
@@ -917,7 +921,10 @@
           "submit_failed_message": "Unable to top up user.",
           "submit_failed_title": "Top up failed"
         },
-        "title": "Top Up {{username}}"
+        "title": "Top Up {{username}}",
+        "validation": {
+          "quota_integer": "Quota must be an integer."
+        }
       }
     },
     "edit": {

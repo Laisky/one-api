@@ -51,10 +51,7 @@ describe('TopUpPage: Stripe checkout behavior', () => {
 
     localStorage.clear();
     localStorage.setItem('quota_per_unit', '500000');
-    localStorage.setItem(
-      'status',
-      JSON.stringify({ stripe_enabled: true, min_topup_usd: 5, top_up_link: '' })
-    );
+    localStorage.setItem('status', JSON.stringify({ stripe_enabled: true, min_topup_usd: 5, top_up_link: '' }));
 
     (api.get as any).mockReset();
     (api.post as any).mockReset();
@@ -97,9 +94,7 @@ describe('TopUpPage: Stripe checkout behavior', () => {
     fireEvent.change(amount, { target: { value: '19.99' } });
     fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }));
 
-    await waitFor(() =>
-      expect(api.post).toHaveBeenCalledWith('/api/user/topup/stripe', { amount_usd: 19.99 })
-    );
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/user/topup/stripe', { amount_usd: 19.99 }));
   });
 
   it('blocks amounts below the server-advertised minimum', async () => {
@@ -113,6 +108,29 @@ describe('TopUpPage: Stripe checkout behavior', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
+  it('shows the required message for an empty Stripe amount', async () => {
+    renderPage();
+
+    const amount = await screen.findByLabelText(/amount \(usd\)/i);
+    fireEvent.change(amount, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }));
+
+    await screen.findByText(/enter an amount in usd/i);
+    expect(screen.queryByText(/minimum is \$5/i)).not.toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('preserves the maximum validation for non-empty Stripe amounts', async () => {
+    renderPage();
+
+    const amount = await screen.findByLabelText(/amount \(usd\)/i);
+    fireEvent.change(amount, { target: { value: '100000.01' } });
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }));
+
+    await screen.findByText(/amount too large/i);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it('shows the cancel outcome from the query string', async () => {
     renderPage('/topup?stripe=cancel');
     await screen.findByText(/payment canceled/i);
@@ -122,13 +140,9 @@ describe('TopUpPage: Stripe checkout behavior', () => {
   it('polls fulfillment and refreshes balance and history after paid status', async () => {
     renderPage('/topup?stripe=success&session_id=cs_test');
 
-    await waitFor(() =>
-      expect(api.get).toHaveBeenCalledWith('/api/user/topup/stripe/orders/cs_test')
-    );
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/user/topup/stripe/orders/cs_test'));
     await screen.findByText(/^credits added$/i);
-    expect(
-      screen.getByText(/your balance has been updated from the server order status/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/your balance has been updated from the server order status/i)).toBeInTheDocument();
 
     await waitFor(() => {
       const calls = (api.get as any).mock.calls.map((args: unknown[]) => args[0]);

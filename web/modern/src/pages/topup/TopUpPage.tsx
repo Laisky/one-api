@@ -6,17 +6,8 @@ import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/stores/auth';
-import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  AlertCircle,
-  ArrowUpRight,
-  CheckCircle2,
-  Clock,
-  CreditCard,
-  Mail,
-  RefreshCw,
-  Ticket,
-} from 'lucide-react';
+import { zodResolver } from '@/lib/zod-resolver';
+import { AlertCircle, ArrowUpRight, CheckCircle2, Clock, CreditCard, Mail, RefreshCw, Ticket } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -50,8 +41,7 @@ export function TopUpPage() {
   const [searchParams] = useSearchParams();
   const { t, i18n } = useTranslation();
   const tr = useCallback(
-    (key: string, defaultValue: string, options?: Record<string, unknown>) =>
-      t(`topup.${key}`, { defaultValue, ...options }),
+    (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`topup.${key}`, { defaultValue, ...options }),
     [t]
   );
 
@@ -83,23 +73,28 @@ export function TopUpPage() {
   }, [searchParams]);
   const returnSessionId = searchParams.get('session_id') || '';
 
-  const presets = useMemo(
-    () => BASE_PRESETS.filter((n) => n >= minTopUpUSD),
-    [minTopUpUSD]
-  );
+  const presets = useMemo(() => BASE_PRESETS.filter((n) => n >= minTopUpUSD), [minTopUpUSD]);
 
-  const stripeSchema = useMemo(
-    () =>
-      z.object({
-        amount_usd: z.coerce
-          .number({ invalid_type_error: tr('stripe.required', 'Enter an amount in USD') })
-          .min(minTopUpUSD, tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }))
-          .max(100000, tr('stripe.max', 'Amount too large')),
-      }),
-    [minTopUpUSD, tr]
-  );
-  type StripeForm = z.infer<typeof stripeSchema>;
-  const stripeForm = useForm<StripeForm>({
+  const stripeSchema = useMemo(() => {
+    const amountInputSchema = z.union([
+      z
+        .string()
+        .trim()
+        .min(1, { error: tr('stripe.required', 'Enter an amount in USD') }),
+      z.number(),
+    ]);
+    const amountSchema = z.coerce
+      .number<string | number>({ error: tr('stripe.required', 'Enter an amount in USD') })
+      .min(minTopUpUSD, { error: tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }) })
+      .max(100000, { error: tr('stripe.max', 'Amount too large') });
+
+    return z.object({
+      amount_usd: amountInputSchema.pipe(amountSchema),
+    });
+  }, [minTopUpUSD, tr]);
+  type StripeFormInput = z.input<typeof stripeSchema>;
+  type StripeForm = z.output<typeof stripeSchema>;
+  const stripeForm = useForm<StripeFormInput, unknown, StripeForm>({
     resolver: zodResolver(stripeSchema),
     defaultValues: { amount_usd: minTopUpUSD },
   });
@@ -413,10 +408,7 @@ export function TopUpPage() {
                   ? tr('stripe.outcome_credited', 'Your balance has been updated from the server order status.')
                   : fulfillmentStatus === 'failed'
                     ? tr('stripe.outcome_failed', 'Payment was recorded but needs operator review. Contact support if balance is wrong.')
-                    : tr(
-                        'stripe.outcome_success',
-                        'Confirming with the server… your balance updates after the webhook settles the order.'
-                      )}
+                    : tr('stripe.outcome_success', 'Confirming with the server… your balance updates after the webhook settles the order.')}
               </p>
             </div>
           </div>
@@ -426,9 +418,7 @@ export function TopUpPage() {
             <AlertCircle className="h-4 w-4 mt-0.5 text-warning flex-shrink-0" />
             <div className="text-warning-foreground">
               <p className="font-medium mb-0.5">{tr('stripe.outcome_cancel_title', 'Payment canceled')}</p>
-              <p className="text-warning-foreground/80">
-                {tr('stripe.outcome_cancel', 'You have not been charged.')}
-              </p>
+              <p className="text-warning-foreground/80">{tr('stripe.outcome_cancel', 'You have not been charged.')}</p>
             </div>
           </div>
         )}
@@ -450,9 +440,7 @@ export function TopUpPage() {
                   <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
                 </Button>
               </div>
-              <p className="mt-1 text-4xl font-semibold tracking-tight tabular-nums text-foreground">
-                {balanceUSD}
-              </p>
+              <p className="mt-1 text-4xl font-semibold tracking-tight tabular-nums text-foreground">{balanceUSD}</p>
               <p className="mt-1 text-xs text-muted-foreground tabular-nums">{tokensLabel}</p>
               <p className="mt-auto pt-6 text-xs text-muted-foreground">
                 {tr('balance.note', 'Credits are billed in USD and never expire.')}
@@ -547,9 +535,7 @@ export function TopUpPage() {
                         )}
                       </p>
                       <Button type="submit" disabled={isStripeSubmitting} className="min-h-11 sm:w-auto">
-                        {isStripeSubmitting
-                          ? tr('stripe.processing', 'Redirecting…')
-                          : tr('stripe.button', 'Continue to Stripe')}
+                        {isStripeSubmitting ? tr('stripe.processing', 'Redirecting…') : tr('stripe.button', 'Continue to Stripe')}
                       </Button>
                     </div>
                   </form>
@@ -565,16 +551,11 @@ export function TopUpPage() {
               <Ticket className="h-4 w-4 text-muted-foreground" />
               <CardTitle className="text-base">{tr('redeem.title', 'Redeem a code')}</CardTitle>
             </div>
-            <CardDescription>
-              {tr('redeem.description', 'Have a redemption code? Add credits without paying.')}
-            </CardDescription>
+            <CardDescription>{tr('redeem.description', 'Have a redemption code? Add credits without paying.')}</CardDescription>
           </CardHeader>
           <CardContent>
             <Form {...codeForm}>
-              <form
-                onSubmit={codeForm.handleSubmit(onCodeSubmit)}
-                className="flex flex-col sm:flex-row sm:items-start gap-3"
-              >
+              <form onSubmit={codeForm.handleSubmit(onCodeSubmit)} className="flex flex-col sm:flex-row sm:items-start gap-3">
                 <FormField
                   control={codeForm.control}
                   name="redemption_code"
@@ -594,18 +575,13 @@ export function TopUpPage() {
                   )}
                 />
                 <Button type="submit" variant="outline" disabled={isCodeSubmitting} className="min-h-11 sm:w-auto">
-                  {isCodeSubmitting
-                    ? tr('redeem.processing', 'Redeeming...')
-                    : tr('redeem.button', 'Redeem')}
+                  {isCodeSubmitting ? tr('redeem.processing', 'Redeeming...') : tr('redeem.button', 'Redeem')}
                 </Button>
               </form>
 
               {codeForm.formState.errors.root && (
                 <div
-                  className={cn(
-                    'mt-3 text-sm',
-                    codeForm.formState.errors.root.type === 'success' ? 'text-success' : 'text-destructive'
-                  )}
+                  className={cn('mt-3 text-sm', codeForm.formState.errors.root.type === 'success' ? 'text-success' : 'text-destructive')}
                 >
                   {codeForm.formState.errors.root.message}
                 </div>
@@ -676,7 +652,10 @@ export function TopUpPage() {
                     <tbody>
                       {history.map((entry) => (
                         <tr key={entry.id} className="border-t hover:bg-muted/30">
-                          <td className="px-6 py-3 tabular-nums text-foreground/90 whitespace-nowrap" data-label={tr('history.col.date', 'Date')}>
+                          <td
+                            className="px-6 py-3 tabular-nums text-foreground/90 whitespace-nowrap"
+                            data-label={tr('history.col.date', 'Date')}
+                          >
                             {formatHistoryDate(entry.created_at)}
                           </td>
                           <td className="px-6 py-3 text-foreground/80" data-label={tr('history.col.source', 'Source')}>
@@ -688,7 +667,10 @@ export function TopUpPage() {
                           <td className="px-6 py-3 text-foreground/80" data-label={tr('history.col.status', 'Status')}>
                             {statusLabel(entry.status)}
                           </td>
-                          <td className="px-6 py-3 text-right tabular-nums text-foreground font-medium" data-label={tr('history.col.amount', 'Amount')}>
+                          <td
+                            className="px-6 py-3 text-right tabular-nums text-foreground font-medium"
+                            data-label={tr('history.col.amount', 'Amount')}
+                          >
                             {formatCents(entry.amount_cents, entry.currency)}
                           </td>
                         </tr>
@@ -705,9 +687,7 @@ export function TopUpPage() {
           <Card>
             <CardContent className="flex items-center justify-between gap-4 p-4">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">
-                  {tr('online.title', 'Online payment portal')}
-                </p>
+                <p className="text-sm font-medium text-foreground">{tr('online.title', 'Online payment portal')}</p>
                 <p className="text-xs text-muted-foreground truncate">
                   {tr('online.description', 'Purchase quota through our external payment system')}
                 </p>
@@ -727,19 +707,15 @@ export function TopUpPage() {
         )}
 
         <div className="pt-2">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
-            {tr('notes.title', 'Good to know')}
-          </p>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">{tr('notes.title', 'Good to know')}</p>
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-start gap-2">
               <Mail className="h-4 w-4 mt-0.5 text-muted-foreground/70 flex-shrink-0" />
               <span>
                 {userEmail
-                  ? tr(
-                      'notes.receipt_with_email',
-                      'After each card payment, Stripe emails an itemized receipt to {{email}}.',
-                      { email: userEmail }
-                    )
+                  ? tr('notes.receipt_with_email', 'After each card payment, Stripe emails an itemized receipt to {{email}}.', {
+                      email: userEmail,
+                    })
                   : tr(
                       'notes.receipt_no_email',
                       'After each card payment, Stripe emails a receipt. Add an email to your account to receive it automatically.'
@@ -758,12 +734,7 @@ export function TopUpPage() {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-muted-foreground/50 select-none mt-1">•</span>
-              <span>
-                {tr(
-                  'notes.refund',
-                  'Refund requests are handled case-by-case. Contact support with the receipt from Stripe.'
-                )}
-              </span>
+              <span>{tr('notes.refund', 'Refund requests are handled case-by-case. Contact support with the receipt from Stripe.')}</span>
             </li>
           </ul>
         </div>
