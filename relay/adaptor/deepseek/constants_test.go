@@ -15,8 +15,9 @@ import (
 func TestModelRatiosMatchOfficialCatalog(t *testing.T) {
 	t.Parallel()
 
-	require.Len(t, ModelRatios, 2)
+	require.Len(t, ModelRatios, 3)
 	require.Contains(t, ModelRatios, "deepseek-v4-flash")
+	require.Contains(t, ModelRatios, "deepseek-v4-flash-vision-exp")
 	require.Contains(t, ModelRatios, "deepseek-v4-pro")
 	require.NotContains(t, ModelRatios, "deepseek-chat")
 	require.NotContains(t, ModelRatios, "deepseek-reasoner")
@@ -32,8 +33,10 @@ func TestModelRatiosMatchOfficialPricing(t *testing.T) {
 		input       float64
 		cachedInput float64
 		output      float64
+		flashPrice  bool
 	}{
-		{name: "deepseek-v4-flash", input: 0.14, cachedInput: 0.0028, output: 0.28},
+		{name: "deepseek-v4-flash", input: 0.14, cachedInput: 0.0028, output: 0.28, flashPrice: true},
+		{name: "deepseek-v4-flash-vision-exp", input: 0.14, cachedInput: 0.0028, output: 0.28, flashPrice: true},
 		{name: "deepseek-v4-pro", input: 0.435, cachedInput: 0.003625, output: 0.87},
 	}
 
@@ -56,7 +59,7 @@ func TestModelRatiosMatchOfficialPricing(t *testing.T) {
 
 			offPeak := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 17, 5, 0, 0, 0, time.UTC))
 			peak := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 17, 2, 0, 0, 0, time.UTC))
-			if tt.name == "deepseek-v4-flash" {
+			if tt.flashPrice {
 				require.InDelta(t, 0.22*ratio.MilliTokensUsd, offPeak.Ratio, 1e-15)
 				require.InDelta(t, 0.007*ratio.MilliTokensUsd, offPeak.CachedInputRatio, 1e-15)
 				require.InDelta(t, 0.66/0.22, offPeak.CompletionRatio, 1e-15)
@@ -78,7 +81,7 @@ func TestModelRatiosMatchOfficialPricing(t *testing.T) {
 }
 
 // TestModelRatiosMatchOfficialCapabilities verifies model-specific version,
-// reasoning-effort, and native Responses API capability metadata.
+// modalities, reasoning effort, and endpoint capability metadata.
 func TestModelRatiosMatchOfficialCapabilities(t *testing.T) {
 	t.Parallel()
 
@@ -86,6 +89,16 @@ func TestModelRatiosMatchOfficialCapabilities(t *testing.T) {
 	require.ElementsMatch(t, []string{"low", "high", "max"}, flash.SupportedReasoningEfforts)
 	require.Contains(t, flash.SupportedFeatures, "web_search")
 	require.Contains(t, flash.Description, "DeepSeek-V4-Flash-0731")
+
+	vision := ModelRatios["deepseek-v4-flash-vision-exp"]
+	require.ElementsMatch(t, []string{"text", "image"}, vision.InputModalities)
+	require.ElementsMatch(t, []string{"text"}, vision.OutputModalities)
+	require.ElementsMatch(t, []string{"low", "high", "max"}, vision.SupportedReasoningEfforts)
+	require.Contains(t, vision.SupportedFeatures, "tools")
+	require.Contains(t, vision.SupportedFeatures, "json_mode")
+	require.NotContains(t, vision.SupportedFeatures, "web_search")
+	require.Nil(t, vision.Image, "image inputs are billed as prompt tokens, not per generated image")
+	require.Contains(t, vision.Description, "DeepSeek-V4-Flash-Vision-Exp")
 
 	pro := ModelRatios["deepseek-v4-pro"]
 	require.ElementsMatch(t, []string{"high", "max"}, pro.SupportedReasoningEfforts)
