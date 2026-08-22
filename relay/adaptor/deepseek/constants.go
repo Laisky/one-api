@@ -6,8 +6,10 @@ import (
 )
 
 var (
-	// deepseekTextInputs lists the input modalities supported by DeepSeek V4 models.
+	// deepseekTextInputs lists the input modalities supported by text-only DeepSeek V4 models.
 	deepseekTextInputs = []string{"text"}
+	// deepseekVisionInputs lists the input modalities supported by DeepSeek V4 Vision models.
+	deepseekVisionInputs = []string{"text", "image"}
 	// deepseekTextOutputs lists the output modalities supported by DeepSeek V4 models.
 	deepseekTextOutputs = []string{"text"}
 
@@ -17,6 +19,10 @@ var (
 	// deepseekProFeatures advertises DeepSeek V4 Pro capabilities across its
 	// Chat Completions and native Responses API endpoints.
 	deepseekProFeatures = []string{"tools", "json_mode", "logprobs", "reasoning", "web_search"}
+	// deepseekVisionFeatures advertises the capabilities documented for the
+	// experimental V4 Flash Vision model. It intentionally excludes web_search
+	// until DeepSeek documents that combination for the vision model.
+	deepseekVisionFeatures = []string{"tools", "json_mode", "logprobs", "reasoning"}
 
 	// deepseekSamplingParams lists the OpenAI-compatible sampling parameters
 	// accepted by DeepSeek Chat Completions. Temperature and top_p have no effect
@@ -96,14 +102,17 @@ func deepseekV4PricingWindows(
 }
 
 // ModelRatios contains the currently available DeepSeek API models and their
-// pricing and capability metadata. Model IDs and prices were verified on
-// 2026-08-13 against the official DeepSeek documentation:
+// pricing and capability metadata. Model IDs, capabilities, and prices were
+// verified on 2026-08-21 against the official DeepSeek documentation:
 //   - https://api-docs.deepseek.com/quick_start/pricing/
+//   - https://api-docs.deepseek.com/guides/vision/
 //   - https://api-docs.deepseek.com/api/list-models/
 //   - https://api-docs.deepseek.com/api/create-chat-completion/
 //   - https://api-docs.deepseek.com/guides/responses_api/
-//   - https://api-docs.deepseek.com/updates/
 //
+// Images sent to deepseek-v4-flash-vision-exp are converted to prompt tokens by
+// DeepSeek and therefore use the normal cache-hit/cache-miss input price. They
+// must not be charged with ImagePricing, which is reserved for generated images.
 // The retired deepseek-chat and deepseek-reasoner aliases are intentionally
 // omitted; DeepSeek made them inaccessible after 2026-07-24 15:59 UTC.
 var ModelRatios = map[string]adaptor.ModelConfig{
@@ -128,6 +137,26 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:   "DeepSeek-V4-Flash-0731, a 284B/13B-active MoE model with thinking and non-thinking modes, 1M context, and native Responses and Anthropic API support.",
 		// The published schedule changes all token prices after 2026-08-16 16:00 UTC.
 		TimeWindows: deepseekV4PricingWindows(0.22, 0.007, 0.66, 0.44, 0.014, 1.32),
+	},
+	// deepseek-v4-flash-vision-exp is the experimental multimodal V4 Flash model.
+	// DeepSeek documents the same token prices and limits as deepseek-v4-flash.
+	// Each image is converted into prompt tokens (at most 384 tokens per image),
+	// and the API response's usage object is authoritative for final billing.
+	"deepseek-v4-flash-vision-exp": {
+		Ratio:                       deepseekV4FlashInputRatio,
+		CachedInputRatio:            deepseekV4FlashCachedInputRatio,
+		CompletionRatio:             0.28 / 0.14,
+		ContextLength:               1048576,
+		MaxOutputTokens:             393216,
+		InputModalities:             deepseekVisionInputs,
+		OutputModalities:            deepseekTextOutputs,
+		SupportedFeatures:           deepseekVisionFeatures,
+		SupportedSamplingParameters: deepseekSamplingParams,
+		SupportedReasoningEfforts:   deepseekFlashReasoningEfforts,
+		DefaultReasoningEffort:      "high",
+		Quantization:                "fp4",
+		Description:                 "DeepSeek-V4-Flash-Vision-Exp, an experimental multimodal V4 Flash model with text and image input, thinking and non-thinking modes, 1M context, and Chat Completions, Responses, and Anthropic API support.",
+		TimeWindows:                 deepseekV4PricingWindows(0.22, 0.007, 0.66, 0.44, 0.014, 1.32),
 	},
 	// deepseek-v4-pro costs $0.435/1M cache-miss input, $0.003625/1M cache-hit
 	// input, and $0.87/1M output before 2026-08-16 16:00 UTC. Its scheduled
