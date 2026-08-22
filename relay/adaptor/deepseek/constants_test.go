@@ -75,7 +75,11 @@ func TestModelRatiosMatchOfficialPricing(t *testing.T) {
 				require.InDelta(t, 3.96/1.32, peak.CompletionRatio, 1e-15)
 			}
 			require.NotContains(t, cfg.SupportedFeatures, "structured_outputs")
-			require.Equal(t, "fp4", cfg.Quantization)
+			if tt.name == "deepseek-v4-flash-vision-exp" {
+				require.Empty(t, cfg.Quantization)
+			} else {
+				require.Equal(t, "fp4", cfg.Quantization)
+			}
 		})
 	}
 }
@@ -96,6 +100,7 @@ func TestModelRatiosMatchOfficialCapabilities(t *testing.T) {
 	require.ElementsMatch(t, []string{"low", "high", "max"}, vision.SupportedReasoningEfforts)
 	require.Contains(t, vision.SupportedFeatures, "tools")
 	require.Contains(t, vision.SupportedFeatures, "json_mode")
+	require.NotContains(t, vision.SupportedFeatures, "logprobs")
 	require.NotContains(t, vision.SupportedFeatures, "web_search")
 	require.Nil(t, vision.Image, "image inputs are billed as prompt tokens, not per generated image")
 	require.Contains(t, vision.Description, "DeepSeek-V4-Flash-Vision-Exp")
