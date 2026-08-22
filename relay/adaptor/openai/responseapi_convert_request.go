@@ -324,13 +324,26 @@ func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
 					textSections = append(textSections, text)
 				}
 			case "input_image":
-				if url, ok := partMap["image_url"].(string); ok {
+				if url, ok := partMap["image_url"].(string); ok && url != "" {
 					image := &model.ImageURL{Url: url}
 					if detail, ok := partMap["detail"].(string); ok {
 						image.Detail = detail
 					}
 					parts = append(parts, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: image})
 					hasNonText = true
+				} else {
+					fileID, _ := partMap["file_id"].(string)
+					fileData, _ := partMap["file_data"].(string)
+					filename, _ := partMap["filename"].(string)
+					if fileID != "" || fileData != "" {
+						parts = append(parts, model.MessageContent{
+							Type:     model.ContentTypeFile,
+							FileID:   fileID,
+							FileData: fileData,
+							Filename: filename,
+						})
+						hasNonText = true
+					}
 				}
 			case "input_audio":
 				if inputAudio, ok := partMap["input_audio"].(map[string]any); ok {

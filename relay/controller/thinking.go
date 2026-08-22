@@ -360,6 +360,8 @@ func isReasoningCapableModel(modelName string) bool {
 		return true
 	case strings.Contains(name, "deepseek-r1"):
 		return true
+	case strings.HasPrefix(name, "deepseek-v4-"):
+		return true
 	case strings.Contains(name, "reasoner"):
 		return true
 	default:
@@ -384,6 +386,9 @@ func normalizeReasoningEffort(modelName, effort string) string {
 	normalized := strings.ToLower(strings.TrimSpace(effort))
 	if normalized == "" {
 		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(modelName)), "deepseek-v4-") && normalized == "xhigh" {
+		return "max"
 	}
 	if !isReasoningEffortAllowed(modelName, normalized) {
 		return ""

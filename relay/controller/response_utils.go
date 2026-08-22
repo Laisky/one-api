@@ -188,11 +188,11 @@ func countResponseAPIInputMapTokens(ctx context.Context, itemMap map[string]any,
 				total += countResponseAPIValueTokens(ctx, args, model)
 			}
 			return total
-		case "function_call_output":
+		case "function_call_output", "custom_tool_call_output":
 			if output, ok := itemMap["output"]; ok {
-				total += countResponseAPIValueTokens(ctx, output, model)
+				total += countResponseAPIEmbeddedContentTokens(ctx, output, model)
 			} else if content, ok := itemMap["content"]; ok {
-				total += countResponseAPIValueTokens(ctx, content, model)
+				total += countResponseAPIEmbeddedContentTokens(ctx, content, model)
 			}
 			return total
 		}
@@ -213,6 +213,25 @@ func countResponseAPIInputMapTokens(ctx context.Context, itemMap map[string]any,
 
 	total += countResponseAPIValueTokens(ctx, itemMap, model)
 	return total
+}
+
+// countResponseAPIEmbeddedContentTokens counts tool-output values while
+// recognizing nested Responses content parts such as file-backed images.
+// Parameters: ctx is the request context; value is the tool output; model is the target model name.
+// Returns: the estimated token count for text and structured content in value.
+func countResponseAPIEmbeddedContentTokens(ctx context.Context, value any, model string) int {
+	switch v := value.(type) {
+	case []any:
+		return countResponseAPIContentTokens(ctx, v, model)
+	case map[string]any:
+		if content, ok := v["content"]; ok {
+			return countResponseAPIEmbeddedContentTokens(ctx, content, model)
+		}
+		if typeStr, ok := v["type"].(string); ok {
+			return countResponseAPIContentPartTokens(ctx, v, typeStr, model)
+		}
+	}
+	return countResponseAPIValueTokens(ctx, value, model)
 }
 
 // countResponseAPIContentTokens counts tokens for a Response API content field.
@@ -251,6 +270,15 @@ func countResponseAPIContentPartTokens(ctx context.Context, partMap map[string]a
 	case "input_image":
 		url, _ := partMap["image_url"].(string)
 		detail, _ := partMap["detail"].(string)
+		if url == "" && model == "deepseek-v4-flash-vision-exp" {
+			fileID, _ := partMap["file_id"].(string)
+			fileData, _ := partMap["file_data"].(string)
+			if strings.TrimSpace(fileID) != "" || strings.TrimSpace(fileData) != "" {
+				// CountImageTokens uses DeepSeek's fixed upper bound and does not
+				// inspect the sentinel because the model is handled specially.
+				url = "deepseek-file-input"
+			}
+		}
 		return countResponseAPIImageTokens(ctx, url, detail, model)
 	case "input_audio":
 		if inputAudio, ok := partMap["input_audio"].(map[string]any); ok {
@@ -438,7 +466,7 @@ func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 
 // supportsDeepSeekNativeResponseAPI reports whether the request targets a model
 // served by DeepSeek's native, stateless Responses endpoint. DeepSeek exposes
-// that endpoint for both currently available V4 models.
+// that endpoint for all currently available V4 models.
 func supportsDeepSeekNativeResponseAPI(meta *metalib.Meta) bool {
 	if meta == nil || !isDeepSeekUpstream(meta) {
 		return false
@@ -450,7 +478,9 @@ func supportsDeepSeekNativeResponseAPI(meta *metalib.Meta) bool {
 	}
 
 	// https://api-docs.deepseek.com/guides/responses_api/
-	return modelName == "deepseek-v4-flash" || modelName == "deepseek-v4-pro"
+	return modelName == "deepseek-v4-flash" ||
+		modelName == "deepseek-v4-flash-vision-exp" ||
+		modelName == "deepseek-v4-pro"
 }
 
 // isDeepSeekModel checks if the model is a DeepSeek model
@@ -503,6 +533,7 @@ func isReasoningModel(modelName string) bool {
 	}
 	// Check for reasoning model prefixes (direct model names)
 	if strings.HasPrefix(modelName, "gpt-5") ||
+		strings.HasPrefix(modelName, "deepseek-v4-") ||
 		strings.HasPrefix(modelName, "o1") ||
 		strings.HasPrefix(modelName, "o3") ||
 		strings.HasPrefix(modelName, "o4") ||

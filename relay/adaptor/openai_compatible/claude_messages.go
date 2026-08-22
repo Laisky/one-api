@@ -288,6 +288,18 @@ func convertClaudeBlocks(role string, blocks []any) []model.Message {
 						}
 						msg.contentParts = append(msg.contentParts, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &imageURL})
 					}
+				case "file":
+					fileID, _ := source["file_id"].(string)
+					fileData, _ := source["file_data"].(string)
+					filename, _ := source["filename"].(string)
+					if fileID != "" || fileData != "" {
+						msg.contentParts = append(msg.contentParts, model.MessageContent{
+							Type:     model.ContentTypeFile,
+							FileID:   fileID,
+							FileData: fileData,
+							Filename: filename,
+						})
+					}
 				}
 			}
 		case "tool_use":

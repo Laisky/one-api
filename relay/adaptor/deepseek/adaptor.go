@@ -92,10 +92,15 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	// DeepSeek is OpenAI-compatible, so we can pass the request through with minimal changes
-	// Remove reasoning_effort as DeepSeek doesn't support it
-	if request.ReasoningEffort != nil {
-		request.ReasoningEffort = nil
+	if request == nil {
+		return nil, errors.New("request is nil")
 	}
+	if request.MaxCompletionTokens != nil && request.MaxTokens == 0 {
+		request.MaxTokens = *request.MaxCompletionTokens
+	}
+	request.MaxCompletionTokens = nil
+	normalizeDeepSeekReasoningEffort(request)
+	ensureDeepSeekStreamUsage(request)
 
 	normalizeDeepSeekThinkingConfig(c, request)
 	normalizeDeepSeekMessageReasoning(request)
@@ -110,13 +115,57 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 
 	if request.ResponseFormat != nil {
-		if request.ResponseFormat.JsonSchema != nil {
+		if strings.EqualFold(request.ResponseFormat.Type, "json_object") && request.ResponseFormat.JsonSchema == nil {
+			// DeepSeek supports the standard JSON object mode directly.
+		} else if request.ResponseFormat.JsonSchema != nil {
 			structuredjson.EnsureInstruction(request)
+			request.ResponseFormat = nil
+		} else {
+			request.ResponseFormat = nil
 		}
-		request.ResponseFormat = nil
 	}
 
 	return request, nil
+}
+
+// normalizeDeepSeekReasoningEffort maps portable reasoning levels to the
+// values accepted by DeepSeek and clears unsupported values.
+// Parameters: request is the mutable OpenAI-style request to normalize.
+// Returns: nothing; request.ReasoningEffort is updated in place.
+func normalizeDeepSeekReasoningEffort(request *model.GeneralOpenAIRequest) {
+	if request == nil || request.ReasoningEffort == nil {
+		return
+	}
+
+	effort := strings.ToLower(strings.TrimSpace(*request.ReasoningEffort))
+	switch effort {
+	case "high", "max":
+	case "low", "medium":
+		// DeepSeek accepts low and medium as compatibility aliases for high.
+		effort = "high"
+	case "xhigh":
+		// DeepSeek accepts xhigh as a compatibility alias for max.
+		effort = "max"
+	default:
+		request.ReasoningEffort = nil
+		return
+	}
+
+	request.ReasoningEffort = &effort
+}
+
+// ensureDeepSeekStreamUsage requests the upstream usage event needed to
+// reconcile streaming quota estimates with authoritative token accounting.
+// Parameters: request is the mutable OpenAI-style request to update.
+// Returns: nothing; stream_options.include_usage is enabled when streaming.
+func ensureDeepSeekStreamUsage(request *model.GeneralOpenAIRequest) {
+	if request == nil || !request.Stream {
+		return
+	}
+	if request.StreamOptions == nil {
+		request.StreamOptions = &model.StreamOptions{}
+	}
+	request.StreamOptions.IncludeUsage = true
 }
 
 // normalizeDeepSeekThinkingConfig coerces thinking.type into values accepted by DeepSeek.
@@ -207,6 +256,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	if !ok {
 		return nil, errors.Errorf("unexpected DeepSeek Claude conversion type %T", converted)
 	}
+	ensureDeepSeekStreamUsage(chatRequest)
 	if request.Thinking != nil {
 		thinking := *request.Thinking
 		chatRequest.Thinking = &thinking

@@ -233,6 +233,18 @@ func (m Message) ParseContent() []MessageContent {
 						},
 					})
 				}
+			case ContentTypeFile:
+				fileID, _ := contentMap["file_id"].(string)
+				fileData, _ := contentMap["file_data"].(string)
+				filename, _ := contentMap["filename"].(string)
+				if fileID != "" || fileData != "" {
+					contentList = append(contentList, MessageContent{
+						Type:     ContentTypeFile,
+						FileID:   fileID,
+						FileData: fileData,
+						Filename: filename,
+					})
+				}
 			default:
 				continue
 			}
@@ -270,11 +282,14 @@ type ImageURL struct {
 }
 
 type MessageContent struct {
-	// Type should be one of the following: text/input_audio
+	// Type identifies the content part, such as text, image_url, file, or input_audio.
 	Type       string      `json:"type,omitempty"`
 	Text       *string     `json:"text,omitempty"`
 	ImageURL   *ImageURL   `json:"image_url,omitempty"`
 	InputAudio *InputAudio `json:"input_audio,omitempty"`
+	FileID     string      `json:"file_id,omitempty"`
+	FileData   string      `json:"file_data,omitempty"`
+	Filename   string      `json:"filename,omitempty"`
 	// -------------------------------------
 	// Anthropic
 	// -------------------------------------

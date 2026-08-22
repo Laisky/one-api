@@ -211,6 +211,9 @@ func CountTokenMessages(ctx context.Context,
 				}
 			}
 		}
+		if actualModel == deepseekV4VisionModelName {
+			tokenNum += countDeepSeekFileImageTokens(message.Content)
+		}
 
 		tokenNum += getTokenNum(tokenEncoder, message.Role)
 		if message.Name != nil {
@@ -221,6 +224,41 @@ func CountTokenMessages(ctx context.Context,
 	tokenNum += int(math.Ceil(totalAudioTokens))
 	tokenNum += 3 // Every reply is primed with <|start|>assistant<|message|>
 	return tokenNum
+}
+
+// countDeepSeekFileImageTokens estimates DeepSeek file content parts without
+// downloading or decoding their image payloads.
+// Parameters: content is the raw message content; the caller has already
+// restricted this helper to the DeepSeek vision model.
+// Returns: the documented upper-bound token estimate for each valid file image.
+func countDeepSeekFileImageTokens(content any) int {
+	total := 0
+	switch blocks := content.(type) {
+	case []any:
+		for _, raw := range blocks {
+			block, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			typeName, _ := block["type"].(string)
+			if !strings.EqualFold(typeName, model.ContentTypeFile) {
+				continue
+			}
+			fileID, _ := block["file_id"].(string)
+			fileData, _ := block["file_data"].(string)
+			if strings.TrimSpace(fileID) != "" || strings.TrimSpace(fileData) != "" {
+				total += deepseekV4VisionMaxImageTokens
+			}
+		}
+	case []model.MessageContent:
+		for _, block := range blocks {
+			if strings.EqualFold(block.Type, model.ContentTypeFile) &&
+				(strings.TrimSpace(block.FileID) != "" || strings.TrimSpace(block.FileData) != "") {
+				total += deepseekV4VisionMaxImageTokens
+			}
+		}
+	}
+	return total
 }
 
 // func countVisonTokenMessages(messages []VisionMessage, model string) (int, error) {
@@ -279,6 +317,10 @@ const (
 	gpt4oMiniLowDetailCost  = 2833
 	gpt4oMiniHighDetailCost = 5667
 	gpt4oMiniAdditionalCost = 2833
+	// DeepSeek documents a hard post-resize upper bound for each image. The
+	// upstream response usage remains authoritative for final billing.
+	deepseekV4VisionMaxImageTokens = 384
+	deepseekV4VisionModelName      = "deepseek-v4-flash-vision-exp"
 )
 
 // getImageSizeFn is injected for testability
@@ -311,6 +353,14 @@ func getVisionBaseTile(model string) (base int, tile int) {
 }
 
 func countImageTokens(url string, detail string, model string) (_ int, err error) {
+	// DeepSeek's exact image-token count is returned by the API usage object.
+	// For pre-consume estimation, use the documented per-image upper bound rather
+	// than applying OpenAI's unrelated tile formula or fetching a remote image.
+	// Post-consume billing reconciles this estimate against upstream usage.
+	if model == deepseekV4VisionModelName {
+		return deepseekV4VisionMaxImageTokens, nil
+	}
+
 	var fetchSize = true
 	var width, height int
 

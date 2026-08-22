@@ -1,13 +1,17 @@
 package deepseek
 
 import (
+	"time"
+
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 var (
-	// deepseekTextInputs lists the input modalities supported by DeepSeek V4 models.
+	// deepseekTextInputs lists the input modalities supported by text-only DeepSeek V4 models.
 	deepseekTextInputs = []string{"text"}
+	// deepseekVisionInputs lists the input modalities supported by DeepSeek V4 Vision models.
+	deepseekVisionInputs = []string{"text", "image", "file"}
 	// deepseekTextOutputs lists the output modalities supported by DeepSeek V4 models.
 	deepseekTextOutputs = []string{"text"}
 
@@ -17,6 +21,9 @@ var (
 	// deepseekProFeatures advertises DeepSeek V4 Pro capabilities across its
 	// Chat Completions and native Responses API endpoints.
 	deepseekProFeatures = []string{"tools", "json_mode", "logprobs", "reasoning", "web_search"}
+	// deepseekVisionFeatures advertises only capabilities explicitly documented
+	// for the experimental V4 Flash Vision model.
+	deepseekVisionFeatures = []string{"tools", "json_mode", "logprobs", "reasoning", "web_search"}
 
 	// deepseekSamplingParams lists the OpenAI-compatible sampling parameters
 	// accepted by DeepSeek Chat Completions. Temperature and top_p have no effect
@@ -28,7 +35,7 @@ var (
 	deepseekFlashReasoningEfforts = []string{"low", "high", "max"}
 	// deepseekProReasoningEfforts lists the effective reasoning levels supported
 	// by DeepSeek V4 Pro. The API accepts low but currently treats it as high.
-	deepseekProReasoningEfforts = []string{"high", "max"}
+	deepseekProReasoningEfforts = []string{"low", "high", "max"}
 )
 
 // DeepSeek V4 regular per-token ratios. The base values are the prices in effect
@@ -44,9 +51,9 @@ const (
 	deepseekV4ProCachedInputRatio = 0.003625 * ratio.MilliTokensUsd
 
 	// deepseekV4PricingEffectiveDate is the first local date covered by the new
-	// pricing schedule. The documented activation instant, 2026-08-16 16:00 UTC,
-	// is 2026-08-17 00:00 in the schedule's Asia/Shanghai timezone.
-	deepseekV4PricingEffectiveDate = "2026-08-17"
+	// pricing schedule. The documented activation instant is 2026-08-22 16:00
+	// UTC, which is 2026-08-23 00:00 in the schedule's Asia/Shanghai timezone.
+	deepseekV4PricingEffectiveDate = "2026-08-23"
 )
 
 // deepseekV4PricingWindows returns the official post-activation off-peak and
@@ -54,7 +61,7 @@ const (
 // Parameters: offPeakInput, offPeakCachedInput, and offPeakOutput are the
 // off-peak prices per million tokens; peakInput, peakCachedInput, and
 // peakOutput are the corresponding peak prices per million tokens.
-// Returns: two Asia/Shanghai time windows beginning on the effective date.
+// Returns: weekday and weekend Asia/Shanghai time windows beginning on the effective date.
 func deepseekV4PricingWindows(
 	offPeakInput float64,
 	offPeakCachedInput float64,
@@ -79,9 +86,28 @@ func deepseekV4PricingWindows(
 			},
 		},
 		{
+			Name:       "deepseek-weekend-offpeak",
+			TimeZone:   "Asia/Shanghai",
+			DateFrom:   deepseekV4PricingEffectiveDate,
+			DaysOfWeek: []int{int(time.Saturday), int(time.Sunday)},
+			Ranges:     []adaptor.ClockRange{{Start: "00:00", End: "00:00"}},
+			Overlay: adaptor.ModelConfig{
+				Ratio:            offPeakInput * ratio.MilliTokensUsd,
+				CachedInputRatio: offPeakCachedInput * ratio.MilliTokensUsd,
+				CompletionRatio:  offPeakOutput / offPeakInput,
+			},
+		},
+		{
 			Name:     "deepseek-peak",
 			TimeZone: "Asia/Shanghai",
 			DateFrom: deepseekV4PricingEffectiveDate,
+			DaysOfWeek: []int{
+				int(time.Monday),
+				int(time.Tuesday),
+				int(time.Wednesday),
+				int(time.Thursday),
+				int(time.Friday),
+			},
 			Ranges: []adaptor.ClockRange{
 				{Start: "09:00", End: "12:00"},
 				{Start: "14:00", End: "18:00"},
@@ -96,14 +122,17 @@ func deepseekV4PricingWindows(
 }
 
 // ModelRatios contains the currently available DeepSeek API models and their
-// pricing and capability metadata. Model IDs and prices were verified on
-// 2026-08-13 against the official DeepSeek documentation:
+// pricing and capability metadata. Model IDs, capabilities, and prices were
+// verified on 2026-08-21 against the official DeepSeek documentation:
 //   - https://api-docs.deepseek.com/quick_start/pricing/
+//   - https://api-docs.deepseek.com/guides/vision/
 //   - https://api-docs.deepseek.com/api/list-models/
 //   - https://api-docs.deepseek.com/api/create-chat-completion/
 //   - https://api-docs.deepseek.com/guides/responses_api/
-//   - https://api-docs.deepseek.com/updates/
 //
+// Images sent to deepseek-v4-flash-vision-exp are converted to prompt tokens by
+// DeepSeek and therefore use the normal cache-hit/cache-miss input price. They
+// must not be charged with ImagePricing, which is reserved for generated images.
 // The retired deepseek-chat and deepseek-reasoner aliases are intentionally
 // omitted; DeepSeek made them inaccessible after 2026-07-24 15:59 UTC.
 var ModelRatios = map[string]adaptor.ModelConfig{
@@ -128,6 +157,25 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:   "DeepSeek-V4-Flash-0731, a 284B/13B-active MoE model with thinking and non-thinking modes, 1M context, and native Responses and Anthropic API support.",
 		// The published schedule changes all token prices after 2026-08-16 16:00 UTC.
 		TimeWindows: deepseekV4PricingWindows(0.22, 0.007, 0.66, 0.44, 0.014, 1.32),
+	},
+	// deepseek-v4-flash-vision-exp is the experimental multimodal V4 Flash model.
+	// DeepSeek documents the same token prices and limits as deepseek-v4-flash.
+	// Each image is converted into prompt tokens (at most 384 tokens per image),
+	// and the API response's usage object is authoritative for final billing.
+	"deepseek-v4-flash-vision-exp": {
+		Ratio:                       deepseekV4FlashInputRatio,
+		CachedInputRatio:            deepseekV4FlashCachedInputRatio,
+		CompletionRatio:             0.28 / 0.14,
+		ContextLength:               1048576,
+		MaxOutputTokens:             393216,
+		InputModalities:             deepseekVisionInputs,
+		OutputModalities:            deepseekTextOutputs,
+		SupportedFeatures:           deepseekVisionFeatures,
+		SupportedSamplingParameters: deepseekSamplingParams,
+		SupportedReasoningEfforts:   deepseekFlashReasoningEfforts,
+		DefaultReasoningEffort:      "high",
+		Description:                 "DeepSeek-V4-Flash-Vision-Exp, an experimental multimodal V4 Flash model with text and image input, thinking and non-thinking modes, 1M context, and Chat Completions, Responses, and Anthropic API support.",
+		TimeWindows:                 deepseekV4PricingWindows(0.22, 0.007, 0.66, 0.44, 0.014, 1.32),
 	},
 	// deepseek-v4-pro costs $0.435/1M cache-miss input, $0.003625/1M cache-hit
 	// input, and $0.87/1M output before 2026-08-16 16:00 UTC. Its scheduled
@@ -156,4 +204,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 // DeepseekToolingDefaults documents that DeepSeek does not publish separate
 // built-in tool prices; server-side web search incurs normal model token usage.
-var DeepseekToolingDefaults = adaptor.ChannelToolConfig{}
+// The explicit zero-cost entry lets policy validation allow the native tool.
+var DeepseekToolingDefaults = adaptor.ChannelToolConfig{
+	Pricing: map[string]adaptor.ToolPricingConfig{
+		// DeepSeek web search is billed through model tokens, so the gateway
+		// records an explicit zero-cost policy entry to allow the native tool.
+		"web_search": {QuotaPerCall: 0},
+	},
+}

@@ -16,6 +16,10 @@ type Usage struct {
 	// promote this value into the nested field so downstream billing only has
 	// to read one location.
 	CachedTokens int `json:"cached_tokens,omitempty"`
+	// PromptCacheHitTokens and PromptCacheMissTokens capture DeepSeek's
+	// provider-specific prompt-cache usage fields before normalization.
+	PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens,omitempty"`
+	PromptCacheMissTokens int `json:"prompt_cache_miss_tokens,omitempty"`
 	// PromptTokensDetails may be empty for some models
 	PromptTokensDetails *UsagePromptTokensDetails `json:"prompt_tokens_details,omitempty"`
 	// CompletionTokensDetails may be empty for some models
@@ -37,23 +41,34 @@ type Usage struct {
 	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
 }
 
-// NormalizeCachedTokens promotes a top-level CachedTokens count into the nested
-// PromptTokensDetails.CachedTokens field, which is the single location quota
-// billing reads cache-hit tokens from.
+// NormalizeCachedTokens promotes top-level and DeepSeek provider-specific cache-hit
+// counts into PromptTokensDetails.CachedTokens, the single location quota billing reads.
 //
-// It is a no-op when there is no top-level cached count, and it never overwrites
+// It is a no-op when neither source has a cache-hit count, and it never overwrites
 // a nested count that an upstream provider already populated (such providers are
-// authoritative). After promotion, the top-level field is cleared so OpenAI-shaped
-// responses expose only the standard prompt_tokens_details.cached_tokens field.
+// authoritative). After promotion, provider-specific fields are cleared so
+// OpenAI-shaped responses expose only the standard prompt_tokens_details.cached_tokens field.
 func (u *Usage) NormalizeCachedTokens() {
-	if u == nil || u.CachedTokens <= 0 {
+	if u == nil {
+		return
+	}
+
+	cachedTokens := u.CachedTokens
+	if u.PromptCacheHitTokens > 0 {
+		if cachedTokens == 0 {
+			cachedTokens = u.PromptCacheHitTokens
+		}
+		u.PromptCacheHitTokens = 0
+	}
+	u.PromptCacheMissTokens = 0
+	if cachedTokens <= 0 {
 		return
 	}
 	if u.PromptTokensDetails == nil {
 		u.PromptTokensDetails = &UsagePromptTokensDetails{}
 	}
 	if u.PromptTokensDetails.CachedTokens == 0 {
-		u.PromptTokensDetails.CachedTokens = u.CachedTokens
+		u.PromptTokensDetails.CachedTokens = cachedTokens
 	}
 	u.CachedTokens = 0
 }
