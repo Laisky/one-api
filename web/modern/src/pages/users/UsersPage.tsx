@@ -3,8 +3,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ConfirmDetailsList } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { ListActionButton } from '@/components/ui/list-action-button';
 import { NameWithId } from '@/components/shared/NameWithId';
 import { useNotifications } from '@/components/ui/notifications';
@@ -17,23 +15,23 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, renderQuota } from '@/lib/utils';
-import { zodResolver } from '@hookform/resolvers/zod';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { Ban, CheckCircle, CreditCard, Settings, ShieldOff, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import * as z from 'zod';
+import { CreateUserDialog, TopUpDialog } from './UserDialogs';
 
 type ConfirmKind = 'promote' | 'demote' | 'disable_2fa';
 
+/** ConfirmState describes the pending privileged user action and its dialog visibility. */
 interface ConfirmState {
   open: boolean;
   kind?: ConfirmKind;
   user?: UserRow;
 }
 
+/** UserRow describes one user record displayed and managed by the users table. */
 interface UserRow {
   id?: number;
   uuid?: string;
@@ -49,20 +47,20 @@ interface UserRow {
   updated_at?: number;
 }
 
+/** userRef accepts a user identity and returns its stable UUID or numeric identifier for API requests. */
 const userRef = (user: Pick<UserRow, 'id' | 'uuid'>): string | number => user.uuid || user.id || '';
 
+/** sameUserRef accepts two user identities and returns whether they resolve to the same stable identifier. */
 const sameUserRef = (left: Pick<UserRow, 'id' | 'uuid'>, right: Pick<UserRow, 'id' | 'uuid'>): boolean => {
   return String(userRef(left)) === String(userRef(right));
 };
 
+/** userRefPayload accepts a stable user identifier and returns the matching management API payload. */
 const userRefPayload = (ref: string | number): { id: number } | { uuid: string } => {
   return typeof ref === 'string' ? { uuid: ref } : { id: ref };
 };
 
-const topupUserPayload = (ref: string | number): { user_id: number } | { user_uuid: string } => {
-  return typeof ref === 'string' ? { user_uuid: ref } : { user_id: ref };
-};
-
+/** UsersPage accepts no props and returns the user search, management, pagination, and dialog interface. */
 export function UsersPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -94,6 +92,7 @@ export function UsersPage() {
   const currentUser = useAuthStore((s) => s.user);
   const isSuperAdmin = (currentUser?.role ?? 0) >= 100;
   const mounted = useRef(false);
+  /** getRoleLabel accepts a numeric role and returns its localized display label. */
   const getRoleLabel = useCallback(
     (role: number) => {
       if (role >= 100) {
@@ -109,10 +108,12 @@ export function UsersPage() {
     },
     [tr]
   );
+  /** getStatusLabel accepts a numeric status and returns its localized display label. */
   const getStatusLabel = useCallback(
     (status: number) => (status === 1 ? tr('table.status.enabled', 'Enabled') : tr('table.status.disabled', 'Disabled')),
     [tr]
   );
+  /** formatRemainingQuota accepts a quota value and returns its localized display label. */
   const formatRemainingQuota = useCallback(
     (quota: number) => {
       if (quota === -1) {
@@ -123,6 +124,7 @@ export function UsersPage() {
     [tr]
   );
 
+  /** load accepts a zero-based page and size, loads that user page, and returns when state is updated. */
   const load = async (p = 0, size = pageSize) => {
     setLoading(true);
     try {
@@ -149,6 +151,7 @@ export function UsersPage() {
     }
   };
 
+  /** searchUsers accepts a query and returns after updating remote search suggestions. */
   const searchUsers = async (query: string) => {
     if (!query.trim()) {
       setSearchOptions([]);
@@ -209,6 +212,7 @@ export function UsersPage() {
     }
   }, [sortBy, sortOrder]);
 
+  /** search reads the current search state, updates matching users, and returns when the request completes. */
   const search = async () => {
     setLoading(true);
     try {
@@ -239,13 +243,7 @@ export function UsersPage() {
     {
       header: tr('columns.username', 'Username'),
       accessorKey: 'username',
-      cell: ({ row }) => (
-        <NameWithId
-          name={row.original.username}
-          refId={userRef(row.original)}
-          idLabel={tr('columns.id', 'ID')}
-        />
-      ),
+      cell: ({ row }) => <NameWithId name={row.original.username} refId={userRef(row.original)} idLabel={tr('columns.id', 'ID')} />,
     },
     {
       header: tr('columns.display_name', 'Display Name'),
@@ -359,6 +357,7 @@ export function UsersPage() {
     },
   ];
 
+  /** closeConfirm accepts no parameters, closes an idle confirmation dialog, and returns no value. */
   const closeConfirm = () => {
     if (confirmBusy) return;
     setConfirmState({ open: false });
@@ -377,6 +376,7 @@ export function UsersPage() {
       ]
     : [];
 
+  /** runConfirmAction accepts no parameters, executes the pending action, and returns when it completes. */
   const runConfirmAction = async () => {
     const { kind, user } = confirmState;
     if (!kind || !user) return;
@@ -459,6 +459,7 @@ export function UsersPage() {
     }
   };
 
+  /** manage accepts a user identifier, action, and row index, then returns after applying the change. */
   const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete', idx: number) => {
     try {
       let res: any;
@@ -534,7 +535,7 @@ export function UsersPage() {
     </div>
   );
 
-  // Handlers for page change and page size change
+  /** handlePageChange accepts pagination values, loads that page, and returns no value. */
   const handlePageChange = (newPageIndex: number, newPageSize: number) => {
     setSearchParams((prev) => {
       prev.set('p', (newPageIndex + 1).toString());
@@ -543,6 +544,7 @@ export function UsersPage() {
     load(newPageIndex, newPageSize);
   };
 
+  /** handlePageSizeChange accepts a page size, resets pagination, and returns no value. */
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize);
     setPageIndex(0);
@@ -691,229 +693,5 @@ export function UsersPage() {
         </DialogContent>
       </Dialog>
     </ResponsivePageContainer>
-  );
-}
-
-// Create User Dialog
-function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void }) {
-  const schema = z.object({
-    username: z.string().min(1),
-    password: z.string().min(6),
-    display_name: z.string().optional(),
-  });
-  type FormT = z.infer<typeof schema>;
-  const form = useForm<FormT>({
-    resolver: zodResolver(schema),
-    defaultValues: { username: '', password: '', display_name: '' },
-  });
-  const { t } = useTranslation();
-  const { notify } = useNotifications();
-  const tr = useCallback(
-    (key: string, defaultValue: string, options?: Record<string, unknown>) =>
-      t(`users.dialogs.create.${key}`, { defaultValue, ...options }),
-    [t]
-  );
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{tr('title', 'Create User')}</DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form
-            className="space-y-3"
-            onSubmit={form.handleSubmit(async (values) => {
-              try {
-                // Unified API call - complete URL with /api prefix
-                const res = await api.post('/api/user/', {
-                  username: values.username,
-                  password: values.password,
-                  display_name: values.display_name || values.username,
-                });
-                if (!res.data?.success) {
-                  notify({
-                    type: 'error',
-                    title: tr('notifications.create_failed_title', 'Create failed'),
-                    message: res.data?.message || tr('notifications.create_failed_message', 'Unable to create user.'),
-                  });
-                  return;
-                }
-                onOpenChange(false);
-                form.reset();
-                onCreated();
-              } catch (error) {
-                notify({
-                  type: 'error',
-                  title: tr('notifications.create_failed_title', 'Create failed'),
-                  message:
-                    (error as any)?.response?.data?.message ||
-                    (error as Error)?.message ||
-                    tr('notifications.create_failed_message', 'Unable to create user.'),
-                });
-              }
-            })}
-          >
-            <FormField
-              control={form.control}
-              name="username"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{tr('fields.username.label', 'Username')}</FormLabel>
-                  <FormControl>
-                    <Input placeholder={tr('fields.username.placeholder', 'Enter username')} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{tr('fields.password.label', 'Password')}</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder={tr('fields.password.placeholder', 'Enter password')} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="display_name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{tr('fields.display_name.label', 'Display Name')}</FormLabel>
-                  <FormControl>
-                    <Input placeholder={tr('fields.display_name.placeholder', 'Enter display name')} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="pt-2 flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                {tr('actions.close', 'Close')}
-              </Button>
-              <Button type="submit">{tr('actions.create', 'Create')}</Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Top Up Dialog
-function TopUpDialog({
-  open,
-  onOpenChange,
-  userId,
-  username,
-  onDone,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  userId?: string | number;
-  username?: string;
-  onDone: () => void;
-}) {
-  const schema = z.object({
-    quota: z.coerce.number().int(),
-    remark: z.string().optional(),
-  });
-  type FormT = z.infer<typeof schema>;
-  const form = useForm<FormT>({
-    resolver: zodResolver(schema),
-    defaultValues: { quota: 0, remark: '' },
-  });
-  const { t } = useTranslation();
-  const { notify } = useNotifications();
-  const tr = useCallback(
-    (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`users.dialogs.topup.${key}`, { defaultValue, ...options }),
-    [t]
-  );
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {tr('title', 'Top Up {{username}}', {
-              username: username ? `@${username}` : '',
-            })}
-          </DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form
-            className="space-y-3"
-            onSubmit={form.handleSubmit(async (values) => {
-              if (!userId) return;
-              try {
-                // Unified API call - complete URL with /api prefix
-                const res = await api.post('/api/topup', {
-                  ...topupUserPayload(userId),
-                  quota: values.quota,
-                  remark: values.remark,
-                });
-                if (!res.data?.success) {
-                  notify({
-                    type: 'error',
-                    title: tr('notifications.submit_failed_title', 'Top up failed'),
-                    message: res.data?.message || tr('notifications.submit_failed_message', 'Unable to top up user.'),
-                  });
-                  return;
-                }
-                onOpenChange(false);
-                form.reset();
-                onDone();
-              } catch (error) {
-                notify({
-                  type: 'error',
-                  title: tr('notifications.submit_failed_title', 'Top up failed'),
-                  message:
-                    (error as any)?.response?.data?.message ||
-                    (error as Error)?.message ||
-                    tr('notifications.submit_failed_message', 'Unable to top up user.'),
-                });
-              }
-            })}
-          >
-            <FormField
-              control={form.control}
-              name="quota"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{tr('fields.quota.label', 'Quota')}</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder={tr('fields.quota.placeholder', 'Enter quota change')} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="remark"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{tr('fields.remark.label', 'Remark')}</FormLabel>
-                  <FormControl>
-                    <Input placeholder={tr('fields.remark.placeholder', 'Optional')} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="pt-2 flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                {tr('actions.close', 'Close')}
-              </Button>
-              <Button type="submit">{tr('actions.submit', 'Submit')}</Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
   );
 }

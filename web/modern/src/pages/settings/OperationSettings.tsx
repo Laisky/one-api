@@ -5,16 +5,16 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { useNotifications } from '@/components/ui/notifications';
 import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertCircle, Info } from 'lucide-react';
+import { zodResolver } from '@/lib/zod-resolver';
+import { Info } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import * as z from 'zod';
 import { formatJSON, sanitizeJsonInput } from '../channels/helpers';
+import { OperationAdministrationCards, OperationQuotaCard } from './OperationSettingsCards';
 
 const operationSchema = z.object({
   QuotaForNewUser: z.number().min(0).default(0),
@@ -35,9 +35,12 @@ const operationSchema = z.object({
   ApproximateTokenEnabled: z.boolean().default(false),
 });
 
-type OperationForm = z.infer<typeof operationSchema>;
+/** OperationFormInput describes possibly omitted settings before schema defaults are applied. */
+export type OperationFormInput = z.input<typeof operationSchema>;
+/** OperationForm describes validated operation settings after schema defaults are applied. */
+export type OperationForm = z.output<typeof operationSchema>;
 
-type GroupRatioIssue = { type: 'parse'; message: string } | { type: 'shape' } | { type: 'invalid-entries'; entries: string[] };
+export type GroupRatioIssue = { type: 'parse'; message: string } | { type: 'shape' } | { type: 'invalid-entries'; entries: string[] };
 
 const validateGroupRatioJSON = (raw: string): GroupRatioIssue | null => {
   if (!raw.trim()) return { type: 'shape' };
@@ -103,7 +106,7 @@ export function OperationSettings() {
     [t]
   );
 
-  const form = useForm<OperationForm>({
+  const form = useForm<OperationFormInput, unknown, OperationForm>({
     resolver: zodResolver(operationSchema),
     defaultValues: {
       QuotaForNewUser: 0,
@@ -177,7 +180,7 @@ export function OperationSettings() {
   };
 
   const onSubmitGroup = async (group: 'quota' | 'general' | 'monitor') => {
-    const values = form.getValues();
+    const values = operationSchema.parse(form.getValues());
 
     try {
       switch (group) {
@@ -307,125 +310,7 @@ export function OperationSettings() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        {/* Quota Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('operation_settings.quota.title')}</CardTitle>
-            <CardDescription>{t('operation_settings.quota.description')}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="QuotaForNewUser"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        {t('operation_settings.quota.quota_for_new_user')}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
-                              <Info className="h-4 w-4" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
-                            {descriptions.QuotaForNewUser}
-                          </TooltipContent>
-                        </Tooltip>
-                      </FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} onChange={(e) => field.onChange(Number(e.target.value))} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="QuotaForInviter"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        {t('operation_settings.quota.quota_for_inviter')}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
-                              <Info className="h-4 w-4" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
-                            {descriptions.QuotaForInviter}
-                          </TooltipContent>
-                        </Tooltip>
-                      </FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} onChange={(e) => field.onChange(Number(e.target.value))} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="QuotaForInvitee"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        {t('operation_settings.quota.quota_for_invitee')}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
-                              <Info className="h-4 w-4" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
-                            {descriptions.QuotaForInvitee}
-                          </TooltipContent>
-                        </Tooltip>
-                      </FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} onChange={(e) => field.onChange(Number(e.target.value))} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="PreConsumedQuota"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        {t('operation_settings.quota.pre_consumed_quota')}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
-                              <Info className="h-4 w-4" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
-                            {descriptions.PreConsumedQuota}
-                          </TooltipContent>
-                        </Tooltip>
-                      </FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} onChange={(e) => field.onChange(Number(e.target.value))} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="mt-4">
-                <Button onClick={() => onSubmitGroup('quota')}>{t('operation_settings.quota.save')}</Button>
-              </div>
-            </Form>
-          </CardContent>
-        </Card>
+        <OperationQuotaCard t={t} form={form} descriptions={descriptions} onSave={() => onSubmitGroup('quota')} />
 
         {/* General Settings */}
         <Card>
@@ -865,82 +750,19 @@ export function OperationSettings() {
           </CardContent>
         </Card>
 
-        {/* Group Ratio */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('operation_settings.group_ratio.title')}</CardTitle>
-            <CardDescription>{t('operation_settings.group_ratio.description')}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label htmlFor="group-ratio-textarea" className="text-sm font-medium flex items-center gap-2">
-                  {t('operation_settings.group_ratio.label')}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
-                        <Info className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" align="start" className="max-w-[320px]">
-                      {t('operation_settings.group_ratio.help')}
-                    </TooltipContent>
-                  </Tooltip>
-                </label>
-                <Button type="button" variant="ghost" size="sm" className="h-6 text-xs self-start sm:self-auto" onClick={formatGroupRatio}>
-                  {t('operation_settings.group_ratio.format')}
-                </Button>
-              </div>
-              <Textarea
-                id="group-ratio-textarea"
-                value={groupRatioText}
-                onChange={(e) => setGroupRatioText(e.target.value)}
-                placeholder={'{\n  "default": 1,\n  "vip": 0.8,\n  "svip": 0.5\n}'}
-                className={`font-mono text-xs min-h-[180px] ${groupRatioIssue ? 'border-destructive focus-visible:ring-destructive' : ''}`}
-                spellCheck={false}
-              />
-              {groupRatioIssue && (
-                <div className="flex items-start gap-2 rounded-lg border border-destructive bg-destructive/10 p-3">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                  <span className="text-sm text-destructive">
-                    {groupRatioIssue.type === 'parse'
-                      ? t('operation_settings.group_ratio.invalid_json', { message: groupRatioIssue.message })
-                      : groupRatioIssue.type === 'shape'
-                        ? t('operation_settings.group_ratio.shape_invalid')
-                        : t('operation_settings.group_ratio.invalid_entries', {
-                            keys: groupRatioIssue.entries.join(', '),
-                          })}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Button onClick={saveGroupRatio} disabled={savingGroupRatio || !!groupRatioIssue || !groupRatioDirty}>
-                  {savingGroupRatio ? t('operation_settings.group_ratio.saving') : t('operation_settings.group_ratio.save')}
-                </Button>
-                {groupRatioDirty && !groupRatioIssue && (
-                  <span className="text-xs text-muted-foreground">{t('operation_settings.group_ratio.unsaved')}</span>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Log Management */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('operation_settings.logs.title')}</CardTitle>
-            <CardDescription>{t('operation_settings.logs.description')}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center space-x-4">
-              <Input type="date" value={historyTimestamp} onChange={(e) => setHistoryTimestamp(e.target.value)} className="w-auto" />
-              <Button variant="destructive" onClick={deleteHistoryLogs}>
-                {t('operation_settings.logs.clear_button')}
-              </Button>
-            </div>
-            <p className="text-sm text-muted-foreground mt-2">{t('operation_settings.logs.clear_warning')}</p>
-          </CardContent>
-        </Card>
+        <OperationAdministrationCards
+          t={t}
+          groupRatioText={groupRatioText}
+          groupRatioIssue={groupRatioIssue}
+          groupRatioDirty={groupRatioDirty}
+          savingGroupRatio={savingGroupRatio}
+          onGroupRatioTextChange={setGroupRatioText}
+          onFormatGroupRatio={formatGroupRatio}
+          onSaveGroupRatio={saveGroupRatio}
+          historyTimestamp={historyTimestamp}
+          onHistoryTimestampChange={setHistoryTimestamp}
+          onDeleteHistoryLogs={deleteHistoryLogs}
+        />
       </div>
     </TooltipProvider>
   );

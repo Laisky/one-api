@@ -1,12 +1,11 @@
 import { Badge } from '@/components/ui/badge';
 import { FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import type { UseFormReturn } from 'react-hook-form';
-import type { ChannelForm } from '../schemas';
+import type { ChannelFormMethods } from '../schemas';
 import { LabelWithHelp } from './LabelWithHelp';
 
 interface ChannelGroupsProps {
-  form: UseFormReturn<ChannelForm>;
+  form: ChannelFormMethods;
   groups: string[];
   tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
 }
@@ -16,7 +15,7 @@ interface ChannelGroupsProps {
 // model catalog.
 export const ChannelGroups = ({ form, groups, tr }: ChannelGroupsProps) => {
   const toggleGroup = (groupValue: string) => {
-    const currentGroups = form.getValues('groups');
+    const currentGroups = form.getValues('groups') ?? ['default'];
     if (currentGroups.includes(groupValue)) {
       form.setValue(
         'groups',
@@ -28,14 +27,14 @@ export const ChannelGroups = ({ form, groups, tr }: ChannelGroupsProps) => {
   };
 
   const addGroup = (groupName: string) => {
-    const currentGroups = form.getValues('groups');
+    const currentGroups = form.getValues('groups') ?? ['default'];
     if (!currentGroups.includes(groupName)) {
       form.setValue('groups', [...currentGroups, groupName]);
     }
   };
 
   const removeGroup = (groupToRemove: string) => {
-    const currentGroups = form.getValues('groups');
+    const currentGroups = form.getValues('groups') ?? ['default'];
     const newGroups = currentGroups.filter((g) => g !== groupToRemove);
     // Ensure at least 'default' group remains
     if (newGroups.length === 0) {
@@ -56,7 +55,7 @@ export const ChannelGroups = ({ form, groups, tr }: ChannelGroupsProps) => {
           />
           <div className="flex flex-wrap gap-2 mb-2">
             {groups.map((group) => {
-              const isSelected = form.watch('groups').includes(group);
+              const isSelected = (form.watch('groups') ?? []).includes(group);
               return (
                 <Badge
                   key={group}
@@ -86,7 +85,7 @@ export const ChannelGroups = ({ form, groups, tr }: ChannelGroupsProps) => {
             />
           </div>
           <div className="flex flex-wrap gap-2 mt-2">
-            {form.watch('groups').map((group) => (
+            {(form.watch('groups') ?? []).map((group) => (
               <Badge key={group} variant="secondary" className="gap-1 max-w-full">
                 <span className="truncate min-w-0" title={group}>
                   {group}

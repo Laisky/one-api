@@ -173,20 +173,21 @@ export function BreakpointVisualizer() {
 export function GridOverlay() {
   const [isVisible, setIsVisible] = useState(false);
 
-  if (process.env.NODE_ENV !== 'development') {
-    return null;
-  }
-
   useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return undefined;
     const handleKeyPress = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key === 'G') {
-        setIsVisible(!isVisible);
+        setIsVisible((current) => !current);
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [isVisible]);
+  }, []);
+
+  if (process.env.NODE_ENV !== 'development') {
+    return null;
+  }
 
   if (!isVisible) return null;
 

@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { logEditPageLayout } from '@/dev/layout-debug';
 import { api } from '@/lib/api';
 import { fromDateTimeLocal, toDateTimeLocal } from '@/lib/utils';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { Info } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -39,7 +39,7 @@ const createTokenSchema = (tr?: TokenValidationTranslator) => {
 
   return z.object({
     name: z.string().min(1, message('validation.name_required', 'Token name is required')),
-    remain_quota: z.coerce.number().min(0, message('validation.quota_min', 'Quota must be non-negative')),
+    remain_quota: z.coerce.number<string | number>().min(0, message('validation.quota_min', 'Quota must be non-negative')),
     expired_time: z.string().optional(),
     unlimited_quota: z.boolean().default(false),
     models: z.array(z.string()).default([]),
@@ -48,7 +48,8 @@ const createTokenSchema = (tr?: TokenValidationTranslator) => {
 };
 
 type TokenSchema = ReturnType<typeof createTokenSchema>;
-type TokenForm = z.infer<TokenSchema>;
+type TokenFormInput = z.input<TokenSchema>;
+type TokenForm = z.output<TokenSchema>;
 
 // Matches a subset of backend Token for status handling
 type BackendToken = {
@@ -80,7 +81,7 @@ export function EditTokenPage() {
   const [modelSearchTerm, setModelSearchTerm] = useState('');
   const { notify } = useNotifications();
 
-  const form = useForm<TokenForm>({
+  const form = useForm<TokenFormInput, unknown, TokenForm>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: '',
@@ -189,10 +190,10 @@ export function EditTokenPage() {
 
   const filteredModels = modelOptions.filter((model) => model.text.toLowerCase().includes(modelSearchTerm.toLowerCase()));
 
-  const selectedModels = form.watch('models');
+  const selectedModels = form.watch('models') ?? [];
 
   const toggleModel = (modelValue: string) => {
-    const currentModels = form.getValues('models');
+    const currentModels = form.getValues('models') ?? [];
     if (currentModels.includes(modelValue)) {
       form.setValue(
         'models',
@@ -362,7 +363,6 @@ export function EditTokenPage() {
 
   return (
     // Trigger layout diagnostics after render
-    // eslint-disable-next-line react/jsx-no-useless-fragment
     <>
       {(() => {
         logEditPageLayout('EditTokenPage');

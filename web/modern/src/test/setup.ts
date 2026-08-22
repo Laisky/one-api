@@ -1,6 +1,5 @@
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 import { vi } from 'vitest';
-import enTranslations from '../i18n/locales/en';
 
 // Mock react-i18next
 vi.mock('react-i18next', async () => {
@@ -25,13 +24,10 @@ vi.mock('react-i18next', async () => {
       if (options?.returnObjects) {
         return ['Item 1', 'Item 2'];
       }
-      // Fallback to default value if provided, either as the second argument
-      // (t(key, defaultValue, options)) or inside the options object
-      // (t(key, { defaultValue, ...options }), which react-i18next supports
-      // and the codebase uses).
+      // Fallback to default value if provided
       if (typeof arg2 === 'string') {
         value = arg2;
-      } else if (typeof options?.defaultValue === 'string') {
+      } else if (options?.defaultValue !== undefined) {
         value = options.defaultValue;
       } else {
         return key;
@@ -81,12 +77,18 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
-// Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+// Mock ResizeObserver with a real constructable class for Vitest 4.
+class MockResizeObserver implements ResizeObserver {
+  constructor(_callback: ResizeObserverCallback) {}
+
+  observe(_target: Element, _options?: ResizeObserverOptions) {}
+
+  unobserve(_target: Element) {}
+
+  disconnect() {}
+}
+
+globalThis.ResizeObserver = MockResizeObserver;
 
 // Polyfill pointer capture APIs used by Radix UI under jsdom
 if (!HTMLElement.prototype.hasPointerCapture) {
@@ -106,7 +108,6 @@ if (typeof window.PointerEvent === 'undefined') {
       super(type, props);
     }
   }
-  // @ts-ignore assigning test-only PointerEvent polyfill for jsdom
   window.PointerEvent = MockPointerEvent as unknown as typeof PointerEvent;
 }
 

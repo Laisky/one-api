@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import Turnstile from '@/components/Turnstile';
 import { useSystemStatus } from '@/hooks/useSystemStatus';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';

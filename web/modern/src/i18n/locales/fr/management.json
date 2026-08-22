@@ -896,7 +896,11 @@
           "create_failed_message": "Impossible de créer l'utilisateur.",
           "create_failed_title": "Échec de la création"
         },
-        "title": "Créer un utilisateur"
+        "title": "Créer un utilisateur",
+        "validation": {
+          "password_min": "Le mot de passe doit contenir au moins {{count}} caractères.",
+          "username_required": "Saisissez un nom d’utilisateur."
+        }
       },
       "topup": {
         "actions": {
@@ -917,7 +921,10 @@
           "submit_failed_message": "Impossible de recharger l'utilisateur.",
           "submit_failed_title": "Échec du rechargement"
         },
-        "title": "Recharger {{username}}"
+        "title": "Recharger {{username}}",
+        "validation": {
+          "quota_integer": "Le quota doit être un nombre entier."
+        }
       }
     },
     "edit": {

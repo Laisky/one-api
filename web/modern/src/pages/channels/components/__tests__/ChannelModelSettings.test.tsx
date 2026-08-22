@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect } from 'react';
-import { useForm, type UseFormReturn } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
-import type { ChannelForm } from '../../schemas';
+import type { ChannelForm, ChannelFormInput, ChannelFormMethods } from '../../schemas';
 import { ChannelModelSettings } from '../ChannelModelSettings';
 
 /**
@@ -61,7 +61,7 @@ const baseDefaults: ChannelForm = {
  */
 interface TestHarnessProps {
   defaultPricing: string;
-  onReady: (form: UseFormReturn<ChannelForm>) => void;
+  onReady: (form: ChannelFormMethods) => void;
   defaultValues?: Partial<ChannelForm>;
   availableModels?: { id: string; name: string }[];
   currentCatalogModels?: string[];
@@ -74,7 +74,7 @@ interface TestHarnessProps {
  * @returns The rendered ChannelModelSettings component.
  */
 const TestHarness = ({ defaultPricing, onReady, defaultValues, availableModels = [], currentCatalogModels = [] }: TestHarnessProps) => {
-  const form = useForm<ChannelForm>({
+  const form = useForm<ChannelFormInput, unknown, ChannelForm>({
     defaultValues: {
       ...baseDefaults,
       ...defaultValues,
@@ -106,7 +106,7 @@ const TestHarness = ({ defaultPricing, onReady, defaultValues, availableModels =
 describe('ChannelModelSettings', () => {
   it('loads default model configs into the form', async () => {
     const user = userEvent.setup();
-    let formRef: UseFormReturn<ChannelForm> | null = null;
+    let formRef: ChannelFormMethods | null = null;
 
     render(
       <TestHarness
@@ -120,7 +120,7 @@ describe('ChannelModelSettings', () => {
     const button = screen.getByRole('button', { name: 'Load Default' });
     await user.click(button);
 
-    expect(formRef?.getValues('model_configs')).toBe('{"gpt-4": {"ratio": 1}}');
+    expect(formRef!.getValues('model_configs')).toBe('{"gpt-4": {"ratio": 1}}');
   });
 
   it('shows non-blocking hidden-model warnings', () => {

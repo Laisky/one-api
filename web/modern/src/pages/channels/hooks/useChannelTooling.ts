@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { UseFormReturn } from 'react-hook-form';
 import {
   cloneNormalizedToolingConfig,
   clonePricingMap,
@@ -8,10 +7,10 @@ import {
   prepareToolingConfigForSet,
   stringifyToolingConfig,
 } from '../helpers';
-import type { ChannelForm, NormalizedToolingConfig, ToolPricingEntry } from '../schemas';
+import type { ChannelFormMethods, NormalizedToolingConfig, ToolPricingEntry } from '../schemas';
 
 export const useChannelTooling = (
-  form: UseFormReturn<ChannelForm>,
+  form: ChannelFormMethods,
   defaultTooling: string,
   notify: (options: any) => void,
   tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string

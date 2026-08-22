@@ -10,7 +10,7 @@ import { SelectionListManager } from '@/components/ui/selection-list-manager';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { Info, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -27,8 +27,8 @@ const createServerSchema = (translate: (key: string, defaultValue: string) => st
   z.object({
     name: z.string().min(1, translate('mcp.edit.validation.name_required', 'Name is required')),
     description: z.string().optional(),
-    status: z.coerce.number().int().default(1),
-    priority: z.coerce.number().int().default(0),
+    status: z.coerce.number<string | number>().int().default(1),
+    priority: z.coerce.number<string | number>().int().default(0),
     base_url: z.string().min(1, translate('mcp.edit.validation.base_url_required', 'Base URL is required')),
     protocol: z.string().default('streamable_http'),
     auth_type: z.string().default('none'),
@@ -38,10 +38,12 @@ const createServerSchema = (translate: (key: string, defaultValue: string) => st
     tool_blacklist: z.array(z.string()).default([]),
     tool_pricing: z.string().optional(),
     auto_sync_enabled: z.boolean().default(true),
-    auto_sync_interval_minutes: z.coerce.number().int().min(5).max(1440).default(60),
+    auto_sync_interval_minutes: z.coerce.number<string | number>().int().min(5).max(1440).default(60),
   });
 
-type ServerForm = z.infer<ReturnType<typeof createServerSchema>>;
+type ServerSchema = ReturnType<typeof createServerSchema>;
+type ServerFormInput = z.input<ServerSchema>;
+type ServerForm = z.output<ServerSchema>;
 
 export function EditMCPServerPage() {
   const { t } = useTranslation();
@@ -55,7 +57,7 @@ export function EditMCPServerPage() {
   const [syncing, setSyncing] = useState(false);
   const validationSchema = useMemo(() => createServerSchema((key, defaultValue) => String(t(key, defaultValue))), [t]);
 
-  const form = useForm<ServerForm>({
+  const form = useForm<ServerFormInput, unknown, ServerForm>({
     resolver: zodResolver(validationSchema),
     defaultValues: {
       name: '',
@@ -423,7 +425,7 @@ export function EditMCPServerPage() {
                   label={t('mcp.edit.fields.tool_whitelist', 'Tool whitelist')}
                   help={t('mcp.edit.fields.tool_whitelist_help', 'Only tools listed here will be enabled.')}
                   options={toolOptions}
-                  selected={form.watch('tool_whitelist')}
+                  selected={form.watch('tool_whitelist') ?? []}
                   onChange={(value) => form.setValue('tool_whitelist', value)}
                   searchPlaceholder={t('mcp.edit.fields.tool_search', 'Search tools...')}
                   customPlaceholder={t('mcp.edit.fields.tool_custom', 'Add custom tool...')}
@@ -441,7 +443,7 @@ export function EditMCPServerPage() {
                   label={t('mcp.edit.fields.tool_blacklist', 'Tool blacklist')}
                   help={t('mcp.edit.fields.tool_blacklist_help', 'Blocked tools will never be exposed.')}
                   options={toolOptions}
-                  selected={form.watch('tool_blacklist')}
+                  selected={form.watch('tool_blacklist') ?? []}
                   onChange={(value) => form.setValue('tool_blacklist', value)}
                   searchPlaceholder={t('mcp.edit.fields.tool_search', 'Search tools...')}
                   customPlaceholder={t('mcp.edit.fields.tool_custom', 'Add custom tool...')}

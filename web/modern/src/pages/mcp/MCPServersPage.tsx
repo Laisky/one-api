@@ -9,7 +9,7 @@ import type { SearchOption } from '@/components/ui/searchable-dropdown';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { api } from '@/lib/api';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { Ban, CheckCircle, FlaskConical, Plus, RefreshCw, Settings, Trash2, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';

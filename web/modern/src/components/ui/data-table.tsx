@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import type { ColumnDef, SortingState } from '@tanstack/react-table';
+import { flexRender, type RowData, type SortingState, useTable } from '@tanstack/react-table';
+import { modernTableFeatures, type ModernColumnDef as ColumnDef } from '@/lib/table';
 import { useResponsive } from '@/hooks/useResponsive';
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -9,7 +9,7 @@ import { AdvancedPagination } from '@/components/ui/advanced-pagination';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-export interface DataTableProps<TData, TValue> {
+export interface DataTableProps<TData extends RowData, TValue = unknown> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   pageIndex?: number;
@@ -24,7 +24,7 @@ export interface DataTableProps<TData, TValue> {
   loading?: boolean;
 }
 
-export function DataTable<TData, TValue>({
+export function DataTable<TData extends RowData, TValue = unknown>({
   columns,
   data,
   pageIndex = 0,
@@ -89,9 +89,10 @@ export function DataTable<TData, TValue>({
     } as ColumnDef<TData, TValue>;
   });
 
-  const table = useReactTable({
+  const table = useTable({
+    features: modernTableFeatures,
     data,
-    columns: enhancedColumns,
+    columns: enhancedColumns as ColumnDef<TData, unknown>[],
     state: {
       sorting,
       pagination: {
@@ -100,11 +101,10 @@ export function DataTable<TData, TValue>({
       },
     },
     onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
     manualSorting: !!onSortChange, // Use manual sorting if server-side sorting is available
     manualPagination: true,
     pageCount: Math.ceil(total / pageSize),
-  });
+  }, (state) => state);
 
   return (
     <div className="space-y-2">
