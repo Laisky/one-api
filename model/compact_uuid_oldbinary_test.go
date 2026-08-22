@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -39,11 +40,9 @@ const compactOldBinaryPortEnv = "COMPACT_UUID_TEST_OLD_BINARY_PORT"
 // terminatePinnedOldBinary stops a pinned server process and joins its output-copy goroutines.
 // Expected process-exit errors are accepted, while unexpected kill or wait failures are reported
 // through the supplied test handle.
-// Parameters:
-//   - t: test handle used to report unexpected process lifecycle failures.
-//   - command: started pinned binary command to terminate and join.
-//
-// Return values: none.
+// The t parameter reports unexpected process lifecycle failures.
+// The command parameter is the started pinned binary command to terminate and join.
+// This function does not return a value.
 func terminatePinnedOldBinary(t *testing.T, command *exec.Cmd) {
 	t.Helper()
 	require.NotNil(t, command.Process)
@@ -110,15 +109,18 @@ func runPinnedOldBinary(t *testing.T, binary string, dsn string, settleFor time.
 	t.Cleanup(terminate)
 
 	time.Sleep(settleFor)
-	// Signal 0 is the portable liveness probe: it performs the permission and existence checks
-	// without delivering anything. Passing a nil signal is not a probe and always errors.
-	require.NotNil(t, command.Process)
-	livenessErr := command.Process.Signal(syscall.Signal(0))
-	if livenessErr != nil {
-		terminate()
-		require.NoError(t, livenessErr,
-			"the pinned old binary must still be running after startup and AutoMigrate; output:\n%s",
-			output.String())
+	// Signal 0 is a Unix-like liveness probe: it performs permission and existence checks
+	// without delivering anything. Windows does not implement it; the output and database
+	// assertions below still verify startup and AutoMigrate there.
+	if runtime.GOOS != "windows" {
+		require.NotNil(t, command.Process)
+		livenessErr := command.Process.Signal(syscall.Signal(0))
+		if livenessErr != nil {
+			terminate()
+			require.NoError(t, livenessErr,
+				"the pinned old binary must still be running after startup and AutoMigrate; output:\n%s",
+				output.String())
+		}
 	}
 
 	// Cmd.Wait, unlike Process.Wait, also joins os/exec's stdout and stderr copy goroutines.
