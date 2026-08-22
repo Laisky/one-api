@@ -83,7 +83,7 @@ export const createLogColumns = ({
     cell: ({ row }) => (
       <div className="flex items-center gap-2">
         <TimestampDisplay timestamp={row.original.created_at} className="font-mono text-xs" title={row.original.request_id || undefined} />
-        {row.original.request_id && <LogCopyButton text={row.original.request_id} />}
+        {row.original.request_id && <LogCopyButton text={row.original.request_id} label={t('common.copy_id', 'Copy ID')} />}
       </div>
     ),
   },

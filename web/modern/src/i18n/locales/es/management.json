@@ -896,7 +896,11 @@
           "create_failed_message": "No se pudo crear el usuario.",
           "create_failed_title": "Error al crear"
         },
-        "title": "Crear usuario"
+        "title": "Crear usuario",
+        "validation": {
+          "password_min": "La contraseña debe tener al menos {{count}} caracteres.",
+          "username_required": "Introduce un nombre de usuario."
+        }
       },
       "topup": {
         "actions": {
@@ -917,7 +921,10 @@
           "submit_failed_message": "No se pudo recargar al usuario.",
           "submit_failed_title": "Error al recargar"
         },
-        "title": "Recargar {{username}}"
+        "title": "Recargar {{username}}",
+        "validation": {
+          "quota_integer": "La cuota debe ser un número entero."
+        }
       }
     },
     "edit": {

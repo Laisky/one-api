@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { useNotifications } from '@/components/ui/notifications';
 import { api } from '@/lib/api';
 import { zodResolver } from '@/lib/zod-resolver';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import * as z from 'zod';
@@ -24,16 +24,24 @@ type TopUpDialogProps = {
   onDone: () => void;
 };
 
-const createUserSchema = z.object({
-  username: z.string().min(1),
-  password: z.string().min(6),
-  display_name: z.string().optional(),
-});
+type DialogTranslator = (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
 
-const topUpSchema = z.object({
-  quota: z.coerce.number<string | number>().int(),
-  remark: z.string().optional(),
-});
+/** createUserSchema accepts the create-dialog translator and returns its localized validation schema. */
+const createUserSchema = (tr: DialogTranslator) =>
+  z.object({
+    username: z.string().min(1, { error: tr('validation.username_required', 'Enter a username.') }),
+    password: z.string().min(6, {
+      error: tr('validation.password_min', 'Password must be at least {{count}} characters.', { count: 6 }),
+    }),
+    display_name: z.string().optional(),
+  });
+
+/** topUpSchema accepts the top-up-dialog translator and returns its localized validation schema. */
+const topUpSchema = (tr: DialogTranslator) =>
+  z.object({
+    quota: z.coerce.number<string | number>().int({ error: tr('validation.quota_integer', 'Quota must be an integer.') }),
+    remark: z.string().optional(),
+  });
 
 /** topupUserPayload accepts a stable user identifier and returns the matching top-up API payload. */
 const topupUserPayload = (ref: string | number): { user_id: number } | { user_uuid: string } => {
@@ -42,11 +50,6 @@ const topupUserPayload = (ref: string | number): { user_id: number } | { user_uu
 
 /** CreateUserDialog accepts dialog lifecycle props and returns a create-user form dialog. */
 export function CreateUserDialog({ open, onOpenChange, onCreated }: CreateUserDialogProps) {
-  type CreateUserForm = z.infer<typeof createUserSchema>;
-  const form = useForm<CreateUserForm>({
-    resolver: zodResolver(createUserSchema),
-    defaultValues: { username: '', password: '', display_name: '' },
-  });
   const { t } = useTranslation();
   const { notify } = useNotifications();
   const tr = useCallback(
@@ -54,6 +57,12 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: CreateUserDi
       t(`users.dialogs.create.${key}`, { defaultValue, ...options }),
     [t]
   );
+  const schema = useMemo(() => createUserSchema(tr), [tr]);
+  type CreateUserForm = z.infer<typeof schema>;
+  const form = useForm<CreateUserForm>({
+    resolver: zodResolver(schema),
+    defaultValues: { username: '', password: '', display_name: '' },
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -148,18 +157,19 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: CreateUserDi
 
 /** TopUpDialog accepts a selected user and dialog callbacks, then returns a quota adjustment form dialog. */
 export function TopUpDialog({ open, onOpenChange, userId, username, onDone }: TopUpDialogProps) {
-  type TopUpFormInput = z.input<typeof topUpSchema>;
-  type TopUpForm = z.output<typeof topUpSchema>;
-  const form = useForm<TopUpFormInput, unknown, TopUpForm>({
-    resolver: zodResolver(topUpSchema),
-    defaultValues: { quota: 0, remark: '' },
-  });
   const { t } = useTranslation();
   const { notify } = useNotifications();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`users.dialogs.topup.${key}`, { defaultValue, ...options }),
     [t]
   );
+  const schema = useMemo(() => topUpSchema(tr), [tr]);
+  type TopUpFormInput = z.input<typeof schema>;
+  type TopUpForm = z.output<typeof schema>;
+  const form = useForm<TopUpFormInput, unknown, TopUpForm>({
+    resolver: zodResolver(schema),
+    defaultValues: { quota: 0, remark: '' },
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

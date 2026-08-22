@@ -60,8 +60,6 @@ export function PersonalSettings() {
   const [emailVerificationError, setEmailVerificationError] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
 
-  // OAuth binding state — track third-party identifiers returned by /api/user/self.
-  // We track these locally because the shared auth store User type does not include them.
   const [oauthBindings, setOauthBindings] = useState<OAuthBindings>({
     github_id: '',
     wechat_id: '',
@@ -84,7 +82,6 @@ export function PersonalSettings() {
     [t]
   );
 
-  // Load system status
   const loadStatus = async () => {
     try {
       const status = await loadSystemStatus();
@@ -745,49 +742,55 @@ export function PersonalSettings() {
       />
       <PersonalSecurityCard
         t={t}
-        passkeys={passkeys}
-        passkeySupported={passkeySupported}
-        passkeyError={passkeyError}
-        passkeyLoading={passkeyLoading}
-        showPasskeyName={showPasskeyName}
-        passkeyName={passkeyName}
-        onPasskeyNameChange={setPasskeyName}
-        onOpenPasskeyName={() => setShowPasskeyName(true)}
-        onCancelPasskeyName={() => {
-          setShowPasskeyName(false);
-          setPasskeyName('');
+        passkey={{
+          passkeys,
+          passkeySupported,
+          passkeyError,
+          passkeyLoading,
+          showPasskeyName,
+          passkeyName,
+          onPasskeyNameChange: setPasskeyName,
+          onOpenPasskeyName: () => setShowPasskeyName(true),
+          onCancelPasskeyName: () => {
+            setShowPasskeyName(false);
+            setPasskeyName('');
+          },
+          onRegisterPasskey: registerPasskey,
+          onDeletePasskey: deletePasskey,
         }}
-        onRegisterPasskey={registerPasskey}
-        onDeletePasskey={deletePasskey}
-        totpEnabled={totpEnabled}
-        totpError={totpError}
-        setupTotpError={setupTotpError}
-        disableTotpError={disableTotpError}
-        totpCode={totpCode}
-        onTotpCodeChange={setTotpCode}
-        totpLoading={totpLoading}
-        onSetupTotp={setupTotp}
-        onDisableTotp={disableTotp}
-        newPassword={newPassword}
-        confirmPassword={confirmPassword}
-        passwordError={passwordError}
-        passwordLoading={passwordLoading}
-        onNewPasswordChange={(value) => {
-          setNewPassword(value);
-          if (passwordError) setPasswordError('');
+        totp={{
+          totpEnabled,
+          totpError,
+          setupTotpError,
+          disableTotpError,
+          totpCode,
+          onTotpCodeChange: setTotpCode,
+          totpLoading,
+          onSetupTotp: setupTotp,
+          onDisableTotp: disableTotp,
+          showTotpSetup,
+          onShowTotpSetupChange: (open) => !totpLoading && setShowTotpSetup(open),
+          totpQRCode,
+          totpSecret,
+          confirmTotpError,
+          onConfirmTotp: confirmTotp,
+          isMobile,
         }}
-        onConfirmPasswordChange={(value) => {
-          setConfirmPassword(value);
-          if (passwordError) setPasswordError('');
+        password={{
+          newPassword,
+          confirmPassword,
+          passwordError,
+          passwordLoading,
+          onNewPasswordChange: (value) => {
+            setNewPassword(value);
+            if (passwordError) setPasswordError('');
+          },
+          onConfirmPasswordChange: (value) => {
+            setConfirmPassword(value);
+            if (passwordError) setPasswordError('');
+          },
+          onUpdatePassword: updatePassword,
         }}
-        onUpdatePassword={updatePassword}
-        showTotpSetup={showTotpSetup}
-        onShowTotpSetupChange={(open) => !totpLoading && setShowTotpSetup(open)}
-        totpQRCode={totpQRCode}
-        totpSecret={totpSecret}
-        confirmTotpError={confirmTotpError}
-        onConfirmTotp={confirmTotp}
-        isMobile={isMobile}
       />
       <ConfirmActionDialog />
     </div>

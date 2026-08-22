@@ -896,7 +896,11 @@
           "create_failed_message": "ユーザーを作成できません。",
           "create_failed_title": "作成に失敗"
         },
-        "title": "ユーザーを作成"
+        "title": "ユーザーを作成",
+        "validation": {
+          "password_min": "パスワードは{{count}}文字以上で入力してください。",
+          "username_required": "ユーザー名を入力してください。"
+        }
       },
       "topup": {
         "actions": {
@@ -917,7 +921,10 @@
           "submit_failed_message": "ユーザーにチャージできません。",
           "submit_failed_title": "チャージに失敗"
         },
-        "title": "{{username}} にチャージ"
+        "title": "{{username}} にチャージ",
+        "validation": {
+          "quota_integer": "クォータは整数で入力してください。"
+        }
       }
     },
     "edit": {

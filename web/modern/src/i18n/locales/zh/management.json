@@ -896,7 +896,11 @@
           "create_failed_message": "无法创建用户。",
           "create_failed_title": "创建失败"
         },
-        "title": "创建用户"
+        "title": "创建用户",
+        "validation": {
+          "password_min": "密码至少需要 {{count}} 个字符",
+          "username_required": "请输入用户名"
+        }
       },
       "topup": {
         "actions": {
@@ -917,7 +921,10 @@
           "submit_failed_message": "无法为用户充值。",
           "submit_failed_title": "充值失败"
         },
-        "title": "充值 {{username}}"
+        "title": "充值 {{username}}",
+        "validation": {
+          "quota_integer": "额度必须是整数"
+        }
       }
     },
     "edit": {
