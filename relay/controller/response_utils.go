@@ -438,7 +438,7 @@ func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 
 // supportsDeepSeekNativeResponseAPI reports whether the request targets a model
 // served by DeepSeek's native, stateless Responses endpoint. DeepSeek exposes
-// that endpoint for both currently available V4 models.
+// that endpoint for all currently available V4 models.
 func supportsDeepSeekNativeResponseAPI(meta *metalib.Meta) bool {
 	if meta == nil || !isDeepSeekUpstream(meta) {
 		return false
@@ -450,7 +450,9 @@ func supportsDeepSeekNativeResponseAPI(meta *metalib.Meta) bool {
 	}
 
 	// https://api-docs.deepseek.com/guides/responses_api/
-	return modelName == "deepseek-v4-flash" || modelName == "deepseek-v4-pro"
+	return modelName == "deepseek-v4-flash" ||
+		modelName == "deepseek-v4-flash-vision-exp" ||
+		modelName == "deepseek-v4-pro"
 }
 
 // isDeepSeekModel checks if the model is a DeepSeek model
