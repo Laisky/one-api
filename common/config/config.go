@@ -1011,11 +1011,6 @@ var (
 	MetricFailChanSize = env.Int("METRIC_FAIL_CHAN_SIZE", 128)
 )
 
-// DB based tracing
-var (
-	TracingBasedOnDBEnabled = env.Bool("TRACING_BASED_ON_DB_ENABLED", false)
-)
-
 // =============================================================================
 // OPEN TELEMETRY
 // =============================================================================
@@ -1087,6 +1082,13 @@ var (
 	// Allowed values: "hourly", "daily", "weekly"
 	LogRotationInterval = strings.TrimSpace(strings.ToLower(env.String("LOG_ROTATION_INTERVAL", "daily")))
 
+	// LogFormat selects the application logger encoding.
+	//
+	// Environment variable: LOG_FORMAT
+	// Default: "console"
+	// Allowed values: "console", "json"
+	LogFormat = strings.TrimSpace(strings.ToLower(env.String("LOG_FORMAT", "console")))
+
 	// LogRetentionDays determines how many days logs are kept before the
 	// retention worker purges them. Set to 0 to disable cleanup.
 	//
@@ -1095,26 +1097,6 @@ var (
 	// Unit: days
 	LogRetentionDays = func() int {
 		v := env.Int("LOG_RETENTION_DAYS", 0)
-		if v < 0 {
-			return 0
-		}
-		return v
-	}()
-
-	// TraceEnabled toggles database-based tracing of requests. When true, trace records are stored in the database and can be queried for debugging and monitoring purposes.
-	//
-	// Environment variable: TRACE_ENABLED
-	// Default: false
-	TraceEnabled = env.Bool("TRACE_ENABLED", false)
-
-	// TraceRetentionDays controls how long trace records are kept before the
-	// retention worker removes them. Set to 0 to disable cleanup.
-	//
-	// Environment variable: TRACE_RETENTION_DAYS
-	// Default: 30 days
-	// Unit: days
-	TraceRetentionDays = func() int {
-		v := env.Int("TRACE_RETENTION_DAYS", 30)
 		if v < 0 {
 			return 0
 		}

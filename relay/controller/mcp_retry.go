@@ -14,7 +14,6 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/tracing"
-	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/mcp"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
@@ -185,16 +184,16 @@ func invokeMCPTool(c *gin.Context, registry *mcpToolRegistry, nameKey string, ca
 	start := time.Now().UTC().UnixMilli()
 	result, err := client.CallTool(gmw.Ctx(c), candidate.Tool.Name, args)
 	end := time.Now().UTC().UnixMilli()
-	tracing.RecordTraceExternalCall(c, model.TraceExternalCall{
-		Source:      "mcp",
-		Tool:        candidate.Tool.Name,
-		ServerID:    candidate.ServerID,
-		ServerLabel: candidate.ServerLabel,
-		StartedAt:   start,
-		EndedAt:     end,
-		DurationMs:  end - start,
-		IsError:     err != nil,
-	})
+	tracing.RecordExternalCall(c,
+		zap.String("source", "mcp"),
+		zap.String("tool", candidate.Tool.Name),
+		zap.Int("server_id", candidate.ServerID),
+		zap.String("server_label", candidate.ServerLabel),
+		zap.Int64("started_at", start),
+		zap.Int64("ended_at", end),
+		zap.Int64("duration_ms", end-start),
+		zap.Bool("is_error", err != nil),
+	)
 	if err != nil {
 		return mcp.ToolCandidate{}, nil, errors.Wrapf(err, "call mcp tool %q on server %d", candidate.Tool.Name, candidate.ServerID)
 	}

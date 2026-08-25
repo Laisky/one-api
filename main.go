@@ -32,6 +32,7 @@ import (
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/telemetry"
+	commontracing "github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/controller"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
@@ -46,6 +47,36 @@ import (
 //go:embed web/build/*
 
 var buildFS embed.FS
+
+// newGinLoggerMiddleware creates the request logger middleware for the configured log format.
+func newGinLoggerMiddleware(logLevel glog.Level) gin.HandlerFunc {
+	options := []gmw.LoggerMwOptFunc{
+		gmw.WithLevel(logLevel.String()),
+		gmw.WithLogger(logger.Logger.Named("gin")),
+	}
+	if config.LogFormat != "json" {
+		options = append([]gmw.LoggerMwOptFunc{gmw.WithLoggerMwColored()}, options...)
+	}
+	return gmw.NewLoggerMiddleware(options...)
+}
+
+// attachOpenTelemetryLoggerFields adds valid OpenTelemetry correlation IDs to the request logger.
+func attachOpenTelemetryLoggerFields() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		lg := logger.Logger.Named("gin")
+		fields := make([]zap.Field, 0, 2)
+		if traceID := commontracing.GetOpenTelemetryTraceID(c); traceID != "" {
+			fields = append(fields, zap.String("trace_id", traceID))
+		}
+		if spanID := commontracing.GetOpenTelemetrySpanID(c); spanID != "" {
+			fields = append(fields, zap.String("span_id", spanID))
+		}
+		if len(fields) > 0 {
+			gmw.SetLogger(c, lg.With(fields...))
+		}
+		c.Next()
+	}
+}
 
 func main() {
 	ctx := context.Background()
@@ -68,7 +99,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	if config.OpenTelemetryEnabled {
+	if config.OpenTelemetryEnabled && config.OpenTelemetryEndpoint != "" {
 		otelProviders, err = telemetry.InitOpenTelemetry(ctx)
 		if err != nil {
 			logger.Logger.Fatal("failed to initialize OpenTelemetry", zap.Error(err))
@@ -87,7 +118,6 @@ func main() {
 	if err := model.InitDatabases(ctx); err != nil {
 		logger.Logger.Fatal("database bootstrap error", zap.Error(err))
 	}
-	model.StartTraceRetentionCleaner(ctx, config.TraceRetentionDays)
 	model.StartAsyncTaskRetentionCleaner(ctx, config.AsyncTaskRetentionDays)
 	err = model.CreateRootAccountIfNeed()
 	if err != nil {
@@ -177,24 +207,17 @@ func main() {
 		gin.Recovery(),
 	}
 
-	if otelProviders != nil {
-		middlewares = append(middlewares, otelgin.Middleware(config.OpenTelemetryServiceName))
-	}
+	middlewares = append(middlewares, otelgin.Middleware(config.OpenTelemetryServiceName))
+	middlewares = append(middlewares, attachOpenTelemetryLoggerFields())
 
 	middlewares = append(middlewares,
-		gmw.NewLoggerMiddleware(
-			gmw.WithLoggerMwColored(),
-			gmw.WithLevel(logLevel.String()),
-			gmw.WithLogger(logger.Logger.Named("gin")),
-		),
+		newGinLoggerMiddleware(logLevel),
 	)
 	server.Use(middlewares...)
 	// This will cause SSE not to work!!!
 	//server.Use(gzip.Gzip(gzip.DefaultCompression))
 	server.Use(middleware.RequestId())
-	if config.TraceEnabled {
-		server.Use(middleware.TracingMiddleware())
-	}
+	server.Use(middleware.TracingMiddleware())
 
 	// Add Prometheus middleware if enabled
 	if config.EnablePrometheusMetrics {

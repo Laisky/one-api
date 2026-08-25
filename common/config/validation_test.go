@@ -87,6 +87,32 @@ func TestValidateLogRotationInterval(t *testing.T) {
 	}
 }
 
+func TestValidateLogFormat(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"console is valid", "console", false},
+		{"json is valid", "json", false},
+		{"text is invalid", "text", true},
+		{"empty is invalid", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateLogFormat(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidateTheme(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -178,7 +204,7 @@ func TestValidateOpenTelemetryConfig(t *testing.T) {
 		wantErr  bool
 	}{
 		{"disabled ignores endpoint", false, "", false},
-		{"enabled requires endpoint", true, "", true},
+		{"enabled without endpoint uses no exporter", true, "", false},
 		{"enabled with endpoint", true, "collector:4318", false},
 	}
 

@@ -2,256 +2,49 @@
 
 ## Overview
 
-The request tracing system provides comprehensive tracking of API requests throughout their lifecycle, from initial receipt to completion. It standardizes request identification using TraceID from gin-middlewares and captures key timestamps for performance analysis and debugging.
+Request tracing is implemented with OpenTelemetry middleware and request-scoped structured logs. The old database-backed request tracing path is removed from backend request handling: requests no longer create trace rows, update trace timestamps, append trace external-call records, or rely on DB tracing feature flags.
 
-## Architecture Components
+Historical trace tables and read endpoints may still exist for previously stored data or older operational surfaces, but new request handling does not write to those tables.
 
-### 1. Core Components
+## Runtime Flow
 
-#### TraceID Standardization
+`main.go` always registers `otelgin.Middleware(config.OpenTelemetryServiceName)` and the storage-free `middleware.TracingMiddleware()`. If no OpenTelemetry exporter endpoint is configured, the default OpenTelemetry provider behaves as a no-op and startup and requests continue normally.
 
-- **Source**: gin-middlewares `TraceID(ctx *gin.Context)` function
-- **Format**: JaegerTracingID string representation
-- **Usage**: Unified across all logging and tracing operations
+The tracing middleware records these lifecycle events through the active span when one is recording and emits synchronized debug logs through the request-scoped logger:
 
-#### Database Schema
+- `request.received`
+- `relay.start`
+- `upstream.request.sent`
+- `upstream.first_byte`
+- `upstream.complete`
+- `response.complete`
+- `error`
 
-**Traces Table**:
+Relay code records upstream timing events at the existing dispatch and response points without writing to storage.
 
-```sql
-CREATE TABLE traces (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    uuid CHAR(36),
-    trace_id VARCHAR(64) UNIQUE NOT NULL,
-    url VARCHAR(512) NOT NULL,
-    method VARCHAR(16) NOT NULL,
-    body_size BIGINT DEFAULT 0,
-    status INTEGER DEFAULT 0,
-    timestamps TEXT,  -- JSON object with key timestamps
-    created_at BIGINT,
-    updated_at BIGINT
-);
-```
+## Logging
 
-**Logs Table Enhancement**:
+Request logs must use the context-aware logger from `gmw.GetLogger(c)` in Gin request paths. `LOG_FORMAT=console` keeps colored console output. `LOG_FORMAT=json` selects JSON logger encoding and disables colored Gin middleware output.
 
-```sql
-ALTER TABLE logs ADD COLUMN trace_id VARCHAR(64);
-CREATE INDEX idx_logs_trace_id ON logs(trace_id);
-```
+When a valid OpenTelemetry span context exists, logs may include standard `trace_id` and `span_id` values. The service does not fabricate IDs when the OpenTelemetry context is missing or invalid.
 
-#### Timestamp Structure
+Prompt previews are log-only. They are sanitized and bounded to the first 100 characters, `...`, and the last 100 characters. Tracing must not parse, re-serialize, or inspect client request bodies solely to populate trace fields.
 
-```json
-{
-  "request_received": 1640995200000,
-  "request_forwarded": 1640995200100,
-  "first_upstream_response": 1640995200500,
-  "first_client_response": 1640995200520,
-  "upstream_completed": 1640995201000,
-  "request_completed": 1640995201020
-}
-```
+## GenAI Fields
 
-### 2. Implementation Layers
+GenAI trace attributes follow the OpenTelemetry GenAI inference client convention for values already known from normal routing, relay, upstream response, and usage accounting. Allowed field names include:
 
-#### Model Layer (`model/trace.go`)
+- `gen_ai.operation.name`
+- `gen_ai.request.model`
+- `gen_ai.response.model`
+- `gen_ai.usage.input_tokens`
+- `gen_ai.usage.output_tokens`
 
-- `Trace` struct with GORM annotations
-- `TraceTimestamps` struct for JSON parsing
-- CRUD operations: `CreateTrace`, `UpdateTraceTimestamp`, `UpdateTraceStatus`
-- Helper functions: `GetTraceByTraceId`, `GetTraceTimestamps`
+OneAPI-specific routing context uses the `oneapi.*` namespace:
 
-#### Helper Layer (`common/helper/helper.go`)
+- `oneapi.channel_id`
+- `oneapi.stream`
+- `oneapi.upstream_address`
+- `oneapi.upstream_url`
 
-- `GetTraceIDFromContext(ctx context.Context)` - Extract TraceID from standard context
-- Integration with existing `GetRequestID` functionality
-
-#### Tracing Utilities (`common/tracing/tracing.go`)
-
-- `GetTraceID(c *gin.Context)` - Extract TraceID from gin context
-- `RecordTraceStart`, `RecordTraceTimestamp`, `RecordTraceEnd` - Lifecycle tracking
-- `WithTraceID` - Add TraceID to structured logging
-
-#### Middleware Layer (`middleware/tracing.go`)
-
-- `TracingMiddleware()` - Gin middleware for automatic tracing
-- Custom response writer to capture first response timing
-- Automatic trace lifecycle management
-
-#### Controller Layer (`controller/tracing.go`)
-
-- `GetTraceByTraceId` - API endpoint for trace retrieval
-- `GetTraceByLogId` - API endpoint linking logs to traces
-- Duration calculations for performance metrics
-
-### 3. Integration Points
-
-#### Request Lifecycle Instrumentation
-
-**Request Start** (`middleware/tracing.go`):
-
-- Automatic trace creation with initial timestamp
-- URL, method, and body size capture
-
-**Upstream Forwarding** (`relay/adaptor/common.go`):
-
-- `DoRequestHelper`: Record forwarding timestamp
-- `DoRequest`: Record first upstream response timestamp
-
-**Streaming Completion** (`relay/adaptor/openai/main.go`):
-
-- Multiple streaming handlers instrumented
-- Upstream completion timestamp recording
-
-**Response Handling** (`middleware/tracing.go`):
-
-- Custom response writer captures first client response
-- Final completion and status recording
-
-#### Logging Integration (`model/log.go`)
-
-- All log entries automatically include `trace_id`
-- Backward compatibility with existing `request_id`
-- Enhanced structured logging with trace context
-
-### 4. Frontend Components
-
-#### Berry Template (`web/berry/src/views/Log/`)
-
-- `TracingModal.js` - Material-UI based modal
-- `TableRow.js` - Clickable rows with hover effects
-- Chinese localization and modern design
-
-#### Air Template (`web/air/src/components/`)
-
-- `TracingModal.js` - Semi-UI based modal
-- `LogsTable.js` - Semi Design table integration
-- Consistent API integration across templates
-
-## API Endpoints
-
-### GET /api/trace/:trace_id
-
-Retrieve tracing information by trace ID.
-
-**Response**:
-
-```json
-{
-  "success": true,
-  "data": {
-    "uuid": "018f0000-0000-7000-8000-000000000001",
-    "trace_id": "01234567-89ab-cdef-0123-456789abcdef",
-    "url": "/v1/chat/completions",
-    "method": "POST",
-    "body_size": 1024,
-    "status": 200,
-    "timestamps": { ... },
-    "created_at": 1640995200000,
-    "updated_at": 1640995201000
-  }
-}
-```
-
-### GET /api/trace/log/:log_id
-
-Retrieve tracing information for a specific log entry by log UUID.
-
-**Response**:
-
-```json
-{
-  "success": true,
-  "data": {
-    "trace_id": "01234567-89ab-cdef-0123-456789abcdef",
-    "timestamps": { ... },
-    "durations": {
-      "processing_time": 100,
-      "upstream_response_time": 400,
-      "response_processing_time": 20,
-      "streaming_time": 480,
-      "total_time": 1020
-    },
-    "log": {
-      "uuid": "018f0000-0000-7000-8000-000000000123",
-      "username": "user123",
-      "content": "Request processed successfully"
-    }
-  }
-}
-```
-
-## Performance Considerations
-
-### Database Optimization
-
-- Indexed `trace_id` columns for fast lookups
-- JSON timestamps for flexible schema evolution
-- Automatic cleanup policies for old trace data
-
-### Memory Usage
-
-- Minimal memory footprint with structured timestamps
-- Efficient JSON marshaling/unmarshaling
-- Context-aware logging to prevent memory leaks
-
-### Network Overhead
-
-- Lazy loading of trace data in frontend
-- Compressed JSON responses
-- Efficient API design with minimal round trips
-
-## Security and Privacy
-
-### Access Control
-
-- User authentication required for trace access
-- Users can only access traces for their own requests
-- Admin users have full trace visibility
-
-### Data Retention
-
-- Configurable trace data retention policies (`TRACE_RETENTION_DAYS`, default 30; set to 0 to disable cleanup)
-- Automatic cleanup of old trace records via the daily trace retention worker
-- Privacy-compliant data handling
-
-## Monitoring and Observability
-
-### Metrics Collection
-
-- Trace creation success/failure rates
-- API endpoint performance metrics
-- Frontend modal usage analytics
-
-### Error Handling
-
-- Graceful degradation when tracing fails
-- Comprehensive error logging
-- User-friendly error messages in UI
-
-### Debugging Support
-
-- Detailed trace information for troubleshooting
-- Request correlation across system components
-- Performance bottleneck identification
-
-## Future Enhancements
-
-### Distributed Tracing
-
-- Integration with OpenTelemetry
-- Cross-service trace correlation
-- Jaeger/Zipkin compatibility
-
-### Advanced Analytics
-
-- Performance trend analysis
-- Anomaly detection
-- Automated alerting
-
-### Enhanced UI Features
-
-- Real-time trace updates
-- Advanced filtering and search
-- Export capabilities for trace data
+Input-detail and content fields are intentionally excluded by default, including `gen_ai.input.messages`, `gen_ai.output.messages`, system instructions, prompt variables, tool definitions, and sampling parameters that would require extra client request parsing.

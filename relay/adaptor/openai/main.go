@@ -21,7 +21,6 @@ import (
 	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/common/tracing"
-	relaymodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	metalib "github.com/Laisky/one-api/relay/meta"
@@ -75,13 +74,7 @@ const (
 
 // Optionally: record when upstream streaming is completed (non-standard event)
 func recordUpstreamCompleted(c *gin.Context) {
-	// Only attempt to record trace timestamp when DB is initialized. In tests or
-	// lightweight environments the global DB may be nil which would cause a
-	// panic inside the model package. Guard to keep handler robust.
-	if relaymodel.DB == nil {
-		return
-	}
-	tracing.RecordTraceTimestamp(c, relaymodel.TimestampUpstreamCompleted)
+	tracing.RecordTraceTimestamp(c, tracing.TimestampUpstreamCompleted)
 }
 
 // StreamHandler processes streaming responses from OpenAI API

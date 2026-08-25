@@ -18,7 +18,6 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/tracing"
-	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
 	rmeta "github.com/Laisky/one-api/relay/meta"
 )
@@ -144,9 +143,7 @@ func doResponseAPIRequestViaWebSocket(
 		HandshakeTimeout: 15 * time.Second,
 	}
 
-	if dbmodel.DB != nil {
-		tracing.RecordTraceTimestamp(c, dbmodel.TimestampRequestForwarded)
-	}
+	tracing.RecordTraceTimestamp(c, tracing.TimestampRequestForwarded)
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 
 	upstreamConn, _, err := dialer.Dial(wsURL, dialHeader)
@@ -188,9 +185,7 @@ func doResponseAPIRequestViaWebSocket(
 		_ = upstreamConn.Close()
 		return nil, true, errors.Wrap(firstErr, "read first websocket response event")
 	}
-	if dbmodel.DB != nil {
-		tracing.RecordTraceTimestamp(c, dbmodel.TimestampFirstUpstreamResponse)
-	}
+	tracing.RecordTraceTimestamp(c, tracing.TimestampFirstUpstreamResponse)
 
 	if errResp, ok := tryBuildWebSocketErrorResponse(firstMessage); ok {
 		fallbackToHTTP := shouldFallbackToHTTPForWebSocketError(firstMessage)

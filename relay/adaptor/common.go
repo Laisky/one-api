@@ -15,7 +15,6 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/tracing"
-	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/meta"
 )
 
@@ -173,7 +172,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	lg.Debug("forwarding request to upstream channel", fields...)
 
 	// Optionally: Record when request is forwarded to upstream (non-standard event)
-	tracing.RecordTraceTimestamp(c, model.TimestampRequestForwarded)
+	tracing.RecordTraceTimestamp(c, tracing.TimestampRequestForwarded)
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 
 	resp, err := DoRequest(c, req)
@@ -215,7 +214,7 @@ func DoRequest(c *gin.Context, req *http.Request) (*http.Response, error) {
 	}
 
 	// Optionally: Record when first response is received from upstream (non-standard event)
-	tracing.RecordTraceTimestamp(c, model.TimestampFirstUpstreamResponse)
+	tracing.RecordTraceTimestamp(c, tracing.TimestampFirstUpstreamResponse)
 
 	if req.Body != nil {
 		_ = req.Body.Close()

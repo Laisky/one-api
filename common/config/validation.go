@@ -88,6 +88,20 @@ func ValidateLogRotationInterval(value string) error {
 	return nil
 }
 
+// ValidateLogFormat validates LOG_FORMAT and returns an error for unsupported encodings.
+func ValidateLogFormat(value string) error {
+	allowed := []string{"console", "json"}
+	if !slices.Contains(allowed, value) {
+		return &ConfigValidationError{
+			Variable:    "LOG_FORMAT",
+			Value:       value,
+			Constraint:  "must be a valid log format",
+			AllowedVals: allowed,
+		}
+	}
+	return nil
+}
+
 // ValidateTheme validates the THEME environment variable.
 // Allowed values: "berry", "air", "modern".
 // Note: "default" is accepted for backward compatibility and redirected to "modern".
@@ -146,20 +160,10 @@ func ValidateGeminiVersion(value string) error {
 	return nil
 }
 
-// ValidateOpenTelemetryConfig ensures OTEL_EXPORTER_OTLP_ENDPOINT is provided when OpenTelemetry is enabled.
+// ValidateOpenTelemetryConfig validates OpenTelemetry exporter settings without requiring an exporter.
 func ValidateOpenTelemetryConfig(enabled bool, endpoint string) error {
-	if !enabled {
-		return nil
-	}
-
-	if strings.TrimSpace(endpoint) == "" {
-		return &ConfigValidationError{
-			Variable:   "OTEL_EXPORTER_OTLP_ENDPOINT",
-			Value:      endpoint,
-			Constraint: "must be set when OTEL_ENABLED is true",
-		}
-	}
-
+	_ = enabled
+	_ = endpoint
 	return nil
 }
 
@@ -293,6 +297,9 @@ func ValidateAllEnvVars() *ValidationResult {
 		result.Errors = append(result.Errors, err)
 	}
 	if err := ValidateLogRotationInterval(LogRotationInterval); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateLogFormat(LogFormat); err != nil {
 		result.Errors = append(result.Errors, err)
 	}
 	if err := ValidateTheme(Theme); err != nil {

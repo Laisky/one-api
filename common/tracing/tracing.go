@@ -2,29 +2,107 @@ package tracing
 
 import (
 	"context"
+	"net/http"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	gutils "github.com/Laisky/go-utils/v6"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/Laisky/one-api/common/logger"
-	"github.com/Laisky/one-api/model"
 )
 
-// otelTraceIDFromContext extracts the OpenTelemetry trace ID from a context when available.
-func otelTraceIDFromContext(ctx context.Context) string {
+const (
+	// EventRequestReceived records when the gateway accepts an inbound request.
+	EventRequestReceived = "request.received"
+	// EventRelayStart records when relay handling begins.
+	EventRelayStart = "relay.start"
+	// EventUpstreamRequestSent records when the upstream request is dispatched.
+	EventUpstreamRequestSent = "upstream.request.sent"
+	// EventFirstUpstreamByte records when the first upstream response byte or event is available.
+	EventFirstUpstreamByte = "upstream.first_byte"
+	// EventUpstreamComplete records when upstream response handling completes.
+	EventUpstreamComplete = "upstream.complete"
+	// EventResponseComplete records when the client response is complete.
+	EventResponseComplete = "response.complete"
+	// EventError records a relay or middleware error.
+	EventError = "error"
+)
+
+const (
+	// TimestampRequestForwarded preserves the old timestamp key for upstream dispatch events.
+	TimestampRequestForwarded = "request_forwarded"
+	// TimestampFirstUpstreamResponse preserves the old timestamp key for first upstream response events.
+	TimestampFirstUpstreamResponse = "first_upstream_response"
+	// TimestampFirstClientResponse preserves the old timestamp key for first client response events.
+	TimestampFirstClientResponse = "first_client_response"
+	// TimestampUpstreamCompleted preserves the old timestamp key for upstream completion events.
+	TimestampUpstreamCompleted = "upstream_completed"
+	// TimestampRequestCompleted preserves the old timestamp key for request completion events.
+	TimestampRequestCompleted = "request_completed"
+)
+
+const (
+	// GenAIOperationNameAttr is the standard GenAI operation attribute.
+	GenAIOperationNameAttr = "gen_ai.operation.name"
+	// GenAIRequestModelAttr is the standard requested model attribute.
+	GenAIRequestModelAttr = "gen_ai.request.model"
+	// GenAIResponseModelAttr is the standard response model attribute.
+	GenAIResponseModelAttr = "gen_ai.response.model"
+	// GenAIUsageInputTokensAttr is the standard input token usage attribute.
+	GenAIUsageInputTokensAttr = "gen_ai.usage.input_tokens"
+	// GenAIUsageOutputTokensAttr is the standard output token usage attribute.
+	GenAIUsageOutputTokensAttr = "gen_ai.usage.output_tokens"
+	// OneAPIChannelIDAttr identifies the selected OneAPI channel.
+	OneAPIChannelIDAttr = "oneapi.channel_id"
+	// OneAPIStreamAttr records whether the request is streamed.
+	OneAPIStreamAttr = "oneapi.stream"
+	// OneAPIUpstreamAddressAttr records the selected upstream address.
+	OneAPIUpstreamAddressAttr = "oneapi.upstream_address"
+	// OneAPIUpstreamURLAttr records the sanitized upstream URL.
+	OneAPIUpstreamURLAttr = "oneapi.upstream_url"
+)
+
+var excludedGenAIInputDetailAttrs = map[string]struct{}{
+	"gen_ai.input.messages":      {},
+	"gen_ai.output.messages":     {},
+	"gen_ai.system_instructions": {},
+	"gen_ai.prompt":              {},
+	"gen_ai.prompt_template":     {},
+}
+
+// otelSpanContextFromContext extracts a valid OpenTelemetry span context.
+func otelSpanContextFromContext(ctx context.Context) oteltrace.SpanContext {
 	if ctx == nil {
-		return ""
+		return oteltrace.SpanContext{}
 	}
 
 	spanCtx := oteltrace.SpanContextFromContext(ctx)
 	if spanCtx.IsValid() {
-		return spanCtx.TraceID().String()
+		return spanCtx
 	}
 
-	return ""
+	return oteltrace.SpanContext{}
+}
+
+// otelTraceIDFromContext extracts the OpenTelemetry trace ID from a context when available.
+func otelTraceIDFromContext(ctx context.Context) string {
+	spanCtx := otelSpanContextFromContext(ctx)
+	if !spanCtx.IsValid() {
+		return ""
+	}
+	return spanCtx.TraceID().String()
+}
+
+// otelSpanIDFromContext extracts the OpenTelemetry span ID from a context when available.
+func otelSpanIDFromContext(ctx context.Context) string {
+	spanCtx := otelSpanContextFromContext(ctx)
+	if !spanCtx.IsValid() {
+		return ""
+	}
+	return spanCtx.SpanID().String()
 }
 
 // GetTraceID extracts the per-request TraceID from gin context using gin-middlewares.
@@ -82,118 +160,103 @@ func GetOpenTelemetryTraceIDFromContext(ctx context.Context) string {
 	return otelTraceIDFromContext(ctx)
 }
 
-// RecordTraceStart creates a new trace record when a request starts
+// GetOpenTelemetrySpanID extracts the OpenTelemetry span id from gin context when available.
+func GetOpenTelemetrySpanID(c *gin.Context) string {
+	return otelSpanIDFromContext(gmw.Ctx(c))
+}
+
+// GetOpenTelemetrySpanIDFromContext extracts the OpenTelemetry span id from a standard context.
+func GetOpenTelemetrySpanIDFromContext(ctx context.Context) string {
+	return otelSpanIDFromContext(ctx)
+}
+
+// IsExcludedGenAIInputDetailAttribute reports whether attr would expose prompt or message content.
+func IsExcludedGenAIInputDetailAttribute(attr string) bool {
+	_, ok := excludedGenAIInputDetailAttrs[attr]
+	return ok
+}
+
+// GenAIClientSpanName returns the standard GenAI client span name from known values.
+func GenAIClientSpanName(operationName, model string) string {
+	if operationName == "" {
+		return model
+	}
+	if model == "" {
+		return operationName
+	}
+	return operationName + " " + model
+}
+
+// AddSpanEvent records an OpenTelemetry span event when a recording span exists.
+func AddSpanEvent(ctx context.Context, eventName string, attrs ...attribute.KeyValue) {
+	span := oteltrace.SpanFromContext(ctx)
+	if span == nil || !span.IsRecording() {
+		return
+	}
+	span.AddEvent(eventName, oteltrace.WithAttributes(attrs...))
+}
+
+// RecordTraceEvent emits a storage-free tracing event and synchronized structured log.
+func RecordTraceEvent(c *gin.Context, eventName string, fields ...zap.Field) {
+	lg := gmw.GetLogger(c)
+	ctx := gmw.Ctx(c)
+	AddSpanEvent(ctx, eventName)
+	logFields := append([]zap.Field{zap.String("event", eventName)}, fields...)
+	lg.Debug("trace event", logFields...)
+}
+
+// RecordTraceStart records the request start event without database persistence.
 func RecordTraceStart(c *gin.Context) {
-	traceID := GetTraceID(c)
-	lg := gmw.GetLogger(c)
-	if traceID == "" {
-		lg.Warn("empty trace ID, skipping trace record creation")
-		return
+	status := http.StatusOK
+	if c.Writer != nil && c.Writer.Status() > 0 {
+		status = c.Writer.Status()
 	}
-
-	otelTraceID := GetOpenTelemetryTraceID(c)
-	if otelTraceID != "" {
-		lg.Debug("resolved trace identifiers",
-			zap.String("trace_id", traceID),
-			zap.String("otel_trace_id", otelTraceID),
-			zap.String("url", c.Request.URL.Path),
-			zap.String("method", c.Request.Method),
-		)
-	}
-
-	url := c.Request.URL.String()
 	method := c.Request.Method
-	bodySize := max(c.Request.ContentLength, 0)
-
-	ctx := gmw.SetLogger(gmw.Ctx(c), lg)
-	_, err := model.CreateTrace(ctx, traceID, url, method, bodySize)
-	if err != nil {
-		lg.Error("failed to create trace record",
-			zap.Error(err))
+	path := ""
+	if c.Request.URL != nil {
+		path = c.Request.URL.Path
 	}
+	RecordTraceEvent(c, EventRequestReceived,
+		zap.String("method", method),
+		zap.String("path", path),
+		zap.Int("status", status),
+	)
 }
 
-// RecordTraceTimestamp updates a specific timestamp in the trace record
+// RecordTraceTimestamp maps legacy timestamp names to storage-free OTel/log events.
 func RecordTraceTimestamp(c *gin.Context, timestampKey string) {
-	traceID := GetTraceID(c)
-	lg := gmw.GetLogger(c).With(zap.String("timestamp_key", timestampKey))
-	if traceID == "" {
-		lg.Warn("empty trace ID, skipping timestamp update")
-		return
+	eventName := timestampKey
+	switch timestampKey {
+	case TimestampRequestForwarded:
+		eventName = EventUpstreamRequestSent
+	case TimestampFirstUpstreamResponse:
+		eventName = EventFirstUpstreamByte
+	case TimestampFirstClientResponse:
+		eventName = EventRelayStart
+	case TimestampUpstreamCompleted:
+		eventName = EventUpstreamComplete
+	case TimestampRequestCompleted:
+		eventName = EventResponseComplete
 	}
-
-	err := model.UpdateTraceTimestamp(c, traceID, timestampKey)
-	if err != nil {
-		lg.Error("failed to update trace timestamp", zap.Error(err))
-	}
+	RecordTraceEvent(c, eventName, zap.String("timestamp_key", timestampKey))
 }
 
-// RecordTraceExternalCall appends an external call entry to the trace timeline.
-func RecordTraceExternalCall(c *gin.Context, call model.TraceExternalCall) {
-	traceID := GetTraceID(c)
-	lg := gmw.GetLogger(c)
-	if traceID == "" {
-		lg.Warn("empty trace ID, skipping external call record")
-		return
-	}
-	if err := model.AppendTraceExternalCall(c, traceID, call); err != nil {
-		lg.Error("failed to append trace external call", zap.Error(err))
-	}
+// RecordExternalCall records an external dependency call as OTel event and structured log fields.
+func RecordExternalCall(c *gin.Context, fields ...zap.Field) {
+	RecordTraceEvent(c, "external_call", fields...)
 }
 
-// RecordTraceTimestampFromContext updates a timestamp using standard context
-// func RecordTraceTimestampFromContext(ctx context.Context, timestampKey string) {
-// 	traceID := GetTraceIDFromContext(ctx)
-// 	if traceID == "" {
-// 		logger.Logger.Warn("empty trace ID from context, skipping timestamp update",
-// 			zap.String("timestamp_key", timestampKey))
-// 		return
-// 	}
-
-// 	// Best-effort update; model handles not-found quietly.
-// 	if err := model.UpdateTraceTimestamp(ctx, traceID, timestampKey); err != nil {
-// 		logger.Logger.Error("failed to update trace timestamp from context",
-// 			zap.Error(err),
-// 			zap.String("trace_id", traceID),
-// 			zap.String("timestamp_key", timestampKey))
-// 	}
-// }
-
-// RecordTraceStatus updates the HTTP status code for a trace
+// RecordTraceStatus records the final HTTP status without database persistence.
 func RecordTraceStatus(c *gin.Context, status int) {
-	traceID := GetTraceID(c)
-	lg := gmw.GetLogger(c).With(zap.Int("status", status))
-	if traceID == "" {
-		lg.Warn("empty trace ID, skipping status update")
-		return
-	}
-
-	ctx := gmw.SetLogger(gmw.Ctx(c), lg)
-	err := model.UpdateTraceStatus(ctx, traceID, status)
-	if err != nil {
-		lg.Error("failed to update trace status", zap.Error(err))
-	}
+	RecordTraceEvent(c, EventResponseComplete, zap.Int("status", status))
 }
 
-// RecordTraceEnd marks the completion of a request and records final timestamp
+// RecordTraceEnd records the request completion event without database persistence.
 func RecordTraceEnd(c *gin.Context) {
-	traceID := GetTraceID(c)
-	lg := gmw.GetLogger(c)
-	if traceID == "" {
-		lg.Warn("empty trace ID, skipping trace end recording")
-		return
-	}
-
-	// Record the final timestamp
-	RecordTraceTimestamp(c, model.TimestampRequestCompleted)
-
-	// Record the final status code
 	status := c.Writer.Status()
 	if status == 0 {
-		status = 200 // Default to 200 if no status was set
+		status = http.StatusOK
 	}
-	// attach logger to context for downstream status update
-	_ = gmw.SetLogger(gmw.Ctx(c), lg) // attach logger for symmetry; RecordTraceStatus will fetch its own context
 	RecordTraceStatus(c, status)
 }
 
