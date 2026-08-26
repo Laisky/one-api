@@ -188,6 +188,12 @@ export const CHANNEL_OPTIONS = {
     value: 57,
     color: 'primary'
   },
+  58: {
+    key: 58,
+    text: 'Z.ai',
+    value: 58,
+    color: 'primary'
+  },
   50: {
     key: 50,
     text: 'OpenAI Compatible',

@@ -6,35 +6,54 @@ import (
 )
 
 // imageGenerationModels enumerates Zhipu's image and video generation models.
-// Legacy image entries approximate per-request costs in token units; the Vidu
-// entries below encode the published per-call price directly as quota
-// (Ratio = price in RMB * ratio.QuotaPerRMB) and also surface it through
-// PerCall.UsdPerThousandCalls for the display layer.
+// BigModel prices every model in this table per call (元/次), never per token, so
+// none of them carry a token Ratio:
+//
+//   - Image models set Ratio=0 and carry Image.PricePerImageUsd (published RMB
+//     price / ratio.ExchangeRateRmb), matching the OpenAI/xAI image convention
+//     consumed by calculateImageBaseQuota.
+//   - Video models encode the per-call price as quota (Ratio = price in RMB *
+//     ratio.QuotaPerRMB) and surface it through PerCall.UsdPerThousandCalls,
+//     which relay/controller/video.go bills from.
+//
+// Pricing verified 2026-08-26 against https://bigmodel.cn/pricing.
 var imageGenerationModels = map[string]adaptor.ModelConfig{
 	"cogview-4": {
-		Ratio:            0.06 * ratio.MilliTokensRmb,
-		CompletionRatio:  1,
+		Ratio:           0,
+		CompletionRatio: 1,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.06 / ratio.ExchangeRateRmb,
+		},
 		InputModalities:  textInput(),
 		OutputModalities: []string{"image"},
-		Description:      "CogView-4: high-quality text-to-image generation model with multi-resolution support.",
+		Description:      "CogView-4: high-quality text-to-image generation model with multi-resolution support; ¥0.06 per image.",
 	},
 	"glm-image": {
-		Ratio:            0.1 * ratio.MilliTokensRmb,
-		CompletionRatio:  1,
+		Ratio:           0,
+		CompletionRatio: 1,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.1 / ratio.ExchangeRateRmb,
+		},
 		InputModalities:  textInput(),
 		OutputModalities: []string{"image"},
-		Description:      "GLM-Image: flagship text-to-image generation model (max 1000-char prompt), multi-resolution 512px-2048px in multiples of 32.",
+		Description:      "GLM-Image: flagship text-to-image generation model (max 1000-char prompt), multi-resolution 512px-2048px in multiples of 32; ¥0.1 per image.",
 	},
 	"cogview-3-plus": {
-		Ratio:            0.08 * ratio.MilliTokensRmb,
-		CompletionRatio:  1,
+		Ratio:           0,
+		CompletionRatio: 1,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.08 / ratio.ExchangeRateRmb,
+		},
 		InputModalities:  textInput(),
 		OutputModalities: []string{"image"},
 		Description:      "CogView-3-Plus: enhanced CogView-3 image generator. (retired/superseded; no longer listed among current image-generation models, which now comprise GLM-Image, CogView-4, and CogView-3-Flash)",
 	},
 	"cogview-3": {
-		Ratio:            0.04 * ratio.MilliTokensRmb,
-		CompletionRatio:  1,
+		Ratio:           0,
+		CompletionRatio: 1,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.04 / ratio.ExchangeRateRmb,
+		},
 		InputModalities:  textInput(),
 		OutputModalities: []string{"image"},
 		Description:      "CogView-3: text-to-image generation model. (retired/superseded; no longer listed among current image-generation models, which now comprise GLM-Image, CogView-4, and CogView-3-Flash)",
@@ -47,12 +66,24 @@ var imageGenerationModels = map[string]adaptor.ModelConfig{
 		OutputModalities: []string{"image"},
 		Description:      "CogView-3-Flash: free fast text-to-image generation model.",
 	},
+	// CogVideoX-3: ¥1 per call, 5s/10s clips up to 4K.
+	// Source: https://docs.bigmodel.cn/cn/guide/models/video-generation/cogvideox-3
 	"cogvideox-3": {
-		Ratio:            1 * ratio.MilliTokensRmb,
+		Ratio:            1 * ratio.QuotaPerRMB,
 		CompletionRatio:  1,
 		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"video"},
-		Description:      "CogVideoX-3: flagship text/image-to-video generation model supporting first/last-frame control, up to 4K resolution (supersedes CogVideoX/CogVideoX-2).",
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 1.0 / 7 * 1000},
+		Description:      "CogVideoX-3: flagship text/image-to-video generation model supporting first/last-frame control, up to 4K resolution at ¥1/call (supersedes CogVideoX/CogVideoX-2).",
+	},
+	// CogVideoX-2: ¥0.5 per call (Batch API ¥0.25).
+	"cogvideox-2": {
+		Ratio:            0.5 * ratio.QuotaPerRMB,
+		CompletionRatio:  1,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"video"},
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 0.5 / 7 * 1000},
+		Description:      "CogVideoX-2: previous-generation text/image-to-video model at ¥0.5/call (superseded by CogVideoX-3).",
 	},
 	"cogviewx": {
 		Ratio:            0.04 * ratio.MilliTokensRmb,

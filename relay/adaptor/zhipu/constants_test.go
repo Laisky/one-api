@@ -64,6 +64,60 @@ func TestCurrentVisionModelMetadata(t *testing.T) {
 	glm4v, ok := ModelRatios["glm-4v-plus-0111"]
 	require.True(t, ok)
 	require.Equal(t, int32(8_192), glm4v.MaxOutputTokens)
+
+	// GLM-5.3-Flash bills at the standard list price (¥0.8/¥0.23/¥2.8), not the
+	// two-week launch promotion, so quota does not under-charge once it lapses.
+	glm53Flash, ok := ModelRatios["glm-5.3-flash"]
+	require.True(t, ok)
+	require.Equal(t, int32(1_000_000), glm53Flash.ContextLength)
+	require.Equal(t, int32(131_072), glm53Flash.MaxOutputTokens)
+	require.Equal(t, []string{"text", "image", "video", "file"}, glm53Flash.InputModalities)
+	require.Empty(t, glm53Flash.Tiers)
+	require.InDelta(t, 0.8*ratio.MilliTokensRmb, glm53Flash.Ratio, 1e-12)
+	require.InDelta(t, 2.8/0.8, glm53Flash.CompletionRatio, 1e-12)
+	require.InDelta(t, 0.23*ratio.MilliTokensRmb, glm53Flash.CachedInputRatio, 1e-12)
+}
+
+// TestImageGenerationPerCallPricing verifies BigModel's image models are billed
+// per rendered image (元/次) through Image.PricePerImageUsd rather than being
+// mistaken for per-token models, which would under-charge by ~1e6x.
+func TestImageGenerationPerCallPricing(t *testing.T) {
+	t.Parallel()
+
+	for name, cny := range map[string]float64{
+		"glm-image":      0.1,
+		"cogview-4":      0.06,
+		"cogview-3-plus": 0.08,
+		"cogview-3":      0.04,
+	} {
+		cfg, ok := ModelRatios[name]
+		require.True(t, ok, name)
+		require.Zero(t, cfg.Ratio, name)
+		require.NotNil(t, cfg.Image, name)
+		require.InDelta(t, cny/ratio.ExchangeRateRmb, cfg.Image.PricePerImageUsd, 1e-12, name)
+	}
+
+	free, ok := ModelRatios["cogview-3-flash"]
+	require.True(t, ok)
+	require.Zero(t, free.Ratio)
+	require.Nil(t, free.Image)
+}
+
+// TestCogVideoXPerCallPricing verifies the CogVideoX video models carry the
+// per-call pricing the video relay bills from.
+func TestCogVideoXPerCallPricing(t *testing.T) {
+	t.Parallel()
+
+	for name, cny := range map[string]float64{
+		"cogvideox-3": 1,
+		"cogvideox-2": 0.5,
+	} {
+		cfg, ok := ModelRatios[name]
+		require.True(t, ok, name)
+		require.NotNil(t, cfg.PerCall, name)
+		require.InDelta(t, cny*ratio.QuotaPerRMB, cfg.Ratio, 1e-9, name)
+		require.InDelta(t, cny/7*1000, cfg.PerCall.UsdPerThousandCalls, 1e-9, name)
+	}
 }
 
 // TestViduPerCallPricing verifies the published per-call prices for Vidu Q1 and

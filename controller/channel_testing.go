@@ -79,8 +79,12 @@ func calculateTestCost(usage *relaymodel.Usage, meta *meta.Meta, request *relaym
 		return 0
 	}
 
-	// Get model ratio and completion ratio using three-layer pricing system
-	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
+	// Get model ratio and completion ratio using three-layer pricing system.
+	// relay.GetAdaptor takes an API type, not a channel type -- passing the channel
+	// type resolves whichever adaptor happens to share that numeric id (e.g.
+	// channeltype.LingYiWanWu is 31 and so is apitype.Zai), which silently prices
+	// the test request off an unrelated provider's table.
+	pricingAdaptor := relay.GetAdaptor(channeltype.ToAPIType(meta.ChannelType))
 	modelRatio := pricing.ResolveModelRatioAt(request.Model, nil, nil, pricingAdaptor, meta.StartTime)
 	completionRatio := pricing.ResolveCompletionRatioAt(request.Model, nil, nil, pricingAdaptor, meta.StartTime)
 

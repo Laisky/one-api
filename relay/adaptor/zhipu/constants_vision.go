@@ -26,6 +26,22 @@ var flagshipVisionModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: chatSamplingParameters(),
 		Description:                 "AutoGLM-Phone: vision-language AI phone assistant that understands screens and drives Android devices via ADB; 20K context, 2048 max output; free for a limited time.",
 	},
+	// GLM-5.3-Flash: released 2026-08-25 with a two-week 50% launch promotion
+	// (promo ¥0.4/¥0.115/¥1.4). The rates below are the standard list prices —
+	// ¥0.8 input / ¥0.23 cached input / ¥2.8 output per 1M tokens — so billing
+	// does not silently under-charge once the promotion lapses.
+	"glm-5.3-flash": {
+		Ratio:                       0.8 * ratio.MilliTokensRmb,
+		CompletionRatio:             2.8 / 0.8,
+		CachedInputRatio:            0.23 * ratio.MilliTokensRmb,
+		ContextLength:               1_000_000,
+		MaxOutputTokens:             131_072,
+		InputModalities:             textImageVideoFileInput(),
+		OutputModalities:            textOutput(),
+		SupportedFeatures:           reasoningChatFeatures(),
+		SupportedSamplingParameters: chatSamplingParameters(),
+		Description:                 "GLM-5.3-Flash: native multimodal Flash sibling of GLM-5.3 with 1M context and 128K max output; list pricing ¥0.8/¥2.8 per 1M input/output, ¥0.23 cached-input (launched 2026-08-25 with a two-week 50% promotion).",
+	},
 	// GLM-5V-Turbo: input [0,32K) ¥5/¥22, input [32K+) ¥7/¥26 (same as GLM-5-Turbo)
 	"glm-5v-turbo": {
 		Ratio:            5 * ratio.MilliTokensRmb,

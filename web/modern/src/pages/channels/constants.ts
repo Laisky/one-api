@@ -294,6 +294,14 @@ export const CHANNEL_TYPES: ChannelType[] = [
       'DeepInfra serverless inference; OpenAI-compatible chat, completions, embeddings, images, and audio, plus rerank and native Anthropic Messages.',
   },
   {
+    key: 58,
+    text: 'Z.ai',
+    value: 58,
+    color: 'teal',
+    description:
+      'Z.ai international GLM platform (api.z.ai). Same models as Zhipu but a separate account, key, and flat USD pricing. Serves chat, vision, image, video, ASR, and OCR; no embeddings, rerank, TTS, or realtime.',
+  },
+  {
     key: 42,
     text: 'VertexAI',
     value: 42,

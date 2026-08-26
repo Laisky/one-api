@@ -64,6 +64,8 @@ func String(apiType int) string {
 		return "azure"
 	case DeepInfra:
 		return "deepinfra"
+	case Zai:
+		return "zai"
 	default:
 		return ""
 	}

@@ -32,6 +32,7 @@ const (
 	Cerebras
 	Azure
 	DeepInfra
+	Zai
 
 	Dummy // this one is only for count, do not add any channel after this
 )

@@ -13,8 +13,8 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/cohere"
 	"github.com/Laisky/one-api/relay/adaptor/copilot"
 	"github.com/Laisky/one-api/relay/adaptor/coze"
-	"github.com/Laisky/one-api/relay/adaptor/deepl"
 	"github.com/Laisky/one-api/relay/adaptor/deepinfra"
+	"github.com/Laisky/one-api/relay/adaptor/deepl"
 	"github.com/Laisky/one-api/relay/adaptor/deepseek"
 	"github.com/Laisky/one-api/relay/adaptor/fireworks"
 	"github.com/Laisky/one-api/relay/adaptor/gemini"
@@ -32,6 +32,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/vertexai"
 	"github.com/Laisky/one-api/relay/adaptor/xai"
 	"github.com/Laisky/one-api/relay/adaptor/xunfei"
+	"github.com/Laisky/one-api/relay/adaptor/zai"
 	"github.com/Laisky/one-api/relay/adaptor/zhipu"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/pricing"
@@ -101,6 +102,8 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &cerebras.Adaptor{}
 	case apitype.Azure:
 		return &azure.Adaptor{}
+	case apitype.Zai:
+		return &zai.Adaptor{}
 	}
 
 	return nil

@@ -59,5 +59,6 @@ const (
 	NVIDIA
 	Cerebras
 	DeepInfra
+	Zai
 	Dummy
 )

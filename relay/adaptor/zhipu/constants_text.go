@@ -8,13 +8,12 @@ import (
 // flagshipTextModels enumerates Zhipu's flagship text-only chat models.
 // Pricing comes from https://bigmodel.cn/pricing; metadata derives from
 // https://docs.bigmodel.cn/cn/guide/start/model-overview and per-model spec pages.
-// Last updated: 2026-08-17.
+// Last updated: 2026-08-26.
 var flagshipTextModels = map[string]adaptor.ModelConfig{
 	// GLM-5.3: same base model as GLM-5.2 with post-training improvements.
-	// Live on the API (verified 2026-08-17 via /api/paas/v4/models) but
-	// access-gated (unauthorized keys receive error code 1220). BigModel has not
-	// published per-token pricing yet, so the placeholder rate mirrors GLM-5.2
-	// (¥8/¥28, ¥2 cached); update the Ratio fields when official pricing lands.
+	// Official pricing is now published on the flagship table (verified 2026-08-26):
+	// ¥8 input / ¥2 cached input / ¥28 output per 1M tokens, no tiers. The z.ai
+	// international list quotes the same tier ($1.4 / $0.26 / $4.4).
 	"glm-5.3": {
 		Ratio:                       8 * ratio.MilliTokensRmb,
 		CompletionRatio:             28.0 / 8.0,
@@ -27,7 +26,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: chatSamplingParameters(),
 		SupportedReasoningEfforts:   []string{"low", "high", "max"},
 		DefaultReasoningEffort:      "max",
-		Description:                 "GLM-5.3: latest flagship text model built on the GLM-5.2 base; 1M context, 128K max output, always-on thinking with reasoning_effort low/high/max; coding SOTA and emergent cybersecurity capabilities. Live on the API but access-gated; placeholder pricing mirrors GLM-5.2 until official rates publish.",
+		Description:                 "GLM-5.3: latest flagship text model built on the GLM-5.2 base; 1M context, 128K max output, always-on thinking with reasoning_effort low/high/max (thinking cannot be disabled); coding SOTA and emergent cybersecurity capabilities. Official pricing ¥8/¥28 per 1M input/output, ¥2 cached-input.",
 	},
 	// GLM-5-Turbo: input [0,32K) ¥5/¥22, input [32K+) ¥7/¥26
 	"glm-5-turbo": {
@@ -143,7 +142,8 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		Quantization:                "bf16",
 		Description:                 "GLM-4.7-Flash: free 31B open-weight base model with 200K context.",
 	},
-	// GLM-4.6: same tiered pricing as GLM-4.7
+	// GLM-4.6: same tiered pricing as GLM-4.7. No longer carries a published rate on
+	// BigModel's flagship pricing table (verified 2026-08-26); still served by the API.
 	"glm-4.6": {
 		Ratio:            2 * ratio.MilliTokensRmb,
 		CompletionRatio:  8.0 / 2.0,
@@ -160,7 +160,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: chatSamplingParameters(),
 		HuggingFaceID:               "zai-org/GLM-4.6",
 		Quantization:                "bf16",
-		Description:                 "GLM-4.6: 355B/32B-active MoE coding model with 200K context, aligned with Claude Sonnet 4.",
+		Description:                 "GLM-4.6: 355B/32B-active MoE coding model with 200K context, aligned with Claude Sonnet 4. Still served, but dropped from BigModel's priced flagship table; rates below are its last published tiers.",
 	},
 	// GLM-4.5-Air: input [0,32K) output [0,0.2K) ¥0.8/¥2; output [0.2K+) ¥0.8/¥6; input [32K,128K) ¥1.2/¥8
 	"glm-4.5-air": {
@@ -198,7 +198,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: chatSamplingParameters(),
 		HuggingFaceID:               "zai-org/GLM-4.5",
 		Quantization:                "bf16",
-		Description:                 "GLM-4.5: 355B/32B-active MoE flagship for agent applications with hybrid thinking. (slated for retirement, along with GLM-4.5-X, in favor of GLM-4.7)",
+		Description:                 "GLM-4.5: 355B/32B-active MoE flagship for agent applications with hybrid thinking. Deprecated: BigModel announces GLM-4.5 and GLM-4.5-X are 即将下线 (no date given) and no longer prices them; migrate to GLM-4.7.",
 	},
 	// GLM-4.5-X
 	"glm-4.5-x": {
@@ -215,7 +215,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           reasoningChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
-		Description:                 "GLM-4.5-X: high-performance speed-optimized variant of GLM-4.5 (slated for retirement).",
+		Description:                 "GLM-4.5-X: high-performance speed-optimized variant of GLM-4.5. Deprecated: removed from BigModel's current model enum and pricing table (verified 2026-08-26); migrate to GLM-4.7.",
 	},
 	// GLM-4.5-AirX
 	"glm-4.5-airx": {
@@ -231,7 +231,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           reasoningChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
-		Description:                 "GLM-4.5-AirX: speed-optimized GLM-4.5-Air with 100+ tokens/s generation throughput.",
+		Description:                 "GLM-4.5-AirX: speed-optimized GLM-4.5-Air with 100+ tokens/s generation throughput. Still in BigModel's model enum but no longer priced on the pricing page; rates below are its last published tiers.",
 	},
 }
 
@@ -336,7 +336,7 @@ var languageModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           reasoningChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
-		Description:                 "GLM-4.5-Flash: free GLM-4.5 sibling with thinking mode (slated for retirement) (deprecated; scheduled for retirement). RETIRED 2026-01-30.",
+		Description:                 "GLM-4.5-Flash: free GLM-4.5 sibling with thinking mode. RETIRED 2026-01-30; BigModel auto-routes requests to GLM-4.7-Flash.",
 	},
 	"glm-4-flash": {
 		Ratio:                       0,

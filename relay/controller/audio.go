@@ -222,10 +222,13 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			fullRequestURL = fmt.Sprintf("%s/openai/deployments/%s/audio/speech?api-version=%s", baseURL, audioModel, apiVersion)
 		}
 	}
-	if channelType == channeltype.Zhipu {
-		// Zhipu exposes OpenAI-compatible audio endpoints under /api/paas/v4.
+	if channelType == channeltype.Zhipu || channelType == channeltype.Zai {
+		// Zhipu and Z.AI are the same platform under two brands and expose the same
+		// OpenAI-compatible audio endpoints under /api/paas/v4. Z.AI serves only
+		// transcription (GLM-ASR-2512); it publishes no text-to-speech model.
 		// Sources: https://docs.bigmodel.cn/api-reference/模型-api/文本转语音
 		// https://docs.bigmodel.cn/api-reference/模型-api/语音转文本
+		// https://docs.z.ai/api-reference/audio/audio-transcriptions
 		switch relayMode {
 		case relaymode.AudioSpeech:
 			fullRequestURL = fmt.Sprintf("%s/api/paas/v4/audio/speech", baseURL)
@@ -233,7 +236,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			fullRequestURL = fmt.Sprintf("%s/api/paas/v4/audio/transcriptions", baseURL)
 		case relaymode.AudioTranslation:
 			return openai.ErrorWrapper(
-				errors.New("zhipu does not offer an audio translation endpoint; GLM-ASR-2512 supports multilingual transcription via /v1/audio/transcriptions"),
+				errors.New("this provider does not offer an audio translation endpoint; GLM-ASR-2512 supports multilingual transcription via /v1/audio/transcriptions"),
 				"unsupported_audio_translation", http.StatusBadRequest)
 		}
 	}

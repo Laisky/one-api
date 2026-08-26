@@ -69,6 +69,9 @@ var ChannelBaseURLConfigs = []ChannelBaseURLConfig{
 	{URL: "https://integrate.api.nvidia.com/v1", Editable: true},                       // 55 NVIDIA
 	{URL: "https://api.cerebras.ai/v1", Editable: false},                               // 56 Cerebras
 	{URL: "https://api.deepinfra.com", Editable: false},                                // 57 DeepInfra
+	// Z.AI international GLM platform. The zhipu adaptor appends /api/paas/v4/...,
+	// which reproduces Z.AI's documented paths exactly, so the bare host is correct.
+	{URL: "https://api.z.ai", Editable: false}, // 58 Zai
 }
 
 // ChannelBaseURLs provides backward compatibility by returning only the URL strings.

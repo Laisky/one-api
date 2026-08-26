@@ -5,7 +5,7 @@
 Open‑source version of OpenRouter, managed through a unified gateway that handles all AI SaaS model calls. Core functions include:
 
 1. Aggregating chat, image, speech, TTS, embeddings, rerank and other capabilities.
-2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, Groq, Grok/xAI, Fireworks, NVIDIA, Cerebras, Cloudflare, ZHIPU GLM, Cohere, etc.
+2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, Groq, Grok/xAI, Fireworks, NVIDIA, Cerebras, Cloudflare, ZHIPU GLM, Z.ai, Cohere, etc.
 3. Aggregating various upstream API request formats like Chat Completion, Response, Claude Messages.
 4. Supporting different request formats; users can issue requests via Chat Completion, Response, or Claude Messages, which are automatically and transparently converted to the native request format of the upstream model. Even if the client sends a mismatched request format to wrong api endpoint, it will still be correctly processed.
 5. Supporting multi‑tenant management, allowing each tenant to set distinct quotas and permissions.
@@ -151,6 +151,9 @@ The original author stopped maintaining the project, leaving critical PRs and ne
       - [Image Generation Models](#image-generation-models)
       - [Other Models](#other-models)
       - [GLM OCR](#glm-ocr)
+    - [Z.ai Features](#zai-features)
+      - [Z.ai vs Zhipu / open.bigmodel.cn](#zai-vs-zhipu--openbigmodelcn)
+      - [Z.ai Model Catalog](#zai-model-catalog)
     - [XAI / Grok Features](#xai--grok-features)
       - [Support XAI/Grok Text \& Image Models](#support-xaigrok-text--image-models)
     - [Black Forest Labs Features](#black-forest-labs-features)
@@ -1403,7 +1406,7 @@ Kimi K3 is also available through several hosted providers, each with its own ca
 
 #### Flagship Models - Visual
 
-`autoglm-phone` / `glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` / `glm-4.5v` / `glm-4.6v-flash` / `glm-4v-flash`
+`autoglm-phone` / `glm-5.3-flash` / `glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` / `glm-4.5v` / `glm-4.6v-flash` / `glm-4v-flash`
 
 #### Language Models
 
@@ -1419,7 +1422,7 @@ Kimi K3 is also available through several hosted providers, each with its own ca
 
 #### Image Generation Models
 
-`glm-image` / `cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogvideox-3` / `cogviewx` / `cogviewx-flash` / `viduq1-image` / `viduq1-start-end` / `viduq1-text` / `vidu2-image` / `vidu2-start-end` / `vidu2-reference`
+`glm-image` / `cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogvideox-3` / `cogvideox-2` / `cogviewx` / `cogviewx-flash` / `viduq1-image` / `viduq1-start-end` / `viduq1-text` / `vidu2-image` / `vidu2-start-end` / `vidu2-reference`
 
 #### Audio Models
 
@@ -1533,6 +1536,52 @@ Response:
   }
 }
 ```
+
+### Z.ai Features
+
+Z.ai (`https://api.z.ai`) and Zhipu / open.bigmodel.cn are two brands of the same
+company serving the same GLM wire protocol, so one-api exposes them as **two
+separate channel types**: `Zhipu` (16) and `Z.ai` (58). Each holds its own API key
+and its own model list, and each bills from its own price table. Requests to
+`glm-4.7` on a Zhipu channel bill at BigModel's CNY tiers; the same model on a
+Z.ai channel bills at Z.ai's flat USD rate.
+
+#### Z.ai vs Zhipu / open.bigmodel.cn
+
+| | Zhipu (16) | Z.ai (58) |
+|---|---|---|
+| Base URL | `https://open.bigmodel.cn` | `https://api.z.ai` |
+| Auth | HS256-signed JWT built from a dotted `{id}.{secret}` key | plain `Authorization: Bearer <key>` |
+| Pricing | CNY, tiered by input and output length | USD, flat (no tiers) |
+| Endpoints | chat, embeddings, images, response API, Claude Messages, OCR | chat, images, videos, audio transcription, response API, Claude Messages, OCR |
+| Not available | — | embeddings, rerank, text-to-speech, realtime |
+
+Because the two catalogs overlap almost entirely, `/v1/models` publishes one row
+per model id and resolves the owner deterministically by adaptor name in byte
+order — shared GLM ids are labelled `zai`. That is a display label only; billing
+always follows the channel the request was actually routed to.
+
+Z.ai's GLM Coding Plan uses different base URLs (`/api/anthropic`,
+`/api/coding/paas/v4`) and is **not** served by this channel; point a
+`ClaudeCompatible` channel at `https://api.z.ai/api/anthropic` for that instead.
+
+#### Z.ai Model Catalog
+
+Text: `glm-5.3` / `glm-5.2` / `glm-5.1` / `glm-5` / `glm-5-turbo` / `glm-4.7` /
+`glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` /
+`glm-4.5-air` / `glm-4.5-airx` / `glm-4.5-flash` / `glm-4-32b-0414-128k`
+
+Vision: `glm-5.3-flash` / `glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` /
+`glm-4.6v-flash` / `glm-4.5v`
+
+OCR, image, video, audio: `glm-ocr` / `glm-image` / `cogview-4-250304` /
+`cogvideox-3` / `viduq1-text` / `viduq1-image` / `viduq1-start-end` /
+`vidu2-image` / `vidu2-start-end` / `vidu2-reference` / `glm-asr-2512`
+
+`glm-4.7-flash`, `glm-4.5-flash` and `glm-4.6v-flash` are free on Z.ai.
+`glm-4-32b-0414-128k` and `cogview-4-250304` exist only on Z.ai; conversely
+`embedding-3`, `rerank`, `glm-tts` and `glm-realtime-*` exist only on Zhipu.
+Pricing source: <https://docs.z.ai/guides/overview/pricing>.
 
 ### XAI / Grok Features
 

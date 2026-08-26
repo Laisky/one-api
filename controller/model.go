@@ -148,6 +148,7 @@ func init() {
 			})
 		}
 	}
+	allModels = dedupeStaticModelsByOwner(allModels)
 	modelsMap = make(map[string]OpenAIModels)
 	for _, model := range allModels {
 		modelsMap[model.Id] = model
@@ -165,6 +166,43 @@ func init() {
 		adaptor.Init(meta)
 		channelId2Models[i] = adaptor.GetModelList()
 	}
+}
+
+// dedupeStaticModelsByOwner collapses the aggregated static catalog to exactly
+// one row per model id.
+//
+// Many providers legitimately serve the same model id -- open-weight ids such as
+// Qwen/Qwen3.5-9B are hosted by several upstreams at once, Claude ids are served
+// by both the Anthropic and AWS adaptors, and the Zhipu (open.bigmodel.cn) and
+// Zai (api.z.ai) channels are two brands of the same GLM catalog. The aggregation
+// loops above append unconditionally, so without this pass /v1/models emits a
+// duplicate row per extra provider, and the modelsMap built from it resolves the
+// owner by whichever adaptor happened to be swept last.
+//
+// The winner is chosen by byte order of OwnedBy (the adaptor's channel name), with
+// the original position as a stable tie-break. That makes the listing independent
+// of the apitype iota, of map iteration order, and of which channels are enabled --
+// the same input always yields the same owner label.
+//
+// This affects the public listing only. Billing is unaffected: quota resolves per
+// request through the channel's own apitype and its own price table, so glm-4.7 on
+// a Zhipu channel still bills at BigModel's CNY tiers while the same id on a Zai
+// channel bills at Z.AI's flat USD rate, regardless of which one owns the row here.
+func dedupeStaticModelsByOwner(models []OpenAIModels) []OpenAIModels {
+	winners := make(map[string]int, len(models))
+	for i, m := range models {
+		prev, seen := winners[m.Id]
+		if !seen || m.OwnedBy < models[prev].OwnedBy {
+			winners[m.Id] = i
+		}
+	}
+	deduped := make([]OpenAIModels, 0, len(winners))
+	for i, m := range models {
+		if winners[m.Id] == i {
+			deduped = append(deduped, m)
+		}
+	}
+	return deduped
 }
 
 // DashboardListModels returns the complete channel-to-model mapping for administrative dashboards.

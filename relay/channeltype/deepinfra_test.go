@@ -13,7 +13,6 @@ func TestDeepInfraRegistration(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, 57, DeepInfra)
-	require.Equal(t, 58, Dummy)
 	require.Equal(t, apitype.DeepInfra, ToAPIType(DeepInfra))
 	require.Equal(t, "deepinfra", IdToName(DeepInfra))
 	require.Equal(t, "deepinfra", apitype.String(apitype.DeepInfra))

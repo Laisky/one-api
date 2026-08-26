@@ -107,6 +107,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	// these adaptors need to convert the request
 	switch meta.ChannelType {
 	case channeltype.Zhipu,
+		channeltype.Zai,
 		channeltype.Ali,
 		channeltype.VertextAI,
 		channeltype.Baidu,

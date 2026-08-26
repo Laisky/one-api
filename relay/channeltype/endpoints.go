@@ -217,6 +217,20 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointClaudeMessages,
 			EndpointOCR,
 		}
+	case Zai:
+		// Z.AI international (api.z.ai) is the same company as Zhipu/BigModel serving
+		// the same GLM wire protocol, but a smaller catalog: it has NO embeddings, NO
+		// rerank, NO text-to-speech and NO realtime surface -- those are BigModel-only.
+		// Source: https://docs.z.ai/llms.txt and https://docs.z.ai/guides/overview/pricing
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointImagesGenerations,
+			EndpointVideos,
+			EndpointAudioTranscription,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+			EndpointOCR,
+		}
 	case Ali:
 		return []Endpoint{
 			EndpointChatCompletions,
