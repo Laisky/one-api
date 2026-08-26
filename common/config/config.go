@@ -1082,12 +1082,11 @@ var (
 	// Allowed values: "hourly", "daily", "weekly"
 	LogRotationInterval = strings.TrimSpace(strings.ToLower(env.String("LOG_ROTATION_INTERVAL", "daily")))
 
-	// LogFormat selects the application logger encoding.
+	// RelayAccessLogEnabled controls whether relay access logs are emitted.
 	//
-	// Environment variable: LOG_FORMAT
-	// Default: "console"
-	// Allowed values: "console", "json"
-	LogFormat = strings.TrimSpace(strings.ToLower(env.String("LOG_FORMAT", "console")))
+	// Environment variable: RELAY_ACCESS_LOG_ENABLED
+	// Default: false
+	RelayAccessLogEnabled = env.Bool("RELAY_ACCESS_LOG_ENABLED", false)
 
 	// LogRetentionDays determines how many days logs are kept before the
 	// retention worker purges them. Set to 0 to disable cleanup.

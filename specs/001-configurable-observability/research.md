@@ -28,18 +28,19 @@
 - Record only start and completion. Rejected because it hides upstream latency and streaming first-byte behavior.
 - Trace every internal conversion and routing step. Rejected because it creates excessive detail for the first OTel redesign.
 
-## Decision: Add opt-in JSON log format using existing logger stack
+## Decision: Add opt-in relay access log middleware using existing logger stack
 
-**Rationale**: `common/logger` already centralizes logger construction and sink configuration. JSON format should remain an operator-selected log encoding while existing console-style output stays available.
+**Rationale**: Operators need a concise summary of relay requests, but internal implementation details are better carried by OpenTelemetry events. A dedicated middleware keeps access logs independent from general application logs and avoids changing global logger encoding.
 
 **Alternatives considered**:
 
 - Replace the logging stack. Rejected as too broad.
-- Emit a parallel JSON log stream. Rejected because it complicates sinks and doubles operational noise.
+- Change global log encoding. Rejected because the current need is scoped to relay access visibility.
+- Log every internal relay timing point. Rejected because those details belong in tracing and create excessive log volume.
 
 ## Decision: Use OpenTelemetry SpanContext for `trace_id` and `span_id`
 
-**Rationale**: Correlation fields must use valid OpenTelemetry identifiers, not project-defined request IDs. The implementation should use the active OpenTelemetry span context and attach IDs to request-scoped JSON logs only when that context is valid.
+**Rationale**: Correlation fields must use valid OpenTelemetry identifiers, not project-defined request IDs. The implementation should use the active OpenTelemetry span context and attach IDs to request-scoped relay access logs only when that context is valid.
 
 **Alternatives considered**:
 

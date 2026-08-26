@@ -6,7 +6,7 @@ This contract describes operator-visible configuration behavior for the configur
 
 | Variable | Values | Default | Behavior |
 |----------|--------|---------|----------|
-| `LOG_FORMAT` | `console` or `json` | `console` | Selects operational log encoding for stdout and file sinks. |
+| `RELAY_ACCESS_LOG_ENABLED` | `true` or `false` | `false` | Enables one access log entry per relay request. |
 | OpenTelemetry exporter variables | Existing OpenTelemetry-supported values | unset | Optional exporter configuration; absence must not prevent middleware registration or request processing. |
 
 ## Removed Database Trace Storage Behavior
@@ -32,15 +32,14 @@ This contract describes operator-visible configuration behavior for the configur
 - Trace data must include OneAPI-specific `oneapi.channel_id`, `oneapi.stream`, `oneapi.upstream_address`, and `oneapi.upstream_url` when known.
 - OneAPI-specific trace fields must remain distinguishable from standard OpenTelemetry fields.
 
-## JSON Log Behavior
+## Relay Access Log Behavior
 
-- When `LOG_FORMAT=json`, each operational log line emitted through the application logger must be valid JSON.
-- JSON log entries must include `severity_text`.
-- Request-scoped JSON log entries must include `trace_id` and `span_id` when valid OpenTelemetry span context is available.
-- Request-scoped JSON log entries must include synchronized relay timing event names when emitted for required relay timing points.
-- Request-scoped JSON log entries must include known GenAI inference attributes using the same OpenTelemetry semantic convention field names as traces, subject to the same no-extra-client-request-parsing rule.
-- Request-scoped JSON log entries must include `oneapi.channel_id`, `oneapi.stream`, `oneapi.upstream_address`, and `oneapi.upstream_url` when those values are known.
-- Request-scoped JSON log entries must include `prompt_preview` when prompt text is safely available for logging.
+- When `RELAY_ACCESS_LOG_ENABLED=true`, each relay request emits one concise `relay access` log entry after request completion.
+- Relay access logs must use the existing request-scoped logger and must not change global logger encoding.
+- Relay access logs must include status, duration, method, path, response size, request id, and already-known relay context such as request model, relay mode, and upstream address when available.
+- Relay access logs may include `trace_id` and `span_id` only when valid OpenTelemetry span context is available.
+- Relay access logs must not include internal timing/debug steps already carried by OpenTelemetry events.
+- Relay access logs may include `prompt_preview` only when prompt text is already safely available to the logging path.
 - `trace_id` must follow OpenTelemetry trace ID format: 32 hexadecimal characters and not all zeroes.
 - `span_id` must follow OpenTelemetry span ID format: 16 hexadecimal characters and not all zeroes.
 - When valid OpenTelemetry context is unavailable, the system must not invent project-specific values for `trace_id` or `span_id`.
@@ -48,7 +47,7 @@ This contract describes operator-visible configuration behavior for the configur
 - `prompt_preview` must use the full sanitized prompt when it is 200 characters or shorter.
 - `prompt_preview` must use first 100 characters, then `...`, then last 100 characters when the sanitized prompt is longer than 200 characters.
 
-## Non-JSON Log Behavior
+## Default Log Behavior
 
-- When `LOG_FORMAT` is absent, empty, or `console`, existing readable console-style output remains available.
-- Existing log rotation, retention, and alert push behavior continues to use the selected logger output format where supported by the current sink.
+- When `RELAY_ACCESS_LOG_ENABLED` is absent or false, relay access logging is disabled.
+- Existing readable application log output, log rotation, retention, and alert push behavior remain unchanged.

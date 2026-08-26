@@ -24,7 +24,7 @@ Relay code records upstream timing events at the existing dispatch and response 
 
 ## Logging
 
-Request logs must use the context-aware logger from `gmw.GetLogger(c)` in Gin request paths. `LOG_FORMAT=console` keeps colored console output. `LOG_FORMAT=json` selects JSON logger encoding and disables colored Gin middleware output.
+General request logs keep the existing logger behavior. Relay access logging is handled by a dedicated middleware and is enabled only when `RELAY_ACCESS_LOG_ENABLED=true`.
 
 When a valid OpenTelemetry span context exists, logs may include standard `trace_id` and `span_id` values. The service does not fabricate IDs when the OpenTelemetry context is missing or invalid.
 

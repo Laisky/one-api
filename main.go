@@ -32,7 +32,6 @@ import (
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/telemetry"
-	commontracing "github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/controller"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
@@ -48,34 +47,13 @@ import (
 
 var buildFS embed.FS
 
-// newGinLoggerMiddleware creates the request logger middleware for the configured log format.
+// newGinLoggerMiddleware creates the standard Gin request logger middleware.
 func newGinLoggerMiddleware(logLevel glog.Level) gin.HandlerFunc {
-	options := []gmw.LoggerMwOptFunc{
+	return gmw.NewLoggerMiddleware(
+		gmw.WithLoggerMwColored(),
 		gmw.WithLevel(logLevel.String()),
 		gmw.WithLogger(logger.Logger.Named("gin")),
-	}
-	if config.LogFormat != "json" {
-		options = append([]gmw.LoggerMwOptFunc{gmw.WithLoggerMwColored()}, options...)
-	}
-	return gmw.NewLoggerMiddleware(options...)
-}
-
-// attachOpenTelemetryLoggerFields adds valid OpenTelemetry correlation IDs to the request logger.
-func attachOpenTelemetryLoggerFields() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		lg := logger.Logger.Named("gin")
-		fields := make([]zap.Field, 0, 2)
-		if traceID := commontracing.GetOpenTelemetryTraceID(c); traceID != "" {
-			fields = append(fields, zap.String("trace_id", traceID))
-		}
-		if spanID := commontracing.GetOpenTelemetrySpanID(c); spanID != "" {
-			fields = append(fields, zap.String("span_id", spanID))
-		}
-		if len(fields) > 0 {
-			gmw.SetLogger(c, lg.With(fields...))
-		}
-		c.Next()
-	}
+	)
 }
 
 func main() {
@@ -208,7 +186,6 @@ func main() {
 	}
 
 	middlewares = append(middlewares, otelgin.Middleware(config.OpenTelemetryServiceName))
-	middlewares = append(middlewares, attachOpenTelemetryLoggerFields())
 
 	middlewares = append(middlewares,
 		newGinLoggerMiddleware(logLevel),
@@ -258,7 +235,7 @@ func main() {
 		logger.Logger.Info("Prometheus metrics endpoint available at /metrics")
 	}
 
-	router.SetRouter(server, buildFS)
+	router.SetRouter(server, buildFS, config.RelayAccessLogEnabled)
 	port := config.ServerPort
 	if port == "" {
 		port = strconv.Itoa(*common.Port)

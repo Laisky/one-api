@@ -15,6 +15,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/tracing"
@@ -143,7 +144,12 @@ func doResponseAPIRequestViaWebSocket(
 		HandshakeTimeout: 15 * time.Second,
 	}
 
-	tracing.RecordTraceTimestamp(c, tracing.TimestampRequestForwarded)
+	tracing.RecordTraceEventAttrs(c, tracing.EventUpstreamRequestSent,
+		attribute.String(tracing.OneAPIUpstreamURLAttr, wsURL),
+		attribute.String(tracing.GenAIOperationNameAttr, "response"),
+		attribute.String(tracing.GenAIRequestModelAttr, metaInfo.ActualModelName),
+		attribute.Bool(tracing.OneAPIStreamAttr, streamingRequested),
+	)
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 
 	upstreamConn, _, err := dialer.Dial(wsURL, dialHeader)
@@ -155,12 +161,6 @@ func doResponseAPIRequestViaWebSocket(
 		_ = upstreamConn.Close()
 		return nil, true, errors.Wrap(err, "send response.create websocket event")
 	}
-
-	lg.Debug("openai response api websocket event sent",
-		zap.String("event_type", "response.create"),
-		zap.Bool("stream", streamingRequested),
-		zap.String("model", metaInfo.ActualModelName),
-	)
 
 	firstMessage, firstErr := readNextWebSocketTextMessage(upstreamConn)
 	if firstErr != nil {
@@ -185,7 +185,10 @@ func doResponseAPIRequestViaWebSocket(
 		_ = upstreamConn.Close()
 		return nil, true, errors.Wrap(firstErr, "read first websocket response event")
 	}
-	tracing.RecordTraceTimestamp(c, tracing.TimestampFirstUpstreamResponse)
+	tracing.RecordTraceEventAttrs(c, tracing.EventFirstUpstreamByte,
+		attribute.String(tracing.GenAIOperationNameAttr, "response"),
+		attribute.String(tracing.GenAIRequestModelAttr, metaInfo.ActualModelName),
+	)
 
 	if errResp, ok := tryBuildWebSocketErrorResponse(firstMessage); ok {
 		fallbackToHTTP := shouldFallbackToHTTPForWebSocketError(firstMessage)

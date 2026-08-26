@@ -8,7 +8,8 @@ import (
 	"github.com/Laisky/one-api/middleware"
 )
 
-func SetRelayRouter(router *gin.Engine) {
+// SetRelayRouter registers relay routes and conditionally enables relay access logging.
+func SetRelayRouter(router *gin.Engine, relayAccessLogEnabled bool) {
 	// Rewrite various Claude Code prefixes to the canonical /v1/messages path.
 	// Put this before other middlewares to avoid double-running them on redispatch.
 	router.Use(
@@ -56,6 +57,9 @@ func SetRelayRouter(router *gin.Engine) {
 		middleware.GlobalRelayRateLimit(),
 		middleware.LowBalanceRelayRateLimit(),
 		middleware.ChannelRateLimit(),
+	}
+	if relayAccessLogEnabled {
+		relayMws = append(relayMws, middleware.RelayAccessLog())
 	}
 
 	// -------------------------------------

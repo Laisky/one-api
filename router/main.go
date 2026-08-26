@@ -12,10 +12,11 @@ import (
 	"github.com/Laisky/one-api/common/logger"
 )
 
-func SetRouter(router *gin.Engine, buildFS embed.FS) {
+// SetRouter registers all HTTP routes and optional route-level middleware.
+func SetRouter(router *gin.Engine, buildFS embed.FS, relayAccessLogEnabled bool) {
 	SetApiRouter(router)
 	SetDashboardRouter(router)
-	SetRelayRouter(router)
+	SetRelayRouter(router, relayAccessLogEnabled)
 	frontendBaseUrl := config.FrontendBaseURL
 	if config.IsMasterNode && frontendBaseUrl != "" {
 		frontendBaseUrl = ""

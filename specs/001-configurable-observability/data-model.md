@@ -2,23 +2,22 @@
 
 ## Observability Configuration
 
-**Purpose**: Represents deployment-time operator choices for operational log formatting and non-database observability output.
+**Purpose**: Represents deployment-time operator choices for relay access logging and non-database observability output.
 
 **Fields**:
 
-- `log_format`: String setting that selects operational log output format.
+- `relay_access_log_enabled`: Boolean setting that enables one relay access log entry per relay request.
 - `otel_exporter`: Optional OpenTelemetry exporter configuration supplied by the existing deployment environment.
 - `prompt_preview_limit`: Fixed preview behavior of first 100 characters and last 100 characters for long sanitized prompt text.
 
 **Validation Rules**:
 
-- `log_format` must accept the default console behavior and the JSON behavior.
-- Invalid `log_format` values must fail configuration validation instead of silently choosing an unexpected format.
+- `relay_access_log_enabled` defaults to false.
 - Missing OpenTelemetry exporter configuration must not fail startup or request processing.
 
 **Relationships**:
 
-- Controls how Structured Log Entries are encoded.
+- Controls whether relay access log entries are emitted.
 - Does not control whether OpenTelemetry middleware is registered.
 - Does not control any database-backed trace storage because that storage path is removed.
 
@@ -74,28 +73,30 @@
 - Supplies trace context and event names used by Structured Log Entries.
 - Replaces the old database-backed tracing request path.
 
-## Structured Log Entry
+## Relay Access Log Entry
 
-**Purpose**: Operational log event emitted to stdout/file sinks for operator ingestion and debugging.
+**Purpose**: Optional relay request summary emitted to the existing logger for operator inspection.
 
 **Fields**:
 
-- `severity_text`: Text severity label required for JSON log output.
 - `trace_id`: OpenTelemetry trace ID when a valid span context exists.
 - `span_id`: OpenTelemetry span ID when a valid span context exists.
-- `event`: Relay timing event name when the log corresponds to a relay timing point.
-- `oneapi.channel_id`: OneAPI channel selected for the upstream request when known.
-- `oneapi.stream`: Whether the request used streaming behavior when known.
-- `oneapi.upstream_address`: Host or address used for the upstream request when known.
-- `oneapi.upstream_url`: Concrete upstream request URL when known, sanitized before logging.
+- `request_id`: Existing OneAPI request identifier.
+- `method`: HTTP method.
+- `path`: HTTP path.
+- `status`: Final HTTP status.
+- `duration_ms`: Request duration in milliseconds.
+- `response_bytes`: Response writer size.
+- `request_model`: Requested model when already known.
+- `relay_mode`: Relay mode when already known.
+- `upstream_address`: Selected upstream address when already known.
 - `prompt_preview`: Sanitized preview of prompt text when prompt text is present.
-- OpenTelemetry GenAI fields listed in GenAI Request Context when available without extra client request parsing, using the same field names as trace attributes.
-- Existing fields such as message, timestamp, logger name, host, request ID, status, latency, model, channel, and error details as applicable.
+- Existing request-scoped logger fields such as user, token, channel, and error details as applicable.
 
 **Validation Rules**:
 
-- JSON log entries must be valid JSON when JSON format is selected.
-- `severity_text` must appear on JSON log entries.
+- Relay access log entries must be emitted only when `RELAY_ACCESS_LOG_ENABLED=true`.
+- Relay access logging must not change global logger encoding or sink behavior.
 - `trace_id`, when emitted, must be exactly 32 hexadecimal characters and must not be the all-zero ID.
 - `span_id`, when emitted, must be exactly 16 hexadecimal characters and must not be the all-zero ID.
 - Logs must not expose API keys, passwords, tokens, credentials, or sensitive request payloads.
@@ -120,12 +121,12 @@
 
 **Validation Rules**:
 
-- Only valid OpenTelemetry span context may populate JSON log `trace_id` and `span_id`.
+- Only valid OpenTelemetry span context may populate relay access log `trace_id` and `span_id`.
 - Malformed, missing, or all-zero context must not be converted into project-specific replacement IDs.
 
 **Relationships**:
 
-- Source of `trace_id` and `span_id` for request-scoped JSON logs.
+- Source of `trace_id` and `span_id` for request-scoped relay access logs.
 - Independent from database-backed tracing because that backend path is removed.
 
 ## GenAI Request Context

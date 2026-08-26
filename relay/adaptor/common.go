@@ -10,7 +10,9 @@ import (
 	gutils "github.com/Laisky/go-utils/v6"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/attribute"
 
+	appcommon "github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/identity"
@@ -160,19 +162,17 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	ctx := gmw.Ctx(c)
 	ctx = gmw.SetLogger(ctx, lg)
 
-	// Log upstream request for billing tracking
-	fields := []zap.Field{
-		zap.String("method", req.Method),
-		zap.String("url", fullRequestURL),
-		zap.Bool("body_logging_suppressed", true),
+	traceAttrs := []attribute.KeyValue{
+		attribute.String("http.request.method", req.Method),
+		attribute.String(tracing.OneAPIUpstreamURLAttr, appcommon.SanitizeURLForLogging(fullRequestURL)),
+		attribute.String("oneapi.adaptor", a.GetChannelName()),
+		attribute.Int(tracing.OneAPIChannelIDAttr, meta.ChannelId),
+		attribute.String(tracing.GenAIRequestModelAttr, meta.ActualModelName),
 	}
 	if bodySize >= 0 {
-		fields = append(fields, zap.Int("body_bytes", bodySize))
+		traceAttrs = append(traceAttrs, attribute.Int64("http.request.body.size", int64(bodySize)))
 	}
-	lg.Debug("forwarding request to upstream channel", fields...)
-
-	// Optionally: Record when request is forwarded to upstream (non-standard event)
-	tracing.RecordTraceTimestamp(c, tracing.TimestampRequestForwarded)
+	tracing.RecordTraceEventAttrs(c, tracing.EventUpstreamRequestSent, traceAttrs...)
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 
 	resp, err := DoRequest(c, req)
@@ -214,7 +214,9 @@ func DoRequest(c *gin.Context, req *http.Request) (*http.Response, error) {
 	}
 
 	// Optionally: Record when first response is received from upstream (non-standard event)
-	tracing.RecordTraceTimestamp(c, tracing.TimestampFirstUpstreamResponse)
+	tracing.RecordTraceEventAttrs(c, tracing.EventFirstUpstreamByte,
+		attribute.Int("http.response.status_code", resp.StatusCode),
+	)
 
 	if req.Body != nil {
 		_ = req.Body.Close()

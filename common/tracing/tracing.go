@@ -196,13 +196,15 @@ func AddSpanEvent(ctx context.Context, eventName string, attrs ...attribute.KeyV
 	span.AddEvent(eventName, oteltrace.WithAttributes(attrs...))
 }
 
-// RecordTraceEvent emits a storage-free tracing event and synchronized structured log.
+// RecordTraceEvent records a storage-free tracing event without emitting operational logs.
 func RecordTraceEvent(c *gin.Context, eventName string, fields ...zap.Field) {
-	lg := gmw.GetLogger(c)
-	ctx := gmw.Ctx(c)
-	AddSpanEvent(ctx, eventName)
-	logFields := append([]zap.Field{zap.String("event", eventName)}, fields...)
-	lg.Debug("trace event", logFields...)
+	_ = fields
+	RecordTraceEventAttrs(c, eventName)
+}
+
+// RecordTraceEventAttrs records a storage-free tracing event with OpenTelemetry attributes.
+func RecordTraceEventAttrs(c *gin.Context, eventName string, attrs ...attribute.KeyValue) {
+	AddSpanEvent(gmw.Ctx(c), eventName, attrs...)
 }
 
 // RecordTraceStart records the request start event without database persistence.
@@ -216,10 +218,10 @@ func RecordTraceStart(c *gin.Context) {
 	if c.Request.URL != nil {
 		path = c.Request.URL.Path
 	}
-	RecordTraceEvent(c, EventRequestReceived,
-		zap.String("method", method),
-		zap.String("path", path),
-		zap.Int("status", status),
+	RecordTraceEventAttrs(c, EventRequestReceived,
+		attribute.String("http.request.method", method),
+		attribute.String("url.path", path),
+		attribute.Int("http.response.status_code", status),
 	)
 }
 
@@ -238,17 +240,17 @@ func RecordTraceTimestamp(c *gin.Context, timestampKey string) {
 	case TimestampRequestCompleted:
 		eventName = EventResponseComplete
 	}
-	RecordTraceEvent(c, eventName, zap.String("timestamp_key", timestampKey))
+	RecordTraceEventAttrs(c, eventName, attribute.String("oneapi.timestamp_key", timestampKey))
 }
 
-// RecordExternalCall records an external dependency call as OTel event and structured log fields.
-func RecordExternalCall(c *gin.Context, fields ...zap.Field) {
-	RecordTraceEvent(c, "external_call", fields...)
+// RecordExternalCall records an external dependency call as an OpenTelemetry event.
+func RecordExternalCall(c *gin.Context, attrs ...attribute.KeyValue) {
+	RecordTraceEventAttrs(c, "external_call", attrs...)
 }
 
 // RecordTraceStatus records the final HTTP status without database persistence.
 func RecordTraceStatus(c *gin.Context, status int) {
-	RecordTraceEvent(c, EventResponseComplete, zap.Int("status", status))
+	RecordTraceEventAttrs(c, EventResponseComplete, attribute.Int("http.response.status_code", status))
 }
 
 // RecordTraceEnd records the request completion event without database persistence.
@@ -260,9 +262,9 @@ func RecordTraceEnd(c *gin.Context) {
 	RecordTraceStatus(c, status)
 }
 
-// WithTraceID adds trace ID to structured logging fields
+// WithTraceID adds standard OpenTelemetry trace ID fields to structured logging fields.
 func WithTraceID(c *gin.Context, fields ...zap.Field) []zap.Field {
-	traceID := GetTraceID(c)
+	traceID := GetOpenTelemetryTraceID(c)
 	if traceID == "" {
 		return fields
 	}
@@ -271,9 +273,9 @@ func WithTraceID(c *gin.Context, fields ...zap.Field) []zap.Field {
 	return append([]zap.Field{traceField}, fields...)
 }
 
-// WithTraceIDFromContext adds trace ID to structured logging fields from context
+// WithTraceIDFromContext adds standard OpenTelemetry trace ID fields from context.
 func WithTraceIDFromContext(ctx context.Context, fields ...zap.Field) []zap.Field {
-	traceID := GetTraceIDFromContext(ctx)
+	traceID := GetOpenTelemetryTraceIDFromContext(ctx)
 	if traceID == "" {
 		return fields
 	}

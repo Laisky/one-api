@@ -6,7 +6,7 @@
 
 ## Summary
 
-Remove the existing database-backed request tracing implementation from backend request handling and redesign relay observability around OpenTelemetry middleware plus structured request logs. The implementation must not keep database tracing controls, middleware gates, helper checks, request-path write/update calls, or compatibility branches for the deleted DB trace path. OpenTelemetry middleware is registered for relay request paths and uses default or no-op behavior when no exporter or collector is configured. Relay processing records synchronized OpenTelemetry events and structured log entries for request received, relay start, upstream request sent, first upstream byte, upstream complete, response complete, and errors. GenAI inference spans must follow the OpenTelemetry GenAI span convention exactly for fields already known from normal relay flow, including `CLIENT` span kind, `{gen_ai.operation.name} {gen_ai.request.model}` span naming, standard attribute names, and no invented values. Tracing must not parse, re-serialize, or inspect the client request body only to populate optional GenAI fields. JSON log output remains opt-in and must emit `severity_text`, valid OpenTelemetry `trace_id` and `span_id` when available, the same cheaply known GenAI fields, OneAPI routing fields, and sanitized bounded prompt previews.
+Remove the existing database-backed request tracing implementation from backend request handling and redesign relay observability around OpenTelemetry middleware plus an opt-in relay access log middleware. The implementation must not keep database tracing controls, middleware gates, helper checks, request-path write/update calls, or compatibility branches for the deleted DB trace path. OpenTelemetry middleware is registered for relay request paths and uses default or no-op behavior when no exporter or collector is configured. Relay processing records internal implementation timing details as OpenTelemetry events for request received, relay start, upstream request sent, first upstream byte, upstream complete, response complete, and errors. GenAI inference spans must follow the OpenTelemetry GenAI span convention exactly for fields already known from normal relay flow, including `CLIENT` span kind, `{gen_ai.operation.name} {gen_ai.request.model}` span naming, standard attribute names, and no invented values. Tracing must not parse, re-serialize, or inspect the client request body only to populate optional GenAI fields. Relay access logging is disabled by default and enabled by `RELAY_ACCESS_LOG_ENABLED`; when enabled it emits one concise request summary per relay request using already-known request context. Long human payload previews such as prompts remain log-only and must be bounded and sanitized when added from code paths that already have the prompt available.
 
 ## Technical Context
 
@@ -22,7 +22,7 @@ Remove the existing database-backed request tracing implementation from backend 
 
 **Project Type**: Web service/API gateway with backend-managed operational observability.
 
-**Performance Goals**: Removing DB-backed tracing eliminates new database trace writes for 100% of normal API requests; tracing does not add client request parsing or serialization solely for observability; JSON logging adds no new network dependency; prompt preview logging bounds each large prompt to at most 203 preview characters after sanitization.
+**Performance Goals**: Removing DB-backed tracing eliminates new database trace writes for 100% of normal API requests; tracing does not add client request parsing or serialization solely for observability; relay access logging emits at most one summary log per relay request when enabled; prompt preview logging bounds each large prompt to at most 203 preview characters after sanitization.
 
 **Constraints**: Reuse existing libraries where possible; remove old DB trace logic rather than preserving a switch; always register OTel relay middleware; align trace data exactly with OpenTelemetry GenAI inference client spans for already-known values; do not parse client requests solely for tracing; do not emit input-detail or content attributes without explicit sanitized enablement; do not adapt frontend or public trace interfaces; do not expose secrets in logs; emitted `trace_id` and `span_id` must be OpenTelemetry-compliant when present.
 
@@ -34,9 +34,9 @@ Remove the existing database-backed request tracing implementation from backend 
 
 - **API Format Compatibility Is Product Behavior**: PASS. The plan preserves ChatCompletion, Response API, and Claude Messages behavior and does not touch conversion adapters.
 - **Minimal Sufficient Change**: PASS. The approach deletes obsolete DB tracing behavior and reuses existing logger, middleware, and OpenTelemetry dependencies.
-- **Trust Boundaries Stay Explicit**: PASS. New log fields come from validated OpenTelemetry span context and sanitized bounded prompt previews.
-- **Observable Request Paths**: PASS. Request-scoped logging remains context-based and adds standard trace correlation plus relay event fields.
-- **Checks Prove the Change**: PASS. Focused tests cover primary request flow, JSON logs, OTel ID extraction, prompt preview truncation, no-exporter behavior, and relay timing emission.
+- **Trust Boundaries Stay Explicit**: PASS. Tracing fields come from already-known relay context, and prompt previews remain sanitized bounded log-only data.
+- **Observable Request Paths**: PASS. OpenTelemetry events carry internal relay timing, and optional relay access logs provide one request summary.
+- **Checks Prove the Change**: PASS. Focused checks cover primary request flow, OTel ID extraction, prompt preview truncation, no-exporter behavior, and relay timing emission.
 
 ## Project Structure
 

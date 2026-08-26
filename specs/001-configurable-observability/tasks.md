@@ -35,9 +35,9 @@ description: "Task list for configurable observability implementation"
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [X] T004 Keep only non-DB observability configuration such as `LOG_FORMAT` in `common/config/config.go`
-- [X] T005 Add `ValidateLogFormat` and wire log-format validation into `ValidateAllEnvVars` in `common/config/validation.go`
-- [X] T006 [P] Add config validation tests for log format behavior and absence of DB tracing config in `common/config/validation_test.go`
+- [X] T004 Keep only non-DB observability configuration such as `RELAY_ACCESS_LOG_ENABLED` in `common/config/config.go`
+- [X] T005 Keep validation free of deleted DB tracing and global log-format controls in `common/config/validation.go`
+- [X] T006 [P] Add config validation tests for absence of DB tracing config in `common/config/validation_test.go`
 - [X] T007 Add OpenTelemetry trace ID and span ID extraction helpers that return only valid standard IDs in `common/tracing/tracing.go`
 - [X] T008 [P] Add OpenTelemetry trace ID and span ID extraction tests for valid, missing, invalid, and all-zero contexts in `common/tracing/tracing_test.go`
 - [X] T009 Add prompt preview sanitization and first-100/last-100 character truncation helper in `common/logging_sanitize.go`
@@ -72,26 +72,26 @@ description: "Task list for configurable observability implementation"
 
 ---
 
-## Phase 4: User Story 2 - Emit JSON Logs With Correlation Fields (Priority: P2)
+## Phase 4: User Story 2 - Emit Opt-In Relay Access Logs (Priority: P2)
 
-**Goal**: Operators can opt into JSON operational logs containing `severity_text`, OpenTelemetry-compliant `trace_id`, and OpenTelemetry-compliant `span_id`.
+**Goal**: Operators can opt into one concise access log entry per relay request without changing global logger output.
 
-**Independent Test**: Start with `LOG_FORMAT=json`, send a request with valid OTel context, and verify sampled log lines are JSON with the required fields.
+**Independent Test**: Start with `RELAY_ACCESS_LOG_ENABLED=true`, send a relay request, and verify exactly one `relay access` summary log is emitted with request context and no internal timing chatter.
 
 ### Tests for User Story 2
 
-- [ ] T020 [P] [US2] Add logger test for JSON encoding and `severity_text` output in `common/logger/logger_test.go`
-- [ ] T021 [P] [US2] Add request-scoped JSON correlation field test using valid OpenTelemetry span context in `common/gin_request_logging_test.go`
+- [ ] T020 [P] [US2] Add relay access-log integration coverage only if automated integration hooks become available
+- [ ] T021 [P] [US2] Verify manually that disabled `RELAY_ACCESS_LOG_ENABLED` emits no relay access logs
 
 ### Implementation for User Story 2
 
-- [X] T022 [US2] Select console or JSON logger encoding from `config.LogFormat` in `common/logger/logger.go`
-- [ ] T023 [US2] Ensure JSON logger output uses `severity_text` as the level field in `common/logger/logger.go`
-- [X] T024 [US2] Attach OpenTelemetry `trace_id` and `span_id` fields to request-scoped loggers only when valid context exists in `main.go`
-- [X] T025 [US2] Disable colored Gin logger output when `LOG_FORMAT=json` in `main.go`
-- [ ] T026 [US2] Update operational logging documentation for JSON log format in `docs/arch/logger.md`
+- [X] T022 [US2] Add `RELAY_ACCESS_LOG_ENABLED` configuration in `common/config/config.go`
+- [X] T023 [US2] Restore global logger behavior so access logging does not change general log encoding in `common/logger/logger.go`
+- [X] T024 [US2] Add opt-in relay access log middleware in `middleware/relay_access_log.go`
+- [X] T025 [US2] Register relay access log middleware on relay routes only in `router/relay.go`
+- [ ] T026 [US2] Update operational logging documentation for relay access logging in `docs/arch/logger.md`
 
-**Checkpoint**: User Story 2 works independently from removed DB-backed tracing.
+**Checkpoint**: User Story 2 works independently from removed DB-backed tracing and does not increase global log volume.
 
 ---
 
@@ -105,18 +105,18 @@ description: "Task list for configurable observability implementation"
 
 - [X] T027 [P] [US3] Add OTel relay middleware test proving no exporter configuration does not fail request handling in `middleware/tracing_test.go`
 - [X] T028 [P] [US3] Add tracing helper tests for span kind `CLIENT`, span name `{gen_ai.operation.name} {gen_ai.request.model}`, allowed already-known GenAI attributes, excluded input-detail attributes, and OneAPI attributes in `common/tracing/tracing_test.go`
-- [ ] T029 [P] [US3] Add relay request logging tests for timing events, OneAPI routing fields, allowed GenAI fields, and prompt preview presence in `relay/controller/debug_logging_test.go`
+- [ ] T029 [P] [US3] Add relay tracing verification for timing events, OneAPI routing fields, allowed GenAI fields, and prompt preview log-only behavior in `relay/controller/debug_logging_test.go`
 
 ### Implementation for User Story 3
 
 - [X] T030 [US3] Add always-registered OpenTelemetry relay middleware with no-op/default behavior when no exporter exists in `middleware/tracing.go`
-- [ ] T031 [US3] Emit synchronized trace events and structured logs for required relay timing points in `relay/controller/text.go`
+- [ ] T031 [US3] Emit trace events for required relay timing points without synchronized internal debug log lines in `relay/controller/text.go`
 - [ ] T032 [US3] Capture `oneapi.channel_id`, `oneapi.stream`, `oneapi.upstream_address`, and `oneapi.upstream_url` before upstream dispatch in `relay/adaptor/common.go`
 - [ ] T033 [US3] Add exact OpenTelemetry GenAI inference span fields from already-known relay, routing, upstream response, and usage accounting values in `relay/controller/text.go`
 - [X] T034 [US3] Suppress input-detail and content attributes without parsing, re-serializing, or inspecting client request bodies solely for tracing in `common/tracing/tracing.go`
 - [ ] T035 [US3] Add `prompt_preview` to request-scoped structured logs using the shared truncation helper in `common/render/stream_log.go` and `relay/controller/debug_logging.go`
 - [ ] T036 [US3] Ensure touched relay functions retrieve the request-scoped logger with `gmw.GetLogger(c)` once per function in `relay/controller/text.go`, `relay/adaptor/common.go`, and `relay/controller/debug_logging.go`
-- [ ] T037 [US3] Update trace/log field contract with final implemented GenAI and OneAPI field names in `specs/001-configurable-observability/contracts/observability-config.md`
+- [X] T037 [US3] Update trace/log field contract with final implemented GenAI, OneAPI, and relay access log field names in `specs/001-configurable-observability/contracts/observability-config.md`
 
 **Checkpoint**: User Story 3 model observability can be validated without frontend changes.
 
@@ -146,7 +146,7 @@ description: "Task list for configurable observability implementation"
 **Purpose**: Documentation, validation, and final quality gates across all stories.
 
 - [ ] T041 [P] Update quickstart validation steps with final runnable commands and observed checks in `specs/001-configurable-observability/quickstart.md`
-- [ ] T042 [P] Update README observability section with DB trace removal, OTel relay tracing, GenAI field policy, and JSON log format configuration in `README.md`
+- [ ] T042 [P] Update README observability section with DB trace removal, OTel relay tracing, GenAI field policy, and relay access log configuration in `README.md`
 - [ ] T043 Run focused package tests from quickstart in `specs/001-configurable-observability/quickstart.md`
 - [ ] T044 Run `go vet ./...` from `/Users/leo/Documents/codes/one-api`
 - [ ] T045 Run `go test -race ./...` from `/Users/leo/Documents/codes/one-api`
@@ -194,8 +194,8 @@ Task: "Add or update relay primary request-flow test proving relay succeeds with
 ## Parallel Example: User Story 2
 
 ```text
-Task: "Add logger test for JSON encoding and severity_text output in common/logger/logger_test.go"
-Task: "Add request-scoped JSON correlation field test using valid OpenTelemetry span context in common/gin_request_logging_test.go"
+Task: "Verify relay access logs are emitted only when RELAY_ACCESS_LOG_ENABLED=true"
+Task: "Verify disabled relay access logs do not add request log volume"
 ```
 
 ## Parallel Example: User Story 3
@@ -215,12 +215,12 @@ Task: "Add relay request logging tests for timing events, OneAPI routing fields,
 1. Complete Phase 1 setup.
 2. Complete Phase 2 shared non-DB observability helpers.
 3. Complete Phase 3 to remove database-backed request tracing.
-4. Stop and validate US1 independently before adding JSON log and GenAI timing work.
+4. Stop and validate US1 independently before adding relay access logging and GenAI timing work.
 
 ### Incremental Delivery
 
 1. Deliver US1 so backend request handling no longer writes DB trace records.
-2. Deliver US2 so operators can ingest JSON logs with OTel trace/span correlation.
+2. Deliver US2 so operators can enable concise relay access logs without changing global logger behavior.
 3. Deliver US3 so OTel traces/logs include relay timing, exact OpenTelemetry GenAI inference fields from already-known values, OneAPI routing context, and bounded prompt previews.
 4. Deliver US4 to verify existing trace routes/controllers remain outside new compatibility scope.
 
