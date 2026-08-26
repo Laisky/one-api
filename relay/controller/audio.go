@@ -22,6 +22,7 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing"
@@ -359,11 +360,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	markBillingReconciled(c)
 	quotaDelta := quota - preConsumedQuota
 
-	// Capture trace ID from gin context now; the background context will not carry gin
-	var traceID string
-	if tid, err := gmw.TraceID(c); err == nil {
-		traceID = tid.String()
-	}
+	traceID := tracing.GetOpenTelemetryTraceID(c)
 
 	defer func() {
 		bgctx, cancel := context.WithTimeout(detachForBilling(c), time.Minute)

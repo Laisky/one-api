@@ -13,10 +13,10 @@ import (
 )
 
 // SetRouter registers all HTTP routes and optional route-level middleware.
-func SetRouter(router *gin.Engine, buildFS embed.FS, relayAccessLogEnabled bool) {
+func SetRouter(router *gin.Engine, buildFS embed.FS) {
 	SetApiRouter(router)
 	SetDashboardRouter(router)
-	SetRelayRouter(router, relayAccessLogEnabled)
+	SetRelayRouter(router)
 	frontendBaseUrl := config.FrontendBaseURL
 	if config.IsMasterNode && frontendBaseUrl != "" {
 		frontendBaseUrl = ""

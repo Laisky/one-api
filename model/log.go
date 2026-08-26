@@ -563,22 +563,9 @@ func recordLogHelper(ctx context.Context, log *Log) {
 		return
 	}
 
-	// log_request_id / log_trace_id are the correlators stored ON THE ROW. They are
-	// deliberately not called request_id / trace_id: the request-scoped logger already
-	// carries those for the CURRENT request, and on the reconciliation path the row's
-	// values belong to the earlier request that created it.
-	lg.Info("record log",
-		logRowFields(ctx, log,
-			zap.Int64("created_at", log.CreatedAt),
-			zap.Int("type", log.Type),
-			zap.String("content", log.Content),
-			zap.String("log_request_id", log.RequestId),
-			zap.String("log_trace_id", log.TraceId),
-			zap.Int("quota", log.Quota),
-			zap.Int("prompt_tokens", log.PromptTokens),
-			zap.Int("completion_tokens", log.CompletionTokens),
-		)...,
-	)
+	// Successful log persistence is intentionally silent. Relay request summaries
+	// belong to the dedicated relay access log middleware, while this function's
+	// stdout logging is reserved for persistence failures.
 }
 
 // recordLogHelperWithTraceID removed: callers must set IDs directly on log

@@ -2,16 +2,16 @@ package tracing
 
 import (
 	"context"
+	"crypto/rand"
+	"io"
 	"net/http"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
-	gutils "github.com/Laisky/go-utils/v6"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
-
-	"github.com/Laisky/one-api/common/logger"
 )
 
 const (
@@ -45,8 +45,12 @@ const (
 )
 
 const (
+	// OpenTelemetryTraceIDKey caches a generated fallback OpenTelemetry trace ID on gin context.
+	OpenTelemetryTraceIDKey = "open_telemetry_trace_id"
 	// GenAIOperationNameAttr is the standard GenAI operation attribute.
 	GenAIOperationNameAttr = "gen_ai.operation.name"
+	// GenAIProviderNameAttr is the standard GenAI provider attribute.
+	GenAIProviderNameAttr = "gen_ai.provider.name"
 	// GenAIRequestModelAttr is the standard requested model attribute.
 	GenAIRequestModelAttr = "gen_ai.request.model"
 	// GenAIResponseModelAttr is the standard response model attribute.
@@ -105,44 +109,17 @@ func otelSpanIDFromContext(ctx context.Context) string {
 	return spanCtx.SpanID().String()
 }
 
-// GetTraceID extracts the per-request TraceID from gin context using gin-middlewares.
-//
-// This TraceID is intended to be unique per incoming HTTP request. It may be derived
-// from the OpenTelemetry span context, but it includes span-level information (e.g.
-// span id) so it remains unique even when multiple requests share the same distributed
-// OpenTelemetry trace id.
+// GetTraceID extracts the OpenTelemetry trace ID from a gin context.
 func GetTraceID(c *gin.Context) string {
-	traceID, err := gmw.TraceID(c)
-	if err != nil {
-		gmw.GetLogger(c).Warn("failed to get trace ID from gin-middlewares", zap.Error(err))
-		// Fallback to empty string - this should not happen in normal operation
-		return ""
-	}
-	return traceID.String()
+	return GetOpenTelemetryTraceID(c)
 }
 
-// GetTraceIDFromContext extracts the per-request TraceID from a standard context.
-//
-// Resolution order:
-//  1. When the context contains an embedded gin.Context (gmw.BackgroundCtx pattern),
-//     the span-scoped gin-middlewares TraceID is returned.
-//  2. Otherwise it reads the trace id snapshotted under gutils.TracingKey. This is the
-//     relayctx.Detach pattern: a c-free background context carries the trace id BY
-//     VALUE as a string under gutils.TracingKey (no embedded gin, no OTel span), so it
-//     would otherwise be lost here.
-//  3. When neither is available, it falls back to the OpenTelemetry trace id.
+// GetTraceIDFromContext extracts the OpenTelemetry trace ID from a context.
 func GetTraceIDFromContext(ctx context.Context) string {
-	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
-		return GetTraceID(ginCtx)
+	if ginCtx, ok := ctx.(*gin.Context); ok {
+		return GetOpenTelemetryTraceID(ginCtx)
 	}
-	if v, ok := ctx.Value(gutils.TracingKey).(string); ok && v != "" {
-		return v
-	}
-	if traceID := otelTraceIDFromContext(ctx); traceID != "" {
-		return traceID
-	}
-	logger.FromContext(ctx).Warn("failed to get gin context from standard context for trace ID extraction")
-	return ""
+	return otelTraceIDFromContext(ctx)
 }
 
 // GetOpenTelemetryTraceID extracts the OpenTelemetry trace id from gin context when available.
@@ -150,18 +127,63 @@ func GetTraceIDFromContext(ctx context.Context) string {
 // This is used when callers need a stable distributed trace id (not span-scoped), e.g.
 // generating OpenAI-style response IDs.
 func GetOpenTelemetryTraceID(c *gin.Context) string {
-	return otelTraceIDFromContext(gmw.Ctx(c))
+	if c == nil {
+		return ""
+	}
+	if c.Request != nil {
+		if traceID := otelTraceIDFromContext(c.Request.Context()); traceID != "" {
+			return traceID
+		}
+	}
+	if traceID := otelTraceIDFromContext(gmw.Ctx(c)); traceID != "" {
+		return traceID
+	}
+	if cached := c.GetString(OpenTelemetryTraceIDKey); cached != "" {
+		return cached
+	}
+
+	traceID, err := GenerateOpenTelemetryTraceID()
+	if err != nil {
+		return ""
+	}
+	c.Set(OpenTelemetryTraceIDKey, traceID)
+	return traceID
 }
 
 // GetOpenTelemetryTraceIDFromContext extracts the OpenTelemetry trace id from a standard context.
 //
 // Returns empty string when no OpenTelemetry span context is available.
 func GetOpenTelemetryTraceIDFromContext(ctx context.Context) string {
-	return otelTraceIDFromContext(ctx)
+	if traceID := otelTraceIDFromContext(ctx); traceID != "" {
+		return traceID
+	}
+
+	traceID, err := GenerateOpenTelemetryTraceID()
+	if err != nil {
+		return ""
+	}
+	return traceID
+}
+
+// GenerateOpenTelemetryTraceID creates a valid non-zero OpenTelemetry trace ID string.
+func GenerateOpenTelemetryTraceID() (string, error) {
+	var traceID oteltrace.TraceID
+	if _, err := io.ReadFull(rand.Reader, traceID[:]); err != nil {
+		return "", errors.Wrap(err, "read random trace id bytes")
+	}
+	return traceID.String(), nil
 }
 
 // GetOpenTelemetrySpanID extracts the OpenTelemetry span id from gin context when available.
 func GetOpenTelemetrySpanID(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if c.Request != nil {
+		if spanID := otelSpanIDFromContext(c.Request.Context()); spanID != "" {
+			return spanID
+		}
+	}
 	return otelSpanIDFromContext(gmw.Ctx(c))
 }
 
@@ -194,6 +216,15 @@ func AddSpanEvent(ctx context.Context, eventName string, attrs ...attribute.KeyV
 		return
 	}
 	span.AddEvent(eventName, oteltrace.WithAttributes(attrs...))
+}
+
+// SetSpanAttributes records attributes on the current OpenTelemetry span when it is recording.
+func SetSpanAttributes(ctx context.Context, attrs ...attribute.KeyValue) {
+	span := oteltrace.SpanFromContext(ctx)
+	if span == nil || !span.IsRecording() {
+		return
+	}
+	span.SetAttributes(attrs...)
 }
 
 // RecordTraceEvent records a storage-free tracing event without emitting operational logs.
@@ -296,9 +327,6 @@ func WithTraceIDFromContext(ctx context.Context, fields ...zap.Field) []zap.Fiel
 // Returns: Chat completion ID string with "chatcmpl-oneapi-" prefix
 func GenerateChatCompletionID(c *gin.Context) string {
 	traceID := GetOpenTelemetryTraceID(c)
-	if traceID == "" {
-		traceID = GetTraceID(c)
-	}
 	return "chatcmpl-oneapi-" + traceID
 }
 
@@ -310,8 +338,5 @@ func GenerateChatCompletionID(c *gin.Context) string {
 // Returns: Chat completion ID string with "chatcmpl-oneapi-" prefix
 func GenerateChatCompletionIDFromContext(ctx context.Context) string {
 	traceID := GetOpenTelemetryTraceIDFromContext(ctx)
-	if traceID == "" {
-		traceID = GetTraceIDFromContext(ctx)
-	}
 	return "chatcmpl-oneapi-" + traceID
 }

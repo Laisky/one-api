@@ -235,7 +235,7 @@ func main() {
 		logger.Logger.Info("Prometheus metrics endpoint available at /metrics")
 	}
 
-	router.SetRouter(server, buildFS, config.RelayAccessLogEnabled)
+	router.SetRouter(server, buildFS)
 	port := config.ServerPort
 	if port == "" {
 		port = strconv.Itoa(*common.Port)

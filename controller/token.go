@@ -22,6 +22,7 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/network"
 	"github.com/Laisky/one-api/common/random"
+	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -324,10 +325,7 @@ func ConsumeToken(c *gin.Context) {
 		return
 	}
 
-	traceID := ""
-	if tid, err := gmw.TraceID(c); err == nil {
-		traceID = tid.String()
-	}
+	traceID := tracing.GetOpenTelemetryTraceID(c)
 	requestID := c.GetString(helper.RequestIdKey)
 
 	var (

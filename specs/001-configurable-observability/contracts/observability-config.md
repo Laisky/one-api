@@ -35,7 +35,8 @@ This contract describes operator-visible configuration behavior for the configur
 ## Relay Access Log Behavior
 
 - When `RELAY_ACCESS_LOG_ENABLED=true`, each relay request emits one concise `relay access` log entry after request completion.
-- Relay access logs must use the existing request-scoped logger and must not change global logger encoding.
+- Relay access logs must use a dedicated JSON logger and must not change global logger encoding.
+- Relay access logs are emitted only for relay router groups such as `/v1`, `/v2`, and provider-compatible relay routes; administrative endpoints such as channel testing are not relay access-log traffic.
 - Relay access logs must include status, duration, method, path, response size, request id, and already-known relay context such as request model, relay mode, and upstream address when available.
 - Relay access logs may include `trace_id` and `span_id` only when valid OpenTelemetry span context is available.
 - Relay access logs must not include internal timing/debug steps already carried by OpenTelemetry events.

@@ -11,7 +11,7 @@
 // context.WithValue(ctx, CtxKeyGin, c), so any code that later resolves the gin
 // context out of the std context (gmw.GetGinCtxFromStdCtx) and reads c.Keys is back
 // in the same use-after-return hazard. Detach is the c-free alternative: it copies
-// the request logger and trace id by value into a fresh context.Background() and
+// the request logger and identity by value into a fresh context.Background() and
 // never references the gin context.
 package relayctx
 
@@ -19,7 +19,6 @@ import (
 	"context"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
-	gutils "github.com/Laisky/go-utils/v6"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/graceful"
@@ -27,12 +26,12 @@ import (
 )
 
 // Detach returns a non-cancellable background context that carries the request's
-// logger and trace id BY VALUE but never retains the *gin.Context.
+// logger and identity BY VALUE but never retains the *gin.Context.
 //
 // The returned context is safe to hand to a goroutine that outlives the HTTP
-// handler: gmw.GetLogger(ctx) resolves the snapshotted logger and reading the
-// trace id off ctx works, but gmw.GetGinCtxFromStdCtx(ctx) returns (nil, false) —
-// so no code path can dereference the recycled gin context through it.
+// handler: gmw.GetLogger(ctx) resolves the snapshotted logger, but
+// gmw.GetGinCtxFromStdCtx(ctx) returns (nil, false) — so no code path can
+// dereference the recycled gin context through it.
 //
 // Unlike gmw.BackgroundCtx, the result is detached from request cancellation
 // (rooted at context.Background()), so a DB write that runs after the handler
@@ -52,13 +51,6 @@ func Detach(c *gin.Context) context.Context {
 	// billing code that only receives a context.Context can still log — and tag
 	// errors with — uuid and name without any lookup.
 	ctx = identity.NewContext(ctx, identity.Current(c))
-
-	// Snapshot the trace id by value under the same key gin-middlewares uses, so
-	// downstream logging/tracing still resolves it. gmw.TraceID must run on the gin
-	// context (here, on the request goroutine) before we detach.
-	if tid, err := gmw.TraceID(c); err == nil {
-		ctx = context.WithValue(ctx, gutils.TracingKey, tid.String())
-	}
 
 	return ctx
 }

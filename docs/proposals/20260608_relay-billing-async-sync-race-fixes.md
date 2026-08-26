@@ -41,8 +41,8 @@ form is **indirect** — a goroutine that never names `c.Get` but calls
 - gin `v1.12.0` pools and `reset()`s `*gin.Context` after `ServeHTTP` returns.
 - **No `c.Copy()` exists anywhere** in non-test code.
 - `gmw.BackgroundCtx(c)` detaches cancellation **but stores `c` itself** via
-  `context.WithValue(ctx, CtxKeyGin, c)`; `gmw.GetLogger(ctx)` / `gmw.TraceID(ctx)`
-  therefore still dereference `c`. So "use `BackgroundCtx` instead of `Ctx`" fixes
+  `context.WithValue(ctx, CtxKeyGin, c)`; helpers that resolve request state
+  from that context therefore still dereference `c`. So "use `BackgroundCtx` instead of `Ctx`" fixes
   cancellation (refund-loss) but **not** the use-after-return on `c.Keys`.
 - The lifecycle tracker `graceful.GoCritical` waits for goroutines only at
   shutdown drain; it establishes **no** happens-before with gin's per-request pool
@@ -82,24 +82,22 @@ form is **indirect** — a goroutine that never names `c.Get` but calls
 
 The plan standardizes on a layered rule: **a goroutine must never hold a live
 `*gin.Context`.** It receives (a) a *detached* context that carries only copied
-logger/trace values, and (b) explicitly snapshotted scalars.
+logger/identity values, and (b) explicitly snapshotted scalars.
 
 ### 3.1 Two safe primitives (to be built in Phase 2)
 
 1. **Detached context constructor that does NOT retain `c`.** Today
    `gmw.BackgroundCtx(c)` retains `c`. We will introduce a project-side wrapper that
-   snapshots the logger and trace id into a fresh `context.Background()` *without*
+   snapshots the logger and identity into a fresh `context.Background()` *without*
    storing the gin context, and use it at every spawn boundary. Sketch:
 
    ```go
    // common/relayctx (new): a background context safe to hand to goroutines —
-   // it carries the request's logger and trace id by value and never references *gin.Context.
+   // it carries the request's logger and identity by value and never references *gin.Context.
    func Detach(c *gin.Context) context.Context {
        ctx := context.Background()
        ctx = gmwlog.SetLogger(ctx, gmw.GetLogger(c)) // logger snapshot, not c
-       if tid, err := gmw.TraceID(c); err == nil {
-           ctx = context.WithValue(ctx, gutils.TracingKey, tid)
-       }
+       ctx = identity.NewContext(ctx, identity.Current(c))
        return ctx
    }
    ```

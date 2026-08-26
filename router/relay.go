@@ -3,13 +3,14 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/controller"
 	"github.com/Laisky/one-api/middleware"
 )
 
 // SetRelayRouter registers relay routes and conditionally enables relay access logging.
-func SetRelayRouter(router *gin.Engine, relayAccessLogEnabled bool) {
+func SetRelayRouter(router *gin.Engine) {
 	// Rewrite various Claude Code prefixes to the canonical /v1/messages path.
 	// Put this before other middlewares to avoid double-running them on redispatch.
 	router.Use(
@@ -58,7 +59,7 @@ func SetRelayRouter(router *gin.Engine, relayAccessLogEnabled bool) {
 		middleware.LowBalanceRelayRateLimit(),
 		middleware.ChannelRateLimit(),
 	}
-	if relayAccessLogEnabled {
+	if config.RelayAccessLogEnabled {
 		relayMws = append(relayMws, middleware.RelayAccessLog())
 	}
 
