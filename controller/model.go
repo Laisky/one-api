@@ -67,6 +67,13 @@ type OpenAIModels struct {
 
 // BUG(#39): 更新 custom channel 时，应该同步更新所有自定义的 models 到 allModels
 var (
+	// modelCatalogCreated is the frozen `created` timestamp every catalog entry
+	// carries. It must stay a constant: the supported-models snapshot is rebuilt
+	// whenever the enabled-channel signature changes, and because a billing write
+	// bumps channels.updated_at that happens on essentially every relayed request.
+	// A time.Now() here would make `created` churn on every rebuild.
+	modelCatalogCreated = 1626777600
+
 	allModels               []OpenAIModels
 	modelsMap               map[string]OpenAIModels
 	channelId2Models        map[int][]string
@@ -85,7 +92,7 @@ func init() {
 	permission = append(permission, OpenAIModelPermission{
 		Id:                 "modelperm-LwHkVFn8AcMItP432fKKDIKJ",
 		Object:             "model_permission",
-		Created:            1626777600,
+		Created:            modelCatalogCreated,
 		AllowCreateEngine:  true,
 		AllowSampling:      true,
 		AllowLogprobs:      true,
@@ -123,7 +130,7 @@ func init() {
 			allModels = append(allModels, OpenAIModels{
 				Id:         modelName,
 				Object:     "model",
-				Created:    1626777600,
+				Created:    modelCatalogCreated,
 				OwnedBy:    channelName,
 				Permission: permission,
 				Root:       modelName,
@@ -140,7 +147,7 @@ func init() {
 			allModels = append(allModels, OpenAIModels{
 				Id:         modelName,
 				Object:     "model",
-				Created:    1626777600,
+				Created:    modelCatalogCreated,
 				OwnedBy:    channelName,
 				Permission: permission,
 				Root:       modelName,
@@ -179,15 +186,19 @@ func init() {
 // duplicate row per extra provider, and the modelsMap built from it resolves the
 // owner by whichever adaptor happened to be swept last.
 //
-// The winner is chosen by byte order of OwnedBy (the adaptor's channel name), with
-// the original position as a stable tie-break. That makes the listing independent
-// of the apitype iota, of map iteration order, and of which channels are enabled --
-// the same input always yields the same owner label.
+// This is the FALLBACK ranking, used only where no channel is available to ask:
+// allModels is built at init() from the compiled-in adaptors, long before the
+// database is readable. Wherever channels exist the owner comes from them instead
+// -- listAllSupportedModels ranks enabled channels ahead of this catalog, and
+// /v1/models resolves the owner from the ability's own channel (bestAbilityPerModel).
+// Here the winner is simply the smallest OwnedBy in byte order, with the original
+// position as a stable tie-break, so the catalog is at least deterministic rather
+// than dependent on the apitype iota or map iteration order.
 //
-// This affects the public listing only. Billing is unaffected: quota resolves per
-// request through the channel's own apitype and its own price table, so glm-4.7 on
-// a Zhipu channel still bills at BigModel's CNY tiers while the same id on a Zai
-// channel bills at Z.AI's flat USD rate, regardless of which one owns the row here.
+// Billing is unaffected either way: quota resolves per request through the
+// channel's own apitype and price table, so glm-4.7 on a Zhipu channel bills at
+// BigModel's CNY tiers while the same id on a Zai channel bills at Z.AI's flat USD
+// rate, regardless of which one owns the row in any listing.
 func dedupeStaticModelsByOwner(models []OpenAIModels) []OpenAIModels {
 	winners := make(map[string]int, len(models))
 	for i, m := range models {
@@ -798,17 +809,26 @@ func mergeModelNamesWithOverrides(base []string, overrides map[string]model.Mode
 // Parameters: ctx is the request context used for channel configuration diagnostics.
 // Returns: the supported model snapshot or a wrapped database error.
 func listAllSupportedModels(ctx context.Context) ([]OpenAIModels, error) {
-	models := make([]OpenAIModels, 0, len(allModels))
-	seen := make(map[string]struct{}, len(allModels))
-	for _, base := range allModels {
-		models = append(models, base)
-		seen[strings.ToLower(base.Id)] = struct{}{}
-	}
 	channels, err := model.GetAllEnabledChannels()
 	if err != nil {
 		return nil, errors.Wrap(err, "get all enabled channels")
 	}
-	created := int(time.Now().Unix())
+
+	// Channels first, ranked the way routing ranks them: highest priority, then
+	// lowest channel id. The first channel in this order that serves a name owns
+	// it, so a model offered by two providers (two brands of one company, or an
+	// open-weight id hosted by several upstreams) is attributed to the channel
+	// most likely to actually serve it -- and the answer is stable across
+	// restarts and replicas instead of following row order.
+	sort.SliceStable(channels, func(i, j int) bool {
+		if pi, pj := channels[i].GetPriority(), channels[j].GetPriority(); pi != pj {
+			return pi > pj
+		}
+		return channels[i].Id < channels[j].Id
+	})
+
+	channelOwners := make(map[string]string)
+	channelModels := make([]OpenAIModels, 0)
 	for _, ch := range channels {
 		overrides := ch.GetModelPriceConfigsWithContext(ctx)
 		names := mergeModelNamesWithOverrides(ch.GetSupportedModelNames(), overrides)
@@ -816,7 +836,7 @@ func listAllSupportedModels(ctx context.Context) ([]OpenAIModels, error) {
 			continue
 		}
 		owner := channeltype.IdToName(ch.Type)
-		if owner == "" {
+		if owner == "" || owner == "unknown" {
 			owner = fmt.Sprintf("channel-%d", ch.Id)
 		}
 		for _, name := range names {
@@ -825,22 +845,42 @@ func listAllSupportedModels(ctx context.Context) ([]OpenAIModels, error) {
 				continue
 			}
 			lower := strings.ToLower(trimmed)
-			if _, exists := seen[lower]; exists {
+			if _, exists := channelOwners[lower]; exists {
 				continue
 			}
-			entry := OpenAIModels{
+			channelOwners[lower] = owner
+			channelModels = append(channelModels, OpenAIModels{
 				Id:         trimmed,
 				Object:     "model",
-				Created:    created,
+				Created:    modelCatalogCreated,
 				OwnedBy:    owner,
 				Permission: defaultModelPermissions,
 				Root:       trimmed,
 				Parent:     nil,
-			}
-			models = append(models, entry)
-			seen[lower] = struct{}{}
+			})
 		}
 	}
+
+	// The compiled-in catalog then fills in every model no enabled channel
+	// serves. This endpoint feeds the admin channel editor, which must offer the
+	// full universe of model names before any channel exists -- so unlike
+	// /v1/models it cannot be channel-derived alone. Where a channel does serve
+	// the name, that channel's owner wins over the catalog's.
+	models := make([]OpenAIModels, 0, len(allModels)+len(channelModels))
+	seen := make(map[string]struct{}, len(allModels)+len(channelModels))
+	for _, entry := range channelModels {
+		models = append(models, entry)
+		seen[strings.ToLower(entry.Id)] = struct{}{}
+	}
+	for _, base := range allModels {
+		lower := strings.ToLower(base.Id)
+		if _, exists := seen[lower]; exists {
+			continue
+		}
+		models = append(models, base)
+		seen[lower] = struct{}{}
+	}
+
 	sort.Slice(models, func(i, j int) bool {
 		return models[i].Id < models[j].Id
 	})
@@ -1638,6 +1678,18 @@ func withRoutableModelID(entry OpenAIModels, routableName string) OpenAIModels {
 	return entry
 }
 
+// withRoutableModelOwner is withRoutableModelID plus an owner override, used
+// where the serving channel is known and must take precedence over the
+// compiled-in catalog's idea of who owns the id. An empty owner leaves the
+// inherited value untouched.
+func withRoutableModelOwner(entry OpenAIModels, routableName string, owner string) OpenAIModels {
+	entry = withRoutableModelID(entry, routableName)
+	if owner != "" {
+		entry.OwnedBy = owner
+	}
+	return entry
+}
+
 // abilityChannelRef resolves the log identity of the channel backing an ability.
 //
 // It reads only the caller-supplied channel cache, never the database, because it
@@ -1657,12 +1709,46 @@ func abilityChannelRef(channelCache map[int]*model.Channel, channelID int) ident
 	return identity.NewChannelRef(channelID, "", "")
 }
 
+// bestAbilityPerModel collapses the one-row-per-(model, channel) ability list to a
+// single representative channel per exact model name, ranked the way routing
+// ranks channels: highest priority first, lowest channel id as the tie-break.
+//
+// This is what makes a listing's owned_by honest. The same model id is routinely
+// served by several channels -- open-weight ids hosted by many upstreams, and
+// two-brand providers such as Zhipu (open.bigmodel.cn) and Z.ai (api.z.ai) whose
+// catalogs are near-identical -- so without an explicit rank the attribution
+// would fall out of row order or map iteration and move between restarts.
+//
+// Keyed by the exact model name because routing is case-sensitive: two abilities
+// differing only in case are distinct routing keys (see issue #352).
+func bestAbilityPerModel(abilities []dto.EnabledAbility) map[string]dto.EnabledAbility {
+	best := make(map[string]dto.EnabledAbility, len(abilities))
+	for _, ability := range abilities {
+		modelName := strings.TrimSpace(ability.Model)
+		if modelName == "" {
+			continue
+		}
+		if current, ok := best[modelName]; ok && !ability.Beats(current) {
+			continue
+		}
+		best[modelName] = ability
+	}
+	return best
+}
+
 // resolveUserAvailableModels converts a user group's enabled abilities into
 // OpenAI-shaped model entries. Display metadata is inherited from the
 // supported-models snapshot via a case-insensitive match, but the returned entry
 // Id/Root always equals the ability's actual model name — the case-sensitive
 // routing key that /v1/chat/completions matches — so every listed model stays
 // callable. See issue #352.
+//
+// owned_by is NOT taken from the snapshot. The snapshot's owner is whichever
+// adaptor happens to advertise the id in the compiled-in catalog, which says
+// nothing about this deployment: a gateway running only a Zhipu channel would
+// otherwise report glm-4.7 as owned by Z.ai purely because both adaptors ship the
+// id. The owner is resolved instead from the channel that actually backs the
+// ability, chosen by bestAbilityPerModel.
 //
 // Entries are keyed by the exact ability model name: two abilities that differ
 // only in case are distinct routing keys and must both remain listable, while
@@ -1674,13 +1760,13 @@ func resolveUserAvailableModels(abilities []dto.EnabledAbility, snapshot []OpenA
 	}
 
 	allowed := make(map[string]OpenAIModels, len(abilities))
-	for _, ability := range abilities {
-		modelName := strings.TrimSpace(ability.Model)
-		if modelName == "" {
-			continue
-		}
+	for modelName, ability := range bestAbilityPerModel(abilities) {
 		if entry, ok := snapshotByID[strings.ToLower(modelName)]; ok {
-			allowed[modelName] = withRoutableModelID(entry, modelName)
+			entry = withRoutableModelID(entry, modelName)
+			if owner := abilityOwnerFromCache(ability.ChannelId, ability.ChannelType, channelCache); owner != "" {
+				entry.OwnedBy = owner
+			}
+			allowed[modelName] = entry
 			continue
 		}
 		if entry, ok := buildModelEntryFromAbility(modelName, ability.ChannelId, ability.ChannelType, created, channelCache); ok {
@@ -1710,35 +1796,59 @@ func resolveUserAvailableModels(abilities []dto.EnabledAbility, snapshot []OpenA
 	return userAvailableModels
 }
 
+// abilityOwnerFromCache resolves the owned_by label for the channel backing an
+// ability WITHOUT any database access, so it is safe inside the /v1/models
+// listing loop (same constraint as abilityChannelRef).
+//
+// The cached channel's own type wins when available; otherwise the ability's
+// channel_type is authoritative on its own, because GetGroupModelsV2 reads it by
+// joining channels. An unnamed or unknown type degrades to "channel-<id>" so the
+// label always identifies something real.
+func abilityOwnerFromCache(channelID int, channelType int, cache map[int]*model.Channel) string {
+	owner := channeltype.IdToName(channelType)
+	if channelID > 0 {
+		if channel, ok := cache[channelID]; ok && channel != nil {
+			owner = channeltype.IdToName(channel.Type)
+			if owner == "" || owner == "unknown" {
+				owner = fmt.Sprintf("channel-%d", channel.Id)
+			}
+		}
+	}
+	if owner == "" || owner == "unknown" {
+		if channelID > 0 {
+			return fmt.Sprintf("channel-%d", channelID)
+		}
+		return "unknown"
+	}
+	return owner
+}
+
+// abilityOwnerName is abilityOwnerFromCache plus a single-channel database
+// fallback, memoized into cache. Only for paths that handle one model at a time
+// (RetrieveModel, the snapshot-miss fallback) -- never inside a listing loop.
+func abilityOwnerName(channelID int, channelType int, cache map[int]*model.Channel) string {
+	if channelID > 0 && cache != nil {
+		if _, ok := cache[channelID]; !ok {
+			channel, err := model.GetChannelById(channelID, false)
+			if err != nil {
+				// Negative-cache the miss. Channel.Delete is not transactional, so
+				// orphaned ability rows are a known state; without this an orphan
+				// costs one failed query per model that channel used to serve.
+				channel = nil
+			}
+			cache[channelID] = channel
+		}
+	}
+	return abilityOwnerFromCache(channelID, channelType, cache)
+}
+
 func buildModelEntryFromAbility(modelName string, channelID int, channelType int, created int, cache map[int]*model.Channel) (OpenAIModels, bool) {
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
 		return OpenAIModels{}, false
 	}
 
-	owner := channeltype.IdToName(channelType)
-	if channelID > 0 {
-		if channel, ok := cache[channelID]; ok {
-			owner = channeltype.IdToName(channel.Type)
-			if owner == "" || owner == "unknown" {
-				owner = fmt.Sprintf("channel-%d", channel.Id)
-			}
-		} else {
-			channel, err := model.GetChannelById(channelID, false)
-			if err == nil {
-				cache[channelID] = channel
-				owner = channeltype.IdToName(channel.Type)
-				if owner == "" || owner == "unknown" {
-					owner = fmt.Sprintf("channel-%d", channel.Id)
-				}
-			} else if owner == "" {
-				owner = fmt.Sprintf("channel-%d", channelID)
-			}
-		}
-	}
-	if owner == "" {
-		owner = "unknown"
-	}
+	owner := abilityOwnerName(channelID, channelType, cache)
 
 	return OpenAIModels{
 		Id:         modelName,
@@ -1753,7 +1863,10 @@ func buildModelEntryFromAbility(modelName string, channelID int, channelType int
 
 // matchVisibleAbilityByModelID selects an ability for a requested model ID. The
 // exact trimmed routing ID wins; otherwise, the lexicographically smallest
-// case-folded match is returned, with channel metadata used as a stable tie-breaker.
+// case-folded match is returned. Within one model name the channel is chosen the
+// way routing chooses it -- highest priority, then lowest channel id -- so the
+// metadata reported for a model served by several channels matches what
+// /v1/models reports for the same model.
 func matchVisibleAbilityByModelID(abilities []dto.EnabledAbility, modelID string) (dto.EnabledAbility, bool) {
 	modelID = strings.TrimSpace(modelID)
 	candidates := make([]dto.EnabledAbility, 0, len(abilities))
@@ -1771,6 +1884,9 @@ func matchVisibleAbilityByModelID(abilities []dto.EnabledAbility, modelID string
 	sort.Slice(candidates, func(i, j int) bool {
 		if candidates[i].Model != candidates[j].Model {
 			return candidates[i].Model < candidates[j].Model
+		}
+		if candidates[i].Priority != candidates[j].Priority {
+			return candidates[i].Priority > candidates[j].Priority
 		}
 		if candidates[i].ChannelId != candidates[j].ChannelId {
 			return candidates[i].ChannelId < candidates[j].ChannelId
@@ -1811,13 +1927,17 @@ func RetrieveModel(c *gin.Context) {
 	// case-sensitive routing key back to the client even when metadata is found
 	// under a different casing in the catalog/snapshot, so the retrieved id stays
 	// callable via /v1/chat/completions. See issue #352.
+	// owned_by follows the channel that actually serves the model, exactly as in
+	// resolveUserAvailableModels; modelsMap only supplies the remaining display
+	// metadata and knows nothing about which channels this deployment runs.
+	owner := abilityOwnerName(matched.ChannelId, matched.ChannelType, channelCache)
 	if entry, ok := modelsMap[modelId]; ok {
-		c.JSON(http.StatusOK, withRoutableModelID(entry, modelId))
+		c.JSON(http.StatusOK, withRoutableModelOwner(entry, modelId, owner))
 		return
 	}
 	for key, modelEntry := range modelsMap {
 		if strings.EqualFold(key, modelId) {
-			c.JSON(http.StatusOK, withRoutableModelID(modelEntry, modelId))
+			c.JSON(http.StatusOK, withRoutableModelOwner(modelEntry, modelId, owner))
 			return
 		}
 	}
@@ -1825,7 +1945,7 @@ func RetrieveModel(c *gin.Context) {
 	if snapshot, err := getSupportedModelsSnapshotWithContext(gmw.Ctx(c)); err == nil {
 		for _, m := range snapshot {
 			if strings.EqualFold(m.Id, modelId) {
-				c.JSON(http.StatusOK, withRoutableModelID(m, modelId))
+				c.JSON(http.StatusOK, withRoutableModelOwner(m, modelId, owner))
 				return
 			}
 		}

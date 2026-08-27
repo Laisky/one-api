@@ -407,7 +407,10 @@ func GetGroupModelsV2(ctx context.Context, group string) ([]dto.EnabledAbility, 
 	// query with JOIN to get model, channel type, and channel ID in a single query
 	var models []dto.EnabledAbility
 	query := DB.Model(&Ability{}).
-		Select("DISTINCT abilities.model AS model, channels.type AS channel_type, abilities.channel_id AS channel_id").
+		// COALESCE because Ability.Priority is *int64: a NULL row scans fine into
+		// SQLite but raises "converting NULL to int64 is unsupported" on
+		// PostgreSQL/MySQL, which would 500 the entire model listing for a group.
+		Select("DISTINCT abilities.model AS model, channels.type AS channel_type, abilities.channel_id AS channel_id, COALESCE(abilities.priority, 0) AS priority").
 		Joins("JOIN channels ON abilities.channel_id = channels.id").
 		Where("abilities."+groupCol+" = ? AND abilities.enabled = "+trueVal+" AND (abilities.suspend_until IS NULL OR abilities.suspend_until < ?)", group, now).
 		Order("abilities.model")

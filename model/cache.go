@@ -290,7 +290,7 @@ func CacheGetGroupModelsV2(ctx context.Context, group string) (models []dto.Enab
 	if !common.IsRedisEnabled() {
 		return GetGroupModelsV2(ctx, group)
 	}
-	modelsStr, err := common.RedisGet(ctx, fmt.Sprintf("group_models_v2:%s", group))
+	modelsStr, err := common.RedisGet(ctx, fmt.Sprintf("group_models_v3:%s", group))
 	if err != nil {
 		lg.Debug("Redis cache miss for group models, falling back to database", zap.String("group", group), zap.Error(err))
 	} else {
@@ -312,7 +312,11 @@ func CacheGetGroupModelsV2(ctx context.Context, group string) (models []dto.Enab
 		return models, nil
 	}
 
-	err = common.RedisSet(ctx, fmt.Sprintf("group_models_v2:%s", group), string(cachePayload),
+	// v3: the payload gained EnabledAbility.Priority. Reusing the v2 key would let
+	// a rolling deploy read pre-upgrade JSON whose rows all unmarshal as priority
+	// 0, silently collapsing the owner ranking to lowest-channel-id until the key
+	// expires. Bumping the key is the same fix the v1 -> v2 payload change used.
+	err = common.RedisSet(ctx, fmt.Sprintf("group_models_v3:%s", group), string(cachePayload),
 		time.Duration(GroupModelsCacheSeconds)*time.Second)
 	if err != nil {
 		lg.Warn("Redis set group models failed, continuing without cache", zap.String("group", group), zap.Error(err))

@@ -1556,10 +1556,18 @@ Z.ai channel bills at Z.ai's flat USD rate.
 | Endpoints | chat, embeddings, images, response API, Claude Messages, OCR | chat, images, videos, audio transcription, response API, Claude Messages, OCR |
 | Not available | — | embeddings, rerank, text-to-speech, realtime |
 
-Because the two catalogs overlap almost entirely, `/v1/models` publishes one row
-per model id and resolves the owner deterministically by adaptor name in byte
-order — shared GLM ids are labelled `zai`. That is a display label only; billing
-always follows the channel the request was actually routed to.
+Because the two catalogs overlap almost entirely, a model id served by both is
+attributed to a single channel in the listings. `/v1/models` reports the channel
+that would actually serve the request — the highest-priority channel offering
+that model, with the lowest channel id breaking ties — so a deployment running
+only a Zhipu channel reports `zhipu` and never `zai`. The admin catalog at
+`/api/channel/models` ranks enabled channels the same way, falling back to the
+compiled-in adaptor list for models no channel serves yet (that list is what lets
+you pick models while creating your first channel).
+
+`owned_by` is a display label in every case: billing always follows the channel
+the request was actually routed to, so the same `glm-4.7` call bills at CNY tiers
+on a Zhipu channel and at flat USD on a Z.ai channel.
 
 Z.ai's GLM Coding Plan uses different base URLs (`/api/anthropic`,
 `/api/coding/paas/v4`) and is **not** served by this channel; point a

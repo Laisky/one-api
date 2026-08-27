@@ -34,14 +34,20 @@ func TestStaticModelsAreDeterministicallyDeduped(t *testing.T) {
 	require.Len(t, byID, len(allModels))
 }
 
-// TestSharedGLMIdOwnedDeterministically pins the byte-order tie-break for the
-// Zhipu (open.bigmodel.cn) and Zai (api.z.ai) channels, which are two brands of
-// the same company advertising the same GLM model ids.
+// TestSharedGLMIdOwnedDeterministically pins the FALLBACK tie-break for the Zhipu
+// (open.bigmodel.cn) and Zai (api.z.ai) channels, which are two brands of the
+// same company advertising the same GLM model ids.
 //
-// "zai" sorts before "zhipu", so it wins the listing label. This is a display
-// concern only: billing resolves per request through the channel's own apitype,
-// so glm-4.7 still bills at CNY tiers on a Zhipu channel and at flat USD on a Zai
-// channel regardless of the owner shown here.
+// allModels is the compiled-in catalog, built at init() before any channel is
+// readable, so byte order is all there is to rank by and "zai" sorts before
+// "zhipu". This label is NOT what /v1/models reports: once channels exist the
+// owner is resolved from the channel backing the ability (see
+// TestResolveUserAvailableModelsOwnerFollowsChannelPriority), so a deployment
+// running only a Zhipu channel reports "zhipu".
+//
+// Either way it is a display concern: billing resolves per request through the
+// channel's own apitype, so glm-4.7 bills at CNY tiers on a Zhipu channel and at
+// flat USD on a Zai channel regardless of the owner shown in any listing.
 func TestSharedGLMIdOwnedDeterministically(t *testing.T) {
 	t.Parallel()
 

@@ -34,6 +34,9 @@ func TestListModels_PreservesConfiguredModelCasing_Issue352(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	const configuredModel = "deepseek-ai/DeepSeek-V4-Flash"
+	// The nvidia adaptor registers the same logical model in lowercase; that
+	// collision is the issue #352 trigger.
+	const catalogAlias = "deepseek-ai/deepseek-v4-flash"
 	groupName := fmt.Sprintf("case-group-%d", time.Now().UnixNano())
 
 	require.NoError(t, model.DB.Create(&model.Channel{
@@ -52,11 +55,24 @@ func TestListModels_PreservesConfiguredModelCasing_Issue352(t *testing.T) {
 		Priority:  ptrInt64(0),
 	}).Error)
 
-	// Precondition: the global snapshot advertises the same model under a
-	// DIFFERENT casing. Mirror ListModels' own last-write-wins resolution (a
-	// map keyed by lowercased id) rather than scanning the slice, because that
-	// is the casing ListModels actually substitutes. Without this collision
-	// there is nothing to reproduce, so fail loudly if the catalog ever changes.
+	// Precondition: the compiled-in catalog really does register this model under
+	// a different casing, so the collision under test exists. Fail loudly if the
+	// adaptor catalog ever changes and the reproduction goes stale.
+	require.NotEqual(t, configuredModel, catalogAlias)
+	catalogHasAlias := false
+	for _, m := range allModels {
+		if m.Id == catalogAlias {
+			catalogHasAlias = true
+			break
+		}
+	}
+	require.True(t, catalogHasAlias,
+		"precondition: compiled-in catalog must advertise the lowercase alias %q", catalogAlias)
+
+	// listAllSupportedModels ranks enabled channels ahead of the compiled-in
+	// catalog, so the snapshot itself now resolves this id to the CHANNEL's
+	// casing -- the routable one. Mirror ListModels' own resolution (a map keyed
+	// by lowercased id), because that is the casing it substitutes.
 	snapshot, err := getSupportedModelsSnapshot()
 	require.NoError(t, err)
 	snapshotByID := make(map[string]OpenAIModels, len(snapshot))
@@ -66,9 +82,8 @@ func TestListModels_PreservesConfiguredModelCasing_Issue352(t *testing.T) {
 	snapshotCasing := snapshotByID[strings.ToLower(configuredModel)].Id
 	require.NotEmpty(t, snapshotCasing,
 		"precondition: supported-models snapshot must advertise %q", configuredModel)
-	require.NotEqual(t, configuredModel, snapshotCasing,
-		"precondition: snapshot casing %q must differ from configured casing %q (issue #352 trigger)",
-		snapshotCasing, configuredModel)
+	require.Equal(t, configuredModel, snapshotCasing,
+		"the enabled channel's casing must win over the catalog alias %q in the snapshot", catalogAlias)
 
 	user := &model.User{
 		Username: "case-user",
@@ -100,8 +115,8 @@ func TestListModels_PreservesConfiguredModelCasing_Issue352(t *testing.T) {
 	require.Contains(t, listed, configuredModel,
 		"/v1/models must advertise the model under its configured casing %q, not the snapshot alias %q",
 		configuredModel, snapshotCasing)
-	require.NotContains(t, listed, snapshotCasing,
-		"/v1/models must not advertise the non-routable lowercase alias %q", snapshotCasing)
+	require.NotContains(t, listed, catalogAlias,
+		"/v1/models must not advertise the non-routable lowercase alias %q", catalogAlias)
 
 	// Behavioral contract: every advertised id must be routable. Channel selection
 	// matches the ability model column case-sensitively (verified for both the DB
@@ -136,9 +151,13 @@ func TestResolveUserAvailableModels_PreservesAbilityCasing_Issue352(t *testing.T
 		"listed id must equal the ability's actual routing key, not the snapshot's lowercase alias")
 	require.Equal(t, "deepseek-ai/DeepSeek-V4-Flash", got[0].Root,
 		"root must also carry the routable casing")
-	// Display metadata is still inherited from the snapshot entry.
-	require.Equal(t, "nvidia", got[0].OwnedBy,
-		"owner metadata should still be inherited from the case-insensitive snapshot match")
+	// Permissions and created stay inherited from the snapshot entry, but the
+	// owner does NOT: the model is served here by a SiliconFlow channel and only
+	// collides with the nvidia adaptor's lowercase catalog id. Reporting "nvidia"
+	// would attribute the model to a provider this deployment may not even have
+	// configured, so owned_by is resolved from the ability's own channel.
+	require.Equal(t, "siliconflow", got[0].OwnedBy,
+		"owner must come from the channel that actually serves the model, not the snapshot alias")
 }
 
 // TestResolveUserAvailableModels_KeepsDistinctCasingsAsDistinctModels asserts
