@@ -69,21 +69,8 @@ func TestListModels_PreservesConfiguredModelCasing_Issue352(t *testing.T) {
 	require.True(t, catalogHasAlias,
 		"precondition: compiled-in catalog must advertise the lowercase alias %q", catalogAlias)
 
-	// listAllSupportedModels ranks enabled channels ahead of the compiled-in
-	// catalog, so the snapshot itself now resolves this id to the CHANNEL's
-	// casing -- the routable one. Mirror ListModels' own resolution (a map keyed
-	// by lowercased id), because that is the casing it substitutes.
-	snapshot, err := getSupportedModelsSnapshot()
-	require.NoError(t, err)
-	snapshotByID := make(map[string]OpenAIModels, len(snapshot))
-	for _, m := range snapshot {
-		snapshotByID[strings.ToLower(m.Id)] = m
-	}
-	snapshotCasing := snapshotByID[strings.ToLower(configuredModel)].Id
-	require.NotEmpty(t, snapshotCasing,
-		"precondition: supported-models snapshot must advertise %q", configuredModel)
-	require.Equal(t, configuredModel, snapshotCasing,
-		"the enabled channel's casing must win over the catalog alias %q in the snapshot", catalogAlias)
+	// ListModels builds every entry from the ability itself, so the catalog alias
+	// can no longer leak into the response regardless of what the snapshot holds.
 
 	user := &model.User{
 		Username: "case-user",
@@ -113,8 +100,8 @@ func TestListModels_PreservesConfiguredModelCasing_Issue352(t *testing.T) {
 	}
 
 	require.Contains(t, listed, configuredModel,
-		"/v1/models must advertise the model under its configured casing %q, not the snapshot alias %q",
-		configuredModel, snapshotCasing)
+		"/v1/models must advertise the model under its configured casing %q, not the catalog alias %q",
+		configuredModel, catalogAlias)
 	require.NotContains(t, listed, catalogAlias,
 		"/v1/models must not advertise the non-routable lowercase alias %q", catalogAlias)
 
@@ -134,30 +121,24 @@ func TestListModels_PreservesConfiguredModelCasing_Issue352(t *testing.T) {
 // /v1/models. It hand-builds the snapshot so the reproduction does not depend on
 // which adaptors happen to be compiled in.
 func TestResolveUserAvailableModels_PreservesAbilityCasing_Issue352(t *testing.T) {
-	// Snapshot advertises the model in lowercase (as the nvidia adaptor does),
-	// while the group's ability is configured in mixed case (as SiliconFlow uses).
-	snapshot := []OpenAIModels{
-		{Id: "deepseek-ai/deepseek-v4-flash", Object: "model", OwnedBy: "nvidia", Root: "deepseek-ai/deepseek-v4-flash"},
-		{Id: "some-other-model", Object: "model", OwnedBy: "openai", Root: "some-other-model"},
-	}
+	// The compiled-in nvidia adaptor registers this model in lowercase while the
+	// group's ability is configured in mixed case (as SiliconFlow advertises it).
 	abilities := []dto.EnabledAbility{
 		{Model: "deepseek-ai/DeepSeek-V4-Flash", ChannelId: 7, ChannelType: channeltype.SiliconFlow},
 	}
 
-	got := resolveUserAvailableModels(abilities, snapshot, 123, map[int]*model.Channel{}, nil)
+	got := resolveUserAvailableModels(abilities, map[int]*model.Channel{}, nil)
 
 	require.Len(t, got, 1)
 	require.Equal(t, "deepseek-ai/DeepSeek-V4-Flash", got[0].Id,
 		"listed id must equal the ability's actual routing key, not the snapshot's lowercase alias")
 	require.Equal(t, "deepseek-ai/DeepSeek-V4-Flash", got[0].Root,
 		"root must also carry the routable casing")
-	// Permissions and created stay inherited from the snapshot entry, but the
-	// owner does NOT: the model is served here by a SiliconFlow channel and only
-	// collides with the nvidia adaptor's lowercase catalog id. Reporting "nvidia"
-	// would attribute the model to a provider this deployment may not even have
-	// configured, so owned_by is resolved from the ability's own channel.
+	// The model is served here by a SiliconFlow channel and only collides with the
+	// nvidia adaptor's lowercase catalog id. Reporting "nvidia" would attribute it
+	// to a provider this deployment may not even have configured.
 	require.Equal(t, "siliconflow", got[0].OwnedBy,
-		"owner must come from the channel that actually serves the model, not the snapshot alias")
+		"owner must come from the channel that actually serves the model")
 }
 
 // TestResolveUserAvailableModels_KeepsDistinctCasingsAsDistinctModels asserts
@@ -165,16 +146,13 @@ func TestResolveUserAvailableModels_PreservesAbilityCasing_Issue352(t *testing.T
 // entries (they are distinct keys in the case-sensitive abilities table), while
 // identical names collapse to one.
 func TestResolveUserAvailableModels_KeepsDistinctCasingsAsDistinctModels(t *testing.T) {
-	snapshot := []OpenAIModels{
-		{Id: "deepseek-ai/deepseek-v4-flash", Object: "model", OwnedBy: "nvidia", Root: "deepseek-ai/deepseek-v4-flash"},
-	}
 	abilities := []dto.EnabledAbility{
 		{Model: "deepseek-ai/DeepSeek-V4-Flash", ChannelId: 1, ChannelType: channeltype.SiliconFlow},
 		{Model: "deepseek-ai/deepseek-v4-flash", ChannelId: 2, ChannelType: channeltype.NVIDIA},
 		{Model: "deepseek-ai/DeepSeek-V4-Flash", ChannelId: 3, ChannelType: channeltype.SiliconFlow}, // duplicate casing -> collapses
 	}
 
-	got := resolveUserAvailableModels(abilities, snapshot, 0, map[int]*model.Channel{}, nil)
+	got := resolveUserAvailableModels(abilities, map[int]*model.Channel{}, nil)
 
 	ids := make([]string, 0, len(got))
 	for _, m := range got {
@@ -335,8 +313,11 @@ func TestRetrieveModel_ReturnsConfiguredCasing_Issue352(t *testing.T) {
 	const configuredModel = "deepseek-ai/DEEPSEEK-V4-FLASH"
 	groupName := fmt.Sprintf("retrieve-group-%d", time.Now().UnixNano())
 
-	// Precondition: the configured casing is NOT an exact catalog entry, but a
-	// case-insensitive variant IS. That is exactly what forces the buggy branch.
+	// Precondition: the compiled-in catalog holds a case-insensitive VARIANT of the
+	// configured id but not the id itself. RetrieveModel no longer consults that
+	// catalog at all -- it renders the matched ability -- so this fixture now guards
+	// against a regression that reintroduces a catalog lookup, which would echo the
+	// non-routable variant back to the client (issue #352).
 	require.NotContains(t, modelsMap, configuredModel,
 		"precondition: configured casing must be absent from the exact catalog map")
 	var variantFound bool

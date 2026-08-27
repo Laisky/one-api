@@ -1557,13 +1557,19 @@ Z.ai channel bills at Z.ai's flat USD rate.
 | Not available | — | embeddings, rerank, text-to-speech, realtime |
 
 Because the two catalogs overlap almost entirely, a model id served by both is
-attributed to a single channel in the listings. `/v1/models` reports the channel
-that would actually serve the request — the highest-priority channel offering
-that model, with the lowest channel id breaking ties — so a deployment running
-only a Zhipu channel reports `zhipu` and never `zai`. The admin catalog at
-`/api/channel/models` ranks enabled channels the same way, falling back to the
-compiled-in adaptor list for models no channel serves yet (that list is what lets
-you pick models while creating your first channel).
+attributed to a single channel in the listings.
+
+`/v1/models` is derived entirely from the channels enabled on this deployment,
+scoped to the caller's group — it never consults the compiled-in adaptor catalog.
+Every row is rendered from the ability that makes the model routable, so each id
+is callable by construction, and `owned_by` names the channel that would serve
+it: the highest-priority channel offering that model, with the lowest channel id
+breaking ties. A deployment running only a Zhipu channel therefore reports
+`zhipu` and never `zai`, and with no channels configured the list is empty.
+
+The admin catalog at `/api/channel/models` ranks enabled channels the same way
+but *does* fall back to the compiled-in adaptor list for models no channel serves
+yet — that list is what lets you pick models while creating your first channel.
 
 `owned_by` is a display label in every case: billing always follows the channel
 the request was actually routed to, so the same `glm-4.7` call bills at CNY tiers

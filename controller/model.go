@@ -247,10 +247,6 @@ func ListAllModels(c *gin.Context) {
 	})
 }
 
-func getSupportedModelsSnapshot() ([]OpenAIModels, error) {
-	return getSupportedModelsSnapshotWithContext(context.Background())
-}
-
 // getSupportedModelsSnapshotWithContext returns the cached supported-model
 // snapshot, rebuilding it with request-correlated diagnostics when stale.
 // Parameters: ctx carries cancellation and logging values for snapshot loading.
@@ -297,15 +293,24 @@ func getRequestUserGroup(c *gin.Context) (context.Context, string, error) {
 }
 
 // loadChannelCached loads a channel once and reuses it from the provided cache.
+//
+// Failures are memoized as a nil entry. Channel.Delete is not transactional, so
+// orphaned ability rows are a real state; without negative memoization one
+// deleted channel costs a failed query per ability it used to back, on every
+// request that lists models.
 func loadChannelCached(channelID int, cache map[int]*model.Channel) (*model.Channel, error) {
 	if channelID == 0 {
 		return nil, errors.New("channel id is required")
 	}
 	if channel, ok := cache[channelID]; ok {
+		if channel == nil {
+			return nil, errors.Errorf("channel %d is not resolvable", channelID)
+		}
 		return channel, nil
 	}
 	channel, err := model.GetChannelById(channelID, false)
 	if err != nil {
+		cache[channelID] = nil
 		return nil, errors.Wrapf(err, "load channel %d", channelID)
 	}
 	cache[channelID] = channel
@@ -1654,40 +1659,7 @@ func ListModels(c *gin.Context) {
 	channelCache := make(map[int]*model.Channel)
 	availableAbilities = filterVisibleAbilities(availableAbilities, channelCache)
 
-	snapshot, err := getSupportedModelsSnapshotWithContext(gmw.Ctx(c))
-	if err != nil {
-		middleware.AbortWithError(c, http.StatusInternalServerError, errors.Wrap(err, "load supported models snapshot"))
-		return
-	}
-
-	userAvailableModels := resolveUserAvailableModels(availableAbilities, snapshot, int(time.Now().Unix()), channelCache, lg)
-
-	respondModelList(c, userAvailableModels)
-}
-
-// withRoutableModelID returns a copy of entry whose Id/Root equal routableName,
-// the ability's actual (case-sensitive) model name that channel routing matches.
-// Display metadata (owner, permissions, created) is otherwise preserved. This
-// keeps every advertised model callable even when a case-insensitively-equal
-// snapshot/catalog entry supplies the metadata under a different casing (e.g.
-// the nvidia adaptor registers deepseek-ai/deepseek-v4-flash while a SiliconFlow
-// channel is configured as deepseek-ai/DeepSeek-V4-Flash). See issue #352.
-func withRoutableModelID(entry OpenAIModels, routableName string) OpenAIModels {
-	entry.Id = routableName
-	entry.Root = routableName
-	return entry
-}
-
-// withRoutableModelOwner is withRoutableModelID plus an owner override, used
-// where the serving channel is known and must take precedence over the
-// compiled-in catalog's idea of who owns the id. An empty owner leaves the
-// inherited value untouched.
-func withRoutableModelOwner(entry OpenAIModels, routableName string, owner string) OpenAIModels {
-	entry = withRoutableModelID(entry, routableName)
-	if owner != "" {
-		entry.OwnedBy = owner
-	}
-	return entry
+	respondModelList(c, resolveUserAvailableModels(availableAbilities, channelCache, lg))
 }
 
 // abilityChannelRef resolves the log identity of the channel backing an ability.
@@ -1737,39 +1709,29 @@ func bestAbilityPerModel(abilities []dto.EnabledAbility) map[string]dto.EnabledA
 }
 
 // resolveUserAvailableModels converts a user group's enabled abilities into
-// OpenAI-shaped model entries. Display metadata is inherited from the
-// supported-models snapshot via a case-insensitive match, but the returned entry
-// Id/Root always equals the ability's actual model name — the case-sensitive
-// routing key that /v1/chat/completions matches — so every listed model stays
-// callable. See issue #352.
+// OpenAI-shaped model entries.
 //
-// owned_by is NOT taken from the snapshot. The snapshot's owner is whichever
-// adaptor happens to advertise the id in the compiled-in catalog, which says
-// nothing about this deployment: a gateway running only a Zhipu channel would
-// otherwise report glm-4.7 as owned by Z.ai purely because both adaptors ship the
-// id. The owner is resolved instead from the channel that actually backs the
-// ability, chosen by bestAbilityPerModel.
+// Every field is derived from the abilities and their channels; the compiled-in
+// adaptor catalog is deliberately not consulted. That catalog describes what this
+// binary knows how to talk to, not what this deployment can serve, so borrowing
+// from it produced two defects: a gateway running only a Zhipu channel reported
+// glm-4.7 as owned by Z.ai (both adaptors ship the id), and an id whose catalog
+// entry used a different casing could be advertised in a form channel routing
+// cannot match (issue #352). Building from the ability makes the first impossible
+// to get wrong and the second structurally impossible: Id/Root are the ability's
+// own case-sensitive routing key by construction.
+//
+// The three remaining fields are constants or channel-derived: owned_by comes
+// from the channel chosen by bestAbilityPerModel, created is the frozen
+// modelCatalogCreated, and permission is defaultModelPermissions.
 //
 // Entries are keyed by the exact ability model name: two abilities that differ
 // only in case are distinct routing keys and must both remain listable, while
 // identical names collapse to a single entry.
-func resolveUserAvailableModels(abilities []dto.EnabledAbility, snapshot []OpenAIModels, created int, channelCache map[int]*model.Channel, lg glog.Logger) []OpenAIModels {
-	snapshotByID := make(map[string]OpenAIModels, len(snapshot))
-	for _, entry := range snapshot {
-		snapshotByID[strings.ToLower(entry.Id)] = entry
-	}
-
+func resolveUserAvailableModels(abilities []dto.EnabledAbility, channelCache map[int]*model.Channel, lg glog.Logger) []OpenAIModels {
 	allowed := make(map[string]OpenAIModels, len(abilities))
 	for modelName, ability := range bestAbilityPerModel(abilities) {
-		if entry, ok := snapshotByID[strings.ToLower(modelName)]; ok {
-			entry = withRoutableModelID(entry, modelName)
-			if owner := abilityOwnerFromCache(ability.ChannelId, ability.ChannelType, channelCache); owner != "" {
-				entry.OwnedBy = owner
-			}
-			allowed[modelName] = entry
-			continue
-		}
-		if entry, ok := buildModelEntryFromAbility(modelName, ability.ChannelId, ability.ChannelType, created, channelCache); ok {
+		if entry, ok := buildModelEntryFromAbility(modelName, ability.ChannelId, ability.ChannelType, channelCache); ok {
 			allowed[modelName] = entry
 			continue
 		}
@@ -1823,37 +1785,22 @@ func abilityOwnerFromCache(channelID int, channelType int, cache map[int]*model.
 	return owner
 }
 
-// abilityOwnerName is abilityOwnerFromCache plus a single-channel database
-// fallback, memoized into cache. Only for paths that handle one model at a time
-// (RetrieveModel, the snapshot-miss fallback) -- never inside a listing loop.
-func abilityOwnerName(channelID int, channelType int, cache map[int]*model.Channel) string {
-	if channelID > 0 && cache != nil {
-		if _, ok := cache[channelID]; !ok {
-			channel, err := model.GetChannelById(channelID, false)
-			if err != nil {
-				// Negative-cache the miss. Channel.Delete is not transactional, so
-				// orphaned ability rows are a known state; without this an orphan
-				// costs one failed query per model that channel used to serve.
-				channel = nil
-			}
-			cache[channelID] = channel
-		}
-	}
-	return abilityOwnerFromCache(channelID, channelType, cache)
-}
-
-func buildModelEntryFromAbility(modelName string, channelID int, channelType int, created int, cache map[int]*model.Channel) (OpenAIModels, bool) {
+// buildModelEntryFromAbility renders one ability as an OpenAI model entry.
+//
+// It performs no I/O: callers run it once per advertised model, and every caller
+// has already populated the channel cache via filterVisibleAbilities.
+func buildModelEntryFromAbility(modelName string, channelID int, channelType int, cache map[int]*model.Channel) (OpenAIModels, bool) {
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
 		return OpenAIModels{}, false
 	}
 
-	owner := abilityOwnerName(channelID, channelType, cache)
+	owner := abilityOwnerFromCache(channelID, channelType, cache)
 
 	return OpenAIModels{
 		Id:         modelName,
 		Object:     "model",
-		Created:    created,
+		Created:    modelCatalogCreated,
 		OwnedBy:    owner,
 		Permission: defaultModelPermissions,
 		Root:       modelName,
@@ -1923,36 +1870,12 @@ func RetrieveModel(c *gin.Context) {
 	}
 	modelId = matched.Model
 
-	// modelId was rebound above to the ability's actual casing. Echo that
-	// case-sensitive routing key back to the client even when metadata is found
-	// under a different casing in the catalog/snapshot, so the retrieved id stays
-	// callable via /v1/chat/completions. See issue #352.
-	// owned_by follows the channel that actually serves the model, exactly as in
-	// resolveUserAvailableModels; modelsMap only supplies the remaining display
-	// metadata and knows nothing about which channels this deployment runs.
-	owner := abilityOwnerName(matched.ChannelId, matched.ChannelType, channelCache)
-	if entry, ok := modelsMap[modelId]; ok {
-		c.JSON(http.StatusOK, withRoutableModelOwner(entry, modelId, owner))
-		return
-	}
-	for key, modelEntry := range modelsMap {
-		if strings.EqualFold(key, modelId) {
-			c.JSON(http.StatusOK, withRoutableModelOwner(modelEntry, modelId, owner))
-			return
-		}
-	}
-	lg := gmw.GetLogger(c)
-	if snapshot, err := getSupportedModelsSnapshotWithContext(gmw.Ctx(c)); err == nil {
-		for _, m := range snapshot {
-			if strings.EqualFold(m.Id, modelId) {
-				c.JSON(http.StatusOK, withRoutableModelOwner(m, modelId, owner))
-				return
-			}
-		}
-	} else if lg != nil {
-		lg.Debug("failed to build supported models snapshot for lookup", zap.Error(err))
-	}
-	if entry, ok := buildModelEntryFromAbility(modelId, matched.ChannelId, matched.ChannelType, int(time.Now().Unix()), channelCache); ok {
+	// modelId was rebound above to the ability's actual casing, the case-sensitive
+	// routing key /v1/chat/completions matches (issue #352). The entry is built
+	// from that ability rather than looked up in the compiled-in catalog, so this
+	// endpoint reports exactly what GET /v1/models reports for the same model --
+	// same id, same owner, same created -- and cannot drift from it.
+	if entry, ok := buildModelEntryFromAbility(modelId, matched.ChannelId, matched.ChannelType, channelCache); ok {
 		c.JSON(http.StatusOK, entry)
 		return
 	}

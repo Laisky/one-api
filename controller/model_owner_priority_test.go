@@ -64,12 +64,6 @@ func TestBestAbilityPerModelIsOrderIndependent(t *testing.T) {
 func TestResolveUserAvailableModelsOwnerFollowsChannelPriority(t *testing.T) {
 	t.Parallel()
 
-	// The snapshot deliberately claims a third, unrelated owner to prove the
-	// listing does not inherit it.
-	snapshot := []OpenAIModels{
-		{Id: "glm-4.7", Object: "model", OwnedBy: "some-other-adaptor", Root: "glm-4.7"},
-	}
-
 	for name, tc := range map[string]struct {
 		abilities []dto.EnabledAbility
 		want      string
@@ -103,12 +97,14 @@ func TestResolveUserAvailableModelsOwnerFollowsChannelPriority(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got := resolveUserAvailableModels(tc.abilities, snapshot, 0, map[int]*model.Channel{}, nil)
+			got := resolveUserAvailableModels(tc.abilities, map[int]*model.Channel{}, nil)
 			require.Len(t, got, 1)
 			require.Equal(t, "glm-4.7", got[0].Id)
+			require.Equal(t, "glm-4.7", got[0].Root)
 			require.Equal(t, tc.want, got[0].OwnedBy,
-				"owned_by must name the channel that would serve the model, not the catalog owner")
-			require.NotEqual(t, "some-other-adaptor", got[0].OwnedBy)
+				"owned_by must name the channel that would serve the model")
+			require.Equal(t, modelCatalogCreated, got[0].Created,
+				"created must be the frozen constant, never a rebuild timestamp")
 		})
 	}
 }
@@ -146,37 +142,41 @@ func TestListAndRetrieveAgreeOnOwner(t *testing.T) {
 		{Model: "glm-4.7", ChannelId: 5, ChannelType: channeltype.Zhipu, Priority: 7},
 		{Model: "glm-4.7", ChannelId: 1, ChannelType: channeltype.Zai, Priority: 7},
 	}
-	snapshot := []OpenAIModels{{Id: "glm-4.7", Object: "model", OwnedBy: "catalog-owner", Root: "glm-4.7"}}
-
-	listed := resolveUserAvailableModels(abilities, snapshot, 0, map[int]*model.Channel{}, nil)
+	listed := resolveUserAvailableModels(abilities, map[int]*model.Channel{}, nil)
 	require.Len(t, listed, 1)
 
 	matched, ok := matchVisibleAbilityByModelID(abilities, "glm-4.7")
 	require.True(t, ok)
-	retrieved := abilityOwnerFromCache(matched.ChannelId, matched.ChannelType, map[int]*model.Channel{})
+	retrieved, ok := buildModelEntryFromAbility(matched.Model, matched.ChannelId, matched.ChannelType, map[int]*model.Channel{})
+	require.True(t, ok)
 
 	// Top tier is priority 7 = {channel 5 zhipu, channel 1 zai}; lowest id wins.
 	require.Equal(t, "zai", listed[0].OwnedBy)
-	require.Equal(t, listed[0].OwnedBy, retrieved,
-		"the list and single-model endpoints must name the same channel")
 	require.Equal(t, 1, matched.ChannelId)
+
+	// The two endpoints must be byte-identical, not merely agree on the owner:
+	// RetrieveModel now renders the same struct from the same ability.
+	require.Equal(t, listed[0], retrieved,
+		"GET /v1/models and GET /v1/models/:model must return the identical entry")
 }
 
-// TestAbilityOwnerNameNegativelyCachesMisses pins that an orphaned ability (a
+// TestLoadChannelCachedNegativelyCachesMisses pins that an orphaned ability (a
 // channel row deleted without its abilities -- Channel.Delete is not
 // transactional) costs at most one lookup, not one per model it used to serve.
-func TestAbilityOwnerNameNegativelyCachesMisses(t *testing.T) {
+func TestLoadChannelCachedNegativelyCachesMisses(t *testing.T) {
 	t.Parallel()
 
-	// model.DB is nil here, so a second lookup attempt would panic rather than
-	// return an error; surviving two calls proves the miss was cached.
-	cache := map[int]*model.Channel{}
-	require.Panics(t, func() { _ = abilityOwnerName(9999, channeltype.Zai, cache) },
-		"sanity: the first lookup really does reach the database layer")
-
-	cache[9999] = nil // simulate the negative cache entry the recover path stores
+	// A nil entry is the memoized miss. model.DB is nil in this package's unit
+	// tests, so a second lookup attempt would panic instead of returning an
+	// error; not panicking proves the cached miss short-circuits.
+	cache := map[int]*model.Channel{9999: nil}
 	require.NotPanics(t, func() {
-		require.Equal(t, "zai", abilityOwnerName(9999, channeltype.Zai, cache),
-			"a negatively cached channel falls back to the ability's own channel_type")
+		got, err := loadChannelCached(9999, cache)
+		require.Error(t, err)
+		require.Nil(t, got)
 	})
+
+	// A negatively cached channel still yields a usable owner label from the
+	// ability's own channel_type, which GetGroupModelsV2 read via its JOIN.
+	require.Equal(t, "zai", abilityOwnerFromCache(9999, channeltype.Zai, cache))
 }
