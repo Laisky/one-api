@@ -299,7 +299,7 @@ func TokenAuth() func(c *gin.Context) {
 		// Check if token has model restrictions and validate access
 		if token.Models != nil && *token.Models != "" {
 			c.Set(ctxkey.AvailableModels, *token.Models)
-			if requestModel != "" && !isModelInList(requestModel, *token.Models) {
+			if requestModel != "" && !IsModelInList(requestModel, *token.Models) {
 				// Valid key, model outside the token's allow-list.
 				AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.Errorf("This API key does not have permission to use the model: %s", requestModel)), tokenInfo)
 				return

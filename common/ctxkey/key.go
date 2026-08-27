@@ -190,7 +190,10 @@ const (
 
 	// AvailableModels is the CSV of models allowed by the API token (token.Models).
 	// Set in: middleware/auth.TokenAuth when token has model restrictions.
-	// Read in: controller/model.GetUserAvailableModels to build filtered model lists.
+	// Read in: controller/model.filterAbilitiesByTokenAllowList (scopes GET /v1/models
+	// and GET /v1/models/:model to what the key may invoke),
+	// controller/model.GetAvailableModelsByToken, and controller/user.GetTokenInfo.
+	// Absent means the token is unrestricted -- never treat absence as "deny all".
 	AvailableModels = "available_models"
 
 	// KeyRequestBody caches the raw request body bytes for reuse (avoid double read).

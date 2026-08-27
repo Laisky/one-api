@@ -342,11 +342,66 @@ func filterVisibleAbilities(abilities []dto.EnabledAbility, cache map[int]*model
 	return visible
 }
 
+// filterAbilitiesByTokenAllowList narrows abilities to what the calling API token
+// is permitted to invoke.
+//
+// Group abilities answer "what can this deployment serve for this user", which is
+// a coarser question than "what may this key call". TokenAuth enforces the token's
+// own allow-list on every request and 403s anything outside it, so a listing that
+// skipped this filter advertised models the caller would then be refused.
+//
+// The membership test is middleware.IsModelInList -- the very predicate that
+// produces the 403 -- so discovery and invocability cannot disagree. The TOKEN
+// entry is matched raw (that helper does not trim), so an allow-list stored as
+// "a, b" genuinely does not permit "b" and the listing reflects that rather than
+// hiding it. The ABILITY name is trimmed because the trimmed form is the id
+// actually advertised, and therefore the string a client sends back; see
+// bestAbilityPerModel, which trims identically.
+//
+// An unrestricted token has no ctxkey.AvailableModels entry at all (TokenAuth sets
+// it only for a non-empty Token.Models), so the absent case must return everything
+// -- returning an empty list there would blank the catalog for most callers.
+func filterAbilitiesByTokenAllowList(c *gin.Context, abilities []dto.EnabledAbility) []dto.EnabledAbility {
+	raw, restricted := c.Get(ctxkey.AvailableModels)
+	if !restricted {
+		return abilities
+	}
+	allowList, ok := raw.(string)
+	if !ok {
+		// Only TokenAuth writes this key, and always as a string. Reaching here
+		// means something else clobbered it; the relay would still enforce the
+		// allow-list, so failing open would advertise models that then 403.
+		gmw.GetLogger(c).Warn("ctxkey.AvailableModels is not a string; token allow-list filter skipped")
+		return abilities
+	}
+	if allowList == "" {
+		return abilities
+	}
+
+	permitted := make([]dto.EnabledAbility, 0, len(abilities))
+	for _, ability := range abilities {
+		if middleware.IsModelInList(strings.TrimSpace(ability.Model), allowList) {
+			permitted = append(permitted, ability)
+		}
+	}
+	return permitted
+}
+
 // respondModelNotFound returns the OpenAI-compatible model-not-found error payload.
+//
+// HTTP 404, matching OpenAI: SDKs key their NotFoundError on the status, so a 200
+// carrying an error body is parsed as a successful model descriptor and surfaces
+// as a confusing decode failure rather than a clean "model not found".
+//
+// The same payload is returned whether the model does not exist, is hidden on its
+// channel, or is outside the calling key's allow-list. That is deliberate -- three
+// distinguishable responses would let any key enumerate the deployment's catalog --
+// which is also why the message follows OpenAI in saying "or you do not have access
+// to it" rather than asserting the model does not exist.
 func respondModelNotFound(c *gin.Context, modelID string) {
-	msg := fmt.Sprintf("The model '%s' does not exist", modelID)
+	msg := fmt.Sprintf("The model '%s' does not exist or you do not have access to it", modelID)
 	respErr := relaymodel.Error{Message: msg, Type: relaymodel.ErrorTypeInvalidRequest, Param: "model", Code: "model_not_found", RawError: errors.New(msg)}
-	c.JSON(http.StatusOK, gin.H{
+	c.JSON(http.StatusNotFound, gin.H{
 		"error": respErr,
 	})
 }
@@ -1658,6 +1713,7 @@ func ListModels(c *gin.Context) {
 	}
 	channelCache := make(map[int]*model.Channel)
 	availableAbilities = filterVisibleAbilities(availableAbilities, channelCache)
+	availableAbilities = filterAbilitiesByTokenAllowList(c, availableAbilities)
 
 	respondModelList(c, resolveUserAvailableModels(availableAbilities, channelCache, lg))
 }
@@ -1850,6 +1906,8 @@ func matchVisibleAbilityByModelID(abilities []dto.EnabledAbility, modelID string
 
 // RetrieveModel returns details about a specific model or an error when it does not exist.
 func RetrieveModel(c *gin.Context) {
+	// Scoped to the caller's group and key, so it must not be shared by a cache.
+	setPrivateCatalogHeaders(c)
 	modelId := strings.TrimSpace(c.Param("model"))
 	ctx, userGroup, err := getRequestUserGroup(c)
 	if err != nil {
@@ -1863,6 +1921,10 @@ func RetrieveModel(c *gin.Context) {
 	}
 	channelCache := make(map[int]*model.Channel)
 	visibleAbilities := filterVisibleAbilities(abilities, channelCache)
+	// A model outside the token's allow-list is reported as not found rather than
+	// described: the caller cannot invoke it, so advertising its metadata would
+	// both mislead and disclose part of the group catalog the key has no access to.
+	visibleAbilities = filterAbilitiesByTokenAllowList(c, visibleAbilities)
 	matched, ok := matchVisibleAbilityByModelID(visibleAbilities, modelId)
 	if !ok {
 		respondModelNotFound(c, modelId)
@@ -1928,13 +1990,18 @@ func intersectTokenModelIDs(modelsString string, abilities []dto.EnabledAbility)
 		routingIDs[modelName] = modelName
 	}
 
+	// Membership is delegated to middleware.IsModelInList -- the same call the relay
+	// makes before it 403s -- so this endpoint cannot advertise a model the caller
+	// would be refused. It used to TrimSpace each entry, which made an allow-list
+	// stored as "a, b" advertise "b" while the relay refused it.
+	//
+	// Iteration stays over the CSV so the caller's own ordering is preserved.
 	tokenModels := strings.Split(modelsString, ",")
 	modelNames := make([]string, 0, len(tokenModels))
 	seen := make(map[string]struct{}, len(tokenModels))
 	for _, rawModel := range tokenModels {
-		modelName := strings.TrimSpace(rawModel)
-		canonicalModel, ok := routingIDs[modelName]
-		if !ok {
+		canonicalModel, ok := routingIDs[rawModel]
+		if !ok || !middleware.IsModelInList(canonicalModel, modelsString) {
 			continue
 		}
 		if _, ok := seen[canonicalModel]; ok {
@@ -1969,8 +2036,10 @@ func GetAvailableModelsByToken(c *gin.Context) {
 
 	// Check if the token has specific model restrictions
 	if availableModels, exists := c.Get(ctxkey.AvailableModels); exists {
-		// Token has model restrictions, use those models
-		modelsString := availableModels.(string)
+		// Token has model restrictions, use those models. The assertion is checked:
+		// an unchecked one would panic the handler on the same corrupted-context
+		// state that filterAbilitiesByTokenAllowList merely logs.
+		modelsString, _ := availableModels.(string)
 		if modelsString != "" {
 			ctx, userGroup, err := getRequestUserGroup(c)
 			if err != nil {

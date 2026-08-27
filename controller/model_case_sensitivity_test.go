@@ -14,6 +14,7 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/dto"
+	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
 )
@@ -203,8 +204,17 @@ func TestIntersectTokenModelIDsUsesExactRoutingCasing(t *testing.T) {
 		{Model: "foo", ChannelId: 2},
 	}
 
-	got := intersectTokenModelIDs(" FOO , foo, Foo,foo ", abilities)
+	// Casing is a routing key, so FOO matches nothing while foo and Foo each match
+	// their own ability; the duplicate collapses and CSV order is preserved.
+	got := intersectTokenModelIDs("FOO,foo,Foo,foo", abilities)
 	require.Equal(t, []string{"foo", "Foo"}, got)
+
+	// Entries are matched raw, exactly as middleware.IsModelInList does at the
+	// relay. A stored " Foo" is not callable, so it must not be advertised either.
+	require.False(t, middleware.IsModelInList("Foo", " Foo"),
+		"precondition: the relay refuses an untrimmed allow-list entry")
+	require.Empty(t, intersectTokenModelIDs(" Foo, foo", abilities),
+		"untrimmed entries must not be advertised, since the relay would refuse them")
 }
 
 // TestRetrieveModelPrefersExactAbilityCasing verifies the HTTP handler returns
@@ -269,7 +279,9 @@ func TestGetAvailableModelsByTokenUsesExactAbilityCasing(t *testing.T) {
 	}
 
 	const userID = 91
-	tokenModels := "FOO, foo, Foo,foo"
+	// No incidental whitespace: entries are matched raw (see intersectTokenModelIDs),
+	// so " foo" would be a different, uncallable entry rather than a spelling of foo.
+	tokenModels := "FOO,foo,Foo,foo"
 	token := &model.Token{UserId: userID, Name: "case-token", Status: model.TokenStatusEnabled, Models: &tokenModels}
 	require.NoError(t, model.DB.Create(token).Error)
 	user := &model.User{Id: userID, Username: "token-case-user", Group: groupName, Role: model.RoleCommonUser, Status: model.UserStatusEnabled}
@@ -294,6 +306,13 @@ func TestGetAvailableModelsByTokenUsesExactAbilityCasing(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
 	require.True(t, payload.Success)
 	require.Equal(t, []string{"foo", "Foo"}, payload.Data.Available)
+
+	// Whatever this endpoint advertises must be callable: /api/available_models and
+	// the relay's own 403 now share one predicate, so they cannot contradict.
+	for _, advertised := range payload.Data.Available {
+		require.Truef(t, middleware.IsModelInList(advertised, tokenModels),
+			"advertised model %q must pass the relay's allow-list check", advertised)
+	}
 }
 
 // TestRetrieveModel_ReturnsConfiguredCasing_Issue352 covers the single-model

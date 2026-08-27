@@ -597,7 +597,9 @@ func TestRetrieveModelRejectsHiddenModels(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusOK, w.Code)
+	// 404, as OpenAI returns for an unknown or inaccessible model: SDKs key their
+	// NotFoundError on the status, not on the body's `code`.
+	require.Equal(t, http.StatusNotFound, w.Code)
 	var resp struct {
 		Error struct {
 			Code string `json:"code"`

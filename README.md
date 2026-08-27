@@ -1560,7 +1560,12 @@ Because the two catalogs overlap almost entirely, a model id served by both is
 attributed to a single channel in the listings.
 
 `/v1/models` is derived entirely from the channels enabled on this deployment,
-scoped to the caller's group — it never consults the compiled-in adaptor catalog.
+scoped to the caller's group and then narrowed to the API key's own model
+allow-list — it never consults the compiled-in adaptor catalog. Every model it
+lists passes the same allow-list check the relay applies before serving a request,
+so a key is no longer shown models it would be refused. (The converse does not
+hold: models hidden on a channel are deliberately omitted from the listing while
+remaining callable.)
 Every row is rendered from the ability that makes the model routable, so each id
 is callable by construction, and `owned_by` names the channel that would serve
 it: the highest-priority channel offering that model, with the lowest channel id
