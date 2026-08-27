@@ -321,24 +321,38 @@ export function TopUpPage() {
   /** openTopUpLink opens the configured external top-up portal in a new tab. */
   const openTopUpLink = () => {
     if (!topUpLink) return;
+    let target = topUpLink;
+    // Decorating the URL is best-effort: a malformed link or a missing profile
+    // field must never stop the portal from opening.
     try {
       const url = new URL(topUpLink);
-      if (userData) {
-        url.searchParams.append('username', userData.username);
-        url.searchParams.append('user_id', userData.id.toString());
-        const uuid =
+      const profile = userData ?? (user as any) ?? null;
+      if (profile) {
+        // The user API exposes uuid only (dto.UserResponse drops the internal
+        // integer id), so identify the account by uuid and fall back to the
+        // legacy numeric id if some deployment still returns one.
+        const username = profile.username;
+        if (typeof username === 'string' && username) {
+          url.searchParams.append('username', username);
+        }
+        const userId = profile.uuid ?? profile.id;
+        if (userId !== undefined && userId !== null && `${userId}`) {
+          url.searchParams.append('user_id', `${userId}`);
+        }
+        const transactionId =
           (globalThis as any).crypto?.randomUUID?.() ??
           'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
             const r = (Math.random() * 16) | 0;
             const v = c === 'x' ? r : (r & 0x3) | 0x8;
             return v.toString(16);
           });
-        url.searchParams.append('transaction_id', uuid);
+        url.searchParams.append('transaction_id', transactionId);
       }
-      window.open(url.toString(), '_blank');
+      target = url.toString();
     } catch (error) {
-      console.error(`Error opening top-up link: ${errorMessage(error)}`);
+      console.error(`Error building top-up link: ${errorMessage(error)}`);
     }
+    window.open(target, '_blank', 'noopener,noreferrer');
   };
 
   const balanceUSD = formatUSD(userQuota);

@@ -105,6 +105,51 @@ describe('TopUpPage', () => {
     await screen.findByText(/successfully redeemed/i);
   });
 
+  it('opens the payment portal even though /api/user/self returns no numeric id', async () => {
+    // Regression: dto.UserResponse exposes `uuid` only (no internal integer id).
+    // The handler used to call `userData.id.toString()`, which threw and was
+    // swallowed by its own try/catch, so the button silently did nothing.
+    (api.get as any).mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/api/user/self')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: { uuid: 'd0c9e0f2-1111-4222-8333-444455556666', username: 'testuser', quota: 1000 },
+          },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/status')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: { top_up_link: 'https://pay.example.com', stripe_enabled: false, min_topup_usd: 5 },
+          },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/topup/stripe/orders')) {
+        return Promise.resolve({ data: { success: true, data: [] } });
+      }
+      return Promise.resolve({ data: { success: true, data: {} } });
+    });
+
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderWithProviders(<TopUpPage />);
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/user/self'));
+    const portalBtn = await screen.findByRole('button', { name: /open payment portal|open$/i });
+
+    fireEvent.click(portalBtn);
+
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const opened = new URL((openSpy.mock.calls[0] as any[])[0] as string);
+    expect(opened.origin + opened.pathname).toBe('https://pay.example.com/');
+    expect(opened.searchParams.get('username')).toBe('testuser');
+    expect(opened.searchParams.get('user_id')).toBe('d0c9e0f2-1111-4222-8333-444455556666');
+    expect(opened.searchParams.get('transaction_id')).toBeTruthy();
+
+    openSpy.mockRestore();
+  });
+
   it('loads user quota on mount', async () => {
     renderWithProviders(<TopUpPage />);
 
