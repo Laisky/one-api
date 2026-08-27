@@ -3,12 +3,14 @@ package zai
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/zhipu"
 	"github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/pricing"
 )
 
 // TestPricingIsNotInheritedFromZhipu guards the embedding trap that makes Z.AI
@@ -49,14 +51,23 @@ func TestPricingIsNotInheritedFromZhipu(t *testing.T) {
 }
 
 // TestNoCNYPricingArtifacts pins that Z.AI's flat price list never carries a
-// BigModel tier table, time window, or cache-write rate: Z.AI publishes exactly
-// one value per column with no tiering by input or output length.
+// BigModel tier table, inherited CNY time window, or cache-write rate: Z.AI
+// publishes exactly one value per column with no tiering by input or output
+// length.
+//
+// zaiOwnTimeWindows lists the entries allowed to declare a window of their own.
+// Those windows must be declared in USD here (via launchPromoUsd), never
+// inherited from BigModel, and TestGLM53FlashLaunchPromoWindow pins their values.
 func TestNoCNYPricingArtifacts(t *testing.T) {
 	t.Parallel()
 
+	zaiOwnTimeWindows := map[string]bool{"glm-5.3-flash": true}
+
 	for name, cfg := range ModelRatios {
 		require.Empty(t, cfg.Tiers, "%s must not carry BigModel's input/output tiers", name)
-		require.Empty(t, cfg.TimeWindows, "%s must not carry time-window pricing", name)
+		if !zaiOwnTimeWindows[name] {
+			require.Empty(t, cfg.TimeWindows, "%s must not carry time-window pricing", name)
+		}
 		require.Zero(t, cfg.CacheWrite5mRatio, name)
 		require.Zero(t, cfg.CacheWrite1hRatio, name)
 		require.Equal(t, strings.ToLower(name), name, "model ids must be lowercase")
@@ -122,7 +133,7 @@ func TestKeyPricePins(t *testing.T) {
 	require.Zero(t, ModelRatios["glm-4.7-flash"].CachedInputRatio)
 	require.Zero(t, ModelRatios["glm-4.6v-flash"].Ratio)
 
-	// GLM-5.3-Flash bills at list price, not the 50% launch promotion.
+	// GLM-5.3-Flash's base price is list; the 50% launch promotion is a window.
 	require.InDelta(t, 0.15*ratio.MilliTokensUsd, ModelRatios["glm-5.3-flash"].Ratio, 1e-12)
 	require.InDelta(t, 0.50/0.15, ModelRatios["glm-5.3-flash"].CompletionRatio, 1e-12)
 
@@ -165,4 +176,32 @@ func TestToolingDefaultsAreZaiSpecific(t *testing.T) {
 	for _, bigmodelOnly := range []string{"search_std", "search_pro", "search_pro_sogou", "search_pro_quark"} {
 		require.NotContains(t, cfg.Pricing, bigmodelOnly)
 	}
+}
+
+// TestGLM53FlashLaunchPromoWindow verifies Z.AI's 50% launch promotion is carried
+// as a USD time window over the list price -- derive() strips BigModel's CNY
+// window, so this asserts the USD overlay was re-attached -- and that it expires
+// by itself at 24:00 on 2026-09-09 (UTC+8) without any further code change.
+func TestGLM53FlashLaunchPromoWindow(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["glm-5.3-flash"]
+	require.True(t, ok)
+	require.Len(t, cfg.TimeWindows, 1)
+	require.Equal(t, "glm-5.3-flash-launch-promo", cfg.TimeWindows[0].Name)
+	require.Equal(t, "Asia/Shanghai", cfg.TimeWindows[0].TimeZone)
+	require.Equal(t, "2026-09-10", cfg.TimeWindows[0].DateTo)
+
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	require.NoError(t, err)
+
+	promo := pricing.ApplyTimeWindow(cfg, time.Date(2026, 9, 9, 23, 59, 0, 0, shanghai))
+	require.InDelta(t, 0.075*ratio.MilliTokensUsd, promo.Ratio, 1e-12)
+	require.InDelta(t, 0.015*ratio.MilliTokensUsd, promo.CachedInputRatio, 1e-12)
+	require.InDelta(t, 0.25*ratio.MilliTokensUsd, promo.Ratio*promo.CompletionRatio, 1e-12)
+
+	expired := pricing.ApplyTimeWindow(cfg, time.Date(2026, 9, 10, 0, 0, 0, 0, shanghai))
+	require.InDelta(t, 0.15*ratio.MilliTokensUsd, expired.Ratio, 1e-12)
+	require.InDelta(t, 0.03*ratio.MilliTokensUsd, expired.CachedInputRatio, 1e-12)
+	require.InDelta(t, 0.50*ratio.MilliTokensUsd, expired.Ratio*expired.CompletionRatio, 1e-12)
 }

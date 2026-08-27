@@ -2,6 +2,7 @@ package zhipu
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -65,8 +66,9 @@ func TestCurrentVisionModelMetadata(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, int32(8_192), glm4v.MaxOutputTokens)
 
-	// GLM-5.3-Flash bills at the standard list price (¥0.8/¥0.23/¥2.8), not the
-	// two-week launch promotion, so quota does not under-charge once it lapses.
+	// GLM-5.3-Flash's BASE price is the standard list price (¥0.8/¥0.23/¥2.8);
+	// the two-week launch promotion is a time window, so quota returns to list
+	// on its own once the promotion lapses.
 	glm53Flash, ok := ModelRatios["glm-5.3-flash"]
 	require.True(t, ok)
 	require.Equal(t, int32(1_000_000), glm53Flash.ContextLength)
@@ -76,6 +78,36 @@ func TestCurrentVisionModelMetadata(t *testing.T) {
 	require.InDelta(t, 0.8*ratio.MilliTokensRmb, glm53Flash.Ratio, 1e-12)
 	require.InDelta(t, 2.8/0.8, glm53Flash.CompletionRatio, 1e-12)
 	require.InDelta(t, 0.23*ratio.MilliTokensRmb, glm53Flash.CachedInputRatio, 1e-12)
+}
+
+// TestGLM53FlashLaunchPromoWindow verifies the two-week 50% launch promotion is
+// expressed as a self-expiring time window over the list price: discounted
+// through 2026-09-09 24:00 Asia/Shanghai, back to list immediately afterwards.
+func TestGLM53FlashLaunchPromoWindow(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["glm-5.3-flash"]
+	require.True(t, ok)
+	require.Len(t, cfg.TimeWindows, 1)
+	require.Equal(t, "glm-5.3-flash-launch-promo", cfg.TimeWindows[0].Name)
+	require.Equal(t, "Asia/Shanghai", cfg.TimeWindows[0].TimeZone)
+	require.Equal(t, "2026-09-10", cfg.TimeWindows[0].DateTo)
+
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	require.NoError(t, err)
+
+	// Last discounted minute: 2026-09-09 23:59 UTC+8.
+	promo := pricing.ApplyTimeWindow(cfg, time.Date(2026, 9, 9, 23, 59, 0, 0, shanghai))
+	require.InDelta(t, 0.4*ratio.MilliTokensRmb, promo.Ratio, 1e-12)
+	require.InDelta(t, 0.115*ratio.MilliTokensRmb, promo.CachedInputRatio, 1e-12)
+	// Output is 50% off through the inherited completion ratio: 0.4 * 3.5 = 1.4.
+	require.InDelta(t, 1.4*ratio.MilliTokensRmb, promo.Ratio*promo.CompletionRatio, 1e-12)
+
+	// First minute after expiry: 2026-09-10 00:00 UTC+8 bills at list again.
+	expired := pricing.ApplyTimeWindow(cfg, time.Date(2026, 9, 10, 0, 0, 0, 0, shanghai))
+	require.InDelta(t, 0.8*ratio.MilliTokensRmb, expired.Ratio, 1e-12)
+	require.InDelta(t, 0.23*ratio.MilliTokensRmb, expired.CachedInputRatio, 1e-12)
+	require.InDelta(t, 2.8*ratio.MilliTokensRmb, expired.Ratio*expired.CompletionRatio, 1e-12)
 }
 
 // TestImageGenerationPerCallPricing verifies BigModel's image models are billed

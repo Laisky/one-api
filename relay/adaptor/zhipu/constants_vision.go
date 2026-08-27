@@ -26,10 +26,11 @@ var flagshipVisionModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: chatSamplingParameters(),
 		Description:                 "AutoGLM-Phone: vision-language AI phone assistant that understands screens and drives Android devices via ADB; 20K context, 2048 max output; free for a limited time.",
 	},
-	// GLM-5.3-Flash: released 2026-08-25 with a two-week 50% launch promotion
-	// (promo ¥0.4/¥0.115/¥1.4). The rates below are the standard list prices —
-	// ¥0.8 input / ¥0.23 cached input / ¥2.8 output per 1M tokens — so billing
-	// does not silently under-charge once the promotion lapses.
+	// GLM-5.3-Flash: launched 2026-08-26 with a two-week 50% launch promotion
+	// (「5折限时两周」, promo ¥0.4/¥0.115/¥1.4 per 1M input/cached input/output).
+	// The base rates below are the standard list prices — ¥0.8/¥0.23/¥2.8 — and
+	// the promotion rides on top as a time window so billing reverts to list on
+	// its own when the promotion lapses, instead of needing a manual edit.
 	"glm-5.3-flash": {
 		Ratio:                       0.8 * ratio.MilliTokensRmb,
 		CompletionRatio:             2.8 / 0.8,
@@ -40,7 +41,21 @@ var flagshipVisionModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           reasoningChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
-		Description:                 "GLM-5.3-Flash: native multimodal Flash sibling of GLM-5.3 with 1M context and 128K max output; list pricing ¥0.8/¥2.8 per 1M input/output, ¥0.23 cached-input (launched 2026-08-25 with a two-week 50% promotion).",
+		Description:                 "GLM-5.3-Flash: native multimodal Flash sibling of GLM-5.3 with 1M context and 128K max output; list pricing ¥0.8/¥2.8 per 1M input/output, ¥0.23 cached-input, with a 50% launch promotion applied as a time-window discount through 2026-09-09 24:00 (UTC+8).",
+		// The promotion ends at 24:00 on 2026-09-09 Asia/Shanghai. DateTo is
+		// exclusive, so 2026-09-10 keeps the whole of 2026-09-09 discounted.
+		// CompletionRatio is inherited (2.8/0.8 == 1.4/0.4 == 3.5) because the
+		// promotion cuts every token class by the same 50%.
+		TimeWindows: []adaptor.TimeWindow{{
+			Name:     "glm-5.3-flash-launch-promo",
+			TimeZone: "Asia/Shanghai",
+			DateTo:   "2026-09-10",
+			Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "00:00"}},
+			Overlay: adaptor.ModelConfig{
+				Ratio:            0.4 * ratio.MilliTokensRmb,
+				CachedInputRatio: 0.115 * ratio.MilliTokensRmb,
+			},
+		}},
 	},
 	// GLM-5V-Turbo: input [0,32K) ¥5/¥22, input [32K+) ¥7/¥26 (same as GLM-5-Turbo)
 	"glm-5v-turbo": {
