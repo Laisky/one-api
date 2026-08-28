@@ -4,40 +4,37 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/Laisky/one-api/model"
 )
 
-func TestRelay429RetryLogic(t *testing.T) {
+// TestRetrySelectionPolicyFor pins which retry selection policy each initial
+// failure status maps to. 413 is the only status with a dedicated policy; a 429
+// walks the remaining channels strictly by priority like every other retryable
+// status (the rate-limited channel is excluded, never its whole tier).
+func TestRetrySelectionPolicyFor(t *testing.T) {
 	t.Parallel()
-	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
-		name                   string
-		initialError           int
-		shouldTryLowerPriority bool
+		name       string
+		statusCode int
+		want       retrySelectionPolicy
 	}{
-		{
-			name:                   "429 error should try lower priority channels first",
-			initialError:           http.StatusTooManyRequests,
-			shouldTryLowerPriority: true,
-		},
-		{
-			name:                   "500 error should try highest priority channels first",
-			initialError:           http.StatusInternalServerError,
-			shouldTryLowerPriority: false,
-		},
+		{name: "429 Too Many Requests walks strict priority", statusCode: http.StatusTooManyRequests, want: retrySelectStrictPriority},
+		{name: "413 Request Entity Too Large seeks larger max_tokens", statusCode: http.StatusRequestEntityTooLarge, want: retrySelectLargerMaxTokens},
+		{name: "500 Internal Server Error walks strict priority", statusCode: http.StatusInternalServerError, want: retrySelectStrictPriority},
+		{name: "502 Bad Gateway walks strict priority", statusCode: http.StatusBadGateway, want: retrySelectStrictPriority},
+		{name: "503 Service Unavailable walks strict priority", statusCode: http.StatusServiceUnavailable, want: retrySelectStrictPriority},
+		{name: "504 Gateway Timeout walks strict priority", statusCode: http.StatusGatewayTimeout, want: retrySelectStrictPriority},
+		{name: "401 Unauthorized walks strict priority", statusCode: http.StatusUnauthorized, want: retrySelectStrictPriority},
+		{name: "403 Forbidden walks strict priority", statusCode: http.StatusForbidden, want: retrySelectStrictPriority},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			// Test the retry priority logic directly
-			shouldTryLowerPriorityFirst := tt.initialError == http.StatusTooManyRequests
-			assert.Equal(t, tt.shouldTryLowerPriority, shouldTryLowerPriorityFirst,
-				"Retry priority logic should match expected behavior for status code %d", tt.initialError)
+			assert.Equal(t, tt.want, retrySelectionPolicyFor(tt.statusCode))
 		})
 	}
 }
@@ -72,66 +69,6 @@ func TestChannelExclusionInRetry(t *testing.T) {
 	}
 
 	assert.Equal(t, expectedAvailableIds, actualAvailableIds, "Should exclude failed channels")
-}
-
-// TestRetryPriorityLogic tests the core retry priority decision logic
-func TestRetryPriorityLogic(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name                   string
-		statusCode             int
-		shouldTryLowerPriority bool
-	}{
-		{
-			name:                   "HTTP 429 Too Many Requests should try lower priority first",
-			statusCode:             http.StatusTooManyRequests,
-			shouldTryLowerPriority: true,
-		},
-		{
-			name:                   "HTTP 500 Internal Server Error should try highest priority first",
-			statusCode:             http.StatusInternalServerError,
-			shouldTryLowerPriority: false,
-		},
-		{
-			name:                   "HTTP 502 Bad Gateway should try highest priority first",
-			statusCode:             http.StatusBadGateway,
-			shouldTryLowerPriority: false,
-		},
-		{
-			name:                   "HTTP 503 Service Unavailable should try highest priority first",
-			statusCode:             http.StatusServiceUnavailable,
-			shouldTryLowerPriority: false,
-		},
-		{
-			name:                   "HTTP 504 Gateway Timeout should try highest priority first",
-			statusCode:             http.StatusGatewayTimeout,
-			shouldTryLowerPriority: false,
-		},
-		{
-			name:                   "HTTP 400 Bad Request should try highest priority first",
-			statusCode:             http.StatusBadRequest,
-			shouldTryLowerPriority: false,
-		},
-		{
-			name:                   "HTTP 401 Unauthorized should try highest priority first",
-			statusCode:             http.StatusUnauthorized,
-			shouldTryLowerPriority: false,
-		},
-		{
-			name:                   "HTTP 404 Not Found should try highest priority first",
-			statusCode:             http.StatusNotFound,
-			shouldTryLowerPriority: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			shouldTryLowerPriorityFirst := tt.statusCode == http.StatusTooManyRequests
-			assert.Equal(t, tt.shouldTryLowerPriority, shouldTryLowerPriorityFirst,
-				"Status code %d should determine priority logic correctly", tt.statusCode)
-		})
-	}
 }
 
 // TestChannelExclusionLogic tests the channel exclusion functionality

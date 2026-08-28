@@ -637,9 +637,25 @@ func CacheGetRandomSatisfiedChannelExcludingWithContext(ctx context.Context, gro
 			if channel == nil {
 				channel = candidateChannels[random.RandRange(endIdx, len(candidateChannels))]
 			}
+			// Tier diagnostics: which tier was skipped and what remained. This is
+			// what makes an unexpected retry order explainable from the logs.
+			lg.Debug("channel tier selection in cache",
+				zap.Bool("ignore_first_priority", true),
+				zap.Int("excluded_channels", len(excludeChannelIds)),
+				zap.Int64("skipped_tier_priority", firstChannel.GetPriority()),
+				zap.Int("skipped_tier_size", endIdx),
+				zap.Int("lower_tier_candidates", len(candidateChannels)-endIdx),
+				zap.Int64("selected_priority", channel.GetPriority()),
+			)
 			lg.Info("select channel in cache", channel.Ref().Zap()...)
 			return channel, nil
 		} else {
+			lg.Debug("channel tier selection in cache: no lower tier after exclusions",
+				zap.Bool("ignore_first_priority", true),
+				zap.Int("excluded_channels", len(excludeChannelIds)),
+				zap.Int64("only_tier_priority", firstChannel.GetPriority()),
+				zap.Int("only_tier_size", len(candidateChannels)),
+			)
 			// No lower priority channels available, return error to indicate we should try a different approach
 			return nil, errors.New("no lower priority channels available after excluding failed channels")
 		}
@@ -675,6 +691,15 @@ func CacheGetRandomSatisfiedChannelExcludingWithContext(ctx context.Context, gro
 		if channel == nil {
 			channel = maxPriorityChannels[rand.Intn(len(maxPriorityChannels))]
 		}
+		// Tier diagnostics: the highest tier is recomputed AFTER exclusions, so on
+		// a retry this is the next tier down from the channels that already failed.
+		lg.Debug("channel tier selection in cache",
+			zap.Bool("ignore_first_priority", false),
+			zap.Int("excluded_channels", len(excludeChannelIds)),
+			zap.Int64("selected_tier_priority", maxPriority),
+			zap.Int("selected_tier_size", len(maxPriorityChannels)),
+			zap.Int("remaining_candidates", len(candidateChannels)),
+		)
 		lg.Info("select channel in cache", channel.Ref().Zap()...)
 		return channel, nil
 	}
