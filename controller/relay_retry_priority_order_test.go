@@ -6,13 +6,20 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	glog "github.com/Laisky/go-utils/v6/log"
+	"github.com/Laisky/zap"
+	"github.com/Laisky/zap/zapcore"
+	"github.com/Laisky/zap/zaptest/observer"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	gmw "github.com/Laisky/gin-middlewares/v7"
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
@@ -97,6 +104,9 @@ type retryOrderResult struct {
 	// processedErrors counts the async channel-error processings that were
 	// dispatched, one per failed attempt.
 	processedErrors int
+	// logs captures every log line the request-scoped logger emitted, so a
+	// scenario can assert the diagnostics an operator would read.
+	logs *observer.ObservedLogs
 }
 
 // runRelayRetryScenario drives the real controller.Relay retry loop with the
@@ -140,6 +150,14 @@ func runRelayRetryScenario(t *testing.T, initial *dbmodel.Channel, outcome retry
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
+	core, logs := observer.New(zapcore.DebugLevel)
+	requestLogger, err := glog.New(
+		glog.WithName("relay-retry-order"),
+		glog.WithLevel(glog.LevelDebug),
+		glog.WithZapOptions(zap.WrapCore(func(zapcore.Core) zapcore.Core { return core })),
+	)
+	require.NoError(t, err)
+	gmw.SetLogger(c, requestLogger)
 	body, err := json.Marshal(map[string]any{
 		"model":    retryOrderModel,
 		"messages": []map[string]string{{"role": "user", "content": "hi"}},
@@ -164,6 +182,7 @@ func runRelayRetryScenario(t *testing.T, initial *dbmodel.Channel, outcome retry
 		status:          recorder.Code,
 		body:            recorder.Body.Bytes(),
 		processedErrors: len(processed),
+		logs:            logs,
 	}
 }
 
@@ -404,4 +423,46 @@ func TestRelayRetry_413PrefersLargerMaxTokens(t *testing.T) {
 	require.Equal(t, []int{1, 3}, got.order,
 		"413 retries must skip channels whose max_tokens already rejected the request")
 	require.Equal(t, http.StatusOK, got.status)
+}
+
+// TestRelayRetry_429DiagnosticLogsShowStrictWalk double-checks issue #386 the
+// way the reporter diagnosed it: DEBUG=true, memory cache on, A(10) rate
+// limited, then reading the retry diagnostics. The "using channel to retry"
+// lines must name B then C (priorities 5 then 0), the exclusion set must grow
+// A → A,B → A,B,C, and exhaustion must stay a WARN, never an ERROR.
+func TestRelayRetry_429DiagnosticLogsShowStrictWalk(t *testing.T) {
+	channelA := retryOrderChannel(1, "A-prio-10", 10)
+	channelB := retryOrderChannel(2, "B-prio-5", 5)
+	channelC := retryOrderChannel(3, "C-prio-0", 0)
+	setupRetryOrderDB(t, []*dbmodel.Channel{channelA, channelB, channelC})
+
+	got := runRelayRetryScenario(t, channelA, rateLimited, true, 3)
+	require.Equal(t, []int{1, 2, 3}, got.order)
+
+	var retryChannels []string
+	var retryPriorities []int64
+	var policies []string
+	for _, entry := range got.logs.FilterMessage("using channel to retry").All() {
+		fields := entry.ContextMap()
+		retryChannels = append(retryChannels, fields["retry_channel"].(string))
+		retryPriorities = append(retryPriorities, fields["retry_channel_priority"].(int64))
+		policies = append(policies, fields["retry_selection_policy"].(string))
+	}
+	require.Len(t, retryChannels, 2, "exactly two retries: B then C")
+	require.True(t, strings.HasPrefix(retryChannels[0], "channel B-prio-5("), retryChannels[0])
+	require.True(t, strings.HasPrefix(retryChannels[1], "channel C-prio-0("), retryChannels[1])
+	require.Equal(t, []int64{5, 0}, retryPriorities)
+	require.Equal(t, []string{"strict_priority", "strict_priority"}, policies)
+
+	var exclusionSizes []int
+	for _, entry := range got.logs.FilterMessage("Debug: Attempting retry").All() {
+		excluded, ok := entry.ContextMap()["excluded_channels"].([]any)
+		require.True(t, ok, "excluded_channels must be an array field")
+		exclusionSizes = append(exclusionSizes, len(excluded))
+	}
+	require.Equal(t, []int{1, 2, 3}, exclusionSizes, "exclusion set must grow by one per attempt")
+
+	require.Equal(t, 0, got.logs.FilterLevelExact(zapcore.ErrorLevel).Len(),
+		"channel exhaustion after a full walk is an expected state, not an ERROR")
+	require.Equal(t, 1, got.logs.FilterMessage("relay retry exhausted: no alternative channel available").Len())
 }
