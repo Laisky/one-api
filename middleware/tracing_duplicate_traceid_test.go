@@ -14,15 +14,11 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
-	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/logger"
-	"github.com/Laisky/one-api/model"
 )
 
-func TestTracingMiddleware_AllowsSameOTelTraceIDAcrossRequests(t *testing.T) {
+func TestTracingMiddleware_AllowsSameOTelTraceIDAcrossRequestsWithoutDB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Ensure otelgin creates spans and honors traceparent headers.
@@ -32,20 +28,6 @@ func TestTracingMiddleware_AllowsSameOTelTraceIDAcrossRequests(t *testing.T) {
 	defer func() {
 		_ = tp.Shutdown(context.Background())
 	}()
-
-	// Use an isolated in-memory DB.
-	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&model.Trace{}))
-
-	originalDB := model.DB
-	originalUsingSQLite := common.UsingSQLite.Load()
-	model.DB = testDB
-	common.UsingSQLite.Store(true)
-	t.Cleanup(func() {
-		model.DB = originalDB
-		common.UsingSQLite.Store(originalUsingSQLite)
-	})
 
 	engine := gin.New()
 	engine.Use(otelgin.Middleware("one-api-test"))
@@ -69,7 +51,4 @@ func TestTracingMiddleware_AllowsSameOTelTraceIDAcrossRequests(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 	}
 
-	var count int64
-	require.NoError(t, model.DB.Model(&model.Trace{}).Count(&count).Error)
-	require.Equal(t, int64(2), count)
 }

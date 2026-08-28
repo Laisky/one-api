@@ -56,3 +56,23 @@ func TestSanitizePayloadForLogging_Base64String(t *testing.T) {
 	require.NotContains(t, previewText, base64Data)
 	require.False(t, truncated)
 }
+
+// TestPromptPreviewForLogging verifies prompt previews are sanitized and keep first and last 100 characters.
+func TestPromptPreviewForLogging(t *testing.T) {
+	t.Parallel()
+
+	short := "hello"
+	require.Equal(t, short, PromptPreviewForLogging(short))
+
+	exact := strings.Repeat("a", PromptPreviewEdgeChars*2)
+	require.Equal(t, exact, PromptPreviewForLogging(exact))
+
+	long := strings.Repeat("a", PromptPreviewEdgeChars) + "middle" + strings.Repeat("z", PromptPreviewEdgeChars)
+	require.Equal(t, strings.Repeat("a", PromptPreviewEdgeChars)+"..."+strings.Repeat("z", PromptPreviewEdgeChars), PromptPreviewForLogging(long))
+
+	multibyte := strings.Repeat("你", PromptPreviewEdgeChars) + "hidden" + strings.Repeat("好", PromptPreviewEdgeChars)
+	require.Equal(t, strings.Repeat("你", PromptPreviewEdgeChars)+"..."+strings.Repeat("好", PromptPreviewEdgeChars), PromptPreviewForLogging(multibyte))
+
+	base64Data := strings.Repeat("A", 1024)
+	require.NotContains(t, PromptPreviewForLogging(base64Data), base64Data)
+}

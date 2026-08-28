@@ -133,10 +133,9 @@ func FromContext(ctx context.Context) glog.Logger {
 
 // configureGlobalLogger reinitializes the shared logger with the provided output paths.
 func configureGlobalLogger(outputPaths, errorPaths []string) error {
-	level := Logger.Level()
 	newLogger, err := glog.New(
 		glog.WithName("one-api"),
-		glog.WithLevel(level),
+		glog.WithLevel(Logger.Level()),
 		glog.WithEncoding(glog.EncodingConsole),
 		glog.WithOutputPaths(outputPaths),
 		glog.WithErrorOutputPaths(errorPaths),

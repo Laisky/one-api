@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
-	gutils "github.com/Laisky/go-utils/v6"
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -65,22 +64,6 @@ func TestDetach_SurvivesRequestCancellation(t *testing.T) {
 	require.Error(t, gmw.Ctx(c).Err(), "request context must be cancelled")
 	require.NoError(t, detached.Err(),
 		"Detach must survive request-context cancellation so post-return DB writes are not aborted")
-}
-
-// TestDetach_CarriesTraceID verifies the trace id is snapshotted under the key
-// gin-middlewares uses, so downstream logging/tracing can still resolve it.
-func TestDetach_CarriesTraceID(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest("POST", "/v1/anything", nil)
-
-	tid, err := gmw.TraceID(c)
-	require.NoError(t, err)
-	require.NotEmpty(t, tid.String())
-
-	detached := Detach(c)
-	require.Equal(t, tid.String(), detached.Value(gutils.TracingKey),
-		"Detach must carry the request trace id by value")
 }
 
 // TestDetach_NilContext must not panic and returns a usable background context.

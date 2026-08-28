@@ -12,6 +12,7 @@ import (
 	"github.com/Laisky/one-api/common/logger"
 )
 
+// SetRouter registers all HTTP routes and optional route-level middleware.
 func SetRouter(router *gin.Engine, buildFS embed.FS) {
 	SetApiRouter(router)
 	SetDashboardRouter(router)

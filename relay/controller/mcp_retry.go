@@ -11,10 +11,10 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/tracing"
-	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/mcp"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
@@ -185,16 +185,16 @@ func invokeMCPTool(c *gin.Context, registry *mcpToolRegistry, nameKey string, ca
 	start := time.Now().UTC().UnixMilli()
 	result, err := client.CallTool(gmw.Ctx(c), candidate.Tool.Name, args)
 	end := time.Now().UTC().UnixMilli()
-	tracing.RecordTraceExternalCall(c, model.TraceExternalCall{
-		Source:      "mcp",
-		Tool:        candidate.Tool.Name,
-		ServerID:    candidate.ServerID,
-		ServerLabel: candidate.ServerLabel,
-		StartedAt:   start,
-		EndedAt:     end,
-		DurationMs:  end - start,
-		IsError:     err != nil,
-	})
+	tracing.RecordExternalCall(c,
+		attribute.String("source", "mcp"),
+		attribute.String("tool", candidate.Tool.Name),
+		attribute.Int("server_id", candidate.ServerID),
+		attribute.String("server_label", candidate.ServerLabel),
+		attribute.Int64("started_at", start),
+		attribute.Int64("ended_at", end),
+		attribute.Int64("duration_ms", end-start),
+		attribute.Bool("is_error", err != nil),
+	)
 	if err != nil {
 		return mcp.ToolCandidate{}, nil, errors.Wrapf(err, "call mcp tool %q on server %d", candidate.Tool.Name, candidate.ServerID)
 	}

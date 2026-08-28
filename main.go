@@ -47,6 +47,15 @@ import (
 
 var buildFS embed.FS
 
+// newGinLoggerMiddleware creates the standard Gin request logger middleware.
+func newGinLoggerMiddleware(logLevel glog.Level) gin.HandlerFunc {
+	return gmw.NewLoggerMiddleware(
+		gmw.WithLoggerMwColored(),
+		gmw.WithLevel(logLevel.String()),
+		gmw.WithLogger(logger.Logger.Named("gin")),
+	)
+}
+
 func main() {
 	ctx := context.Background()
 
@@ -68,7 +77,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	if config.OpenTelemetryEnabled {
+	if config.OpenTelemetryEnabled && config.OpenTelemetryEndpoint != "" {
 		otelProviders, err = telemetry.InitOpenTelemetry(ctx)
 		if err != nil {
 			logger.Logger.Fatal("failed to initialize OpenTelemetry", zap.Error(err))
@@ -87,7 +96,6 @@ func main() {
 	if err := model.InitDatabases(ctx); err != nil {
 		logger.Logger.Fatal("database bootstrap error", zap.Error(err))
 	}
-	model.StartTraceRetentionCleaner(ctx, config.TraceRetentionDays)
 	model.StartAsyncTaskRetentionCleaner(ctx, config.AsyncTaskRetentionDays)
 	err = model.CreateRootAccountIfNeed()
 	if err != nil {
@@ -177,16 +185,10 @@ func main() {
 		gin.Recovery(),
 	}
 
-	if otelProviders != nil {
-		middlewares = append(middlewares, otelgin.Middleware(config.OpenTelemetryServiceName))
-	}
+	middlewares = append(middlewares, otelgin.Middleware(config.OpenTelemetryServiceName))
 
 	middlewares = append(middlewares,
-		gmw.NewLoggerMiddleware(
-			gmw.WithLoggerMwColored(),
-			gmw.WithLevel(logLevel.String()),
-			gmw.WithLogger(logger.Logger.Named("gin")),
-		),
+		newGinLoggerMiddleware(logLevel),
 	)
 	server.Use(middlewares...)
 	// This will cause SSE not to work!!!

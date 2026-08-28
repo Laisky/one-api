@@ -178,7 +178,7 @@ func TestValidateOpenTelemetryConfig(t *testing.T) {
 		wantErr  bool
 	}{
 		{"disabled ignores endpoint", false, "", false},
-		{"enabled requires endpoint", true, "", true},
+		{"enabled without endpoint uses no exporter", true, "", false},
 		{"enabled with endpoint", true, "collector:4318", false},
 	}
 

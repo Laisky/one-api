@@ -11,6 +11,8 @@ import (
 const (
 	// DefaultLogBodyLimit defines the maximum number of bytes to emit for log previews.
 	DefaultLogBodyLimit = 4096
+	// PromptPreviewEdgeChars defines how many runes to keep from each edge of a long prompt preview.
+	PromptPreviewEdgeChars = 100
 	// LogTruncationSuffix marks truncated log values.
 	LogTruncationSuffix = "...[truncated]"
 	// base64RedactionThreshold is the minimum length that triggers base64 redaction.
@@ -27,6 +29,16 @@ var sensitiveURLQueryKeys = map[string]struct{}{
 	"secret":       {},
 	"token":        {},
 	"turnstile":    {},
+}
+
+// PromptPreviewForLogging returns a sanitized prompt preview capped to first and last 100 characters.
+func PromptPreviewForLogging(prompt string) string {
+	sanitized := sanitizeStringForLogging(prompt, DefaultLogBodyLimit)
+	runes := []rune(sanitized)
+	if len(runes) <= PromptPreviewEdgeChars*2 {
+		return sanitized
+	}
+	return string(runes[:PromptPreviewEdgeChars]) + "..." + string(runes[len(runes)-PromptPreviewEdgeChars:])
 }
 
 // SanitizeURLForLogging redacts sensitive query parameter values before URLs are written to logs or traces.
