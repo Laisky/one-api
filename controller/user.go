@@ -1113,7 +1113,7 @@ func UpdateUser(c *gin.Context) {
 	}
 
 	if quotaUpdated && originUser.Quota != newQuota {
-		note := fmt.Sprintf("admin_id=%d", adminUserID)
+		note := adminActorNote(adminUserID)
 		model.RecordManageLog(ctx, originUser.Id, "quota", common.LogQuota(originUser.Quota), common.LogQuota(newQuota), note)
 	}
 
@@ -1826,6 +1826,28 @@ func GetTotpStatus(c *gin.Context) {
 	})
 }
 
+// adminActorNote renders the acting admin for a management-log note using the
+// external UUID and username only, never the internal integer id.
+// Parameters:
+//   - adminUserId: internal id of the acting admin.
+//
+// Return values:
+//   - string: "admin=<username> admin_uuid=<uuid>" (whichever parts resolve),
+//     or "admin=unknown" when neither can be resolved.
+func adminActorNote(adminUserId int) string {
+	parts := []string{}
+	if username := strings.TrimSpace(model.GetUsernameById(adminUserId)); username != "" {
+		parts = append(parts, "admin="+username)
+	}
+	if adminUUID, err := model.GetUserUUIDByID(adminUserId); err == nil && strings.TrimSpace(adminUUID) != "" {
+		parts = append(parts, "admin_uuid="+strings.TrimSpace(adminUUID))
+	}
+	if len(parts) == 0 {
+		return "admin=unknown"
+	}
+	return strings.Join(parts, " ")
+}
+
 // AdminGetUserTotpStatus reports whether TOTP is enabled for the referenced user.
 //
 // The strict-out user DTO never carries totp_secret, so admin UIs need this
@@ -1917,7 +1939,7 @@ func AdminDisableUserTotp(c *gin.Context) {
 
 	// Log the admin action
 	adminUserId := c.GetInt(ctxkey.Id)
-	note := fmt.Sprintf("admin_id=%d target_username=%s", adminUserId, user.Username)
+	note := fmt.Sprintf("%s target_username=%s", adminActorNote(adminUserId), user.Username)
 	model.RecordManageLog(ctx, user.Id, "totp_enabled", true, false, note)
 
 	c.JSON(http.StatusOK, gin.H{

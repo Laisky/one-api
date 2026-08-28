@@ -2440,7 +2440,7 @@ Lists the models the authenticated key may access, in the OpenAI-compatible mode
 | `data[].id` | string | Model name. |
 | `data[].object` | string | Always `"model"`. |
 | `data[].created` | integer | Unix timestamp. |
-| `data[].owned_by` | string | The owning channel/adaptor name (or `channel-<id>` when unnamed). |
+| `data[].owned_by` | string | The owning channel/adaptor name (or `channel-<uuid>` when the channel type has no display name; `unknown` if the channel has no UUID). |
 | `data[].permission` | array | OpenAI-style permission records. |
 | `data[].root` | string | Equals `id`. |
 | `data[].parent` | string \| null | Always `null`. |

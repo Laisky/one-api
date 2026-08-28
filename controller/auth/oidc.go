@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -118,7 +117,7 @@ func OidcAuth(c *gin.Context) {
 			if oidcUser.PreferredUsername != "" {
 				user.Username = oidcUser.PreferredUsername
 			} else {
-				user.Username = "oidc_" + strconv.Itoa(model.GetMaxUserId()+1)
+				user.Username = defaultOAuthUsername("oidc")
 			}
 			if oidcUser.Name != "" {
 				user.DisplayName = oidcUser.Name

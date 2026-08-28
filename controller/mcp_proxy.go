@@ -292,6 +292,32 @@ func resolveToolCost(server *model.MCPServer, toolName string) int64 {
 	return 0
 }
 
+// mcpServerLabel renders an MCP server for log content by name and external
+// UUID, never by internal integer id.
+// Parameters:
+//   - ctx: request context (reserved for logging; the store lookup is context-free).
+//   - serverId: internal MCP server id.
+//
+// Return values:
+//   - string: "<name> <uuid>" when resolvable, otherwise "unknown".
+func mcpServerLabel(ctx context.Context, serverId int) string {
+	server, err := model.GetMCPServerByID(serverId)
+	if err != nil || server == nil {
+		return "unknown"
+	}
+	parts := []string{}
+	if name := strings.TrimSpace(server.Name); name != "" {
+		parts = append(parts, name)
+	}
+	if uuid := strings.TrimSpace(server.UUID); uuid != "" {
+		parts = append(parts, uuid)
+	}
+	if len(parts) == 0 {
+		return "unknown"
+	}
+	return strings.Join(parts, " ")
+}
+
 // recordMCPToolLog records an MCP tool invocation as a single LogTypeTool row.
 // The dashboard tool charts aggregate strictly on type, so this becomes one
 // row per invocation with ModelName=toolName and Quota=cost. Free invocations
@@ -303,7 +329,7 @@ func recordMCPToolLog(ctx context.Context, c *gin.Context, userId int, serverId 
 		TokenUUID:   model.StringPtrIfNotEmpty(c.GetString(ctxkey.TokenUUID)),
 		ModelName:   toolName,
 		Quota:       int(cost),
-		Content:     fmt.Sprintf("MCP tool call: %s (server %d)", toolName, serverId),
+		Content:     fmt.Sprintf("MCP tool call: %s (server %s)", toolName, mcpServerLabel(ctx, serverId)),
 		RequestId:   c.GetString(ctxkey.RequestId),
 		TraceId:     tracing.GetTraceID(c),
 		IsStream:    false,

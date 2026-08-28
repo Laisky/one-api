@@ -360,11 +360,87 @@ func sanitizeManageValue(field string, value any) string {
 	return text
 }
 
-func buildManageFallbackContent(log *Log) string {
+// logUserDetails renders the user identity for a log content string using the
+// external UUID and username only; the internal integer id never appears in
+// user-visible content.
+// Parameters:
+//   - log: log row; UserUUID/Username are resolved best-effort from UserId
+//     when missing and a database is available.
+//
+// Return values:
+//   - []string: zero or more "user=<name>" / "user_uuid=<uuid>" fragments.
+func logUserDetails(log *Log) []string {
 	details := []string{}
-	if log.UserId != 0 {
-		details = append(details, fmt.Sprintf("user_id=%d", log.UserId))
+	if log == nil {
+		return details
 	}
+	username := strings.TrimSpace(log.Username)
+	userUUID := ""
+	if log.UserUUID != nil {
+		userUUID = strings.TrimSpace(*log.UserUUID)
+	}
+	if log.UserId > 0 && DB != nil {
+		if username == "" {
+			username = strings.TrimSpace(GetUsernameById(log.UserId))
+		}
+		if userUUID == "" {
+			if resolved, err := GetUserUUIDByID(log.UserId); err == nil {
+				userUUID = strings.TrimSpace(resolved)
+			}
+		}
+	}
+	if username != "" {
+		details = append(details, fmt.Sprintf("user=%s", username))
+	}
+	if userUUID != "" {
+		details = append(details, fmt.Sprintf("user_uuid=%s", userUUID))
+	}
+	return details
+}
+
+// logChannelDetails renders the channel identity for a log content string
+// using the channel name and external UUID only.
+// Parameters:
+//   - log: log row; ChannelUUID/ChannelName are resolved best-effort from
+//     ChannelId when missing and a database is available.
+//
+// Return values:
+//   - []string: zero or more "channel=<name>" / "channel_uuid=<uuid>" fragments.
+func logChannelDetails(log *Log) []string {
+	details := []string{}
+	if log == nil {
+		return details
+	}
+	name := strings.TrimSpace(log.ChannelName)
+	channelUUID := ""
+	if log.ChannelUUID != nil {
+		channelUUID = strings.TrimSpace(*log.ChannelUUID)
+	}
+	if log.ChannelId > 0 && DB != nil && (name == "" || channelUUID == "") {
+		var row struct {
+			UUID string
+			Name string
+		}
+		if err := DB.Model(&Channel{}).Select("uuid", "name").Where("id = ?", log.ChannelId).Take(&row).Error; err == nil {
+			if name == "" {
+				name = strings.TrimSpace(row.Name)
+			}
+			if channelUUID == "" {
+				channelUUID = strings.TrimSpace(row.UUID)
+			}
+		}
+	}
+	if name != "" {
+		details = append(details, fmt.Sprintf("channel=%s", name))
+	}
+	if channelUUID != "" {
+		details = append(details, fmt.Sprintf("channel_uuid=%s", channelUUID))
+	}
+	return details
+}
+
+func buildManageFallbackContent(log *Log) string {
+	details := logUserDetails(log)
 	if log.RequestId != "" {
 		details = append(details, fmt.Sprintf("request_id=%s", log.RequestId))
 	}
@@ -385,9 +461,7 @@ func buildTopupContent(log *Log) string {
 	if log.TokenName != "" {
 		details = append(details, fmt.Sprintf("token=%s", log.TokenName))
 	}
-	if log.ChannelId != 0 {
-		details = append(details, fmt.Sprintf("channel_id=%d", log.ChannelId))
-	}
+	details = append(details, logChannelDetails(log)...)
 	if len(details) == 0 {
 		return "Top-up event recorded."
 	}
@@ -399,9 +473,7 @@ func buildConsumeContent(log *Log) string {
 	if log.ModelName != "" {
 		details = append(details, fmt.Sprintf("model=%s", log.ModelName))
 	}
-	if log.ChannelId != 0 {
-		details = append(details, fmt.Sprintf("channel_id=%d", log.ChannelId))
-	}
+	details = append(details, logChannelDetails(log)...)
 	if log.Quota != 0 {
 		details = append(details, fmt.Sprintf("quota=%s", common.LogQuota(int64(log.Quota))))
 	}
@@ -415,12 +487,7 @@ func buildConsumeContent(log *Log) string {
 }
 
 func buildSystemContent(log *Log) string {
-	details := []string{}
-	if log.Username != "" {
-		details = append(details, fmt.Sprintf("username=%s", log.Username))
-	} else if log.UserId != 0 {
-		details = append(details, fmt.Sprintf("user_id=%d", log.UserId))
-	}
+	details := logUserDetails(log)
 	if log.Quota != 0 {
 		details = append(details, fmt.Sprintf("quota=%s", common.LogQuota(int64(log.Quota))))
 	}
@@ -438,9 +505,7 @@ func buildTestContent(log *Log) string {
 	if log.ModelName != "" {
 		details = append(details, fmt.Sprintf("model=%s", log.ModelName))
 	}
-	if log.ChannelId != 0 {
-		details = append(details, fmt.Sprintf("channel_id=%d", log.ChannelId))
-	}
+	details = append(details, logChannelDetails(log)...)
 	if log.ElapsedTime != 0 {
 		details = append(details, fmt.Sprintf("elapsed=%dms", log.ElapsedTime))
 	}
@@ -458,9 +523,7 @@ func buildTestContent(log *Log) string {
 
 func buildGenericContent(log *Log) string {
 	details := []string{fmt.Sprintf("type=%d", log.Type)}
-	if log.UserId != 0 {
-		details = append(details, fmt.Sprintf("user_id=%d", log.UserId))
-	}
+	details = append(details, logUserDetails(log)...)
 	if log.RequestId != "" {
 		details = append(details, fmt.Sprintf("request_id=%s", log.RequestId))
 	}

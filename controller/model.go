@@ -897,7 +897,7 @@ func listAllSupportedModels(ctx context.Context) ([]OpenAIModels, error) {
 		}
 		owner := channeltype.IdToName(ch.Type)
 		if owner == "" || owner == "unknown" {
-			owner = fmt.Sprintf("channel-%d", ch.Id)
+			owner = channelUUIDOwner(ch.UUID)
 		}
 		for _, name := range names {
 			trimmed := strings.TrimSpace(name)
@@ -1820,25 +1820,39 @@ func resolveUserAvailableModels(abilities []dto.EnabledAbility, channelCache map
 //
 // The cached channel's own type wins when available; otherwise the ability's
 // channel_type is authoritative on its own, because GetGroupModelsV2 reads it by
-// joining channels. An unnamed or unknown type degrades to "channel-<id>" so the
-// label always identifies something real.
+// joining channels. An unnamed or unknown type degrades to "channel-<uuid>" when
+// the cached channel carries its external UUID, and to "unknown" otherwise; the
+// internal integer id never reaches the public catalog and this path stays
+// I/O-free.
 func abilityOwnerFromCache(channelID int, channelType int, cache map[int]*model.Channel) string {
 	owner := channeltype.IdToName(channelType)
 	if channelID > 0 {
 		if channel, ok := cache[channelID]; ok && channel != nil {
 			owner = channeltype.IdToName(channel.Type)
 			if owner == "" || owner == "unknown" {
-				owner = fmt.Sprintf("channel-%d", channel.Id)
+				owner = channelUUIDOwner(channel.UUID)
 			}
 		}
 	}
 	if owner == "" || owner == "unknown" {
-		if channelID > 0 {
-			return fmt.Sprintf("channel-%d", channelID)
-		}
 		return "unknown"
 	}
 	return owner
+}
+
+// channelUUIDOwner builds the owned_by fallback label for a channel whose type
+// has no display name.
+// Parameters:
+//   - channelUUID: the channel's external UUID; may be empty when not backfilled.
+//
+// Return values:
+//   - string: "channel-<uuid>" or "unknown" when the UUID is empty.
+func channelUUIDOwner(channelUUID string) string {
+	channelUUID = strings.TrimSpace(channelUUID)
+	if channelUUID == "" {
+		return "unknown"
+	}
+	return "channel-" + channelUUID
 }
 
 // buildModelEntryFromAbility renders one ability as an OpenAI model entry.

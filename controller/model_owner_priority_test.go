@@ -125,8 +125,12 @@ func TestAbilityOwnerFromCacheDoesNoDatabaseWork(t *testing.T) {
 	cache := map[int]*model.Channel{7: {Id: 7, Type: channeltype.Zhipu}}
 	require.Equal(t, "zhipu", abilityOwnerFromCache(7, channeltype.Zai, cache))
 
-	// An unnameable type degrades to a label that still identifies the channel.
-	require.Equal(t, "channel-11", abilityOwnerFromCache(11, 9999, map[int]*model.Channel{}))
+	// An unnameable type degrades to the channel's external UUID, never its
+	// integer id; with nothing cached there is no UUID to show.
+	require.Equal(t, "unknown", abilityOwnerFromCache(11, 9999, map[int]*model.Channel{}))
+	uuidCache := map[int]*model.Channel{11: {Id: 11, Type: 9999, UUID: "018f0000-0000-7000-8000-000000000011"}}
+	require.Equal(t, "channel-018f0000-0000-7000-8000-000000000011", abilityOwnerFromCache(11, 9999, uuidCache))
+	require.Equal(t, "unknown", abilityOwnerFromCache(12, 9999, map[int]*model.Channel{12: {Id: 12, Type: 9999}}))
 }
 
 // TestListAndRetrieveAgreeOnOwner pins that GET /v1/models and
