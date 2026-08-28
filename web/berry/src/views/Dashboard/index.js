@@ -205,13 +205,13 @@ const Dashboard = () => {
                     fullWidth
                     options={dashboardUsers}
                     getOptionLabel={(option) =>
-                      option.id === 0 ? option.display_name : `${option.display_name || option.username} (${option.username})`
+                      option.uuid === 'all' ? option.display_name : `${option.display_name || option.username} (${option.username})`
                     }
                     value={dashboardUsers.find(user =>
-                      (user.id === 0 ? 'all' : String(user.uuid || user.id)) === selectedUserId
+                      String(user.uuid) === selectedUserId
                     ) || null}
                     onChange={(_, newValue) => {
-                      const value = newValue ? (newValue.id === 0 ? 'all' : String(newValue.uuid || newValue.id)) : '';
+                      const value = newValue ? String(newValue.uuid) : '';
                       setSelectedUserId(value);
                     }}
                     renderInput={(params) => (
@@ -224,9 +224,9 @@ const Dashboard = () => {
                     renderOption={(props, option) => (
                       <li {...props}>
                         <div>
-                          <div>{option.id === 0 ? option.display_name : `${option.display_name || option.username} (${option.username})`}</div>
+                          <div>{option.uuid === 'all' ? option.display_name : `${option.display_name || option.username} (${option.username})`}</div>
                           <div style={{ fontSize: '0.8em', color: '#666' }}>
-                            {option.id === 0 ? 'View site-wide statistics' : `User ID: ${option.id}`}
+                            {option.uuid === 'all' ? 'View site-wide statistics' : `User UUID: ${option.uuid}`}
                           </div>
                         </div>
                       </li>

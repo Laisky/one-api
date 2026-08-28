@@ -110,8 +110,8 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
     if (success) {
       data.is_edit = true;
       setInputs(data);
-      // Set TOTP status from user data
-      setTotpEnabled(data.totp_secret && data.totp_secret !== '');
+      // totp_secret is never serialized in API responses; query the dedicated status endpoint
+      await loadTotpStatus();
     } else {
       showError(message);
     }
@@ -119,6 +119,17 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
       showError(error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTotpStatus = async () => {
+    try {
+      const res = await API.get(`/api/user/totp/status/${userId}`);
+      const { success, data } = res.data;
+      setTotpEnabled(Boolean(success && data && data.totp_enabled));
+    } catch (error) {
+      // Non-fatal: leave the TOTP control hidden when status cannot be determined
+      setTotpEnabled(false);
     }
   };
 

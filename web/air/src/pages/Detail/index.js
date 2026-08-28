@@ -54,7 +54,7 @@ const Detail = (props) => {
                 // Create options for AutoComplete
                 const options = data.map(user => ({
                     value: user.username,
-                    label: user.id === 0 ? user.display_name : `${user.display_name || user.username} (${user.username})`,
+                    label: user.uuid === 'all' ? user.display_name : `${user.display_name || user.username} (${user.username})`,
                     user: user
                 }));
                 setUserOptions(options);
@@ -453,7 +453,7 @@ const Detail = (props) => {
                                             <div>
                                                 <div>{option.label}</div>
                                                 <div style={{ fontSize: '12px', color: '#666' }}>
-                                                    {option.user.id === 0 ? '查看全站统计' : `用户ID: ${option.user.id}`}
+                                                    {option.user.uuid === 'all' ? '查看全站统计' : `用户ID: ${option.user.uuid}`}
                                                 </div>
                                             </div>
                                         )}

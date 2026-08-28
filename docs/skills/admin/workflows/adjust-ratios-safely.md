@@ -86,23 +86,23 @@ Verify with step 4 again.
 Per-channel `model_configs` changes don't require root and don't globally reload ratios. Scope: single channel.
 
 ```bash
-CHANNEL_ID=42
+CHANNEL_UUID=<channel-uuid>   # the channel's `uuid` string from `scripts/oneapi channel list`
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/channel/pricing/$CHANNEL_ID" > /tmp/pricing-$CHANNEL_ID-before.json
+  "$ONEAPI_BASE_URL/api/channel/pricing/$CHANNEL_UUID" > /tmp/pricing-$CHANNEL_UUID-before.json
 
 # Mutate
-jq '.["gpt-4o"].input_ratio = 2.0' /tmp/pricing-$CHANNEL_ID-before.json > /tmp/pricing-$CHANNEL_ID-new.json
-diff <(jq -S . /tmp/pricing-$CHANNEL_ID-before.json) <(jq -S . /tmp/pricing-$CHANNEL_ID-new.json)
+jq '.["gpt-4o"].input_ratio = 2.0' /tmp/pricing-$CHANNEL_UUID-before.json > /tmp/pricing-$CHANNEL_UUID-new.json
+diff <(jq -S . /tmp/pricing-$CHANNEL_UUID-before.json) <(jq -S . /tmp/pricing-$CHANNEL_UUID-new.json)
 
 # Apply
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -X PUT -d @/tmp/pricing-$CHANNEL_ID-new.json \
-  "$ONEAPI_BASE_URL/api/channel/pricing/$CHANNEL_ID"
+  -X PUT -d @/tmp/pricing-$CHANNEL_UUID-new.json \
+  "$ONEAPI_BASE_URL/api/channel/pricing/$CHANNEL_UUID"
 
 # Verify
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/channel/pricing/$CHANNEL_ID" | jq .
+  "$ONEAPI_BASE_URL/api/channel/pricing/$CHANNEL_UUID" | jq .
 ```
 
 This is the right knob for "upstream dropped their price, pass it through" — affects one channel, no cross-user surprise.

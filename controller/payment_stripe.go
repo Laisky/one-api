@@ -240,9 +240,18 @@ func CreateStripeCheckout(c *gin.Context) {
 	}
 	userEmail = strings.TrimSpace(userEmail)
 
+	// Stripe is a third party: hand it the external UUID, never the internal
+	// integer id. The webhook settles by session id and never reads these
+	// values, so they are informational only.
+	userRef, uuidErr := model.GetUserUUIDByID(userID)
+	if uuidErr != nil || userRef == "" {
+		logger.Warn("lookup user uuid for Stripe metadata", zap.Error(uuidErr), zap.Int("user_id", userID))
+		userRef = strconv.Itoa(userID)
+	}
+
 	params := &stripe.CheckoutSessionParams{
 		Mode:              stripe.String(string(stripe.CheckoutSessionModePayment)),
-		ClientReferenceID: stripe.String(strconv.Itoa(userID)),
+		ClientReferenceID: stripe.String(userRef),
 		SuccessURL:        stripe.String(base + "/topup?stripe=success&session_id={CHECKOUT_SESSION_ID}"),
 		CancelURL:         stripe.String(base + "/topup?stripe=cancel"),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{{
@@ -256,7 +265,7 @@ func CreateStripeCheckout(c *gin.Context) {
 			},
 		}},
 		Metadata: map[string]string{
-			"user_id":    strconv.Itoa(userID),
+			"user_id":    userRef,
 			"quota":      strconv.FormatInt(quota, 10),
 			"request_id": requestID,
 			"order_id":   strconv.Itoa(order.Id),

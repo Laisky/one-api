@@ -422,3 +422,93 @@ func TestAdminDisableUserTotp(t *testing.T) {
 	assert.False(t, response["success"].(bool))
 	assert.Equal(t, "Invalid user ID", response["message"])
 }
+
+func TestAdminGetUserTotpStatus(t *testing.T) {
+	testDB, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	adminUser := &model.User{
+		Id:          12,
+		Username:    "status-admin",
+		Password:    "hashedpassword",
+		Role:        model.RoleAdminUser,
+		Status:      model.UserStatusEnabled,
+		DisplayName: "Admin",
+		Email:       "status-admin@example.com",
+		AccessToken: "test-access-token-12",
+		AffCode:     "STADM",
+	}
+	require.NoError(t, testDB.Create(adminUser).Error)
+
+	withTotp := &model.User{
+		Id:          13,
+		Username:    "status-with-totp",
+		Password:    "hashedpassword",
+		Role:        model.RoleCommonUser,
+		Status:      model.UserStatusEnabled,
+		Email:       "status-with@example.com",
+		AccessToken: "test-access-token-13",
+		AffCode:     "STWIT",
+		TotpSecret:  "JBSWY3DPEHPK3PXP",
+	}
+	require.NoError(t, testDB.Create(withTotp).Error)
+
+	withoutTotp := &model.User{
+		Id:          14,
+		Username:    "status-without-totp",
+		Password:    "hashedpassword",
+		Role:        model.RoleCommonUser,
+		Status:      model.UserStatusEnabled,
+		Email:       "status-without@example.com",
+		AccessToken: "test-access-token-14",
+		AffCode:     "STWOT",
+	}
+	require.NoError(t, testDB.Create(withoutTotp).Error)
+
+	peerAdmin := &model.User{
+		Id:          15,
+		Username:    "status-peer-admin",
+		Password:    "hashedpassword",
+		Role:        model.RoleAdminUser,
+		Status:      model.UserStatusEnabled,
+		Email:       "status-peer@example.com",
+		AccessToken: "test-access-token-15",
+		AffCode:     "STPER",
+		TotpSecret:  "JBSWY3DPEHPK3PXP",
+	}
+	require.NoError(t, testDB.Create(peerAdmin).Error)
+
+	router := setupTestRouter()
+	router.GET("/admin/totp/status/:id", func(c *gin.Context) {
+		c.Set(ctxkey.Id, adminUser.Id)
+		c.Set(ctxkey.Role, model.RoleAdminUser)
+		AdminGetUserTotpStatus(c)
+	})
+
+	call := func(ref string) (int, map[string]any) {
+		req, _ := http.NewRequest("GET", "/admin/totp/status/"+ref, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		return w.Code, body
+	}
+
+	code, body := call(withTotp.UUID)
+	require.Equal(t, http.StatusOK, code)
+	require.True(t, body["success"].(bool))
+	require.Equal(t, true, body["data"].(map[string]any)["totp_enabled"])
+
+	code, body = call(withoutTotp.UUID)
+	require.Equal(t, http.StatusOK, code)
+	require.True(t, body["success"].(bool))
+	require.Equal(t, false, body["data"].(map[string]any)["totp_enabled"])
+
+	// Legacy integer ids are rejected under the strict-in contract.
+	_, body = call("13")
+	require.False(t, body["success"].(bool))
+
+	// Admins cannot inspect peers of the same or higher role.
+	_, body = call(peerAdmin.UUID)
+	require.False(t, body["success"].(bool))
+}

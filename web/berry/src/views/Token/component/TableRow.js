@@ -169,7 +169,7 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
 
   return (
     <>
-      <TableRow tabIndex={item.id}>
+      <TableRow tabIndex={0}>
         <TableCell>
           <ResourceRefTooltip refId={ref}>{item.name}</ResourceRefTooltip>
         </TableCell>
@@ -193,7 +193,7 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
             placement="top"
           >
             <TableSwitch
-              id={`switch-${item.id}`}
+              id={`switch-${ref}`}
               checked={statusSwitch === 1}
               onChange={handleStatus}
               // disabled={statusSwitch !== 1 && statusSwitch !== 2}

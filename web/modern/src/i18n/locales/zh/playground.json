@@ -225,6 +225,7 @@
         "no_enabled": "未找到启用的令牌。",
         "no_tokens": "无可用令牌",
         "select_placeholder": "选择令牌",
+        "unnamed": "令牌 {{ref}}",
         "unlimited": "无限"
       },
       "top_k": {

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import type { Mock } from 'vitest';
@@ -39,6 +39,13 @@ vi.mock('@/components/ui/skeleton', () => ({
   Skeleton: ({ className }: { className?: string }) => <div className={className} data-testid="skeleton" />,
 }));
 
+const navigateMock = vi.fn();
+
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return { ...actual, useNavigate: () => navigateMock };
+});
+
 vi.mock('@/lib/api', () => ({
   api: {
     get: vi.fn(),
@@ -61,8 +68,14 @@ const apiGetMock = () => api.get as Mock;
 
 type AuthUser = NonNullable<ReturnType<typeof useAuthStore.getState>['user']>;
 
+const LOG_UUID = '018f0000-0000-7000-8000-000000000901';
+const USER_UUID = '018f0000-0000-7000-8000-000000000101';
+const TOKEN_UUID = '018f0000-0000-7000-8000-000000000301';
+const CHANNEL_UUID = '018f0000-0000-7000-8000-000000000207';
+
 const defaultUser: AuthUser = {
   id: 1,
+  uuid: USER_UUID,
   username: 'fallback-user',
   role: 1,
   status: 1,
@@ -91,6 +104,7 @@ describe('LogDetailsModal', () => {
       useAuthStore.setState({ user: defaultUser, token: 'token', isAuthenticated: true });
     });
     apiGetMock().mockReset();
+    navigateMock.mockReset();
   });
 
   afterEach(() => {
@@ -102,14 +116,17 @@ describe('LogDetailsModal', () => {
 
   it('renders a detailed view that mirrors the logs table fields', async () => {
     const log: LogEntry = {
-      id: 42,
+      uuid: LOG_UUID,
+      user_uuid: USER_UUID,
+      token_uuid: TOKEN_UUID,
       type: LOG_TYPES.CONSUME,
       created_at: 1_700_000_000,
       model_name: 'gpt-4',
       origin_model_name: 'public-alias',
       token_name: 'prod-token',
       username: '',
-      channel: 12,
+      channel_uuid: CHANNEL_UUID,
+      channel_name: 'OpenAI Primary',
       quota: 5_000,
       prompt_tokens: 1_200,
       completion_tokens: 800,
@@ -141,7 +158,14 @@ describe('LogDetailsModal', () => {
     expect(screen.getByText(/requested model/i)).toBeInTheDocument();
     expect(screen.getByText('prod-token')).toBeInTheDocument();
     expect(screen.getByText('fallback-user')).toBeInTheDocument();
-    expect(screen.getByText('12')).toBeInTheDocument();
+    expect(screen.getByText(LOG_UUID)).toBeInTheDocument();
+
+    // Channel row: shows the channel name, links by channel UUID (no int id in the DTO).
+    const channelButton = screen.getByRole('button', { name: /OpenAI Primary/ });
+    expect(channelButton).toHaveAttribute('title', CHANNEL_UUID);
+    fireEvent.click(channelButton);
+    expect(navigateMock).toHaveBeenCalledWith(`/channels/edit/${CHANNEL_UUID}`);
+    expect(screen.queryByText('12')).not.toBeInTheDocument();
     expect(screen.getByText(formatLatencyForTest(log.elapsed_time))).toBeInTheDocument();
 
     const promptInput = screen.getByText(/prompt tokens \(input\)/i).closest('div');
@@ -168,13 +192,16 @@ describe('LogDetailsModal', () => {
 
   it('fetches and renders tracing information when a trace ID is present', async () => {
     const log: LogEntry = {
-      id: 77,
+      uuid: LOG_UUID,
+      user_uuid: USER_UUID,
+      token_uuid: TOKEN_UUID,
       type: LOG_TYPES.CONSUME,
       created_at: 1_700_100_000,
       model_name: 'claude-v3',
       token_name: 'trace-token',
       username: 'trace-user',
-      channel: 3,
+      channel_uuid: CHANNEL_UUID,
+      channel_name: 'Anthropic Primary',
       quota: 2_000,
       prompt_tokens: 600,
       completion_tokens: 400,
@@ -210,8 +237,8 @@ describe('LogDetailsModal', () => {
           total_time: 2_200,
         },
         log: {
-          id: 77,
-          user_id: 1,
+          uuid: LOG_UUID,
+          user_uuid: USER_UUID,
           username: 'trace-user',
           content: '',
           type: LOG_TYPES.CONSUME,
@@ -226,7 +253,7 @@ describe('LogDetailsModal', () => {
     });
 
     await waitFor(() => {
-      expect(apiGetMock()).toHaveBeenCalledWith('/api/trace/log/77');
+      expect(apiGetMock()).toHaveBeenCalledWith(`/api/trace/log/${LOG_UUID}`);
     });
 
     expect(await screen.findByText(/request information/i)).toBeInTheDocument();
@@ -243,13 +270,14 @@ describe('LogDetailsModal', () => {
     ['TOPUP', LOG_TYPES.TOPUP],
   ])('fetches trace data for %s logs when trace_id is present (regression: not CONSUME-gated)', async (_label, type) => {
     const log: LogEntry = {
-      id: 99,
+      uuid: LOG_UUID,
+      user_uuid: USER_UUID,
       type,
       created_at: 1_700_200_000,
       model_name: '',
       token_name: '',
       username: 'trace-any',
-      channel: 1,
+      channel_uuid: CHANNEL_UUID,
       quota: 0,
       prompt_tokens: 0,
       completion_tokens: 0,
@@ -273,7 +301,7 @@ describe('LogDetailsModal', () => {
           updated_at: 1_700_200_001,
           timestamps: {},
           durations: { total_time: 100 },
-          log: { id: 99, user_id: 1, username: 'trace-any', content: '', type },
+          log: { uuid: LOG_UUID, user_uuid: USER_UUID, username: 'trace-any', content: '', type },
         },
       },
     } as any);
@@ -283,19 +311,20 @@ describe('LogDetailsModal', () => {
     });
 
     await waitFor(() => {
-      expect(apiGetMock()).toHaveBeenCalledWith('/api/trace/log/99');
+      expect(apiGetMock()).toHaveBeenCalledWith(`/api/trace/log/${LOG_UUID}`);
     });
   });
 
   it('does not fetch trace data when trace_id is empty regardless of log type', async () => {
     const log: LogEntry = {
-      id: 100,
+      uuid: LOG_UUID,
+      user_uuid: USER_UUID,
       type: LOG_TYPES.CONSUME,
       created_at: 1_700_300_000,
       model_name: 'gpt-4',
       token_name: 't',
       username: 'u',
-      channel: 1,
+      channel_uuid: CHANNEL_UUID,
       quota: 0,
       prompt_tokens: 0,
       completion_tokens: 0,
@@ -313,5 +342,73 @@ describe('LogDetailsModal', () => {
     });
 
     expect(apiGetMock()).not.toHaveBeenCalled();
+  });
+  it('falls back to the channel UUID when no channel name is provided', async () => {
+    const log: LogEntry = {
+      uuid: LOG_UUID,
+      user_uuid: USER_UUID,
+      type: LOG_TYPES.CONSUME,
+      created_at: 1_700_400_000,
+      model_name: 'gpt-4',
+      token_name: 't',
+      username: 'u',
+      channel_uuid: CHANNEL_UUID,
+      quota: 0,
+      trace_id: '',
+      metadata: {},
+    };
+
+    await act(async () => {
+      renderLogDetailsModal(log);
+    });
+
+    const channelButton = screen.getByRole('button', { name: new RegExp(CHANNEL_UUID) });
+    fireEvent.click(channelButton);
+    expect(navigateMock).toHaveBeenCalledWith(`/channels/edit/${CHANNEL_UUID}`);
+  });
+
+  it('still supports legacy rows that only carry the integer channel id', async () => {
+    const log: LogEntry = {
+      id: 5,
+      type: LOG_TYPES.CONSUME,
+      created_at: 1_700_500_000,
+      model_name: 'gpt-4',
+      token_name: 't',
+      username: 'u',
+      channel: 12,
+      quota: 0,
+      trace_id: '',
+      metadata: {},
+    };
+
+    await act(async () => {
+      renderLogDetailsModal(log);
+    });
+
+    const channelButton = screen.getByRole('button', { name: /^12$/ });
+    fireEvent.click(channelButton);
+    expect(navigateMock).toHaveBeenCalledWith('/channels/edit/12');
+  });
+
+  it('omits the channel link when the log has no channel reference', async () => {
+    const log: LogEntry = {
+      uuid: LOG_UUID,
+      user_uuid: USER_UUID,
+      type: LOG_TYPES.TOPUP,
+      created_at: 1_700_600_000,
+      model_name: '',
+      username: 'u',
+      quota: 0,
+      trace_id: '',
+      metadata: {},
+    };
+
+    await act(async () => {
+      renderLogDetailsModal(log);
+    });
+
+    expect(screen.queryByText(CHANNEL_UUID)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Copy ID' })).not.toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 });

@@ -16,6 +16,24 @@ const { Header } = Layout;
 
 const MODE_OPTIONS = [{ key: 'all', text: '全部用户', value: 'all' }, { key: 'self', text: '当前用户', value: 'self' }];
 
+/**
+ * stableHash maps an arbitrary string to a non-negative integer so display
+ * colours stay consistent for the same identifier across renders and reloads.
+ *
+ * Parameters:
+ *   - value: any, coerced to string; undefined/null hash to 0.
+ *
+ * Return value: a non-negative 32-bit integer.
+ */
+function stableHash(value) {
+  const str = value === undefined || value === null ? '' : String(value);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
 const colors = ['amber', 'blue', 'cyan', 'green', 'grey', 'indigo', 'light-blue', 'lime', 'orange', 'pink', 'purple', 'red', 'teal', 'violet', 'yellow'];
 
 function renderType(type) {
@@ -59,11 +77,15 @@ const LogsTable = () => {
     title: '时间', dataIndex: 'timestamp2string'
   }, {
     title: '渠道',
-    dataIndex: 'channel',
+    dataIndex: 'channel_uuid',
     className: isAdmin() ? 'tableShow' : 'tableHiddle',
     render: (text, record, index) => {
+      const channelRef = record.channel_uuid;
+      const channelLabel = record.channel_name || channelRef;
       return (isAdminUser ? record.type === 0 || record.type === 2 ? <div>
-        {<Tag color={colors[parseInt(text) % colors.length]} size="large"> {text} </Tag>}
+        <ResourceRefTooltip refId={channelRef} label="渠道 ID">
+          <Tag color={colors[stableHash(channelRef) % colors.length]} size="large"> {channelLabel} </Tag>
+        </ResourceRefTooltip>
       </div> : <></> : <></>);
     }
   }, {
@@ -228,7 +250,7 @@ const LogsTable = () => {
           label: `${user.display_name || user.username} (@${user.username})`,
           username: user.username,
           display_name: user.display_name,
-          id: user.id
+          uuid: user.uuid
         }));
         setUserOptions(options);
       }
@@ -320,7 +342,7 @@ const LogsTable = () => {
           {compactTimestamp}
         </span>
       );
-      logs[i].key = '' + logs[i].id;
+      logs[i].key = '' + (logs[i].uuid ?? logs[i].id ?? i);
     }
     // data.key = '' + data.id
     setLogs(logs);
@@ -557,8 +579,8 @@ const LogsTable = () => {
             name="end_timestamp" disabled={keywordActive}
             onChange={value => handleInputChange(value, 'end_timestamp')} />
           {isAdminUser && <>
-            <Form.Input field="channel" label="渠道 ID" style={{ width: 176 }} value={channel}
-              placeholder="可选值" name="channel" disabled={keywordActive}
+            <Form.Input field="channel" label="渠道 UUID" style={{ width: 176 }} value={channel}
+              placeholder="可选，渠道 UUID" name="channel" disabled={keywordActive}
               onChange={value => handleInputChange(value, 'channel')} />
             <Form.Field field="username" label="用户名称" style={{ width: 176 }}>
               <AutoComplete
@@ -577,7 +599,7 @@ const LogsTable = () => {
                       {option.display_name || option.username}
                     </div>
                     <div style={{ fontSize: '12px', color: '#666' }}>
-                      @{option.username} • ID: {option.id}
+                      @{option.username}{option.uuid ? ` • ID: ${String(option.uuid).slice(0, 8)}` : ''}
                     </div>
                   </div>
                 )}

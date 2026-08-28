@@ -1826,6 +1826,50 @@ func GetTotpStatus(c *gin.Context) {
 	})
 }
 
+// AdminGetUserTotpStatus reports whether TOTP is enabled for the referenced user.
+//
+// The strict-out user DTO never carries totp_secret, so admin UIs need this
+// endpoint to decide whether to offer the "disable TOTP" action.
+//
+// Parameters:
+//   - c: gin context; path param "id" is the target user's UUID.
+//
+// Return values:
+//   - JSON {"success": true, "data": {"totp_enabled": bool}} or an error response.
+func AdminGetUserTotpStatus(c *gin.Context) {
+	targetUserRef := c.Param("id")
+	if targetUserRef == "" {
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
+		return
+	}
+
+	userId, err := resolveUserRef(targetUserRef)
+	if err != nil {
+		helper.RespondError(c, errkind.Mark(errors.New("Invalid user ID"), errkind.Of(err)))
+		return
+	}
+
+	user, err := model.GetUserById(userId, true)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+
+	myRole := c.GetInt(ctxkey.Role)
+	if myRole <= user.Role && myRole != model.RoleRootUser {
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("No permission to view user with the same or higher permission level")))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"totp_enabled": user.TotpSecret != "",
+		},
+	})
+}
+
 // AdminDisableUserTotp allows admins to disable TOTP for any user
 func AdminDisableUserTotp(c *gin.Context) {
 	ctx := gmw.Ctx(c)

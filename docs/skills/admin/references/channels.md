@@ -8,7 +8,7 @@ The full schema lives in [model/channel.go](../../../../model/channel.go). Field
 
 | Field            | Type     | Notes                                                                 |
 |------------------|----------|-----------------------------------------------------------------------|
-| `id`             | int      | Auto-assigned on create                                               |
+| `uuid`           | string   | Server-assigned external identifier. Use it in every `:uuid` path and `PUT` body; no integer `id` is exposed |
 | `type`           | int      | Provider enum — see table below                                       |
 | `name`           | string   | Human label, not unique                                               |
 | `key`            | string   | Upstream API key. Comma-separated for round-robin: `"k1,k2,k3"`       |
@@ -49,19 +49,21 @@ For the complete list, read [relay/channeltype/define.go](../../../../relay/chan
 |--------|-------------------------------|------------------------------------------|
 | GET    | `/api/channel/`               | Paginated list                           |
 | GET    | `/api/channel/search`         | Keyword search                           |
-| GET    | `/api/channel/:id`            | Single channel                           |
-| POST   | `/api/channel/`               | Create                                   |
-| PUT    | `/api/channel/`               | Update (`id` in body)                    |
-| DELETE | `/api/channel/:id`            | Delete                                   |
+| GET    | `/api/channel/:uuid`          | Single channel                           |
+| POST   | `/api/channel/`               | Create (returns `{success, message}` only — no `data`) |
+| PUT    | `/api/channel/`               | Update (`uuid` in body)                  |
+| DELETE | `/api/channel/:uuid`          | Delete                                   |
 | DELETE | `/api/channel/disabled`       | Delete all status-2 and status-3         |
 | GET    | `/api/channel/models`         | All model ids supported across channels  |
 | GET    | `/api/channel/metadata`       | Channel-building metadata (types, defaults) |
 | GET    | `/api/channel/test`           | Test multiple channels (async)           |
-| GET    | `/api/channel/test/:id`       | Test one channel synchronously           |
+| GET    | `/api/channel/test/:uuid`     | Test one channel synchronously           |
 | GET    | `/api/channel/update_balance` | Refresh balance for all (async)          |
-| GET    | `/api/channel/update_balance/:id` | Refresh balance for one                 |
-| GET    | `/api/channel/pricing/:id`    | Fetch per-channel pricing config         |
-| PUT    | `/api/channel/pricing/:id`    | Replace per-channel pricing config       |
+| GET    | `/api/channel/update_balance/:uuid` | Refresh balance for one               |
+| GET    | `/api/channel/pricing/:uuid`  | Fetch per-channel pricing config         |
+| PUT    | `/api/channel/pricing/:uuid`  | Replace per-channel pricing config       |
+
+Every `:uuid` segment is the channel's `uuid` string; the server resolves it via `resolveChannelRef` ([controller/id_refs.go](../../../../controller/id_refs.go)) and returns `channel not found` for anything else.
 | GET    | `/api/channel/default-pricing`| System default pricing                   |
 
 ## List channels
@@ -69,17 +71,17 @@ For the complete list, read [relay/channeltype/define.go](../../../../relay/chan
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   "$ONEAPI_BASE_URL/api/channel/?p=0&size=50&sort=priority&sort_order=desc" \
-  | jq '{total, items: (.data | map({id, name, type, status, group, priority}))}'
+  | jq '{total, items: (.data | map({uuid, name, type, status, group, priority}))}'
 ```
-Query params: `p` (page, 0-indexed), `size`, `sort` (`id|name|type|status|priority|weight|balance|response_time|created_time`), `sort_order` (`asc|desc`).
+Query params: `p` (page, 0-indexed), `size`, `sort`, `sort_order` (`asc|desc`). Sort allowlist ([model/channel.go](../../../../model/channel.go) `channelSortFields`): `name|type|status|response_time|test_time|priority|weight|used_quota|created_at|updated_at`. `id` is accepted but sorts on a value you cannot see — use `created_at` for insertion order. `balance` is **not** sortable server-side; sort client-side with `jq 'sort_by(.balance)'`.
 
 ## Search
 
 ```bash
-# Matches name prefix, id (numeric), or model membership
+# Matches name / model membership; a keyword that parses as a UUID matches `uuid` exactly
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   "$ONEAPI_BASE_URL/api/channel/search?keyword=azure" \
-  | jq '.data[] | {id, name, type}'
+  | jq '.data[] | {uuid, name, type}'
 ```
 
 ## Create a channel
@@ -98,7 +100,12 @@ jq -nc --arg key "$UPSTREAM_KEY" '{
       -H "Content-Type: application/json" \
       -X POST -d @- \
       "$ONEAPI_BASE_URL/api/channel/" \
-  | jq '{success, message, id: .data.id}'
+  | jq '{success, message}'
+
+# The create response carries no `data`; look the new channel up by name to get its uuid
+CHANNEL_UUID=$(curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
+  "$ONEAPI_BASE_URL/api/channel/search?keyword=openai-prod" \
+  | jq -r '.data[] | select(.name == "openai-prod") | .uuid')
 ```
 
 Azure example (needs `config` with `api_version`, and `base_url` to your Azure endpoint):
@@ -127,10 +134,10 @@ jq -nc --arg key "$AZURE_KEY" --arg url "$AZURE_ENDPOINT" '{
 
 ## Update a channel
 
-PUT with `id` in the body. Include only fields you want to change, plus fields the server requires:
+PUT with `uuid` in the body (missing → `resource uuid is required`; [controller/channel.go](../../../../controller/channel.go) `UpdateChannel`). Include only fields you want to change, plus fields the server requires:
 ```bash
 # Change priority
-jq -nc '{id: 42, priority: 20}' \
+jq -nc --arg uuid "$CHANNEL_UUID" '{uuid: $uuid, priority: 20}' \
   | curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
       -H "Content-Type: application/json" \
       -X PUT -d @- "$ONEAPI_BASE_URL/api/channel/"
@@ -138,18 +145,18 @@ jq -nc '{id: 42, priority: 20}' \
 
 To re-enable an auto-disabled channel:
 ```bash
-jq -nc '{id: 42, status: 1}' \
+jq -nc --arg uuid "$CHANNEL_UUID" '{uuid: $uuid, status: 1}' \
   | curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
       -H "Content-Type: application/json" \
       -X PUT -d @- "$ONEAPI_BASE_URL/api/channel/"
 ```
-**Do this only after fixing the root cause.** A test call (`GET /api/channel/test/42`) before re-enabling is mandatory.
+**Do this only after fixing the root cause.** A test call (`GET /api/channel/test/$CHANNEL_UUID`) before re-enabling is mandatory.
 
 ## Disable / delete
 
 **Disable (preferred):**
 ```bash
-jq -nc '{id: 42, status: 2}' \
+jq -nc --arg uuid "$CHANNEL_UUID" '{uuid: $uuid, status: 2}' \
   | curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
       -H "Content-Type: application/json" \
       -X PUT -d @- "$ONEAPI_BASE_URL/api/channel/"
@@ -158,10 +165,10 @@ jq -nc '{id: 42, status: 2}' \
 **Delete (destructive, irreversible):**
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  -X DELETE "$ONEAPI_BASE_URL/api/channel/42" \
+  -X DELETE "$ONEAPI_BASE_URL/api/channel/$CHANNEL_UUID" \
   | jq '{success, message}'
 ```
-Historical logs with `channel_id=42` remain, but the channel row is gone. Prefer keep-disabled for at least one billing cycle.
+Historical logs keep their `channel_uuid`, but the channel row is gone. Prefer keep-disabled for at least one billing cycle.
 
 **Bulk-delete all disabled:**
 ```bash
@@ -175,7 +182,7 @@ Removes every channel with `status` in `{2, 3}`. Require explicit user confirmat
 Single, synchronous:
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/channel/test/42?model=gpt-4o-mini" \
+  "$ONEAPI_BASE_URL/api/channel/test/$CHANNEL_UUID?model=gpt-4o-mini" \
   | jq '{success, message, time, modelName}'
 ```
 Response:
@@ -194,7 +201,7 @@ curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
 ```bash
 # Single
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/channel/update_balance/42" \
+  "$ONEAPI_BASE_URL/api/channel/update_balance/$CHANNEL_UUID" \
   | jq '{success, balance, message}'
 
 # All (async)
@@ -207,14 +214,14 @@ Not all providers expose balance APIs. `success=false` with `"not supported"` is
 
 Per-channel pricing lives in two places:
 - `model_configs` field on the channel row (preferred, new format).
-- `/api/channel/pricing/:id` endpoints (same data, dedicated endpoints).
+- `/api/channel/pricing/:uuid` endpoints (same data, dedicated endpoints).
 
 See [groups-and-ratios.md](groups-and-ratios.md) for the ratio model and JSON shape.
 
 Fetch:
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/channel/pricing/42" | jq .
+  "$ONEAPI_BASE_URL/api/channel/pricing/$CHANNEL_UUID" | jq .
 ```
 
 Replace:
@@ -224,14 +231,16 @@ jq -nc '{
   "gpt-4o-mini": {"input_ratio": 0.15, "output_ratio": 0.6}
 }' | curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
       -H "Content-Type: application/json" \
-      -X PUT -d @- "$ONEAPI_BASE_URL/api/channel/pricing/42"
+      -X PUT -d @- "$ONEAPI_BASE_URL/api/channel/pricing/$CHANNEL_UUID"
 ```
 
 ## Pitfalls
 
+- **No integer ids.** Responses expose `uuid` only and every path/body identifier must be that string. `{id: 42, ...}` fails with `resource uuid is required`; build bodies with `jq --arg uuid` (string), never `--argjson`.
+- **`POST /api/channel/` returns no `data`.** Capture the new `uuid` with a follow-up `/api/channel/search?keyword=<name>` filtered by exact `.name`.
 - **`weight` is a `*uint` pointer.** Null means "use default weight". To force equal weight, omit the field rather than sending `0`.
 - **`priority` default is 0.** If you create a channel without setting priority, it's the lowest. Set `priority: 10` for "normal" and higher for premium routes.
-- **Changing `models` does not resync abilities automatically — most server versions trigger an ability-table rebuild on channel update. If a newly added model isn't routable, call `POST /api/debug/channel/:id/fix`.**
+- **Changing `models` does not resync abilities automatically — most server versions trigger an ability-table rebuild on channel update. If a newly added model isn't routable, call `POST /api/debug/channel/:uuid/fix`.**
 - **`group` must match a group listed in `/api/group/`.** Adding a channel with `group: "vip"` when `vip` doesn't exist in `GroupRatio` silently routes no one to it. Create the group first (see [groups-and-ratios.md](groups-and-ratios.md)).
 - **Azure channels need `config.api_version`.** Missing → 404 from upstream on first request.
 - **Deprecated fields `model_ratio` and `completion_ratio` on the channel row are for backward compat.** Prefer `model_configs`.

@@ -56,14 +56,32 @@ const EditUser = (props) => {
     if (success) {
       data.password = '';
       setInputs(data);
-      // For admin editing other users, set TOTP status from user data
+      // The user DTO never exposes the TOTP secret; ask the dedicated
+      // admin status endpoint instead.
       if (userId) {
-        setTotpEnabled(data.totp_secret && data.totp_secret !== '');
+        await loadTotpStatus();
       }
     } else {
       showError(message);
     }
     setLoading(false);
+  };
+
+  // loadTotpStatus fetches whether the edited user has TOTP enabled via the
+  // admin-only status endpoint and updates the local flag. Failures are
+  // reported but leave the flag untouched.
+  const loadTotpStatus = async () => {
+    try {
+      const res = await API.get(`/api/user/totp/status/${userId}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setTotpEnabled(Boolean(data?.totp_enabled));
+      } else {
+        showError(message);
+      }
+    } catch (error) {
+      showError(error.message);
+    }
   };
 
   const adminDisableTotp = async () => {

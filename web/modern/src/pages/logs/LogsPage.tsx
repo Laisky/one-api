@@ -617,7 +617,7 @@ export function LogsPage() {
                 transformResponse={(data) =>
                   Array.isArray(data)
                     ? data.map((t: any) => ({
-                        key: String(t.id),
+                        key: String(t.uuid ?? t.id ?? t.name),
                         value: t.name,
                         text: t.name,
                       }))
@@ -638,7 +638,7 @@ export function LogsPage() {
                 transformResponse={(data) =>
                   Array.isArray(data)
                     ? data.map((u: any) => ({
-                        key: String(u.id),
+                        key: String(u.uuid ?? u.id ?? u.username),
                         value: u.username,
                         text: u.username,
                       }))

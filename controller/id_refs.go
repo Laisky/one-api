@@ -22,16 +22,28 @@ func resolveUserRef(ref string) (int, error) {
 
 // resolveOptionalUserRef resolves an optional user UUID string.
 // Parameters:
-//   - ref: client supplied user reference; empty means no filter.
+//   - ref: client supplied user reference; empty or "0" means no filter.
 //
 // Return values:
 //   - int: internal user primary key, or 0 when ref is empty.
 //   - error: invalid-reference or not-found error.
 func resolveOptionalUserRef(ref string) (int, error) {
-	if strings.TrimSpace(ref) == "" {
+	if isUnsetOptionalRef(ref) {
 		return 0, nil
 	}
 	return resolveUserRef(ref)
+}
+
+// isUnsetOptionalRef reports whether an optional reference means "no filter".
+// Parameters:
+//   - ref: client supplied optional reference.
+//
+// Return values:
+//   - bool: true for an empty value or the legacy integer sentinel "0", which
+//     pre-UUID clients (and the bundled admin CLI) send to mean "all".
+func isUnsetOptionalRef(ref string) bool {
+	trimmed := strings.TrimSpace(ref)
+	return trimmed == "" || trimmed == "0"
 }
 
 // resolveChannelRef resolves a channel UUID string to an internal id.
@@ -47,13 +59,13 @@ func resolveChannelRef(ref string) (int, error) {
 
 // resolveOptionalChannelRef resolves an optional channel UUID string.
 // Parameters:
-//   - ref: client supplied channel reference; empty means no filter.
+//   - ref: client supplied channel reference; empty or "0" means no filter.
 //
 // Return values:
 //   - int: internal channel primary key, or 0 when ref is empty.
 //   - error: invalid-reference or not-found error.
 func resolveOptionalChannelRef(ref string) (int, error) {
-	if strings.TrimSpace(ref) == "" {
+	if isUnsetOptionalRef(ref) {
 		return 0, nil
 	}
 	return resolveChannelRef(ref)
@@ -94,13 +106,13 @@ func resolveMCPServerRef(ref string) (int, error) {
 
 // resolveOptionalMCPServerRef resolves an optional MCP server UUID string.
 // Parameters:
-//   - ref: client supplied MCP server reference; empty means no filter.
+//   - ref: client supplied MCP server reference; empty or "0" means no filter.
 //
 // Return values:
 //   - int: internal MCP server primary key, or 0 when ref is empty.
 //   - error: invalid-reference or not-found error.
 func resolveOptionalMCPServerRef(ref string) (int, error) {
-	if strings.TrimSpace(ref) == "" {
+	if isUnsetOptionalRef(ref) {
 		return 0, nil
 	}
 	return resolveMCPServerRef(ref)

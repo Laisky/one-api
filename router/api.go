@@ -29,7 +29,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/user/get-by-token", middleware.TokenAuth(), controller.GetSelfByToken)
 		apiRouter.GET("/available_models", middleware.TokenAuth(), controller.GetAvailableModelsByToken)
 		apiRouter.POST("/user/reset", middleware.CriticalRateLimit(), controller.ResetPassword)
-	apiRouter.POST("/payment/stripe/webhook", controller.StripeWebhook)
+		apiRouter.POST("/payment/stripe/webhook", controller.StripeWebhook)
 		apiRouter.GET("/oauth/github", middleware.CriticalRateLimit(), auth.GitHubOAuth)
 		apiRouter.GET("/oauth/oidc", middleware.CriticalRateLimit(), auth.OidcAuth)
 		apiRouter.GET("/oauth/lark", middleware.CriticalRateLimit(), auth.LarkOAuth)
@@ -85,6 +85,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/manage", controller.ManageUser)
 				adminRoute.PUT("/", controller.UpdateUser)
 				adminRoute.DELETE("/:id", controller.DeleteUser)
+				adminRoute.GET("/totp/status/:id", controller.AdminGetUserTotpStatus)
 				adminRoute.POST("/totp/disable/:id", controller.AdminDisableUserTotp)
 			}
 		}

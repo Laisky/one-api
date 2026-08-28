@@ -46,7 +46,6 @@ const LoginForm = ({ ...others }) => {
   const { login, wechatLogin } = useLogin();
   const [openWechat, setOpenWechat] = useState(false);
   const [totpRequired, setTotpRequired] = useState(false);
-  const [userId, setUserId] = useState(null);
   const matchDownSM = useMediaQuery(theme.breakpoints.down('md'));
   const customization = useSelector((state) => state.customization);
   const siteInfo = useSelector((state) => state.siteInfo);
@@ -225,7 +224,6 @@ const LoginForm = ({ ...others }) => {
             // Check if TOTP is required
             if (message === 'totp_required' && data && data.totp_required) {
               setTotpRequired(true);
-              setUserId(data.user_id);
               setErrors({ submit: '请输入您的TOTP验证码' });
             } else if (message) {
               setErrors({ submit: message });
@@ -348,7 +346,6 @@ const LoginForm = ({ ...others }) => {
                       color="secondary"
                       onClick={() => {
                         setTotpRequired(false);
-                        setUserId(null);
                       }}
                     >
                       返回登录

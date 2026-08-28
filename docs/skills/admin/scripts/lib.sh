@@ -114,7 +114,7 @@ oneapi_throttle() {
 }
 
 # Ask the user for y/N confirmation. Auto-yes if ONEAPI_ASSUME_YES=1.
-# Usage: oneapi_confirm "delete channel 42?"
+# Usage: oneapi_confirm "delete channel <uuid>?"
 oneapi_confirm() {
   local prompt="$1"
   if [[ "${ONEAPI_ASSUME_YES:-0}" == "1" ]]; then

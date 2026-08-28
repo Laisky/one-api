@@ -70,7 +70,8 @@ echo "$resp" | jq '.data'
 | Message                                                            | Cause                                              |
 |--------------------------------------------------------------------|----------------------------------------------------|
 | `invalid parameters` / `invalid input`                              | JSON body failed struct validation                 |
-| `channel not found`                                                 | `:id` doesn't exist                                |
+| `resource uuid is required`                                         | `PUT` body lacks `uuid` (sending integer `id` instead) — [controller/id_refs.go](../../../../controller/id_refs.go) `preferUUIDRef` |
+| `channel not found`                                                 | `:uuid` doesn't exist or is not a uuid             |
 | upstream error strings (`auth`, `rate limit`, `model not found`)    | `GET /test/:id` — issue is on upstream side        |
 
 ### Tokens

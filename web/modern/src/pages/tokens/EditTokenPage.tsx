@@ -53,7 +53,6 @@ type TokenForm = z.output<TokenSchema>;
 
 // Matches a subset of backend Token for status handling
 type BackendToken = {
-  id: number;
   status: number;
 };
 
@@ -129,9 +128,8 @@ export function EditTokenPage() {
         if (data.subnet == null) data.subnet = '';
 
         form.reset(data);
-        // Persist original id/status for submission logic
+        // Persist original status for submission logic
         (form as any)._original = {
-          id: data.id as number,
           status: data.status as number,
         } as BackendToken;
       } else {

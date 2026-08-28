@@ -465,7 +465,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
             const parsedConfigs = JSON.parse(data.model_configs);
             // Pretty format with proper indentation
             data.model_configs = JSON.stringify(parsedConfigs, null, 2);
-            console.log('Loaded model_configs for channel:', data.id, 'type:', data.type, 'models:', Object.keys(parsedConfigs));
+            console.log('Loaded model_configs for channel:', data.uuid, 'type:', data.type, 'models:', Object.keys(parsedConfigs));
           } catch (e) {
             console.error('Failed to parse model_configs:', e);
             // If parsing fails, keep original value but log the error

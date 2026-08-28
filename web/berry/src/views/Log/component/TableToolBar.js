@@ -54,7 +54,7 @@ export default function TableToolBar({
       const { success, data } = res.data;
       if (success) {
         const options = data.map(user => ({
-          id: user.id,
+          uuid: user.uuid,
           username: user.username,
           label: `${user.display_name || user.username} (@${user.username})`,
           display_name: user.display_name
@@ -285,7 +285,7 @@ export default function TableToolBar({
                       {option.display_name || option.username}
                     </div>
                     <div style={{ fontSize: '0.9em', color: '#666' }}>
-                      @{option.username} • ID: {option.id}
+                      @{option.username}{option.uuid ? ` • ${String(option.uuid).slice(0, 8)}` : ''}
                     </div>
                   </div>
                 </li>

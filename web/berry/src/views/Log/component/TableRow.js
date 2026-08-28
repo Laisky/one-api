@@ -34,13 +34,19 @@ export default function LogTableRow({ item, userIsAdmin, onRowClick }) {
   return (
     <>
       <TableRow
-        tabIndex={item.id}
+        tabIndex={0}
         sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
         onClick={() => onRowClick && onRowClick(item.uuid || item.id)}
       >
         <TableCell data-label="时间" title={fullTimestamp}>{compactTimestamp}</TableCell>
 
-        {userIsAdmin && <TableCell data-label="渠道">{item.channel || ''}</TableCell>}
+        {userIsAdmin && (
+          <TableCell data-label="渠道">
+            <ResourceRefTooltip refId={item.channel_uuid} label="渠道 ID">
+              {item.channel_name || item.channel_uuid || ''}
+            </ResourceRefTooltip>
+          </TableCell>
+        )}
         {userIsAdmin && (
           <TableCell data-label="用户">
             <ResourceRefTooltip refId={item.user_uuid || item.user_id} label="用户 ID">

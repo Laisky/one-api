@@ -297,7 +297,7 @@ export default function Log() {
               />
               <TableBody>
                 {logs.slice(activePage * ITEMS_PER_PAGE, (activePage + 1) * ITEMS_PER_PAGE).map((row, index) => (
-                  <LogTableRow item={row} key={`${row.id}_${index}`} userIsAdmin={userIsAdmin} onRowClick={handleRowClick} />
+                  <LogTableRow item={row} key={row.uuid || row.id || index} userIsAdmin={userIsAdmin} onRowClick={handleRowClick} />
                 ))}
               </TableBody>
             </Table>

@@ -69,7 +69,7 @@ Confirm role level:
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   "$ONEAPI_BASE_URL/api/user/self" \
-  | jq '{id, username, role, status}'
+  | jq '{uuid, username, role, status}'
 ```
 - `role >= 10` → admin-capable
 - `role == 100` → root-capable (required for `/api/option/*`)

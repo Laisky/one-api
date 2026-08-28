@@ -520,7 +520,8 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     if (!log) return null;
 
     const username = log.username || user?.username || '—';
-    const channelDisplay = log.channel_uuid || log.channel || '—';
+    const channelRef = log.channel_uuid || log.channel || '';
+    const channelDisplay = log.channel_name || channelRef || '—';
     const promptTokens = log.prompt_tokens ?? 0;
     const cachedPromptTokens = log.cached_prompt_tokens ?? 0;
     const completionTokens = log.completion_tokens ?? 0;
@@ -578,12 +579,13 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
           <DetailItem
             label={t('logs.details.channel', 'Channel')}
             value={
-              log.channel != null ? (
+              channelRef ? (
                 <span className="inline-flex items-center gap-1">
                   <button
                     type="button"
                     className="inline-flex items-center gap-1 font-mono text-sm text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
-                    onClick={() => navigateTo(`/channels/edit/${log.channel}`)}
+                    title={String(channelRef)}
+                    onClick={() => navigateTo(`/channels/edit/${encodeURIComponent(String(channelRef))}`)}
                   >
                     {channelDisplay}
                     <ExternalLink className="h-3 w-3 flex-shrink-0" />
@@ -592,7 +594,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
                     size="icon"
                     variant="ghost"
                     className="h-6 w-6"
-                    onClick={() => handleCopy(String(channelDisplay))}
+                    onClick={() => handleCopy(String(channelRef))}
                     aria-label={t('common.copy_id', 'Copy ID')}
                   >
                     <Copy className="h-3 w-3" />

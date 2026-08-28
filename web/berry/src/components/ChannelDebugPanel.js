@@ -127,7 +127,7 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
                 </Typography>
                 <List dense>
                   <ListItem>
-                    <ListItemText primary={`ID: ${migrationStatus.channel_id}`} />
+                    <ListItemText primary={`UUID: ${migrationStatus.channel_uuid}`} />
                   </ListItem>
                   <ListItem>
                     <ListItemText primary={`Name: ${migrationStatus.channel_name}`} />

@@ -225,6 +225,7 @@
         "no_enabled": "No se encontraron tokens habilitados.",
         "no_tokens": "No hay tokens disponibles",
         "select_placeholder": "Selecciona un token",
+        "unnamed": "Token {{ref}}",
         "unlimited": "Ilimitado"
       },
       "top_k": {

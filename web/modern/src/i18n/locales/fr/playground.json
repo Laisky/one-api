@@ -225,6 +225,7 @@
         "no_enabled": "Aucun jeton activé trouvé.",
         "no_tokens": "Aucun jeton disponible",
         "select_placeholder": "Sélectionnez un jeton",
+        "unnamed": "Jeton {{ref}}",
         "unlimited": "Illimité"
       },
       "top_k": {

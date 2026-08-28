@@ -28,8 +28,8 @@ All list/search endpoints accept:
 | `username`        | string | Admin-only filter (self-routes ignore)                  |
 | `token_name`      | string | Filter by token label                                   |
 | `model_name`      | string | e.g. `gpt-4o`                                            |
-| `channel`         | int    | Channel id                                              |
-| `sort` / `sort_by`     | string | Column name                                        |
+| `channel`         | string | Channel `uuid` (resolved via `resolveOptionalChannelRef`; empty = no filter) |
+| `sort` / `sort_by`     | string | One of `created_at` (alias `created_time`), `prompt_tokens`, `completion_tokens`, `quota`, `elapsed_time` ([model/log.go](../../../../model/log.go) `logSortFields`); `id` accepted but opaque |
 | `order` / `sort_order` | string | `asc` / `desc`                                      |
 
 **Time range is capped at 30 days when sort requires it** ([controller/log.go](../../../../controller/log.go) — look for `thirty days` / `30 day` guards).
@@ -44,7 +44,7 @@ curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   --data-urlencode "type=2" \
   --data-urlencode "size=100" \
   -G "$ONEAPI_BASE_URL/api/log/" \
-  | jq '{total, items: (.data | map({created_at, username, token_name, model_name, prompt_tokens, completion_tokens, quota, channel_id}))}'
+  | jq '{total, items: (.data | map({created_at, username, token_name, model_name, prompt_tokens, completion_tokens, quota, channel_uuid, channel_name}))}'
 ```
 
 Always pass timestamps via `--data-urlencode` — some shells mangle the Unix-seconds integer into scientific notation.
@@ -55,12 +55,16 @@ Always pass timestamps via `--data-urlencode` — some shells mangle the Unix-se
 
 | Field               | Notes                                                     |
 |---------------------|-----------------------------------------------------------|
+| `uuid`              | Log row identifier (string); feed it to `/api/trace/log/:log_id` |
+| `user_uuid`         | Requesting user's `uuid` (nullable)                        |
 | `created_at`        | Millisecond timestamp                                      |
 | `type`              | 1=top-up, 2=consume, 3=manage, 4=system                    |
 | `username`          | Who made the request                                       |
 | `token_name`        | Token label (useful for drilling into a specific key)      |
+| `token_uuid`        | Token's `uuid` (nullable) — exact join key to `/api/admin/tokens/:uuid` |
 | `model_name`        | Model as seen from consumer                                |
-| `channel_id`        | Which upstream served it                                   |
+| `channel_uuid`      | Which upstream served it (nullable); pass it back as `?channel=` |
+| `channel_name`      | Channel label at write time (omitted when empty)           |
 | `prompt_tokens`     | Input token count                                          |
 | `completion_tokens` | Output token count                                         |
 | `quota`             | Units charged (convert with `QuotaPerUnit`)                |
@@ -112,9 +116,9 @@ Every request produces a trace record with per-stage timestamps.
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   "$ONEAPI_BASE_URL/api/trace/$TRACE_ID" | jq .
 
-# By log id (when you only have the log row id)
+# By log uuid (the log row's `uuid` field)
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/trace/log/$LOG_ID" | jq .
+  "$ONEAPI_BASE_URL/api/trace/log/$LOG_UUID" | jq .
 ```
 Admin and user both allowed — users see their own traces only.
 
@@ -136,5 +140,6 @@ Before running: export a copy of the rows you're about to delete, and confirm wi
 - **Logs include both successful and failed requests.** Filter by `type=2` (consume) for billing-relevant rows; `type=4` (system) for server internals.
 - **Pagination past ~10000 rows is slow** — the `count(*)` becomes expensive on large deployments. Always pass a tight time window.
 - **`username` filter is a substring match**, not an exact match on newer versions — double-check results for collisions like `alice` matching `alice-bot`.
-- **`channel_id` shows which upstream served the request**, but if a request retried, only the final channel is recorded. For retry telemetry, check the trace.
+- **No integer ids on log rows.** `id`, `user_id`, `channel_id`, `token_id` are gone; use `uuid`, `user_uuid`, `channel_uuid`, `token_uuid`. The `?channel=` filter takes a channel `uuid`.
+- **`channel_uuid` shows which upstream served the request**, but if a request retried, only the final channel is recorded. For retry telemetry, check the trace.
 - **`content` field carries freeform upstream error text.** Parse defensively — do not regex it into JSON.

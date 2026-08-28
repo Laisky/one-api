@@ -150,27 +150,6 @@ const ChannelsTable = () => {
         );
       }
     },
-    // {
-    //   title: '权重',
-    //   dataIndex: 'weight',
-    //   render: (text, record, index) => {
-    //     return (
-    //       <div>
-    //         <InputNumber
-    //           style={{ width: 70 }}
-    //           name="weight"
-    //           onBlur={e => {
-    //             manageChannel(record.id, 'weight', record, e.target.value);
-    //           }}
-    //           keepFocus={true}
-    //           innerButtons
-    //           defaultValue={record.weight}
-    //           min={0}
-    //         />
-    //       </div>
-    //     );
-    //   }
-    // },
     {
       title: '',
       dataIndex: 'operate',
