@@ -8,6 +8,7 @@ import (
 	"github.com/Laisky/one-api/middleware"
 )
 
+// SetRelayRouter registers the public inference and MCP relay endpoints.
 func SetRelayRouter(router *gin.Engine) {
 	// Rewrite various Claude Code prefixes to the canonical /v1/messages path.
 	// Put this before other middlewares to avoid double-running them on redispatch.
@@ -42,10 +43,9 @@ func SetRelayRouter(router *gin.Engine) {
 		modelsRouter.GET("/:model", controller.RetrieveModel)
 	}
 
-	// MCP Streamable HTTP transport: a single endpoint serves POST (JSON-RPC
-	// requests/notifications), GET (optional server-initiated SSE), and
-	// DELETE (session termination). The handler dispatches by method.
-	router.Any("/mcp", middleware.TokenAuth(), controller.MCPProxy)
+	// MCP Streamable HTTP transport: a single endpoint serves MCP 2026-07-28
+	// requests and transparently delegates legacy initialize/session clients.
+	router.Any("/mcp", middleware.TokenAuth(), controller.MCPProxyLatest)
 
 	relayMws := []gin.HandlerFunc{
 		// Track in-flight requests for graceful shutdown/drain

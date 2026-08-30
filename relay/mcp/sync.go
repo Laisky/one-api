@@ -22,7 +22,7 @@ func SyncServerTools(ctx context.Context, server *model.MCPServer) (int, error) 
 	}
 
 	client := NewStreamableHTTPClient(server, nil, defaultSyncTimeout)
-	tools, err := client.ListTools(ctx)
+	tools, err := client.ListToolsLatest(ctx)
 	if err != nil {
 		return 0, errors.Wrap(err, "list mcp tools from server")
 	}
@@ -42,9 +42,13 @@ func SyncServerTools(ctx context.Context, server *model.MCPServer) (int, error) 
 				inputSchema = string(schemaBytes)
 			}
 		}
+		displayName := tool.Title
+		if displayName == "" {
+			displayName = tool.Name
+		}
 		stored = append(stored, &model.MCPTool{
 			Name:        tool.Name,
-			DisplayName: tool.Name,
+			DisplayName: displayName,
 			Description: tool.Description,
 			InputSchema: inputSchema,
 			Status:      1,
