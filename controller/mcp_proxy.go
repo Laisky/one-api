@@ -95,9 +95,11 @@ func handleMCPPost(c *gin.Context) {
 			return
 		}
 		var params mcpInitializeParams
-		if err := json.Unmarshal(request.Params, &params); err != nil {
-			respondMCPError(c, request.ID, mcpErrInvalidParams, errors.Wrap(err, "decode mcp initialize params"))
-			return
+		if len(request.Params) != 0 {
+			if err := json.Unmarshal(request.Params, &params); err != nil {
+				respondMCPError(c, request.ID, mcpErrInvalidParams, errors.Wrap(err, "decode mcp initialize params"))
+				return
+			}
 		}
 		respondMCPResult(c, request.ID, gin.H{
 			"protocolVersion": mcp.NegotiateLegacyProtocolVersion(params.ProtocolVersion),
@@ -188,7 +190,7 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		toolName = strings.TrimSpace(params.Name)
 	}
 	if toolName == "" {
-		return nil, errors.New("tool name is required")
+		return nil, errors.WithStack(errors.New("tool name is required"))
 	}
 	if params.Arguments == nil {
 		params.Arguments = map[string]any{}
@@ -220,11 +222,11 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		return nil, errors.Errorf("no eligible MCP tool found for exact name %q", toolName)
 	}
 
-	startedAt := time.Now()
+	startedAt := time.Now() // Preserve the monotonic component for elapsed-time measurement.
 	selected, result, err := mcp.CallWithFallback(ctx, candidates, func(ctx context.Context, candidate mcp.ToolCandidate) (*mcp.CallToolResult, error) {
 		server := serverByID[candidate.ServerID]
 		if server == nil {
-			return nil, errors.New("mcp server not loaded")
+			return nil, errors.WithStack(errors.New("mcp server not loaded"))
 		}
 		descriptor, err := descriptorForMCPTool(candidate.Tool)
 		if err != nil {
@@ -326,7 +328,7 @@ func loadMCPToolsByServer(servers []*model.MCPServer) (map[int][]*model.MCPTool,
 func chargeAndRecordMCPToolCall(ctx context.Context, c *gin.Context, userID int, serverByID map[int]*model.MCPServer, selected mcp.ToolCandidate, startedAt time.Time) error {
 	server := serverByID[selected.ServerID]
 	if server == nil {
-		return errors.New("mcp server not loaded")
+		return errors.WithStack(errors.New("mcp server not loaded"))
 	}
 	cost := resolveToolCost(server, selected.Tool.Name)
 	if cost > 0 {
@@ -435,7 +437,7 @@ func getUserFromContext(c *gin.Context) (*model.User, error) {
 	}
 	userID := c.GetInt(ctxkey.Id)
 	if userID == 0 {
-		return nil, errors.New("user id missing")
+		return nil, errors.WithStack(errors.New("user id missing"))
 	}
 	user, err := model.GetUserById(userID, true)
 	if err != nil {

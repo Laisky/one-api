@@ -25,7 +25,7 @@ Every HTTP POST must also include:
 - `Mcp-Name` for `tools/call`, matching `params.name` after protocol decoding;
 - any schema-driven `Mcp-Param-*` headers declared through `x-mcp-header`.
 
-`server/discover` reports supported protocol versions, capabilities, cache metadata, and server identity. Successful results include `resultType` and `params._meta["io.modelcontextprotocol/serverInfo"]`. `tools/list` responses use deterministic ordering, a private cache scope, and a cache TTL.
+`server/discover` reports supported protocol versions, capabilities, cache metadata, and server identity. Successful results include `resultType` and `result._meta["io.modelcontextprotocol/serverInfo"]`. `tools/list` responses use deterministic ordering, a private cache scope, and a cache TTL.
 
 The HTTP endpoint validates `Origin` whenever it is present. The Origin host must match the MCP endpoint host, preventing DNS-rebinding access from an unrelated browser origin.
 

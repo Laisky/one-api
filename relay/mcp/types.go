@@ -92,19 +92,19 @@ func (t *ToolDescriptor) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return errors.Wrap(err, "decode mcp tool input schema")
 	}
-	decoded.OutputSchema, err = decodeOptionalObject(raw, "outputSchema", "output_schema")
+	decoded.OutputSchema, err = decodeNullableOptionalObject(raw, "outputSchema", "output_schema")
 	if err != nil {
 		return errors.Wrap(err, "decode mcp tool output schema")
 	}
-	decoded.Annotations, err = decodeOptionalObject(raw, "annotations")
+	decoded.Annotations, err = decodeNullableOptionalObject(raw, "annotations")
 	if err != nil {
 		return errors.Wrap(err, "decode mcp tool annotations")
 	}
-	decoded.Meta, err = decodeOptionalObject(raw, "_meta")
+	decoded.Meta, err = decodeNullableOptionalObject(raw, "_meta")
 	if err != nil {
 		return errors.Wrap(err, "decode mcp tool metadata")
 	}
-	decoded.Icons, err = decodeOptionalObjectSlice(raw, "icons")
+	decoded.Icons, err = decodeNullableOptionalObjectSlice(raw, "icons")
 	if err != nil {
 		return errors.Wrap(err, "decode mcp tool icons")
 	}
@@ -239,7 +239,7 @@ func (c *CallToolResult) UnmarshalJSON(data []byte) error {
 		}
 	}
 	var err error
-	decoded.InputRequests, err = decodeOptionalObject(raw, "inputRequests", "input_requests")
+	decoded.InputRequests, err = decodeNullableOptionalObject(raw, "inputRequests", "input_requests")
 	if err != nil {
 		return errors.Wrap(err, "decode mcp input requests")
 	}
@@ -248,7 +248,7 @@ func (c *CallToolResult) UnmarshalJSON(data []byte) error {
 			return errors.Wrap(err, "decode mcp request state")
 		}
 	}
-	decoded.Meta, err = decodeOptionalObject(raw, "_meta")
+	decoded.Meta, err = decodeNullableOptionalObject(raw, "_meta")
 	if err != nil {
 		return errors.Wrap(err, "decode mcp result metadata")
 	}
@@ -342,6 +342,23 @@ func decodeOptionalObject(raw map[string]json.RawMessage, names ...string) (map[
 	return object, nil
 }
 
+// decodeNullableOptionalObject decodes an optional object alias and treats explicit null as absence.
+//
+// Parameters:
+//   - raw: The source JSON object supplies the candidate fields.
+//   - names: The modern and legacy aliases are checked in precedence order.
+//
+// Return values:
+//   - map[string]any: The decoded object is returned, or nil when the field is absent or null.
+//   - error: A wrapped type error is returned for a present non-object, non-null value.
+func decodeNullableOptionalObject(raw map[string]json.RawMessage, names ...string) (map[string]any, error) {
+	encoded, exists := firstRawMessage(raw, names...)
+	if !exists || bytes.Equal(bytes.TrimSpace(encoded), []byte("null")) {
+		return nil, nil
+	}
+	return decodeOptionalObject(raw, names...)
+}
+
 // decodeOptionalObjectSlice decodes an optional array whose elements must be JSON objects.
 //
 // Parameters:
@@ -378,6 +395,23 @@ func decodeOptionalObjectSlice(raw map[string]json.RawMessage, name string) ([]m
 		objects = append(objects, object)
 	}
 	return objects, nil
+}
+
+// decodeNullableOptionalObjectSlice decodes an optional object array and treats field-level null as absence.
+//
+// Parameters:
+//   - raw: The source JSON object supplies the candidate array field.
+//   - name: The field name identifies the optional object array.
+//
+// Return values:
+//   - []map[string]any: The decoded objects are returned, or nil when the field is absent or null.
+//   - error: A wrapped type error is returned for a non-array value or a null/non-object element.
+func decodeNullableOptionalObjectSlice(raw map[string]json.RawMessage, name string) ([]map[string]any, error) {
+	encoded, exists := raw[name]
+	if !exists || bytes.Equal(bytes.TrimSpace(encoded), []byte("null")) {
+		return nil, nil
+	}
+	return decodeOptionalObjectSlice(raw, name)
 }
 
 // firstRawMessage returns the first present alias from a JSON object.

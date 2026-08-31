@@ -11,20 +11,19 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
-	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/mcp"
 )
 
 // executeModernMCPTool validates one modern call against its lossless descriptor and executes it.
 //
 // Parameters:
-//   - ctx: the request context controlling database and upstream work.
-//   - c: the Gin context containing the authenticated user and request headers.
-//   - params: the exact qualified tool name, arguments, signature, and optional MRTR state.
+//   - ctx: The request context controls database and upstream work.
+//   - c: The Gin context contains the authenticated user and request headers.
+//   - params: The call parameters contain the exact qualified tool name, arguments, signature, and optional MRTR state.
 //
 // Return values:
-//   - *mcp.CallToolResult: the normalized upstream result.
-//   - error: a modern validation error or a wrapped routing, execution, or billing error.
+//   - *mcp.CallToolResult: The normalized upstream result is returned on success.
+//   - error: A modern validation error or a wrapped routing, execution, or billing error is returned on failure.
 func executeModernMCPTool(ctx context.Context, c *gin.Context, params modernMCPCallParams) (*mcp.CallToolResult, error) {
 	if params.Arguments == nil {
 		params.Arguments = map[string]any{}
@@ -54,13 +53,13 @@ func executeModernMCPTool(ctx context.Context, c *gin.Context, params modernMCPC
 // callMCPToolForUserLatest routes one exact tool name across eligible servers and applies final-result billing.
 //
 // Parameters:
-//   - ctx: the request context controlling database and upstream work.
-//   - c: the Gin context containing the authenticated user and request-scoped logger.
-//   - params: the exact qualified tool name, arguments, signature, and optional MRTR state.
+//   - ctx: The request context controls database and upstream work.
+//   - c: The Gin context contains the authenticated user and request-scoped logger.
+//   - params: The call parameters contain the exact qualified tool name, arguments, signature, and optional MRTR state.
 //
 // Return values:
-//   - *mcp.CallToolResult: the normalized upstream result, including input_required intermediates.
-//   - error: a wrapped authentication, catalog, routing, execution, or billing error.
+//   - *mcp.CallToolResult: The normalized upstream result, including input_required intermediates, is returned on success.
+//   - error: A wrapped authentication, catalog, routing, execution, or billing error is returned on failure.
 func callMCPToolForUserLatest(ctx context.Context, c *gin.Context, params modernMCPCallParams) (*mcp.CallToolResult, error) {
 	logger := gmw.GetLogger(c)
 	user, err := getUserFromContext(c)
@@ -73,7 +72,7 @@ func callMCPToolForUserLatest(ctx context.Context, c *gin.Context, params modern
 		toolName = strings.TrimSpace(params.Name)
 	}
 	if toolName == "" {
-		return nil, errors.New("tool name is required")
+		return nil, errors.WithStack(errors.New("tool name is required"))
 	}
 
 	servers, serverByID, err := loadMCPCallServers(serverLabel)
@@ -102,11 +101,11 @@ func callMCPToolForUserLatest(ctx context.Context, c *gin.Context, params modern
 		return nil, errors.Errorf("no eligible MCP tool found for exact name %q", toolName)
 	}
 
-	startedAt := time.Now()
+	startedAt := time.Now() // Preserve the monotonic component for elapsed-time measurement.
 	selected, result, err := mcp.CallWithFallback(ctx, candidates, func(ctx context.Context, candidate mcp.ToolCandidate) (*mcp.CallToolResult, error) {
 		server := serverByID[candidate.ServerID]
 		if server == nil {
-			return nil, errors.New("mcp server not loaded")
+			return nil, errors.WithStack(errors.New("mcp server not loaded"))
 		}
 		descriptor, err := descriptorForMCPTool(candidate.Tool)
 		if err != nil {
@@ -144,11 +143,11 @@ func callMCPToolForUserLatest(ctx context.Context, c *gin.Context, params modern
 // filterExactMCPToolCandidates removes candidates that only matched case-insensitive policy normalization.
 //
 // Parameters:
-//   - candidates: policy-filtered candidates returned by the shared registry.
-//   - exactName: the exact case-sensitive upstream wire name requested by the client.
+//   - candidates: The policy-filtered candidates come from the shared registry.
+//   - exactName: The exactName value is the case-sensitive upstream wire name requested by the client.
 //
 // Return values:
-//   - []mcp.ToolCandidate: candidates whose stored wire names exactly equal exactName.
+//   - []mcp.ToolCandidate: The returned candidates have stored wire names that exactly equal exactName.
 func filterExactMCPToolCandidates(candidates []mcp.ToolCandidate, exactName string) []mcp.ToolCandidate {
 	filtered := make([]mcp.ToolCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
@@ -163,10 +162,10 @@ func filterExactMCPToolCandidates(candidates []mcp.ToolCandidate, exactName stri
 // shouldBillMCPToolResult reports whether one result represents a successful completed logical call.
 //
 // Parameters:
-//   - result: the normalized upstream result.
+//   - result: The normalized upstream result is inspected for final completion.
 //
 // Return values:
-//   - bool: true only for non-error results whose resultType is complete.
+//   - bool: True is returned only for non-error results whose resultType is complete.
 func shouldBillMCPToolResult(result *mcp.CallToolResult) bool {
 	return result != nil && !result.IsError && result.ResultType == mcp.ResultTypeComplete
 }

@@ -257,7 +257,7 @@ func (c *StreamableHTTPClient) doModernRPC(ctx context.Context, method string, p
 		return errors.Wrap(err, "create modern mcp request")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	for key, value := range c.Headers {
+	for key, value := range c.headerSnapshot() {
 		req.Header.Set(key, value)
 	}
 	for key := range req.Header {
@@ -290,7 +290,7 @@ func (c *StreamableHTTPClient) doModernRPC(ctx context.Context, method string, p
 	}
 
 	c.debugLogRequest(method, req.Header, data)
-	client := &http.Client{Timeout: c.Timeout}
+	client := c.httpClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "send modern mcp request")

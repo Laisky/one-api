@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"math"
+	"math/big"
 	"net/http"
 	"sort"
 	"strconv"
@@ -457,16 +458,15 @@ func renderInteger(value any) (string, error) {
 		}
 		return strconv.FormatFloat(typed, 'f', -1, 64), nil
 	case json.Number:
-		integer, err := typed.Int64()
-		if err == nil {
-			signed = integer
-			break
+		rational, ok := new(big.Rat).SetString(string(typed))
+		if !ok || !rational.IsInt() {
+			return "", errors.Errorf("expected exact JSON integer, got %q", typed)
 		}
-		floating, floatErr := typed.Float64()
-		if floatErr != nil || math.IsNaN(floating) || math.IsInf(floating, 0) || math.Trunc(floating) != floating || math.Abs(floating) > float64(maxMCPHeaderInteger) {
-			return "", errors.Wrap(err, "parse json integer")
+		integer := rational.Num()
+		if !integer.IsInt64() {
+			return "", errors.Errorf("integer %q exceeds the supported range", typed)
 		}
-		return strconv.FormatFloat(floating, 'f', -1, 64), nil
+		signed = integer.Int64()
 	default:
 		return "", errors.Errorf("expected integer, got %T", value)
 	}

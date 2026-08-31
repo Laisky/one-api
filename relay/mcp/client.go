@@ -311,7 +311,7 @@ func (c *StreamableHTTPClient) doRPCRaw(ctx context.Context, method string, para
 	}
 	c.debugLogRequest(method, req.Header, data)
 
-	client := &http.Client{Timeout: c.Timeout}
+	client := c.httpClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "send mcp request")
@@ -391,7 +391,7 @@ func (c *StreamableHTTPClient) sendNotification(ctx context.Context, method stri
 	}
 	c.debugLogRequest(method, req.Header, data)
 
-	client := &http.Client{Timeout: c.Timeout}
+	client := c.httpClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "send mcp notification")
@@ -627,7 +627,7 @@ func isSensitiveKey(key string) bool {
 	if key == "" {
 		return false
 	}
-	for _, token := range []string{"authorization", "proxy-authorization", "api_key", "apikey", "token", "secret", "password", "passwd", "x-api-key"} {
+	for _, token := range []string{"authorization", "proxy-authorization", "api_key", "apikey", "token", "secret", "password", "passwd", "x-api-key", "cookie"} {
 		if strings.Contains(key, token) {
 			return true
 		}

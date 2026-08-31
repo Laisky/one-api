@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -131,4 +132,49 @@ func TestFilterValidToolDescriptorsExcludesInvalidTools(t *testing.T) {
 	require.Equal(t, []ToolDescriptor{tools[0]}, valid)
 	require.Len(t, rejected, 1)
 	require.Equal(t, "invalid", rejected[0].Name)
+}
+
+// TestToolArgumentHeadersEncodeEitherSentinelBoundary verifies a single reserved boundary is never emitted as plain text.
+//
+// Parameters:
+//   - t: The test owns reserved-sentinel encoding assertions.
+//
+// Return values: none; failures are reported through t.
+func TestToolArgumentHeadersEncodeEitherSentinelBoundary(t *testing.T) {
+	schema := map[string]any{"properties": map[string]any{"value": map[string]any{"type": "string", "x-mcp-header": "Value"}}}
+	for _, value := range []string{"=?base64?literal", "literal?="} {
+		headers, err := ToolArgumentHeaders(schema, map[string]any{"value": value})
+		require.NoError(t, err)
+		require.NotEqual(t, value, headers.Get("Mcp-Param-Value"))
+		decoded, err := DecodeMCPHeaderValue(headers.Get("Mcp-Param-Value"))
+		require.NoError(t, err)
+		require.Equal(t, value, decoded)
+	}
+}
+
+// TestValidateToolArgumentHeadersComparesIntegersNumerically verifies equivalent decimal representations are accepted.
+//
+// Parameters:
+//   - t: The test owns numeric header validation assertions.
+//
+// Return values: none; failures are reported through t.
+func TestValidateToolArgumentHeadersComparesIntegersNumerically(t *testing.T) {
+	schema := map[string]any{"properties": map[string]any{"value": map[string]any{"type": "integer", "x-mcp-header": "Value"}}}
+	headers := make(http.Header)
+	headers.Set("Mcp-Param-Value", "42.0")
+	require.NoError(t, ValidateToolArgumentHeaders(headers, schema, map[string]any{"value": float64(42)}))
+}
+
+// TestRenderIntegerRejectsRoundedJSONNumbers verifies fractional JSON numbers cannot round into accepted integers.
+//
+// Parameters:
+//   - t: The test owns exact-number parsing assertions.
+//
+// Return values: none; failures are reported through t.
+func TestRenderIntegerRejectsRoundedJSONNumbers(t *testing.T) {
+	_, err := renderInteger(json.Number("1.0000000000000001"))
+	require.ErrorContains(t, err, "exact JSON integer")
+	value, err := renderInteger(json.Number("1e3"))
+	require.NoError(t, err)
+	require.Equal(t, "1000", value)
 }

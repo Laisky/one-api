@@ -739,7 +739,7 @@ func TestMCPProxy_FullInspectorHandshake(t *testing.T) {
 	require.Nil(t, initResp["error"])
 	result, ok := initResp["result"].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, mcpProtocolVersion, result["protocolVersion"])
+	require.Equal(t, mcp.LegacyProtocolVersionFallback, result["protocolVersion"])
 	info := result["serverInfo"].(map[string]any)
 	require.Equal(t, mcpServerName, info["name"])
 

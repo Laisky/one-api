@@ -113,7 +113,7 @@ func TestMCPProxyLatestDelegatesLegacyInitialize(t *testing.T) {
 		Result map[string]any `json:"result"`
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
-	require.Equal(t, mcpProtocolVersion, envelope.Result["protocolVersion"])
+	require.Equal(t, mcp.LegacyProtocolVersionFallback, envelope.Result["protocolVersion"])
 }
 
 // TestMCPProxyLatestClientServerContract verifies one-api's modern client can drive its own modern server.

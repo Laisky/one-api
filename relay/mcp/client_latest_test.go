@@ -34,7 +34,7 @@ func TestListToolsLatestUsesModernRequestModel(t *testing.T) {
 		require.Equal(t, ProtocolVersion, meta[MetaProtocolVersionKey])
 		require.NotNil(t, meta[MetaClientCapabilitiesKey])
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeMCPTestJSON(t, w, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      request.ID,
 			"result": map[string]any{
@@ -68,7 +68,7 @@ func TestCallToolLatestSendsSchemaDrivenHeaders(t *testing.T) {
 		}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeMCPTestJSON(t, w, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      request.ID,
 			"result": map[string]any{
@@ -112,12 +112,12 @@ func TestListToolsLatestFallsBackToLegacy(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if request.Method == "tools/list" && r.Header.Get(MethodHeader) != "" {
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"initialize required"}}`)
+			writeMCPTestText(t, w, `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"initialize required"}}`)
 			return
 		}
 		switch request.Method {
 		case "initialize":
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeMCPTestJSON(t, w, map[string]any{
 				"jsonrpc": "2.0",
 				"id":      request.ID,
 				"result": map[string]any{
@@ -129,7 +129,7 @@ func TestListToolsLatestFallsBackToLegacy(t *testing.T) {
 		case "notifications/initialized":
 			w.WriteHeader(http.StatusAccepted)
 		case "tools/list":
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeMCPTestJSON(t, w, map[string]any{
 				"jsonrpc": "2.0",
 				"id":      request.ID,
 				"result":  map[string]any{"tools": []any{map[string]any{"name": "legacy.echo"}}},
@@ -173,7 +173,7 @@ func TestCallToolLatestEncodesNameAndMRTRFields(t *testing.T) {
 		require.Equal(t, "state", request.Params["requestState"])
 		require.Equal(t, map[string]any{"answer": "yes"}, request.Params["inputResponses"])
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeMCPTestJSON(t, w, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      request.ID,
 			"result": map[string]any{
@@ -203,7 +203,7 @@ func TestListToolsLatestExcludesInvalidHeaderSchemas(t *testing.T) {
 		}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeMCPTestJSON(t, w, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      request.ID,
 			"result": map[string]any{
@@ -259,7 +259,7 @@ func TestListToolsLatestFollowsPagination(t *testing.T) {
 			require.Equal(t, "page-2", request.Params["cursor"])
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": request.ID, "result": result})
+		writeMCPTestJSON(t, w, map[string]any{"jsonrpc": "2.0", "id": request.ID, "result": result})
 	}))
 	defer server.Close()
 
@@ -268,4 +268,31 @@ func TestListToolsLatestFollowsPagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"tool-1", "tool-2"}, []string{tools[0].Name, tools[1].Name})
 	require.Equal(t, 2, calls)
+}
+
+// writeMCPTestJSON encodes one mock HTTP response and reports failures at the write site.
+//
+// Parameters:
+//   - t: The owning test receives any encoding failure.
+//   - writer: The mock HTTP response writer receives the JSON payload.
+//   - value: The JSON-compatible response value is encoded.
+//
+// Return values: none; failures are reported through t.
+func writeMCPTestJSON(t *testing.T, writer http.ResponseWriter, value any) {
+	t.Helper()
+	require.NoError(t, json.NewEncoder(writer).Encode(value))
+}
+
+// writeMCPTestText writes one mock HTTP response and reports failures at the write site.
+//
+// Parameters:
+//   - t: The owning test receives any write failure.
+//   - writer: The mock HTTP response writer receives the text payload.
+//   - value: The response text is written exactly once.
+//
+// Return values: none; failures are reported through t.
+func writeMCPTestText(t *testing.T, writer http.ResponseWriter, value string) {
+	t.Helper()
+	_, err := fmt.Fprint(writer, value)
+	require.NoError(t, err)
 }

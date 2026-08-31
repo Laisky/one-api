@@ -210,7 +210,7 @@ func ServerResponseMeta(name, version string) ResponseMeta {
 // Return values:
 //   - map[string]any: a new parameters object that does not mutate the caller's map.
 func WithModernMeta(params map[string]any) map[string]any {
-	out := make(map[string]any, len(params)+1)
+	out := make(map[string]any)
 	for key, value := range params {
 		out[key] = value
 	}

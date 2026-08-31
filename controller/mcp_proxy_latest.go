@@ -3,6 +3,8 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	stderrors "errors"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -17,7 +19,10 @@ import (
 	"github.com/Laisky/one-api/relay/mcp"
 )
 
-const modernMCPMaxRequestBytes = 4 << 20
+const (
+	modernMCPMaxRequestBytes int64 = 4 << 20
+	legacyMCPMaxRequestBytes int64 = 32 << 20
+)
 
 // modernMCPRequestMeta extracts the required per-request metadata for MCP 2026-07-28.
 type modernMCPRequestMeta struct {
@@ -67,6 +72,19 @@ func (e *modernMCPValidationError) Error() string {
 	return e.Err.Error()
 }
 
+// Unwrap returns the underlying validation error for errors.Is and errors.As.
+//
+// Parameters: none.
+//
+// Return values:
+//   - error: The underlying validation error is returned, or nil for an empty receiver.
+func (e *modernMCPValidationError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
 // Close closes the original HTTP request body retained by replayReadCloser.
 //
 // Parameters: none.
@@ -91,39 +109,55 @@ func MCPProxyLatest(c *gin.Context) {
 		respondMCPModernError(c, nil, http.StatusForbidden, mcpErrInvalidRequest, err, nil)
 		return
 	}
-	if c.Request.Method != http.MethodPost {
+
+	versionValues := c.Request.Header.Values(mcp.ProtocolVersionHeader)
+	if len(versionValues) > 1 {
+		respondMCPModernError(c, nil, http.StatusBadRequest, mcp.ErrorCodeHeaderMismatch, errors.Errorf("%s must occur at most once", mcp.ProtocolVersionHeader), nil)
+		return
+	}
+	modernTransport := len(versionValues) == 1 && !mcp.IsLegacyProtocolVersion(versionValues[0])
+
+	switch c.Request.Method {
+	case http.MethodGet, http.MethodDelete:
+		if modernTransport {
+			c.Header("Allow", http.MethodPost)
+			c.AbortWithStatus(http.StatusMethodNotAllowed)
+			return
+		}
 		MCPProxy(c)
+		return
+	case http.MethodPost:
+		// Continue below.
+	default:
+		c.Header("Allow", http.MethodPost)
+		c.AbortWithStatus(http.StatusMethodNotAllowed)
 		return
 	}
 
-	versionValues := c.Request.Header.Values(mcp.ProtocolVersionHeader)
+	requestLimit := legacyMCPMaxRequestBytes
+	if modernTransport {
+		requestLimit = modernMCPMaxRequestBytes
+	}
+	body, err := readBoundedMCPRequestBody(c.Request.Body, requestLimit)
+	if err != nil {
+		var tooLarge *mcpRequestTooLargeError
+		if stderrors.As(err, &tooLarge) {
+			respondMCPModernError(c, nil, http.StatusRequestEntityTooLarge, mcpErrInvalidRequest, err, nil)
+			return
+		}
+		respondMCPModernError(c, nil, http.StatusBadRequest, mcpErrParseError, errors.Wrap(err, "read mcp request"), nil)
+		return
+	}
+	originalBody := c.Request.Body
+	c.Request.Body = &replayReadCloser{Reader: bytes.NewReader(body), closer: originalBody}
+
 	if len(versionValues) == 1 && mcp.IsLegacyProtocolVersion(versionValues[0]) {
 		MCPProxy(c)
 		return
 	}
 
-	originalBody := c.Request.Body
-	prefix, err := io.ReadAll(io.LimitReader(originalBody, modernMCPMaxRequestBytes+1))
-	if err != nil {
-		respondMCPModernError(c, nil, http.StatusBadRequest, mcpErrParseError, errors.Wrap(err, "read mcp request"), nil)
-		return
-	}
-	if len(prefix) > modernMCPMaxRequestBytes && len(versionValues) == 0 {
-		c.Request.Body = &replayReadCloser{
-			Reader: io.MultiReader(bytes.NewReader(prefix), originalBody),
-			closer: originalBody,
-		}
-		MCPProxy(c)
-		return
-	}
-	c.Request.Body = &replayReadCloser{Reader: bytes.NewReader(prefix), closer: originalBody}
-	if len(prefix) > modernMCPMaxRequestBytes {
-		respondMCPModernError(c, nil, http.StatusRequestEntityTooLarge, mcpErrInvalidRequest, errors.New("mcp request body exceeds 4 MiB"), nil)
-		return
-	}
-
 	var request mcpRPCRequest
-	if err := json.Unmarshal(prefix, &request); err != nil {
+	if err := json.Unmarshal(body, &request); err != nil {
 		if len(versionValues) == 0 {
 			MCPProxy(c)
 			return
@@ -135,11 +169,67 @@ func MCPProxyLatest(c *gin.Context) {
 		MCPProxy(c)
 		return
 	}
+	if int64(len(body)) > modernMCPMaxRequestBytes {
+		respondMCPModernError(c, request.ID, http.StatusRequestEntityTooLarge, mcpErrInvalidRequest, errors.Errorf("modern mcp request body exceeds %d bytes", modernMCPMaxRequestBytes), nil)
+		return
+	}
 	if err := validateModernMCPRequest(c, request); err != nil {
 		respondModernValidationError(c, request.ID, err)
 		return
 	}
 	handleModernMCPPost(c, request)
+}
+
+// mcpRequestTooLargeError records the configured request-body limit that was exceeded.
+type mcpRequestTooLargeError struct {
+	Limit int64
+}
+
+// Error returns a stable request-body limit message.
+//
+// Parameters: none.
+//
+// Return values:
+//   - string: The configured byte limit is included in the message.
+func (e *mcpRequestTooLargeError) Error() string {
+	if e == nil {
+		return "mcp request body is too large"
+	}
+	return fmt.Sprintf("mcp request body exceeds %d bytes", e.Limit)
+}
+
+// readBoundedMCPRequestBody reads one complete request without exceeding a fixed allocation boundary.
+//
+// Parameters:
+//   - reader: The inbound request body supplies the bytes to consume.
+//   - limit: The maximum accepted body size is expressed in bytes.
+//
+// Return values:
+//   - []byte: The complete request body is returned when it is within the limit.
+//   - error: A wrapped read error or mcpRequestTooLargeError is returned on failure.
+func readBoundedMCPRequestBody(reader io.Reader, limit int64) ([]byte, error) {
+	if reader == nil {
+		return nil, errors.WithStack(errors.New("mcp request body is nil"))
+	}
+	if limit < 0 {
+		return nil, errors.WithStack(errors.New("mcp request body limit is negative"))
+	}
+	limited := &io.LimitedReader{R: reader, N: limit}
+	body, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, errors.Wrap(err, "read bounded mcp request body")
+	}
+	if limited.N == 0 {
+		var extra [1]byte
+		_, probeErr := io.ReadFull(reader, extra[:])
+		if probeErr == nil {
+			return nil, &mcpRequestTooLargeError{Limit: limit}
+		}
+		if !stderrors.Is(probeErr, io.EOF) {
+			return nil, errors.Wrap(probeErr, "probe bounded mcp request body")
+		}
+	}
+	return body, nil
 }
 
 // isModernMCPRequest reports whether a request selects the 2026-07-28 stateless protocol profile.
@@ -325,8 +415,8 @@ func validateModernMCPOrigin(request *http.Request) error {
 //
 // Return values: none; the function writes a complete JSON-RPC error response.
 func respondModernValidationError(c *gin.Context, id any, err error) {
-	validationErr, ok := err.(*modernMCPValidationError)
-	if !ok || validationErr == nil {
+	var validationErr *modernMCPValidationError
+	if !stderrors.As(err, &validationErr) || validationErr == nil {
 		respondMCPModernError(c, id, http.StatusBadRequest, mcpErrInvalidRequest, err, nil)
 		return
 	}
@@ -356,7 +446,7 @@ func handleModernMCPPost(c *gin.Context, request mcpRPCRequest) {
 	case "tools/list":
 		result, err := listModernMCPToolsPage(gmw.Ctx(c), c, request.Params)
 		if err != nil {
-			respondMCPModernError(c, request.ID, http.StatusOK, mcpErrInternal, err, nil)
+			respondModernDispatchError(c, request.ID, err)
 			return
 		}
 		respondMCPModernResult(c, request.ID, result)
@@ -368,7 +458,7 @@ func handleModernMCPPost(c *gin.Context, request mcpRPCRequest) {
 		}
 		result, err := executeModernMCPTool(gmw.Ctx(c), c, params)
 		if err != nil {
-			respondMCPModernError(c, request.ID, http.StatusOK, mcpErrInternal, err, nil)
+			respondModernDispatchError(c, request.ID, err)
 			return
 		}
 		respondMCPModernResult(c, request.ID, result)
@@ -379,6 +469,23 @@ func handleModernMCPPost(c *gin.Context, request mcpRPCRequest) {
 		}
 		respondMCPModernError(c, request.ID, http.StatusNotFound, mcpErrMethodNotFound, errors.Errorf("unsupported method %s", request.Method), nil)
 	}
+}
+
+// respondModernDispatchError preserves modern validation status while redacting unexpected internal failures.
+//
+// Parameters:
+//   - c: The Gin request context receives the JSON-RPC response.
+//   - id: The JSON-RPC request identifier is reflected in the response.
+//   - err: The method failure is classified as a validation or internal error.
+//
+// Return values: none; the function writes the complete JSON-RPC error response.
+func respondModernDispatchError(c *gin.Context, id any, err error) {
+	var validationErr *modernMCPValidationError
+	if stderrors.As(err, &validationErr) && validationErr != nil {
+		respondModernValidationError(c, id, validationErr)
+		return
+	}
+	respondMCPModernError(c, id, http.StatusOK, mcpErrInternal, err, nil)
 }
 
 // respondMCPModernResult writes a successful JSON-RPC result with required defaults and server identity.
