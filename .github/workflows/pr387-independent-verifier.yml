@@ -1,0 +1,361 @@
+name: Independently verify PR 387
+
+on:
+  push:
+    branches:
+      - automation/pr387-independent-verifier
+    paths:
+      - .github/workflows/pr387-independent-verifier.yml
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: write
+  statuses: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Discover stable clean PR head
+        id: discover
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.parse
+          import urllib.request
+
+          repository = os.environ['REPOSITORY']
+          token = os.environ['GH_TOKEN']
+          headers = {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': f'Bearer {token}',
+              'User-Agent': 'pr387-independent-verifier',
+              'X-GitHub-Api-Version': '2022-11-28',
+          }
+          temporary_paths = {
+              '.github/pr387-final-trigger',
+              '.github/pr387-final-trigger-v4',
+              '.github/pr387-oracle.tmp',
+              '.github/scripts/pr387_repair.py',
+              '.github/scripts/pr387_repair_v2.py',
+              '.github/workflows/pr387-complete.yml',
+              '.github/workflows/pr387-complete-v2.yml',
+              '.github/workflows/pr387-source-snapshot.yml',
+              '.github/workflows/pr387-finalize.yml',
+              '.github/workflows/pr387-finalize-v2.yml',
+              '.github/workflows/pr387-finalize-v3.yml',
+              '.github/workflows/pr387-finalize-v4.yml',
+          }
+          required_paths = {
+              'controller/mcp_call_latest.go',
+              'controller/mcp_catalog_latest.go',
+              'controller/mcp_protocol_behavior_test.go',
+              'model/mcp_server_transport_test.go',
+              'relay/mcp/end_to_end_protocol_test.go',
+              'relay/mcp/transport_security.go',
+          }
+
+          def get(path, parameters=None):
+              query = '?' + urllib.parse.urlencode(parameters or {}) if parameters else ''
+              request = urllib.request.Request(
+                  f'https://api.github.com/repos/{repository}/{path}{query}',
+                  headers=headers,
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+          stable_sha = None
+          stable_count = 0
+          for _ in range(1500):
+              pr = get('pulls/387')
+              sha = pr['head']['sha']
+              commit = get(f'commits/{sha}')
+              tree = get(f"git/trees/{commit['commit']['tree']['sha']}", {'recursive': 1})
+              paths = {item['path'] for item in tree.get('tree', [])}
+              clean = not (temporary_paths & paths)
+              complete = required_paths <= paths
+              if clean and complete:
+                  if sha == stable_sha:
+                      stable_count += 1
+                  else:
+                      stable_sha = sha
+                      stable_count = 1
+                  if stable_count >= 5:
+                      with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+                          output.write(f'sha={sha}\n')
+                      break
+              else:
+                  stable_sha = None
+                  stable_count = 0
+              time.sleep(8)
+          else:
+              raise SystemExit('PR #387 never reached a stable clean and structurally complete head')
+          PY
+
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          repository: Laisky/one-api
+          ref: ${{ steps.discover.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: web/modern/yarn.lock
+
+      - name: Enable Yarn
+        run: corepack enable
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Run independent implementation validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '=== exact head ==='
+            git rev-parse HEAD
+            test "$(git rev-parse HEAD)" = '${{ steps.discover.outputs.sha }}'
+            echo '=== formatting and patch integrity ==='
+            test -z "$(gofmt -l $(git ls-files 'controller/mcp*.go' 'model/mcp*.go' 'relay/mcp/*.go'))"
+            git diff --check HEAD^ HEAD
+            echo '=== focused MCP behavior tests ==='
+            go test -count=1 ./relay/mcp ./model ./controller
+            echo '=== go vet ==='
+            go vet ./...
+            echo '=== race-enabled full Go tests ==='
+            go test -race -count=1 ./...
+            echo '=== Modern frontend build ==='
+            make build-frontend-modern
+          } 2>&1 | tee /tmp/pr387-independent-validation.log
+
+      - name: Require normal repository workflows for the exact head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINAL_SHA: ${{ steps.discover.outputs.sha }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.parse
+          import urllib.request
+
+          repository = os.environ['REPOSITORY']
+          sha = os.environ['FINAL_SHA']
+          token = os.environ['GH_TOKEN']
+          headers = {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': f'Bearer {token}',
+              'User-Agent': 'pr387-independent-verifier',
+              'X-GitHub-Api-Version': '2022-11-28',
+          }
+
+          def get(path, parameters=None):
+              query = '?' + urllib.parse.urlencode(parameters or {}) if parameters else ''
+              request = urllib.request.Request(
+                  f'https://api.github.com/repos/{repository}/{path}{query}',
+                  headers=headers,
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+          required = {'lint', 'pr-check'}
+          for _ in range(1500):
+              runs = get('actions/runs', {
+                  'head_sha': sha,
+                  'event': 'pull_request',
+                  'per_page': 100,
+              }).get('workflow_runs', [])
+              latest = {}
+              for run in sorted(runs, key=lambda item: item['id'], reverse=True):
+                  latest.setdefault(run['name'], run)
+              if required <= latest.keys() and all(latest[name]['status'] == 'completed' for name in required):
+                  final = {name: latest[name] for name in required}
+                  break
+              time.sleep(8)
+          else:
+              raise SystemExit('Timed out waiting for normal workflows on the exact final head')
+
+          failures = {name: run for name, run in final.items() if run.get('conclusion') != 'success'}
+          with open('/tmp/pr387-independent-workflows.json', 'w', encoding='utf-8') as output:
+              json.dump(final, output, indent=2)
+          if failures:
+              details = ', '.join(
+                  f"{name}={run.get('conclusion')} ({run.get('html_url')})"
+                  for name, run in sorted(failures.items())
+              )
+              raise SystemExit('Normal workflows are not green: ' + details)
+          PY
+
+      - name: Publish success status and final PR record
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINAL_SHA: ${{ steps.discover.outputs.sha }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          repository = os.environ['REPOSITORY']
+          sha = os.environ['FINAL_SHA']
+          token = os.environ['GH_TOKEN']
+          headers = {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': f'Bearer {token}',
+              'Content-Type': 'application/json',
+              'User-Agent': 'pr387-independent-verifier',
+              'X-GitHub-Api-Version': '2022-11-28',
+          }
+
+          def send(path, method, payload):
+              request = urllib.request.Request(
+                  f'https://api.github.com/repos/{repository}/{path}',
+                  data=json.dumps(payload).encode(),
+                  method=method,
+                  headers=headers,
+              )
+              with urllib.request.urlopen(request, timeout=30):
+                  pass
+
+          body = f'''## Summary
+
+Complete one-api's end-to-end MCP gateway upgrade to the stable `2026-07-28` protocol while retaining explicit compatibility with initialization/session-based MCP peers.
+
+one-api is covered in both roles:
+
+- **MCP server:** authenticated downstream clients use `/mcp` for `server/discover`, paginated `tools/list`, and `tools/call`.
+- **MCP client:** synchronization and execution use modern stateless requests first, with bounded fallback to supported legacy protocol profiles.
+
+## End-to-end behavior
+
+- preserve exact case-sensitive tool names across discovery, persistence, policy resolution, listing, and invocation
+- persist and re-emit complete tool descriptors, including current fields and unknown extension fields
+- replace tool catalogs atomically while retaining one-api-owned identity, status, and pricing overrides
+- expose deterministic aggregate pagination with opaque catalog-fingerprinted cursors
+- propagate modern result fields and unknown result extensions without lossy translation
+- support multi-round-trip `input_required` results and bill only a completed logical call
+- enforce mirrored MCP headers, bounded request/response bodies, exact JSON-RPC response correlation, and safe credential transport/redirect behavior
+- route legacy version headers and initialization traffic through the legacy handler without imposing modern semantics
+- keep OpenAI Responses Tool Search outside this MCP wire-protocol change; the lossless catalog is the substrate for that separate orchestration feature
+
+## Independently verified final head
+
+Exact SHA: `{sha}`
+
+Passed on this exact commit:
+
+- `git diff --check HEAD^ HEAD`
+- Go formatting verification for all touched MCP files
+- `go test -count=1 ./relay/mcp ./model ./controller`
+- `go vet ./...`
+- `go test -race -count=1 ./...`
+- `make build-frontend-modern`
+- repository `lint` workflow
+- repository `pr-check` workflow
+
+Temporary repair and verification workflows/scripts are absent from the PR branch.
+'''
+          send(f'statuses/{sha}', 'POST', {
+              'state': 'success',
+              'context': 'PR387/end-to-end-verification',
+              'description': 'MCP behavior, full race tests, vet, frontend build, lint and PR checks passed',
+          })
+          send('pulls/387', 'PATCH', {
+              'title': 'feat(mcp): complete end-to-end protocol 2026-07-28 gateway support',
+              'body': body,
+          })
+          send('issues/387/comments', 'POST', {
+              'body': f'''Independent final verification succeeded for PR #387 head `{sha}`.
+
+The exact head was checked out independently and passed focused MCP behavior tests, `go vet`, full race-enabled Go tests, the Modern frontend build, and the repository's normal `lint` and `pr-check` workflows. The PR branch contains no temporary completion scaffolding.''',
+          })
+          PY
+
+      - name: Publish failure status
+        if: failure() && steps.discover.outputs.sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINAL_SHA: ${{ steps.discover.outputs.sha }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import urllib.request
+
+          repository = os.environ['REPOSITORY']
+          sha = os.environ['FINAL_SHA']
+          token = os.environ['GH_TOKEN']
+          log = pathlib.Path('/tmp/pr387-independent-validation.log')
+          excerpt = '\n'.join(log.read_text(errors='replace').splitlines()[-120:]) if log.exists() else ''
+          headers = {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': f'Bearer {token}',
+              'Content-Type': 'application/json',
+              'User-Agent': 'pr387-independent-verifier',
+              'X-GitHub-Api-Version': '2022-11-28',
+          }
+
+          def send(path, payload):
+              request = urllib.request.Request(
+                  f'https://api.github.com/repos/{repository}/{path}',
+                  data=json.dumps(payload).encode(),
+                  method='POST',
+                  headers=headers,
+              )
+              with urllib.request.urlopen(request, timeout=30):
+                  pass
+
+          send(f'statuses/{sha}', {
+              'state': 'failure',
+              'context': 'PR387/end-to-end-verification',
+              'description': 'Independent MCP verification failed; inspect workflow logs',
+              'target_url': os.environ['RUN_URL'],
+          })
+          body = f"Independent PR #387 verification failed for `{sha}`. Workflow: {os.environ['RUN_URL']}"
+          if excerpt:
+              body += '\n\n<details><summary>Validation log tail</summary>\n\n```text\n' + excerpt[-12000:] + '\n```\n</details>'
+          send('issues/387/comments', {'body': body})
+          PY
+
+      - name: Upload independent evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr387-independent-verification-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            /tmp/pr387-independent-validation.log
+            /tmp/pr387-independent-workflows.json
