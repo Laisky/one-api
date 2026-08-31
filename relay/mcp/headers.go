@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -45,6 +46,7 @@ func ToolArgumentHeaders(schema map[string]any, arguments map[string]any) (http.
 	if err != nil {
 		return nil, errors.Wrap(err, "collect mcp tool header bindings")
 	}
+
 	headers := make(http.Header, len(bindings))
 	for _, binding := range bindings {
 		value, exists := lookupToolArgument(arguments, binding.Path)
@@ -78,6 +80,7 @@ func ValidateToolArgumentHeaders(requestHeaders http.Header, schema map[string]a
 	if err != nil {
 		return errors.Wrap(err, "derive expected mcp tool headers")
 	}
+
 	valueTypes := make(map[string]string, len(bindings))
 	for _, binding := range bindings {
 		valueTypes[strings.ToLower(ParameterHeaderPrefix+binding.HeaderName)] = binding.ValueType
@@ -93,15 +96,17 @@ func ValidateToolArgumentHeaders(requestHeaders http.Header, schema map[string]a
 	if len(actual) != len(expected) {
 		return errors.Errorf("mcp parameter header count mismatch: expected %d, got %d", len(expected), len(actual))
 	}
-	for key, values := range expected {
-		if len(values) != 1 {
+
+	for key, expectedValues := range expected {
+		if len(expectedValues) != 1 {
 			return errors.Errorf("mcp parameter header %s has invalid expected cardinality", key)
 		}
 		actualValues := actual.Values(key)
 		if len(actualValues) != 1 {
 			return errors.Errorf("mcp parameter header %s must occur exactly once", key)
 		}
-		want, err := DecodeMCPHeaderValue(values[0])
+
+		want, err := DecodeMCPHeaderValue(expectedValues[0])
 		if err != nil {
 			return errors.Wrapf(err, "decode expected mcp parameter header %s", key)
 		}
@@ -268,8 +273,13 @@ func validateToolHeaderAnnotationPlacement(value any, reachable bool, isProperty
 				if !ok {
 					continue
 				}
-				for name, property := range properties {
-					if err := validateToolHeaderAnnotationPlacement(property, true, true, location+".properties."+name); err != nil {
+				propertyNames := make([]string, 0, len(properties))
+				for name := range properties {
+					propertyNames = append(propertyNames, name)
+				}
+				sort.Strings(propertyNames)
+				for _, name := range propertyNames {
+					if err := validateToolHeaderAnnotationPlacement(properties[name], true, true, location+".properties."+name); err != nil {
 						return err
 					}
 				}
@@ -285,6 +295,7 @@ func validateToolHeaderAnnotationPlacement(value any, reachable bool, isProperty
 				return err
 			}
 		}
+	}
 	return nil
 }
 
@@ -303,8 +314,14 @@ func walkToolSchemaProperties(schema map[string]any, path []string, bindings *[]
 	if !ok {
 		return nil
 	}
-	for propertyName, rawProperty := range properties {
-		propertySchema, ok := rawProperty.(map[string]any)
+	propertyNames := make([]string, 0, len(properties))
+	for name := range properties {
+		propertyNames = append(propertyNames, name)
+	}
+	sort.Strings(propertyNames)
+
+	for _, propertyName := range propertyNames {
+		propertySchema, ok := properties[propertyName].(map[string]any)
 		if !ok {
 			continue
 		}
@@ -412,6 +429,7 @@ func renderInteger(value any) (string, error) {
 	var signed int64
 	var unsigned uint64
 	var isUnsigned bool
+
 	switch typed := value.(type) {
 	case int:
 		signed = int64(typed)
@@ -440,13 +458,19 @@ func renderInteger(value any) (string, error) {
 		return strconv.FormatFloat(typed, 'f', -1, 64), nil
 	case json.Number:
 		integer, err := typed.Int64()
-		if err != nil {
+		if err == nil {
+			signed = integer
+			break
+		}
+		floating, floatErr := typed.Float64()
+		if floatErr != nil || math.IsNaN(floating) || math.IsInf(floating, 0) || math.Trunc(floating) != floating || math.Abs(floating) > float64(maxMCPHeaderInteger) {
 			return "", errors.Wrap(err, "parse json integer")
 		}
-		signed = integer
+		return strconv.FormatFloat(floating, 'f', -1, 64), nil
 	default:
 		return "", errors.Errorf("expected integer, got %T", value)
 	}
+
 	if isUnsigned {
 		if unsigned > uint64(maxMCPHeaderInteger) {
 			return "", errors.Errorf("integer %d exceeds the JavaScript-safe range", unsigned)
