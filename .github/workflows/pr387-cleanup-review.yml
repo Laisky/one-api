@@ -1,0 +1,71 @@
+name: PR 387 cleanup and final review
+
+on:
+  push:
+    branches:
+      - feat/mcp-2026-07-28-protocol
+    paths:
+      - .github/workflows/pr387-cleanup-review.yml
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/mcp-2026-07-28-protocol
+          fetch-depth: 0
+
+      - name: Close only the accidental probe issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100" \
+            --jq '.[] | select(.pull_request == null) | select(.user.login == "Laisky") | select((.title == "probe" and .body == "do not create") or (.title == "x" and .body == "x")) | .number' \
+            | while read -r number; do
+                test -n "$number"
+                gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/${number}" -f state=closed >/dev/null
+              done
+
+      - name: Remove one-time workflows and commit cleanup
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f \
+            .github/workflows/pr387-source-snapshot.yml \
+            .github/workflows/pr387-complete.yml \
+            .github/workflows/pr387-finalize.yml \
+            .github/workflows/pr387-finalize-2.yml \
+            .github/workflows/pr387-finalize-3.yml \
+            .github/workflows/pr387-final-gate.yml \
+            .github/workflows/pr387-finalize-5.yml \
+            .github/workflows/pr387-cleanup-review.yml
+          git config user.name "Laisky.Cai"
+          git config user.email "github@laisky.com"
+          git add -A
+          git commit -m "chore: remove one-time PR acceptance workflows"
+          git push origin HEAD:feat/mcp-2026-07-28-protocol
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Request final automated reviews
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.commit.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/387/comments" \
+            -f body="Final implementation head: \`${HEAD_SHA}\`
+
+          @codex review
+
+          @coderabbitai review"
