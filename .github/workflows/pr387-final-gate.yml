@@ -1,0 +1,136 @@
+name: PR 387 final MCP acceptance gate
+
+on:
+  push:
+    branches:
+      - feat/mcp-2026-07-28-protocol
+    paths:
+      - .github/workflows/pr387-final-gate.yml
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: pr387-final-acceptance
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/mcp-2026-07-28-protocol
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Reject incomplete MCP implementation patterns
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          reject() {
+            local pattern="$1"
+            shift
+            if grep -RIn --include='*.go' --include='*.md' -- "$pattern" "$@"; then
+              echo "Forbidden incomplete MCP pattern remains: $pattern" >&2
+              exit 1
+            fi
+          }
+
+          reject '"arguments": arguments' relay/mcp
+          reject 'req.Header.Add(key, value)' relay/mcp
+          reject 'params._meta\["io.modelcontextprotocol/serverInfo"\]' docs/manuals
+          reject 'make(map\[string\]any, len(params)+1)' relay/mcp
+          reject 'strings.ToLower(t.Name)' model
+          reject 'client := &http.Client{Timeout: c.Timeout}' relay/mcp
+
+          test -f relay/mcp/security.go
+          test -f relay/mcp/client_state.go
+          grep -q 'DescriptorJSON' model/mcp_tool.go
+          grep -q 'readMCPResponseBody' relay/mcp/client.go
+          grep -q 'readMCPResponseBody' relay/mcp/client_latest.go
+          grep -q 'newMCPHTTPClient' relay/mcp/client.go
+          grep -q 'newMCPHTTPClient' relay/mcp/client_latest.go
+          grep -q 'LegacyProtocolVersionCompat' relay/mcp/protocol.go
+          grep -q 'shouldBillMCPToolResult' controller/mcp_call_latest.go
+          grep -q 'legacyMCPMaxRequestBytes' controller/mcp_proxy_latest.go
+          grep -q 'stderrors.As(err, &validationErr)' controller/mcp_proxy_latest.go
+
+      - name: Verify formatting and focused MCP behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          go test -count=1 ./relay/mcp ./model ./controller
+
+      - name: Run boundary response guardrail
+        run: go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Run race-enabled full test suite
+        run: go test -race ./...
+
+      - name: Build Modern frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          make build-frontend-modern
+
+      - name: Commit certified tree and remove temporary workflows
+        id: certify
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f \
+            .github/workflows/pr387-source-snapshot.yml \
+            .github/workflows/pr387-complete.yml \
+            .github/workflows/pr387-finalize.yml \
+            .github/workflows/pr387-finalize-2.yml \
+            .github/workflows/pr387-finalize-3.yml \
+            .github/workflows/pr387-final-gate.yml
+          git config user.name "Laisky.Cai"
+          git config user.email "github@laisky.com"
+          git add -A
+          git commit -m "ci(mcp): certify end-to-end protocol implementation"
+          git push origin HEAD:feat/mcp-2026-07-28-protocol
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Record remote acceptance on PR 387
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CERTIFIED_SHA: ${{ steps.certify.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/387/comments" \
+            -f body="<!-- pr387-mcp-final-acceptance -->
+          MCP end-to-end acceptance completed on commit \`${CERTIFIED_SHA}\`.
+
+          Verified on a GitHub-hosted runner:
+
+          - forbidden incomplete-pattern gate
+          - focused MCP/model/controller behavior tests
+          - boundary entity-response analyzer
+          - \`go vet ./...\`
+          - \`go test -race ./...\`
+          - \`make build-frontend-modern\`
+
+          The one-time acceptance workflows were removed from the certified tree."
