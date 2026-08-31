@@ -16,6 +16,7 @@ const (
 	mcpBase64SentinelPrefix = "=?base64?"
 	mcpBase64SentinelSuffix = "?="
 	maxMCPHeaderInteger     = int64(1<<53 - 1)
+	mcpHeaderNumberEpsilon  = 1e-9
 )
 
 type toolHeaderBinding struct {
@@ -24,13 +25,21 @@ type toolHeaderBinding struct {
 	ValueType  string
 }
 
-// ToolDescriptorRejection describes a tool excluded because its x-mcp-header schema is invalid.
+// ToolDescriptorRejection describes one tool excluded because its x-mcp-header schema is invalid.
 type ToolDescriptorRejection struct {
 	Name string
 	Err  error
 }
 
-// ToolArgumentHeaders derives MCP-Param-* headers from x-mcp-header annotations in a tool schema.
+// ToolArgumentHeaders derives MCP-Param-* headers from reachable x-mcp-header annotations.
+//
+// Parameters:
+//   - schema: the tool input schema containing optional x-mcp-header annotations.
+//   - arguments: the normalized JSON object supplied to tools/call.
+//
+// Return values:
+//   - http.Header: exactly one encoded header value for every present annotated argument.
+//   - error: a wrapped schema, lookup, type, range, or encoding error.
 func ToolArgumentHeaders(schema map[string]any, arguments map[string]any) (http.Header, error) {
 	bindings, err := collectToolHeaderBindings(schema)
 	if err != nil {
@@ -38,8 +47,8 @@ func ToolArgumentHeaders(schema map[string]any, arguments map[string]any) (http.
 	}
 	headers := make(http.Header, len(bindings))
 	for _, binding := range bindings {
-		value, ok := lookupToolArgument(arguments, binding.Path)
-		if !ok || value == nil {
+		value, exists := lookupToolArgument(arguments, binding.Path)
+		if !exists || value == nil {
 			continue
 		}
 		encoded, err := formatToolHeaderValue(value, binding.ValueType)
@@ -51,12 +60,29 @@ func ToolArgumentHeaders(schema map[string]any, arguments map[string]any) (http.
 	return headers, nil
 }
 
-// ValidateToolArgumentHeaders verifies that mirrored MCP parameter headers match the JSON arguments.
+// ValidateToolArgumentHeaders verifies mirrored parameter headers against the schema and JSON arguments.
+//
+// Parameters:
+//   - requestHeaders: the complete inbound HTTP request headers.
+//   - schema: the selected tool input schema.
+//   - arguments: the normalized tools/call argument object.
+//
+// Return values:
+//   - error: a wrapped schema, cardinality, decoding, numeric, or value-mismatch error.
 func ValidateToolArgumentHeaders(requestHeaders http.Header, schema map[string]any, arguments map[string]any) error {
+	bindings, err := collectToolHeaderBindings(schema)
+	if err != nil {
+		return errors.Wrap(err, "collect expected mcp tool header bindings")
+	}
 	expected, err := ToolArgumentHeaders(schema, arguments)
 	if err != nil {
 		return errors.Wrap(err, "derive expected mcp tool headers")
 	}
+	valueTypes := make(map[string]string, len(bindings))
+	for _, binding := range bindings {
+		valueTypes[strings.ToLower(ParameterHeaderPrefix+binding.HeaderName)] = binding.ValueType
+	}
+
 	actual := make(http.Header)
 	for key, values := range requestHeaders {
 		if !strings.HasPrefix(strings.ToLower(key), strings.ToLower(ParameterHeaderPrefix)) {
@@ -83,6 +109,12 @@ func ValidateToolArgumentHeaders(requestHeaders http.Header, schema map[string]a
 		if err != nil {
 			return errors.Wrapf(err, "decode mcp parameter header %s", key)
 		}
+		if valueTypes[strings.ToLower(key)] == "integer" {
+			if !equalMCPHeaderNumbers(got, want) {
+				return errors.Errorf("mcp parameter header %s mismatch", key)
+			}
+			continue
+		}
 		if got != want {
 			return errors.Errorf("mcp parameter header %s mismatch", key)
 		}
@@ -91,15 +123,26 @@ func ValidateToolArgumentHeaders(requestHeaders http.Header, schema map[string]a
 }
 
 // ValidateToolSchemaHeaders validates x-mcp-header annotations without requiring argument values.
+//
+// Parameters:
+//   - schema: the tool input schema to validate.
+//
+// Return values:
+//   - error: a wrapped annotation placement, token, type, or uniqueness error.
 func ValidateToolSchemaHeaders(schema map[string]any) error {
-	_, err := collectToolHeaderBindings(schema)
-	if err != nil {
+	if _, err := collectToolHeaderBindings(schema); err != nil {
 		return errors.Wrap(err, "validate mcp tool schema headers")
 	}
 	return nil
 }
 
 // ValidateToolDescriptor validates required tool fields and HTTP header annotations.
+//
+// Parameters:
+//   - tool: the MCP tool descriptor to validate for Streamable HTTP use.
+//
+// Return values:
+//   - error: a wrapped required-field or input-schema annotation error.
 func ValidateToolDescriptor(tool ToolDescriptor) error {
 	if strings.TrimSpace(tool.Name) == "" {
 		return errors.New("mcp tool name is required")
@@ -113,7 +156,14 @@ func ValidateToolDescriptor(tool ToolDescriptor) error {
 	return nil
 }
 
-// FilterValidToolDescriptors excludes tools whose x-mcp-header annotations violate the HTTP transport rules.
+// FilterValidToolDescriptors separates valid tools from descriptors rejected by HTTP rules.
+//
+// Parameters:
+//   - tools: descriptors returned by one or more tools/list pages.
+//
+// Return values:
+//   - []ToolDescriptor: valid descriptors in their original order.
+//   - []ToolDescriptorRejection: names and reasons for excluded descriptors.
 func FilterValidToolDescriptors(tools []ToolDescriptor) ([]ToolDescriptor, []ToolDescriptorRejection) {
 	valid := make([]ToolDescriptor, 0, len(tools))
 	rejected := make([]ToolDescriptorRejection, 0)
@@ -127,7 +177,13 @@ func FilterValidToolDescriptors(tools []ToolDescriptor) ([]ToolDescriptor, []Too
 	return valid, rejected
 }
 
-// EncodeMCPHeaderValue applies the protocol's Base64 sentinel to unsafe HTTP header values.
+// EncodeMCPHeaderValue applies the protocol Base64 sentinel to unsafe or sentinel-like values.
+//
+// Parameters:
+//   - value: the decoded UTF-8 value to represent in one HTTP header field.
+//
+// Return values:
+//   - string: the original safe value or its exact sentinel-encoded form.
 func EncodeMCPHeaderValue(value string) string {
 	if headerValueRequiresEncoding(value) {
 		return mcpBase64SentinelPrefix + base64.StdEncoding.EncodeToString([]byte(value)) + mcpBase64SentinelSuffix
@@ -135,7 +191,14 @@ func EncodeMCPHeaderValue(value string) string {
 	return value
 }
 
-// DecodeMCPHeaderValue decodes the protocol's Base64 sentinel or validates a plain HTTP header value.
+// DecodeMCPHeaderValue decodes a sentinel value or validates one safe plain HTTP field value.
+//
+// Parameters:
+//   - value: the HTTP field value received from an MCP peer.
+//
+// Return values:
+//   - string: the decoded UTF-8 protocol value.
+//   - error: a wrapped sentinel, Base64, UTF-8, or plain-field validation error.
 func DecodeMCPHeaderValue(value string) (string, error) {
 	if strings.HasPrefix(value, mcpBase64SentinelPrefix) || strings.HasSuffix(value, mcpBase64SentinelSuffix) {
 		if !strings.HasPrefix(value, mcpBase64SentinelPrefix) || !strings.HasSuffix(value, mcpBase64SentinelSuffix) {
@@ -157,7 +220,14 @@ func DecodeMCPHeaderValue(value string) (string, error) {
 	return value, nil
 }
 
-// collectToolHeaderBindings walks statically reachable object properties and returns header bindings.
+// collectToolHeaderBindings returns deterministic bindings reachable through object properties only.
+//
+// Parameters:
+//   - schema: the tool input schema to inspect.
+//
+// Return values:
+//   - []toolHeaderBinding: validated header names, argument paths, and primitive types.
+//   - error: a wrapped placement, token, type, or uniqueness error.
 func collectToolHeaderBindings(schema map[string]any) ([]toolHeaderBinding, error) {
 	if len(schema) == 0 {
 		return nil, nil
@@ -173,7 +243,16 @@ func collectToolHeaderBindings(schema map[string]any) ([]toolHeaderBinding, erro
 	return bindings, nil
 }
 
-// validateToolHeaderAnnotationPlacement rejects annotations outside a properties-only path from the schema root.
+// validateToolHeaderAnnotationPlacement rejects annotations outside a properties-only root path.
+//
+// Parameters:
+//   - value: the current schema fragment.
+//   - reachable: whether properties-only traversal can reach the fragment.
+//   - isProperty: whether the fragment is itself a property schema.
+//   - location: the diagnostic JSON path.
+//
+// Return values:
+//   - error: an annotation-placement error, or nil when every descendant is valid.
 func validateToolHeaderAnnotationPlacement(value any, reachable bool, isProperty bool, location string) error {
 	switch typed := value.(type) {
 	case map[string]any:
@@ -206,11 +285,19 @@ func validateToolHeaderAnnotationPlacement(value any, reachable bool, isProperty
 				return err
 			}
 		}
-	}
 	return nil
 }
 
-// walkToolSchemaProperties recursively visits object properties that have deterministic argument paths.
+// walkToolSchemaProperties recursively visits object properties with deterministic argument paths.
+//
+// Parameters:
+//   - schema: the current object schema.
+//   - path: the property path from the input root.
+//   - bindings: the destination slice for validated bindings.
+//   - seen: case-insensitive header names and their first locations.
+//
+// Return values:
+//   - error: a token, type, or duplicate-name error.
 func walkToolSchemaProperties(schema map[string]any, path []string, bindings *[]toolHeaderBinding, seen map[string]string) error {
 	properties, ok := schema["properties"].(map[string]any)
 	if !ok {
@@ -222,7 +309,7 @@ func walkToolSchemaProperties(schema map[string]any, path []string, bindings *[]
 			continue
 		}
 		propertyPath := append(append([]string(nil), path...), propertyName)
-		if annotation, ok := propertySchema["x-mcp-header"]; ok {
+		if annotation, exists := propertySchema["x-mcp-header"]; exists {
 			headerName, ok := annotation.(string)
 			if !ok || headerName == "" {
 				return errors.Errorf("x-mcp-header at %s must be a non-empty string", strings.Join(propertyPath, "."))
@@ -250,7 +337,15 @@ func walkToolSchemaProperties(schema map[string]any, path []string, bindings *[]
 	return nil
 }
 
-// lookupToolArgument resolves a deterministic property path from JSON-like arguments.
+// lookupToolArgument resolves one deterministic property path from JSON-like arguments.
+//
+// Parameters:
+//   - arguments: the normalized tools/call argument object.
+//   - path: the statically reachable property path.
+//
+// Return values:
+//   - any: the resolved value when present.
+//   - bool: true when every path segment exists.
 func lookupToolArgument(arguments map[string]any, path []string) (any, bool) {
 	if len(path) == 0 {
 		return nil, false
@@ -269,7 +364,15 @@ func lookupToolArgument(arguments map[string]any, path []string) (any, bool) {
 	return current, true
 }
 
-// formatToolHeaderValue converts a primitive JSON value into its MCP header representation.
+// formatToolHeaderValue converts one primitive JSON value into its MCP header representation.
+//
+// Parameters:
+//   - value: the argument value selected by a schema binding.
+//   - valueType: string, boolean, or integer from the schema.
+//
+// Return values:
+//   - string: the safe plain or sentinel-encoded HTTP value.
+//   - error: a type, range, or formatting error.
 func formatToolHeaderValue(value any, valueType string) (string, error) {
 	var rendered string
 	switch valueType {
@@ -297,7 +400,14 @@ func formatToolHeaderValue(value any, valueType string) (string, error) {
 	return EncodeMCPHeaderValue(rendered), nil
 }
 
-// renderInteger formats JavaScript-safe integer representations without losing precision.
+// renderInteger formats a JavaScript-safe integer without losing precision.
+//
+// Parameters:
+//   - value: an integer-compatible Go or JSON number.
+//
+// Return values:
+//   - string: the base-10 integer representation.
+//   - error: a type, fractional, non-finite, parse, or safe-range error.
 func renderInteger(value any) (string, error) {
 	var signed int64
 	var unsigned uint64
@@ -349,16 +459,41 @@ func renderInteger(value any) (string, error) {
 	return strconv.FormatInt(signed, 10), nil
 }
 
+// equalMCPHeaderNumbers compares two numeric header representations using SEP-2243 precision semantics.
+//
+// Parameters:
+//   - left: the decoded inbound header value.
+//   - right: the canonical value derived from the JSON body.
+//
+// Return values:
+//   - bool: true when both values are finite and differ by at most 1E-9 relative precision.
+func equalMCPHeaderNumbers(left, right string) bool {
+	leftNumber, leftErr := strconv.ParseFloat(left, 64)
+	rightNumber, rightErr := strconv.ParseFloat(right, 64)
+	if leftErr != nil || rightErr != nil || math.IsNaN(leftNumber) || math.IsNaN(rightNumber) || math.IsInf(leftNumber, 0) || math.IsInf(rightNumber, 0) {
+		return false
+	}
+	difference := math.Abs(leftNumber - rightNumber)
+	scale := math.Max(1, math.Max(math.Abs(leftNumber), math.Abs(rightNumber)))
+	return difference <= mcpHeaderNumberEpsilon*scale
+}
+
 // headerValueRequiresEncoding reports whether a value requires the MCP Base64 sentinel.
+//
+// Parameters:
+//   - value: the decoded UTF-8 field value.
+//
+// Return values:
+//   - bool: true for whitespace-sensitive, non-ASCII/control, or sentinel-like values.
 func headerValueRequiresEncoding(value string) bool {
 	if !utf8.ValidString(value) || strings.TrimSpace(value) != value {
 		return true
 	}
-	if strings.HasPrefix(value, mcpBase64SentinelPrefix) && strings.HasSuffix(value, mcpBase64SentinelSuffix) {
+	if strings.HasPrefix(value, mcpBase64SentinelPrefix) || strings.HasSuffix(value, mcpBase64SentinelSuffix) {
 		return true
 	}
-	for _, r := range value {
-		if r == '\t' || r == ' ' || (r >= 0x21 && r <= 0x7e) {
+	for _, character := range value {
+		if character == '\t' || character == ' ' || (character >= 0x21 && character <= 0x7e) {
 			continue
 		}
 		return true
@@ -366,16 +501,22 @@ func headerValueRequiresEncoding(value string) bool {
 	return false
 }
 
-// isValidMCPHeaderToken reports whether a schema annotation is safe in an HTTP header name.
+// isValidMCPHeaderToken reports whether an annotation can safely extend an HTTP header name.
+//
+// Parameters:
+//   - value: the x-mcp-header annotation value.
+//
+// Return values:
+//   - bool: true when every character satisfies HTTP token syntax.
 func isValidMCPHeaderToken(value string) bool {
 	if value == "" {
 		return false
 	}
-	for _, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+	for _, character := range value {
+		if (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') {
 			continue
 		}
-		switch r {
+		switch character {
 		case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
 			continue
 		default:
