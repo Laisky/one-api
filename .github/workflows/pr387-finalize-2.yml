@@ -1,0 +1,569 @@
+name: Finalize PR 387 MCP implementation
+
+on:
+  push:
+    branches:
+      - feat/mcp-2026-07-28-protocol
+    paths:
+      - .github/workflows/pr387-finalize-2.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr387-finalize
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/mcp-2026-07-28-protocol
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: web/modern/yarn.lock
+
+      - name: Apply idempotent MCP completion fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python <<'PY'
+          from __future__ import annotations
+
+          import re
+          from pathlib import Path
+
+          root = Path('.')
+
+          def read(path: str) -> str:
+              return (root / path).read_text(encoding='utf-8')
+
+          def write(path: str, value: str) -> None:
+              (root / path).write_text(value, encoding='utf-8')
+
+          def replace_function(source: str, name: str, replacement: str) -> str:
+              match = re.search(rf'func\s+(?:\([^)]*\)\s*)?{re.escape(name)}\s*\(', source)
+              if match is None:
+                  raise RuntimeError(f'function {name} not found')
+              brace = source.find('{', match.start())
+              if brace < 0:
+                  raise RuntimeError(f'function {name} has no body')
+              depth = 0
+              in_string = False
+              escaped = False
+              index = brace
+              while index < len(source):
+                  character = source[index]
+                  if in_string:
+                      if escaped:
+                          escaped = False
+                      elif character == '\\':
+                          escaped = True
+                      elif character == '"':
+                          in_string = False
+                  else:
+                      if character == '"':
+                          in_string = True
+                      elif character == '{':
+                          depth += 1
+                      elif character == '}':
+                          depth -= 1
+                          if depth == 0:
+                              return source[:match.start()] + replacement.rstrip() + source[index + 1:]
+                  index += 1
+              raise RuntimeError(f'function {name} has an unterminated body')
+
+          for temporary in (
+              '.github/workflows/pr387-source-snapshot.yml',
+              '.github/workflows/pr387-complete.yml',
+              '.github/workflows/pr387-finalize.yml',
+          ):
+              path = root / temporary
+              if path.exists():
+                  path.unlink()
+
+          for test_path in ('controller/mcp_proxy_latest_test.go', 'controller/mcp_proxy_test.go'):
+              path = root / test_path
+              if path.exists():
+                  write(test_path, read(test_path).replace('mcpProtocolVersion', 'mcp.LegacyProtocolVersionFallback'))
+
+          path = root / 'relay/mcp/client_latest.go'
+          if path.exists():
+              source = read(str(path))
+              source = source.replace('"arguments": arguments,', '"arguments": argumentMap,')
+              source = source.replace('req.Header.Add(key, value)', 'req.Header.Set(key, value)')
+              write(str(path), source)
+
+          path = root / 'relay/mcp/protocol.go'
+          if path.exists():
+              source = read(str(path)).replace('make(map[string]any, len(params)+1)', 'make(map[string]any)')
+              if '2025-03-26' not in source and 'LegacyProtocolVersionFallback' in source:
+                  source = source.replace(
+                      '\tLegacyProtocolVersionFallback = "2025-06-18"',
+                      '\tLegacyProtocolVersionFallback = "2025-06-18"\n\t// LegacyProtocolVersionCompat retains compatibility with the first Streamable HTTP revision.\n\tLegacyProtocolVersionCompat = "2025-03-26"',
+                  )
+                  source = source.replace(
+                      'return []string{ProtocolVersion, LegacyProtocolVersion, LegacyProtocolVersionFallback}',
+                      'return []string{ProtocolVersion, LegacyProtocolVersion, LegacyProtocolVersionFallback, LegacyProtocolVersionCompat}',
+                  )
+                  source = source.replace(
+                      'case LegacyProtocolVersion, LegacyProtocolVersionFallback:',
+                      'case LegacyProtocolVersion, LegacyProtocolVersionFallback, LegacyProtocolVersionCompat:',
+                  )
+              write(str(path), source)
+
+          path = root / 'docs/manuals/mcp_protocol_2026_07_28.md'
+          if path.exists():
+              source = read(str(path))
+              source = source.replace('params._meta["io.modelcontextprotocol/serverInfo"]', 'result._meta["io.modelcontextprotocol/serverInfo"]')
+              source = source.replace('100 items per page', '128 items per page')
+              write(str(path), source)
+
+          path = root / 'controller/mcp_proxy.go'
+          if path.exists():
+              source = read(str(path))
+              source = source.replace('return nil, errors.New("no eligible MCP tool found")', 'return nil, errors.WithStack(errors.New("no eligible MCP tool found"))')
+              source = source.replace('return nil, errors.New("mcp server not loaded")', 'return nil, errors.WithStack(errors.New("mcp server not loaded"))')
+              source = source.replace('"protocolVersion": mcp.LegacyProtocolVersionFallback,', '"protocolVersion": mcp.NegotiateLegacyProtocolVersion(initParams.ProtocolVersion),')
+              if 'trimmedParams := strings.TrimSpace(string(req.Params))' not in source:
+                  source = re.sub(
+                      r'(case "initialize":\n\s*var initParams [^\n]+\n)\s*if err := json\.Unmarshal\(req\.Params, &initParams\); err != nil \{(.*?)\n\s*\}',
+                      lambda match: match.group(1) + '\t\ttrimmedParams := strings.TrimSpace(string(req.Params))\n\t\tif trimmedParams != "" && trimmedParams != "null" {\n\t\t\tif err := json.Unmarshal(req.Params, &initParams); err != nil {' + match.group(2) + '\n\t\t\t}\n\t\t}',
+                      source,
+                      count=1,
+                      flags=re.S,
+                  )
+              write(str(path), source)
+
+          security = root / 'relay/mcp/security.go'
+          if not security.exists():
+              security.write_text(r'''package mcp
+
+          import (
+          	"net/http"
+          	"net/url"
+          	"strings"
+          	"time"
+
+          	"github.com/Laisky/errors/v2"
+          )
+
+          // hasSensitiveMCPHeaders reports whether configured outbound headers contain reusable secrets.
+          //
+          // Parameters:
+          //   - headers: configured outbound MCP headers.
+          //
+          // Return values:
+          //   - bool: true when a non-empty header name indicates credentials or session secrets.
+          func hasSensitiveMCPHeaders(headers map[string]string) bool {
+          	for key, value := range headers {
+          		if strings.TrimSpace(value) == "" {
+          			continue
+          		}
+          		normalized := strings.ToLower(strings.TrimSpace(key))
+          		for _, token := range []string{"authorization", "api-key", "apikey", "token", "secret", "password", "cookie"} {
+          			if strings.Contains(normalized, token) {
+          				return true
+          			}
+          		}
+          	}
+          	return false
+          }
+
+          // validateMCPTransportSecurity rejects plaintext transport whenever reusable credentials are configured.
+          //
+          // Parameters:
+          //   - baseURL: configured MCP endpoint URL.
+          //   - sensitive: whether requests carry reusable credentials.
+          //
+          // Return values:
+          //   - error: a wrapped URL or plaintext-credential validation error.
+          func validateMCPTransportSecurity(baseURL string, sensitive bool) error {
+          	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+          	if err != nil {
+          		return errors.Wrap(err, "parse mcp endpoint URL")
+          	}
+          	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+          		return errors.Errorf("unsupported MCP endpoint scheme %q", parsed.Scheme)
+          	}
+          	if parsed.Host == "" {
+          		return errors.New("mcp endpoint host is required")
+          	}
+          	if sensitive && parsed.Scheme != "https" {
+          		return errors.New("credentialed MCP endpoints require HTTPS")
+          	}
+          	return nil
+          }
+
+          // newMCPHTTPClient creates a bounded client that prevents credential redirects to plaintext or another origin.
+          //
+          // Parameters:
+          //   - timeout: total request timeout.
+          //   - baseURL: configured MCP endpoint URL.
+          //   - sensitive: whether configured headers contain reusable credentials.
+          //
+          // Return values:
+          //   - *http.Client: a client with a strict redirect policy.
+          //   - error: a wrapped endpoint validation error.
+          func newMCPHTTPClient(timeout time.Duration, baseURL string, sensitive bool) (*http.Client, error) {
+          	if err := validateMCPTransportSecurity(baseURL, sensitive); err != nil {
+          		return nil, errors.Wrap(err, "validate mcp transport security")
+          	}
+          	origin, err := url.Parse(strings.TrimSpace(baseURL))
+          	if err != nil {
+          		return nil, errors.Wrap(err, "parse mcp redirect origin")
+          	}
+          	client := &http.Client{Timeout: timeout}
+          	client.CheckRedirect = func(request *http.Request, via []*http.Request) error {
+          		if len(via) >= 10 {
+          			return errors.New("mcp redirect limit exceeded")
+          		}
+          		if len(via) == 0 {
+          			return nil
+          		}
+          		previous := via[len(via)-1].URL
+          		if previous.Scheme == "https" && request.URL.Scheme != "https" {
+          			return errors.New("mcp redirect from HTTPS to plaintext HTTP is forbidden")
+          		}
+          		if sensitive {
+          			if request.URL.Scheme != "https" {
+          				return errors.New("credentialed MCP redirect requires HTTPS")
+          			}
+          			if !strings.EqualFold(request.URL.Host, origin.Host) {
+          				return errors.New("credentialed MCP redirect to another origin is forbidden")
+          			}
+          		}
+          		return nil
+          	}
+          	return client, nil
+          }
+          ''', encoding='utf-8')
+
+          path = root / 'relay/mcp/client.go'
+          if path.exists():
+              source = read(str(path))
+              if 'sensitiveTransport bool' not in source:
+                  source = source.replace('\tprotocolVersion string\n}', '\tprotocolVersion string\n\tsensitiveTransport bool\n}')
+              source = re.sub(
+                  r'\n\tif _, ok := merged\[mcpProtocolVersionHeader\]; !ok \{\n\t\tmerged\[mcpProtocolVersionHeader\] = mcpDefaultProtocolVersion\n\t\}\n',
+                  '\n',
+                  source,
+              )
+              source = source.replace('mcpDefaultProtocolVersion = "2025-06-18"', 'mcpDefaultProtocolVersion = LegacyProtocolVersion')
+              if 'sensitiveTransport: hasSensitiveMCPHeaders(merged)' not in source:
+                  source = source.replace('\t\tserverRef: server.Ref(),\n\t}', '\t\tserverRef: server.Ref(),\n\t\tsensitiveTransport: hasSensitiveMCPHeaders(merged),\n\t}')
+              source = source.replace('body, readErr := io.ReadAll(resp.Body)', 'body, readErr := readMCPResponseBody(resp.Body)')
+              write(str(path), source)
+
+          path = root / 'relay/mcp/types.go'
+          if path.exists():
+              source = read(str(path))
+              if 'func isMCPJSONNull(' not in source:
+                  if 'import (' in source and '"bytes"' not in source:
+                      source = source.replace('import (\n', 'import (\n\t"bytes"\n', 1)
+                  source += '''\n// isMCPJSONNull reports whether a raw optional field contains the JSON null literal.\n//\n// Parameters:\n//   - value: the raw JSON field value.\n//\n// Return values:\n//   - bool: true only for the JSON null literal.\nfunc isMCPJSONNull(value json.RawMessage) bool {\n\treturn bytes.Equal(bytes.TrimSpace(value), []byte("null"))\n}\n'''
+              for key in ('outputSchema', 'output_schema', 'annotations', 'icons', '_meta', 'isError', 'is_error', 'inputRequests', 'input_requests', 'requestState', 'request_state', 'execution'):
+                  source = source.replace(
+                      f'if encoded := raw["{key}"]; len(encoded) != 0 {{',
+                      f'if encoded := raw["{key}"]; len(encoded) != 0 && !isMCPJSONNull(encoded) {{',
+                  )
+              source = re.sub(
+                  r'if encoded := firstRawMessage\(([^;]+)\); len\(encoded\) != 0 \{',
+                  r'if encoded := firstRawMessage(\1); len(encoded) != 0 && !isMCPJSONNull(encoded) {',
+                  source,
+              )
+              write(str(path), source)
+
+          proxy_path = root / 'controller/mcp_proxy_latest.go'
+          if proxy_path.exists():
+              source = read(str(proxy_path))
+              if 'stderrors "errors"' not in source:
+                  source = source.replace('import (\n', 'import (\n\tstderrors "errors"\n', 1)
+              if 'legacyMCPMaxRequestBytes' not in source:
+                  source = source.replace(
+                      'const modernMCPMaxRequestBytes = 4 << 20',
+                      'const (\n\tmodernMCPMaxRequestBytes int64 = 4 << 20\n\tlegacyMCPMaxRequestBytes int64 = 32 << 20\n)',
+                  )
+              if 'func (e *modernMCPValidationError) Unwrap() error' not in source:
+                  anchor = 'func (e *modernMCPValidationError) Error() string {'
+                  start = source.find(anchor)
+                  if start >= 0:
+                      brace = source.find('{', start)
+                      depth = 0
+                      end = None
+                      for index in range(brace, len(source)):
+                          if source[index] == '{':
+                              depth += 1
+                          elif source[index] == '}':
+                              depth -= 1
+                              if depth == 0:
+                                  end = index + 1
+                                  break
+                      if end is None:
+                          raise RuntimeError('cannot find modernMCPValidationError.Error end')
+                      source = source[:end] + '''\n\n// Unwrap exposes the underlying validation error to errors.Is and errors.As callers.\n//\n// Parameters: none.\n//\n// Return values:\n//   - error: the underlying validation error, which may be nil.\nfunc (e *modernMCPValidationError) Unwrap() error {\n\tif e == nil {\n\t\treturn nil\n\t}\n\treturn e.Err\n}\n''' + source[end:]
+              new_proxy = r'''func MCPProxyLatest(c *gin.Context) {
+          	if err := validateModernMCPOrigin(c.Request); err != nil {
+          		respondMCPModernError(c, nil, http.StatusForbidden, mcpErrInvalidRequest, err, nil)
+          		return
+          	}
+          	if c.Request.Method != http.MethodPost {
+          		MCPProxy(c)
+          		return
+          	}
+
+          	originalBody := c.Request.Body
+          	body, err := io.ReadAll(io.LimitReader(originalBody, legacyMCPMaxRequestBytes+1))
+          	if err != nil {
+          		respondMCPModernError(c, nil, http.StatusBadRequest, mcpErrParseError, errors.Wrap(err, "read mcp request"), nil)
+          		return
+          	}
+          	if int64(len(body)) > legacyMCPMaxRequestBytes {
+          		respondMCPModernError(c, nil, http.StatusRequestEntityTooLarge, mcpErrInvalidRequest, errors.Errorf("mcp request body exceeds %d bytes", legacyMCPMaxRequestBytes), nil)
+          		return
+          	}
+          	c.Request.Body = &replayReadCloser{Reader: bytes.NewReader(body), closer: originalBody}
+
+          	versionValues := c.Request.Header.Values(mcp.ProtocolVersionHeader)
+          	if len(versionValues) > 1 {
+          		respondMCPModernError(c, nil, http.StatusBadRequest, mcp.ErrorCodeHeaderMismatch, errors.Errorf("%s must occur at most once", mcp.ProtocolVersionHeader), nil)
+          		return
+          	}
+          	if len(versionValues) == 1 && mcp.IsLegacyProtocolVersion(versionValues[0]) {
+          		MCPProxy(c)
+          		return
+          	}
+
+          	var request mcpRPCRequest
+          	if err := json.Unmarshal(body, &request); err != nil {
+          		if len(versionValues) == 0 {
+          			MCPProxy(c)
+          			return
+          		}
+          		respondMCPModernError(c, nil, http.StatusBadRequest, mcpErrParseError, errors.Wrap(err, "decode modern mcp request"), nil)
+          		return
+          	}
+          	if !isModernMCPRequest(c, request) {
+          		MCPProxy(c)
+          		return
+          	}
+          	if int64(len(body)) > modernMCPMaxRequestBytes {
+          		respondMCPModernError(c, request.ID, http.StatusRequestEntityTooLarge, mcpErrInvalidRequest, errors.Errorf("modern mcp request body exceeds %d bytes", modernMCPMaxRequestBytes), nil)
+          		return
+          	}
+          	if err := validateModernMCPRequest(c, request); err != nil {
+          		respondModernValidationError(c, request.ID, err)
+          		return
+          	}
+          	handleModernMCPPost(c, request)
+          }'''
+              source = replace_function(source, 'MCPProxyLatest', new_proxy)
+              old_response = re.search(r'func respondMCPModernError\s*\(', source)
+              if old_response is not None:
+                  replacement = r'''func respondMCPModernError(c *gin.Context, id any, status int, code int, err error, data any) {
+          	var validationErr *modernMCPValidationError
+          	if stderrors.As(err, &validationErr) && validationErr != nil {
+          		status = validationErr.Status
+          		code = validationErr.Code
+          		data = validationErr.Data
+          		err = validationErr.Err
+          	}
+          	message := "mcp request failed"
+          	if code == mcpErrInternal {
+          		logger := gmw.GetLogger(c)
+          		if err != nil {
+          			logger.Error("mcp internal request failure", zap.Error(err))
+          		}
+          		message = "internal MCP error"
+          	} else if err != nil {
+          		message = err.Error()
+          	}
+          	errorObject := gin.H{"code": code, "message": message}
+          	if data != nil {
+          		errorObject["data"] = data
+          	}
+          	c.JSON(status, gin.H{"jsonrpc": "2.0", "id": id, "error": errorObject})
+          }'''
+                  source = replace_function(source, 'respondMCPModernError', replacement)
+              write(str(proxy_path), source)
+
+          security_test = root / 'relay/mcp/security_test.go'
+          if not security_test.exists():
+              security_test.write_text(r'''package mcp
+
+          import (
+          	"net/http"
+          	"net/url"
+          	"testing"
+          	"time"
+
+          	"github.com/stretchr/testify/require"
+          )
+
+          // TestValidateMCPTransportSecurityRejectsPlaintextCredentials verifies secrets never use plaintext HTTP.
+          //
+          // Parameters:
+          //   - t: the active test context.
+          //
+          // Return values: none; failures are reported through assertions.
+          func TestValidateMCPTransportSecurityRejectsPlaintextCredentials(t *testing.T) {
+          	require.ErrorContains(t, validateMCPTransportSecurity("http://mcp.example/rpc", true), "require HTTPS")
+          	require.NoError(t, validateMCPTransportSecurity("https://mcp.example/rpc", true))
+          	require.NoError(t, validateMCPTransportSecurity("http://mcp.example/rpc", false))
+          }
+
+          // TestMCPRedirectPolicyRejectsCredentialDowngradeAndCrossOrigin verifies redirects cannot leak credentials.
+          //
+          // Parameters:
+          //   - t: the active test context.
+          //
+          // Return values: none; failures are reported through assertions.
+          func TestMCPRedirectPolicyRejectsCredentialDowngradeAndCrossOrigin(t *testing.T) {
+          	client, err := newMCPHTTPClient(time.Second, "https://mcp.example/rpc", true)
+          	require.NoError(t, err)
+          	via := []*http.Request{{URL: mustMCPTestURL(t, "https://mcp.example/rpc")}}
+          	require.Error(t, client.CheckRedirect(&http.Request{URL: mustMCPTestURL(t, "http://mcp.example/rpc")}, via))
+          	require.Error(t, client.CheckRedirect(&http.Request{URL: mustMCPTestURL(t, "https://other.example/rpc")}, via))
+          	require.NoError(t, client.CheckRedirect(&http.Request{URL: mustMCPTestURL(t, "https://mcp.example/next")}, via))
+          }
+
+          // mustMCPTestURL parses one test URL and fails when the fixture is invalid.
+          //
+          // Parameters:
+          //   - t: the active test context.
+          //   - value: the absolute URL fixture.
+          //
+          // Return values:
+          //   - *url.URL: the parsed URL.
+          func mustMCPTestURL(t *testing.T, value string) *url.URL {
+          	t.Helper()
+          	parsed, err := url.Parse(value)
+          	require.NoError(t, err)
+          	return parsed
+          }
+          ''', encoding='utf-8')
+
+          path = root / 'relay/mcp/client_latest_test.go'
+          if path.exists():
+              source = read(str(path))
+              if 'TestCallToolLatestNormalizesNilArguments' not in source:
+                  source += r'''
+
+          // TestCallToolLatestNormalizesNilArguments verifies zero-argument tools send an empty JSON object.
+          //
+          // Parameters:
+          //   - t: the active test context.
+          //
+          // Return values: none; failures are reported through assertions.
+          func TestCallToolLatestNormalizesNilArguments(t *testing.T) {
+          	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+          		var envelope struct {
+          			ID     any            `json:"id"`
+          			Params map[string]any `json:"params"`
+          		}
+          		require.NoError(t, json.NewDecoder(request.Body).Decode(&envelope))
+          		arguments, ok := envelope.Params["arguments"].(map[string]any)
+          		require.True(t, ok)
+          		require.Empty(t, arguments)
+          		writer.Header().Set("Content-Type", "application/json")
+          		require.NoError(t, json.NewEncoder(writer).Encode(map[string]any{
+          			"jsonrpc": "2.0",
+          			"id":      envelope.ID,
+          			"result":  map[string]any{"resultType": ResultTypeComplete, "content": []any{}},
+          		}))
+          	}))
+          	defer server.Close()
+
+          	client := NewStreamableHTTPClient(&model.MCPServer{BaseURL: server.URL}, nil, 5*time.Second)
+          	_, err := client.CallToolLatestWithDescriptor(context.Background(), ToolDescriptor{
+          		Name:        "no_args",
+          		InputSchema: map[string]any{"type": "object", "additionalProperties": false},
+          	}, nil)
+          	require.NoError(t, err)
+          }
+          '''
+                  write(str(path), source)
+
+          path = root / 'controller/mcp_proxy_latest_test.go'
+          if path.exists():
+              source = read(str(path))
+              if 'TestMCPProxyLatestDelegatesLegacyInitializeWithoutParams' not in source:
+                  source += r'''
+
+          // TestMCPProxyLatestDelegatesLegacyInitializeWithoutParams verifies omitted legacy initialize params remain accepted.
+          //
+          // Parameters:
+          //   - t: the active test context.
+          //
+          // Return values: none; failures are reported through assertions.
+          func TestMCPProxyLatestDelegatesLegacyInitializeWithoutParams(t *testing.T) {
+          	gin.SetMode(gin.TestMode)
+          	router := gin.New()
+          	router.POST("/mcp", MCPProxyLatest)
+          	body := []byte(`{"jsonrpc":"2.0","id":"legacy-no-params","method":"initialize"}`)
+          	request := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
+          	request.Header.Set("Content-Type", "application/json")
+          	response := httptest.NewRecorder()
+          	router.ServeHTTP(response, request)
+          	require.Equal(t, http.StatusOK, response.Code)
+          	var envelope struct {
+          		Result map[string]any `json:"result"`
+          	}
+          	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
+          	require.Equal(t, mcp.LegacyProtocolVersion, envelope.Result["protocolVersion"])
+          }
+          '''
+                  write(str(path), source)
+          PY
+
+          gofmt -w relay/mcp/*.go controller/mcp_*go model/mcp_*go
+
+      - name: Verify formatting and focused behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          go test -count=1 ./relay/mcp ./model ./controller
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Run race-enabled test suite
+        run: go test -race ./...
+
+      - name: Build Modern frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          make build-frontend-modern
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/pr387-finalize-2.yml
+          git config user.name "Laisky.Cai"
+          git config user.email "github@laisky.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No implementation changes remain after verification."
+            exit 0
+          fi
+          git commit -m "fix(mcp): complete end-to-end protocol implementation"
+          git push origin HEAD:feat/mcp-2026-07-28-protocol
