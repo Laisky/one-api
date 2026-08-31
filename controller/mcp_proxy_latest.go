@@ -2,29 +2,90 @@ package controller
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"math"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
-	"time"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/Laisky/one-api/common/config"
-	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/mcp"
 )
 
 const modernMCPMaxRequestBytes = 4 << 20
 
-// MCPProxyLatest dispatches MCP 2026-07-28 requests while preserving the legacy endpoint behavior.
+// modernMCPRequestMeta extracts the required per-request metadata for MCP 2026-07-28.
+type modernMCPRequestMeta struct {
+	ProtocolVersion    string                  `json:"io.modelcontextprotocol/protocolVersion"`
+	ClientInfo         *mcp.ImplementationInfo `json:"io.modelcontextprotocol/clientInfo,omitempty"`
+	ClientCapabilities map[string]any          `json:"io.modelcontextprotocol/clientCapabilities"`
+}
+
+// modernMCPParamsEnvelope extracts modern metadata without constraining method-specific parameters.
+type modernMCPParamsEnvelope struct {
+	Meta modernMCPRequestMeta `json:"_meta"`
+}
+
+// modernMCPCallParams contains one tools/call request and optional multi-round-trip state.
+type modernMCPCallParams struct {
+	Name           string         `json:"name"`
+	Arguments      map[string]any `json:"arguments"`
+	Signature      string         `json:"signature,omitempty"`
+	InputResponses map[string]any `json:"inputResponses,omitempty"`
+	RequestState   string         `json:"requestState,omitempty"`
+}
+
+// modernMCPValidationError carries HTTP and JSON-RPC details for one rejected modern request.
+type modernMCPValidationError struct {
+	Status int
+	Code   int
+	Err    error
+	Data   any
+}
+
+// replayReadCloser replays bytes already inspected while retaining ownership of the original request body.
+type replayReadCloser struct {
+	io.Reader
+	closer io.Closer
+}
+
+// Error returns the underlying modern request validation message.
+//
+// Parameters: none.
+//
+// Return values:
+//   - string: the validation message or a stable fallback when the receiver is incomplete.
+func (e *modernMCPValidationError) Error() string {
+	if e == nil || e.Err == nil {
+		return "invalid modern mcp request"
+	}
+	return e.Err.Error()
+}
+
+// Close closes the original HTTP request body retained by replayReadCloser.
+//
+// Parameters: none.
+//
+// Return values:
+//   - error: the original request body close error, or nil when no closer is present.
+func (r *replayReadCloser) Close() error {
+	if r == nil || r.closer == nil {
+		return nil
+	}
+	return r.closer.Close()
+}
+
+// MCPProxyLatest dispatches modern MCP requests and delegates recognized legacy traffic unchanged.
+//
+// Parameters:
+//   - c: the Gin request context containing the authenticated Streamable HTTP request.
+//
+// Return values: none; the function writes the complete HTTP response or delegates to MCPProxy.
 func MCPProxyLatest(c *gin.Context) {
 	if err := validateModernMCPOrigin(c.Request); err != nil {
 		respondMCPModernError(c, nil, http.StatusForbidden, mcpErrInvalidRequest, err, nil)
@@ -35,99 +96,97 @@ func MCPProxyLatest(c *gin.Context) {
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(c.Request.Body, modernMCPMaxRequestBytes+1))
+	versionValues := c.Request.Header.Values(mcp.ProtocolVersionHeader)
+	if len(versionValues) == 1 && mcp.IsLegacyProtocolVersion(versionValues[0]) {
+		MCPProxy(c)
+		return
+	}
+
+	originalBody := c.Request.Body
+	prefix, err := io.ReadAll(io.LimitReader(originalBody, modernMCPMaxRequestBytes+1))
 	if err != nil {
 		respondMCPModernError(c, nil, http.StatusBadRequest, mcpErrParseError, errors.Wrap(err, "read mcp request"), nil)
 		return
 	}
-	c.Request.Body = io.NopCloser(bytes.NewReader(body))
-	if len(body) > modernMCPMaxRequestBytes {
+	if len(prefix) > modernMCPMaxRequestBytes && len(versionValues) == 0 {
+		c.Request.Body = &replayReadCloser{
+			Reader: io.MultiReader(bytes.NewReader(prefix), originalBody),
+			closer: originalBody,
+		}
+		MCPProxy(c)
+		return
+	}
+	c.Request.Body = &replayReadCloser{Reader: bytes.NewReader(prefix), closer: originalBody}
+	if len(prefix) > modernMCPMaxRequestBytes {
 		respondMCPModernError(c, nil, http.StatusRequestEntityTooLarge, mcpErrInvalidRequest, errors.New("mcp request body exceeds 4 MiB"), nil)
 		return
 	}
 
-	var req mcpRPCRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		if c.GetHeader(mcp.ProtocolVersionHeader) == "" {
+	var request mcpRPCRequest
+	if err := json.Unmarshal(prefix, &request); err != nil {
+		if len(versionValues) == 0 {
 			MCPProxy(c)
 			return
 		}
 		respondMCPModernError(c, nil, http.StatusBadRequest, mcpErrParseError, errors.Wrap(err, "decode modern mcp request"), nil)
 		return
 	}
-	if !isModernMCPRequest(c, req) {
+	if !isModernMCPRequest(c, request) {
 		MCPProxy(c)
 		return
 	}
-	if err := validateModernMCPRequest(c, req); err != nil {
-		respondModernValidationError(c, req.ID, err)
+	if err := validateModernMCPRequest(c, request); err != nil {
+		respondModernValidationError(c, request.ID, err)
 		return
 	}
-	handleModernMCPPost(c, req)
+	handleModernMCPPost(c, request)
 }
 
-// modernMCPRequestMeta extracts the per-request metadata used to negotiate modern MCP requests.
-type modernMCPRequestMeta struct {
-	ProtocolVersion    string                  `json:"io.modelcontextprotocol/protocolVersion"`
-	ClientInfo         *mcp.ImplementationInfo `json:"io.modelcontextprotocol/clientInfo,omitempty"`
-	ClientCapabilities map[string]any          `json:"io.modelcontextprotocol/clientCapabilities"`
-}
-
-// modernMCPParamsEnvelope extracts the reserved _meta object without constraining method-specific parameters.
-type modernMCPParamsEnvelope struct {
-	Meta modernMCPRequestMeta `json:"_meta"`
-}
-
-// modernMCPCallParams contains tool invocation and multi-round-trip retry fields.
-type modernMCPCallParams struct {
-	Name           string         `json:"name"`
-	Arguments      map[string]any `json:"arguments"`
-	Signature      string         `json:"signature,omitempty"`
-	InputResponses map[string]any `json:"inputResponses,omitempty"`
-	RequestState   string         `json:"requestState,omitempty"`
-}
-
-// modernMCPValidationError carries the HTTP and JSON-RPC details for a rejected modern request.
-type modernMCPValidationError struct {
-	Status int
-	Code   int
-	Err    error
-	Data   any
-}
-
-// Error returns the underlying validation message.
-func (e *modernMCPValidationError) Error() string {
-	if e == nil || e.Err == nil {
-		return "invalid modern mcp request"
-	}
-	return e.Err.Error()
-}
-
-// isModernMCPRequest reports whether a request uses the MCP 2026-07-28 request model.
-func isModernMCPRequest(c *gin.Context, req mcpRPCRequest) bool {
-	if strings.TrimSpace(req.Method) == "server/discover" {
-		return true
-	}
-	if strings.TrimSpace(c.GetHeader(mcp.ProtocolVersionHeader)) != "" {
+// isModernMCPRequest reports whether a request selects the 2026-07-28 stateless protocol profile.
+//
+// Parameters:
+//   - c: the Gin request context containing transport headers.
+//   - request: the parsed JSON-RPC request.
+//
+// Return values:
+//   - bool: true for modern metadata, the modern version header, discovery, or an unknown non-legacy version.
+func isModernMCPRequest(c *gin.Context, request mcpRPCRequest) bool {
+	if strings.TrimSpace(request.Method) == "server/discover" {
 		return true
 	}
 	var params modernMCPParamsEnvelope
-	return json.Unmarshal(req.Params, &params) == nil && strings.TrimSpace(params.Meta.ProtocolVersion) != ""
+	if json.Unmarshal(request.Params, &params) == nil && strings.TrimSpace(params.Meta.ProtocolVersion) != "" {
+		return true
+	}
+	versions := c.Request.Header.Values(mcp.ProtocolVersionHeader)
+	if len(versions) != 1 {
+		return len(versions) > 1
+	}
+	version := strings.TrimSpace(versions[0])
+	return version != "" && !mcp.IsLegacyProtocolVersion(version)
 }
 
-// validateModernMCPRequest validates protocol metadata, mirrored headers, and request identity.
-func validateModernMCPRequest(c *gin.Context, req mcpRPCRequest) error {
-	if req.JSONRPC != "2.0" || strings.TrimSpace(req.Method) == "" {
+// validateModernMCPRequest validates JSON-RPC identity, metadata, and mirrored transport headers.
+//
+// Parameters:
+//   - c: the Gin request context containing transport headers.
+//   - request: the parsed modern JSON-RPC request.
+//
+// Return values:
+//   - error: a modernMCPValidationError describing the required HTTP status and JSON-RPC code.
+func validateModernMCPRequest(c *gin.Context, request mcpRPCRequest) error {
+	if request.JSONRPC != "2.0" || strings.TrimSpace(request.Method) == "" {
 		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidRequest, Err: errors.New("jsonrpc must be 2.0 and method is required")}
 	}
-	if req.ID == nil && isModernMCPRequestMethod(req.Method) {
+	if request.ID == nil && isModernMCPRequestMethod(request.Method) {
 		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidRequest, Err: errors.New("modern mcp requests require a non-null id")}
 	}
-	if req.ID != nil && !isValidModernMCPRequestID(req.ID) {
+	if request.ID != nil && !isValidModernMCPRequestID(request.ID) {
 		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidRequest, Err: errors.New("modern mcp request id must be a string or integer")}
 	}
+
 	var params modernMCPParamsEnvelope
-	if err := json.Unmarshal(req.Params, &params); err != nil {
+	if err := json.Unmarshal(request.Params, &params); err != nil {
 		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidRequest, Err: errors.Wrap(err, "decode modern mcp metadata")}
 	}
 	bodyVersion := strings.TrimSpace(params.Meta.ProtocolVersion)
@@ -147,7 +206,7 @@ func validateModernMCPRequest(c *gin.Context, req mcpRPCRequest) error {
 			Code:   mcp.ErrorCodeUnsupportedProtocolVersion,
 			Err:    errors.Errorf("unsupported mcp protocol version %q", bodyVersion),
 			Data: gin.H{
-				"supported": []string{mcp.ProtocolVersion},
+				"supported": mcp.SupportedProtocolVersions(),
 				"requested": bodyVersion,
 			},
 		}
@@ -156,33 +215,41 @@ func validateModernMCPRequest(c *gin.Context, req mcpRPCRequest) error {
 		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidRequest, Err: errors.New("modern mcp requests require client capabilities in _meta")}
 	}
 	headerMethod, err := singleMCPHeaderValue(c.Request.Header, mcp.MethodHeader)
-	if err != nil || headerMethod != req.Method {
+	if err != nil || headerMethod != request.Method {
 		if err == nil {
 			err = errors.New("MCP-Method does not match the JSON-RPC method")
 		}
 		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcp.ErrorCodeHeaderMismatch, Err: err}
 	}
-	if req.Method == "tools/call" {
-		var params modernMCPCallParams
-		if err := json.Unmarshal(req.Params, &params); err != nil {
-			return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidParams, Err: errors.Wrap(err, "decode mcp call params")}
+	if request.Method != "tools/call" {
+		return nil
+	}
+
+	var callParams modernMCPCallParams
+	if err := json.Unmarshal(request.Params, &callParams); err != nil {
+		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidParams, Err: errors.Wrap(err, "decode mcp call params")}
+	}
+	headerName, err := singleMCPHeaderValue(c.Request.Header, mcp.NameHeader)
+	if err != nil {
+		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcp.ErrorCodeHeaderMismatch, Err: err}
+	}
+	decodedName, err := mcp.DecodeMCPHeaderValue(headerName)
+	if err != nil || decodedName != callParams.Name {
+		if err == nil {
+			err = errors.New("MCP-Name does not match tools/call params.name")
 		}
-		headerName, err := singleMCPHeaderValue(c.Request.Header, mcp.NameHeader)
-		if err != nil {
-			return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcp.ErrorCodeHeaderMismatch, Err: err}
-		}
-		decodedName, err := mcp.DecodeMCPHeaderValue(headerName)
-		if err != nil || decodedName != params.Name {
-			if err == nil {
-				err = errors.New("MCP-Name does not match tools/call params.name")
-			}
-			return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcp.ErrorCodeHeaderMismatch, Err: err}
-		}
+		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcp.ErrorCodeHeaderMismatch, Err: err}
 	}
 	return nil
 }
 
-// isModernMCPRequestMethod reports whether a method is a core request supported by this endpoint.
+// isModernMCPRequestMethod reports whether the tools-only modern endpoint expects a response identifier.
+//
+// Parameters:
+//   - method: the JSON-RPC method to classify.
+//
+// Return values:
+//   - bool: true for discovery, tool listing, and tool execution requests.
 func isModernMCPRequestMethod(method string) bool {
 	switch method {
 	case "server/discover", "tools/list", "tools/call":
@@ -192,7 +259,13 @@ func isModernMCPRequestMethod(method string) bool {
 	}
 }
 
-// isValidModernMCPRequestID reports whether a JSON value is a string or integer request identifier.
+// isValidModernMCPRequestID reports whether a decoded JSON-RPC identifier is a string or integer.
+//
+// Parameters:
+//   - id: the JSON-decoded request identifier.
+//
+// Return values:
+//   - bool: true for strings and finite integral JSON numbers.
 func isValidModernMCPRequestID(id any) bool {
 	switch typed := id.(type) {
 	case string:
@@ -204,7 +277,15 @@ func isValidModernMCPRequestID(id any) bool {
 	}
 }
 
-// singleMCPHeaderValue returns one required header value and rejects missing or repeated values.
+// singleMCPHeaderValue returns one required non-empty header value.
+//
+// Parameters:
+//   - headers: the HTTP request headers.
+//   - name: the case-insensitive header field name.
+//
+// Return values:
+//   - string: the sole non-empty value.
+//   - error: a cardinality or empty-value error.
 func singleMCPHeaderValue(headers http.Header, name string) (string, error) {
 	values := headers.Values(name)
 	if len(values) != 1 || strings.TrimSpace(values[0]) == "" {
@@ -213,7 +294,13 @@ func singleMCPHeaderValue(headers http.Header, name string) (string, error) {
 	return values[0], nil
 }
 
-// validateModernMCPOrigin protects the HTTP endpoint from DNS rebinding through browser Origin requests.
+// validateModernMCPOrigin protects browser-accessible HTTP endpoints from DNS rebinding.
+//
+// Parameters:
+//   - request: the inbound HTTP request.
+//
+// Return values:
+//   - error: a validation error when a present Origin is malformed or targets another host.
 func validateModernMCPOrigin(request *http.Request) error {
 	origin := strings.TrimSpace(request.Header.Get("Origin"))
 	if origin == "" {
@@ -229,7 +316,14 @@ func validateModernMCPOrigin(request *http.Request) error {
 	return nil
 }
 
-// respondModernValidationError writes a modern protocol validation failure.
+// respondModernValidationError writes one modern protocol validation failure.
+//
+// Parameters:
+//   - c: the Gin request context receiving the response.
+//   - id: the decoded JSON-RPC request identifier.
+//   - err: a modernMCPValidationError or an unexpected validation error.
+//
+// Return values: none; the function writes a complete JSON-RPC error response.
 func respondModernValidationError(c *gin.Context, id any, err error) {
 	validationErr, ok := err.(*modernMCPValidationError)
 	if !ok || validationErr == nil {
@@ -239,219 +333,62 @@ func respondModernValidationError(c *gin.Context, id any, err error) {
 	respondMCPModernError(c, id, validationErr.Status, validationErr.Code, validationErr.Err, validationErr.Data)
 }
 
-// handleModernMCPPost serves modern discovery, tool listing, and tool calls without an initialize handshake.
-func handleModernMCPPost(c *gin.Context, req mcpRPCRequest) {
-	ctx := gmw.Ctx(c)
-	switch strings.TrimSpace(req.Method) {
+// handleModernMCPPost serves the tools-only MCP 2026-07-28 method surface.
+//
+// Parameters:
+//   - c: the Gin request context containing authentication and request-scoped logging.
+//   - request: the validated modern JSON-RPC request.
+//
+// Return values: none; the function writes a complete JSON-RPC response.
+func handleModernMCPPost(c *gin.Context, request mcpRPCRequest) {
+	switch strings.TrimSpace(request.Method) {
 	case "server/discover":
-		respondMCPModernResult(c, req.ID, mcp.DiscoveryResult{
+		respondMCPModernResult(c, request.ID, mcp.DiscoveryResult{
 			ResultType:        mcp.ResultTypeComplete,
-			SupportedVersions: []string{mcp.ProtocolVersion},
+			SupportedVersions: mcp.SupportedProtocolVersions(),
 			Capabilities: gin.H{
 				"tools": gin.H{"listChanged": false},
 			},
-			TTLMS:      int64(time.Hour / time.Millisecond),
+			TTLMS:      3600000,
 			CacheScope: mcp.CacheScopePrivate,
 			Meta:       mcp.ServerResponseMeta(mcpServerName, mcpServerVersion),
 		})
 	case "tools/list":
-		tools, err := listMCPToolsForUser(ctx, c)
+		result, err := listModernMCPToolsPage(gmw.Ctx(c), c, request.Params)
 		if err != nil {
-			respondMCPModernError(c, req.ID, http.StatusOK, mcpErrInternal, err, nil)
+			respondMCPModernError(c, request.ID, http.StatusOK, mcpErrInternal, err, nil)
 			return
 		}
-		tools = normalizeModernToolDescriptors(tools)
-		tools, rejected := mcp.FilterValidToolDescriptors(tools)
-		if len(rejected) != 0 {
-			logger := gmw.GetLogger(c)
-			for _, rejection := range rejected {
-				logger.Warn("excluding invalid mcp tool descriptor", zap.String("tool", rejection.Name), zap.Error(rejection.Err))
-			}
-		}
-		sort.SliceStable(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
-		respondMCPModernResult(c, req.ID, gin.H{
-			"resultType": mcp.ResultTypeComplete,
-			"tools":      tools,
-			"ttlMs":      int64(time.Minute / time.Millisecond),
-			"cacheScope": mcp.CacheScopePrivate,
-		})
+		respondMCPModernResult(c, request.ID, result)
 	case "tools/call":
 		var params modernMCPCallParams
-		if err := json.Unmarshal(req.Params, &params); err != nil {
-			respondMCPModernError(c, req.ID, http.StatusBadRequest, mcpErrInvalidParams, errors.Wrap(err, "decode mcp call params"), nil)
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			respondMCPModernError(c, request.ID, http.StatusBadRequest, mcpErrInvalidParams, errors.Wrap(err, "decode mcp call params"), nil)
 			return
 		}
-		descriptor, err := findModernMCPToolDescriptor(ctx, c, params.Name)
+		result, err := executeModernMCPTool(gmw.Ctx(c), c, params)
 		if err != nil {
-			respondMCPModernError(c, req.ID, http.StatusOK, mcpErrInvalidParams, err, nil)
+			respondMCPModernError(c, request.ID, http.StatusOK, mcpErrInternal, err, nil)
 			return
 		}
-		if err := mcp.ValidateToolArgumentHeaders(c.Request.Header, descriptor.InputSchema, params.Arguments); err != nil {
-			respondMCPModernError(c, req.ID, http.StatusBadRequest, mcp.ErrorCodeHeaderMismatch, err, nil)
-			return
-		}
-		result, err := callMCPToolForUserLatest(ctx, c, params)
-		if err != nil {
-			respondMCPModernError(c, req.ID, http.StatusOK, mcpErrInternal, err, nil)
-			return
-		}
-		respondMCPModernResult(c, req.ID, mcp.NormalizeCallToolResult(result))
+		respondMCPModernResult(c, request.ID, result)
 	default:
-		if req.ID == nil {
+		if request.ID == nil {
 			c.AbortWithStatus(http.StatusAccepted)
 			return
 		}
-		respondMCPModernError(c, req.ID, http.StatusNotFound, mcpErrMethodNotFound, errors.Errorf("unsupported method %s", req.Method), nil)
+		respondMCPModernError(c, request.ID, http.StatusNotFound, mcpErrMethodNotFound, errors.Errorf("unsupported method %s", request.Method), nil)
 	}
 }
 
-// normalizeModernToolDescriptors supplies the required empty-object schema for legacy stored tools.
-func normalizeModernToolDescriptors(tools []mcp.ToolDescriptor) []mcp.ToolDescriptor {
-	for index := range tools {
-		if tools[index].InputSchema == nil {
-			tools[index].InputSchema = map[string]any{"type": "object"}
-		}
-	}
-	return tools
-}
-
-// findModernMCPToolDescriptor resolves a qualified tool name for modern header validation.
-func findModernMCPToolDescriptor(ctx context.Context, c *gin.Context, name string) (mcp.ToolDescriptor, error) {
-	tools, err := listMCPToolsForUser(ctx, c)
-	if err != nil {
-		return mcp.ToolDescriptor{}, errors.Wrap(err, "list mcp tools for header validation")
-	}
-	tools = normalizeModernToolDescriptors(tools)
-	tools, _ = mcp.FilterValidToolDescriptors(tools)
-	for _, tool := range tools {
-		if tool.Name == name {
-			return tool, nil
-		}
-	}
-	return mcp.ToolDescriptor{}, errors.Errorf("no eligible MCP tool found for %q", name)
-}
-
-// callMCPToolForUserLatest invokes an MCP tool through modern-first upstream negotiation and applies billing.
-func callMCPToolForUserLatest(ctx context.Context, c *gin.Context, params modernMCPCallParams) (*mcp.CallToolResult, error) {
-	logger := gmw.GetLogger(c)
-	user, err := getUserFromContext(c)
-	if err != nil {
-		return nil, errors.Wrap(err, "get user from context")
-	}
-
-	serverLabel, toolName := splitToolName(params.Name)
-	if toolName == "" {
-		toolName = strings.TrimSpace(params.Name)
-	}
-	if toolName == "" {
-		return nil, errors.New("tool name is required")
-	}
-
-	var servers []*model.MCPServer
-	serverByID := make(map[int]*model.MCPServer)
-	if serverLabel != "" {
-		server, err := model.GetMCPServerByName(serverLabel)
-		if err != nil {
-			return nil, errors.Wrapf(err, "get mcp server by name %q", serverLabel)
-		}
-		servers = []*model.MCPServer{server}
-		serverByID[server.Id] = server
-	} else {
-		servers, err = model.ListEnabledMCPServers()
-		if err != nil {
-			return nil, errors.Wrap(err, "list enabled mcp servers")
-		}
-		for _, server := range servers {
-			if server != nil {
-				serverByID[server.Id] = server
-			}
-		}
-	}
-
-	toolsByServer := make(map[int][]*model.MCPTool, len(servers))
-	for _, server := range servers {
-		if server == nil {
-			continue
-		}
-		tools, err := model.GetMCPToolsByServerID(server.Id)
-		if err != nil {
-			return nil, errors.Wrapf(err, "get mcp tools for server %d", server.Id)
-		}
-		toolsByServer[server.Id] = tools
-	}
-
-	candidates, err := mcp.BuildToolCandidates(servers, toolsByServer, nil, user.MCPToolBlacklist, []string{toolName}, toolName, params.Signature)
-	if err != nil {
-		return nil, errors.Wrapf(err, "build mcp tool candidates for %q", toolName)
-	}
-	if len(candidates) == 0 {
-		return nil, errors.New("no eligible MCP tool found")
-	}
-
-	startedAt := time.Now()
-	selected, result, err := mcp.CallWithFallback(ctx, candidates, func(ctx context.Context, candidate mcp.ToolCandidate) (*mcp.CallToolResult, error) {
-		server := serverByID[candidate.ServerID]
-		if server == nil {
-			return nil, errors.New("mcp server not loaded")
-		}
-		descriptor, err := descriptorForMCPTool(candidate.Tool)
-		if err != nil {
-			return nil, errors.Wrapf(err, "build descriptor for tool %q", candidate.Tool.Name)
-		}
-		client := mcp.NewStreamableHTTPClientWithLogger(server, nil, time.Duration(config.MCPToolCallTimeoutSec)*time.Second, logger)
-		callResult, err := client.CallToolLatestWithOptions(ctx, descriptor, params.Arguments, mcp.CallToolRequestOptions{
-			InputResponses: params.InputResponses,
-			RequestState:   params.RequestState,
-		})
-		if err != nil {
-			return nil, errors.Wrapf(err, "call mcp tool %q on server %d", candidate.Tool.Name, candidate.ServerID)
-		}
-		return callResult, nil
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "call mcp tool with fallback")
-	}
-	result = mcp.NormalizeCallToolResult(result)
-	if result.IsError {
-		return result, nil
-	}
-
-	server := serverByID[selected.ServerID]
-	if server == nil {
-		return nil, errors.New("mcp server not loaded")
-	}
-	cost := resolveToolCost(server, selected.Tool.Name)
-	if cost > 0 {
-		if err := model.DecreaseUserQuota(ctx, user.Id, cost); err != nil {
-			return nil, errors.Wrap(err, "decrease user quota for mcp tool call")
-		}
-		model.UpdateUserUsedQuotaAndRequestCountWithContext(ctx, user.Id, cost)
-	}
-	qualifiedName := server.Name + "." + selected.Tool.Name
-	recordMCPToolLog(ctx, c, user.Id, server.Id, qualifiedName, cost, time.Since(startedAt).Milliseconds())
-	return result, nil
-}
-
-// descriptorForMCPTool converts synchronized database metadata into an MCP wire descriptor.
-func descriptorForMCPTool(tool *model.MCPTool) (mcp.ToolDescriptor, error) {
-	if tool == nil {
-		return mcp.ToolDescriptor{}, errors.New("mcp tool is nil")
-	}
-	descriptor := mcp.ToolDescriptor{
-		Name:        tool.Name,
-		Title:       tool.DisplayName,
-		Description: tool.Description,
-		InputSchema: map[string]any{"type": "object"},
-	}
-	if tool.InputSchema != "" {
-		if err := json.Unmarshal([]byte(tool.InputSchema), &descriptor.InputSchema); err != nil {
-			return mcp.ToolDescriptor{}, errors.Wrap(err, "decode mcp tool input schema")
-		}
-	}
-	return descriptor, nil
-}
-
-// respondMCPModernResult writes a JSON-RPC result with protocol-required result and server metadata.
+// respondMCPModernResult writes a successful JSON-RPC result with required defaults and server identity.
+//
+// Parameters:
+//   - c: the Gin request context receiving the response.
+//   - id: the decoded JSON-RPC request identifier.
+//   - result: the result object to normalize and encode.
+//
+// Return values: none; the function writes a complete JSON-RPC response.
 func respondMCPModernResult(c *gin.Context, id any, result any) {
 	encoded, err := json.Marshal(result)
 	if err != nil {
@@ -482,7 +419,14 @@ func respondMCPModernResult(c *gin.Context, id any, result any) {
 	c.JSON(http.StatusOK, gin.H{"jsonrpc": "2.0", "id": id, "result": normalized})
 }
 
-// promoteModernResultAlias moves a legacy result field to its modern camelCase name.
+// promoteModernResultAlias moves one legacy result field to its current camelCase name.
+//
+// Parameters:
+//   - result: the mutable result object.
+//   - legacyName: the legacy snake_case field name.
+//   - modernName: the current camelCase field name.
+//
+// Return values: none; result is updated in place.
 func promoteModernResultAlias(result map[string]any, legacyName, modernName string) {
 	if value, exists := result[legacyName]; exists {
 		if _, modernExists := result[modernName]; !modernExists {
@@ -492,10 +436,26 @@ func promoteModernResultAlias(result map[string]any, legacyName, modernName stri
 	}
 }
 
-// respondMCPModernError writes a JSON-RPC error with the HTTP status required by the modern transport.
+// respondMCPModernError writes one JSON-RPC error while redacting internal implementation details.
+//
+// Parameters:
+//   - c: the Gin request context receiving the response and providing the request-scoped logger.
+//   - id: the decoded JSON-RPC request identifier, which may be nil for parse failures.
+//   - status: the HTTP status required by the transport profile.
+//   - code: the JSON-RPC or MCP error code.
+//   - err: the underlying validation or internal error.
+//   - data: optional protocol-safe structured error details.
+//
+// Return values: none; the function writes a complete JSON-RPC error response.
 func respondMCPModernError(c *gin.Context, id any, status int, code int, err error, data any) {
 	message := "mcp request failed"
-	if err != nil {
+	if code == mcpErrInternal {
+		logger := gmw.GetLogger(c)
+		if err != nil {
+			logger.Error("mcp internal request failure", zap.Error(err))
+		}
+		message = "internal MCP error"
+	} else if err != nil {
 		message = err.Error()
 	}
 	errorObject := gin.H{"code": code, "message": message}
