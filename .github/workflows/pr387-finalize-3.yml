@@ -1,0 +1,370 @@
+name: Finalize PR 387 MCP client transport
+
+on:
+  push:
+    branches:
+      - feat/mcp-2026-07-28-protocol
+    paths:
+      - .github/workflows/pr387-finalize-3.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr387-finalize-client
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/mcp-2026-07-28-protocol
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Complete client negotiation and transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          python <<'PY'
+          from __future__ import annotations
+
+          import re
+          from pathlib import Path
+
+          root = Path('.')
+
+          def read(path: str) -> str:
+              return (root / path).read_text(encoding='utf-8')
+
+          def write(path: str, value: str) -> None:
+              (root / path).write_text(value, encoding='utf-8')
+
+          def replace_function(source: str, name: str, replacement: str) -> str:
+              match = re.search(rf'func\s+(?:\([^)]*\)\s*)?{re.escape(name)}\s*\(', source)
+              if match is None:
+                  raise RuntimeError(f'function {name} not found')
+              brace = source.find('{', match.start())
+              depth = 0
+              in_double = False
+              in_raw = False
+              escaped = False
+              for index in range(brace, len(source)):
+                  character = source[index]
+                  if in_double:
+                      if escaped:
+                          escaped = False
+                      elif character == '\\':
+                          escaped = True
+                      elif character == '"':
+                          in_double = False
+                      continue
+                  if in_raw:
+                      if character == '`':
+                          in_raw = False
+                      continue
+                  if character == '"':
+                      in_double = True
+                  elif character == '`':
+                      in_raw = True
+                  elif character == '{':
+                      depth += 1
+                  elif character == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return source[:match.start()] + replacement.rstrip() + source[index + 1:]
+              raise RuntimeError(f'function {name} has no complete body')
+
+          for temporary in (
+              '.github/workflows/pr387-source-snapshot.yml',
+              '.github/workflows/pr387-complete.yml',
+              '.github/workflows/pr387-finalize.yml',
+              '.github/workflows/pr387-finalize-2.yml',
+          ):
+              path = root / temporary
+              if path.exists():
+                  path.unlink()
+
+          state_file = root / 'relay/mcp/client_state.go'
+          state_file.write_text(r'''package mcp
+
+          // snapshotHeaders returns an independent copy of the configured and negotiated request headers.
+          //
+          // Parameters: none.
+          //
+          // Return values:
+          //   - map[string]string: a copy safe for one outbound request to iterate and modify.
+          func (c *StreamableHTTPClient) snapshotHeaders() map[string]string {
+          	if c == nil {
+          		return nil
+          	}
+          	c.headersMu.RLock()
+          	defer c.headersMu.RUnlock()
+          	headers := make(map[string]string, len(c.Headers))
+          	for key, value := range c.Headers {
+          		headers[key] = value
+          	}
+          	return headers
+          }
+
+          // setNegotiatedHeader updates one protocol header while excluding concurrent request snapshots.
+          //
+          // Parameters:
+          //   - key: the case-insensitive HTTP header name.
+          //   - value: the negotiated value, or an empty string to remove the header.
+          //
+          // Return values: none; the client header state is updated in place.
+          func (c *StreamableHTTPClient) setNegotiatedHeader(key, value string) {
+          	if c == nil {
+          		return
+          	}
+          	c.headersMu.Lock()
+          	defer c.headersMu.Unlock()
+          	if value == "" {
+          		delete(c.Headers, key)
+          		return
+          	}
+          	c.Headers[key] = value
+          }
+          ''', encoding='utf-8')
+
+          client_path = root / 'relay/mcp/client.go'
+          source = read(str(client_path))
+          if 'headersMu sync.RWMutex' not in source:
+              source = source.replace('\tinitMu          sync.Mutex\n', '\theadersMu       sync.RWMutex\n\tinitMu          sync.Mutex\n')
+          if 'sensitiveTransport bool' not in source:
+              source = source.replace('\tprotocolVersion string\n}', '\tprotocolVersion string\n\tsensitiveTransport bool\n}')
+          source = re.sub(
+              r'\n\tif _, ok := merged\[mcpProtocolVersionHeader\]; !ok \{\n\t\tmerged\[mcpProtocolVersionHeader\] = mcpDefaultProtocolVersion\n\t\}\n',
+              '\n',
+              source,
+          )
+          source = source.replace('mcpDefaultProtocolVersion = "2025-06-18"', 'mcpDefaultProtocolVersion = LegacyProtocolVersion')
+          if 'sensitiveTransport: hasSensitiveMCPHeaders(merged)' not in source:
+              source = source.replace('\t\tserverRef: server.Ref(),\n\t}', '\t\tserverRef: server.Ref(),\n\t\tsensitiveTransport: hasSensitiveMCPHeaders(merged),\n\t}')
+
+          initialize = r'''func (c *StreamableHTTPClient) Initialize(ctx context.Context) error {
+          	if c == nil {
+          		return errors.New("mcp client is nil")
+          	}
+          	c.initMu.Lock()
+          	defer c.initMu.Unlock()
+          	if c.initialized {
+          		return nil
+          	}
+
+          	var lastErr error
+          	for _, requestedVersion := range []string{LegacyProtocolVersion, LegacyProtocolVersionFallback, LegacyProtocolVersionCompat} {
+          		initParams := map[string]any{
+          			"protocolVersion": requestedVersion,
+          			"capabilities":    map[string]any{},
+          			"clientInfo": map[string]any{
+          				"name":    mcpClientName,
+          				"version": mcpClientVersion,
+          			},
+          		}
+          		var initResult struct {
+          			ProtocolVersion string         `json:"protocolVersion"`
+          			Capabilities    map[string]any `json:"capabilities"`
+          			ServerInfo      map[string]any `json:"serverInfo"`
+          		}
+          		responseHeaders, err := c.doRPCRaw(ctx, "initialize", initParams, &initResult)
+          		if err != nil {
+          			lastErr = errors.Wrapf(err, "initialize legacy MCP version %s", requestedVersion)
+          			continue
+          		}
+          		negotiatedVersion := strings.TrimSpace(initResult.ProtocolVersion)
+          		if negotiatedVersion == "" {
+          			negotiatedVersion = requestedVersion
+          		}
+          		if !IsLegacyProtocolVersion(negotiatedVersion) {
+          			lastErr = errors.Errorf("legacy MCP server negotiated unsupported version %q", negotiatedVersion)
+          			continue
+          		}
+          		c.protocolVersion = negotiatedVersion
+          		c.setNegotiatedHeader(mcpProtocolVersionHeader, negotiatedVersion)
+          		if sessionID := strings.TrimSpace(responseHeaders.Get(mcpSessionIDHeader)); sessionID != "" {
+          			c.sessionID = sessionID
+          			c.setNegotiatedHeader(mcpSessionIDHeader, sessionID)
+          		}
+          		if err := c.sendNotification(ctx, "notifications/initialized", nil); err != nil && c.Logger != nil {
+          			c.Logger.Warn("mcp notifications/initialized failed", append(c.serverRef.Zap(), zap.Error(err))...)
+          		}
+          		c.initialized = true
+          		return nil
+          	}
+          	if lastErr == nil {
+          		lastErr = errors.New("no legacy MCP protocol versions were attempted")
+          	}
+          	return errors.Wrap(lastErr, "mcp initialize")
+          }'''
+          source = replace_function(source, 'Initialize', initialize)
+
+          # Every request takes an immutable header snapshot. Initialize itself omits the
+          # version and session headers until the server has negotiated them.
+          source = source.replace('for key, value := range c.Headers {', 'for key, value := range c.snapshotHeaders() {')
+          source = source.replace(
+              'for key, value := range c.snapshotHeaders() {\n\t\treq.Header.Set(key, value)\n\t}',
+              'for key, value := range c.snapshotHeaders() {\n\t\tif method == "initialize" && (strings.EqualFold(key, mcpProtocolVersionHeader) || strings.EqualFold(key, mcpSessionIDHeader)) {\n\t\t\tcontinue\n\t\t}\n\t\treq.Header.Set(key, value)\n\t}',
+              1,
+          )
+          source = source.replace('body, readErr := io.ReadAll(resp.Body)', 'body, readErr := readMCPResponseBody(resp.Body)')
+
+          # Replace the legacy request client's construction inside doRPCRaw.
+          do_rpc_pattern = re.compile(r'func \(c \*StreamableHTTPClient\) doRPCRaw\(.*?\n\}', re.S)
+          match = do_rpc_pattern.search(source)
+          if match is None:
+              raise RuntimeError('doRPCRaw not found')
+          block = match.group(0)
+          block = block.replace(
+              'client := &http.Client{Timeout: c.Timeout}',
+              'client, err := newMCPHTTPClient(c.Timeout, c.BaseURL, c.sensitiveTransport)\n\tif err != nil {\n\t\treturn nil, errors.Wrap(err, "create mcp HTTP client")\n\t}',
+          )
+          source = source[:match.start()] + block + source[match.end():]
+
+          # Replace the notification client's construction with its error-only return shape.
+          notify_pattern = re.compile(r'func \(c \*StreamableHTTPClient\) sendNotification\(.*?\n\}', re.S)
+          match = notify_pattern.search(source)
+          if match is None:
+              raise RuntimeError('sendNotification not found')
+          block = match.group(0)
+          block = block.replace(
+              'client := &http.Client{Timeout: c.Timeout}',
+              'client, err := newMCPHTTPClient(c.Timeout, c.BaseURL, c.sensitiveTransport)\n\tif err != nil {\n\t\treturn errors.Wrap(err, "create mcp notification HTTP client")\n\t}',
+          )
+          block = block.replace('body, _ := io.ReadAll(resp.Body)', 'body, readErr := readMCPResponseBody(resp.Body)\n\tif readErr != nil {\n\t\treturn errors.Wrap(readErr, "read mcp notification response body")\n\t}')
+          source = source[:match.start()] + block + source[match.end():]
+          write(str(client_path), source)
+
+          latest_path = root / 'relay/mcp/client_latest.go'
+          source = read(str(latest_path))
+          source = source.replace('"arguments": arguments,', '"arguments": argumentMap,')
+          source = source.replace('for key, value := range c.Headers {', 'for key, value := range c.snapshotHeaders() {')
+          modern_pattern = re.compile(r'func \(c \*StreamableHTTPClient\) doModernRPC\(.*?\n\}', re.S)
+          match = modern_pattern.search(source)
+          if match is None:
+              raise RuntimeError('doModernRPC not found')
+          block = match.group(0)
+          block = block.replace(
+              'client := &http.Client{Timeout: c.Timeout}',
+              'client, err := newMCPHTTPClient(c.Timeout, c.BaseURL, c.sensitiveTransport)\n\tif err != nil {\n\t\treturn errors.Wrap(err, "create modern mcp HTTP client")\n\t}',
+          )
+          block = block.replace('req.Header.Add(key, value)', 'req.Header.Set(key, value)')
+          source = source[:match.start()] + block + source[match.end():]
+          write(str(latest_path), source)
+
+          # Extend focused tests for version fallback and production transport enforcement.
+          test_path = root / 'relay/mcp/client_latest_test.go'
+          source = read(str(test_path))
+          if 'TestLegacyInitializeNegotiatesSupportedVersionsInOrder' not in source:
+              source += r'''
+
+          // TestLegacyInitializeNegotiatesSupportedVersionsInOrder verifies fallback reaches an older supported server.
+          //
+          // Parameters:
+          //   - t: the active test context.
+          //
+          // Return values: none; failures are reported through assertions.
+          func TestLegacyInitializeNegotiatesSupportedVersionsInOrder(t *testing.T) {
+          	var requested []string
+          	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+          		var envelope struct {
+          			ID     any            `json:"id"`
+          			Method string         `json:"method"`
+          			Params map[string]any `json:"params"`
+          		}
+          		require.NoError(t, json.NewDecoder(request.Body).Decode(&envelope))
+          		writer.Header().Set("Content-Type", "application/json")
+          		switch envelope.Method {
+          		case "initialize":
+          			version, _ := envelope.Params["protocolVersion"].(string)
+          			requested = append(requested, version)
+          			if version != LegacyProtocolVersionFallback {
+          				writer.WriteHeader(http.StatusBadRequest)
+          				require.NoError(t, json.NewEncoder(writer).Encode(map[string]any{"jsonrpc": "2.0", "id": envelope.ID, "error": map[string]any{"code": -32600, "message": "unsupported protocol"}}))
+          				return
+          			}
+          			require.NoError(t, json.NewEncoder(writer).Encode(map[string]any{"jsonrpc": "2.0", "id": envelope.ID, "result": map[string]any{"protocolVersion": version, "capabilities": map[string]any{}, "serverInfo": map[string]any{"name": "legacy", "version": "1"}}}))
+          		case "notifications/initialized":
+          			writer.WriteHeader(http.StatusAccepted)
+          		case "tools/list":
+          			require.NoError(t, json.NewEncoder(writer).Encode(map[string]any{"jsonrpc": "2.0", "id": envelope.ID, "result": map[string]any{"tools": []any{}}}))
+          		}
+          	}))
+          	defer server.Close()
+
+          	client := NewStreamableHTTPClient(&model.MCPServer{BaseURL: server.URL}, nil, 5*time.Second)
+          	tools, err := client.ListTools(context.Background())
+          	require.NoError(t, err)
+          	require.Empty(t, tools)
+          	require.Equal(t, []string{LegacyProtocolVersion, LegacyProtocolVersionFallback}, requested)
+          }
+
+          // TestCredentialedClientRejectsPlaintextBeforeSending verifies production request paths enforce HTTPS.
+          //
+          // Parameters:
+          //   - t: the active test context.
+          //
+          // Return values: none; failures are reported through assertions.
+          func TestCredentialedClientRejectsPlaintextBeforeSending(t *testing.T) {
+          	client := NewStreamableHTTPClient(&model.MCPServer{BaseURL: "http://mcp.example/rpc", AuthType: model.MCPAuthTypeBearer, APIKey: "secret"}, nil, time.Second)
+          	_, err := client.ListToolsLatest(context.Background())
+          	require.ErrorContains(t, err, "require HTTPS")
+          }
+          '''
+              write(str(test_path), source)
+          PY
+
+          gofmt -w relay/mcp/*.go
+
+      - name: Verify focused behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          go test -count=1 ./relay/mcp ./model ./controller
+
+      - name: Run repository guardrail
+        run: go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Run race-enabled test suite
+        run: go test -race ./...
+
+      - name: Build Modern frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          make build-frontend-modern
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/pr387-finalize-3.yml
+          git config user.name "Laisky.Cai"
+          git config user.email "github@laisky.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No implementation changes remain after verification."
+            exit 0
+          fi
+          git commit -m "fix(mcp): finish client negotiation and secure transport"
+          git push origin HEAD:feat/mcp-2026-07-28-protocol
