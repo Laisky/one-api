@@ -1,0 +1,28 @@
+name: PR387 source snapshot
+
+on:
+  push:
+    branches:
+      - feat/mcp-2026-07-28-protocol
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Pack source tree
+        run: tar --exclude=.git -czf /tmp/one-api-pr387-source.tar.gz .
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: pr387-source-${{ github.sha }}
+          path: /tmp/one-api-pr387-source.tar.gz
+          retention-days: 1
+          if-no-files-found: error
