@@ -10,7 +10,7 @@ import (
 const (
 	// ProtocolVersion is the latest stable MCP protocol version supported by one-api.
 	ProtocolVersion = "2026-07-28"
-	// LegacyProtocolVersion is the latest initialization-based MCP protocol version.
+	// LegacyProtocolVersion is the preferred initialization-based MCP protocol version.
 	LegacyProtocolVersion = "2025-11-25"
 	// LegacyProtocolVersionFallback keeps compatibility with older Streamable HTTP servers.
 	LegacyProtocolVersionFallback = "2025-06-18"
@@ -71,7 +71,7 @@ type ResponseMeta struct {
 	ServerInfo ImplementationInfo `json:"io.modelcontextprotocol/serverInfo"`
 }
 
-// DiscoveryResult describes protocol versions and capabilities exposed by a modern MCP server.
+// DiscoveryResult describes protocol versions and capabilities exposed by an MCP server.
 type DiscoveryResult struct {
 	ResultType        string         `json:"resultType"`
 	SupportedVersions []string       `json:"supportedVersions"`
@@ -92,6 +92,11 @@ type ProtocolError struct {
 }
 
 // Error renders ProtocolError without discarding transport or JSON-RPC context.
+//
+// Parameters: none.
+//
+// Return values:
+//   - string: a stable diagnostic string containing the available status, code, and message.
 func (e *ProtocolError) Error() string {
 	if e == nil {
 		return "mcp protocol error"
@@ -116,7 +121,64 @@ func (e *ProtocolError) Error() string {
 	return "mcp protocol error: " + strings.Join(parts, ": ")
 }
 
+// SupportedProtocolVersions returns protocol versions that the gateway can serve.
+//
+// Parameters: none.
+//
+// Return values:
+//   - []string: a new slice ordered from the preferred modern version to legacy compatibility versions.
+func SupportedProtocolVersions() []string {
+	return []string{ProtocolVersion, LegacyProtocolVersion, LegacyProtocolVersionFallback}
+}
+
+// IsLegacyProtocolVersion reports whether version selects the initialization-based protocol era.
+//
+// Parameters:
+//   - version: the protocol version supplied by an MCP peer or HTTP header.
+//
+// Return values:
+//   - bool: true only for legacy versions that one-api explicitly supports.
+func IsLegacyProtocolVersion(version string) bool {
+	switch strings.TrimSpace(version) {
+	case LegacyProtocolVersion, LegacyProtocolVersionFallback:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsSupportedProtocolVersion reports whether version is supported by either MCP protocol era.
+//
+// Parameters:
+//   - version: the protocol version supplied by an MCP peer.
+//
+// Return values:
+//   - bool: true when one-api can process the version through a modern or legacy path.
+func IsSupportedProtocolVersion(version string) bool {
+	return strings.TrimSpace(version) == ProtocolVersion || IsLegacyProtocolVersion(version)
+}
+
+// NegotiateLegacyProtocolVersion chooses the legacy protocol version returned by initialize.
+//
+// Parameters:
+//   - requested: the version requested in legacy initialize parameters.
+//
+// Return values:
+//   - string: the requested version when supported, otherwise the preferred legacy version.
+func NegotiateLegacyProtocolVersion(requested string) string {
+	requested = strings.TrimSpace(requested)
+	if IsLegacyProtocolVersion(requested) {
+		return requested
+	}
+	return LegacyProtocolVersion
+}
+
 // ModernRequestMeta returns the metadata attached to each MCP 2026-07-28 request.
+//
+// Parameters: none.
+//
+// Return values:
+//   - RequestMeta: fresh request metadata with an explicit empty optional-capability set.
 func ModernRequestMeta() RequestMeta {
 	return RequestMeta{
 		ProtocolVersion: ProtocolVersion,
@@ -129,11 +191,24 @@ func ModernRequestMeta() RequestMeta {
 }
 
 // ServerResponseMeta returns one-api's server identity for modern results.
+//
+// Parameters:
+//   - name: the public server implementation name.
+//   - version: the public server implementation version.
+//
+// Return values:
+//   - ResponseMeta: metadata containing the supplied server identity.
 func ServerResponseMeta(name, version string) ResponseMeta {
 	return ResponseMeta{ServerInfo: ImplementationInfo{Name: name, Version: version}}
 }
 
 // WithModernMeta returns object parameters containing the required modern request metadata.
+//
+// Parameters:
+//   - params: method-specific parameters; nil is treated as an empty object.
+//
+// Return values:
+//   - map[string]any: a new parameters object that does not mutate the caller's map.
 func WithModernMeta(params map[string]any) map[string]any {
 	out := make(map[string]any, len(params)+1)
 	for key, value := range params {
@@ -144,6 +219,12 @@ func WithModernMeta(params map[string]any) map[string]any {
 }
 
 // IsRecognizedModernError reports whether an error proves that the peer speaks modern MCP.
+//
+// Parameters:
+//   - err: the transport or JSON-RPC error returned by a modern request.
+//
+// Return values:
+//   - bool: true when retrying through the legacy handshake would be incorrect.
 func IsRecognizedModernError(err error) bool {
 	var protocolErr *ProtocolError
 	if !stderrors.As(err, &protocolErr) || protocolErr == nil {
@@ -160,6 +241,12 @@ func IsRecognizedModernError(err error) bool {
 }
 
 // IsModernFallbackCandidate reports whether a failed modern request should retry through the legacy handshake.
+//
+// Parameters:
+//   - err: the error returned by a modern request attempt.
+//
+// Return values:
+//   - bool: true only for failures that plausibly indicate a legacy endpoint.
 func IsModernFallbackCandidate(err error) bool {
 	var protocolErr *ProtocolError
 	if !stderrors.As(err, &protocolErr) || protocolErr == nil {
