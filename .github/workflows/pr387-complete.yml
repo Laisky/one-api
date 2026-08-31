@@ -1,0 +1,92 @@
+name: Complete PR 387 MCP implementation
+
+on:
+  push:
+    branches:
+      - feat/mcp-2026-07-28-protocol
+    paths:
+      - .github/scripts/pr387_repair.py
+      - .github/workflows/pr387-complete.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr387-complete
+  cancel-in-progress: false
+
+jobs:
+  repair-validate-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/mcp-2026-07-28-protocol
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: web/modern/yarn.lock
+
+      - name: Enable Yarn
+        run: corepack enable
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Apply deterministic repair
+        run: python3 .github/scripts/pr387_repair.py
+
+      - name: Format changed Go files
+        shell: bash
+        run: |
+          mapfile -t files < <(git status --porcelain=v1 | sed -E 's/^.. //' | grep '\.go$' || true)
+          if [ ${#files[@]} -gt 0 ]; then
+            gofmt -w "${files[@]}"
+          fi
+
+      - name: Verify patch formatting
+        run: git diff --check
+
+      - name: Run focused MCP behavior tests
+        run: go test -count=1 ./relay/mcp ./model ./controller
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Run race-enabled Go tests
+        run: go test -race -count=1 ./...
+
+      - name: Build Modern frontend
+        run: make build-frontend-modern
+
+      - name: Remove temporary repair assets
+        run: |
+          rm -f .github/scripts/pr387_repair.py
+          rm -f .github/workflows/pr387-complete.yml
+          rm -f .github/workflows/pr387-source-snapshot.yml
+
+      - name: Commit and push validated implementation
+        shell: bash
+        run: |
+          git config user.name 'Laisky.Cai'
+          git config user.email 'github@laisky.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No validated changes remain to commit.'
+            exit 0
+          fi
+          git commit -m 'fix(mcp): complete end-to-end gateway protocol behavior' \
+            -m 'Preserve lossless case-sensitive tool metadata across synchronization and proxying, harden modern and legacy transports, propagate validation semantics, and add end-to-end behavior coverage.'
+          git push origin HEAD:feat/mcp-2026-07-28-protocol
