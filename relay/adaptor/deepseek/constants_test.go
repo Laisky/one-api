@@ -51,7 +51,7 @@ func TestModelRatiosMatchOfficialPricing(t *testing.T) {
 			require.Equal(t, int32(1048576), cfg.ContextLength)
 			require.Equal(t, int32(393216), cfg.MaxOutputTokens)
 			require.Len(t, cfg.TimeWindows, 3)
-			require.Equal(t, "2026-08-23", cfg.TimeWindows[0].DateFrom)
+			require.Equal(t, "2026-08-17", cfg.TimeWindows[0].DateFrom)
 			require.Equal(t, "Asia/Shanghai", cfg.TimeWindows[0].TimeZone)
 
 			beforeActivation := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 16, 15, 59, 0, 0, time.UTC))
@@ -93,15 +93,19 @@ func TestDeepSeekPricingScheduleHonorsActivationAndWeekends(t *testing.T) {
 	t.Parallel()
 
 	cfg := ModelRatios["deepseek-v4-flash"]
-	beforeActivation := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 22, 15, 59, 0, 0, time.UTC))
+	beforeActivation := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 16, 15, 59, 0, 0, time.UTC))
 	require.InDelta(t, cfg.Ratio, beforeActivation.Ratio, 1e-15)
 
-	sundayPeakHour := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 23, 2, 0, 0, 0, time.UTC))
-	require.InDelta(t, 0.22*ratio.MilliTokensUsd, sundayPeakHour.Ratio, 1e-15)
-	require.InDelta(t, 0.007*ratio.MilliTokensUsd, sundayPeakHour.CachedInputRatio, 1e-15)
+	atActivation := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 16, 16, 0, 0, 0, time.UTC))
+	require.InDelta(t, 0.22*ratio.MilliTokensUsd, atActivation.Ratio, 1e-15)
+	require.InDelta(t, 0.007*ratio.MilliTokensUsd, atActivation.CachedInputRatio, 1e-15)
 
-	mondayPeakHour := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 24, 2, 0, 0, 0, time.UTC))
-	require.InDelta(t, 0.44*ratio.MilliTokensUsd, mondayPeakHour.Ratio, 1e-15)
+	firstWeekdayPeakHour := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 17, 2, 0, 0, 0, time.UTC))
+	require.InDelta(t, 0.44*ratio.MilliTokensUsd, firstWeekdayPeakHour.Ratio, 1e-15)
+
+	saturdayPeakHour := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 22, 2, 0, 0, 0, time.UTC))
+	require.InDelta(t, 0.22*ratio.MilliTokensUsd, saturdayPeakHour.Ratio, 1e-15)
+	require.InDelta(t, 0.007*ratio.MilliTokensUsd, saturdayPeakHour.CachedInputRatio, 1e-15)
 }
 
 // TestModelRatiosMatchOfficialCapabilities verifies model-specific version,

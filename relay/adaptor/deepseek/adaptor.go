@@ -128,10 +128,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	return request, nil
 }
 
-// normalizeDeepSeekReasoningEffort maps portable reasoning levels to the
-// values accepted by DeepSeek and clears unsupported values.
-// Parameters: request is the mutable OpenAI-style request to normalize.
-// Returns: nothing; request.ReasoningEffort is updated in place.
+// normalizeDeepSeekReasoningEffort maps portable reasoning levels to the values
+// currently documented by DeepSeek. Parameters: request is the mutable
+// OpenAI-style request to normalize and may be nil. Returns: nothing; supported
+// values are normalized in place and unsupported values are cleared.
 func normalizeDeepSeekReasoningEffort(request *model.GeneralOpenAIRequest) {
 	if request == nil || request.ReasoningEffort == nil {
 		return
@@ -139,13 +139,10 @@ func normalizeDeepSeekReasoningEffort(request *model.GeneralOpenAIRequest) {
 
 	effort := strings.ToLower(strings.TrimSpace(*request.ReasoningEffort))
 	switch effort {
-	case "high", "max":
-	case "low", "medium":
-		// DeepSeek accepts low and medium as compatibility aliases for high.
+	case "low", "high", "max":
+	case "medium", "xhigh":
+		// DeepSeek maps both OpenAI compatibility aliases to high.
 		effort = "high"
-	case "xhigh":
-		// DeepSeek accepts xhigh as a compatibility alias for max.
-		effort = "max"
 	default:
 		request.ReasoningEffort = nil
 		return

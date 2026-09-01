@@ -33,8 +33,8 @@ var (
 	// deepseekFlashReasoningEfforts lists the distinct reasoning levels supported
 	// by DeepSeek V4 Flash. The API defaults to high.
 	deepseekFlashReasoningEfforts = []string{"low", "high", "max"}
-	// deepseekProReasoningEfforts lists the effective reasoning levels supported
-	// by DeepSeek V4 Pro. The API accepts low but currently treats it as high.
+	// deepseekProReasoningEfforts lists the distinct reasoning levels supported
+	// by DeepSeek V4 Pro. The API defaults to high.
 	deepseekProReasoningEfforts = []string{"low", "high", "max"}
 )
 
@@ -51,9 +51,9 @@ const (
 	deepseekV4ProCachedInputRatio = 0.003625 * ratio.MilliTokensUsd
 
 	// deepseekV4PricingEffectiveDate is the first local date covered by the new
-	// pricing schedule. The documented activation instant is 2026-08-22 16:00
-	// UTC, which is 2026-08-23 00:00 in the schedule's Asia/Shanghai timezone.
-	deepseekV4PricingEffectiveDate = "2026-08-23"
+	// pricing schedule. The documented activation instant is 2026-08-16 16:00
+	// UTC, which is 2026-08-17 00:00 in the schedule's Asia/Shanghai timezone.
+	deepseekV4PricingEffectiveDate = "2026-08-17"
 )
 
 // deepseekV4PricingWindows returns the official post-activation off-peak and
@@ -123,8 +123,9 @@ func deepseekV4PricingWindows(
 
 // ModelRatios contains the currently available DeepSeek API models and their
 // pricing and capability metadata. Model IDs, capabilities, and prices were
-// verified on 2026-08-21 against the official DeepSeek documentation:
+// verified on 2026-09-01 against the official DeepSeek documentation:
 //   - https://api-docs.deepseek.com/quick_start/pricing/
+//   - https://api-docs.deepseek.com/guides/thinking_mode/
 //   - https://api-docs.deepseek.com/guides/vision/
 //   - https://api-docs.deepseek.com/api/list-models/
 //   - https://api-docs.deepseek.com/api/create-chat-completion/

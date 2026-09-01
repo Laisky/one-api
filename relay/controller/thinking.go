@@ -381,15 +381,27 @@ func defaultReasoningEffort(modelName string) string {
 	return "high"
 }
 
-// normalizeReasoningEffort sanitizes a requested reasoning effort value for a model.
+// normalizeReasoningEffort sanitizes a requested reasoning effort for a model.
+// Parameters: modelName selects provider-specific rules and effort is the requested value.
+// Returns: a normalized provider-compatible value, or an empty string when unsupported.
 func normalizeReasoningEffort(modelName, effort string) string {
 	normalized := strings.ToLower(strings.TrimSpace(effort))
 	if normalized == "" {
 		return ""
 	}
-	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(modelName)), "deepseek-v4-") && normalized == "xhigh" {
-		return "max"
+
+	name := strings.ToLower(strings.TrimSpace(modelName))
+	if strings.HasPrefix(name, "deepseek-v4-") {
+		switch normalized {
+		case "medium", "xhigh":
+			return "high"
+		case "low", "high", "max":
+			return normalized
+		default:
+			return ""
+		}
 	}
+
 	if !isReasoningEffortAllowed(modelName, normalized) {
 		return ""
 	}
