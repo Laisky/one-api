@@ -1,7 +1,7 @@
 ---
 title: MCP 2026-07-28 Protocol Compatibility
 version: 1.0
-last_updated: 2026-08-30
+last_updated: 2026-08-31
 ---
 
 # MCP 2026-07-28 Protocol Compatibility
@@ -45,6 +45,12 @@ The client:
 8. retries through the legacy initialize/session lifecycle only when the remote endpoint does not return a recognized modern protocol error.
 
 Authentication failures and recognized modern errors such as `HeaderMismatch`, `MissingRequiredClientCapability`, and `UnsupportedProtocolVersion` are returned to the caller rather than being misclassified as legacy-server failures.
+
+## Credential transport policy
+
+Configured remote MCP endpoints that receive an API key, an authorization or cookie header, custom authentication headers, or URL user information must use HTTPS. The same rule is enforced both when server configuration is validated and immediately before outbound network I/O, so previously persisted or directly constructed clients cannot bypass it.
+
+Plaintext HTTP remains available for unauthenticated endpoints. Credentialed HTTP is allowed only for `localhost`, `127.0.0.0/8`, and `::1` loopback endpoints used by local development and integration tests. HTTPS-to-HTTP redirects are always rejected, and credentialed redirects must preserve the original scheme, hostname, and effective port.
 
 ## Schema-driven parameter headers
 
@@ -116,7 +122,9 @@ Regression tests cover:
 - modern and legacy result-field aliases;
 - multi-round-trip request fields;
 - `server/discover`, cache metadata, Origin validation, and header mismatch rejection;
-- legacy `initialize` delegation through the same `/mcp` endpoint.
+- legacy `initialize` delegation through the same `/mcp` endpoint;
+- configuration-time and runtime rejection of credentialed remote plaintext HTTP;
+- loopback-only credentialed HTTP compatibility and redirect downgrade protection.
 
 ## Specification references
 

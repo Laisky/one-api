@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -10,15 +11,46 @@ import (
 
 const maxMCPRedirects = 10
 
-// httpClient returns an HTTP client that enforces MCP redirect transport boundaries.
+// mcpSecurityRoundTripper rejects credential-bearing requests that would leave the process over remote plaintext HTTP.
+type mcpSecurityRoundTripper struct {
+	base         http.RoundTripper
+	credentialed bool
+}
+
+// RoundTrip validates the outbound request transport before delegating to the configured HTTP transport.
+//
+// Parameters:
+//   - request: The outbound MCP HTTP request is checked before network I/O begins.
+//
+// Return values:
+//   - *http.Response: The delegated transport response is returned for an allowed request.
+//   - error: A transport-policy or delegated round-trip error is returned on failure.
+func (transport mcpSecurityRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	if err := validateMCPOutboundTransport(request, transport.credentialed); err != nil {
+		return nil, err
+	}
+	base := transport.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(request)
+}
+
+// httpClient returns an HTTP client that enforces MCP request and redirect transport boundaries.
 //
 // Parameters: none.
 //
 // Return values:
-//   - *http.Client: The client uses the configured timeout and rejects unsafe redirects.
+//   - *http.Client: The client uses the configured timeout and rejects unsafe plaintext or redirected credential delivery.
 func (c *StreamableHTTPClient) httpClient() *http.Client {
-	client := &http.Client{Timeout: c.Timeout}
 	sensitive := hasSensitiveMCPClientState(c)
+	client := &http.Client{
+		Timeout: c.Timeout,
+		Transport: mcpSecurityRoundTripper{
+			base:         http.DefaultTransport,
+			credentialed: sensitive,
+		},
+	}
 	client.CheckRedirect = func(request *http.Request, via []*http.Request) error {
 		if len(via) >= maxMCPRedirects {
 			return errors.WithStack(errors.New("stopped after 10 MCP redirects"))
@@ -38,24 +70,76 @@ func (c *StreamableHTTPClient) httpClient() *http.Client {
 	return client
 }
 
+// validateMCPOutboundTransport enforces HTTPS for credentialed remote MCP requests while retaining loopback development compatibility.
+//
+// Parameters:
+//   - request: The outbound HTTP request supplies the destination URL.
+//   - credentialed: The flag indicates whether the client carries API keys, authorization values, cookies, URL user information, or similar secrets.
+//
+// Return values:
+//   - error: A policy error is returned when a credentialed request targets remote plaintext HTTP; otherwise nil is returned.
+func validateMCPOutboundTransport(request *http.Request, credentialed bool) error {
+	if !credentialed {
+		return nil
+	}
+	if request == nil || request.URL == nil {
+		return errors.WithStack(errors.New("credentialed MCP request URL is missing"))
+	}
+	if strings.EqualFold(request.URL.Scheme, "https") {
+		return nil
+	}
+	if strings.EqualFold(request.URL.Scheme, "http") && isLoopbackMCPHostname(request.URL.Hostname()) {
+		return nil
+	}
+	return errors.WithStack(errors.New("credentialed MCP requests require HTTPS unless the endpoint is a loopback host"))
+}
+
 // hasSensitiveMCPClientState reports whether an MCP client sends credentials with requests.
 //
 // Parameters:
 //   - client: The client supplies configured headers and URL user information.
 //
 // Return values:
-//   - bool: True is returned when redirects could expose credentials.
+//   - bool: True is returned when redirects or plaintext transport could expose credentials.
 func hasSensitiveMCPClientState(client *StreamableHTTPClient) bool {
 	if client == nil {
 		return false
 	}
 	for key, value := range client.headerSnapshot() {
-		if strings.TrimSpace(value) != "" && isSensitiveKey(strings.ToLower(strings.TrimSpace(key))) {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		normalizedKey := http.CanonicalHeaderKey(strings.TrimSpace(key))
+		if isSensitiveKey(strings.ToLower(normalizedKey)) {
+			return true
+		}
+		switch normalizedKey {
+		case "Accept", "Accept-Encoding", "Content-Type", "User-Agent", http.CanonicalHeaderKey(ProtocolVersionHeader), http.CanonicalHeaderKey(SessionIDHeader):
+			continue
+		default:
+			// Arbitrary configured headers can implement custom authentication even
+			// when their names do not contain a conventional credential token.
 			return true
 		}
 	}
 	parsed, err := url.Parse(client.BaseURL)
 	return err == nil && parsed.User != nil
+}
+
+// isLoopbackMCPHostname reports whether a hostname is restricted to the local machine.
+//
+// Parameters:
+//   - hostname: The URL hostname is checked as localhost or a loopback IP address.
+//
+// Return values:
+//   - bool: True is returned only for localhost and IP loopback addresses.
+func isLoopbackMCPHostname(hostname string) bool {
+	hostname = strings.TrimSpace(hostname)
+	if strings.EqualFold(hostname, "localhost") {
+		return true
+	}
+	address := net.ParseIP(hostname)
+	return address != nil && address.IsLoopback()
 }
 
 // sameMCPOrigin reports whether two endpoint URLs share scheme, hostname, and effective port.
