@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestClaudeSeptember2026BedrockModelIDs verifies the Bedrock model-ID mappings
+// for the Claude 5.1 releases. It accepts a testing handle and returns no value.
 func TestClaudeSeptember2026BedrockModelIDs(t *testing.T) {
 	t.Parallel()
 

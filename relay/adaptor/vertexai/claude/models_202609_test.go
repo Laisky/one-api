@@ -8,6 +8,9 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
+// TestClaudeSeptember2026VertexModelCatalog verifies the September 2026 Claude
+// pricing and model-list exposure on Vertex AI. It accepts a testing handle and
+// returns no value.
 func TestClaudeSeptember2026VertexModelCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -39,6 +42,9 @@ func TestClaudeSeptember2026VertexModelCatalog(t *testing.T) {
 	}
 }
 
+// TestClaudeSonnet5VertexPricingHasNoExpiryWindow verifies that Vertex AI
+// Sonnet 5 uses its permanent price without a time-window override. It accepts
+// a testing handle and returns no value.
 func TestClaudeSonnet5VertexPricingHasNoExpiryWindow(t *testing.T) {
 	t.Parallel()
 

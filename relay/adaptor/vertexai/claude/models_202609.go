@@ -26,6 +26,8 @@ var claudeSeptember2026ModelRatios = map[string]adaptor.ModelConfig{
 	},
 }
 
+// init installs the September 2026 Claude entries and rebuilds the Vertex AI
+// model list. It takes no parameters and returns no values.
 func init() {
 	for model, config := range claudeSeptember2026ModelRatios {
 		ModelRatios[model] = config

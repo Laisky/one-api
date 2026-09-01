@@ -8,6 +8,8 @@ var claudeSeptember2026BedrockModelIDs = map[string]string{
 	"claude-mythos-5-1": "anthropic.claude-mythos-5-1",
 }
 
+// init installs the September 2026 Claude IDs in the Bedrock model-ID registry.
+// It takes no parameters and returns no values.
 func init() {
 	for model, bedrockModelID := range claudeSeptember2026BedrockModelIDs {
 		AwsModelIDMap[model] = bedrockModelID
