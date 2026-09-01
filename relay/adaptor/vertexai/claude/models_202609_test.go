@@ -1,0 +1,55 @@
+package vertexai
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/billing/ratio"
+)
+
+// TestClaudeSeptember2026VertexModelCatalog verifies the September 2026 Claude
+// pricing and model-list exposure on Vertex AI. It accepts a testing handle and
+// returns no value.
+func TestClaudeSeptember2026VertexModelCatalog(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		inputUsd        float64
+		cacheReadUsd    float64
+		cacheWrite5mUsd float64
+		cacheWrite1hUsd float64
+	}{
+		{name: "claude-fable-5-1", inputUsd: 10, cacheReadUsd: 0.25, cacheWrite5mUsd: 12.5, cacheWrite1hUsd: 20},
+		{name: "claude-mythos-5-1", inputUsd: 10, cacheReadUsd: 0.25, cacheWrite5mUsd: 12.5, cacheWrite1hUsd: 20},
+		{name: "claude-sonnet-5", inputUsd: 2, cacheReadUsd: 0.2, cacheWrite5mUsd: 2.5, cacheWrite1hUsd: 4},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			config, ok := ModelRatios[tt.name]
+			require.True(t, ok)
+			require.InDelta(t, tt.inputUsd*ratio.MilliTokensUsd, config.Ratio, 1e-12)
+			require.InDelta(t, 5.0, config.CompletionRatio, 1e-12)
+			require.InDelta(t, tt.cacheReadUsd*ratio.MilliTokensUsd, config.CachedInputRatio, 1e-12)
+			require.InDelta(t, tt.cacheWrite5mUsd*ratio.MilliTokensUsd, config.CacheWrite5mRatio, 1e-12)
+			require.InDelta(t, tt.cacheWrite1hUsd*ratio.MilliTokensUsd, config.CacheWrite1hRatio, 1e-12)
+			require.Contains(t, ModelList, tt.name)
+		})
+	}
+}
+
+// TestClaudeSonnet5VertexPricingHasNoExpiryWindow verifies that Vertex AI
+// Sonnet 5 uses its permanent price without a time-window override. It accepts
+// a testing handle and returns no value.
+func TestClaudeSonnet5VertexPricingHasNoExpiryWindow(t *testing.T) {
+	t.Parallel()
+
+	config := ModelRatios["claude-sonnet-5"]
+	require.Empty(t, config.TimeWindows)
+	require.InDelta(t, 2*ratio.MilliTokensUsd, config.Ratio, 1e-12)
+	require.InDelta(t, 10*ratio.MilliTokensUsd, config.Ratio*config.CompletionRatio, 1e-12)
+}
