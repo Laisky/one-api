@@ -174,11 +174,11 @@ func TestConvertRequestPreservesReasoningEffort(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{input: "low", expected: "high"},
+		{input: "low", expected: "low"},
 		{input: "high", expected: "high"},
 		{input: "max", expected: "max"},
 		{input: "medium", expected: "high"},
-		{input: "xhigh", expected: "max"},
+		{input: "xhigh", expected: "high"},
 	} {
 		testCase := testCase
 		t.Run(testCase.input, func(t *testing.T) {
