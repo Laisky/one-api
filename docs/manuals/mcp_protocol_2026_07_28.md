@@ -50,7 +50,7 @@ Authentication failures and recognized modern errors such as `HeaderMismatch`, `
 
 Configured remote MCP endpoints that receive an API key, an authorization or cookie header, custom authentication headers, or URL user information must use HTTPS. The same rule is enforced both when server configuration is validated and immediately before outbound network I/O, so previously persisted or directly constructed clients cannot bypass it.
 
-Plaintext HTTP remains available for unauthenticated endpoints. Credentialed HTTP is allowed only for `localhost`, `127.0.0.0/8`, and `::1` loopback endpoints used by local development and integration tests. HTTPS-to-HTTP redirects are always rejected, and credentialed redirects must preserve the original scheme, hostname, and effective port.
+Plaintext HTTP remains available for unauthenticated endpoints. Credentialed HTTP is allowed only for `localhost`, `127.0.0.0/8`, and `::1` loopback endpoints used by local development and integration tests. The exception is host-bound: a credentialed redirect must remain on the exact original origin. HTTPS-to-HTTP redirects are always rejected, and credentialed redirects must preserve the original scheme, hostname, and effective port.
 
 ## Schema-driven parameter headers
 
