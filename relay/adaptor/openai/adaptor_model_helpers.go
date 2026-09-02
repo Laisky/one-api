@@ -36,16 +36,33 @@ func extractGptVersion(modelName string) (float64, bool) {
 }
 
 // isModelSupportedReasoning checks if the model supports reasoning features.
+// Model metadata takes precedence so aliases such as Daybreak are not dependent
+// on a numeric GPT prefix.
 func isModelSupportedReasoning(modelName string) bool {
 	lower := normalizedModelName(modelName)
+	if lower == "" {
+		return false
+	}
+	if strings.HasPrefix(lower, "gpt-5-chat-latest") || lower == "gpt-5-chat" {
+		return false
+	}
+
+	if cfg, ok := ModelRatios[lower]; ok {
+		if len(cfg.SupportedReasoningEfforts) > 0 {
+			return true
+		}
+		for _, feature := range cfg.SupportedFeatures {
+			if strings.EqualFold(feature, "reasoning") {
+				return true
+			}
+		}
+	}
+
 	if strings.HasPrefix(lower, "o") {
 		return true
 	}
 
 	if version, ok := extractGptVersion(lower); ok && version >= 5 {
-		if strings.HasPrefix(lower, "gpt-5-chat-latest") || lower == "gpt-5-chat" {
-			return false
-		}
 		return true
 	}
 
@@ -57,6 +74,7 @@ func isWebSearchModel(modelName string) bool {
 	return strings.Contains(modelName, "-search") || strings.Contains(modelName, "-search-preview")
 }
 
+// isDeepResearchModel returns true when the model uses OpenAI's deep-research surface.
 func isDeepResearchModel(modelName string) bool {
 	return strings.Contains(modelName, "deep-research")
 }
@@ -105,9 +123,9 @@ func defaultReasoningEffortForModel(modelName string) string {
 	return "medium"
 }
 
-// isReasoningEffortAllowedForModel reports whether `effort` is a permitted
-// reasoning_effort value for the model. Data-driven against the model config
-// when populated; falls back to name-based heuristics otherwise.
+// isReasoningEffortAllowedForModel reports whether effort is a permitted
+// reasoning_effort value for the model. It uses model metadata when populated
+// and falls back to name-based heuristics otherwise.
 func isReasoningEffortAllowedForModel(modelName, effort string) bool {
 	if effort == "" {
 		return false
@@ -134,22 +152,29 @@ func isReasoningEffortAllowedForModel(modelName, effort string) bool {
 	}
 }
 
+// normalizeReasoningEffortForModel validates and canonicalizes reasoning effort
+// values for the target model.
 func normalizeReasoningEffortForModel(modelName string, effort *string) *string {
 	defaultEffort := defaultReasoningEffortForModel(modelName)
 	if effort == nil {
 		return stringRef(defaultEffort)
 	}
 	normalized := strings.ToLower(strings.TrimSpace(*effort))
+	if normalized == "minimal" && isReasoningEffortAllowedForModel(modelName, "none") {
+		normalized = "none"
+	}
 	if !isReasoningEffortAllowedForModel(modelName, normalized) {
 		return stringRef(defaultEffort)
 	}
 	return stringRef(normalized)
 }
 
+// stringRef returns a pointer to value.
 func stringRef(value string) *string {
 	return &value
 }
 
+// ensureWebSearchTool adds the web_search tool when it is not already present.
 func ensureWebSearchTool(request *model.GeneralOpenAIRequest) {
 	for _, tool := range request.Tools {
 		if strings.EqualFold(tool.Type, "web_search") {
