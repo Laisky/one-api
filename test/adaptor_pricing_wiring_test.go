@@ -169,3 +169,43 @@ func TestNoPerTokenPriceLooksLikeAUnitError(t *testing.T) {
 			"(a 1000x under-charge). Fix the unit, or price the model per call: %v",
 		perTokenUnitErrorFloorUsdPerMillion, lines)
 }
+
+// TestSameVendorTablesAgreeOnSharedModels pins the price of a SKU that two
+// channel types of the same vendor both serve.
+//
+// DashScope (channeltype.Ali) and Bailian (channeltype.AliBailian) are two names
+// for one Alibaba platform, and alibailian/constants.go says outright that its
+// DeepSeek pricing "is also maintained in relay/adaptor/ali/constants_deepseek.go".
+// Maintained-in-parallel tables drift: Bailian carried deepseek-v3 at 0.07 CNY/1M
+// with completion ratio 1 against DashScope's 2 / 4, a 28x input and 114x output
+// under-charge on the identical SKU.
+//
+// Divergence between DIFFERENT vendors reselling the same open-weight model
+// (deepinfra vs siliconflow vs together.ai for Qwen, zhipu vs z.ai for GLM) is
+// normal and deliberately not checked here — they really do charge differently.
+func TestSameVendorTablesAgreeOnSharedModels(t *testing.T) {
+	dashscope := pricingAdaptorForChannel(channeltype.Ali).GetDefaultModelPricing()
+	bailian := pricingAdaptorForChannel(channeltype.AliBailian).GetDefaultModelPricing()
+
+	// A hosted SKU may legitimately be offered on only one of the two surfaces;
+	// only ids present in both are constrained.
+	checked := 0
+	for modelName, dashscopeCfg := range dashscope {
+		bailianCfg, shared := bailian[modelName]
+		if !shared || dashscopeCfg.Ratio <= 0 || bailianCfg.Ratio <= 0 {
+			continue
+		}
+		checked++
+
+		assert.InEpsilonf(t, dashscopeCfg.Ratio, bailianCfg.Ratio, 0.05,
+			"%s: DashScope bills %.6g per token but Bailian bills %.6g — same vendor, same SKU",
+			modelName, dashscopeCfg.Ratio, bailianCfg.Ratio)
+
+		if dashscopeCfg.CompletionRatio > 0 && bailianCfg.CompletionRatio > 0 {
+			assert.InEpsilonf(t, dashscopeCfg.CompletionRatio, bailianCfg.CompletionRatio, 0.05,
+				"%s: DashScope completion ratio %.4g but Bailian %.4g",
+				modelName, dashscopeCfg.CompletionRatio, bailianCfg.CompletionRatio)
+		}
+	}
+	require.NotZero(t, checked, "the two Alibaba tables share no priced model; this guard has stopped guarding anything")
+}

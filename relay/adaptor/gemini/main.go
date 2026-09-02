@@ -249,7 +249,17 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 		if textRequest.ResponseFormat.JsonSchema != nil {
 			// Clean the schema to remove unsupported properties for Gemini
 			cleanedSchema := cleanJsonSchemaForGemini(textRequest.ResponseFormat.JsonSchema.Schema)
-			geminiRequest.GenerationConfig.ResponseSchema = cleanedSchema
+			// ResponseSchema is an `any` field, so omitempty will not drop an empty
+			// map: cleaning a schema whose top level holds only unsupported keys
+			// (a $ref/$defs wrapper, which pydantic and zod emit constantly) yields
+			// an empty map, and `"responseSchema": {}` alongside a JSON mime type is
+			// rejected by Gemini. Send the mime type without a schema instead.
+			if schemaMap, ok := cleanedSchema.(map[string]any); ok && len(schemaMap) == 0 {
+				cleanedSchema = nil
+			}
+			if cleanedSchema != nil {
+				geminiRequest.GenerationConfig.ResponseSchema = cleanedSchema
+			}
 			geminiRequest.GenerationConfig.ResponseMimeType = mimeTypeMap["json_object"]
 		}
 	}

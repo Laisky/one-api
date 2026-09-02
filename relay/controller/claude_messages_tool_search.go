@@ -483,7 +483,11 @@ func buildClaudeAssistantMessage(resp *anthropic.Response) relaymodel.ClaudeMess
 		case "tool_use":
 			contentBlock["id"] = block.Id
 			contentBlock["name"] = block.Name
-			contentBlock["input"] = block.Input
+			// Anthropic requires tool_use.input to be an object. block.Input is `any`,
+			// so an upstream that omitted it would replay as `"input": null` on the
+			// next MCP round and be rejected. The default arm below already guards
+			// this; these two hot arms did not.
+			contentBlock["input"] = toolUseInputOrEmpty(block.Input)
 		case "thinking":
 			if block.Thinking != nil {
 				contentBlock["thinking"] = *block.Thinking
@@ -494,7 +498,7 @@ func buildClaudeAssistantMessage(resp *anthropic.Response) relaymodel.ClaudeMess
 		case "server_tool_use":
 			contentBlock["id"] = block.Id
 			contentBlock["name"] = block.Name
-			contentBlock["input"] = block.Input
+			contentBlock["input"] = toolUseInputOrEmpty(block.Input)
 		default:
 			// Preserve other block types as-is
 			contentBlock["text"] = block.Text
@@ -612,4 +616,18 @@ func resolveServerByIDFromCatalog(catalog *mcpToolCatalog, serverID int) *model.
 		}
 	}
 	return nil
+}
+
+// toolUseInputOrEmpty substitutes an empty object for a missing tool_use input.
+//
+// Parameters:
+//   - input: the block's decoded input, which may be nil.
+//
+// Return values:
+//   - any: input when present, otherwise an empty object.
+func toolUseInputOrEmpty(input any) any {
+	if input == nil {
+		return map[string]any{}
+	}
+	return input
 }

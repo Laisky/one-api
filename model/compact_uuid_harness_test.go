@@ -32,9 +32,66 @@ import (
 //   - context.Context: seeded, bounded context.
 func compactTestContext(t *testing.T) context.Context {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(withCompactLogger(context.Background()), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(withCompactLogger(context.Background()), compactTestBudget(t))
 	t.Cleanup(cancel)
 	return ctx
+}
+
+// compactTestBudget sizes the wall-clock budget for one compact-migration test.
+//
+// A fixed two minutes was too tight under load. TestCompactUUIDConcurrentCyclesConverge
+// runs 4 x 60 real migration cycles and then drives the coordinator to ready; on a
+// busy machine it exceeded the budget, and because an exhausted context stops the
+// migration from progressing without surfacing an error, the test reported
+// "table async_task_bindings is not fully expanded with typed compact columns" —
+// a convergence failure that had not happened.
+//
+// Scaling off the binary's own deadline means a longer `go test -timeout` buys the
+// work proportionally more room, while still expiring before go test kills the
+// binary with an undiagnosable panic.
+//
+// Parameters:
+//   - t: the running test, consulted for the binary's deadline.
+//
+// Return values:
+//   - time.Duration: the budget to give this test's context.
+func compactTestBudget(t *testing.T) time.Duration {
+	const defaultBudget = 2 * time.Minute
+	const maxBudget = 8 * time.Minute
+	// Expire before go test's own timeout so the failure is ours and readable.
+	const margin = 15 * time.Second
+
+	deadline, ok := t.Deadline()
+	if !ok {
+		return defaultBudget
+	}
+	budget := time.Until(deadline) - margin
+	switch {
+	case budget <= 0:
+		return time.Second
+	case budget > maxBudget:
+		return maxBudget
+	default:
+		return budget
+	}
+}
+
+// requireCompactBudgetRemaining fails with an accurate message when the harness
+// ran out of wall-clock time.
+//
+// An expired context makes the migration stop making progress, but the validation
+// queries still run and report incomplete work — so without this check a timeout
+// masquerades as a correctness failure and sends the reader hunting a bug that is
+// not there.
+//
+// Parameters:
+//   - t: the running test.
+//   - ctx: the harness context whose budget is being checked.
+func requireCompactBudgetRemaining(t *testing.T, ctx context.Context) {
+	t.Helper()
+	require.NoError(t, ctx.Err(),
+		"compact test budget exhausted before the assertion ran; this is a harness timeout, "+
+			"not a migration defect - raise go test -timeout or compactTestBudget")
 }
 
 // withCompactTestSettings installs fast, bounded settings for one test and restores them after.

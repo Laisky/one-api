@@ -1,6 +1,6 @@
 module github.com/Laisky/one-api
 
-go 1.26.3
+go 1.27.1
 
 require (
 	cloud.google.com/go/iam v1.11.0
