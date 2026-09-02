@@ -1,0 +1,85 @@
+name: ChatGPT diagnose Go unit tests
+
+on:
+  push:
+    branches:
+      - chore/update-openai-models-2026-09
+    paths:
+      - .github/workflows/chatgpt-diagnose-go-unit.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: chore/update-openai-models-2026-09
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Reproduce the lint workflow Go test command
+        shell: bash
+        run: |
+          set +e
+          go test -race -cover -coverprofile=coverage.txt -count=1 -timeout 20m ./... > /tmp/go-unit.log 2>&1
+          status=$?
+          set -e
+
+          if [ "$status" -eq 0 ]; then
+            rm .github/workflows/chatgpt-diagnose-go-unit.yml
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .github/workflows/chatgpt-diagnose-go-unit.yml
+            git commit -m "ci: remove successful Go unit diagnostic"
+            git push origin HEAD:chore/update-openai-models-2026-09
+            exit 0
+          fi
+
+          python <<'PY'
+          from pathlib import Path
+
+          source = Path('/tmp/go-unit.log').read_text(errors='replace').splitlines()
+          markers = (
+              '--- FAIL:',
+              'WARNING: DATA RACE',
+              'panic:',
+              'fatal error:',
+              'FAIL\t',
+              'FAIL ',
+          )
+          hits = [i for i, line in enumerate(source) if any(marker in line for marker in markers)]
+          selected = set(range(max(0, len(source) - 2500), len(source)))
+          for hit in hits:
+              selected.update(range(max(0, hit - 120), min(len(source), hit + 240)))
+          output = [
+              'Command: go test -race -cover -coverprofile=coverage.txt -count=1 -timeout 20m ./...',
+              f'Exit status: {status}',
+              f'Original log lines: {len(source)}',
+              '',
+          ]
+          previous = None
+          for index in sorted(selected):
+              if previous is not None and index != previous + 1:
+                  output.append(f'... omitted lines {previous + 2}-{index} ...')
+              output.append(f'{index + 1:06d}: {source[index]}')
+              previous = index
+          Path('.github/chatgpt-go-unit.log').write_text('\n'.join(output) + '\n')
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/chatgpt-go-unit.log
+          git commit -m "ci: capture failing Go unit-test diagnostics"
+          git push origin HEAD:chore/update-openai-models-2026-09
+          exit "$status"
