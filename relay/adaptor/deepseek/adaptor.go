@@ -165,12 +165,17 @@ func ensureDeepSeekStreamUsage(request *model.GeneralOpenAIRequest) {
 	request.StreamOptions.IncludeUsage = true
 }
 
-// normalizeDeepSeekThinkingConfig coerces thinking.type into values accepted by DeepSeek.
-// DeepSeek chat completion currently supports only enabled/disabled.
+// normalizeDeepSeekThinkingConfig removes Anthropic-only controls and coerces
+// thinking.type into values accepted by DeepSeek. The context supplies request-scoped
+// logging, request is mutated in place, and the function returns no value.
 func normalizeDeepSeekThinkingConfig(c *gin.Context, request *model.GeneralOpenAIRequest) {
 	if request == nil || request.Thinking == nil {
 		return
 	}
+
+	// block_binding controls Anthropic signature validation and has no DeepSeek
+	// equivalent. Remove it while retaining portable thinking mode and budget data.
+	request.Thinking.BlockBinding = nil
 
 	originalType := request.Thinking.Type
 	normalizedType, changed := deepseekcompat.NormalizeThinkingType(originalType, request.Thinking.BudgetTokens)

@@ -15,6 +15,9 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
+// TestThinkingBindingControls_ConvertedRequestRoundTrip verifies converted Anthropic
+// requests retain explicit block-binding controls and enable the required beta flag.
+// It accepts the test context and reports all validation failures through that context.
 func TestThinkingBindingControls_ConvertedRequestRoundTrip(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -47,6 +50,9 @@ func TestThinkingBindingControls_ConvertedRequestRoundTrip(t *testing.T) {
 	require.True(t, c.GetBool(ctxkey.ClaudeThinkingBindingControlsEnabled))
 }
 
+// TestThinkingBindingControls_HeaderActivation verifies the Anthropic beta header
+// is added only for explicit binding controls and is deduplicated case-insensitively.
+// It accepts the test context and reports all validation failures through that context.
 func TestThinkingBindingControls_HeaderActivation(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -120,6 +126,9 @@ func TestThinkingBindingControls_HeaderActivation(t *testing.T) {
 	}
 }
 
+// TestPreservedThinkingResponseMetadataRoundTrip verifies typed response handling
+// retains empty thinking text, redacted data, and future transformation metadata.
+// It accepts the test context and reports all validation failures through that context.
 func TestPreservedThinkingResponseMetadataRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -169,6 +178,9 @@ func TestPreservedThinkingResponseMetadataRoundTrip(t *testing.T) {
 	require.Contains(t, string(reencoded), `"input_transformations":[]`)
 }
 
+// TestNativeStream_PreservesThinkingInputTransformations verifies native streaming
+// forwards preserved-thinking transformation metadata from the message_start event.
+// It accepts the test context and reports all validation failures through that context.
 func TestNativeStream_PreservesThinkingInputTransformations(t *testing.T) {
 	t.Parallel()
 	c, recorder := newTestContext(t)

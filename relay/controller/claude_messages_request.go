@@ -76,6 +76,11 @@ func rewriteClaudeAdaptiveThinking(rawThinking json.RawMessage) (json.RawMessage
 		}
 		return json.RawMessage(rewritten), true, nil
 	}
+	if obj == nil {
+		// JSON null represents an absent optional thinking configuration. Preserve it
+		// rather than synthesizing adaptive thinking or assigning into a nil map.
+		return rawThinking, false, nil
+	}
 
 	var thinkingType string
 	if rawType, ok := obj["type"]; ok {

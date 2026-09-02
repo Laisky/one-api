@@ -6,8 +6,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
+// TestRewriteAndSanitizeClaudeRequestBody_PreservesBoundThinkingBlocks verifies
+// signed, redacted, and future thinking blocks survive request rewriting. It accepts
+// the test context and reports all validation failures through that context.
 func TestRewriteAndSanitizeClaudeRequestBody_PreservesBoundThinkingBlocks(t *testing.T) {
 	t.Parallel()
 
@@ -70,6 +75,9 @@ func TestRewriteAndSanitizeClaudeRequestBody_PreservesBoundThinkingBlocks(t *tes
 	}
 }
 
+// TestRewriteAndSanitizeClaudeRequestBody_StripsOnlyUnsignedVisibleThinking verifies
+// only unsigned visible thinking is removed while opaque redacted blocks remain. It
+// accepts the test context and reports all validation failures through that context.
 func TestRewriteAndSanitizeClaudeRequestBody_StripsOnlyUnsignedVisibleThinking(t *testing.T) {
 	t.Parallel()
 
@@ -113,6 +121,9 @@ func TestRewriteAndSanitizeClaudeRequestBody_StripsOnlyUnsignedVisibleThinking(t
 	require.Equal(t, "sig==", *root.Messages[0].Content[1].Signature)
 }
 
+// TestRewriteClaudeRequestBody_AdaptiveThinkingPreservesBindingAndFutureFields verifies
+// adaptive normalization changes only supported fields and preserves future siblings. It
+// accepts the test context and reports all validation failures through that context.
 func TestRewriteClaudeRequestBody_AdaptiveThinkingPreservesBindingAndFutureFields(t *testing.T) {
 	t.Parallel()
 
@@ -148,6 +159,30 @@ func TestRewriteClaudeRequestBody_AdaptiveThinkingPreservesBindingAndFutureField
 	require.Equal(t, "true", string(binding["future_option"]))
 }
 
+// TestRewriteClaudeRequestBody_AdaptiveThinkingNullDoesNotPanic verifies an explicit
+// JSON null is treated as an absent optional thinking configuration and forwarded. It
+// accepts the test context and reports all validation failures through that context.
+func TestRewriteClaudeRequestBody_AdaptiveThinkingNullDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"model":"claude-fable-5-1",
+		"max_tokens":1024,
+		"thinking":null,
+		"messages":[{"role":"user","content":"hello"}]
+	}`)
+
+	result, err := rewriteClaudeRequestBody(raw, &ClaudeMessagesRequest{Model: "claude-fable-5-1"})
+	require.NoError(t, err)
+
+	var root map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(result, &root))
+	require.Equal(t, "null", string(root["thinking"]))
+}
+
+// TestStripClaudeThinkingFromAssistantHistory_PreservedThinkingFallback verifies the
+// compatibility retry removes all provider-bound thinking while preserving useful output.
+// It accepts the test context and reports all validation failures through that context.
 func TestStripClaudeThinkingFromAssistantHistory_PreservedThinkingFallback(t *testing.T) {
 	t.Parallel()
 
@@ -170,6 +205,9 @@ func TestStripClaudeThinkingFromAssistantHistory_PreservedThinkingFallback(t *te
 	require.Contains(t, string(result), `"type":"tool_use"`)
 }
 
+// TestShouldRetryClaudeThinkingReplay verifies legacy replay recovery remains enabled
+// unless the validated caller explicitly selects strict prefix errors. It accepts the
+// test context and reports all validation failures through that context.
 func TestShouldRetryClaudeThinkingReplay(t *testing.T) {
 	t.Parallel()
 
@@ -180,13 +218,30 @@ func TestShouldRetryClaudeThinkingReplay(t *testing.T) {
 			"message":"messages.1.content.0: Invalid ` + "`signature`" + ` in ` + "`thinking`" + ` block. The block is bound to a different conversation."
 		}
 	}`)
-	legacyRequest := []byte(`{"thinking":{"type":"adaptive"},"messages":[]}`)
-	explicitErrorRequest := []byte(`{"thinking":{"type":"adaptive","block_binding":{"prefix_mismatch_behavior":"error"}},"messages":[]}`)
-	dropRequest := []byte(`{"thinking":{"type":"adaptive","block_binding":{"prefix_mismatch_behavior":"drop_block"}},"messages":[]}`)
+	legacyRequest := &ClaudeMessagesRequest{
+		Thinking: &relaymodel.Thinking{Type: "adaptive"},
+	}
+	explicitErrorRequest := &ClaudeMessagesRequest{
+		Thinking: &relaymodel.Thinking{
+			Type: "adaptive",
+			BlockBinding: &relaymodel.ThinkingBlockBinding{
+				PrefixMismatchBehavior: "error",
+			},
+		},
+	}
+	dropRequest := &ClaudeMessagesRequest{
+		Thinking: &relaymodel.Thinking{
+			Type: "adaptive",
+			BlockBinding: &relaymodel.ThinkingBlockBinding{
+				PrefixMismatchBehavior: "drop_block",
+			},
+		},
+	}
 
 	require.True(t, shouldRetryClaudeInvalidThinkingSignature(http.StatusBadRequest, newBindingError))
 	require.True(t, shouldRetryClaudeThinkingReplay(http.StatusBadRequest, newBindingError, legacyRequest))
 	require.False(t, shouldRetryClaudeThinkingReplay(http.StatusBadRequest, newBindingError, explicitErrorRequest))
 	require.True(t, shouldRetryClaudeThinkingReplay(http.StatusBadRequest, newBindingError, dropRequest))
+	require.True(t, shouldRetryClaudeThinkingReplay(http.StatusBadRequest, newBindingError, nil))
 	require.False(t, shouldRetryClaudeThinkingReplay(http.StatusInternalServerError, newBindingError, legacyRequest))
 }

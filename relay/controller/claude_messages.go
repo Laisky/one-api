@@ -312,7 +312,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 					zap.Error(bodyErr),
 					zap.Int("status_code", resp.StatusCode),
 				)
-			} else if shouldRetryClaudeThinkingReplay(resp.StatusCode, responseBody, passthroughBody) {
+			} else if shouldRetryClaudeThinkingReplay(resp.StatusCode, responseBody, claudeRequest) {
 				logUpstreamResponseFromBytes(lg, resp, responseBody, "claude_messages_signature_rejected")
 
 				retryBody, retryStats, retryBodyErr := stripClaudeThinkingFromAssistantHistory(passthroughBody)
