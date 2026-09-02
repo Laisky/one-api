@@ -121,7 +121,7 @@ jobs:
                       return cfg.DefaultReasoningEffort
                   }
                   if len(cfg.SupportedReasoningEfforts) == 1 {
-                      return cfg.SupportedReasoningEfforts[0]
+                      return cfg.SupportedReasoningEffort[0]
                   }
               }
               return "medium"
@@ -198,7 +198,25 @@ jobs:
           old = "gpt56SolLongContextTier"
           if catalog_content.count(old) != 2:
               raise RuntimeError(f"expected two {old} references, found {catalog_content.count(old)}")
-          catalog.write_text(catalog_content.replace(old, "gpt56SolPromoLongContextTier"))
+          catalog_content = catalog_content.replace(old, "gpt56SolPromoLongContextTier")
+
+          needle = '''\tfor _, modelName := range []string{"gpt-5.6", "gpt-5.6-sol"} {
+          \t\tmodelRatios[modelName] = cloneModelConfig(sol)
+          \t}
+          '''
+          replacement = needle + '''
+          \tfor _, modelName := range []string{"gpt-5.6-terra", "gpt-5.6-luna"} {
+          \t\tconfig, ok := modelRatios[modelName]
+          \t\tif !ok {
+          \t\t\tcontinue
+          \t\t}
+          \t\tconfig.SupportedReasoningEfforts = slices.Clone(gpt56CanonicalReasoningEfforts)
+          \t\tmodelRatios[modelName] = config
+          \t}
+          '''
+          if catalog_content.count(needle) != 1:
+              raise RuntimeError("could not locate GPT-5.6 Sol catalog insertion point")
+          catalog.write_text(catalog_content.replace(needle, replacement))
           PY
 
           gofmt -w \
