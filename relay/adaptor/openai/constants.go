@@ -9,10 +9,10 @@ import (
 // per-family files stay focused and readable. Model list is derived from the keys of
 // this map, eliminating redundancy.
 //
-// Pricing sources verified 2026-07-31:
+// Pricing sources verified 2026-09-01:
 //   - https://developers.openai.com/api/docs/pricing
 //   - https://developers.openai.com/api/docs/models
-var ModelRatios = mergeModelRatios(
+var ModelRatios = applyOpenAIModelCatalog202609(mergeModelRatios(
 	gpt35ModelRatios,
 	gpt4ModelRatios,
 	gpt4oModelRatios,
@@ -26,7 +26,7 @@ var ModelRatios = mergeModelRatios(
 	audioModelRatios,
 	imageModelRatios,
 	videoModelRatios,
-)
+))
 
 // ModelList derived from ModelRatios for backward compatibility.
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
