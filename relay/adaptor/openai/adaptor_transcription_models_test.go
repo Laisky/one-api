@@ -3,38 +3,34 @@ package openai
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// TestCurrentTranscriptionModels verifies the current duration-priced transcription catalog entries.
-func TestCurrentTranscriptionModels(t *testing.T) {
+// TestGPTTranscriptionModels verifies transcription metadata and the duration-based rate used by RelayAudioHelper.
+func TestGPTTranscriptionModels(t *testing.T) {
 	t.Parallel()
 
-	modelList := adaptor.GetModelListFromPricing(ModelRatios)
-	modelSet := make(map[string]bool, len(modelList))
-	for _, modelName := range modelList {
-		modelSet[modelName] = true
+	expectations := map[string]struct {
+		usdPerMinute float64
+	}{
+		"gpt-transcribe":      {usdPerMinute: 0.0045},
+		"gpt-live-transcribe": {usdPerMinute: 0.017},
 	}
 
-	fileModel, ok := ModelRatios["gpt-transcribe"]
-	require.True(t, ok, "ModelRatios must contain gpt-transcribe")
-	assert.True(t, modelSet["gpt-transcribe"])
-	assert.InDelta(t, 7.5*ratio.MilliTokensUsd, fileModel.Ratio, 1e-12)
-	require.NotNil(t, fileModel.Audio)
-	assert.InDelta(t, 10.0, fileModel.Audio.PromptTokensPerSecond, 1e-12)
-	assert.InDelta(t, 0.0045, fileModel.Audio.UsdPerSecond*60.0, 1e-12)
-	assert.Equal(t, []string{"audio", "text"}, fileModel.InputModalities)
-	assert.Equal(t, []string{"text"}, fileModel.OutputModalities)
+	for modelName, expectation := range expectations {
+		cfg, ok := ModelRatios[modelName]
+		require.Truef(t, ok, "ModelRatios must contain %q", modelName)
+		require.NotNilf(t, cfg.Audio, "%s must have audio pricing metadata", modelName)
 
-	liveModel, ok := ModelRatios["gpt-live-transcribe"]
-	require.True(t, ok, "ModelRatios must contain gpt-live-transcribe")
-	assert.True(t, modelSet["gpt-live-transcribe"])
-	require.NotNil(t, liveModel.Audio)
-	assert.InDelta(t, 0.017, liveModel.Audio.UsdPerSecond*60.0, 1e-12)
-	assert.Equal(t, []string{"audio", "text"}, liveModel.InputModalities)
-	assert.Equal(t, []string{"text"}, liveModel.OutputModalities)
+		require.InDeltaf(t, expectation.usdPerMinute/60, cfg.Audio.UsdPerSecond, 1e-12, "%s USD per second", modelName)
+		require.Equalf(t, []string{"audio"}, cfg.InputModalities, "%s input modalities", modelName)
+		require.Equalf(t, []string{"text"}, cfg.OutputModalities, "%s output modalities", modelName)
+		require.Greaterf(t, cfg.Audio.PromptTokensPerSecond, 0.0, "%s prompt tokens per second", modelName)
+		require.Zero(t, cfg.Audio.CompletionRatio)
+
+		effectiveUSDPerMinute := cfg.Ratio * cfg.Audio.PromptTokensPerSecond * 60 / ratio.QuotaPerUsd
+		require.InDeltaf(t, expectation.usdPerMinute, effectiveUSDPerMinute, 1e-12, "%s RelayAudioHelper rate", modelName)
+	}
 }

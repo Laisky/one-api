@@ -3,7 +3,6 @@ package openai
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/relay/adaptor"
@@ -30,7 +29,7 @@ func TestGetModelListFromPricingIncludesGPT56(t *testing.T) {
 	}
 
 	for _, modelName := range gpt56Models {
-		assert.True(t, modelSet[modelName], "GetModelListFromPricing must include %q", modelName)
+		require.True(t, modelSet[modelName], "GetModelListFromPricing must include %q", modelName)
 	}
 }
 
@@ -64,23 +63,23 @@ func TestGPT56Pricing(t *testing.T) {
 		cfg, ok := ModelRatios[name]
 		require.Truef(t, ok, "ModelRatios must contain %q", name)
 
-		assert.InDeltaf(t, expected.ratio*ratio.MilliTokensUsd, cfg.Ratio, 1e-12, "%s input ratio", name)
-		assert.InDeltaf(t, expected.completionRatio, cfg.CompletionRatio, 1e-9, "%s completion ratio", name)
-		assert.InDeltaf(t, expected.cachedInputRatio*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12, "%s cached input ratio", name)
-		assert.InDeltaf(t, expected.cacheWriteRatio*ratio.MilliTokensUsd, cfg.CacheWrite5mRatio, 1e-12, "%s cache write ratio", name)
-		assert.Zerof(t, cfg.CacheWrite1hRatio, "%s must not advertise an unsupported 1h cache write price", name)
-		assert.Equalf(t, expected.contextLength, cfg.ContextLength, "%s context length", name)
-		assert.Equalf(t, int32(128_000), cfg.MaxOutputTokens, "%s max output tokens", name)
-		assert.Equalf(t, []string{"text", "image"}, cfg.InputModalities, "%s input modalities", name)
+		require.InDeltaf(t, expected.ratio*ratio.MilliTokensUsd, cfg.Ratio, 1e-12, "%s input ratio", name)
+		require.InDeltaf(t, expected.completionRatio, cfg.CompletionRatio, 1e-9, "%s completion ratio", name)
+		require.InDeltaf(t, expected.cachedInputRatio*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12, "%s cached input ratio", name)
+		require.InDeltaf(t, expected.cacheWriteRatio*ratio.MilliTokensUsd, cfg.CacheWrite5mRatio, 1e-12, "%s cache write ratio", name)
+		require.Zerof(t, cfg.CacheWrite1hRatio, "%s must not advertise an unsupported 1h cache write price", name)
+		require.Equalf(t, expected.contextLength, cfg.ContextLength, "%s context length", name)
+		require.Equalf(t, int32(128_000), cfg.MaxOutputTokens, "%s max output tokens", name)
+		require.Equalf(t, []string{"text", "image"}, cfg.InputModalities, "%s input modalities", name)
 
 		require.Lenf(t, cfg.Tiers, 1, "%s must have a single long-context tier", name)
 		tier := cfg.Tiers[0]
-		assert.Equalf(t, 272_001, tier.InputTokenThreshold, "%s long-context threshold", name)
-		assert.InDeltaf(t, expected.tierRatio*ratio.MilliTokensUsd, tier.Ratio, 1e-12, "%s long-context input ratio", name)
-		assert.InDeltaf(t, expected.tierCompletion, tier.CompletionRatio, 1e-9, "%s long-context completion ratio", name)
-		assert.InDeltaf(t, expected.tierCached*ratio.MilliTokensUsd, tier.CachedInputRatio, 1e-12, "%s long-context cached input ratio", name)
-		assert.InDeltaf(t, expected.tierCacheWrite*ratio.MilliTokensUsd, tier.CacheWrite5mRatio, 1e-12, "%s long-context cache write ratio", name)
-		assert.Zerof(t, tier.CacheWrite1hRatio, "%s long-context tier must not advertise an unsupported 1h cache write price", name)
+		require.Equalf(t, 272_001, tier.InputTokenThreshold, "%s long-context threshold", name)
+		require.InDeltaf(t, expected.tierRatio*ratio.MilliTokensUsd, tier.Ratio, 1e-12, "%s long-context input ratio", name)
+		require.InDeltaf(t, expected.tierCompletion, tier.CompletionRatio, 1e-9, "%s long-context completion ratio", name)
+		require.InDeltaf(t, expected.tierCached*ratio.MilliTokensUsd, tier.CachedInputRatio, 1e-12, "%s long-context cached input ratio", name)
+		require.InDeltaf(t, expected.tierCacheWrite*ratio.MilliTokensUsd, tier.CacheWrite5mRatio, 1e-12, "%s long-context cache write ratio", name)
+		require.Zerof(t, tier.CacheWrite1hRatio, "%s long-context tier must not advertise an unsupported 1h cache write price", name)
 	}
 }
 
@@ -99,20 +98,28 @@ func TestGPT56ReasoningEfforts(t *testing.T) {
 	}
 
 	for _, name := range models {
-		assert.Truef(t, isModelSupportedReasoning(name), "%s must be recognized as a reasoning model", name)
-		assert.Truef(t, isReasoningEffortAllowedForModel(name, "max"), "%s must allow the 'max' effort", name)
-		assert.Truef(t, isReasoningEffortAllowedForModel(name, "xhigh"), "%s must allow the 'xhigh' effort", name)
-		assert.Truef(t, isReasoningEffortAllowedForModel(name, "none"), "%s must allow the canonical 'none' effort", name)
-		assert.Falsef(t, isReasoningEffortAllowedForModel(name, "minimal"), "%s metadata must not advertise the legacy 'minimal' spelling", name)
-		assert.Falsef(t, isReasoningEffortAllowedForModel(name, "ultra"), "%s must reject an unknown effort", name)
-		assert.Equalf(t, "medium", defaultReasoningEffortForModel(name), "%s default effort", name)
-		assert.Falsef(t, isMediumOnlyReasoningModel(name), "%s is not a medium-only model", name)
+		cfg, ok := ModelRatios[name]
+		require.Truef(t, ok, "ModelRatios must contain %q", name)
+		require.Equalf(t, gpt56CanonicalReasoningEfforts, cfg.SupportedReasoningEfforts, "%s canonical efforts", name)
+		require.Truef(t, isModelSupportedReasoning(name), "%s must be recognized as a reasoning model", name)
+		require.Truef(t, isReasoningEffortAllowedForModel(name, "max"), "%s must allow the 'max' effort", name)
+		require.Truef(t, isReasoningEffortAllowedForModel(name, "xhigh"), "%s must allow the 'xhigh' effort", name)
+		require.Truef(t, isReasoningEffortAllowedForModel(name, "none"), "%s must allow the canonical 'none' effort", name)
+		require.Truef(t, isReasoningEffortAllowedForModel(name, "minimal"), "%s must accept the legacy 'minimal' alias", name)
+		require.Falsef(t, isReasoningEffortAllowedForModel(name, "ultra"), "%s must reject an unknown effort", name)
+		require.Equalf(t, "medium", defaultReasoningEffortForModel(name), "%s default effort", name)
+		require.Falsef(t, isMediumOnlyReasoningModel(name), "%s is not a medium-only model", name)
 
 		requested := "max"
-		assert.Equalf(t, "max", *normalizeReasoningEffortForModel(name, &requested), "%s must pass 'max' through", name)
+		require.Equalf(t, "max", *normalizeReasoningEffortForModel(name, &requested), "%s must pass 'max' through", name)
 		legacy := "minimal"
-		assert.Equalf(t, "none", *normalizeReasoningEffortForModel(name, &legacy), "%s must canonicalize legacy 'minimal' to 'none'", name)
+		require.Equalf(t, "none", *normalizeReasoningEffortForModel(name, &legacy), "%s must canonicalize legacy 'minimal' to 'none'", name)
 		junk := "ultra"
-		assert.Equalf(t, "medium", *normalizeReasoningEffortForModel(name, &junk), "%s must coerce an invalid effort to the default", name)
+		require.Equalf(t, "medium", *normalizeReasoningEffortForModel(name, &junk), "%s must coerce an invalid effort to the default", name)
 	}
+
+	legacy := "minimal"
+	require.True(t, isModelSupportedReasoning(" GPT-5.6 "))
+	require.True(t, isReasoningEffortAllowedForModel(" GPT-5.6 ", "max"))
+	require.Equal(t, "none", *normalizeReasoningEffortForModel(" GPT-5.6 ", &legacy))
 }
