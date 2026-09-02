@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -20,29 +19,22 @@ import (
 	"github.com/Laisky/one-api/model"
 )
 
-// Client defines MCP operations required by the aggregator.
+// Client defines the MCP tool-listing and tool-call operations required by the aggregator.
 type Client interface {
 	ListTools(ctx context.Context) ([]ToolDescriptor, error)
 	CallTool(ctx context.Context, name string, arguments any) (*CallToolResult, error)
 }
 
-// StreamableHTTPClient implements MCP client calls over the Streamable HTTP
-// transport. The client performs the protocol handshake (initialize +
-// notifications/initialized) lazily on first use, captures any
-// server-issued Mcp-Session-Id, and supports both JSON and SSE response
-// content types.
+// StreamableHTTPClient implements modern and legacy MCP over the Streamable HTTP transport.
 type StreamableHTTPClient struct {
 	BaseURL string
 	Headers map[string]string
 	Timeout time.Duration
 	Logger  glog.Logger
 
-	// serverRef identifies the MCP server this client talks to. It is logged on
-	// every client log line because the caller's logger, even when
-	// request-bound, carries the user/token/channel identity but not the MCP
-	// server's.
 	serverRef identity.MCPServerRef
 
+	headerMu        sync.RWMutex
 	initMu          sync.Mutex
 	initialized     bool
 	sessionID       string
@@ -50,70 +42,99 @@ type StreamableHTTPClient struct {
 }
 
 const (
-	mcpProtocolVersionHeader  = "Mcp-Protocol-Version"
-	mcpSessionIDHeader        = "Mcp-Session-Id"
-	mcpDefaultProtocolVersion = "2025-06-18"
+	mcpProtocolVersionHeader  = ProtocolVersionHeader
+	mcpSessionIDHeader        = SessionIDHeader
+	mcpDefaultProtocolVersion = LegacyProtocolVersion
 	mcpAcceptHeaderValue      = "application/json, text/event-stream"
 	mcpClientName             = "one-api-mcp-client"
 	mcpClientVersion          = "1.0.0"
 )
 
 // NewStreamableHTTPClient constructs a StreamableHTTPClient from MCP server metadata.
+//
+// Parameters:
+//   - server: the configured upstream MCP server.
+//   - headers: request headers that override server-level configured headers.
+//   - timeout: the per-request HTTP timeout.
+//
+// Return values:
+//   - *StreamableHTTPClient: a client configured for modern-first requests and legacy fallback.
 func NewStreamableHTTPClient(server *model.MCPServer, headers map[string]string, timeout time.Duration) *StreamableHTTPClient {
 	return newStreamableHTTPClient(server, headers, timeout, nil)
 }
 
-// NewStreamableHTTPClientWithLogger constructs a StreamableHTTPClient with logging enabled.
+// NewStreamableHTTPClientWithLogger constructs a StreamableHTTPClient with request-aware logging.
+//
+// Parameters:
+//   - server: the configured upstream MCP server.
+//   - headers: request headers that override server-level configured headers.
+//   - timeout: the per-request HTTP timeout.
+//   - logger: the logger used for sanitized transport diagnostics.
+//
+// Return values:
+//   - *StreamableHTTPClient: a client configured for modern-first requests and legacy fallback.
 func NewStreamableHTTPClientWithLogger(server *model.MCPServer, headers map[string]string, timeout time.Duration, logger glog.Logger) *StreamableHTTPClient {
 	return newStreamableHTTPClient(server, headers, timeout, logger)
 }
 
-// newStreamableHTTPClient constructs a StreamableHTTPClient from MCP server metadata.
-// The Mcp-Session-Id header is intentionally NOT pre-populated — per the
-// Streamable HTTP transport spec, the session id is issued by the server in
-// the initialize response and only then attached to subsequent requests.
+// newStreamableHTTPClient merges configuration without preselecting a legacy protocol session.
+//
+// Parameters:
+//   - server: the configured upstream MCP server.
+//   - headers: request headers that override server-level configured headers.
+//   - timeout: the per-request HTTP timeout.
+//   - logger: the optional logger used for sanitized transport diagnostics.
+//
+// Return values:
+//   - *StreamableHTTPClient: a new client whose legacy lifecycle is initialized lazily.
 func newStreamableHTTPClient(server *model.MCPServer, headers map[string]string, timeout time.Duration, logger glog.Logger) *StreamableHTTPClient {
 	merged := make(map[string]string)
-	for k, v := range server.Headers {
-		merged[k] = v
+	if server != nil {
+		for key, value := range server.Headers {
+			merged[key] = value
+		}
 	}
-	for k, v := range headers {
-		merged[k] = v
+	for key, value := range headers {
+		merged[key] = value
 	}
-	if _, ok := merged[mcpProtocolVersionHeader]; !ok {
-		merged[mcpProtocolVersionHeader] = mcpDefaultProtocolVersion
-	}
-	if _, ok := merged["Accept"]; !ok {
+	delete(merged, mcpProtocolVersionHeader)
+	delete(merged, mcpSessionIDHeader)
+	if _, exists := merged["Accept"]; !exists {
 		merged["Accept"] = mcpAcceptHeaderValue
 	}
 
-	switch strings.ToLower(server.AuthType) {
-	case model.MCPAuthTypeBearer:
-		if server.APIKey != "" {
-			merged["Authorization"] = "Bearer " + server.APIKey
-		}
-	case model.MCPAuthTypeAPIKey:
-		if server.APIKey != "" {
-			merged["X-API-Key"] = server.APIKey
+	if server != nil {
+		switch strings.ToLower(server.AuthType) {
+		case model.MCPAuthTypeBearer:
+			if server.APIKey != "" {
+				merged["Authorization"] = "Bearer " + server.APIKey
+			}
+		case model.MCPAuthTypeAPIKey:
+			if server.APIKey != "" {
+				merged["X-API-Key"] = server.APIKey
+			}
 		}
 	}
 
-	return &StreamableHTTPClient{
-		BaseURL:   strings.TrimSpace(server.BaseURL),
-		Headers:   merged,
-		Timeout:   timeout,
-		Logger:    logger,
-		serverRef: server.Ref(),
+	client := &StreamableHTTPClient{
+		Headers: merged,
+		Timeout: timeout,
+		Logger:  logger,
 	}
+	if server != nil {
+		client.BaseURL = strings.TrimSpace(server.BaseURL)
+		client.serverRef = server.Ref()
+	}
+	return client
 }
 
-// Initialize performs the MCP protocol handshake: sends an `initialize`
-// request and the corresponding `notifications/initialized` notification.
-// Captures the server-issued Mcp-Session-Id (if any) and the negotiated
-// protocol version, then attaches both to subsequent requests.
+// Initialize performs the preferred 2025-11-25 initialize exchange and records the negotiated legacy state.
 //
-// Safe to call concurrently and idempotent — the handshake runs at most
-// once per client instance.
+// Parameters:
+//   - ctx: the request context controlling cancellation and deadlines.
+//
+// Return values:
+//   - error: a wrapped transport, negotiation, or notification error when initialization cannot complete.
 func (c *StreamableHTTPClient) Initialize(ctx context.Context) error {
 	if c == nil {
 		return errors.New("mcp client is nil")
@@ -132,62 +153,102 @@ func (c *StreamableHTTPClient) Initialize(ctx context.Context) error {
 			"version": mcpClientVersion,
 		},
 	}
-
 	var initResult struct {
 		ProtocolVersion string         `json:"protocolVersion"`
 		Capabilities    map[string]any `json:"capabilities"`
 		ServerInfo      map[string]any `json:"serverInfo"`
 	}
 
-	respHeaders, err := c.doRPCRaw(ctx, "initialize", initParams, &initResult)
+	responseHeaders, err := c.doRPCRaw(ctx, "initialize", initParams, &initResult)
 	if err != nil {
 		return errors.Wrap(err, "mcp initialize")
 	}
 
-	if sid := respHeaders.Get(mcpSessionIDHeader); sid != "" {
-		c.sessionID = sid
-		c.Headers[mcpSessionIDHeader] = sid
+	negotiatedVersion := strings.TrimSpace(initResult.ProtocolVersion)
+	if negotiatedVersion == "" {
+		negotiatedVersion = mcpDefaultProtocolVersion
 	}
-	if initResult.ProtocolVersion != "" {
-		c.protocolVersion = initResult.ProtocolVersion
-		c.Headers[mcpProtocolVersionHeader] = initResult.ProtocolVersion
+	if !IsLegacyProtocolVersion(negotiatedVersion) {
+		return errors.Errorf("mcp initialize negotiated unsupported legacy version %q", negotiatedVersion)
+	}
+	c.protocolVersion = negotiatedVersion
+	c.setClientHeader(mcpProtocolVersionHeader, negotiatedVersion)
+	if sessionID := strings.TrimSpace(responseHeaders.Get(mcpSessionIDHeader)); sessionID != "" {
+		c.sessionID = sessionID
+		c.setClientHeader(mcpSessionIDHeader, sessionID)
 	}
 
 	if err := c.sendNotification(ctx, "notifications/initialized", nil); err != nil {
-		// Notification failure is non-fatal — log and proceed so a server
-		// that diverges on this notification does not block tool calls.
 		if c.Logger != nil {
 			c.Logger.Warn("mcp notifications/initialized failed",
 				append(c.serverRef.Zap(), zap.Error(err))...)
 		}
 	}
-
 	c.initialized = true
 	return nil
 }
 
-// ListTools calls the MCP tools/list method.
+// ListTools lists every tool through the negotiated legacy lifecycle and follows pagination cursors.
+//
+// Parameters:
+//   - ctx: the request context controlling cancellation and deadlines.
+//
+// Return values:
+//   - []ToolDescriptor: tools collected across every legacy tools/list page.
+//   - error: a wrapped initialization, transport, pagination, or decoding error.
 func (c *StreamableHTTPClient) ListTools(ctx context.Context) ([]ToolDescriptor, error) {
 	if err := c.Initialize(ctx); err != nil {
 		return nil, err
 	}
-	var result struct {
-		Tools []ToolDescriptor `json:"tools"`
+	tools := make([]ToolDescriptor, 0)
+	seenCursors := make(map[string]struct{})
+	cursor := ""
+	for page := 0; ; page++ {
+		if page >= 1000 {
+			return nil, errors.New("legacy mcp tools/list exceeded 1000 pages")
+		}
+		var params map[string]any
+		if cursor != "" {
+			params = map[string]any{"cursor": cursor}
+		}
+		var result ListToolsResult
+		if err := c.doRPC(ctx, "tools/list", params, &result); err != nil {
+			return nil, errors.Wrap(err, "mcp rpc tools/list")
+		}
+		tools = append(tools, result.Tools...)
+		nextCursor := strings.TrimSpace(result.NextCursor)
+		if nextCursor == "" {
+			return tools, nil
+		}
+		if _, exists := seenCursors[nextCursor]; exists {
+			return nil, errors.Errorf("legacy mcp tools/list repeated cursor %q", nextCursor)
+		}
+		seenCursors[nextCursor] = struct{}{}
+		cursor = nextCursor
 	}
-	if err := c.doRPC(ctx, "tools/list", nil, &result); err != nil {
-		return nil, errors.Wrap(err, "mcp rpc tools/list")
-	}
-	return result.Tools, nil
 }
 
-// CallTool invokes a MCP tool by name.
+// CallTool invokes one exact case-sensitive tool through the negotiated legacy lifecycle.
+//
+// Parameters:
+//   - ctx: the request context controlling cancellation and deadlines.
+//   - name: the exact upstream tool name.
+//   - arguments: a JSON-compatible argument object; nil becomes an empty object.
+//
+// Return values:
+//   - *CallToolResult: the decoded upstream result.
+//   - error: a wrapped initialization, validation, transport, or decoding error.
 func (c *StreamableHTTPClient) CallTool(ctx context.Context, name string, arguments any) (*CallToolResult, error) {
 	if err := c.Initialize(ctx); err != nil {
 		return nil, err
 	}
+	argumentMap, err := normalizeToolArguments(arguments)
+	if err != nil {
+		return nil, errors.Wrap(err, "normalize legacy mcp tool arguments")
+	}
 	params := map[string]any{
 		"name":      name,
-		"arguments": arguments,
+		"arguments": argumentMap,
 	}
 	var result CallToolResult
 	if err := c.doRPC(ctx, "tools/call", params, &result); err != nil {
@@ -196,28 +257,40 @@ func (c *StreamableHTTPClient) CallTool(ctx context.Context, name string, argume
 	return &result, nil
 }
 
-// doRPC performs a JSON-RPC call and discards the response headers.
+// doRPC performs one legacy JSON-RPC request and discards the response headers.
+//
+// Parameters:
+//   - ctx: the request context controlling cancellation and deadlines.
+//   - method: the legacy JSON-RPC method.
+//   - params: optional structured request parameters.
+//   - out: the destination for a successful result, or nil to discard it.
+//
+// Return values:
+//   - error: a wrapped transport, correlation, protocol, or decoding error.
 func (c *StreamableHTTPClient) doRPC(ctx context.Context, method string, params any, out any) error {
 	_, err := c.doRPCRaw(ctx, method, params, out)
 	return err
 }
 
-// doRPCRaw performs a JSON-RPC call and returns the response headers, which
-// the initialize handshake needs to read the Mcp-Session-Id assigned by the
-// server. Handles both `application/json` and `text/event-stream` response
-// content types per the Streamable HTTP transport spec.
+// doRPCRaw performs one correlated legacy JSON-RPC request and returns the response headers.
+//
+// Parameters:
+//   - ctx: the request context controlling cancellation and deadlines.
+//   - method: the legacy JSON-RPC method.
+//   - params: optional structured request parameters.
+//   - out: the destination for a successful result, or nil to discard it.
+//
+// Return values:
+//   - http.Header: response headers used by initialize to capture session state.
+//   - error: a wrapped transport, size, correlation, protocol, or decoding error.
 func (c *StreamableHTTPClient) doRPCRaw(ctx context.Context, method string, params any, out any) (http.Header, error) {
 	if c == nil {
 		return nil, errors.New("mcp client is nil")
 	}
-	// Per JSON-RPC 2.0, the params member MUST be a structured value (Object
-	// or Array) when present. Strict validators (e.g. the TypeScript MCP
-	// SDK's Zod schema used by aas-ee/open-web-search) reject `"params":null`
-	// with -32700 "Parse error: Invalid JSON-RPC message". Omit the field
-	// entirely when no params were supplied.
+	requestID := random.GetUUID()
 	payload := map[string]any{
 		"jsonrpc": "2.0",
-		"id":      random.GetUUID(),
+		"id":      requestID,
 		"method":  method,
 	}
 	if params != nil {
@@ -228,52 +301,51 @@ func (c *StreamableHTTPClient) doRPCRaw(ctx context.Context, method string, para
 		return nil, errors.Wrap(err, "marshal mcp request")
 	}
 
-	client := &http.Client{Timeout: c.Timeout}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL, bytes.NewReader(data))
 	if err != nil {
 		return nil, errors.Wrap(err, "create mcp request")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	for key, value := range c.Headers {
+	for key, value := range c.headerSnapshot() {
 		req.Header.Set(key, value)
 	}
-
 	c.debugLogRequest(method, req.Header, data)
 
+	client := c.httpClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "send mcp request")
 	}
 	defer resp.Body.Close()
 
-	body, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		return resp.Header, errors.Wrap(readErr, "read mcp response body")
+	body, err := readMCPResponseBody(resp.Body)
+	if err != nil {
+		return resp.Header, errors.Wrap(err, "read mcp response body")
 	}
 	c.debugLogResponse(method, resp, body)
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return resp.Header, errors.Errorf("mcp request failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-
-	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
-	if strings.Contains(contentType, "text/event-stream") {
-		jsonBody, perr := parseSSEResponse(body)
-		if perr != nil {
-			return resp.Header, errors.Wrap(perr, "parse mcp sse response")
+	if strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
+		body, err = extractMCPResponseEnvelope(body, requestID)
+		if err != nil {
+			return resp.Header, errors.Wrap(err, "parse mcp SSE response")
 		}
-		body = jsonBody
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return resp.Header, decodeModernProtocolError(resp.StatusCode, body)
 	}
 
-	var envelope struct {
-		Result json.RawMessage `json:"result"`
-		Error  map[string]any  `json:"error"`
-	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return resp.Header, errors.Wrap(err, "decode mcp response")
+	envelope, err := parseMCPResponseEnvelope(body, requestID)
+	if err != nil {
+		return resp.Header, err
 	}
 	if envelope.Error != nil {
-		return resp.Header, errors.Errorf("mcp error: %v", envelope.Error)
+		return resp.Header, &ProtocolError{
+			HTTPStatus: resp.StatusCode,
+			Code:       envelope.Error.Code,
+			Message:    envelope.Error.Message,
+			Data:       envelope.Error.Data,
+			Body:       strings.TrimSpace(string(body)),
+		}
 	}
 	if out == nil {
 		return resp.Header, nil
@@ -284,9 +356,15 @@ func (c *StreamableHTTPClient) doRPCRaw(ctx context.Context, method string, para
 	return resp.Header, nil
 }
 
-// sendNotification sends a JSON-RPC notification (no `id` field). Per the
-// Streamable HTTP transport spec, the server replies with HTTP 202 and an
-// empty body — there is no JSON-RPC envelope to parse.
+// sendNotification sends one legacy JSON-RPC notification without a request identifier.
+//
+// Parameters:
+//   - ctx: the request context controlling cancellation and deadlines.
+//   - method: the notification method.
+//   - params: optional structured notification parameters.
+//
+// Return values:
+//   - error: a wrapped transport, size, or HTTP status error.
 func (c *StreamableHTTPClient) sendNotification(ctx context.Context, method string, params any) error {
 	if c == nil {
 		return errors.New("mcp client is nil")
@@ -303,39 +381,82 @@ func (c *StreamableHTTPClient) sendNotification(ctx context.Context, method stri
 		return errors.Wrap(err, "marshal mcp notification")
 	}
 
-	client := &http.Client{Timeout: c.Timeout}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL, bytes.NewReader(data))
 	if err != nil {
 		return errors.Wrap(err, "create mcp notification request")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	for key, value := range c.Headers {
+	for key, value := range c.headerSnapshot() {
 		req.Header.Set(key, value)
 	}
-
 	c.debugLogRequest(method, req.Header, data)
 
+	client := c.httpClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "send mcp notification")
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	body, err := readMCPResponseBody(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "read mcp notification response body")
+	}
 	c.debugLogResponse(method, resp, body)
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return errors.Errorf("mcp notification failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return nil
 }
 
-// parseSSEResponse extracts the JSON payload from a Server-Sent Events body.
-// The MCP Streamable HTTP transport allows a server to reply to a single
-// request/response with one SSE event whose `data:` field contains the
-// JSON-RPC envelope. Multi-line `data:` fields are concatenated with `\n`
-// per the SSE spec.
+// headerSnapshot returns a copy of mutable client headers for one HTTP request.
+//
+// Parameters: none.
+//
+// Return values:
+//   - map[string]string: an isolated header map safe for request construction.
+func (c *StreamableHTTPClient) headerSnapshot() map[string]string {
+	if c == nil {
+		return nil
+	}
+	c.headerMu.RLock()
+	defer c.headerMu.RUnlock()
+	snapshot := make(map[string]string, len(c.Headers))
+	for key, value := range c.Headers {
+		snapshot[key] = value
+	}
+	return snapshot
+}
+
+// setClientHeader updates one internally managed header under the client header lock.
+//
+// Parameters:
+//   - key: the HTTP header name.
+//   - value: the replacement value; an empty value removes the header.
+//
+// Return values: none.
+func (c *StreamableHTTPClient) setClientHeader(key, value string) {
+	if c == nil {
+		return
+	}
+	c.headerMu.Lock()
+	defer c.headerMu.Unlock()
+	if value == "" {
+		delete(c.Headers, key)
+		return
+	}
+	c.Headers[key] = value
+}
+
+// parseSSEResponse extracts data fields from a single finite SSE message for compatibility tests.
+//
+// Parameters:
+//   - body: a finite Server-Sent Events response body.
+//
+// Return values:
+//   - []byte: concatenated data fields.
+//   - error: an error when the body contains no data field.
 func parseSSEResponse(body []byte) ([]byte, error) {
-	var dataLines []string
+	dataLines := make([]string, 0)
 	for _, raw := range strings.Split(string(body), "\n") {
 		line := strings.TrimRight(raw, "\r")
 		if !strings.HasPrefix(line, "data:") {
@@ -350,49 +471,64 @@ func parseSSEResponse(body []byte) ([]byte, error) {
 }
 
 // debugLogRequest records sanitized outbound MCP request metadata and payload.
+//
+// Parameters:
+//   - method: the JSON-RPC method.
+//   - headers: the outbound HTTP headers.
+//   - body: the encoded request body.
+//
+// Return values: none.
 func (c *StreamableHTTPClient) debugLogRequest(method string, headers http.Header, body []byte) {
 	if c == nil || c.Logger == nil {
 		return
 	}
-	sanitizedHeaders := sanitizeHeadersForLog(headers)
-	sanitizedBody := sanitizeBodyForLog(body)
 	c.Logger.Debug("mcp outbound request",
 		append(c.serverRef.Zap(),
 			zap.String("method", method),
 			zap.String("url", c.BaseURL),
-			zap.Any("headers", sanitizedHeaders),
+			zap.Any("headers", sanitizeHeadersForLog(headers)),
 			zap.Int("body_bytes", len(body)),
-			zap.String("body", sanitizedBody),
+			zap.String("body", sanitizeBodyForLog(body)),
 		)...)
 }
 
 // debugLogResponse records sanitized inbound MCP response metadata and payload.
+//
+// Parameters:
+//   - method: the JSON-RPC method.
+//   - resp: the HTTP response metadata.
+//   - body: the bounded response body.
+//
+// Return values: none.
 func (c *StreamableHTTPClient) debugLogResponse(method string, resp *http.Response, body []byte) {
 	if c == nil || c.Logger == nil || resp == nil {
 		return
 	}
-	sanitizedHeaders := sanitizeHeadersForLog(resp.Header)
-	sanitizedBody := sanitizeBodyForLog(body)
 	c.Logger.Debug("mcp inbound response",
 		append(c.serverRef.Zap(),
 			zap.String("method", method),
 			zap.String("url", c.BaseURL),
 			zap.Int("status_code", resp.StatusCode),
-			zap.Any("headers", sanitizedHeaders),
+			zap.Any("headers", sanitizeHeadersForLog(resp.Header)),
 			zap.Int("body_bytes", len(body)),
-			zap.String("body", sanitizedBody),
+			zap.String("body", sanitizeBodyForLog(body)),
 		)...)
 }
 
-// sanitizeHeadersForLog redacts sensitive header values for logging.
+// sanitizeHeadersForLog redacts sensitive header values before structured logging.
+//
+// Parameters:
+//   - headers: the HTTP headers to sanitize.
+//
+// Return values:
+//   - map[string]string: flattened headers with sensitive values redacted.
 func sanitizeHeadersForLog(headers http.Header) map[string]string {
 	if headers == nil {
 		return nil
 	}
 	sanitized := make(map[string]string, len(headers))
 	for key, values := range headers {
-		lower := strings.ToLower(strings.TrimSpace(key))
-		if isSensitiveKey(lower) {
+		if isSensitiveKey(strings.ToLower(strings.TrimSpace(key))) {
 			sanitized[key] = "<redacted>"
 			continue
 		}
@@ -401,7 +537,13 @@ func sanitizeHeadersForLog(headers http.Header) map[string]string {
 	return sanitized
 }
 
-// sanitizeBodyForLog returns a sanitized body string for logging.
+// sanitizeBodyForLog redacts secrets and binary-like fields from a request or response body.
+//
+// Parameters:
+//   - body: the raw request or response body.
+//
+// Return values:
+//   - string: a sanitized JSON string or a safe textual placeholder.
 func sanitizeBodyForLog(body []byte) string {
 	if len(body) == 0 {
 		return ""
@@ -428,7 +570,14 @@ func sanitizeBodyForLog(body []byte) string {
 	return string(encoded)
 }
 
-// scrubJSONValue redacts sensitive or binary-like data from JSON values.
+// scrubJSONValue recursively redacts sensitive and binary-like JSON values.
+//
+// Parameters:
+//   - value: the decoded JSON value to sanitize.
+//   - keyHint: the parent field name used for redaction heuristics.
+//
+// Return values:
+//   - any: the sanitized JSON-compatible value.
 func scrubJSONValue(value any, keyHint string) any {
 	if value == nil {
 		return nil
@@ -449,8 +598,8 @@ func scrubJSONValue(value any, keyHint string) any {
 		}
 		return typed
 	case []any:
-		for idx, inner := range typed {
-			typed[idx] = scrubJSONValue(inner, keyHint)
+		for index, inner := range typed {
+			typed[index] = scrubJSONValue(inner, keyHint)
 		}
 		return typed
 	case string:
@@ -467,13 +616,18 @@ func scrubJSONValue(value any, keyHint string) any {
 	}
 }
 
-// isSensitiveKey reports whether a key is likely to contain secrets.
+// isSensitiveKey reports whether a field or header name is likely to contain a secret.
+//
+// Parameters:
+//   - key: a normalized field or header name.
+//
+// Return values:
+//   - bool: true when the value must be redacted from logs.
 func isSensitiveKey(key string) bool {
 	if key == "" {
 		return false
 	}
-	sensitive := []string{"authorization", "proxy-authorization", "api_key", "apikey", "token", "secret", "password", "passwd", "x-api-key"}
-	for _, token := range sensitive {
+	for _, token := range []string{"authorization", "proxy-authorization", "api_key", "apikey", "token", "secret", "password", "passwd", "x-api-key", "cookie"} {
 		if strings.Contains(key, token) {
 			return true
 		}
@@ -481,13 +635,18 @@ func isSensitiveKey(key string) bool {
 	return false
 }
 
-// isBinaryKey reports whether a key is likely to contain binary payloads.
+// isBinaryKey reports whether a JSON field name is likely to contain binary payload data.
+//
+// Parameters:
+//   - key: a normalized JSON field name.
+//
+// Return values:
+//   - bool: true when the value should be omitted from logs.
 func isBinaryKey(key string) bool {
 	if key == "" {
 		return false
 	}
-	tokens := []string{"image", "audio", "video", "binary", "base64", "bytes", "file", "blob"}
-	for _, token := range tokens {
+	for _, token := range []string{"image", "audio", "video", "binary", "base64", "bytes", "file", "blob"} {
 		if strings.Contains(key, token) {
 			return true
 		}
@@ -495,7 +654,13 @@ func isBinaryKey(key string) bool {
 	return false
 }
 
-// isLikelyBinary performs a heuristic check for binary payloads.
+// isLikelyBinary reports whether a response body contains invalid UTF-8 or control-heavy data.
+//
+// Parameters:
+//   - body: the raw body to inspect.
+//
+// Return values:
+//   - bool: true when logging the body as text would be unsafe or unhelpful.
 func isLikelyBinary(body []byte) bool {
 	if len(body) == 0 {
 		return false
@@ -504,18 +669,24 @@ func isLikelyBinary(body []byte) bool {
 		return true
 	}
 	nonPrintable := 0
-	for _, r := range body {
-		if r == '\n' || r == '\r' || r == '\t' {
+	for _, value := range body {
+		if value == '\n' || value == '\r' || value == '\t' {
 			continue
 		}
-		if r < 0x20 || r == 0x7f {
+		if value < 0x20 || value == 0x7f {
 			nonPrintable++
 		}
 	}
 	return nonPrintable > len(body)/20
 }
 
-// isLikelyBase64 checks whether a string looks like base64 data.
+// isLikelyBase64 reports whether a long string resembles encoded binary data.
+//
+// Parameters:
+//   - value: the string to inspect.
+//
+// Return values:
+//   - bool: true when the value should be omitted from logs.
 func isLikelyBase64(value string) bool {
 	trimmed := strings.TrimSpace(value)
 	if len(trimmed) < 128 {
@@ -524,8 +695,8 @@ func isLikelyBase64(value string) bool {
 	if strings.HasPrefix(trimmed, "data:") {
 		return true
 	}
-	for _, r := range trimmed {
-		if r == '=' || r == '+' || r == '/' || r == '-' || r == '_' || (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+	for _, character := range trimmed {
+		if character == '=' || character == '+' || character == '/' || character == '-' || character == '_' || (character >= '0' && character <= '9') || (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z') {
 			continue
 		}
 		return false

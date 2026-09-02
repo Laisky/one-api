@@ -41,7 +41,19 @@ var MCPToolSortFields = map[string]string{
 	"updated_at": "updated_at",
 }
 
-// ListMCPTools returns MCP tools filtered by server id and status.
+// ListMCPTools returns MCP tools filtered by server, status, pagination, and ordering.
+//
+// Parameters:
+//   - serverID: owning server id; non-positive means every server.
+//   - status: optional status filter.
+//   - offset: pagination offset.
+//   - limit: page size; non-positive means unlimited.
+//   - sortBy: whitelisted sort column.
+//   - sortOrder: ascending or descending order.
+//
+// Return values:
+//   - []*MCPTool: matching tools.
+//   - error: a wrapped database error when the query fails.
 func ListMCPTools(serverID int, status *int, offset int, limit int, sortBy string, sortOrder string) ([]*MCPTool, error) {
 	return SearchMCPTools(serverID, status, "", offset, limit, sortBy, sortOrder)
 }
@@ -86,7 +98,15 @@ func SearchMCPTools(serverID int, status *int, keyword string, offset int, limit
 	return tools, nil
 }
 
-// CountMCPTools returns the total number of MCP tools matching filters.
+// CountMCPTools returns the total number of MCP tools matching server and status filters.
+//
+// Parameters:
+//   - serverID: owning server id; non-positive means every server.
+//   - status: optional status filter.
+//
+// Return values:
+//   - int64: the number of matching tools.
+//   - error: a wrapped database error when the count fails.
 func CountMCPTools(serverID int, status *int) (int64, error) {
 	return CountSearchedMCPTools(serverID, status, "")
 }
@@ -121,8 +141,12 @@ func CountSearchedMCPTools(serverID int, status *int, keyword string) (int64, er
 
 // GetMCPToolsByServerID fetches tools for a specific server.
 //
-// The empty case returns a non-nil zero-length slice so HTTP handlers that
-// pass the result straight to c.JSON marshal "data" as [] rather than null.
+// Parameters:
+//   - serverID: the positive internal id of the owning MCP server.
+//
+// Return values:
+//   - []*MCPTool: a non-nil slice containing every stored tool for the server.
+//   - error: a validation or wrapped database error.
 func GetMCPToolsByServerID(serverID int) ([]*MCPTool, error) {
 	if serverID <= 0 {
 		return nil, errors.New("server id is invalid")
@@ -134,26 +158,45 @@ func GetMCPToolsByServerID(serverID int) ([]*MCPTool, error) {
 	return tools, nil
 }
 
-// UpsertMCPTools replaces tools for a server with the provided list.
+// UpsertMCPTools atomically replaces a server catalog while preserving exact wire names and descriptors.
+//
+// Parameters:
+//   - serverID: the positive internal id of the owning MCP server.
+//   - serverUUID: the stable owning server UUID copied onto every tool row.
+//   - tools: the complete replacement catalog; nil entries are ignored.
+//
+// Return values:
+//   - error: a validation or wrapped transactional database error.
 func UpsertMCPTools(serverID int, serverUUID string, tools []*MCPTool) error {
 	if serverID <= 0 {
 		return errors.New("server id is invalid")
 	}
-	if err := DB.Where("server_id = ?", serverID).Delete(&MCPTool{}).Error; err != nil {
-		return errors.Wrap(err, "clear mcp tools")
+	if DB == nil {
+		return errors.New("database is not initialized")
 	}
-	for _, tool := range tools {
-		if tool == nil {
-			continue
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("server_id = ?", serverID).Delete(&MCPTool{}).Error; err != nil {
+			return errors.Wrap(err, "clear mcp tools")
 		}
-		tool.ServerId = serverID
-		if serverUUID != "" {
-			tool.ServerUUID = &serverUUID
+		for _, tool := range tools {
+			if tool == nil {
+				continue
+			}
+			tool.ServerId = serverID
+			if serverUUID != "" {
+				tool.ServerUUID = &serverUUID
+			}
+			tool.NormalizeName()
+			if tool.Name == "" {
+				return errors.New("mcp tool name is required")
+			}
+			if err := tx.Create(tool).Error; err != nil {
+				return errors.Wrapf(err, "create mcp tool %q", tool.Name)
+			}
 		}
-		tool.NormalizeName()
-		if err := DB.Create(tool).Error; err != nil {
-			return errors.Wrap(err, "create mcp tool")
-		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "replace mcp tool catalog")
 	}
 	return nil
 }
