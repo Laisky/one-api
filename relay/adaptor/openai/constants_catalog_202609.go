@@ -10,7 +10,7 @@ import (
 var (
 	gpt56CanonicalReasoningEfforts = []string{"none", "low", "medium", "high", "xhigh", "max"}
 
-	gpt56SolLongContextTier = adaptor.ModelRatioTier{
+	gpt56SolPromoLongContextTier = adaptor.ModelRatioTier{
 		Ratio:               8.0 * ratio.MilliTokensUsd,
 		CompletionRatio:     30.0 / 8.0,
 		CachedInputRatio:    0.8 * ratio.MilliTokensUsd,
@@ -54,7 +54,7 @@ func applyOpenAIModelCatalog202609(modelRatios map[string]adaptor.ModelConfig) m
 		CompletionRatio:             20.0 / 4.0,
 		CachedInputRatio:            0.4 * ratio.MilliTokensUsd,
 		CacheWrite5mRatio:           5.0 * ratio.MilliTokensUsd,
-		Tiers:                       []adaptor.ModelRatioTier{gpt56SolLongContextTier},
+		Tiers:                       []adaptor.ModelRatioTier{gpt56SolPromoLongContextTier},
 		ContextLength:               1_050_000,
 		MaxOutputTokens:             128_000,
 		InputModalities:             []string{"text", "image"},
@@ -68,6 +68,15 @@ func applyOpenAIModelCatalog202609(modelRatios map[string]adaptor.ModelConfig) m
 
 	for _, modelName := range []string{"gpt-5.6", "gpt-5.6-sol"} {
 		modelRatios[modelName] = cloneModelConfig(sol)
+	}
+
+	for _, modelName := range []string{"gpt-5.6-terra", "gpt-5.6-luna"} {
+		config, ok := modelRatios[modelName]
+		if !ok {
+			continue
+		}
+		config.SupportedReasoningEfforts = slices.Clone(gpt56CanonicalReasoningEfforts)
+		modelRatios[modelName] = config
 	}
 
 	cyber := cloneModelConfig(sol)

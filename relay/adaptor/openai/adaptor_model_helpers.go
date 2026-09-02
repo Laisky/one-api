@@ -1,219 +1,252 @@
 package openai
 
 import (
+	"maps"
 	"strconv"
 	"strings"
 
 	"github.com/Laisky/one-api/relay/model"
 )
 
-func normalizedModelName(modelName string) string {
-	return strings.ToLower(strings.TrimSpace(modelName))
+// extractGptVersion returns the numeric GPT major/minor version if present in the model name.
+// It expects normalized lowercase model names and only parses names starting with "gpt-".
+func extractGptVersion(modelName string) (float64, bool) {
+	lower := normalizedModelName(modelName)
+	if !strings.HasPrefix(lower, "gpt-") {
+		return 0, false
+	}
+
+	remainder := strings.TrimPrefix(lower, "gpt-")
+	cutIdx := strings.IndexFunc(remainder, func(r rune) bool {
+		return !(r == '.' || (r >= '0' && r <= '9'))
+	})
+	if cutIdx == 0 {
+		return 0, false
+	}
+	if cutIdx > 0 {
+		remainder = remainder[:cutIdx]
+	}
+
+	version, err := strconv.ParseFloat(remainder, 64)
+	if err != nil {
+		return 0, false
+	}
+
+	return version, true
 }
 
-func modelNameWithoutDateSuffix(modelName string) string {
-	const dateSuffixLength = len("-YYYY-MM-DD")
-	if len(modelName) < dateSuffixLength {
-		return modelName
-	}
-
-	index := len(modelName) - dateSuffixLength
-	if modelName[index] != '-' || modelName[index+5] != '-' || modelName[index+8] != '-' {
-		return modelName
-	}
-
-	for _, part := range [][2]int{{index + 1, index + 5}, {index + 6, index + 8}, {index + 9, index + 11}} {
-		if _, err := strconv.Atoi(modelName[part[0]:part[1]]); err != nil {
-			return modelName
-		}
-	}
-
-	return modelName[:index]
-}
-
-// isModelSupportedReasoning reports whether modelName supports reasoning.
-// Catalog metadata takes precedence over name-based compatibility fallbacks.
+// isModelSupportedReasoning checks if the model supports reasoning features.
 func isModelSupportedReasoning(modelName string) bool {
-	normalizedName := normalizedModelName(modelName)
-	if config, ok := ModelRatios[normalizedName]; ok {
-		for _, feature := range config.SupportedFeatures {
-			if feature == "reasoning" {
+	lower := normalizedModelName(modelName)
+	if lower == "" {
+		return false
+	}
+
+	// Preserve the existing explicit exclusion before consulting catalog metadata.
+	if strings.HasPrefix(lower, "gpt-5-chat-latest") || lower == "gpt-5-chat" {
+		return false
+	}
+
+	// Catalog metadata handles aliases whose names do not carry a GPT/o-series prefix,
+	// such as the separately provisioned Daybreak models.
+	if cfg, ok := ModelRatios[lower]; ok {
+		for _, feature := range cfg.SupportedFeatures {
+			if strings.EqualFold(feature, "reasoning") {
 				return true
 			}
 		}
-		if len(config.SupportedReasoningEfforts) > 0 || config.DefaultReasoningEffort != "" {
+		if len(cfg.SupportedReasoningEfforts) > 0 || cfg.DefaultReasoningEffort != "" {
 			return true
 		}
 	}
 
-	switch {
-	case strings.HasPrefix(normalizedName, "o1"),
-		strings.HasPrefix(normalizedName, "o3"),
-		strings.HasPrefix(normalizedName, "o4"),
-		strings.HasPrefix(normalizedName, "gpt-5"),
-		strings.HasPrefix(normalizedName, "chat-latest"):
+	if strings.HasPrefix(lower, "o") {
+		return true
+	}
+
+	if version, ok := extractGptVersion(lower); ok && version >= 5 {
+		return true
+	}
+
+	return false
+}
+
+// isWebSearchModel returns true when the upstream OpenAI model uses the web search surface.
+func isWebSearchModel(modelName string) bool {
+	return strings.Contains(modelName, "-search") || strings.Contains(modelName, "-search-preview")
+}
+
+func isDeepResearchModel(modelName string) bool {
+	return strings.Contains(modelName, "deep-research")
+}
+
+// isMediumOnlyReasoningModel reports whether the model only accepts a single
+// "medium" reasoning_effort level. The data-driven check examines
+// SupportedReasoningEfforts on the ModelConfig; when the model is unknown the
+// helper falls back to name-based heuristics for forward compatibility.
+func isMediumOnlyReasoningModel(modelName string) bool {
+	lower := normalizedModelName(modelName)
+	if lower == "" {
+		return false
+	}
+
+	if cfg, ok := ModelRatios[lower]; ok && len(cfg.SupportedReasoningEfforts) > 0 {
+		if len(cfg.SupportedReasoningEfforts) != 1 {
+			return false
+		}
+		return strings.EqualFold(cfg.SupportedReasoningEfforts[0], "medium")
+	}
+
+	if strings.HasPrefix(lower, "o") {
+		return true
+	}
+
+	if version, ok := extractGptVersion(lower); ok && version >= 5 {
+		if strings.Contains(lower, "-chat") {
+			return true
+		}
+	}
+
+	return false
+}
+
+// defaultReasoningEffortForModel returns the default reasoning effort level
+// for the model. Falls back to "medium" when the model config doesn't pin one.
+func defaultReasoningEffortForModel(modelName string) string {
+	if cfg, ok := ModelRatios[normalizedModelName(modelName)]; ok {
+		if cfg.DefaultReasoningEffort != "" {
+			return cfg.DefaultReasoningEffort
+		}
+		if len(cfg.SupportedReasoningEfforts) == 1 {
+			return cfg.SupportedReasoningEfforts[0]
+		}
+	}
+	return "medium"
+}
+
+// isReasoningEffortAllowedForModel reports whether `effort` is a permitted
+// reasoning_effort value for the model. Data-driven against the model config
+// when populated; falls back to name-based heuristics otherwise.
+func isReasoningEffortAllowedForModel(modelName, effort string) bool {
+	if effort == "" {
+		return false
+	}
+	lowerModelName := normalizedModelName(modelName)
+	normalizedEffort := strings.ToLower(strings.TrimSpace(effort))
+
+	if cfg, ok := ModelRatios[lowerModelName]; ok && len(cfg.SupportedReasoningEfforts) > 0 {
+		for _, allowed := range cfg.SupportedReasoningEfforts {
+			if strings.EqualFold(allowed, normalizedEffort) {
+				return true
+			}
+			// GPT-5.6 uses canonical "none" while legacy clients may still send "minimal".
+			if normalizedEffort == "minimal" && strings.EqualFold(allowed, "none") {
+				return true
+			}
+		}
+		return false
+	}
+
+	if isDeepResearchModel(lowerModelName) || isMediumOnlyReasoningModel(lowerModelName) {
+		return normalizedEffort == "medium"
+	}
+	switch normalizedEffort {
+	case "low", "medium", "high":
 		return true
 	default:
 		return false
 	}
-}
-
-func isMediumOnlyReasoningModel(modelName string) bool {
-	config, ok := ModelRatios[normalizedModelName(modelName)]
-	if !ok {
-		return false
-	}
-
-	if len(config.SupportedReasoningEfforts) != 1 {
-		return false
-	}
-	return config.SupportedReasoningEfforts[0] == "medium"
-}
-
-func defaultReasoningEffortForModel(modelName string) string {
-	normalizedName := normalizedModelName(modelName)
-	if config, ok := ModelRatios[normalizedName]; ok && config.DefaultReasoningEffort != "" {
-		return config.DefaultReasoningEffort
-	}
-
-	baseModelName := modelNameWithoutDateSuffix(normalizedName)
-
-	switch baseModelName {
-	case "o4-mini", "o3":
-		return "medium"
-	default:
-		return "medium"
-	}
-}
-
-func isReasoningEffortAllowedForModel(modelName, effort string) bool {
-	normalizedName := normalizedModelName(modelName)
-	config, ok := ModelRatios[normalizedName]
-	if ok && len(config.SupportedReasoningEfforts) > 0 {
-		for _, supportedEffort := range config.SupportedReasoningEfforts {
-			if effort == supportedEffort {
-				return true
-			}
-			if effort == "minimal" && supportedEffort == "none" {
-				return true
-			}
-		}
-		return false
-	}
-
-	baseModelName := modelNameWithoutDateSuffix(normalizedName)
-
-	if strings.HasPrefix(baseModelName, "o1-pro") {
-		return effort == "high"
-	}
-	if strings.HasPrefix(baseModelName, "o1-mini") || strings.HasPrefix(baseModelName, "o1-preview") {
-		return effort == "medium"
-	}
-	if strings.HasPrefix(baseModelName, "o1") {
-		return effort == "low" || effort == "medium" || effort == "high"
-	}
-	if baseModelName == "o4-mini" || baseModelName == "o3" {
-		return effort == "low" || effort == "medium" || effort == "high"
-	}
-
-	return true
-}
-
-func supportsNoneReasoningEffort(modelName string) bool {
-	config, ok := ModelRatios[normalizedModelName(modelName)]
-	if !ok {
-		return false
-	}
-	for _, effort := range config.SupportedReasoningEfforts {
-		if effort == "none" {
-			return true
-		}
-	}
-	return false
 }
 
 func normalizeReasoningEffortForModel(modelName string, effort *string) *string {
-	normalizedName := normalizedModelName(modelName)
-	if isMediumOnlyReasoningModel(normalizedName) {
-		effort := "medium"
-		return &effort
+	defaultEffort := defaultReasoningEffortForModel(modelName)
+	if effort == nil {
+		return stringRef(defaultEffort)
 	}
 
-	if effort == nil || *effort == "" {
-		defaultEffort := defaultReasoningEffortForModel(normalizedName)
-		return &defaultEffort
-	}
-
-	if *effort == "minimal" && supportsNoneReasoningEffort(normalizedName) {
-		normalizedEffort := "none"
-		return &normalizedEffort
-	}
-
-	if isReasoningEffortAllowedForModel(normalizedName, *effort) {
-		return effort
-	}
-
-	defaultEffort := defaultReasoningEffortForModel(normalizedName)
-	return &defaultEffort
-}
-
-func standardSamplingParameters() []string {
-	return []string{"temperature", "top_p", "max_tokens", "seed", "frequency_penalty", "presence_penalty"}
-}
-
-func reasoningSamplingParameters() []string {
-	return []string{"seed", "max_tokens"}
-}
-
-func containsSupportedParameter(supported []string, parameter string) bool {
-	for _, value := range supported {
-		if value == parameter {
-			return true
+	normalized := strings.ToLower(strings.TrimSpace(*effort))
+	if normalized == "minimal" {
+		if cfg, ok := ModelRatios[normalizedModelName(modelName)]; ok {
+			for _, allowed := range cfg.SupportedReasoningEfforts {
+				if strings.EqualFold(allowed, "none") {
+					normalized = "none"
+					break
+				}
+			}
 		}
 	}
-	return false
+
+	if !isReasoningEffortAllowedForModel(modelName, normalized) {
+		return stringRef(defaultEffort)
+	}
+	return stringRef(normalized)
 }
 
-func supportsSeedParameter(modelName string) bool {
-	config, ok := ModelRatios[normalizedModelName(modelName)]
-	if !ok || len(config.SupportedSamplingParameters) == 0 {
-		return true
-	}
-	return containsSupportedParameter(config.SupportedSamplingParameters, "seed")
+func stringRef(value string) *string {
+	return &value
 }
 
-func supportsSamplingParameter(modelName, parameter string) bool {
-	config, ok := ModelRatios[normalizedModelName(modelName)]
-	if !ok || len(config.SupportedSamplingParameters) == 0 {
-		return true
+func ensureWebSearchTool(request *model.GeneralOpenAIRequest) {
+	for _, tool := range request.Tools {
+		if strings.EqualFold(tool.Type, "web_search") {
+			return
+		}
 	}
-	return containsSupportedParameter(config.SupportedSamplingParameters, parameter)
+
+	request.Tools = append(request.Tools, model.Tool{Type: "web_search"})
 }
 
-func filterRequestParametersForModel(request *model.GeneralOpenAIRequest, modelName string) {
-	if request == nil {
-		return
-	}
+// normalizeClaudeToolChoice coerces Claude tool_choice payloads into the ChatCompletion
+// format that upstream OpenAI-compatible adapters expect (type=function with function name).
+func normalizeClaudeToolChoice(choice any) any {
+	switch src := choice.(type) {
+	case map[string]any:
+		cloned := make(map[string]any, len(src))
+		maps.Copy(cloned, src)
 
-	if !supportsSeedParameter(modelName) {
-		request.Seed = nil
+		typeVal, _ := cloned["type"].(string)
+		switch strings.ToLower(typeVal) {
+		case "tool":
+			name, _ := cloned["name"].(string)
+			var fn map[string]any
+			if existing, ok := cloned["function"].(map[string]any); ok {
+				fn = cloneMap(existing)
+			} else {
+				fn = map[string]any{}
+			}
+			if name != "" && fn["name"] == nil {
+				fn["name"] = name
+			}
+			if len(fn) > 0 {
+				cloned["function"] = fn
+			}
+			cloned["type"] = "function"
+			delete(cloned, "name")
+		case "function":
+			if name, ok := cloned["name"].(string); ok && name != "" {
+				fn, _ := cloned["function"].(map[string]any)
+				if fn == nil {
+					fn = map[string]any{}
+				}
+				if fn["name"] == nil {
+					fn["name"] = name
+				}
+				cloned["function"] = fn
+				delete(cloned, "name")
+			}
+		}
+		return cloned
+	default:
+		return choice
 	}
+}
 
-	if !supportsSamplingParameter(modelName, "temperature") {
-		request.Temperature = nil
+// cloneMap returns a shallow copy of the provided map.
+func cloneMap(input map[string]any) map[string]any {
+	if input == nil {
+		return nil
 	}
-	if !supportsSamplingParameter(modelName, "top_p") {
-		request.TopP = nil
-	}
-	if !supportsSamplingParameter(modelName, "frequency_penalty") {
-		request.FrequencyPenalty = nil
-	}
-	if !supportsSamplingParameter(modelName, "presence_penalty") {
-		request.PresencePenalty = nil
-	}
-
-	if !supportsSamplingParameter(modelName, "max_tokens") {
-		request.MaxTokens = 0
-		request.MaxCompletionTokens = nil
-	}
+	cloned := make(map[string]any, len(input))
+	maps.Copy(cloned, input)
+	return cloned
 }
