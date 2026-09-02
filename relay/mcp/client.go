@@ -267,7 +267,7 @@ func (c *StreamableHTTPClient) CallTool(ctx context.Context, name string, argume
 //
 // Return values:
 //   - error: a wrapped transport, correlation, protocol, or decoding error.
-func (c *StreamableHTTPClient) doRPC(ctx context.Context, method string, params any, out any) error {
+func (c *StreamableHTTPClient) doRPC(ctx context.Context, method string, params map[string]any, out any) error {
 	_, err := c.doRPCRaw(ctx, method, params, out)
 	return err
 }
@@ -283,7 +283,7 @@ func (c *StreamableHTTPClient) doRPC(ctx context.Context, method string, params 
 // Return values:
 //   - http.Header: response headers used by initialize to capture session state.
 //   - error: a wrapped transport, size, correlation, protocol, or decoding error.
-func (c *StreamableHTTPClient) doRPCRaw(ctx context.Context, method string, params any, out any) (http.Header, error) {
+func (c *StreamableHTTPClient) doRPCRaw(ctx context.Context, method string, params map[string]any, out any) (http.Header, error) {
 	if c == nil {
 		return nil, errors.New("mcp client is nil")
 	}
@@ -293,6 +293,8 @@ func (c *StreamableHTTPClient) doRPCRaw(ctx context.Context, method string, para
 		"id":      requestID,
 		"method":  method,
 	}
+	// params is typed as a map (not any) so a nil map omits the field entirely.
+	// Strict SDK-based upstreams reject `"params": null` with -32700 Parse error.
 	if params != nil {
 		payload["params"] = params
 	}
@@ -365,7 +367,7 @@ func (c *StreamableHTTPClient) doRPCRaw(ctx context.Context, method string, para
 //
 // Return values:
 //   - error: a wrapped transport, size, or HTTP status error.
-func (c *StreamableHTTPClient) sendNotification(ctx context.Context, method string, params any) error {
+func (c *StreamableHTTPClient) sendNotification(ctx context.Context, method string, params map[string]any) error {
 	if c == nil {
 		return errors.New("mcp client is nil")
 	}
@@ -373,6 +375,7 @@ func (c *StreamableHTTPClient) sendNotification(ctx context.Context, method stri
 		"jsonrpc": "2.0",
 		"method":  method,
 	}
+	// See doRPCRaw: a nil map omits `params` instead of serializing null.
 	if params != nil {
 		payload["params"] = params
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	stdlog "log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	glogger "gorm.io/gorm/logger"
 	"gorm.io/plugin/opentelemetry/tracing"
 
 	"github.com/Laisky/one-api/common"
@@ -23,11 +25,46 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/random"
-	// glogger "gorm.io/gorm/logger"
 )
 
 var DB *gorm.DB
 var LOG_DB *gorm.DB
+
+// gormLogger is the GORM logger shared by every connection this package opens.
+//
+// It differs from glogger.Default in one way that matters everywhere: a
+// "record not found" is normal control flow here (every First() probe that
+// decides whether to insert), so it must not be printed as a query error.
+var gormLogger = newGormLogger()
+
+// init aligns GORM's package-level default with gormLogger so *gorm.DB handles
+// opened outside chooseDB (migrations, tests) inherit the same behavior instead
+// of falling back to the noisy stock logger.
+func init() {
+	glogger.Default = gormLogger
+}
+
+// newGormLogger builds the shared GORM logger.
+//
+// Return values:
+//   - glogger.Interface: a logger that ignores record-not-found errors, and that
+//     stays silent under `go test` unless LOG_LEVEL or DEBUG asks otherwise.
+func newGormLogger() glogger.Interface {
+	level := glogger.Warn
+	if logger.QuietForTests() {
+		level = glogger.Silent
+	}
+	if config.DebugEnabled {
+		level = glogger.Info
+	}
+
+	return glogger.New(stdlog.New(os.Stdout, "\r\n", stdlog.LstdFlags), glogger.Config{
+		SlowThreshold:             200 * time.Millisecond,
+		LogLevel:                  level,
+		IgnoreRecordNotFoundError: true,
+		Colorful:                  true,
+	})
+}
 
 func CreateRootAccountIfNeed() error {
 	var user User
@@ -99,7 +136,7 @@ func openPostgreSQL(dsn string) (*gorm.DB, error) {
 		PreferSimpleProtocol: true, // disables implicit prepared statement usage
 	}), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
-		// Logger: glogger.Default.LogMode(glogger.Info),  // debug sql
+		Logger:      gormLogger,
 	})
 }
 
@@ -113,6 +150,7 @@ func openMySQL(dsn string) (*gorm.DB, error) {
 
 	return gorm.Open(mysql.Open(normalized), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
+		Logger:      gormLogger,
 	})
 }
 
@@ -134,6 +172,7 @@ func openSQLite() (*gorm.DB, error) {
 	dsn := fmt.Sprintf("%s?_busy_timeout=%d&_journal_mode=WAL&_synchronous=NORMAL", sqlitePath, common.SQLiteBusyTimeout)
 	return gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
+		Logger:      gormLogger,
 	})
 }
 
