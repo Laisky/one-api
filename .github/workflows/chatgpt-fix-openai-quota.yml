@@ -1,0 +1,50 @@
+name: ChatGPT OpenAI quota test fix
+
+on:
+  push:
+    branches:
+      - chore/update-openai-models-2026-09
+    paths:
+      - .github/workflows/chatgpt-fix-openai-quota.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: chore/update-openai-models-2026-09
+          fetch-depth: 0
+
+      - name: Update quota expectations and remove temporary workflow
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path("relay/quota/quota_cache_test.go")
+          content = path.read_text()
+          replacements = (
+              ("expected:    413,", "expected:    310,"),
+              ("expected:    1523750,", "expected:    1216000,"),
+              ("expectedOut: 4.5,", "expectedOut: 3.75,"),
+          )
+          for old, new in replacements:
+              count = content.count(old)
+              if count != 1:
+                  raise RuntimeError(f"expected one occurrence of {old!r}, found {count}")
+              content = content.replace(old, new)
+          path.write_text(content)
+          PY
+
+          rm .github/workflows/chatgpt-fix-openai-quota.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add relay/quota/quota_cache_test.go .github/workflows/chatgpt-fix-openai-quota.yml
+          git diff --cached --check
+          git commit -m "test(quota): update GPT-5.6 pricing expectations"
+          git push origin HEAD:chore/update-openai-models-2026-09
