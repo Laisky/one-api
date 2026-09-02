@@ -121,7 +121,7 @@ jobs:
                       return cfg.DefaultReasoningEffort
                   }
                   if len(cfg.SupportedReasoningEfforts) == 1 {
-                      return cfg.SupportedReasoningEffort[0]
+                      return cfg.SupportedReasoningEfforts[0]
                   }
               }
               return "medium"
