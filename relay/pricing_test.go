@@ -35,8 +35,11 @@ func TestAdapterPricingImplementations(t *testing.T) {
 		{"VertexAI", apitype.VertexAI, "gemini-2.5-flash", false},
 		{"xAI", apitype.XAI, "grok-3", false},
 		{"AWS Bedrock/Mistral AI", apitype.AwsClaude, "mistral-pixtral-large-2502", false},
-		// Adapters that still use DefaultPricingMethods (expected to have empty pricing)
-		{"Ollama", apitype.Ollama, "llama2", true},
+		// Ollama publishes a deliberately symbolic price (it runs locally and is not
+		// metered upstream). It used to embed DefaultPricingMethods without wiring
+		// ModelRatios, which billed every model at the 2.5 USD/1M fallback instead —
+		// roughly 250x the intended rate.
+		{"Ollama", apitype.Ollama, "llama2:latest", false},
 		{"Cohere", apitype.Cohere, "command", false},
 		{"Coze", apitype.Coze, "coze-chat", false},
 	}

@@ -139,6 +139,32 @@ jobs:
       - name: Run noentityresponse analyzer
         run: go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
 
+  vulnerability_scan:
+    name: Dependency vulnerability scan
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # `make lint` has always run govulncheck locally, but no CI job did, so two
+      # reachable advisories (GO-2026-6222 unbounded VP8L decode reached through
+      # replicate.ConvertImageToPNG, GO-2026-6061 in the grpc HTTP/2 transport)
+      # sat in go.mod until someone happened to run it. govulncheck only reports
+      # advisories whose vulnerable symbols this code actually calls, so a finding
+      # here is reachable by definition and must be fixed, not waived.
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
   modern_frontend_tests:
     name: Frontend tests (modern)
     needs: changes

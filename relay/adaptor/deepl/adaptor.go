@@ -81,6 +81,43 @@ func (a *Adaptor) GetChannelName() string {
 	return "deepl"
 }
 
+// GetDefaultModelPricing returns DeepL's per-source-character pricing.
+//
+// Return values:
+//   - map[string]adaptor.ModelConfig: the audited pricing keyed by model id.
+func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
+	return ModelRatios
+}
+
+// GetModelRatio returns the per-source-character ratio for modelName.
+//
+// Parameters:
+//   - modelName: the requested model id.
+//
+// Return values:
+//   - float64: quota per source character.
+func (a *Adaptor) GetModelRatio(modelName string) float64 {
+	if price, exists := ModelRatios[modelName]; exists {
+		return price.Ratio
+	}
+	return a.DefaultPricingMethods.GetModelRatio(modelName)
+}
+
+// GetCompletionRatio returns the output multiplier for modelName. DeepL bills
+// source characters only, so this is never applied to real usage.
+//
+// Parameters:
+//   - modelName: the requested model id.
+//
+// Return values:
+//   - float64: output-to-input price multiplier.
+func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
+	if price, exists := ModelRatios[modelName]; exists {
+		return price.CompletionRatio
+	}
+	return a.DefaultPricingMethods.GetCompletionRatio(modelName)
+}
+
 // DefaultToolingConfig returns DeepL tooling defaults (translation API has no separate tool metering).
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return DeepLToolingDefaults

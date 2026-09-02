@@ -421,7 +421,9 @@ var reasoningModels = map[string]adaptor.ModelConfig{
 // legacyModels enumerates older Zhipu chat models retained for backward compatibility.
 var legacyModels = map[string]adaptor.ModelConfig{
 	"glm-3-turbo": {
-		Ratio:                       0.005 * ratio.MilliTokensRmb,
+		// Zhipu published GLM-3-Turbo at CNY 0.005 per 1k tokens, i.e. CNY 5 per 1M,
+		// which is the unit every other entry in this package uses.
+		Ratio:                       5 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               131_072,
 		MaxOutputTokens:             4_096,

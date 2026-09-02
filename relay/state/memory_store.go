@@ -35,7 +35,7 @@ type MemoryStore struct {
 	convByUser     map[int]map[string]int64 // userID -> convID -> last-activity unix
 	leases         map[string]leaseState
 
-	items       map[string]itemIndexEntry // itemID -> entry
+	items       map[itemIndexKey]itemIndexEntry // {owner user, itemID} -> entry
 	checkpoints map[string]*CheckpointRecord
 }
 
@@ -76,7 +76,7 @@ func NewMemoryStore(limits Limits) *MemoryStore {
 		convAppendIdem: make(map[string]struct{}),
 		convByUser:     make(map[int]map[string]int64),
 		leases:         make(map[string]leaseState),
-		items:          make(map[string]itemIndexEntry),
+		items:          make(map[itemIndexKey]itemIndexEntry),
 		checkpoints:    make(map[string]*CheckpointRecord),
 	}
 }
@@ -178,19 +178,31 @@ func (s *MemoryStore) evictResponseLocked(id string) {
 	}
 	delete(s.responses, id)
 	s.respTombstones[id] = struct{}{}
-	s.removeItemIndexLocked(rec.InputItems)
-	s.removeItemIndexLocked(rec.OutputItems)
+	s.removeItemIndexLocked(rec.Owner, rec.InputItems)
+	s.removeItemIndexLocked(rec.Owner, rec.OutputItems)
+}
+
+// itemIndexKey scopes an item-index entry to its owner. UpstreamItemID comes
+// verbatim from a client-supplied "id", so a flat itemID-keyed map let one tenant
+// squat or delete another tenant's index entry. This mirrors RedisStore.itemKey.
+type itemIndexKey struct {
+	userID int
+	itemID string
 }
 
 // removeItemIndexLocked deletes both the gateway-id and upstream-id index entries
 // for each item, closing the UpstreamItemID remanence gap (ST-018).
-func (s *MemoryStore) removeItemIndexLocked(items []ItemEnvelope) {
+//
+// Parameters:
+//   - owner: the owner whose entries are being removed.
+//   - items: the envelopes whose index entries to drop.
+func (s *MemoryStore) removeItemIndexLocked(owner OwnerScope, items []ItemEnvelope) {
 	for _, env := range items {
 		if env.GatewayItemID != "" {
-			delete(s.items, env.GatewayItemID)
+			delete(s.items, itemIndexKey{userID: owner.UserID, itemID: env.GatewayItemID})
 		}
 		if env.UpstreamItemID != "" {
-			delete(s.items, env.UpstreamItemID)
+			delete(s.items, itemIndexKey{userID: owner.UserID, itemID: env.UpstreamItemID})
 		}
 	}
 }
@@ -233,8 +245,8 @@ func (s *MemoryStore) DeleteResponse(_ context.Context, owner OwnerScope, id str
 	s.respTombstones[id] = struct{}{}
 	// Remove the node's items from the reference index (both gateway and upstream
 	// ids) so a stale reference cannot resolve after deletion (S06, ST-018).
-	s.removeItemIndexLocked(rec.InputItems)
-	s.removeItemIndexLocked(rec.OutputItems)
+	s.removeItemIndexLocked(rec.Owner, rec.InputItems)
+	s.removeItemIndexLocked(rec.Owner, rec.OutputItems)
 	s.untrackUserResponseLocked(rec.Owner.UserID, id)
 	return nil
 }
@@ -322,7 +334,7 @@ func (s *MemoryStore) GetItem(_ context.Context, owner OwnerScope, itemID string
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entry, ok := s.items[itemID]
+	entry, ok := s.items[itemIndexKey{userID: owner.UserID, itemID: itemID}]
 	if !ok || !entry.owner.Matches(owner) {
 		return nil, ErrNotFound
 	}
@@ -338,12 +350,13 @@ func (s *MemoryStore) indexItems(owner OwnerScope, items []ItemEnvelope) {
 		}
 		clone := env
 		clone.Raw = cloneRaw(env.Raw)
-		s.items[env.GatewayItemID] = itemIndexEntry{owner: owner, env: clone}
+		s.items[itemIndexKey{userID: owner.UserID, itemID: env.GatewayItemID}] = itemIndexEntry{owner: owner, env: clone}
 		if env.UpstreamItemID != "" {
 			// Also index by upstream id so an item_reference expressed with the raw
 			// provider id resolves.
-			if _, exists := s.items[env.UpstreamItemID]; !exists {
-				s.items[env.UpstreamItemID] = itemIndexEntry{owner: owner, env: clone}
+			upstreamKey := itemIndexKey{userID: owner.UserID, itemID: env.UpstreamItemID}
+			if _, exists := s.items[upstreamKey]; !exists {
+				s.items[upstreamKey] = itemIndexEntry{owner: owner, env: clone}
 			}
 		}
 	}
@@ -432,7 +445,7 @@ func (s *MemoryStore) DeleteConversation(_ context.Context, owner OwnerScope, id
 	s.convTombstones[id] = struct{}{}
 	delete(s.leases, id)
 	// Purge both gateway-id and upstream-id item index entries (ST-018).
-	s.removeItemIndexLocked(rec.Items)
+	s.removeItemIndexLocked(rec.Owner, rec.Items)
 	s.untrackConversationLocked(rec.Owner.UserID, id)
 	return nil
 }
@@ -513,7 +526,7 @@ func (s *MemoryStore) DeleteConversationItem(_ context.Context, owner OwnerScope
 		if env.GatewayItemID == itemID || (env.UpstreamItemID != "" && env.UpstreamItemID == itemID) {
 			removed = true
 			// Purge both gateway-id and upstream-id index entries (ST-018).
-			s.removeItemIndexLocked([]ItemEnvelope{env})
+			s.removeItemIndexLocked(rec.Owner, []ItemEnvelope{env})
 			continue
 		}
 		filtered = append(filtered, env)

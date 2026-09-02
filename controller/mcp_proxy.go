@@ -185,7 +185,7 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		return nil, errors.Wrap(err, "get user from context")
 	}
 
-	serverLabel, toolName := splitToolName(params.Name)
+	serverLabel, toolName := resolveQualifiedToolName(params.Name)
 	if toolName == "" {
 		toolName = strings.TrimSpace(params.Name)
 	}
@@ -463,6 +463,47 @@ func splitToolName(value string) (string, string) {
 	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 }
 
+// resolveQualifiedToolName splits a "<server>.<tool>" name using the server names
+// that actually exist, preferring the longest match.
+//
+// splitToolName cuts at the FIRST dot, which is wrong whenever a server name
+// contains one: a server called "github.com" advertises "github.com.search_repos"
+// in the catalog, and the naive split asked for a server named "github", so every
+// tool on that server was listed but permanently uncallable. Candidates are tried
+// longest-first so the most specific server name wins; a name with no dots, or one
+// whose prefixes match no server, falls back to the previous behavior and produces
+// the same error as before.
+//
+// Parameters:
+//   - value: the qualified or unqualified tool name from the request.
+//
+// Return values:
+//   - string: the resolved server label, empty when the name is unqualified.
+//   - string: the remaining exact tool name.
+func resolveQualifiedToolName(value string) (string, string) {
+	value = strings.TrimSpace(value)
+	if !strings.Contains(value, ".") {
+		return "", value
+	}
+
+	// Build prefixes at every dot, longest first: "a.b.c" -> ["a.b", "a"].
+	var prefixes []string
+	for idx := strings.LastIndex(value, "."); idx > 0; idx = strings.LastIndex(value[:idx], ".") {
+		prefixes = append(prefixes, value[:idx])
+	}
+	for _, prefix := range prefixes {
+		label := strings.TrimSpace(prefix)
+		if label == "" {
+			continue
+		}
+		if _, err := model.GetMCPServerByName(label); err == nil {
+			return label, strings.TrimSpace(value[len(prefix)+1:])
+		}
+	}
+
+	return splitToolName(value)
+}
+
 // respondMCPResult writes one successful initialization-based JSON-RPC response.
 //
 // Parameters:
@@ -495,12 +536,18 @@ func respondMCPError(c *gin.Context, id any, code int, err error) {
 	} else if err != nil {
 		message = err.Error()
 	}
-	c.JSON(http.StatusOK, gin.H{
+	// The MCP error-response schema types id as `id?: string | number`, so when we
+	// could not read a request id the field must be omitted rather than sent as
+	// null. Strict clients — one-api's own included — reject a null id.
+	payload := gin.H{
 		"jsonrpc": "2.0",
-		"id":      id,
 		"error": gin.H{
 			"code":    code,
 			"message": message,
 		},
-	})
+	}
+	if id != nil {
+		payload["id"] = id
+	}
+	c.JSON(http.StatusOK, payload)
 }

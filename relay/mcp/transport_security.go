@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/common/network"
 )
 
 const maxMCPRedirects = 10
@@ -65,9 +67,76 @@ func (c *StreamableHTTPClient) httpClient() *http.Client {
 		if sensitive && !sameMCPOrigin(initial, request.URL) {
 			return errors.WithStack(errors.New("credentialed MCP redirect must preserve the endpoint origin"))
 		}
-		return nil
+		return guardMCPRedirectTarget(initial, request.URL)
 	}
 	return client
+}
+
+// guardMCPRedirectTarget refuses a redirect that walks from a public MCP endpoint
+// into private address space.
+//
+// The same-origin pin above only applies to credentialed clients, so an MCP
+// server configured with auth_type=none (or whoever controls its DNS) could
+// answer a tool call with 302 Location: http://169.254.169.254/... and have the
+// gateway fetch it and hand the body back to the caller — a straightforward SSRF,
+// since the upstream operator is not inside the admin's trust boundary.
+//
+// An endpoint the operator deliberately pointed at localhost or a LAN address is
+// left alone: redirects that stay inside address space the operator already chose
+// are consistent with that choice.
+//
+// This checks the redirect target's host, so it does not defend against a DNS
+// rebind between this check and the dial; it closes the direct redirect path,
+// which is the one an upstream controls.
+//
+// Parameters:
+//   - initial: the originally configured endpoint URL.
+//   - target: the URL the server is redirecting to.
+//
+// Return values:
+//   - error: non-nil when a public endpoint redirects into private address space.
+func guardMCPRedirectTarget(initial, target *url.URL) error {
+	if initial == nil || target == nil {
+		return nil
+	}
+	if isInternalMCPHost(initial.Hostname()) {
+		return nil
+	}
+	if isInternalMCPHost(target.Hostname()) {
+		return errors.WithStack(errors.New("MCP redirect from a public endpoint into private address space is not allowed"))
+	}
+	return nil
+}
+
+// isInternalMCPHost reports whether host denotes a loopback, private, link-local
+// or otherwise non-public address.
+//
+// Parameters:
+//   - host: a hostname or IP literal.
+//
+// Return values:
+//   - bool: true when the host is not publicly routable.
+func isInternalMCPHost(host string) bool {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return false
+	}
+	if isLoopbackMCPHostname(host) {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return network.IsForbiddenIP(ip)
+	}
+	addresses, err := net.LookupIP(host)
+	if err != nil {
+		return false
+	}
+	for _, ip := range addresses {
+		if network.IsForbiddenIP(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // validateMCPOutboundTransport enforces HTTPS for credentialed remote MCP requests while retaining loopback development compatibility.

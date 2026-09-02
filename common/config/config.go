@@ -886,6 +886,19 @@ var (
 	// Unit: seconds
 	UserContentRequestTimeout = env.Int("USER_CONTENT_REQUEST_TIMEOUT", 30)
 
+	// MaxRequestBodySizeMB caps how many bytes a single relay request body may
+	// contribute, both as uploaded bytes and as gzip-decompressed bytes.
+	//
+	// Without a cap, GzipDecodeMiddleware hands downstream readers an unbounded
+	// compress/gzip stream and common.GetRequestBody reads it fully into memory, so
+	// a ~1 MB upload of compressed zeros expands to ~1 GB of resident heap. The cap
+	// has to be generous because relay payloads legitimately carry base64 media.
+	//
+	// Environment variable: MAX_REQUEST_BODY_SIZE_MB
+	// Default: 128 MB
+	// Unit: megabytes; 0 or negative disables the limit
+	MaxRequestBodySizeMB = env.Int("MAX_REQUEST_BODY_SIZE_MB", 128)
+
 	// MaxInlineImageSizeMB limits the size of images that can be inlined as base64
 	// to prevent oversized payloads from overwhelming upstream providers.
 	//

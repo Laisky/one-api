@@ -55,20 +55,18 @@ func (a *Adaptor) GetChannelName() string {
 	return "xunfeiv2"
 }
 
-// GetDefaultModelPricing returns the pricing information for XunfeiV2 models
-// Based on Xunfei pricing: https://www.xfyun.cn/doc/spark/Web.html#_1-%E6%8E%A5%E5%8F%A3%E8%AF%B4%E6%98%8E
+// GetDefaultModelPricing returns the audited XunfeiV2 pricing table.
+//
+// It must stay the same map ModelList is derived from: this method previously
+// returned a hand-written map keyed by marketing names ("spark-pro", "spark-max")
+// while the channel advertises the upstream domain ids ("generalv3", "max-32k").
+// The two key sets did not intersect, so every real request missed and fell back
+// to the 2.5 USD/1M default in DefaultPricingMethods.
+//
+// Return values:
+//   - map[string]adaptor.ModelConfig: pricing keyed by the ids this channel serves.
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-	const MilliTokensRmb = 3.5 // 0.000007 * 500000 = 3.5 quota per milli-token
-
-	return map[string]adaptor.ModelConfig{
-		// XunfeiV2 Models - Based on https://www.xfyun.cn/doc/spark/Web.html#_1-%E6%8E%A5%E5%8F%A3%E8%AF%B4%E6%98%8E
-		"spark-lite":      {Ratio: 0.0 * MilliTokensRmb, CompletionRatio: 1},   // Free tier
-		"spark-pro":       {Ratio: 0.003 * MilliTokensRmb, CompletionRatio: 1}, // CNY 0.003 / 1k tokens
-		"spark-pro-128k":  {Ratio: 0.005 * MilliTokensRmb, CompletionRatio: 1}, // CNY 0.005 / 1k tokens
-		"spark-max":       {Ratio: 0.005 * MilliTokensRmb, CompletionRatio: 1}, // CNY 0.005 / 1k tokens
-		"spark-max-32k":   {Ratio: 0.008 * MilliTokensRmb, CompletionRatio: 1}, // CNY 0.008 / 1k tokens
-		"spark-4.0-ultra": {Ratio: 0.005 * MilliTokensRmb, CompletionRatio: 1}, // CNY 0.005 / 1k tokens
-	}
+	return ModelRatios
 }
 
 func (a *Adaptor) GetModelRatio(modelName string) float64 {

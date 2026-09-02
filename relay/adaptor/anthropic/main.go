@@ -498,13 +498,17 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 			// Add tool calls
 			for i := range message.ToolCalls {
 				inputParam := make(map[string]any)
-				if err := json.Unmarshal([]byte(message.ToolCalls[i].Function.Arguments.(string)), &inputParam); err != nil {
-					return nil, errors.Wrapf(err, "unmarshal tool call arguments for tool %s", message.ToolCalls[i].Function.Name)
+				rawArguments, err := message.ToolCalls[i].Function.ArgumentsJSON()
+				if err != nil {
+					return nil, errors.Wrapf(err, "read tool call arguments for tool %s", message.ToolCalls[i].FunctionName())
+				}
+				if err := json.Unmarshal([]byte(rawArguments), &inputParam); err != nil {
+					return nil, errors.Wrapf(err, "unmarshal tool call arguments for tool %s", message.ToolCalls[i].FunctionName())
 				}
 				claudeMessage.Content = append(claudeMessage.Content, Content{
 					Type:  "tool_use",
 					Id:    message.ToolCalls[i].Id,
-					Name:  message.ToolCalls[i].Function.Name,
+					Name:  message.ToolCalls[i].FunctionName(),
 					Input: inputParam,
 				})
 			}
@@ -562,13 +566,17 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		// Add tool calls for non-string content messages
 		for i := range message.ToolCalls {
 			inputParam := make(map[string]any)
-			if err := json.Unmarshal([]byte(message.ToolCalls[i].Function.Arguments.(string)), &inputParam); err != nil {
-				return nil, errors.Wrapf(err, "unmarshal tool call arguments for tool %s", message.ToolCalls[i].Function.Name)
+			rawArguments, err := message.ToolCalls[i].Function.ArgumentsJSON()
+			if err != nil {
+				return nil, errors.Wrapf(err, "read tool call arguments for tool %s", message.ToolCalls[i].FunctionName())
+			}
+			if err := json.Unmarshal([]byte(rawArguments), &inputParam); err != nil {
+				return nil, errors.Wrapf(err, "unmarshal tool call arguments for tool %s", message.ToolCalls[i].FunctionName())
 			}
 			contents = append(contents, Content{
 				Type:  "tool_use",
 				Id:    message.ToolCalls[i].Id,
-				Name:  message.ToolCalls[i].Function.Name,
+				Name:  message.ToolCalls[i].FunctionName(),
 				Input: inputParam,
 			})
 		}

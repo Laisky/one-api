@@ -88,17 +88,25 @@ func NewStreamableHTTPClientWithLogger(server *model.MCPServer, headers map[stri
 // Return values:
 //   - *StreamableHTTPClient: a new client whose legacy lifecycle is initialized lazily.
 func newStreamableHTTPClient(server *model.MCPServer, headers map[string]string, timeout time.Duration, logger glog.Logger) *StreamableHTTPClient {
+	// Canonicalize on the way in. This map is later replayed through
+	// http.Header.Set, which canonicalizes anyway, so two entries differing only in
+	// case ("accept" and "Accept") would collapse onto one field with a winner
+	// chosen by Go's randomized map iteration order. The delete/default guards
+	// below are exact-case, so an admin header spelled "accept" or
+	// "mcp-session-id" used to slip past them and corrupt roughly half the
+	// requests: a missing text/event-stream in Accept draws 406 from the MCP
+	// TypeScript SDK, and a stale session id draws 400/404.
 	merged := make(map[string]string)
 	if server != nil {
 		for key, value := range server.Headers {
-			merged[key] = value
+			merged[http.CanonicalHeaderKey(strings.TrimSpace(key))] = value
 		}
 	}
 	for key, value := range headers {
-		merged[key] = value
+		merged[http.CanonicalHeaderKey(strings.TrimSpace(key))] = value
 	}
-	delete(merged, mcpProtocolVersionHeader)
-	delete(merged, mcpSessionIDHeader)
+	delete(merged, http.CanonicalHeaderKey(mcpProtocolVersionHeader))
+	delete(merged, http.CanonicalHeaderKey(mcpSessionIDHeader))
 	if _, exists := merged["Accept"]; !exists {
 		merged["Accept"] = mcpAcceptHeaderValue
 	}
@@ -284,6 +292,60 @@ func (c *StreamableHTTPClient) doRPC(ctx context.Context, method string, params 
 //   - http.Header: response headers used by initialize to capture session state.
 //   - error: a wrapped transport, size, correlation, protocol, or decoding error.
 func (c *StreamableHTTPClient) doRPCRaw(ctx context.Context, method string, params map[string]any, out any) (http.Header, error) {
+	if c == nil {
+		return nil, errors.New("mcp client is nil")
+	}
+
+	headers, err := c.doRPCRawOnce(ctx, method, params, out)
+	if err == nil || !c.sessionExpired(method, err) {
+		return headers, err
+	}
+
+	// Streamable HTTP: "When a client receives HTTP 404 in response to a request
+	// containing an Mcp-Session-Id, it MUST start a new session by sending a new
+	// InitializeRequest without a session ID attached." Without this, a server that
+	// reaps idle sessions (or an autoscaled deployment that loses one) leaves the
+	// client wedged: Initialize returns early because c.initialized is already
+	// true, so every later request keeps replaying the dead session id and 404s.
+	c.resetSession()
+	if initErr := c.Initialize(ctx); initErr != nil {
+		return headers, errors.Wrap(initErr, "reinitialize mcp session after 404")
+	}
+	return c.doRPCRawOnce(ctx, method, params, out)
+}
+
+// sessionExpired reports whether err is the upstream telling us our session is gone.
+//
+// Parameters:
+//   - method: the JSON-RPC method that failed; initialize is excluded so the
+//     recovery path cannot recurse.
+//   - err: the error returned by one request attempt.
+//
+// Return values:
+//   - bool: true when the request carried a session id and drew HTTP 404.
+func (c *StreamableHTTPClient) sessionExpired(method string, err error) bool {
+	if method == "initialize" || strings.TrimSpace(c.sessionID) == "" {
+		return false
+	}
+	var protocolErr *ProtocolError
+	return errors.As(err, &protocolErr) && protocolErr.HTTPStatus == http.StatusNotFound
+}
+
+// resetSession forgets the negotiated session so Initialize performs a fresh
+// handshake with no session id attached.
+func (c *StreamableHTTPClient) resetSession() {
+	if c == nil {
+		return
+	}
+	c.sessionID = ""
+	c.initialized = false
+	c.setClientHeader(mcpSessionIDHeader, "")
+}
+
+// doRPCRawOnce performs exactly one correlated legacy JSON-RPC request.
+//
+// Parameters and return values mirror doRPCRaw; it performs no session recovery.
+func (c *StreamableHTTPClient) doRPCRawOnce(ctx context.Context, method string, params map[string]any, out any) (http.Header, error) {
 	if c == nil {
 		return nil, errors.New("mcp client is nil")
 	}

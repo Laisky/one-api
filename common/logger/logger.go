@@ -65,7 +65,7 @@ func alignLibraryLogger(name string, target glog.Logger, level glog.Level) {
 	}
 	// glog.Shared and gmw.Logger are interface values holding pointers, so a nil
 	// logger can still compare non-nil as an interface.
-	if v := reflect.ValueOf(target); v.Kind() == reflect.Ptr && v.IsNil() {
+	if v := reflect.ValueOf(target); v.Kind() == reflect.Pointer && v.IsNil() {
 		return
 	}
 	if err := target.ChangeLevel(level); err != nil {

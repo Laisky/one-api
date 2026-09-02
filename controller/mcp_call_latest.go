@@ -82,7 +82,7 @@ func prepareModernMCPToolCall(c *gin.Context, params modernMCPCallParams) (*mode
 		return nil, errors.Wrap(err, "get user from context")
 	}
 
-	serverLabel, toolName := splitToolName(params.Name)
+	serverLabel, toolName := resolveQualifiedToolName(params.Name)
 	if toolName == "" {
 		toolName = strings.TrimSpace(params.Name)
 	}
