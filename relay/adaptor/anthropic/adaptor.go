@@ -70,6 +70,11 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 				betaHeaders = append(betaHeaders, AnthropicBetaAdvancedToolUse)
 			}
 		}
+		if enabled, ok := c.Get(ctxkey.ClaudeThinkingBindingControlsEnabled); ok {
+			if enabledBool, ok := enabled.(bool); ok && enabledBool {
+				betaHeaders = append(betaHeaders, AnthropicBetaThinkingBindingControls)
+			}
+		}
 	}
 
 	mergedBeta := mergeAnthropicBetaHeaders(betaHeaders)
@@ -86,6 +91,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 
 	c.Set(ctxkey.ClaudeModel, request.Model)
+	c.Set(ctxkey.ClaudeThinkingBindingControlsEnabled, hasClaudeThinkingBindingControls(request.Thinking))
 	// Anthropic's `tools[].name` validator enforces `^[a-zA-Z0-9_-]{1,64}$`; sanitize
 	// the OpenAI-shaped payload before conversion so the resulting Anthropic tool
 	// definitions carry compliant names. Restoration happens in the response path
@@ -117,6 +123,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	// Set flag to use direct pass-through instead of conversion
 	c.Set(ctxkey.ClaudeDirectPassthrough, true)
 	c.Set(ctxkey.ClaudeToolSearchEnabled, hasClaudeToolSearchTools(request))
+	c.Set(ctxkey.ClaudeThinkingBindingControlsEnabled, hasClaudeThinkingBindingControls(request.Thinking))
 
 	// Still parse the request for billing purposes, but we won't use the converted result
 	// The original request body will be forwarded directly for better compatibility

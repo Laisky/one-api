@@ -88,15 +88,16 @@ func rewriteClaudeAdaptiveThinking(rawThinking json.RawMessage) (json.RawMessage
 		if _, ok := obj["budget_tokens"]; !ok {
 			return rawThinking, false, nil
 		}
-		delete(obj, "budget_tokens")
-		rewritten, err := encodeClaudeRawJSONObject(obj)
-		if err != nil {
-			return nil, false, errors.Wrap(err, "marshal adaptive thinking")
-		}
-		return json.RawMessage(rewritten), true, nil
 	}
 
-	rewritten, err := json.Marshal(map[string]string{"type": "adaptive"})
+	adaptiveType, err := json.Marshal("adaptive")
+	if err != nil {
+		return nil, false, errors.Wrap(err, "marshal adaptive thinking type")
+	}
+	obj["type"] = json.RawMessage(adaptiveType)
+	delete(obj, "budget_tokens")
+
+	rewritten, err := encodeClaudeRawJSONObject(obj)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "marshal adaptive thinking")
 	}
@@ -381,8 +382,9 @@ func stripClaudeThinkingFromAssistantHistory(raw []byte) ([]byte, claudeSignatur
 	return encodedRequest, stats, nil
 }
 
-// stripClaudeUnsignedThinkingFromAssistantMessage removes assistant thinking blocks that cannot be replayed because they lack signatures.
-// stripClaudeUnsignedThinkingFromAssistantMessage returns the rewritten message, removal stats, whether the message should be kept, and any error.
+// stripClaudeUnsignedThinkingFromAssistantMessage removes visible assistant thinking blocks that cannot be replayed because they lack signatures.
+// Redacted thinking blocks carry opaque data instead of a signature and must be replayed unchanged.
+// The function returns the rewritten message, removal stats, whether the message should be kept, and any error.
 func stripClaudeUnsignedThinkingFromAssistantMessage(messageRaw json.RawMessage, messageIndex int) ([]byte, claudeUnsignedThinkingStats, bool, error) {
 	var stats claudeUnsignedThinkingStats
 	var message map[string]json.RawMessage
@@ -425,7 +427,9 @@ func stripClaudeUnsignedThinkingFromAssistantMessage(messageRaw json.RawMessage,
 		}
 
 		normalizedType := strings.ToLower(strings.TrimSpace(blockType))
-		if normalizedType != "thinking" && normalizedType != "redacted_thinking" {
+		if normalizedType != "thinking" {
+			// redacted_thinking has an opaque data field and no signature field.
+			// Preserve it, along with unknown future block types, byte-for-byte.
 			keptBlocks = append(keptBlocks, blockRaw)
 			continue
 		}
