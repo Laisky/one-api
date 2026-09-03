@@ -59,15 +59,15 @@ func PrometheusMiddleware() gin.HandlerFunc {
 		normalizedPath := normalizePath(path)
 
 		// Track active requests
-		metrics.GlobalRecorder.RecordHTTPActiveRequest(normalizedPath, method, 1)
-		defer metrics.GlobalRecorder.RecordHTTPActiveRequest(normalizedPath, method, -1)
+		metrics.Recorder().RecordHTTPActiveRequest(normalizedPath, method, 1)
+		defer metrics.Recorder().RecordHTTPActiveRequest(normalizedPath, method, -1)
 
 		// Continue processing the request
 		c.Next()
 
 		// Record metrics after request completion
 		statusCode := strconv.Itoa(c.Writer.Status())
-		metrics.GlobalRecorder.RecordHTTPRequest(start, normalizedPath, method, statusCode)
+		metrics.Recorder().RecordHTTPRequest(start, normalizedPath, method, statusCode)
 	}
 }
 

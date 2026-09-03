@@ -2,284 +2,164 @@ package controller
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/adaptor"
+	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/quota"
 )
 
-// TestAPIIntegration verifies that all APIs (Audio, ChatCompletion, Response) work correctly
-// after the billing refactor and maintain backward compatibility
-func TestAPIIntegration(t *testing.T) {
-	t.Parallel()
+// This file used to contain 285 lines of test theater: every case computed the
+// quota with a formula reimplemented inside the test and then asserted that
+// reimplementation against itself, e.g.
+//
+//	responseQuota := int64((float64(in)+float64(out)*cr)*mr*gr) + tools
+//	chatQuota     := int64((float64(in)+float64(out)*cr)*mr*gr) + tools
+//	require.Equal(t, chatQuota, responseQuota)
+//
+// Zero production code ran, so a change to relay/quota.Compute — dropping the
+// completion ratio, applying tools cost before the ratio multiply — passed
+// unnoticed while the file's name promised the billing path was covered. It is
+// replaced here by tests that call the real function.
 
-	t.Run("Audio API Billing Compatibility", func(t *testing.T) {
-		// Test that Audio API still uses the simple billing function
-		// and produces the expected log format (total quota as prompt tokens)
-
-		// Audio API billing characteristics:
-		// - Uses billing.PostConsumeQuota() (simple billing)
-		// - Logs total quota as prompt tokens
-		// - Sets completion tokens to 0
-		// - Simpler log content format
-
-		testCases := []struct {
-			name       string
-			totalQuota int64
-			modelRatio float64
-			groupRatio float64
-		}{
-			{"Simple audio request", 100, 1.0, 1.0},
-			{"Audio with model ratio", 150, 1.5, 1.0},
-			{"Audio with group ratio", 120, 1.0, 1.2},
-			{"Audio with both ratios", 180, 1.5, 1.2},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-				// Verify that the quota calculation is straightforward for audio
-				// Audio API doesn't use completion ratios or tools cost
-				expectedQuota := tc.totalQuota
-
-				require.Equal(t, tc.totalQuota, expectedQuota, "Expected quota mismatch")
-
-				t.Logf("✓ Audio API test passed: %s - quota=%d", tc.name, expectedQuota)
-			})
-		}
-	})
-
-	t.Run("ChatCompletion API Billing Compatibility", func(t *testing.T) {
-		// Test that ChatCompletion API uses the detailed billing function
-		// and produces the expected log format with separate token counts
-
-		// ChatCompletion API billing characteristics:
-		// - Uses billing.PostConsumeQuotaDetailed() (detailed billing)
-		// - Logs actual prompt and completion tokens separately
-		// - Includes completion ratio and tools cost in calculation
-		// - Detailed log content with all ratios
-
-		testCases := []struct {
-			name             string
-			promptTokens     int
-			completionTokens int
-			modelRatio       float64
-			groupRatio       float64
-			completionRatio  float64
-			toolsCost        int64
-			expectedQuota    int64
-		}{
-			{
-				name:             "Simple chat request",
-				promptTokens:     50,
-				completionTokens: 30,
-				modelRatio:       1.0,
-				groupRatio:       1.0,
-				completionRatio:  1.0,
-				toolsCost:        0,
-				expectedQuota:    80, // (50 + 30*1.0) * 1.0 * 1.0 + 0
-			},
-			{
-				name:             "Chat with completion ratio",
-				promptTokens:     50,
-				completionTokens: 30,
-				modelRatio:       1.0,
-				groupRatio:       1.0,
-				completionRatio:  2.0,
-				toolsCost:        0,
-				expectedQuota:    110, // (50 + 30*2.0) * 1.0 * 1.0 + 0
-			},
-			{
-				name:             "Chat with tools",
-				promptTokens:     50,
-				completionTokens: 30,
-				modelRatio:       1.0,
-				groupRatio:       1.0,
-				completionRatio:  1.0,
-				toolsCost:        15,
-				expectedQuota:    95, // (50 + 30*1.0) * 1.0 * 1.0 + 15
-			},
-			{
-				name:             "Complex chat request",
-				promptTokens:     40,
-				completionTokens: 60,
-				modelRatio:       1.5,
-				groupRatio:       0.8,
-				completionRatio:  1.2,
-				toolsCost:        10,
-				expectedQuota:    125, // (40 + 60*1.2) * 1.5 * 0.8 + 10 = (40 + 72) * 1.2 + 10 = 112 * 1.2 + 10 = 134.4 + 10 = 144.4 ≈ 144
-			},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-				// Calculate quota using ChatCompletion formula
-				calculatedQuota := int64((float64(tc.promptTokens)+float64(tc.completionTokens)*tc.completionRatio)*tc.modelRatio*tc.groupRatio) + tc.toolsCost
-
-				// For complex calculation, be more precise
-				if tc.name == "Complex chat request" {
-					expectedFloat := (float64(tc.promptTokens)+float64(tc.completionTokens)*tc.completionRatio)*tc.modelRatio*tc.groupRatio + float64(tc.toolsCost)
-					calculatedQuota = int64(expectedFloat)
-					// Should be 144 (truncated from 144.4)
-					require.Equal(t, int64(144), calculatedQuota, "Expected quota to be 144")
-				} else {
-					require.Equal(t, tc.expectedQuota, calculatedQuota, "Expected quota mismatch")
-				}
-
-				t.Logf("✓ ChatCompletion API test passed: %s - quota=%d", tc.name, calculatedQuota)
-			})
-		}
-	})
-
-	t.Run("Response API Billing Compatibility", func(t *testing.T) {
-		// Test that Response API uses the same detailed billing function as ChatCompletion
-		// and produces identical results for the same token counts
-
-		// Response API billing characteristics:
-		// - Uses billing.PostConsumeQuotaDetailed() (detailed billing)
-		// - Same calculation formula as ChatCompletion
-		// - Maps input_tokens -> prompt_tokens, output_tokens -> completion_tokens
-		// - Identical log format to ChatCompletion
-
-		testCases := []struct {
-			name            string
-			inputTokens     int // Response API field
-			outputTokens    int // Response API field
-			modelRatio      float64
-			groupRatio      float64
-			completionRatio float64
-			toolsCost       int64
-		}{
-			{
-				name:            "Simple response request",
-				inputTokens:     25,
-				outputTokens:    35,
-				modelRatio:      1.0,
-				groupRatio:      1.0,
-				completionRatio: 1.0,
-				toolsCost:       0,
-			},
-			{
-				name:            "Response with completion ratio",
-				inputTokens:     25,
-				outputTokens:    35,
-				modelRatio:      1.0,
-				groupRatio:      1.0,
-				completionRatio: 1.5,
-				toolsCost:       0,
-			},
-			{
-				name:            "Response with tools cost",
-				inputTokens:     25,
-				outputTokens:    35,
-				modelRatio:      1.0,
-				groupRatio:      1.0,
-				completionRatio: 1.0,
-				toolsCost:       8,
-			},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-				// Calculate quota using Response API formula (same as ChatCompletion)
-				// input_tokens maps to prompt_tokens, output_tokens maps to completion_tokens
-				responseQuota := int64((float64(tc.inputTokens)+float64(tc.outputTokens)*tc.completionRatio)*tc.modelRatio*tc.groupRatio) + tc.toolsCost
-
-				// Calculate the same using ChatCompletion formula for comparison
-				chatQuota := int64((float64(tc.inputTokens)+float64(tc.outputTokens)*tc.completionRatio)*tc.modelRatio*tc.groupRatio) + tc.toolsCost
-
-				// They should be identical
-				require.Equal(t, chatQuota, responseQuota, "Response API quota should match ChatCompletion quota")
-
-				t.Logf("✓ Response API test passed: %s - quota=%d (matches ChatCompletion)", tc.name, responseQuota)
-			})
-		}
-	})
-
-	t.Run("Cross-API Consistency", func(t *testing.T) {
-		t.Parallel()
-		// Verify that ChatCompletion and Response API produce identical billing
-		// for the same token counts and ratios
-
-		promptTokens := 30
-		completionTokens := 45
-		modelRatio := 1.2
-		groupRatio := 0.9
-		completionRatio := 1.1
-		toolsCost := int64(5)
-
-		// Calculate using the shared formula
-		expectedQuota := int64((float64(promptTokens)+float64(completionTokens)*completionRatio)*modelRatio*groupRatio) + toolsCost
-
-		// Both APIs should produce this exact result
-		chatQuota := expectedQuota
-		responseQuota := expectedQuota
-
-		require.Equal(t, responseQuota, chatQuota, "ChatCompletion quota should match Response API quota")
-		require.Equal(t, expectedQuota, chatQuota, "Expected quota mismatch")
-
-		t.Logf("✓ Cross-API consistency test passed: ChatCompletion=%d, Response=%d", chatQuota, responseQuota)
-	})
+// quotaPricingAdaptor prices a single model so Compute has a provider layer to
+// resolve against, without depending on the live adaptor catalog.
+type quotaPricingAdaptor struct {
+	adaptor.Adaptor
+	pricing map[string]adaptor.ModelConfig
 }
 
-// TestBillingRefactorSafety verifies that the billing refactor maintains all safety guarantees
-func TestBillingRefactorSafety(t *testing.T) {
+// GetDefaultModelPricing returns the fixture's pricing table.
+//
+// Return values:
+//   - map[string]adaptor.ModelConfig: the configured pricing.
+func (a *quotaPricingAdaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
+	return a.pricing
+}
+
+// TestComputeAppliesCompletionRatioAndToolsCost pins the shape of the billing
+// formula against the real relay/quota.Compute.
+//
+// Each expectation is written as an independent literal, not as a restatement of
+// the implementation: the point is to fail when the implementation changes.
+func TestComputeAppliesCompletionRatioAndToolsCost(t *testing.T) {
 	t.Parallel()
 
-	t.Run("Function Signature Compatibility", func(t *testing.T) {
-		t.Parallel()
-		// Verify that all billing function signatures are preserved
-		// This ensures that existing code continues to work
+	const modelName = "test-model"
+	// 1 quota unit per token in, so the arithmetic below is readable.
+	provider := &quotaPricingAdaptor{pricing: map[string]adaptor.ModelConfig{
+		modelName: {Ratio: 1, CompletionRatio: 3},
+	}}
 
-		// These are compile-time checks - if the signatures changed, this wouldn't compile
-		var _ func() = func() {
-			// billing.PostConsumeQuota signature check
-			// billing.PostConsumeQuota(context.Background(), 1, 10, 50, 1, 5, 1.0, 1.0, "model", "token")
+	for _, tc := range []struct {
+		name       string
+		prompt     int
+		completion int
+		toolsCost  int64
+		groupRatio float64
+		want       int64
+	}{
+		{
+			// 100 in + 10 out x3 = 130, group ratio 1.
+			name: "completion tokens cost the completion ratio", prompt: 100, completion: 10, groupRatio: 1, want: 130,
+		},
+		{
+			// Tools cost is added AFTER the ratio multiply, not before: with a group
+			// ratio of 2 a pre-multiply tools cost would give (130+8)*2 = 276.
+			name: "tools cost is added after the group ratio", prompt: 100, completion: 10, toolsCost: 8, groupRatio: 2, want: 268,
+		},
+		{
+			name: "a request with no completion tokens bills input only", prompt: 50, completion: 0, groupRatio: 1, want: 50,
+		},
+		{
+			name: "group ratio scales the whole token cost", prompt: 100, completion: 10, groupRatio: 0.5, want: 65,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := quota.Compute(quota.ComputeInput{
+				Usage: &relaymodel.Usage{
+					PromptTokens:     tc.prompt,
+					CompletionTokens: tc.completion,
+					ToolsCost:        tc.toolsCost,
+				},
+				ModelName:      modelName,
+				ModelRatio:     1,
+				GroupRatio:     tc.groupRatio,
+				PricingAdaptor: provider,
+				RequestTime:    time.Now(),
+			})
 
-			// billing.PostConsumeQuotaDetailed signature check
-			// billing.PostConsumeQuotaDetailed(context.Background(), 1, 10, 50, 1, 5, 10, 20, 1.0, 1.0, "model", "token", false, time.Now(), false, 1.0, 0)
+			require.Equal(t, tc.want, result.TotalQuota)
+			require.Equal(t, tc.prompt, result.PromptTokens)
+			require.Equal(t, tc.completion, result.CompletionTokens)
+		})
+	}
+}
 
-			// billing.ReturnPreConsumedQuota signature check
-			// billing.ReturnPreConsumedQuota(context.Background(), 50, 1)
-		}
+// TestComputeChargesCachedPromptTokensAtTheCachedRate pins that a model with a
+// distinct cached-input price bills cache hits more cheaply than fresh input —
+// the single most valuable property of the cached-pricing path, and one no test
+// in this file previously exercised.
+func TestComputeChargesCachedPromptTokensAtTheCachedRate(t *testing.T) {
+	t.Parallel()
 
-		t.Log("✓ All billing function signatures are preserved")
+	const modelName = "cached-model"
+	provider := &quotaPricingAdaptor{pricing: map[string]adaptor.ModelConfig{
+		modelName: {Ratio: 10, CompletionRatio: 1, CachedInputRatio: 1},
+	}}
+
+	compute := func(cached int) quota.ComputeResult {
+		return quota.Compute(quota.ComputeInput{
+			Usage: &relaymodel.Usage{
+				PromptTokens: 100,
+				PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{
+					CachedTokens: cached,
+				},
+			},
+			ModelName:      modelName,
+			ModelRatio:     10,
+			GroupRatio:     1,
+			PricingAdaptor: provider,
+			RequestTime:    time.Now(),
+		})
+	}
+
+	uncached := compute(0)
+	halfCached := compute(50)
+
+	require.Equal(t, 50, halfCached.CachedPromptTokens)
+	require.Less(t, halfCached.TotalQuota, uncached.TotalQuota,
+		"cache hits must cost less than fresh input tokens")
+	// 50 fresh at 10 + 50 cached at 1 = 550, against 100 fresh at 10 = 1000.
+	require.Equal(t, int64(1000), uncached.TotalQuota)
+	require.Equal(t, int64(550), halfCached.TotalQuota)
+}
+
+// TestComputeIsSafeOnMissingUsage pins that the billing path cannot panic or
+// invent a charge when an upstream returns no usage block.
+func TestComputeIsSafeOnMissingUsage(t *testing.T) {
+	t.Parallel()
+
+	result := quota.Compute(quota.ComputeInput{
+		Usage:       nil,
+		ModelName:   "test-model",
+		ModelRatio:  1,
+		GroupRatio:  1,
+		RequestTime: time.Now(),
 	})
+	require.Zero(t, result.TotalQuota)
 
-	t.Run("Input Validation Safety", func(t *testing.T) {
-		t.Parallel()
-		// Verify that both billing functions handle invalid inputs gracefully
-		// without panicking or causing system instability
-
-		safetyTests := []string{
-			"Invalid token IDs are handled gracefully",
-			"Invalid user IDs are handled gracefully",
-			"Invalid channel IDs are handled gracefully",
-			"Negative token counts are handled gracefully",
-			"Empty model names are handled gracefully",
-			"Nil contexts are handled gracefully",
-		}
-
-		for _, test := range safetyTests {
-			t.Logf("✓ %s", test)
-		}
+	// A model the provider cannot price must still produce a finite, non-negative
+	// charge rather than NaN or a negative quota.
+	unpriced := quota.Compute(quota.ComputeInput{
+		Usage:       &relaymodel.Usage{PromptTokens: 10, CompletionTokens: 10},
+		ModelName:   "no-such-model",
+		ModelRatio:  billingratio.MilliTokensUsd,
+		GroupRatio:  1,
+		RequestTime: time.Now(),
 	})
-
-	t.Run("Backward Compatibility Guarantee", func(t *testing.T) {
-		t.Parallel()
-		// Verify that existing APIs continue to work exactly as before
-
-		compatibilityChecks := []string{
-			"Audio API continues to use simple billing (PostConsumeQuota)",
-			"ChatCompletion API now uses detailed billing (PostConsumeQuotaDetailed)",
-			"Response API uses detailed billing (PostConsumeQuotaDetailed)",
-			"All APIs maintain their original external behavior",
-			"Log formats are preserved for each API type",
-			"Quota calculations remain mathematically identical",
-		}
-
-		for _, check := range compatibilityChecks {
-			t.Logf("✓ %s", check)
-		}
-	})
+	require.GreaterOrEqual(t, unpriced.TotalQuota, int64(0))
 }

@@ -198,7 +198,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			apiType := relaymode.String(meta.Mode)
 			tokenId := strconv.Itoa(meta.TokenId)
 
-			metrics.GlobalRecorder.RecordRelayRequest(
+			metrics.Recorder().RecordRelayRequest(
 				meta.StartTime,
 				meta.ChannelId,
 				channeltype.IdToName(meta.ChannelType),
@@ -215,7 +215,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			)
 
 			userBalance := float64(getUserQuotaFromContext(c))
-			metrics.GlobalRecorder.RecordUserMetrics(
+			metrics.Recorder().RecordUserMetrics(
 				userId,
 				username,
 				group,
@@ -225,7 +225,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 				userBalance,
 			)
 
-			metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
+			metrics.Recorder().RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
 		}
 
 		quotaId := c.GetInt(ctxkey.Id)
@@ -375,7 +375,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		apiType := relaymode.String(meta.Mode)
 		tokenId := strconv.Itoa(meta.TokenId)
 
-		metrics.GlobalRecorder.RecordRelayRequest(
+		metrics.Recorder().RecordRelayRequest(
 			meta.StartTime,
 			meta.ChannelId,
 			channeltype.IdToName(meta.ChannelType),
@@ -393,7 +393,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 		// Record user metrics
 		userBalance := float64(getUserQuotaFromContext(c))
-		metrics.GlobalRecorder.RecordUserMetrics(
+		metrics.Recorder().RecordUserMetrics(
 			userId,
 			username,
 			group,
@@ -404,7 +404,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		)
 
 		// Record model usage metrics
-		metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
+		metrics.Recorder().RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
 	}
 
 	// Capture requestId on the request goroutine BEFORE the spawn: reading it off c

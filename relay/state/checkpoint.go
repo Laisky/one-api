@@ -132,6 +132,12 @@ func CheckpointKeyAt(owner OwnerScope, clientFamily, publicModel string, binding
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// maxCheckpointProbes bounds how many message boundaries LongestCheckpointMatch
+// probes. Each probe is one store round-trip plus a full-prefix hash, so this is
+// the difference between a constant cost and one the caller chooses by sending a
+// longer message list.
+const maxCheckpointProbes = 64
+
 // LongestCheckpointMatch computes checkpoint keys at every message boundary from
 // the longest prefix down to a single message and returns the longest prefix
 // whose checkpoint exists, is live, and is unambiguous (CP01). A match is only
@@ -147,7 +153,20 @@ func LongestCheckpointMatch(ctx context.Context, store ResponseStateStore, owner
 	}
 
 	// Longest prefix first so the first live, unambiguous hit is the longest match.
-	for n := len(msgs); n >= 1; n-- {
+	//
+	// The probe count is bounded: the loop performs one store round-trip per
+	// boundary and CheckpointKeyAt re-hashes the whole prefix each time, so an
+	// unbounded walk turned a single request's message count — taken verbatim from
+	// the request body — into O(N) Redis round-trips and O(N^2) hashing on the
+	// request thread. A continuation appends one or two messages to what the
+	// gateway already stored, so a real match is always within the newest few
+	// boundaries; anything older simply misses and the caller does an ordinary
+	// explicit replay, which this function is documented to fail open into.
+	lowest := 1
+	if len(msgs) > maxCheckpointProbes {
+		lowest = len(msgs) - maxCheckpointProbes + 1
+	}
+	for n := len(msgs); n >= lowest; n-- {
 		key := CheckpointKeyAt(owner, clientFamily, publicModel, binding, msgs, n)
 		rec, err := store.GetCheckpoint(ctx, owner, key)
 		if err != nil {

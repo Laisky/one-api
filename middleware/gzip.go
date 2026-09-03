@@ -18,8 +18,10 @@ func GzipDecodeMiddleware() gin.HandlerFunc {
 			}
 			defer gzipReader.Close()
 
-			// Replace the request body with the decompressed data
-			c.Request.Body = io.NopCloser(gzipReader)
+			// Bound the DECOMPRESSED stream, not just the upload: ~1 MB of gzipped
+			// zeros expands to ~1 GB, and downstream readers (common.GetRequestBody,
+			// the JSON decoders) read the body fully into memory.
+			c.Request.Body = newBoundedBody(io.NopCloser(gzipReader))
 		}
 
 		// Continue processing the request

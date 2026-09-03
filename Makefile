@@ -52,6 +52,19 @@ lint-goroutine-guard:
 lint-entity-response:
 	go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
 
+# Test targets. Application logging is silent under `go test` so results are not
+# buried in relay/billing log output (see common/logger.defaultLevel); set
+# LOG_LEVEL=debug|info|warn|error for a run that needs it, e.g.
+# `LOG_LEVEL=info make test-race`.
+.PHONY: test test-race
+GOTEST_FLAGS ?= -count=1 -timeout 20m
+
+test:
+	go test $(GOTEST_FLAGS) ./...
+
+test-race:
+	ONEAPI_REQUIRE_COMPACT_UUID_SUITE=1 go test -race $(GOTEST_FLAGS) ./...
+
 # Development targets - Template specific
 .PHONY: dev-air dev-berry dev-modern
 dev-air:

@@ -26,10 +26,8 @@ const (
 // Return values:
 //   - metrics.MetricsRecorder: the process recorder, or a no-op when metrics are disabled.
 func uuidMetricsRecorder() metrics.MetricsRecorder {
-	if metrics.GlobalRecorder == nil {
-		return &metrics.NoOpRecorder{}
-	}
-	return metrics.GlobalRecorder
+	// metrics.Recorder() already substitutes a no-op when nothing is installed.
+	return metrics.Recorder()
 }
 
 // recordUUIDRows publishes how many rows one batch updated and left unresolved.

@@ -27,6 +27,7 @@ type Content struct {
 	// https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#implementing-extended-thinking
 	Thinking  *string `json:"thinking,omitempty"`
 	Signature *string `json:"signature,omitempty"`
+	Data      *string `json:"data,omitempty"`
 }
 
 type Message struct {
@@ -82,6 +83,10 @@ type CacheCreation struct {
 	Ephemeral1hInputTokens int `json:"ephemeral_1h_input_tokens,omitempty"`
 }
 
+// InputTransformation intentionally remains an open map because Anthropic may
+// add transformation types or metadata while the beta evolves.
+type InputTransformation map[string]any
+
 type Error struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
@@ -102,15 +107,16 @@ const (
 
 // https://docs.anthropic.com/claude/reference/messages-streaming
 type Response struct {
-	Id           string    `json:"id"`
-	Type         string    `json:"type"`
-	Role         string    `json:"role"`
-	Content      []Content `json:"content"`
-	Model        string    `json:"model"`
-	StopReason   *string   `json:"stop_reason"`
-	StopSequence *string   `json:"stop_sequence"`
-	Usage        Usage     `json:"usage"`
-	Error        Error     `json:"error"`
+	Id                   string                 `json:"id"`
+	Type                 string                 `json:"type"`
+	Role                 string                 `json:"role"`
+	Content              []Content              `json:"content"`
+	Model                string                 `json:"model"`
+	StopReason           *string                `json:"stop_reason"`
+	StopSequence         *string                `json:"stop_sequence"`
+	Usage                Usage                  `json:"usage"`
+	InputTransformations *[]InputTransformation `json:"input_transformations,omitempty"`
+	Error                Error                  `json:"error"`
 }
 
 type Delta struct {
@@ -124,12 +130,13 @@ type Delta struct {
 }
 
 type StreamResponse struct {
-	Type         string    `json:"type"`
-	Message      *Response `json:"message"`
-	Index        int       `json:"index"`
-	ContentBlock *Content  `json:"content_block"`
-	Delta        *Delta    `json:"delta"`
-	Usage        *Usage    `json:"usage"`
+	Type                 string                 `json:"type"`
+	Message              *Response              `json:"message"`
+	Index                int                    `json:"index"`
+	ContentBlock         *Content               `json:"content_block"`
+	Delta                *Delta                 `json:"delta"`
+	Usage                *Usage                 `json:"usage"`
+	InputTransformations *[]InputTransformation `json:"input_transformations,omitempty"`
 	// Error events are sent over SSE as {"type":"error","error":{...},"request_id":"..."}
 	Error     Error  `json:"error"`
 	RequestId string `json:"request_id,omitempty"`

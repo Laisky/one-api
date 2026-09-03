@@ -85,12 +85,18 @@ var imageGenerationModels = map[string]adaptor.ModelConfig{
 		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 0.5 / 7 * 1000},
 		Description:      "CogVideoX-2: previous-generation text/image-to-video model at ¥0.5/call (superseded by CogVideoX-3).",
 	},
+	// CogVideoX (legacy id) is priced like the generation that superseded it,
+	// CogVideoX-2 at ¥0.5 per call. It previously carried a per-TOKEN Ratio, which
+	// contradicts this file's stated convention and, because relay/controller/video.go
+	// needs either a PerCall price or a Video block, made every request for it fail
+	// with HTTP 400 video_pricing_missing — unbillable rather than mis-billed.
 	"cogviewx": {
-		Ratio:            0.04 * ratio.MilliTokensRmb,
+		Ratio:            0.5 * ratio.QuotaPerRMB,
 		CompletionRatio:  1,
 		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"video"},
-		Description:      "CogVideoX: text-and-image-to-video generation model. (legacy id; no live Zhipu model currently uses this id -- current video-generation ids are cogvideox-3 and cogvideox-flash)",
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 0.5 / 7 * 1000},
+		Description:      "CogVideoX: text-and-image-to-video generation model at ¥0.5/call. (legacy id; no live Zhipu model currently uses this id -- current video-generation ids are cogvideox-3 and cogvideox-flash)",
 	},
 	"cogviewx-flash": {
 		Ratio:            0,

@@ -47,13 +47,15 @@ func shouldRetryClaudeInvalidThinkingSignature(statusCode int, responseBody []by
 	if err := json.Unmarshal(responseBody, &envelope); err == nil {
 		if strings.EqualFold(strings.TrimSpace(envelope.Error.Type), "invalid_request_error") &&
 			(strings.Contains(envelope.Error.Message, "Invalid `signature` in `thinking` block") ||
-				strings.Contains(envelope.Error.Message, ".thinking.signature: Field required")) {
+				strings.Contains(envelope.Error.Message, ".thinking.signature: Field required") ||
+				isClaudePreservedThinkingBindingError(envelope.Error.Message)) {
 			return true
 		}
 	}
 
 	return bytes.Contains(responseBody, []byte("Invalid `signature` in `thinking` block")) ||
-		bytes.Contains(responseBody, []byte(".thinking.signature: Field required"))
+		bytes.Contains(responseBody, []byte(".thinking.signature: Field required")) ||
+		isClaudePreservedThinkingBindingError(string(responseBody))
 }
 
 // readAndRestoreResponseBody reads an HTTP response body and restores it for subsequent consumers.
@@ -310,7 +312,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 					zap.Error(bodyErr),
 					zap.Int("status_code", resp.StatusCode),
 				)
-			} else if shouldRetryClaudeInvalidThinkingSignature(resp.StatusCode, responseBody) {
+			} else if shouldRetryClaudeThinkingReplay(resp.StatusCode, responseBody, claudeRequest) {
 				logUpstreamResponseFromBytes(lg, resp, responseBody, "claude_messages_signature_rejected")
 
 				retryBody, retryStats, retryBodyErr := stripClaudeThinkingFromAssistantHistory(passthroughBody)

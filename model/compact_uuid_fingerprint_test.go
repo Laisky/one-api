@@ -126,6 +126,7 @@ func TestCompactUUIDConcurrentCyclesConverge(t *testing.T) {
 
 	verified, reason, err := validateCompactObjects(ctx, topology)
 	require.NoError(t, err)
+	requireCompactBudgetRemaining(t, ctx)
 	require.True(t, verified, "concurrent cycles must converge on verified objects: %s", reason)
 
 	fingerprint, err := computeCompactFingerprints(ctx, topology, uuidRolePrimary)

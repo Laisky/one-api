@@ -25,13 +25,13 @@ func PrometheusRateLimitMiddleware() gin.HandlerFunc {
 		// based on your middleware setup
 		if rateLimitRemaining := c.GetHeader("X-RateLimit-Remaining"); rateLimitRemaining != "" {
 			if remaining, err := strconv.Atoi(rateLimitRemaining); err == nil {
-				metrics.GlobalRecorder.UpdateRateLimitRemaining(rateLimitType, identifier, remaining)
+				metrics.Recorder().UpdateRateLimitRemaining(rateLimitType, identifier, remaining)
 			}
 		}
 
 		// Check if rate limit was exceeded (status 429)
 		if c.Writer.Status() == 429 {
-			metrics.GlobalRecorder.RecordRateLimitHit(rateLimitType, identifier)
+			metrics.Recorder().RecordRateLimitHit(rateLimitType, identifier)
 		}
 	}
 }

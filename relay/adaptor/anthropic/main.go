@@ -80,6 +80,14 @@ func ConvertClaudeRequest(c *gin.Context, claudeRequest model.ClaudeRequest) (*R
 			}
 		}
 
+		// Anthropic requires input_schema.type == "object". A Claude tool that omits
+		// input_schema, or sends a non-object, left the zero value here and we sent
+		// `"input_schema":{"type":""}` upstream — the struct has no omitempty and
+		// could not have one, since input_schema is a required field. The OpenAI ->
+		// Anthropic converter below already applies this default; this path did not.
+		if strings.TrimSpace(inputSchema.Type) == "" {
+			inputSchema.Type = "object"
+		}
 		claudeTools = append(claudeTools, Tool{
 			Name:        tool.Name,
 			Description: tool.Description,
@@ -188,6 +196,14 @@ func ConvertClaudeRequest(c *gin.Context, claudeRequest model.ClaudeRequest) (*R
 			var contentBlocks []Content
 			if err := json.Unmarshal(contentBytes, &contentBlocks); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal message content")
+			}
+			// Message.Content has no omitempty (Anthropic requires the field), so a
+			// nil slice would serialize as `"content": null` and be rejected. This
+			// arm is reached whenever content is neither a string nor an array —
+			// a literal null, or an object — where Unmarshal leaves the slice nil.
+			// Every other adaptor guards this with len(); Anthropic was the outlier.
+			if len(contentBlocks) == 0 {
+				contentBlocks = []Content{}
 			}
 			claudeMessage.Content = contentBlocks
 		}
@@ -498,13 +514,17 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 			// Add tool calls
 			for i := range message.ToolCalls {
 				inputParam := make(map[string]any)
-				if err := json.Unmarshal([]byte(message.ToolCalls[i].Function.Arguments.(string)), &inputParam); err != nil {
-					return nil, errors.Wrapf(err, "unmarshal tool call arguments for tool %s", message.ToolCalls[i].Function.Name)
+				rawArguments, err := message.ToolCalls[i].Function.ArgumentsJSON()
+				if err != nil {
+					return nil, errors.Wrapf(err, "read tool call arguments for tool %s", message.ToolCalls[i].FunctionName())
+				}
+				if err := json.Unmarshal([]byte(rawArguments), &inputParam); err != nil {
+					return nil, errors.Wrapf(err, "unmarshal tool call arguments for tool %s", message.ToolCalls[i].FunctionName())
 				}
 				claudeMessage.Content = append(claudeMessage.Content, Content{
 					Type:  "tool_use",
 					Id:    message.ToolCalls[i].Id,
-					Name:  message.ToolCalls[i].Function.Name,
+					Name:  message.ToolCalls[i].FunctionName(),
 					Input: inputParam,
 				})
 			}
@@ -562,13 +582,17 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		// Add tool calls for non-string content messages
 		for i := range message.ToolCalls {
 			inputParam := make(map[string]any)
-			if err := json.Unmarshal([]byte(message.ToolCalls[i].Function.Arguments.(string)), &inputParam); err != nil {
-				return nil, errors.Wrapf(err, "unmarshal tool call arguments for tool %s", message.ToolCalls[i].Function.Name)
+			rawArguments, err := message.ToolCalls[i].Function.ArgumentsJSON()
+			if err != nil {
+				return nil, errors.Wrapf(err, "read tool call arguments for tool %s", message.ToolCalls[i].FunctionName())
+			}
+			if err := json.Unmarshal([]byte(rawArguments), &inputParam); err != nil {
+				return nil, errors.Wrapf(err, "unmarshal tool call arguments for tool %s", message.ToolCalls[i].FunctionName())
 			}
 			contents = append(contents, Content{
 				Type:  "tool_use",
 				Id:    message.ToolCalls[i].Id,
-				Name:  message.ToolCalls[i].Function.Name,
+				Name:  message.ToolCalls[i].FunctionName(),
 				Input: inputParam,
 			})
 		}

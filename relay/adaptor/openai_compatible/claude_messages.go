@@ -41,7 +41,15 @@ func ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, er
 		Temperature:         request.Temperature,
 		TopP:                request.TopP,
 		Stream:              request.Stream != nil && *request.Stream,
-		Stop:                request.StopSequences,
+	}
+
+	// GeneralOpenAIRequest.Stop is `any`, and `omitempty` does not omit a non-nil
+	// interface that holds a nil slice. Assigning StopSequences unconditionally
+	// therefore put `"stop": null` on the wire for every request without stop
+	// sequences, which strict OpenAI-compatible upstreams reject, and which made
+	// aws.ValidateUnsupportedParameters report a stop parameter that was never sent.
+	if len(request.StopSequences) > 0 {
+		openaiRequest.Stop = request.StopSequences
 	}
 
 	schemaName, schemaPayload, schemaDescription, promoteStructured := detectStructuredToolSchema(request)

@@ -31,6 +31,7 @@ The goal is to let multiple teams and projects integrate logging in a consistent
     - [4.1 Shared logger package](#41-shared-logger-package)
     - [4.2 Gin integration](#42-gin-integration)
     - [4.3 DB audit/usage log stream](#43-db-auditusage-log-stream)
+    - [4.4 Verbosity and test-run silence](#44-verbosity-and-test-run-silence)
   - [5. Integration Steps (Copy/Paste Checklist)](#5-integration-steps-copypaste-checklist)
     - [5.1 Initialize logging early (before serving requests)](#51-initialize-logging-early-before-serving-requests)
     - [5.2 Configure log directory](#52-configure-log-directory)
@@ -196,6 +197,25 @@ The DB audit log stream is backed by `model.Log` and stored via `LOG_DB`.
 - Initialize with `model.InitLogDB()`.
 - Record with helpers like `RecordConsumeLog`, `RecordManageLog`, etc.
 - Include `request_id`/`trace_id` where possible (`RecordLogWithIDs`, `RecordTopupLogWithIDs`, etc).
+
+### 4.4 Verbosity and test-run silence
+
+The starting level of `logger.Logger` is resolved once, at package init, in this order:
+
+1. `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `fatal`) — an unset or unrecognized value falls through.
+2. `DEBUG=true` → `debug`.
+3. Context default: `info` for a running server, `fatal` (i.e. silent) when the process is a `go test` binary.
+
+The same decision is applied to two other loggers so one knob governs the whole process:
+
+- `glog.Shared`, which `gmw.GetLogger` falls back to whenever it receives a context that carries no request logger.
+- GORM (`model.gormLogger`), which additionally sets `IgnoreRecordNotFoundError: true` — "record not found" is normal control flow here (every `First()` probe that decides whether to insert), not a query error worth printing.
+
+The test default exists because relay/billing logging otherwise buries test results in megabytes of interleaved output. Bring it back for a single run when debugging:
+
+```bash
+LOG_LEVEL=info go test ./relay/controller/ -run TestBilling -v
+```
 
 ## 5. Integration Steps (Copy/Paste Checklist)
 

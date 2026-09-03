@@ -219,9 +219,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// ERNIE 4.0 Models
 	"ernie-4.0-8k-latest": {
-		Ratio:                       0.12 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.12 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
-		CompletionRatio:             1,
+		Ratio:                       30 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (30 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		CompletionRatio:             3,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
 		InputModalities:             ernieV2TextInputs,
@@ -229,11 +229,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2ChatFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE 4.0 8K (latest alias): closed-weight flagship chat model on Qianfan v2.",
-	}, // CNY 0.12 / 1k tokens
+	}, // CNY 0.03 in / 0.09 out per 1k tokens (2024-09-27 刊例价; RETIRED 2026-06-30)
 	"ernie-4.0-8k-preview": {
-		Ratio:                       0.12 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.12 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
-		CompletionRatio:             1,
+		Ratio:                       30 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (30 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		CompletionRatio:             3,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
 		InputModalities:             ernieV2TextInputs,
@@ -241,11 +241,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2ChatFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE 4.0 8K (preview): closed-weight flagship chat model on Qianfan v2.",
-	}, // CNY 0.12 / 1k tokens
+	}, // CNY 0.03 in / 0.09 out per 1k tokens (2024-09-27 刊例价; RETIRED 2026-06-30)
 	"ernie-4.0-8k": {
-		Ratio:                       0.12 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.12 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
-		CompletionRatio:             1,
+		Ratio:                       30 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (30 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		CompletionRatio:             3,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
 		InputModalities:             ernieV2TextInputs,
@@ -253,7 +253,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2ChatFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE 4.0 8K: closed-weight flagship chat model on Qianfan v2. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
-	}, // CNY 0.12 / 1k tokens
+	}, // CNY 0.03 in / 0.09 out per 1k tokens (2024-09-27 刊例价; RETIRED 2026-06-30)
 	"ernie-4.0-turbo-8k-latest": {
 		Ratio:                       20 * ratio.MilliTokensRmb,
 		CachedInputRatio:            0.4 * (20 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
@@ -291,9 +291,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Baidu ERNIE 4.0 Turbo 8K: closed-weight balanced-cost chat model. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
 	}, // CNY 0.02 / 1k tokens
 	"ernie-4.0-turbo-128k": {
-		Ratio:                       0.02 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.02 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
-		CompletionRatio:             1,
+		Ratio:                       20 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (20 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		CompletionRatio:             3,
 		ContextLength:               131072,
 		MaxOutputTokens:             4096,
 		InputModalities:             ernieV2TextInputs,
@@ -301,13 +301,13 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2ChatFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE 4.0 Turbo 128K: long-context closed-weight balanced-cost chat model. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
-	}, // CNY 0.02 / 1k tokens
+	}, // CNY 0.02 in / 0.06 out per 1k tokens (2024-09-27 刊例价; RETIRED 2026-06-30)
 
 	// ERNIE 3.5 Models
 	"ernie-3.5-8k-preview": {
-		Ratio:                       0.012 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.012 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
-		CompletionRatio:             1,
+		Ratio:                       0.8 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.8 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		CompletionRatio:             2.5,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
 		InputModalities:             ernieV2TextInputs,
@@ -315,11 +315,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2ChatFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE 3.5 8K (preview): closed-weight general-purpose chat model.",
-	}, // CNY 0.012 / 1k tokens
+	}, // CNY 0.0008 in / 0.002 out per 1k tokens (2024-09-27 刊例价; RETIRED 2026-06-30)
 	"ernie-3.5-8k": {
-		Ratio:                       0.012 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.012 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
-		CompletionRatio:             1,
+		Ratio:                       0.8 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.8 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		CompletionRatio:             2.5,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
 		InputModalities:             ernieV2TextInputs,
@@ -327,11 +327,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2ChatFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE 3.5 8K: closed-weight general-purpose chat model. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
-	}, // CNY 0.012 / 1k tokens
+	}, // CNY 0.0008 in / 0.002 out per 1k tokens (2024-09-27 刊例价; RETIRED 2026-06-30)
 	"ernie-3.5-128k": {
-		Ratio:                       0.012 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.012 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
-		CompletionRatio:             1,
+		Ratio:                       0.8 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.8 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		CompletionRatio:             2.5,
 		ContextLength:               131072,
 		MaxOutputTokens:             4096,
 		InputModalities:             ernieV2TextInputs,
@@ -339,12 +339,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2ChatFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE 3.5 128K: long-context closed-weight general-purpose chat model.",
-	}, // CNY 0.012 / 1k tokens
+	}, // CNY 0.0008 in / 0.002 out per 1k tokens (2024-09-27 刊例价; RETIRED 2026-06-30)
 
 	// ERNIE Speed Models
 	"ernie-speed-8k": {
-		Ratio:                       0.004 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.004 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		Ratio:                       0 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -353,10 +353,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2BasicFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE Speed 8K: throughput-optimized closed-weight chat tier on Qianfan v2. Deprecated: already retired (已退役) effective 2026-06-09 (registered 2026-05-28).",
-	}, // CNY 0.004 / 1k tokens
+	}, // FREE since 2026-05-21 (Baidu zeroed Speed/Lite/Tiny); RETIRED 2026-01-27
 	"ernie-speed-128k": {
-		Ratio:                       0.004 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.004 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		Ratio:                       0 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               131072,
 		MaxOutputTokens:             4096,
@@ -365,7 +365,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2BasicFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE Speed 128K: long-context throughput-optimized closed-weight chat tier. Deprecated: already retired (已退役) effective 2026-06-09 (registered 2026-05-28; a third-party notice also cites a 2026-01-27 delisting).",
-	}, // CNY 0.004 / 1k tokens
+	}, // FREE since 2026-05-21 (Baidu zeroed Speed/Lite/Tiny); RETIRED 2026-06-30
 	"ernie-speed-pro-128k": {
 		Ratio:                       0.3 * ratio.MilliTokensRmb,
 		CachedInputRatio:            0.4 * (0.3 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
@@ -381,8 +381,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// ERNIE Lite Models
 	"ernie-lite-8k": {
-		Ratio:                       0.008 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.008 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		Ratio:                       0 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -391,7 +391,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2BasicFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE Lite 8K: cost-efficient closed-weight chat tier on Qianfan v2. Deprecated: already retired (已退役) effective 2026-06-09 (registered 2026-05-28); briefly delisted 2026-01-27 (then replacement ERNIE-Lite-Pro-128K/DeepSeek-V3) before final retirement.",
-	}, // CNY 0.008 / 1k tokens
+	}, // FREE since 2026-05-21 (Baidu zeroed Speed/Lite/Tiny); RETIRED 2026-01-27
 	"ernie-lite-pro-128k": {
 		Ratio:                       0.2 * ratio.MilliTokensRmb,
 		CachedInputRatio:            0.4 * (0.2 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
@@ -407,8 +407,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// ERNIE Tiny Models
 	"ernie-tiny-8k": {
-		Ratio:                       0.004 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.004 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		Ratio:                       0 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -417,12 +417,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2BasicFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE Tiny 8K: ultra low-cost closed-weight chat tier on Qianfan v2. Deprecated: already retired (已退役) effective 2026-06-09 (registered 2026-05-28; an earlier dated snapshot retired 2026-01-27, then replacement DeepSeek-V3/ERNIE-4.5-Turbo-32K).",
-	}, // CNY 0.004 / 1k tokens
+	}, // FREE since 2026-05-21 (Baidu zeroed Speed/Lite/Tiny); RETIRED 2026-06-30
 
 	// ERNIE Character Models
 	"ernie-char-8k": {
-		Ratio:                       0.04 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.04 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		Ratio:                       40 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (40 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -433,8 +433,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Baidu ERNIE Character 8K: closed-weight role-play / persona chat model. Deprecated: already retired (已退役) effective 2026-06-09 (registered 2026-05-28); no replacement listed.",
 	}, // CNY 0.04 / 1k tokens
 	"ernie-char-fiction-8k": {
-		Ratio:                       0.04 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.04 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		Ratio:                       40 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (40 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -445,8 +445,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Baidu ERNIE Character Fiction 8K: closed-weight model tuned for fictional persona dialogue. Deprecated: retired 2025-12-23 (registered 2025-11-21), replacement DeepSeek-V3.1.",
 	}, // CNY 0.04 / 1k tokens
 	"ernie-novel-8k": {
-		Ratio:                       0.04 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.04 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		Ratio:                       40 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (40 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -486,7 +486,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek R1 hosted on Baidu Qianfan v2: open-weight reasoning chat model (thinking mode). Deprecated: retired 2026-06-30 (registered 2026-05-26, R1-250528 build; earlier R1-250120 build retired 2026-04-28), replacements DeepSeek-V4-Pro/DeepSeek-V4-Flash/DeepSeek-V3.2.",
 	}, // CNY 0.004 input / 0.016 output per 1k tokens
 	"deepseek-r1-distill-qwen-32b": {
-		Ratio:                       0.004 * ratio.MilliTokensRmb,
+		Ratio:                       4 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
@@ -500,7 +500,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek R1 distilled into Qwen-32B, hosted on Baidu Qianfan v2. Deprecated: retired 2026-07-02 (registered 2026-06-11), replacements DeepSeek-V4-Pro/DeepSeek-V4-Flash.",
 	}, // CNY 0.004 / 1k tokens
 	"deepseek-r1-distill-qwen-14b": {
-		Ratio:                       0.003 * ratio.MilliTokensRmb,
+		Ratio:                       3 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,

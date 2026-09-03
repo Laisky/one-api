@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -255,7 +256,7 @@ func (n *behaviorDiffNormalizer) apply(v any) any {
 		}
 		return typed
 	case string:
-		out := typed
+		out := canonicalizeGoStructFieldPath(typed)
 		for _, r := range n.sortedStrings() {
 			out = strings.ReplaceAll(out, r.value, r.placeholder)
 		}
@@ -271,6 +272,40 @@ func (n *behaviorDiffNormalizer) apply(v any) any {
 	default:
 		return v
 	}
+}
+
+// goStructFieldPathPattern matches the struct path encoding/json embeds in an
+// unmarshal error: `Go struct field <path> of type <type>`.
+var goStructFieldPathPattern = regexp.MustCompile(`Go struct field ([A-Za-z0-9_.]+) of type `)
+
+// canonicalizeGoStructFieldPath reduces the struct path in an encoding/json
+// unmarshal error to its final segment, i.e. the JSON field name.
+//
+// The full path is a Go-internal detail whose spelling depends on the toolchain:
+// for a field promoted from an embedded struct, Go 1.26 renders
+// `channelPayload.Channel.type` while Go 1.27 renders `channelPayload.type`.
+// Pinning either spelling makes this suite fail on the other toolchain without
+// any behavior having changed. The parts a client can actually act on — the
+// failing field name and the expected Go type — are preserved, so a real change
+// to which field rejects the payload still breaks the baseline.
+//
+// Parameters:
+//   - value: a candidate response string.
+//
+// Return values:
+//   - string: value with any struct path reduced to its final segment.
+func canonicalizeGoStructFieldPath(value string) string {
+	return goStructFieldPathPattern.ReplaceAllStringFunc(value, func(match string) string {
+		groups := goStructFieldPathPattern.FindStringSubmatch(match)
+		if len(groups) != 2 {
+			return match
+		}
+		path := groups[1]
+		if idx := strings.LastIndex(path, "."); idx >= 0 {
+			path = path[idx+1:]
+		}
+		return "Go struct field " + path + " of type "
+	})
 }
 
 // sortedStrings returns the string replacements ordered longest-value-first so a

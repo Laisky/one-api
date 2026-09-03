@@ -6,8 +6,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
+	"testing"
 
 	errors "github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -36,16 +38,106 @@ func init() {
 func initLogger() {
 	initLogOnce.Do(func() {
 		var err error
-		level := glog.LevelInfo
-		if config.DebugEnabled {
-			level = glog.LevelDebug
-		}
-
+		level := defaultLevel()
 		Logger, err = glog.NewConsoleWithName("one-api", level)
 		if err != nil {
 			panic(fmt.Sprintf("failed to create logger: %+v", err))
 		}
+
+		// Two library loggers write alongside Logger: glog.Shared, which
+		// gmw.GetLogger falls back to when handed a context that carries no
+		// request logger, and gmw.Logger, which gin-middlewares builds for
+		// itself at info. Align both so one verbosity knob governs the process.
+		alignLibraryLogger("shared", glog.Shared, level)
+		alignLibraryLogger("gin-mw", gmw.Logger, level)
 	})
+}
+
+// alignLibraryLogger moves a third-party logger onto the level this process resolved.
+//
+// Parameters:
+//   - name: the logger's name, used only to report a failure.
+//   - target: the logger to adjust; a nil logger is skipped.
+//   - level: the level to apply.
+func alignLibraryLogger(name string, target glog.Logger, level glog.Level) {
+	if target == nil {
+		return
+	}
+	// glog.Shared and gmw.Logger are interface values holding pointers, so a nil
+	// logger can still compare non-nil as an interface.
+	if v := reflect.ValueOf(target); v.Kind() == reflect.Pointer && v.IsNil() {
+		return
+	}
+	if err := target.ChangeLevel(level); err != nil {
+		Logger.Warn("failed to align library logger level",
+			zap.String("logger", name),
+			zap.String("level", level.String()),
+			zap.Error(err))
+	}
+}
+
+// defaultLevel resolves the verbosity of the shared logger.
+//
+// Precedence is LOG_LEVEL, then DEBUG, then the context default: info for a
+// running server, but silent under `go test`, where the relay/billing log
+// stream otherwise buries the test results in megabytes of output. Re-enable it
+// for a single run with `LOG_LEVEL=info go test ./...` (or DEBUG=true).
+//
+// Return values:
+//   - glog.Level: the level the shared logger starts at.
+func defaultLevel() glog.Level {
+	if level, ok := parseLevel(os.Getenv("LOG_LEVEL")); ok {
+		return level
+	}
+	if config.DebugEnabled {
+		return glog.LevelDebug
+	}
+	if testing.Testing() {
+		return glog.LevelFatal
+	}
+	return glog.LevelInfo
+}
+
+// parseLevel converts a LOG_LEVEL environment value into a logger level.
+//
+// Parameters:
+//   - raw: the raw environment value, which may be empty or unrecognized.
+//
+// Return values:
+//   - glog.Level: the parsed level, meaningful only when ok is true.
+//   - bool: whether raw named a supported level.
+func parseLevel(raw string) (glog.Level, bool) {
+	switch glog.Level(strings.ToLower(strings.TrimSpace(raw))) {
+	case glog.LevelDebug:
+		return glog.LevelDebug, true
+	case glog.LevelInfo:
+		return glog.LevelInfo, true
+	case glog.LevelWarn:
+		return glog.LevelWarn, true
+	case glog.LevelError:
+		return glog.LevelError, true
+	case glog.LevelFatal:
+		return glog.LevelFatal, true
+	default:
+		return glog.LevelUnspecified, false
+	}
+}
+
+// QuietForTests reports whether library-level logging should stay silent because
+// the process is a `go test` binary running without an explicit verbosity request.
+// Subsystems with their own logger (notably GORM) consult it so a test run emits
+// one coherent amount of output instead of each library deciding on its own.
+//
+// Return values:
+//   - bool: true when third-party logging should be suppressed.
+func QuietForTests() bool {
+	if !testing.Testing() {
+		return false
+	}
+	if _, ok := parseLevel(os.Getenv("LOG_LEVEL")); ok {
+		return false
+	}
+	return !config.DebugEnabled
 }
 
 // SetupLogger configures the shared logger to write to stdout and the configured log directory with optional rotation.

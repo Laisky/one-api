@@ -683,6 +683,12 @@ func GetChannelDefaultPricing(c *gin.Context) {
 			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Unsupported channel type")))
 			return
 		}
+		// OpenAI-compatible channel types share the OpenAI adaptor, so it has to be
+		// bound to this channel type or the admin UI offers OpenAI's price list as
+		// the defaults for a Doubao/MiniMax/BaiduV2/... channel.
+		if aware, ok := providerAdaptor.(adaptor.ChannelTypeAware); ok {
+			aware.SetChannelType(channelType)
+		}
 		defaultPricing = providerAdaptor.GetDefaultModelPricing()
 	}
 

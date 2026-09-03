@@ -396,7 +396,11 @@ func TestRealtimeWS_SessionUpdateModelDenied(t *testing.T) {
 		"/v1/realtime?model=gpt-4o-realtime-preview"
 	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
-		t.Skipf("WebSocket dial failed (expected in some test envs): %v", err)
+		// This proxy is a local httptest server, so a dial failure is a real defect in the
+		// upgrade path, not an environment quirk. Skipping on it turned the model-switch
+		// denial guard — a security control — green precisely when the most likely
+		// regression (the proxy refusing the upgrade) had occurred.
+		require.NoError(t, err, "the local realtime proxy must accept a WebSocket upgrade")
 	}
 	defer clientConn.Close()
 
@@ -454,7 +458,11 @@ func TestRealtimeWS_SessionUpdateWithoutModelForwarded(t *testing.T) {
 		"/v1/realtime?model=gpt-4o-realtime-preview"
 	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
-		t.Skipf("WebSocket dial failed (expected in some test envs): %v", err)
+		// This proxy is a local httptest server, so a dial failure is a real defect in the
+		// upgrade path, not an environment quirk. Skipping on it turned the model-switch
+		// denial guard — a security control — green precisely when the most likely
+		// regression (the proxy refusing the upgrade) had occurred.
+		require.NoError(t, err, "the local realtime proxy must accept a WebSocket upgrade")
 	}
 	defer clientConn.Close()
 

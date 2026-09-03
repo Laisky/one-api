@@ -38,12 +38,9 @@ const (
 	StateOutcomeStoreError = "store_error"
 )
 
-// RecordStateEvent is a convenience wrapper over GlobalRecorder that tolerates a
-// nil recorder (GlobalRecorder is always set, but guarding keeps call sites and
+// RecordStateEvent is a convenience wrapper over Recorder() that tolerates a
+// nil recorder (Recorder() is always set, but guarding keeps call sites and
 // tests robust). Callers pass only the compile-time constants above.
 func RecordStateEvent(category, outcome string) {
-	if GlobalRecorder == nil {
-		return
-	}
-	GlobalRecorder.RecordResponseStateEvent(category, outcome)
+	Recorder().RecordResponseStateEvent(category, outcome)
 }

@@ -262,7 +262,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			apiType := relaymode.String(meta.Mode)
 			tokenId := strconv.Itoa(meta.TokenId)
 
-			metrics.GlobalRecorder.RecordRelayRequest(
+			metrics.Recorder().RecordRelayRequest(
 				meta.StartTime,
 				meta.ChannelId,
 				channeltype.IdToName(meta.ChannelType),
@@ -279,7 +279,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			)
 
 			userBalance := float64(getUserQuotaFromContext(c))
-			metrics.GlobalRecorder.RecordUserMetrics(
+			metrics.Recorder().RecordUserMetrics(
 				userId,
 				username,
 				group,
@@ -289,7 +289,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 				userBalance,
 			)
 
-			metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
+			metrics.Recorder().RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
 		}
 
 		quotaId := c.GetInt(ctxkey.Id)
@@ -422,7 +422,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		apiType := relaymode.String(meta.Mode)
 		tokenId := strconv.Itoa(meta.TokenId)
 
-		metrics.GlobalRecorder.RecordRelayRequest(
+		metrics.Recorder().RecordRelayRequest(
 			meta.StartTime,
 			meta.ChannelId,
 			channeltype.IdToName(meta.ChannelType),
@@ -439,7 +439,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		)
 
 		userBalance := float64(getUserQuotaFromContext(c))
-		metrics.GlobalRecorder.RecordUserMetrics(
+		metrics.Recorder().RecordUserMetrics(
 			userId,
 			username,
 			group,
@@ -449,7 +449,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			userBalance,
 		)
 
-		metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
+		metrics.Recorder().RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
 	}
 
 	quotaId := c.GetInt(ctxkey.Id)

@@ -14,6 +14,12 @@ const (
 	LegacyProtocolVersion = "2025-11-25"
 	// LegacyProtocolVersionFallback keeps compatibility with older Streamable HTTP servers.
 	LegacyProtocolVersionFallback = "2025-06-18"
+	// LegacyProtocolVersionStreamableHTTPOrigin is the revision that introduced the
+	// Streamable HTTP transport. A large share of deployed servers still pin it, and
+	// everything this client uses over that transport — initialize,
+	// notifications/initialized, tools/list, tools/call, Mcp-Session-Id — is
+	// unchanged since. Refusing it made every tool on those servers unreachable.
+	LegacyProtocolVersionStreamableHTTPOrigin = "2025-03-26"
 
 	// ProtocolVersionHeader carries the protocol version for every modern request.
 	ProtocolVersionHeader = "Mcp-Protocol-Version"
@@ -128,7 +134,12 @@ func (e *ProtocolError) Error() string {
 // Return values:
 //   - []string: a new slice ordered from the preferred modern version to legacy compatibility versions.
 func SupportedProtocolVersions() []string {
-	return []string{ProtocolVersion, LegacyProtocolVersion, LegacyProtocolVersionFallback}
+	return []string{
+		ProtocolVersion,
+		LegacyProtocolVersion,
+		LegacyProtocolVersionFallback,
+		LegacyProtocolVersionStreamableHTTPOrigin,
+	}
 }
 
 // IsLegacyProtocolVersion reports whether version selects the initialization-based protocol era.
@@ -140,7 +151,7 @@ func SupportedProtocolVersions() []string {
 //   - bool: true only for legacy versions that one-api explicitly supports.
 func IsLegacyProtocolVersion(version string) bool {
 	switch strings.TrimSpace(version) {
-	case LegacyProtocolVersion, LegacyProtocolVersionFallback:
+	case LegacyProtocolVersion, LegacyProtocolVersionFallback, LegacyProtocolVersionStreamableHTTPOrigin:
 		return true
 	default:
 		return false
@@ -240,6 +251,44 @@ func IsRecognizedModernError(err error) bool {
 	}
 }
 
+// AdvertisesSupportedLegacyVersion reports whether an UnsupportedProtocolVersion
+// error names a legacy revision this client can actually speak.
+//
+// The 2026-07-28 transport binding says that on a recognized modern error the
+// client should "retry using the advertised `supported` versions ... rather than
+// falling back". For -32022 the advertised list is exactly what tells us whether
+// the legacy handshake is the right retry, so it must be read rather than
+// discarded — a server pinned to 2025-11-25 is fully usable through Initialize.
+//
+// Parameters:
+//   - protocolErr: the decoded modern protocol error; nil is not a candidate.
+//
+// Return values:
+//   - bool: true when data.supported contains a version IsLegacyProtocolVersion accepts.
+func AdvertisesSupportedLegacyVersion(protocolErr *ProtocolError) bool {
+	if protocolErr == nil || protocolErr.Code != ErrorCodeUnsupportedProtocolVersion {
+		return false
+	}
+	data, ok := protocolErr.Data.(map[string]any)
+	if !ok {
+		return false
+	}
+	supported, ok := data["supported"].([]any)
+	if !ok {
+		return false
+	}
+	for _, entry := range supported {
+		version, ok := entry.(string)
+		if !ok {
+			continue
+		}
+		if IsLegacyProtocolVersion(version) {
+			return true
+		}
+	}
+	return false
+}
+
 // IsModernFallbackCandidate reports whether a failed modern request should retry through the legacy handshake.
 //
 // Parameters:
@@ -254,6 +303,13 @@ func IsModernFallbackCandidate(err error) bool {
 	}
 	if protocolErr.HTTPStatus == http.StatusUnauthorized || protocolErr.HTTPStatus == http.StatusForbidden {
 		return false
+	}
+	// A modern server that only speaks a legacy revision answers the probe with
+	// -32022 and lists what it does support. That is a recognized modern error, so
+	// the blanket rule below would refuse to fall back — and the client would give
+	// up on a server it can talk to perfectly well. Honour the advertised list.
+	if AdvertisesSupportedLegacyVersion(protocolErr) {
+		return true
 	}
 	if IsRecognizedModernError(err) {
 		return false

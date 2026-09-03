@@ -36,7 +36,7 @@ func TestMCPProxyLatestDiscover(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
 	require.Equal(t, mcp.ResultTypeComplete, envelope.Result["resultType"])
-	require.Equal(t, []any{mcp.ProtocolVersion}, envelope.Result["supportedVersions"])
+	requireDiscoverAdvertisesEveryServableVersion(t, envelope.Result["supportedVersions"])
 	meta := envelope.Result["_meta"].(map[string]any)
 	serverInfo := meta[mcp.MetaServerInfoKey].(map[string]any)
 	require.Equal(t, mcpServerName, serverInfo["name"])
@@ -128,8 +128,42 @@ func TestMCPProxyLatestClientServerContract(t *testing.T) {
 	result, err := client.DiscoverLatest(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, mcp.ResultTypeComplete, result.ResultType)
-	require.Equal(t, []string{mcp.ProtocolVersion}, result.SupportedVersions)
+	advertised := make([]any, 0, len(result.SupportedVersions))
+	for _, version := range result.SupportedVersions {
+		advertised = append(advertised, version)
+	}
+	requireDiscoverAdvertisesEveryServableVersion(t, advertised)
 	require.Equal(t, mcpServerName, result.Meta.ServerInfo.Name)
+}
+
+// requireDiscoverAdvertisesEveryServableVersion pins the server/discover contract:
+// the advertised list must lead with the modern version and must include every
+// legacy version the gateway will actually serve. MCPProxyLatest dispatches legacy
+// protocol versions to MCPProxy (controller/mcp_proxy_latest.go:154-169), so
+// advertising only the modern version would stop legacy clients from negotiating
+// down to an era this gateway does support.
+//
+// Parameters:
+//   - t: the running test.
+//   - raw: the decoded `supportedVersions` value from a discover result.
+func requireDiscoverAdvertisesEveryServableVersion(t *testing.T, raw any) {
+	t.Helper()
+	values, ok := raw.([]any)
+	require.True(t, ok, "supportedVersions must be a list, got %T", raw)
+	require.NotEmpty(t, values)
+
+	advertised := make([]string, 0, len(values))
+	for _, value := range values {
+		version, ok := value.(string)
+		require.True(t, ok, "supportedVersions entries must be strings, got %T", value)
+		advertised = append(advertised, version)
+	}
+
+	require.Equal(t, mcp.ProtocolVersion, advertised[0], "the modern version must be advertised first")
+	for _, legacy := range []string{mcp.LegacyProtocolVersion, mcp.LegacyProtocolVersionFallback} {
+		require.True(t, mcp.IsLegacyProtocolVersion(legacy), "test fixture drifted: %q is no longer legacy", legacy)
+		require.Contains(t, advertised, legacy, "gateway serves %q but does not advertise it", legacy)
+	}
 }
 
 // modernMCPRequestBody builds a protocol-complete request body for controller tests.

@@ -24,6 +24,10 @@ func SetRelayRouter(router *gin.Engine) {
 	// so that misrouted requests are redirected to the correct endpoint with all middlewares applied.
 	router.Use(middleware.APIFormatAutoDetect(router))
 	router.Use(middleware.CORS())
+	// Bound the upload before anything reads it, then bound the decompressed stream
+	// inside the gzip middleware. Order matters: the cap has to be installed on the
+	// raw body first.
+	router.Use(middleware.RequestBodyLimit())
 	router.Use(middleware.GzipDecodeMiddleware())
 
 	// OpenRouter provider listing endpoint. Public (no auth) since OpenRouter

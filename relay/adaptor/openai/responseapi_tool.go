@@ -134,7 +134,13 @@ func (t *ResponseAPITool) UnmarshalJSON(data []byte) error {
 		t.Function = &model.Function{
 			Name:        raw.Name,
 			Description: raw.Description,
-			Parameters:  raw.Parameters,
+		}
+		// model.Function.Parameters is `any`, and omitempty does not drop an
+		// interface holding a nil map — assigning raw.Parameters unconditionally put
+		// `"parameters": null` inside the function block for every flattened tool
+		// that carried a name but no parameters.
+		if len(raw.Parameters) > 0 {
+			t.Function.Parameters = raw.Parameters
 		}
 	}
 
@@ -160,7 +166,11 @@ func sanitizeFunctionForRequest(tool ResponseAPITool) *model.Function {
 		fn = &model.Function{
 			Name:        tool.Name,
 			Description: tool.Description,
-			Parameters:  tool.Parameters,
+		}
+		// See ResponseAPITool.UnmarshalJSON: a nil map assigned into the `any`
+		// Parameters field serializes as null rather than being omitted.
+		if len(tool.Parameters) > 0 {
+			fn.Parameters = tool.Parameters
 		}
 	}
 	if fn == nil {

@@ -651,9 +651,13 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Note: parallel deepseek pricing is also maintained in
 	// relay/adaptor/ali/constants_deepseek.go for the DashScope channel.
 	"deepseek-r1": {
-		Ratio:                       1.0 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.2 * (1.0 * ratio.MilliTokensRmb),
-		CompletionRatio:             1,
+		// Kept in lockstep with ali/constants_deepseek.go: DashScope and Bailian are
+		// the same Alibaba platform, so the same SKU must not carry two prices. This
+		// entry used to read 1.0 with CompletionRatio 1 against DashScope's 4 / 4,
+		// a 4x input and 16x output under-charge.
+		Ratio:                       4 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * (4 * ratio.MilliTokensRmb),
+		CompletionRatio:             4,
 		ContextLength:               65536,
 		MaxOutputTokens:             8192,
 		InputModalities:             bailianTextInputs,
@@ -666,9 +670,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek R1 hosted on Bailian: open-weight reasoning chat model (thinking mode).",
 	},
 	"deepseek-v3": {
-		Ratio:                       0.07 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.2 * (0.07 * ratio.MilliTokensRmb),
-		CompletionRatio:             1,
+		// Kept in lockstep with ali/constants_deepseek.go (see deepseek-r1 above).
+		// This entry used to read 0.07 with CompletionRatio 1 against DashScope's
+		// 2 / 4 — a 28x input and 114x output under-charge on the same SKU.
+		Ratio:                       2 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * (2 * ratio.MilliTokensRmb),
+		CompletionRatio:             4,
 		ContextLength:               65536,
 		MaxOutputTokens:             8192,
 		InputModalities:             bailianTextInputs,

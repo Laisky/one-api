@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -8,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/model"
 )
 
 // TestMarkPreConsumedAndReconciled tests the basic lifecycle of marking
@@ -63,26 +66,73 @@ func TestBillingAuditSafetyNet_Reconciled(t *testing.T) {
 	billingAuditSafetyNet(c)
 }
 
-// TestBillingAuditSafetyNet_UnreconciledNotForwarded verifies that the safety net
-// detects unreconciled pre-consumed quota and attempts an emergency refund when
-// the request was NOT forwarded upstream.
-func TestBillingAuditSafetyNet_UnreconciledNotForwarded(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
-	c.Set(ctxkey.Id, 42)
-	c.Set(ctxkey.TokenId, 10)
-	c.Set(ctxkey.ChannelId, 5)
-	c.Set(ctxkey.RequestId, "req_test_unreconciled")
+// TestBillingAuditSafetyNetRefundsOnlyWhenNotForwarded pins the one decision this
+// safety net exists to make: refund unreconciled pre-consumed quota when the
+// request never reached upstream, and deliberately do NOT refund when it may have,
+// because refunding a request the provider actually served is systematic
+// under-billing.
+//
+// Both cases previously called billingAuditSafetyNet with no assertion at all —
+// the comments said "the important thing is it doesn't panic" — so inverting the
+// forwarded check, the exact mistake that costs money, passed both tests.
+func TestBillingAuditSafetyNetRefundsOnlyWhenNotForwarded(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		forwarded  bool
+		wantRefund bool
+	}{
+		{name: "never forwarded upstream so the quota is returned", forwarded: false, wantRefund: true},
+		{name: "possibly forwarded upstream so the quota is kept", forwarded: true, wantRefund: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cleanup := setupCacheBillingLogTest(t)
+			defer cleanup()
 
-	markPreConsumed(c, 5000)
-	// NOT marking as reconciled
-	// NOT marking as forwarded
+			const preConsumed = 5000
+			before := tokenRemainQuotaForAudit(t, 1)
 
-	// This should detect the unreconciled quota and attempt emergency refund.
-	// Since we don't have a real DB, the refund will fail silently via GoCritical.
-	// The important thing is it doesn't panic.
-	billingAuditSafetyNet(c)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+			c.Set(ctxkey.Id, 1)
+			c.Set(ctxkey.TokenId, 1)
+			c.Set(ctxkey.ChannelId, 5)
+			c.Set(ctxkey.RequestId, "req_test_"+tc.name)
+
+			markPreConsumed(c, preConsumed)
+			if tc.forwarded {
+				c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
+			}
+			// Deliberately not reconciled: that is what arms the safety net.
+
+			billingAuditSafetyNet(c)
+			// The refund runs on a detached critical goroutine; Drain waits for it.
+			require.NoError(t, graceful.Drain(context.Background()))
+
+			after := tokenRemainQuotaForAudit(t, 1)
+			if tc.wantRefund {
+				require.Equal(t, before+preConsumed, after,
+					"a request that never reached upstream must have its pre-consumed quota returned")
+				return
+			}
+			require.Equal(t, before, after,
+				"a request that may have been served upstream must NOT be refunded")
+		})
+	}
+}
+
+// tokenRemainQuotaForAudit reads a token's remaining quota straight from the DB.
+//
+// Parameters:
+//   - t: the running test.
+//   - tokenID: the token to read.
+//
+// Return values:
+//   - int64: the persisted remaining quota.
+func tokenRemainQuotaForAudit(t *testing.T, tokenID int) int64 {
+	t.Helper()
+	var token model.Token
+	require.NoError(t, model.DB.First(&token, "id = ?", tokenID).Error)
+	return token.RemainQuota
 }
 
 // TestBillingAuditSafetyNet_UnreconciledForwarded verifies that when a request

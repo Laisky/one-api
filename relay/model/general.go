@@ -185,9 +185,16 @@ type UserLocationApproximate struct {
 }
 
 // https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#implementing-extended-thinking
+// ThinkingBlockBinding controls how Anthropic handles replayed thinking blocks
+// whose conversation prefix no longer matches the prefix they were generated from.
+type ThinkingBlockBinding struct {
+	PrefixMismatchBehavior string `json:"prefix_mismatch_behavior,omitempty" binding:"omitempty,oneof=error drop_block"`
+}
+
 type Thinking struct {
-	Type         string `json:"type"`
-	BudgetTokens *int   `json:"budget_tokens,omitempty" binding:"omitempty,min=1024"`
+	Type         string                `json:"type"`
+	BudgetTokens *int                  `json:"budget_tokens,omitempty" binding:"omitempty,min=1024"`
+	BlockBinding *ThinkingBlockBinding `json:"block_binding,omitempty"`
 }
 
 // IntPtr is a helper to create a pointer to an int value.

@@ -482,6 +482,18 @@ type ToolingDefaultsForModelProvider interface {
 	DefaultToolingConfigForModel(model string) ChannelToolConfig
 }
 
+// ChannelTypeAware is implemented by adaptors that serve more than one channel
+// type and therefore need to know which one they are answering for.
+//
+// The OpenAI adaptor backs every OpenAI-compatible channel (Doubao, MiniMax,
+// BaiduV2, ...), and each of those has its own pricing table. Code that builds an
+// adaptor outside the relay request path — pricing resolution, the admin
+// default-pricing endpoint — must call SetChannelType, otherwise the adaptor
+// answers with OpenAI's table for every channel.
+type ChannelTypeAware interface {
+	SetChannelType(channelType int)
+}
+
 type Adaptor interface {
 	Init(meta *meta.Meta)
 	GetRequestURL(meta *meta.Meta) (string, error)
