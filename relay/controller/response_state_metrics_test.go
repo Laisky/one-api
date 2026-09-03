@@ -10,7 +10,7 @@ import (
 
 // countingRecorder counts RecordResponseStateEvent calls by (category,outcome)
 // while delegating every other metric to the no-op base. It is exercised directly
-// (NOT installed as the process-global metrics.GlobalRecorder) so this test never
+// (NOT installed as the process-global metrics.Recorder()) so this test never
 // races the async billing goroutines other controller tests leave in flight.
 type countingRecorder struct {
 	metrics.NoOpRecorder
@@ -58,6 +58,6 @@ func TestResponseStateLabelVocabularyBounded(t *testing.T) {
 	}
 
 	// The default global recorder handles the event without panicking.
-	require.NotNil(t, metrics.GlobalRecorder)
+	require.NotNil(t, metrics.Recorder())
 	metrics.RecordStateEvent(metrics.StateCategoryPath, metrics.StateOutcomeStateless)
 }

@@ -2,154 +2,147 @@ package billing
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
-	// bring in model.Log type for constructing log entries
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 
-	modelpkg "github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/model"
 )
 
-// TestZeroQuotaFix verifies that the billing functions handle zero quota correctly
-// This addresses the critical bug where requests with 0 quota were not being logged
-func TestZeroQuotaFix(t *testing.T) {
-	ctx := context.Background()
-	validTime := time.Now()
+// This file previously contained two tests with zero assertions: one wrapped the
+// call in `defer recover()` and treated BOTH panic and no-panic as success, the
+// other was three t.Log("✓ ...") lines describing what the code should do. The
+// bug they were named for — "requests with 0 quota were not being logged" — was
+// therefore not pinned at all: restoring the `if totalQuota != 0 { skip logging }`
+// early return passed both. These replace them with assertions against a real DB.
 
-	t.Run("PostConsumeQuotaWithLog with zero quota should not panic on logging", func(t *testing.T) {
-		// This test verifies that the function doesn't return early when totalQuota is 0
-		// The function should attempt to log (which may fail due to database issues in test env)
-		// but should not panic due to the conditional check being removed
+// setupZeroQuotaBillingDB gives the billing package a real SQLite database with one
+// user and one token, so a consume log can actually be observed.
+//
+// Parameters:
+//   - t: the running test.
+//
+// Return values:
+//   - func(): restores the previous globals.
+func setupZeroQuotaBillingDB(t *testing.T) func() {
+	t.Helper()
 
-		defer func() {
-			if r := recover(); r != nil {
-				// Database operations will fail in test environment, but that's expected
-				// The key is that we reach the logging code path
-				t.Logf("Expected database panic caught: %v", r)
-			}
-		}()
+	dsn := fmt.Sprintf("file:billing_zero_quota_%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Log{}))
 
-		// Before the fix: this would skip logging entirely when totalQuota == 0
-		// After the fix: this will attempt to log (and may panic on DB operations, which is fine)
-		PostConsumeQuotaWithLog(ctx, 123, 10, 0, &modelpkg.Log{ // model.Log
-			UserId:    1,
-			ChannelId: 5,
-			ModelName: "test-model",
-			TokenName: "test-token",
-		})
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 
-		// If we reach here, the function completed without database operations
-		// This is also acceptable behavior
-		t.Log("Function completed without database panic")
-	})
+	originalDB, originalLogDB := model.DB, model.LOG_DB
+	model.DB, model.LOG_DB = db, db
 
-	t.Run("PostConsumeQuotaDetailed with zero quota should not panic on logging", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r != nil {
-				// Database operations will fail in test environment, but that's expected
-				t.Logf("Expected database panic caught: %v", r)
-			}
-		}()
+	originalSQLite := common.UsingSQLite.Load()
+	common.UsingSQLite.Store(true)
+	originalRedis := common.IsRedisEnabled()
+	common.SetRedisEnabled(false)
 
-		// Before the fix: this would skip logging entirely when totalQuota == 0
-		// After the fix: this will attempt to log (and may panic on DB operations, which is fine)
-		PostConsumeQuotaDetailed(QuotaConsumeDetail{
-			Ctx:                ctx,
-			TokenId:            123,
-			QuotaDelta:         10,
-			TotalQuota:         0,
-			UserId:             1,
-			ChannelId:          5,
-			PromptTokens:       10,
-			CompletionTokens:   20,
-			ModelRatio:         1.0,
-			GroupRatio:         1.0,
-			ModelName:          "test-model",
-			TokenName:          "test-token",
-			IsStream:           false,
-			StartTime:          validTime,
-			SystemPromptReset:  false,
-			CompletionRatio:    1.0,
-			ToolsCost:          0,
-			CachedPromptTokens: 0,
-		})
+	require.NoError(t, db.Create(&model.User{
+		Id: 1, Username: "zero-quota-user", Password: "x",
+		Role: model.RoleCommonUser, Status: model.UserStatusEnabled, Quota: 1_000_000,
+	}).Error)
+	require.NoError(t, db.Create(&model.Token{
+		Id: 123, UserId: 1, Key: strings.Repeat("z", 48),
+		Status: model.TokenStatusEnabled, Name: "zero-quota-token",
+		RemainQuota: 1_000_000, CreatedTime: helper.GetTimestamp(), AccessedTime: helper.GetTimestamp(),
+	}).Error)
 
-		t.Log("Function completed without database panic")
-	})
-
-	t.Run("PostConsumeQuotaWithLog with positive quota should work normally", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r != nil {
-				// Database operations will fail in test environment, but that's expected
-				t.Logf("Expected database panic caught: %v", r)
-			}
-		}()
-
-		PostConsumeQuotaWithLog(ctx, 123, 10, 50, &modelpkg.Log{
-			UserId:    1,
-			ChannelId: 5,
-			ModelName: "test-model",
-			TokenName: "test-token",
-		})
-		t.Log("Function completed")
-	})
-
-	t.Run("PostConsumeQuotaDetailed with positive quota should work normally", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r != nil {
-				// Database operations will fail in test environment, but that's expected
-				t.Logf("Expected database panic caught: %v", r)
-			}
-		}()
-
-		PostConsumeQuotaDetailed(QuotaConsumeDetail{
-			Ctx:                ctx,
-			TokenId:            123,
-			QuotaDelta:         10,
-			TotalQuota:         100,
-			UserId:             1,
-			ChannelId:          5,
-			PromptTokens:       10,
-			CompletionTokens:   20,
-			ModelRatio:         1.0,
-			GroupRatio:         1.0,
-			ModelName:          "test-model",
-			TokenName:          "test-token",
-			IsStream:           false,
-			StartTime:          validTime,
-			SystemPromptReset:  false,
-			CompletionRatio:    1.0,
-			ToolsCost:          0,
-			CachedPromptTokens: 0,
-		})
-		t.Log("Function completed")
-	})
+	return func() {
+		model.DB, model.LOG_DB = originalDB, originalLogDB
+		common.UsingSQLite.Store(originalSQLite)
+		common.SetRedisEnabled(originalRedis)
+	}
 }
 
-// TestZeroQuotaLogicFlow tests the logical flow of the billing functions
-func TestZeroQuotaLogicFlow(t *testing.T) {
-	// This test verifies that the logic flow is correct:
-	// 1. Always attempt to log (regardless of quota amount)
-	// 2. Only update user/channel quotas when totalQuota > 0
-	// 3. Log error when totalQuota <= 0
+// TestPostConsumeQuotaWithLogRecordsZeroQuotaRequests pins the fix this file is
+// named for: a request that costs nothing still has to leave an audit trail.
+//
+// A free model, a cached-only turn, or an upstream that reports no usage all
+// produce totalQuota == 0. Skipping the log for those loses the record that the
+// request happened at all.
+func TestPostConsumeQuotaWithLogRecordsZeroQuotaRequests(t *testing.T) {
+	defer setupZeroQuotaBillingDB(t)()
 
-	t.Run("Logic flow verification", func(t *testing.T) {
-		// We can't easily test the actual database operations in unit tests,
-		// but we can verify that the code structure is correct by examining
-		// the source code logic through this test
+	PostConsumeQuotaWithLog(context.Background(), 123, 0, 0, &model.Log{
+		UserId:    1,
+		ChannelId: 5,
+		ModelName: "free-model",
+		TokenName: "zero-quota-token",
+		Content:   "zero quota request",
+		RequestId: "req_zero_quota",
+	})
+	require.NoError(t, graceful.Drain(context.Background()))
 
-		// The key changes made:
-		// 1. Removed the conditional check `if totalQuota != 0` before logging
-		// 2. Added conditional check `if totalQuota > 0` before quota updates
-		// 3. Kept the error logging for totalQuota <= 0
+	var logs []model.Log
+	require.NoError(t, model.LOG_DB.Where("request_id = ?", "req_zero_quota").Find(&logs).Error)
+	require.Len(t, logs, 1, "a zero-quota request must still be logged")
+	require.Equal(t, "free-model", logs[0].ModelName)
+	require.Zero(t, logs[0].Quota)
+}
 
-		// This ensures that:
-		// - All requests are logged for tracking (even 0 quota ones)
-		// - User/channel quotas are only updated when there's actual consumption
-		// - Error logging still happens for debugging purposes
+// TestPostConsumeQuotaWithLogRejectsInvalidIdentifiers pins the input validation
+// the old TestInputValidation only claimed to cover: its helpers could distinguish
+// nothing but "panicked" from "did not panic", and its shouldFail field was
+// inverted relative to its name.
+func TestPostConsumeQuotaWithLogRejectsInvalidIdentifiers(t *testing.T) {
+	defer setupZeroQuotaBillingDB(t)()
 
-		t.Log("✓ Billing logic flow has been corrected to always log requests")
-		t.Log("✓ Quota updates only happen when totalQuota > 0")
-		t.Log("✓ Error logging preserved for debugging zero quota cases")
+	for _, tc := range []struct {
+		name      string
+		tokenID   int
+		userID    int
+		channelID int
+	}{
+		{name: "token id is zero", tokenID: 0, userID: 1, channelID: 5},
+		{name: "token id is negative", tokenID: -1, userID: 1, channelID: 5},
+		{name: "user id is zero", tokenID: 123, userID: 0, channelID: 5},
+		{name: "channel id is zero", tokenID: 123, userID: 1, channelID: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requestID := "req_invalid_" + tc.name
+
+			require.NotPanics(t, func() {
+				PostConsumeQuotaWithLog(context.Background(), tc.tokenID, 10, 10, &model.Log{
+					UserId:    tc.userID,
+					ChannelId: tc.channelID,
+					ModelName: "test-model",
+					TokenName: "zero-quota-token",
+					RequestId: requestID,
+				})
+			})
+			require.NoError(t, graceful.Drain(context.Background()))
+
+			var logs []model.Log
+			require.NoError(t, model.LOG_DB.Where("request_id = ?", requestID).Find(&logs).Error)
+			require.Empty(t, logs, "an entry with an invalid identifier must not be billed or logged")
+		})
+	}
+}
+
+// TestPostConsumeQuotaWithLogIgnoresNilInputs keeps the nil guards honest.
+func TestPostConsumeQuotaWithLogIgnoresNilInputs(t *testing.T) {
+	defer setupZeroQuotaBillingDB(t)()
+
+	require.NotPanics(t, func() {
+		PostConsumeQuotaWithLog(context.Background(), 123, 10, 10, nil)
+	})
+	//nolint:staticcheck // deliberately passing a nil context to pin the guard
+	require.NotPanics(t, func() {
+		PostConsumeQuotaWithLog(nil, 123, 10, 10, &model.Log{UserId: 1, ChannelId: 5})
 	})
 }

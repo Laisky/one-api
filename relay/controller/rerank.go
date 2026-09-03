@@ -172,7 +172,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		apiType := relaymode.String(meta.Mode)
 		tokenId := strconv.Itoa(meta.TokenId)
 
-		metrics.GlobalRecorder.RecordRelayRequest(
+		metrics.Recorder().RecordRelayRequest(
 			meta.StartTime,
 			meta.ChannelId,
 			channeltype.IdToName(meta.ChannelType),
@@ -189,7 +189,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		)
 
 		userBalance := float64(getUserQuotaFromContext(c))
-		metrics.GlobalRecorder.RecordUserMetrics(
+		metrics.Recorder().RecordUserMetrics(
 			userIdStr,
 			username,
 			group,
@@ -199,7 +199,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			userBalance,
 		)
 
-		metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
+		metrics.Recorder().RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
 	}
 
 	markBillingReconciled(c)

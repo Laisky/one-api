@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"sync/atomic"
 	"time"
 )
 
@@ -88,8 +89,40 @@ type MetricsRecorder interface {
 	UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int)
 }
 
-// GlobalRecorder holds the active metrics recorder implementation.
-var GlobalRecorder MetricsRecorder
+// globalRecorder holds the active metrics recorder implementation.
+//
+// It is an atomic.Value rather than a plain variable because it is read from
+// every request goroutine and from long-lived background workers (the UUID
+// migration coordinator among them) while it can still be written: monitor.Init
+// installs the real recorder after those workers may already be running, and
+// tests swap it per-case. As a bare var that is a data race, and -race caught it
+// as one between model.uuidMetricsRecorder and a test installing a recorder.
+//
+// A recorderBox wrapper keeps the stored dynamic type constant; storing differing
+// concrete types directly in an atomic.Value panics.
+var globalRecorder atomic.Value
+
+// recorderBox pins one concrete type for atomic.Value storage.
+type recorderBox struct{ recorder MetricsRecorder }
+
+// Recorder returns the active metrics recorder, never nil.
+//
+// Return values:
+//   - MetricsRecorder: the installed recorder, or a no-op when none is installed.
+func Recorder() MetricsRecorder {
+	if box, ok := globalRecorder.Load().(recorderBox); ok && box.recorder != nil {
+		return box.recorder
+	}
+	return &NoOpRecorder{}
+}
+
+// SetRecorder installs the process-wide metrics recorder.
+//
+// Parameters:
+//   - recorder: the recorder to install; nil restores the no-op behavior.
+func SetRecorder(recorder MetricsRecorder) {
+	globalRecorder.Store(recorderBox{recorder: recorder})
+}
 
 // NoOpRecorder is a no-operation implementation for when metrics are disabled
 type NoOpRecorder struct{}
@@ -204,7 +237,7 @@ func (n *NoOpRecorder) RecordResponseStateEvent(category, outcome string) {}
 
 // Initialize with no-op recorder by default
 func init() {
-	GlobalRecorder = &NoOpRecorder{}
+	SetRecorder(&NoOpRecorder{})
 }
 
 // MultiRecorder wraps multiple MetricsRecorder implementations

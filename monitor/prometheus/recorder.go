@@ -534,5 +534,5 @@ func (p *PrometheusRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, to
 
 // InitPrometheusRecorder initializes the Prometheus recorder and sets it as the global recorder
 func InitPrometheusRecorder() {
-	metrics.GlobalRecorder = &PrometheusRecorder{}
+	metrics.SetRecorder(&PrometheusRecorder{})
 }

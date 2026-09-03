@@ -72,7 +72,7 @@ func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64,
 	if ctx == nil || logEntry == nil {
 		lg := logger.FromContext(ctx)
 		lg.Error("PostConsumeQuotaWithLog: invalid args", zap.Bool("ctx_nil", ctx == nil), zap.Bool("log_nil", logEntry == nil))
-		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_with_log", 0, 0, "")
+		metrics.Recorder().RecordBillingError("validation_error", "post_consume_with_log", 0, 0, "")
 		return
 	}
 
@@ -92,17 +92,17 @@ func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64,
 	})
 	if tokenId <= 0 {
 		lg.Error("PostConsumeQuotaWithLog: invalid tokenId", zap.Int("arg_token_id", tokenId))
-		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
+		metrics.Recorder().RecordBillingError("validation_error", "post_consume_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
 		return
 	}
 	if logEntry.UserId <= 0 || logEntry.ChannelId <= 0 {
 		lg.Error("PostConsumeQuotaWithLog: invalid user/channel", zap.Int("arg_user_id", logEntry.UserId), zap.Int("arg_channel_id", logEntry.ChannelId))
-		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
+		metrics.Recorder().RecordBillingError("validation_error", "post_consume_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
 		return
 	}
 	if logEntry.ModelName == "" {
 		lg.Error("PostConsumeQuotaWithLog: modelName is empty")
-		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
+		metrics.Recorder().RecordBillingError("validation_error", "post_consume_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
 		return
 	}
 
@@ -113,7 +113,7 @@ func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64,
 			zap.String("model", logEntry.ModelName),
 			zap.Int64("quota_delta", quotaDelta),
 			zap.Int64("total_quota", totalQuota))
-		metrics.GlobalRecorder.RecordBillingError("database_error", "post_consume_token_quota_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
+		metrics.Recorder().RecordBillingError("database_error", "post_consume_token_quota_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
 		billingSuccess = false
 	}
 	if err := model.CacheUpdateUserQuota(ctx, logEntry.UserId); err != nil {
@@ -122,7 +122,7 @@ func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64,
 			zap.String("model", logEntry.ModelName),
 			zap.Int64("total_quota", totalQuota),
 			zap.String("note", "database billing succeeded, cache will be refreshed on next request"))
-		metrics.GlobalRecorder.RecordBillingError("cache_error", "update_user_quota_cache", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
+		metrics.Recorder().RecordBillingError("cache_error", "update_user_quota_cache", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
 		billingSuccess = false
 	}
 
@@ -163,11 +163,11 @@ func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64,
 		lg.Error("invalid negative totalQuota consumed",
 			zap.Int64("total_quota", totalQuota),
 			zap.String("model_name", logEntry.ModelName))
-		metrics.GlobalRecorder.RecordBillingError("calculation_error", "post_consume_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
+		metrics.Recorder().RecordBillingError("calculation_error", "post_consume_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
 		billingSuccess = false
 	} // totalQuota == 0: do nothing (free request)
 
-	metrics.GlobalRecorder.RecordBillingOperation(billingStartTime, "post_consume_with_log", billingSuccess, logEntry.UserId, logEntry.ChannelId, logEntry.ModelName, float64(totalQuota))
+	metrics.Recorder().RecordBillingOperation(billingStartTime, "post_consume_with_log", billingSuccess, logEntry.UserId, logEntry.ChannelId, logEntry.ModelName, float64(totalQuota))
 }
 
 func ReturnPreConsumedQuota(ctx context.Context, preConsumedQuota int64, tokenId int) {
@@ -267,34 +267,34 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 	})
 	if detail.Ctx == nil {
 		lg.Error("PostConsumeQuotaDetailed: context is nil")
-		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
+		metrics.Recorder().RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
 		return
 	}
 	if detail.TokenId <= 0 {
 		lg.Error("PostConsumeQuotaDetailed: invalid tokenId", zap.Int("arg_token_id", detail.TokenId))
-		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
+		metrics.Recorder().RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
 		return
 	}
 	if detail.UserId <= 0 {
 		lg.Error("PostConsumeQuotaDetailed: invalid userId", zap.Int("arg_user_id", detail.UserId))
-		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
+		metrics.Recorder().RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
 		return
 	}
 	if detail.ChannelId <= 0 {
 		lg.Error("PostConsumeQuotaDetailed: invalid channelId", zap.Int("arg_channel_id", detail.ChannelId))
-		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
+		metrics.Recorder().RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
 		return
 	}
 	if detail.PromptTokens < 0 || detail.CompletionTokens < 0 {
 		lg.Error("PostConsumeQuotaDetailed: negative token counts",
 			zap.Int("prompt_tokens", detail.PromptTokens),
 			zap.Int("completion_tokens", detail.CompletionTokens))
-		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
+		metrics.Recorder().RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
 		return
 	}
 	if detail.ModelName == "" {
 		lg.Error("PostConsumeQuotaDetailed: modelName is empty")
-		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
+		metrics.Recorder().RecordBillingError("validation_error", "post_consume_detailed", detail.UserId, detail.ChannelId, detail.ModelName)
 		return
 	}
 

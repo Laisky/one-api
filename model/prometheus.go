@@ -65,7 +65,7 @@ func (p *PrometheusDBHook) afterCallback(operation string) func(*gorm.DB) {
 		success := db.Error == nil
 
 		// Record metrics
-		metrics.GlobalRecorder.RecordDBQuery(startTime, operation, tableName, success)
+		metrics.Recorder().RecordDBQuery(startTime, operation, tableName, success)
 	}
 }
 
@@ -75,7 +75,7 @@ func UpdateDBConnectionMetrics() {
 		sqlDB, err := DB.DB()
 		if err == nil {
 			stats := sqlDB.Stats()
-			metrics.GlobalRecorder.UpdateDBConnectionMetrics(stats.InUse, stats.Idle)
+			metrics.Recorder().UpdateDBConnectionMetrics(stats.InUse, stats.Idle)
 		}
 	}
 }

@@ -10,7 +10,9 @@ package model
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -94,6 +96,67 @@ func requireCompactBudgetRemaining(t *testing.T, ctx context.Context) {
 			"not a migration defect - raise go test -timeout or compactTestBudget")
 }
 
+// compactSuiteBudget is the wall-clock the compact-UUID suite needs to finish.
+//
+// Measured under -race on a developer machine: 51 compact tests take ~449s, i.e.
+// 88% of the whole model package's 510s. The suite mutates global
+// config.CompactUUID* settings, so its tests cannot use t.Parallel() and the cost
+// is serial by construction.
+const compactSuiteBudget = 15 * time.Minute
+
+// requireCompactSuiteBudget keeps the compact-UUID suite from blowing the test
+// binary's timeout.
+//
+// go test's default per-package timeout is 10 minutes, which this suite exceeds
+// under -race — so a plain `go test -race ./...` died with
+// `panic: test timed out after 10m0s` and took the whole model package down with
+// it, reporting nothing useful about the 323 other tests in the package.
+//
+// Rather than fail opaquely, skip with instructions when the binary was not given
+// enough time. Both CI workflows (-timeout 20m and 45m) and `make test-race`
+// (-timeout 20m) clear the bar and run the suite in full. Set
+// ONEAPI_REQUIRE_COMPACT_UUID_SUITE=1 to turn the skip into a failure, so an
+// environment that is supposed to run it can never silently stop.
+//
+// Parameters:
+//   - t: the running test.
+func requireCompactSuiteBudget(t *testing.T) {
+	t.Helper()
+	configured := configuredTestTimeout()
+	// A zero timeout means `-timeout 0`, i.e. no limit at all.
+	if configured <= 0 || configured >= compactSuiteBudget {
+		return
+	}
+	message := fmt.Sprintf(
+		"compact-UUID suite needs about %s of wall clock but the test binary was given -timeout %s; "+
+			"re-run with `make test-race` or `go test -race -timeout 20m ./model/`",
+		compactSuiteBudget, configured)
+	if os.Getenv("ONEAPI_REQUIRE_COMPACT_UUID_SUITE") == "1" {
+		t.Fatalf("%s (ONEAPI_REQUIRE_COMPACT_UUID_SUITE=1 forbids skipping)", message)
+	}
+	t.Skip(message)
+}
+
+// configuredTestTimeout reports the -timeout the test binary was started with.
+//
+// Return values:
+//   - time.Duration: the configured timeout, or 0 when unset/unlimited/unreadable.
+func configuredTestTimeout() time.Duration {
+	flagValue := flag.Lookup("test.timeout")
+	if flagValue == nil {
+		return 0
+	}
+	getter, ok := flagValue.Value.(flag.Getter)
+	if !ok {
+		return 0
+	}
+	timeout, ok := getter.Get().(time.Duration)
+	if !ok {
+		return 0
+	}
+	return timeout
+}
+
 // withCompactTestSettings installs fast, bounded settings for one test and restores them after.
 //
 // The production defaults (five-second active interval, five-minute idle) are correct for a
@@ -105,6 +168,8 @@ func requireCompactBudgetRemaining(t *testing.T, ctx context.Context) {
 //
 // Return values: none.
 func withCompactTestSettings(t *testing.T) {
+	requireCompactSuiteBudget(t)
+
 	t.Helper()
 	originalAuto := config.CompactUUIDAutoMigrate
 	originalActive := config.CompactUUIDActiveInterval

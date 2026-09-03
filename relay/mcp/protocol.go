@@ -14,6 +14,12 @@ const (
 	LegacyProtocolVersion = "2025-11-25"
 	// LegacyProtocolVersionFallback keeps compatibility with older Streamable HTTP servers.
 	LegacyProtocolVersionFallback = "2025-06-18"
+	// LegacyProtocolVersionStreamableHTTPOrigin is the revision that introduced the
+	// Streamable HTTP transport. A large share of deployed servers still pin it, and
+	// everything this client uses over that transport — initialize,
+	// notifications/initialized, tools/list, tools/call, Mcp-Session-Id — is
+	// unchanged since. Refusing it made every tool on those servers unreachable.
+	LegacyProtocolVersionStreamableHTTPOrigin = "2025-03-26"
 
 	// ProtocolVersionHeader carries the protocol version for every modern request.
 	ProtocolVersionHeader = "Mcp-Protocol-Version"
@@ -128,7 +134,12 @@ func (e *ProtocolError) Error() string {
 // Return values:
 //   - []string: a new slice ordered from the preferred modern version to legacy compatibility versions.
 func SupportedProtocolVersions() []string {
-	return []string{ProtocolVersion, LegacyProtocolVersion, LegacyProtocolVersionFallback}
+	return []string{
+		ProtocolVersion,
+		LegacyProtocolVersion,
+		LegacyProtocolVersionFallback,
+		LegacyProtocolVersionStreamableHTTPOrigin,
+	}
 }
 
 // IsLegacyProtocolVersion reports whether version selects the initialization-based protocol era.
@@ -140,7 +151,7 @@ func SupportedProtocolVersions() []string {
 //   - bool: true only for legacy versions that one-api explicitly supports.
 func IsLegacyProtocolVersion(version string) bool {
 	switch strings.TrimSpace(version) {
-	case LegacyProtocolVersion, LegacyProtocolVersionFallback:
+	case LegacyProtocolVersion, LegacyProtocolVersionFallback, LegacyProtocolVersionStreamableHTTPOrigin:
 		return true
 	default:
 		return false

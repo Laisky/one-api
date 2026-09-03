@@ -59,7 +59,7 @@ func (p *PrometheusRedisHook) recordMetrics(ctx context.Context, cmd redis.Cmder
 	success := cmd.Err() == nil
 
 	// Record metrics
-	metrics.GlobalRecorder.RecordRedisCommand(startTime, cmdName, success)
+	metrics.Recorder().RecordRedisCommand(startTime, cmdName, success)
 }
 
 // InitPrometheusRedisMonitoring attaches Prometheus hooks to the Redis client and periodically updates pool metrics.
@@ -78,7 +78,7 @@ func InitPrometheusRedisMonitoring() {
 				for range ticker.C {
 					if client != nil {
 						stats := client.PoolStats()
-						metrics.GlobalRecorder.UpdateRedisConnectionMetrics(int(stats.TotalConns))
+						metrics.Recorder().UpdateRedisConnectionMetrics(int(stats.TotalConns))
 					}
 				}
 			}()

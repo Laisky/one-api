@@ -121,4 +121,7 @@ jobs:
         # The live MySQL/PostgreSQL qualification suite needs more than Go's
         # default 10-minute per-package budget, so a generous -timeout is
         # explicit here; -count=1 keeps every run fresh.
+        env:
+          # See lint.yml: forbid the compact-UUID suite from skipping itself.
+          ONEAPI_REQUIRE_COMPACT_UUID_SUITE: "1"
         run: go test -race -v -count=1 -timeout 45m ./...

@@ -15,7 +15,25 @@ import (
 	"github.com/Laisky/one-api/common/config"
 )
 
+// restoreLogPushConfig snapshots the alert-push globals and restores them when the
+// test ends.
+//
+// These tests used to set config.LogPushAPI/Type/Token and never put them back, so
+// every later test in the package ran with an alert pusher pointed at
+// example.com — order-dependent behavior plus real outbound HTTP from a unit test.
+//
+// Parameters:
+//   - t: the running test.
+func restoreLogPushConfig(t *testing.T) {
+	t.Helper()
+	api, pushType, token := config.LogPushAPI, config.LogPushType, config.LogPushToken
+	t.Cleanup(func() {
+		config.LogPushAPI, config.LogPushType, config.LogPushToken = api, pushType, token
+	})
+}
+
 func TestSetupEnhancedLogger(t *testing.T) {
+	restoreLogPushConfig(t)
 	ctx := context.Background()
 
 	// Test without alert pusher configuration
@@ -48,6 +66,7 @@ func TestSetupEnhancedLogger(t *testing.T) {
 }
 
 func TestSetupEnhancedLoggerWithEnvironmentVariables(t *testing.T) {
+	restoreLogPushConfig(t)
 	ctx := context.Background()
 
 	// Test with environment variables

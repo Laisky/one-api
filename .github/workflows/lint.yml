@@ -73,6 +73,12 @@ jobs:
       # coverage profile to a file. You will need the name of the file (e.g. "coverage.txt")
       # in the next step as well as the next job.
       - name: Test
+        # ONEAPI_REQUIRE_COMPACT_UUID_SUITE turns the compact-UUID suite's
+        # budget skip into a hard failure: that suite is ~88% of the model
+        # package's runtime and skips itself when -timeout is under 15m, so
+        # without this a future timeout reduction would silently drop 51 tests.
+        env:
+          ONEAPI_REQUIRE_COMPACT_UUID_SUITE: "1"
         run: go test -race -cover -coverprofile=coverage.txt -count=1 -timeout 20m ./...
 
       - name: Archive code coverage results

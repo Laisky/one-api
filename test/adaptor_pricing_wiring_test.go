@@ -209,3 +209,52 @@ func TestSameVendorTablesAgreeOnSharedModels(t *testing.T) {
 	}
 	require.NotZero(t, checked, "the two Alibaba tables share no priced model; this guard has stopped guarding anything")
 }
+
+// TestVideoModelsCarryPerCallOrPerSecondPricing pins that a model which produces
+// video is priced in a unit the video billing path can actually use.
+//
+// relay/controller/video.go bills either per call (PerCall.UsdPerThousandCalls) or
+// per second (Video.PerSecondUsd); with neither it returns HTTP 400
+// video_pricing_missing. A video model carrying only a per-token Ratio is
+// therefore not mis-billed but completely unusable — which is how Zhipu's
+// `cogviewx` shipped, contradicting its own file's "never per token" convention
+// while every sibling used QuotaPerRMB + PerCall.
+func TestVideoModelsCarryPerCallOrPerSecondPricing(t *testing.T) {
+	var offenders []string
+	seen := map[string]bool{}
+
+	for channelType := 1; channelType < channeltype.Dummy; channelType++ {
+		provider := pricingAdaptorForChannel(channelType)
+		if provider == nil {
+			continue
+		}
+		channelName := provider.GetChannelName()
+		for modelName, cfg := range provider.GetDefaultModelPricing() {
+			// Only a model whose SOLE output is video takes the video-generation
+			// route. An any-to-any model that emits text alongside video (Gemini
+			// Omni) is a chat model and is genuinely billed per token.
+			if len(cfg.OutputModalities) != 1 || cfg.OutputModalities[0] != "video" {
+				continue
+			}
+			key := channelName + "/" + modelName
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
+			billable := (cfg.PerCall != nil && cfg.PerCall.UsdPerThousandCalls > 0) ||
+				(cfg.Video != nil && cfg.Video.HasData())
+			// A genuinely free model (Ratio 0, no per-call price) is fine.
+			if billable || cfg.Ratio == 0 {
+				continue
+			}
+			offenders = append(offenders, key)
+		}
+	}
+
+	sort.Strings(offenders)
+	assert.Emptyf(t, offenders,
+		"these video models carry a per-token Ratio but no PerCall or Video pricing, so "+
+			"relay/controller/video.go rejects every request for them with video_pricing_missing: %v",
+		offenders)
+}
