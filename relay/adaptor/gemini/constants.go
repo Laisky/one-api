@@ -7,18 +7,18 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 )
 
-// ModelRatios uses the shared Gemini pricing from geminiOpenaiCompatible
+// ModelRatios uses the shared Gemini pricing from geminiOpenaiCompatible.
 var ModelRatios = geminiOpenaiCompatible.ModelRatios
 
-// ModelList derived from ModelRatios for backward compatibility
+// ModelList is derived from ModelRatios for backward compatibility.
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// GeminiToolingDefaults reuses the Gemini OpenAI-compatible tooling defaults sourced from Google pricing (retrieved 2025-11-12).
+// GeminiToolingDefaults reuses the Gemini OpenAI-compatible tooling defaults sourced from Google pricing, verified 2026-09-02.
 var GeminiToolingDefaults = geminiOpenaiCompatible.GeminiToolingDefaults()
 
-// ModelsSupportSystemInstruction is the list of models that support system instruction.
+// ModelsSupportSystemInstruction lists models that accept system instructions.
 //
-// https://cloud.google.com/vertex-ai/generative-ai/docs/learn/prompts/system-instructions
+// Source: https://ai.google.dev/gemini-api/docs/models
 var ModelsSupportSystemInstruction = []string{
 	"gemini-2.5-flash", "gemini-2.5-flash-preview",
 	"gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview",
@@ -28,13 +28,13 @@ var ModelsSupportSystemInstruction = []string{
 	"gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-3-pro-image-preview",
 	"gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools",
 	"gemini-3.1-flash-image-preview", "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview",
-	"gemini-3.5-flash",
+	"gemini-3.5-flash", "gemini-3.5-flash-lite",
+	"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash",
 	"gemini-robotics-er-1.6-preview",
 }
 
-// IsModelSupportSystemInstruction check if the model support system instruction.
-//
-// Because the main version of Go is 1.20, slice.Contains cannot be used
+// IsModelSupportSystemInstruction reports whether model accepts system instructions.
+// Parameters: model is the upstream Gemini model ID. Returns: true when system instructions are supported.
 func IsModelSupportSystemInstruction(model string) bool {
 	return slices.Contains(ModelsSupportSystemInstruction, model)
 }
