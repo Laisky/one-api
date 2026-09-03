@@ -94,7 +94,7 @@ func geminiSeptember2026RoboticsConfig(streaming bool) adaptor.ModelConfig {
 	config := adaptor.ModelConfig{
 		Ratio:            2.00 * ratio.MilliTokensUsd,
 		CompletionRatio:  10.00 / 2.00,
-		ContextLength:    gemini1MContext,
+		ContextLength:    131_072,
 		MaxOutputTokens:  gemini3FlashMaxOutput,
 		InputModalities:  geminiInputMultimodal,
 		OutputModalities: geminiOutputText,
@@ -108,7 +108,7 @@ func geminiSeptember2026RoboticsConfig(streaming bool) adaptor.ModelConfig {
 		Description:                 "Gemini Robotics ER 2 preview for embodied reasoning, video progress understanding, spatial reasoning, and multi-robot orchestration.",
 	}
 	if streaming {
-		config.SupportedFeatures = []string{"tools", "reasoning"}
+		config.SupportedFeatures = []string{"tools", "web_search", "reasoning"}
 		config.Description = "Gemini Robotics ER 2 Streaming preview for low-latency bidirectional audio and video robotics agents over the Live API."
 		return config
 	}
