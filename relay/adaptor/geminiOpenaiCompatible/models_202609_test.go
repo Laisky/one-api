@@ -78,16 +78,36 @@ func TestGeminiSeptember2026SpecializedCatalog(t *testing.T) {
 	require.InDelta(t, 0.10136, omni.Video.PerSecondUsd, 1e-12)
 	require.Equal(t, "1280x720", omni.Video.BaseResolution)
 
-	robotics := ModelRatios["gemini-robotics-er-2-preview"]
-	require.InDelta(t, 2.00*ratio.MilliTokensUsd, robotics.Ratio, 1e-12)
-	require.InDelta(t, 10.00/2.00, robotics.CompletionRatio, 1e-12)
-	require.InDelta(t, 0.20*ratio.MilliTokensUsd, robotics.CachedInputRatio, 1e-12)
-	require.Contains(t, geminiWebSearchModels, "gemini-robotics-er-2-preview")
+	roboticsTests := []struct {
+		model             string
+		cachedInputUsd    float64
+		expectedFeatures []string
+	}{
+		{
+			model:             "gemini-robotics-er-2-preview",
+			cachedInputUsd:    0.20,
+			expectedFeatures: []string{"tools", "json_mode", "structured_outputs", "web_search", "reasoning"},
+		},
+		{
+			model:             "gemini-robotics-er-2-streaming-preview",
+			expectedFeatures: []string{"tools", "web_search", "reasoning"},
+		},
+	}
 
-	roboticsStreaming := ModelRatios["gemini-robotics-er-2-streaming-preview"]
-	require.InDelta(t, 2.00*ratio.MilliTokensUsd, roboticsStreaming.Ratio, 1e-12)
-	require.InDelta(t, 10.00/2.00, roboticsStreaming.CompletionRatio, 1e-12)
-	require.Zero(t, roboticsStreaming.CachedInputRatio)
+	for _, tt := range roboticsTests {
+		t.Run(tt.model, func(t *testing.T) {
+			config, ok := ModelRatios[tt.model]
+			require.True(t, ok, "%s missing from pricing map", tt.model)
+			require.InDelta(t, 2.00*ratio.MilliTokensUsd, config.Ratio, 1e-12)
+			require.InDelta(t, 10.00/2.00, config.CompletionRatio, 1e-12)
+			require.InDelta(t, tt.cachedInputUsd*ratio.MilliTokensUsd, config.CachedInputRatio, 1e-12)
+			require.EqualValues(t, 131_072, config.ContextLength)
+			require.EqualValues(t, 65_536, config.MaxOutputTokens)
+			require.ElementsMatch(t, tt.expectedFeatures, config.SupportedFeatures)
+			require.Contains(t, config.SupportedFeatures, "web_search")
+			require.Contains(t, geminiWebSearchModels, tt.model)
+		})
+	}
 }
 
 // TestGeminiSeptember2026LifecycleMetadata verifies corrected replacement and
