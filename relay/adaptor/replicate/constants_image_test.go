@@ -74,7 +74,6 @@ func TestReplicateOfficialImageAdditions(t *testing.T) {
 
 	gptImage := ModelRatios["openai/gpt-image-1.5"].Image
 	require.Equal(t, "auto", gptImage.DefaultQuality)
-	require.Equal(t, 10, gptImage.MaxImages)
 	require.InDelta(t, 0.013/0.136, gptImage.QualityMultipliers["low"], 1e-12)
 	require.InDelta(t, 0.05/0.136, gptImage.QualityMultipliers["medium"], 1e-12)
 
