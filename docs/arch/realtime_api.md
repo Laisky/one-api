@@ -39,13 +39,25 @@ Key principles:
   - Headers from client:
     - `Authorization: Bearer <one-api-token>` (required; one-api TokenAuth)
     - `Sec-WebSocket-Protocol: openai-realtime-v1` (recommended; forwarded to upstream if present)
+    - Browsers cannot set headers on a WebSocket, so they authenticate instead with
+      `Sec-WebSocket-Protocol: realtime, openai-insecure-api-key.<one-api-token>`.
+      `extractRawCredential` accepts that subprotocol as an auth source.
   - one-api applies: CORS, rate limits (global + channel), distribution, channel auth.
 
 - Upstream target: `wss://api.openai.com/v1/realtime?model=<model>`
   - Headers set by one-api:
     - `Authorization: Bearer <upstream-channel-key>`
-    - `Sec-WebSocket-Protocol: openai-realtime-v1` (if client requested, mirror/forward)
+    - `Sec-WebSocket-Protocol`: only the non-auth subprotocols the client offered,
+      via `NegotiateRealtimeSubprotocols`. The client's
+      `openai-insecure-api-key.*` entry must never be forwarded: OpenAI rejects a
+      handshake carrying both a protocol api key and an Authorization header with
+      "You must only send one of protocol api key and Authorization header", which
+      breaks every browser call. The same rule applies to the Responses WebSocket proxy.
     - Any additional OpenAI-required headers for Realtime beta (transparent forward if needed)
+
+- `session.update` frames must not contain `session.model`. The relay rejects them with
+  `ws_model_switch_denied` and a 1008 close, because the model is bound at connect time by
+  the `model` query parameter, which the relay rewrites to the channel's actual model name.
 
 Note: The OpenAI Realtime API also supports WebRTC and ephemeral tokens. For Phase 1 we only support the WebSocket path and do not issue OpenAI ephemeral tokens from one-api (that would bypass one-api’s logging/billing).
 
