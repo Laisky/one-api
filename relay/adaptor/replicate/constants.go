@@ -105,8 +105,8 @@ var ReplicateToolingDefaults = adaptor.ChannelToolConfig{}
 
 // init assembles ModelRatios from per-family maps and derives ModelList. The
 // assembly is deterministic across runs because Go map iteration in
-// adaptor.GetModelListFromPricing already produces stable identity (callers do
-// not assume ordering).
+// adaptor.GetModelListFromPricing already produces stable identity and callers
+// do not assume ordering. It takes no parameters and returns no values.
 func init() {
 	maps.Copy(ModelRatios, replicateImageModelRatios)
 	maps.Copy(ModelRatios, replicateOfficialImageAdditions)
