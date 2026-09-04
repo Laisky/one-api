@@ -7,7 +7,8 @@ import (
 )
 
 // TestReplicateImageModelPrices ensures representative Replicate image models
-// retain non-zero per-image pricing metadata.
+// retain non-zero per-image pricing metadata. The t parameter manages the test
+// lifecycle and assertions. This function returns no values.
 func TestReplicateImageModelPrices(t *testing.T) {
 	t.Parallel()
 	cases := []string{
@@ -24,7 +25,9 @@ func TestReplicateImageModelPrices(t *testing.T) {
 }
 
 // TestReplicateOfficialImageAdditions verifies the refreshed official model
-// catalog, fixed output prices, advertised edit modality, and derived ModelList.
+// catalog, safe output prices, advertised modalities, and derived ModelList. The
+// t parameter manages the test lifecycle and assertions. This function returns
+// no values.
 func TestReplicateOfficialImageAdditions(t *testing.T) {
 	t.Parallel()
 
@@ -47,8 +50,8 @@ func TestReplicateOfficialImageAdditions(t *testing.T) {
 		{model: "wan-video/wan-2.7-image", price: 0.03, supportsEdit: true},
 		{model: "wan-video/wan-2.7-image-pro", price: 0.03, supportsEdit: true},
 		{model: "xai/grok-imagine-image", price: 0.02, supportsEdit: true},
-		{model: "xai/grok-imagine-image-quality", price: 0.07, supportsEdit: true},
-		{model: "xai/grok-imagine-image-2", price: 0.04, supportsEdit: true},
+		{model: "xai/grok-imagine-image-quality", price: 0.07},
+		{model: "xai/grok-imagine-image-2", price: 0.04},
 	}
 
 	for _, tt := range tests {
@@ -63,26 +66,36 @@ func TestReplicateOfficialImageAdditions(t *testing.T) {
 			require.Equal(t, []string{"image"}, cfg.OutputModalities)
 			if tt.supportsEdit {
 				require.Contains(t, cfg.InputModalities, "image")
+			} else {
+				require.NotContains(t, cfg.InputModalities, "image")
 			}
 		})
 	}
 
 	seedream := ModelRatios["bytedance/seedream-5-pro"].Image
 	require.Equal(t, "2K", seedream.DefaultSize)
-	require.InDelta(t, 0.5, seedream.SizeMultipliers["1K"], 1e-12)
-	require.InDelta(t, 1.0, seedream.SizeMultipliers["2K"], 1e-12)
+	require.NotContains(t, seedream.SizeMultipliers, "1k")
+	require.InDelta(t, 1.0, seedream.SizeMultipliers["2k"], 1e-12)
+
+	nanoBananaLite := ModelRatios["google/nano-banana-2-lite"].Image
+	require.Equal(t, "1K", nanoBananaLite.DefaultSize)
+	require.InDelta(t, 1.0, nanoBananaLite.SizeMultipliers["1k"], 1e-12)
 
 	gptImage := ModelRatios["openai/gpt-image-1.5"].Image
 	require.Equal(t, "auto", gptImage.DefaultQuality)
-	require.InDelta(t, 0.013/0.136, gptImage.QualityMultipliers["low"], 1e-12)
-	require.InDelta(t, 0.05/0.136, gptImage.QualityMultipliers["medium"], 1e-12)
+	require.NotContains(t, gptImage.QualityMultipliers, "low")
+	require.NotContains(t, gptImage.QualityMultipliers, "medium")
+	require.InDelta(t, 1.0, gptImage.QualityMultipliers["auto"], 1e-12)
+	require.InDelta(t, 1.0, gptImage.QualityMultipliers["high"], 1e-12)
 
 	grokQuality := ModelRatios["xai/grok-imagine-image-quality"].Image
 	require.Equal(t, "2k", grokQuality.DefaultSize)
-	require.InDelta(t, 0.05/0.07, grokQuality.SizeMultipliers["1k"], 1e-12)
+	require.NotContains(t, grokQuality.SizeMultipliers, "1k")
 	require.InDelta(t, 1.0, grokQuality.SizeMultipliers["2k"], 1e-12)
 
 	grok2 := ModelRatios["xai/grok-imagine-image-2"].Image
 	require.Equal(t, "2k", grok2.DefaultSize)
 	require.Equal(t, "medium", grok2.DefaultQuality)
+	require.InDelta(t, 1.0, grok2.SizeMultipliers["2k"], 1e-12)
+	require.InDelta(t, 1.0, grok2.QualityMultipliers["medium"], 1e-12)
 }
