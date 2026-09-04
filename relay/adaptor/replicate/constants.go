@@ -81,12 +81,13 @@ func replicateImageConfig(pricePerImage float64) *adaptor.ImagePricingConfig {
 // Replicate collection pages are treated additively for discovery; absence from a collection is not used for removals.
 //
 // The map is assembled in init() from family-specific maps declared in
-// constants_image*.go and constants_language.go to keep individual files under
+// constants_image*.go and constants_language*.go to keep individual files under
 // the 800-line project guideline.
 //
 // Sources consulted:
 //   - https://replicate.com/explore
 //   - https://replicate.com/collections/text-to-image
+//   - https://replicate.com/collections/language-models
 //   - Per-model pages under https://replicate.com/<owner>/<model>
 //   - HuggingFace cards for open-weight models (referenced via HuggingFaceID)
 //
@@ -103,13 +104,21 @@ var ModelList []string
 // Source: https://replicate.com/pricing
 var ReplicateToolingDefaults = adaptor.ChannelToolConfig{}
 
-// init assembles ModelRatios from per-family maps and derives ModelList. The
-// assembly is deterministic across runs because Go map iteration in
-// adaptor.GetModelListFromPricing already produces stable identity and callers
-// do not assume ordering. It takes no parameters and returns no values.
+// init assembles ModelRatios from per-family maps, applies temporary pricing
+// windows, and derives ModelList. The assembly is deterministic across runs
+// because callers do not assume map iteration order. It takes no parameters and
+// returns no values.
 func init() {
 	maps.Copy(ModelRatios, replicateImageModelRatios)
 	maps.Copy(ModelRatios, replicateOfficialImageAdditions)
 	maps.Copy(ModelRatios, replicateLanguageModelRatios)
+	for modelName, windows := range replicateLanguagePricingAdjustments {
+		config, ok := ModelRatios[modelName]
+		if !ok {
+			continue
+		}
+		config.TimeWindows = append(config.TimeWindows, windows...)
+		ModelRatios[modelName] = config
+	}
 	ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 }
