@@ -2,10 +2,10 @@ package replicate
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// replicateOfficialImageAdditions contains fixed-price Replicate Official image
-// endpoints that are absent from the original catalog snapshot. Models whose
-// current multi-property billing cannot be represented by ImagePricingConfig are
-// intentionally excluded rather than assigned an estimated price.
+// replicateOfficialImageAdditions contains Replicate Official image endpoints
+// whose deterministic output pricing can be represented by ImagePricingConfig.
+// Models or request modes with unrepresentable provider charges are intentionally
+// excluded rather than assigned an estimated or underpriced configuration.
 var replicateOfficialImageAdditions = map[string]adaptor.ModelConfig{
 	"black-forest-labs/flux-kontext-max": {
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.08),
@@ -13,19 +13,20 @@ var replicateOfficialImageAdditions = map[string]adaptor.ModelConfig{
 		Description: "FLUX.1 Kontext [max] premium text-guided image editing model with improved typography.",
 	},
 	"bytedance/seedream-5-pro": {
-		// Replicate bills 1K outputs at $0.045 and 2K outputs at $0.09.
+		// Replicate also offers a discounted 1K tier, but the current relay does
+		// not forward Seedream's model-specific size field. Expose only the 2K
+		// upstream default so every accepted request is billed at provider cost.
 		Ratio: 0, CompletionRatio: 1.0,
 		Image: &adaptor.ImagePricingConfig{
 			PricePerImageUsd: 0.09,
 			DefaultSize:      "2K",
 			MinImages:        1,
 			SizeMultipliers: map[string]float64{
-				"1K": 0.5,
-				"2K": 1.0,
+				"2k": 1.0,
 			},
 		},
 		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
-		Description: "ByteDance Seedream 5.0 Pro image generation and editing model with 1K and 2K output tiers.",
+		Description: "ByteDance Seedream 5.0 Pro image generation and editing model using the upstream-default 2K output tier.",
 	},
 	"google/nano-banana": {
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.039),
@@ -38,26 +39,29 @@ var replicateOfficialImageAdditions = map[string]adaptor.ModelConfig{
 			PricePerImageUsd: 0.034,
 			DefaultSize:      "1K",
 			MinImages:        1,
+			SizeMultipliers: map[string]float64{
+				"1k": 1.0,
+			},
 		},
 		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
 		Description: "Google Nano Banana 2 Lite fast 1K image generation and editing model with multi-image references.",
 	},
 	"openai/gpt-image-1.5": {
-		// Replicate exposes quality tiers: auto/high $0.136, medium $0.05, low $0.013.
+		// Replicate also offers discounted low and medium tiers, but the current
+		// relay does not forward the quality selector. Accept only auto/high,
+		// which share the $0.136 output price, to prevent underbilling.
 		Ratio: 0, CompletionRatio: 1.0,
 		Image: &adaptor.ImagePricingConfig{
 			PricePerImageUsd: 0.136,
 			DefaultQuality:   "auto",
 			MinImages:        1,
 			QualityMultipliers: map[string]float64{
-				"low":    0.013 / 0.136,
-				"medium": 0.05 / 0.136,
-				"high":   1.0,
-				"auto":   1.0,
+				"auto": 1.0,
+				"high": 1.0,
 			},
 		},
 		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
-		Description: "OpenAI GPT Image 1.5 generation and editing model with low, medium, and high quality tiers.",
+		Description: "OpenAI GPT Image 1.5 generation and editing model using the auto/high output price.",
 	},
 	"recraft-ai/recraft-v4": {
 		Ratio: 0, CompletionRatio: 1.0,
@@ -135,32 +139,39 @@ var replicateOfficialImageAdditions = map[string]adaptor.ModelConfig{
 		Description: "xAI Grok Imagine Image fast image generation and editing model with strong text rendering.",
 	},
 	"xai/grok-imagine-image-quality": {
-		// Replicate bills 1K outputs at $0.05 and 2K outputs at $0.07. Editing
-		// adds $0.01 per input image, which the current metadata schema cannot encode.
+		// Replicate also offers a discounted 1K tier and charges $0.01 per input
+		// image for edits. The current relay forwards neither the resolution field
+		// nor the edit surcharge, so expose only 2K text-to-image generation.
 		Ratio: 0, CompletionRatio: 1.0,
 		Image: &adaptor.ImagePricingConfig{
 			PricePerImageUsd: 0.07,
 			DefaultSize:      "2k",
 			MinImages:        1,
 			SizeMultipliers: map[string]float64{
-				"1k": 0.05 / 0.07,
 				"2k": 1.0,
 			},
 		},
-		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
-		Description: "xAI Grok Imagine Image Quality high-fidelity generation and editing model with 1K and 2K tiers.",
+		InputModalities: imageInputs, OutputModalities: imageOutputs,
+		Description: "xAI Grok Imagine Image Quality high-fidelity text-to-image model using the upstream-default 2K tier.",
 	},
 	"xai/grok-imagine-image-2": {
-		// Replicate bills $0.04 per output image and an additional $0.01 per input
-		// image for edits; the input-image surcharge is not representable here.
+		// Replicate charges $0.01 per input image for edits. The current pricing
+		// schema cannot represent that surcharge, so expose generation only and
+		// restrict metadata to the upstream-default 2K/medium request settings.
 		Ratio: 0, CompletionRatio: 1.0,
 		Image: &adaptor.ImagePricingConfig{
 			PricePerImageUsd: 0.04,
 			DefaultSize:      "2k",
 			DefaultQuality:   "medium",
 			MinImages:        1,
+			SizeMultipliers: map[string]float64{
+				"2k": 1.0,
+			},
+			QualityMultipliers: map[string]float64{
+				"medium": 1.0,
+			},
 		},
-		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
-		Description: "xAI Grok Imagine Image 2.0 generation and editing model with selectable quality and output up to 2K.",
+		InputModalities: imageInputs, OutputModalities: imageOutputs,
+		Description: "xAI Grok Imagine Image 2.0 text-to-image model using the upstream-default 2K medium-quality settings.",
 	},
 }
