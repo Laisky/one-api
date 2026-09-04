@@ -21,9 +21,9 @@ var replicateLanguagePricingAdjustments = map[string][]adaptor.TimeWindow{
 				{Start: "00:00", End: "00:00"},
 			},
 			Overlay: adaptor.ModelConfig{
-				Ratio:              2.50 * ratio.MilliTokensUsd,
-				CachedInputRatio:   0.25 * ratio.MilliTokensUsd,
-				CompletionRatio:    15.00 / 2.50,
+				Ratio:            2.50 * ratio.MilliTokensUsd,
+				CompletionRatio:  15.00 / 2.50,
+				CachedInputRatio: 0.25 * ratio.MilliTokensUsd,
 			},
 		},
 	},
