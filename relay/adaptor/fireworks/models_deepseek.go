@@ -6,9 +6,10 @@ import (
 )
 
 // deepseekModels contains DeepSeek family models served by Fireworks. Sources:
-//   - https://app.fireworks.ai/models/fireworks/deepseek-v4-pro-0813
-//   - https://app.fireworks.ai/models/fireworks/deepseek-v4-flash-0731
-//   - Historical per-model cards under https://app.fireworks.ai/models/{fireworks,deepseek-ai}/...
+//   - https://fireworks.ai/models/deepseek-ai/deepseek-v4-pro-0813
+//   - https://fireworks.ai/models/deepseek-ai/deepseek-v4-flash-0731
+//   - https://fireworks.ai/models/deepseek-ai/deepseek-v4-flash-vision-exp
+//   - Historical per-model cards under https://fireworks.ai/models/{fireworks,deepseek-ai}/...
 var deepseekModels = map[string]adaptor.ModelConfig{
 	// Official DeepSeek V4 releases (August 2026).
 	"accounts/fireworks/models/deepseek-v4-pro-0813": {
@@ -26,9 +27,9 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		Description:                 "Official DeepSeek V4 Pro release (1.6T MoE) with DSpark speculative decoding, 1M-token context, stronger production agent performance, and function calling.",
 	},
 	"accounts/fireworks/models/deepseek-v4-flash-0731": {
-		Ratio:                       0.14 * ratio.MilliTokensUsd,
-		CompletionRatio:             0.28 / 0.14,
-		CachedInputRatio:            0.028 * ratio.MilliTokensUsd,
+		Ratio:                       0.22 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.66 / 0.22,
+		CachedInputRatio:            0.007 * ratio.MilliTokensUsd,
 		ContextLength:               1048576,
 		MaxOutputTokens:             131072,
 		InputModalities:             fwTextOnlyModalities,
@@ -39,8 +40,20 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash-0731",
 		Description:                 "Official DeepSeek V4 Flash release (304B MoE) with DSpark speculative decoding, 1M-token context, enhanced agentic capability, and function calling.",
 	},
+	"accounts/fireworks/models/deepseek-v4-flash-vision-exp": {
+		Ratio:                       0.22 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.66 / 0.22,
+		CachedInputRatio:            0.007 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		InputModalities:             fwTextImageInModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+		Description:                 "Experimental DeepSeek V4 Flash multimodal release (305B MoE) with image input, DSpark speculative decoding, 1M-token context, and function calling.",
+	},
 
-	// DeepSeek V4 Pro preview — $1.74 in / $3.48 out, discounted cached input listed separately.
+	// DeepSeek V4 Pro preview — retained for on-demand compatibility.
 	"accounts/fireworks/models/deepseek-v4-pro": {
 		Ratio:                       1.74 * ratio.MilliTokensUsd,
 		CompletionRatio:             3.48 / 1.74,
@@ -53,7 +66,7 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwReasoningSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Pro",
-		Description:                 "DeepSeek V4 Pro preview (1.6T MoE) with hybrid attention and 1M-token context. Still listed on Fireworks serverless as of 2026-08-18, but superseded by deepseek-v4-pro-0813.",
+		Description:                 "DeepSeek V4 Pro preview (1.6T MoE) with hybrid attention and 1M-token context. Fireworks now marks this preview as on-demand only; use deepseek-v4-pro-0813 for serverless inference.",
 	},
 
 	// DeepSeek V3 family — $0.56 in / $1.68 out, 50% cached discount.
@@ -131,6 +144,6 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash",
-		Description:                 "DeepSeek V4 Flash preview with 1M-token context. No longer listed as serverless on 2026-08-18 and superseded by deepseek-v4-flash-0731; retained for dedicated/on-demand deployments.",
+		Description:                 "DeepSeek V4 Flash preview with 1M-token context. No longer listed as serverless and superseded by deepseek-v4-flash-0731; retained for dedicated/on-demand deployments.",
 	},
 }

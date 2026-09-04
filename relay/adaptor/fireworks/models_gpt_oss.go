@@ -6,14 +6,14 @@ import (
 )
 
 // gptOssModels contains OpenAI gpt-oss open-weight models hosted on Fireworks
-// (gpt-oss-120b, gpt-oss-20b). Sources:
-//   - https://app.fireworks.ai/models/fireworks/gpt-oss-120b
-//   - https://app.fireworks.ai/models/fireworks/gpt-oss-20b
+// (gpt-oss-120b and the on-demand-only gpt-oss-20b). Sources:
+//   - https://fireworks.ai/models/fireworks/gpt-oss-120b
+//   - https://fireworks.ai/models/fireworks/gpt-oss-20b
 var gptOssModels = map[string]adaptor.ModelConfig{
 	"accounts/fireworks/models/gpt-oss-120b": {
 		Ratio:                       0.15 * ratio.MilliTokensUsd,
 		CompletionRatio:             0.60 / 0.15,
-		CachedInputRatio:            0.014 * ratio.MilliTokensUsd,
+		CachedInputRatio:            0.015 * ratio.MilliTokensUsd,
 		ContextLength:               131072,
 		MaxOutputTokens:             131072,
 		InputModalities:             fwTextOnlyModalities,
@@ -48,6 +48,6 @@ var gptOssModels = map[string]adaptor.ModelConfig{
 		DefaultReasoningEffort:    "medium",
 		Quantization:              "fp16",
 		HuggingFaceID:             "openai/gpt-oss-20b",
-		Description:               "OpenAI gpt-oss-20b compact open-weight MoE reasoning model for lower-latency agentic and developer use cases; Fireworks serverless does not expose function calling for this endpoint.",
+		Description:               "OpenAI gpt-oss-20b compact open-weight MoE reasoning model for lower-latency and specialized use cases. Fireworks now marks this model as on-demand only and does not expose function calling for the endpoint.",
 	},
 }
