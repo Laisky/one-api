@@ -49,7 +49,6 @@ var replicateOfficialImageAdditions = map[string]adaptor.ModelConfig{
 			PricePerImageUsd: 0.136,
 			DefaultQuality:   "auto",
 			MinImages:        1,
-			MaxImages:        10,
 			QualityMultipliers: map[string]float64{
 				"low":    0.013 / 0.136,
 				"medium": 0.05 / 0.136,
