@@ -108,7 +108,10 @@ func applyOpenAIModelCatalog202609(modelRatios map[string]adaptor.ModelConfig) m
 		},
 		InputModalities:  []string{"audio"},
 		OutputModalities: []string{"text"},
-		Description:      "GPT Transcribe: speech-to-text model for file and Realtime transcription.",
+		// response_format is limited to json/text on /v1/audio/transcriptions; srt, vtt and
+		// verbose_json are whisper-1 only. Upstream answers 400 unsupported_value otherwise.
+		// Source: https://developers.openai.com/api/docs/models/gpt-transcribe
+		Description: "GPT Transcribe: speech-to-text model for file and Realtime transcription; response_format json or text only (use whisper-1 for srt/vtt/verbose_json).",
 	}
 
 	modelRatios["gpt-live-transcribe"] = adaptor.ModelConfig{

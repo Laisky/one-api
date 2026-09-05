@@ -182,9 +182,12 @@ func Relay(c *gin.Context) {
 				zap.String("error_code", strings.TrimSpace(fmt.Sprint(bizErr.Code))),
 				zap.String("error_message_preview", errorMessagePreview),
 			)
+			// retry_skip_reason already carries the decision text; zap.Error would add
+			// one-api's own errors/v2 stack to a WARN line that reports a routing
+			// decision, not a fault.
 			lg.Warn("relay retry skipped after failure",
 				appendRelayFailureFields(relayLogParams,
-					zap.Error(err),
+					stacklessErrorField(err),
 					zap.Bool("user_originated", isUserSideRetrySkip),
 					zap.String("retry_skip_reason", err.Error()),
 				)...,

@@ -269,6 +269,10 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	req.Header.Set("Accept", c.Request.Header.Get("Accept"))
 
 	lg := gmw.GetLogger(c)
+	// Record what the caller actually asked for. The multipart body is excluded from
+	// the generic request logger, so without this an upstream parameter rejection
+	// leaves no gateway-side evidence of the request that caused it.
+	logAudioRequestParameters(c, relayMode, audioModel, &ttsRequest)
 	// Log upstream request for billing tracking
 	lg.Info("sending audio request to upstream channel",
 		zap.String("url", fullRequestURL),
