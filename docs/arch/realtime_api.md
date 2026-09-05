@@ -53,7 +53,13 @@ Key principles:
       handshake carrying both a protocol api key and an Authorization header with
       "You must only send one of protocol api key and Authorization header", which
       breaks every browser call. The same rule applies to the Responses WebSocket proxy.
-    - Any additional OpenAI-required headers for Realtime beta (transparent forward if needed)
+    - `OpenAI-Beta`: forwarded only when the client explicitly sent it. The relay must
+      not default `realtime=v1`. OpenAI removed the Realtime beta interface on
+      2026-05-12 and its GA migration guide says to drop the header; sending it
+      selects the retired beta schema, which rejects GA session fields such as
+      `session.type` with "Unknown parameter: 'session.type'". The same applies to the
+      `/v1/realtime/sessions` surface and to the legacy `openai-beta.realtime-v1`
+      subprotocol, which GA clients no longer send.
 
 - `session.update` frames must not contain `session.model`. The relay rejects them with
   `ws_model_switch_denied` and a 1008 close, because the model is bound at connect time by

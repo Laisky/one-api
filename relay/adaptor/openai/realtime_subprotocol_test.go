@@ -22,6 +22,7 @@ type capturedHandshake struct {
 	mu            sync.Mutex
 	authorization string
 	subprotocols  string
+	beta          string
 	seen          bool
 }
 
@@ -30,6 +31,13 @@ func (c *capturedHandshake) snapshot() (string, string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.authorization, c.subprotocols, c.seen
+}
+
+// betaHeader returns the recorded OpenAI-Beta value.
+func (c *capturedHandshake) betaHeader() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.beta
 }
 
 // newRecordingUpstream accepts one WebSocket upgrade and records its request headers.
@@ -41,6 +49,7 @@ func newRecordingUpstream(t *testing.T, got *capturedHandshake) *httptest.Server
 		got.mu.Lock()
 		got.authorization = r.Header.Get("Authorization")
 		got.subprotocols = r.Header.Get("Sec-WebSocket-Protocol")
+		got.beta = r.Header.Get("OpenAI-Beta")
 		got.seen = true
 		got.mu.Unlock()
 
@@ -120,6 +129,13 @@ func TestRealtimeHandler_DoesNotForwardClientAPIKeySubprotocol(t *testing.T) {
 
 	// The client must also never see its own key echoed back.
 	require.NotContains(t, clientConn.Subprotocol(), "openai-insecure-api-key")
+
+	// The Realtime beta interface was removed upstream on 2026-05-12. Defaulting
+	// the beta header selects the retired beta schema, which rejects GA session
+	// fields such as `session.type`, so a client that did not ask for it must not
+	// get it.
+	require.Empty(t, got.betaHeader(),
+		"the proxy must not invent an OpenAI-Beta header for a GA client")
 
 	_ = clientConn.WriteMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))

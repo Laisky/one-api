@@ -125,7 +125,11 @@ func RealtimeSessionsHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWit
 	}
 	req.Header.Set("Authorization", "Bearer "+meta.APIKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("OpenAI-Beta", "realtime=v1")
+	// No OpenAI-Beta header: the Realtime beta interface was removed upstream,
+	// and sending it selects the retired beta schema.
+	if beta := c.GetHeader("OpenAI-Beta"); beta != "" {
+		req.Header.Set("OpenAI-Beta", beta)
+	}
 
 	// Send request to upstream
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -212,11 +216,13 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	if sp := NegotiateRealtimeSubprotocols(c.Request); len(sp) > 0 {
 		requestHeader.Set("Sec-WebSocket-Protocol", strings.Join(sp, ", "))
 	}
+	// Only mirror OpenAI-Beta when the client explicitly asked for it. The
+	// Realtime beta interface was removed on 2026-05-12, and OpenAI's GA
+	// migration guide says to drop the header. Defaulting it selects the beta
+	// event schema, which rejects GA fields such as `session.type` with
+	// "Unknown parameter: 'session.type'".
 	if beta := c.GetHeader("OpenAI-Beta"); beta != "" {
 		requestHeader.Set("OpenAI-Beta", beta)
-	} else {
-		// Default beta header required by OpenAI Realtime during beta period
-		requestHeader.Set("OpenAI-Beta", "realtime=v1")
 	}
 	requestHeader.Set("Authorization", "Bearer "+meta.APIKey)
 
