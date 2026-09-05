@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/utils"
 )
 
 // Trace represents a request tracing record with key timestamps
@@ -79,7 +80,10 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 		RequestReceived: &now,
 	}
 
-	sanitizedURL := common.SanitizeURLForLogging(url)
+	// URL.String() keeps the raw query bytes, so a request line such as
+	// "GET /?a=\xc0" reaches here as invalid UTF-8; MySQL/PostgreSQL text
+	// columns and OTLP span attributes both reject that.
+	sanitizedURL := utils.ToValidUTF8(common.SanitizeURLForLogging(url))
 	urlToStore, truncated := enforceTraceURLLimit(sanitizedURL)
 	if truncated {
 		lg.Warn("trace url truncated to max length",
@@ -396,16 +400,14 @@ func (t *Trace) GetTraceTimestamps() (*TraceTimestamps, error) {
 	return &timestamps, nil
 }
 
-// enforceTraceURLLimit truncates URLs longer than maxTraceURLLength while preserving UTF-8 boundaries.
+// enforceTraceURLLimit truncates URLs longer than maxTraceURLLength bytes on a
+// UTF-8 rune boundary, so the stored value never exceeds the column budget and
+// never ends in a split multi-byte character.
+// Parameters: raw is the sanitized URL. Return values: the bounded URL and
+// whether it was truncated.
 func enforceTraceURLLimit(raw string) (string, bool) {
 	if len(raw) <= maxTraceURLLength {
 		return raw, false
 	}
-
-	runes := []rune(raw)
-	if len(runes) <= maxTraceURLLength {
-		return raw[:maxTraceURLLength], true
-	}
-
-	return string(runes[:maxTraceURLLength]), true
+	return utils.TruncateUTF8(raw, maxTraceURLLength), true
 }

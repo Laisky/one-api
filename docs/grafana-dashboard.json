@@ -2532,8 +2532,8 @@
           },
           "targets": [
             {
-              "expr": "sum(rate(one_api_rate_limit_hits_total[$__rate_interval])) by (type)",
-              "legendFormat": "{{type}}",
+              "expr": "sum(rate(one_api_rate_limit_hits_total[$__rate_interval])) by (limit_type)",
+              "legendFormat": "{{limit_type}}",
               "refId": "A"
             }
           ],

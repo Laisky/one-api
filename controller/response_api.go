@@ -15,7 +15,7 @@ func RelayResponseGet(c *gin.Context) {
 	meta := metalib.GetByContext(c)
 	startTime := time.Now()
 
-	PrometheusMonitor.RecordChannelRequest(meta, startTime)
+	defer PrometheusMonitor.RecordChannelRequest(meta)()
 
 	if bizErr := rcontroller.RelayResponseAPIGetHelper(c); bizErr != nil {
 		PrometheusMonitor.RecordRelayRequest(c, meta, startTime, false, 0, 0, 0)
@@ -36,7 +36,7 @@ func RelayResponseDelete(c *gin.Context) {
 	meta := metalib.GetByContext(c)
 	startTime := time.Now()
 
-	PrometheusMonitor.RecordChannelRequest(meta, startTime)
+	defer PrometheusMonitor.RecordChannelRequest(meta)()
 
 	if bizErr := rcontroller.RelayResponseAPIDeleteHelper(c); bizErr != nil {
 		PrometheusMonitor.RecordRelayRequest(c, meta, startTime, false, 0, 0, 0)
@@ -57,7 +57,7 @@ func RelayResponseCancel(c *gin.Context) {
 	meta := metalib.GetByContext(c)
 	startTime := time.Now()
 
-	PrometheusMonitor.RecordChannelRequest(meta, startTime)
+	defer PrometheusMonitor.RecordChannelRequest(meta)()
 
 	if bizErr := rcontroller.RelayResponseAPICancelHelper(c); bizErr != nil {
 		PrometheusMonitor.RecordRelayRequest(c, meta, startTime, false, 0, 0, 0)

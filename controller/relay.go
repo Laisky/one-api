@@ -110,7 +110,7 @@ func Relay(c *gin.Context) {
 	requestId := c.GetString(helper.RequestIdKey)
 
 	// Track channel request in flight
-	PrometheusMonitor.RecordChannelRequest(relayMeta, startTime)
+	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
 
 	bizErr := invokeRelayHelper(c, relayMode)
 	if bizErr == nil {

@@ -15,6 +15,7 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/metrics"
+	"github.com/Laisky/one-api/common/utils"
 )
 
 // MetricsAuth protects the /metrics endpoint with a dedicated Bearer token.
@@ -87,8 +88,9 @@ func PrometheusMiddleware() gin.HandlerFunc {
 // are truncated on a rune boundary and suffixed with "...".
 const maxPathLabelBytes = 100
 
-// maxDistinctPathLabels bounds how many distinct normalized paths may become
-// metric label values over the lifetime of the process.
+// defaultMaxDistinctPathLabels bounds how many distinct normalized paths may
+// become metric label values over the lifetime of the process when
+// METRICS_MAX_PATH_LABELS is unset or non-positive.
 //
 // Why: every distinct path label creates permanent time series (a histogram
 // alone is buckets+2 series per path/method/status) in both the Prometheus
@@ -97,11 +99,21 @@ const maxPathLabelBytes = 100
 // ...). Legitimate traffic uses a few hundred distinct normalized paths at most
 // (API routes with ids collapsed, /v1 relay routes collapsed, frontend assets),
 // so this cap only engages under abuse.
-const maxDistinctPathLabels = 1000
+const defaultMaxDistinctPathLabels = 1000
 
-// overflowPathLabel is the path label used once maxDistinctPathLabels distinct
-// paths have been seen. It mirrors the existing "/v1/other" placeholder.
+// overflowPathLabel is the path label used once the distinct path cap has been
+// reached. It mirrors the existing "/v1/other" placeholder.
 const overflowPathLabel = "/other"
+
+// effectivePathLabelLimit resolves the configured METRICS_MAX_PATH_LABELS value,
+// falling back to defaultMaxDistinctPathLabels for non-positive input.
+// Parameters: configured is config.MetricsMaxPathLabels. Return value: the cap.
+func effectivePathLabelLimit(configured int) int {
+	if configured <= 0 {
+		return defaultMaxDistinctPathLabels
+	}
+	return configured
+}
 
 // pathLabelSet tracks the distinct path labels emitted so far and folds any
 // new path beyond its limit into overflowPathLabel.
@@ -113,7 +125,7 @@ type pathLabelSet struct {
 }
 
 // pathLabels is the process-wide path label set used by PrometheusMiddleware.
-var pathLabels = newPathLabelSet(maxDistinctPathLabels)
+var pathLabels = newPathLabelSet(effectivePathLabelLimit(config.MetricsMaxPathLabels))
 
 // newPathLabelSet creates a pathLabelSet that admits at most limit distinct
 // labels.
@@ -216,24 +228,10 @@ func normalizePath(path string) string {
 
 	// Limit path length to prevent extremely long paths
 	if len(path) > maxPathLabelBytes {
-		return truncateOnRuneBoundary(path, maxPathLabelBytes) + "..."
+		return utils.TruncateUTF8(path, maxPathLabelBytes) + "..."
 	}
 
 	return path
-}
-
-// truncateOnRuneBoundary returns the longest prefix of s that is at most
-// maxBytes long and does not end in the middle of a multi-byte rune, so a
-// truncated valid string stays valid UTF-8.
-func truncateOnRuneBoundary(s string, maxBytes int) string {
-	if len(s) <= maxBytes {
-		return s
-	}
-	cut := maxBytes
-	for cut > 0 && !utf8.RuneStart(s[cut]) {
-		cut--
-	}
-	return s[:cut]
 }
 
 // isNumeric checks if a string is numeric

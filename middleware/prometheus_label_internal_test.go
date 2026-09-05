@@ -165,3 +165,10 @@ func TestPrometheusMiddlewareBucketsScannerPathsAfterCap(t *testing.T) {
 	}
 	require.Equal(t, map[string]bool{"/cap-test/.env": true, "/cap-test/.aws/credentials": true, overflowPathLabel: true}, seen)
 }
+
+// TestEffectivePathLabelLimit pins the METRICS_MAX_PATH_LABELS fallback rule.
+func TestEffectivePathLabelLimit(t *testing.T) {
+	require.Equal(t, defaultMaxDistinctPathLabels, effectivePathLabelLimit(0))
+	require.Equal(t, defaultMaxDistinctPathLabels, effectivePathLabelLimit(-5))
+	require.Equal(t, 250, effectivePathLabelLimit(250))
+}

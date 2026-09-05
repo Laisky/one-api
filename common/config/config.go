@@ -974,6 +974,17 @@ var (
 	// Default: "" (metrics endpoint blocked)
 	MetricsToken = strings.TrimSpace(env.String("METRICS_TOKEN", ""))
 
+	// MetricsMaxPathLabels bounds how many distinct normalized request paths
+	// may become HTTP metric "path" label values per process; further paths are
+	// recorded under "/other". Legitimate traffic uses a few hundred distinct
+	// normalized paths, while vulnerability scanners probe thousands, each of
+	// which would otherwise create permanent time series. Non-positive values
+	// fall back to the default.
+	//
+	// Environment variable: METRICS_MAX_PATH_LABELS
+	// Default: 1000
+	MetricsMaxPathLabels = env.Int("METRICS_MAX_PATH_LABELS", 1000)
+
 	// EnablePprof exposes the Go net/http/pprof profiling endpoints on a
 	// dedicated listener (see PprofListen) when true. Use it to debug live
 	// memory/CPU/goroutine usage with `go tool pprof`. Disabled by default

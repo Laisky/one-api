@@ -2,6 +2,7 @@ package controller
 
 import (
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -60,22 +61,29 @@ func (p *PrometheusRelayMonitor) RecordRelayRequest(c *gin.Context, meta *meta.M
 	}
 }
 
-// RecordChannelRequest tracks channel-specific request metrics
-func (p *PrometheusRelayMonitor) RecordChannelRequest(meta *meta.Meta, startTime time.Time) {
+// RecordChannelRequest marks one request in flight on the channel and returns
+// the function that marks it finished. Callers invoke the returned function when
+// the request completes (typically `defer PrometheusMonitor.RecordChannelRequest(meta)()`);
+// it is safe to call more than once and only the first call decrements.
+//
+// Why: the previous implementation parked one goroutine per request for up to a
+// minute to decrement the gauge on a timer, which measured "started in the last
+// minute" rather than "in flight" and held thousands of goroutines at production
+// request rates.
+// Parameters: meta identifies the channel. Return value: the completion callback.
+func (p *PrometheusRelayMonitor) RecordChannelRequest(meta *meta.Meta) func() {
 	channelIdStr := strconv.Itoa(meta.ChannelId)
 	channelType := channeltype.IdToName(meta.ChannelType)
 	channelName := "channel_" + channelIdStr // We might want to get actual channel name from DB
 
-	// Track requests in flight
 	metrics.Recorder().UpdateChannelRequestsInFlight(meta.ChannelId, channelName, channelType, 1)
 
-	// We'll update this when the request completes
-	go func() {
-		// Wait for request to complete (this is a simplified approach)
-		// In practice, you'd want to track this more precisely
-		time.Sleep(time.Until(startTime.Add(time.Minute))) // Max wait of 1 minute
-		metrics.Recorder().UpdateChannelRequestsInFlight(meta.ChannelId, channelName, channelType, -1)
-	}()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			metrics.Recorder().UpdateChannelRequestsInFlight(meta.ChannelId, channelName, channelType, -1)
+		})
+	}
 }
 
 // RecordError records an error metric

@@ -79,7 +79,7 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 		// time.Since will return negative number!
 		// See: https://stackoverflow.com/questions/50970900/why-is-time-since-returning-negative-durations-on-windows
 		if int64(nowTime.Sub(oldTime).Seconds()) < duration {
-			setRateLimitExceededHeaders(c, maxRequestNum, duration-int64(nowTime.Sub(oldTime).Seconds()))
+			setRateLimitExceededHeaders(c, mark, maxRequestNum, duration-int64(nowTime.Sub(oldTime).Seconds()))
 			rdb.Expire(ctx, key, config.RateLimitKeyExpirationDuration)
 			AbortWithError(c, http.StatusTooManyRequests, errors.New("rate limit exceeded"))
 		} else {
@@ -111,17 +111,20 @@ func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark s
 	}
 
 	if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
-		setRateLimitExceededHeaders(c, maxRequestNum, duration)
+		setRateLimitExceededHeaders(c, mark, maxRequestNum, duration)
 		AbortWithError(c, http.StatusTooManyRequests, errors.New("rate limit exceeded"))
 		return
 	}
 }
 
 // setRateLimitExceededHeaders attaches standard rate-limit metadata for a
-// rejected request. Parameters: c is the Gin request context, maxRequestNum is
+// rejected request and records which limiter rejected it (ctxkey.RateLimitMark)
+// for the metrics middleware. Parameters: c is the Gin request context, mark is
+// the limiter's short mark ("GW", "GR", "LB", ...), maxRequestNum is
 // the request allowance for the window, and resetSeconds is the retry delay in
 // seconds. Return value: none; the function mutates response headers.
-func setRateLimitExceededHeaders(c *gin.Context, maxRequestNum int, resetSeconds int64) {
+func setRateLimitExceededHeaders(c *gin.Context, mark string, maxRequestNum int, resetSeconds int64) {
+	c.Set(ctxkey.RateLimitMark, mark)
 	if resetSeconds < 1 {
 		resetSeconds = 1
 	}
@@ -277,7 +280,7 @@ func LowBalanceRelayRateLimit() func(c *gin.Context) {
 
 		if !allowed {
 			balanceUSD := float64(balance) / config.QuotaPerUnit
-			setRateLimitExceededHeaders(c, maxRequestNum, duration)
+			setRateLimitExceededHeaders(c, "LB", maxRequestNum, duration)
 			AbortWithError(c, http.StatusTooManyRequests, errors.Errorf(
 				"rate limit exceeded: your account balance ($%.4f) is below the $%.2f minimum, "+
 					"so a stricter limit of %d requests per %d seconds applies; "+

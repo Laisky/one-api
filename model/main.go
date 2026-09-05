@@ -279,6 +279,16 @@ func initPrimaryDatabase() error {
 		}
 	}
 
+	// Register the query-metrics hook before anything can issue a statement
+	// through the handle: gorm callback registration mutates the shared callback
+	// chain without locking, and the migrations below (plus the bootstrap workers
+	// they start) run queries concurrently with whatever main.go does next.
+	if config.EnablePrometheusMetrics || config.OpenTelemetryEnabled {
+		if err = registerDBMetricsHook(DB); err != nil {
+			return errors.Wrap(err, "register database metrics hook")
+		}
+	}
+
 	if config.DebugSQLEnabled {
 		logger.Logger.Debug("debug sql enabled")
 		DB = DB.Debug()

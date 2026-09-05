@@ -21,6 +21,7 @@ The Prometheus monitoring system provides detailed metrics about:
 
 - `ENABLE_PROMETHEUS_METRICS`: Enable/disable Prometheus metrics collection (default: `true`)
 - `METRICS_TOKEN`: Bearer token required to access the `/metrics` endpoint. When not set, the endpoint returns 403. (default: empty)
+- `METRICS_MAX_PATH_LABELS`: Maximum number of distinct normalized request paths recorded as `path` label values per process; further paths are counted under `/other`. Non-positive values fall back to the default. (default: `1000`)
 - `ENABLE_METRIC`: Enable/disable the existing channel monitoring system (default: `false`)
 
 ### Metrics Endpoint
@@ -64,6 +65,8 @@ scrape_configs:
 - `one_api_http_active_requests`: Gauge of currently active HTTP requests
 
 Labels: `path`, `method`, `status_code`
+
+The `path` label is normalized to bound cardinality: numeric ids, UUIDs and tokens under `/api/` become `:id`, `:uuid` and `:token`; relay routes collapse to their family (`/v1/chat/completions`, `/v1/images/:action`, `/v1/other`, ...); paths longer than 100 bytes are truncated on a UTF-8 boundary; any byte sequence that is not valid UTF-8 (for example a percent-encoded `%c0`) is replaced by U+FFFD; and once `METRICS_MAX_PATH_LABELS` distinct paths have been seen, every new path is recorded as `/other` (vulnerability scanners probe thousands of distinct paths).
 
 ### API Relay Metrics
 
@@ -117,10 +120,10 @@ Labels: `command`, `success`
 
 ### Rate Limiting Metrics
 
-- `one_api_rate_limit_hits_total`: Counter of rate limit hits
-- `one_api_rate_limit_remaining`: Gauge of remaining rate limit tokens
+- `one_api_rate_limit_hits_total`: Counter of responses rejected with HTTP 429
+- `one_api_rate_limit_remaining`: Reserved; not populated. It was previously fed from the client-supplied `X-RateLimit-Remaining` request header, which is untrusted input, so the series is no longer written.
 
-Labels: `type`, `identifier`
+Labels: `limit_type` (which limiter rejected the request: `web`, `api`, `critical`, `download`, `upload`, `relay`, `conversations`, `channel`, `low_balance`; `other` for a 429 not produced by a limiter, e.g. an upstream provider's 429 relayed to the client), `identifier` (what the limiter keys on: `ip`, `token`, `user`; `none` for `other`). Neither label carries a client IP, token or user id: those values are unbounded and would create one time series per caller.
 
 ### Model Usage Metrics
 

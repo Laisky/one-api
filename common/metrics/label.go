@@ -1,8 +1,7 @@
 package metrics
 
 import (
-	"strings"
-	"unicode/utf8"
+	"github.com/Laisky/one-api/common/utils"
 )
 
 // SanitizeLabelValue returns value with every run of invalid UTF-8 bytes
@@ -18,8 +17,5 @@ import (
 //
 // Valid strings are returned unchanged without allocating.
 func SanitizeLabelValue(value string) string {
-	if utf8.ValidString(value) {
-		return value
-	}
-	return strings.ToValidUTF8(value, "�")
+	return utils.ToValidUTF8(value)
 }

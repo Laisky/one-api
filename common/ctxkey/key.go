@@ -231,6 +231,13 @@ const (
 	// Read in: middleware/rate-limit to enforce QPS/RPM limits.
 	RateLimit = "rate_limit"
 
+	// RateLimitMark identifies which limiter rejected the request, using the
+	// limiter's short mark ("GW", "GA", "CT", "DW", "UP", "GR", "CV", "CR", "LB").
+	// Set in: middleware/rate-limit (setRateLimitExceededHeaders) on every 429 abort.
+	// Read in: middleware/rate_limit_prometheus to label the hit counter with a
+	// bounded limit type instead of the client IP.
+	RateLimitMark = "rate_limit_mark"
+
 	// ClaudeMessagesConversion flags that this request/response should be converted
 	// between Claude Messages API and another provider format.
 	// Set in: many non-Anthropic adaptors when supporting Claude Messages via conversion.

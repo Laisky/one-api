@@ -148,10 +148,9 @@ func main() {
 		}
 		logger.Logger.Info("monitoring initialized")
 
-		// Initialize database monitoring
-		if err := model.InitPrometheusDBMonitoring(); err != nil {
-			logger.Logger.Fatal("failed to initialize database monitoring", zap.Error(err))
-		}
+		// Database query metrics are attached in model.InitDB when the handle
+		// is opened, before any background worker can race the gorm callback
+		// registration; nothing to do here.
 
 		// Initialize Redis monitoring if enabled
 		if common.IsRedisEnabled() {

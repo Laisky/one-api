@@ -59,7 +59,7 @@ func RelayRealtime(c *gin.Context) {
 	relayMeta := meta.GetByContext(c)
 
 	// Record channel requests in flight
-	PrometheusMonitor.RecordChannelRequest(relayMeta, start)
+	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
 
 	// ── Step 1: Resolve pricing ─────────────────────────────────────────
 	var channelModelRatio map[string]float64
@@ -323,7 +323,7 @@ func RelayRealtimeSessions(c *gin.Context) {
 	start := time.Now()
 	relayMeta := meta.GetByContext(c)
 
-	PrometheusMonitor.RecordChannelRequest(relayMeta, start)
+	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
 
 	if relayMeta.APIType != apitype.OpenAI {
 		// GLM-Realtime authenticates with the API key directly over WebSocket
