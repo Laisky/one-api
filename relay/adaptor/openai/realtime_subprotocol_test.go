@@ -141,3 +141,110 @@ func TestRealtimeHandler_DoesNotForwardClientAPIKeySubprotocol(t *testing.T) {
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	_ = rmodel.Usage{}
 }
+
+// TestRealtimeHandler_ForwardsGASessionUpdateUnchanged drives the exact first frame
+// the GPTChat browser client sends and asserts the relay hands it to OpenAI intact.
+// This covers the whole browser-to-upstream path in one place: browser subprotocol
+// auth, credential hygiene on the upstream handshake, absence of the retired beta
+// header, and the session-model guard accepting a GA payload.
+func TestRealtimeHandler_ForwardsGASessionUpdateUnchanged(t *testing.T) {
+	t.Parallel()
+
+	// Byte-for-byte the payload from createRealtimeSessionUpdate in
+	// web/src/pages/gptchat/audio/realtime-session.ts, with the model field absent.
+	const gaSessionUpdate = `{"type":"session.update","session":{` +
+		`"type":"realtime","output_modalities":["audio"],"instructions":"Be brief.",` +
+		`"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},` +
+		`"turn_detection":{"type":"semantic_vad","create_response":true,"interrupt_response":true}},` +
+		`"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"marin"}},` +
+		`"tools":[{"type":"function","name":"end_call","description":"End this voice call.",` +
+		`"parameters":{"type":"object","properties":{"reason":{"type":"string"}},` +
+		`"required":["reason"],"additionalProperties":false}}],"tool_choice":"auto"}}`
+
+	got := &capturedHandshake{}
+	relayed := make(chan string, 4)
+
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.mu.Lock()
+		got.authorization = r.Header.Get("Authorization")
+		got.subprotocols = r.Header.Get("Sec-WebSocket-Protocol")
+		got.beta = r.Header.Get("OpenAI-Beta")
+		got.seen = true
+		got.mu.Unlock()
+
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			select {
+			case relayed <- string(msg):
+			default:
+			}
+			// Acknowledge the way the GA API does.
+			_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"session.updated"}`))
+		}
+	}))
+	defer upstream.Close()
+
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gin.SetMode(gin.TestMode)
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = r
+		c.Writer = &ginResponseWriter{w: w, ResponseWriter: c.Writer}
+
+		meta := &rmeta.Meta{
+			Mode:            relaymode.Realtime,
+			BaseURL:         upstream.URL,
+			APIKey:          "sk-channel-key",
+			ActualModelName: "gpt-realtime-2.1",
+		}
+		if bizErr, _ := RealtimeHandler(c, meta); bizErr != nil {
+			return
+		}
+	}))
+	defer proxy.Close()
+
+	wsURL := strings.Replace(proxy.URL, "http://", "ws://", 1) +
+		"/v1/realtime?model=gpt-realtime-2.1"
+	dialer := websocket.Dialer{
+		HandshakeTimeout: 5 * time.Second,
+		Subprotocols:     []string{"realtime", "openai-insecure-api-key.sk-browser-token"},
+	}
+	clientConn, _, err := dialer.Dial(wsURL, nil)
+	require.NoError(t, err)
+	defer clientConn.Close()
+
+	require.NoError(t, clientConn.WriteMessage(websocket.TextMessage, []byte(gaSessionUpdate)))
+
+	// The guard must not reject a GA payload, so the acknowledgement comes back.
+	clientConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, ack, err := clientConn.ReadMessage()
+	require.NoError(t, err, "a GA session.update must not be rejected by the model guard")
+	require.JSONEq(t, `{"type":"session.updated"}`, string(ack))
+
+	select {
+	case frame := <-relayed:
+		require.JSONEq(t, gaSessionUpdate, frame,
+			"the relay must forward the GA session.update byte-equivalent")
+	case <-time.After(5 * time.Second):
+		t.Fatal("upstream never received the session.update frame")
+	}
+
+	authorization, subprotocols, seen := got.snapshot()
+	require.True(t, seen)
+	require.Equal(t, "Bearer sk-channel-key", authorization)
+	require.NotContains(t, subprotocols, "openai-insecure-api-key")
+	require.Empty(t, got.betaHeader(),
+		"OpenAI answers a beta header on the GA path with "+
+			"\"The Realtime Beta API is no longer supported\"")
+
+	_ = clientConn.WriteMessage(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+}
