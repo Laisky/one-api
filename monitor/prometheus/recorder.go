@@ -291,13 +291,13 @@ var (
 // RecordHTTPRequest records HTTP request metrics
 func (p *PrometheusRecorder) RecordHTTPRequest(startTime time.Time, path, method, statusCode string) {
 	duration := time.Since(startTime).Seconds()
-	httpRequestDuration.WithLabelValues(path, method, statusCode).Observe(duration)
-	httpRequestsTotal.WithLabelValues(path, method, statusCode).Inc()
+	httpRequestDuration.WithLabelValues(labelValues(path, method, statusCode)...).Observe(duration)
+	httpRequestsTotal.WithLabelValues(labelValues(path, method, statusCode)...).Inc()
 }
 
 // RecordHTTPActiveRequest tracks active HTTP requests
 func (p *PrometheusRecorder) RecordHTTPActiveRequest(path, method string, delta float64) {
-	httpActiveRequests.WithLabelValues(path, method).Add(delta)
+	httpActiveRequests.WithLabelValues(labelValues(path, method)...).Add(delta)
 }
 
 // RecordRelayRequest records API relay request metrics
@@ -314,17 +314,17 @@ func (p *PrometheusRecorder) RecordRelayRequest(startTime time.Time, channelId i
 	_ = userId
 	_ = tokenId
 
-	relayRequestDuration.WithLabelValues(channelIdStr, channelType, model, group, apiFormat, apiType, successStr).Observe(duration)
-	relayRequestsTotal.WithLabelValues(channelIdStr, channelType, model, group, apiFormat, apiType, successStr).Inc()
+	relayRequestDuration.WithLabelValues(labelValues(channelIdStr, channelType, model, group, apiFormat, apiType, successStr)...).Observe(duration)
+	relayRequestsTotal.WithLabelValues(labelValues(channelIdStr, channelType, model, group, apiFormat, apiType, successStr)...).Inc()
 
 	if promptTokens > 0 {
-		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, group, apiFormat, apiType, "prompt").Add(float64(promptTokens))
+		relayTokensUsed.WithLabelValues(labelValues(channelIdStr, channelType, model, group, apiFormat, apiType, "prompt")...).Add(float64(promptTokens))
 	}
 	if completionTokens > 0 {
-		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, group, apiFormat, apiType, "completion").Add(float64(completionTokens))
+		relayTokensUsed.WithLabelValues(labelValues(channelIdStr, channelType, model, group, apiFormat, apiType, "completion")...).Add(float64(completionTokens))
 	}
 	if quotaUsed > 0 {
-		relayQuotaUsed.WithLabelValues(channelIdStr, channelType, model, group, apiFormat, apiType).Add(quotaUsed)
+		relayQuotaUsed.WithLabelValues(labelValues(channelIdStr, channelType, model, group, apiFormat, apiType)...).Add(quotaUsed)
 	}
 }
 
@@ -341,16 +341,16 @@ func (p *PrometheusRecorder) UpdateChannelMetrics(channelId int, channelName, ch
 		statusValue = 0
 	}
 
-	channelStatus.WithLabelValues(channelIdStr, channelName, channelType).Set(statusValue)
-	channelBalance.WithLabelValues(channelIdStr, channelName, channelType).Set(balance)
-	channelResponseTime.WithLabelValues(channelIdStr, channelName, channelType).Set(float64(responseTimeMs))
-	channelSuccessRate.WithLabelValues(channelIdStr, channelName, channelType).Set(successRate)
+	channelStatus.WithLabelValues(labelValues(channelIdStr, channelName, channelType)...).Set(statusValue)
+	channelBalance.WithLabelValues(labelValues(channelIdStr, channelName, channelType)...).Set(balance)
+	channelResponseTime.WithLabelValues(labelValues(channelIdStr, channelName, channelType)...).Set(float64(responseTimeMs))
+	channelSuccessRate.WithLabelValues(labelValues(channelIdStr, channelName, channelType)...).Set(successRate)
 }
 
 // UpdateChannelRequestsInFlight updates the number of requests currently being processed
 func (p *PrometheusRecorder) UpdateChannelRequestsInFlight(channelId int, channelName, channelType string, delta float64) {
 	channelIdStr := strconv.Itoa(channelId)
-	channelRequestsInFlight.WithLabelValues(channelIdStr, channelName, channelType).Add(delta)
+	channelRequestsInFlight.WithLabelValues(labelValues(channelIdStr, channelName, channelType)...).Add(delta)
 }
 
 // RecordUserMetrics records user-related metrics
@@ -363,15 +363,15 @@ func (p *PrometheusRecorder) RecordUserMetrics(userId, username, group string, q
 	_ = userId
 	_ = username
 
-	userRequestsTotal.WithLabelValues(group).Inc()
+	userRequestsTotal.WithLabelValues(labelValues(group)...).Inc()
 	if quotaUsed > 0 {
-		userQuotaUsed.WithLabelValues(group).Add(quotaUsed)
+		userQuotaUsed.WithLabelValues(labelValues(group)...).Add(quotaUsed)
 	}
 	if promptTokens > 0 {
-		userTokensUsed.WithLabelValues(group, "prompt").Add(float64(promptTokens))
+		userTokensUsed.WithLabelValues(labelValues(group, "prompt")...).Add(float64(promptTokens))
 	}
 	if completionTokens > 0 {
-		userTokensUsed.WithLabelValues(group, "completion").Add(float64(completionTokens))
+		userTokensUsed.WithLabelValues(labelValues(group, "completion")...).Add(float64(completionTokens))
 	}
 	// NOTE: per-user balance is intentionally NOT exported as a metric. Once
 	// user_id/username are dropped a per-group gauge would be last-write-wins
@@ -387,8 +387,8 @@ func (p *PrometheusRecorder) RecordDBQuery(startTime time.Time, operation, table
 	duration := time.Since(startTime).Seconds()
 	successStr := strconv.FormatBool(success)
 
-	dbQueryDuration.WithLabelValues(operation, table).Observe(duration)
-	dbQueriesTotal.WithLabelValues(operation, table, successStr).Inc()
+	dbQueryDuration.WithLabelValues(labelValues(operation, table)...).Observe(duration)
+	dbQueriesTotal.WithLabelValues(labelValues(operation, table, successStr)...).Inc()
 }
 
 // UpdateDBConnectionMetrics updates database connection metrics
@@ -402,8 +402,8 @@ func (p *PrometheusRecorder) RecordRedisCommand(startTime time.Time, command str
 	duration := time.Since(startTime).Seconds()
 	successStr := strconv.FormatBool(success)
 
-	redisCommandDuration.WithLabelValues(command).Observe(duration)
-	redisCommandsTotal.WithLabelValues(command, successStr).Inc()
+	redisCommandDuration.WithLabelValues(labelValues(command)...).Observe(duration)
+	redisCommandsTotal.WithLabelValues(labelValues(command, successStr)...).Inc()
 }
 
 // UpdateRedisConnectionMetrics updates Redis connection metrics
@@ -413,34 +413,34 @@ func (p *PrometheusRecorder) UpdateRedisConnectionMetrics(active int) {
 
 // RecordRateLimitHit records rate limiting metrics
 func (p *PrometheusRecorder) RecordRateLimitHit(limitType, identifier string) {
-	rateLimitHits.WithLabelValues(limitType, identifier).Inc()
+	rateLimitHits.WithLabelValues(labelValues(limitType, identifier)...).Inc()
 }
 
 // UpdateRateLimitRemaining updates remaining rate limit tokens
 func (p *PrometheusRecorder) UpdateRateLimitRemaining(limitType, identifier string, remaining int) {
-	rateLimitRemaining.WithLabelValues(limitType, identifier).Set(float64(remaining))
+	rateLimitRemaining.WithLabelValues(labelValues(limitType, identifier)...).Set(float64(remaining))
 }
 
 // RecordTokenAuth records token authentication attempts
 func (p *PrometheusRecorder) RecordTokenAuth(success bool) {
 	successStr := strconv.FormatBool(success)
-	tokenAuthAttempts.WithLabelValues(successStr).Inc()
+	tokenAuthAttempts.WithLabelValues(labelValues(successStr)...).Inc()
 }
 
 // UpdateActiveTokens updates the count of active tokens
 func (p *PrometheusRecorder) UpdateActiveTokens(userId, tokenName string, count int) {
-	activeTokens.WithLabelValues(userId, tokenName).Set(float64(count))
+	activeTokens.WithLabelValues(labelValues(userId, tokenName)...).Set(float64(count))
 }
 
 // RecordError records errors by type and component
 func (p *PrometheusRecorder) RecordError(errorType, component string) {
-	errorsTotal.WithLabelValues(errorType, component).Inc()
+	errorsTotal.WithLabelValues(labelValues(errorType, component)...).Inc()
 }
 
 // RecordModelUsage records model usage and latency
 func (p *PrometheusRecorder) RecordModelUsage(modelName, channelType string, latency time.Duration) {
-	modelUsage.WithLabelValues(modelName, channelType).Inc()
-	modelLatency.WithLabelValues(modelName, channelType).Observe(latency.Seconds())
+	modelUsage.WithLabelValues(labelValues(modelName, channelType)...).Inc()
+	modelLatency.WithLabelValues(labelValues(modelName, channelType)...).Observe(latency.Seconds())
 }
 
 // RecordBillingOperation records billing operation metrics
@@ -450,11 +450,11 @@ func (p *PrometheusRecorder) RecordBillingOperation(startTime time.Time, operati
 	channelIdStr := strconv.Itoa(channelId)
 	successStr := strconv.FormatBool(success)
 
-	billingOperationDuration.WithLabelValues(operation, successStr, userIdStr, channelIdStr, modelName).Observe(duration)
-	billingOperationsTotal.WithLabelValues(operation, successStr, userIdStr, channelIdStr, modelName).Inc()
+	billingOperationDuration.WithLabelValues(labelValues(operation, successStr, userIdStr, channelIdStr, modelName)...).Observe(duration)
+	billingOperationsTotal.WithLabelValues(labelValues(operation, successStr, userIdStr, channelIdStr, modelName)...).Inc()
 
 	if quotaAmount > 0 {
-		billingQuotaProcessed.WithLabelValues(operation, userIdStr, channelIdStr, modelName).Add(quotaAmount)
+		billingQuotaProcessed.WithLabelValues(labelValues(operation, userIdStr, channelIdStr, modelName)...).Add(quotaAmount)
 	}
 }
 
@@ -463,10 +463,10 @@ func (p *PrometheusRecorder) RecordBillingTimeout(userId int, channelId int, mod
 	userIdStr := strconv.Itoa(userId)
 	channelIdStr := strconv.Itoa(channelId)
 
-	billingTimeoutsTotal.WithLabelValues(userIdStr, channelIdStr, modelName).Inc()
+	billingTimeoutsTotal.WithLabelValues(labelValues(userIdStr, channelIdStr, modelName)...).Inc()
 
 	// Also record as a billing error
-	billingErrorsTotal.WithLabelValues("timeout", "post_consume", userIdStr, channelIdStr, modelName).Inc()
+	billingErrorsTotal.WithLabelValues(labelValues("timeout", "post_consume", userIdStr, channelIdStr, modelName)...).Inc()
 }
 
 // RecordBillingError records billing error events
@@ -474,14 +474,14 @@ func (p *PrometheusRecorder) RecordBillingError(errorType, operation string, use
 	userIdStr := strconv.Itoa(userId)
 	channelIdStr := strconv.Itoa(channelId)
 
-	billingErrorsTotal.WithLabelValues(errorType, operation, userIdStr, channelIdStr, modelName).Inc()
+	billingErrorsTotal.WithLabelValues(labelValues(errorType, operation, userIdStr, channelIdStr, modelName)...).Inc()
 }
 
 // UpdateBillingStats updates overall billing statistics
 func (p *PrometheusRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
-	billingStats.WithLabelValues("total_operations").Set(float64(totalBillingOperations))
-	billingStats.WithLabelValues("successful_operations").Set(float64(successfulBillingOperations))
-	billingStats.WithLabelValues("failed_operations").Set(float64(failedBillingOperations))
+	billingStats.WithLabelValues(labelValues("total_operations")...).Set(float64(totalBillingOperations))
+	billingStats.WithLabelValues(labelValues("successful_operations")...).Set(float64(successfulBillingOperations))
+	billingStats.WithLabelValues(labelValues("failed_operations")...).Set(float64(failedBillingOperations))
 }
 
 // RecordUUIDBackfillRows records rows processed by one external UUID backfill batch.
@@ -492,35 +492,35 @@ func (p *PrometheusRecorder) RecordUUIDBackfillRows(role, phase, target, result 
 	if count <= 0 {
 		return
 	}
-	uuidBackfillRowsTotal.WithLabelValues(role, phase, target, result).Add(float64(count))
+	uuidBackfillRowsTotal.WithLabelValues(labelValues(role, phase, target, result)...).Add(float64(count))
 }
 
 // UpdateUUIDBackfillBacklog publishes the last observed backlog for one target.
 //
 // role and target must be compile-time registry constants.
 func (p *PrometheusRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {
-	uuidBackfillLastBacklog.WithLabelValues(role, target).Set(backlog)
+	uuidBackfillLastBacklog.WithLabelValues(labelValues(role, target)...).Set(backlog)
 }
 
 // RecordUUIDBackfillCycle records one catch-up or finalizer cycle outcome and duration.
 //
 // role, mode, and result must be compile-time registry constants.
 func (p *PrometheusRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
-	uuidBackfillCycleDuration.WithLabelValues(role, mode, result).Observe(duration.Seconds())
+	uuidBackfillCycleDuration.WithLabelValues(labelValues(role, mode, result)...).Observe(duration.Seconds())
 }
 
 // RecordUUIDBackfillFinalizer records one finalizer attempt result for a database role.
 //
 // role and result must be compile-time registry constants.
 func (p *PrometheusRecorder) RecordUUIDBackfillFinalizer(role, result string) {
-	uuidBackfillFinalizerTotal.WithLabelValues(role, result).Inc()
+	uuidBackfillFinalizerTotal.WithLabelValues(labelValues(role, result)...).Inc()
 }
 
 // Compact UUID storage metrics are recorded in recorder_compact_uuid.go.
 
 // InitSystemMetrics initializes system-wide metrics
 func (p *PrometheusRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {
-	systemInfo.WithLabelValues(version, buildTime, goVersion).Set(1)
+	systemInfo.WithLabelValues(labelValues(version, buildTime, goVersion)...).Set(1)
 	systemStartTime.Set(float64(startTime.Unix()))
 }
 

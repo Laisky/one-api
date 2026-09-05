@@ -26,8 +26,8 @@ import (
 func (r *OtelRecorder) UpdateCompactUUIDState(role, state string, active bool) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("role", role),
-		attribute.String("state", state),
+		strAttr("role", role),
+		strAttr("state", state),
 	}
 	var value int64
 	if active {
@@ -43,9 +43,9 @@ func (r *OtelRecorder) UpdateCompactUUIDState(role, state string, active bool) {
 func (r *OtelRecorder) UpdateCompactUUIDBacklog(role, target, kind string, rows float64) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("role", role),
-		attribute.String("target", target),
-		attribute.String("kind", kind),
+		strAttr("role", role),
+		strAttr("target", target),
+		strAttr("kind", kind),
 	}
 	r.compactUUIDBacklogRows.Record(ctx, rows, metric.WithAttributes(attrs...))
 }
@@ -56,9 +56,9 @@ func (r *OtelRecorder) UpdateCompactUUIDBacklog(role, target, kind string, rows 
 func (r *OtelRecorder) RecordCompactUUIDAction(role, action, result string) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("role", role),
-		attribute.String("action", action),
-		attribute.String("result", result),
+		strAttr("role", role),
+		strAttr("action", action),
+		strAttr("result", result),
 	}
 	r.compactUUIDActionsTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
@@ -69,8 +69,8 @@ func (r *OtelRecorder) RecordCompactUUIDAction(role, action, result string) {
 func (r *OtelRecorder) RecordCompactUUIDLookupFallback(role, reason string) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("role", role),
-		attribute.String("reason", reason),
+		strAttr("role", role),
+		strAttr("reason", reason),
 	}
 	r.compactUUIDLookupFallbackTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
@@ -81,7 +81,7 @@ func (r *OtelRecorder) RecordCompactUUIDLookupFallback(role, reason string) {
 func (r *OtelRecorder) UpdateCompactUUIDLastProgress(role string, unixTime float64) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("role", role),
+		strAttr("role", role),
 	}
 	r.compactUUIDLastProgressUnixtime.Record(ctx, unixTime, metric.WithAttributes(attrs...))
 }
@@ -92,8 +92,8 @@ func (r *OtelRecorder) UpdateCompactUUIDLastProgress(role string, unixTime float
 func (r *OtelRecorder) RecordCompactUUIDDuration(role, operation string, duration time.Duration) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("role", role),
-		attribute.String("operation", operation),
+		strAttr("role", role),
+		strAttr("operation", operation),
 	}
 	r.compactUUIDDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
 }

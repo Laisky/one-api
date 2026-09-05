@@ -70,7 +70,7 @@ func (p *PrometheusRecorder) UpdateCompactUUIDState(role, state string, active b
 	if active {
 		value = 1
 	}
-	compactUUIDState.WithLabelValues(role, state).Set(value)
+	compactUUIDState.WithLabelValues(labelValues(role, state)...).Set(value)
 }
 
 // UpdateCompactUUIDBacklog publishes the last bounded gap/mismatch/blocker observation.
@@ -78,7 +78,7 @@ func (p *PrometheusRecorder) UpdateCompactUUIDState(role, state string, active b
 // The value is one bounded observation, never a claimed global total. role,
 // target, and kind must be compile-time registry constants.
 func (p *PrometheusRecorder) UpdateCompactUUIDBacklog(role, target, kind string, rows float64) {
-	compactUUIDBacklogRows.WithLabelValues(role, target, kind).Set(rows)
+	compactUUIDBacklogRows.WithLabelValues(labelValues(role, target, kind)...).Set(rows)
 }
 
 // RecordCompactUUIDAction records one DDL, fill, validation, marker, audit, or repair outcome.
@@ -86,26 +86,26 @@ func (p *PrometheusRecorder) UpdateCompactUUIDBacklog(role, target, kind string,
 // role, action, and result must be compile-time registry constants; they become
 // metric labels and must never carry an ID, UUID, DSN, or error message.
 func (p *PrometheusRecorder) RecordCompactUUIDAction(role, action, result string) {
-	compactUUIDActionsTotal.WithLabelValues(role, action, result).Inc()
+	compactUUIDActionsTotal.WithLabelValues(labelValues(role, action, result)...).Inc()
 }
 
 // RecordCompactUUIDLookupFallback records one compact UUID lookup fallback.
 //
 // role and reason must be compile-time registry constants.
 func (p *PrometheusRecorder) RecordCompactUUIDLookupFallback(role, reason string) {
-	compactUUIDLookupFallbackTotal.WithLabelValues(role, reason).Inc()
+	compactUUIDLookupFallbackTotal.WithLabelValues(labelValues(role, reason)...).Inc()
 }
 
 // UpdateCompactUUIDLastProgress publishes the UTC timestamp of the last durable progress.
 //
 // role must be a compile-time registry constant.
 func (p *PrometheusRecorder) UpdateCompactUUIDLastProgress(role string, unixTime float64) {
-	compactUUIDLastProgressUnixtime.WithLabelValues(role).Set(unixTime)
+	compactUUIDLastProgressUnixtime.WithLabelValues(labelValues(role)...).Set(unixTime)
 }
 
 // RecordCompactUUIDDuration records the duration of one compact UUID operation.
 //
 // role and operation must be compile-time registry constants.
 func (p *PrometheusRecorder) RecordCompactUUIDDuration(role, operation string, duration time.Duration) {
-	compactUUIDDuration.WithLabelValues(role, operation).Observe(duration.Seconds())
+	compactUUIDDuration.WithLabelValues(labelValues(role, operation)...).Observe(duration.Seconds())
 }

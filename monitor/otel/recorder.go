@@ -238,9 +238,9 @@ func (r *OtelRecorder) RecordHTTPRequest(startTime time.Time, path, method, stat
 	ctx := context.Background()
 	duration := time.Since(startTime).Seconds()
 	attrs := []attribute.KeyValue{
-		attribute.String("path", path),
-		attribute.String("method", method),
-		attribute.String("status_code", statusCode),
+		strAttr("path", path),
+		strAttr("method", method),
+		strAttr("status_code", statusCode),
 	}
 	r.httpRequestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
 	r.httpRequestsTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
@@ -250,8 +250,8 @@ func (r *OtelRecorder) RecordHTTPRequest(startTime time.Time, path, method, stat
 func (r *OtelRecorder) RecordHTTPActiveRequest(path, method string, delta float64) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("path", path),
-		attribute.String("method", method),
+		strAttr("path", path),
+		strAttr("method", method),
 	}
 	r.httpActiveRequests.Add(ctx, delta, metric.WithAttributes(attrs...))
 }
@@ -274,24 +274,24 @@ func (r *OtelRecorder) RecordRelayRequest(startTime time.Time, channelId int, ch
 	_ = userId
 	_ = tokenId
 	attrs := []attribute.KeyValue{
-		attribute.String("channel_id", channelIdStr),
-		attribute.String("channel_type", channelType),
-		attribute.String("model", model),
-		attribute.String("group", group),
-		attribute.String("api_format", apiFormat),
-		attribute.String("api_type", apiType),
-		attribute.String("success", successStr),
+		strAttr("channel_id", channelIdStr),
+		strAttr("channel_type", channelType),
+		strAttr("model", model),
+		strAttr("group", group),
+		strAttr("api_format", apiFormat),
+		strAttr("api_type", apiType),
+		strAttr("success", successStr),
 	}
 
 	r.relayRequestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
 	r.relayRequestsTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 
 	if promptTokens > 0 {
-		promptAttrs := append(attrs, attribute.String("token_type", "prompt"))
+		promptAttrs := append(attrs, strAttr("token_type", "prompt"))
 		r.relayTokensUsed.Add(ctx, int64(promptTokens), metric.WithAttributes(promptAttrs...))
 	}
 	if completionTokens > 0 {
-		completionAttrs := append(attrs, attribute.String("token_type", "completion"))
+		completionAttrs := append(attrs, strAttr("token_type", "completion"))
 		r.relayTokensUsed.Add(ctx, int64(completionTokens), metric.WithAttributes(completionAttrs...))
 	}
 	if quotaUsed > 0 {
@@ -304,9 +304,9 @@ func (r *OtelRecorder) UpdateChannelMetrics(channelId int, channelName, channelT
 	ctx := context.Background()
 	channelIdStr := strconv.Itoa(channelId)
 	attrs := []attribute.KeyValue{
-		attribute.String("channel_id", channelIdStr),
-		attribute.String("channel_name", channelName),
-		attribute.String("channel_type", channelType),
+		strAttr("channel_id", channelIdStr),
+		strAttr("channel_name", channelName),
+		strAttr("channel_type", channelType),
 	}
 
 	r.channelStatus.Record(ctx, int64(status), metric.WithAttributes(attrs...))
@@ -319,9 +319,9 @@ func (r *OtelRecorder) UpdateChannelMetrics(channelId int, channelName, channelT
 func (r *OtelRecorder) UpdateChannelRequestsInFlight(channelId int, channelName, channelType string, delta float64) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("channel_id", strconv.Itoa(channelId)),
-		attribute.String("channel_name", channelName),
-		attribute.String("channel_type", channelType),
+		strAttr("channel_id", strconv.Itoa(channelId)),
+		strAttr("channel_name", channelName),
+		strAttr("channel_type", channelType),
 	}
 	r.channelRequestsInFlight.Add(ctx, delta, metric.WithAttributes(attrs...))
 }
@@ -340,7 +340,7 @@ func (r *OtelRecorder) RecordUserMetrics(userId, username, group string, quotaUs
 	_ = userId
 	_ = username
 	attrs := []attribute.KeyValue{
-		attribute.String("group", group),
+		strAttr("group", group),
 	}
 
 	r.userRequestsTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
@@ -348,11 +348,11 @@ func (r *OtelRecorder) RecordUserMetrics(userId, username, group string, quotaUs
 		r.userQuotaUsed.Add(ctx, quotaUsed, metric.WithAttributes(attrs...))
 	}
 	if promptTokens > 0 {
-		promptAttrs := append(attrs, attribute.String("token_type", "prompt"))
+		promptAttrs := append(attrs, strAttr("token_type", "prompt"))
 		r.userTokensUsed.Add(ctx, int64(promptTokens), metric.WithAttributes(promptAttrs...))
 	}
 	if completionTokens > 0 {
-		completionAttrs := append(attrs, attribute.String("token_type", "completion"))
+		completionAttrs := append(attrs, strAttr("token_type", "completion"))
 		r.userTokensUsed.Add(ctx, int64(completionTokens), metric.WithAttributes(completionAttrs...))
 	}
 	// NOTE: per-user balance is intentionally NOT exported as a metric. Once
@@ -368,9 +368,9 @@ func (r *OtelRecorder) RecordUserMetrics(userId, username, group string, quotaUs
 func (r *OtelRecorder) RecordDBQuery(startTime time.Time, operation, table string, success bool) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("operation", operation),
-		attribute.String("table", table),
-		attribute.String("success", strconv.FormatBool(success)),
+		strAttr("operation", operation),
+		strAttr("table", table),
+		strAttr("success", strconv.FormatBool(success)),
 	}
 	r.dbQueriesTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
@@ -385,8 +385,8 @@ func (r *OtelRecorder) RecordRedisCommand(startTime time.Time, command string, s
 	ctx := context.Background()
 	duration := time.Since(startTime).Seconds()
 	attrs := []attribute.KeyValue{
-		attribute.String("command", command),
-		attribute.String("success", strconv.FormatBool(success)),
+		strAttr("command", command),
+		strAttr("success", strconv.FormatBool(success)),
 	}
 	r.redisCommandDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
 	r.redisCommandsTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
@@ -401,8 +401,8 @@ func (r *OtelRecorder) UpdateRedisConnectionMetrics(active int) {
 func (r *OtelRecorder) RecordRateLimitHit(limitType, identifier string) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("limit_type", limitType),
-		attribute.String("identifier", identifier),
+		strAttr("limit_type", limitType),
+		strAttr("identifier", identifier),
 	}
 	r.rateLimitHits.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
@@ -426,8 +426,8 @@ func (r *OtelRecorder) UpdateActiveTokens(userId, tokenName string, count int) {
 func (r *OtelRecorder) RecordError(errorType, component string) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("error_type", errorType),
-		attribute.String("component", component),
+		strAttr("error_type", errorType),
+		strAttr("component", component),
 	}
 	r.errorsTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
@@ -436,8 +436,8 @@ func (r *OtelRecorder) RecordError(errorType, component string) {
 func (r *OtelRecorder) RecordModelUsage(modelName, channelType string, latency time.Duration) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("model", modelName),
-		attribute.String("channel_type", channelType),
+		strAttr("model", modelName),
+		strAttr("channel_type", channelType),
 	}
 	r.modelUsageDuration.Record(ctx, latency.Seconds(), metric.WithAttributes(attrs...))
 }
@@ -469,10 +469,10 @@ func (r *OtelRecorder) RecordUUIDBackfillRows(role, phase, target, result string
 	}
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("role", role),
-		attribute.String("phase", phase),
-		attribute.String("target", target),
-		attribute.String("result", result),
+		strAttr("role", role),
+		strAttr("phase", phase),
+		strAttr("target", target),
+		strAttr("result", result),
 	}
 	r.uuidBackfillRowsTotal.Add(ctx, int64(count), metric.WithAttributes(attrs...))
 }
@@ -483,8 +483,8 @@ func (r *OtelRecorder) RecordUUIDBackfillRows(role, phase, target, result string
 func (r *OtelRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("role", role),
-		attribute.String("target", target),
+		strAttr("role", role),
+		strAttr("target", target),
 	}
 	r.uuidBackfillLastBacklog.Record(ctx, backlog, metric.WithAttributes(attrs...))
 }
@@ -495,9 +495,9 @@ func (r *OtelRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog fl
 func (r *OtelRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("role", role),
-		attribute.String("mode", mode),
-		attribute.String("result", result),
+		strAttr("role", role),
+		strAttr("mode", mode),
+		strAttr("result", result),
 	}
 	r.uuidBackfillCycleDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
 }
@@ -508,8 +508,8 @@ func (r *OtelRecorder) RecordUUIDBackfillCycle(role, mode, result string, durati
 func (r *OtelRecorder) RecordUUIDBackfillFinalizer(role, result string) {
 	ctx := context.Background()
 	attrs := []attribute.KeyValue{
-		attribute.String("role", role),
-		attribute.String("result", result),
+		strAttr("role", role),
+		strAttr("result", result),
 	}
 	r.uuidBackfillFinalizerTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 }

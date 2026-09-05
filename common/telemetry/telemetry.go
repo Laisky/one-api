@@ -127,10 +127,7 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 		return nil, laerrors.Wrap(err, "create OTLP trace exporter")
 	}
 
-	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(traceExporter),
-		sdktrace.WithResource(res),
-	)
+	tracerProvider := newTracerProvider(traceExporter, res)
 	otel.SetTracerProvider(tracerProvider)
 
 	metricExporter, err := otlpmetrichttp.New(ctx, buildMetricExporterOptions()...)
@@ -165,6 +162,22 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 		tracerProvider: tracerProvider,
 		meterProvider:  meterProvider,
 	}, nil
+}
+
+// newTracerProvider builds the tracer provider used by InitOpenTelemetry: the
+// UTF-8 attribute sanitizer runs first so request-derived span attributes can
+// never make the OTLP exporter reject a batch, then the batching exporter.
+// Parameters: exporter receives the ended spans; res is the resource attached
+// to every span (nil is allowed). Return value: the configured provider.
+func newTracerProvider(exporter sdktrace.SpanExporter, res *sdkresource.Resource) *sdktrace.TracerProvider {
+	opts := []sdktrace.TracerProviderOption{
+		sdktrace.WithSpanProcessor(newUTF8AttributeSanitizer()),
+		sdktrace.WithBatcher(exporter),
+	}
+	if res != nil {
+		opts = append(opts, sdktrace.WithResource(res))
+	}
+	return sdktrace.NewTracerProvider(opts...)
 }
 
 // Shutdown drains telemetry providers, ensuring exporters flush pending data.
