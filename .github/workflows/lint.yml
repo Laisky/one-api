@@ -141,7 +141,7 @@ jobs:
       # Type-aware analyzer that forbids serializing raw management-API entities
       # (model.User/Token/Channel/Redemption/Log) at the HTTP boundary. See
       # tools/analyzers/noentityresponse and
-      # docs/proposals/20260714_boundary-response-dtos.md (gate E3).
+      # docs/proposals/archive/20260714_boundary-response-dtos.md (gate E3).
       - name: Run noentityresponse analyzer
         run: go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
 

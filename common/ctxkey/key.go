@@ -386,6 +386,12 @@ const (
 	// Read in: error funnels and any handler that needs identity without a lookup.
 	Identity = "identity"
 
+	// TraceRecorder holds the *tracing.Recorder accumulating this request's
+	// trace document in memory. Set in: middleware.TracingMiddleware. Read in:
+	// common/tracing lifecycle helpers, which mutate it instead of issuing a
+	// SELECT plus UPDATE per lifecycle mark.
+	TraceRecorder = "trace_recorder"
+
 	// BaseLogger holds the pristine request logger captured before any identity
 	// field was bound, so common/identity.Bind can REBUILD the logger instead of
 	// appending a duplicate channel_id when the channel changes on a relay retry.

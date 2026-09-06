@@ -225,8 +225,8 @@
         "no_enabled": "有効なトークンが見つかりませんでした。",
         "no_tokens": "利用可能なトークンがありません",
         "select_placeholder": "トークンを選択",
-        "unnamed": "トークン {{ref}}",
-        "unlimited": "無制限"
+        "unlimited": "無制限",
+        "unnamed": "トークン {{ref}}"
       },
       "top_k": {
         "description": "Top-K サンプリング：確率上位 K 個のトークンに限定",

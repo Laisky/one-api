@@ -1,9 +1,11 @@
 # Change Manual: External UUIDv7 Resource Identifiers
 
-- Status: Proposed (rev. 3 — backward-compatibility ladder + acceptance overhaul)
+> **Archived 2026-09-06.** This work is complete and shipped; the document is kept as a historical design record and is no longer a plan of record.
+
+- Status: Implemented (rev. 3 — backward-compatibility ladder + acceptance overhaul); archived 2026-09-06
 - Date: 2026-07-03 (rev. 3: 2026-07-04)
 - Area: data model / migrations / management API / auth / caching / frontend (modern, air, berry) / observability / docs
-- Related: security posture (IDOR / enumeration hardening), [`docs/security/api_security_audit.md`](../security/api_security_audit.md) (which already recommends "Use UUIDs and validate ownership")
+- Related: security posture (IDOR / enumeration hardening), [`docs/security/api_security_audit.md`](../../security/api_security_audit.md) (which already recommends "Use UUIDs and validate ownership")
 
 > **Revision note.** Every file/line anchor and structural claim below was verified against the working tree — three independent verification rounds; the third re-verified every anchor with five parallel sweeps (§11.2). §11 is a changelog of what changed versus earlier drafts and *why*. Read §3.6 (migration hazards), §3.9 (compatibility ladder), §3.10 (bind-safety), and §5 (phasing) before implementing — they contain the correctness-critical mechanics. Backward compatibility is a first-class rule: **no JSON key ever changes type; fields are only added (dual-emit) and later removed (strict), per resource, each in its own release** (D6).
 
@@ -22,7 +24,7 @@ and enable abuse:
 - **Enumeration / IDOR** — sequential IDs make every table trivially walkable
   (`/api/channel/1`, `/2`, `/3`…). Any single authorization gap becomes a full
   table disclosure.
-- **Business-intelligence leakage** — [`GetMaxUserId()`](../../model/user.go#L76)
+- **Business-intelligence leakage** — [`GetMaxUserId()`](../../../model/user.go#L76)
   and "latest row" queries hand any observer the total user / channel / token
   counts, growth rate, and record ordering. (Note the residual leak in §10.5:
   OAuth default usernames are minted as `github_<GetMaxUserId()+1>`.)
@@ -49,11 +51,11 @@ billing).
 > branch. **One exception, verified:** the admin "token-key channel suffix" is
 > parsed by splitting the key on **`-`** (not `:` — the "`token_key:channel_id`"
 > comment in the source is misleading; the code is
-> [`strings.Split(key, "-")`](../../middleware/utils.go#L268), then
-> [`parts[1]`](../../middleware/auth.go#L300)). A hyphenated channel UUID appended
+> [`strings.Split(key, "-")`](../../../middleware/utils.go#L268), then
+> [`parts[1]`](../../../middleware/auth.go#L300)). A hyphenated channel UUID appended
 > there shatters into fragments, so **that one site cannot accept a UUID under the
 > current key grammar** — keep it int-only (or change its delimiter). The relay
-> `:channelid` path param ([`auth.go:314`](../../middleware/auth.go#L314)) is a URL
+> `:channelid` path param ([`auth.go:314`](../../../middleware/auth.go#L314)) is a URL
 > segment and *does* accept a UUID. See §3.2 and Appendix A.
 
 > **D1 caveat** (documented, not blocking): UUIDv7 embeds a 48-bit creation
@@ -62,23 +64,23 @@ billing).
 
 ### 1.3 Existing infrastructure we reuse
 
-- UUIDv7 generator: [`random.GetUUIDWithHyphens()`](../../common/random/main.go#L23)
-  returns `gutils.UUID7()` **with hyphens** (plain [`random.GetUUID()`](../../common/random/main.go#L16)
+- UUIDv7 generator: [`random.GetUUIDWithHyphens()`](../../../common/random/main.go#L23)
+  returns `gutils.UUID7()` **with hyphens** (plain [`random.GetUUID()`](../../../common/random/main.go#L16)
   strips them — we must use the hyphenated variant so D3 holds). go-utils pin:
-  `github.com/Laisky/go-utils/v6 v6.2.3-…` ([`go.mod:10`](../../go.mod#L10)).
+  `github.com/Laisky/go-utils/v6 v6.2.3-…` ([`go.mod:10`](../../../go.mod#L10)).
 - Opaque external secrets are already UUID/random and need no change:
   `User.AccessToken`, `User.AffCode` (a 4-char code resolved server-side via
-  [`GetUserIdByAffCode`](../../model/user.go#L148)), API `Token.Key`,
+  [`GetUserIdByAffCode`](../../../model/user.go#L148)), API `Token.Key`,
   `Redemption.Key`, the per-request id, and the signed session cookie (stores
   the int id server-side only).
 - **Proven post-backfill unique-index migration template:**
-  [`MigrateUserRequestCostEnsureUniqueRequestID`](../../model/cost.go#L131) —
+  [`MigrateUserRequestCostEnsureUniqueRequestID`](../../../model/cost.go#L131) —
   dedup-then-create-index, cross-dialect, `HasIndex`-guarded, batched. This is
   the template we follow for the uuid unique index (§3.6), *not* the AutoMigrate
   struct-tag path.
-- Cross-dialect ALTER precedents: [`trace_migration.go`](../../model/trace_migration.go#L21),
-  [`ability_migration.go`](../../model/ability_migration.go#L20).
-- SQLite busy-retry wrapper: [`sqlite_retry.go`](../../model/sqlite_retry.go#L21).
+- Cross-dialect ALTER precedents: [`trace_migration.go`](../../../model/trace_migration.go#L21),
+  [`ability_migration.go`](../../../model/ability_migration.go#L20).
+- SQLite busy-retry wrapper: [`sqlite_retry.go`](../../../model/sqlite_retry.go#L21).
 
 ### 1.4 The core complication: "UUID only" cascades into foreign keys
 
@@ -90,8 +92,8 @@ integers:
 
 | Model | Own `id` JSON | Embedded FK JSON fields (int today) |
 | --- | --- | --- |
-| User | `id` | `inviter_id` (no frontend UI reads it — [`model/user.go:55`](../../model/user.go#L55)) |
-| Token | `id` | `user_id` — **via `MarshalJSON` DTO, not struct tags** ([`model/token.go:69-70`](../../model/token.go#L69)) |
+| User | `id` | `inviter_id` (no frontend UI reads it — [`model/user.go:55`](../../../model/user.go#L55)) |
+| Token | `id` | `user_id` — **via `MarshalJSON` DTO, not struct tags** ([`model/token.go:69-70`](../../../model/token.go#L69)) |
 | Redemption | `id` | `user_id` |
 | Log | `id` | `user_id`, **`channel`** (JSON name of `ChannelId`), `token_id` |
 | MCPTool | `id` | `server_id` (own id not route-addressable — see §2.1) |
@@ -100,8 +102,8 @@ integers:
 | AsyncTaskBinding | `id` | `user_id`, `token_id`, `channel_id` — **no HTTP surface at all** (§2.2) |
 
 > **Correction vs first draft:** `dto.EnabledAbility.ChannelId`
-> ([`dto/ability.go:7`](../../dto/ability.go#L7)) is **not** a response leak. All
-> consumers ([`controller/model.go:1487,1553,1664,1720,1783`](../../controller/model.go))
+> ([`dto/ability.go:7`](../../../dto/ability.go#L7)) is **not** a response leak. All
+> consumers ([`controller/model.go:1487,1553,1664,1720,1783`](../../../controller/model.go))
 > read it internally to build display maps; no handler serializes an
 > `EnabledAbility`. It is removed from scope.
 
@@ -114,7 +116,7 @@ the strategy and §4 sizes it.
 
 ### 2.1 In-scope models
 
-All 12 integer-PK models are `AutoMigrate`d in [`migrateDB()`](../../model/main.go#L276)
+All 12 integer-PK models are `AutoMigrate`d in [`migrateDB()`](../../../model/main.go#L276)
 (the migrate list actually holds **14** structs — the 12 below plus `Option`
 (string PK) and `Ability` (composite PK), both correctly out of scope per §2.2):
 
@@ -129,9 +131,9 @@ each needs:
 
 | Tier | Models | Route-addressable by own int PK? | Work implied |
 | --- | --- | --- | --- |
-| **T-A: addressable** | User, Channel, Token, Redemption, **Log** (via [`/api/trace/log/:log_id`](../../router/api.go#L175) + `?id=` drilldown), MCPServer, PasskeyCredential | **Yes** | Full: uuid column + `GetXByUUID` + request-side resolver (D3) + response cutover (D4) |
+| **T-A: addressable** | User, Channel, Token, Redemption, **Log** (via [`/api/trace/log/:log_id`](../../../router/api.go#L175) + `?id=` drilldown), MCPServer, PasskeyCredential | **Yes** | Full: uuid column + `GetXByUUID` + request-side resolver (D3) + response cutover (D4) |
 | **T-B: serialized-only** | MCPTool (listed by `server_id`), TokenTransaction (scoped to auth token), UserRequestCost (addressed by `request_id` string), Trace (addressed by `trace_id` string) | No — own int id never taken as a param | D4 only: uuid column optional; emit uuid **or omit** the int fields (§3.3) |
-| **T-C: internal-only** | AsyncTaskBinding | No HTTP surface whatsoever ([confirmed](../../model/async_task.go): only `SaveAsyncTaskBinding`/`GetAsyncTaskBindingByTaskID`) | Column is **defensive-only**; zero external/frontend work |
+| **T-C: internal-only** | AsyncTaskBinding | No HTTP surface whatsoever ([confirmed](../../../model/async_task.go): only `SaveAsyncTaskBinding`/`GetAsyncTaskBindingByTaskID`) | Column is **defensive-only**; zero external/frontend work |
 
 D5 keeps all 12 uniform (a uuid column everywhere), but recognizing the tiers
 avoids wasted effort: T-B/T-C need **no request-side resolver and no frontend
@@ -142,14 +144,14 @@ the client already knows (its own token/user) rather than denormalizing a uuid.
 
 | Item | Why |
 | --- | --- |
-| `Option` ([`model/option.go:17`](../../model/option.go#L17)) | PK is a **string** `Key`. No option value stores a channel/user id (verified: only flags/secrets/quotas/ratios/links). |
-| `Ability` ([`model/ability.go:21`](../../model/ability.go#L21)) | **Composite** PK `(Group, Model, ChannelId)`, no surrogate int PK. Relay hot path resolves group+model→`*Channel` by int and never needs a uuid. Stays int. |
+| `Option` ([`model/option.go:17`](../../../model/option.go#L17)) | PK is a **string** `Key`. No option value stores a channel/user id (verified: only flags/secrets/quotas/ratios/links). |
+| `Ability` ([`model/ability.go:21`](../../../model/ability.go#L21)) | **Composite** PK `(Group, Model, ChannelId)`, no surrogate int PK. Relay hot path resolves group+model→`*Channel` by int and never needs a uuid. Stays int. |
 | Internal FK joins, caches, in-memory routing maps | D2 — stay int behind the resolver (§3.5). |
-| Prometheus / OTEL `channel_id` labels ([`monitor/prometheus/recorder.go`](../../monitor/prometheus/recorder.go), [`monitor/otel/recorder.go`](../../monitor/otel/recorder.go)) | Internal ops telemetry, admin-bounded cardinality, never serialized to a client. Stays int. |
+| Prometheus / OTEL `channel_id` labels ([`monitor/prometheus/recorder.go`](../../../monitor/prometheus/recorder.go), [`monitor/otel/recorder.go`](../../../monitor/otel/recorder.go)) | Internal ops telemetry, admin-bounded cardinality, never serialized to a client. Stays int. |
 | zap log fields | Internal diagnostics. Stays int. |
-| Session cookie / WebAuthn handle | Cookie stores int server-side ([`SetupLogin`](../../controller/user.go#L159)). [`WebAuthnUser.WebAuthnID()`](../../model/passkey_webauthn.go#L20) binds `uint64(User.Id)`; int PK unchanged ⇒ passkey login unaffected. |
+| Session cookie / WebAuthn handle | Cookie stores int server-side ([`SetupLogin`](../../../controller/user.go#L159)). [`WebAuthnUser.WebAuthnID()`](../../../model/passkey_webauthn.go#L20) binds `uint64(User.Id)`; int PK unchanged ⇒ passkey login unaffected. |
 | Relay passthrough routes (`router/relay.go`) | OpenAI-compatible surface, not management resources. (Admin `:channelid` proxy param is handled in §3.2.) |
-| Root-user email notifications embedding `#%d` ([`monitor/channel.go:41,57,74`](../../monitor/channel.go#L41)) | Recipient is the operator (admin), not an end user. Internal. |
+| Root-user email notifications embedding `#%d` ([`monitor/channel.go:41,57,74`](../../../monitor/channel.go#L41)) | Recipient is the operator (admin), not an end user. Internal. |
 
 ---
 
@@ -175,8 +177,8 @@ UUID string `json:"uuid" gorm:"type:char(36);index;column:uuid"` // NULLABLE —
   at migrate time. We still add the UNIQUE constraint in a dedicated post-backfill
   migration (cost.go pattern) for three concrete reasons: (a) the codebase already
   distrusts AutoMigrate for cross-dialect unique-index creation — that is exactly
-  why [`MigrateUserRequestCostEnsureUniqueRequestID`](../../model/cost.go#L131)
-  exists; (b) SQLite's flaky DDL introspection ([`main.go:217-222`](../../model/main.go#L217));
+  why [`MigrateUserRequestCostEnsureUniqueRequestID`](../../../model/cost.go#L131)
+  exists; (b) SQLite's flaky DDL introspection ([`main.go:217-222`](../../../model/main.go#L217));
   (c) it decouples the constraint from the backfill so a generation bug surfaces
   as a controlled migration error, not a startup `Fatal`. A plain index already
   serves `GetXByUUID` lookups.
@@ -207,21 +209,21 @@ Appendix A for the full table; the counts:
   channel_testing `315`, user `337/1172/1735`, mcp_server `94/140/230/249/285/323`,
   redemption `89/160`, channel `275/295/389/479/523` (= 3+1+2+3+1+1+3+6+2+5 = **27**).
 - **Admin channel selectors (2 sites, only 1 UUID-capable):** the relay
-  `:channelid` path param ([`auth.go:314`](../../middleware/auth.go#L314)) is a URL
+  `:channelid` path param ([`auth.go:314`](../../../middleware/auth.go#L314)) is a URL
   segment → resolver applies, accepts uuid. The **token-key suffix**
-  ([`auth.go:300`](../../middleware/auth.go#L300)) parses via `strings.Split(key,
+  ([`auth.go:300`](../../../middleware/auth.go#L300)) parses via `strings.Split(key,
   "-")` and therefore **stays int-only** (a hyphenated uuid would shatter — §1.2);
   either leave it int or change its delimiter first. This is the one site D3 does
   *not* cover.
-- **Query params (4 sites):** [`controller/log.go:28,259,280`](../../controller/log.go#L28)
+- **Query params (4 sites):** [`controller/log.go:28,259,280`](../../../controller/log.go#L28)
   `strconv.Atoi(c.Query("channel"))` — **server-side int coercion** (the frontend
-  passes the raw string; the *backend* is what breaks), [`mcp_tool.go:35`](../../controller/mcp_tool.go#L35)
-  (`server_id`), [`user.go:403`](../../controller/user.go#L403) (`user_id`, already
-  a string), [`token.go:1051`](../../controller/token.go#L1051) (`user_id`).
+  passes the raw string; the *backend* is what breaks), [`mcp_tool.go:35`](../../../controller/mcp_tool.go#L35)
+  (`server_id`), [`user.go:403`](../../../controller/user.go#L403) (`user_id`, already
+  a string), [`token.go:1051`](../../../controller/token.go#L1051) (`user_id`).
 - **JSON body ids (5 sites):** `UpdateUser` (`/api/user/` PUT, `payload.Id`),
   `UpdateChannel` (`channel.Id`), `UpdateToken` (`token.Id`), `UpdateRedemption`
   (`redemption.Id`), and — **missed by the first draft** —
-  [`AdminTopUp`](../../controller/user.go#L1455) (`/api/topup` POST, `req.UserId`).
+  [`AdminTopUp`](../../../controller/user.go#L1455) (`/api/topup` POST, `req.UserId`).
 
 **Body-site mechanics (D3 without a type flip).** The bound struct keeps its
 legacy int `id` field and gains the (already-added) `uuid` field; the handler
@@ -232,9 +234,9 @@ resolution the handler zeroes every uuid field before the struct reaches GORM
 
 **Downstream note:** the resolver converts at the boundary only. Internal
 consumers of the already-parsed int channel id (`ctxkey.SpecificChannelId`
-readers in [`distributor.go:212`](../../middleware/distributor.go#L212),
-[`relay_retry.go:18`](../../controller/relay_retry.go#L18),
-[`video_task_binding.go:72`](../../middleware/video_task_binding.go#L72)) are
+readers in [`distributor.go:212`](../../../middleware/distributor.go#L212),
+[`relay_retry.go:18`](../../../controller/relay_retry.go#L18),
+[`video_task_binding.go:72`](../../../middleware/video_task_binding.go#L72)) are
 unaffected per D2.
 
 ### 3.3 Foreign-key rendering strategy — **RECOMMENDED: denormalized uuid columns (Option A), with omit-for-T-B**
@@ -254,8 +256,8 @@ UserUUID string `json:"user_uuid" gorm:"type:char(36);column:user_uuid"`  // per
 Three reasons it fits one-api better than the alternative:
 
 1. **It survives the split log database.** `Log` lives on a *separate* `LOG_DB`
-   when `LOG_SQL_DSN` is set ([`InitLogDB`](../../model/main.go#L339); only `Log`
-   is migrated there, [`migrateLOGDB`](../../model/main.go#L375)). A read-time
+   when `LOG_SQL_DSN` is set ([`InitLogDB`](../../../model/main.go#L339); only `Log`
+   is migrated there, [`migrateLOGDB`](../../../model/main.go#L375)). A read-time
    translator would have to reach across databases (log rows on `LOG_DB`, their
    users/channels on `DB`) — a JOIN is impossible and a per-page cross-DB
    `IN (…)` fan-out is required. Denormalizing the uuid **onto the log row at
@@ -267,8 +269,8 @@ Three reasons it fits one-api better than the alternative:
    user/channel is historical, transactions are immutable) → zero drift, no sync
    triggers. (Nuance, sharpened in §3.10: `User.Update`/`Channel.Update`/
    `MCPServer.Update` use `Updates(struct)` with no `Select` allowlist
-   ([`user.go:231`](../../model/user.go#L231), [`channel.go:1929`](../../model/channel.go#L1929),
-   [`mcp_server_store.go:101`](../../model/mcp_server_store.go#L101)), so a
+   ([`user.go:231`](../../../model/user.go#L231), [`channel.go:1929`](../../../model/channel.go#L1929),
+   [`mcp_server_store.go:101`](../../../model/mcp_server_store.go#L101)), so a
    populated string field *is* written. Server-side that is harmless — GORM skips
    zero values and the uuids are immutable — but these structs are **bound from
    client JSON**, so a client-supplied non-zero uuid *would* clobber. The
@@ -283,10 +285,10 @@ row's uuid). Every `Log`/`TokenTransaction` creation site must set it — **23
 distinct log rows + 2 TokenTransaction sites** (enumerated in Appendix C).
 
 > **Correction vs rev. 2 (verified).** The detached billing snapshot does **not**
-> hold `*User`/`*Channel`: [`billingIdentity`](../../relay/controller/billing_ctx.go#L20)
+> hold `*User`/`*Channel`: [`billingIdentity`](../../../relay/controller/billing_ctx.go#L20)
 > captures only `requestID`/`provisionalLogID`/`traceID`/`toolSummary`, and every
 > relay/billing log site holds only the **int** ids carried by
-> [`meta.Meta`](../../relay/meta/relay_meta.go#L41) (`ChannelId`/`TokenId`/`UserId`).
+> [`meta.Meta`](../../../relay/meta/relay_meta.go#L41) (`ChannelId`/`TokenId`/`UserId`).
 > Naive per-write lookups would add DB reads to the hot billing path (~15 of the
 > 23 log rows).
 
@@ -336,7 +338,7 @@ embedded mixin (e.g. `type UUIDModel struct { UUID string … }` with a
 
 Auth resolves the internal int id from the **session cookie** or the **opaque
 token key** — never from a user-facing uuid — so the existing `user_obj:%d` /
-`user_group:%d` / `token:%s` / channel caches ([`model/cache.go`](../../model/cache.go))
+`user_group:%d` / `token:%s` / channel caches ([`model/cache.go`](../../../model/cache.go))
 stay int and unchanged. Only the new **request-side** uuid inputs need
 translation:
 
@@ -345,7 +347,7 @@ translation:
   by the `uuid` index. (T-B/T-C need no `GetXByUUID`.)
 - Optional Redis cache `<model>_uuid:<uuid> → id`, mirroring the `token:%s`
   recipe (string key, `SyncFrequency` TTL). Invalidation mirrors
-  [`clearTokenCache`](../../model/token.go#L105). **Corrected claim (verified):**
+  [`clearTokenCache`](../../../model/token.go#L105). **Corrected claim (verified):**
   the user-scoped caches (`user_obj:%d`, `user_group:%d`, `user_quota:%d`, …) are
   TTL-only today — *nothing* `RedisDel`s them; only token and group-model caches
   have active invalidation. The uuid→id cache adds its own `RedisDel` on the
@@ -356,10 +358,10 @@ translation:
 ### 3.6 Migration mechanics — **the correctness-critical section**
 
 `InitDB()` runs migrations only on the master node
-([`main.go:207`](../../model/main.go#L207)) in three ordered steps:
-STEP 1 `migrateDB()` AutoMigrate ([`:223`](../../model/main.go#L223)),
-STEP 2 column/data normalizers ([`:234-256`](../../model/main.go#L234)),
-STEP 3 data-format migrations ([`:258-271`](../../model/main.go#L258)).
+([`main.go:207`](../../../model/main.go#L207)) in three ordered steps:
+STEP 1 `migrateDB()` AutoMigrate ([`:223`](../../../model/main.go#L223)),
+STEP 2 column/data normalizers ([`:234-256`](../../../model/main.go#L234)),
+STEP 3 data-format migrations ([`:258-271`](../../../model/main.go#L258)).
 
 Five hazards, each with its required handling:
 
@@ -371,7 +373,7 @@ Five hazards, each with its required handling:
    `''` and a unique index collides. **Handling:** tag is nullable plain `index`
    (§3.1); a new `model/uuid_migration.go` creates the UNIQUE index in a
    dialect-aware, `HasIndex`-guarded step, exactly like
-   [`cost.go:317-334`](../../model/cost.go#L317), for the conservatism reasons in
+   [`cost.go:317-334`](../../../model/cost.go#L317), for the conservatism reasons in
    §3.1. The unique promotion is gated on "no NULL **own** uuids remaining" (see
    hazards 3 & 5).
 
@@ -381,7 +383,7 @@ Five hazards, each with its required handling:
    against `LOG_DB`, generates each row's own uuid in Go, and fills
    `user_uuid`/`channel_uuid` from an in-memory `id → uuid` map built by reading
    `DB.users`/`DB.channels` (batched). When `LOG_SQL_DSN` is empty
-   (`LOG_DB == DB`, [`main.go:341`](../../model/main.go#L341)) the same code path
+   (`LOG_DB == DB`, [`main.go:341`](../../../model/main.go#L341)) the same code path
    works against the single handle.
 
 3. **Rolling upgrades / slaves write NULL-uuid rows.** Migrations are
@@ -397,12 +399,12 @@ Five hazards, each with its required handling:
    uuids. Until then a plain index serves lookups and correctness is preserved.
 
 4. **Hard-deleted channels/tokens orphan FK backfill (verified).**
-   `channel.Delete()` ([`channel.go:2016`](../../model/channel.go#L2016)) and token
+   `channel.Delete()` ([`channel.go:2016`](../../../model/channel.go#L2016)) and token
    delete are **hard** deletes — no `DeletedAt` on `Channel`/`Token` — so a
    historical `Log`/`TokenTransaction` can reference a channel/token whose row no
    longer exists, and the §3.6.2 `id → uuid` map (built from live rows) cannot
    fill its `channel_uuid`/`token_uuid`. (`user.Delete()`
-   [`user.go:249`](../../model/user.go#L249) is a *soft* delete — sets
+   [`user.go:249`](../../../model/user.go#L249) is a *soft* delete — sets
    `Status=Deleted`, keeps the row — so `user_uuid` is always fillable.)
    **Handling:** orphaned FK uuids stay `NULL` and are emitted as JSON `null`
    (never a bare `""`); the D4 gate and T12 must tolerate a `null` FK uuid on
@@ -411,11 +413,11 @@ Five hazards, each with its required handling:
 
 5. **SQLite AutoMigrate-once + a terminating sweep.** Keep AutoMigrate to a single
    invocation per process — note (verified) the "guard" at
-   [`main.go:217-222`](../../model/main.go#L217) is a **comment/convention, not a
+   [`main.go:217-222`](../../../model/main.go#L217) is a **comment/convention, not a
    runtime flag**; the only safety net is `shouldIgnoreDuplicateColumn`
-   ([`main.go:331`](../../model/main.go#L331)), so do not add a second AutoMigrate
+   ([`main.go:331`](../../../model/main.go#L331)), so do not add a second AutoMigrate
    call. Route backfill writes through
-   [`sqlite_retry.go`](../../model/sqlite_retry.go); guard
+   [`sqlite_retry.go`](../../../model/sqlite_retry.go); guard
    every step with `HasColumn`/`HasIndex`. The re-runnable backfill's "is there
    work left" predicate must test **own** uuid IS NULL (fillable), never FK uuid
    (may be permanently NULL for orphans, hazard 4), so it converges. SQLite
@@ -425,8 +427,8 @@ Five hazards, each with its required handling:
    master-only, and GORM is only *partially* tolerant of a missing column: plain
    `First`/`Find` render `SELECT *` and survive, but **every write** (INSERT and
    UPDATE enumerate all struct columns) and **every `Omit(...)` read**
-   ([`user.go:83,121,123,140`](../../model/user.go#L83) `Omit("password")`,
-   [`channel.go:489,534,547`](../../model/channel.go#L489) `Omit("key")` — these
+   ([`user.go:83,121,123,140`](../../../model/user.go#L83) `Omit("password")`,
+   [`channel.go:489,534,547`](../../../model/channel.go#L489) `Omit("key")` — these
    enumerate every schema column *except* the omitted one) reference the new
    `uuid` columns explicitly and **hard-fail** against a schema the master has
    not migrated yet. A new-binary slave started before the new master therefore
@@ -437,10 +439,10 @@ Five hazards, each with its required handling:
 
 ### 3.7 Root-account seeding
 
-[`CreateRootAccountIfNeed()`](../../model/main.go#L31) creates the root `User`
-([`main.go:53`](../../model/main.go#L53)) and — only when
+[`CreateRootAccountIfNeed()`](../../../model/main.go#L31) creates the root `User`
+([`main.go:53`](../../../model/main.go#L53)) and — only when
 `config.InitialRootToken != ""` — `Token{Id: 1}`
-([`main.go:68`](../../model/main.go#L68)). Both seed rows use **raw `DB.Create`**,
+([`main.go:68`](../../../model/main.go#L68)). Both seed rows use **raw `DB.Create`**,
 bypassing `User.Insert`/`Token.Insert` — so FK-uuid population must not live only
 inside the `Insert()` wrappers. The `BeforeCreate` hook (§3.4) is GORM-level and
 still fires, assigning both own uuids automatically; the token's `user_uuid` must
@@ -457,21 +459,21 @@ gate's target (full detail in Appendix B):
 
 | Site | File:line | Fields to convert |
 | --- | --- | --- |
-| `Token.MarshalJSON` → `tokenDTO` | [`model/token.go:69-70`](../../model/token.go#L69) | `id`, `user_id` — **highest impact**: overrides tags for ~8 token endpoints + `ConsumeToken`'s `data: updatedToken` |
-| `GetSelfByToken` | [`controller/user.go:681,708,731,733`](../../controller/user.go#L681) | `id`(user), `id`(token), **`uid`**, **`token_id`** (last two missed by first draft) |
-| `GetTraceByTraceId` | [`controller/tracing.go:53`](../../controller/tracing.go#L53) | `id`(trace) |
-| `GetTraceByLogId` | [`controller/tracing.go:132,143,144`](../../controller/tracing.go#L132) | `id`(trace), `id`(log), `user_id`(log) |
-| `buildTransactionResponse` (via `ConsumeToken`) | [`controller/token.go:746,748`](../../controller/token.go#L746) | `id`(txn), `token_id` |
-| `PasskeyRegisterFinish` | [`controller/passkey.go:251`](../../controller/passkey.go#L251) | `id`(cred) |
-| `PasskeyList` → `passkeyInfo` DTO | [`controller/passkey.go:383`](../../controller/passkey.go#L383) | `id`(cred) |
-| `DuplicateChannel` | [`controller/channel.go:317`](../../controller/channel.go#L317) | `id`(new channel) |
-| `GetChannelMigrationStatus` | [`controller/channel_debug.go:115`](../../controller/channel_debug.go#L115) | `channel_id` |
-| `GetToolsDisplay` → `MCPServerDisplayInfo` | [`controller/mcp_server.go:405`](../../controller/mcp_server.go#L405) | `id`(server) |
-| `GetDashboardUsers` → `UserOption` | [`controller/user.go:591,599`](../../controller/user.go#L591) | `id`(user); also the literal `Id:0` "All Users" sentinel → needs a non-int sentinel (`""`/`"all"`) |
-| `GetUserDashboard` stat DTOs | [`dto/log_statistics.go:20,34,57,66`](../../dto/log_statistics.go#L20) | `UserId` — **no json tag**, serializes as capitalized `"UserId"` ×4 DTOs. **Not a passive field flip:** these come from `GROUP BY user_id` queries ([`model/log.go:1180,1195,1227,1243,1333,1352,1390,1410`](../../model/log.go#L1180)); emitting a uuid means adding `logs.user_uuid` to both `SELECT` and `GROUP BY` (sequenced *after* the Log `user_uuid` denormalization lands), and it must be grouped, not just selected, to satisfy MySQL `ONLY_FULL_GROUP_BY`. |
+| `Token.MarshalJSON` → `tokenDTO` | [`model/token.go:69-70`](../../../model/token.go#L69) | `id`, `user_id` — **highest impact**: overrides tags for ~8 token endpoints + `ConsumeToken`'s `data: updatedToken` |
+| `GetSelfByToken` | [`controller/user.go:681,708,731,733`](../../../controller/user.go#L681) | `id`(user), `id`(token), **`uid`**, **`token_id`** (last two missed by first draft) |
+| `GetTraceByTraceId` | [`controller/tracing.go:53`](../../../controller/tracing.go#L53) | `id`(trace) |
+| `GetTraceByLogId` | [`controller/tracing.go:132,143,144`](../../../controller/tracing.go#L132) | `id`(trace), `id`(log), `user_id`(log) |
+| `buildTransactionResponse` (via `ConsumeToken`) | [`controller/token.go:746,748`](../../../controller/token.go#L746) | `id`(txn), `token_id` |
+| `PasskeyRegisterFinish` | [`controller/passkey.go:251`](../../../controller/passkey.go#L251) | `id`(cred) |
+| `PasskeyList` → `passkeyInfo` DTO | [`controller/passkey.go:383`](../../../controller/passkey.go#L383) | `id`(cred) |
+| `DuplicateChannel` | [`controller/channel.go:317`](../../../controller/channel.go#L317) | `id`(new channel) |
+| `GetChannelMigrationStatus` | [`controller/channel_debug.go:115`](../../../controller/channel_debug.go#L115) | `channel_id` |
+| `GetToolsDisplay` → `MCPServerDisplayInfo` | [`controller/mcp_server.go:405`](../../../controller/mcp_server.go#L405) | `id`(server) |
+| `GetDashboardUsers` → `UserOption` | [`controller/user.go:591,599`](../../../controller/user.go#L591) | `id`(user); also the literal `Id:0` "All Users" sentinel → needs a non-int sentinel (`""`/`"all"`) |
+| `GetUserDashboard` stat DTOs | [`dto/log_statistics.go:20,34,57,66`](../../../dto/log_statistics.go#L20) | `UserId` — **no json tag**, serializes as capitalized `"UserId"` ×4 DTOs. **Not a passive field flip:** these come from `GROUP BY user_id` queries ([`model/log.go:1180,1195,1227,1243,1333,1352,1390,1410`](../../../model/log.go#L1180)); emitting a uuid means adding `logs.user_uuid` to both `SELECT` and `GROUP BY` (sequenced *after* the Log `user_uuid` denormalization lands), and it must be grouped, not just selected, to satisfy MySQL `ONLY_FULL_GROUP_BY`. |
 
 **Shared login response is tag-flippable** but high-fan-out: `SetupLogin` builds
-`cleanUser := model.User{…}` ([`controller/user.go:192-198`](../../controller/user.go#L192), `c.JSON` at `:199`)
+`cleanUser := model.User{…}` ([`controller/user.go:192-198`](../../../controller/user.go#L192), `c.JSON` at `:199`)
 returned by password `Login`, **all** OAuth logins (github/oidc/lark/wechat →
 `SetupLogin`), and `PasskeyLoginFinish` — one `model.User.Id` tag flip covers them
 all. No response header, SSE, WebSocket, or relay payload leaks a resource int id
@@ -532,12 +534,12 @@ Grouped by layer. File references are anchors, not exhaustive line lists.
 
 | Change | Location |
 | --- | --- |
-| Add `UUID string gorm:"type:char(36);index"` (plain index) + `BeforeCreate` mixin | 12 in-scope structs; root seed [`main.go:31`](../../model/main.go#L31) |
+| Add `UUID string gorm:"type:char(36);index"` (plain index) + `BeforeCreate` mixin | 12 in-scope structs; root seed [`main.go:31`](../../../model/main.go#L31) |
 | Add denormalized FK uuid columns (Option A), emitted under new `*_uuid` keys (D6) | `token.go` (`user_uuid`), `log.go` (`user_uuid`, `channel_uuid`, `token_uuid`), `token_transaction.go` (`log_uuid`; drop id/token_id/user_id at S2 per §3.3), `user.go` (`inviter_uuid`), `mcp_tool.go` (`server_uuid`), `cost.go`/`trace.go` (omit int fields at S2, no FK uuid needed) |
 | S1: add uuid JSON keys alongside the ints; per-resource S2: flip that resource's int tags to `json:"-"` | same files + the §3.8 custom sites (edited twice, once per stage) |
-| Bind-safety (§3.10): zero uuid fields after every `ShouldBindJSON` into in-scope structs; `Omit` uuid columns in the three no-allowlist `Update` methods | create/update handlers; [`user.go:231`](../../model/user.go#L231), [`channel.go:1929`](../../model/channel.go#L1929), [`mcp_server_store.go:101`](../../model/mcp_server_store.go#L101) |
+| Bind-safety (§3.10): zero uuid fields after every `ShouldBindJSON` into in-scope structs; `Omit` uuid columns in the three no-allowlist `Update` methods | create/update handlers; [`user.go:231`](../../../model/user.go#L231), [`channel.go:1929`](../../../model/channel.go#L1929), [`mcp_server_store.go:101`](../../../model/mcp_server_store.go#L101) |
 | `GetXByUUID` lookups (T-A only) | `user.go`, `channel.go`, `token.go`, `redemption.go`, `log.go`, `mcp_server_store.go`, `passkey.go` |
-| New `model/uuid_migration.go`: backfill own+FK uuids (Go-side, batched, idempotent, `IsMasterNode`, **`LOG_DB`-aware for `Log`**, re-runnable); **later** phase promotes plain index → UNIQUE (cost.go pattern) | wired into STEP 3 of [`InitDB()`](../../model/main.go#L258) |
+| New `model/uuid_migration.go`: backfill own+FK uuids (Go-side, batched, idempotent, `IsMasterNode`, **`LOG_DB`-aware for `Log`**, re-runnable); **later** phase promotes plain index → UNIQUE (cost.go pattern) | wired into STEP 3 of [`InitDB()`](../../../model/main.go#L258) |
 
 ### 4.2 Backend infra
 
@@ -570,27 +572,27 @@ Distinguish **resource-row ids** (migrate to string) from **channel-TYPE enums**
 blanket `id: number → string` sweep: several `id: number` fields are *not*
 migrated-model ids and must stay numeric.
 
-**modern** ([`web/modern`](../../web/modern), TS/Vite — most surface):
+**modern** ([`web/modern`](../../../web/modern), TS/Vite — most surface):
 
 - Flip `id: number → string` in per-page interfaces, the `LogEntry` type in
-  [`src/types/log.ts`](../../web/modern/src/types/log.ts) (`id`, `user_id`,
+  [`src/types/log.ts`](../../../web/modern/src/types/log.ts) (`id`, `user_id`,
   `channel`), the **persisted** auth store
-  ([`lib/stores/auth.ts:6`](../../web/modern/src/lib/stores/auth.ts#L6) — cached to
+  ([`lib/stores/auth.ts:6`](../../../web/modern/src/lib/stores/auth.ts#L6) — cached to
   `localStorage`; see the persisted-state note below), MCP `server_id`, the local
-  `MCPTool` interface ([`EditMCPServerPage.tsx:22`](../../web/modern/src/pages/mcp/EditMCPServerPage.tsx#L22)
+  `MCPTool` interface ([`EditMCPServerPage.tsx:22`](../../../web/modern/src/pages/mcp/EditMCPServerPage.tsx#L22)
   — **missed by rev. 2**), `useClipboardManager` `Record<number,…>` **key type**,
   and the balance-refresh `Set<number>` of channel ids
-  ([`ChannelsPage.tsx:119`](../../web/modern/src/pages/channels/ChannelsPage.tsx#L119)
+  ([`ChannelsPage.tsx:119`](../../../web/modern/src/pages/channels/ChannelsPage.tsx#L119)
   — **missed by rev. 2**). Admin gating uses `role`, never `id` — safe.
 - Remove four update-body `parseInt` casts: channel
-  [`pages/channels/hooks/useChannelForm.ts:621`](../../web/modern/src/pages/channels/hooks/useChannelForm.ts#L621)
+  [`pages/channels/hooks/useChannelForm.ts:621`](../../../web/modern/src/pages/channels/hooks/useChannelForm.ts#L621)
   (path corrected — the hook lives under `pages/channels/hooks/`, not
   `src/hooks/`), token `EditTokenPage.tsx:253`, user `EditUserPage.tsx:213`,
   redemption `EditRedemptionPage.tsx:156`.
 - Three comparison/parse breakages the other apps lack: `LogsPage.tsx:141`
   `parseInt(idStr)` tracing (`parseInt(uuid)`→NaN never matches — compare raw
   string); `EditUserPage.tsx:92` `Number(userId)` self-vs-target compare;
-  dashboard [`pages/dashboard/hooks/useDashboardData.ts:153/168/190/200`](../../web/modern/src/pages/dashboard/hooks/useDashboardData.ts#L153)
+  dashboard [`pages/dashboard/hooks/useDashboardData.ts:153/168/190/200`](../../../web/modern/src/pages/dashboard/hooks/useDashboardData.ts#L153)
   `Number(row.UserId)` on the stat rows (the **filter** input is already
   string-safe — the break is row parsing, contra the first draft's "dashboard
   user_id filter").
@@ -606,7 +608,7 @@ migrated-model ids and must stay numeric.
   refreshes stale entries; audit air and berry the same way (both keep `user`
   in localStorage).
 
-**air** ([`web/air`](../../web/air), JS/CRA/Semi):
+**air** ([`web/air`](../../../web/air), JS/CRA/Semi):
 
 - Four update-body `parseInt`s: `EditChannel.js:548`, `EditToken.js:150`,
   `EditUser.js:96`, `EditRedemption.js:63`.
@@ -619,7 +621,7 @@ migrated-model ids and must stay numeric.
 - Log `channel` filter is a plain text input → passes the uuid through; the
   backend `strconv.Atoi` is what needs the resolver (§3.2).
 
-**berry** ([`web/berry`](../../web/berry), JS/CRA/MUI):
+**berry** ([`web/berry`](../../../web/berry), JS/CRA/MUI):
 
 - Four update-body `parseInt`s: `Channel/component/EditModal.js:369`,
   `Token/component/EditModal.js:72`, `User/component/EditModal.js:77`,
@@ -640,19 +642,19 @@ username-keyed — its call sites (`modern UsersPage.tsx:391`/`EditUserPage.tsx:
 
 ### 4.5 Docs & observability (D4-strict, optional)
 
-- Update [`docs/manuals/api_references.md`](../../docs/manuals/api_references.md#L247)
+- Update [`docs/manuals/api_references.md`](../../../docs/manuals/api_references.md#L247)
   (line 247 literally states "Resource ids are integers") and the served
-  `web/modern/public/openapi.json` ([`router/web.go:44`](../../router/web.go#L44)).
+  `web/modern/public/openapi.json` ([`router/web.go:44`](../../../router/web.go#L44)).
 - Client-facing relay error strings embedding raw channel id —
-  `"Channel #%d does not support…"` ([`middleware/distributor.go:227,233,241`](../../middleware/distributor.go#L227)),
-  `"channel #%d does not list support…"` ([`model/ability.go:70,379`](../../model/ability.go#L70)),
-  `"Invalid Channel Id: %s"` ([`middleware/auth.go:302,317`](../../middleware/auth.go#L302)).
+  `"Channel #%d does not support…"` ([`middleware/distributor.go:227,233,241`](../../../middleware/distributor.go#L227)),
+  `"channel #%d does not list support…"` ([`model/ability.go:70,379`](../../../model/ability.go#L70)),
+  `"Invalid Channel Id: %s"` ([`middleware/auth.go:302,317`](../../../middleware/auth.go#L302)).
   Diagnostic text, not identifiers; sanitize (or emit the channel uuid/name) only
   if "no int id ever crosses the boundary" is enforced strictly. See open Q2.
 - Optionally decide whether `SearchUsers`/`SearchChannels`/`SearchRedemptions`
   (which match a numeric keyword against the `id` column —
-  [`user.go:121`](../../model/user.go#L121), [`channel.go:534`](../../model/channel.go#L534),
-  [`redemption.go:67`](../../model/redemption.go#L67); PG `SearchUsers` already
+  [`user.go:121`](../../../model/user.go#L121), [`channel.go:534`](../../../model/channel.go#L534),
+  [`redemption.go:67`](../../../model/redemption.go#L67); PG `SearchUsers` already
   omits id) should also match a uuid. Minor admin QoL.
 
 ---
@@ -851,28 +853,28 @@ Each criterion names the tests that prove it and the phase gate (§6.1) it block
 
 | Resource | Handler | Site (file:line) | Kind |
 | --- | --- | --- | --- |
-| User | GetUser | [`user.go:337`](../../controller/user.go#L337) | path `:id` |
-| User | DeleteUser | [`user.go:1172`](../../controller/user.go#L1172) | path `:id` |
-| User | AdminDisableUserTotp | [`user.go:1735`](../../controller/user.go#L1735) | path `:id` (string) |
+| User | GetUser | [`user.go:337`](../../../controller/user.go#L337) | path `:id` |
+| User | DeleteUser | [`user.go:1172`](../../../controller/user.go#L1172) | path `:id` |
+| User | AdminDisableUserTotp | [`user.go:1735`](../../../controller/user.go#L1735) | path `:id` (string) |
 | User | UpdateUser | `/api/user/` PUT `payload.Id` | body |
-| User | AdminTopUp | [`user.go:1455`](../../controller/user.go#L1455) `req.UserId` | body |
-| User | GetUserDashboard / AdminGetAllTokens | [`user.go:403`](../../controller/user.go#L403), [`token.go:1051`](../../controller/token.go#L1051) | query `user_id` |
-| Channel | GetChannel / DeleteChannel / DuplicateChannel / (balance) | [`channel.go:275,295,389,479,523`](../../controller/channel.go#L275) | path `:id` |
-| Channel | GetChannelPricing / UpdateChannelPricing / UpdateChannelBalance | [`channel_billing.go:382`](../../controller/channel_billing.go#L382) | path `:id` |
-| Channel | TestChannel | [`channel_testing.go:315`](../../controller/channel_testing.go#L315) | path `:id` |
-| Channel | Debug / Fix / MigrationStatus | [`channel_debug.go:16,51,100`](../../controller/channel_debug.go#L16) | path `:id` |
+| User | AdminTopUp | [`user.go:1455`](../../../controller/user.go#L1455) `req.UserId` | body |
+| User | GetUserDashboard / AdminGetAllTokens | [`user.go:403`](../../../controller/user.go#L403), [`token.go:1051`](../../../controller/token.go#L1051) | query `user_id` |
+| Channel | GetChannel / DeleteChannel / DuplicateChannel / (balance) | [`channel.go:275,295,389,479,523`](../../../controller/channel.go#L275) | path `:id` |
+| Channel | GetChannelPricing / UpdateChannelPricing / UpdateChannelBalance | [`channel_billing.go:382`](../../../controller/channel_billing.go#L382) | path `:id` |
+| Channel | TestChannel | [`channel_testing.go:315`](../../../controller/channel_testing.go#L315) | path `:id` |
+| Channel | Debug / Fix / MigrationStatus | [`channel_debug.go:16,51,100`](../../../controller/channel_debug.go#L16) | path `:id` |
 | Channel | UpdateChannel | `/api/channel/` PUT `channel.Id` | body |
-| Channel | GetAllLogs / GetLogsStat | [`log.go:28,259,280`](../../controller/log.go#L28) | query `channel` (int-coerced) |
-| Channel | admin selector (relay path) | [`auth.go:314`](../../middleware/auth.go#L314) | `:channelid` — **uuid-capable** |
-| Channel | admin selector (token suffix) | [`auth.go:300`](../../middleware/auth.go#L300) | `strings.Split(key,"-")` → **int-only**, not D3-capable (§1.2) |
-| Token | GetToken / DeleteToken / AdminGetToken | [`token.go:121,220,1108`](../../controller/token.go#L121) | path `:id` |
+| Channel | GetAllLogs / GetLogsStat | [`log.go:28,259,280`](../../../controller/log.go#L28) | query `channel` (int-coerced) |
+| Channel | admin selector (relay path) | [`auth.go:314`](../../../middleware/auth.go#L314) | `:channelid` — **uuid-capable** |
+| Channel | admin selector (token suffix) | [`auth.go:300`](../../../middleware/auth.go#L300) | `strings.Split(key,"-")` → **int-only**, not D3-capable (§1.2) |
+| Token | GetToken / DeleteToken / AdminGetToken | [`token.go:121,220,1108`](../../../controller/token.go#L121) | path `:id` |
 | Token | UpdateToken | `/api/token/` PUT `token.Id` | body |
-| Redemption | GetRedemption / DeleteRedemption | [`redemption.go:89,160`](../../controller/redemption.go#L89) | path `:id` |
+| Redemption | GetRedemption / DeleteRedemption | [`redemption.go:89,160`](../../../controller/redemption.go#L89) | path `:id` |
 | Redemption | UpdateRedemption | `/api/redemption/` PUT | body |
-| MCPServer | Get/Update/Delete/Sync/Test/ListTools | [`mcp_server.go:94,140,230,249,285,323`](../../controller/mcp_server.go#L94) | path `:id` |
-| MCPTool | GetMCPTools | [`mcp_tool.go:35`](../../controller/mcp_tool.go#L35) | query `server_id` |
-| Log/Trace | GetTraceByLogId | [`tracing.go:71`](../../controller/tracing.go#L71) | path `:log_id` |
-| Passkey | PasskeyDelete / PasskeyRename | [`passkey.go:399,420`](../../controller/passkey.go#L399) | path `:id` |
+| MCPServer | Get/Update/Delete/Sync/Test/ListTools | [`mcp_server.go:94,140,230,249,285,323`](../../../controller/mcp_server.go#L94) | path `:id` |
+| MCPTool | GetMCPTools | [`mcp_tool.go:35`](../../../controller/mcp_tool.go#L35) | query `server_id` |
+| Log/Trace | GetTraceByLogId | [`tracing.go:71`](../../../controller/tracing.go#L71) | path `:log_id` |
+| Passkey | PasskeyDelete / PasskeyRename | [`passkey.go:399,420`](../../../controller/passkey.go#L399) | path `:id` |
 
 ## Appendix B — response-side leak inventory (verified sweep)
 
@@ -892,47 +894,47 @@ header / SSE / WebSocket / relay-body int-id leak exists.
 ## Appendix C — FK-uuid write-site population (Option A)
 
 **Log — 23 distinct rows** (the `token.go` 384/396 and 654/666 pairs are one
-build+write each): [`billing.go:108,111,248,311`](../../relay/billing/billing.go#L108),
-[`proxy.go:72`](../../relay/controller/proxy.go#L72),
-[`image.go:584,599`](../../relay/controller/image.go#L584),
+build+write each): [`billing.go:108,111,248,311`](../../../relay/billing/billing.go#L108),
+[`proxy.go:72`](../../../relay/controller/proxy.go#L72),
+[`image.go:584,599`](../../../relay/controller/image.go#L584),
 `video.go:196`, `rerank.go:353`, `ocr.go:339`, `audio.go:361`,
-[`billing_safety.go:433`](../../relay/controller/billing_safety.go#L433),
+[`billing_safety.go:433`](../../../relay/controller/billing_safety.go#L433),
 `realtime_billing.go:117`, `channel_testing.go:205`,
-[`token.go:384,654`](../../controller/token.go#L384) (+ tool logs `396,666`),
-`mcp_proxy.go:297`, [`redemption.go:157`](../../model/redemption.go#L157),
-[`user.go:184,189,193`](../../model/user.go#L184) (gifts),
+[`token.go:384,654`](../../../controller/token.go#L384) (+ tool logs `396,666`),
+`mcp_proxy.go:297`, [`redemption.go:157`](../../../model/redemption.go#L157),
+[`user.go:184,189,193`](../../../model/user.go#L184) (gifts),
 `controller/user.go:1069,1471,1778`. Most record helpers funnel through
-[`recordLogHelper`](../../model/log.go#L423) (`LOG_DB.Create`); the two that call
-`LOG_DB.Create` directly are `RecordToolLogs` ([`log.go:642`](../../model/log.go#L642))
-and `RecordProvisionalConsumeLog` ([`log.go:689`](../../model/log.go#L689))
+[`recordLogHelper`](../../../model/log.go#L423) (`LOG_DB.Create`); the two that call
+`LOG_DB.Create` directly are `RecordToolLogs` ([`log.go:642`](../../../model/log.go#L642))
+and `RecordProvisionalConsumeLog` ([`log.go:689`](../../../model/log.go#L689))
 (`RecordTestLog`/`RecordTestLogWithIDs` *do* funnel through `recordLogHelper`).
 Whichever path, each `Log` needs `user_uuid`/`channel_uuid`. **Population source
 (corrected in rev. 3):** the relay/billing sites hold only int ids
-([`meta.Meta`](../../relay/meta/relay_meta.go#L41) carries `ChannelId`/`TokenId`/
+([`meta.Meta`](../../../relay/meta/relay_meta.go#L41) carries `ChannelId`/`TokenId`/
 `UserId int` + `TokenName`) and the detached billing snapshot
-([`billingIdentity`](../../relay/controller/billing_ctx.go#L20)) holds **no**
+([`billingIdentity`](../../../relay/controller/billing_ctx.go#L20)) holds **no**
 `*User`/`*Channel` — nothing is "free" there. They copy the strings from the
 enriched `meta` (§3.3). The int-only helpers (`RecordLog`/`RecordTopupLog`/
 `RecordManageLog` — topup/gift/manage paths, off the hot path; they already do a
 per-row `GetUsernameById`) use an internal lookup or leave NULL for the sweep.
 
-**TokenTransaction (2 sites)** — [`controller/token.go:416,692`](../../controller/token.go#L416)
-via [`CreateTokenTransaction`](../../model/token_transaction.go#L88): set
+**TokenTransaction (2 sites)** — [`controller/token.go:416,692`](../../../controller/token.go#L416)
+via [`CreateTokenTransaction`](../../../model/token_transaction.go#L88): set
 `log_uuid` (and, if kept, `token_uuid`/`user_uuid`). Note `LogId` is nil whenever
 `IsLogConsumeEnabled()` is off (`RecordToolLog` early-returns —
-[`log.go:548`](../../model/log.go#L548)); `log_uuid` is NULL in exactly the same
+[`log.go:548`](../../../model/log.go#L548)); `log_uuid` is NULL in exactly the same
 cases and is emitted as JSON `null`.
 
 **Other FK-uuid write paths** — `MCPTool.server_uuid`: rows are created only in
-[`UpsertMCPTools`](../../model/mcp_tool_store.go#L87), which receives `serverID
-int`; its sole caller ([`relay/mcp/sync.go:53`](../../relay/mcp/sync.go#L53))
+[`UpsertMCPTools`](../../../model/mcp_tool_store.go#L87), which receives `serverID
+int`; its sole caller ([`relay/mcp/sync.go:53`](../../../relay/mcp/sync.go#L53))
 holds the full `*MCPServer`, so extend the signature to pass the server uuid.
-`Token.user_uuid`: [`Token.Insert`](../../model/token.go#L286) callers hold the
-int only ([`controller/token.go:207`](../../controller/token.go#L207)) or the
-full user ([`model/user.go:207`](../../model/user.go#L207)); the **root-seed
-token bypasses `Insert` entirely** ([`main.go:68`](../../model/main.go#L68)) —
+`Token.user_uuid`: [`Token.Insert`](../../../model/token.go#L286) callers hold the
+int only ([`controller/token.go:207`](../../../controller/token.go#L207)) or the
+full user ([`model/user.go:207`](../../../model/user.go#L207)); the **root-seed
+token bypasses `Insert` entirely** ([`main.go:68`](../../../model/main.go#L68)) —
 set it at the seed site (§3.7). `User.inviter_uuid`: only `inviterId int` is in
-scope at [`user.go:193`](../../model/user.go#L184) — lookup (registration path,
+scope at [`user.go:193`](../../../model/user.go#L184) — lookup (registration path,
 off the hot path).
 
 ## 11. Review changelog (what changed vs the first draft, and why)
@@ -986,7 +988,7 @@ critic) caught five more issues, now folded in:
 
 - **Blocking — D3 vs the token-key delimiter.** The admin token-key channel
   suffix is parsed by `strings.Split(key, "-")`
-  ([`utils.go:268`](../../middleware/utils.go#L268) → [`auth.go:300`](../../middleware/auth.go#L300)),
+  ([`utils.go:268`](../../../middleware/utils.go#L268) → [`auth.go:300`](../../../middleware/auth.go#L300)),
   *not* `:` as the first draft's D3 note claimed. A hyphenated UUID appended there
   shatters, so that single site stays int-only. Fixed §1.2, §3.2, Appendix A, T9,
   AC-2. (The relay `:channelid` path param is unaffected and remains uuid-capable.)
@@ -1019,7 +1021,7 @@ A third verification round — five parallel sweeps re-checking every claim
 FK write sites) — plus a compatibility-focused design review produced:
 
 - **Corrected — the billing-snapshot claim was wrong.** `billingIdentity`
-  ([`billing_ctx.go:20-25`](../../relay/controller/billing_ctx.go#L20)) holds no
+  ([`billing_ctx.go:20-25`](../../../relay/controller/billing_ctx.go#L20)) holds no
   `*User`/`*Channel`; every relay/billing log site carries only the int ids in
   `meta.Meta`. Hot-path FK-uuid population is redesigned as **`meta.Meta`
   enrichment** — uuids captured in auth/distributor middleware where those rows

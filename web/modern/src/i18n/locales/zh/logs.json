@@ -47,6 +47,7 @@
       "no_content": "未记录内容。",
       "no_timeline": "此追踪没有时间轴数据。",
       "no_tracing": "此日志条目没有追踪数据。",
+      "not_retained_locally": "本地未保留此追踪数据。它可能因采样被丢弃，或已发送到外部可观测性服务。",
       "origin_model": "请求模型",
       "prompt_tokens_cached": "提示令牌 (缓存)",
       "prompt_tokens_input": "提示令牌 (输入)",

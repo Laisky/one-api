@@ -88,6 +88,91 @@ func ValidateLogRotationInterval(value string) error {
 	return nil
 }
 
+// ValidateRecordLineFormat validates the LOG_RECORD_LINE_FORMAT variable.
+//
+// Parameters:
+//   - value: the resolved format name.
+//
+// Return values:
+//   - error: a *ConfigValidationError when value is not a known format.
+func ValidateRecordLineFormat(value string) error {
+	allowed := []string{LogRecordLineFull, LogRecordLineCompact}
+	if !slices.Contains(allowed, value) {
+		return &ConfigValidationError{
+			Variable:    "LOG_RECORD_LINE_FORMAT",
+			Value:       value,
+			Constraint:  "must be a known record-log line format",
+			AllowedVals: allowed,
+		}
+	}
+	return nil
+}
+
+// ValidateAppLogSink validates the APP_LOG_SINK environment variable.
+//
+// Parameters:
+//   - value: the resolved sink name.
+//
+// Return values:
+//   - error: a *ConfigValidationError when value is not a known sink.
+func ValidateAppLogSink(value string) error {
+	allowed := []string{AppLogSinkFile, AppLogSinkStdout, AppLogSinkBoth}
+	if !slices.Contains(allowed, value) {
+		return &ConfigValidationError{
+			Variable:    "APP_LOG_SINK",
+			Value:       value,
+			Constraint:  "must be a known application log sink",
+			AllowedVals: allowed,
+		}
+	}
+	return nil
+}
+
+// ValidateObservabilityProfile validates the OBSERVABILITY_PROFILE environment
+// variable.
+//
+// Parameters:
+//   - value: the resolved profile name.
+//
+// Return values:
+//   - error: a *ConfigValidationError when value is not a known profile.
+func ValidateObservabilityProfile(value string) error {
+	allowed := []string{
+		ObservabilityProfileStandalone,
+		ObservabilityProfileScaled,
+		ObservabilityProfileExternal,
+	}
+	if !slices.Contains(allowed, value) {
+		return &ConfigValidationError{
+			Variable:    "OBSERVABILITY_PROFILE",
+			Value:       value,
+			Constraint:  "must be a known observability profile",
+			AllowedVals: allowed,
+		}
+	}
+	return nil
+}
+
+// ValidateTraceWriteMode validates the TRACE_WRITE_MODE environment variable.
+//
+// Parameters:
+//   - value: the resolved write mode.
+//
+// Return values:
+//   - error: a *ConfigValidationError when value is not a known write mode.
+func ValidateTraceWriteMode(value string) error {
+	allowed := []string{TraceWriteModeBatched, TraceWriteModeSync}
+	if !slices.Contains(allowed, value) {
+		return &ConfigValidationError{
+			Variable:    "TRACE_WRITE_MODE",
+			Value:       value,
+			Constraint:  "must be a known trace write mode",
+			AllowedVals: allowed,
+		}
+	}
+	return nil
+}
+
 // ValidateTheme validates the THEME environment variable.
 // Allowed values: "berry", "air", "modern".
 // Note: "default" is accepted for backward compatibility and redirected to "modern".
@@ -161,6 +246,68 @@ func ValidateOpenTelemetryConfig(enabled bool, endpoint string) error {
 	}
 
 	return nil
+}
+
+// ValidateTraceSinkOpenTelemetryConfig ensures an OTLP trace sink is never
+// constructed without an enabled OpenTelemetry provider.
+//
+// Parameters:
+//   - sinks: resolved trace sink identifiers.
+//   - enabled: whether OpenTelemetry exporter initialization is enabled.
+//
+// Return values:
+//   - error: a *ConfigValidationError when TRACE_SINK includes otlp while
+//     OTEL_ENABLED is false.
+func ValidateTraceSinkOpenTelemetryConfig(sinks []string, enabled bool) error {
+	for _, sink := range sinks {
+		if sink != TraceSinkOTLP {
+			continue
+		}
+		if enabled {
+			return nil
+		}
+		return &ConfigValidationError{
+			Variable:   "OTEL_ENABLED",
+			Value:      enabled,
+			Constraint: "must be true when TRACE_SINK includes otlp",
+		}
+	}
+
+	return nil
+}
+
+// ValidateSyncTraceConfiguration ensures the legacy synchronous trace path is
+// used only with settings it can faithfully implement.
+//
+// Synchronous tracing writes each mutation while a request is in flight, before
+// its final status and duration are known. It therefore cannot apply
+// completion-time sampling or fan out to a non-SQL sink. Rejecting unsupported
+// combinations is safer than silently changing TRACE_WRITE_MODE=sync into the
+// batched pipeline.
+//
+// Parameters:
+//   - writeMode: the resolved TRACE_WRITE_MODE value.
+//   - sinks: the resolved TRACE_SINK identifiers.
+//   - sampleRate: the resolved TRACE_SAMPLE_RATE value.
+//
+// Return values:
+//   - error: a *ConfigValidationError when sync mode cannot preserve its
+//     per-mutation semantics.
+func ValidateSyncTraceConfiguration(writeMode string, sinks []string, sampleRate float64) error {
+	if writeMode != TraceWriteModeSync {
+		return nil
+	}
+
+	validSink := len(sinks) == 1 && (sinks[0] == TraceSinkDB || sinks[0] == TraceSinkNone)
+	if validSink && sampleRate == 1 {
+		return nil
+	}
+
+	return &ConfigValidationError{
+		Variable:   "TRACE_WRITE_MODE",
+		Value:      writeMode,
+		Constraint: "sync requires TRACE_SINK to be exactly db or none and TRACE_SAMPLE_RATE to be 1",
+	}
 }
 
 // =============================================================================
@@ -419,6 +566,74 @@ func ValidateAllEnvVars() *ValidationResult {
 		result.Errors = append(result.Errors, err)
 	}
 	if err := ValidateURLFormat("API_BASE", APIBase); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+
+	// Observability data-tiering validators.
+	if err := ValidateObservabilityProfile(ObservabilityProfile); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateTraceWriteMode(TraceWriteMode); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateTraceSinkOpenTelemetryConfig(TraceSinks, OpenTelemetryEnabled); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateSyncTraceConfiguration(TraceWriteMode, TraceSinks, TraceSampleRate); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateFloatRange("TRACE_SAMPLE_RATE", TraceSampleRate, 0, 1); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateNonNegativeInt("TRACE_ALWAYS_SAMPLE_SLOW_MS", TraceAlwaysSampleSlowMs); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidatePositiveInt("TRACE_BATCH_SIZE", TraceBatchSize); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidatePositiveInt("TRACE_FLUSH_INTERVAL_MS", TraceFlushIntervalMs); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidatePositiveInt("TRACE_QUEUE_SIZE", TraceQueueSize); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidatePositiveInt("TRACE_WRITER_COUNT", TraceWriterCount); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateAppLogSink(AppLogSink); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateRecordLineFormat(LogRecordLineFormat); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidatePositiveInt("RETENTION_DELETE_BATCH_SIZE", RetentionDeleteBatchSize); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateNonNegativeInt("RETENTION_DELETE_PAUSE_MS", RetentionDeletePauseMs); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidatePositiveInt("RETENTION_SWEEP_INTERVAL_MINUTES", RetentionSweepIntervalMinutes); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateNonNegativeInt("LOG_MAX_TOTAL_SIZE_MB", LogMaxTotalSizeMB); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateNonNegativeInt("LOG_MIN_FREE_DISK_MB", LogMinFreeDiskMB); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateNonNegativeInt("LOG_SAMPLE_INITIAL", LogSampleInitial); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateNonNegativeInt("LOG_SAMPLE_THEREAFTER", LogSampleThereafter); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidatePositiveInt("LOG_SAMPLE_TICK_MS", LogSampleTickMs); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateNonNegativeInt("DASHBOARD_CACHE_TTL_SEC", DashboardCacheTTLSec); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidatePositiveInt("DASHBOARD_MAX_SITEWIDE_RANGE_DAYS", DashboardMaxSitewideRangeDays); err != nil {
 		result.Errors = append(result.Errors, err)
 	}
 

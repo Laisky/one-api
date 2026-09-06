@@ -1,6 +1,8 @@
 # Proposal: Channel Hidden Models
 
-- Status: Draft
+> **Archived 2026-09-06.** This work is complete and shipped; the document is kept as a historical design record and is no longer a plan of record.
+
+- Status: Implemented (archived 2026-09-06)
 - Author: @Laisky
 - Created: 2026-04-21
 - Owners: backend, frontend
@@ -123,7 +125,7 @@ Invariants:
 
 ### 4.1 Backend — data model
 
-- [model/channel.go](../../model/channel.go)
+- [model/channel.go](../../../model/channel.go)
   - Add `HiddenModels *string \`json:"hidden_models" gorm:"type:text"\`` to
     the `Channel` struct (JSON array of strings, nullable for backward
     compatibility).
@@ -157,7 +159,7 @@ Invariants:
 
 ### 4.2 Backend — ability registration
 
-- [model/ability.go](../../model/ability.go) `Channel.AddAbilities`
+- [model/ability.go](../../../model/ability.go) `Channel.AddAbilities`
   (line 73): skip model names present in `GetHiddenModels()`. The
   current `utils.DeDuplication` helper does **not** trim names or remove
   empty strings, so build abilities from `GetSupportedModelNames()` (or
@@ -187,7 +189,7 @@ expires (`config.SyncFrequency`, 120 seconds by default).
 
 ### 4.3 Backend — public listing endpoints
 
-- [controller/model.go](../../controller/model.go)
+- [controller/model.go](../../../controller/model.go)
   - `ListModels` (line 774): this is the real `GET /v1/models` handler.
     It already starts from `CacheGetGroupModelsV2`, which draws from the
     `Ability` table. After 4.2 and cache invalidation, hidden models are
@@ -245,7 +247,7 @@ expires (`config.SyncFrequency`, 120 seconds by default).
 
 ### 4.5 Backend — request path
 
-- [middleware/distributor.go](../../middleware/distributor.go)
+- [middleware/distributor.go](../../../middleware/distributor.go)
   - Auto-routing path (`CacheGetRandomSatisfiedChannelExcluding`, line
     265): already filtered because abilities no longer include hidden
     models. The unavailable-model path naturally rejects the request.
@@ -270,16 +272,16 @@ Only the Modern template is in scope for this change. `web/air` and
 `web/berry` remain compatible through the backend CRUD field but do not
 need new editor UI.
 
-- [web/modern/src/pages/channels/schemas.ts](../../web/modern/src/pages/channels/schemas.ts)
+- [web/modern/src/pages/channels/schemas.ts](../../../web/modern/src/pages/channels/schemas.ts)
   - Add `hidden_models: z.array(z.string()).default([])`.
-- [web/modern/src/pages/channels/hooks/useChannelForm.ts](../../web/modern/src/pages/channels/hooks/useChannelForm.ts)
+- [web/modern/src/pages/channels/hooks/useChannelForm.ts](../../../web/modern/src/pages/channels/hooks/useChannelForm.ts)
   - Parse `data.hidden_models` from the backend JSON string into a string
     array when loading a channel.
   - On submit, send `hidden_models` as a JSON-encoded string (or `null`
     for an empty array) to match the backend field.
   - Keep browser console diagnostics string-only if new diagnostics are
     added.
-- [web/modern/src/pages/channels/components/ChannelModelSettings.tsx](../../web/modern/src/pages/channels/components/ChannelModelSettings.tsx)
+- [web/modern/src/pages/channels/components/ChannelModelSettings.tsx](../../../web/modern/src/pages/channels/components/ChannelModelSettings.tsx)
   - Add a **Hidden Models** `SelectionListManager` near Model Mapping.
     Suggested options are the currently selected `models`; custom entries
     are allowed for paste/typing workflows.
@@ -290,7 +292,7 @@ need new editor UI.
   `Models`, show "This name is not currently supported by the channel."
 - Validation warning (non-blocking): if a hidden name is a `ModelMapping`
   source, show that the public alias will become unreachable.
-- [web/modern/src/i18n/locales/](../../web/modern/src/i18n/locales/)
+- [web/modern/src/i18n/locales/](../../../web/modern/src/i18n/locales/)
   - Add all new labels, help text, warnings, and validation messages to
     each Modern locale file.
 

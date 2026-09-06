@@ -460,63 +460,28 @@ func GetUserDashboard(c *gin.Context) {
 		targetUserId = 0
 	}
 
-	// Get log statistics
-	// Using half-open interval [startTs, endTsExclusive)
-	dashboards, err := model.SearchLogsByDayAndModel(targetUserId, int(startTs), int(endTsExclusive))
+	// A site-wide aggregate scans every consume log in the window, so an
+	// unbounded range is a guaranteed timeout once the table is large. The cap
+	// only applies to site-wide queries; per-user ranges are unaffected.
+	if targetUserId == 0 {
+		if days := sitewideRangeDays(startTs, endTsExclusive); days > config.DashboardMaxSitewideRangeDays {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": fmt.Sprintf(
+					"Site-wide dashboard range is limited to %d days (requested %d). Narrow the range or raise DASHBOARD_MAX_SITEWIDE_RANGE_DAYS.",
+					config.DashboardMaxSitewideRangeDays, days),
+				"data": nil,
+			})
+			return
+		}
+	}
+
+	// Get log statistics, using half-open interval [startTs, endTsExclusive).
+	aggregates, err := resolveDashboardAggregates(gmw.Ctx(c), targetUserId, startTs, endTsExclusive)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "Failed to get dashboard data: " + err.Error(),
-			"data":    nil,
-		})
-		return
-	}
-
-	userStats, err := model.SearchLogsByDayAndUser(targetUserId, int(startTs), int(endTsExclusive))
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Failed to get user usage data: " + err.Error(),
-			"data":    nil,
-		})
-		return
-	}
-
-	tokenStats, err := model.SearchLogsByDayAndToken(targetUserId, int(startTs), int(endTsExclusive))
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Failed to get token usage data: " + err.Error(),
-			"data":    nil,
-		})
-		return
-	}
-
-	toolStats, err := model.SearchToolLogsByDayAndTool(targetUserId, int(startTs), int(endTsExclusive))
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Failed to get tool usage data: " + err.Error(),
-			"data":    nil,
-		})
-		return
-	}
-
-	toolUserStats, err := model.SearchToolLogsByDayAndUser(targetUserId, int(startTs), int(endTsExclusive))
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Failed to get tool user usage data: " + err.Error(),
-			"data":    nil,
-		})
-		return
-	}
-
-	toolTokenStats, err := model.SearchToolLogsByDayAndToken(targetUserId, int(startTs), int(endTsExclusive))
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Failed to get tool token usage data: " + err.Error(),
 			"data":    nil,
 		})
 		return
@@ -527,8 +492,10 @@ func GetUserDashboard(c *gin.Context) {
 	var status string
 
 	if targetUserId == 0 {
-		// Site-wide statistics for admin/root users
-		totalQuota, usedQuota, status, err = model.GetSiteWideQuotaStats()
+		// Site-wide statistics for admin/root users. Cached in-process: it is a
+		// full aggregate over the users table, which no index can make cheap
+		// once there are a million rows.
+		totalQuota, usedQuota, status, err = model.GetSiteWideQuotaStatsCached()
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -564,12 +531,12 @@ func GetUserDashboard(c *gin.Context) {
 
 	// Create response with both log data and quota/status info
 	response := gin.H{
-		"logs":            dashboards,
-		"user_logs":       userStats,
-		"token_logs":      tokenStats,
-		"tool_logs":       toolStats,
-		"tool_user_logs":  toolUserStats,
-		"tool_token_logs": toolTokenStats,
+		"logs":            aggregates.Logs,
+		"user_logs":       aggregates.UserLogs,
+		"token_logs":      aggregates.TokenLogs,
+		"tool_logs":       aggregates.ToolLogs,
+		"tool_user_logs":  aggregates.ToolUserLogs,
+		"tool_token_logs": aggregates.ToolTokenLogs,
 		"total_quota":     totalQuota,
 		"used_quota":      usedQuota,
 		"status":          status,
@@ -1946,4 +1913,21 @@ func AdminDisableUserTotp(c *gin.Context) {
 		"success": true,
 		"message": "TOTP has been successfully disabled for the user",
 	})
+}
+
+// sitewideRangeDays converts a half-open second range into whole days, rounding
+// up so a partial day still counts against the cap.
+//
+// Parameters:
+//   - startTs: inclusive start, in Unix seconds.
+//   - endTsExclusive: exclusive end, in Unix seconds.
+//
+// Return values:
+//   - int: the number of days the range spans; 0 for an empty or inverted range.
+func sitewideRangeDays(startTs, endTsExclusive int64) int {
+	const secondsPerDay = 24 * 60 * 60
+	if endTsExclusive <= startTs {
+		return 0
+	}
+	return int((endTsExclusive - startTs + secondsPerDay - 1) / secondsPerDay)
 }

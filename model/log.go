@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
+	"github.com/Laisky/zap/zapcore"
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
@@ -630,11 +631,59 @@ func recordLogHelper(ctx context.Context, log *Log) {
 	// deliberately not called request_id / trace_id: the request-scoped logger already
 	// carries those for the CURRENT request, and on the reconciliation path the row's
 	// values belong to the earlier request that created it.
+	//
+	// The full form is DEBUG. It carries the rendered `content` string, which is
+	// already persisted on the row this function just wrote, so duplicating it
+	// into the log file once per request buys nothing. The INFO form keeps the
+	// correlators and the billing numbers an operator actually greps for.
+	//
+	// Measured by BenchmarkRecordLogLineBytes, cross-tree against the pre-change
+	// code (commit 397781e1), console encoding as production uses: this line
+	// shrinks from 516/576/751 bytes to a flat 413 bytes for short/typical/long
+	// content, i.e. 103-338 bytes saved per billed request (20-45% of the line).
+	// At 10k requests per second and typical content that is ~141 GB/day of log
+	// bytes not written WITH SAMPLING OFF. Under the scaled/external profiles,
+	// which default LOG_SAMPLE_INITIAL=100, the sampler already thins this line
+	// to ~199/s and the demotion is worth ~2.8 GB/day there. It is a large
+	// saving on ONE line at volumes where sampling is off, not on total process
+	// log volume.
+	if lg.Level().Zap() <= zapcore.DebugLevel {
+		lg.Debug("record log",
+			logRowFields(ctx, log,
+				zap.Int64("created_at", log.CreatedAt),
+				zap.Int("type", log.Type),
+				zap.String("content", log.Content),
+				zap.String("log_request_id", log.RequestId),
+				zap.String("log_trace_id", log.TraceId),
+				zap.Int("quota", log.Quota),
+				zap.Int("prompt_tokens", log.PromptTokens),
+				zap.Int("completion_tokens", log.CompletionTokens),
+			)...,
+		)
+		return
+	}
+
+	if config.LogRecordLineFormat == config.LogRecordLineFull {
+		// Pre-proposal shape, kept as the standalone default so an existing
+		// log-parsing pipeline does not break on upgrade.
+		lg.Info("record log",
+			logRowFields(ctx, log,
+				zap.Int64("created_at", log.CreatedAt),
+				zap.Int("type", log.Type),
+				zap.String("content", log.Content),
+				zap.String("log_request_id", log.RequestId),
+				zap.String("log_trace_id", log.TraceId),
+				zap.Int("quota", log.Quota),
+				zap.Int("prompt_tokens", log.PromptTokens),
+				zap.Int("completion_tokens", log.CompletionTokens),
+			)...,
+		)
+		return
+	}
+
 	lg.Info("record log",
 		logRowFields(ctx, log,
-			zap.Int64("created_at", log.CreatedAt),
 			zap.Int("type", log.Type),
-			zap.String("content", log.Content),
 			zap.String("log_request_id", log.RequestId),
 			zap.String("log_trace_id", log.TraceId),
 			zap.Int("quota", log.Quota),
@@ -1307,10 +1356,44 @@ func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	return token
 }
 
-// DeleteOldLog removes log entries older than the provided timestamp and returns the number deleted.
+// DeleteOldLog removes log entries older than the provided timestamp.
+//
+// The signature is unchanged from before the chunked-retention work so existing
+// callers keep compiling; DeleteOldLogContext is the variant to prefer in new
+// code, because a cancelled request can then stop a long purge.
+//
+// Parameters:
+//   - targetTimestamp: exclusive upper bound on created_at.
+//
+// Return values:
+//   - int64: rows removed.
+//   - error: wrapped failure from the chunk that could not complete.
 func DeleteOldLog(targetTimestamp int64) (int64, error) {
-	result := LOG_DB.Where("created_at < ?", targetTimestamp).Delete(&Log{})
-	return result.RowsAffected, result.Error
+	return DeleteOldLogContext(context.Background(), targetTimestamp)
+}
+
+// DeleteOldLogContext removes log entries older than the provided timestamp, in
+// bounded chunks.
+//
+// This is an operator-triggered purge over the largest table in the system, and
+// a single unbounded DELETE would lock it for the duration. Chunking makes the
+// purge take longer in wall-clock terms but keeps the gateway serving
+// throughout.
+//
+// Parameters:
+//   - ctx: cancellation scope; a cancelled purge returns what it already removed.
+//   - targetTimestamp: exclusive upper bound on created_at.
+//
+// Return values:
+//   - int64: rows removed.
+//   - error: wrapped failure from the chunk that could not complete.
+func DeleteOldLogContext(ctx context.Context, targetTimestamp int64) (int64, error) {
+	return ChunkedDelete(ctx, LOG_DB, ChunkedDeleteOptions{
+		Table: "logs",
+		Where: "created_at < ?",
+		Args:  []any{targetTimestamp},
+		Pause: config.RetentionDeletePause(),
+	})
 }
 
 // GetLogById retrieves a log entry by its ID

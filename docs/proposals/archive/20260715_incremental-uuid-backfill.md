@@ -1,6 +1,8 @@
 # Proposal: Incremental External UUID Backfill Remediation
 
-- Status: Proposed; required before the current UUID migration is finalized
+> **Archived 2026-09-06.** This work is complete and shipped; the document is kept as a historical design record and is no longer a plan of record.
+
+- Status: Implemented (v3 remediation landed; see the backfill manual); archived 2026-09-06
 - Date: 2026-07-15
 - Area: model initialization, data migration, UUID indexes, split log database
 - Related: [GitHub issue #354](https://github.com/Laisky/one-api/issues/354),
@@ -889,7 +891,7 @@ evidence record names the responsible person.
 - [x] UUID-R08: Publish finalizer enable and disable, retry, lock-timeout,
   partial-marker recovery, and split-LOG_DB repoint procedures; every repoint
   uses a new migration generation and explicit reconciliation.
-  Evidence: [External UUID Backfill: Operator Runbook](../manuals/external_uuid_backfill.md).
+  Evidence: [External UUID Backfill: Operator Runbook](../../manuals/external_uuid_backfill.md).
 
 ## 12. Required Verification Evidence
 

@@ -235,6 +235,12 @@ func (n *NoOpRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUse
 // RecordResponseStateEvent implements MetricsRecorder.RecordResponseStateEvent without collecting any data.
 func (n *NoOpRecorder) RecordResponseStateEvent(category, outcome string) {}
 
+// RecordTraceRecord implements TracePipelineRecorder without collecting any data.
+func (n *NoOpRecorder) RecordTraceRecord(outcome string, count int) {}
+
+// UpdateTraceQueueDepth implements TracePipelineRecorder without collecting any data.
+func (n *NoOpRecorder) UpdateTraceQueueDepth(depth, capacity float64) {}
+
 // Initialize with no-op recorder by default
 func init() {
 	SetRecorder(&NoOpRecorder{})
@@ -473,5 +479,26 @@ func (m *MultiRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUs
 func (m *MultiRecorder) RecordResponseStateEvent(category, outcome string) {
 	for _, r := range m.Recorders {
 		r.RecordResponseStateEvent(category, outcome)
+	}
+}
+
+// RecordTraceRecord implements TracePipelineRecorder by forwarding to every
+// child recorder that supports it. A recorder that predates the trace-pipeline
+// metrics is simply skipped rather than failing to compile.
+func (m *MultiRecorder) RecordTraceRecord(outcome string, count int) {
+	for _, r := range m.Recorders {
+		if tr, ok := r.(TracePipelineRecorder); ok {
+			tr.RecordTraceRecord(outcome, count)
+		}
+	}
+}
+
+// UpdateTraceQueueDepth implements TracePipelineRecorder by forwarding to every
+// child recorder that supports it.
+func (m *MultiRecorder) UpdateTraceQueueDepth(depth, capacity float64) {
+	for _, r := range m.Recorders {
+		if tr, ok := r.(TracePipelineRecorder); ok {
+			tr.UpdateTraceQueueDepth(depth, capacity)
+		}
 	}
 }

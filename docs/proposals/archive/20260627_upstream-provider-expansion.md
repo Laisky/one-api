@@ -1,6 +1,8 @@
 # Change Manual: Upstream API Provider Expansion
 
-- **Status:** Proposal
+> **Archived 2026-09-06.** Only Phase 1's DeepInfra channel landed (`relay/channeltype/define.go`, `relay/adaptor/deepinfra`). HuggingFace, Perplexity, SambaNova and VoyageAI were never implemented; re-propose them in a new document if they are still wanted. Kept as a historical design record.
+
+- **Status:** Partially implemented — DeepInfra shipped; HuggingFace, Perplexity, SambaNova and VoyageAI were not built (archived 2026-09-06)
 - **Date:** 2026-06-27
 - **Scope:** Add a prioritized set of mainstream LLM API providers currently missing from one-api
 - **Owner:** Relay / Adaptors

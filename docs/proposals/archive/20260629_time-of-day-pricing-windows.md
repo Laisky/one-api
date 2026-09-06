@@ -1,6 +1,8 @@
 # Change Manual: Time-of-Day Pricing Windows
 
-- Status: Proposed
+> **Archived 2026-09-06.** This work is complete and shipped; the document is kept as a historical design record and is no longer a plan of record.
+
+- Status: Implemented (archived 2026-09-06)
 - Date: 2026-06-29
 - Area: pricing / billing / channel config / model display / frontend
 - Related: [`20260627_upstream-provider-expansion.md`](20260627_upstream-provider-expansion.md), tiered pricing (`ModelRatioTier`)
@@ -38,27 +40,27 @@ These three properties (timezone, midnight-crossing, optional date bounds) drive
 
 Pricing today resolves through **three layers** and one **tier** sub-layer:
 
-- `adaptor.ModelConfig` ([`relay/adaptor/interface.go:21`](../../relay/adaptor/interface.go#L21)) is the
+- `adaptor.ModelConfig` ([`relay/adaptor/interface.go:21`](../../../relay/adaptor/interface.go#L21)) is the
   canonical in-memory pricing record: scalar ratios (`Ratio`, `CompletionRatio`,
   `CachedInputRatio`, `CacheWrite5mRatio`, `CacheWrite1hRatio`), a `Tiers []ModelRatioTier`
   ladder, and nested modality blocks (`Video`, `Audio`, `Image`, `Embedding`, `PerCall`).
-- `model.ModelConfigLocal` ([`model/channel.go:116`](../../model/channel.go#L116)) is the
+- `model.ModelConfigLocal` ([`model/channel.go:116`](../../../model/channel.go#L116)) is the
   channel-scoped override, persisted as JSON in the `Channel.ModelConfigs *string gorm:"type:text"`
-  column ([`model/channel.go:48`](../../model/channel.go#L48)) and mirrors the pricing subset of `ModelConfig`.
+  column ([`model/channel.go:48`](../../../model/channel.go#L48)) and mirrors the pricing subset of `ModelConfig`.
 - `relay/pricing` resolves a model to an effective `adaptor.ModelConfig` with **channel →
   adaptor-default → global** precedence: `ResolveModelConfig`, `ResolveModelConfigRatioOnly`
-  ([`relay/pricing/resolver.go:22`](../../relay/pricing/resolver.go#L22),
-  [`:240`](../../relay/pricing/resolver.go#L240)), plus modality-specific `ResolveAudioPricing`,
+  ([`relay/pricing/resolver.go:22`](../../../relay/pricing/resolver.go#L22),
+  [`:240`](../../../relay/pricing/resolver.go#L240)), plus modality-specific `ResolveAudioPricing`,
   `ResolveImagePricing`, and `GetVideoPricingWithThreeLayers`, `GetModelRatioWithThreeLayers`,
-  `GetCompletionRatioWithThreeLayers` ([`relay/pricing/global.go`](../../relay/pricing/global.go)).
+  `GetCompletionRatioWithThreeLayers` ([`relay/pricing/global.go`](../../../relay/pricing/global.go)).
 - **Tiers** are applied on top of the resolved config by `ResolveEffectivePricingFromConfig`
-  ([`relay/pricing/global.go:504`](../../relay/pricing/global.go#L504)): it walks the sorted ladder and,
+  ([`relay/pricing/global.go:504`](../../../relay/pricing/global.go#L504)): it walks the sorted ladder and,
   per field, **`0` means "inherit from base"** (negative cached ratio means "free").
-- Billing is computed by `quota.Compute` ([`relay/quota/quota.go:43`](../../relay/quota/quota.go#L43)),
+- Billing is computed by `quota.Compute` ([`relay/quota/quota.go:43`](../../../relay/quota/quota.go#L43)),
   which calls `ResolveModelConfigRatioOnly` then `ResolveEffectivePricingFromConfig`.
 - The canonical **request-start timestamp** already exists: `meta.StartTime time.Time`, set once
-  per request to `time.Now()` ([`relay/meta/relay_meta.go:41`](../../relay/meta/relay_meta.go#L41),
-  [`:117`](../../relay/meta/relay_meta.go#L117)) and threaded into every billing path.
+  per request to `time.Now()` ([`relay/meta/relay_meta.go:41`](../../../relay/meta/relay_meta.go#L41),
+  [`:117`](../../../relay/meta/relay_meta.go#L117)) and threaded into every billing path.
 
 ### 1.3 The gap
 
@@ -281,16 +283,16 @@ A channel `model_configs` entry for `deepseek-reasoner` (R1, −75% off-peak):
 
 | File | Change |
 | --- | --- |
-| [`relay/adaptor/interface.go`](../../relay/adaptor/interface.go) | Add `TimeWindow`, `ClockRange` structs; add `TimeWindows []TimeWindow` to `ModelConfig`. Add `Clone()` for `TimeWindow` (deep-clones `Overlay` + slices). Extend `ModelConfig` doc to note the time layer sits above Tiers. |
-| [`model/channel.go`](../../model/channel.go#L116) | Add `TimeWindowLocal`, `ClockRangeLocal` (Overlay = `ModelConfigLocal`); add `TimeWindows []TimeWindowLocal` to `ModelConfigLocal` with `json:"time_windows,omitempty"`. **Append the field at the END of the struct** so a window-less config serializes byte-identically to today (no spurious diffs, clean rollback — see §7). |
+| [`relay/adaptor/interface.go`](../../../relay/adaptor/interface.go) | Add `TimeWindow`, `ClockRange` structs; add `TimeWindows []TimeWindow` to `ModelConfig`. Add `Clone()` for `TimeWindow` (deep-clones `Overlay` + slices). Extend `ModelConfig` doc to note the time layer sits above Tiers. |
+| [`model/channel.go`](../../../model/channel.go#L116) | Add `TimeWindowLocal`, `ClockRangeLocal` (Overlay = `ModelConfigLocal`); add `TimeWindows []TimeWindowLocal` to `ModelConfigLocal` with `json:"time_windows,omitempty"`. **Append the field at the END of the struct** so a window-less config serializes byte-identically to today (no spurious diffs, clean rollback — see §7). |
 
 ### 3.2 Resolution & merge (`relay/pricing`)
 
 | File | Change |
 | --- | --- |
 | `relay/pricing/timewindow.go` (new) | `ApplyTimeWindow(cfg adaptor.ModelConfig, at time.Time) adaptor.ModelConfig` (fast-path `len==0` returns input unchanged); `matchWindow(w, at)`; `mergePricing(base, overlay)` and per-block merge helpers; `loadLocationCached(tz string) (*time.Location, error)`. A `ratio-only` merge variant that touches only scalars + tiers for the hot billing path. |
-| [`relay/pricing/resolver.go`](../../relay/pricing/resolver.go) | Thread `at time.Time` into `ResolveModelConfig` (:22), `ResolveModelConfigRatioOnly` (:240), `ResolveAudioPricing` (:48), `ResolveImagePricing` (:81); apply `ApplyTimeWindow` after the three-layer resolve, before returning. Carry `TimeWindows` through `convertLocalModelConfig` (:111) and `convertLocalModelConfigRatioOnly` (:273). |
-| [`relay/pricing/global.go`](../../relay/pricing/global.go) | (a) **`cloneModelConfig` (:431) `PerCall` fix (prerequisite):** it does `clone := src` (shallow) and then `Clone()`s Video/Audio/Image/Embedding but **not** `PerCall`, leaving the pointer aliased to the cached source. Add `if src.PerCall != nil { clone.PerCall = src.PerCall.Clone() }`. This matters because `mergePricing` may mutate the `PerCall` block in place; without the clone, the mutation leaks into the shared cache and corrupts later requests (a real data race, caught by `-race`). (b) `GetGlobalModelConfigRatioOnly` (:254) must copy `TimeWindows` so the global layer carries them. (c) New `ResolveModelRatioAt` / `ResolveCompletionRatioAt` windowed scalar helpers — see *Scalar-shortcut paths* below. |
+| [`relay/pricing/resolver.go`](../../../relay/pricing/resolver.go) | Thread `at time.Time` into `ResolveModelConfig` (:22), `ResolveModelConfigRatioOnly` (:240), `ResolveAudioPricing` (:48), `ResolveImagePricing` (:81); apply `ApplyTimeWindow` after the three-layer resolve, before returning. Carry `TimeWindows` through `convertLocalModelConfig` (:111) and `convertLocalModelConfigRatioOnly` (:273). |
+| [`relay/pricing/global.go`](../../../relay/pricing/global.go) | (a) **`cloneModelConfig` (:431) `PerCall` fix (prerequisite):** it does `clone := src` (shallow) and then `Clone()`s Video/Audio/Image/Embedding but **not** `PerCall`, leaving the pointer aliased to the cached source. Add `if src.PerCall != nil { clone.PerCall = src.PerCall.Clone() }`. This matters because `mergePricing` may mutate the `PerCall` block in place; without the clone, the mutation leaks into the shared cache and corrupts later requests (a real data race, caught by `-race`). (b) `GetGlobalModelConfigRatioOnly` (:254) must copy `TimeWindows` so the global layer carries them. (c) New `ResolveModelRatioAt` / `ResolveCompletionRatioAt` windowed scalar helpers — see *Scalar-shortcut paths* below. |
 
 **`mergePricing` invariant.** `mergePricing(base, overlay)` and `ApplyTimeWindow` return a config
 with `TimeWindows` set to `nil`, so a merged config can never re-trigger windowing. Unit-tested.
@@ -314,8 +316,8 @@ design:
   full windowed config; `usedModelRatio`/`usedCompletionRatio` come from `eff.*` (the windowed
   tier result) and **override** the non-windowed `input.ModelRatio` the controller computed via
   `GetModelRatioWithThreeLayers`.
-- Paths that bill **directly off a scalar** — rerank per-call ([`rerank.go:59`](../../relay/controller/rerank.go#L59))
-  and the **token-based audio fallback** ([`output_audio_billing.go:125`](../../relay/controller/output_audio_billing.go#L125)) —
+- Paths that bill **directly off a scalar** — rerank per-call ([`rerank.go:59`](../../../relay/controller/rerank.go#L59))
+  and the **token-based audio fallback** ([`output_audio_billing.go:125`](../../../relay/controller/output_audio_billing.go#L125)) —
   must switch to the new `ResolveModelRatioAt(modelName, channelConfigs, channelOverrides, provider, at)`
   (and completion twin), which resolves the full windowed `ModelConfig` and extracts the scalar.
 - **Video** billing must resolve the full windowed config via `ResolveModelConfig(..., at)` and
@@ -337,9 +339,9 @@ model, configure its base price in the `model_configs` `ModelConfig` (not the le
 
 | File | Change |
 | --- | --- |
-| [`relay/quota/quota.go`](../../relay/quota/quota.go#L18) | Add `RequestTime time.Time` to `ComputeInput`; pass it into `ResolveModelConfigRatioOnly` (:53) and into the `resolveCompletionRatio` → `GetCompletionRatioWithThreeLayers` fallback (:238/:251). No other math changes — `resolveCompletionRatio` already prefers the (now windowed) resolved `CompletionRatio`, and tiers operate on the windowed config at :75. |
-| [`relay/controller/helper.go`](../../relay/controller/helper.go) (:194,:292,:411), [`response_billing.go`](../../relay/controller/response_billing.go#L136), [`claude_messages_billing.go`](../../relay/controller/claude_messages_billing.go#L89), [`mcp_helpers.go`](../../relay/controller/mcp_helpers.go#L197), [`controller/realtime.go`](../../controller/realtime.go#L221) | Set `RequestTime: meta.StartTime` on every `quota.Compute` call. |
-| [`relay/controller/output_billing_context.go`](../../relay/controller/output_billing_context.go), [`output_image_billing.go`](../../relay/controller/output_image_billing.go), `output_audio_billing.go`, `output_video_billing.go`, [`image.go`](../../relay/controller/image.go#L317), `audio.go`, `video.go` | Thread `meta.StartTime` into modality pricing: **image** via `ResolveImagePricing(..., at)`, **audio** via `ResolveAudioPricing(..., at)` and the token fallback via `ResolveModelRatioAt`, **video** by resolving the full windowed config (`ResolveModelConfig(..., at)`) and reading `.Video` (since `GetVideoPricingWithThreeLayers` lacks `channelConfigs`). |
+| [`relay/quota/quota.go`](../../../relay/quota/quota.go#L18) | Add `RequestTime time.Time` to `ComputeInput`; pass it into `ResolveModelConfigRatioOnly` (:53) and into the `resolveCompletionRatio` → `GetCompletionRatioWithThreeLayers` fallback (:238/:251). No other math changes — `resolveCompletionRatio` already prefers the (now windowed) resolved `CompletionRatio`, and tiers operate on the windowed config at :75. |
+| [`relay/controller/helper.go`](../../../relay/controller/helper.go) (:194,:292,:411), [`response_billing.go`](../../../relay/controller/response_billing.go#L136), [`claude_messages_billing.go`](../../../relay/controller/claude_messages_billing.go#L89), [`mcp_helpers.go`](../../../relay/controller/mcp_helpers.go#L197), [`controller/realtime.go`](../../../controller/realtime.go#L221) | Set `RequestTime: meta.StartTime` on every `quota.Compute` call. |
+| [`relay/controller/output_billing_context.go`](../../../relay/controller/output_billing_context.go), [`output_image_billing.go`](../../../relay/controller/output_image_billing.go), `output_audio_billing.go`, `output_video_billing.go`, [`image.go`](../../../relay/controller/image.go#L317), `audio.go`, `video.go` | Thread `meta.StartTime` into modality pricing: **image** via `ResolveImagePricing(..., at)`, **audio** via `ResolveAudioPricing(..., at)` and the token fallback via `ResolveModelRatioAt`, **video** by resolving the full windowed config (`ResolveModelConfig(..., at)`) and reading `.Video` (since `GetVideoPricingWithThreeLayers` lacks `channelConfigs`). |
 
 Note: the rerank/ocr/audio/video "legacy" billing paths use `PostConsumeQuotaWithLog`. With the
 scalar-path routing above, their **prices are windowed correctly**; only the billing *log* lacks
@@ -351,9 +353,9 @@ interim limitation is called out in Acceptance Criteria.
 
 | File | Change |
 | --- | --- |
-| [`model/channel.go:282`](../../model/channel.go#L282) `normalizeModelConfigLocal` | Add `normalizeTimeWindowsLocal(windows []TimeWindowLocal) ([]TimeWindowLocal, error)` — validates each window (tz/ranges/dates), trims/defaults (`timezone` → `"UTC"`), preserves window order (order = precedence), recurses normalization into each `Overlay`, and returns the normalized slice or a wrapped error; call it from `normalizeModelConfigLocal` and carry the result into the rebuilt `normalized` struct. **Adjacent fix:** the function rebuilds field-by-field and currently **drops `Embedding`** (it is never assigned to `normalized`); add `if cfg.Embedding != nil { normalized.Embedding = cfg.Embedding }` alongside the new `TimeWindows` so neither is silently lost on save. (Note: `ModelConfigLocal` has no `PerCall` field today — channel-level per-call overrides/windows are a separate gap, see §1.5.) |
-| [`model/channel.go:874`](../../model/channel.go#L874) `validateModelPriceConfigs` | Validate each window: IANA timezone parses (`time.LoadLocation`), each `Start`/`End` parses as `"15:04"` (so `"24:00"` is rejected; `Start == End` is allowed and means all-day), ≥1 range, `DaysOfWeek ∈ [0,6]`, `DateFrom`/`DateTo` parse as `"2006-01-02"` with `From < To`, `Overlay` carries ≥1 pricing field, `Overlay.TimeWindows` is empty (reject recursion), overlay ratios obey the same sign rules as base/tier validation. |
-| [`model/channel.go:1364`](../../model/channel.go#L1364)/[`:1382`](../../model/channel.go#L1382) `Get/SetModelPriceConfigs` | No structural change — `omitempty` on `time_windows` gives transparent backward compat (old rows → `nil`). |
+| [`model/channel.go:282`](../../../model/channel.go#L282) `normalizeModelConfigLocal` | Add `normalizeTimeWindowsLocal(windows []TimeWindowLocal) ([]TimeWindowLocal, error)` — validates each window (tz/ranges/dates), trims/defaults (`timezone` → `"UTC"`), preserves window order (order = precedence), recurses normalization into each `Overlay`, and returns the normalized slice or a wrapped error; call it from `normalizeModelConfigLocal` and carry the result into the rebuilt `normalized` struct. **Adjacent fix:** the function rebuilds field-by-field and currently **drops `Embedding`** (it is never assigned to `normalized`); add `if cfg.Embedding != nil { normalized.Embedding = cfg.Embedding }` alongside the new `TimeWindows` so neither is silently lost on save. (Note: `ModelConfigLocal` has no `PerCall` field today — channel-level per-call overrides/windows are a separate gap, see §1.5.) |
+| [`model/channel.go:874`](../../../model/channel.go#L874) `validateModelPriceConfigs` | Validate each window: IANA timezone parses (`time.LoadLocation`), each `Start`/`End` parses as `"15:04"` (so `"24:00"` is rejected; `Start == End` is allowed and means all-day), ≥1 range, `DaysOfWeek ∈ [0,6]`, `DateFrom`/`DateTo` parse as `"2006-01-02"` with `From < To`, `Overlay` carries ≥1 pricing field, `Overlay.TimeWindows` is empty (reject recursion), overlay ratios obey the same sign rules as base/tier validation. |
+| [`model/channel.go:1364`](../../../model/channel.go#L1364)/[`:1382`](../../../model/channel.go#L1382) `Get/SetModelPriceConfigs` | No structural change — `omitempty` on `time_windows` gives transparent backward compat (old rows → `nil`). |
 
 No DB migration: the `ModelConfigs` column is already `type:text` JSON.
 
@@ -361,9 +363,9 @@ No DB migration: the `ModelConfigs` column is already `type:text` JSON.
 
 | File | Change |
 | --- | --- |
-| [`controller/model.go:294`](../../controller/model.go#L294) `ModelDisplayInfo` | Add `TimeWindows []TimeWindowDisplay `json:"time_windows,omitempty"`` and `ActiveTimeWindow string `json:"active_time_window,omitempty"``. `ActiveTimeWindow` = the `Name` of the **first** window matching at server `time.Now()` (empty if none), used for an "off-peak active now" badge. It is computed at *display* time and is intentionally decoupled from any past request's billing window (which keys on that request's `StartTime`, see §2.5). |
-| [`controller/model.go:900-1053`](../../controller/model.go#L900) `buildChannelModels` | Convert resolved `ModelConfig.TimeWindows` into display form (schedule + the overlay rendered as prices via the existing `convertRatioToPrice` at :690); compute `ActiveTimeWindow`. |
-| [`router/api.go:21`](../../router/api.go#L21) `GET /api/models/display` (+ `:105`/`:110` channel pricing routes) | No route change; payload gains the new fields. |
+| [`controller/model.go:294`](../../../controller/model.go#L294) `ModelDisplayInfo` | Add `TimeWindows []TimeWindowDisplay `json:"time_windows,omitempty"`` and `ActiveTimeWindow string `json:"active_time_window,omitempty"``. `ActiveTimeWindow` = the `Name` of the **first** window matching at server `time.Now()` (empty if none), used for an "off-peak active now" badge. It is computed at *display* time and is intentionally decoupled from any past request's billing window (which keys on that request's `StartTime`, see §2.5). |
+| [`controller/model.go:900-1053`](../../../controller/model.go#L900) `buildChannelModels` | Convert resolved `ModelConfig.TimeWindows` into display form (schedule + the overlay rendered as prices via the existing `convertRatioToPrice` at :690); compute `ActiveTimeWindow`. |
+| [`router/api.go:21`](../../../router/api.go#L21) `GET /api/models/display` (+ `:105`/`:110` channel pricing routes) | No route change; payload gains the new fields. |
 
 ### 3.6 Frontend (three mirrors) + i18n
 
@@ -372,10 +374,10 @@ can author windows immediately. Required work is validation tolerance + read-onl
 
 | Frontend | Files | Change |
 | --- | --- | --- |
-| **modern** (primary) | [`web/modern/src/pages/channels/components/ChannelModelSettings.tsx`](../../web/modern/src/pages/channels/components/ChannelModelSettings.tsx) (textarea + `sanitizeJsonInput`), `schemas.ts`/`helpers.ts` | Accept and (lightly) validate `time_windows` in the JSON; update placeholder/example. |
-| **modern** read-only | [`web/modern/src/pages/models/ModelPricingModal.tsx`](../../web/modern/src/pages/models/ModelPricingModal.tsx) (`ModelDisplayData` iface + a new pricing section) | Render a "Time-of-day pricing" section: each window's schedule, timezone, day/date bounds, overlaid prices; highlight the active one. |
-| **air** | [`web/air/src/pages/Channel/EditChannel.js`](../../web/air/src/pages/Channel/EditChannel.js) (`validateModelConfigs` :20–123), `web/air/src/pages/Models/index.js` | Tolerate `time_windows` in validation; optionally surface an "off-peak" indicator in the price table. |
-| **berry** | [`web/berry/src/views/Channel/component/EditModal.js`](../../web/berry/src/views/Channel/component/EditModal.js) (Yup `model_configs` :76–128), `web/berry/src/views/Models/index.js` | Same: tolerate the field; optionally surface an indicator. |
+| **modern** (primary) | [`web/modern/src/pages/channels/components/ChannelModelSettings.tsx`](../../../web/modern/src/pages/channels/components/ChannelModelSettings.tsx) (textarea + `sanitizeJsonInput`), `schemas.ts`/`helpers.ts` | Accept and (lightly) validate `time_windows` in the JSON; update placeholder/example. |
+| **modern** read-only | [`web/modern/src/pages/models/ModelPricingModal.tsx`](../../../web/modern/src/pages/models/ModelPricingModal.tsx) (`ModelDisplayData` iface + a new pricing section) | Render a "Time-of-day pricing" section: each window's schedule, timezone, day/date bounds, overlaid prices; highlight the active one. |
+| **air** | [`web/air/src/pages/Channel/EditChannel.js`](../../../web/air/src/pages/Channel/EditChannel.js) (`validateModelConfigs` :20–123), `web/air/src/pages/Models/index.js` | Tolerate `time_windows` in validation; optionally surface an "off-peak" indicator in the price table. |
+| **berry** | [`web/berry/src/views/Channel/component/EditModal.js`](../../../web/berry/src/views/Channel/component/EditModal.js) (Yup `model_configs` :76–128), `web/berry/src/views/Models/index.js` | Same: tolerate the field; optionally surface an indicator. |
 | **i18n** | `web/modern/src/i18n/locales/{en,es,fr,ja,zh}/models.json` | Add a fixed key set under `models.detail.*`: `time_pricing` (section header), `window_name`, `window_schedule`, `window_timezone`, `window_days`, `window_dates`, `window_active` (badge), and `weekday_0`…`weekday_6` (translated day names). **All five locales** (en, zh, es, fr, ja) must carry every key — enforced by the i18n lint/test. Day names and times are rendered via the i18n library's locale-aware formatters, not hardcoded layouts. |
 
 Frontend validators today are field-presence checks, not key allowlists, so an unknown
@@ -505,9 +507,9 @@ corruption**. The guarantees below are each backed by a verified codebase fact.
 
 | # | Guarantee | Why it holds (verified) |
 | --- | --- | --- |
-| C1 | **No DB schema change.** | Windows live inside the existing `Channel.ModelConfigs *string gorm:"type:text"` JSON column ([`model/channel.go:48`](../../model/channel.go#L48)). No column is added or dropped, so `AutoMigrate` under either binary is unaffected. (GORM never drops columns regardless, but we add none.) |
+| C1 | **No DB schema change.** | Windows live inside the existing `Channel.ModelConfigs *string gorm:"type:text"` JSON column ([`model/channel.go:48`](../../../model/channel.go#L48)). No column is added or dropped, so `AutoMigrate` under either binary is unaffected. (GORM never drops columns regardless, but we add none.) |
 | C2 | **No existing field changes.** | Every current `ModelConfig`/`ModelConfigLocal` field keeps its name, type, and meaning. `TimeWindows` is new, `omitempty`, and appended at the **end** of the struct (§3.1) — so a config without windows serializes **byte-identically** to today. Existing stored JSON is never rewritten until an admin explicitly edits that channel. |
-| C3 | **Old binary ignores the new key (no error).** | Verified: the repo contains **zero** `json.DisallowUnknownFields` usages. `GetModelPriceConfigs` ([`:1364`](../../model/channel.go#L1364)) and the migration check ([`:719`](../../model/channel.go#L719)) both use lenient `json.Unmarshal`. An old binary decoding new JSON into the old `ModelConfigLocal` (which lacks `TimeWindows`) silently drops the unknown `time_windows` key — no parse error, no failed channel load, no billing break. |
+| C3 | **Old binary ignores the new key (no error).** | Verified: the repo contains **zero** `json.DisallowUnknownFields` usages. `GetModelPriceConfigs` ([`:1364`](../../../model/channel.go#L1364)) and the migration check ([`:719`](../../../model/channel.go#L719)) both use lenient `json.Unmarshal`. An old binary decoding new JSON into the old `ModelConfigLocal` (which lacks `TimeWindows`) silently drops the unknown `time_windows` key — no parse error, no failed channel load, no billing break. |
 | C4 | **Old binary bills exactly as pre-feature.** | With `time_windows` ignored, the old binary resolves prices from the default `ModelConfig` as it always did. It simply applies no time discount/surcharge (which it never could). Billing stays correct under the old rules — never over/undercharged beyond prior behavior. |
 | C5 | **New binary tolerates old data.** | Old rows have no `time_windows` → `nil` → `ApplyTimeWindow` is a no-op → behavior identical to today. New `normalize`/`validate` skip all window checks when `len(TimeWindows)==0`, so they never reject a pre-existing config. |
 | C6 | **Nested overlay invisible to old code.** | `time_windows[].overlay` is nested; old code iterates only **top-level** model keys (still model names) and never descends into it. |
@@ -566,16 +568,16 @@ Bounded promo taking precedence over a recurring off-peak (first-match-wins orde
 
 | Concern | Anchor |
 | --- | --- |
-| Canonical config | [`relay/adaptor/interface.go:21`](../../relay/adaptor/interface.go#L21) (`ModelConfig`), `:252` (`ModelRatioTier`) |
-| Local/persisted config | [`model/channel.go:116`](../../model/channel.go#L116) (`ModelConfigLocal`), `:48` (column) |
+| Canonical config | [`relay/adaptor/interface.go:21`](../../../relay/adaptor/interface.go#L21) (`ModelConfig`), `:252` (`ModelRatioTier`) |
+| Local/persisted config | [`model/channel.go:116`](../../../model/channel.go#L116) (`ModelConfigLocal`), `:48` (column) |
 | Normalize / validate / get / set | `model/channel.go` `:282` / `:874` / `:1364` / `:1382` |
-| Three-layer resolve | [`relay/pricing/resolver.go:22`](../../relay/pricing/resolver.go#L22)/`:48`/`:81`/`:240` |
-| Scalar/video resolve + clone | [`relay/pricing/global.go:348`](../../relay/pricing/global.go#L348)/`:381`/`:409`/`:431` (clone) |
-| Tier application | [`relay/pricing/global.go:504`](../../relay/pricing/global.go#L504) |
-| Billing compute | [`relay/quota/quota.go:43`](../../relay/quota/quota.go#L43) (`Compute`), `:18` (`ComputeInput`) |
-| Request start time | [`relay/meta/relay_meta.go:41`](../../relay/meta/relay_meta.go#L41)/`:117` |
-| Display | [`controller/model.go:294`](../../controller/model.go#L294)/`:900` |
-| Display route | [`router/api.go:21`](../../router/api.go#L21) |
+| Three-layer resolve | [`relay/pricing/resolver.go:22`](../../../relay/pricing/resolver.go#L22)/`:48`/`:81`/`:240` |
+| Scalar/video resolve + clone | [`relay/pricing/global.go:348`](../../../relay/pricing/global.go#L348)/`:381`/`:409`/`:431` (clone) |
+| Tier application | [`relay/pricing/global.go:504`](../../../relay/pricing/global.go#L504) |
+| Billing compute | [`relay/quota/quota.go:43`](../../../relay/quota/quota.go#L43) (`Compute`), `:18` (`ComputeInput`) |
+| Request start time | [`relay/meta/relay_meta.go:41`](../../../relay/meta/relay_meta.go#L41)/`:117` |
+| Display | [`controller/model.go:294`](../../../controller/model.go#L294)/`:900` |
+| Display route | [`router/api.go:21`](../../../router/api.go#L21) |
 | Frontend editors | modern `ChannelModelSettings.tsx`; air `EditChannel.js`; berry `EditModal.js` |
 | Frontend display | modern `ModelPricingModal.tsx`; air/berry `Models/index.js` |
 | i18n | `web/modern/src/i18n/locales/{en,es,fr,ja,zh}/models.json` |

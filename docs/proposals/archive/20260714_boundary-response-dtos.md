@@ -1,6 +1,8 @@
 # Change Manual: Boundary Response DTOs — Retiring Model-Level `MarshalJSON`
 
-- Status: **Implemented** (code landed; verified 2026-07-15 — see §10 Verification results)
+> **Archived 2026-09-06.** This work is complete and shipped; the document is kept as a historical design record and is no longer a plan of record.
+
+- Status: **Implemented** (code landed; verified 2026-07-15 — see §10 Verification results); archived 2026-09-06
 - Date: 2026-07-14 (proposed) / 2026-07-15 (verified)
 - Area: management API serialization / model layer / caching / security / test & lint infrastructure
 - Related: [`20260703_external-uuid-identifiers.md`](20260703_external-uuid-identifiers.md) (defines the S2 strict-out contract this manual **preserves byte-for-byte**), GitHub issue [#353](https://github.com/Laisky/one-api/issues/353) (the production incident that exposed the current design's failure mode)
@@ -30,24 +32,24 @@
 After a deploy, `/v1/chat/completions` intermittently returned
 `500 "user id is empty"` with `user_id: 0` in logs. Root cause chain:
 
-1. [`CacheGetUserById`](../../model/cache.go#L84) cached the whole user into
+1. [`CacheGetUserById`](../../../model/cache.go#L84) cached the whole user into
    Redis (`user_obj:<id>`) via `json.Marshal(user)`.
 2. `json.Marshal` on a `model.User` invokes the **API-facing**
-   [`User.MarshalJSON`](../../model/user_json.go#L37) — a whitelist DTO
+   [`User.MarshalJSON`](../../../model/user_json.go#L37) — a whitelist DTO
    (`userJSON`) that *deliberately* omits the internal integer `Id` (and
    `InviterId`, and secrets), per the S2 strict-out contract.
 3. The cached payload therefore had **no `"id"` key**. On a cache **hit**,
    `json.Unmarshal` left `user.Id == 0`.
-4. `TokenAuth` then set [`ctxkey.Id = user.Id`](../../middleware/auth.go#L292)
+4. `TokenAuth` then set [`ctxkey.Id = user.Id`](../../../middleware/auth.go#L292)
    → `meta.UserId = 0` → quota sync rejected id 0 → 500. Intermittent because
    it fires only on cache hits; flushing `user_obj:*` masked it until the cache
    repopulated.
 
 The hotfix (shipped) mirrors the token cache's existing counter-measure: a
-`type plainUser User` alias at [`model/cache.go:115`](../../model/cache.go#L115)
+`type plainUser User` alias at [`model/cache.go:115`](../../../model/cache.go#L115)
 strips the method set so the cache serializes raw fields (with secrets
 explicitly scrubbed). The token cache had used `type plainToken Token`
-([`model/cache.go:60`](../../model/cache.go#L60)) from the start — meaning the
+([`model/cache.go:60`](../../../model/cache.go#L60)) from the start — meaning the
 codebase already knew this trap and defended **one of two** identical sites.
 That inconsistency *is* the design smell this manual removes.
 
@@ -62,20 +64,20 @@ too. Consequences observed in the tree today:
 
 - **The boundary is not in control.** The login handler builds
   `cleanUser := model.User{Id: user.Id, …}` and returns it
-  ([`controller/user.go:194-205`](../../controller/user.go#L194)) — the handler
+  ([`controller/user.go:194-205`](../../../controller/user.go#L194)) — the handler
   explicitly sets `Id`, and the type's marshaler silently drops it on the way
   out. The code *reads* as if the handler decides the shape; it does not.
 - **Internal code must remember to opt out.** Every internal
   whole-struct serialization needs a `plainX` alias
-  (`plainToken` [cache.go:60](../../model/cache.go#L60), `plainUser`
-  [cache.go:115](../../model/cache.go#L115)). Forgetting one is invisible at
+  (`plainToken` [cache.go:60](../../../model/cache.go#L60), `plainUser`
+  [cache.go:115](../../../model/cache.go#L115)). Forgetting one is invisible at
   compile time, invisible in code review (the call site looks innocent), and
   surfaces as a production 500 — issue #353 exactly. This is
   **default-dangerous / opt-into-safety**.
 - **Embedding promotes the trap.** A wrapper embedding one of these types
   inherits the marshaler; `channelListItem` had to hand-write an override plus
   byte-splicing to add one field
-  ([`controller/channel_testing_model.go:86-115`](../../controller/channel_testing_model.go#L86)).
+  ([`controller/channel_testing_model.go:86-115`](../../../controller/channel_testing_model.go#L86)).
   A prior instance of this exact promotion bug shipped and had to be fixed
   (see memory: the channel wrapper silently dropped `test_models`).
 
@@ -99,16 +101,16 @@ tests and static analysis rather than by a method with global reach.
 already gone — retired by the previous UUID proposal in commit `99c5ed01`, not
 by this manual. The evidence is unambiguous:
 
-- [`common/idresolve.Resolve`](../../common/idresolve/idresolve.go#L25) rejects
+- [`common/idresolve.Resolve`](../../../common/idresolve/idresolve.go#L25) rejects
   any ref lacking a `-`; its doc states "digit-only legacy integer ids are
   rejected".
-- [`preferUUIDRef(uuid, id)`](../../controller/id_refs.go#L139) — used by
+- [`preferUUIDRef(uuid, id)`](../../../controller/id_refs.go#L139) — used by
   `UpdateToken`, `UpdateChannel`, `UpdateRedemption`, `ManageUser` and
   `user.go:1533` — documents its `id` parameter as "**ignored** legacy integer
   id field retained only for decoding old payloads", and returns
   `resource uuid is required` whenever `uuid` is empty.
 - The repo's own committed gate asserts the rejection:
-  [`TestTokenStrictInResponses`](../../controller/uuid_contract_test.go#L594)
+  [`TestTokenStrictInResponses`](../../../controller/uuid_contract_test.go#L594)
   requires `success == false` for both `GET /api/token/1` and
   `PUT /api/token/ {"id":1,"status":1}`.
 - Confirmed live on both binaries: `PUT /api/token/` with `{"id":<int>}`
@@ -134,25 +136,25 @@ cache requirement is the proposal's own founding bug.
 
 - **A boundary-DTO style is already in the tree** and is the target idiom:
   `GetSelfByToken` hand-builds a uuid-only `gin.H`
-  ([`controller/user.go:701-741`](../../controller/user.go#L701));
+  ([`controller/user.go:701-741`](../../../controller/user.go#L701));
   `GetDashboardUsers` uses a `UserOption` DTO; `DuplicateChannel` returns
   `gin.H{uuid,name}`. These sites need **no change**.
-- **The `dto` package exists** ([`dto/`](../../dto/)) and already holds
+- **The `dto` package exists** ([`dto/`](../../../dto/)) and already holds
   request/statistics DTOs. Note the dependency direction: **`model` imports
-  `dto`** ([`model/ability.go:17`](../../model/ability.go#L17),
-  [`model/cache.go:21`](../../model/cache.go#L21)), so `dto` must never import
+  `dto`** ([`model/ability.go:17`](../../../model/ability.go#L17),
+  [`model/cache.go:21`](../../../model/cache.go#L21)), so `dto` must never import
   `model` — this dictates the mapper placement in §3.1.
 - **The enforcement gate exists**:
-  [`controller/uuid_contract_test.go`](../../controller/uuid_contract_test.go)
+  [`controller/uuid_contract_test.go`](../../../controller/uuid_contract_test.go)
   (769 lines) drives real handlers via httptest and asserts, per endpoint, that
   responses contain `uuid` keys and **do not contain** `id`/`user_id` keys.
   This gate is what makes the migration safe: any handler that loses its
   id-hiding during the refactor fails CI loudly.
 - **Static-guardrail infrastructure exists**: `.ast-grep/rules/` +
-  [`sgconfig.yml`](../../sgconfig.yml), run by `make ast-grep-scan` and CI
-  ([`.github/workflows/lint.yml`](../../.github/workflows/lint.yml)).
+  [`sgconfig.yml`](../../../sgconfig.yml), run by `make ast-grep-scan` and CI
+  ([`.github/workflows/lint.yml`](../../../.github/workflows/lint.yml)).
 - **The regression tests from issue #353 exist**:
-  [`model/cache_user_id_test.go`](../../model/cache_user_id_test.go) proves the
+  [`model/cache_user_id_test.go`](../../../model/cache_user_id_test.go) proves the
   cache round-trip preserves `Id` and scrubs secrets, and
   `TestUserMarshalJSON_StillHidesInternalIntId` guards the outbound contract.
 
@@ -163,15 +165,15 @@ it (full table in Appendix A):
 
 | Entity | Marshaler | Handler sites | Notes |
 | --- | --- | --- | --- |
-| `model.Redemption` | [`redemption.go:44`](../../model/redemption.go#L44) | 4 (all admin) | smallest, no secrets, no wrappers → **pilot** |
-| `model.Log` | [`log_json.go:15`](../../model/log_json.go#L15) | 5 (admin/self/token) | list-heavy; largest row counts |
-| `model.Token` | [`token.go:61`](../../model/token.go#L61) | 9 (self/admin/**TokenAuth**) | key-prefix normalization lives in the marshaler; `ConsumeToken` returns `data: updatedToken` to API clients ([`controller/token.go:357`](../../controller/token.go#L357)) |
-| `model.User` | [`user_json.go:37`](../../model/user_json.go#L37) | 6 | includes the `SetupLogin` funnel (password + 4 OAuth providers + passkey all serialize at [`user.go:202`](../../controller/user.go#L202)); **secrets live on this struct** |
-| `model.Channel` | [`channel_json.go:15`](../../model/channel_json.go#L15) | 4 (all admin) | via 2 shared builders + the `channelListItem` embedding wrapper |
+| `model.Redemption` | [`redemption.go:44`](../../../model/redemption.go#L44) | 4 (all admin) | smallest, no secrets, no wrappers → **pilot** |
+| `model.Log` | [`log_json.go:15`](../../../model/log_json.go#L15) | 5 (admin/self/token) | list-heavy; largest row counts |
+| `model.Token` | [`token.go:61`](../../../model/token.go#L61) | 9 (self/admin/**TokenAuth**) | key-prefix normalization lives in the marshaler; `ConsumeToken` returns `data: updatedToken` to API clients ([`controller/token.go:357`](../../../controller/token.go#L357)) |
+| `model.User` | [`user_json.go:37`](../../../model/user_json.go#L37) | 6 | includes the `SetupLogin` funnel (password + 4 OAuth providers + passkey all serialize at [`user.go:202`](../../../controller/user.go#L202)); **secrets live on this struct** |
+| `model.Channel` | [`channel_json.go:15`](../../../model/channel_json.go#L15) | 4 (all admin) | via 2 shared builders + the `channelListItem` embedding wrapper |
 
 Verified **absent**: no SSE/websocket/CSV-export path serializes these five
 types; the only non-`c.JSON` outbound marshal is
-[`buildChannelResponsePayload`](../../controller/channel.go#L198) (counted
+[`buildChannelResponsePayload`](../../../controller/channel.go#L198) (counted
 above). The Redis caches in `model/cache.go` are the only internal
 whole-struct JSON round-trips (independently confirmed by the issue-#353
 adversarial audit: 22 serialization sites classified, no other instance).
@@ -187,13 +189,13 @@ proposal, not consequences of this one:
 
 - The air+berry dashboard "all users" sentinel `id === 0` is **already dead
   code**: `GetDashboardUsers`' `UserOption` emits **no `id` at all**
-  ([`controller/user.go:606-610`](../../controller/user.go#L606)) — it was
+  ([`controller/user.go:606-610`](../../../controller/user.go#L606)) — it was
   removed by commit `99c5ed01` under the 20260703 UUID proposal, and
-  [`uuid_contract_test.go:344`](../../controller/uuid_contract_test.go#L344)
+  [`uuid_contract_test.go:344`](../../../controller/uuid_contract_test.go#L344)
   already asserts its absence. So `option.id === 0` evaluates
   `undefined === 0` → always false. Selection still works only via the
   `uuid || id` fallback (`String(user.uuid || user.id)` → `"all"`, driven by
-  the `UUID: "all"` sentinel at [`user.go:614-618`](../../controller/user.go#L614)).
+  the `UUID: "all"` sentinel at [`user.go:614-618`](../../../controller/user.go#L614)).
   This refactor does not touch it either way.
 - Log-row React keys reading `row.id` are cosmetic in modern and berry (berry
   suffixes the row index, so keys stay unique). The one real defect is
@@ -299,13 +301,13 @@ Design rules for the shapes:
   lists are the hot path (up to `MaxRecentItems` rows per page).
 - `nil`-safety: mappers accept `nil` receivers and return the zero shape, so
   wrapper code (e.g. `channelListItem` with `item.Channel == nil`,
-  [`channel_testing_model.go:97`](../../controller/channel_testing_model.go#L97))
+  [`channel_testing_model.go:97`](../../../controller/channel_testing_model.go#L97))
   keeps its current behavior.
 
 ### 3.2 Secrets become unmarshalable (`json:"-"`), request DTOs absorb inbound
 
 Today `User.Password/AccessToken/TotpSecret` have live JSON tags
-([`model/user.go:39,49,50`](../../model/user.go#L39)) and are hidden outbound
+([`model/user.go:39,49,50`](../../../model/user.go#L39)) and are hidden outbound
 *only* by the marshaler. Removing the marshaler without re-protecting them
 would let any stray `json.Marshal(user)` (a future log statement, a future
 cache) emit a bcrypt hash or a TOTP seed. Therefore, **before** the User
@@ -316,20 +318,20 @@ marshaler is removed:
    that is not protection.)
 2. Exactly **three** handlers bind inbound JSON into `model.User` and read
    these fields — each gets a small request DTO in `dto`:
-   - `Register` ([`controller/user.go:234`](../../controller/user.go#L234)) →
+   - `Register` ([`controller/user.go:234`](../../../controller/user.go#L234)) →
      `dto.UserRegisterRequest` (username, password, display_name, email,
      verification_code — enumerate at implementation from the handler's actual
      reads, locked by the bind-equivalence test T7).
-   - `CreateUser` ([`controller/user.go:1268`](../../controller/user.go#L1268))
+   - `CreateUser` ([`controller/user.go:1268`](../../../controller/user.go#L1268))
      → `dto.UserCreateRequest`.
-   - `UpdateSelf` ([`controller/user.go:1116`](../../controller/user.go#L1116))
+   - `UpdateSelf` ([`controller/user.go:1116`](../../../controller/user.go#L1116))
      → `dto.UserSelfUpdateRequest` (pointer fields; the handler already
      re-reads the raw body to distinguish omitted-vs-empty — that logic stays).
 3. All other password/secret flows already use dedicated request structs
    (`LoginRequest`, `UserAdminUpdatePayload`, TOTP `req` structs) — no change.
 
 Beneficial side effect: the cache's explicit secret scrub
-([`model/cache.go:117-119`](../../model/cache.go#L117)) becomes redundant
+([`model/cache.go:117-119`](../../../model/cache.go#L117)) becomes redundant
 (kept as belt-and-suspenders or removed in P6 — either is safe once `json:"-"`
 lands, because the tag makes the scrub's failure mode unrepresentable).
 
@@ -350,9 +352,9 @@ Each entity migrates in **one PR** with this internal order:
 4. **Marshaler removal — same PR:** delete the model-level `MarshalJSON`.
    *Everything that depended on it flips in this same commit:*
    - **Channel only:** rewrite
-     [`buildChannelResponsePayload`](../../controller/channel.go#L198) to build
+     [`buildChannelResponsePayload`](../../../controller/channel.go#L198) to build
      from `channel.ToResponse()` (then splice `tooling` as today), and replace
-     [`channelListItem.MarshalJSON`](../../controller/channel_testing_model.go#L86)'s
+     [`channelListItem.MarshalJSON`](../../../controller/channel_testing_model.go#L86)'s
      byte-splicing with a plain struct: `struct { dto.ChannelResponse;
      TestModels []string `json:"test_models"` }` — the embedding-promotion
      hazard disappears because `dto.ChannelResponse` has no methods.
@@ -362,12 +364,12 @@ Each entity migrates in **one PR** with this internal order:
      stay green — they are the proof the flip lost nothing.
 5. **Cache simplification (User/Token PRs or deferred to P6):** with the
    marshaler gone, `plainUser`/`plainToken` aliases become no-ops; remove them
-   and re-run [`model/cache_user_id_test.go`](../../model/cache_user_id_test.go).
+   and re-run [`model/cache_user_id_test.go`](../../../model/cache_user_id_test.go).
 
    **Mixed-version note — corrected against measurement (T11).** This manual
    originally asserted that "cache payloads only ever gain keys relative to the
    current fixed binary". That is **false**, as
-   [`model/cache_mixed_version_test.go`](../../model/cache_mixed_version_test.go)
+   [`model/cache_mixed_version_test.go`](../../../model/cache_mixed_version_test.go)
    now proves against fixtures generated by the real pre-refactor binary
    (git `6ebe28a5`):
 
@@ -406,7 +408,7 @@ acceptable because three independent gates catch it:
 
 | Gate | Layer | Catches |
 | --- | --- | --- |
-| E1 [`uuid_contract_test.go`](../../controller/uuid_contract_test.go) (exists) | runtime, per endpoint | any *existing* endpoint emitting `id`/`user_id`/secret keys — runs on every `go test ./controller/...` |
+| E1 [`uuid_contract_test.go`](../../../controller/uuid_contract_test.go) (exists) | runtime, per endpoint | any *existing* endpoint emitting `id`/`user_id`/secret keys — runs on every `go test ./controller/...` |
 | E2 Golden byte-compat tests (new, §3.3.1) | unit, per entity | any drift between the frozen contract and the mapper output |
 | E3 `noentityresponse` static analyzer (new) | compile-time types, whole repo | any `c.JSON`/`json.Marshal` argument whose type (or element/field type, transitively through `gin.H`/composite literals) is one of the five entities — **including brand-new endpoints E1 doesn't know about** |
 
@@ -426,7 +428,7 @@ struct. E3 makes the policy mechanical.
 
 ### 3.5 Explicitly unchanged behaviors
 
-- `ConsumeToken`'s `data: updatedToken` ([`token.go:357`](../../controller/token.go#L357))
+- `ConsumeToken`'s `data: updatedToken` ([`token.go:357`](../../../controller/token.go#L357))
   is an **API-client-facing contract** (TokenAuth callers) — byte-frozen by its
   golden test in the Token PR.
 - `SetupLogin`'s response shape (consumed by password login, GitHub/Lark/OIDC/
@@ -457,7 +459,7 @@ the working tree on 2026-07-14.
 
 | File | Change |
 | --- | --- |
-| 🆕 `dto/responses.go` (+`RedemptionResponse`) | shape ≡ today's `redemptionDTO` ([`redemption.go:45-57`](../../model/redemption.go#L45)) |
+| 🆕 `dto/responses.go` (+`RedemptionResponse`) | shape ≡ today's `redemptionDTO` ([`redemption.go:45-57`](../../../model/redemption.go#L45)) |
 | 🆕 `model/redemption_view.go` | `ToResponse()` + list mapper + golden test |
 | ✏️ `controller/redemption.go` | R1 `:47`, R2 `:79`, R3 `:99`, R4 `:222` → mappers |
 | 🗑️ `model/redemption.go:44-72` | remove `MarshalJSON` |
@@ -466,7 +468,7 @@ the working tree on 2026-07-14.
 
 | File | Change |
 | --- | --- |
-| ✏️ `dto/responses.go` (+`LogResponse`) | shape ≡ `logJSON` ([`log_json.go:16-40`](../../model/log_json.go#L16)), incl. `omitempty` on `channel_name`/`metadata` |
+| ✏️ `dto/responses.go` (+`LogResponse`) | shape ≡ `logJSON` ([`log_json.go:16-40`](../../../model/log_json.go#L16)), incl. `omitempty` on `channel_name`/`metadata` |
 | 🆕 `model/log_view.go` | mappers (pre-allocated list mapper) + golden test |
 | ✏️ `controller/log.go` | L1 `:77`, L2 `:137`, L3 `:180`, L4 `:213`, L5 `:247` |
 | 🗑️ `model/log_json.go` | remove file (marshaler only) |
@@ -475,8 +477,8 @@ the working tree on 2026-07-14.
 
 | File | Change |
 | --- | --- |
-| ✏️ `dto/responses.go` (+`TokenResponse`) | shape ≡ `tokenDTO` ([`token.go:71-87`](../../model/token.go#L71)) |
-| 🆕 `model/token_view.go` | `ToResponse()` carries the prefix normalization verbatim ([`token.go:62-69`](../../model/token.go#L62)) + golden test incl. prefix cases (port `model/token_json_test.go` assertions) |
+| ✏️ `dto/responses.go` (+`TokenResponse`) | shape ≡ `tokenDTO` ([`token.go:71-87`](../../../model/token.go#L71)) |
+| 🆕 `model/token_view.go` | `ToResponse()` carries the prefix normalization verbatim ([`token.go:62-69`](../../../model/token.go#L62)) + golden test incl. prefix cases (port `model/token_json_test.go` assertions) |
 | ✏️ `controller/token.go` | T1 `:80`, T2 `:112`, T3 `:132`, T4 `:214` (`cleanToken`), T5 `:357` (`ConsumeToken`), T6 `:986`, T7 `:1100`, T8 `:1134`, T9 `:1154` |
 | 🗑️ `model/token.go:59-106` | remove `MarshalJSON` |
 | ✏️ `model/cache.go:60-61` | drop the `plainToken` alias (now a no-op) — or defer to P6 |
@@ -485,7 +487,7 @@ the working tree on 2026-07-14.
 
 | File | Change |
 | --- | --- |
-| ✏️ `dto/responses.go` (+`UserResponse`) | shape ≡ `userJSON` ([`user_json.go:9-30`](../../model/user_json.go#L9)) |
+| ✏️ `dto/responses.go` (+`UserResponse`) | shape ≡ `userJSON` ([`user_json.go:9-30`](../../../model/user_json.go#L9)) |
 | 🆕 `dto/user_requests.go` | `UserRegisterRequest`, `UserCreateRequest`, `UserSelfUpdateRequest` (§3.2) |
 | 🆕 `model/user_view.go` | mappers + golden test |
 | ✏️ `model/user.go:39,48,49,50` | `Password`, `VerificationCode`, `AccessToken`, `TotpSecret` → `json:"-"` |
@@ -498,7 +500,7 @@ the working tree on 2026-07-14.
 
 | File | Change |
 | --- | --- |
-| ✏️ `dto/responses.go` (+`ChannelResponse`) | shape ≡ `channelJSON` ([`channel_json.go:16-46`](../../model/channel_json.go#L16)) |
+| ✏️ `dto/responses.go` (+`ChannelResponse`) | shape ≡ `channelJSON` ([`channel_json.go:16-46`](../../../model/channel_json.go#L16)) |
 | 🆕 `model/channel_view.go` | mappers + golden test |
 | ✏️ `controller/channel.go:198-218` | `buildChannelResponsePayload` builds from `ToResponse()` + `tooling` splice (C3 `:297`, C4 `:497` unchanged above it) |
 | ✏️ `controller/channel_testing_model.go:74-126` | `channelListItem` → plain composite `{dto.ChannelResponse; TestModels []string}`; delete the byte-splicing `MarshalJSON` override (C1 `:255`, C2 `:277` via `buildChannelListResponse`) |
@@ -549,13 +551,13 @@ the rest are new. DB guardrails from prior work apply throughout
 | --- | --- | --- | --- |
 | T1 | Unit / contract | Per entity: fully-populated model → `ToResponse()` → `json.Marshal` vs the P0 golden bytes | byte-identical (`require.JSONEq` + exact key-set walk); run per PR P1–P5 |
 | T2 | Unit / contract | Golden capture determinism: regenerate golden from the same fixture twice | identical bytes (no map-ordering flake — goldens compared via `JSONEq`) |
-| T3 | Runtime gate **(exists)** | [`uuid_contract_test.go`](../../controller/uuid_contract_test.go): every endpoint, per entity, before & after its flip | still green at every phase; `id`/`user_id` absent; `uuid` keys present |
+| T3 | Runtime gate **(exists)** | [`uuid_contract_test.go`](../../../controller/uuid_contract_test.go): every endpoint, per entity, before & after its flip | still green at every phase; `id`/`user_id` absent; `uuid` keys present |
 | T4 | Security | Post-P4: marshal a fully-populated `model.User` with **default** `json.Marshal` (no mapper) | output contains `id` (honest) and **never** `password`/`access_token`/`totp_secret`/`verification_code` (`json:"-"`) |
 | T5 | Security | Post-P4: `dto.UserResponse` golden | no secret keys, no `id`/`inviter_id` (mirrors existing `TestUserMarshalJSON_StillHidesInternalIntId`, which is deleted only when its replacement lands in the same PR) |
-| T6 | Cache **(exists)** | [`model/cache_user_id_test.go`](../../model/cache_user_id_test.go): miniredis round-trip preserves `Id`, scrubs secrets | green before and after P4's alias/scrub simplification |
+| T6 | Cache **(exists)** | [`model/cache_user_id_test.go`](../../../model/cache_user_id_test.go): miniredis round-trip preserves `Id`, scrubs secrets | green before and after P4's alias/scrub simplification |
 | T7 | Inbound equivalence | P4: replay identical JSON bodies against `Register`/`CreateUser`/`UpdateSelf` pre- and post-request-DTO | resulting DB rows identical (password set & hashed, display_name/email/metadata semantics incl. omitted-vs-empty in `UpdateSelf`); unknown-field tolerance unchanged |
-| T8 | Inbound regression | D3 legacy writers: `AddToken`/`UpdateToken` with `{"id":…}`/`{"user_id":…}` int bodies | ~~still parse~~ → **still *refused identically***: strict-in has rejected integer ids since `99c5ed01`, so the assertion is invariance of the refusal, not acceptance (`resource uuid is required`, same status + body pre/post). Tags untouched. Covered by the untouched [`TestTokenStrictInResponses`](../../controller/uuid_contract_test.go#L594) + the T17 differential. See the §1.3 correction. |
-| T9 | Wrapper | P5: `channelListItem` replacement with 0, 1, n `test_models`, and `nil` channel | key-set identical to the old byte-splicer, incl. `"test_models":[]` (never omitted) and the nil-channel `{"test_models":[]}` shape ([`channel_testing_model.go:97`](../../controller/channel_testing_model.go#L97)) |
+| T8 | Inbound regression | D3 legacy writers: `AddToken`/`UpdateToken` with `{"id":…}`/`{"user_id":…}` int bodies | ~~still parse~~ → **still *refused identically***: strict-in has rejected integer ids since `99c5ed01`, so the assertion is invariance of the refusal, not acceptance (`resource uuid is required`, same status + body pre/post). Tags untouched. Covered by the untouched [`TestTokenStrictInResponses`](../../../controller/uuid_contract_test.go#L594) + the T17 differential. See the §1.3 correction. |
+| T9 | Wrapper | P5: `channelListItem` replacement with 0, 1, n `test_models`, and `nil` channel | key-set identical to the old byte-splicer, incl. `"test_models":[]` (never omitted) and the nil-channel `{"test_models":[]}` shape ([`channel_testing_model.go:97`](../../../controller/channel_testing_model.go#L97)) |
 | T10 | Client contract | P3: `ConsumeToken` httptest — full response incl. `data` + `transaction` | byte-identical key-set to pre-flip capture |
 | T11 | Mixed-version cache | Write cache entry with pre-change binary's payload shape (fixture), read with post-change code, and vice versa | both directions unmarshal correctly; `Id` preserved; no panic on missing/extra keys |
 | T12 | Static gate | Analyzer unit tests: `c.JSON` with raw entity / slice / `gin.H`-wrapped / embedded; and negative cases (`dto.*Response`, scalars, mappers, cache aliases) | flags all positives, none of the negatives |
@@ -587,7 +589,7 @@ the rest are new. DB guardrails from prior work apply throughout
 | AC1 | `grep -rn "func (.*) MarshalJSON()" model/*.go` returns **only** the four lossless field serializers (`JSONStringSlice`, `JSONStringMap`, `MCPToolPricingMap`, `LogMetadata`) — the five entity whitelist marshalers are gone. |
 | AC2 | Every endpoint in Appendix A emits a byte-identical key-set to its P0 golden (T1) and passes the existing contract gate (T3) — the external S2 contract is provably unchanged. |
 | AC3 | `json.Marshal` of any of the five entities yields default, id-bearing JSON with **zero** secret keys for `User` (T4) — issue #353's bug class is unrepresentable. |
-| AC4 | `model/cache.go` contains no `plainX` aliases and no secret-scrub that the type system doesn't already guarantee; [`model/cache_user_id_test.go`](../../model/cache_user_id_test.go) green (T6). |
+| AC4 | `model/cache.go` contains no `plainX` aliases and no secret-scrub that the type system doesn't already guarantee; [`model/cache_user_id_test.go`](../../../model/cache_user_id_test.go) green (T6). |
 | AC5 | The `noentityresponse` analyzer runs in CI in **fail mode** (`strict = true` by default); introducing `c.JSON(200, gin.H{"data": user})` in any package fails `make lint` (T12). ~~with an empty allowlist~~ **Corrected:** the allowlist is `{model/cache.go}`, not empty — AC5 as written contradicted §3.4, which *requires* that entry, because the internal Redis cache must marshal the raw entity (that honest, id-bearing payload is the #353 fix). An empty allowlist is therefore not a reachable end state. The analyzer additionally skips `_test.go` files, so tests may still marshal entities deliberately (the goldens and mixed-version fixtures depend on this). Verified: `make lint-entity-response` exits 0 repo-wide. |
 | AC6 | ~~Legacy int-id inbound writers still work (T8) — D3 untouched.~~ **Corrected:** legacy int-id writers do **not** work and have not since `99c5ed01` (strict-in rejects them; see §1.3). The criterion that is actually meaningful, and that is met: **inbound behavior is byte-for-byte invariant** — `PUT /api/token/ {"id":<int>}` returns the same `resource uuid is required` refusal pre- and post-refactor (verified live on both binaries and by the untouched `TestTokenStrictInResponses`). All inbound tags are untouched (T8). |
 | AC7 | All three frontends pass the T15 manual matrix; the air/berry dashboard sentinel works. |
@@ -647,12 +649,12 @@ because a differential that cannot fail proves nothing.
 | **T1/T2/AC2** | Green. **Provenance independently proven**: the five `model/testdata/*_response.golden.json` were replayed through the *legacy* marshalers in the pre-refactor worktree — all five match byte-for-byte. Since T1 proves *mapper == golden* in the main tree, this transitively proves **mapper == retired `MarshalJSON`**. Vacuity checked (mutating a fixture value fails the comparison). This closes the §8 "golden freezes a bug" risk. |
 | **T3** | Green (`uuid_contract_test.go` untouched and passing). |
 | **T4/T5/T6/T16** | Green. |
-| **T10** | Implemented ([`controller/consume_token_contract_test.go`](../../controller/consume_token_contract_test.go), 6 subtests). Exact key-set frozen: top level `{data, message, success, transaction}`; `data` = 15 keys; `transaction` = 14 base keys + conditional `confirmed_at`/`canceled_at`/`elapsed_time_ms`. `id`/`user_id`/`token_id`/`log_id`/secrets asserted absent at any depth. **Passes unmodified on both trees.** Vacuity checked (injecting `Id` into `dto.TokenResponse` fails it). |
-| **T11** | Implemented ([`model/cache_mixed_version_test.go`](../../model/cache_mixed_version_test.go), 6 tests) against fixtures generated by the **real pre-refactor binary**. Both directions green via miniredis + the real `CacheGetUserById`/`CacheGetTokenByKey`. **Found two doc errors — see §3.3.5 correction.** |
+| **T10** | Implemented ([`controller/consume_token_contract_test.go`](../../../controller/consume_token_contract_test.go), 6 subtests). Exact key-set frozen: top level `{data, message, success, transaction}`; `data` = 15 keys; `transaction` = 14 base keys + conditional `confirmed_at`/`canceled_at`/`elapsed_time_ms`. `id`/`user_id`/`token_id`/`log_id`/secrets asserted absent at any depth. **Passes unmodified on both trees.** Vacuity checked (injecting `Id` into `dto.TokenResponse` fails it). |
+| **T11** | Implemented ([`model/cache_mixed_version_test.go`](../../../model/cache_mixed_version_test.go), 6 tests) against fixtures generated by the **real pre-refactor binary**. Both directions green via miniredis + the real `CacheGetUserById`/`CacheGetTokenByKey`. **Found two doc errors — see §3.3.5 correction.** |
 | **T13/I7** | **Measured, envelope holds with a wide margin — in the improving direction.** 10k fully-populated rows, both paths' JSON verified byte-identical first: sec/op **80.42m → 21.28m (−73.5%)**, allocs/op **80.00k → 50.00k (−37.5%)**, B/op −42.2% (benchstat n=10, p=0.000; direction reproduced at `GOMAXPROCS=1` and `16`). Cause: the retired `Log.MarshalJSON` ran a *nested* `json.Marshal` per row (8 allocs/row vs 5); the pre-allocated DTO slice costs exactly **1** allocation total. |
 | **T14/AC8** | See §10.4. |
 | **T15** | **Holds.** Verified across modern/air/berry: all key by `uuid`; zod/yup are *input*-only (no response schema anywhere); no theme *depends* on an integer FK. **Two §1.5 claims were factually wrong and are corrected there.** |
-| **T17/T18** | Implemented ([`controller/behavior_differential_test.go`](../../controller/behavior_differential_test.go), **81 cases**, all 28 Appendix A sites + error paths). Baselines generated **on the pre-refactor tree**; the file compiles and runs on both sides. Capture determinism verified (two captures byte-identical). **78/81 zero-diff; 3 genuine behavior changes found — see §10.3.** |
+| **T17/T18** | Implemented ([`controller/behavior_differential_test.go`](../../../controller/behavior_differential_test.go), **81 cases**, all 28 Appendix A sites + error paths). Baselines generated **on the pre-refactor tree**; the file compiles and runs on both sides. Capture determinism verified (two captures byte-identical). **78/81 zero-diff; 3 genuine behavior changes found — see §10.3.** |
 | **T19** | **Green, live.** Two servers (refactored + pre-refactor) driven over real HTTP with real routing/middleware/session auth. Management journey: **54 steps** (45 returning data). Relay journey: **11 steps** including a real billed `/v1/chat/completions` against a mock upstream. Both recordings are **byte-identical (matching md5)** across the two binaries. Zero secret keys and zero integer-id key paths on either side. Differ vacuity-checked (injected status/shape changes are caught). |
 | **T20** | **Green.** Relay → billing → log verified live: identical response, identical log row, identical `quota_delta=1` on both binaries. Statically, the `noentityresponse` analyzer passes repo-wide in strict mode, so no relay-path code serializes any of the five entities. |
 | **AC6/T8** | **Criterion was wrong; behavior is invariant.** See the §1.3 correction — legacy int-id inbound has been rejected since `99c5ed01`, so the meaningful assertion is that the *refusal* is identical pre/post (verified live and by the untouched `TestTokenStrictInResponses`). |
@@ -747,7 +749,7 @@ sentinel. Both are inherited from the 20260703 UUID proposal.
 | AC6 | **Criterion corrected** — the refusal is invariant; legacy int-id acceptance has not existed since `99c5ed01` (§1.3). |
 | AC7 | **Met** (T15, all three themes, code-level audit). |
 | AC8 | **Met.** `go test -race ./...` green across 89 packages; `go vet` clean; `make lint-entity-response` exits 0; the `no-gin-context-as-spawn-arg` ast-grep guardrail passes. |
-| AC9 | **Met.** The boundary rule is documented in [`docs/arch/boundary_response_dtos.md`](../arch/boundary_response_dtos.md), which is where the rule, its rationale, the four enforcement gates and the "adding a new endpoint" checklist live. |
+| AC9 | **Met.** The boundary rule is documented in [`docs/arch/boundary_response_dtos.md`](../../arch/boundary_response_dtos.md), which is where the rule, its rationale, the four enforcement gates and the "adding a new endpoint" checklist live. |
 | AC10 | **Met with one recorded deviation** (§10.3). I1, I4, I5, I6, I7 hold unconditionally and are proven by the differentials above; **I2/I3 hold except for the single accepted inbound-strictness relaxation**, which is pinned, documented, and unreachable from any bundled client. |
 
 ### 10.6 Reproducing the verification
@@ -767,7 +769,7 @@ make lint-entity-response                                        # strict; must 
 ```
 
 The live T19/T20 differential is committed as a reusable tool at
-[`scripts/behavior-differential/`](../../scripts/behavior-differential/) (see its
+[`scripts/behavior-differential/`](../../../scripts/behavior-differential/) (see its
 README). It needs two running binaries, so it is a **manual** gate, not a CI one:
 
 ```sh
@@ -793,67 +795,67 @@ so it is worth reaching for the next time a refactor claims behavior invariance.
 
 ## Appendix A — Verified handler-site inventory (the 28 flips)
 
-Auth column from [`router/api.go`](../../router/api.go).
+Auth column from [`router/api.go`](../../../router/api.go).
 
 ### User (6)
 
 | # | Site | Handler | Shape | Auth |
 | --- | --- | --- | --- | --- |
-| U1 | [`controller/user.go:202`](../../controller/user.go#L202) | `SetupLogin` (`cleanUser`) — funnel for `Login`, WeChat/Lark/OIDC/GitHub OAuth, `PasskeyLoginFinish` | single | public→self |
-| U2 | [`controller/user.go:329`](../../controller/user.go#L329) | `GetAllUsers` | list | admin |
-| U3 | [`controller/user.go:350`](../../controller/user.go#L350) | `SearchUsers` | list | admin |
-| U4 | [`controller/user.go:373`](../../controller/user.go#L373) | `GetUser` | single | admin |
-| U5 | [`controller/user.go:778`](../../controller/user.go#L778) | `GetSelf` | single | self |
-| U6 | [`controller/user.go:1413`](../../controller/user.go#L1413) | `ManageUser` (`clearUser`) | single | admin |
+| U1 | [`controller/user.go:202`](../../../controller/user.go#L202) | `SetupLogin` (`cleanUser`) — funnel for `Login`, WeChat/Lark/OIDC/GitHub OAuth, `PasskeyLoginFinish` | single | public→self |
+| U2 | [`controller/user.go:329`](../../../controller/user.go#L329) | `GetAllUsers` | list | admin |
+| U3 | [`controller/user.go:350`](../../../controller/user.go#L350) | `SearchUsers` | list | admin |
+| U4 | [`controller/user.go:373`](../../../controller/user.go#L373) | `GetUser` | single | admin |
+| U5 | [`controller/user.go:778`](../../../controller/user.go#L778) | `GetSelf` | single | self |
+| U6 | [`controller/user.go:1413`](../../../controller/user.go#L1413) | `ManageUser` (`clearUser`) | single | admin |
 
 ### Token (9)
 
 | # | Site | Handler | Shape | Auth |
 | --- | --- | --- | --- | --- |
-| T1 | [`controller/token.go:80`](../../controller/token.go#L80) | `GetAllTokens` | list | self |
-| T2 | [`controller/token.go:112`](../../controller/token.go#L112) | `SearchTokens` | list | self |
-| T3 | [`controller/token.go:132`](../../controller/token.go#L132) | `GetToken` | single | self |
-| T4 | [`controller/token.go:214`](../../controller/token.go#L214) | `AddToken` (`cleanToken`) | single | self |
-| T5 | [`controller/token.go:357`](../../controller/token.go#L357) | `ConsumeToken` (`data: updatedToken`) | single | **TokenAuth (API clients)** |
-| T6 | [`controller/token.go:986`](../../controller/token.go#L986) | `UpdateToken` (`cleanToken`) | single | self |
-| T7 | [`controller/token.go:1100`](../../controller/token.go#L1100) | `AdminGetAllTokens` | list | admin |
-| T8 | [`controller/token.go:1134`](../../controller/token.go#L1134) | `AdminSearchTokens` | list | admin |
-| T9 | [`controller/token.go:1154`](../../controller/token.go#L1154) | `AdminGetToken` | single | admin |
+| T1 | [`controller/token.go:80`](../../../controller/token.go#L80) | `GetAllTokens` | list | self |
+| T2 | [`controller/token.go:112`](../../../controller/token.go#L112) | `SearchTokens` | list | self |
+| T3 | [`controller/token.go:132`](../../../controller/token.go#L132) | `GetToken` | single | self |
+| T4 | [`controller/token.go:214`](../../../controller/token.go#L214) | `AddToken` (`cleanToken`) | single | self |
+| T5 | [`controller/token.go:357`](../../../controller/token.go#L357) | `ConsumeToken` (`data: updatedToken`) | single | **TokenAuth (API clients)** |
+| T6 | [`controller/token.go:986`](../../../controller/token.go#L986) | `UpdateToken` (`cleanToken`) | single | self |
+| T7 | [`controller/token.go:1100`](../../../controller/token.go#L1100) | `AdminGetAllTokens` | list | admin |
+| T8 | [`controller/token.go:1134`](../../../controller/token.go#L1134) | `AdminSearchTokens` | list | admin |
+| T9 | [`controller/token.go:1154`](../../../controller/token.go#L1154) | `AdminGetToken` | single | admin |
 
 ### Channel (4, via shared builders)
 
 | # | Site | Handler | Shape | Auth |
 | --- | --- | --- | --- | --- |
-| C1 | [`controller/channel.go:255`](../../controller/channel.go#L255) | `GetAllChannels` → `buildChannelListResponse` → `channelListItem` | list | admin |
-| C2 | [`controller/channel.go:277`](../../controller/channel.go#L277) | `SearchChannels` → same | list | admin |
-| C3 | [`controller/channel.go:297`](../../controller/channel.go#L297) | `GetChannel` → `buildChannelResponsePayload` | single | admin |
-| C4 | [`controller/channel.go:497`](../../controller/channel.go#L497) | `UpdateChannel` → same | single | admin |
+| C1 | [`controller/channel.go:255`](../../../controller/channel.go#L255) | `GetAllChannels` → `buildChannelListResponse` → `channelListItem` | list | admin |
+| C2 | [`controller/channel.go:277`](../../../controller/channel.go#L277) | `SearchChannels` → same | list | admin |
+| C3 | [`controller/channel.go:297`](../../../controller/channel.go#L297) | `GetChannel` → `buildChannelResponsePayload` | single | admin |
+| C4 | [`controller/channel.go:497`](../../../controller/channel.go#L497) | `UpdateChannel` → same | single | admin |
 
-Shared mechanisms: [`buildChannelResponsePayload` `channel.go:198`](../../controller/channel.go#L198)
+Shared mechanisms: [`buildChannelResponsePayload` `channel.go:198`](../../../controller/channel.go#L198)
 (`json.Marshal(channel)` at `:200`), [`buildChannelListResponse`
-`channel_testing_model.go:126`](../../controller/channel_testing_model.go#L126),
-[`channelListItem` + override `channel_testing_model.go:74,86`](../../controller/channel_testing_model.go#L74).
+`channel_testing_model.go:126`](../../../controller/channel_testing_model.go#L126),
+[`channelListItem` + override `channel_testing_model.go:74,86`](../../../controller/channel_testing_model.go#L74).
 Inbound-only wrapper (no outbound change): `channelPayload`
-[`channel.go:27`](../../controller/channel.go#L27).
+[`channel.go:27`](../../../controller/channel.go#L27).
 
 ### Redemption (4)
 
 | # | Site | Handler | Shape | Auth |
 | --- | --- | --- | --- | --- |
-| R1 | [`controller/redemption.go:47`](../../controller/redemption.go#L47) | `GetAllRedemptions` | list | admin |
-| R2 | [`controller/redemption.go:79`](../../controller/redemption.go#L79) | `SearchRedemptions` | list | admin |
-| R3 | [`controller/redemption.go:99`](../../controller/redemption.go#L99) | `GetRedemption` | single | admin |
-| R4 | [`controller/redemption.go:222`](../../controller/redemption.go#L222) | `UpdateRedemption` (`cleanRedemption`) | single | admin |
+| R1 | [`controller/redemption.go:47`](../../../controller/redemption.go#L47) | `GetAllRedemptions` | list | admin |
+| R2 | [`controller/redemption.go:79`](../../../controller/redemption.go#L79) | `SearchRedemptions` | list | admin |
+| R3 | [`controller/redemption.go:99`](../../../controller/redemption.go#L99) | `GetRedemption` | single | admin |
+| R4 | [`controller/redemption.go:222`](../../../controller/redemption.go#L222) | `UpdateRedemption` (`cleanRedemption`) | single | admin |
 
 ### Log (5)
 
 | # | Site | Handler | Shape | Auth |
 | --- | --- | --- | --- | --- |
-| L1 | [`controller/log.go:77`](../../controller/log.go#L77) | `GetAllLogs` | list | admin |
-| L2 | [`controller/log.go:137`](../../controller/log.go#L137) | `GetUserLogs` | list | self |
-| L3 | [`controller/log.go:180`](../../controller/log.go#L180) | `GetTokenLogs` | list | TokenAuth |
-| L4 | [`controller/log.go:213`](../../controller/log.go#L213) | `SearchAllLogs` | list | admin |
-| L5 | [`controller/log.go:247`](../../controller/log.go#L247) | `SearchUserLogs` | list | self |
+| L1 | [`controller/log.go:77`](../../../controller/log.go#L77) | `GetAllLogs` | list | admin |
+| L2 | [`controller/log.go:137`](../../../controller/log.go#L137) | `GetUserLogs` | list | self |
+| L3 | [`controller/log.go:180`](../../../controller/log.go#L180) | `GetTokenLogs` | list | TokenAuth |
+| L4 | [`controller/log.go:213`](../../../controller/log.go#L213) | `SearchAllLogs` | list | admin |
+| L5 | [`controller/log.go:247`](../../../controller/log.go#L247) | `SearchUserLogs` | list | self |
 
 **Verified out of scope (already boundary-style, no change):**
 `GetSelfByToken` (`user.go:701` hand-built `gin.H`), `GetDashboardUsers`
@@ -869,8 +871,8 @@ field-for-field; the golden files (P0) freeze their serialized form:
 
 | Entity | Current shape | Anchor |
 | --- | --- | --- |
-| User | `userJSON` (20 fields, `uuid`…`updated_at`; no `id`, no `inviter_id`, no secrets) | [`model/user_json.go:9-30`](../../model/user_json.go#L9) |
-| Token | `tokenDTO` (16 fields; `key` = prefix-normalized; no `id`, no `user_id`) | [`model/token.go:71-87`](../../model/token.go#L71) |
-| Channel | `channelJSON` (28 fields; no `id`) | [`model/channel_json.go:16-46`](../../model/channel_json.go#L16) |
-| Redemption | `redemptionDTO` (11 fields; no `id`, no `user_id`) | [`model/redemption.go:45-57`](../../model/redemption.go#L45) |
-| Log | `logJSON` (22 fields; `channel_name`/`metadata` `omitempty`; no `id`, no int FKs) | [`model/log_json.go:16-40`](../../model/log_json.go#L16) |
+| User | `userJSON` (20 fields, `uuid`…`updated_at`; no `id`, no `inviter_id`, no secrets) | [`model/user_json.go:9-30`](../../../model/user_json.go#L9) |
+| Token | `tokenDTO` (16 fields; `key` = prefix-normalized; no `id`, no `user_id`) | [`model/token.go:71-87`](../../../model/token.go#L71) |
+| Channel | `channelJSON` (28 fields; no `id`) | [`model/channel_json.go:16-46`](../../../model/channel_json.go#L16) |
+| Redemption | `redemptionDTO` (11 fields; no `id`, no `user_id`) | [`model/redemption.go:45-57`](../../../model/redemption.go#L45) |
+| Log | `logJSON` (22 fields; `channel_name`/`metadata` `omitempty`; no `id`, no int FKs) | [`model/log_json.go:16-40`](../../../model/log_json.go#L16) |

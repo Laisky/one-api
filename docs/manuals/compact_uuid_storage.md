@@ -2,7 +2,7 @@
 
 - Status: Implemented
 - Migration generation: `compact_uuid_storage_v1`
-- Proposal: [Automatic Compact UUID Storage Implementation Handbook](../proposals/20260715_compact-uuid-storage.md)
+- Proposal: [Automatic Compact UUID Storage Implementation Handbook](../proposals/archive/20260715_compact-uuid-storage.md)
 - Related: [External UUID Backfill](./external_uuid_backfill.md)
 
 ## 1. What this is

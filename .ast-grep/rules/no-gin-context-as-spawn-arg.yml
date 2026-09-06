@@ -14,7 +14,7 @@ note: >-
   graceful.GoCritical(detachForBilling(c), name, fn), or relayctx.GoRequestScoped(c,
   name, fn) (which detaches internally). Inside the goroutine use the passed ctx
   (gmw.GetLogger(ctx)), never c. See
-  docs/proposals/20260608_relay-billing-async-sync-race-fixes.md.
+  docs/proposals/archive/20260608_relay-billing-async-sync-race-fixes.md.
 # Complements no-gin-context-in-goroutine.yml. That rule flags references to `c`
 # lexically INSIDE the spawned closure; the spawn ARGUMENTS sit outside the closure and
 # so are not covered there. This rule closes that gap: it flags a `gmw.Ctx(...)` /

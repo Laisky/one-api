@@ -1,6 +1,8 @@
 # Proposal: Stateful Responses Conversion Across API Formats
 
-- Status: **Implemented — remediation complete** (core tasks ST-001–ST-014
+> **Archived 2026-09-06.** This work is complete and shipped; the document is kept as a historical design record and is no longer a plan of record.
+
+- Status: **Implemented — remediation complete; archived 2026-09-06** (core tasks ST-001–ST-014
   landed and closed B01–B14; the 2026-07-19 acceptance review surfaced
   security/completeness defects ST-017–ST-023, which have now been implemented
   and unit-tested. The P0 anti-abuse/correctness set (ST-017–ST-020), the
@@ -12,8 +14,8 @@
   operations environment, not code.)
 - Date: 2026-07-19
 - Area: relay routing, Responses API, Chat Completions, Claude Messages, shared state storage, streaming
-- Related: [`response_api.md`](../refs/response_api.md), [`api_convert.md`](../arch/api_convert.md)
-- Evidence: [`response_state_conversion_behavior_test.go`](../../relay/adaptor/openai/response_state_conversion_behavior_test.go), [`response_state_behavior_test.go`](../../relay/controller/response_state_behavior_test.go), [`response_state_behavior_test.go`](../../relay/format/response_state_behavior_test.go)
+- Related: [`response_api.md`](../../refs/response_api.md), [`api_convert.md`](../../arch/api_convert.md)
+- Evidence: [`response_state_conversion_behavior_test.go`](../../../relay/adaptor/openai/response_state_conversion_behavior_test.go), [`response_state_behavior_test.go`](../../../relay/controller/response_state_behavior_test.go), [`response_state_behavior_test.go`](../../../relay/format/response_state_behavior_test.go)
 - Acceptance review: 2026-07-19 — contract rules R1-R9 re-verified against the
   current official OpenAI documentation; four independent audit tracks
   (B-finding closures, `relay/state` internals, pipeline wiring,
@@ -241,7 +243,7 @@ user content, model prompts, or upstream credentials.
 Backend and key requirements:
 
 - The gateway state feature can be enabled only when Redis is configured and
-  healthy (`common.IsRedisEnabled` in [`common/redis.go`](../../common/redis.go)).
+  healthy (`common.IsRedisEnabled` in [`common/redis.go`](../../../common/redis.go)).
   Redis is optional in one-api today; deployments without it keep current
   behavior exactly as row O01 requires, and the feature flag must refuse to
   turn on rather than degrade to an in-process store.
@@ -252,13 +254,13 @@ Backend and key requirements:
 - Encryption must use a dedicated, explicitly configured key, for example
   `RESPONSE_STATE_ENCRYPTION_KEYS` holding `<version>:<base64-key>` entries
   with the newest first. Deriving the key from `SESSION_SECRET` (the
-  [`common/secret.go`](../../common/secret.go) pattern) is not acceptable
+  [`common/secret.go`](../../../common/secret.go) pattern) is not acceptable
   here: `SESSION_SECRET` may be auto-generated at boot, which would
   permanently orphan durable ciphertext after a restart. Enabling the feature
   without a stable configured key is a startup error. The AES-GCM
   construction in `common/secret.go` may be reused; its key source may not.
 - The pluggable-backend shape already exists in the repository:
-  [`relay/adaptor/anthropic/signature_cache.go`](../../relay/adaptor/anthropic/signature_cache.go)
+  [`relay/adaptor/anthropic/signature_cache.go`](../../../relay/adaptor/anthropic/signature_cache.go)
   defines a small backend interface with an in-memory fallback.
   `ResponseStateStore` should follow that pattern — interface, Redis
   production backend, in-memory conformance backend — with the difference
@@ -379,8 +381,8 @@ reasoning state are not equivalent.
   record and final `response.completed` object.
 WebSocket ownership: today's Responses WebSocket path is a transparent frame
 proxy to an OpenAI upstream
-([`response_api_ws_proxy.go`](../../relay/adaptor/openai/response_api_ws_proxy.go)
-behind [`response_ws.go`](../../relay/controller/response_ws.go)). one-api
+([`response_api_ws_proxy.go`](../../../relay/adaptor/openai/response_api_ws_proxy.go)
+behind [`response_ws.go`](../../../relay/controller/response_ws.go)). one-api
 holds no connection-local response cache; `store=false` continuation is
 enforced by the upstream socket. The target design keeps that division of
 labor:
@@ -423,20 +425,20 @@ Function names are the stable anchors; line numbers are intentionally omitted.
 
 | Pipeline stage | Concrete hook |
 | --- | --- |
-| Parse state hint, owner scope | New stage inside `middleware.Distribute` ([`middleware/distributor.go`](../../middleware/distributor.go)), after token auth populates the context and before channel selection. |
+| Parse state hint, owner scope | New stage inside `middleware.Distribute` ([`middleware/distributor.go`](../../../middleware/distributor.go)), after token auth populates the context and before channel selection. |
 | Affinity pin | Reuse the existing specific-channel mechanism (`ctxkey.SpecificChannelId`) plus `middleware.SetupContextForSelectedChannel`, which already rebinds auth, base URL, and channel config. |
-| Retry re-selection | The retry loop in [`controller/relay.go`](../../controller/relay.go) re-selects via `CacheGetRandomSatisfiedChannelExcluding` and re-pins via `SetupContextForSelectedChannel`; the affinity stage must respect its failed-channel exclusion set and the portability policy (rows R03, R06). |
-| Request validation | `getAndValidateResponseAPIRequest` ([`relay/controller/response_utils.go`](../../relay/controller/response_utils.go)); relax the input-or-prompt rule so state-only requests are accepted (rows A03, B09). |
-| Format detection | `DetectFormat` and `requestProbe` in [`relay/format/detect.go`](../../relay/format/detect.go); add `previous_response_id`, `conversation`, and `prompt` (row B11). |
-| Typed DTOs | [`relay/adaptor/openai/responseapi_request.go`](../../relay/adaptor/openai/responseapi_request.go) and `responseapi_response.go` (rows B01, B06). |
-| Fallback conversion | [`relay/controller/response_fallback.go`](../../relay/controller/response_fallback.go) and [`relay/adaptor/openai/responseapi_convert_request.go`](../../relay/adaptor/openai/responseapi_convert_request.go), refactored to consume a resolved turn (ST-007). |
-| Rendering and stream bridge | [`relay/controller/response_convert.go`](../../relay/controller/response_convert.go) and [`relay/controller/response_stream_bridge.go`](../../relay/controller/response_stream_bridge.go); replace `generateResponseAPIID` output with committed gateway IDs (ST-009, ST-010). |
-| Retrieval, deletion, cancellation | [`relay/controller/response_actions.go`](../../relay/controller/response_actions.go); resolve gateway records before deciding whether to proxy a native handle (ST-009). |
-| WebSocket | [`relay/controller/response_ws.go`](../../relay/controller/response_ws.go) and [`relay/adaptor/openai/response_api_ws_proxy.go`](../../relay/adaptor/openai/response_api_ws_proxy.go) (ST-011). |
-| Billing | `getResponseAPIPromptTokens` (hydrated-context estimation), `preConsumeResponseAPIQuota` and `postConsumeResponseAPIQuota` in [`relay/controller/response_billing.go`](../../relay/controller/response_billing.go), delegating to `billing.PostConsumeQuotaDetailed` (ST-014). |
-| Conversations routes | Register under the `/v1` group in [`router/relay.go`](../../router/relay.go) with relay token auth; Conversation CRUD performs no upstream call and must not enter channel distribution (row V11). |
+| Retry re-selection | The retry loop in [`controller/relay.go`](../../../controller/relay.go) re-selects via `CacheGetRandomSatisfiedChannelExcluding` and re-pins via `SetupContextForSelectedChannel`; the affinity stage must respect its failed-channel exclusion set and the portability policy (rows R03, R06). |
+| Request validation | `getAndValidateResponseAPIRequest` ([`relay/controller/response_utils.go`](../../../relay/controller/response_utils.go)); relax the input-or-prompt rule so state-only requests are accepted (rows A03, B09). |
+| Format detection | `DetectFormat` and `requestProbe` in [`relay/format/detect.go`](../../../relay/format/detect.go); add `previous_response_id`, `conversation`, and `prompt` (row B11). |
+| Typed DTOs | [`relay/adaptor/openai/responseapi_request.go`](../../../relay/adaptor/openai/responseapi_request.go) and `responseapi_response.go` (rows B01, B06). |
+| Fallback conversion | [`relay/controller/response_fallback.go`](../../../relay/controller/response_fallback.go) and [`relay/adaptor/openai/responseapi_convert_request.go`](../../../relay/adaptor/openai/responseapi_convert_request.go), refactored to consume a resolved turn (ST-007). |
+| Rendering and stream bridge | [`relay/controller/response_convert.go`](../../../relay/controller/response_convert.go) and [`relay/controller/response_stream_bridge.go`](../../../relay/controller/response_stream_bridge.go); replace `generateResponseAPIID` output with committed gateway IDs (ST-009, ST-010). |
+| Retrieval, deletion, cancellation | [`relay/controller/response_actions.go`](../../../relay/controller/response_actions.go); resolve gateway records before deciding whether to proxy a native handle (ST-009). |
+| WebSocket | [`relay/controller/response_ws.go`](../../../relay/controller/response_ws.go) and [`relay/adaptor/openai/response_api_ws_proxy.go`](../../../relay/adaptor/openai/response_api_ws_proxy.go) (ST-011). |
+| Billing | `getResponseAPIPromptTokens` (hydrated-context estimation), `preConsumeResponseAPIQuota` and `postConsumeResponseAPIQuota` in [`relay/controller/response_billing.go`](../../../relay/controller/response_billing.go), delegating to `billing.PostConsumeQuotaDetailed` (ST-014). |
+| Conversations routes | Register under the `/v1` group in [`router/relay.go`](../../../router/relay.go) with relay token auth; Conversation CRUD performs no upstream call and must not enter channel distribution (row V11). |
 | Async state commits | Post-response commits run outside the request handler; goroutines must not retain `*gin.Context` — use the `relayctx` detach helpers exactly as the deferred billing path does. |
-| Configuration | Follow the `env.Bool`/`env.String` pattern in [`common/config/config.go`](../../common/config/config.go): `RESPONSE_STATE_ENABLED`, `RESPONSE_STATE_SHADOW`, `RESPONSE_STATE_ALLOWLIST`, `RESPONSE_STATE_LEGACY_PASSTHROUGH`, `RESPONSE_STATE_ENCRYPTION_KEYS`, plus the Section 5.4 limit knobs. `DEBUG` stays logging-only and never toggles state behavior. |
+| Configuration | Follow the `env.Bool`/`env.String` pattern in [`common/config/config.go`](../../../common/config/config.go): `RESPONSE_STATE_ENABLED`, `RESPONSE_STATE_SHADOW`, `RESPONSE_STATE_ALLOWLIST`, `RESPONSE_STATE_LEGACY_PASSTHROUGH`, `RESPONSE_STATE_ENCRYPTION_KEYS`, plus the Section 5.4 limit knobs. `DEBUG` stays logging-only and never toggles state behavior. |
 
 ## 6. Error contract
 
@@ -882,13 +884,13 @@ follow-up; **P3** is the pre-existing operations gate.
 ### ST-017 (P0) — Cancel path bypasses gateway resolution (SEC04/R08)
 
 `RelayResponseAPICancelHelper`
-([`response_actions.go`](../../relay/controller/response_actions.go)) performs
+([`response_actions.go`](../../../relay/controller/response_actions.go)) performs
 no gateway lookup and no legacy-passthrough check: an unknown or
 gateway-minted `resp_` ID sent to `POST /v1/responses/{id}/cancel` is still
 forwarded verbatim to an OpenAI upstream even with
 `RESPONSE_STATE_LEGACY_PASSTHROUGH=false`. GET and DELETE are correct; cancel
 is the hole, and the config comment in
-[`common/config/config.go`](../../common/config/config.go) wrongly claims
+[`common/config/config.go`](../../../common/config/config.go) wrongly claims
 cancel is already covered.
 
 Deliverable: resolve gateway records first (row C12: cancelling a
@@ -899,8 +901,8 @@ extend row R08's test to cancel. Acceptance rows: C12, R08, SEC04.
 ### ST-018 (P0) — Deletion semantics: dead tombstones and index remanence (S06)
 
 - Tombstone markers are written but never read (`respTombKey` in
-  [`redis_store.go`](../../relay/state/redis_store.go); `respTombstones` /
-  `convTombstones` in [`memory_store.go`](../../relay/state/memory_store.go)),
+  [`redis_store.go`](../../../relay/state/redis_store.go); `respTombstones` /
+  `convTombstones` in [`memory_store.go`](../../../relay/state/memory_store.go)),
   so a deleted ID is externally indistinguishable from an expired or
   never-existed one and S06 ("tombstone prevents stale fallback") is not
   actually implemented.
@@ -929,7 +931,7 @@ Today only per-object caps exist (8 MiB/record, 2048 items/conversation,
 30-day response TTL). There is **no per-user aggregate cap of any kind**,
 conversations have **no TTL of any kind**, conversation CRUD consumes **zero
 quota**, and the conversations router runs **without any relay rate-limit
-middleware** ([`router/relay.go`](../../router/relay.go) mounts only
+middleware** ([`router/relay.go`](../../../router/relay.go) mounts only
 panic-recover + `TokenAuth`). Because the state Redis must run `noeviction`
 (Section 5.4), the overflow failure mode is Redis OOM → 503 for every
 state-dependent request (and anything else sharing that Redis): a cheap,
@@ -958,7 +960,7 @@ Deliverable (implements the new Section 8.8 rows L06-L10):
 
 `Limits.MaxHydratedBytes` and `Limits.MaxHydratedTokens` are configurable and
 documented but enforced nowhere: `hydratedBytesExceeded` /
-`hydratedTokensExceeded` ([`limits.go`](../../relay/state/limits.go)) have no
+`hydratedTokensExceeded` ([`limits.go`](../../../relay/state/limits.go)) have no
 callers, so rows L03/L04 are currently illusory. Wire both checks into the
 hydrator (and use the existing `chainDepthExceeded` helper instead of the
 inline depth check) so an oversized hydrated transcript is rejected before
@@ -977,7 +979,7 @@ PERF02, STR01.
 
 ### ST-022 (P1) — Checkpoint live wiring (CP rows end-to-end)
 
-The ST-012 algorithm ([`checkpoint.go`](../../relay/state/checkpoint.go)) has
+The ST-012 algorithm ([`checkpoint.go`](../../../relay/state/checkpoint.go)) has
 zero production callers. After ST-021 provides upstream bindings, wire
 checkpoint record/match into the Chat and Claude controllers; matching must
 remain fail-open for stateless clients. Acceptance rows: CP01-CP10, M02, M08.
@@ -987,9 +989,9 @@ Responses id is now surfaced from the openai render handlers via
 `ctxkey.ResponseAPIUpstreamID` (`ResponseAPIHandler` and
 `ConvertResponseAPIToClaudeResponse`), and the rendered assistant turn via
 `ctxkey.ResponseAPIAssistantMessage`. The Chat controller
-([`text.go`](../../relay/controller/text.go)) now calls `matchChatCheckpoint`
+([`text.go`](../../../relay/controller/text.go)) now calls `matchChatCheckpoint`
 before `DoRequest` and `recordChatCheckpoint` after a successful `DoResponse`
-([`response_state_checkpoint.go`](../../relay/controller/response_state_checkpoint.go)):
+([`response_state_checkpoint.go`](../../../relay/controller/response_state_checkpoint.go)):
 the deterministic `chatMessagesToCheckpoint` mapper (JSON-canonical content,
 tool-call/signature folded in) keys the full transcript (request + rendered
 assistant turn), and a hit rewrites the converted request to continue from the
@@ -1012,17 +1014,17 @@ unit-tested).
 
 - Severity-aware logging at state-error render sites: typed 4xx state errors
   log WARN (no stack), 5xx log ERROR — today
-  [`controller/response_api.go`](../../controller/response_api.go) and
-  [`controller/conversations.go`](../../controller/conversations.go) render
+  [`controller/response_api.go`](../../../controller/response_api.go) and
+  [`controller/conversations.go`](../../../controller/conversations.go) render
   the error body without logging at all.
 - Emit the defined-but-unused `portable` and `unpinned` metric outcomes so
   portability-success and affinity-pin ratios are derivable (OBS03, OBS05).
 - Billing failing-path tests: assert the fake upstream was NOT called; the
   helper comment in
-  [`response_state_billing_test.go`](../../relay/controller/response_state_billing_test.go)
+  [`response_state_billing_test.go`](../../../relay/controller/response_state_billing_test.go)
   currently claims upstream-contact recording that does not exist.
 - Drop or hash the `upstream_response_id` WARN field in
-  [`response_state_commit.go`](../../relay/controller/response_state_commit.go)
+  [`response_state_commit.go`](../../../relay/controller/response_state_commit.go)
   if provider-ID exposure is in scope for OBS07.
 - `detachedCommitContext` embeds the live `*gin.Context`; safe only while
   commits stay synchronous. Switch to the `relayctx.Detach` helpers before

@@ -1,7 +1,7 @@
 package model
 
 // Run, outcome, and reconciliation machinery for the section 12 compatibility workload
-// (docs/proposals/20260715_compact-uuid-storage.md). The per-client operation machinery lives
+// (docs/proposals/archive/20260715_compact-uuid-storage.md). The per-client operation machinery lives
 // in compact_uuid_workload_harness_test.go; this file owns the run that drives the eight
 // clients, the outcome it reduces to, acknowledged-write reconciliation, and the category-by-
 // category comparison against the migration-disabled baseline. Split from the harness file

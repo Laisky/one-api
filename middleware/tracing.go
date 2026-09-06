@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/tracing"
@@ -21,11 +23,21 @@ func TracingMiddleware() gin.HandlerFunc {
 		}
 		c.Writer = writer
 
+		// Deferred so a panicking handler still produces a complete trace.
+		// gin.Recovery() is registered before this middleware, so its recover
+		// runs after ours and the panic still reaches it. At this point Recovery
+		// has not written its 500 yet, so record that status explicitly before
+		// re-panicking for the outer middleware to handle.
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				tracing.RecordTraceEndWithStatus(c, http.StatusInternalServerError)
+				panic(recovered)
+			}
+			tracing.RecordTraceEnd(c)
+		}()
+
 		// Continue processing the request
 		c.Next()
-
-		// Record the end of the request
-		tracing.RecordTraceEnd(c)
 	}
 }
 

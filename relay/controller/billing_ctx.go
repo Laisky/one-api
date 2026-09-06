@@ -67,7 +67,7 @@ func billingIdentityFromGinContext(c *gin.Context) billingIdentity {
 // INVARIANT: every ASYNCHRONOUS post-billing goroutine MUST be spawned with a
 // detachForBilling context, so this resolves at the first branch — from the snapshot taken
 // on the request goroutine, never off a *gin.Context that gin has recycled. The audit in
-// docs/proposals/20260608_relay-billing-async-sync-race-fixes.md confirms no async caller
+// docs/proposals/archive/20260608_relay-billing-async-sync-race-fixes.md confirms no async caller
 // reaches the fallback below.
 //
 // The embedded-gin fallback is a SYNCHRONOUS-ONLY escape hatch: a caller that still passes

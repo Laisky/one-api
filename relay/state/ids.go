@@ -2,7 +2,7 @@
 // response and conversation records, a lossless item ledger, provider affinity,
 // and a pluggable encrypted store. It is the resolution layer that runs before
 // route selection and format conversion, as described in
-// docs/proposals/20260719_stateful-responses-format-conversion.md.
+// docs/proposals/archive/20260719_stateful-responses-format-conversion.md.
 //
 // The layer is deliberately independent of the Chat Completions, Responses, and
 // Claude Messages converters: it produces a fully resolved turn, and exactly one

@@ -5,7 +5,7 @@ finalizer, retrying, handling a lock timeout, recovering partial marker state,
 and repointing a split LOG_DB.
 
 Implements UUID-R08 of
-[Incremental External UUID Backfill Remediation](../proposals/20260715_incremental-uuid-backfill.md).
+[Incremental External UUID Backfill Remediation](../proposals/archive/20260715_incremental-uuid-backfill.md).
 
 ## 1. Concepts
 

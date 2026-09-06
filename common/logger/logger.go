@@ -143,6 +143,16 @@ func QuietForTests() bool {
 // SetupLogger configures the shared logger to write to stdout and the configured log directory with optional rotation.
 func SetupLogger() {
 	setupLogOnce.Do(func() {
+		// APP_LOG_SINK decides which destinations are attached. "stdout" alone
+		// is the right choice under Kubernetes, where the platform already
+		// collects and rotates container output; it also removes local log
+		// growth as a failure mode entirely, so it needs no log directory.
+		if config.AppLogSink == config.AppLogSinkStdout {
+			applyGinWriters()
+			Logger.Info("log sinks configured", zap.String("app_log_sink", config.AppLogSink))
+			return
+		}
+
 		if strings.TrimSpace(LogDir) == "" {
 			Logger.Info("log directory not configured; file logging disabled")
 			return
@@ -154,8 +164,12 @@ func SetupLogger() {
 		}
 
 		basePath := filepath.Join(LogDir, "oneapi.log")
-		outputPaths := []string{"stdout"}
-		errorPaths := []string{"stderr"}
+
+		var outputPaths, errorPaths []string
+		if config.AppLogSink != config.AppLogSinkFile {
+			outputPaths = append(outputPaths, "stdout")
+			errorPaths = append(errorPaths, "stderr")
+		}
 
 		rotationEnabled := !config.OnlyOneLogFile
 		rotationInterval := rotationIntervalDaily
@@ -200,6 +214,7 @@ func SetupLogger() {
 
 		fields := []zap.Field{
 			zap.String("log_dir", LogDir),
+			zap.String("app_log_sink", config.AppLogSink),
 			zap.Bool("rotation_enabled", rotationEnabled),
 		}
 		if rotationEnabled {
@@ -283,6 +298,17 @@ func (w *ginZapWriter) Write(p []byte) (int, error) {
 // SetupEnhancedLogger sets up the logger with alertPusher integration.
 func SetupEnhancedLogger(ctx context.Context) {
 	opts := []zap.Option{}
+
+	// Install log sampling before any other option so every downstream logger
+	// derived from the global one inherits it.
+	if opt, ok := samplingOption(); ok {
+		opts = append(opts, opt)
+		Logger.Info("application log sampling enabled",
+			zap.Int("log_sample_initial", config.LogSampleInitial),
+			zap.Int("log_sample_thereafter", config.LogSampleThereafter),
+			zap.Int("log_sample_tick_ms", config.LogSampleTickMs),
+			zap.String("note", "levels at warn and above are never sampled"))
+	}
 
 	// Setup alert pusher if configured.
 	if config.LogPushAPI != "" {

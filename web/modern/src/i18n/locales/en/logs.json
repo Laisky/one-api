@@ -47,6 +47,7 @@
       "no_content": "No content recorded.",
       "no_timeline": "Timeline data is not available for this trace.",
       "no_tracing": "Tracing data is not available for this log entry.",
+      "not_retained_locally": "Trace data was not retained locally. It may have been sampled out or sent to an external observability service.",
       "origin_model": "Requested Model",
       "prompt_tokens_cached": "Prompt Tokens (cached)",
       "prompt_tokens_input": "Prompt Tokens (input)",

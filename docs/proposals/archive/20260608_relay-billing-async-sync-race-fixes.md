@@ -1,6 +1,8 @@
 # Proposal: Systematic Remediation of Async/Sync Races in the Relay & Billing Path
 
-- Status: Implemented (P1–P5 landed; see §10)
+> **Archived 2026-09-06.** This work is complete and shipped; the document is kept as a historical design record and is no longer a plan of record.
+
+- Status: Implemented (P1–P5 landed; see §10) — archived 2026-09-06
 - Author: @Laisky
 - Created: 2026-06-08
 - Owners: backend

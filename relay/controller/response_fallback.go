@@ -43,7 +43,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	// Resolve gateway state selectors (previous_response_id, conversation,
 	// item_reference) into a fully hydrated effective turn before conversion. This
 	// is a no-op when the feature is disabled or the request carries no state, so
-	// current behavior is preserved exactly. See docs/proposals/20260719-*.md.
+	// current behavior is preserved exactly. See docs/proposals/archive/20260719-*.md.
 	hydrated, stateErr := hydrateResponseAPIRequestForFallback(ctx, meta, responseAPIRequest, responseFallbackTarget(meta))
 	if stateErr != nil {
 		return stateErr

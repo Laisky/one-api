@@ -47,6 +47,7 @@
       "no_content": "No hay contenido registrado.",
       "no_timeline": "Los datos de la línea de tiempo no están disponibles para este rastreo.",
       "no_tracing": "Los datos de rastreo no están disponibles para esta entrada de registro.",
+      "not_retained_locally": "Los datos de rastreo no se conservaron localmente. Es posible que se hayan muestreado o enviado a un servicio de observabilidad externo.",
       "origin_model": "Modelo solicitado",
       "prompt_tokens_cached": "Tokens de prompt (en caché)",
       "prompt_tokens_input": "Tokens de prompt (entrada)",

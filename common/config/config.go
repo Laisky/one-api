@@ -1106,14 +1106,29 @@ var (
 	// Allowed values: "hourly", "daily", "weekly"
 	LogRotationInterval = strings.TrimSpace(strings.ToLower(env.String("LOG_ROTATION_INTERVAL", "daily")))
 
-	// LogRetentionDays determines how many days logs are kept before the
+	// LogRetentionDays determines how many days log FILES are kept before the
 	// retention worker purges them. Set to 0 to disable cleanup.
 	//
+	// The default stays 0 (never delete) under the standalone profile. Enabling
+	// it by default was considered and rejected: an existing deployment that
+	// upgrades without changing its configuration would have had years of
+	// accumulated log files deleted on first start, which is exactly the kind
+	// of surprise this project's backward-compatibility rules forbid. The
+	// unbounded-growth problem is real at high volume, so the scaled and
+	// external profiles enable retention -- but reaching those profiles is an
+	// explicit operator decision.
+	//
+	// Operators who leave every disk guard off are warned once at startup; see
+	// logger.StartLogRetentionCleaner.
+	//
+	// See also LOG_MAX_TOTAL_SIZE_MB and LOG_MIN_FREE_DISK_MB, which bound disk
+	// even when a single retention window does not fit on the volume.
+	//
 	// Environment variable: LOG_RETENTION_DAYS
-	// Default: 0 (disabled)
+	// Default: 0 (disabled) for standalone, 3 for scaled, 1 for external
 	// Unit: days
 	LogRetentionDays = func() int {
-		v := env.Int("LOG_RETENTION_DAYS", 0)
+		v := env.Int("LOG_RETENTION_DAYS", profileInt(ObservabilityProfile, 0, 3, 1))
 		if v < 0 {
 			return 0
 		}

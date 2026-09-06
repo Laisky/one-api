@@ -2,7 +2,7 @@
 
 This document describes the serialization boundary rule for the management API.
 It is the shipped form of
-[`docs/proposals/20260714_boundary-response-dtos.md`](../proposals/20260714_boundary-response-dtos.md).
+[`docs/proposals/archive/20260714_boundary-response-dtos.md`](../proposals/archive/20260714_boundary-response-dtos.md).
 
 ## The rule
 

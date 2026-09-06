@@ -263,6 +263,43 @@ describe('LogDetailsModal', () => {
     expect(screen.getAllByText(/request received/i).length).toBeGreaterThan(0);
   });
 
+  it('explains that an expected sampled or external trace is not retained locally', async () => {
+    const log: LogEntry = {
+      uuid: LOG_UUID,
+      user_uuid: USER_UUID,
+      type: LOG_TYPES.CONSUME,
+      created_at: 1_700_100_000,
+      model_name: 'claude-v3',
+      token_name: 'trace-token',
+      username: 'trace-user',
+      channel_uuid: CHANNEL_UUID,
+      quota: 2_000,
+      prompt_tokens: 600,
+      completion_tokens: 400,
+      cached_prompt_tokens: 0,
+      elapsed_time: 3_000,
+      request_id: 'req-trace-not-retained',
+      trace_id: 'trace-not-retained-locally',
+      metadata: {},
+    };
+    apiGetMock().mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          availability: 'not_retained_locally',
+          trace_id: log.trace_id,
+        },
+      },
+    } as any);
+
+    await act(async () => {
+      renderLogDetailsModal(log);
+    });
+
+    expect(await screen.findByText(/trace data was not retained locally/i)).toBeInTheDocument();
+    expect(screen.queryByText(/failed to load trace information/i)).not.toBeInTheDocument();
+  });
+
   it.each([
     ['MANAGE', LOG_TYPES.MANAGE],
     ['SYSTEM', LOG_TYPES.SYSTEM],

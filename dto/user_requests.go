@@ -4,7 +4,7 @@ package dto
 // bind JSON directly into model.User and read its secret fields
 // (Password/VerificationCode). Binding into these DTOs instead lets model.User's
 // secret fields become json:"-" (deny-by-default outbound) without breaking
-// inbound parsing — see docs/proposals/20260714_boundary-response-dtos.md §3.2.
+// inbound parsing — see docs/proposals/archive/20260714_boundary-response-dtos.md §3.2.
 //
 // The four validate-tagged fields on model.User are Username (max=30),
 // Password (min=8,max=20), DisplayName (max=20) and Email (max=50); no other

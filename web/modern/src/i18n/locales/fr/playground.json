@@ -225,8 +225,8 @@
         "no_enabled": "Aucun jeton activé trouvé.",
         "no_tokens": "Aucun jeton disponible",
         "select_placeholder": "Sélectionnez un jeton",
-        "unnamed": "Jeton {{ref}}",
-        "unlimited": "Illimité"
+        "unlimited": "Illimité",
+        "unnamed": "Jeton {{ref}}"
       },
       "top_k": {
         "description": "Échantillonnage Top-K : limite les choix aux K tokens les plus probables",

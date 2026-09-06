@@ -249,6 +249,74 @@ OTEL_SERVICE_NAME="one-api"
 OTEL_ENVIRONMENT="debug"
 ```
 
+#### Scalable request tracing
+
+Request traces are accumulated in memory and written once per request by an
+asynchronous batching writer, instead of the per-timestamp read-modify-write
+statements earlier versions issued. Defaults are unchanged for small
+deployments; high-volume deployments select a profile and, optionally, move
+traces out of the database entirely.
+
+```sh
+# One preset governs every trace knob. Individual variables still win.
+# Defaults are chosen so an upgrade changes nothing; "scaled" opts in.
+OBSERVABILITY_PROFILE="scaled"   # standalone (default) | scaled | external
+
+# Or tune individually. The standalone value is shown in the comment.
+TRACE_WRITE_MODE="batched"       # standalone: sync (pre-existing behaviour)
+TRACE_SAMPLE_RATE="0.05"         # standalone: 1.0
+TRACE_ALWAYS_SAMPLE_ERRORS="true"
+TRACE_ALWAYS_SAMPLE_SLOW_MS="5000"
+TRACE_EXCLUDED_PATH_PREFIXES="/api/status,/metrics,/health,/static,/assets"
+TRACE_SINK="db"                  # db | otlp | none, comma-separated to fan out
+TRACE_BATCH_SIZE="500"
+TRACE_FLUSH_INTERVAL_MS="1000"
+TRACE_QUEUE_SIZE="50000"
+TRACE_WRITER_COUNT="4"
+```
+
+Errors and slow requests are always retained regardless of the sample rate.
+`TRACE_WRITE_MODE=sync` is the legacy in-flight SQL path and therefore requires
+`TRACE_SINK=db` (or `none`) and `TRACE_SAMPLE_RATE=1`; configurations that need
+sampling, OTLP, or sink fan-out must use `batched` and fail fast otherwise.
+See [docs/arch/tracing_system.md](./docs/arch/tracing_system.md).
+
+#### Bounded log and telemetry retention
+
+Retention sweeps delete in bounded chunks instead of one unbounded `DELETE`, and
+the log directory is bounded by age, total size, and free disk.
+
+```sh
+# Log files. Every deletion knob is OFF by default so an upgrade never removes
+# files an operator chose to keep; OBSERVABILITY_PROFILE=scaled turns them on.
+LOG_RETENTION_DAYS="7"          # standalone: 0 (never delete)
+LOG_MAX_TOTAL_SIZE_MB="20480"   # standalone: 0 (unlimited)
+LOG_MIN_FREE_DISK_MB="1024"     # standalone: 0 (guard disabled)
+APP_LOG_SINK="both"             # file | stdout | both; stdout suits Kubernetes
+
+# Per-request log line. The full form is the default so existing log pipelines
+# keep parsing the same fields.
+LOG_RECORD_LINE_FORMAT="compact"   # standalone: full
+LOG_SAMPLE_INITIAL="100"           # standalone: 0 (no sampling)
+LOG_SAMPLE_THEREAFTER="100"
+LOG_SAMPLE_TICK_MS="1000"
+
+# Database retention sweeps (traces, logs, async task bindings). These bound the
+# size of each DELETE; they do not change what gets deleted.
+RETENTION_DELETE_BATCH_SIZE="5000"
+RETENTION_DELETE_PAUSE_MS="10"
+RETENTION_SWEEP_INTERVAL_MINUTES="60"
+
+# Dashboard.
+DASHBOARD_CACHE_TTL_SEC="60"            # standalone: 0 (always live)
+DASHBOARD_MAX_SITEWIDE_RANGE_DAYS="31"  # standalone: 365 (the existing limit)
+```
+
+Upgrading from an earlier release changes nothing unless you set one of these:
+retention, sampling, caching and the compact log line are all off by default,
+and trace writes stay synchronous. See
+[the compatibility contract](./docs/proposals/20260905_observability-data-tiering.md#45-backward-compatibility-contract).
+
 #### Support channel's built-in tooling configuration
 
 Configure the price and whitelist for a channel’s built‑in tools.

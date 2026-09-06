@@ -1,6 +1,8 @@
 # Automatic Compact UUID Storage Implementation Handbook
 
-- Status: Ready for implementation and acceptance
+> **Archived 2026-09-06.** This work is complete and shipped; the document is kept as a historical design record and is no longer a plan of record.
+
+- Status: Implemented and accepted (migration generation `compact_uuid_storage_v1` shipped); archived 2026-09-06
 - Date: 2026-07-15
 - Owners: Backend, database operations, release engineering, and QA
 - Area: Automatic UUID shadow storage, compatibility, indexes, and migration

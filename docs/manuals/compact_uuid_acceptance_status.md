@@ -1,6 +1,6 @@
 # Compact UUID Storage — Acceptance Status
 
-- Proposal: [Automatic Compact UUID Storage Implementation Handbook](../proposals/20260715_compact-uuid-storage.md)
+- Proposal: [Automatic Compact UUID Storage Implementation Handbook](../proposals/archive/20260715_compact-uuid-storage.md)
 - Migration generation: `compact_uuid_storage_v1`
 
 This records what is implemented and verified, and what is not. Section 3 records the AUTO-T26

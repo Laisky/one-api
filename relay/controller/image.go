@@ -234,7 +234,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	// NOTE: This image post-billing/refund runs in a SYNCHRONOUS defer — it executes on the
 	// request goroutine, inside the handler call stack, BEFORE ServeHTTP returns and gin
 	// recycles c via sync.Pool. It is therefore NOT the async-goroutine race class the
-	// proposal addresses (docs/proposals/20260608_relay-billing-async-sync-race-fixes.md):
+	// proposal addresses (docs/proposals/archive/20260608_relay-billing-async-sync-race-fixes.md):
 	// reading c here is safe. gmw.BackgroundCtx(c) is used only to DETACH the DB writes from
 	// request-context cancellation (a client disconnect must not abort the refund), not to
 	// hand c to a goroutine. Do NOT copy this pattern into a `go func`/GoCritical — there it

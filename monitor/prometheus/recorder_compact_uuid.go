@@ -1,7 +1,7 @@
 package prometheus
 
 // This file holds the compact UUID storage metrics required by
-// docs/proposals/20260715_compact-uuid-storage.md (work item AUTO-012). They
+// docs/proposals/archive/20260715_compact-uuid-storage.md (work item AUTO-012). They
 // live apart from recorder.go only to keep both files within the 600-line limit
 // that §9.3 of that proposal mandates; they are otherwise an ordinary part of
 // the PrometheusRecorder implementation of metrics.MetricsRecorder.

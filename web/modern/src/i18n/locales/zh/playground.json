@@ -225,8 +225,8 @@
         "no_enabled": "未找到启用的令牌。",
         "no_tokens": "无可用令牌",
         "select_placeholder": "选择令牌",
-        "unnamed": "令牌 {{ref}}",
-        "unlimited": "无限"
+        "unlimited": "无限",
+        "unnamed": "令牌 {{ref}}"
       },
       "top_k": {
         "description": "Top-K 采样: 限制 Token 选择为前 K 个最可能的",

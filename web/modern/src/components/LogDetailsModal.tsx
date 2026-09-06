@@ -105,6 +105,7 @@ interface TraceDurations {
 }
 
 interface TraceData {
+  availability?: 'not_retained_locally';
   id?: number;
   uuid?: string;
   trace_id: string;
@@ -233,14 +234,26 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     let active = true;
     const loadTrace = async () => {
       if (!open || !hasTrace || !log) {
+        if (active) {
+          setTraceData(null);
+          setTraceError(null);
+          setTraceLoading(false);
+        }
         return;
       }
 
       setTraceLoading(true);
+      setTraceData(null);
+      setTraceError(null);
       try {
         const response = await api.get(`/api/trace/log/${logRef}`);
         if (active) {
-          setTraceData(response.data.data);
+          const trace = response.data?.data as TraceData | undefined;
+          if (trace) {
+            setTraceData(trace);
+          } else {
+            setTraceError(t('logs.details.load_failed'));
+          }
         }
       } catch (error: any) {
         if (active) {
@@ -259,6 +272,8 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
       active = false;
     };
   }, [open, hasTrace, log, t]);
+
+  const traceNotRetainedLocally = traceData?.availability === 'not_retained_locally';
 
   const handleCopy = async (value?: string) => {
     if (!value) return;
@@ -752,13 +767,19 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
                     </div>
                   )}
 
+                  {hasTrace && !traceLoading && traceNotRetainedLocally && (
+                    <Alert>
+                      <AlertDescription>{t('logs.details.not_retained_locally')}</AlertDescription>
+                    </Alert>
+                  )}
+
                   {hasTrace && !traceLoading && traceError && (
                     <Alert variant="destructive">
                       <AlertDescription>{traceError}</AlertDescription>
                     </Alert>
                   )}
 
-                  {hasTrace && !traceLoading && traceData && (
+                  {hasTrace && !traceLoading && traceData && !traceNotRetainedLocally && (
                     <div className="space-y-6">
                       {renderTraceSummary(traceData)}
                       <Separator />

@@ -47,6 +47,7 @@
       "no_content": "Aucun contenu enregistré.",
       "no_timeline": "Les données de chronologie ne sont pas disponibles pour cette trace.",
       "no_tracing": "Les données de traçage ne sont pas disponibles pour cette entrée de journal.",
+      "not_retained_locally": "Les données de traçage ne sont pas conservées localement. Elles ont peut-être été échantillonnées ou envoyées vers un service d’observabilité externe.",
       "origin_model": "Modèle demandé",
       "prompt_tokens_cached": "Jetons d'invite (mis en cache)",
       "prompt_tokens_input": "Jetons d'invite (entrée)",

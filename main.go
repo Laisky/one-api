@@ -32,6 +32,7 @@ import (
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/telemetry"
+	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/controller"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
@@ -52,10 +53,15 @@ func main() {
 
 	common.Init()
 	logger.SetupLogger()
-	logger.StartLogRetentionCleaner(ctx, config.LogRetentionDays, logger.LogDir)
 
 	// Setup enhanced logger with alertPusher integration
 	logger.SetupEnhancedLogger(ctx)
+
+	// Started after the enhanced logger is installed: the worker captures the
+	// logger it will use for the life of the process, and starting it earlier
+	// would both race SetupEnhancedLogger's write to the global logger and
+	// leave the worker without the alert hook.
+	logger.StartLogRetentionCleaner(ctx, config.LogRetentionDays, logger.LogDir)
 
 	var (
 		err           error
@@ -88,6 +94,12 @@ func main() {
 		logger.Logger.Fatal("database bootstrap error", zap.Error(err))
 	}
 	model.StartTraceRetentionCleaner(ctx, config.TraceRetentionDays)
+
+	// Trace sinks own the asynchronous batched writer, so they must start after
+	// the database handles exist and before the HTTP server accepts requests.
+	if err := tracing.InitSinks(ctx); err != nil {
+		logger.Logger.Fatal("failed to initialize trace sinks", zap.Error(err))
+	}
 	model.StartAsyncTaskRetentionCleaner(ctx, config.AsyncTaskRetentionDays)
 	err = model.CreateRootAccountIfNeed()
 	if err != nil {
@@ -273,6 +285,12 @@ func main() {
 		if err := pprofSrv.Shutdown(shutdownCtx); err != nil {
 			logger.Logger.Error("pprof server shutdown error", zap.Error(err))
 		}
+	}
+
+	// Flush buffered traces now that the server stopped accepting requests, so
+	// the last batch is written before the database handle is closed.
+	if err := tracing.Shutdown(shutdownCtx); err != nil {
+		logger.Logger.Error("failed to flush trace sinks", zap.Error(err))
 	}
 
 	// Stop batch updater and flush pending changes before draining other tasks.
