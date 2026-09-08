@@ -14,46 +14,25 @@ import { TimestampDisplay } from '@/components/ui/timestamp';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { api } from '@/lib/api';
 import { LOG_TYPES, LOG_TYPE_OPTIONS } from '@/lib/constants/logs';
-import { buildCsv, fetchAllPaginatedResults, mapWithConcurrency } from '@/lib/export';
+import type { LogCursorFilters } from '@/lib/logCursor';
+import { useLogExport } from './useLogExport';
 import { useAuthStore } from '@/lib/stores/auth';
-import { cn, formatTimestamp, fromDateTimeLocal, renderQuota, toDateTimeLocal } from '@/lib/utils';
+import { cn, fromDateTimeLocal, renderQuota, toDateTimeLocal } from '@/lib/utils';
 import { Eye, EyeOff, FileDown, Filter, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { createLogColumns, formatLatency, getCacheWriteSummaries, logRef, type LogRow } from './logs-page-columns';
+import { createLogColumns, logRef, type LogRow } from './logs-page-columns';
+import { LOG_TYPE_TRANSLATION_KEYS } from './log-types';
+import { LogCursorPager } from './components/LogCursorPager';
+import { useLogCursorPagination, type LogCursorNavigation } from './useLogCursorPagination';
 
 /** LogStatistics describes the aggregate quota and request totals returned by log statistics APIs. */
 interface LogStatistics {
   quota: number;
   token_count?: number;
   request_count?: number;
-}
-
-const LOG_TYPE_TRANSLATION_KEYS: Record<number, string> = {
-  [LOG_TYPES.ALL]: 'all',
-  [LOG_TYPES.TOPUP]: 'topup',
-  [LOG_TYPES.CONSUME]: 'consume',
-  [LOG_TYPES.MANAGE]: 'manage',
-  [LOG_TYPES.SYSTEM]: 'system',
-  [LOG_TYPES.TEST]: 'test',
-  [LOG_TYPES.TOOL]: 'tool',
-};
-
-/** ExportTracePayload describes trace data embedded in exported log CSV rows. */
-interface ExportTracePayload {
-  id: number;
-  trace_id: string;
-  url: string;
-  method: string;
-  body_size: number;
-  status: number;
-  created_at: number;
-  updated_at: number;
-  timestamps?: Record<string, unknown>;
-  durations?: Record<string, unknown>;
-  log?: Record<string, unknown>;
 }
 
 /** LogsPage renders log filters, statistics, export actions, pagination, and trace details. */
@@ -65,10 +44,12 @@ export function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [pageIndex, setPageIndex] = useState(Math.max(0, parseInt(searchParams.get('p') || '1') - 1));
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
+  // cursorActive reflects the source of the rows on screen, not the eligibility
+  // of the next request, so the pager never describes data it did not produce.
+  const [cursorActive, setCursorActive] = useState(false);
   const mounted = useRef(false);
 
   // Determine if user is admin/root
@@ -134,7 +115,11 @@ export function LogsPage() {
 
   // (removed duplicate isAdmin declaration)
 
-  const load = async (p = 0, size = pageSize) => {
+  const load = async (p = 0, size = pageSize, sortOverride?: { by: string; order: 'asc' | 'desc' }) => {
+    // The sort is passed explicitly because a caller that has just called
+    // setSortBy still sees the previous value in this closure.
+    const activeSortBy = sortOverride?.by ?? sortBy;
+    const activeSortOrder = sortOverride?.order ?? sortOrder;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -148,9 +133,9 @@ export function LogsPage() {
       if (filters.channel && isAdminOrRoot) params.set('channel', filters.channel);
       if (filters.start_timestamp) params.set('start_timestamp', String(fromDateTimeLocal(filters.start_timestamp)));
       if (filters.end_timestamp) params.set('end_timestamp', String(fromDateTimeLocal(filters.end_timestamp)));
-      if (sortBy) {
-        params.set('sort', sortBy);
-        params.set('order', sortOrder);
+      if (activeSortBy) {
+        params.set('sort', activeSortBy);
+        params.set('order', activeSortOrder);
       }
 
       // Unified API call - complete URL with /api prefix
@@ -163,6 +148,7 @@ export function LogsPage() {
         setTotal(responseTotal || 0);
         setPageIndex(p);
         setPageSize(size);
+        setCursorActive(false);
       }
     } catch (error) {
       console.error('Failed to load logs:', error);
@@ -171,6 +157,65 @@ export function LogsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const { exporting, exportLogs: handleExportLogs } = useLogExport({ filters, isAdminOrRoot, sortBy, sortOrder });
+
+  const cursor = useLogCursorPagination<LogRow>({
+    isAdminOrRoot,
+    filters: filters as LogCursorFilters,
+    pageSize,
+    toUnixSeconds: fromDateTimeLocal,
+    get: (url) => api.get(url),
+    onRestart: () =>
+      notify({
+        type: 'info',
+        title: t('logs.notifications.cursor_restart_title'),
+        message: t('logs.notifications.cursor_restart_message'),
+      }),
+  });
+
+  /**
+   * loadPage fetches a page, preferring the keyset route.
+   *
+   * The keyset route only answers the view it can answer: the default
+   * created_at DESC listing with no keyword search. Anything else — a different
+   * sort, a keyword search, or a server without the capability — uses the
+   * legacy offset route unchanged, so no existing capability is lost.
+   *
+   * @param navigation - the move being made.
+   * @param options - per-call overrides for state that has not committed yet.
+   * @returns nothing; the page state is updated in place.
+   */
+  const loadPage = async (
+    navigation: LogCursorNavigation,
+    options: { size?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; offsetPage?: number } = {}
+  ) => {
+    const size = options.size ?? pageSize;
+    const activeSortBy = options.sortBy ?? sortBy;
+    const activeSortOrder = options.sortOrder ?? sortOrder;
+    const eligible = cursor.supported && !searchKeyword.trim() && activeSortBy === 'created_at' && activeSortOrder === 'desc';
+
+    if (eligible) {
+      setLoading(true);
+      try {
+        if (navigation === 'first') cursor.reset();
+        const rows = await cursor.fetchPage(navigation);
+        if (rows) {
+          setData(rows);
+          setPageSize(size);
+          setCursorActive(true);
+          return;
+        }
+      } finally {
+        setLoading(false);
+      }
+      // rows === null means this server cannot answer with a cursor; fall
+      // through to the legacy route rather than showing an empty list.
+    }
+
+    setCursorActive(false);
+    await load(options.offsetPage ?? 0, size, { by: activeSortBy, order: activeSortOrder });
   };
 
   const loadStatistics = async () => {
@@ -243,7 +288,7 @@ export function LogsPage() {
 
   const performSearch = async () => {
     if (!searchKeyword.trim()) {
-      return load(0, pageSize);
+      return loadPage('first');
     }
 
     setLoading(true);
@@ -257,6 +302,9 @@ export function LogsPage() {
         setData(responseData || []);
         setPageIndex(0);
         setTotal(responseData?.length || 0);
+        // Keyword search is a separate route with its own result set; the
+        // keyset pager describes nothing about it.
+        setCursorActive(false);
       }
     } catch (error) {
       console.error('Search failed:', error);
@@ -268,10 +316,16 @@ export function LogsPage() {
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
-      load(pageIndex, pageSize);
+      // A ?p= deep link is an offset address; it has no keyset equivalent, so
+      // it is honoured only by the route that understands it.
+      if (pageIndex > 0) {
+        load(pageIndex, pageSize);
+      } else {
+        loadPage('first');
+      }
       return;
     }
-    load(0, pageSize);
+    loadPage('first');
   }, [pageSize]);
 
   useEffect(() => {
@@ -285,7 +339,7 @@ export function LogsPage() {
   };
 
   const handleFilterSubmit = () => {
-    load(0, pageSize);
+    loadPage('first');
   };
 
   const handleClearLogs = async () => {
@@ -314,7 +368,7 @@ export function LogsPage() {
         });
         return;
       }
-      load(0, pageSize);
+      loadPage('first');
       notify({
         type: 'success',
         title: t('logs.notifications.clear_success_title', 'Logs cleared'),
@@ -330,124 +384,6 @@ export function LogsPage() {
           (error as Error)?.message ||
           t('logs.notifications.clear_failed_message', 'Failed to clear logs.'),
       });
-    }
-  };
-
-  const handleExportLogs = async () => {
-    setExporting(true);
-    try {
-      const params = new URLSearchParams();
-      if (filters.type !== '0') params.set('type', filters.type);
-      if (filters.model_name) params.set('model_name', filters.model_name);
-      if (filters.token_name) params.set('token_name', filters.token_name);
-      if (isAdminOrRoot && filters.username) params.set('username', filters.username);
-      if (filters.channel && isAdminOrRoot) params.set('channel', filters.channel);
-      if (filters.start_timestamp) params.set('start_timestamp', String(fromDateTimeLocal(filters.start_timestamp)));
-      if (filters.end_timestamp) params.set('end_timestamp', String(fromDateTimeLocal(filters.end_timestamp)));
-      if (sortBy) {
-        params.set('sort', sortBy);
-        params.set('order', sortOrder);
-      }
-
-      const exportPath = isAdminOrRoot ? '/api/log/' : '/api/log/self';
-      const exportData = await fetchAllPaginatedResults<LogRow>((url) => api.get(url), exportPath, params);
-      const logsWithTrace = exportData.filter((log) => log.trace_id?.trim());
-      const traceEntries = await mapWithConcurrency(logsWithTrace, async (log) => {
-        const ref = logRef(log);
-        try {
-          const traceResponse = await api.get(`/api/trace/log/${ref}`);
-          if (traceResponse.data?.success === false) {
-            return {
-              logId: ref,
-              trace: { error: traceResponse.data?.message || t('logs.details.load_failed') } as ExportTracePayload | { error: string },
-            };
-          }
-
-          return {
-            logId: ref,
-            trace: (traceResponse.data?.data as ExportTracePayload | undefined) ?? null,
-          };
-        } catch (_error) {
-          return {
-            logId: ref,
-            trace: { error: t('logs.details.load_failed') } as ExportTracePayload | { error: string },
-          };
-        }
-      });
-      const tracesByLogId = new Map<string | number, ExportTracePayload | { error: string } | null>(
-        traceEntries.map((entry) => [entry.logId, entry.trace])
-      );
-
-      const csvHeaders = [
-        t('logs.details.recorded_at'),
-        t('logs.details.type'),
-        t('logs.details.log_id'),
-        t('logs.details.model'),
-        t('logs.details.origin_model'),
-        t('logs.details.token'),
-        t('logs.details.user'),
-        t('logs.details.channel'),
-        t('logs.details.quota'),
-        t('logs.details.quota_raw'),
-        t('logs.details.prompt_tokens_input'),
-        t('logs.details.completion_tokens_output'),
-        t('logs.details.prompt_tokens_cached'),
-        t('logs.details.cache_write_5m'),
-        t('logs.details.cache_write_1h'),
-        t('logs.details.total_tokens'),
-        t('logs.details.latency'),
-        t('logs.details.request_id'),
-        t('logs.details.trace_id'),
-        t('logs.details.stream'),
-        t('logs.details.system_reset'),
-        t('logs.details.content'),
-        t('logs.details.metadata'),
-        t('logs.details.tracing'),
-      ];
-      const csvData = exportData.map((log) => {
-        const { fiveMinute, oneHour } = getCacheWriteSummaries(log.metadata);
-        const totalTokens = (log.prompt_tokens ?? 0) + (log.completion_tokens ?? 0);
-        const tracePayload = tracesByLogId.get(logRef(log)) ?? null;
-        return [
-          formatTimestamp(log.created_at),
-          `${getLogTypeLabelText(log.type)} (${log.type})`,
-          logRef(log),
-          log.model_name,
-          log.origin_model_name || '',
-          log.token_name || '',
-          log.username || '',
-          log.channel_uuid || log.channel || '',
-          renderQuota(log.quota),
-          log.quota,
-          log.prompt_tokens || 0,
-          log.completion_tokens || 0,
-          log.cached_prompt_tokens || 0,
-          fiveMinute,
-          oneHour,
-          totalTokens,
-          formatLatency(log.elapsed_time, t('logs.labels.not_available')),
-          log.request_id || '',
-          log.trace_id || '',
-          Boolean(log.is_stream),
-          Boolean(log.system_prompt_reset),
-          log.content || '',
-          log.metadata ?? null,
-          tracePayload,
-        ];
-      });
-
-      const csv = buildCsv([csvHeaders, ...csvData]);
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `logs_${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Failed to export logs:', error);
-    } finally {
-      setExporting(false);
     }
   };
 
@@ -477,14 +413,14 @@ export function LogsPage() {
     if (searchKeyword.trim()) {
       performSearch();
     } else {
-      load(0, newPageSize);
+      loadPage('first', { size: newPageSize });
     }
   };
 
   const handleSortChange = (newSortBy: string, newSortOrder: 'asc' | 'desc') => {
     setSortBy(newSortBy);
     setSortOrder(newSortOrder);
-    load(0, pageSize);
+    loadPage('first', { sortBy: newSortBy, sortOrder: newSortOrder });
   };
 
   const handleRowClick = (log: LogRow) => {
@@ -506,6 +442,8 @@ export function LogsPage() {
   const refresh = () => {
     if (searchKeyword.trim()) {
       performSearch();
+    } else if (cursorActive) {
+      loadPage('reload');
     } else {
       load(pageIndex, pageSize);
     }
@@ -704,6 +642,23 @@ export function LogsPage() {
             onRefresh={refresh}
             loading={loading}
             emptyMessage={t('logs.table.empty')}
+            paginationSlot={
+              cursorActive ? (
+                <LogCursorPager
+                  rowsBefore={cursor.rowsBefore}
+                  pageSize={pageSize}
+                  rowCount={data.length}
+                  hasMore={cursor.hasMore}
+                  hasPrevious={cursor.hasPrevious}
+                  count={cursor.count}
+                  notice={cursor.notice}
+                  loading={loading}
+                  onPrevious={() => loadPage('previous')}
+                  onNext={() => loadPage('next')}
+                  onPageSizeChange={handlePageSizeChange}
+                />
+              ) : undefined
+            }
           />
         </CardContent>
       </Card>

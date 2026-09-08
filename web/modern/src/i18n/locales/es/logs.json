@@ -114,7 +114,22 @@
       "clear_failed_message": "No se pudieron limpiar los registros.",
       "clear_failed_title": "Error al limpiar",
       "clear_success_message": "Los registros se limpiaron correctamente.",
-      "clear_success_title": "Registros limpiados"
+      "clear_success_title": "Registros limpiados",
+      "cursor_restart_message": "La posición de paginación caducó o ya no coincide con los filtros, por lo que el listado se reinició en la primera página.",
+      "cursor_restart_title": "Listado reiniciado"
+    },
+    "pagination": {
+      "bytes_capped": "Esta página se acortó para no superar el límite de tamaño de respuesta. Continúa a la página siguiente para ver el resto.",
+      "count_cached": "Recuento reutilizado de una consulta idéntica reciente.",
+      "count_cached_hint": "El recuento se tomó hace un momento y puede no incluir los registros más recientes.",
+      "next": "Siguiente",
+      "oversized_record": "Este registro por sí solo supera el límite de tamaño de respuesta, por lo que se muestra aparte. No se ha truncado nada.",
+      "page_size": "Filas por página",
+      "page_size_option": "{{size}} / página",
+      "previous": "Anterior",
+      "range_exact_total": "Mostrando {{from}}–{{to}} de {{count}}",
+      "range_lower_bound_total": "Mostrando {{from}}–{{to}} de al menos {{count}}",
+      "range_unknown_total": "Mostrando {{from}}–{{to}}; el total no está disponible para esta consulta"
     },
     "search": {
       "log_entry": "Entrada de registro",

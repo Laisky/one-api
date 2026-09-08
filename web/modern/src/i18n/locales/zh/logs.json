@@ -114,7 +114,22 @@
       "clear_failed_message": "清理日志失败。",
       "clear_failed_title": "清理失败",
       "clear_success_message": "日志清理成功。",
-      "clear_success_title": "日志已清理"
+      "clear_success_title": "日志已清理",
+      "cursor_restart_message": "翻页位置已过期或不再匹配当前筛选条件，列表已从第一页重新开始。",
+      "cursor_restart_title": "列表已重新开始"
+    },
+    "pagination": {
+      "bytes_capped": "为不超出响应大小上限，本页已被截短。继续翻到下一页可查看其余记录。",
+      "count_cached": "计数复用自近期的相同查询。",
+      "count_cached_hint": "该计数在稍早之前取得，可能不包含最新记录。",
+      "next": "下一页",
+      "oversized_record": "该条记录本身已超出响应大小上限，因此单独显示。内容未被截断。",
+      "page_size": "每页行数",
+      "page_size_option": "每页 {{size}} 条",
+      "previous": "上一页",
+      "range_exact_total": "显示第 {{from}}–{{to}} 条，共 {{count}} 条",
+      "range_lower_bound_total": "显示第 {{from}}–{{to}} 条，至少有 {{count}} 条",
+      "range_unknown_total": "显示第 {{from}}–{{to}} 条；该查询无法给出总数"
     },
     "search": {
       "log_entry": "日志条目",

@@ -55,6 +55,8 @@ func TestStandaloneDefaultsPreserveOutputContracts(t *testing.T) {
 		"dashboard aggregates must stay live by default rather than becoming up to a minute stale")
 	require.Equal(t, 365, DashboardMaxSitewideRangeDays,
 		"the site-wide dashboard range must keep the existing 365-day limit")
+	require.Equal(t, 1440, RetentionSweepIntervalMinutes,
+		"retention workers must keep their historical 24-hour cadence; when deletions happen is observable behavior")
 }
 
 // TestStandaloneDefaultsPreserveTraceBehaviour verifies tracing keeps working
@@ -92,4 +94,39 @@ func TestScaledProfileOptsIntoTheOptimizations(t *testing.T) {
 	require.Equal(t, 60, profileInt(ObservabilityProfileScaled, 0, 60, 60), "scaled enables dashboard caching")
 	require.InDelta(t, 0.05, profileFloat(ObservabilityProfileScaled, 1.0, 0.05, 1.0), 1e-9,
 		"scaled enables trace sampling")
+}
+
+// TestCursorCapabilityIsOffByDefault verifies an upgrade does not silently move
+// any existing deployment onto the keyset log routes.
+//
+// The keyset order needs an access path the shipped schema does not have. On
+// MySQL 8.4 the first cursor page is a full table scan plus a filesort of every
+// row — measured at 5.9 s on 2,000,000 rows against 0.8 ms for the legacy offset
+// page it would replace (docs/benchmarks/20260906_w24-cursor-plans.md). A
+// default-on capability would therefore make the log page dramatically slower
+// for existing operators, which is exactly what these guarantees forbid.
+//
+// Parameters:
+//   - t: the test handle.
+//
+// Return values: none.
+func TestCursorCapabilityIsOffByDefault(t *testing.T) {
+	require.False(t, LogCursorEnabled,
+		"LOG_CURSOR_ENABLED must stay off until W2.5 establishes the access paths")
+}
+
+// TestCursorBudgetsAreBoundedByDefault verifies that an operator who does enable
+// the capability still gets bounded work without configuring anything.
+//
+// Parameters:
+//   - t: the test handle.
+//
+// Return values: none.
+func TestCursorBudgetsAreBoundedByDefault(t *testing.T) {
+	require.Positive(t, LogCursorMaxResponseBytes, "a page must be bounded in bytes")
+	require.Positive(t, LogCountProbeMaxRows, "counting must be bounded in rows")
+	require.Positive(t, LogCountProbeTimeoutMs, "counting must be bounded in time")
+	require.Positive(t, LogCountProbeMaxConcurrent, "counting must be bounded in concurrency")
+	require.LessOrEqual(t, LogCountExactMaxConcurrent, LogCountProbeMaxConcurrent,
+		"the unbounded-cost count must not be allowed more concurrency than the bounded one")
 }

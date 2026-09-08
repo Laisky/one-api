@@ -54,6 +54,14 @@ export interface EnhancedDataTableProps<TData extends RowData, TValue = unknown>
   loading?: boolean;
   className?: string;
   emptyMessage?: string;
+
+  /**
+   * paginationSlot replaces the built-in page-number pager. Callers whose
+   * pagination cannot address an arbitrary page — a keyset traversal, for
+   * instance — supply their own control here. Omitting it keeps the built-in
+   * pager, so every existing caller is unaffected.
+   */
+  paginationSlot?: React.ReactNode;
 }
 
 export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
@@ -85,6 +93,7 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
   compactMode = false,
   loading = false,
   className,
+  paginationSlot,
   emptyMessage,
 }: EnhancedDataTableProps<TData, TValue>) {
   const { t } = useTranslation();
@@ -424,19 +433,21 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
       </div>
 
       {/* Advanced Pagination */}
-      <AdvancedPagination
-        currentPage={pageIndex + 1}
-        totalPages={Math.ceil(total / pageSize)}
-        pageSize={pageSize}
-        totalItems={total}
-        onPageChange={(page) => onPageChange?.(page - 1, pageSize)}
-        onPageSizeChange={(newPageSize) => {
-          onPageSizeChange?.(newPageSize);
-          // Reset to first page when changing page size
-          onPageChange?.(0, newPageSize);
-        }}
-        loading={loading}
-      />
+      {paginationSlot ?? (
+        <AdvancedPagination
+          currentPage={pageIndex + 1}
+          totalPages={Math.ceil(total / pageSize)}
+          pageSize={pageSize}
+          totalItems={total}
+          onPageChange={(page) => onPageChange?.(page - 1, pageSize)}
+          onPageSizeChange={(newPageSize) => {
+            onPageSizeChange?.(newPageSize);
+            // Reset to first page when changing page size
+            onPageChange?.(0, newPageSize);
+          }}
+          loading={loading}
+        />
+      )}
 
       {/* Floating Row Actions */}
       {floatingRowActions &&

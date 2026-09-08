@@ -310,11 +310,26 @@ RETENTION_SWEEP_INTERVAL_MINUTES="60"
 # Dashboard.
 DASHBOARD_CACHE_TTL_SEC="60"            # standalone: 0 (always live)
 DASHBOARD_MAX_SITEWIDE_RANGE_DAYS="31"  # standalone: 365 (the existing limit)
+
+# Keyset log pagination. Two ADDITIVE routes (/api/log/cursor and
+# /api/log/self/cursor); the existing offset routes are untouched.
+#
+# OFF by default, and not because it is experimental: the keyset order
+# (created_at DESC, id DESC) has no supporting index in the shipped schema, so
+# on MySQL 8.4 the first page is a full table scan. Turn it on only after adding
+# the access paths for your engine. Measured plans:
+# docs/benchmarks/20260906_w24-cursor-plans.md
+LOG_CURSOR_ENABLED="true"               # default: false
+LOG_CURSOR_TTL_SEC="1800"               # how long a page token stays usable
+LOG_CURSOR_MAX_RESPONSE_BYTES="4194304" # 0 disables the cap
+LOG_COUNT_PROBE_MAX_ROWS="10000"        # beyond this the count is a lower bound
+LOG_COUNT_PROBE_TIMEOUT_MS="3000"       # beyond this the count is unavailable
+LOG_COUNT_CACHE_TTL_SEC="30"            # 0 disables count reuse
 ```
 
 Upgrading from an earlier release changes nothing unless you set one of these:
-retention, sampling, caching and the compact log line are all off by default,
-and trace writes stay synchronous. See
+retention, sampling, caching, the compact log line and keyset pagination are all
+off by default, and trace writes stay synchronous. See
 [the compatibility contract](./docs/proposals/20260905_observability-data-tiering.md#45-backward-compatibility-contract).
 
 #### Support channel's built-in tooling configuration

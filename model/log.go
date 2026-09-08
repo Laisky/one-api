@@ -1408,17 +1408,40 @@ func GetLogById(id int) (*Log, error) {
 }
 
 // dayAggregationSelect returns the SQL expression that normalizes log timestamps
-// into YYYY-MM-DD strings, accounting for the configured database engine.
-func dayAggregationSelect() string {
-	if common.UsingPostgreSQL.Load() {
-		return "TO_CHAR(date_trunc('day', to_timestamp(created_at)), 'YYYY-MM-DD') as day"
-	}
-
-	if common.UsingSQLite.Load() {
+// into UTC YYYY-MM-DD strings for the engine that owns the given handle.
+//
+// Two properties matter here, and the pre-W2 implementation had neither.
+//
+// The dialect is read from the HANDLE, not from the process-global
+// common.UsingPostgreSQL / UsingSQLite flags. Those flags are set as a side
+// effect of opening any handle, so a deployment that points LOG_SQL_DSN at a
+// different engine from SQL_DSN leaves them describing whichever handle was
+// opened last. These queries run on LOG_DB, so reading the globals could emit
+// one engine's date syntax against another's.
+//
+// The expressions are also independent of the database session time zone.
+// `to_timestamp()` on PostgreSQL and `FROM_UNIXTIME()` on MySQL both resolve in
+// the session zone, while SQLite's `unixepoch` modifier is unconditionally UTC:
+// on a server whose zone is not UTC the same row landed in different days on
+// different engines. Verified: at session zone +09:00 both engines bucketed
+// epoch second 1767225540 as 2026-01-01, where UTC is 2025-12-31. The forms
+// below build the timestamp from a zone-free epoch literal instead, so every
+// engine agrees on the UTC day.
+//
+// Parameters:
+//   - db: the handle the query will run on; its dialector names the engine.
+//
+// Return values:
+//   - string: the aliased `day` select expression.
+func dayAggregationSelect(db *gorm.DB) string {
+	switch dialectName(db) {
+	case "postgres":
+		return "TO_CHAR(TIMESTAMP 'epoch' + created_at * INTERVAL '1 second', 'YYYY-MM-DD') as day"
+	case "mysql":
+		return "DATE_FORMAT(DATE_ADD('1970-01-01', INTERVAL created_at SECOND), '%Y-%m-%d') as day"
+	default:
 		return "strftime('%Y-%m-%d', datetime(created_at, 'unixepoch')) as day"
 	}
-
-	return "DATE_FORMAT(FROM_UNIXTIME(created_at), '%Y-%m-%d') as day"
 }
 
 // SearchToolLogsByDayAndTool returns per-day, per-tool aggregates of tool
@@ -1426,7 +1449,7 @@ func dayAggregationSelect() string {
 // invocations (one log row per invocation) and quota is the sum of the
 // charged quota.
 func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLogStatistic, error) {
-	groupSelect := dayAggregationSelect()
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1470,7 +1493,7 @@ func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLog
 // SearchToolLogsByDayAndUser returns per-day, per-user aggregates of tool
 // invocation logs (Type == LogTypeTool).
 func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByUser, error) {
-	groupSelect := dayAggregationSelect()
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1518,7 +1541,7 @@ func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLog
 // SearchToolLogsByDayAndToken returns per-day, per-token aggregates of tool
 // invocation logs (Type == LogTypeTool).
 func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByToken, error) {
-	groupSelect := dayAggregationSelect()
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1569,7 +1592,7 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 // half-open timestamp range [start, endExclusive). `start` and `endExclusive`
 // are Unix seconds.
 func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*dto.LogStatistic, err error) {
-	groupSelect := dayAggregationSelect()
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	// If userId is 0, query all users (site-wide statistics)
 	var query string
@@ -1623,7 +1646,7 @@ func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*
 // SearchLogsByDayAndUser returns per-day, per-user aggregates for logs within
 // the half-open timestamp range [start, endExclusive).
 func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisticByUser, error) {
-	groupSelect := dayAggregationSelect()
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1679,7 +1702,7 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 // username to disambiguate tokens with identical names) for the half-open
 // range [start, endExclusive).
 func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatisticByToken, error) {
-	groupSelect := dayAggregationSelect()
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any

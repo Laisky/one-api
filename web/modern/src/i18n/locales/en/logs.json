@@ -114,7 +114,22 @@
       "clear_failed_message": "Failed to clear logs.",
       "clear_failed_title": "Clear failed",
       "clear_success_message": "Logs cleared successfully.",
-      "clear_success_title": "Logs cleared"
+      "clear_success_title": "Logs cleared",
+      "cursor_restart_message": "The page position expired or no longer matches the filters, so the listing restarted from the first page.",
+      "cursor_restart_title": "Listing restarted"
+    },
+    "pagination": {
+      "bytes_capped": "This page was shortened to stay within the response size limit. Continue to the next page to see the rest.",
+      "count_cached": "Count reused from a recent identical query.",
+      "count_cached_hint": "The count was taken a moment ago and may not include the newest records.",
+      "next": "Next",
+      "oversized_record": "This record alone exceeds the response size limit, so it is shown on its own. Nothing has been truncated.",
+      "page_size": "Rows per page",
+      "page_size_option": "{{size}} / page",
+      "previous": "Previous",
+      "range_exact_total": "Showing {{from}}–{{to}} of {{count}}",
+      "range_lower_bound_total": "Showing {{from}}–{{to}} of at least {{count}}",
+      "range_unknown_total": "Showing {{from}}–{{to}}; the total is not available for this query"
     },
     "search": {
       "log_entry": "Log Entry",

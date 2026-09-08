@@ -409,12 +409,23 @@ var (
 	RetentionDeletePauseMs = nonNegative(env.Int("RETENTION_DELETE_PAUSE_MS", 10))
 
 	// RetentionSweepIntervalMinutes is how often background retention workers
-	// run. Sweeping hourly instead of daily keeps each sweep small.
+	// run.
+	//
+	// The standalone default is 1440 minutes -- the historical 24-hour cadence
+	// every retention worker used before this work. Sweeping hourly makes each
+	// sweep smaller, which is the point at high volume, but cadence is
+	// observable behavior: it changes when deletions happen and how often the
+	// workers touch the database. An upgrade that changes it without being
+	// asked violates the unchanged-configuration contract in section 2.1 of
+	// docs/proposals/20260905_observability-data-tiering.md, which names this
+	// specific gap as a G1 blocker. The scaled and external profiles opt in to
+	// the hourly cadence.
 	//
 	// Environment variable: RETENTION_SWEEP_INTERVAL_MINUTES
-	// Default: 60
+	// Default: 1440 (24h) for standalone, 60 for scaled and external
 	// Unit: minutes
-	RetentionSweepIntervalMinutes = positiveOr(env.Int("RETENTION_SWEEP_INTERVAL_MINUTES", 60), 60)
+	RetentionSweepIntervalMinutes = positiveOr(env.Int("RETENTION_SWEEP_INTERVAL_MINUTES",
+		profileInt(ObservabilityProfile, 1440, 60, 60)), 1440)
 
 	// LogMaxTotalSizeMB caps the total size of the log directory. When the
 	// directory exceeds it, the retention worker deletes oldest-first until it

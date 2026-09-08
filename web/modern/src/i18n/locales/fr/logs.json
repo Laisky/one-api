@@ -114,7 +114,22 @@
       "clear_failed_message": "Impossible de supprimer les journaux.",
       "clear_failed_title": "Échec du nettoyage",
       "clear_success_message": "Les journaux ont été supprimés.",
-      "clear_success_title": "Journaux supprimés"
+      "clear_success_title": "Journaux supprimés",
+      "cursor_restart_message": "La position de pagination a expiré ou ne correspond plus aux filtres ; la liste a redémarré à la première page.",
+      "cursor_restart_title": "Liste redémarrée"
+    },
+    "pagination": {
+      "bytes_capped": "Cette page a été raccourcie pour ne pas dépasser la taille de réponse maximale. Passez à la page suivante pour voir le reste.",
+      "count_cached": "Décompte réutilisé depuis une requête identique récente.",
+      "count_cached_hint": "Le décompte a été effectué il y a un instant et peut ne pas inclure les enregistrements les plus récents.",
+      "next": "Suivant",
+      "oversized_record": "Cet enregistrement dépasse à lui seul la taille de réponse maximale ; il est donc affiché seul. Rien n'a été tronqué.",
+      "page_size": "Lignes par page",
+      "page_size_option": "{{size}} / page",
+      "previous": "Précédent",
+      "range_exact_total": "Affichage de {{from}} à {{to}} sur {{count}}",
+      "range_lower_bound_total": "Affichage de {{from}} à {{to}} sur au moins {{count}}",
+      "range_unknown_total": "Affichage de {{from}} à {{to}} ; le total n'est pas disponible pour cette requête"
     },
     "search": {
       "log_entry": "Entrée de journal",

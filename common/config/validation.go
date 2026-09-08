@@ -636,6 +636,7 @@ func ValidateAllEnvVars() *ValidationResult {
 	if err := ValidatePositiveInt("DASHBOARD_MAX_SITEWIDE_RANGE_DAYS", DashboardMaxSitewideRangeDays); err != nil {
 		result.Errors = append(result.Errors, err)
 	}
+	result.Errors = append(result.Errors, validateLogCursorSettings()...)
 
 	return result
 }

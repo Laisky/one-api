@@ -171,6 +171,10 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
+		// Additive keyset routes. They are siblings of the offset routes above,
+		// never a mode of them, so the legacy response envelope stays frozen.
+		logRoute.GET("/cursor", middleware.AdminAuth(), controller.GetAllLogsCursor)
+		logRoute.GET("/self/cursor", middleware.UserAuth(), controller.GetUserLogsCursor)
 		logRoute.GET("/self/search", middleware.UserAuth(), controller.SearchUserLogs)
 
 		// Tracing routes

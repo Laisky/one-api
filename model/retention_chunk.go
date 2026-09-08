@@ -143,12 +143,7 @@ func ChunkedDelete(ctx context.Context, db *gorm.DB, opts ChunkedDeleteOptions) 
 func boundedDeleteStatement(db *gorm.DB, table, where string, batchSize int) string {
 	limit := strconv.Itoa(batchSize)
 
-	dialect := ""
-	if db != nil && db.Dialector != nil {
-		dialect = db.Dialector.Name()
-	}
-
-	switch dialect {
+	switch dialectName(db) {
 	case "postgres":
 		return "DELETE FROM " + table +
 			" WHERE ctid IN (SELECT ctid FROM " + table +

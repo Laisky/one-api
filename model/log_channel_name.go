@@ -34,7 +34,12 @@ func fillLogChannelNames(logs []*Log) error {
 		Name string
 	}
 	rows := make([]channelNameRow, 0, len(ids))
-	if err := LOG_DB.Raw("SELECT id, name FROM channels WHERE id IN ?", ids).Scan(&rows).Error; err != nil {
+	// Channels live on the PRIMARY handle. migrateLOGDB creates only Log and
+	// DataMigration on LOG_DB, so a deployment that points LOG_SQL_DSN at a
+	// separate database has no channels table there and this lookup failed the
+	// whole log list with "query channel names for logs". Logs are read from
+	// LOG_DB; the names decorating them are resolved where they actually live.
+	if err := DB.Raw("SELECT id, name FROM channels WHERE id IN ?", ids).Scan(&rows).Error; err != nil {
 		return errors.Wrap(err, "query channel names for logs")
 	}
 

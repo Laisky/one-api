@@ -25,7 +25,7 @@ work items must comply with them. Requirements marked **planned** are not curren
 | --- | --- | --- | --- |
 | Phase 0: exclusions, chunked deletion, file guards, sampling, dashboard caches | Yes | Targeted tests and historical component benchmarks exist | Close compatibility, disk, cache-failure, and resource gates in W0 |
 | Phase 1: recorder, SQL batching, local sampling, OTLP sink, timestamp columns | Yes | Targeted tests and historical component benchmarks exist | Close lifecycle, outcome, memory, and OTLP correctness gates in W1 |
-| Phase 2: mutation-aware SQL projections, additive pagination, explicit index migrations | No | Acceptance specification below | Planned; synchronous usage-write semantics remain |
+| Phase 2: mutation-aware SQL projections, additive pagination, explicit index migrations | Partial — W2.4 (additive cursor/count APIs) implemented; W2.1–W2.3, W2.5, W2.6 not started | W2.4: [cursor plans and correctness bundle](../benchmarks/20260906_w24-cursor-plans.md), 3 engines, 2M rows | W2.4 released **off by default** (`LOG_CURSOR_ENABLED=false`); synchronous usage-write semantics remain |
 | Phase 3: optional OTLP application logs and operational metrics | No; trace sink is already Phase 1 code | No integration acceptance yet | Optional; does not block SQL optimization |
 | Phase 4: durable replay and corrected ClickHouse mirror | No | No replay or reconciliation evidence yet | Optional; cannot authorize billing-history deletion |
 | Sustained full-relay 10,000 RPS | Not established | Component results are insufficient | Require G5 before publishing capacity claims |
@@ -623,6 +623,26 @@ authorized user time/id cursor, type-filtered paths, and supported detail filter
 Candidate `(created_at, id)` and `(user_id, created_at, id)` paths must earn their write/storage
 cost. Do not add every possible composite index. Validate plans with skew, broad filters,
 deep history, cold caches and concurrent inserts/retention.
+
+**Status: implemented, released disabled by default.** Evidence:
+[W2.4 cursor plans and correctness bundle](../benchmarks/20260906_w24-cursor-plans.md)
+(3 engines, 2,000,000-row skewed corpus). Two additive routes ship — `GET /api/log/cursor`
+and `GET /api/log/self/cursor` — as siblings of the legacy routes, which are untouched.
+
+The plans confirmed the warning above and turned it into a release decision. On MySQL 8.4
+with the shipped index set, the *unfiltered* first cursor page is a full table scan plus a
+filesort of every row (measured 5.9 s and 9.1 s on 2M rows, against 0.8–6.1 ms for the legacy
+offset page it would replace), while the *type-filtered* deep page on the same index set is
+5.7 ms. `LOG_CURSOR_ENABLED` therefore defaults to **false**: enabling the capability before
+W2.5 establishes the access paths would be a severe regression for existing MySQL operators.
+Modern probes the capability and falls back to the legacy route when it is unavailable.
+
+Per-engine, the candidate indexes are load-bearing on MySQL (`(created_at, id)`: 9,051 ms →
+2.2 ms) and SQLite (`(user_id, created_at, id)`: 2,162 ms → 295 µs), and near-neutral on
+PostgreSQL 17, which already serves every cursor family in single-digit milliseconds using
+`Incremental Sort` over `idx_created_at_type`. One case is unresolved and handed to W2.5:
+on MySQL the heavy-user deep page remains 218 ms with both candidates because the optimizer
+picks ref access on `user_id` and scans every newer row that user owns.
 
 ### W2.5 — Explicit index migrations (Database Operations)
 

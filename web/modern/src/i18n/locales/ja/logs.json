@@ -114,7 +114,22 @@
       "clear_failed_message": "ログをクリアできませんでした。",
       "clear_failed_title": "クリアに失敗しました",
       "clear_success_message": "ログを正常にクリアしました。",
-      "clear_success_title": "ログをクリアしました"
+      "clear_success_title": "ログをクリアしました",
+      "cursor_restart_message": "ページ位置の有効期限が切れたか、フィルターと一致しなくなったため、一覧を 1 ページ目から表示し直しました。",
+      "cursor_restart_title": "一覧を最初からやり直しました"
+    },
+    "pagination": {
+      "bytes_capped": "レスポンスサイズの上限を超えないよう、このページは短縮されました。残りは次のページで確認できます。",
+      "count_cached": "直近の同一クエリの件数を再利用しています。",
+      "count_cached_hint": "この件数は少し前に取得したもので、最新のレコードを含まない場合があります。",
+      "next": "次へ",
+      "oversized_record": "このレコード単体でレスポンスサイズの上限を超えるため、単独で表示しています。内容は切り詰められていません。",
+      "page_size": "1 ページの行数",
+      "page_size_option": "{{size}} 件 / ページ",
+      "previous": "前へ",
+      "range_exact_total": "{{count}} 件中 {{from}}–{{to}} 件を表示",
+      "range_lower_bound_total": "少なくとも {{count}} 件中 {{from}}–{{to}} 件を表示",
+      "range_unknown_total": "{{from}}–{{to}} 件を表示。このクエリでは総数を取得できません"
     },
     "search": {
       "log_entry": "ログエントリ",

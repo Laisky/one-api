@@ -137,4 +137,30 @@ describe('mapWithConcurrency', () => {
     expect(results).toEqual([10, 20, 30, 40, 50]);
     expect(maxActiveTasks).toBeLessThanOrEqual(2);
   });
+
+  it('derives the page count from the size the server actually applied, not the size requested', async () => {
+    // The list endpoints clamp `size` to MAX_ITEMS_PER_PAGE (100 by default).
+    // Asking for 1000 and computing pages from 1000 exported a tenth of the rows.
+    const serverPageSize = 100;
+    const total = 450;
+    const requestPage = vi.fn(async (url: string) => {
+      const page = Number(new URL(url, 'http://x').searchParams.get('p'));
+      const start = page * serverPageSize;
+      const rows = Array.from(
+        { length: Math.max(0, Math.min(serverPageSize, total - start)) },
+        (_v, i) => ({ id: start + i })
+      );
+      return { data: { success: true, data: rows, total } };
+    });
+
+    const rows = await fetchAllPaginatedResults(
+      requestPage as never,
+      '/api/log/',
+      new URLSearchParams([['type', '2']]),
+      1000
+    );
+
+    expect(rows).toHaveLength(total);
+    expect(requestPage).toHaveBeenCalledTimes(Math.ceil(total / serverPageSize));
+  });
 });
