@@ -9,7 +9,8 @@
       "edit": "Modifier",
       "enable": "Activer",
       "refresh_balance": "Actualiser le solde de {{name}}",
-      "test": "Tester"
+      "test": "Tester",
+      "test_help": "Contrôler ce canal maintenant, selon son réglage de modèle de test."
     },
     "columns": {
       "actions": "Actions",
@@ -455,6 +456,8 @@
         "error_title": "Erreur de test",
         "failed_message": "Le test du canal a échoué.",
         "failed_title": "Test échoué",
+        "skipped_message": "Test du canal ignoré : {{message}}",
+        "skipped_title": "Ignoré",
         "success_message": "Le test du canal s’est terminé avec succès.",
         "success_title": "Test réussi"
       },
@@ -583,6 +586,8 @@
       "status_failed_title": "Échec de la mise à jour",
       "test_failed_message": "Erreur inconnue",
       "test_failed_title": "Échec du test du canal",
+      "test_skipped_message": "Ce canal n'expose aucun point de terminaison compatible avec le chat ; son état ne peut donc pas être vérifié. Il reste activé.",
+      "test_skipped_title": "Test du canal ignoré",
       "test_success": "Test du canal réussi.",
       "testing_model_failed_message": "Impossible de mettre à jour le modèle de test",
       "testing_model_failed_title": "Échec de l'enregistrement",
@@ -603,7 +608,10 @@
       "paused": "En pause"
     },
     "testing": {
-      "auto": "LE MOINS CHER"
+      "auto": "LE MOINS CHER",
+      "help": "Choisit le modèle utilisé pour contrôler l'état de ce canal.\n\nCHEAPEST — utilise automatiquement le modèle le moins cher servi via une API de chat (chat completions, response API, Claude messages ou Gemini chat).\n\nSKIP — exclut totalement ce canal des contrôles. Il n'est jamais sondé ni désactivé automatiquement.\n\nSeuls les modèles au format chat sont testables. Les modèles d'embeddings, de reranking, de modération, de complétion et multimédias sont exclus, de même que ceux dont le format d'API est inconnu — sélectionnez-en un ici pour le tester malgré tout.",
+      "help_label": "Comment le modèle de test est choisi",
+      "skip": "SKIP (jamais testé)"
     },
     "title": "Canaux",
     "toolbar": {
@@ -615,6 +623,7 @@
       "refresh_balances": "Actualiser tous les soldes",
       "refresh_balances_mobile": "Actualiser les soldes",
       "test_all": "Tout tester",
+      "test_all_help": "Contrôle tous les canaux, chacun selon son propre réglage de modèle de test (ou son modèle chat le moins cher si réglé sur CHEAPEST).\n\nLes canaux réglés sur SKIP, et ceux sans modèle au format chat à sonder, sont ignorés : ils ne sont jamais signalés en échec ni désactivés automatiquement.",
       "test_all_mobile": "Tester tous les canaux"
     },
     "type_unknown": "Type {{type}}"

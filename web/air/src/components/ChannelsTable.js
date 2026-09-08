@@ -471,12 +471,20 @@ const ChannelsTable = () => {
   };
 
   const testChannel = async (record, model) => {
-    const res = await API.get(`/api/channel/test/${channelRef(record)}?model=${model}`);
-    const { success, message, time } = res.data;
+    // An absent model must send no query parameter at all: `?model=undefined`
+    // reaches the backend as an explicitly requested model named "undefined",
+    // which it rejects as unsupported. Omitting it lets the server apply the
+    // channel's own testing-model setting.
+    const query = model ? `?model=${encodeURIComponent(model)}` : '';
+    const res = await API.get(`/api/channel/test/${channelRef(record)}${query}`);
+    const { success, message, time, skipped } = res.data;
     if (success) {
       record.response_time = time * 1000;
       record.test_time = Date.now() / 1000;
       showInfo(`渠道 ${record.name} 测试成功，耗时 ${time.toFixed(2)} 秒。`);
+    } else if (skipped) {
+      // 该渠道没有可用于对话的接口，无法进行健康检查，这不是故障。
+      showInfo(`已跳过渠道 ${record.name} 的测试：${message}`);
     } else {
       showError(message);
     }

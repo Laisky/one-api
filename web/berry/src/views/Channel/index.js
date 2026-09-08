@@ -150,7 +150,12 @@ export default function ChannelPage() {
         showError(`未知操作类型: ${action}`);
         return;
     }
-    const { success, message, data: responseData } = res.data;
+    const { success, message, data: responseData, skipped } = res.data;
+    if (!success && skipped) {
+      // 该渠道没有可用于对话的接口，无法进行健康检查，这不是故障。
+      showInfo(`已跳过该渠道的测试：${message}`);
+      return res.data;
+    }
     if (success) {
       showSuccess('操作成功完成！');
       if (action === 'delete') {

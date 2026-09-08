@@ -9,7 +9,8 @@
       "edit": "Editar",
       "enable": "Habilitar",
       "refresh_balance": "Actualizar saldo de {{name}}",
-      "test": "Probar"
+      "test": "Probar",
+      "test_help": "Comprueba ahora este canal usando su ajuste de modelo de prueba."
     },
     "columns": {
       "actions": "Acciones",
@@ -455,6 +456,8 @@
         "error_title": "Error de prueba",
         "failed_message": "La prueba del canal falló.",
         "failed_title": "Prueba fallida",
+        "skipped_message": "Prueba de canal omitida: {{message}}",
+        "skipped_title": "Omitido",
         "success_message": "La prueba del canal se completó correctamente.",
         "success_title": "Prueba aprobada"
       },
@@ -583,6 +586,8 @@
       "status_failed_title": "Error al actualizar",
       "test_failed_message": "Error desconocido",
       "test_failed_title": "La prueba del canal falló",
+      "test_skipped_message": "Este canal no expone ningún endpoint compatible con chat, por lo que no se puede comprobar su estado. Se ha mantenido habilitado.",
+      "test_skipped_title": "Prueba de canal omitida",
       "test_success": "Prueba del canal exitosa.",
       "testing_model_failed_message": "No se pudo actualizar el modelo de prueba",
       "testing_model_failed_title": "Error al guardar",
@@ -603,7 +608,10 @@
       "paused": "En pausa"
     },
     "testing": {
-      "auto": "MÁS ECONÓMICO"
+      "auto": "MÁS ECONÓMICO",
+      "help": "Elige el modelo usado para comprobar el estado de este canal.\n\nCHEAPEST — usa automáticamente el modelo más barato servido a través de una API de chat (chat completions, response API, Claude messages o Gemini chat).\n\nSKIP — excluye este canal por completo de las comprobaciones. Nunca se sondea ni se desactiva automáticamente.\n\nSolo se pueden probar modelos de formato chat. Los modelos de embeddings, reranking, moderación, completions y multimedia quedan excluidos, igual que los modelos cuyo formato de API se desconoce: selecciona uno aquí para probarlo de todos modos.",
+      "help_label": "Cómo se elige el modelo de prueba",
+      "skip": "SKIP (nunca probar)"
     },
     "title": "Canales",
     "toolbar": {
@@ -615,6 +623,7 @@
       "refresh_balances": "Actualizar todos los saldos",
       "refresh_balances_mobile": "Actualizar saldos",
       "test_all": "Probar todo",
+      "test_all_help": "Comprueba todos los canales, cada uno con su propio ajuste de modelo de prueba (o su modelo de chat más barato si está en CHEAPEST).\n\nLos canales con SKIP, y los que no tienen ningún modelo de formato chat que sondear, se omiten: nunca se informan como fallidos ni se desactivan automáticamente.",
       "test_all_mobile": "Probar todos los canales"
     },
     "type_unknown": "Tipo {{type}}"

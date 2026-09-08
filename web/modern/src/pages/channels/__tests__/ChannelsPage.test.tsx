@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ChannelsPage } from '../ChannelsPage';
+import { CHANNEL_TESTING_MODEL_SKIP } from '../channels-page-columns';
 import { api } from '@/lib/api';
 const notify = vi.fn();
 vi.mock('@/components/ui/notifications', () => ({
@@ -293,7 +294,7 @@ describe('ChannelsPage Pagination', () => {
     expect(row).not.toBeNull();
 
     const selector = within(row as HTMLElement).getByRole('combobox', { name: 'Testing Model' }) as HTMLSelectElement;
-    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', 'gpt-4o-mini']);
+    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', CHANNEL_TESTING_MODEL_SKIP, 'gpt-4o-mini']);
     expect(selector).not.toHaveTextContent('sora-2');
     expect(selector).not.toHaveTextContent('text-embedding-3-small');
 
@@ -337,7 +338,7 @@ describe('ChannelsPage Pagination', () => {
     expect(row).not.toBeNull();
 
     const selector = within(row as HTMLElement).getByRole('combobox', { name: 'Testing Model' }) as HTMLSelectElement;
-    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', 'gpt-4o-mini']);
+    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', CHANNEL_TESTING_MODEL_SKIP, 'gpt-4o-mini']);
     expect(selector).not.toHaveTextContent('dall-e-2');
     expect(selector).not.toHaveTextContent('text-embedding-3-small');
   });

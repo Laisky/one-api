@@ -123,7 +123,7 @@ export function OptionItem({ option, description, onSave, onClear, isSensitive, 
               <Info className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="top" align="start" className="max-w-[320px]">
+          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
             {description || t('system_settings.no_description')}
           </TooltipContent>
         </Tooltip>
@@ -280,7 +280,7 @@ export function EmailDomainWhitelistItem({ option, description, onSave }: EmailD
               <Info className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="top" align="start" className="max-w-[320px]">
+          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
             {description || t('system_settings.no_description')}
           </TooltipContent>
         </Tooltip>

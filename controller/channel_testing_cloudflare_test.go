@@ -44,5 +44,5 @@ func TestCloudflareChannelTestModelsAreChatOnly(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, clearStored)
 	require.Empty(t, selectedModel)
-	require.Contains(t, err.Error(), "does not support both text input and text output")
+	require.Contains(t, err.Error(), "is not served through a chat API format")
 }

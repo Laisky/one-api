@@ -334,7 +334,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.TopUpLink}
                           </TooltipContent>
                         </Tooltip>
@@ -360,7 +360,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.ChatLink}
                           </TooltipContent>
                         </Tooltip>
@@ -386,7 +386,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.QuotaPerUnit}
                           </TooltipContent>
                         </Tooltip>
@@ -412,7 +412,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.RetryTimes}
                           </TooltipContent>
                         </Tooltip>
@@ -460,7 +460,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.LogConsumeEnabled}
                           </TooltipContent>
                         </Tooltip>
@@ -500,7 +500,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.DisplayInCurrencyEnabled}
                           </TooltipContent>
                         </Tooltip>
@@ -540,7 +540,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.DisplayTokenStatEnabled}
                           </TooltipContent>
                         </Tooltip>
@@ -580,7 +580,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.ApproximateTokenEnabled}
                           </TooltipContent>
                         </Tooltip>
@@ -619,7 +619,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.QuotaRemindThreshold}
                           </TooltipContent>
                         </Tooltip>
@@ -645,7 +645,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.ChannelDisableThreshold}
                           </TooltipContent>
                         </Tooltip>
@@ -693,7 +693,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.AutomaticDisableChannelEnabled}
                           </TooltipContent>
                         </Tooltip>
@@ -733,7 +733,7 @@ export function OperationSettings() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-[320px]">
+                          <TooltipContent side="top" align="start" className="max-w-[380px] whitespace-pre-line">
                             {descriptions.AutomaticEnableChannelEnabled}
                           </TooltipContent>
                         </Tooltip>

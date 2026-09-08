@@ -112,6 +112,10 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	startTime := time.Now()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	// Every adaptor translates this internal chat request into its upstream's own
+	// wire format and derives the upstream URL from the channel type, so a single
+	// probe shape reaches Claude-native channels at /v1/messages and
+	// OpenAI-compatible ones at /v1/chat/completions.
 	c.Request = &http.Request{
 		Method: http.MethodPost,
 		URL:    &url.URL{Path: "/v1/chat/completions"},
@@ -280,6 +284,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 		err = errors.Wrapf(nil, "response error: %s", respErr.Error.Message)
 		return "", err, &respErr.Error
 	}
+
 	if usage == nil {
 		err = errors.New("usage is nil")
 		return "", errors.WithStack(err), nil
@@ -350,6 +355,21 @@ func TestChannel(c *gin.Context) {
 		}
 	}
 	if err != nil {
+		// A channel with no chat-capable surface was never probed, so it is
+		// neither healthy nor broken. Report that distinctly instead of as a
+		// failure, so the admin UI does not present it as an outage.
+		if isChannelTestNotApplicable(err) {
+			lg.Info("skipped channel test: channel is not chat-probeable",
+				zap.String("reason", err.Error()))
+			c.JSON(http.StatusOK, gin.H{
+				"success":   false,
+				"skipped":   true,
+				"message":   err.Error(),
+				"time":      0.0,
+				"modelName": "",
+			})
+			return
+		}
 		lg.Debug("failed to choose channel test model", zap.Error(err))
 		helper.RespondError(c, identity.Tag(err, channel.Ref()))
 		return
@@ -431,6 +451,17 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 				if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
 					clg.Error("failed to clear invalid testing_model in bulk test", zap.Error(updateErr))
 				}
+			}
+			// A channel that exposes no chat-capable surface, or whose every model
+			// is a non-chat task model (embeddings, rerank, translation, media),
+			// cannot receive a representative probe. That is an inconclusive
+			// result, not a failure: skip it entirely rather than judging it.
+			// Letting it fall through is what auto-disabled healthy
+			// embeddings-only channels (issue #400).
+			if err != nil && isChannelTestNotApplicable(err) {
+				clg.Info("skipped channel test: channel is not chat-probeable",
+					zap.String("reason", err.Error()))
+				continue
 			}
 			var openaiErr *relaymodel.Error
 			if err == nil {

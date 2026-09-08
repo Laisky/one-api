@@ -553,15 +553,20 @@ var (
 		return v
 	}()
 
-	// ChannelDisableThreshold defines the failure ratio that triggers automatic
-	// channel disablement when AutomaticDisableChannelEnabled is true.
+	// ChannelDisableThreshold is the channel-test RESPONSE TIME limit, in seconds.
+	// A channel whose health check takes longer than this is disabled even when the
+	// probe itself succeeded (see controller.testChannels). It is NOT a failure
+	// ratio: the failure-rate mechanism is MetricSuccessRateThreshold, consumed by
+	// monitor/metric.go. A value of 0 disables the latency check entirely.
 	//
 	// Runtime variable (set via admin UI)
-	// Default: 5.0 (500% - effectively disabled by default)
+	// Default: 5.0 seconds
 	ChannelDisableThreshold = 5.0
 
-	// AutomaticDisableChannelEnabled enables automatic channel disabling when
-	// failure rate exceeds ChannelDisableThreshold.
+	// AutomaticDisableChannelEnabled enables automatic channel disabling when a
+	// health check fails with a credential, quota or permission error, when the
+	// upstream cannot be reached, or when it exceeds ChannelDisableThreshold.
+	// Channels skipped by the health check are never auto-disabled.
 	//
 	// Runtime variable (set via admin UI)
 	// Default: false

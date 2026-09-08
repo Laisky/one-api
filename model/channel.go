@@ -16,6 +16,17 @@ import (
 	"github.com/Laisky/one-api/common/logger"
 )
 
+// ChannelTestingModelSkip is the sentinel testing_model value that excludes a
+// channel from health checking altogether — the automatic sweep and the list-page
+// Test button both report it as skipped instead of probing it.
+//
+// It is stored in the testing_model column rather than a separate flag because the
+// administrator chooses it from the same per-channel selector as the model names,
+// alongside the auto-select ("cheapest") option. It is deliberately not a legal
+// model name, and it is never sent upstream. The admin UI offers the same literal,
+// so changing it is a breaking wire change.
+const ChannelTestingModelSkip = "__skip__"
+
 const (
 	ChannelStatusUnknown          = 0
 	ChannelStatusEnabled          = 1 // don't use 0, 0 is the default value!
@@ -48,8 +59,9 @@ type Channel struct {
 	Config             string  `json:"config"`
 	SystemPrompt       *string `json:"system_prompt" gorm:"type:text"`
 	RateLimit          *int    `json:"ratelimit" gorm:"column:ratelimit;default:0"`
-	// Preferred testing model for this channel (optional)
-	// If empty or nil, the system will auto-select the cheapest supported model at test time.
+	// Preferred testing model for this channel (optional).
+	// If empty or nil, the system auto-selects the cheapest chat-format model at test
+	// time. Set it to ChannelTestingModelSkip to exclude the channel from testing.
 	TestingModel *string `json:"testing_model" gorm:"column:testing_model;type:varchar(255)"`
 	// Channel-specific pricing tables
 	// DEPRECATED: Use ModelConfigs instead. These fields are kept for backward compatibility and migration.

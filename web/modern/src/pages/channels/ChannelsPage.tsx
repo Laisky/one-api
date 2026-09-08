@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -254,8 +255,11 @@ export function ChannelsPage() {
       if (action === 'test') {
         // Unified API call - complete URL with /api prefix
         const res = await api.get(`/api/channel/test/${id}`);
-        const { success, time, message } = res.data;
-        if (index !== undefined) {
+        const { success, time, message, skipped } = res.data;
+        // A skipped channel was never probed (it serves no chat-capable
+        // endpoint), so leave its recorded latency untouched rather than
+        // stamping it as "tested just now, 0 ms".
+        if (index !== undefined && !skipped) {
           const newData = [...data];
           newData[index] = {
             ...newData[index],
@@ -268,6 +272,12 @@ export function ChannelsPage() {
           notify({
             type: 'success',
             message: t('channels.notifications.test_success'),
+          });
+        } else if (skipped) {
+          notify({
+            type: 'info',
+            title: t('channels.notifications.test_skipped_title'),
+            message: message || t('channels.notifications.test_skipped_message'),
           });
         } else {
           notify({
@@ -652,16 +662,25 @@ export function ChannelsPage() {
   const toolbarActions = (
     <div className={cn('flex gap-2 flex-wrap max-w-full', isMobile ? 'flex-col w-full' : 'items-center')}>
       <div className="flex gap-2 w-full md:w-auto">
-        <Button
-          variant="outline"
-          onClick={handleBulkTest}
-          disabled={bulkTesting || loading}
-          className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
-          size="sm"
-        >
-          {bulkTesting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
-          {isMobile ? t('channels.toolbar.test_all_mobile') : t('channels.toolbar.test_all')}
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                onClick={handleBulkTest}
+                disabled={bulkTesting || loading}
+                className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
+                size="sm"
+              >
+                {bulkTesting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
+                {isMobile ? t('channels.toolbar.test_all_mobile') : t('channels.toolbar.test_all')}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start" className="max-w-[360px] whitespace-pre-line">
+              {t('channels.toolbar.test_all_help')}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <Button
           variant="outline"
           onClick={handleBulkBalanceRefresh}

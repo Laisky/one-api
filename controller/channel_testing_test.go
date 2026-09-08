@@ -28,44 +28,57 @@ func TestResponseStatus(t *testing.T) {
 	})
 }
 
-// TestModelConfigSupportsTextTest verifies that channel tests accept only text Chat Completions metadata.
-func TestModelConfigSupportsTextTest(t *testing.T) {
+// TestModelConfigUsesChatFormat verifies metadata classification by API format.
+func TestModelConfigUsesChatFormat(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, modelConfigSupportsTextTest(adaptor.ModelConfig{
+	require.True(t, modelConfigUsesChatFormat(adaptor.ModelConfig{
 		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"text"},
-	}, true))
-	require.False(t, modelConfigSupportsTextTest(adaptor.ModelConfig{
+	}))
+	require.False(t, modelConfigUsesChatFormat(adaptor.ModelConfig{
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"video"},
-	}, true))
-	require.False(t, modelConfigSupportsTextTest(adaptor.ModelConfig{
+	}))
+	require.False(t, modelConfigUsesChatFormat(adaptor.ModelConfig{
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"text"},
 		Embedding:        &adaptor.EmbeddingPricingConfig{TextTokenRatio: 1},
-	}, true))
-	require.False(t, modelConfigSupportsTextTest(adaptor.ModelConfig{
+	}))
+	require.False(t, modelConfigUsesChatFormat(adaptor.ModelConfig{
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"text"},
 		Description:      "A multilingual text embeddings model.",
-	}, true))
-	require.False(t, modelConfigSupportsTextTest(adaptor.ModelConfig{
+	}))
+	require.False(t, modelConfigUsesChatFormat(adaptor.ModelConfig{
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"text"},
 		Description:      "A sentiment classifier for text classification.",
-	}, true))
-	require.True(t, modelConfigSupportsTextTest(adaptor.ModelConfig{}, false))
+	}))
 }
 
-// TestModelNameLooksNonTextTestable distinguishes specialized tasks from similarly named chat models.
-func TestModelNameLooksNonTextTestable(t *testing.T) {
+// TestModelNameLooksNonChatFormat verifies the name markers denote non-chat API
+// formats, and do not reject specialized models that are still served over chat.
+func TestModelNameLooksNonChatFormat(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, modelNameLooksNonTextTestable("@cf/baai/bge-m3"))
-	require.True(t, modelNameLooksNonTextTestable("gpt-3.5-turbo-instruct"))
-	require.False(t, modelNameLooksNonTextTestable("amazon.nova-pro-v1:0"))
-	require.False(t, modelNameLooksNonTextTestable("gpt-4o-mini"))
+	// Non-chat API formats.
+	require.True(t, modelNameLooksNonChatFormat("@cf/baai/bge-m3"))
+	require.True(t, modelNameLooksNonChatFormat("gpt-3.5-turbo-instruct"))
+	require.True(t, modelNameLooksNonChatFormat("text-embedding-3-small"))
+	require.True(t, modelNameLooksNonChatFormat("omni-moderation-2024-09-26"))
+
+	// Ordinary chat models.
+	require.False(t, modelNameLooksNonChatFormat("amazon.nova-pro-v1:0"))
+	require.False(t, modelNameLooksNonChatFormat("gpt-4o-mini"))
+
+	// Specialized, but served over Chat Completions: a vision-language model, an
+	// OCR-tuned VLM, a video-understanding chat model and a safety classifier all
+	// take text in and return text, so the probe can use them.
+	require.False(t, modelNameLooksNonChatFormat("@cf/moondream/moondream3.1-9B-A2B"))
+	require.False(t, modelNameLooksNonChatFormat("qwen-vl-ocr"))
+	require.False(t, modelNameLooksNonChatFormat("hunyuan-turbos-vision-video"))
+	require.False(t, modelNameLooksNonChatFormat("meta-llama/Llama-Guard-4-12B"))
 }
 
 // TestChooseChannelTestModelFiltersNonChatModels verifies fallback selection skips models that cannot serve Chat Completions.
@@ -240,10 +253,11 @@ func TestChooseChannelTestModelRejectsExplicitNonChatModel(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, clearStored)
 	require.Empty(t, modelName)
-	require.Contains(t, err.Error(), "does not support both text input and text output through Chat Completions")
+	require.Contains(t, err.Error(), "is not served through a chat API format")
 }
 
-// TestChooseChannelTestModelRejectsChannelWithoutChatEndpoint verifies all probes use the Chat Completions endpoint contract.
+// TestChooseChannelTestModelRejectsChannelWithoutChatEndpoint verifies a channel
+// exposing no chat-capable surface is reported as not-applicable rather than failed.
 func TestChooseChannelTestModelRejectsChannelWithoutChatEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -257,11 +271,18 @@ func TestChooseChannelTestModelRejectsChannelWithoutChatEndpoint(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, clearStored)
 	require.Empty(t, modelName)
-	require.Contains(t, err.Error(), "does not support the Chat Completions endpoint")
+	require.Contains(t, err.Error(), "no chat-capable endpoint")
+	require.True(t, isChannelTestNotApplicable(err),
+		"an unprobeable channel must be skipped, never routed to the auto-disable path")
 }
 
-// TestChooseChannelTestModelAllowsUnknownCustomChatModel preserves custom-provider compatibility when metadata is unavailable.
-func TestChooseChannelTestModelAllowsUnknownCustomChatModel(t *testing.T) {
+// TestChooseChannelTestModelExcludesUnknownFormatByDefault verifies a model whose
+// API format cannot be determined is left out of automatic selection, and that the
+// exclusion is a skip rather than a failure.
+//
+// Guessing "chat" for an unrecognised name is what sends a Chat Completions request
+// to a self-hosted embeddings deployment, so the default has to be exclusion.
+func TestChooseChannelTestModelExcludesUnknownFormatByDefault(t *testing.T) {
 	t.Parallel()
 
 	channel := &model.Channel{
@@ -270,9 +291,82 @@ func TestChooseChannelTestModelAllowsUnknownCustomChatModel(t *testing.T) {
 	}
 
 	modelName, clearStored, err := chooseChannelTestModel(channel, "")
+	require.Error(t, err)
+	require.False(t, clearStored)
+	require.Empty(t, modelName)
+	require.True(t, isChannelTestNotApplicable(err),
+		"an unknown-format model must be skipped, never routed to the auto-disable path")
+	require.Contains(t, err.Error(), "unknown format")
+}
+
+// TestChooseChannelTestModelHonoursExplicitUnknownModel verifies the administrator
+// override: naming a model deliberately opts it back into the probe even when the
+// gateway holds no metadata describing its API format.
+func TestChooseChannelTestModelHonoursExplicitUnknownModel(t *testing.T) {
+	t.Parallel()
+
+	stored := "vendor/new-chat-model"
+	channel := &model.Channel{
+		Type:         channeltype.OpenAICompatible,
+		Models:       "vendor/new-chat-model",
+		TestingModel: &stored,
+	}
+
+	// Explicit via the stored channel testing model.
+	modelName, clearStored, err := chooseChannelTestModel(channel, "")
 	require.NoError(t, err)
 	require.False(t, clearStored)
 	require.Equal(t, "vendor/new-chat-model", modelName)
+
+	// Explicit via ?model= on the manual test.
+	modelName, clearStored, err = chooseChannelTestModel(
+		&model.Channel{Type: channeltype.OpenAICompatible, Models: "vendor/new-chat-model"},
+		"vendor/new-chat-model")
+	require.NoError(t, err)
+	require.False(t, clearStored)
+	require.Equal(t, "vendor/new-chat-model", modelName)
+}
+
+// TestChannelTestModelCandidatesSplitExplicitFromAutomatic verifies the admin
+// selector still offers an unknown-format model (so the override is reachable in the
+// UI) while automatic selection leaves it out.
+func TestChannelTestModelCandidatesSplitExplicitFromAutomatic(t *testing.T) {
+	t.Parallel()
+
+	channel := &model.Channel{
+		Type:   channeltype.OpenAICompatible,
+		Models: "vendor/new-chat-model,gpt-4o-mini,text-embedding-3-small",
+	}
+
+	require.Equal(t, []string{"gpt-4o-mini", "vendor/new-chat-model"}, channelTextTestModels(channel),
+		"the selector offers known chat models plus unknown-format ones")
+	require.Equal(t, []string{"gpt-4o-mini"}, channelAutoTestModels(channel),
+		"automatic selection is limited to models known to use a chat API format")
+}
+
+// TestSpecializedChatModelsRemainTestable pins the blocklist fix: a model that is
+// specialized (vision-language, OCR-tuned, video-understanding, safety classifier)
+// but still served over Chat Completions must stay in the probe's scope.
+func TestSpecializedChatModelsRemainTestable(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{
+		"@cf/moondream/moondream3.1-9B-A2B",
+		"qwen-vl-ocr",
+		"hunyuan-turbos-vision-video",
+		"meta-llama/Llama-Guard-4-12B",
+	} {
+		require.False(t, modelNameLooksNonChatFormat(name), name)
+	}
+
+	for _, name := range []string{
+		"text-embedding-3-small",
+		"omni-moderation-2024-09-26",
+		"gpt-3.5-turbo-instruct",
+		"@cf/ai4bharat/indictrans2-en-indic-1B",
+	} {
+		require.True(t, modelNameLooksNonChatFormat(name), name)
+	}
 }
 
 // TestChannelTestModelSupportsTextUsesMapping verifies aliases inherit task checks from mapped upstream models.
@@ -286,6 +380,6 @@ func TestChannelTestModelSupportsTextUsesMapping(t *testing.T) {
 		ModelMapping: &mapping,
 	}
 
-	require.False(t, channelTestModelSupportsText(channel, "embedding-alias"))
-	require.True(t, channelTestModelSupportsText(channel, "chat-alias"))
+	require.False(t, channelTestModelUsesChatFormat(channel, "embedding-alias", false))
+	require.True(t, channelTestModelUsesChatFormat(channel, "chat-alias", false))
 }

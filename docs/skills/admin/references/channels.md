@@ -23,7 +23,7 @@ The full schema lives in [model/channel.go](../../../../model/channel.go). Field
 | `config`         | string   | Provider-specific JSON config (e.g. Azure `api_version`, `plugin`)    |
 | `system_prompt`  | *string  | Injected at top of every request — leave null unless you know why. Send `null` or `""` to clear; omit to keep current value. |
 | `ratelimit`      | *int     | Per-channel req/min cap; null = unlimited                             |
-| `testing_model`  | *string  | Model used by `GET /test/:id`. Null → cheapest supported              |
+| `testing_model`  | *string  | Model used by the health check. Null → cheapest chat-format model; `"__skip__"` → never test this channel |
 | `balance`        | float64  | USD, refreshed by `/update_balance/:id`                                |
 
 ### Channel types (subset)
@@ -187,7 +187,8 @@ curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
 ```
 Response:
 - `success: true` → round-trip succeeded. `time` is seconds.
-- `success: false` → `.message` has the upstream error (auth, rate limit, model unavailable). The channel is **not** auto-disabled from a single failed manual test.
+- `success: false`, no `skipped` → `.message` has the upstream error (auth, rate limit, model unavailable). The channel is **not** auto-disabled from a single failed manual test.
+- `success: false`, `skipped: true` → the channel was **never probed**: it exposes no chat-capable endpoint, or every model it lists is a non-chat task model. This is an inconclusive result, not a failure — `test_time` and `response_time` are left untouched.
 
 All at once, async (fire-and-forget):
 ```bash
@@ -195,6 +196,70 @@ curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   "$ONEAPI_BASE_URL/api/channel/test?scope=enabled"
 ```
 `scope`: `all` | `enabled` | `<group-name>`. Results appear in channel rows (`test_time`, `response_time`) — poll with list.
+
+### What gets health checked
+
+The probe is chat-only. A channel is eligible when it exposes at least one
+chat-shaped **client-facing** endpoint in `config.supported_endpoints` (falling back
+to the channel type's defaults):
+
+| Declared endpoints include | Health checked? |
+| --- | --- |
+| `chat_completions`, `response_api` or `claude_messages` | yes |
+| only non-chat surfaces (`embeddings`, `rerank`, `moderations`, audio, image, video, `ocr`, `realtime`) | **skipped** |
+
+Eligibility is about the *client* surface. The probe itself is always one internal
+chat request; each adaptor translates it into the upstream's own wire format and
+derives the upstream URL from the **channel type**:
+
+| Channel type | Upstream surface the probe reaches |
+| --- | --- |
+| OpenAI / OpenAI-compatible / Custom | `/v1/chat/completions` |
+| Anthropic / ClaudeCompatible | `/v1/messages` (Claude body) |
+| Gemini | `/v1beta/models/<model>:generateContent` |
+| Gemini OpenAI-compatible | `/chat/completions` |
+
+Note there is **no Gemini endpoint name** in the `supported_endpoints` vocabulary:
+Gemini chat is reached through `chat_completions`, and the adaptor rewrites the call
+to `generateContent`. Narrowing a channel to `claude_messages` alone no longer costs
+it its health check.
+
+**Model selection.** Within an eligible channel, a model is probed only when it is
+served through a chat API format. The criterion is the API format, not the modality:
+embedding, rerank, moderation and legacy-completions models all declare text input
+and text output — OpenAI's own `text-embedding-3-small` is registered as
+text-in/text-out — so modality cannot separate them. Classification uses, in order:
+
+1. name markers for non-chat formats (embeddings, rerank, moderations, completions,
+   audio, image, video, layout parsing);
+2. the channel type's model catalogue, then the cross-provider catalogue — a model's
+   format is a property of the model, and a channel type's own table may lack it
+   (`GeminiOpenAICompatible` resolves to the OpenAI catalogue, which lists no Gemini
+   models);
+3. billing shape (`Embedding`/`PerCall`/`Image`/`Video`), output modality, description.
+
+A specialized model that is nonetheless served over Chat Completions — a
+vision-language model, an OCR-tuned VLM, a video-understanding chat model, a safety
+classifier — stays in scope.
+
+**Opting a channel out entirely.** Set `testing_model` to `"__skip__"` (the SKIP entry
+in the list page's Testing Model selector). The channel is then never probed by either
+the manual test or the periodic sweep, and never auto-disabled. A manual test that
+names a model explicitly (`?model=`) still runs, as a deliberate one-off.
+
+**Models of unknown format are excluded by default.** If nothing in either catalogue
+describes a model, the gateway does not guess: assuming "chat" is what sends a Chat
+Completions request to a private embeddings deployment. A channel whose models are all
+custom-named is therefore skipped, not probed. To opt one back in, set the channel's
+`testing_model` (or pass `?model=` on a manual test) — an explicitly named model is
+honoured whatever its format, provided it is not a *known* non-chat one. The admin
+test-model selector lists unknown-format models for exactly this purpose, while
+automatic selection ignores them.
+
+Skipped channels are never auto-disabled, never trigger a failure notification, and
+never have `test_time`/`response_time` written — probing them with a chat request
+would say nothing about their health. This is why an embeddings-only channel stays
+enabled through the periodic sweep.
 
 ## Balance refresh
 
@@ -244,6 +309,10 @@ jq -nc '{
 - **`group` must match a group listed in `/api/group/`.** Adding a channel with `group: "vip"` when `vip` doesn't exist in `GroupRatio` silently routes no one to it. Create the group first (see [groups-and-ratios.md](groups-and-ratios.md)).
 - **Azure channels need `config.api_version`.** Missing → 404 from upstream on first request.
 - **Deprecated fields `model_ratio` and `completion_ratio` on the channel row are for backward compat.** Prefer `model_configs`.
+- **`ChannelDisableThreshold` is a response-time limit in SECONDS, not a failure rate.** A channel slower than it is auto-disabled even when the probe succeeded (default 5s; `0` disables the check). The failure-rate mechanism is the separate `MetricSuccessRateThreshold`.
+- **A channel of custom-named models is skipped until you set `testing_model`.** Unknown API format is excluded by default; naming the model is the opt-in.
 - **Testing model defaults to the cheapest supported model on the channel.** To avoid per-test cost surprises, set `testing_model` explicitly (e.g. `"gpt-4o-mini"` for OpenAI, `"gemini-2.0-flash-lite"` for Gemini).
+- **Embeddings-only, rerank-only and translation-only channels are skipped by the health check, not failed.** If such a channel is being auto-disabled, it is not the sweep — check `relay_error.go`'s passive path driven by real traffic instead.
+- **A single upstream 5xx does not auto-disable a channel.** `monitor.ShouldDisableChannel` only disables on credential, quota and permission errors; a transient server error is recorded as a failed test and nothing more.
 - **Clearing nullable text fields (`model_mapping`, `model_configs`, `system_prompt`, `inference_profile_arn_map`) requires sending the key with `null` or `""`.** Omitting the key keeps the previous value (the controller records which keys were present in the raw body and forces a per-column update for those).
 - **Clearing `hidden_models` requires sending the key explicitly** (same reason).

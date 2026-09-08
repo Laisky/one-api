@@ -732,13 +732,23 @@ export const useChannelForm = () => {
     try {
       setIsSubmitting(true);
       const response = await api.get(`/api/channel/test/${channelId}`);
-      const { success, message } = response.data;
+      const { success, message, skipped } = response.data;
 
       if (success) {
         notify({
           type: 'success',
           title: tr('test.success_title', 'Success'),
           message: tr('test.success_message', 'Channel test successful!'),
+        });
+      } else if (skipped) {
+        // The channel exposes no chat-capable endpoint, so no representative
+        // probe exists. That is not a failure and must not read like one.
+        notify({
+          type: 'info',
+          title: tr('test.skipped_title', 'Skipped'),
+          message: tr('test.skipped_message', 'Channel test skipped: {{message}}', {
+            message: message || 'this channel serves no chat-capable endpoint',
+          }),
         });
       } else {
         notify({
