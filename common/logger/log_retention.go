@@ -14,7 +14,18 @@ import (
 	"github.com/Laisky/zap"
 
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/metrics"
 )
+
+// retentionTargetAppLogFiles names the application log FILE sweep in the
+// operational retention metrics (proposal
+// docs/proposals/20260905_observability-data-tiering.md, Phase 3 / W3.3).
+//
+// It is a compile-time constant and deliberately distinct from the database
+// retention targets in model.retentionTables: this sweeper removes files from a
+// directory, its throughput is measured in files rather than rows, and mixing
+// the two under one target name would make the series unreadable.
+const retentionTargetAppLogFiles = "app_log_files"
 
 var (
 	// retentionWorkerGroup tracks the log retention sweep and the disk-pressure
@@ -181,22 +192,7 @@ func startRetentionSweep(ctx context.Context, workerLogger glog.Logger, retentio
 		return
 	}
 
-	sweep := func(localLogger glog.Logger) {
-		if retentionDays > 0 {
-			if err := deleteExpiredLogFiles(localLogger, retentionDays, logDir); err != nil {
-				localLogger.Warn("log retention cleanup failed", zap.Error(err))
-			}
-		}
-		if deleted, err := enforceSizeCeiling(localLogger, logDir, maxTotalBytes); err != nil {
-			localLogger.Warn("log size ceiling enforcement failed", zap.Error(err))
-		} else if deleted > 0 {
-			localLogger.Info("deleted log files to satisfy the size ceiling",
-				zap.Int("deleted_files", deleted),
-				zap.Int("log_max_total_size_mb", config.LogMaxTotalSizeMB))
-		}
-	}
-
-	sweep(workerLogger)
+	runLogRetentionSweep(ctx, workerLogger, retentionDays, logDir, maxTotalBytes)
 
 	ticker := time.NewTicker(config.RetentionSweepInterval())
 	addRetentionWorker()
@@ -210,7 +206,7 @@ func startRetentionSweep(ctx context.Context, workerLogger glog.Logger, retentio
 				localLogger.Info("log retention cleaner stopped", zap.Error(ctx.Err()))
 				return
 			case <-ticker.C:
-				sweep(localLogger)
+				runLogRetentionSweep(ctx, localLogger, retentionDays, logDir, maxTotalBytes)
 			}
 		}
 	}(workerLogger)
@@ -222,21 +218,111 @@ func startRetentionSweep(ctx context.Context, workerLogger glog.Logger, retentio
 		zap.String("log_dir", logDir))
 }
 
-// deleteExpiredLogFiles removes log files older than the retention window from the configured log directory.
-// The retentionDays parameter defines the age threshold in days, logDir is the directory to scan,
-// and the returned error reports failures when listing entries.
-func deleteExpiredLogFiles(lg glog.Logger, retentionDays int, logDir string) error {
+// runLogRetentionSweep performs one expiry-and-budget pass over the log
+// directory and reports its throughput.
+//
+// It is a named function rather than the closure it replaced so a test can drive
+// exactly one sweep, and so the metric has a single completion point covering
+// both halves of the work: age expiry and the directory budget are one sweep of
+// one target, not two.
+//
+// The result label follows the same rule as the database sweeps
+// (model.retentionSweepResult): a real failure is `failed`, a sweep the shutdown
+// cut short at a file boundary is `canceled`, and only a sweep that examined
+// everything it was asked to is `completed`. A genuine failure outranks a
+// cancellation because a cancellation is routine at shutdown while a failure is
+// not, and reporting the routine one would hide the actionable one.
+//
+// Parameters:
+//   - ctx: lifecycle scope; cancellation stops the sweep at a file boundary.
+//   - lg: the worker's logger; the package-level Logger must not be read from
+//     the worker goroutine.
+//   - retentionDays: age threshold in days; values <= 0 skip the expiry pass.
+//   - logDir: the directory holding log files.
+//   - maxTotalBytes: the directory budget; values <= 0 skip the budget pass.
+//
+// Return values: none; failures are logged because retention is best-effort.
+func runLogRetentionSweep(ctx context.Context, lg glog.Logger, retentionDays int, logDir string, maxTotalBytes int64) {
+	started := time.Now()
+	var (
+		removed  int
+		failed   error
+		canceled error
+	)
+
+	if retentionDays > 0 {
+		deleted, err := deleteExpiredLogFiles(ctx, lg, retentionDays, logDir)
+		removed += deleted
+		switch {
+		case err == nil:
+		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+			canceled = err
+		default:
+			failed = err
+			lg.Warn("log retention cleanup failed", zap.Error(err))
+		}
+	}
+
+	// The budget pass is skipped once the context is done: it deletes files
+	// oldest-first with no cancellation point of its own, and a shutdown asked
+	// this worker to stop.
+	if err := ctx.Err(); err != nil {
+		canceled = err
+	} else if deleted, err := enforceSizeCeiling(lg, logDir, maxTotalBytes); err != nil {
+		failed = err
+		lg.Warn("log size ceiling enforcement failed", zap.Error(err))
+	} else {
+		removed += deleted
+		if deleted > 0 {
+			lg.Info("deleted log files to satisfy the size ceiling",
+				zap.Int("deleted_files", deleted),
+				zap.Int("log_max_total_size_mb", config.LogMaxTotalSizeMB))
+		}
+	}
+
+	result := metrics.RetentionResultCompleted
+	switch {
+	case failed != nil:
+		result = metrics.RetentionResultFailed
+	case canceled != nil:
+		result = metrics.RetentionResultCanceled
+	}
+	metrics.RecordRetentionSweep(retentionTargetAppLogFiles, result,
+		int64(removed), time.Since(started))
+}
+
+// deleteExpiredLogFiles removes log files older than the retention window from
+// the configured log directory.
+//
+// Parameters:
+//   - ctx: cancellation scope; a cancelled sweep stops at the next file and
+//     reports what it already removed, mirroring the chunk-boundary contract of
+//     the database sweeps.
+//   - lg: the worker's logger.
+//   - retentionDays: the age threshold in days.
+//   - logDir: the directory to scan.
+//
+// Return values:
+//   - int: how many files were removed.
+//   - error: wrapped failure when the directory cannot be listed, or the wrapped
+//     context error when the sweep was cancelled part-way.
+func deleteExpiredLogFiles(ctx context.Context, lg glog.Logger, retentionDays int, logDir string) (int, error) {
 	entries, err := os.ReadDir(logDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return 0, nil
 		}
-		return errors.Wrap(err, "read log directory")
+		return 0, errors.Wrap(err, "read log directory")
 	}
 
 	cutoff := time.Now().UTC().AddDate(0, 0, -retentionDays)
+	deleted := 0
 
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return deleted, errors.Wrapf(err,
+				"log retention sweep stopped after %d files", deleted)
+		}
 		if entry.IsDir() {
 			continue
 		}
@@ -263,8 +349,9 @@ func deleteExpiredLogFiles(lg glog.Logger, retentionDays int, logDir string) err
 			continue
 		}
 
+		deleted++
 		lg.Info("deleted expired log file", zap.String("log_path", fullPath), zap.Time("modified_at", modTime))
 	}
 
-	return nil
+	return deleted, nil
 }

@@ -127,3 +127,130 @@ func timeToFirstTokenMs(in model.TraceRowInput) (int64, bool) {
 	}
 	return ttft, true
 }
+
+// requestOutcome maps a finished request onto the bounded operational outcome
+// vocabulary owned by common/metrics.
+//
+// FailureKind is deliberately NOT passed through as a label. Its documentation
+// in sampling.go states that its values are not metric labels: they are a
+// sampling vocabulary, free to grow whenever a new signal helps the sampler,
+// and a metric label set must instead be closed and stable. The translation is
+// therefore explicit and total -- every input produces one of the
+// metrics.RequestOutcome* constants, including a FailureKind this function does
+// not recognize.
+//
+// PRECEDENCE, first match wins:
+//
+//  1. panic          -- FailurePanic
+//  2. timeout        -- FailureTimeout
+//  3. canceled       -- FailureClientCanceled
+//  4. upstream_error -- any other reported semantic failure, INCLUDING a
+//     request whose client-visible status is 200 because the
+//     stream had already flushed its headers
+//  5. server_error   -- status >= 500 with no semantic failure
+//  6. client_error   -- status in [400, 500) with no semantic failure
+//  7. success        -- everything else
+//
+// The semantic failure outranks the status on purpose. A failed stream's status
+// is pinned at 200 and a proxied upstream error commonly arrives as 502; both
+// descriptions are less actionable than "the relay failed", and an outcome
+// series that could not separate those from real successes would be exactly the
+// blind spot W3.3 exists to remove.
+//
+// Within the failures the order is by actionability rather than by frequency.
+// A panic outranks a timeout because a panicking handler often trips its
+// deadline on the way out, and the panic is the fact worth alerting on. A
+// timeout outranks a client cancellation because a client that gives up on a
+// stalled upstream reports the disconnect it observed, not the cause. A client
+// cancellation outranks an upstream error so that callers hanging up cannot
+// inflate the gateway's own error rate.
+//
+// Parameters:
+//   - status: the client-visible HTTP status code; a value below 400 (including
+//     0, meaning none was recorded) is a success unless a failure was reported.
+//   - failure: the semantic failure reported through RecordTraceFailure, if any.
+//
+// Return values:
+//   - string: one of the metrics.RequestOutcome* constants.
+func requestOutcome(status int, failure FailureKind) string {
+	switch failure {
+	case FailurePanic:
+		return metrics.RequestOutcomePanic
+	case FailureTimeout:
+		return metrics.RequestOutcomeTimeout
+	case FailureClientCanceled:
+		return metrics.RequestOutcomeCanceled
+	case FailureUpstream:
+		return metrics.RequestOutcomeUpstream
+	case FailureNone:
+		// Fall through to the status-derived outcomes below.
+	default:
+		// A FailureKind added to sampling.go without a case here is still a
+		// failure, and reporting it as a success would be the one wrong answer.
+		// upstream_error is the conservative bucket: it says the relay failed
+		// without claiming to know how.
+		if failure.IsFailure() {
+			return metrics.RequestOutcomeUpstream
+		}
+	}
+
+	switch {
+	case status >= 500:
+		return metrics.RequestOutcomeServerError
+	case status >= 400:
+		return metrics.RequestOutcomeClientError
+	default:
+		return metrics.RequestOutcomeSuccess
+	}
+}
+
+// recordRequestOutcome emits the operational counters for one finished request.
+//
+// SAMPLING INDEPENDENCE. This is called from recordTraceEnd BEFORE the sampling
+// decision, so TRACE_SAMPLE_RATE never reduces it. The rate selects which traces
+// are PERSISTED; letting it also select which requests are COUNTED would turn
+// the operational view into a 5% view of the gateway at the default rate, and an
+// operator reading a request-rate or error-rate panel would have no way to tell.
+//
+// EXACTLY ONCE. The caller reaches this only when Recorder.Finish returned its
+// single-shot ok flag, so a panicking handler or a doubly registered middleware
+// produces one sample per request rather than two.
+//
+// EXCLUDED REQUESTS ARE NOT COUNTED, DELIBERATELY. A request on an excluded path
+// (TRACE_EXCLUDED_PATH_PREFIXES), a request under TRACE_SINK=none, and a request
+// denied recorder admission (TRACE_MAX_ACTIVE_RECORDERS) all return from
+// recordTraceEnd before this point, so they contribute no outcome and no
+// latency. That is the honest reading rather than a gap: those requests have no
+// MEASURED lifetime, because the recorder that stamps request_received is
+// exactly what was skipped, and recording a fabricated 0 ms would corrupt the
+// latency histogram it lands in. The skip is not silent -- noteRequestExcluded
+// counts the exclusion and NewRecorder counts the admission drop, both through
+// the trace-pipeline outcome series -- so an operator can always tell "not
+// measured" from "measured and healthy". The practical consequence to know is
+// that TRACE_SINK=none turns off the per-request operational metrics too.
+//
+// ORDERING AT STARTUP. main.go installs the real recorder in monitor.InitMonitoring
+// well after tracing.InitSinks, so anything recorded in between reaches the
+// no-op recorder. For per-request metrics that window closes before the HTTP
+// server accepts its first request, so nothing measurable is lost.
+//
+// Parameters:
+//   - status: the client-visible HTTP status code.
+//   - failure: the semantic failure reported for the request, if any.
+//   - durationMs: the request's total lifetime in milliseconds.
+//   - ttftMs: milliseconds to the first client byte; meaningful only when
+//     ttftKnown is true.
+//   - ttftKnown: whether the request produced a first client byte at all.
+//
+// Return values: none.
+func recordRequestOutcome(status int, failure FailureKind, durationMs, ttftMs int64, ttftKnown bool) {
+	outcome := requestOutcome(status, failure)
+	metrics.RecordRequestOutcomeMillis(outcome, durationMs)
+	if !ttftKnown {
+		// A request that never produced a client byte has no time-to-first-token.
+		// Recording 0 would put "never answered" in the fastest bucket of the
+		// histogram, which is the opposite of the truth.
+		return
+	}
+	metrics.RecordTimeToFirstToken(outcome, ttftMs)
+}

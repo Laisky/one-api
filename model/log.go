@@ -1388,12 +1388,22 @@ func DeleteOldLog(targetTimestamp int64) (int64, error) {
 //   - int64: rows removed.
 //   - error: wrapped failure from the chunk that could not complete.
 func DeleteOldLogContext(ctx context.Context, targetTimestamp int64) (int64, error) {
-	return ChunkedDelete(ctx, LOG_DB, ChunkedDeleteOptions{
+	// This purge is operator-triggered rather than periodic, but it is the same
+	// bounded sweep over the same allow-listed table, so it feeds the same
+	// throughput series (W3.3). A purge abandoned when the operator's request
+	// context ends is reported as `canceled`, not as a completed purge.
+	started := time.Now()
+	stats, err := ChunkedDeleteWithStats(ctx, LOG_DB, ChunkedDeleteOptions{
 		Table: "logs",
 		Where: "created_at < ?",
 		Args:  []any{targetTimestamp},
 		Pause: config.RetentionDeletePause(),
 	})
+	recordRetentionSweep("logs", stats, err, time.Since(started))
+	if err != nil {
+		return stats.Deleted, errors.Wrap(err, "purge expired logs")
+	}
+	return stats.Deleted, nil
 }
 
 // GetLogById retrieves a log entry by its ID

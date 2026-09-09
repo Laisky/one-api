@@ -220,6 +220,11 @@ func CleanExpiredAsyncTaskBindingsStats(ctx context.Context, retentionDays int) 
 
 	cutoff := time.Now().UTC().Add(-time.Duration(retentionDays) * 24 * time.Hour).UnixMilli()
 	pause := config.RetentionDeletePause()
+	// The two passes are one sweep of one table, so they produce ONE metric
+	// sample carrying their merged rows and their combined elapsed time. Counting
+	// them separately would double the sweep rate of this target against every
+	// other one.
+	started := time.Now()
 
 	touched, err := ChunkedDeleteWithStats(ctx, DB, ChunkedDeleteOptions{
 		Table:       "async_task_bindings",
@@ -230,6 +235,7 @@ func CleanExpiredAsyncTaskBindingsStats(ctx context.Context, retentionDays int) 
 	})
 	stats = stats.Merge(touched)
 	if err != nil {
+		recordRetentionSweep("async_task_bindings", stats, err, time.Since(started))
 		return stats, errors.Wrap(err, "sweep accessed async task bindings")
 	}
 
@@ -241,6 +247,7 @@ func CleanExpiredAsyncTaskBindingsStats(ctx context.Context, retentionDays int) 
 		Pause:       pause,
 	})
 	stats = stats.Merge(untouched)
+	recordRetentionSweep("async_task_bindings", stats, err, time.Since(started))
 	if err != nil {
 		return stats, errors.Wrap(err, "sweep never-accessed async task bindings")
 	}

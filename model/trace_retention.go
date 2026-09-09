@@ -136,6 +136,10 @@ func CleanExpiredTracesStats(ctx context.Context, retentionDays int) (ChunkedDel
 
 	cutoff := time.Now().UTC().Add(-time.Duration(retentionDays) * 24 * time.Hour).UnixMilli()
 
+	// Measured around the sweep itself rather than around the whole cleanup
+	// closure, so the reported throughput is time spent deleting and not time
+	// spent formatting log fields.
+	started := time.Now()
 	stats, err := ChunkedDeleteWithStats(ctx, DB, ChunkedDeleteOptions{
 		Table:       "traces",
 		Where:       "created_at < ?",
@@ -143,6 +147,9 @@ func CleanExpiredTracesStats(ctx context.Context, retentionDays int) (ChunkedDel
 		OrderColumn: "created_at",
 		Pause:       config.RetentionDeletePause(),
 	})
+	// Recorded on every path, including the cancelled one: a shutdown that keeps
+	// cutting sweeps short is the condition section 8.3 asks operators to see.
+	recordRetentionSweep("traces", stats, err, time.Since(started))
 	if err != nil {
 		return stats, errors.Wrap(err, "sweep expired traces")
 	}

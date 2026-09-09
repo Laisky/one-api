@@ -440,6 +440,11 @@ func recordTraceEnd(c *gin.Context, status int) {
 
 	rec := recorderFromGin(c)
 	if rec == nil {
+		// No recorder: the request was denied admission (NewRecorder already
+		// counted the drop) or never passed through TracingMiddleware. It
+		// therefore has no measured lifetime and contributes no operational
+		// outcome either; recordRequestOutcome documents why that is the honest
+		// answer rather than a gap.
 		return
 	}
 
@@ -456,13 +461,24 @@ func recordTraceEnd(c *gin.Context, status int) {
 	// passed alongside the total lifetime so the slow rule is not dominated by
 	// long-lived streams.
 	ttftMs, ttftKnown := timeToFirstTokenMs(in)
+	failure := TraceFailure(c)
+
+	// Operational metrics are emitted HERE, above the sampling decision, and the
+	// order is load-bearing (W3.3): TRACE_SAMPLE_RATE decides which traces are
+	// persisted, and if it also decided which requests were counted the outcome
+	// and latency series would silently become a 5% view of the gateway at the
+	// default rate. Finish() returned ok exactly once for this request, so this
+	// is one sample per request. See recordRequestOutcome for what happens to
+	// requests that never reach this point.
+	recordRequestOutcome(in.Status, failure, durationMs, ttftMs, ttftKnown)
+
 	if !SampleDecisionFor(SampleInput{
 		Status:     in.Status,
 		DurationMs: durationMs,
 		TTFTMs:     ttftMs,
 		TTFTKnown:  ttftKnown,
 		Forced:     rec.Forced(),
-		Failure:    TraceFailure(c),
+		Failure:    failure,
 	}) {
 		metrics.RecordTraceOutcome(metrics.TraceOutcomeSampledOut, 1)
 		return
