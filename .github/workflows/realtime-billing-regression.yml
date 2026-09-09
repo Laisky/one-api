@@ -1,0 +1,43 @@
+name: Realtime billing regression
+
+on:
+  pull_request:
+    paths:
+      - 'relay/realtime/**'
+      - 'relay/quota/**'
+      - 'relay/model/**'
+      - 'relay/pricing/**'
+      - 'relay/adaptor/openai/**'
+      - 'controller/realtime*'
+      - '.github/workflows/realtime-billing-regression.yml'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: Realtime regression (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - ./relay/realtime
+          - ./relay/quota
+          - ./relay/adaptor/openai
+          - ./controller
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Reviewer behavior regressions
+        run: go test -race -count=1 -timeout=5m -v -run '^TestReview' ${{ matrix.package }}
+      - name: Package regression suite
+        run: go test -race -count=1 -timeout=10m ${{ matrix.package }}
+      - name: Vet package
+        run: go vet ${{ matrix.package }}
