@@ -246,19 +246,24 @@ type ImageUsage struct {
 
 // ImageUsageInputTokensDetails is the details of input tokens for image request
 type ImageUsageInputTokensDetails struct {
-	TextTokens  int `json:"text_tokens"`
-	ImageTokens int `json:"image_tokens"`
+	CachedTokens        int                             `json:"cached_tokens,omitempty"`
+	CachedTokensDetails *model.UsageCachedTokensDetails `json:"cached_tokens_details,omitempty"`
+	TextTokens          int                             `json:"text_tokens"`
+	ImageTokens         int                             `json:"image_tokens"`
 }
 
-// Convert2GeneralUsage converts ImageUsage to model.Usage
+// Convert2GeneralUsage preserves image token totals and cached modality buckets.
+// Parameters: u is the decoded Images API usage. Returns: normalized relay usage.
 func (u *ImageUsage) Convert2GeneralUsage() *model.Usage {
 	return &model.Usage{
 		PromptTokens:     u.InputTokens,
 		CompletionTokens: u.OutputTokens,
 		TotalTokens:      u.TotalTokens,
 		PromptTokensDetails: &model.UsagePromptTokensDetails{
-			ImageTokens: u.InputTokensDetails.ImageTokens,
-			TextTokens:  u.InputTokensDetails.TextTokens,
+			CachedTokens:        u.InputTokensDetails.CachedTokens,
+			CachedTokensDetails: u.InputTokensDetails.CachedTokensDetails,
+			ImageTokens:         u.InputTokensDetails.ImageTokens,
+			TextTokens:          u.InputTokensDetails.TextTokens,
 		},
 	}
 }
