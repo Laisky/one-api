@@ -57,11 +57,23 @@ func main() {
 	// Setup enhanced logger with alertPusher integration
 	logger.SetupEnhancedLogger(ctx)
 
+	// workerCtx bounds every periodic background worker started below. They are
+	// producers of database and log-directory work, so they must be stoppable:
+	// with a never-cancelled context their tickers kept firing throughout
+	// shutdown and after model.CloseDB, issuing statements against a closed
+	// pool. The shutdown sequence cancels this context (the retention_workers
+	// step) before the trace sinks close and long before the database does, and
+	// then JOINS the retention cleaners so unfinished sweeps are reported rather
+	// than raced. Cancellation is not deferred here on purpose: every
+	// logger.Logger.Fatal below calls os.Exit and no defer would run anyway.
+	workerCtx, stopBackgroundWorkers := context.WithCancel(ctx)
+	controller.SetDashboardAggregateLifecycleContext(workerCtx)
+
 	// Started after the enhanced logger is installed: the worker captures the
 	// logger it will use for the life of the process, and starting it earlier
 	// would both race SetupEnhancedLogger's write to the global logger and
 	// leave the worker without the alert hook.
-	logger.StartLogRetentionCleaner(ctx, config.LogRetentionDays, logger.LogDir)
+	logger.StartLogRetentionCleaner(workerCtx, config.LogRetentionDays, logger.LogDir)
 
 	var (
 		err           error
@@ -74,6 +86,12 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// OpenTelemetry is initialized BEFORE tracing.InitSinks below, and the order
+	// is load-bearing: an OTLP trace sink built while the process still carries
+	// OpenTelemetry's global no-op provider exports nothing, and would report
+	// export_failed once per request forever. InitSinks now refuses to build the
+	// sink unless telemetry.ProviderInitialized() is true, so reversing these
+	// two blocks fails startup instead of degrading silently.
 	if config.OpenTelemetryEnabled {
 		otelProviders, err = telemetry.InitOpenTelemetry(ctx)
 		if err != nil {
@@ -93,24 +111,24 @@ func main() {
 	if err := model.InitDatabases(ctx); err != nil {
 		logger.Logger.Fatal("database bootstrap error", zap.Error(err))
 	}
-	model.StartTraceRetentionCleaner(ctx, config.TraceRetentionDays)
+	model.StartTraceRetentionCleaner(workerCtx, config.TraceRetentionDays)
 
 	// Trace sinks own the asynchronous batched writer, so they must start after
 	// the database handles exist and before the HTTP server accepts requests.
 	if err := tracing.InitSinks(ctx); err != nil {
 		logger.Logger.Fatal("failed to initialize trace sinks", zap.Error(err))
 	}
-	model.StartAsyncTaskRetentionCleaner(ctx, config.AsyncTaskRetentionDays)
+	model.StartAsyncTaskRetentionCleaner(workerCtx, config.AsyncTaskRetentionDays)
 	err = model.CreateRootAccountIfNeed()
 	if err != nil {
 		logger.Logger.Fatal("database init error", zap.Error(err))
 	}
-	defer func() {
-		err := model.CloseDB()
-		if err != nil {
-			logger.Logger.Fatal("failed to close database", zap.Error(err))
-		}
-	}()
+	// The database is deliberately not closed by a defer here. Every
+	// logger.Logger.Fatal below calls os.Exit, so deferred functions never run on
+	// the failure paths such a defer would look like it protects; it would only
+	// ever fire on a normal shutdown, right after the ordered close at the end of
+	// main, closing the same handles a second time. The single close is the last
+	// step of the shutdown sequence built by newShutdownSequence.
 
 	// Initialize Redis
 	err = common.InitRedisClient()
@@ -137,12 +155,18 @@ func main() {
 		model.InitChannelCache()
 	}
 	if config.MemoryCacheEnabled {
-		go model.SyncOptions(config.SyncFrequency)
-		go model.SyncChannelCache(config.SyncFrequency)
+		model.StartBackgroundWorker(workerCtx, func(ctx context.Context) {
+			model.SyncOptionsContext(ctx, config.SyncFrequency)
+		})
+		model.StartBackgroundWorker(workerCtx, func(ctx context.Context) {
+			model.SyncChannelCacheContext(ctx, config.SyncFrequency)
+		})
 	}
-	mcp.StartAutoSync(ctx)
+	mcp.StartAutoSync(workerCtx)
 	if config.ChannelTestFrequency > 0 {
-		go controller.AutomaticallyTestChannels(config.ChannelTestFrequency)
+		model.StartBackgroundWorker(workerCtx, func(ctx context.Context) {
+			controller.AutomaticallyTestChannelsContext(ctx, config.ChannelTestFrequency)
+		})
 	}
 	if config.BatchUpdateEnabled {
 		logger.Logger.Info("batch update enabled with interval " + strconv.Itoa(config.BatchUpdateInterval) + "s")
@@ -271,49 +295,239 @@ func main() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 	logger.Logger.Info("shutdown signal received, starting graceful drain")
-	graceful.SetDraining()
 
-	// Stop accepting new requests and wait for handlers to return
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(config.ShutdownTimeoutSec)*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Logger.Error("server shutdown error", zap.Error(err))
-	}
 
-	// Shut down the pprof listener if it was started.
-	if pprofSrv != nil {
-		if err := pprofSrv.Shutdown(shutdownCtx); err != nil {
-			logger.Logger.Error("pprof server shutdown error", zap.Error(err))
+	runShutdownSequence(shutdownCtx, logger.Logger,
+		newShutdownSequence(srv, pprofSrv, otelProviders, config.BatchUpdateEnabled, stopBackgroundWorkers))
+}
+
+// shutdownStep is one stage of the ordered graceful shutdown sequence.
+//
+// The sequence is data rather than straight-line code so the order itself can be
+// asserted by a test without starting a server: admissions stop first, then every
+// producer drains, only then are the consuming sinks closed, then the exporters
+// are flushed, and the database is closed last.
+type shutdownStep struct {
+	// name identifies the step in deadline reports; keep it stable, it is a log field.
+	name string
+	// failureLog is the message logged when run reports an error.
+	failureLog string
+	// run performs the step. A nil error means the step completed.
+	run func(ctx context.Context) error
+}
+
+// newShutdownSequence builds the ordered shutdown steps for the running process.
+//
+// It only assembles closures; nothing is executed until runShutdownSequence runs
+// them, which is what lets a test assert the order in isolation.
+//
+// Order and the reason for it:
+//  1. stop_admissions       — flip the draining flag so nothing new is accepted.
+//  2. http_server           — drain in-flight HTTP handlers.
+//  3. pprof_server          — drain the profiling listener.
+//  4. batch_updater         — stop the quota batch updater and queue its final flush.
+//  5. background_tasks      — join billing/refund and other critical producers.
+//  6. retention_workers     — cancel the periodic background workers and join the
+//     retention cleaners, so no sweep is still deleting rows when the sinks and
+//     then the database close underneath it.
+//  7. trace_sinks           — close the consuming sinks only once every producer
+//     above has stopped emitting; closing them earlier makes traces emitted by a
+//     draining background or billing task count as dropped_closed.
+//  8. otel_providers        — flush the exporters that the sinks handed data to.
+//  9. database              — close the handles everything above was writing through.
+//
+// Parameters:
+//   - srv: the API HTTP server; must not be nil.
+//   - pprofSrv: the pprof listener, or nil when pprof is disabled.
+//   - otelProviders: the OpenTelemetry provider bundle, or nil when disabled.
+//   - batchUpdateEnabled: whether the quota batch updater was started.
+//   - stopBackgroundWorkers: cancels the context shared by the periodic
+//     background workers; nil is tolerated so a test can build the sequence
+//     without starting any.
+//
+// Return values:
+//   - []shutdownStep: the steps in the order they must run.
+func newShutdownSequence(
+	srv *http.Server,
+	pprofSrv *http.Server,
+	otelProviders *telemetry.ProviderBundle,
+	batchUpdateEnabled bool,
+	stopBackgroundWorkers context.CancelFunc,
+) []shutdownStep {
+	return []shutdownStep{
+		{
+			name:       "stop_admissions",
+			failureLog: "failed to stop admissions",
+			run: func(context.Context) error {
+				graceful.SetDraining()
+				return nil
+			},
+		},
+		{
+			name:       "http_server",
+			failureLog: "server shutdown error",
+			run: func(ctx context.Context) error {
+				if srv == nil {
+					return nil
+				}
+				return errors.Wrap(srv.Shutdown(ctx), "shutdown http server")
+			},
+		},
+		{
+			name:       "pprof_server",
+			failureLog: "pprof server shutdown error",
+			run: func(ctx context.Context) error {
+				// Shut down the pprof listener if it was started.
+				if pprofSrv == nil {
+					return nil
+				}
+				return errors.Wrap(pprofSrv.Shutdown(ctx), "shutdown pprof server")
+			},
+		},
+		{
+			name:       "batch_updater",
+			failureLog: "batch updater shutdown did not complete",
+			run: func(ctx context.Context) error {
+				// Stop batch updater and flush pending changes before draining other
+				// tasks. This is critical because the batch updater holds uncommitted
+				// quota changes in memory. The final flush itself is a critical task,
+				// so it is joined by the background_tasks step below.
+				if !batchUpdateEnabled {
+					return nil
+				}
+				model.StopBatchUpdater(ctx)
+				return errors.Wrap(ctx.Err(), "stop batch updater")
+			},
+		},
+		{
+			name:       "background_tasks",
+			failureLog: "graceful drain finished with timeout/error",
+			run: func(ctx context.Context) error {
+				// Drain critical background tasks (billing, refunds, etc.)
+				return errors.Wrap(graceful.Drain(ctx), "drain background tasks")
+			},
+		},
+		{
+			name:       "retention_workers",
+			failureLog: "retention workers did not stop before the deadline",
+			run: func(ctx context.Context) error {
+				// Cancel every periodic background worker, then JOIN the ones
+				// that write to the database. Cancelling alone only asks a
+				// retention sweep to stop at its next chunk boundary
+				// (model.ChunkedDeleteWithStats checks ctx.Err() between
+				// chunks); without the join the last in-flight DELETE would
+				// race the trace-sink close and the database close below it,
+				// and nothing would report that the sweep was unfinished.
+				if stopBackgroundWorkers != nil {
+					stopBackgroundWorkers()
+				}
+				return errors.Wrap(errors.Join(
+					model.WaitForRetentionCleaners(ctx),
+					model.WaitForBackgroundWorkers(ctx),
+					controller.WaitForDashboardAggregateWork(ctx),
+					logger.WaitForRetentionWorkers(ctx),
+				), "stop retention workers")
+			},
+		},
+		{
+			name:       "trace_sinks",
+			failureLog: "failed to flush trace sinks",
+			run: func(ctx context.Context) error {
+				// Flush and close the buffered trace sinks now that the HTTP handlers
+				// and every background/billing producer have stopped, so the last batch
+				// is written before the database handle is closed and no draining task
+				// can still submit into a closed sink.
+				return errors.Wrap(tracing.Shutdown(ctx), "shutdown trace sinks")
+			},
+		},
+		{
+			name:       "otel_providers",
+			failureLog: "failed to shutdown OpenTelemetry",
+			run: func(ctx context.Context) error {
+				if otelProviders == nil {
+					return nil
+				}
+				return errors.Wrap(otelProviders.Shutdown(ctx), "shutdown opentelemetry providers")
+			},
+		},
+		{
+			name:       "database",
+			failureLog: "failed to close database",
+			run: func(ctx context.Context) error {
+				// Close DB after all drains, sink closes and exporter flushes complete.
+				// CloseDB is idempotent, so this stays correct even if some other exit
+				// path closed the handles already.
+				//
+				// Once the shared shutdown deadline has expired, an earlier producer or
+				// sink may still be using the pools. Closing them here would violate the
+				// ordering this sequence exists to enforce and race those goroutines.
+				// Process exit will reclaim the handles; report the skipped explicit
+				// close as unfinished work instead.
+				if err := ctx.Err(); err != nil {
+					return errors.Wrap(err, "skip database close while shutdown work may still be running")
+				}
+				return errors.Wrap(model.CloseDB(), "close database")
+			},
+		},
+	}
+}
+
+// runShutdownSequence runs the steps in order and reports the work that did not
+// finish before ctx's deadline.
+//
+// Every step runs even after the deadline expires: a step that is skipped leaks
+// the resource it owns (the database handle above all), so the sequence degrades
+// to best effort rather than stopping. Each step keeps its own failure message,
+// and any step whose failure is attributable to an expired or cancelled context
+// is named in a single summary record so the unfinished work is visible.
+//
+// Parameters:
+//   - ctx: the shutdown deadline shared by every step.
+//   - lg: logger used for per-step failures and the deadline summary.
+//   - steps: the ordered steps, as built by newShutdownSequence.
+//
+// Return values:
+//   - []string: names of the steps that did not finish before the deadline, in
+//     execution order; empty when the sequence completed within the deadline.
+func runShutdownSequence(ctx context.Context, lg glog.Logger, steps []shutdownStep) []string {
+	start := time.Now().UTC()
+
+	var unfinished []string
+	for _, step := range steps {
+		if step.run == nil {
+			continue
+		}
+
+		err := step.run(ctx)
+		if err == nil {
+			continue
+		}
+
+		lg.Error(step.failureLog,
+			zap.String("shutdown_step", step.name),
+			zap.Error(err))
+
+		// Attribute the failure to the deadline only when the context actually
+		// expired or was cancelled; an ordinary failure is already logged above.
+		if ctx.Err() != nil ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, context.Canceled) {
+			unfinished = append(unfinished, step.name)
 		}
 	}
 
-	// Flush buffered traces now that the server stopped accepting requests, so
-	// the last batch is written before the database handle is closed.
-	if err := tracing.Shutdown(shutdownCtx); err != nil {
-		logger.Logger.Error("failed to flush trace sinks", zap.Error(err))
+	if len(unfinished) > 0 {
+		lg.Error("graceful shutdown deadline expired with unfinished work",
+			zap.Strings("unfinished_steps", unfinished),
+			zap.Duration("elapsed", time.Since(start)),
+			zap.Error(ctx.Err()))
+		return unfinished
 	}
 
-	// Stop batch updater and flush pending changes before draining other tasks.
-	// This is critical because batch updater holds uncommitted quota changes in memory.
-	if config.BatchUpdateEnabled {
-		model.StopBatchUpdater(shutdownCtx)
-	}
-
-	// Drain critical background tasks (billing, refunds, etc.)
-	if err := graceful.Drain(shutdownCtx); err != nil {
-		logger.Logger.Error("graceful drain finished with timeout/error", zap.Error(err))
-	}
-
-	if otelProviders != nil {
-		if err := otelProviders.Shutdown(shutdownCtx); err != nil {
-			logger.Logger.Error("failed to shutdown OpenTelemetry", zap.Error(err))
-		}
-	}
-
-	// Close DB after all drains complete
-	if derr := model.CloseDB(); derr != nil {
-		logger.Logger.Error("failed to close database", zap.Error(derr))
-	}
+	lg.Info("graceful shutdown complete", zap.Duration("elapsed", time.Since(start)))
+	return nil
 }
 
 // startPprofServer starts a dedicated HTTP listener that serves the Go

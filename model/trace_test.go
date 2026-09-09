@@ -88,6 +88,17 @@ func TestTraceDBSessionDisablesPreparedStatementsOnPostgres(t *testing.T) {
 	require.False(t, sessionGin.Config.PrepareStmt)
 }
 
+// TestTraceDBWithContextPreservesLifecycleCancellation verifies callers that
+// own a worker lifecycle can stop a trace write before its database closes.
+func TestTraceDBWithContextPreservesLifecycleCancellation(t *testing.T) {
+	setupTestDatabase(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	db := traceDBWithContext(ctx)
+	require.ErrorIs(t, db.Statement.Context.Err(), context.Canceled)
+}
+
 func TestUpdateTraceTimestampWithPostgresSession(t *testing.T) {
 	setupTestDatabase(t)
 	prev := common.UsingPostgreSQL.Load()

@@ -334,15 +334,33 @@ var channelId2channel map[int]*Channel
 var channelSyncLock sync.RWMutex
 
 func InitChannelCache() {
+	if err := InitChannelCacheContext(context.Background()); err != nil {
+		logger.Logger.Error("failed to sync channels from database", zap.Error(err))
+	}
+}
+
+// InitChannelCacheContext rebuilds the channel cache with database cancellation
+// bound to ctx.
+//
+// Parameters:
+//   - ctx: lifecycle and deadline scope for cache queries.
+//
+// Return values:
+//   - error: wrapped query failure.
+func InitChannelCacheContext(ctx context.Context) error {
 	newChannelId2channel := make(map[int]*Channel)
 	var channels []*Channel
-	DB.Where("status = ?", ChannelStatusEnabled).Find(&channels)
+	if err := DB.WithContext(ctx).Where("status = ?", ChannelStatusEnabled).Find(&channels).Error; err != nil {
+		return errors.Wrap(err, "list enabled channels for cache")
+	}
 	for _, channel := range channels {
 		newChannelId2channel[channel.Id] = channel
 	}
 
 	var allAbilities []*Ability
-	DB.Find(&allAbilities) // Fetch all abilities
+	if err := DB.WithContext(ctx).Find(&allAbilities).Error; err != nil {
+		return errors.Wrap(err, "list abilities for cache")
+	}
 
 	// Filter abilities: must be enabled and not currently suspended
 	// And create a quick lookup map for valid abilities
@@ -402,6 +420,7 @@ func InitChannelCache() {
 	channelId2channel = newChannelId2channel
 	channelSyncLock.Unlock()
 	logger.Logger.Info("channels synced from database, considering suspensions")
+	return nil
 }
 
 // cachedChannelById returns the cached channel row, or nil when the in-memory
@@ -425,11 +444,48 @@ func cachedChannelById(id int) *Channel {
 	return channelId2channel[id]
 }
 
+// SyncChannelCache preserves the historical frequency-only worker API.
+//
+// Parameters:
+//   - frequency: seconds between rebuilds; values <= 0 disable the loop.
+//
+// Return values: none.
 func SyncChannelCache(frequency int) {
+	SyncChannelCacheContext(context.Background(), frequency)
+}
+
+// SyncChannelCacheContext periodically rebuilds the in-memory channel cache
+// from the database until ctx is cancelled.
+//
+// It is a database producer, so it takes the caller's lifecycle context: an
+// unstoppable loop keeps querying during shutdown and after CloseDB. It is not
+// joined -- a missed rebuild has no durable consequence -- so a shutdown does
+// not wait for it, unlike the retention cleaners.
+//
+// Parameters:
+//   - ctx: lifecycle scope; cancellation ends the loop at the next tick.
+//   - frequency: seconds between rebuilds; values <= 0 disable the loop.
+//
+// Return values: none.
+func SyncChannelCacheContext(ctx context.Context, frequency int) {
+	if frequency <= 0 {
+		logger.Logger.Info("channel cache sync disabled", zap.Int("sync_frequency", frequency))
+		return
+	}
+
+	ticker := time.NewTicker(time.Duration(frequency) * time.Second)
+	defer ticker.Stop()
 	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
-		logger.Logger.Info("syncing channels from database")
-		InitChannelCache()
+		select {
+		case <-ctx.Done():
+			logger.Logger.Info("channel cache sync stopped", zap.Error(ctx.Err()))
+			return
+		case <-ticker.C:
+			logger.Logger.Info("syncing channels from database")
+			if err := InitChannelCacheContext(ctx); err != nil {
+				logger.Logger.Warn("channel cache sync failed", zap.Error(err))
+			}
+		}
 	}
 }
 

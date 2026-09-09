@@ -33,6 +33,34 @@ var traceQueueCapacity = promauto.NewGauge(prometheus.GaugeOpts{
 	Help: "Configured capacity of the asynchronous trace writer queue",
 })
 
+// traceActiveRecorders reports how many in-flight requests currently hold a
+// trace recorder. The completed-record queue gauge above says nothing about
+// this: long-lived streaming requests accumulate on the active side, which is
+// where trace memory actually grows at high concurrency.
+var traceActiveRecorders = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "oneapi_trace_active_recorders",
+	Help: "In-flight requests currently holding a trace recorder",
+})
+
+// traceActiveRecordersLimit reports the configured admission limit, or 0 when
+// admission is unlimited.
+var traceActiveRecordersLimit = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "oneapi_trace_active_recorders_limit",
+	Help: "Configured TRACE_MAX_ACTIVE_RECORDERS admission limit (0 means unlimited)",
+})
+
+// UpdateTraceActiveRecorders publishes in-flight trace recorder occupancy.
+//
+// Parameters:
+//   - active: number of requests currently holding a recorder.
+//   - limit: configured admission limit; 0 means unlimited.
+//
+// Return values: none.
+func (p *PrometheusRecorder) UpdateTraceActiveRecorders(active, limit float64) {
+	traceActiveRecorders.Set(active)
+	traceActiveRecordersLimit.Set(limit)
+}
+
 // RecordTraceRecord records the outcome of count completed request traces.
 //
 // Parameters:

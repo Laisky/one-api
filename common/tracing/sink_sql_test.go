@@ -26,6 +26,9 @@ type countingRecorder struct {
 
 	mu       sync.Mutex
 	outcomes map[string]int
+
+	activeRecorders float64
+	activeLimit     float64
 }
 
 // newCountingRecorder builds an outcome-counting metrics recorder.
@@ -89,6 +92,34 @@ func (c *countingRecorder) count(outcome string) int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.outcomes[outcome]
+}
+
+// UpdateTraceActiveRecorders implements metrics.TraceActiveRecorder by keeping
+// the last published occupancy, so a test can assert the gauge is wired.
+//
+// Parameters:
+//   - active: in-flight recorders reported by the admission counter.
+//   - limit: the configured admission limit; 0 means unlimited.
+//
+// Return values: none.
+func (c *countingRecorder) UpdateTraceActiveRecorders(active, limit float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.activeRecorders = active
+	c.activeLimit = limit
+}
+
+// activeGauge returns the last published in-flight recorder occupancy.
+//
+// Parameters: none.
+//
+// Return values:
+//   - float64: the active recorder count.
+//   - float64: the published admission limit.
+func (c *countingRecorder) activeGauge() (float64, float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.activeRecorders, c.activeLimit
 }
 
 // installCountingRecorder swaps in an outcome-counting recorder for one test.
@@ -404,9 +435,10 @@ func TestSQLSinkFlushRespectsDeadline(t *testing.T) {
 // TestSQLSinkFlushTriggersWriteBeforeTicker verifies Flush makes the writers
 // write, rather than merely waiting for their own schedule.
 //
-// This is the property the trace-lookup path depends on: it flushes with a
-// 500 ms deadline, which the 1 s default flush ticker would otherwise miss on
-// a partially filled batch, leaving a completed request's trace unfindable.
+// This is the property shutdown depends on: a partially filled batch is
+// otherwise written only when the 1 s default ticker fires, so any flush with a
+// shorter deadline would time out with healthy, idle writers. (The trace-lookup
+// path no longer flushes at all; it reports local retention instead.)
 //
 // Parameters:
 //   - t: the test handle.

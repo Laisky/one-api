@@ -17,6 +17,7 @@ import (
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/metrics"
+	"github.com/Laisky/one-api/common/telemetry"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -30,9 +31,17 @@ type TraceSink interface {
 	// dropped records and reported through metrics, never propagated to the
 	// request path.
 	Submit(ctx context.Context, row *model.Trace) error
-	// Flush blocks until buffered records are durably handed off or ctx expires.
+	// Flush blocks until buffered records are durably handed off or ctx
+	// expires.
+	//
+	// A nil return means a durable sink persisted the records it accepted. An
+	// OTLP sink can only report local SDK recording because collector delivery is
+	// asynchronous and owned by the provider shutdown path. Durable trace loss
+	// is permitted, but an implementation must report it with a count rather
+	// than returning nil because no work is pending.
 	Flush(ctx context.Context) error
-	// Close flushes and releases resources. It is idempotent.
+	// Close flushes and releases resources. It is idempotent, and a deadline
+	// that expires with work outstanding reports how much was unfinished.
 	Close(ctx context.Context) error
 }
 
@@ -45,12 +54,27 @@ var (
 // process trace sink. Calling it twice closes the previous sink first, so a
 // test or a reload can safely re-init.
 //
+// It must run AFTER telemetry.InitOpenTelemetry: an otlp sink built while the
+// process still carries OpenTelemetry's global no-op provider exports nothing,
+// and the check below turns that ordering mistake into a startup failure rather
+// than a per-request span-record failure forever.
+//
 // Parameters:
 //   - ctx: lifetime scope for the sinks' background workers.
 //
 // Return values:
-//   - error: wrapped failure when a configured sink cannot be constructed.
+//   - error: wrapped failure when the configuration is invalid, when the OTLP
+//     sink is requested without an installed provider, or when a configured
+//     sink cannot be constructed.
 func InitSinks(ctx context.Context) error {
+	// The combination rule is re-checked here, not only in the environment
+	// matrix, because config.TraceSinks is a package variable: a direct
+	// assignment (a test, an embedder, a future reload path) can reintroduce
+	// "db,none", which traceDisabled()'s len(sinks)==1 check reads as "db plus
+	// a sink that drops every record" instead of "tracing off".
+	if err := config.ValidateTraceSinkCombination(config.TraceSinks); err != nil {
+		return errors.Wrap(err, "validate trace sink combination")
+	}
 	if err := config.ValidateOpenTelemetryConfig(config.OpenTelemetryEnabled, config.OpenTelemetryEndpoint); err != nil {
 		return errors.Wrap(err, "validate OpenTelemetry configuration")
 	}
@@ -60,6 +84,9 @@ func InitSinks(ctx context.Context) error {
 	if err := config.ValidateSyncTraceConfiguration(config.TraceWriteMode, config.TraceSinks, config.TraceSampleRate); err != nil {
 		return errors.Wrap(err, "validate synchronous trace configuration")
 	}
+	if err := validateSinkRuntimeRequirements(config.TraceSinks); err != nil {
+		return err
+	}
 
 	sinks := make([]TraceSink, 0, len(config.TraceSinks))
 	for _, name := range config.TraceSinks {
@@ -67,6 +94,15 @@ func InitSinks(ctx context.Context) error {
 		case config.TraceSinkDB:
 			sinks = append(sinks, newSQLSink(ctx))
 		case config.TraceSinkOTLP:
+			// OTEL_ENABLED alone only says an operator ASKED for a provider.
+			// Whether one was actually installed is runtime state owned by
+			// common/telemetry, and it is what the sink's
+			// otel.GetTracerProvider() will resolve to. Without this check a
+			// failed or not-yet-run InitOpenTelemetry leaves the global no-op
+			// provider in place, every Submit finds !span.IsRecording(), and a
+			// startup misconfiguration is rediscovered once per request --
+			// counted as TraceOutcomeSpanRecordFailed -- for the life of the
+			// process while traces go nowhere.
 			sinks = append(sinks, newOTLPSink())
 		case config.TraceSinkNone:
 			sinks = append(sinks, nullSink{})
@@ -103,6 +139,35 @@ func InitSinks(ctx context.Context) error {
 		zap.Int("queue_size", config.TraceQueueSize),
 		zap.Int("batch_size", config.TraceBatchSize))
 
+	return nil
+}
+
+// validateSinkRuntimeRequirements checks every requested child before any
+// stateful sink starts background workers.
+//
+// Parameters:
+//   - names: configured trace sink names.
+//
+// Return values:
+//   - error: wrapped failure when a requested runtime dependency is absent.
+func validateSinkRuntimeRequirements(names []string) error {
+	for _, name := range names {
+		switch name {
+		case config.TraceSinkDB, config.TraceSinkNone:
+			continue
+		case config.TraceSinkOTLP:
+			if telemetry.ProviderInitialized() {
+				continue
+			}
+			return errors.Errorf(
+				"trace sink %q requires an initialized OpenTelemetry provider "+
+					"(OTEL_ENABLED=%t): none is installed, so every span would be handed "+
+					"to the global no-op provider; initialize telemetry before trace sinks",
+				config.TraceSinkOTLP, config.OpenTelemetryEnabled)
+		default:
+			return errors.Errorf("unknown trace sink %q", name)
+		}
+	}
 	return nil
 }
 
@@ -147,7 +212,8 @@ func SetSinkForTest(s TraceSink) func() {
 //   - ctx: deadline for the flush.
 //
 // Return values:
-//   - error: wrapped failure reported by the sink.
+//   - error: wrapped failure reported by the sink, carrying the count of
+//     records that did not persist; nil means everything accepted was stored.
 func Flush(ctx context.Context) error {
 	return Sink().Flush(ctx)
 }
@@ -159,7 +225,8 @@ func Flush(ctx context.Context) error {
 //   - ctx: deadline for the final flush.
 //
 // Return values:
-//   - error: wrapped failure reported by the sink.
+//   - error: wrapped failure reported by the sink; a deadline that expires with
+//     work outstanding reports how many accepted records were not persisted.
 func Shutdown(ctx context.Context) error {
 	return Sink().Close(ctx)
 }

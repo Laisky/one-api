@@ -310,3 +310,51 @@ func IsDuplicateTraceKeyError(err error) bool {
 	}
 	return false
 }
+
+// Per-statement placeholder ceilings. SQLITE_MAX_VARIABLE_NUMBER defaults to
+// 32766 since SQLite 3.32, which is what the bundled driver ships; MySQL and
+// PostgreSQL both cap a statement at 65535 placeholders.
+const (
+	// MaxStatementParametersSQLite is SQLite's per-statement placeholder ceiling.
+	MaxStatementParametersSQLite = 32766
+	// MaxStatementParametersDefault is the per-statement placeholder ceiling for
+	// MySQL and PostgreSQL.
+	MaxStatementParametersDefault = 65535
+)
+
+// TraceMaxRowsPerStatement returns how many trace rows one multi-row INSERT may
+// carry without exceeding the trace database's parameter ceiling.
+//
+// The ceiling is read from the DIALECT OF THE HANDLE THAT ACTUALLY WRITES
+// TRACES, not from a process-global engine flag. Those agree today because
+// traces live on the primary handle, but a deployment that moved `traces` to
+// LOG_DB would silently get the wrong ceiling from a global describing the
+// primary database -- and the failure mode is not a slow write, it is every
+// trace INSERT failing to prepare. Reading the owning handle costs nothing and
+// removes the trap.
+//
+// Parameters:
+//   - parametersPerRow: how many placeholders one row binds.
+//
+// Return values:
+//   - int: the maximum rows per statement; always at least 1. When the trace
+//     handle is not initialized yet it returns the SMALLER ceiling, because a
+//     batch that is too small merely costs an extra statement while one that is
+//     too large fails outright.
+func TraceMaxRowsPerStatement(parametersPerRow int) int {
+	if parametersPerRow < 1 {
+		parametersPerRow = 1
+	}
+
+	limit := MaxStatementParametersSQLite
+	if db := traceDBWithContext(nil); db != nil {
+		if dialectName(db) != "sqlite" {
+			limit = MaxStatementParametersDefault
+		}
+	}
+
+	if rows := limit / parametersPerRow; rows >= 1 {
+		return rows
+	}
+	return 1
+}

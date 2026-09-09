@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	apimetric "go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -193,4 +194,70 @@ func TestZeroExemplarReservoirViewDoesNotPanicOnRepeatedMeasurements(t *testing.
 	if total != 0 {
 		t.Fatalf("no-op reservoir retained %d exemplars, want 0", total)
 	}
+}
+
+// TestProviderInitializedReportsInstalledProviders verifies the flag that
+// gates the OTLP trace sink: it is false while the process still carries
+// OpenTelemetry's global no-op provider, true once real providers are
+// installed, and false again after they are shut down (proposal
+// docs/proposals/20260905_observability-data-tiering.md, section 3.2, "never
+// count a no-op provider as export").
+func TestProviderInitializedReportsInstalledProviders(t *testing.T) {
+	restore := SetProviderInitializedForTest(false)
+	defer restore()
+
+	require.False(t, ProviderInitialized(),
+		"no provider is installed until InitOpenTelemetry succeeds")
+
+	generation := providerGeneration.Add(1)
+	activeProviderGeneration.Store(generation)
+	providerInitialized.Store(true)
+	require.True(t, ProviderInitialized())
+
+	// Shutting the bundle down returns the process to "no real provider", so a
+	// component gated on this flag cannot keep exporting into a dead provider.
+	require.NoError(t, (&ProviderBundle{generation: generation}).Shutdown(context.Background()))
+	require.False(t, ProviderInitialized())
+}
+
+// TestSetProviderInitializedForTestRestoresPreviousValue verifies the test hook
+// leaves no state behind, since the flag is process-wide.
+func TestSetProviderInitializedForTestRestoresPreviousValue(t *testing.T) {
+	outer := SetProviderInitializedForTest(true)
+	defer outer()
+
+	inner := SetProviderInitializedForTest(false)
+	require.False(t, ProviderInitialized())
+	inner()
+	require.True(t, ProviderInitialized())
+}
+
+// TestNilProviderBundleShutdownKeepsFlag verifies a nil bundle -- what
+// InitOpenTelemetry returns when OpenTelemetry is disabled -- does not clear a
+// flag it never set.
+func TestNilProviderBundleShutdownKeepsFlag(t *testing.T) {
+	defer SetProviderInitializedForTest(true)()
+
+	var bundle *ProviderBundle
+	require.NoError(t, bundle.Shutdown(context.Background()))
+	require.True(t, ProviderInitialized())
+}
+
+// TestOldProviderShutdownCannotClearNewProviderReadiness verifies a bundle from
+// an earlier initialization cannot make a replacement provider look unusable.
+func TestOldProviderShutdownCannotClearNewProviderReadiness(t *testing.T) {
+	restore := SetProviderInitializedForTest(false)
+	defer restore()
+
+	firstGeneration := providerGeneration.Add(1)
+	first := &ProviderBundle{generation: firstGeneration}
+	activeProviderGeneration.Store(firstGeneration)
+	providerInitialized.Store(true)
+	secondGeneration := providerGeneration.Add(1)
+	activeProviderGeneration.Store(secondGeneration)
+	providerInitialized.Store(true) // a later successful initialization
+
+	require.NoError(t, first.Shutdown(context.Background()))
+	require.True(t, ProviderInitialized(),
+		"shutting down an old provider must not clear a replacement provider")
 }

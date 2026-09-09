@@ -594,7 +594,7 @@ func normalizeAppLogSink(raw string) string {
 // Return values:
 //   - time.Duration: the pause; zero when pausing is disabled.
 func RetentionDeletePause() time.Duration {
-	return time.Duration(RetentionDeletePauseMs) * time.Millisecond
+	return durationFromInt(RetentionDeletePauseMs, time.Millisecond)
 }
 
 // RetentionSweepInterval returns how often retention workers run.
@@ -604,7 +604,7 @@ func RetentionDeletePause() time.Duration {
 // Return values:
 //   - time.Duration: the sweep interval.
 func RetentionSweepInterval() time.Duration {
-	return time.Duration(RetentionSweepIntervalMinutes) * time.Minute
+	return durationFromInt(RetentionSweepIntervalMinutes, time.Minute)
 }
 
 // DashboardCacheTTL returns how long a cached dashboard aggregate stays valid.
@@ -614,5 +614,5 @@ func RetentionSweepInterval() time.Duration {
 // Return values:
 //   - time.Duration: the TTL; zero when caching is disabled.
 func DashboardCacheTTL() time.Duration {
-	return time.Duration(DashboardCacheTTLSec) * time.Second
+	return durationFromInt(DashboardCacheTTLSec, time.Second)
 }

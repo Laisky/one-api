@@ -17,6 +17,8 @@ var (
 	traceRecordsCounter    metric.Int64Counter
 	traceQueueDepthGauge   metric.Int64Gauge
 	traceQueueCapacityGaug metric.Int64Gauge
+	traceActiveGauge       metric.Int64Gauge
+	traceActiveLimitGauge  metric.Int64Gauge
 )
 
 // initTracePipelineInstruments creates the trace-pipeline instruments once.
@@ -45,6 +47,18 @@ func initTracePipelineInstruments() {
 			metric.WithDescription("Configured capacity of the asynchronous trace writer queue"),
 		); err == nil {
 			traceQueueCapacityGaug = g
+		}
+		if g, err := meter.Int64Gauge(
+			"oneapi_trace_active_recorders",
+			metric.WithDescription("In-flight requests currently holding a trace recorder"),
+		); err == nil {
+			traceActiveGauge = g
+		}
+		if g, err := meter.Int64Gauge(
+			"oneapi_trace_active_recorders_limit",
+			metric.WithDescription("Configured TRACE_MAX_ACTIVE_RECORDERS admission limit (0 means unlimited)"),
+		); err == nil {
+			traceActiveLimitGauge = g
 		}
 	})
 }
@@ -84,5 +98,27 @@ func (r *OtelRecorder) UpdateTraceQueueDepth(depth, capacity float64) {
 	}
 	if traceQueueCapacityGaug != nil {
 		traceQueueCapacityGaug.Record(context.Background(), int64(capacity))
+	}
+}
+
+// UpdateTraceActiveRecorders publishes in-flight trace recorder occupancy.
+//
+// The queue gauges above cover only COMPLETED records. Long-lived streaming
+// requests accumulate on the active side, which is where trace memory actually
+// grows at high concurrency, so an OTLP-only deployment needs this instrument
+// to see admission working at all.
+//
+// Parameters:
+//   - active: number of requests currently holding a recorder.
+//   - limit: configured admission limit; 0 means unlimited.
+//
+// Return values: none.
+func (r *OtelRecorder) UpdateTraceActiveRecorders(active, limit float64) {
+	initTracePipelineInstruments()
+	if traceActiveGauge != nil {
+		traceActiveGauge.Record(context.Background(), int64(active))
+	}
+	if traceActiveLimitGauge != nil {
+		traceActiveLimitGauge.Record(context.Background(), int64(limit))
 	}
 }

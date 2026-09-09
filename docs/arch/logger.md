@@ -381,7 +381,8 @@ Retention is implemented in two layers:
 
 1. **Writer retention** (when rotation is enabled) can use `retention_days` to prune.
 2. A **retention cleaner** enforces three independent limits every
-   `RETENTION_SWEEP_INTERVAL_MINUTES` (default 60):
+   `RETENTION_SWEEP_INTERVAL_MINUTES` (default 1440, i.e. the historical 24-hour
+   cadence; `60` under the `scaled` and `external` profiles):
 
 ```go
 logger.StartLogRetentionCleaner(ctx, config.LogRetentionDays, logger.LogDir)

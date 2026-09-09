@@ -1449,6 +1449,14 @@ func dayAggregationSelect(db *gorm.DB) string {
 // invocations (one log row per invocation) and quota is the sum of the
 // charged quota.
 func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLogStatistic, error) {
+	return SearchToolLogsByDayAndToolWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchToolLogsByDayAndToolWithContext returns per-day tool aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchToolLogsByDayAndToolWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.ToolLogStatistic, error) {
 	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
@@ -1484,7 +1492,7 @@ func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLog
 	}
 
 	var stats []*dto.ToolLogStatistic
-	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+	if err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error; err != nil {
 		return nil, errors.Wrap(err, "search tool logs by day and tool")
 	}
 	return stats, nil
@@ -1493,6 +1501,14 @@ func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLog
 // SearchToolLogsByDayAndUser returns per-day, per-user aggregates of tool
 // invocation logs (Type == LogTypeTool).
 func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByUser, error) {
+	return SearchToolLogsByDayAndUserWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchToolLogsByDayAndUserWithContext returns per-day tool user aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchToolLogsByDayAndUserWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.ToolLogStatisticByUser, error) {
 	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
@@ -1532,7 +1548,7 @@ func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLog
 	}
 
 	var stats []*dto.ToolLogStatisticByUser
-	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+	if err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error; err != nil {
 		return nil, errors.Wrap(err, "search tool logs by day and user")
 	}
 	return stats, nil
@@ -1541,6 +1557,14 @@ func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLog
 // SearchToolLogsByDayAndToken returns per-day, per-token aggregates of tool
 // invocation logs (Type == LogTypeTool).
 func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByToken, error) {
+	return SearchToolLogsByDayAndTokenWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchToolLogsByDayAndTokenWithContext returns per-day tool token aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchToolLogsByDayAndTokenWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.ToolLogStatisticByToken, error) {
 	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
@@ -1582,7 +1606,7 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 	}
 
 	var stats []*dto.ToolLogStatisticByToken
-	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+	if err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error; err != nil {
 		return nil, errors.Wrap(err, "search tool logs by day and token")
 	}
 	return stats, nil
@@ -1592,6 +1616,14 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 // half-open timestamp range [start, endExclusive). `start` and `endExclusive`
 // are Unix seconds.
 func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*dto.LogStatistic, err error) {
+	return SearchLogsByDayAndModelWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchLogsByDayAndModelWithContext returns per-day model aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchLogsByDayAndModelWithContext(ctx context.Context, userId, start, endExclusive int) (LogStatistics []*dto.LogStatistic, err error) {
 	groupSelect := dayAggregationSelect(LOG_DB)
 
 	// If userId is 0, query all users (site-wide statistics)
@@ -1636,7 +1668,7 @@ func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*
 		args = []any{userId, start, endExclusive}
 	}
 
-	err = LOG_DB.Raw(query, args...).Scan(&LogStatistics).Error
+	err = LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&LogStatistics).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search logs by day and model")
 	}
@@ -1646,6 +1678,14 @@ func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*
 // SearchLogsByDayAndUser returns per-day, per-user aggregates for logs within
 // the half-open timestamp range [start, endExclusive).
 func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisticByUser, error) {
+	return SearchLogsByDayAndUserWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchLogsByDayAndUserWithContext returns per-day user aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchLogsByDayAndUserWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.LogStatisticByUser, error) {
 	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
@@ -1691,7 +1731,7 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 	}
 
 	var stats []*dto.LogStatisticByUser
-	err := LOG_DB.Raw(query, args...).Scan(&stats).Error
+	err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search logs by day and user")
 	}
@@ -1702,6 +1742,14 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 // username to disambiguate tokens with identical names) for the half-open
 // range [start, endExclusive).
 func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatisticByToken, error) {
+	return SearchLogsByDayAndTokenWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchLogsByDayAndTokenWithContext returns per-day token aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchLogsByDayAndTokenWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.LogStatisticByToken, error) {
 	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
@@ -1749,7 +1797,7 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 	}
 
 	var stats []*dto.LogStatisticByToken
-	err := LOG_DB.Raw(query, args...).Scan(&stats).Error
+	err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search logs by day and token")
 	}

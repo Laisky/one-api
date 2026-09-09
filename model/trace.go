@@ -125,7 +125,7 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 		span.AddEvent(TimestampRequestReceived)
 	}
 
-	db := traceWriteSession(traceDBWithContext(ctx))
+	db := traceWriteSession(traceDBWithDetachedContext(ctx))
 
 	if err := db.Create(traceRecord).Error; err != nil {
 		// Creating the trace record is best-effort. Under unusual client tracing setups
@@ -326,7 +326,7 @@ func UpdateTraceStatus(ctx context.Context, traceId string, status int) error {
 	}
 
 	// Use RowsAffected to determine if the record exists; treat 0 as best-effort no-op.
-	db := traceDBWithContext(ctx)
+	db := traceDBWithDetachedContext(ctx)
 	tx := db.Model(&Trace{}).Where("trace_id = ?", traceId).Update("status", status)
 	if tx.Error != nil {
 		lg.Error("failed to update trace status",
@@ -418,12 +418,29 @@ func traceDBWithGin(ctx *gin.Context) *gorm.DB {
 	return applyTraceDBSession(base)
 }
 
-// traceDBWithContext mirrors traceDBWithGin but accepts a standard context for callers
-// outside the Gin execution flow.
+// traceDBWithContext creates a trace session that preserves the caller's
+// cancellation. SQL sink workers use it with their own lifecycle context, so a
+// timed-out shutdown can stop in-flight writes before the database closes.
 func traceDBWithContext(ctx context.Context) *gorm.DB {
 	if ctx != nil {
-		detachedCtx := context.WithoutCancel(ctx)
-		return applyTraceDBSession(DB.WithContext(detachedCtx))
+		return applyTraceDBSession(DB.WithContext(ctx))
+	}
+	return applyTraceDBSession(DB)
+}
+
+// traceDBWithDetachedContext creates a trace session whose values survive a
+// request cancellation. It is limited to legacy synchronous trace updates;
+// background SQL writers must use traceDBWithContext so their lifecycle can be
+// cancelled during shutdown.
+//
+// Parameters:
+//   - ctx: request context whose values should be retained.
+//
+// Return values:
+//   - *gorm.DB: a trace session detached from request cancellation.
+func traceDBWithDetachedContext(ctx context.Context) *gorm.DB {
+	if ctx != nil {
+		return applyTraceDBSession(DB.WithContext(context.WithoutCancel(ctx)))
 	}
 	return applyTraceDBSession(DB)
 }

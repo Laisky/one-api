@@ -132,6 +132,20 @@ type ModelConfig struct {
 }
 
 func GetAllChannels(startIdx int, num int, scope string, sortBy string, sortOrder string) ([]*Channel, error) {
+	return GetAllChannelsWithContext(context.Background(), startIdx, num, scope, sortBy, sortOrder)
+}
+
+// GetAllChannelsWithContext returns channels with database cancellation bound
+// to ctx.
+//
+// Parameters:
+//   - ctx: lifecycle and deadline scope for the query.
+//   - startIdx, num, scope, sortBy, sortOrder: pagination and filtering inputs.
+//
+// Return values:
+//   - []*Channel: matching channels.
+//   - error: wrapped query failure.
+func GetAllChannelsWithContext(ctx context.Context, startIdx int, num int, scope string, sortBy string, sortOrder string) ([]*Channel, error) {
 	var channels []*Channel
 	var err error
 
@@ -141,15 +155,15 @@ func GetAllChannels(startIdx int, num int, scope string, sortBy string, sortOrde
 	case "all":
 		if num > 0 {
 			// Apply pagination when num > 0
-			err = DB.Order(orderClause).Limit(num).Offset(startIdx).Find(&channels).Error
+			err = DB.WithContext(ctx).Order(orderClause).Limit(num).Offset(startIdx).Find(&channels).Error
 		} else {
 			// Return all channels when num = 0 (backward compatibility)
-			err = DB.Order(orderClause).Find(&channels).Error
+			err = DB.WithContext(ctx).Order(orderClause).Find(&channels).Error
 		}
 	case "disabled":
-		err = DB.Order(orderClause).Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Find(&channels).Error
+		err = DB.WithContext(ctx).Order(orderClause).Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Find(&channels).Error
 	default:
-		err = DB.Order(orderClause).Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
+		err = DB.WithContext(ctx).Order(orderClause).Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "get all channels")
@@ -518,7 +532,7 @@ func (channel *Channel) UpdateResponseTime(responseTime int64) {
 // Parameters: ctx carries request logging and responseTime is the measured latency in milliseconds.
 // Returns: none; persistence failures are logged with channel identity.
 func (channel *Channel) UpdateResponseTimeWithContext(ctx context.Context, responseTime int64) {
-	err := DB.Model(channel).Select("response_time", "test_time").Updates(Channel{
+	err := DB.WithContext(ctx).Model(channel).Select("response_time", "test_time").Updates(Channel{
 		TestTime:     helper.GetTimestamp(),
 		ResponseTime: int(responseTime),
 	}).Error

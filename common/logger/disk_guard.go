@@ -13,17 +13,144 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	errors "github.com/Laisky/errors/v2"
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
+
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/metrics"
 )
 
 // levelEscalated records whether the free-disk guard has already raised the
 // process log level, so recovery restores it exactly once.
 var levelEscalated atomic.Bool
+
+var activeLogFiles = struct {
+	sync.RWMutex
+	paths map[string]string
+}{paths: make(map[string]string)}
+
+// setActiveLogFile records the exact pathname held open by this process for a
+// log directory. Directory metadata cannot identify this safely after a size
+// rotation, because the active and renamed sibling may share an mtime.
+//
+// Parameters:
+//   - path: the pathname held open by the writer.
+//
+// Return values: none.
+func setActiveLogFile(path string) {
+	if path == "" {
+		return
+	}
+	cleaned := filepath.Clean(path)
+	activeLogFiles.Lock()
+	activeLogFiles.paths[filepath.Dir(cleaned)] = cleaned
+	activeLogFiles.Unlock()
+}
+
+// clearActiveLogFile removes an ownership record only when it still names path.
+//
+// Parameters:
+//   - path: the pathname a closing writer previously held open.
+//
+// Return values: none.
+func clearActiveLogFile(path string) {
+	if path == "" {
+		return
+	}
+	cleaned := filepath.Clean(path)
+	dir := filepath.Dir(cleaned)
+	activeLogFiles.Lock()
+	if activeLogFiles.paths[dir] == cleaned {
+		delete(activeLogFiles.paths, dir)
+	}
+	activeLogFiles.Unlock()
+}
+
+// freeDiskProbe reads available space on the filesystem holding a path.
+//
+// It is a variable so hysteresis can be tested at all: the entry floor, the
+// recovery floor and the band between them are only distinguishable by driving
+// free space to specific values, which no test can do to a real filesystem.
+var freeDiskProbe = freeDiskBytes
+
+// pressureReportInterval rate-limits the guard's own reporting.
+//
+// The pressure loop now samples every LOG_DISK_CHECK_INTERVAL_SEC (five seconds
+// by default) instead of once per retention sweep, so a warning emitted on
+// every observation would be roughly seventeen thousand times more log volume
+// per day -- produced by the guard whose job is to produce less of it.
+const pressureReportInterval = time.Minute
+
+// pressureReport rate-limits one repeated guard message.
+type pressureReport struct {
+	mu     sync.Mutex
+	lastAt time.Time
+}
+
+// allow reports whether the message may be emitted now, and records the
+// emission when it may.
+//
+// Parameters:
+//   - now: the current time, in UTC.
+//
+// Return values:
+//   - bool: true when the caller should log.
+func (r *pressureReport) allow(now time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !r.lastAt.IsZero() && now.Sub(r.lastAt) < pressureReportInterval {
+		return false
+	}
+	r.lastAt = now
+	return true
+}
+
+// reset clears the rate limiter so the next observation reports immediately.
+//
+// Parameters: none.
+//
+// Return values: none.
+func (r *pressureReport) reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lastAt = time.Time{}
+}
+
+var (
+	// belowFloorReport rate-limits the "free disk below the floor" warning.
+	belowFloorReport = &pressureReport{}
+	// activeFileReport rate-limits the "active file over its ceiling" warning.
+	activeFileReport = &pressureReport{}
+)
+
+// diskRecoveryFloor resolves the free-space level at which the guard leaves
+// emergency mode.
+//
+// It clamps the configured hysteresis result to at least the entry floor. The
+// margin is applied by multiplication in common/config, and a floor large
+// enough to overflow int64 when multiplied would otherwise produce a recovery
+// threshold BELOW the entry floor -- which would turn hysteresis into
+// permanent, instantaneous recovery. Tests deliberately use such a floor to
+// force the guard to exhaust its options.
+//
+// Parameters:
+//   - minFreeBytes: the configured free-disk floor, in bytes.
+//
+// Return values:
+//   - int64: the recovery threshold, never below minFreeBytes.
+func diskRecoveryFloor(minFreeBytes int64) int64 {
+	recovery := config.LogDiskRecoveryFloorBytes(minFreeBytes)
+	if recovery < minFreeBytes {
+		return minFreeBytes
+	}
+	return recovery
+}
 
 // logFile is one candidate for deletion, ordered oldest first.
 type logFile struct {
@@ -109,11 +236,14 @@ func isLogFileName(name string) bool {
 
 // enforceSizeCeiling deletes oldest-first until the directory fits its budget.
 //
-// The file the logger currently holds open is never deleted: unlinking it frees
-// nothing until the next rotation, because the open descriptor keeps the inode
-// alive, and the process would go on writing to a file no longer reachable by
-// name. activeLogFile identifies it by name rather than by modification time,
-// which a foreign or restored file could otherwise win.
+// The budget covers the ACTIVE file as well as the rotated ones. That matters
+// because the active file is the only one the sweep cannot delete: unlinking it
+// frees nothing until the next rotation, since the open descriptor keeps the
+// inode alive, and the process would go on writing to a file no longer
+// reachable by name. Excluding it from the total would therefore report the
+// directory as compliant while the one file nothing can reclaim grows past the
+// budget on its own -- which is precisely the hole W0.2 closes by rotating that
+// file on size.
 //
 // Parameters:
 //   - lg: the worker's logger.
@@ -137,6 +267,13 @@ func enforceSizeCeiling(lg glog.Logger, logDir string, maxTotalBytes int64) (int
 	}
 
 	active := activeLogFile(logDir)
+	var activeBytes int64
+	for i := range files {
+		if files[i].path == active {
+			activeBytes = files[i].size
+			break
+		}
+	}
 
 	deleted := 0
 	for i := 0; i < len(files) && total > maxTotalBytes; i++ {
@@ -153,11 +290,122 @@ func enforceSizeCeiling(lg glog.Logger, logDir string, maxTotalBytes int64) (int
 		lg.Warn("log directory still exceeds its size ceiling after deleting rotated files",
 			zap.String("log_dir", logDir),
 			zap.Int64("total_bytes", total),
+			zap.Int64("active_file_bytes", activeBytes),
 			zap.Int64("max_total_bytes", maxTotalBytes),
-			zap.String("hint", "the active log file alone exceeds the budget; lower LOG_ROTATION_INTERVAL or raise LOG_MAX_TOTAL_SIZE_MB"))
+			zap.String("hint", "the active log file alone exceeds the budget; set LOG_MAX_ACTIVE_FILE_SIZE_MB so it is rotated by size, "+
+				"lower LOG_ROTATION_INTERVAL, or raise LOG_MAX_TOTAL_SIZE_MB"))
 	}
 
 	return deleted, nil
+}
+
+// enforceActiveFileCeiling checks the file the logger holds open against
+// LOG_MAX_ACTIVE_FILE_SIZE_MB and engages the bounded emergency policy when it
+// is over the ceiling and nothing rotated it away.
+//
+// In the normal configuration the rotation writer enforces this at write time
+// and this check never fires. It fires when rotation cannot act: ONLY_ONE_LOG_FILE
+// writes to a single file with no rotation sink at all, and the guard must not
+// pretend a bound is being enforced when it is not. Capping the bytes admitted
+// is the honest response -- the file still cannot shrink, but it stops growing
+// at the rate that got it here.
+//
+// Parameters:
+//   - lg: the worker's logger.
+//   - logDir: the directory holding the active file.
+//   - maxActiveBytes: the ceiling; values <= 0 disable the check.
+//
+// Return values:
+//   - error: wrapped failure when the active file cannot be inspected.
+func enforceActiveFileCeiling(lg glog.Logger, logDir string, maxActiveBytes int64) error {
+	if maxActiveBytes <= 0 {
+		return nil
+	}
+
+	active := activeLogFile(logDir)
+	if active == "" {
+		releaseActiveFileCap(lg)
+		return nil
+	}
+
+	info, err := os.Stat(active)
+	if err != nil {
+		if os.IsNotExist(err) {
+			releaseActiveFileCap(lg)
+			return nil
+		}
+		return errors.Wrapf(err, "stat active log file %s", active)
+	}
+
+	if info.Size() <= maxActiveBytes {
+		releaseActiveFileCap(lg)
+		return nil
+	}
+
+	engageActiveFileCap(lg, active, info.Size(), maxActiveBytes)
+	return nil
+}
+
+// engageActiveFileCap turns on the bounded policy because the active file is
+// over its ceiling.
+//
+// Parameters:
+//   - lg: the worker's logger.
+//   - path: the active file.
+//   - size: its current size in bytes.
+//   - maxActiveBytes: the ceiling it exceeded.
+//
+// Return values: none.
+func engageActiveFileCap(lg glog.Logger, path string, size, maxActiveBytes int64) {
+	engaged := diskEmergency.engage(metrics.LogSuppressReasonActiveFileCap)
+	if !engaged && !activeFileReport.allow(time.Now().UTC()) {
+		return
+	}
+
+	// This is an operator misconfiguration, not a server fault: the process is
+	// doing exactly what it was told to do and reporting that the instruction
+	// cannot be satisfied.
+	lg.Warn("active log file is over its ceiling and cannot be rotated; "+
+		"bounding application log output instead",
+		zap.String("log_path", path),
+		zap.Int64("active_file_bytes", size),
+		zap.Int64("max_active_file_bytes", maxActiveBytes),
+		zap.Int("log_emergency_max_bytes_per_sec", config.LogEmergencyMaxBytesPerSec),
+		zap.String("hint", "ONLY_ONE_LOG_FILE disables rotation entirely; unset it to let "+
+			"LOG_MAX_ACTIVE_FILE_SIZE_MB rotate the file by size"))
+}
+
+// releaseActiveFileCap turns off the active-file reason and reports what it
+// suppressed.
+//
+// Parameters:
+//   - lg: the worker's logger.
+//
+// Return values: none.
+func releaseActiveFileCap(lg glog.Logger) {
+	activeFileReport.reset()
+	reportEmergencyRecovery(lg, diskEmergency.release(metrics.LogSuppressReasonActiveFileCap),
+		metrics.LogSuppressReasonActiveFileCap)
+}
+
+// reportEmergencyRecovery emits the rate-limited recovery summary.
+//
+// Parameters:
+//   - lg: the worker's logger.
+//   - summary: what the closing emergency discarded.
+//   - reason: the reason that was cleared, for the report.
+//
+// Return values: none.
+func reportEmergencyRecovery(lg glog.Logger, summary emergencySummary, reason string) {
+	if !summary.Report {
+		return
+	}
+
+	lg.Warn("application log output left its bounded emergency policy",
+		zap.String("reason", reason),
+		zap.Int64("suppressed_lines", summary.Lines),
+		zap.Int64("suppressed_bytes", summary.Bytes),
+		zap.String("note", "the suppressed lines are lost; this is the gap they left in the log"))
 }
 
 // enforceFreeDiskFloor keeps free space above a floor, escalating the log level
@@ -180,19 +428,31 @@ func enforceFreeDiskFloor(lg glog.Logger, logDir string, minFreeBytes int64) (in
 		return 0, nil
 	}
 
-	free, err := freeDiskBytes(logDir)
+	recoveryBytes := diskRecoveryFloor(minFreeBytes)
+
+	free, err := freeDiskProbe(logDir)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrapf(err, "read free disk space for %s", logDir)
 	}
-	if int64(free) >= minFreeBytes {
-		restoreLogLevel(lg)
+	if int64(free) >= recoveryBytes {
+		leaveDiskPressure(lg)
+		return 0, nil
+	}
+	if int64(free) >= minFreeBytes && !diskEmergency.engaged.Load() && !levelEscalated.Load() {
+		// Inside the hysteresis band and not currently degraded. Entering here
+		// would mean entering and leaving on the same threshold, which is what
+		// made the pre-W0.4 guard flap: one deletion or one temp file either
+		// side of the floor toggled the whole log level.
 		return 0, nil
 	}
 
-	lg.Warn("free disk space below the configured floor, purging rotated logs",
-		zap.String("log_dir", logDir),
-		zap.Uint64("free_bytes", free),
-		zap.Int64("min_free_bytes", minFreeBytes))
+	if belowFloorReport.allow(time.Now().UTC()) {
+		lg.Warn("free disk space below the configured floor, purging rotated logs",
+			zap.String("log_dir", logDir),
+			zap.Uint64("free_bytes", free),
+			zap.Int64("min_free_bytes", minFreeBytes),
+			zap.Int64("recovery_free_bytes", recoveryBytes))
+	}
 
 	files, _, err := listLogFiles(lg, logDir)
 	if err != nil {
@@ -210,21 +470,55 @@ func enforceFreeDiskFloor(lg glog.Logger, logDir string, minFreeBytes int64) (in
 			continue
 		}
 		deleted++
-		if free, err = freeDiskBytes(logDir); err != nil {
-			return deleted, err
+		if free, err = freeDiskProbe(logDir); err != nil {
+			return deleted, errors.Wrapf(err, "read free disk space for %s", logDir)
 		}
-		if int64(free) >= minFreeBytes {
-			restoreLogLevel(lg)
+		if int64(free) >= recoveryBytes {
+			leaveDiskPressure(lg)
 			return deleted, nil
 		}
 	}
 
-	escalateLogLevel(lg, logDir, free, minFreeBytes)
+	enterDiskPressure(lg, logDir, free, minFreeBytes)
 	return deleted, nil
 }
 
-// activeLogFile returns the path of the newest file this process owns, which is
-// the one the logger is writing to.
+// enterDiskPressure engages the bounded emergency policy and raises the log
+// level, in that order.
+//
+// The order matters: the byte budget must already be in force before the
+// escalation report is written, so the report itself is charged against the
+// budget it announces.
+//
+// Parameters:
+//   - lg: the worker's logger.
+//   - logDir: the directory being guarded, for the report.
+//   - free: currently free bytes.
+//   - minFreeBytes: the floor that was not met.
+//
+// Return values: none.
+func enterDiskPressure(lg glog.Logger, logDir string, free uint64, minFreeBytes int64) {
+	diskEmergency.engage(metrics.LogSuppressReasonDiskPressure)
+	escalateLogLevel(lg, logDir, free, minFreeBytes)
+}
+
+// leaveDiskPressure releases the bounded emergency policy, restores the log
+// level, and reports what was discarded.
+//
+// Parameters:
+//   - lg: the worker's logger.
+//
+// Return values: none.
+func leaveDiskPressure(lg glog.Logger) {
+	summary := diskEmergency.release(metrics.LogSuppressReasonDiskPressure)
+	belowFloorReport.reset()
+	restoreLogLevel(lg)
+	reportEmergencyRecovery(lg, summary, metrics.LogSuppressReasonDiskPressure)
+}
+
+// activeLogFile returns the exact pathname the local writer currently holds
+// open. It never guesses from directory timestamps: that guess can select a
+// size-rotated sibling and let the retention guard unlink the live file.
 //
 // Parameters:
 //   - logDir: the directory being swept.
@@ -232,27 +526,10 @@ func enforceFreeDiskFloor(lg glog.Logger, logDir string, minFreeBytes int64) (in
 // Return values:
 //   - string: the active file path, or "" when the directory holds none.
 func activeLogFile(logDir string) string {
-	entries, err := os.ReadDir(logDir)
-	if err != nil {
-		return ""
-	}
-
-	newest := ""
-	var newestTime time.Time
-	for _, entry := range entries {
-		if entry.IsDir() || !isLogFileName(entry.Name()) {
-			continue
-		}
-		info, infoErr := entry.Info()
-		if infoErr != nil {
-			continue
-		}
-		if newest == "" || info.ModTime().After(newestTime) {
-			newest = filepath.Join(logDir, entry.Name())
-			newestTime = info.ModTime()
-		}
-	}
-	return newest
+	activeLogFiles.RLock()
+	path := activeLogFiles.paths[filepath.Clean(logDir)]
+	activeLogFiles.RUnlock()
+	return path
 }
 
 // removeLogFile deletes one log file, reporting whether it succeeded.
@@ -280,6 +557,10 @@ func removeLogFile(lg glog.Logger, f logFile) bool {
 
 // escalateLogLevel raises the process log level to warn so logging stops
 // consuming the little disk that is left.
+//
+// On its own this is NOT a bound -- warn and error remain fully enabled, and an
+// error storm still fills the volume -- which is why the caller engages the
+// emergency byte budget first (W0.4).
 //
 // Parameters:
 //   - lg: the worker's logger. glog derives loggers with a SHARED atomic level,

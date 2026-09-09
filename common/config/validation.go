@@ -451,9 +451,10 @@ func ValidateAllEnvVars() *ValidationResult {
 	if err := ValidateGeminiVersion(GeminiVersion); err != nil {
 		result.Errors = append(result.Errors, err)
 	}
-	if err := ValidateOpenTelemetryConfig(OpenTelemetryEnabled, OpenTelemetryEndpoint); err != nil {
-		result.Errors = append(result.Errors, err)
-	}
+	// OTEL_ENABLED and OTEL_EXPORTER_OTLP_ENDPOINT are validated by
+	// ValidateObservabilityEnv below, together with the rest of the section 3.2
+	// matrix they participate in. Checking them here as well would report every
+	// OpenTelemetry misconfiguration twice.
 
 	// Positive integer validators
 	if err := ValidatePositiveInt("MAX_ITEMS_PER_PAGE", MaxItemsPerPage); err != nil {
@@ -570,18 +571,31 @@ func ValidateAllEnvVars() *ValidationResult {
 	}
 
 	// Observability data-tiering validators.
+	//
+	// RAW INPUT FIRST. Everything below this call inspects an already-normalized
+	// package variable, so none of it can reject a value an operator actually
+	// typed: normalizeProfile has already turned an unknown profile into
+	// standalone, parseTraceSinks has already discarded an unknown sink, and
+	// clampUnitInterval has already folded an out-of-range sample rate into
+	// range. ValidateObservabilityEnv reads the environment strings themselves
+	// and rejects an explicitly set invalid value before normalization can
+	// change its meaning, then enforces the section 3.2 combination matrix on
+	// the effective configuration (proposal sections 3.1 and 3.2, W1). The
+	// normalized checks are kept as a second line of defense for values assigned
+	// directly to the package variables.
+	result.Errors = append(result.Errors, ValidateObservabilityEnv(ObservabilityEnvFromOS())...)
+
 	if err := ValidateObservabilityProfile(ObservabilityProfile); err != nil {
 		result.Errors = append(result.Errors, err)
 	}
 	if err := ValidateTraceWriteMode(TraceWriteMode); err != nil {
 		result.Errors = append(result.Errors, err)
 	}
-	if err := ValidateTraceSinkOpenTelemetryConfig(TraceSinks, OpenTelemetryEnabled); err != nil {
-		result.Errors = append(result.Errors, err)
-	}
-	if err := ValidateSyncTraceConfiguration(TraceWriteMode, TraceSinks, TraceSampleRate); err != nil {
-		result.Errors = append(result.Errors, err)
-	}
+	// The cross-field trace rules -- ValidateTraceSinkCombination,
+	// ValidateSyncTraceConfiguration and ValidateTraceSinkOpenTelemetryConfig --
+	// run inside ValidateObservabilityEnv against the effective configuration,
+	// which TestResolveObservabilityEnvMatchesPackageVariables pins to these same
+	// package variables. Repeating them here only duplicates each message.
 	if err := ValidateFloatRange("TRACE_SAMPLE_RATE", TraceSampleRate, 0, 1); err != nil {
 		result.Errors = append(result.Errors, err)
 	}

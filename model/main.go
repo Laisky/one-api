@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -594,6 +595,13 @@ func monitorDBConnections(sqlDB *sql.DB) {
 	}
 }
 
+// closeDB closes the connection pool backing a single GORM handle.
+//
+// Parameters:
+//   - db: the handle to close; must not be nil.
+//
+// Return values:
+//   - error: wrapped failure returned while resolving or closing the pool.
 func closeDB(db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -603,22 +611,70 @@ func closeDB(db *gorm.DB) error {
 	return errors.WithStack(err)
 }
 
+var (
+	// closeDBMu serializes CloseDB so two callers cannot race the worker joins or
+	// the handle bookkeeping below.
+	closeDBMu sync.Mutex
+	// closedPrimaryDB and closedLogDB remember the handles the previous CloseDB
+	// already closed. Comparing pointers (rather than latching a single boolean)
+	// keeps CloseDB idempotent for the process lifetime while still closing a
+	// handle that a later InitDatabases/InitDB opened, which tests depend on.
+	closedPrimaryDB *gorm.DB
+	closedLogDB     *gorm.DB
+)
+
+// CloseDB stops every database-backed background loop and closes both database
+// handles. It is the last step of the graceful shutdown sequence, after all
+// producers have drained and all consuming sinks have been closed.
+//
+// CloseDB is idempotent and safe to call more than once, concurrently or
+// sequentially: a handle that a previous call already closed is skipped, so a
+// duplicate call can neither panic nor report a confusing "sql: database is
+// closed" style failure. A handle opened again after a close (as tests do) is
+// a different pointer and is therefore closed normally.
+//
+// Parameters: none.
+//
+// Return values:
+//   - error: wrapped failure from closing either handle; nil when there was
+//     nothing left to close.
 func CloseDB() error {
+	closeDBMu.Lock()
+	defer closeDBMu.Unlock()
+
 	// Cancel and join every background loop before either database is closed. Both migration
 	// generations own workers that issue statements, so a loop still in flight would run
-	// against a closed pool.
+	// against a closed pool. Both stop helpers are themselves idempotent.
 	stopUUIDCatchUpWorker()
 	stopCompactLoops()
+	var closeErrs []error
+
 	// LOG_DB is nil for an InitDB-only caller that never initialized the log database, so it
-	// must be checked before use rather than only compared against DB.
-	if LOG_DB != nil && LOG_DB != DB {
-		err := closeDB(LOG_DB)
-		if err != nil {
-			return errors.Wrap(err, "close log database")
+	// must be checked before use rather than only compared against DB. Both independent
+	// handles are attempted even if one close fails; shutdown must not leak the primary
+	// pool merely because the log pool reported an error.
+	if LOG_DB != nil && LOG_DB != DB && LOG_DB != closedLogDB {
+		if err := closeDB(LOG_DB); err != nil {
+			closeErrs = append(closeErrs, errors.Wrap(err, "close log database"))
+		} else {
+			closedLogDB = LOG_DB
 		}
 	}
-	if DB == nil {
-		return nil
+	if DB != nil && DB != closedPrimaryDB {
+		if err := closeDB(DB); err != nil {
+			closeErrs = append(closeErrs, errors.Wrap(err, "close primary database"))
+		} else {
+			closedPrimaryDB = DB
+			// A shared handle is reachable through both globals, so mark it closed
+			// on both sides rather than letting the log branch re-close it.
+			if LOG_DB == DB {
+				closedLogDB = DB
+			}
+		}
 	}
-	return closeDB(DB)
+
+	if len(closeErrs) > 0 {
+		return errors.Wrap(errors.Join(closeErrs...), "close databases")
+	}
+	return nil
 }

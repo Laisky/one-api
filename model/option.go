@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -24,9 +25,20 @@ type Option struct {
 
 // AllOption returns all persisted runtime configuration options.
 func AllOption() ([]*Option, error) {
+	return AllOptionWithContext(context.Background())
+}
+
+// AllOptionWithContext returns all persisted options using ctx for database cancellation.
+//
+// Parameters:
+//   - ctx: lifecycle and deadline scope for the database query.
+//
+// Return values:
+//   - []*Option: persisted options.
+//   - error: wrapped query failure.
+func AllOptionWithContext(ctx context.Context) ([]*Option, error) {
 	var options []*Option
-	var err error
-	err = DB.Find(&options).Error
+	err := DB.WithContext(ctx).Find(&options).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "query all options")
 	}
@@ -106,7 +118,18 @@ func InitOptionMap() {
 
 // loadOptionsFromDatabase replays persisted options into the in-memory config map.
 func loadOptionsFromDatabase() {
-	options, err := AllOption()
+	loadOptionsFromDatabaseWithContext(context.Background())
+}
+
+// loadOptionsFromDatabaseWithContext replays persisted options using ctx for
+// the database query.
+//
+// Parameters:
+//   - ctx: lifecycle and deadline scope for the query.
+//
+// Return values: none; failures are logged.
+func loadOptionsFromDatabaseWithContext(ctx context.Context) {
+	options, err := AllOptionWithContext(ctx)
 	if err != nil {
 		logger.Logger.Error("failed to query options from database", zap.Error(err))
 		return
@@ -123,12 +146,46 @@ func loadOptionsFromDatabase() {
 	}
 }
 
-// SyncOptions periodically refreshes runtime configuration from persisted options.
+// SyncOptions preserves the historical frequency-only worker API.
+//
+// Parameters:
+//   - frequency: seconds between refreshes; values <= 0 disable the loop.
+//
+// Return values: none.
 func SyncOptions(frequency int) {
+	SyncOptionsContext(context.Background(), frequency)
+}
+
+// SyncOptionsContext periodically refreshes runtime configuration from
+// persisted options until ctx is cancelled.
+//
+// It is a database producer, so it takes the caller's lifecycle context: an
+// unstoppable loop keeps querying during shutdown and after CloseDB. It is not
+// joined -- a missed refresh has no durable consequence -- so a shutdown does
+// not wait for it, unlike the retention cleaners.
+//
+// Parameters:
+//   - ctx: lifecycle scope; cancellation ends the loop at the next tick.
+//   - frequency: seconds between refreshes; values <= 0 disable the loop.
+//
+// Return values: none.
+func SyncOptionsContext(ctx context.Context, frequency int) {
+	if frequency <= 0 {
+		logger.Logger.Info("option sync disabled", zap.Int("sync_frequency", frequency))
+		return
+	}
+
+	ticker := time.NewTicker(time.Duration(frequency) * time.Second)
+	defer ticker.Stop()
 	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
-		logger.Logger.Info("syncing options from database")
-		loadOptionsFromDatabase()
+		select {
+		case <-ctx.Done():
+			logger.Logger.Info("option sync stopped", zap.Error(ctx.Err()))
+			return
+		case <-ticker.C:
+			logger.Logger.Info("syncing options from database")
+			loadOptionsFromDatabaseWithContext(ctx)
+		}
 	}
 }
 

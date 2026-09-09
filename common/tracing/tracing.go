@@ -196,6 +196,7 @@ func requestExcluded(c *gin.Context) bool {
 // Return values: none; failures are logged because tracing is best-effort.
 func RecordTraceStart(c *gin.Context) {
 	if requestExcluded(c) {
+		noteRequestExcluded(c)
 		return
 	}
 
@@ -242,7 +243,14 @@ func RecordTraceStart(c *gin.Context) {
 		span.AddEvent(model.TimestampRequestReceived)
 	}
 
-	bindRecorder(c, NewRecorder(traceID, url, method, bodySize))
+	rec := NewRecorder(traceID, url, method, bodySize)
+	if rec == nil {
+		// Active-recorder admission was denied (TRACE_MAX_ACTIVE_RECORDERS);
+		// NewRecorder already counted the drop. The request proceeds untraced
+		// rather than failing, and every later hook resolves to a nil recorder.
+		return
+	}
+	bindRecorder(c, rec)
 }
 
 // RecordTraceTimestamp records a lifecycle timestamp for the current request.
@@ -410,6 +418,7 @@ func RecordTraceEndWithStatus(c *gin.Context, status int) {
 // Return values: none; failures are logged because tracing is best-effort.
 func recordTraceEnd(c *gin.Context, status int) {
 	if requestExcluded(c) {
+		noteRequestExcluded(c)
 		return
 	}
 
@@ -440,7 +449,21 @@ func recordTraceEnd(c *gin.Context, status int) {
 		return
 	}
 
-	if !SampleDecision(in.Status, durationMs, rec.Forced()) {
+	// The status recorded above is what the client actually received, which for
+	// a failed stream is 200: once headers are flushed nothing can change it.
+	// The semantic failure is therefore passed separately, so the
+	// always-sample-errors rule still retains the trace. Time-to-first-token is
+	// passed alongside the total lifetime so the slow rule is not dominated by
+	// long-lived streams.
+	ttftMs, ttftKnown := timeToFirstTokenMs(in)
+	if !SampleDecisionFor(SampleInput{
+		Status:     in.Status,
+		DurationMs: durationMs,
+		TTFTMs:     ttftMs,
+		TTFTKnown:  ttftKnown,
+		Forced:     rec.Forced(),
+		Failure:    TraceFailure(c),
+	}) {
 		metrics.RecordTraceOutcome(metrics.TraceOutcomeSampledOut, 1)
 		return
 	}

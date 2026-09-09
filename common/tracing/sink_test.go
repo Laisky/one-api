@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/metrics"
+	"github.com/Laisky/one-api/common/telemetry"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -166,6 +167,10 @@ func TestInitSinksSelectsConfiguredSinks(t *testing.T) {
 	config.TraceWriteMode = config.TraceWriteModeBatched
 	config.OpenTelemetryEnabled = true
 	config.OpenTelemetryEndpoint = "collector:4318"
+	// The otlp rows of section 3.2 need a provider that was really installed,
+	// not merely OTEL_ENABLED=true; this test is about sink SELECTION, so it
+	// states that precondition rather than re-testing it.
+	t.Cleanup(telemetry.SetProviderInitializedForTest(true))
 	t.Cleanup(func() {
 		config.TraceSinks = prevSinks
 		config.TraceWriteMode = prevWriteMode

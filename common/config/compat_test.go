@@ -130,3 +130,55 @@ func TestCursorBudgetsAreBoundedByDefault(t *testing.T) {
 	require.LessOrEqual(t, LogCountExactMaxConcurrent, LogCountProbeMaxConcurrent,
 		"the unbounded-cost count must not be allowed more concurrency than the bounded one")
 }
+
+// TestStandaloneDefaultsAddNoNewRejection verifies no default introduces a way
+// for a request that used to succeed to start failing.
+//
+// A resource BOUND is compatible when it cannot engage in healthy operation. A
+// BUDGET that refuses work is different in kind: it turns load into an error
+// the caller never saw before, so it stays opt-in even though it would protect
+// the database. That distinction is the line between the two default policies
+// in section 3.1, and it is easy to erode by accident.
+//
+// Parameters:
+//   - t: the test handle.
+//
+// Return values: none.
+func TestStandaloneDefaultsAddNoNewRejection(t *testing.T) {
+	require.Zero(t, DashboardMaxConcurrentAggregates,
+		"a concurrency budget refuses dashboard requests; coalescing already removes the duplicate work, "+
+			"so the budget must stay opt-in rather than introduce a new user-visible failure mode")
+}
+
+// TestBoundedResourceDefaultsAreCompatible documents why the bounds that DO
+// default to enabled are not compatibility breaks.
+//
+// Each one replaces an unbounded resource whose exhaustion kills the process.
+// They are sized so that reaching them already means the deployment is
+// malfunctioning: a gateway does not hold 200000 concurrent in-flight requests,
+// and does not write a single 4 GiB log file, in healthy operation. The
+// alternative to the bound is not "the old behavior", it is an out-of-memory
+// kill or a full disk -- which destroys far more of an operator's data than the
+// bound ever sheds.
+//
+// The assertions are lower bounds, not exact values: tuning a limit upward is
+// not a compatibility question, but dropping one to a level a real deployment
+// could reach would be.
+//
+// Parameters:
+//   - t: the test handle.
+//
+// Return values: none.
+func TestBoundedResourceDefaultsAreCompatible(t *testing.T) {
+	require.GreaterOrEqual(t, TraceMaxActiveRecorders, 100000,
+		"the active-recorder bound must sit far above real concurrency, so it replaces an OOM rather than dropping traces")
+	require.GreaterOrEqual(t, LogMaxActiveFileSizeMB, 1024,
+		"the active log file ceiling must sit far above any healthy single file, so rotation replaces a full disk")
+	require.GreaterOrEqual(t, TraceMaxRecordBytes, 65536,
+		"the per-record bound must not truncate an ordinary trace")
+	require.GreaterOrEqual(t, TraceMaxExternalCalls, 256,
+		"the external-call bound must not truncate an ordinary retry or tool sequence")
+
+	require.LessOrEqual(t, LogDiskCheckIntervalSec, 60,
+		"the disk guard must sample fast enough to matter: at 16 MB/s a 1 GB reserve lasts about 62 seconds")
+}

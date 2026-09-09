@@ -502,3 +502,58 @@ func (m *MultiRecorder) UpdateTraceQueueDepth(depth, capacity float64) {
 		}
 	}
 }
+
+// UpdateTraceActiveRecorders implements TraceActiveRecorder by forwarding to
+// every child recorder that supports it.
+//
+// Without this method a MultiRecorder -- which is what a deployment running
+// both Prometheus and OTel gets -- would fail the TraceActiveRecorder type
+// assertion in UpdateTraceActive, so oneapi_trace_active_recorders would sit at
+// zero forever while admission was silently working. An optional extension
+// interface only stays optional for CHILD recorders; the fan-out itself has to
+// implement every one of them.
+//
+// Parameters:
+//   - active: number of requests currently holding a trace recorder.
+//   - limit: configured admission limit; 0 means unlimited.
+//
+// Return values: none.
+func (m *MultiRecorder) UpdateTraceActiveRecorders(active, limit float64) {
+	for _, r := range m.Recorders {
+		if tr, ok := r.(TraceActiveRecorder); ok {
+			tr.UpdateTraceActiveRecorders(active, limit)
+		}
+	}
+}
+
+// RecordLogSuppression implements LogPipelineRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - reason: a compile-time constant from log_pipeline.go.
+//   - lines: how many log lines were discarded.
+//   - bytes: how many bytes those lines would have written.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordLogSuppression(reason string, lines int, bytes int64) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogPipelineRecorder); ok {
+			lr.RecordLogSuppression(reason, lines, bytes)
+		}
+	}
+}
+
+// UpdateLogDiskPressure implements LogPipelineRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - active: 1 when the emergency logging policy is engaged, 0 otherwise.
+//
+// Return values: none.
+func (m *MultiRecorder) UpdateLogDiskPressure(active float64) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogPipelineRecorder); ok {
+			lr.UpdateLogDiskPressure(active)
+		}
+	}
+}

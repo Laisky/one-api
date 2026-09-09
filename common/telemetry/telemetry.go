@@ -5,6 +5,7 @@ import (
 	stdErrors "errors"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	laerrors "github.com/Laisky/errors/v2"
@@ -103,6 +104,70 @@ func newZeroExemplarReservoirView() sdkmetric.View {
 type ProviderBundle struct {
 	tracerProvider *sdktrace.TracerProvider
 	meterProvider  *sdkmetric.MeterProvider
+	generation     uint64
+}
+
+// providerInitialized records whether InitOpenTelemetry installed real global
+// providers in this process.
+//
+// It exists because the global providers cannot be interrogated for this.
+// otel.GetTracerProvider() answers every caller, and before (or after a failed)
+// InitOpenTelemetry that answer is the SDK's built-in NO-OP provider, whose
+// spans are indistinguishable from real ones at the call site except that they
+// never record. A component that must not be built against a no-op provider --
+// the OTLP trace sink, proposal section 3.2 row "Any sink including otlp |
+// batched | OTEL_ENABLED=false -> Reject; never count a no-op provider as
+// export" -- therefore has no way to ask, and would rediscover the
+// misconfiguration once per request forever.
+//
+// The readiness flag mirrors exactly the global state the sink reads. Its
+// generation prevents Shutdown of an older bundle from clearing readiness after
+// a replacement provider has been installed.
+var (
+	providerInitialized      atomic.Bool
+	providerGeneration       atomic.Uint64
+	activeProviderGeneration atomic.Uint64
+)
+
+// ProviderInitialized reports whether this process installed real OpenTelemetry
+// providers, as opposed to still running on the global no-op provider.
+//
+// Callers use it as a startup precondition, not per record: a false answer
+// means every span handed to otel.GetTracerProvider() would be dropped without
+// ever reaching an exporter.
+//
+// Parameters: none.
+//
+// Return values:
+//   - bool: true between a successful InitOpenTelemetry and ProviderBundle.Shutdown.
+func ProviderInitialized() bool {
+	return providerInitialized.Load()
+}
+
+// SetProviderInitializedForTest overrides the provider-installed flag and
+// returns a restore function. It must only be used from tests: production code
+// sets the flag by actually installing providers.
+//
+// Parameters:
+//   - installed: the value to report from ProviderInitialized.
+//
+// Return values:
+//   - func(): restores the value the flag had before this call.
+func SetProviderInitializedForTest(installed bool) func() {
+	previousReady := providerInitialized.Load()
+	previousGeneration := activeProviderGeneration.Load()
+	if installed {
+		generation := providerGeneration.Add(1)
+		activeProviderGeneration.Store(generation)
+		providerInitialized.Store(true)
+	} else {
+		activeProviderGeneration.Store(0)
+		providerInitialized.Store(false)
+	}
+	return func() {
+		activeProviderGeneration.Store(previousGeneration)
+		providerInitialized.Store(previousReady)
+	}
 }
 
 // InitOpenTelemetry configures global OpenTelemetry providers when enabled.
@@ -133,6 +198,12 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 	metricExporter, err := otlpmetrichttp.New(ctx, buildMetricExporterOptions()...)
 	if err != nil {
 		_ = tracerProvider.Shutdown(ctx)
+		// The global tracer provider above now points at the shut-down provider.
+		// Any readiness inherited from an earlier initialization would be stale
+		// and would let an OTLP sink start against a provider that records
+		// nothing.
+		activeProviderGeneration.Store(0)
+		providerInitialized.Store(false)
 		return nil, laerrors.Wrap(err, "create OTLP metric exporter")
 	}
 
@@ -151,6 +222,14 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 		propagation.Baggage{},
 	))
 
+	// Both global providers are installed at this point, so components that
+	// refuse to run against the no-op provider may now be constructed. Set the
+	// flag before the log line: an operator reading "OpenTelemetry initialized"
+	// must not be able to observe a process where the flag still says otherwise.
+	generation := providerGeneration.Add(1)
+	activeProviderGeneration.Store(generation)
+	providerInitialized.Store(true)
+
 	logger.Logger.Info("OpenTelemetry initialized",
 		zap.String("endpoint", config.OpenTelemetryEndpoint),
 		zap.Bool("insecure", config.OpenTelemetryInsecure),
@@ -161,6 +240,7 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 	return &ProviderBundle{
 		tracerProvider: tracerProvider,
 		meterProvider:  meterProvider,
+		generation:     generation,
 	}, nil
 }
 
@@ -184,6 +264,13 @@ func newTracerProvider(exporter sdktrace.SpanExporter, res *sdkresource.Resource
 func (p *ProviderBundle) Shutdown(ctx context.Context) error {
 	if p == nil {
 		return nil
+	}
+
+	// A shut-down provider records nothing, so anything that gated itself on
+	// ProviderInitialized must see the process go back to "no real provider"
+	// even if a later re-init never happens.
+	if p.generation != 0 && activeProviderGeneration.CompareAndSwap(p.generation, 0) {
+		providerInitialized.Store(false)
 	}
 
 	var errs []error

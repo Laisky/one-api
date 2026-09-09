@@ -345,7 +345,7 @@ so the next tick resumes where the last one stopped.
 | `TRACE_RETENTION_DAYS` | `30`; `0` disables | age cutoff for the `traces` sweeper |
 | `RETENTION_DELETE_BATCH_SIZE` | `5000` | rows removed per retention `DELETE` |
 | `RETENTION_DELETE_PAUSE_MS` | `10` | pause between retention chunks (measured optimum) |
-| `RETENTION_SWEEP_INTERVAL_MINUTES` | `60` | how often retention workers run |
+| `RETENTION_SWEEP_INTERVAL_MINUTES` | `1440` (`60` under `scaled`/`external`) | how often retention workers run |
 
 `TRACE_WRITE_MODE=sync` preserves the legacy behavior in which an in-flight
 request is visible through SQL and every lifecycle mark is persisted

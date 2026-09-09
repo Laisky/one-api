@@ -314,6 +314,18 @@ func TestDashboardAggregations(t *testing.T) {
 	}
 }
 
+// TestDashboardAggregatesHonorContext verifies dashboard queries do not detach
+// from the shared-work lifecycle. Before the context-aware variants, a process
+// shutdown could leave six aggregate queries running after all viewers left.
+func TestDashboardAggregatesHonorContext(t *testing.T) {
+	setupTestDatabase(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := SearchLogsByDayAndModelWithContext(ctx, 0, 0, int(time.Now().UTC().Unix()))
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 // TestRecordToolLogs covers the high-level write helper used by the relay
 // billing path. It asserts:
 //   - one row is written per invocation in summary.Counts

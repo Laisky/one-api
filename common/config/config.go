@@ -1062,10 +1062,7 @@ var (
 	// Default: ""
 	// Example: "100.97.108.34:4318"
 	OpenTelemetryEndpoint = func() string {
-		endpoint := strings.TrimSpace(env.String("OTEL_EXPORTER_OTLP_ENDPOINT", ""))
-		endpoint = strings.TrimPrefix(endpoint, "http://")
-		endpoint = strings.TrimPrefix(endpoint, "https://")
-		return endpoint
+		return normalizeOTLPEndpoint(env.String(EnvOpenTelemetryEndpoint, ""))
 	}()
 
 	// OpenTelemetryInsecure determines whether the OTLP exporters should skip
@@ -1073,7 +1070,7 @@ var (
 	//
 	// Environment variable: OTEL_EXPORTER_OTLP_INSECURE
 	// Default: true
-	OpenTelemetryInsecure = env.Bool("OTEL_EXPORTER_OTLP_INSECURE", true)
+	OpenTelemetryInsecure = env.Bool(EnvOpenTelemetryInsecure, true)
 
 	// OpenTelemetryServiceName labels emitted telemetry with the logical
 	// service identifier. This appears in tracing backends and metrics UIs.

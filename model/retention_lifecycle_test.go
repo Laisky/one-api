@@ -57,6 +57,21 @@ func TestRetentionCleanersDoNotBlockStartup(t *testing.T) {
 					completedOnce.Do(func() { close(completedSweep) })
 				},
 			))
+			// Keyset retention locates candidates with Raw(...).Rows(), which
+			// dispatches GORM's row callback rather than the Exec raw callback
+			// above. Observe both paths so this remains a startup-behaviour test
+			// as the bounded implementation evolves.
+			require.NoError(t, db.Callback().Row().Before("gorm:row").Register(
+				"test:block-initial-retention-row", func(*gorm.DB) {
+					enteredOnce.Do(func() { close(enteredSweep) })
+					time.Sleep(300 * time.Millisecond)
+				},
+			))
+			require.NoError(t, db.Callback().Row().After("gorm:row").Register(
+				"test:complete-initial-retention-row", func(*gorm.DB) {
+					completedOnce.Do(func() { close(completedSweep) })
+				},
+			))
 
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)

@@ -23,8 +23,8 @@ work items must comply with them. Requirements marked **planned** are not curren
 
 | Area | Implemented in inspected tree | Test / benchmark evidence | Release status |
 | --- | --- | --- | --- |
-| Phase 0: exclusions, chunked deletion, file guards, sampling, dashboard caches | Yes | Targeted tests and historical component benchmarks exist | Close compatibility, disk, cache-failure, and resource gates in W0 |
-| Phase 1: recorder, SQL batching, local sampling, OTLP sink, timestamp columns | Yes | Targeted tests and historical component benchmarks exist | Close lifecycle, outcome, memory, and OTLP correctness gates in W1 |
+| Phase 0: exclusions, chunked deletion, file guards, sampling, dashboard caches | Yes, and the W0 remediation is complete: active-file ceiling, disk guard on its own 5-second cadence, bounded emergency policy with hysteresis, coalesced dashboard aggregates, keyset-bounded retention with a sargable async-task predicate | Correctness suites plus [W0/W1 acceptance measurements](../benchmarks/20260908_w0-w1-acceptance.md) | W0 items closed; G1 still needs the compatibility and mixed-schema evidence, and no load claim follows |
+| Phase 1: recorder, SQL batching, local sampling, OTLP sink, timestamp columns | Yes, and the W1 remediation is complete: recorder byte/entry bounds, active-recorder admission, drain bounded by rows/bytes/parameters, Flush reporting failed persistence, one SERVER span per request, ordered shutdown with retention workers joined, fail-fast configuration | Correctness suites plus [W0/W1 acceptance measurements](../benchmarks/20260908_w0-w1-acceptance.md) | W1 items closed; G1 still needs the compatibility and mixed-schema evidence, and no load claim follows |
 | Phase 2: mutation-aware SQL projections, additive pagination, explicit index migrations | Partial — W2.4 (additive cursor/count APIs) implemented; W2.1–W2.3, W2.5, W2.6 not started | W2.4: [cursor plans and correctness bundle](../benchmarks/20260906_w24-cursor-plans.md), 3 engines, 2M rows | W2.4 released **off by default** (`LOG_CURSOR_ENABLED=false`); synchronous usage-write semantics remain |
 | Phase 3: optional OTLP application logs and operational metrics | No; trace sink is already Phase 1 code | No integration acceptance yet | Optional; does not block SQL optimization |
 | Phase 4: durable replay and corrected ClickHouse mirror | No | No replay or reconciliation evidence yet | Optional; cannot authorize billing-history deletion |
@@ -34,6 +34,14 @@ work items must comply with them. Requirements marked **planned** are not curren
 statuses. The external review could not find the companion evidence on its inspected
 baseline branch. Both Git objects and the companion file are available locally now, which
 improves traceability but does not independently reproduce the measurements.
+
+The W0/W1 remediation keeps that distinction. Its work items are implemented and measured
+against before/after baselines, and the measurement found two real defects — a retained-string
+bound that clipped length without releasing memory, and a parameter ceiling read from a
+process-global rather than the owning handle — both since fixed and re-measured. That
+raises Phases 0 and 1 from “implemented” to “implemented and benchmarked.” It does not
+reach “validated at target load”: every figure is a component measurement, so **G5 remains
+untouched and no capacity claim follows from any of it.**
 
 Every release record must attach its published implementation commit, any additional diff,
 build/image digest, benchmark harness revision, exact commands, effective configuration,
@@ -198,7 +206,7 @@ certified capacity settings. File-size settings named `_MB` use MiB (`1 << 20`) 
 | `ASYNC_TASK_RETENTION_DAYS` | `7` | `7` | `7` |
 | `RETENTION_DELETE_BATCH_SIZE` | `5000` | `5000` | `5000` |
 | `RETENTION_DELETE_PAUSE_MS` | `10` | `10` | `10` |
-| `RETENTION_SWEEP_INTERVAL_MINUTES` | `60` | `60` | `60` |
+| `RETENTION_SWEEP_INTERVAL_MINUTES` | `1440` | `60` | `60` |
 | `LOG_RECORD_LINE_FORMAT` | `full` | `compact` | `compact` |
 | `APP_LOG_SINK` | `both` | `both` | `both` |
 | `LOG_RETENTION_DAYS` | `0` | `3` | `1` |
@@ -209,6 +217,28 @@ certified capacity settings. File-size settings named `_MB` use MiB (`1 << 20`) 
 | `LOG_SAMPLE_TICK_MS` | `1000` | `1000` | `1000` |
 | `DASHBOARD_CACHE_TTL_SEC` | `0` | `60` | `60` |
 | `DASHBOARD_MAX_SITEWIDE_RANGE_DAYS` | `365` | `31` | `31` |
+| `LOG_MAX_ACTIVE_FILE_SIZE_MB` | `4096` | `2048` | `1024` |
+| `LOG_DISK_CHECK_INTERVAL_SEC` | `5` | `5` | `5` |
+| `LOG_EMERGENCY_MAX_BYTES_PER_SEC` | `1048576` | `1048576` | `1048576` |
+| `LOG_DISK_RECOVERY_MARGIN_PCT` | `20` | `20` | `20` |
+| `DASHBOARD_MAX_CONCURRENT_AGGREGATES` | `0` | `2` | `2` |
+| `TRACE_MAX_RECORD_BYTES` | `262144` | `65536` | `65536` |
+| `TRACE_MAX_EXTERNAL_CALLS` | `1024` | `256` | `256` |
+| `TRACE_MAX_ACTIVE_RECORDERS` | `200000` | `200000` | `200000` |
+| `TRACE_BATCH_MAX_BYTES` | `8388608` | `8388608` | `8388608` |
+| `LOG_CURSOR_ENABLED` | `false` | `false` | `false` |
+| `LOG_COUNT_EXACT_MAX_ROWS` | `100000` | `100000` | `100000` |
+
+Two kinds of setting appear in this table and they follow opposite default rules.
+A setting that changes what a user observes -- sampling, batched writes, file
+deletion, dashboard staleness, log-line shape -- defaults to the legacy behavior
+and must be opted into. A setting whose ABSENCE is a defect -- an unbounded active
+log file, an unbounded active recorder set, an unbounded flush buffer, a disk guard
+that never runs -- defaults to ENABLED and generously sized, because the deployment
+running pure defaults is the least able to discover the defect. "Unlimited" is not
+a conservative default for a resource bound; it is the bug. These bounds are sized
+so they do not engage in healthy operation, so enabling them changes no observable
+behavior short of the failure they exist to prevent.
 
 `TRACE_EXCLUDED_PATH_PREFIXES=-` disables exclusions. `APP_LOG_SINK` currently accepts
 `file`, `stdout` or `both`; OTLP application logs are planned. `--log-dir` is a CLI flag,
@@ -248,6 +278,8 @@ collector for every restart if the SDK can initialize offline with the configure
 
 These names are implementation targets; none may be advertised as functioning today.
 Defaults remain disabled or legacy for every profile until explicitly configured.
+The cursor/count capability and `LOG_COUNT_EXACT_MAX_ROWS` have since shipped and moved
+to section 3.1; `LOG_CURSOR_ENABLED` still defaults to `false` pending W2.5.
 
 | Planned setting / capability | Default and activation rule |
 | --- | --- |
@@ -257,8 +289,6 @@ Defaults remain disabled or legacy for every profile until explicitly configured
 | Rollup budgets | Explicit worker concurrency, source-row, snapshot-age, memory and database-time limits; tune from W2 measurements |
 | Rollup retention | Configure fine-grained and daily horizons separately; neither authorizes deleting billing records |
 | `LOG_DB_RETENTION_DAYS` | `0` for all profiles; cannot be nonzero without the authority gate in W2.6 |
-| Cursor/count capability | Explicit versioned request; legacy `p` and exact `total` remain unchanged |
-| `LOG_COUNT_EXACT_MAX_ROWS` | Initial optimized probe budget 100000; never discover this limit using an unbounded exact count |
 | `APP_LOG_SINK=otlp` | Optional new value after W3 adapter integration passes |
 | `ANALYTICS_BACKEND` | `sql`; `clickhouse` selects verified mirror reads only after G4 |
 | `CLICKHOUSE_ASYNC_INSERT` | Initial `false`; when enabled require `wait_for_async_insert=1` |

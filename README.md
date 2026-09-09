@@ -249,6 +249,10 @@ OTEL_SERVICE_NAME="one-api"
 OTEL_ENVIRONMENT="debug"
 ```
 
+Use `http://` with `OTEL_EXPORTER_OTLP_INSECURE=true` or `https://` with
+`OTEL_EXPORTER_OTLP_INSECURE=false`. Startup rejects an explicit scheme paired
+with the opposite transport mode.
+
 #### Scalable request tracing
 
 Request traces are accumulated in memory and written once per request by an
@@ -273,6 +277,16 @@ TRACE_BATCH_SIZE="500"
 TRACE_FLUSH_INTERVAL_MS="1000"
 TRACE_QUEUE_SIZE="50000"
 TRACE_WRITER_COUNT="4"
+
+# Bounded trace resources. TRACE_QUEUE_SIZE bounds only COMPLETED records;
+# long-lived streaming requests accumulate on the active side, which is what
+# TRACE_MAX_ACTIVE_RECORDERS bounds. Over the limit a request runs normally
+# but records no trace, counted as oneapi_trace_records_total{outcome=
+# "dropped_active_limit"}.
+TRACE_MAX_ACTIVE_RECORDERS="200000"  # all profiles; 0 restores unbounded
+TRACE_MAX_RECORD_BYTES="65536"       # standalone: 262144; minimum 1024; truncates, never drops
+TRACE_MAX_EXTERNAL_CALLS="256"       # standalone: 1024
+TRACE_BATCH_MAX_BYTES="8388608"      # bounds one writer's flush-local buffer
 ```
 
 Errors and slow requests are always retained regardless of the sample rate.
@@ -280,6 +294,23 @@ Errors and slow requests are always retained regardless of the sample rate.
 `TRACE_SINK=db` (or `none`) and `TRACE_SAMPLE_RATE=1`; configurations that need
 sampling, OTLP, or sink fan-out must use `batched` and fail fast otherwise.
 See [docs/arch/tracing_system.md](./docs/arch/tracing_system.md).
+
+> **Upgrade note — observability settings are now validated at startup.**
+> These variables previously accepted anything and silently substituted a
+> default: `OTEL_ENABLED=1` meant `false`, `TRACE_SINK=cassandra` meant `db`,
+> `TRACE_SAMPLE_RATE=5` meant `1`, and `TRACE_WRITE_MODE=async` meant `batched`.
+> A misconfigured deployment therefore ran with telemetry quietly disabled and
+> no way to find out. They are now rejected at startup with a message naming the
+> variable, the offending value and the allowed values.
+>
+> This intentional startup behavior affects configurations that were already
+> not doing what they said. Only booleans spelled exactly `true`/`false` are
+> accepted — `1`, `yes` and `on` are not.
+
+The OTLP trace outcome labels are now `span_recorded` and
+`span_record_failed`. The former labels local SDK recording; it does not claim
+that the asynchronous exporter or collector persisted the span. Dashboards that
+previously selected `exported` or `export_failed` must use the new labels.
 
 #### Bounded log and telemetry retention
 
@@ -294,6 +325,16 @@ LOG_MAX_TOTAL_SIZE_MB="20480"   # standalone: 0 (unlimited)
 LOG_MIN_FREE_DISK_MB="1024"     # standalone: 0 (guard disabled)
 APP_LOG_SINK="both"             # file | stdout | both; stdout suits Kubernetes
 
+# Active-file ceiling and disk-pressure guard. LOG_MAX_TOTAL_SIZE_MB can only
+# delete already-rotated files, so it cannot bound the file currently being
+# written; LOG_MAX_ACTIVE_FILE_SIZE_MB rotates on bytes and closes that hole.
+# The guard samples on its OWN fast cadence, not the slow retention sweep: at
+# 16 MB/s a 1 GB reserve lasts about 62 seconds.
+LOG_MAX_ACTIVE_FILE_SIZE_MB="2048"     # standalone: 4096; 0 disables
+LOG_DISK_CHECK_INTERVAL_SEC="5"        # independent of RETENTION_SWEEP_INTERVAL_MINUTES
+LOG_EMERGENCY_MAX_BYTES_PER_SEC="1048576"  # byte budget once headroom is gone
+LOG_DISK_RECOVERY_MARGIN_PCT="20"      # hysteresis, so the guard cannot flap
+
 # Per-request log line. The full form is the default so existing log pipelines
 # keep parsing the same fields.
 LOG_RECORD_LINE_FORMAT="compact"   # standalone: full
@@ -305,11 +346,13 @@ LOG_SAMPLE_TICK_MS="1000"
 # size of each DELETE; they do not change what gets deleted.
 RETENTION_DELETE_BATCH_SIZE="5000"
 RETENTION_DELETE_PAUSE_MS="10"
-RETENTION_SWEEP_INTERVAL_MINUTES="60"
+RETENTION_SWEEP_INTERVAL_MINUTES="60"   # standalone: 1440 (historical 24h cadence)
 
 # Dashboard.
 DASHBOARD_CACHE_TTL_SEC="60"            # standalone: 0 (always live)
 DASHBOARD_MAX_SITEWIDE_RANGE_DAYS="31"  # standalone: 365 (the existing limit)
+DASHBOARD_MAX_CONCURRENT_AGGREGATES="2" # standalone: 0 (unlimited). Concurrent
+                                        # misses are coalesced regardless.
 
 # Keyset log pagination. Two ADDITIVE routes (/api/log/cursor and
 # /api/log/self/cursor); the existing offset routes are untouched.

@@ -22,8 +22,37 @@ const (
 	TraceOutcomeWritten = "written"
 	// TraceOutcomeWriteFailed counts trace rows a sink failed to write.
 	TraceOutcomeWriteFailed = "write_failed"
-	// TraceOutcomeExported counts traces handed to the OTLP sink.
-	TraceOutcomeExported = "exported"
+	// TraceOutcomeSpanRecorded counts traces whose local SDK span was recording
+	// and was enriched or ended by the OTLP sink. It is not an export-delivery
+	// metric: batch processor queue overflow and collector transport failures
+	// happen later and must be measured at the exporter boundary.
+	TraceOutcomeSpanRecorded = "span_recorded"
+	// TraceOutcomeExported is retained as a source-compatible alias. Its metric
+	// value deliberately names local span recording so it cannot imply collector
+	// persistence the sink is unable to observe.
+	TraceOutcomeExported = TraceOutcomeSpanRecorded
+	// TraceOutcomeSpanRecordFailed counts traces the OTLP sink could not record
+	// at all -- a non-recording provider, a rejected span, or invalid trace
+	// data. It does not represent asynchronous collector transport failure.
+	TraceOutcomeSpanRecordFailed = "span_record_failed"
+	// TraceOutcomeExportFailed is retained as a source-compatible alias. The
+	// metric value uses span_record_failed to avoid a transport-delivery claim.
+	TraceOutcomeExportFailed = TraceOutcomeSpanRecordFailed
+	// TraceOutcomeExcluded counts requests that were never recorded because a
+	// configured path prefix excluded them, or because TRACE_SINK is "none".
+	//
+	// Exclusion is a deliberate configuration choice; conflating it with
+	// sampled_out or a drop makes it impossible to tell a configured saving from
+	// a capacity problem (W1, "Metrics").
+	TraceOutcomeExcluded = "excluded"
+	// TraceOutcomeTruncated counts trace records whose retained content was cut
+	// down to fit TRACE_MAX_RECORD_BYTES or TRACE_MAX_EXTERNAL_CALLS. The trace
+	// is still persisted; only its detail is reduced.
+	TraceOutcomeTruncated = "truncated"
+	// TraceOutcomeDroppedActiveLimit counts requests that ran without a trace
+	// because TRACE_MAX_ACTIVE_RECORDERS was already reached. The request itself
+	// is unaffected.
+	TraceOutcomeDroppedActiveLimit = "dropped_active_limit"
 )
 
 // TracePipelineRecorder is the OPTIONAL extension a recorder may implement to
@@ -38,6 +67,32 @@ type TracePipelineRecorder interface {
 	RecordTraceRecord(outcome string, count int)
 	// UpdateTraceQueueDepth publishes writer-queue occupancy and capacity.
 	UpdateTraceQueueDepth(depth, capacity float64)
+}
+
+// TraceActiveRecorder is a SECOND optional extension reporting how many
+// in-flight requests currently hold a trace recorder.
+//
+// It is a separate interface rather than a method on TracePipelineRecorder for
+// the same reason that interface is separate from MetricsRecorder: adding a
+// method to an existing exported interface breaks every out-of-tree
+// implementation at compile time.
+type TraceActiveRecorder interface {
+	// UpdateTraceActiveRecorders publishes in-flight recorder occupancy and the
+	// configured admission limit. A limit of 0 means unlimited.
+	UpdateTraceActiveRecorders(active, limit float64)
+}
+
+// UpdateTraceActive publishes in-flight trace recorder occupancy.
+//
+// Parameters:
+//   - active: number of requests currently holding a recorder.
+//   - limit: configured TRACE_MAX_ACTIVE_RECORDERS; 0 means unlimited.
+//
+// Return values: none.
+func UpdateTraceActive(active, limit int) {
+	if tr, ok := Recorder().(TraceActiveRecorder); ok {
+		tr.UpdateTraceActiveRecorders(float64(active), float64(limit))
+	}
 }
 
 // RecordTraceOutcome is a convenience wrapper over Recorder() for trace

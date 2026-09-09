@@ -27,6 +27,9 @@ func writeLogFile(t *testing.T, dir, name string, size int, age time.Duration) s
 	require.NoError(t, os.WriteFile(path, make([]byte, size), 0o600))
 	stamp := time.Now().Add(-age)
 	require.NoError(t, os.Chtimes(path, stamp, stamp))
+	if isLogFileName(name) {
+		setActiveLogFile(path)
+	}
 	return path
 }
 
@@ -47,6 +50,35 @@ func TestListLogFilesOrdersOldestFirst(t *testing.T) {
 	require.Equal(t, oldest, files[0].path)
 	require.Equal(t, middle, files[1].path)
 	require.Equal(t, newest, files[2].path)
+}
+
+// TestActiveLogFileTracksTheOpenWriterRatherThanDirectoryMetadata verifies a
+// size-rotated sibling with the same timestamp cannot be mistaken for the
+// active file. Filesystems commonly have coarse modification timestamps, and
+// the sequenced sibling sorts before the unsequenced active name.
+func TestActiveLogFileTracksTheOpenWriterRatherThanDirectoryMetadata(t *testing.T) {
+	dir := t.TempDir()
+	day := time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC)
+	writer := newSizeCappedWriter(t, dir, 8, day)
+
+	_, err := writer.Write([]byte("first log entry\n"))
+	require.NoError(t, err)
+	_, err = writer.Write([]byte("second log entry\n"))
+	require.NoError(t, err)
+
+	active := filepath.Join(dir, "oneapi-20260905.log")
+	rotated := filepath.Join(dir, "oneapi-20260905-0001.log")
+	require.FileExists(t, rotated)
+	stamp := time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, os.Chtimes(active, stamp, stamp))
+	require.NoError(t, os.Chtimes(rotated, stamp, stamp))
+	require.Equal(t, active, activeLogFile(dir),
+		"the writer's open path, not newest metadata, owns active-file protection")
+
+	deleted, err := enforceSizeCeiling(Logger, dir, 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, deleted)
+	require.FileExists(t, active, "a retention sweep must never unlink the writer's live file")
 }
 
 // TestListLogFilesMissingDirectory verifies a missing directory is not an error.
