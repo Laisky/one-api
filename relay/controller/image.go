@@ -501,6 +501,37 @@ var gptImageTokenBucketPrices = map[string]gptImageTokenBucketPricing{
 		cachedInputImageUSD: 2.0,
 		outputImageUSD:      30.0,
 	},
+	// GPT Image 2.5 token rates verified 2026-09-09 (not per-image estimates).
+	// https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst
+	// https://developers.openai.com/api/docs/models/gpt-image-2.5-flare
+	"gpt-image-2.5-sunburst": {
+		inputTextUSD:        5.0,
+		cachedInputTextUSD:  1.25,
+		inputImageUSD:       8.0,
+		cachedInputImageUSD: 2.0,
+		outputImageUSD:      30.0,
+	},
+	"gpt-image-2.5-sunburst-2026-09-08": {
+		inputTextUSD:        5.0,
+		cachedInputTextUSD:  1.25,
+		inputImageUSD:       8.0,
+		cachedInputImageUSD: 2.0,
+		outputImageUSD:      30.0,
+	},
+	"gpt-image-2.5-flare": {
+		inputTextUSD:        5.0,
+		cachedInputTextUSD:  1.25,
+		inputImageUSD:       8.0,
+		cachedInputImageUSD: 2.0,
+		outputImageUSD:      30.0,
+	},
+	"gpt-image-2.5-flare-2026-09-08": {
+		inputTextUSD:        5.0,
+		cachedInputTextUSD:  1.25,
+		inputImageUSD:       8.0,
+		cachedInputImageUSD: 2.0,
+		outputImageUSD:      30.0,
+	},
 }
 
 // computeGptImageTokenQuota calculates quota for GPT image family models using five billing buckets:
@@ -567,13 +598,9 @@ func computeImageUsageQuota(modelName string, usage *relaymodel.Usage, groupRati
 	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && (usage.PromptTokensDetails == nil) {
 		return 0
 	}
-	switch modelName {
-	case "gpt-image-1", "gpt-image-1-mini", "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16", "gpt-image-2", "gpt-image-2-2026-04-21":
-		return computeGptImageTokenQuota(modelName, usage, groupRatio)
-	default:
-		// Add more models here as they publish token pricing for image buckets
-		return 0
-	}
+	// The bucket table is the allowlist; keep dispatch in sync with every priced
+	// alias and snapshot without maintaining a second model-name list.
+	return computeGptImageTokenQuota(modelName, usage, groupRatio)
 }
 
 // imageQuotaSummary tracks the breakdown of image billing across fixed per-image components and token-based usage.
