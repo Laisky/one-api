@@ -23,9 +23,9 @@ func TestGPTImage25TokenBuckets(t *testing.T) {
 		"gpt-image-2.5-flare-2026-09-08",
 	} {
 		for _, tc := range []struct {
-			label                   string
+			label                    string
 			text, image, cached, out int
-			usd                     float64
+			usd                      float64
 		}{
 			{label: "text", text: 1000, usd: 0.005},
 			{label: "image", image: 1000, usd: 0.008},
