@@ -46,6 +46,7 @@ func TestGPTImage25ReviewRelayAccounting(t *testing.T) {
 		{"missing_usage", "gpt-image-2.5-flare", `null`, 0.1, 1_000_000, 1, 200, 50_000, 50_000, true},
 		{"empty_usage", "gpt-image-2.5-sunburst", `{}`, 0.1, 1_000_000, 1, 200, 50_000, 50_000, true},
 		{"ambiguous_cache_split", "gpt-image-2.5-flare", `{"input_tokens":2000,"output_tokens":1000,"input_tokens_details":{"text_tokens":1000,"image_tokens":1000,"cached_tokens":1000}}`, 0.1, 1_000_000, 1, 200, 50_000, 50_000, true},
+		{"channel_pricing_override", "gpt-image-2.5-sunburst", cachedUsage, 0.1, 1_000_000, 1, 200, 50_000, 26_000, false},
 		{"legacy_per_image_control", "dall-e-3", `{}`, 0, 1_000_000, 1, 200, 20_000, 20_000, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -83,6 +84,9 @@ func TestGPTImage25ReviewRelayAccounting(t *testing.T) {
 			channel := &model.Channel{Id: 1, Type: channeltype.OpenAI, Name: "image25-review", Status: model.ChannelStatusEnabled}
 			if tc.tariff > 0 {
 				pricingJSON := fmt.Sprintf(`{%q:{"image":{"price_per_image_usd":%g}}}`, tc.model, tc.tariff)
+				if tc.name == "channel_pricing_override" {
+					pricingJSON = fmt.Sprintf(`{%q:{"ratio":5,"completion_ratio":4,"cached_input_ratio":0.5,"image":{"price_per_image_usd":0.1,"prompt_ratio":2}}}`, tc.model)
+				}
 				channel.ModelConfigs = &pricingJSON
 			}
 			require.NoError(t, model.DB.Create(channel).Error)
