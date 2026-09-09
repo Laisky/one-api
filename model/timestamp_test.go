@@ -1,6 +1,7 @@
 package model
 
 import (
+	"gorm.io/gorm"
 	"strconv"
 	"testing"
 	"time"
@@ -172,9 +173,23 @@ func TestCreatedAtUpdatedAtFields(t *testing.T) {
 	})
 }
 
-// setupTestDatabase ensures a clean test database is available for testing
+// setupTestDatabase ensures a clean test database is available for testing.
+//
+// It re-initializes when a handle is missing OR unusable, not only when it is
+// nil. Several tests in this package deliberately install and then close their
+// own pool to exercise a database failure; if one of them leaves a closed
+// handle reachable through DB or LOG_DB, every later test that shares this
+// helper fails with "sql: database is closed" and the failure is attributed to
+// whichever test happens to run next rather than to the one that caused it.
+// Checking usability makes the helper's promise -- "a working database" --
+// actually true, and removes that ordering dependency for every caller.
+//
+// Parameters:
+//   - t: the running test.
+//
+// Return values: none.
 func setupTestDatabase(t *testing.T) {
-	if DB == nil {
+	if !databaseHandleUsable(DB) || !databaseHandleUsable(LOG_DB) {
 		// Initialize primary and log databases for tests
 		InitDB()
 		InitLogDB()
@@ -191,4 +206,22 @@ func setupTestDatabase(t *testing.T) {
 	DB.Exec("DELETE FROM user_request_costs WHERE request_id LIKE 'test%'")
 	DB.Exec("DELETE FROM logs WHERE content LIKE 'test%'")
 	DB.Exec("DELETE FROM abilities WHERE `group` LIKE 'test%' OR model LIKE 'test%'")
+}
+
+// databaseHandleUsable reports whether a gorm handle can still serve queries.
+//
+// Parameters:
+//   - db: the handle to probe; nil is not usable.
+//
+// Return values:
+//   - bool: true when the handle is non-nil and its pool answers a ping.
+func databaseHandleUsable(db *gorm.DB) bool {
+	if db == nil {
+		return false
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return false
+	}
+	return sqlDB.Ping() == nil
 }

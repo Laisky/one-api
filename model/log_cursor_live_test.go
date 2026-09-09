@@ -16,6 +16,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -94,11 +95,33 @@ func seedCursorRows(t *testing.T, count int, endAt int64, prefix string) []strin
 //   - []string: the content of every row visited, in traversal order.
 func walkCursor(t *testing.T, pageSize int, between func(page int)) []string {
 	t.Helper()
+	return walkCursorFrom(t, pageSize, nil, between)
+}
+
+// walkCursorFrom traverses every page starting from an explicit anchor.
+//
+// Starting from a caller-supplied anchor is what makes a traversal that races
+// concurrent writers deterministic. With a nil anchor the walk begins at
+// "whatever is newest when the first query runs", so a row inserted between the
+// test's setup and that first query legitimately belongs to the result -- and a
+// test asserting the walk saw only pre-existing rows then fails for a reason
+// that is not a defect.
+//
+// Parameters:
+//   - t: the test handle.
+//   - pageSize: rows per page.
+//   - start: the anchor to begin after; nil begins at the newest row.
+//   - between: mutation to apply after each page; may be nil.
+//
+// Return values:
+//   - []string: the content of every visited row, in traversal order.
+func walkCursorFrom(t *testing.T, pageSize int, start *LogCursorAnchor, between func(page int)) []string {
+	t.Helper()
 
 	scope := LogListScope{Kind: LogListScopeSelf, SubjectUserID: 1, PrincipalUserID: 1}
 	filter := LogListFilter{}.Normalize(scope)
 
-	var anchor *LogCursorAnchor
+	anchor := start
 	visited := make([]string, 0, 256)
 
 	for page := 0; page < 500; page++ {
@@ -236,7 +259,12 @@ func TestCursorNeverDuplicatesUnderConcurrentWriters(t *testing.T) {
 		}
 	}()
 
-	visited := walkCursor(t, 9, nil)
+	// Pin where the traversal starts. Every seeded row is older than `now` and
+	// every concurrently written row is newer, so an anchor at `now` makes the
+	// assertion below a statement about the cursor rather than about which of
+	// two goroutines reached the database first.
+	start := &LogCursorAnchor{CreatedAt: now, ID: math.MaxInt64}
+	visited := walkCursorFrom(t, 9, start, nil)
 	close(stop)
 	wg.Wait()
 
