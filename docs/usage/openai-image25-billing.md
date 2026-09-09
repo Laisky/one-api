@@ -16,6 +16,7 @@ not an additional render fee. Choose it for the image counts, sizes, and quality
 levels offered by the channel. No default dollar amount is invented by the relay.
 A price-only override preserves the catalog request defaults (`auto` size/quality,
 32,000-character prompt, and 1–10 images) instead of reverting to legacy defaults.
+The prompt limit counts Unicode code points, not UTF-8 bytes.
 An absent, nonpositive, nonfinite, or unrepresentable reservation produces
 `503 image_billing_not_configured` before any paid upstream request.
 
@@ -25,12 +26,21 @@ existing pre-consumption path before HTTP dispatch. This is an advance estimate,
 not a provider cost ceiling: actual usage can exceed it and require an additional
 debit under the existing quota policy. Configure adequate reserves and balances.
 
-## Settlement
+## Settlement and channel pricing
 
 With billable output usage, the token charge **replaces** the advance reservation.
 Unused reserved quota is refunded using a signed post-consumption adjustment.
-No fixed render fee is added. The original model rates and settlement rules for
-older image models remain unchanged.
+No fixed render fee is added. The existing tariff tables and settlement formulas
+for older image models are retained.
+
+Channel token prices are resolved at request start, including existing time-window
+rules; usage-based tiers are selected during settlement. `ratio` prices text input,
+`completion_ratio` multiplies it for output, and `cached_input_ratio` prices cached
+text. The existing `image.prompt_ratio` multiplies both uncached and cached text
+rates for the corresponding image-input buckets. This schema has no independent
+cached-image price field. Missing optional overrides inherit provider defaults;
+negative cached-input pricing retains the existing free-cache convention.
+Configuring only a reservation does not replace official token rates with zeros.
 
 The Images response decoder preserves `cached_tokens` and
 `cached_tokens_details.{text_tokens,image_tokens}`. Explicit cache buckets are
@@ -54,8 +64,10 @@ streaming image generation or the Responses image-generation tool.
 `image25_review_test.go` covers wire JSON conversion, asymmetric caches,
 totals-only/partial input, ambiguous usage, and reservation replacement.
 `image25_relay_review_test.go` uses a local HTTP upstream and SQLite to verify
-admission, physical pre-debits, signed refunds, and persisted log/request costs.
-`image25_policy_test.go` covers invalid reservation values and delta boundaries.
+admission, physical pre-debits, signed refunds, channel token-price overrides,
+and persisted log/request costs. `image25_unicode_review_test.go` covers ASCII,
+CJK, and emoji at and beyond the character boundary. `image25_policy_test.go`
+covers invalid reservation values, defaults, and delta boundaries.
 
 Run the focused CI gate locally with the repository's Go toolchain:
 

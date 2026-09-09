@@ -219,6 +219,8 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 	}
 
+	imageUsageConfig := resolveGPTImage25UsageConfig(imageModel, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
+
 	// do request
 	resp, err := adaptor.DoRequest(c, meta, requestBody)
 	if err != nil {
@@ -347,7 +349,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		if usage != nil {
 			promptTokens = usage.PromptTokens
 			completionTokens = usage.CompletionTokens
-			summary := finalizeImageQuota(baseQuota, perImageBilling, imageModel, meta.ActualModelName, usage, groupRatio)
+			summary := finalizeImageQuota(baseQuota, perImageBilling, imageModel, meta.ActualModelName, usage, groupRatio, imageUsageConfig)
 			tokenQuota = summary.TokenQuota
 			tokenQuotaFloat = summary.TokenQuotaFloat
 			usedQuota = summary.TotalQuota
@@ -360,7 +362,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		completionTokens = usage.CompletionTokens
 
 		// Reconcile provider usage using the model-specific render/reservation policy.
-		summary := finalizeImageQuota(baseQuota, perImageBilling, imageModel, meta.ActualModelName, usage, groupRatio)
+		summary := finalizeImageQuota(baseQuota, perImageBilling, imageModel, meta.ActualModelName, usage, groupRatio, imageUsageConfig)
 		tokenQuota = summary.TokenQuota
 		tokenQuotaFloat = summary.TokenQuotaFloat
 		usedQuota = summary.TotalQuota
@@ -414,7 +416,6 @@ func reconcileImageFailureBilling(
 			lg.Error("CRITICAL BILLING AUDIT: image upstream error refund failed",
 				zap.Error(err),
 				zap.Int64("pre_consumed_quota", preConsumedQuota),
-				zap.String("reason", reason),
 			)
 		}
 	}

@@ -3,6 +3,7 @@ package controller
 import (
 	"math"
 
+	"github.com/Laisky/one-api/relay/adaptor"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
@@ -212,8 +213,8 @@ func calculateImageBaseQuota(imagePriceUsd, ratio, imageCostRatio, groupRatio fl
 // GPT Image 2.5 replaces its reserve; older models retain additive render billing.
 // Parameters: baseQuota is reserved quota, perImageBilling selects the legacy path,
 // imageModel/actualModel identify pricing, usage contains provider counts, and groupRatio
-// scales prices. Returns: the final charge and its token/reservation breakdown.
-func finalizeImageQuota(baseQuota int64, perImageBilling bool, imageModel string, actualModel string, usage *relaymodel.Usage, groupRatio float64) imageQuotaSummary {
+// scales prices; configs optionally provides request-start channel pricing. Returns: the final charge and its token/reservation breakdown.
+func finalizeImageQuota(baseQuota int64, perImageBilling bool, imageModel string, actualModel string, usage *relaymodel.Usage, groupRatio float64, configs ...adaptor.ModelConfig) imageQuotaSummary {
 	summary := imageQuotaSummary{
 		BaseQuota:  baseQuota,
 		TotalQuota: baseQuota,
@@ -223,6 +224,9 @@ func finalizeImageQuota(baseQuota int64, perImageBilling bool, imageModel string
 	}
 
 	tokenQuotaFloat := computeImageUsageQuota(imageModel, usage, groupRatio)
+	if isGPTImage25Model(imageModel) && len(configs) > 0 {
+		tokenQuotaFloat = computeGPTImage25ConfiguredQuota(usage, configs[0], groupRatio)
+	}
 	if tokenQuotaFloat < 0 {
 		tokenQuotaFloat = 0
 	}
