@@ -237,7 +237,7 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	}
 	defer func() { _ = upstreamConn.Close() }()
 
-	return nil, RealtimeBidirectionalPump(clientConn, upstreamConn, true, lg)
+	return nil, meteredRealtimePump(clientConn, upstreamConn, lg)
 }
 
 // RealtimeBidirectionalPump relays frames between the client and upstream

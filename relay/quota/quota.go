@@ -28,6 +28,8 @@ type ComputeInput struct {
 // ComputeResult captures the outcome of a quota calculation, including
 // normalized ratios used and cached token details.
 type ComputeResult struct {
+	// BillingIssues marks unresolved Realtime receipts; never silently treat them as fully settled.
+	BillingIssues       []string
 	TotalQuota          int64
 	PromptTokens        int
 	CompletionTokens    int
@@ -43,6 +45,10 @@ func Compute(input ComputeInput) ComputeResult {
 	usage := input.Usage
 	if usage == nil {
 		return ComputeResult{}
+	}
+
+	if usage.Realtime != nil {
+		return computeRealtime(input)
 	}
 
 	promptTokens := usage.PromptTokens
@@ -220,6 +226,7 @@ func hasModelRatioFlatOverride(modelName string, overrides map[string]float64, c
 	if overrides == nil {
 		return false
 	}
+
 	override, ok := overrides[modelName]
 	if !ok {
 		return false
@@ -340,7 +347,7 @@ func computeEmbeddingPromptCost(promptTokens int, details *relaymodel.UsagePromp
 		cost += float64(details.ImageCount) * cfg.UsdPerImage * billingratio.QuotaPerUsd * groupRatio
 	}
 	if details.AudioTokens == 0 && details.AudioSeconds > 0 && cfg.UsdPerAudioSecond > 0 {
-		cost += details.AudioSeconds * cfg.UsdPerAudioSecond * billingratio.QuotaPerUsd * groupRatio
+		cost += float64(details.AudioSeconds) * cfg.UsdPerAudioSecond * billingratio.QuotaPerUsd * groupRatio
 	}
 	if details.VideoTokens == 0 && details.VideoFrames > 0 && cfg.UsdPerVideoFrame > 0 {
 		cost += float64(details.VideoFrames) * cfg.UsdPerVideoFrame * billingratio.QuotaPerUsd * groupRatio

@@ -195,8 +195,8 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:  4.0,
 		CachedInputRatio: 0.3 * ratio.MilliTokensUsd,
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:           16.67, // $10/$0.6 ≈ 16.67x
-			CompletionRatio:       2,     // $20/$10 = 2x
+			PromptRatio:           10.0 / 0.6, // Exact $10/$0.60; do not round a billing multiplier.
+			CompletionRatio:       2,          // $20/$10 = 2x
 			PromptTokensPerSecond: 10,
 		},
 		ContextLength:               128000,
@@ -212,7 +212,7 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:  4.0,
 		CachedInputRatio: 0.3 * ratio.MilliTokensUsd,
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:           16.67,
+			PromptRatio:           10.0 / 0.6,
 			CompletionRatio:       2,
 			PromptTokensPerSecond: 10,
 		},

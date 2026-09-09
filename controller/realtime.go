@@ -51,7 +51,7 @@ const (
 //  2. Record provisional log — audit trail in case of crash
 //  3. Defer billing audit safety net — catch unreconciled pre-consumption
 //  4. Run WebSocket session — proxy all frames, parse usage from response.done
-//  5. Post-consume quota — reconcile with actual usage (or keep pre-consumed if 0)
+//  5. Post-consume quota — settle response and transcription receipts by modality
 func RelayRealtime(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)
@@ -177,9 +177,9 @@ func RelayRealtime(c *gin.Context) {
 // postConsumeRealtimeQuota reconciles actual usage against pre-consumed quota
 // after a realtime WebSocket session ends.
 //
-// Key safety invariant: if usage is zero but pre-consumed quota exists, the
-// pre-consumed amount is KEPT (not refunded) to prevent free rides when
-// upstream fails to report usage.
+// Explicit OpenAI ledgers settle observed usage, including duration-only ASR
+// and free idle sessions. Missing receipts are marked for reconciliation.
+// Providers without a ledger retain their legacy no-usage fallback.
 func postConsumeRealtimeQuota(
 	c *gin.Context,
 	relayMeta *meta.Meta,
@@ -204,10 +204,9 @@ func postConsumeRealtimeQuota(
 	modelName := relayMeta.ActualModelName
 
 	// ── ZERO-USAGE GUARD ────────────────────────────────────────────────
-	// If upstream reported no usage but we pre-consumed quota, keep the
-	// pre-consumed amount as the charge. This prevents free rides when
-	// upstream fails to emit response.done / usage events.
-	if usage == nil || (usage.PromptTokens == 0 && usage.CompletionTokens == 0) {
+	// Keep the legacy fallback only for providers without receipt accounting.
+	// A zero-token OpenAI ledger can represent idle time OR duration-billed ASR.
+	if retainRealtimeEstimate(usage) {
 		if preConsumedQuota > 0 {
 			lg.Warn("realtime billing: zero usage but pre-consumed quota exists, keeping pre-consumed amount",
 				zap.Int64("pre_consumed_quota", preConsumedQuota),
@@ -218,15 +217,8 @@ func postConsumeRealtimeQuota(
 		return float64(preConsumedQuota)
 	}
 
-	// ── Apply audio token surcharge ─────────────────────────────────────
-	// quota.Compute bills all tokens at uniform text rate. Realtime sessions
-	// contain audio tokens that cost significantly more. Add the delta as a
-	// surcharge to usage.ToolsCost so it's included in the total quota.
-	applyRealtimeAudioSurcharge(usage, modelName, modelRatio, groupRatio,
-		channelModelRatio, channelModelConfigs, pricingAdaptor, lg, relayMeta.StartTime)
-
 	// ── Compute actual quota from usage ─────────────────────────────────
-	computeResult := quotautil.Compute(quotautil.ComputeInput{
+	computeResult := computeRealtimeSessionQuota(quotautil.ComputeInput{
 		Usage:                  usage,
 		ModelName:              modelName,
 		ModelRatio:             modelRatio,
@@ -236,11 +228,13 @@ func postConsumeRealtimeQuota(
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
 		RequestTime:            relayMeta.StartTime,
-	})
+	}, lg)
 
 	totalQuota := computeResult.TotalQuota
-	if computeResult.PromptTokens+computeResult.CompletionTokens == 0 {
-		totalQuota = 0
+	metadata := realtimeReceiptMetadata(usage, computeResult)
+	if len(computeResult.BillingIssues) > 0 {
+		lg.Warn("realtime billing requires reconciliation",
+			zap.Strings("billing_issues", computeResult.BillingIssues))
 	}
 
 	// quotaDelta = actual - preConsumed
@@ -278,6 +272,9 @@ func postConsumeRealtimeQuota(
 			userAPIFormat = relaymode.String(relayMeta.Mode)
 		}
 		billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
+			Metadata:           metadata,
+			CachedPromptTokens: computeResult.CachedPromptTokens,
+			ToolsCost:          usage.ToolsCost,
 			Ctx:               ctx,
 			TokenId:           relayMeta.TokenId,
 			QuotaDelta:        quotaDelta,
