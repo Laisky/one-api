@@ -1,0 +1,40 @@
+name: Image billing regression
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/image-billing-regression.yml'
+      - 'relay/controller/image*.go'
+      - 'relay/adaptor/openai/constants*.go'
+      - 'relay/adaptor/openai/image*.go'
+      - 'relay/adaptor/openai/model.go'
+      - 'relay/model/*.go'
+      - 'relay/billing/ratio/*.go'
+      - 'model/token*.go'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-billing-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image-billing:
+    name: GPT Image billing behavior
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+      - name: Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Run image billing regressions
+        env:
+          CGO_ENABLED: '1'
+        run: go test -race -count=1 -timeout=5m ./relay/adaptor/openai ./relay/controller -run 'Test(GPTImage25|Image)'
