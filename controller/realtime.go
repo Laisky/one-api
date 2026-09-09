@@ -174,9 +174,9 @@ func RelayRealtime(c *gin.Context) {
 }
 
 // postConsumeRealtimeQuota reconciles actual usage against pre-consumed quota
-// after a realtime WebSocket session ends. Missing evidence keeps a labeled
-// estimate; authoritative idle/zero usage refunds the reservation. Both paths
-// use the same persisted settlement, so estimated charges cannot strand logs.
+// after a realtime WebSocket session ends. OpenAI receipt paths persist either
+// measured usage or a labeled estimate; authoritative idle/zero usage refunds
+// the reservation. Providers without receipt accounting retain legacy behavior.
 func postConsumeRealtimeQuota(
 	c *gin.Context,
 	relayMeta *meta.Meta,
@@ -196,6 +196,18 @@ func postConsumeRealtimeQuota(
 		// The request-scoped logger already carries user/token/channel identity.
 		lg.Error("realtime billing: meta information incomplete, cannot post consume quota")
 		return 0
+	}
+
+	// Do not change the legacy no-ledger provider contract as part of the
+	// OpenAI receipt audit. Every OpenAI ledger, including one with missing
+	// receipts, still reaches the persisted settlement below.
+	if (usage == nil || usage.Realtime == nil) && retainRealtimeEstimate(usage) {
+		if preConsumedQuota > 0 {
+			lg.Warn("realtime billing: retaining legacy no-usage reservation",
+				zap.Int64("pre_consumed_quota", preConsumedQuota))
+		}
+		rtMarkBillingReconciled(c)
+		return float64(preConsumedQuota)
 	}
 
 	modelName := relayMeta.ActualModelName
