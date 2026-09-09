@@ -13,6 +13,8 @@
 - Repository HEAD inspected for this revision: `30dff1971238f2750986c0e4e3b3a9d81343754d`,
   with existing staged implementation changes. File references describe that working tree.
 - Historical evidence: [Phase 0/1 benchmark record](../benchmarks/20260905_observability-phase0-phase1.md).
+- Phase 3 evidence: [W3 acceptance record](../benchmarks/20260909_w3-acceptance.md) and
+  [OTLP collector topology runbook](../runbooks/20260909_otlp-collector-topology.md).
   This revision does not claim to rerun those benchmarks.
 
 ## 0. Decisions, status, and delivery boundaries
@@ -26,7 +28,7 @@ work items must comply with them. Requirements marked **planned** are not curren
 | Phase 0: exclusions, chunked deletion, file guards, sampling, dashboard caches | Yes, and the W0 remediation is complete: active-file ceiling, disk guard on its own 5-second cadence, bounded emergency policy with hysteresis, coalesced dashboard aggregates, keyset-bounded retention with a sargable async-task predicate | Correctness suites plus [W0/W1 acceptance measurements](../benchmarks/20260908_w0-w1-acceptance.md) | W0 items closed; G1 still needs the compatibility and mixed-schema evidence, and no load claim follows |
 | Phase 1: recorder, SQL batching, local sampling, OTLP sink, timestamp columns | Yes, and the W1 remediation is complete: recorder byte/entry bounds, active-recorder admission, drain bounded by rows/bytes/parameters, Flush reporting failed persistence, one SERVER span per request, ordered shutdown with retention workers joined, fail-fast configuration | Correctness suites plus [W0/W1 acceptance measurements](../benchmarks/20260908_w0-w1-acceptance.md) | W1 items closed; G1 still needs the compatibility and mixed-schema evidence, and no load claim follows |
 | Phase 2: mutation-aware SQL projections, additive pagination, explicit index migrations | Partial — W2.4 (additive cursor/count APIs) implemented; W2.1–W2.3, W2.5, W2.6 not started | W2.4: [cursor plans and correctness bundle](../benchmarks/20260906_w24-cursor-plans.md), 3 engines, 2M rows | W2.4 released **off by default** (`LOG_CURSOR_ENABLED=false`); synchronous usage-write semantics remain |
-| Phase 3: optional OTLP application logs and operational metrics | No; trace sink is already Phase 1 code | No integration acceptance yet | Optional; does not block SQL optimization |
+| Phase 3: optional OTLP application logs and operational metrics | Yes — W3.1 (documentation; its code gates were already closed by W1), W3.2 (forked-zap bridge, bounded pipeline, `APP_LOG_SINK=...,otlp`), W3.3 (three optional recorder interfaces). Projection lag and backfill backlog are NOT recorded: W2.2/W2.3 provide no source | Correctness suites plus [W3 acceptance measurements](../benchmarks/20260909_w3-acceptance.md), and [the collector topology runbook](../runbooks/20260909_otlp-collector-topology.md) | **G3 closed.** Released opt-in and off by default; no capacity claim follows |
 | Phase 4: durable replay and corrected ClickHouse mirror | No | No replay or reconciliation evidence yet | Optional; cannot authorize billing-history deletion |
 | Sustained full-relay 10,000 RPS | Not established | Component results are insufficient | Require G5 before publishing capacity claims |
 
@@ -54,7 +56,7 @@ Delivery order is deliberately limited:
 1. Finish W0/W1 and release their opt-in telemetry improvements under G1.
 2. Ship additive cursor/count APIs, then shadow SQL projections, then opt-in read cutover
    under G2. Do not introduce asynchronous billing writes.
-3. Add optional OTLP application logs and operational views under G3.
+3. Add optional OTLP application logs and operational views under G3. **Done 2026-09-09.**
 4. Add a durable, correction-aware analytics mirror under G4 if measurements justify it.
 5. Certify a specific deployment topology and retention policy under G5.
 
@@ -228,6 +230,14 @@ certified capacity settings. File-size settings named `_MB` use MiB (`1 << 20`) 
 | `TRACE_BATCH_MAX_BYTES` | `8388608` | `8388608` | `8388608` |
 | `LOG_CURSOR_ENABLED` | `false` | `false` | `false` |
 | `LOG_COUNT_EXACT_MAX_ROWS` | `100000` | `100000` | `100000` |
+| `LOG_OTLP_MIN_LEVEL` | `info` | `info` | `info` |
+| `LOG_OTLP_QUEUE_SIZE` | `10000` | `10000` | `10000` |
+| `LOG_OTLP_QUEUE_MAX_MB` | `64` | `64` | `64` |
+| `LOG_OTLP_BATCH_SIZE` | `512` | `512` | `512` |
+| `LOG_OTLP_EXPORT_INTERVAL_MS` | `1000` | `1000` | `1000` |
+| `LOG_OTLP_EXPORT_TIMEOUT_MS` | `30000` | `30000` | `30000` |
+| `LOG_OTLP_MAX_ATTRIBUTES` | `128` | `128` | `128` |
+| `LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES` | `4096` | `4096` | `4096` |
 
 Two kinds of setting appear in this table and they follow opposite default rules.
 A setting that changes what a user observes -- sampling, batched writes, file
@@ -240,8 +250,14 @@ a conservative default for a resource bound; it is the bug. These bounds are siz
 so they do not engage in healthy operation, so enabling them changes no observable
 behavior short of the failure they exist to prevent.
 
-`TRACE_EXCLUDED_PATH_PREFIXES=-` disables exclusions. `APP_LOG_SINK` currently accepts
-`file`, `stdout` or `both`; OTLP application logs are planned. `--log-dir` is a CLI flag,
+`TRACE_EXCLUDED_PATH_PREFIXES=-` disables exclusions. `APP_LOG_SINK` accepts `file`,
+`stdout` or `both`, each optionally combined with the additive `otlp` token
+(`both,otlp`, `stdout,otlp`, `file,otlp`). The `LOG_OTLP_*` settings above have no effect
+unless that token is present, and every profile defaults to the token being ABSENT: the
+external profile moves traces off the database, it does not silently start shipping
+application logs to a collector. A bare `otlp` is rejected, because the bridge drops
+records when its queue is full, before its provider is installed and after it is shut
+down, so it may not be a deployment's only log destination. `--log-dir` is a CLI flag,
 not `LOG_DIR`. Existing `LOG_ROTATION_INTERVAL` defaults to daily; `ONLY_ONE_LOG_FILE`
 disables time rotation. `OTEL_ENABLED` defaults to false; `external` does not enable it
 or populate `OTEL_EXPORTER_OTLP_ENDPOINT` automatically.
@@ -268,6 +284,17 @@ but initialization and malformed-input tests must establish the complete matrix 
 | Any sink including `otlp` | `batched` | false | Reject; never count a no-op provider as export |
 | `none` combined with another sink, unknown explicit values | any | any | Reject ambiguous or invalid configuration |
 
+`APP_LOG_SINK` follows the same shape, and its rules are enforced by the same raw-input
+layer rather than by a silently normalizing enum:
+
+| `APP_LOG_SINK` | `OTEL_ENABLED` | Required result |
+| --- | --- | --- |
+| `file`, `stdout`, `both` | false or true | Unchanged local behavior; no log exporter is built |
+| `both,otlp` (or `stdout,otlp`, `file,otlp`, either token order) | true | Build the bounded log pipeline beside the local sinks |
+| Any value including `otlp` | false | Reject; never count a no-op provider as export |
+| `otlp` alone | any | Reject; the bridge is best-effort and may not be the only destination |
+| Two local sinks, a repeated token, an unknown token | any | Reject rather than normalize to `both` |
+
 `OTEL_ENABLED=true` requires a configured provider even when local tracing is disabled;
 existing OTel instrumentation is separate from `TRACE_SINK=none`. Syntactically valid
 configuration followed by a collector outage is a runtime transport failure: report it,
@@ -279,7 +306,9 @@ collector for every restart if the SDK can initialize offline with the configure
 These names are implementation targets; none may be advertised as functioning today.
 Defaults remain disabled or legacy for every profile until explicitly configured.
 The cursor/count capability and `LOG_COUNT_EXACT_MAX_ROWS` have since shipped and moved
-to section 3.1; `LOG_CURSOR_ENABLED` still defaults to `false` pending W2.5.
+to section 3.1; `LOG_CURSOR_ENABLED` still defaults to `false` pending W2.5. The OTLP
+application-log sink and its `LOG_OTLP_*` settings have also shipped and moved to section
+3.1; they remain off unless `APP_LOG_SINK` names the token.
 
 | Planned setting / capability | Default and activation rule |
 | --- | --- |
@@ -289,7 +318,7 @@ to section 3.1; `LOG_CURSOR_ENABLED` still defaults to `false` pending W2.5.
 | Rollup budgets | Explicit worker concurrency, source-row, snapshot-age, memory and database-time limits; tune from W2 measurements |
 | Rollup retention | Configure fine-grained and daily horizons separately; neither authorizes deleting billing records |
 | `LOG_DB_RETENTION_DAYS` | `0` for all profiles; cannot be nonzero without the authority gate in W2.6 |
-| `APP_LOG_SINK=otlp` | Optional new value after W3 adapter integration passes |
+| ~~`APP_LOG_SINK=otlp`~~ | **Shipped** as the additive `otlp` token; moved to section 3.1 |
 | `ANALYTICS_BACKEND` | `sql`; `clickhouse` selects verified mirror reads only after G4 |
 | `CLICKHOUSE_ASYNC_INSERT` | Initial `false`; when enabled require `wait_for_async_insert=1` |
 
@@ -730,7 +759,19 @@ or implicitly approve an archive.
 
 ## 6. Phase 3: optional telemetry integration
 
-### W3.1 — Reuse the Phase 1 trace pipeline
+### W3.1 — Reuse the Phase 1 trace pipeline — **IMPLEMENTED**
+
+Status: the two code gates named below were already closed by the W0/W1 remediation
+(`TestOtelginSpanIsLiveWhenTraceSinkSubmits` for the existing span,
+`validateSinkRuntimeRequirements` plus `TestInitSinksRejectsOTLPWithoutInitializedProvider`
+for the provider), and no second OTLP trace sink was created. The remaining deliverable was
+documentation, now at [docs/runbooks/20260909_otlp-collector-topology.md](../runbooks/20260909_otlp-collector-topology.md).
+That work surfaced one finding worth recording here: one-api attaches the GORM
+OpenTelemetry plugin whenever `OTEL_ENABLED=true`, so a streaming relay's database child
+spans end within milliseconds while its `otelgin` SERVER span ends minutes later. A
+collector's `decision_wait` timer can therefore expire long before the request finishes,
+which makes the late-span re-decision case reachable with a SINGLE service rather than only
+in a distributed deployment.
 
 Close W1's existing-span and provider validation gates; do not duplicate the implemented
 OTLP sink as new work. A single collector is sufficient for ordinary export. Two-tier
@@ -738,7 +779,29 @@ collectors with trace-ID-affine routing and stateful tail sampling are optional 
 measured distributed tracing requirement. Document memory, maximum trace duration,
 `decision_wait`, incomplete/late spans and collector failure behavior.
 
-### W3.2 — Optional application-log bridge
+### W3.2 — Optional application-log bridge — **IMPLEMENTED**
+
+Status: implemented at `common/logger/otelbridge/` (the adapter),
+`common/telemetry/logs.go` and `common/telemetry/log_pipeline.go` (the bounded provider),
+and `common/logger/otlp_sink.go` (the tee). Evidence:
+[W3 acceptance record](../benchmarks/20260909_w3-acceptance.md) §4.
+
+The compile check settled the question the paragraph below anticipates: `otelzap` v0.20.1
+requires `go.uber.org/zap`, a separate module, and the Laisky fork's `zapcore.Core`
+additionally declares `Fields()`, which upstream has no notion of. The adapter is therefore
+mandatory. Its record mapping is deliberately identical to upstream's so a collector
+pipeline or dashboard written against `otelzap` works unchanged, with two deliberate
+divergences: `Sync()` force-flushes the provider (upstream hard-codes a no-op, which loses
+every queued record when `zap.Fatal` calls Sync and exits), and correlation travels as a
+`SkipType` field carrying only the 24-byte `SpanContext` rather than a whole
+`context.Context`, because request loggers here are snapshotted by value into detached
+goroutines and must not retain the request. That field is invisible to every other encoder,
+so enabling the bridge changes no byte of the application log files.
+
+Module pinning is part of G3 and the versions are not interchangeable: the log line that
+pairs with otel core v1.44.0 is v0.20.0, whose `BatchProcessor` busy-spins under exporter
+backpressure. The tree therefore moved to otel core v1.46.0 with the log modules at
+v0.22.0 and `otelgin` at v0.71.0.
 
 The upstream `otelzap` bridge uses `go.uber.org/zap/zapcore`; this repository uses the
 Laisky fork. Compile a minimal adapter against the actual module graph before designing
@@ -758,7 +821,19 @@ Pin and integration-test compatible module versions. The August 31, 2026 announc
 scope. Do not label the whole pipeline stable based on that announcement. See
 [OpenTelemetry Go Logs API/SDK RC](https://opentelemetry.io/blog/2026/go-logs-api-sdk-rc/).
 
-### W3.3 — Operational metrics
+### W3.3 — Operational metrics — **IMPLEMENTED, with two named omissions**
+
+Status: three optional extension interfaces were added — `RequestOutcomeRecorder`,
+`RetentionRecorder` and `LogExportRecorder` — each implemented on `PrometheusRecorder`,
+`OtelRecorder` and the `MultiRecorder` fan-out, with compile-time conformance assertions.
+No method was added to `MetricsRecorder`. Request outcomes and time-to-first-token are
+recorded ABOVE the sampling decision, so `TRACE_SAMPLE_RATE` cannot silently reduce the
+operational view to a 5 % view.
+
+Two of the quantities named below are deliberately NOT recorded: dashboard **projection
+lag** and **projection backfill backlog** have no source in this tree, because W2.2 and
+W2.3 are not implemented. They are absent rather than reported as zero, since a gauge
+reading 0.0 for a pipeline that does not exist cannot be distinguished from a healthy one.
 
 Extend through optional recorder interfaces; do not add mandatory `MetricsRecorder` methods.
 Record request outcomes, time-to-first-token, latency, queue bytes, drops, projection lag,
@@ -993,7 +1068,7 @@ migration/history safety, and Frontend verifies opt-in behavior and translations
 | --- | --- | --- |
 | G1: focused telemetry | Default compatibility, mixed schemas/binaries, config matrix, W0 disk/cache limits, W1 semantic outcomes/memory/flush/OTLP order | Release opt-in Phase 0/1; no target-load claim |
 | G2: SQL read cutover | Transactional capture, all-writer fence, mutation/replay equality, ownership failure, backfill/repair, cursor/count and response budgets | Opt-in projection dashboards and upgraded Modern navigation |
-| G3: optional OTLP logs | Compile/integration with forked Zap, real trace/span correlation, pinned SDK/exporters, outage/resource/shutdown tests | Optional OTLP application logs and operational views |
+| G3: optional OTLP logs — **CLOSED 2026-09-09** | Compile/integration with forked Zap, real trace/span correlation, pinned SDK/exporters, outage/resource/shutdown tests — all supplied in [the W3 acceptance record](../benchmarks/20260909_w3-acceptance.md) | Optional OTLP application logs and operational views |
 | G4: mirror cutover | Durable outbox, correction/deduplication, common-boundary reconciliation, bounded replay, outage/backlog/repair and publication tests | Optional ClickHouse reads; no shorter authoritative SQL history |
 | G5: deployment capacity | Full relay offered/achieved load, retained-data workload, storage/retention catch-up, failure recovery and operational rollback | Capacity claim for that exact tested topology/configuration |
 
@@ -1136,7 +1211,7 @@ relax the correctness/compatibility contracts in sections 2 and 5.
 | Unsafe mirror fan-out and summing revisions | Durable outbox, canonical event revisions and controlled rebuilds in W4 |
 | Missing authoritative history | Retained SQL authority; separate archive gate before shortening it in W2.6 |
 | Trace sampling/outcome/memory/flush gaps | Focused W1 release requirements, including actual middleware order |
-| Disk survival and incompatible log bridge | Writer-aware limits/emergency policy in W0; tested fork adapter in W3 |
+| Disk survival and incompatible log bridge | Writer-aware limits/emergency policy in W0; tested fork adapter shipped in W3.2, with the incompatibility confirmed rather than assumed (`otelzap` needs `go.uber.org/zap`, and the fork's Core requires `Fields()`) |
 | Retention/index migration assumptions | Explicit catalog/plan/lock/recovery work in W2.5 and section 8 |
 | Unsupported capacity conclusions | Correct arithmetic, narrow historical evidence and open-arrival full-relay G5 |
 
@@ -1151,6 +1226,14 @@ Local sources for implementation and acceptance:
   `common/config/compat_test.go`: implemented defaults and configuration checks.
 - `common/tracing/`, `middleware/tracing.go`, `main.go`, `common/telemetry/telemetry.go`:
   recorder/sinks, actual middleware order, exporter and shutdown lifecycle.
+- `common/logger/otelbridge/`, `common/logger/otlp_sink.go`, `common/telemetry/logs.go`,
+  `common/telemetry/log_pipeline.go`, `common/config/observability_app_log_otlp.go`:
+  the Phase 3 application-log bridge, its bounded provider, the core-stack position and
+  its configuration.
+- `common/metrics/log_export.go`, `common/metrics/operational.go`,
+  `monitor/prometheus/recorder_{log_export,operational}.go`,
+  `monitor/otel/recorder_{log_export,operational}.go`: the W3.3 optional interfaces and
+  their implementations.
 - `common/logger/`, `model/retention_chunk.go`: sampling, active-file limitations and
   engine-specific bounded deletion.
 - `controller/user_dashboard_cache.go`, `model/user_stats_cache.go`: existing cache behavior.

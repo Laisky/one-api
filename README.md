@@ -325,6 +325,20 @@ LOG_MAX_TOTAL_SIZE_MB="20480"   # standalone: 0 (unlimited)
 LOG_MIN_FREE_DISK_MB="1024"     # standalone: 0 (guard disabled)
 APP_LOG_SINK="both"             # file | stdout | both; stdout suits Kubernetes
 
+# Optional OTLP application logs. Add the additive "otlp" token to APP_LOG_SINK
+# (both,otlp / stdout,otlp / file,otlp) to also export log records to the
+# collector configured by OTEL_EXPORTER_OTLP_ENDPOINT. It requires
+# OTEL_ENABLED=true, and a bare "otlp" is rejected: the bridge drops records on a
+# full queue, before its provider is installed and after shutdown, so it may not
+# be a deployment's only log destination. Exported records carry the request's
+# trace and span ids, so logs join to traces in Loki/Tempo/ClickHouse.
+# Off by default in EVERY profile, including external.
+# APP_LOG_SINK="both,otlp"
+LOG_OTLP_MIN_LEVEL="info"              # debug | info | warn | error; independent of LOG_LEVEL
+LOG_OTLP_QUEUE_SIZE="10000"            # records resident before drops are counted
+LOG_OTLP_QUEUE_MAX_MB="64"             # byte ceiling; record count alone does not bound memory
+LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES="4096"  # the SDK default is unlimited
+
 # Active-file ceiling and disk-pressure guard. LOG_MAX_TOTAL_SIZE_MB can only
 # delete already-rotated files, so it cannot bound the file currently being
 # written; LOG_MAX_ACTIVE_FILE_SIZE_MB rotates on bytes and closes that hole.
