@@ -23,11 +23,21 @@ import (
 // fan-out method, which is the only reliable way to catch it: no runtime test
 // of the helper functions can distinguish "no recorder implements this" from
 // "this recorder chose not to".
+//
+// NoOpRecorder is deliberately absent from this list. It is a leaf, never a
+// fan-out, so the type assertion in each helper already produces exactly the
+// intended no-op when it does not implement an extension; adding empty methods
+// there would buy nothing and would have to be repeated forever. The two
+// TracePipelineRecorder methods it does carry predate that reasoning and are
+// kept only for source compatibility.
 var (
-	_ MetricsRecorder       = (*MultiRecorder)(nil)
-	_ TracePipelineRecorder = (*MultiRecorder)(nil)
-	_ TraceActiveRecorder   = (*MultiRecorder)(nil)
-	_ LogPipelineRecorder   = (*MultiRecorder)(nil)
+	_ MetricsRecorder        = (*MultiRecorder)(nil)
+	_ TracePipelineRecorder  = (*MultiRecorder)(nil)
+	_ TraceActiveRecorder    = (*MultiRecorder)(nil)
+	_ LogPipelineRecorder    = (*MultiRecorder)(nil)
+	_ LogExportRecorder      = (*MultiRecorder)(nil)
+	_ RequestOutcomeRecorder = (*MultiRecorder)(nil)
+	_ RetentionRecorder      = (*MultiRecorder)(nil)
 )
 
 // countingRecorder is a child recorder that implements every optional
@@ -39,6 +49,12 @@ type countingRecorder struct {
 	activeCalls    [][2]float64
 	suppressions   map[string]int
 	pressureValues []float64
+
+	exportOutcomes  map[string]int
+	exportQueueArgs [][4]float64
+	requestOutcomes map[string][]float64
+	ttft            map[string][]float64
+	retentionSweeps map[string][2]float64
 }
 
 // newCountingRecorder builds a countingRecorder with initialized maps.
@@ -49,8 +65,12 @@ type countingRecorder struct {
 //   - *countingRecorder: a recorder ready to accept samples.
 func newCountingRecorder() *countingRecorder {
 	return &countingRecorder{
-		traceOutcomes: map[string]int{},
-		suppressions:  map[string]int{},
+		traceOutcomes:   map[string]int{},
+		suppressions:    map[string]int{},
+		exportOutcomes:  map[string]int{},
+		requestOutcomes: map[string][]float64{},
+		ttft:            map[string][]float64{},
+		retentionSweeps: map[string][2]float64{},
 	}
 }
 
@@ -105,6 +125,62 @@ func (c *countingRecorder) UpdateLogDiskPressure(active float64) {
 	c.pressureValues = append(c.pressureValues, active)
 }
 
+// RecordAppLogExportRecords implements LogExportRecorder.
+//
+// Parameters:
+//   - outcome: the application-log export outcome.
+//   - count: how many log records it applies to.
+//
+// Return values: none.
+func (c *countingRecorder) RecordAppLogExportRecords(outcome string, count int) {
+	c.exportOutcomes[outcome] += count
+}
+
+// UpdateAppLogExportQueue implements LogExportRecorder.
+//
+// Parameters:
+//   - records, recordLimit, bytes, byteLimit: queue occupancy and its bounds.
+//
+// Return values: none.
+func (c *countingRecorder) UpdateAppLogExportQueue(records, recordLimit, bytes, byteLimit float64) {
+	c.exportQueueArgs = append(c.exportQueueArgs, [4]float64{records, recordLimit, bytes, byteLimit})
+}
+
+// RecordRequestOutcome implements RequestOutcomeRecorder.
+//
+// Parameters:
+//   - outcome: the operational request outcome.
+//   - durationMs: the request lifetime in milliseconds.
+//
+// Return values: none.
+func (c *countingRecorder) RecordRequestOutcome(outcome string, durationMs float64) {
+	c.requestOutcomes[outcome] = append(c.requestOutcomes[outcome], durationMs)
+}
+
+// RecordTimeToFirstToken implements RequestOutcomeRecorder.
+//
+// Parameters:
+//   - outcome: the operational request outcome.
+//   - ttftMs: milliseconds to the first client byte.
+//
+// Return values: none.
+func (c *countingRecorder) RecordTimeToFirstToken(outcome string, ttftMs float64) {
+	c.ttft[outcome] = append(c.ttft[outcome], ttftMs)
+}
+
+// RecordRetentionSweep implements RetentionRecorder.
+//
+// Parameters:
+//   - target: the swept table or file set.
+//   - result: how the sweep ended.
+//   - rows: rows or files removed.
+//   - durationMs: sweep duration in milliseconds.
+//
+// Return values: none.
+func (c *countingRecorder) RecordRetentionSweep(target, result string, rows float64, durationMs float64) {
+	c.retentionSweeps[target+"/"+result] = [2]float64{rows, durationMs}
+}
+
 // TestMultiRecorderFansOutOptionalExtensions proves the fan-out actually
 // forwards, not merely that it satisfies the interface. A method body that
 // silently did nothing would still pass the compile-time assertions above.
@@ -116,6 +192,11 @@ func TestMultiRecorderFansOutOptionalExtensions(t *testing.T) {
 	multi.UpdateTraceActiveRecorders(17, 200000)
 	multi.RecordLogSuppression(LogSuppressReasonDiskPressure, 5, 4096)
 	multi.UpdateLogDiskPressure(1)
+	multi.RecordAppLogExportRecords(AppLogExportOutcomeDroppedQueueFull, 7)
+	multi.UpdateAppLogExportQueue(11, 2048, 33000, 4194304)
+	multi.RecordRequestOutcome(RequestOutcomeUpstream, 1234.5)
+	multi.RecordTimeToFirstToken(RequestOutcomeSuccess, 87.5)
+	multi.RecordRetentionSweep("logs", RetentionResultCompleted, 900, 4200)
 
 	for name, rec := range map[string]*countingRecorder{"first": first, "second": second} {
 		require.Equal(t, 3, rec.traceOutcomes[TraceOutcomeDroppedActiveLimit],
@@ -126,6 +207,16 @@ func TestMultiRecorderFansOutOptionalExtensions(t *testing.T) {
 			"%s child must receive log suppression counts", name)
 		require.Equal(t, []float64{1}, rec.pressureValues,
 			"%s child must receive the disk-pressure gauge", name)
+		require.Equal(t, 7, rec.exportOutcomes[AppLogExportOutcomeDroppedQueueFull],
+			"%s child must receive the app-log export outcome", name)
+		require.Equal(t, [][4]float64{{11, 2048, 33000, 4194304}}, rec.exportQueueArgs,
+			"%s child must receive the app-log export queue gauges", name)
+		require.Equal(t, []float64{1234.5}, rec.requestOutcomes[RequestOutcomeUpstream],
+			"%s child must receive the request outcome and its duration", name)
+		require.Equal(t, []float64{87.5}, rec.ttft[RequestOutcomeSuccess],
+			"%s child must receive time-to-first-token", name)
+		require.Equal(t, [2]float64{900, 4200}, rec.retentionSweeps["logs/"+RetentionResultCompleted],
+			"%s child must receive the retention sweep", name)
 	}
 }
 
@@ -141,9 +232,19 @@ func TestMultiRecorderSkipsChildrenWithoutExtensions(t *testing.T) {
 		multi.UpdateTraceActiveRecorders(42, 0)
 		multi.RecordLogSuppression(LogSuppressReasonWriterFailure, 1, 128)
 		multi.UpdateLogDiskPressure(0)
+		multi.RecordAppLogExportRecords(AppLogExportOutcomeDroppedNotReady, 2)
+		multi.UpdateAppLogExportQueue(0, 0, 0, 0)
+		multi.RecordRequestOutcome(RequestOutcomeCanceled, 9)
+		multi.RecordTimeToFirstToken(RequestOutcomeCanceled, 3)
+		multi.RecordRetentionSweep("traces", RetentionResultCanceled, 0, 12)
 	}, "a child without the extension must be skipped, not panic")
 
 	require.Equal(t, [][2]float64{{42, 0}}, modern.activeCalls,
 		"the implementing child must still receive the sample")
 	require.Equal(t, 1, modern.suppressions[LogSuppressReasonWriterFailure])
+	require.Equal(t, 2, modern.exportOutcomes[AppLogExportOutcomeDroppedNotReady])
+	require.Equal(t, [][4]float64{{0, 0, 0, 0}}, modern.exportQueueArgs)
+	require.Equal(t, []float64{9}, modern.requestOutcomes[RequestOutcomeCanceled])
+	require.Equal(t, []float64{3}, modern.ttft[RequestOutcomeCanceled])
+	require.Equal(t, [2]float64{0, 12}, modern.retentionSweeps["traces/"+RetentionResultCanceled])
 }

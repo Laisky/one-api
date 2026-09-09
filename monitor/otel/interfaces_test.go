@@ -10,8 +10,11 @@ import "github.com/Laisky/one-api/common/metrics"
 // OTLP-only deployment is precisely the one with no second metrics path to
 // reveal the gap.
 var (
-	_ metrics.MetricsRecorder       = (*OtelRecorder)(nil)
-	_ metrics.TracePipelineRecorder = (*OtelRecorder)(nil)
-	_ metrics.TraceActiveRecorder   = (*OtelRecorder)(nil)
-	_ metrics.LogPipelineRecorder   = (*OtelRecorder)(nil)
+	_ metrics.MetricsRecorder        = (*OtelRecorder)(nil)
+	_ metrics.TracePipelineRecorder  = (*OtelRecorder)(nil)
+	_ metrics.TraceActiveRecorder    = (*OtelRecorder)(nil)
+	_ metrics.LogPipelineRecorder    = (*OtelRecorder)(nil)
+	_ metrics.LogExportRecorder      = (*OtelRecorder)(nil)
+	_ metrics.RequestOutcomeRecorder = (*OtelRecorder)(nil)
+	_ metrics.RetentionRecorder      = (*OtelRecorder)(nil)
 )

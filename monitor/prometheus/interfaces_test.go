@@ -12,8 +12,11 @@ import "github.com/Laisky/one-api/common/metrics"
 // zero forever while the subsystem works correctly. That failure is invisible
 // in tests and in production alike, so it has to be caught at compile time.
 var (
-	_ metrics.MetricsRecorder       = (*PrometheusRecorder)(nil)
-	_ metrics.TracePipelineRecorder = (*PrometheusRecorder)(nil)
-	_ metrics.TraceActiveRecorder   = (*PrometheusRecorder)(nil)
-	_ metrics.LogPipelineRecorder   = (*PrometheusRecorder)(nil)
+	_ metrics.MetricsRecorder        = (*PrometheusRecorder)(nil)
+	_ metrics.TracePipelineRecorder  = (*PrometheusRecorder)(nil)
+	_ metrics.TraceActiveRecorder    = (*PrometheusRecorder)(nil)
+	_ metrics.LogPipelineRecorder    = (*PrometheusRecorder)(nil)
+	_ metrics.LogExportRecorder      = (*PrometheusRecorder)(nil)
+	_ metrics.RequestOutcomeRecorder = (*PrometheusRecorder)(nil)
+	_ metrics.RetentionRecorder      = (*PrometheusRecorder)(nil)
 )

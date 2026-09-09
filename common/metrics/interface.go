@@ -557,3 +557,87 @@ func (m *MultiRecorder) UpdateLogDiskPressure(active float64) {
 		}
 	}
 }
+
+// RecordAppLogExportRecords implements LogExportRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - outcome: a compile-time constant from log_export.go.
+//   - count: how many log records the outcome applies to.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordAppLogExportRecords(outcome string, count int) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogExportRecorder); ok {
+			lr.RecordAppLogExportRecords(outcome, count)
+		}
+	}
+}
+
+// UpdateAppLogExportQueue implements LogExportRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - records: log records currently resident in the export pipeline.
+//   - recordLimit: the configured record ceiling.
+//   - bytes: estimated bytes currently resident in the export pipeline.
+//   - byteLimit: the configured byte ceiling.
+//
+// Return values: none.
+func (m *MultiRecorder) UpdateAppLogExportQueue(records, recordLimit, bytes, byteLimit float64) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogExportRecorder); ok {
+			lr.UpdateAppLogExportQueue(records, recordLimit, bytes, byteLimit)
+		}
+	}
+}
+
+// RecordRequestOutcome implements RequestOutcomeRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - outcome: a compile-time constant from operational.go.
+//   - durationMs: the request's total lifetime in milliseconds.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordRequestOutcome(outcome string, durationMs float64) {
+	for _, r := range m.Recorders {
+		if rr, ok := r.(RequestOutcomeRecorder); ok {
+			rr.RecordRequestOutcome(outcome, durationMs)
+		}
+	}
+}
+
+// RecordTimeToFirstToken implements RequestOutcomeRecorder by forwarding to
+// every child recorder that supports it.
+//
+// Parameters:
+//   - outcome: a compile-time constant from operational.go.
+//   - ttftMs: milliseconds from request receipt to first client byte.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordTimeToFirstToken(outcome string, ttftMs float64) {
+	for _, r := range m.Recorders {
+		if rr, ok := r.(RequestOutcomeRecorder); ok {
+			rr.RecordTimeToFirstToken(outcome, ttftMs)
+		}
+	}
+}
+
+// RecordRetentionSweep implements RetentionRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - target: the swept table or file set, from a closed compile-time set.
+//   - result: a compile-time constant from operational.go.
+//   - rows: how many rows or files the sweep removed.
+//   - durationMs: how long the sweep took, in milliseconds.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordRetentionSweep(target, result string, rows float64, durationMs float64) {
+	for _, r := range m.Recorders {
+		if rr, ok := r.(RetentionRecorder); ok {
+			rr.RecordRetentionSweep(target, result, rows, durationMs)
+		}
+	}
+}

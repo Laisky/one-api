@@ -48,6 +48,7 @@ func TestRecorderNeverPanicsOnNonUTF8LabelValues(t *testing.T) {
 		"UpdateCompactUUIDLastProgress":   func() { rec.UpdateCompactUUIDLastProgress(bad, 1) },
 		"RecordCompactUUIDDuration":       func() { rec.RecordCompactUUIDDuration(bad, bad, time.Second) },
 		"RecordResponseStateEvent":        func() { rec.RecordResponseStateEvent(bad, bad) },
+		"RecordRetentionSweep":            func() { rec.RecordRetentionSweep(bad, bad, 1, 1) },
 		"InitSystemMetrics":               func() { rec.InitSystemMetrics(bad, bad, bad, start) },
 	}
 
