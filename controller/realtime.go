@@ -30,11 +30,10 @@ import (
 )
 
 // Realtime session preConsume estimation constants.
-// Since we can't know session length upfront (live audio streaming), we estimate
-// a conservative minimum charge based on a short audio conversation.
+// Since we cannot know session length upfront, reserve an estimate based on a
+// short audio conversation. This reservation is not a minimum session fee.
 const (
-	// realtimePreConsumeSeconds is the estimated session duration (seconds) for
-	// pre-consuming quota. 120s (2 minutes) is a conservative minimum.
+	// realtimePreConsumeSeconds is the estimated session duration in seconds.
 	realtimePreConsumeSeconds = 120
 
 	// Audio token rates per OpenAI docs:
@@ -175,11 +174,9 @@ func RelayRealtime(c *gin.Context) {
 }
 
 // postConsumeRealtimeQuota reconciles actual usage against pre-consumed quota
-// after a realtime WebSocket session ends.
-//
-// Explicit OpenAI ledgers settle observed usage, including duration-only ASR
-// and free idle sessions. Missing receipts are marked for reconciliation.
-// Providers without a ledger retain their legacy no-usage fallback.
+// after a realtime WebSocket session ends. Missing evidence keeps a labeled
+// estimate; authoritative idle/zero usage refunds the reservation. Both paths
+// use the same persisted settlement, so estimated charges cannot strand logs.
 func postConsumeRealtimeQuota(
 	c *gin.Context,
 	relayMeta *meta.Meta,
@@ -202,23 +199,11 @@ func postConsumeRealtimeQuota(
 	}
 
 	modelName := relayMeta.ActualModelName
-
-	// ── ZERO-USAGE GUARD ────────────────────────────────────────────────
-	// Keep the legacy fallback only for providers without receipt accounting.
-	// A zero-token OpenAI ledger can represent idle time OR duration-billed ASR.
-	if retainRealtimeEstimate(usage) {
-		if preConsumedQuota > 0 {
-			lg.Warn("realtime billing: zero usage but pre-consumed quota exists, keeping pre-consumed amount",
-				zap.Int64("pre_consumed_quota", preConsumedQuota),
-				zap.String("model", modelName))
-		}
-		// Mark billing reconciled — the pre-consumed amount is the final charge
-		rtMarkBillingReconciled(c)
-		return float64(preConsumedQuota)
+	if usage == nil {
+		usage = &rmodel.Usage{}
 	}
 
-	// ── Compute actual quota from usage ─────────────────────────────────
-	computeResult := computeRealtimeSessionQuota(quotautil.ComputeInput{
+	computeResult, metadata := prepareRealtimeReceiptSettlement(quotautil.ComputeInput{
 		Usage:                  usage,
 		ModelName:              modelName,
 		ModelRatio:             modelRatio,
@@ -228,10 +213,9 @@ func postConsumeRealtimeQuota(
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
 		RequestTime:            relayMeta.StartTime,
-	}, lg)
+	}, preConsumedQuota, lg)
 
 	totalQuota := computeResult.TotalQuota
-	metadata := realtimeReceiptMetadata(usage, computeResult)
 	if len(computeResult.BillingIssues) > 0 {
 		lg.Warn("realtime billing requires reconciliation",
 			zap.Strings("billing_issues", computeResult.BillingIssues))

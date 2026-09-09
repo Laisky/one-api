@@ -28,6 +28,9 @@ type ComputeInput struct {
 // ComputeResult captures the outcome of a quota calculation, including
 // normalized ratios used and cached token details.
 type ComputeResult struct {
+	// UnpricedUsage distinguishes a partial price from an authoritative zero.
+	// It is only set by receipt-based Realtime billing.
+	UnpricedUsage bool
 	// BillingIssues marks unresolved Realtime receipts; never silently treat them as fully settled.
 	BillingIssues       []string
 	TotalQuota          int64

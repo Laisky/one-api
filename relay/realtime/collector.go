@@ -2,9 +2,10 @@ package realtime
 
 import (
 	"encoding/json"
-	"fmt"
 	"math"
 	"strconv"
+
+	"github.com/Laisky/errors/v2"
 )
 
 // Ledger is a per-connection, single-writer collector. Only upstream server
@@ -19,6 +20,8 @@ type Ledger struct {
 	seen                  map[string]struct{}
 	pendingResponses      map[string]struct{}
 	pendingTranscriptions map[string]struct{}
+	unkeyedUsageGap       bool
+	stopped               bool
 }
 
 type wireDetails struct {
@@ -43,7 +46,7 @@ type wireEvent struct {
 	Type         string          `json:"type"`
 	EventID      string          `json:"event_id"`
 	ItemID       string          `json:"item_id"`
-	ContentIndex int64           `json:"content_index"`
+	ContentIndex *int64          `json:"content_index"`
 	Usage        *wireUsage      `json:"usage"`
 	Session      json.RawMessage `json:"session"`
 	Item         struct {
@@ -68,33 +71,42 @@ func NewLedger() *Ledger {
 
 // Observe processes one upstream frame and returns an actionable accounting
 // error without retaining transcripts, audio, credentials, or full server frames.
-// Only final response and transcription usage is billable; response status does
-// not erase authoritative usage from cancelled, incomplete, or failed responses.
+// ErrAmbiguousCache retains a validated receipt with a lower-bound charge.
+// ErrLedgerLimit requires the transport to stop; no records may be silently evicted.
 func (l *Ledger) Observe(message []byte) error {
+	if l.stopped {
+		return errors.WithStack(ErrLedgerLimit)
+	}
 	var event wireEvent
 	if err := json.Unmarshal(message, &event); err != nil {
+		l.unkeyedUsageGap = true
 		return l.issue("invalid realtime server event")
+	}
+	if len(event.EventID) > MaxIdentifierBytes || len(event.ItemID) > MaxIdentifierBytes ||
+		len(event.Item.ID) > MaxIdentifierBytes || (event.Response != nil && len(event.Response.ID) > MaxIdentifierBytes) {
+		l.unkeyedUsageGap = true
+		_ = l.issue("realtime identity exceeds billing limit")
+		return l.stop()
 	}
 	switch event.Type {
 	case "session.created", "session.updated", "transcription_session.created", "transcription_session.updated":
 		return l.updateSession(event.Session)
 	case "input_audio_buffer.committed":
-		l.bindItem(event.ItemID)
-		return nil
+		return l.bindItem(event.ItemID)
 	case "conversation.item.created", "conversation.item.added":
 		if event.Item.Role == "user" {
 			for _, content := range event.Item.Content {
 				if content.Type == "input_audio" {
-					l.bindItem(event.Item.ID)
-					break
+					return l.bindItem(event.Item.ID)
 				}
 			}
 		}
 		return nil
 	case "response.created":
 		if event.Response != nil && event.Response.ID != "" {
-			if _, done := l.seen["response:"+event.Response.ID]; !done {
-				l.pendingResponses[event.Response.ID] = struct{}{}
+			key := "response:" + event.Response.ID
+			if _, done := l.seen[key]; !done {
+				return l.trackResponse(key)
 			}
 		}
 		return nil
@@ -103,6 +115,7 @@ func (l *Ledger) Observe(message []byte) error {
 		return nil
 	case "response.done":
 		if event.Response == nil {
+			l.unkeyedUsageGap = true
 			return l.issue("response.done lacks response")
 		}
 		key := "response:" + event.Response.ID
@@ -110,56 +123,76 @@ func (l *Ledger) Observe(message []byte) error {
 			key = "event:" + event.EventID
 		}
 		if event.Response.ID == "" && event.EventID == "" {
+			l.unkeyedUsageGap = true
 			return l.issue("response.done lacks identity")
 		}
 		if _, ok := l.seen[key]; ok {
 			return nil
 		}
 		record, err := decodeUsage(event.Response.Usage, false)
-		if err != nil {
-			return l.issue(err.Error())
-		}
-		if err := l.appendRecord(record); err != nil {
+		if err != nil && !errors.Is(err, ErrAmbiguousCache) {
+			_ = l.recordIssue(err)
+			if limitErr := l.trackResponse(key); limitErr != nil {
+				return limitErr
+			}
 			return err
 		}
-		l.seen[key] = struct{}{}
-		delete(l.pendingResponses, event.Response.ID)
-		return nil
+		return l.acceptRecord(record, key, l.pendingResponses, key, err)
 	case "conversation.item.input_audio_transcription.completed":
-		if event.ItemID == "" || event.ContentIndex < 0 {
-			return l.issue("transcription lacks item identity")
+		if event.ItemID == "" || event.ContentIndex == nil || *event.ContentIndex < 0 {
+			if _, bound := l.itemModels[event.ItemID]; bound {
+				l.pendingTranscriptions[event.ItemID] = struct{}{}
+			} else {
+				l.unkeyedUsageGap = true
+			}
+			return l.recordIssue(errors.Wrap(ErrInvalidUsage, "transcription lacks item/content identity"))
 		}
-		key := "transcription:" + event.ItemID + ":" + strconv.FormatInt(event.ContentIndex, 10)
+		key := "transcription:" + event.ItemID + ":" + strconv.FormatInt(*event.ContentIndex, 10)
 		if _, ok := l.seen[key]; ok {
 			return nil
 		}
 		model, bound := l.itemModels[event.ItemID]
-		if !bound {
+		if !bound || model == "" {
+			l.unkeyedUsageGap = true
 			return l.issue("transcription lacks acknowledged item model")
 		}
-		if model == "" {
-			return l.issue("transcription completed for an unconfigured item")
-		}
 		record, err := decodeUsage(event.Usage, true)
-		if err != nil {
-			return l.issue(err.Error())
+		if err != nil && !errors.Is(err, ErrAmbiguousCache) {
+			// The item is already bounded by itemModels. A later valid receipt
+			// clears this gap without keeping an obsolete reservation floor.
+			l.pendingTranscriptions[event.ItemID] = struct{}{}
+			return l.recordIssue(err)
 		}
 		record.Model = model
-		if err := l.appendRecord(record); err != nil {
-			return err
-		}
-		l.seen[key] = struct{}{}
-		delete(l.pendingTranscriptions, event.ItemID)
-		return nil
+		return l.acceptRecord(record, key, l.pendingTranscriptions, event.ItemID, err)
 	default:
-		// Transcript/audio deltas, playback acknowledgements, truncation, deletion,
-		// rate limits, tool events, and client-shaped frames are not billing receipts.
+		// Transcript/audio deltas, playback, truncation, deletion, rate limits,
+		// tool events and client-shaped frames are not billing receipts.
 		return nil
 	}
 }
 
-// Finish records unresolved work at disconnect; it never fabricates usage from
-// session duration, transcript length, or the proxy's pre-consumption estimate.
+// acceptRecord stores record, updates deduplication and clears its pending key.
+// Uncertainty is retained but does not discard measured tokens. At capacity the
+// last accepted receipt remains billable before the transport is told to stop.
+func (l *Ledger) acceptRecord(record Record, key string, pending map[string]struct{}, pendingKey string, uncertainty error) error {
+	if err := l.appendRecord(record); err != nil {
+		l.unkeyedUsageGap = true
+		return err
+	}
+	l.seen[key] = struct{}{}
+	delete(pending, pendingKey)
+	if uncertainty != nil {
+		_ = l.recordIssue(uncertainty)
+	}
+	if len(l.Records) >= MaxRecords {
+		return l.stop()
+	}
+	return uncertainty
+}
+
+// Finish records unresolved work at disconnect without fabricating provider
+// usage. Settlement separately decides whether the reservation must be retained.
 func (l *Ledger) Finish() {
 	if len(l.pendingResponses) != 0 {
 		_ = l.issue("connection ended before final response usage")
@@ -169,27 +202,42 @@ func (l *Ledger) Finish() {
 	}
 }
 
-// issue retains a bounded, payload-free diagnostic and returns it as an error.
+// HasUsageGap reports missing evidence, not mere uncertainty about a cache split.
+// A corrected receipt clears its keyed gap even though diagnostic history remains.
+func (l *Ledger) HasUsageGap() bool {
+	return l != nil && (l.unkeyedUsageGap || len(l.pendingResponses) > 0 || len(l.pendingTranscriptions) > 0)
+}
+
+// issue records a bounded diagnostic under a classifiable sentinel error.
 func (l *Ledger) issue(message string) error {
-	if len(l.Issues) < 16 {
-		l.Issues = append(l.Issues, message)
+	return l.recordIssue(errors.Wrap(ErrIncompleteUsage, message))
+}
+
+// recordIssue retains err's classification and bounded, payload-free log text.
+func (l *Ledger) recordIssue(err error) error {
+	if len(l.Issues) < MaxIssues {
+		l.Issues = append(l.Issues, boundedDiagnostic(err.Error()))
 	}
-	return fmt.Errorf("%s", message)
+	return err
 }
 
 // bindItem snapshots acknowledged transcription settings once for an input item.
 // A later session update cannot relabel asynchronously completed transcription.
-func (l *Ledger) bindItem(id string) {
+func (l *Ledger) bindItem(id string) error {
 	if id == "" {
-		return
+		return nil
 	}
 	if _, exists := l.itemModels[id]; exists {
-		return
+		return nil
 	}
 	l.itemModels[id] = l.transcriptionModel
 	if l.transcriptionModel != "" {
 		l.pendingTranscriptions[id] = struct{}{}
 	}
+	if len(l.itemModels) >= MaxItems {
+		return l.stop()
+	}
+	return nil
 }
 
 // updateSession reads GA nested or legacy flat transcription settings from a
@@ -219,6 +267,11 @@ func (l *Ledger) updateSession(raw json.RawMessage) error {
 	if err := json.Unmarshal(selected, &transcription); err != nil {
 		return l.issue("invalid acknowledged transcription model")
 	}
+	if transcription != nil && len(transcription.Model) > MaxModelBytes {
+		l.unkeyedUsageGap = true
+		_ = l.issue("realtime transcription model exceeds billing limit")
+		return l.stop()
+	}
 	l.transcriptionModel = ""
 	if transcription != nil {
 		l.transcriptionModel = transcription.Model
@@ -229,72 +282,81 @@ func (l *Ledger) updateSession(raw json.RawMessage) error {
 // appendRecord stores a validated receipt and updates aggregate log counts with
 // overflow checks. The caller marks deduplication only after this succeeds.
 func (l *Ledger) appendRecord(record Record) error {
+	if len(l.Records) >= MaxRecords {
+		return l.stop()
+	}
 	if record.Tokens.Input > math.MaxInt64-l.InputTokens || record.Tokens.Output > math.MaxInt64-l.OutputTokens {
-		return l.issue("realtime session token count overflow")
+		return l.recordIssue(errors.Wrap(ErrQuotaOverflow, "realtime session token count overflow"))
 	}
 	input, output := l.InputTokens+record.Tokens.Input, l.OutputTokens+record.Tokens.Output
 	if input > math.MaxInt64-output {
-		return l.issue("realtime session total token overflow")
+		return l.recordIssue(errors.Wrap(ErrQuotaOverflow, "realtime session total token overflow"))
 	}
 	l.Records = append(l.Records, record)
 	l.InputTokens, l.OutputTokens = input, output
 	return nil
 }
 
-// decodeUsage normalizes one server receipt. Missing modality overhead is text;
-// missing mixed-modality cache splits are ambiguous and require reconciliation.
+// decodeUsage normalizes one server receipt. Missing modality overhead is text.
+// Mixed cache totals survive as unallocated cache and ErrAmbiguousCache, allowing
+// conservative pricing without presenting an inferred split as authoritative.
 func decodeUsage(usage *wireUsage, transcription bool) (Record, error) {
 	if usage == nil {
-		return Record{}, fmt.Errorf("final realtime event lacks usage")
+		return Record{}, errors.Wrap(ErrIncompleteUsage, "final realtime event lacks usage")
 	}
 	if usage.Type == "duration" {
 		if !transcription || usage.Seconds == nil || *usage.Seconds < 0 || math.IsNaN(*usage.Seconds) || math.IsInf(*usage.Seconds, 0) {
-			return Record{}, fmt.Errorf("invalid realtime duration receipt")
+			return Record{}, errors.Wrap(ErrInvalidUsage, "invalid realtime duration receipt")
 		}
 		return Record{Duration: true, Seconds: *usage.Seconds}, nil
 	}
 	if usage.Type != "" && usage.Type != "tokens" {
-		return Record{}, fmt.Errorf("unsupported realtime usage type")
+		return Record{}, errors.Wrap(ErrInvalidUsage, "unsupported realtime usage type")
 	}
 	if usage.Input == nil || usage.Output == nil {
-		return Record{}, fmt.Errorf("realtime usage lacks input/output counts")
+		return Record{}, errors.Wrap(ErrIncompleteUsage, "realtime usage lacks input/output counts")
 	}
 	t := Tokens{Input: *usage.Input, Output: *usage.Output}
 	if t.Input < 0 || t.Output < 0 || t.Input > math.MaxInt64-t.Output {
-		return Record{}, fmt.Errorf("invalid realtime aggregate token count")
+		return Record{}, errors.Wrap(ErrInvalidUsage, "invalid realtime aggregate token count")
 	}
 	if usage.Total != nil && *usage.Total != t.Input+t.Output {
-		return Record{}, fmt.Errorf("inconsistent realtime total tokens")
+		return Record{}, errors.Wrap(ErrInvalidUsage, "inconsistent realtime total tokens")
 	}
 	if d := usage.InputDetails; d != nil {
 		if d.Text < 0 || d.Audio < 0 || d.Image < 0 || d.Text > t.Input || d.Audio > t.Input-d.Text || d.Image > t.Input-d.Text-d.Audio {
-			return Record{}, fmt.Errorf("invalid realtime input detail")
+			return Record{}, errors.Wrap(ErrInvalidUsage, "invalid realtime input detail")
 		}
 		t.Audio, t.Image = d.Audio, d.Image
 	}
 	t.Text = t.Input - t.Audio - t.Image
 	if d := usage.OutputDetails; d != nil {
 		if d.Text < 0 || d.Audio < 0 || d.Text > t.Output || d.Audio > t.Output-d.Text {
-			return Record{}, fmt.Errorf("invalid realtime output detail")
+			return Record{}, errors.Wrap(ErrInvalidUsage, "invalid realtime output detail")
 		}
 		t.OutputAudio = d.Audio
 	}
 	t.OutputText = t.Output - t.OutputAudio
 	if transcription && t.Input > 0 && usage.InputDetails == nil {
-		return Record{}, fmt.Errorf("transcription token usage lacks audio/text split")
+		return Record{}, errors.Wrap(ErrIncompleteUsage, "transcription token usage lacks audio/text split")
 	}
 	if d := usage.InputDetails; d != nil {
+		if d.Cached != nil && (*d.Cached < 0 || *d.Cached > t.Input) {
+			return Record{}, errors.Wrap(ErrInvalidUsage, "invalid realtime cache total")
+		}
 		if d.Split != nil {
 			t.CachedText, t.CachedAudio, t.CachedImage = d.Split.Text, d.Split.Audio, d.Split.Image
 			if err := t.Validate(); err != nil {
 				return Record{}, err
 			}
 			if d.Cached != nil && *d.Cached != t.CachedText+t.CachedAudio+t.CachedImage {
-				return Record{}, fmt.Errorf("inconsistent realtime cache total")
+				return Record{}, errors.Wrap(ErrInvalidUsage, "inconsistent realtime cache total")
 			}
 		} else if d.Cached != nil && *d.Cached != 0 {
 			cached := *d.Cached
 			switch {
+			case cached == t.Input:
+				t.CachedText, t.CachedAudio, t.CachedImage = t.Text, t.Audio, t.Image
 			case t.Text == t.Input:
 				t.CachedText = cached
 			case t.Audio == t.Input:
@@ -302,12 +364,15 @@ func decodeUsage(usage *wireUsage, transcription bool) (Record, error) {
 			case t.Image == t.Input:
 				t.CachedImage = cached
 			default:
-				return Record{}, fmt.Errorf("mixed realtime cache lacks modality split")
+				t.CachedUnallocated = cached
 			}
 		}
 	}
 	if err := t.Validate(); err != nil {
 		return Record{}, err
+	}
+	if t.CachedUnallocated > 0 {
+		return Record{Tokens: t}, errors.WithStack(ErrAmbiguousCache)
 	}
 	return Record{Tokens: t}, nil
 }

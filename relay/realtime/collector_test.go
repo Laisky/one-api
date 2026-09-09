@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestLedgerFinalReceipts checks authoritative response partitioning and replay.
@@ -16,19 +18,15 @@ func TestLedgerFinalReceipts(t *testing.T) {
 			created := `{"type":"response.created","response":{"id":"r","usage":{"input_tokens":0,"output_tokens":0}}}`
 			receipt := fmt.Sprintf(`{"type":"response.done","response":{"id":"r","status":%q,"usage":{"input_tokens":132,"output_tokens":121,"total_tokens":253,"input_token_details":{"text_tokens":119,"audio_tokens":13,"image_tokens":0,"cached_tokens":64,"cached_tokens_details":{"text_tokens":64,"audio_tokens":0,"image_tokens":0}},"output_token_details":{"text_tokens":30,"audio_tokens":91}}}}`, status)
 			for _, event := range []string{created, receipt, receipt} {
-				if err := l.Observe([]byte(event)); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, l.Observe([]byte(event)))
 			}
 			l.Finish()
-			if len(l.Records) != 1 || len(l.Issues) != 0 || l.InputTokens != 132 || l.OutputTokens != 121 {
-				t.Fatalf("unexpected ledger: %+v", l)
-			}
-			got := l.Records[0].Tokens
+			require.Len(t, l.Records, 1)
+			require.Empty(t, l.Issues)
+			require.Equal(t, int64(132), l.InputTokens)
+			require.Equal(t, int64(121), l.OutputTokens)
 			want := Tokens{Input: 132, Output: 121, Text: 119, Audio: 13, CachedText: 64, OutputText: 30, OutputAudio: 91}
-			if got != want {
-				t.Fatalf("got %+v, want %+v", got, want)
-			}
+			require.Equal(t, want, l.Records[0].Tokens)
 		})
 	}
 }
@@ -50,29 +48,20 @@ func TestLedgerTranscriptionModels(t *testing.T) {
 		`{"type":"conversation.item.input_audio_transcription.completed","item_id":"third","content_index":0,"usage":{"type":"duration","seconds":0.125}}`,
 	}
 	for _, event := range events {
-		if err := l.Observe([]byte(event)); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, l.Observe([]byte(event)))
 	}
 	// Replayed completed events cannot charge again, even after settings change.
-	if err := l.Observe([]byte(events[4])); err != nil {
-		t.Fatal(err)
-	}
-	if err := l.Observe([]byte(strings.Replace(events[9], `"content_index":0`, `"content_index":1`, 1))); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, l.Observe([]byte(events[4])))
+	require.NoError(t, l.Observe([]byte(strings.Replace(events[9], `"content_index":0`, `"content_index":1`, 1))))
 	l.Finish()
-	if len(l.Records) != 4 || len(l.Issues) != 0 {
-		t.Fatalf("unexpected ledger %+v", l)
-	}
+	require.Len(t, l.Records, 4)
+	require.Empty(t, l.Issues)
 	for i, model := range []string{"gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1", "whisper-1"} {
-		if l.Records[i].Model != model {
-			t.Fatalf("record %d wrong model: %+v", i, l.Records[i])
-		}
+		require.Equal(t, model, l.Records[i].Model)
 	}
-	if l.Records[2].Seconds != 0.125 || l.InputTokens != 34 || l.OutputTokens != 18 {
-		t.Fatalf("unexpected totals %+v", l)
-	}
+	require.Equal(t, 0.125, l.Records[2].Seconds)
+	require.Equal(t, int64(34), l.InputTokens)
+	require.Equal(t, int64(18), l.OutputTokens)
 }
 
 // TestLedgerNonReceipts checks that transport, transcript and playback events
@@ -93,18 +82,16 @@ func TestLedgerNonReceipts(t *testing.T) {
 	}
 	l := NewLedger()
 	for _, event := range events {
-		if err := l.Observe([]byte(event)); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, l.Observe([]byte(event)))
 	}
 	l.Finish()
-	if len(l.Records) != 0 || len(l.Issues) != 0 {
-		t.Fatalf("unexpected charges: %+v", l)
-	}
+	require.Empty(t, l.Records)
+	require.Empty(t, l.Issues)
 }
 
-// TestLedgerRejectsInvalidUsage checks malformed, inconsistent, overflowing,
-// missing, and ambiguous receipts, without poisoning final-receipt deduplication.
+// TestLedgerRejectsInvalidUsage checks malformed, inconsistent, overflowing and
+// missing receipts, without poisoning final-receipt deduplication. Valid mixed
+// cache ambiguity is separately covered by the reviewer regression tests.
 func TestLedgerRejectsInvalidUsage(t *testing.T) {
 	usages := []string{
 		`null`, `{}`, `{"input_tokens":-1,"output_tokens":0}`, `{"input_tokens":1.5,"output_tokens":0}`,
@@ -113,7 +100,6 @@ func TestLedgerRejectsInvalidUsage(t *testing.T) {
 		`{"input_tokens":3,"output_tokens":2,"total_tokens":9}`,
 		`{"input_tokens":1,"output_tokens":0,"input_token_details":{"audio_tokens":2}}`,
 		`{"input_tokens":1,"output_tokens":0,"input_token_details":{"cached_tokens":2}}`,
-		`{"input_tokens":2,"output_tokens":0,"input_token_details":{"text_tokens":1,"audio_tokens":1,"cached_tokens":1}}`,
 		`{"input_tokens":1,"output_tokens":0,"input_token_details":{"cached_tokens":0,"cached_tokens_details":{"text_tokens":1}}}`,
 		`{"input_tokens":1,"output_tokens":0,"output_token_details":{"audio_tokens":1}}`,
 		`{"type":"duration","seconds":1}`, `{"type":"unknown","input_tokens":0,"output_tokens":0}`,
@@ -122,19 +108,11 @@ func TestLedgerRejectsInvalidUsage(t *testing.T) {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			l := NewLedger()
 			event := `{"type":"response.done","response":{"id":"r","usage":` + usage + `}}`
-			if err := l.Observe([]byte(event)); err == nil {
-				t.Fatalf("accepted %s", event)
-			}
-			if len(l.Records) != 0 {
-				t.Fatal("invalid receipt was recorded")
-			}
+			require.Error(t, l.Observe([]byte(event)))
+			require.Empty(t, l.Records, "invalid receipt was recorded")
 			valid := `{"type":"response.done","response":{"id":"r","usage":{"input_tokens":1,"output_tokens":0}}}`
-			if err := l.Observe([]byte(valid)); err != nil {
-				t.Fatal(err)
-			}
-			if len(l.Records) != 1 {
-				t.Fatal("invalid receipt poisoned deduplication")
-			}
+			require.NoError(t, l.Observe([]byte(valid)))
+			require.Len(t, l.Records, 1, "invalid receipt poisoned deduplication")
 		})
 	}
 }
@@ -150,6 +128,7 @@ func TestLedgerCacheAndTotalNormalization(t *testing.T) {
 		{"audio", `{"audio_tokens":3,"cached_tokens":2}`, Tokens{Input: 3, Audio: 3, CachedAudio: 2}},
 		{"image", `{"image_tokens":3,"cached_tokens":2}`, Tokens{Input: 3, Image: 3, CachedImage: 2}},
 		{"mixed", `{"text_tokens":1,"audio_tokens":1,"image_tokens":1,"cached_tokens":3,"cached_tokens_details":{"text_tokens":1,"audio_tokens":1,"image_tokens":1}}`, Tokens{Input: 3, Text: 1, Audio: 1, Image: 1, CachedText: 1, CachedAudio: 1, CachedImage: 1}},
+		{"full_cache_without_split", `{"text_tokens":1,"audio_tokens":1,"image_tokens":1,"cached_tokens":3}`, Tokens{Input: 3, Text: 1, Audio: 1, Image: 1, CachedText: 1, CachedAudio: 1, CachedImage: 1}},
 		{"overhead", `{"text_tokens":1,"audio_tokens":1}`, Tokens{Input: 3, Text: 2, Audio: 1}},
 	}
 	for _, tc := range cases {
@@ -157,13 +136,12 @@ func TestLedgerCacheAndTotalNormalization(t *testing.T) {
 			l := NewLedger()
 			for i := 0; i < 2; i++ {
 				event := fmt.Sprintf(`{"type":"response.done","response":{"id":"r%d","usage":{"input_tokens":3,"output_tokens":0,"input_token_details":%s}}}`, i, tc.details)
-				if err := l.Observe([]byte(event)); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, l.Observe([]byte(event)))
 			}
-			if l.InputTokens != 6 || l.Records[0].Tokens != tc.want {
-				t.Fatalf("unexpected %+v", l)
-			}
+			require.Equal(t, int64(6), l.InputTokens)
+			require.Len(t, l.Records, 2)
+			require.Equal(t, tc.want, l.Records[0].Tokens)
+			require.Empty(t, l.Issues)
 		})
 	}
 }
@@ -178,27 +156,17 @@ func TestLedgerUnreconciledDisconnect(t *testing.T) {
 		`{"type":"input_audio_buffer.committed","item_id":"i"}`,
 		`{"type":"response.audio_transcript.done","transcript":"private-secret-text"}`,
 	} {
-		if err := l.Observe([]byte(e)); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, l.Observe([]byte(e)))
 	}
 	l.Finish()
-	if len(l.Issues) != 2 {
-		t.Fatalf("expected two reconciliation issues: %+v", l)
-	}
+	require.Len(t, l.Issues, 2)
 	data, err := json.Marshal(l)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(data), "private-secret-text") {
-		t.Fatal("audit retained transcript")
-	}
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "private-secret-text")
 	for i := 0; i < 100; i++ {
 		_ = l.Observe([]byte(`{`))
 	}
-	if len(l.Issues) != 16 {
-		t.Fatal("unbounded issue storage")
-	}
+	require.Len(t, l.Issues, 16, "unbounded issue storage")
 }
 
 // TestCostAndRounding checks all eight token prices, independent duration,
@@ -207,17 +175,12 @@ func TestCostAndRounding(t *testing.T) {
 	rates := Rates{Text: 4, Audio: 32, Image: 5, CachedText: 0.4, CachedAudio: 0.4, CachedImage: 0.5, OutputText: 24, OutputAudio: 64, Second: 100}
 	record := Record{Tokens: Tokens{Input: 60, Text: 10, Audio: 20, Image: 30, CachedText: 2, CachedAudio: 3, CachedImage: 4, Output: 12, OutputText: 5, OutputAudio: 7}}
 	got, err := Cost(record, rates)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	want := 8.*4 + 2*.4 + 17*32 + 3*.4 + 26*5 + 4*.5 + 5*24 + 7*64
-	if math.Abs(got-want) > 1e-10 {
-		t.Fatalf("cost %g != %g", got, want)
-	}
+	require.InDelta(t, want, got, 1e-10)
 	duration, err := Cost(Record{Duration: true, Seconds: 0.125}, rates)
-	if err != nil || duration != 12.5 {
-		t.Fatalf("duration %g %v", duration, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, 12.5, duration)
 	cases := []struct {
 		name        string
 		cost, group float64
@@ -231,25 +194,20 @@ func TestCostAndRounding(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := RoundQuota(tc.cost, tc.group, tc.tools)
-			if err != nil || got != tc.want {
-				t.Fatalf("got %d %v, want %d", got, err, tc.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
 		})
 	}
 	for _, bad := range []float64{-1, math.NaN(), math.Inf(1), float64(1 << 53)} {
-		if _, err := RoundQuota(bad, 1, 0); err == nil {
-			t.Fatalf("accepted invalid cost %g", bad)
-		}
+		_, err := RoundQuota(bad, 1, 0)
+		require.Error(t, err, "accepted invalid cost %g", bad)
 	}
-	if _, err := RoundQuota(1, 1, math.MaxInt64); err == nil {
-		t.Fatal("accepted quota overflow")
-	}
-	if _, err := Cost(record, Rates{Audio: -1}); err == nil {
-		t.Fatal("accepted negative price")
-	}
-	if _, err := Cost(Record{Duration: true, Seconds: -1}, rates); err == nil {
-		t.Fatal("accepted negative duration")
-	}
+	_, err = RoundQuota(1, 1, math.MaxInt64)
+	require.Error(t, err, "accepted quota overflow")
+	_, err = Cost(record, Rates{Audio: -1})
+	require.Error(t, err, "accepted negative price")
+	_, err = Cost(Record{Duration: true, Seconds: -1}, rates)
+	require.Error(t, err, "accepted negative duration")
 }
 
 // FuzzLedgerUsage ensures arbitrary server frames never panic or produce
@@ -264,9 +222,7 @@ func FuzzLedgerUsage(f *testing.F) {
 		_ = l.Observe([]byte(event))
 		l.Finish()
 		for _, record := range l.Records {
-			if err := record.Tokens.Validate(); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, record.Tokens.Validate())
 		}
 	})
 }

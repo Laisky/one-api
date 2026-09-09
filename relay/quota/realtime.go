@@ -1,9 +1,10 @@
 package quota
 
 import (
-	"fmt"
-	"math"
+	"strings"
 	"time"
+
+	"github.com/Laisky/errors/v2"
 
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 	relaymodel "github.com/Laisky/one-api/relay/model"
@@ -11,30 +12,41 @@ import (
 	"github.com/Laisky/one-api/relay/realtime"
 )
 
+// ErrRealtimePriceUnavailable identifies receipts with one or more unpriceable
+// buckets. Resolved buckets remain chargeable; the result is a lower bound.
+var ErrRealtimePriceUnavailable = errors.New("realtime price unavailable")
+
 // computeRealtime prices each authoritative receipt under its own model and
-// context tier, then rounds the session once. It never recursively prices the
-// session aggregates as text, nor charges transcription at the conversation rate.
+// context tier, then rounds the session once. Unpriceable buckets stay explicitly
+// unresolved but cannot erase the priceable portions of the same receipt.
 func computeRealtime(input ComputeInput) ComputeResult {
 	ledger := input.Usage.Realtime
 	result := ComputeResult{PromptTokens: int(ledger.InputTokens), CompletionTokens: int(ledger.OutputTokens),
-		UsedModelRatio: input.ModelRatio, BillingIssues: append([]string(nil), ledger.Issues...)}
+		UsedModelRatio: input.ModelRatio}
+	for _, issue := range ledger.Issues {
+		appendRealtimeBillingIssue(&result, issue)
+	}
 	var total, correction float64
 	for _, record := range ledger.Records {
-		rates, ratios, err := resolveRealtimeRecordRates(input, record)
-		if err != nil {
-			if len(result.BillingIssues) < 16 {
-				result.BillingIssues = append(result.BillingIssues, err.Error())
-			}
-			continue
-		}
+		rates, ratios, rateErr := resolveRealtimeRecordRates(input, record)
 		if record.Model == "" {
 			result.UsedModelRatio, result.UsedCompletionRatio = ratios.UsedModelRatio, ratios.UsedCompletionRatio
 		}
+		if rateErr != nil {
+			result.UnpricedUsage = true
+			appendRealtimeBillingIssue(&result, rateErr.Error())
+		}
+		t := record.Tokens
+		result.CachedPromptTokens += int(t.CachedText + t.CachedAudio + t.CachedImage + t.CachedUnallocated)
+		if t.CachedUnallocated > 0 && len(ledger.Issues) == 0 {
+			appendRealtimeBillingIssue(&result, realtime.ErrAmbiguousCache.Error())
+		}
+		// Missing rates are zero only for the unresolved buckets. The issue
+		// above prevents that lower bound from masquerading as exact billing.
 		cost, err := realtime.Cost(record, rates)
 		if err != nil {
-			if len(result.BillingIssues) < 16 {
-				result.BillingIssues = append(result.BillingIssues, err.Error())
-			}
+			result.UnpricedUsage = true
+			appendRealtimeBillingIssue(&result, err.Error())
 			continue
 		}
 		// Compensated summation avoids per-turn floating-point accumulation drift.
@@ -42,22 +54,33 @@ func computeRealtime(input ComputeInput) ComputeResult {
 		next := total + y
 		correction = (next - total) - y
 		total = next
-		t := record.Tokens
-		result.CachedPromptTokens += int(t.CachedText + t.CachedAudio + t.CachedImage)
 	}
 	quota, err := realtime.RoundQuota(total, input.GroupRatio, input.Usage.ToolsCost)
 	if err != nil {
-		result.BillingIssues = append(result.BillingIssues, err.Error())
+		result.UnpricedUsage = true
+		appendRealtimeBillingIssue(&result, err.Error())
 		return result
 	}
 	result.TotalQuota = quota
 	return result
 }
 
-// resolveRealtimeRecordRates resolves existing channel, provider/global, tier,
-// time-window and legacy scalar settings for one receipt. Supplemental cache
-// discounts are relative to the configured modality price, so existing audio
-// markups remain effective without introducing a second absolute base-price table.
+// appendRealtimeBillingIssue bounds both the count and bytes of result's log
+// diagnostics, including errors containing an administrator-provided model name.
+func appendRealtimeBillingIssue(result *ComputeResult, message string) {
+	if len(result.BillingIssues) >= realtime.MaxIssues {
+		return
+	}
+	if len(message) > 256 {
+		message = message[:256]
+	}
+	result.BillingIssues = append(result.BillingIssues, message)
+}
+
+// resolveRealtimeRecordRates resolves channel, provider/global, context-tier and
+// time-window prices for one receipt. On partial failure it returns every known
+// rate, zero for unknown buckets, and a classifiable error. Cache supplements
+// remain relative to configured modality prices, preserving existing markups.
 func resolveRealtimeRecordRates(input ComputeInput, record realtime.Record) (realtime.Rates, ComputeResult, error) {
 	modelName := input.ModelName
 	if record.Model != "" {
@@ -65,7 +88,7 @@ func resolveRealtimeRecordRates(input ComputeInput, record realtime.Record) (rea
 	}
 	cfg, known := pricing.ResolveModelConfigRatioOnly(modelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime)
 	if !known {
-		return realtime.Rates{}, ComputeResult{}, fmt.Errorf("realtime pricing unavailable for model %q", modelName)
+		return realtime.Rates{}, ComputeResult{}, errors.Wrapf(ErrRealtimePriceUnavailable, "model %q", modelName)
 	}
 	probe := input
 	probe.ModelName = modelName
@@ -86,14 +109,19 @@ func resolveRealtimeRecordRates(input ComputeInput, record realtime.Record) (rea
 	audio, hasAudio := pricing.ResolveAudioPricing(modelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime)
 	if record.Duration {
 		if !hasAudio || audio.UsdPerSecond <= 0 {
-			return rates, resolved, fmt.Errorf("realtime duration pricing unavailable for model %q", modelName)
+			return rates, resolved, errors.Wrapf(ErrRealtimePriceUnavailable, "duration for model %q", modelName)
 		}
 		rates.Second = audio.UsdPerSecond * billingratio.QuotaPerUsd
 		return rates, resolved, nil
 	}
 	if rates.Text == 0 {
-		rates.CachedText = 0
+		// Explicit free token pricing must not gain a synthetic reservation fee.
+		return realtime.Rates{}, resolved, nil
 	}
+	if hasAudio && audio.UsdPerSecond > 0 {
+		return realtime.Rates{}, resolved, errors.Wrap(realtime.ErrInvalidUsage, "token receipt for duration-priced model")
+	}
+	var missing []string
 	if hasAudio {
 		promptRatio, completionRatio := audio.PromptRatio, audio.CompletionRatio
 		if promptRatio == 0 {
@@ -105,7 +133,7 @@ func resolveRealtimeRecordRates(input ComputeInput, record realtime.Record) (rea
 		rates.Audio = rates.Text * promptRatio
 		rates.OutputAudio = rates.Audio * completionRatio
 	} else if record.Tokens.Audio > 0 || record.Tokens.OutputAudio > 0 {
-		return rates, resolved, fmt.Errorf("realtime audio pricing unavailable for model %q", modelName)
+		missing = append(missing, "audio")
 	}
 	cachedAudioDiscount, imageMultiplier, hasSupplement := realtimeSupplement(modelName)
 	if hasSupplement {
@@ -113,18 +141,25 @@ func resolveRealtimeRecordRates(input ComputeInput, record realtime.Record) (rea
 		rates.Image = rates.Text * imageMultiplier
 		rates.CachedImage = rates.Image * 0.1
 	}
+	hasImageCache := hasSupplement && imageMultiplier > 0
 	if image, ok := pricing.ResolveImagePricing(modelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime); ok && image.PromptRatio > 0 {
 		rates.Image = rates.Text * image.PromptRatio
 		rates.CachedImage = rates.Image * 0.1
+		hasImageCache = true
 	}
-	if (record.Tokens.CachedAudio > 0 || record.Tokens.CachedImage > 0) && !hasSupplement {
-		return rates, resolved, fmt.Errorf("realtime modality cache price unavailable for model %q", modelName)
+	needsAudioCache := record.Tokens.CachedAudio > 0 || (record.Tokens.CachedUnallocated > 0 && record.Tokens.Audio > 0)
+	needsImageCache := record.Tokens.CachedImage > 0 || (record.Tokens.CachedUnallocated > 0 && record.Tokens.Image > 0)
+	if needsAudioCache && !hasSupplement {
+		missing = append(missing, "audio cache")
 	}
-	if record.Tokens.Image > 0 && rates.Image == 0 && rates.Text != 0 {
-		return rates, resolved, fmt.Errorf("realtime image price unavailable for model %q", modelName)
+	if needsImageCache && !hasImageCache {
+		missing = append(missing, "image cache")
 	}
-	if math.IsNaN(rates.Text) {
-		return rates, resolved, fmt.Errorf("invalid realtime model price")
+	if record.Tokens.Image > 0 && rates.Image == 0 {
+		missing = append(missing, "image")
+	}
+	if len(missing) > 0 {
+		return rates, resolved, errors.Wrapf(ErrRealtimePriceUnavailable, "%s for model %q", strings.Join(missing, ", "), modelName)
 	}
 	return rates, resolved, nil
 }

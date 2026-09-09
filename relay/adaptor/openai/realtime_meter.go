@@ -33,9 +33,9 @@ func meteredRealtimePump(client, upstream *websocket.Conn, lg glog.Logger) *rmod
 }
 
 // copyMeteredRealtimeUpstream observes only upstream text frames, before delivery
-// to the client. Client disconnects cannot erase a receipt already received.
-// Accounting errors stay in the ledger for final billing diagnostics and metadata;
-// they must not prevent otherwise valid protocol frames from reaching the client.
+// to the client. Recoverable accounting errors do not block valid frames. At the
+// ledger limit the boundary receipt is preserved and forwarded, then the session
+// is closed instead of forwarding more work that the bounded meter cannot retain.
 func copyMeteredRealtimeUpstream(src, dst *websocket.Conn, ledger *realtime.Ledger) error {
 	for {
 		kind, message, err := src.ReadMessage()
@@ -48,11 +48,17 @@ func copyMeteredRealtimeUpstream(src, dst *websocket.Conn, ledger *realtime.Ledg
 			}
 			return errors.WithStack(err)
 		}
+		var accountingErr error
 		if kind == websocket.TextMessage {
-			_ = ledger.Observe(message) // Retained, then reported once by settlement.
+			accountingErr = ledger.Observe(message)
 		}
 		if err := dst.WriteMessage(kind, message); err != nil {
 			return errors.WithStack(err)
+		}
+		if errors.Is(accountingErr, realtime.ErrLedgerLimit) {
+			_ = dst.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "realtime_billing_capacity"), time.Now().Add(time.Second))
+			return accountingErr
 		}
 	}
 }
@@ -73,7 +79,7 @@ func realtimeLedgerUsage(ledger *realtime.Ledger) *rmodel.Usage {
 		p.TextTokens += int(t.Text)
 		p.AudioTokens += int(t.Audio)
 		p.ImageTokens += int(t.Image)
-		p.CachedTokens += int(t.CachedText + t.CachedAudio + t.CachedImage)
+		p.CachedTokens += int(t.CachedText + t.CachedAudio + t.CachedImage + t.CachedUnallocated)
 		p.CachedTokensDetails.TextTokens += int(t.CachedText)
 		p.CachedTokensDetails.AudioTokens += int(t.CachedAudio)
 		p.CachedTokensDetails.ImageTokens += int(t.CachedImage)
