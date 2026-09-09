@@ -20,7 +20,7 @@ type Ledger struct {
 	seen                  map[string]struct{}
 	pendingResponses      map[string]struct{}
 	pendingTranscriptions map[string]struct{}
-	unkeyedUsageGap       bool
+	unkeyedUsageGap        bool
 	stopped               bool
 }
 
@@ -140,9 +140,9 @@ func (l *Ledger) Observe(message []byte) error {
 		return l.acceptRecord(record, key, l.pendingResponses, key, err)
 	case "conversation.item.input_audio_transcription.completed":
 		if event.ItemID == "" || event.ContentIndex == nil || *event.ContentIndex < 0 {
-			if _, bound := l.itemModels[event.ItemID]; bound {
-				l.pendingTranscriptions[event.ItemID] = struct{}{}
-			} else {
+			// Binding already tracks unfinished transcription. An unidentifiable
+			// replay must not reopen an item whose valid receipt was accepted.
+			if _, bound := l.itemModels[event.ItemID]; !bound {
 				l.unkeyedUsageGap = true
 			}
 			return l.recordIssue(errors.Wrap(ErrInvalidUsage, "transcription lacks item/content identity"))
