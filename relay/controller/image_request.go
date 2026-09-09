@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
@@ -179,13 +180,18 @@ func isValidImageSize(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePrici
 
 // isValidImagePromptLength checks the configured or model-default prompt limit.
 // Parameters: req contains the prompt and model and cfg may override the limit.
-// Returns: true when the prompt is within the applicable limit.
+// Returns: true when the prompt is within the applicable limit; GPT Image 2.5
+// counts Unicode code points, while other models retain their legacy byte limit.
 func isValidImagePromptLength(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePricingConfig) bool {
+	length := len(req.Prompt)
+	if isGPTImage25Model(req.Model) {
+		length = utf8.RuneCountInString(req.Prompt)
+	}
 	if cfg != nil && cfg.PromptTokenLimit > 0 {
-		return len(req.Prompt) <= cfg.PromptTokenLimit
+		return length <= cfg.PromptTokenLimit
 	}
 	maxPromptLength, ok := billingratio.ImagePromptLengthLimitations[req.Model]
-	return !ok || len(req.Prompt) <= maxPromptLength
+	return !ok || length <= maxPromptLength
 }
 
 // isWithinRange checks the requested image count against configured or global
