@@ -84,6 +84,11 @@ type ResolvedObservability struct {
 	// explicit request can be a contradiction; a default the operator never
 	// chose must not fail their startup.
 	LogMaxActiveFileSizeExplicit bool
+	// AppLogSink is the resolved LOCAL application-log destination.
+	AppLogSink string
+	// AppLogOTLPEnabled reports whether APP_LOG_SINK asked for the additive
+	// OTLP application-log bridge.
+	AppLogOTLPEnabled bool
 }
 
 // ResolveObservabilityEnv computes the effective observability configuration
@@ -121,6 +126,8 @@ func ResolveObservabilityEnv(in ObservabilityEnv) ResolvedObservability {
 		LogMaxActiveFileSizeMB: nonNegative(in.intOr(EnvLogMaxActiveFileSizeMB,
 			profileInt(profile, 4096, 2048, 1024))),
 		LogMaxActiveFileSizeExplicit: explicitlySet(in, EnvLogMaxActiveFileSizeMB),
+		AppLogSink:                   normalizeAppLogSink(in.stringOr(EnvAppLogSink, AppLogSinkBoth)),
+		AppLogOTLPEnabled:            appLogSinkHasOTLP(in.stringOr(EnvAppLogSink, AppLogSinkBoth)),
 	}
 }
 
@@ -184,6 +191,11 @@ func ValidateObservabilityCombination(resolved ResolvedObservability) []error {
 			resolved.OpenTelemetryInsecure); err != nil {
 			errs = append(errs, err)
 		}
+	}
+
+	if err := ValidateAppLogSinkOpenTelemetryConfig(resolved.AppLogOTLPEnabled,
+		resolved.OpenTelemetryEnabled); err != nil {
+		errs = append(errs, errors.WithStack(err))
 	}
 
 	if err := ValidateLogFileSizeRotationConflict(resolved.OnlyOneLogFile,

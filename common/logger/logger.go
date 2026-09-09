@@ -324,6 +324,18 @@ func SetupEnhancedLogger(ctx context.Context) {
 	// counters would report -- lines sampling was about to discard anyway.
 	opts = append(opts, emergencyOption())
 
+	// The optional OTLP bridge fans out above the emergency budget and below
+	// sampling; common/logger/otlp_sink.go documents why that position is the
+	// only correct one. It is a no-op unless APP_LOG_SINK named the otlp sink.
+	if opt, ok := otlpBridgeOption(); ok {
+		opts = append(opts, opt)
+		Logger.Info("otlp application log bridge enabled",
+			zap.String("min_level", config.AppLogOTLPMinLevel),
+			zap.Int("queue_size", config.AppLogOTLPQueueSize),
+			zap.Int("queue_max_mb", config.AppLogOTLPQueueMaxMB),
+			zap.String("note", "records are dropped and counted until the provider is installed"))
+	}
+
 	// Install log sampling before any other option so every downstream logger
 	// derived from the global one inherits it.
 	if opt, ok := samplingOption(); ok {

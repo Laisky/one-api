@@ -570,14 +570,23 @@ func normalizeRecordLineFormat(raw string) string {
 
 // normalizeAppLogSink lowercases and validates an application log sink name.
 //
+// It resolves the LOCAL destination only. The additive "otlp" token is stripped
+// here and answered by AppLogOTLPEnabled instead, so every existing caller that
+// compares against AppLogSinkFile, AppLogSinkStdout or AppLogSinkBoth keeps its
+// exact pre-proposal meaning whether or not the bridge is enabled.
+//
 // Parameters:
-//   - raw: the raw APP_LOG_SINK value.
+//   - raw: the raw APP_LOG_SINK value, possibly a comma-separated list.
 //
 // Return values:
 //   - string: one of the AppLogSink* constants; unrecognized input falls back
 //     to "both", which is the pre-proposal behavior.
 func normalizeAppLogSink(raw string) string {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
+	tokens := appLogSinkBaseTokens(raw)
+	if len(tokens) != 1 {
+		return AppLogSinkBoth
+	}
+	switch tokens[0] {
 	case AppLogSinkFile:
 		return AppLogSinkFile
 	case AppLogSinkStdout:

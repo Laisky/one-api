@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/exemplar"
 	sdkresource "go.opentelemetry.io/otel/sdk/resource"
@@ -23,6 +24,7 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/common/logger/otelbridge"
 )
 
 // dropExemplarReservoir is a no-op exemplar.Reservoir: it stores nothing and
@@ -104,6 +106,7 @@ func newZeroExemplarReservoirView() sdkmetric.View {
 type ProviderBundle struct {
 	tracerProvider *sdktrace.TracerProvider
 	meterProvider  *sdkmetric.MeterProvider
+	loggerProvider *sdklog.LoggerProvider
 	generation     uint64
 }
 
@@ -222,6 +225,29 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 		propagation.Baggage{},
 	))
 
+	// The optional application-log bridge is built last and only on request.
+	// A deployment that did not name the otlp app-log sink gets no exporter and
+	// no batch worker at all.
+	var loggerProvider *sdklog.LoggerProvider
+	if config.AppLogOTLPEnabled {
+		loggerProvider, err = newLoggerProvider(ctx, res)
+		if err != nil {
+			_ = meterProvider.Shutdown(ctx)
+			_ = tracerProvider.Shutdown(ctx)
+			activeProviderGeneration.Store(0)
+			providerInitialized.Store(false)
+			return nil, laerrors.Wrap(err, "create OTLP log provider")
+		}
+		if err = installLoggerProvider(loggerProvider); err != nil {
+			_ = loggerProvider.Shutdown(ctx)
+			_ = meterProvider.Shutdown(ctx)
+			_ = tracerProvider.Shutdown(ctx)
+			activeProviderGeneration.Store(0)
+			providerInitialized.Store(false)
+			return nil, laerrors.Wrap(err, "install OTLP log provider")
+		}
+	}
+
 	// Both global providers are installed at this point, so components that
 	// refuse to run against the no-op provider may now be constructed. Set the
 	// flag before the log line: an operator reading "OpenTelemetry initialized"
@@ -235,11 +261,13 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 		zap.Bool("insecure", config.OpenTelemetryInsecure),
 		zap.String("service", config.OpenTelemetryServiceName),
 		zap.String("environment", config.OpenTelemetryEnvironment),
+		zap.Bool("app_log_otlp", loggerProvider != nil),
 	)
 
 	return &ProviderBundle{
 		tracerProvider: tracerProvider,
 		meterProvider:  meterProvider,
+		loggerProvider: loggerProvider,
 		generation:     generation,
 	}, nil
 }
@@ -284,6 +312,20 @@ func (p *ProviderBundle) Shutdown(ctx context.Context) error {
 	if p.tracerProvider != nil {
 		if err := p.tracerProvider.Shutdown(ctx); err != nil {
 			errs = append(errs, laerrors.Wrap(err, "shutdown tracer provider"))
+		}
+	}
+
+	// The log provider goes last, and its bridge is closed first. Shutting the
+	// trace and metric providers down emits diagnostics through the application
+	// logger, so draining logs before them would discard exactly the lines that
+	// explain a failed shutdown. Closing the bridge before the drain means any
+	// line written after this point is counted as dropped_shutdown rather than
+	// racing a provider that is tearing itself down; those lines still reach
+	// the file and stdout sinks.
+	if p.loggerProvider != nil {
+		otelbridge.Shared.Close()
+		if err := p.loggerProvider.Shutdown(ctx); err != nil {
+			errs = append(errs, laerrors.Wrap(err, "shutdown logger provider"))
 		}
 	}
 

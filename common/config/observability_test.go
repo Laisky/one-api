@@ -109,6 +109,69 @@ func TestNormalizeAppLogSink(t *testing.T) {
 	require.Equal(t, AppLogSinkBoth, normalizeAppLogSink("syslog"))
 }
 
+// TestAppLogSinkOTLPTokenIsAdditive verifies the Phase 3 extension does not
+// change what the legacy values mean.
+//
+// The whole compatibility argument for adding an "otlp" token to APP_LOG_SINK
+// rests on this: every existing caller compares config.AppLogSink against
+// AppLogSinkFile, AppLogSinkStdout or AppLogSinkBoth, and those comparisons
+// must keep answering exactly what they answered before, bridge or no bridge.
+//
+// Parameters:
+//   - t: the test handle.
+//
+// Return values: none.
+func TestAppLogSinkOTLPTokenIsAdditive(t *testing.T) {
+	for _, tc := range []struct {
+		raw      string
+		wantSink string
+		wantOTLP bool
+	}{
+		{raw: "", wantSink: AppLogSinkBoth},
+		{raw: "both", wantSink: AppLogSinkBoth},
+		{raw: "file", wantSink: AppLogSinkFile},
+		{raw: "stdout", wantSink: AppLogSinkStdout},
+		{raw: "both,otlp", wantSink: AppLogSinkBoth, wantOTLP: true},
+		{raw: "file,otlp", wantSink: AppLogSinkFile, wantOTLP: true},
+		{raw: " OTLP , STDOUT ", wantSink: AppLogSinkStdout, wantOTLP: true},
+		{raw: "stdout,", wantSink: AppLogSinkStdout},
+	} {
+		require.Equal(t, tc.wantSink, normalizeAppLogSink(tc.raw), "local sink for %q", tc.raw)
+		require.Equal(t, tc.wantOTLP, appLogSinkHasOTLP(tc.raw), "otlp token for %q", tc.raw)
+	}
+}
+
+// TestAppLogOTLPQueueMaxBytesUsesMebibytes pins the unit conversion, since the
+// setting is named _MB and the ceiling it feeds is compared against byte
+// estimates.
+//
+// Parameters:
+//   - t: the test handle.
+//
+// Return values: none.
+func TestAppLogOTLPQueueMaxBytesUsesMebibytes(t *testing.T) {
+	previous := AppLogOTLPQueueMaxMB
+	t.Cleanup(func() { AppLogOTLPQueueMaxMB = previous })
+
+	AppLogOTLPQueueMaxMB = 64
+	require.Equal(t, int64(64<<20), AppLogOTLPQueueMaxBytes())
+}
+
+// TestNormalizeAppLogOTLPLevel pins the severity-floor normalizer, including
+// its fallback for a value the raw layer would have rejected.
+//
+// Parameters:
+//   - t: the test handle.
+//
+// Return values: none.
+func TestNormalizeAppLogOTLPLevel(t *testing.T) {
+	require.Equal(t, AppLogOTLPLevelInfo, normalizeAppLogOTLPLevel(""))
+	require.Equal(t, AppLogOTLPLevelDebug, normalizeAppLogOTLPLevel(" DEBUG "))
+	require.Equal(t, AppLogOTLPLevelWarn, normalizeAppLogOTLPLevel("warn"))
+	require.Equal(t, AppLogOTLPLevelError, normalizeAppLogOTLPLevel("error"))
+	require.Equal(t, AppLogOTLPLevelInfo, normalizeAppLogOTLPLevel("verbose"))
+}
+
 // TestProfileDefaultSelectors verifies the per-profile default helpers.
 func TestProfileDefaultSelectors(t *testing.T) {
 	require.Equal(t, 1, profileInt(ObservabilityProfileStandalone, 1, 2, 3))

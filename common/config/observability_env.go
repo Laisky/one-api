@@ -106,6 +106,22 @@ const (
 	EnvAppLogSink = "APP_LOG_SINK"
 	// EnvLogRecordLineFormat names the record-log line shape selector.
 	EnvLogRecordLineFormat = "LOG_RECORD_LINE_FORMAT"
+	// EnvAppLogOTLPMinLevel names the OTLP application-log severity floor.
+	EnvAppLogOTLPMinLevel = "LOG_OTLP_MIN_LEVEL"
+	// EnvAppLogOTLPQueueSize names the OTLP application-log record ceiling.
+	EnvAppLogOTLPQueueSize = "LOG_OTLP_QUEUE_SIZE"
+	// EnvAppLogOTLPQueueMaxMB names the OTLP application-log byte ceiling.
+	EnvAppLogOTLPQueueMaxMB = "LOG_OTLP_QUEUE_MAX_MB"
+	// EnvAppLogOTLPBatchSize names the OTLP application-log export batch size.
+	EnvAppLogOTLPBatchSize = "LOG_OTLP_BATCH_SIZE"
+	// EnvAppLogOTLPExportIntervalMs names the OTLP application-log flush cadence.
+	EnvAppLogOTLPExportIntervalMs = "LOG_OTLP_EXPORT_INTERVAL_MS"
+	// EnvAppLogOTLPExportTimeoutMs names the OTLP application-log export timeout.
+	EnvAppLogOTLPExportTimeoutMs = "LOG_OTLP_EXPORT_TIMEOUT_MS"
+	// EnvAppLogOTLPMaxAttributes names the per-record attribute ceiling.
+	EnvAppLogOTLPMaxAttributes = "LOG_OTLP_MAX_ATTRIBUTES"
+	// EnvAppLogOTLPMaxAttributeValueBytes names the per-attribute value ceiling.
+	EnvAppLogOTLPMaxAttributeValueBytes = "LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES"
 	// EnvLogRetentionDays names the application log-file retention horizon.
 	EnvLogRetentionDays = "LOG_RETENTION_DAYS"
 	// EnvLogMaxTotalSizeMB names the log-directory size ceiling.
@@ -218,6 +234,7 @@ var observabilityEnvNames = func() []string {
 		EnvTraceSink,
 		EnvTraceSampleRate,
 		EnvOpenTelemetryEndpoint,
+		EnvAppLogSink,
 	}
 	for _, spec := range observabilityEnumSpecs {
 		names = append(names, spec.name)
@@ -243,12 +260,15 @@ type observabilityEnumSpec struct {
 }
 
 // observabilityEnumSpecs lists every observability setting normalized by a
-// switch that silently falls back. TRACE_SINK is absent because it is a list
-// and is validated by validateRawTraceSinks.
+// switch that silently falls back. TRACE_SINK and APP_LOG_SINK are absent
+// because they are lists, validated by validateRawTraceSinks and
+// validateRawAppLogSink.
 var observabilityEnumSpecs = []observabilityEnumSpec{
 	{name: EnvTraceWriteMode, allowed: []string{TraceWriteModeBatched, TraceWriteModeSync}},
-	{name: EnvAppLogSink, allowed: []string{AppLogSinkFile, AppLogSinkStdout, AppLogSinkBoth}},
 	{name: EnvLogRecordLineFormat, allowed: []string{LogRecordLineFull, LogRecordLineCompact}},
+	{name: EnvAppLogOTLPMinLevel, allowed: []string{
+		AppLogOTLPLevelDebug, AppLogOTLPLevelInfo, AppLogOTLPLevelWarn, AppLogOTLPLevelError,
+	}},
 }
 
 // observabilityIntSpec describes a setting whose value must be an integer at or
@@ -294,6 +314,13 @@ var observabilityIntSpecs = []observabilityIntSpec{
 	{name: EnvDashboardCacheTTLSec, minValue: 0, maxValue: maxDurationSeconds},
 	{name: EnvDashboardMaxSitewideRangeDays, minValue: 1},
 	{name: EnvDashboardMaxConcurrentAggregates, minValue: 0},
+	{name: EnvAppLogOTLPQueueSize, minValue: 1},
+	{name: EnvAppLogOTLPQueueMaxMB, minValue: 1, maxValue: maxMebibytes},
+	{name: EnvAppLogOTLPBatchSize, minValue: 1},
+	{name: EnvAppLogOTLPExportIntervalMs, minValue: 1, maxValue: maxDurationMilliseconds},
+	{name: EnvAppLogOTLPExportTimeoutMs, minValue: 1, maxValue: maxDurationMilliseconds},
+	{name: EnvAppLogOTLPMaxAttributes, minValue: 1},
+	{name: EnvAppLogOTLPMaxAttributeValueBytes, minValue: 1},
 }
 
 // observabilityBoolNames lists every observability boolean read through
@@ -367,6 +394,10 @@ func ValidateObservabilityRawInput(in ObservabilityEnv) []error {
 		if err := validateRawEnum(in, spec.name, spec.allowed); err != nil {
 			errs = append(errs, err)
 		}
+	}
+
+	if err := validateRawAppLogSink(in); err != nil {
+		errs = append(errs, err)
 	}
 
 	if err := validateRawTraceSinks(in); err != nil {
@@ -479,6 +510,78 @@ func validateRawTraceSinks(in ObservabilityEnv) error {
 			Constraint:  "must name at least one sink",
 			AllowedVals: allowed,
 		})
+	}
+
+	return nil
+}
+
+// validateRawAppLogSink rejects an explicitly set APP_LOG_SINK that
+// normalizeAppLogSink would silently reinterpret.
+//
+// APP_LOG_SINK became a list when the optional OTLP application-log bridge was
+// added, so it needs the same treatment TRACE_SINK gets: the normalizer folds
+// anything it does not recognize into "both", which would turn a typo such as
+// "stdou,otlp" into a configuration that writes files the operator asked it not
+// to write and exports nothing.
+//
+// The accepted grammar is one local destination, optionally plus the additive
+// "otlp" token, in either order. A bare "otlp" is rejected on purpose: the
+// bridge drops records when its queue is full, before the provider is
+// installed, and after it is shut down, so a deployment with no local sink
+// would have no record of its own log loss.
+//
+// Parameters:
+//   - in: the raw input set.
+//
+// Return values:
+//   - error: a wrapped *ConfigValidationError when the value is set and invalid.
+func validateRawAppLogSink(in ObservabilityEnv) error {
+	raw, ok := in.Lookup(EnvAppLogSink)
+	if !ok {
+		return nil
+	}
+
+	allowed := []string{AppLogSinkFile, AppLogSinkStdout, AppLogSinkBoth,
+		AppLogSinkBoth + "," + AppLogSinkOTLP,
+		AppLogSinkStdout + "," + AppLogSinkOTLP,
+		AppLogSinkFile + "," + AppLogSinkOTLP}
+
+	reject := func(constraint string) error {
+		return errors.WithStack(&ConfigValidationError{
+			Variable:    EnvAppLogSink,
+			Value:       raw,
+			Constraint:  constraint,
+			AllowedVals: allowed,
+		})
+	}
+
+	local := 0
+	otlp := 0
+	for _, part := range strings.Split(raw, ",") {
+		token := strings.ToLower(strings.TrimSpace(part))
+		if token == "" {
+			// A stray separator ("both,") is skipped by the parser and here.
+			continue
+		}
+		switch token {
+		case AppLogSinkFile, AppLogSinkStdout, AppLogSinkBoth:
+			local++
+		case AppLogSinkOTLP:
+			otlp++
+		default:
+			return reject(fmt.Sprintf("names unknown sink %q; unknown sinks are not discarded", token))
+		}
+	}
+
+	switch {
+	case local == 0 && otlp == 0:
+		return reject("must name at least one sink")
+	case local == 0:
+		return reject("names only the additive \"otlp\" sink; it must accompany a local sink so log loss stays recorded somewhere")
+	case local > 1:
+		return reject("names more than one local sink; use \"both\" for stdout and file together")
+	case otlp > 1:
+		return reject("repeats the \"otlp\" sink")
 	}
 
 	return nil

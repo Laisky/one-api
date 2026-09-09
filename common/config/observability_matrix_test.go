@@ -585,6 +585,80 @@ func TestObservabilityConfigurationMatrix(t *testing.T) {
 			},
 			accept: true,
 		},
+
+		// ------------------------------------------------------------------
+		// Section 3.3, Phase 3 / W3.2: APP_LOG_SINK gains the additive "otlp"
+		// token. The legacy values must keep behaving exactly as before, the
+		// new one must require a real provider, and it must never be the only
+		// destination.
+		// ------------------------------------------------------------------
+		{
+			name:   "legacy app log sinks are unchanged",
+			env:    map[string]string{EnvAppLogSink: AppLogSinkBoth},
+			accept: true,
+		},
+		{
+			name:   "app log file sink alone is unchanged",
+			env:    map[string]string{EnvAppLogSink: AppLogSinkFile},
+			accept: true,
+		},
+		{
+			name: "app log otlp with opentelemetry enabled",
+			env: map[string]string{
+				EnvAppLogSink:            AppLogSinkBoth + "," + AppLogSinkOTLP,
+				EnvOpenTelemetryEnabled:  "true",
+				EnvOpenTelemetryEndpoint: otlpEndpoint,
+			},
+			accept: true,
+		},
+		{
+			name: "app log otlp in either token order",
+			env: map[string]string{
+				EnvAppLogSink:            AppLogSinkOTLP + "," + AppLogSinkStdout,
+				EnvOpenTelemetryEnabled:  "true",
+				EnvOpenTelemetryEndpoint: otlpEndpoint,
+			},
+			accept: true,
+		},
+		{
+			name:     "app log otlp without opentelemetry is rejected",
+			env:      map[string]string{EnvAppLogSink: AppLogSinkBoth + "," + AppLogSinkOTLP},
+			mentions: []string{EnvOpenTelemetryEnabled, EnvAppLogSink},
+		},
+		{
+			name: "app log otlp alone is rejected",
+			env: map[string]string{
+				EnvAppLogSink:            AppLogSinkOTLP,
+				EnvOpenTelemetryEnabled:  "true",
+				EnvOpenTelemetryEndpoint: otlpEndpoint,
+			},
+			mentions: []string{EnvAppLogSink, "local sink"},
+		},
+		{
+			name:     "an unknown app log sink token is rejected, not normalized",
+			env:      map[string]string{EnvAppLogSink: "stdou,otlp"},
+			mentions: []string{EnvAppLogSink, "unknown sink"},
+		},
+		{
+			name:     "two local app log sinks are rejected in favor of both",
+			env:      map[string]string{EnvAppLogSink: AppLogSinkFile + "," + AppLogSinkStdout},
+			mentions: []string{EnvAppLogSink, "more than one local sink"},
+		},
+		{
+			name:     "an unknown otlp log severity floor is rejected",
+			env:      map[string]string{EnvAppLogOTLPMinLevel: "verbose"},
+			mentions: []string{EnvAppLogOTLPMinLevel},
+		},
+		{
+			name:     "a non-positive otlp log queue size is rejected",
+			env:      map[string]string{EnvAppLogOTLPQueueSize: "0"},
+			mentions: []string{EnvAppLogOTLPQueueSize},
+		},
+		{
+			name:     "a non-numeric otlp log export interval is rejected",
+			env:      map[string]string{EnvAppLogOTLPExportIntervalMs: "1s"},
+			mentions: []string{EnvAppLogOTLPExportIntervalMs},
+		},
 	}
 
 	for _, tc := range cases {
@@ -655,6 +729,8 @@ func TestResolveObservabilityEnvMatchesPackageVariables(t *testing.T) {
 	require.Equal(t, OpenTelemetryEndpoint, resolved.OpenTelemetryEndpoint)
 	require.Equal(t, OnlyOneLogFile, resolved.OnlyOneLogFile)
 	require.Equal(t, LogMaxActiveFileSizeMB, resolved.LogMaxActiveFileSizeMB)
+	require.Equal(t, AppLogSink, resolved.AppLogSink)
+	require.Equal(t, AppLogOTLPEnabled, resolved.AppLogOTLPEnabled)
 }
 
 // TestObservabilityProfileDefaultsResolveToTheDocumentedMatrix verifies the
@@ -749,6 +825,14 @@ func TestObservabilityRawInputCoversEveryDocumentedKnob(t *testing.T) {
 		EnvOpenTelemetryEnabled,
 		EnvOpenTelemetryEndpoint,
 		EnvOpenTelemetryInsecure,
+		EnvAppLogOTLPMinLevel,
+		EnvAppLogOTLPQueueSize,
+		EnvAppLogOTLPQueueMaxMB,
+		EnvAppLogOTLPBatchSize,
+		EnvAppLogOTLPExportIntervalMs,
+		EnvAppLogOTLPExportTimeoutMs,
+		EnvAppLogOTLPMaxAttributes,
+		EnvAppLogOTLPMaxAttributeValueBytes,
 	} {
 		require.True(t, guarded[name], "%s must be validated as raw input", name)
 	}

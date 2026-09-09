@@ -276,6 +276,34 @@ func ValidateTraceSinkOpenTelemetryConfig(sinks []string, enabled bool) error {
 	return nil
 }
 
+// ValidateAppLogSinkOpenTelemetryConfig ensures the optional OTLP
+// application-log bridge is only selected when a real provider will exist.
+//
+// It is structurally the same rule as ValidateTraceSinkOpenTelemetryConfig, and
+// for the same reason: with OTEL_ENABLED=false the process runs on
+// OpenTelemetry's global NO-OP provider, whose loggers accept every record and
+// export none. Building the bridge against it would report a working log
+// pipeline that silently discards everything, which section 3.2 forbids --
+// "never count a no-op provider as export".
+//
+// Parameters:
+//   - appLogOTLPEnabled: whether APP_LOG_SINK named the additive otlp sink.
+//   - enabled: the resolved OTEL_ENABLED value.
+//
+// Return values:
+//   - error: a *ConfigValidationError when the bridge is selected without
+//     OpenTelemetry.
+func ValidateAppLogSinkOpenTelemetryConfig(appLogOTLPEnabled, enabled bool) error {
+	if !appLogOTLPEnabled || enabled {
+		return nil
+	}
+	return &ConfigValidationError{
+		Variable:   "OTEL_ENABLED",
+		Value:      enabled,
+		Constraint: "must be true when APP_LOG_SINK includes otlp",
+	}
+}
+
 // ValidateSyncTraceConfiguration ensures the legacy synchronous trace path is
 // used only with settings it can faithfully implement.
 //
@@ -614,6 +642,10 @@ func ValidateAllEnvVars() *ValidationResult {
 	if err := ValidatePositiveInt("TRACE_WRITER_COUNT", TraceWriterCount); err != nil {
 		result.Errors = append(result.Errors, err)
 	}
+	if err := ValidateAppLogSinkOpenTelemetryConfig(AppLogOTLPEnabled, OpenTelemetryEnabled); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+
 	if err := ValidateAppLogSink(AppLogSink); err != nil {
 		result.Errors = append(result.Errors, err)
 	}
