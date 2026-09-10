@@ -270,7 +270,7 @@ func countResponseAPIContentPartTokens(ctx context.Context, partMap map[string]a
 	case "input_image":
 		url, _ := partMap["image_url"].(string)
 		detail, _ := partMap["detail"].(string)
-		if url == "" && model == "deepseek-v4-flash-vision-exp" {
+		if url == "" && deepseekcompat.IsFlashVisionModel(model) {
 			fileID, _ := partMap["file_id"].(string)
 			fileData, _ := partMap["file_data"].(string)
 			if strings.TrimSpace(fileID) != "" || strings.TrimSpace(fileData) != "" {
@@ -466,7 +466,7 @@ func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 
 // supportsDeepSeekNativeResponseAPI reports whether the request targets a model
 // served by DeepSeek's native, stateless Responses endpoint. DeepSeek exposes
-// that endpoint for all currently available V4 models.
+// that endpoint for the current Flash and Pro API names and Flash aliases.
 func supportsDeepSeekNativeResponseAPI(meta *metalib.Meta) bool {
 	if meta == nil || !isDeepSeekUpstream(meta) {
 		return false
@@ -478,9 +478,7 @@ func supportsDeepSeekNativeResponseAPI(meta *metalib.Meta) bool {
 	}
 
 	// https://api-docs.deepseek.com/guides/responses_api/
-	return modelName == "deepseek-v4-flash" ||
-		modelName == "deepseek-v4-flash-vision-exp" ||
-		modelName == "deepseek-v4-pro"
+	return deepseekcompat.IsFlashVisionModel(modelName) || modelName == "deepseek-v4-pro"
 }
 
 // isDeepSeekModel checks if the model is a DeepSeek model
@@ -526,14 +524,15 @@ func shouldRouteResponseFallbackThroughDeepSeek(meta *metalib.Meta) bool {
 	return isDeepSeekUpstream(meta)
 }
 
-// isReasoningModel checks if the model is a reasoning model
+// isReasoningModel identifies models requiring OpenAI-style sampling removal.
+// DeepSeek accepts top_p in thinking mode and temperature in non-thinking mode,
+// so its canonical names and aliases must leave sampling controls to upstream.
 func isReasoningModel(modelName string) bool {
 	if modelName == "" {
 		return false
 	}
 	// Check for reasoning model prefixes (direct model names)
 	if strings.HasPrefix(modelName, "gpt-5") ||
-		strings.HasPrefix(modelName, "deepseek-v4-") ||
 		strings.HasPrefix(modelName, "o1") ||
 		strings.HasPrefix(modelName, "o3") ||
 		strings.HasPrefix(modelName, "o4") ||

@@ -41,8 +41,8 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 }
 
 // DefaultToolingConfig returns DeepSeek's provider-level tooling defaults.
-// Parameters: none. Returns: an empty separate-pricing map because built-in web
-// search is billed through normal model token usage as of 2026-08-01.
+// Parameters: none. Returns: no built-in tool pricing entries because the
+// current Responses API ignores web_search and other built-in tool types.
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return DeepseekToolingDefaults
 }
@@ -86,6 +86,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	adaptor.SetupCommonRequestHeader(c, req, meta)
+
 	req.Header.Set("Authorization", "Bearer "+meta.APIKey)
 	return nil
 }
@@ -140,9 +141,13 @@ func normalizeDeepSeekReasoningEffort(request *model.GeneralOpenAIRequest) {
 	effort := strings.ToLower(strings.TrimSpace(*request.ReasoningEffort))
 	switch effort {
 	case "low", "high", "max":
+	case "minimal":
+		effort = "low"
 	case "medium", "xhigh":
 		// DeepSeek maps both OpenAI compatibility aliases to high.
 		effort = "high"
+	case "ultra":
+		effort = "max"
 	default:
 		request.ReasoningEffort = nil
 		return

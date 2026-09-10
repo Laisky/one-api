@@ -26,7 +26,7 @@ func TestCountImageTokens_DeepSeekVisionUsesDocumentedUpperBound(t *testing.T) {
 				"deepseek-v4-flash-vision-exp",
 			)
 			require.NoError(t, err)
-			require.Equal(t, 384, got)
+			require.Equal(t, 1024, got)
 		})
 	}
 }

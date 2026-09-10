@@ -2,137 +2,79 @@ package deepseek
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/relay/billing/ratio"
-	"github.com/Laisky/one-api/relay/pricing"
 )
 
-// TestModelRatiosMatchOfficialCatalog verifies that the adapter exposes only
-// the model IDs currently returned by DeepSeek's official model catalog.
+// TestModelRatiosMatchOfficialCatalog checks current and compatible API names,
+// without reintroducing retired V3 names or inventing version-pinned IDs.
 func TestModelRatiosMatchOfficialCatalog(t *testing.T) {
 	t.Parallel()
-
-	require.Len(t, ModelRatios, 3)
-	require.Contains(t, ModelRatios, "deepseek-v4-flash")
-	require.Contains(t, ModelRatios, "deepseek-v4-flash-vision-exp")
-	require.Contains(t, ModelRatios, "deepseek-v4-pro")
-	require.NotContains(t, ModelRatios, "deepseek-chat")
-	require.NotContains(t, ModelRatios, "deepseek-reasoner")
+	require.ElementsMatch(t, []string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"}, (&Adaptor{}).GetModelList())
+	for _, name := range []string{"deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash-vision", "deepseek-v4.1-pro"} {
+		require.NotContains(t, ModelRatios, name)
+	}
 }
 
-// TestModelRatiosMatchOfficialPricing verifies current regular prices, context
-// limits, and the scheduled peak/off-peak pricing overlays.
+// TestModelRatiosMatchOfficialPricing verifies current off-peak defaults. The
+// separate schedule tests exercise the authoritative time-dependent prices.
 func TestModelRatiosMatchOfficialPricing(t *testing.T) {
 	t.Parallel()
-
-	tests := []struct {
-		name        string
-		input       float64
-		cachedInput float64
-		output      float64
-		flashPrice  bool
-	}{
-		{name: "deepseek-v4-flash", input: 0.14, cachedInput: 0.0028, output: 0.28, flashPrice: true},
-		{name: "deepseek-v4-flash-vision-exp", input: 0.14, cachedInput: 0.0028, output: 0.28, flashPrice: true},
-		{name: "deepseek-v4-pro", input: 0.435, cachedInput: 0.003625, output: 0.87},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for name, cfg := range ModelRatios {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-
-			cfg := ModelRatios[tt.name]
-			require.InDelta(t, tt.input*ratio.MilliTokensUsd, cfg.Ratio, 1e-15)
-			require.InDelta(t, tt.cachedInput*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-15)
-			require.InDelta(t, tt.output*ratio.MilliTokensUsd, cfg.Ratio*cfg.CompletionRatio, 1e-15)
+			input, cached, output := 0.15, 0.003, 0.60
+			if name == "deepseek-v4-pro" {
+				input, cached, output = 0.66, 0.022, 1.98
+			}
+			require.InDelta(t, input, cfg.Ratio/ratio.MilliTokensUsd, 1e-12)
+			require.InDelta(t, cached, cfg.CachedInputRatio/ratio.MilliTokensUsd, 1e-12)
+			require.InDelta(t, output, cfg.Ratio*cfg.CompletionRatio/ratio.MilliTokensUsd, 1e-12)
 			require.Equal(t, int32(1048576), cfg.ContextLength)
 			require.Equal(t, int32(393216), cfg.MaxOutputTokens)
-			require.Len(t, cfg.TimeWindows, 3)
-			require.Equal(t, "2026-08-17", cfg.TimeWindows[0].DateFrom)
-			require.Equal(t, "Asia/Shanghai", cfg.TimeWindows[0].TimeZone)
-
-			beforeActivation := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 16, 15, 59, 0, 0, time.UTC))
-			require.InDelta(t, cfg.Ratio, beforeActivation.Ratio, 1e-15)
-
-			offPeak := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 24, 5, 0, 0, 0, time.UTC))
-			peak := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 24, 2, 0, 0, 0, time.UTC))
-			if tt.flashPrice {
-				require.InDelta(t, 0.22*ratio.MilliTokensUsd, offPeak.Ratio, 1e-15)
-				require.InDelta(t, 0.007*ratio.MilliTokensUsd, offPeak.CachedInputRatio, 1e-15)
-				require.InDelta(t, 0.66/0.22, offPeak.CompletionRatio, 1e-15)
-				require.InDelta(t, 0.44*ratio.MilliTokensUsd, peak.Ratio, 1e-15)
-				require.InDelta(t, 0.014*ratio.MilliTokensUsd, peak.CachedInputRatio, 1e-15)
-				require.InDelta(t, 1.32/0.44, peak.CompletionRatio, 1e-15)
-			} else {
-				require.InDelta(t, 0.66*ratio.MilliTokensUsd, offPeak.Ratio, 1e-15)
-				require.InDelta(t, 0.022*ratio.MilliTokensUsd, offPeak.CachedInputRatio, 1e-15)
-				require.InDelta(t, 1.98/0.66, offPeak.CompletionRatio, 1e-15)
-				require.InDelta(t, 1.32*ratio.MilliTokensUsd, peak.Ratio, 1e-15)
-				require.InDelta(t, 0.044*ratio.MilliTokensUsd, peak.CachedInputRatio, 1e-15)
-				require.InDelta(t, 3.96/1.32, peak.CompletionRatio, 1e-15)
-			}
-			require.NotContains(t, cfg.SupportedFeatures, "structured_outputs")
-			if tt.name == "deepseek-v4-flash-vision-exp" {
-				require.Empty(t, cfg.Quantization)
-			} else {
-				require.Equal(t, "fp4", cfg.Quantization)
-			}
 		})
 	}
 }
 
-// TestDeepSeekPricingScheduleHonorsActivationAndWeekends verifies the published
-// schedule starts on the documented date and never applies weekday peak prices
-// on weekends.
-// Parameters: t is the testing handle used for assertions and test lifecycle control.
-// Returns: nothing; the test fails through t when schedule boundaries are wrong.
-func TestDeepSeekPricingScheduleHonorsActivationAndWeekends(t *testing.T) {
-	t.Parallel()
-
-	cfg := ModelRatios["deepseek-v4-flash"]
-	beforeActivation := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 16, 15, 59, 0, 0, time.UTC))
-	require.InDelta(t, cfg.Ratio, beforeActivation.Ratio, 1e-15)
-
-	atActivation := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 16, 16, 0, 0, 0, time.UTC))
-	require.InDelta(t, 0.22*ratio.MilliTokensUsd, atActivation.Ratio, 1e-15)
-	require.InDelta(t, 0.007*ratio.MilliTokensUsd, atActivation.CachedInputRatio, 1e-15)
-
-	firstWeekdayPeakHour := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 17, 2, 0, 0, 0, time.UTC))
-	require.InDelta(t, 0.44*ratio.MilliTokensUsd, firstWeekdayPeakHour.Ratio, 1e-15)
-
-	saturdayPeakHour := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 22, 2, 0, 0, 0, time.UTC))
-	require.InDelta(t, 0.22*ratio.MilliTokensUsd, saturdayPeakHour.Ratio, 1e-15)
-	require.InDelta(t, 0.007*ratio.MilliTokensUsd, saturdayPeakHour.CachedInputRatio, 1e-15)
-}
-
-// TestModelRatiosMatchOfficialCapabilities verifies model-specific version,
-// modalities, reasoning effort, and endpoint capability metadata.
-// Parameters: t is the testing handle used for assertions and test lifecycle control.
-// Returns: nothing; the test fails through t when advertised capabilities are inconsistent.
+// TestModelRatiosMatchOfficialCapabilities prevents stale vision, search, and
+// open-weight metadata from being advertised for the replacement Flash model.
 func TestModelRatiosMatchOfficialCapabilities(t *testing.T) {
 	t.Parallel()
+	for name, cfg := range ModelRatios {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.ElementsMatch(t, []string{"low", "high", "max"}, cfg.SupportedReasoningEfforts)
+			require.Equal(t, "high", cfg.DefaultReasoningEffort)
+			require.ElementsMatch(t, []string{"text"}, cfg.OutputModalities)
+			require.ElementsMatch(t, []string{"tools", "json_mode", "logprobs", "reasoning"}, cfg.SupportedFeatures)
+			require.Contains(t, cfg.SupportedSamplingParameters, "temperature")
+			require.Contains(t, cfg.SupportedSamplingParameters, "top_p")
+			require.Nil(t, cfg.Image, "image inputs are prompt tokens, not generated images")
+			if name == "deepseek-v4-pro" {
+				require.ElementsMatch(t, []string{"text"}, cfg.InputModalities)
+				require.Contains(t, cfg.Description, "DeepSeek-V4-Pro-0813")
+			} else {
+				require.ElementsMatch(t, []string{"text", "image", "file"}, cfg.InputModalities)
+				require.Contains(t, cfg.Description, "DeepSeek-V4.1-Flash")
+				require.Empty(t, cfg.Quantization)
+				require.Empty(t, cfg.HuggingFaceID)
+			}
+		})
+	}
+	require.Empty(t, (&Adaptor{}).DefaultToolingConfig().Pricing, "ignored built-in tools must not be advertised as free native tools")
+}
 
-	flash := ModelRatios["deepseek-v4-flash"]
-	require.ElementsMatch(t, []string{"low", "high", "max"}, flash.SupportedReasoningEfforts)
-	require.Contains(t, flash.SupportedFeatures, "web_search")
-	require.Contains(t, flash.Description, "DeepSeek-V4-Flash-0731")
-
-	vision := ModelRatios["deepseek-v4-flash-vision-exp"]
-	require.ElementsMatch(t, []string{"text", "image", "file"}, vision.InputModalities)
-	require.ElementsMatch(t, []string{"text"}, vision.OutputModalities)
-	require.ElementsMatch(t, []string{"low", "high", "max"}, vision.SupportedReasoningEfforts)
-	require.Contains(t, vision.SupportedFeatures, "tools")
-	require.Contains(t, vision.SupportedFeatures, "json_mode")
-	require.Contains(t, vision.SupportedFeatures, "logprobs")
-	require.Contains(t, vision.SupportedFeatures, "web_search")
-	require.Nil(t, vision.Image, "image inputs are billed as prompt tokens, not per generated image")
-	require.Contains(t, vision.Description, "DeepSeek-V4-Flash-Vision-Exp")
-
-	pro := ModelRatios["deepseek-v4-pro"]
-	require.ElementsMatch(t, []string{"low", "high", "max"}, pro.SupportedReasoningEfforts)
-	require.Contains(t, pro.SupportedFeatures, "web_search")
-	require.Contains(t, pro.Description, "native Responses and Anthropic API support")
+// TestDeepSeekFlashAliasesShareCurrentConfiguration compares all alias metadata
+// except their deliberately distinct descriptions.
+func TestDeepSeekFlashAliasesShareCurrentConfiguration(t *testing.T) {
+	t.Parallel()
+	canonical := ModelRatios["deepseek-flash"]
+	canonical.Description = ""
+	for _, name := range []string{"deepseek-v4-flash", "deepseek-v4-flash-vision-exp"} {
+		alias := ModelRatios[name]
+		alias.Description = ""
+		require.Equal(t, canonical, alias, name)
+	}
 }

@@ -37,7 +37,7 @@ func TestCountTokenMessages_DeepSeekFileImagesUseDocumentedUpperBound(t *testing
 			}
 			content = append(content, fileBlock)
 			got := CountTokenMessages(ctx, []model.Message{{Role: "user", Content: content}}, modelName)
-			require.Equal(t, base+deepseekV4VisionMaxImageTokens, got)
+			require.Equal(t, base+1024, got)
 		})
 	}
 }
