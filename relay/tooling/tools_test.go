@@ -518,27 +518,43 @@ func TestValidateRequestedBuiltins_OpenAIUsesProviderDefaults(t *testing.T) {
 	require.NoError(t, ValidateRequestedBuiltins("gpt-4o", meta, channel, &openai.Adaptor{}, map[string]struct{}{"web_search": {}}))
 }
 
-// TestValidateRequestedBuiltins_DeepSeekNativeWebSearch verifies the native
-// DeepSeek web_search tool is allowed without a separate per-call charge.
-// Parameters: t is the testing handle used for assertions and test lifecycle control.
-// Returns: nothing; the test fails through t when a documented native tool is blocked.
-func TestValidateRequestedBuiltins_DeepSeekNativeWebSearch(t *testing.T) {
+// TestDeepSeekReviewBuiltinPolicy verifies current DeepSeek defaults reject
+// unsupported native search, prune optional built-ins, and preserve a user's
+// function tool even when that function happens to be named web_search.
+func TestDeepSeekReviewBuiltinPolicy(t *testing.T) {
 	t.Parallel()
+	for _, name := range []string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			metadata := &metalib.Meta{ChannelType: channeltype.DeepSeek, ActualModelName: name}
+			channel := &model.Channel{Type: channeltype.DeepSeek}
+			provider := &deepseekadaptor.Adaptor{}
+			require.NotContains(t, provider.DefaultToolingConfig().Pricing, "web_search")
+			require.ErrorContains(t, ValidateRequestedBuiltins(name, metadata, channel, provider,
+				map[string]struct{}{"web_search": {}}), "not allowed")
 
-	meta := &metalib.Meta{ChannelType: channeltype.DeepSeek, ActualModelName: "deepseek-v4-flash"}
-	provider := &deepseekadaptor.Adaptor{}
-	require.NoError(t, ValidateRequestedBuiltins(
-		"deepseek-v4-flash", meta, &model.Channel{Type: channeltype.DeepSeek}, provider,
-		map[string]struct{}{"web_search": {}},
-	))
+			request := &openai.ResponseAPIRequest{
+				Model: name,
+				Tools: []openai.ResponseAPITool{
+					{Type: "web_search"},
+					{Type: "function", Name: "web_search", Parameters: map[string]any{"type": "object"}},
+				},
+			}
+			removed := PruneDisallowedResponseBuiltins(request, metadata, channel, provider)
+			require.Equal(t, []string{"web_search"}, removed)
+			require.Len(t, request.Tools, 1)
+			require.Equal(t, "function", request.Tools[0].Type)
+			require.Equal(t, "web_search", request.Tools[0].Name)
+			require.NoError(t, ValidateResponseBuiltinTools(request, metadata, channel, provider))
 
-	request := &openai.ResponseAPIRequest{
-		Model: "deepseek-v4-flash",
-		Tools: []openai.ResponseAPITool{{Type: "web_search"}},
+			// A forced unsupported tool must fail validation rather than silently
+			// disappearing and changing the caller's requested behavior.
+			request.Tools = []openai.ResponseAPITool{{Type: "web_search"}}
+			request.ToolChoice = map[string]any{"type": "web_search"}
+			require.Empty(t, PruneDisallowedResponseBuiltins(request, metadata, channel, provider))
+			require.ErrorContains(t, ValidateResponseBuiltinTools(request, metadata, channel, provider), "not allowed")
+		})
 	}
-	removed := PruneDisallowedResponseBuiltins(request, meta, &model.Channel{Type: channeltype.DeepSeek}, provider)
-	require.Empty(t, removed)
-	require.Len(t, request.Tools, 1)
 }
 
 func TestNormalizeBuiltinType_ToolSearchAliases(t *testing.T) {

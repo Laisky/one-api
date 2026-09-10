@@ -10,7 +10,10 @@ but their former models are retired. All three names have the same current
 Flash prices, text/image input support, 1,048,576-token context limit, and
 393,216-token maximum output. The `file` modality denotes uploaded **image**
 references, not arbitrary document ingestion. Images are billed using upstream
-prompt-token usage; there is no image-generation price or fixed image-token estimate.
+prompt-token usage. Pre-consume estimation conservatively reserves up to **1024
+tokens per image** for every Flash alias without downloading image dimensions.
+This is not a fixed final image charge: upstream usage, including cache hits,
+remains authoritative. There is no image-generation price.
 
 `deepseek-v4-pro` currently serves **DeepSeek-V4-Pro-0813**, with text input only
 and the same context/output limits. Its announced transition is described below.
@@ -58,13 +61,17 @@ to the provider rather than introducing local sampling rules.
 Run with the repository's required Go toolchain:
 
 ```sh
-go test -race ./relay/adaptor/deepseek ./relay/pricing
+go test -race ./relay/adaptor/deepseek ./relay/adaptor/openai ./relay/controller ./relay/model ./relay/tooling ./relay/pricing
 go test -race ./...
 ```
 
 Tests cover the catalog and aliases, modalities, unsupported capabilities,
 reasoning aliases, both pricing resolution paths, all UTC peak boundaries,
 weekends, caller timezones, and the exact Pro transition without mutating defaults.
+Behavioral review regressions also cover native routing, every Flash image source,
+no-fetch reservations, actual-usage final charging, validating JSON boundaries,
+all alias sampling paths, and unsupported built-ins versus user function tools.
+The DeepSeek regression workflow runs these and the complete affected packages.
 
 ## Official sources
 
@@ -72,3 +79,4 @@ weekends, caller timezones, and the exact Pro transition without mutating defaul
 - [Thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/)
 - [Vision](https://api-docs.deepseek.com/guides/vision/)
 - [Responses API](https://api-docs.deepseek.com/guides/responses_api/)
+- [Current Responses API reference](https://api-docs.deepseek.com/api/create-response/)
