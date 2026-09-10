@@ -1,0 +1,76 @@
+name: Realtime billing regression
+
+on:
+  pull_request:
+    paths:
+      - 'relay/realtime/**'
+      - 'relay/quota/**'
+      - 'relay/model/**'
+      - 'relay/pricing/**'
+      - 'relay/adaptor/openai/**'
+      - 'controller/realtime*'
+      - '.github/workflows/realtime-billing-regression.yml'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: Realtime regression (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - ./relay/realtime
+          - ./relay/quota
+          - ./relay/adaptor/openai
+          - ./controller
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify checkout credentials are not retained
+        shell: bash
+        run: |
+          if git config --local --name-only --get-regexp '^http\..*\.extraheader$|^credential\.' >/dev/null; then
+            echo '::error::Checkout retained credentials in the local Git configuration.'
+            exit 1
+          fi
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Checkout reviewed baseline for the negative control
+        if: matrix.package == './relay/realtime'
+        uses: actions/checkout@v4
+        with:
+          ref: 6138a94f9749312a9c31c7c2ebdcbea758b04235
+          path: .realtime-baseline
+          persist-credentials: false
+      - name: Verify index regression detects the original bug
+        if: matrix.package == './relay/realtime'
+        shell: bash
+        run: |
+          cp relay/realtime/identity_review_test.go .realtime-baseline/relay/realtime/identity_review_test.go
+          set +e
+          (cd .realtime-baseline && go test -race -count=1 -timeout=2m -v -run '^TestReviewTranscriptionIndexPresence$' ./relay/realtime) > "$RUNNER_TEMP/realtime-index-baseline.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/realtime-index-baseline.log"
+          if [ "$status" -ne 1 ] || ! grep -F -- '--- FAIL: TestReviewTranscriptionIndexPresence' "$RUNNER_TEMP/realtime-index-baseline.log" >/dev/null; then
+            echo '::error::The historical control did not reproduce the intended assertion failure.'
+            exit 1
+          fi
+      - name: Reviewer behavior regressions
+        run: go test -race -count=1 -timeout=5m -v -run '^TestReview' ${{ matrix.package }}
+      - name: Package regression suite
+        run: go test -race -count=1 -timeout=10m ${{ matrix.package }}
+      - name: Vet package
+        run: go vet ${{ matrix.package }}
+      - name: Check realtime sentinel error convention
+        if: matrix.package == './relay/realtime'
+        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2 run --no-config --enable-only err113 --timeout=5m ./relay/realtime
