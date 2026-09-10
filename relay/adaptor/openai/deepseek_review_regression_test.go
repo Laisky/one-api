@@ -27,9 +27,13 @@ func TestDeepSeekReviewImageEstimationNoFetch(t *testing.T) {
 				t.Run(name+"/"+detail+"/"+source, func(t *testing.T) {
 					before := fetches
 					tokens, err := CountImageTokens(source, detail, name)
-					require.NoError(t, err)
-					require.Equal(t, 1024, tokens)
-					require.Equal(t, before, fetches, "DeepSeek preflight must not fetch image dimensions")
+					t.Run("tokens", func(t *testing.T) {
+						require.NoError(t, err)
+						require.Equal(t, 1024, tokens)
+					})
+					t.Run("no-fetch", func(t *testing.T) {
+						require.Equal(t, before, fetches, "DeepSeek preflight must not fetch image dimensions")
+					})
 				})
 			}
 		}
@@ -64,13 +68,21 @@ func TestDeepSeekReviewChatImageReservation(t *testing.T) {
 				map[string]any{"type": "file", "file_data": "data:image/png;base64,AAAA"},
 			}
 			for index, image := range images {
-				require.Equal(t, base+1024, count([]any{text, image}), "image source %d", index)
+				t.Run([]string{"url", "inline", "file_id", "file_data"}[index], func(t *testing.T) {
+					require.Equal(t, base+1024, count([]any{text, image}))
+				})
 			}
-			require.Equal(t, base+len(images)*1024, count(append([]any{text}, images...)))
-			require.Equal(t, base, count([]any{text, map[string]any{"type": "file", "file_id": " "}}))
-			plain := []model.Message{{Role: "user", Content: []model.MessageContent{}}}
-			typed := []model.Message{{Role: "user", Content: []model.MessageContent{{Type: model.ContentTypeFile, FileID: "file-api-image"}}}}
-			require.Equal(t, CountTokenMessages(context.Background(), plain, name)+1024, CountTokenMessages(context.Background(), typed, name))
+			t.Run("multiple", func(t *testing.T) {
+				require.Equal(t, base+len(images)*1024, count(append([]any{text}, images...)))
+			})
+			t.Run("empty", func(t *testing.T) {
+				require.Equal(t, base, count([]any{text, map[string]any{"type": "file", "file_id": " "}}))
+			})
+			t.Run("typed-file", func(t *testing.T) {
+				plain := []model.Message{{Role: "user", Content: []model.MessageContent{}}}
+				typed := []model.Message{{Role: "user", Content: []model.MessageContent{{Type: model.ContentTypeFile, FileID: "file-api-image"}}}}
+				require.Equal(t, CountTokenMessages(context.Background(), plain, name)+1024, CountTokenMessages(context.Background(), typed, name))
+			})
 		})
 	}
 }

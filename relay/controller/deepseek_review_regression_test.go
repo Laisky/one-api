@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,13 +29,19 @@ func TestDeepSeekReviewNativeRouting(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			for _, channel := range []int{channeltype.DeepSeek, channeltype.OpenAI, channeltype.OpenAICompatible} {
-				meta := &metalib.Meta{ChannelType: channel, BaseURL: "https://api.deepseek.com", OriginModelName: "my-model", ActualModelName: name}
-				require.True(t, supportsNativeResponseAPI(meta), "mapped model %s on channel %d must retain native Responses routing", name, channel)
+				t.Run("channel-"+strconv.Itoa(channel), func(t *testing.T) {
+					meta := &metalib.Meta{ChannelType: channel, BaseURL: "https://api.deepseek.com", OriginModelName: "my-model", ActualModelName: name}
+					require.True(t, supportsNativeResponseAPI(meta), "mapped model must retain native Responses routing")
+				})
 			}
-			meta := &metalib.Meta{ChannelType: channeltype.DeepSeek, OriginModelName: name}
-			require.True(t, supportsNativeResponseAPI(meta), "origin name must work when actual name is absent")
-			thirdParty := &metalib.Meta{ChannelType: channeltype.OpenAI, BaseURL: "https://third-party.example/v1", ActualModelName: name}
-			require.False(t, supportsNativeResponseAPI(thirdParty), "a model name alone must not opt a third-party host into DeepSeek's contract")
+			t.Run("origin-only", func(t *testing.T) {
+				meta := &metalib.Meta{ChannelType: channeltype.DeepSeek, OriginModelName: name}
+				require.True(t, supportsNativeResponseAPI(meta), "origin name must work when actual name is absent")
+			})
+			t.Run("third-party", func(t *testing.T) {
+				thirdParty := &metalib.Meta{ChannelType: channeltype.OpenAI, BaseURL: "https://third-party.example/v1", ActualModelName: name}
+				require.False(t, supportsNativeResponseAPI(thirdParty), "a model name alone must not opt a third-party host into DeepSeek's contract")
+			})
 		})
 	}
 	require.False(t, supportsNativeResponseAPI(nil))
@@ -69,10 +76,16 @@ func TestDeepSeekReviewResponsesImageReservation(t *testing.T) {
 					map[string]any{"type": "input_image", "file_data": "data:image/png;base64,AAAA"},
 				}
 				for index, image := range images {
-					require.Equal(t, base+1024, count([]any{text, image}), "image source %d must reserve the current bound", index)
+					t.Run([]string{"url", "inline", "file_id", "file_data"}[index], func(t *testing.T) {
+						require.Equal(t, base+1024, count([]any{text, image}), "each image source must reserve the current bound")
+					})
 				}
-				require.Equal(t, base+len(images)*1024, count(append([]any{text}, images...)), "each image must be counted once")
-				require.Equal(t, base, count([]any{text, map[string]any{"type": "input_image"}}), "an empty image source must not reserve tokens")
+				t.Run("multiple", func(t *testing.T) {
+					require.Equal(t, base+len(images)*1024, count(append([]any{text}, images...)), "each image must be counted once")
+				})
+				t.Run("empty", func(t *testing.T) {
+					require.Equal(t, base, count([]any{text, map[string]any{"type": "input_image"}}), "an empty image source must not reserve tokens")
+				})
 			})
 		}
 	}
