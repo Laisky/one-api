@@ -21,8 +21,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify checkout does not retain authentication
+        run: |
+          python3 - <<'PYTHON'
+          import subprocess
+          keys = subprocess.check_output(
+              ["git", "config", "--local", "--name-only", "--list"], text=True
+          ).lower().splitlines()
+          if any(key.endswith(".extraheader") or key == "core.sshcommand" or
+                 (key.startswith("includeif.") and key.endswith(".path")) for key in keys):
+              raise SystemExit("Checkout retained authentication configuration for later steps.")
+          print("No checkout authentication configuration remains.")
+          PYTHON
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Behavioral reproductions and negative controls
@@ -37,7 +51,7 @@ jobs:
             ./relay/model ./relay/tooling ./relay/pricing ./relay/adaptor/common/deepseekcompat
       - name: Save regression evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: deepseek-regression-${{ github.sha }}
           path: /tmp/deepseek-regression.log
