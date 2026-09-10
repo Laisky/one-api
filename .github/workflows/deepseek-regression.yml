@@ -1,0 +1,44 @@
+name: DeepSeek regression
+
+on:
+  pull_request:
+    paths:
+      - 'relay/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/deepseek-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deepseek-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Behavioral reproductions and negative controls
+        run: |
+          set -o pipefail
+          go test -race -count=1 -timeout 10m -v -run '^TestDeepSeekReview' \
+            ./relay/controller ./relay/adaptor/openai ./relay/model 2>&1 | tee /tmp/deepseek-regression.log
+      - name: Complete affected package suites
+        run: |
+          go test -race -count=1 -timeout 10m \
+            ./relay/controller ./relay/adaptor/deepseek ./relay/adaptor/openai \
+            ./relay/model ./relay/tooling ./relay/pricing ./relay/adaptor/common/deepseekcompat
+      - name: Save regression evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: deepseek-regression-${{ github.sha }}
+          path: /tmp/deepseek-regression.log
+          retention-days: 14
