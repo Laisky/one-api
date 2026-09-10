@@ -47,6 +47,11 @@ type databaseTopology struct {
 	primary *gorm.DB
 	log     *gorm.DB
 	mode    uuidTopologyMode
+	// catchUp carries keyset cursors and shape memos across the bounded cycles of one
+	// catch-up pass. It belongs to the topology because a topology is exactly one database
+	// installation for one process generation, which is the scope a pass is defined over:
+	// reinitializing the databases builds a new topology and therefore starts a fresh pass.
+	catchUp *uuidCatchUpProgress
 }
 
 var (
@@ -65,7 +70,10 @@ func newUnifiedTopology(primary *gorm.DB) (*databaseTopology, error) {
 	if primary == nil {
 		return nil, errors.New("primary database handle is nil")
 	}
-	return &databaseTopology{primary: primary, log: primary, mode: uuidTopologyUnified}, nil
+	return &databaseTopology{
+		primary: primary, log: primary, mode: uuidTopologyUnified,
+		catchUp: newUUIDCatchUpProgress(),
+	}, nil
 }
 
 // newSplitTopology builds a topology where a dedicated database owns logs.
@@ -85,7 +93,10 @@ func newSplitTopology(primary *gorm.DB, log *gorm.DB) (*databaseTopology, error)
 	if log == nil {
 		return nil, errors.New("log database handle is nil")
 	}
-	return &databaseTopology{primary: primary, log: log, mode: uuidTopologySplit}, nil
+	return &databaseTopology{
+		primary: primary, log: log, mode: uuidTopologySplit,
+		catchUp: newUUIDCatchUpProgress(),
+	}, nil
 }
 
 // handle returns the database handle that authoritatively owns the supplied role.
@@ -102,6 +113,24 @@ func (topology *databaseTopology) handle(role uuidDBRole) *gorm.DB {
 		return topology.log
 	}
 	return topology.primary
+}
+
+// catchUpProgress returns the topology's catch-up pass state, never nil.
+//
+// A topology built by a test fixture through a struct literal has no progress value, so this
+// tolerates the nil case rather than making every caller check.
+// Parameters: none.
+//
+// Return values:
+//   - *uuidCatchUpProgress: pass state for this topology, or nil when the topology is nil.
+func (topology *databaseTopology) catchUpProgress() *uuidCatchUpProgress {
+	if topology == nil {
+		return nil
+	}
+	if topology.catchUp == nil {
+		topology.catchUp = newUUIDCatchUpProgress()
+	}
+	return topology.catchUp
 }
 
 // markerRoles returns the physical database roles that must carry completion markers.

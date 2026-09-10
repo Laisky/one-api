@@ -16,6 +16,27 @@ reconcile them:
 | --- | --- | --- |
 | Catch-up | Fills resolvable UUIDs in a bounded background worker. Writes no completion marker, promotes no index. | Default. Runs automatically on the master node while markers are absent. |
 | Automatic finalization | After the worker observes sustained quiescence (no reconcilable work for the configured number of idle passes), it runs the full finalizer on its own. | Default (`EXTERNAL_UUID_BACKFILL_AUTO_FINALIZE=true`). No operator action required. |
+
+### Cycles and passes
+
+Catch-up work is measured in two units, and the difference matters when reading logs or
+metrics:
+
+- A **cycle** is one bounded run, limited by `EXTERNAL_UUID_BACKFILL_MAX_ROWS_PER_CYCLE` and
+  `EXTERNAL_UUID_BACKFILL_MAX_CYCLE_DURATION`.
+- A **pass** is one complete traversal of every table, column, and predicate from the lowest
+  id to the end of the candidate rows. A pass legitimately spans several cycles; the worker
+  carries its keyset cursors across them, so a cycle resumes where the previous one stopped
+  instead of rescanning from the beginning.
+
+Quiescence, and therefore automatic finalization, is counted in **passes**: a pass that
+traverses everything and writes nothing is one idle pass. Rows that can never be resolved — a
+log row whose token was hard-deleted, an ambiguous historical token name — are examined once
+per pass and do not count as remaining work.
+
+Each cycle logs one INFO line carrying `pass`, `pass_complete`, `updated_rows`,
+`pass_updated_rows`, and `budget_exhausted`. `budget_exhausted` means "this cycle stopped
+before the pass finished", not "this cycle examined a lot of rows".
 | Synchronous finalizer | Runs the full ordered reconciliation, promotes unique indexes, validates globally, then writes completion markers at startup, failing startup on any error. | Optional operator override, in an approved window, after every writer is UUID-aware. |
 
 The default lifecycle is therefore fully automatic: deploy the release, catch-up
@@ -61,7 +82,7 @@ silently clamped.
 | Metric | Labels | Use |
 | --- | --- | --- |
 | `oneapi_uuid_backfill_rows_total` | role, phase, target, result | Reconciliation throughput; `result="unresolved"` counts examined rows whose reference could not be resolved. |
-| `oneapi_uuid_backfill_last_backlog` | role, target | `1` while catch-up still has work, `0` after a full no-work pass. |
+| `oneapi_uuid_backfill_last_backlog` | role, target | `1` while a pass is unfinished or the pass that just finished wrote rows; `0` after a pass that traversed everything and wrote nothing. Permanently unresolvable rows do not hold this at `1`. |
 | `oneapi_uuid_backfill_cycle_duration_seconds` | role, mode, result | Cycle duration and outcome. |
 | `oneapi_uuid_backfill_finalizer_total` | role, result | Finalizer attempts and their result. |
 
@@ -113,6 +134,18 @@ corrected. It does not retry automatically.
 | `... malformed owned uuid requires operator remediation` | A populated owned UUID is not a canonical hyphenated UUIDv7. | Correct the rows, then rerun. Catch-up deliberately preserves the value. |
 | `populated fk uuid disagrees with live owner` | A denormalized UUID does not match its owner. | Investigate the source, correct the rows, then rerun. Catch-up never silently repairs it. |
 | `fillable missing fk uuid` | Reconciliation did not finish. | Rerun; if it persists, the referenced owner is being changed concurrently, which means the writer barrier is not complete. |
+
+## 6.1 Catch-up that never finishes
+
+| Symptom | Cause | Action |
+| --- | --- | --- |
+| Every cycle logs `updated_rows: 0` with `budget_exhausted: true`, forever, and no marker is ever written | Fixed. Before the pass-based scheduler, each cycle restarted its scan at id 0 and counted permanently unresolvable rows as remaining work, so a deployment holding more such rows than one cycle's row budget never observed an idle pass. | Upgrade. On an older binary, raise `EXTERNAL_UUID_BACKFILL_MAX_ROWS_PER_CYCLE` above the number of unresolvable rows so one cycle can traverse them, or finalize once with `EXTERNAL_UUID_BACKFILL_FINALIZER=true`. |
+
+To count the unresolvable log rows on PostgreSQL:
+
+    SELECT count(*) FROM logs l
+    LEFT JOIN tokens t ON t.user_id = l.user_id AND t.name = l.token_name
+    WHERE l.user_id > 0 AND l.token_name <> '' AND l.token_uuid IS NULL AND t.id IS NULL;
 
 The validation error names the table, column, an aggregate count, and bounded
 example row ids. It never logs row content.

@@ -103,6 +103,7 @@ func startExternalUUIDMigration(ctx context.Context, topology *databaseTopology)
 		if _, err := runUUIDMigrationCoordinator(ctx, topology, uuidMigrationModeFinalizer); err != nil {
 			return errors.Wrap(err, "finalize external resource uuids")
 		}
+		signalCompactPrerequisite()
 		return nil
 	}
 
@@ -143,11 +144,18 @@ func startUUIDCatchUpWorker(ctx context.Context, topology *databaseTopology) {
 	go func() {
 		defer close(done)
 		defer cancel()
-		// idlePasses counts consecutive full no-work passes. Sustained quiescence is the
-		// automatic stand-in for the drained mixed-writer window: once no cycle has found
-		// anything to reconcile for the configured number of idle passes, every writer that
-		// is still running has proven itself UUID-aware, and the worker finalizes so a
-		// default deployment completes without any operator flag.
+		// idlePasses counts consecutive quiescent PASSES, not cycles. A pass is a complete
+		// traversal of every scan; it legitimately spans several bounded cycles, and the
+		// coordinator carries the keyset cursors across them. Sustained quiescence is the
+		// automatic stand-in for the drained mixed-writer window: once a whole pass has found
+		// nothing to reconcile for the configured number of passes, every writer that is
+		// still running has proven itself UUID-aware, and the worker finalizes so a default
+		// deployment completes without any operator flag.
+		//
+		// Counting cycles instead of passes is what made this worker non-convergent: a
+		// deployment whose permanently unresolvable rows outnumber one cycle's row budget
+		// spent every cycle re-examining the same rows, reported backlog every time, and
+		// never reached the quiescence that finalization waits for.
 		idlePasses := 0
 		for {
 			delay := uuidCatchUpIdleInterval()
@@ -162,7 +170,12 @@ func startUUIDCatchUpWorker(ctx context.Context, topology *databaseTopology) {
 			case result.completed:
 				// Markers appeared, so another process finalized; nothing left to do.
 				return
-			case result.updated > 0 || result.budgetExhausted:
+			case !result.passComplete:
+				// The pass is still being traversed. Continue promptly; the cursors are
+				// carried over, so the next cycle resumes rather than rescanning.
+				delay = uuidCatchUpActiveInterval()
+			case result.passUpdated > 0:
+				// A whole pass finished and wrote rows, so another pass may find more.
 				idlePasses = 0
 				delay = uuidCatchUpActiveInterval()
 			default:
@@ -212,6 +225,9 @@ func runAutoFinalize(ctx context.Context, topology *databaseTopology) bool {
 	}
 	log.Info("external uuid migration completed automatically",
 		zap.String("topology", string(topology.mode)))
+	// The compact worker is blocked on exactly these markers. Waking it now is what lets it
+	// wait at the idle cadence instead of polling for the prerequisite every few seconds.
+	signalCompactPrerequisite()
 	return true
 }
 

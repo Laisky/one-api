@@ -38,7 +38,26 @@ var (
 	// because a signal means "look again soon", so coalescing several into one is correct and
 	// a full buffer must never block the request path that raised it.
 	compactRepairSignal = make(chan struct{}, 1)
+	// compactPrerequisiteSignal carries "the external UUID v3 markers now exist" to the
+	// worker. It is buffered by one and sent non-blockingly for the same reasons as the
+	// repair signal: the meaning is "look again now", so coalescing is correct.
+	compactPrerequisiteSignal = make(chan struct{}, 1)
 )
+
+// signalCompactPrerequisite tells the worker that the external UUID v3 markers were written.
+//
+// Without it a worker parked on the prerequisite would either poll — which is what made an
+// incomplete v3 migration cost a lock acquisition and two marker reads every few seconds — or
+// sleep out a full idle interval before noticing that it may finally proceed.
+// Parameters: none.
+//
+// Return values: none.
+func signalCompactPrerequisite() {
+	select {
+	case compactPrerequisiteSignal <- struct{}{}:
+	default:
+	}
+}
 
 // signalCompactRepair asks the worker to start a repair cycle promptly.
 //
@@ -101,6 +120,9 @@ func runCompactWorkerLoop(ctx context.Context, topology *databaseTopology) {
 		case <-compactRepairSignal:
 			// A lookup fallback is consumed promptly rather than waiting out the idle
 			// interval: the proposal requires the signal to be consumed within one second.
+		case <-compactPrerequisiteSignal:
+			// The v3 markers just appeared, so a worker parked on the prerequisite resumes
+			// immediately instead of sleeping out the idle interval.
 		case <-time.After(delay):
 		}
 	}
@@ -181,6 +203,13 @@ func runCompactWorkerCycle(ctx context.Context, coordinator *compactCoordinator)
 		log.Warn("compact uuid migration is blocked by invalid source data or an engine blocker",
 			zap.String("reason", result.reason),
 			zap.Int("blocker_rows", result.blockers))
+		return compactIdleInterval()
+	}
+	if result.state == compactStateWaitingPrerequisite {
+		// Nothing here is allowed to act until the external UUID v3 markers exist, and this
+		// worker cannot make that happen. Re-acquiring ownership and re-reading both marker
+		// sets at the active cadence is pure polling; signalCompactPrerequisite wakes the
+		// worker the moment v3 finishes, so waiting costs nothing in responsiveness.
 		return compactIdleInterval()
 	}
 	return compactActiveInterval()

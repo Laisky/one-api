@@ -65,6 +65,11 @@ upgrade does not inherit a backlog.
 | `ready` | Markers exist and the current audit is healthy | Nothing |
 | `passive_legacy` | Incomplete with no eligible master, or paused | Start/promote a master |
 
+While the state is `waiting_prerequisite` there is nothing this worker is permitted to do, so
+it waits at the idle interval rather than re-checking every few seconds. It does not sleep
+through the handover: completing the v3 migration wakes it immediately, so it resumes within a
+second of the markers being written.
+
 Only two states ever need a human.
 
 **`blocked_validation`** means something cannot be fixed without a decision. Most often it is

@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -140,6 +141,12 @@ type uuidMigrationRun struct {
 	cycleCtx context.Context
 	// updated counts rows written across all phases of this run.
 	updated int
+	// progress carries keyset cursors and shape memos across the cycles of one catch-up
+	// pass. It is nil in finalizer mode, which must always traverse everything from id 0.
+	progress *uuidCatchUpProgress
+	// incomplete records that this cycle stopped before every scan reached the end of its
+	// candidate set, so the pass needs at least one more cycle.
+	incomplete bool
 }
 
 // cycleWindowExpired reports whether an error is just this catch-up cycle's time budget
@@ -165,11 +172,100 @@ func (run *uuidMigrationRun) cycleWindowExpired(parentCtx context.Context, err e
 	// — most importantly a DDL statement timeout, which UUID-042 requires to surface as a
 	// retryable failure — also reports DeadlineExceeded, and pattern-matching the sentinel
 	// would silently convert that operator-configured bound into "the cycle ran out of time".
-	if run.cycleCtx.Err() == nil || !errors.Is(err, context.DeadlineExceeded) {
+	if run.cycleCtx.Err() == nil {
+		return false
+	}
+	// sql.ErrTxDone belongs here alongside DeadlineExceeded. When the cycle deadline fires
+	// inside a batch's transaction, database/sql rolls that transaction back on its own, and
+	// the next statement in it reports "transaction has already been committed or rolled
+	// back" rather than the deadline. That is the same event wearing a different error, and
+	// treating it as a real failure is not cosmetic: it resets the quiescence streak, so a
+	// database slow enough to time out cycles regularly could never finalize — the identical
+	// defect this pass-based scheduler exists to remove.
+	if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, sql.ErrTxDone) {
 		return false
 	}
 	run.budget.drained = true
+	// The cycle's clock, not its work queue, ended this cycle: the pass still has scans to
+	// finish, so the worker must reschedule promptly rather than count a quiescent pass.
+	run.incomplete = true
 	return true
+}
+
+// scanStart returns where one scan resumes and whether this pass already finished it.
+// Finalizer mode has no pass state, so it always starts at id 0 and never skips a scan.
+// Parameters:
+//   - key: scan identity.
+//
+// Return values:
+//   - int: keyset cursor to resume from.
+//   - bool: true when the scan is already exhausted for this pass.
+func (run *uuidMigrationRun) scanStart(key uuidCursorKey) (int, bool) {
+	return run.progress.scanStart(key)
+}
+
+// advanceScan records the highest id one scan examined, so the next cycle of this pass
+// resumes after it instead of re-reading the same rows.
+// Parameters:
+//   - key: scan identity.
+//   - lastID: highest examined id.
+//
+// Return values: none.
+func (run *uuidMigrationRun) advanceScan(key uuidCursorKey, lastID int) {
+	run.progress.advanceScan(key, lastID)
+}
+
+// finishScan marks one scan exhausted for this pass.
+// Parameters:
+//   - key: scan identity.
+//
+// Return values: none.
+func (run *uuidMigrationRun) finishScan(key uuidCursorKey) {
+	run.progress.finishScan(key)
+}
+
+// recordUpdated adds rows written by one batch to both the cycle and the pass totals.
+// Parameters:
+//   - rows: rows written by the batch.
+//
+// Return values: none.
+func (run *uuidMigrationRun) recordUpdated(rows int) {
+	run.updated += rows
+	run.progress.addUpdated(rows)
+}
+
+// stopScan reports that the cycle budget ended this cycle with work left in the pass.
+//
+// This is the distinction the scheduler depends on: a cycle that ran out of budget with scans
+// still unfinished has backlog, while a cycle that examined budget-worth of permanently
+// unresolvable rows and then reached the end of every scan does not.
+// Parameters: none.
+//
+// Return values: none.
+func (run *uuidMigrationRun) stopScan() {
+	run.incomplete = true
+}
+
+// targetPresent reports whether a target's table and column exist, memoized per pass state.
+//
+// The answer describes the database's shape, so re-reading it every cycle only produced
+// catalog traffic. A failure clears the memo through failPass.
+// Parameters:
+//   - db: handle owning the target table.
+//   - key: target identity, with an empty predicate.
+//   - model: gorm model for the target table.
+//   - column: trusted column name that must exist.
+//
+// Return values:
+//   - bool: true when the table and column both exist.
+func (run *uuidMigrationRun) targetPresent(db *gorm.DB, key uuidCursorKey, model any, column string) bool {
+	if present, known := run.progress.targetPresence(key); known {
+		return present
+	}
+	migrator := db.Migrator()
+	present := migrator.HasTable(model) && migrator.HasColumn(model, column)
+	run.progress.memoizeTargetPresence(key, present)
+	return present
 }
 
 // uuidMigrationResult reports what one coordinator invocation observed.
@@ -178,8 +274,18 @@ type uuidMigrationResult struct {
 	completed bool
 	// updated is the number of rows written by this run.
 	updated int
-	// budgetExhausted is true when a catch-up cycle stopped early with work remaining.
+	// budgetExhausted is true when a catch-up cycle stopped before the pass was complete,
+	// meaning at least one scan still has unexamined candidate rows. It is deliberately NOT
+	// "the cycle examined its whole row budget": a cycle can spend the entire budget on
+	// permanently unresolvable rows and still finish every scan, which is quiescence, not
+	// backlog. Conflating the two is what stopped a deployment with more orphaned rows than
+	// one cycle's budget from ever finalizing.
 	budgetExhausted bool
+	// passComplete is true when every scan reached the end of its candidate set during this
+	// pass, whether in this cycle or an earlier one.
+	passComplete bool
+	// passUpdated counts rows written across every cycle of the pass this cycle belongs to.
+	passUpdated int
 }
 
 // RunExternalUUIDMigrations reconciles external UUID data across the initialized topology.
@@ -241,13 +347,28 @@ func runUUIDMigrationCoordinator(ctx context.Context, topology *databaseTopology
 		return result, nil
 	}
 
-	// Step 4: only now, on the incomplete-marker path, is metadata inspection allowed.
-	if err := topology.validateSchema(ctx); err != nil {
-		return result, errors.Wrap(err, "validate database schema")
+	// Catch-up carries pass state across cycles; the finalizer deliberately carries none, so
+	// it re-validates, re-ensures, and re-traverses everything from id 0 every time it runs.
+	var progress *uuidCatchUpProgress
+	pass := uint64(0)
+	if mode == uuidMigrationModeCatchUp {
+		progress = topology.catchUpProgress()
+		pass = progress.beginCycle()
+	}
+
+	// Step 4: only now, on the incomplete-marker path, is metadata inspection allowed. The
+	// schema cannot change under a running process, so a catch-up worker validates it once
+	// rather than issuing the same catalog reads every few seconds.
+	if !progress.schemaIsValidated() {
+		if err := topology.validateSchema(ctx); err != nil {
+			progress.failPass()
+			return result, errors.Wrap(err, "validate database schema")
+		}
+		progress.markSchemaValidated()
 	}
 
 	parentCtx := ctx
-	run := &uuidMigrationRun{topology: topology, mode: mode}
+	run := &uuidMigrationRun{topology: topology, mode: mode, progress: progress}
 	if mode == uuidMigrationModeCatchUp {
 		// The row half of the cycle budget is counted globally across phases; the time half
 		// is a context deadline so every query, update, and inter-batch transition observes
@@ -265,7 +386,8 @@ func runUUIDMigrationCoordinator(ctx context.Context, topology *databaseTopology
 	log := uuidMigrationLogger(ctx)
 	log.Info("external uuid reconciliation started",
 		zap.String("topology", string(topology.mode)),
-		zap.String("mode", string(mode)))
+		zap.String("mode", string(mode)),
+		zap.Uint64("pass", pass))
 
 	// Candidate indexes come before reconciliation so every NULL and empty-string pass is
 	// served by an index instead of degrading into an unindexed historical scan.
@@ -277,21 +399,39 @@ func runUUIDMigrationCoordinator(ctx context.Context, topology *databaseTopology
 	// only shorten, never extend), make EXTERNAL_UUID_BACKFILL_DDL_TIMEOUT unreachable, and
 	// on PostgreSQL leave a cancelled concurrent build behind as an invalid index on every
 	// attempt. The DDL has its own bounded lock and statement timeouts.
-	if err := ensureUUIDCandidateIndexes(parentCtx, run); err != nil {
-		// A failed index phase stops the cycle and records the error; it never falls through
-		// to reconcile against a missing index.
-		recordUUIDCycle(topology, mode, uuidResultFailure, time.Since(started))
-		return result, err
+	// The index phase is memoized for the same reason schema validation is: once every
+	// candidate index exists, re-deriving that fact costs only catalog reads. A failure
+	// clears the memo through failPass, so a retry still re-runs the whole phase.
+	if !run.progress.indexesAreEnsured() {
+		if err := ensureUUIDCandidateIndexes(parentCtx, run); err != nil {
+			// A failed index phase stops the cycle and records the error; it never falls
+			// through to reconcile against a missing index.
+			progress.failPass()
+			recordUUIDCycle(topology, mode, uuidResultFailure, time.Since(started))
+			return result, err
+		}
+		run.progress.markIndexesEnsured()
 	}
 	if err := runUUIDReconciliationPhases(ctx, run); err != nil {
 		if !run.cycleWindowExpired(parentCtx, err) {
+			progress.failPass()
 			recordUUIDCycle(topology, mode, uuidResultFailure, time.Since(started))
 			return result, err
 		}
 	}
 
 	result.updated = run.updated
-	result.budgetExhausted = run.budget.spent()
+	result.budgetExhausted = run.incomplete
+	result.passComplete = !run.incomplete
+	result.passUpdated = run.updated
+	if progress != nil {
+		result.passUpdated = progress.passUpdated()
+		if result.passComplete {
+			// Every scan reached the end of its candidate set, so the next cycle starts a
+			// fresh traversal instead of resuming finished cursors.
+			progress.completePass()
+		}
+	}
 
 	if mode == uuidMigrationModeCatchUp {
 		recordUUIDCycle(topology, mode, uuidResultSuccess, time.Since(started))
@@ -299,7 +439,10 @@ func runUUIDMigrationCoordinator(ctx context.Context, topology *databaseTopology
 		// One INFO event per cycle; per-batch detail stays at DEBUG.
 		log.Info("external uuid catch-up cycle finished without markers",
 			zap.String("topology", string(topology.mode)),
+			zap.Uint64("pass", pass),
 			zap.Int("updated_rows", result.updated),
+			zap.Bool("pass_complete", result.passComplete),
+			zap.Int("pass_updated_rows", result.passUpdated),
 			zap.Bool("budget_exhausted", result.budgetExhausted),
 			zap.Duration("duration", time.Since(started)))
 		return result, nil
@@ -429,14 +572,21 @@ func backfillOwnedUUIDsForRole(ctx context.Context, run *uuidMigrationRun, role 
 // Return values:
 //   - error: wrapped database error when a read or write fails.
 func backfillOwnedUUIDs(ctx context.Context, run *uuidMigrationRun, db *gorm.DB, target uuidOwnedTarget) error {
-	if !db.Migrator().HasTable(target.model) || !db.Migrator().HasColumn(target.model, "uuid") {
+	targetKey := uuidCursorKey{role: target.role, phase: uuidPhaseOwned, table: target.table, column: "uuid"}
+	if !run.targetPresent(db, targetKey, target.model, "uuid") {
 		return nil
 	}
 
 	for _, missingPredicate := range missingStringPredicates(db, "uuid") {
-		lastID := 0
+		key := targetKey
+		key.predicate = missingPredicate
+		lastID, done := run.scanStart(key)
+		if done {
+			continue
+		}
 		for {
 			if run.budget.spent() {
+				run.stopScan()
 				return nil
 			}
 			rows := []uuidIntRow{}
@@ -451,6 +601,7 @@ func backfillOwnedUUIDs(ctx context.Context, run *uuidMigrationRun, db *gorm.DB,
 				return errors.Wrapf(err, "list missing uuid rows for %s", target.table)
 			}
 			if len(rows) == 0 {
+				run.finishScan(key)
 				break
 			}
 			// Advance across every examined row so a row that loses the update race
@@ -465,7 +616,11 @@ func backfillOwnedUUIDs(ctx context.Context, run *uuidMigrationRun, db *gorm.DB,
 			if err != nil {
 				return errors.Wrapf(err, "set uuid for %s", target.table)
 			}
-			run.updated += updated
+			// The cursor records committed progress, never attempted progress: it moves only
+			// after the batch's write succeeded, so a cycle interrupted by its time budget
+			// re-reads that batch instead of stepping over rows it never wrote.
+			run.advanceScan(key, lastID)
+			run.recordUpdated(updated)
 			recordUUIDBatch(ctx, run, target.role, uuidPhaseOwned, target.table, "uuid", len(rows), updated, 0)
 			run.budget.consume(len(rows))
 		}
