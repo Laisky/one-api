@@ -32,8 +32,15 @@ All values are **USD per million tokens**.
 
 Peak hours are **01:00–04:00 and 06:00–10:00 UTC, Monday–Friday**, with inclusive
 starts and exclusive ends. All remaining hours, including weekends, are off-peak.
-Base ratios represent current off-peak defaults. These configurations are not a
-historical price archive; retired price schedules are not retained for replay.
+Base ratios represent current off-peak defaults; billing resolves the schedule
+using the request start time, not the wall-clock time at settlement.
+
+The Flash rates above take effect at **2026-09-10 04:00 UTC** (12:00 Beijing time).
+Before that instant, the immediately preceding Flash defaults are retained:
+**0.22 / 0.007 / 0.66** off-peak and **0.44 / 0.014 / 1.32** peak, ordered as
+cache-miss input / cache-hit input / output. This preserves the announced boundary
+and in-flight request accounting; it is not a complete archive of earlier prices.
+The preceding rates come from the pre-update defaults at commit `e000b8eb`.
 
 At **2026-09-14 04:00 UTC** (12:00 Beijing time), DeepSeek will route the Pro name
 to V4.1 Flash and charge Flash rates, until V4.1 Pro is released. The adapter
@@ -48,6 +55,10 @@ no unannounced model name, release date, or future price is assumed.
 Function tools remain supported. The current Responses API ignores built-in
 `web_search`, so the model defaults no longer advertise native search or a
 zero-cost built-in search policy. This does not remove user-defined search functions.
+The live guide's **Compatibility Details → Tools** table explicitly marks
+`web_search` as ignored; the API reference's **tools** section likewise says
+built-in tool types are ignored. The separate note about replaying older
+`web_search_call` input items does not advertise execution of a new search.
 Old V4 open-weight IDs and quantization claims are not carried over to V4.1 aliases.
 
 Reasoning defaults to `high`. The documented mapping is `minimal`/`low` → `low`,
@@ -67,7 +78,10 @@ go test -race ./...
 
 Tests cover the catalog and aliases, modalities, unsupported capabilities,
 reasoning aliases, both pricing resolution paths, all UTC peak boundaries,
-weekends, caller timezones, and the exact Pro transition without mutating defaults.
+weekends, caller timezones, and both announced transitions without mutating defaults.
+`TestDeepSeekReviewPricingNotice` additionally checks final quota calculation for
+cache misses, cache hits, output-only and mixed usage, including the nanosecond
+before, exact instant of, and nanosecond after both Beijing-noon changes.
 Behavioral review regressions also cover native routing, every Flash image source,
 no-fetch reservations, actual-usage final charging, validating JSON boundaries,
 all alias sampling paths, and unsupported built-ins versus user function tools.

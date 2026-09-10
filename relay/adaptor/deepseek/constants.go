@@ -48,7 +48,7 @@ func deepseekFlashModelConfig(description string) adaptor.ModelConfig {
 	cfg.Ratio = deepseekFlashInputPrice * ratio.MilliTokensUsd
 	cfg.CachedInputRatio = deepseekFlashCachedInputPrice * ratio.MilliTokensUsd
 	cfg.CompletionRatio = deepseekFlashOutputPrice / deepseekFlashInputPrice
-	cfg.TimeWindows = deepseekPricingWindows("", "", deepseekFlashInputPrice, deepseekFlashCachedInputPrice, deepseekFlashOutputPrice)
+	cfg.TimeWindows = deepseekFlashPricingWindows()
 	return cfg
 }
 
@@ -71,7 +71,8 @@ func deepseekProModelConfig() adaptor.ModelConfig {
 //   - https://api-docs.deepseek.com/guides/vision/
 //   - https://api-docs.deepseek.com/guides/responses_api/
 //
-// These are current defaults, not a historical price archive. Image inputs use
+// These defaults retain the immediately preceding Flash rates for the announced
+// transition, not a complete historical price archive. Image inputs use
 // upstream prompt-token usage, never generated-image pricing. Retired V3 names
 // deepseek-chat and deepseek-reasoner remain excluded. Old V4 weight/quantization
 // metadata is not attached to aliases now served by the newer V4.1 model.
