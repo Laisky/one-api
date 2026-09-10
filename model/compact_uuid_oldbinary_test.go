@@ -199,8 +199,9 @@ func TestCompactUUIDOldBinary(t *testing.T) {
 		"the old binary's own AutoMigrate must have run; output:\n%s", output)
 
 	after := compactCatalogFingerprint(t, db)
-	require.Equal(t, before, after,
-		"the old binary's AutoMigrate must not drop, rename, retype, or rewrite any compact or legacy object")
+	// This build declares no owned-uuid index, so the only additions it may make are the
+	// superseded indexes of the rollback contract; every other line must be byte-identical.
+	requireRollbackCatalogContract(t, "the oldest supported rollback build", before, after, nil)
 }
 
 func TestCompactUUIDCompatibilityCorpus(t *testing.T) {

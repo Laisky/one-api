@@ -43,6 +43,9 @@ func Resolve(lookup func(uuid string) (int, error), ref string) (int, error) {
 	}
 	id, err := lookup(ref)
 	if err != nil {
+		if errors.Is(err, ErrInvalidRef) || errors.Is(err, ErrNotFound) {
+			return 0, err
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return 0, ErrNotFound
 		}

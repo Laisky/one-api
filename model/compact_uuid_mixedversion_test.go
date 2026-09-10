@@ -6,6 +6,7 @@ package model
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -59,8 +60,8 @@ func compactFaultCycleVersions(t *testing.T, binary string, dsn string, stage co
 		output := runPinnedOldBinary(t, binary, oldBinaryDSN(dsn), compactFaultOldSettle)
 		require.Contains(t, output, "database schema migrated",
 			"the pinned artifact's own AutoMigrate must have run in round %d; output:\n%s", round, output)
-		require.Equal(t, before, compactCatalogFingerprint(t, db),
-			"round %d: the pinned artifact must leave every compact and legacy object byte-identical", round)
+		requireRollbackCatalogContract(t, "round "+strconv.Itoa(round)+"'s pinned artifact",
+			before, compactCatalogFingerprint(t, db), nil)
 		require.Equal(t, digest, compactFaultDigest(db, compactFaultBacklogRows),
 			"round %d: the pinned artifact must not move the fixture's authoritative text", round)
 

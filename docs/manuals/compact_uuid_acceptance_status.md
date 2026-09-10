@@ -79,8 +79,24 @@ A **real pre-migration artifact** was built from a pinned ref and executed — n
 
 `TestCompactUUIDOldBinary` — the artifact starts against a compact-completed PostgreSQL 17
 schema, runs its own full `AutoMigrate` (log line `database schema migrated` confirmed), and the
-catalog fingerprint is **byte-identical before and after**: no compact or legacy column,
-trigger, index, or marker changed.
+catalog satisfies the rollback contract: no compact or legacy column, trigger, index, or marker
+changed, and nothing was dropped, renamed, retyped, or rewritten.
+
+The contract is exact rather than byte-identical, and has been since `32df60cf`. That commit
+replaced `idx_async_task_bindings_last_accessed_at` with the composite `idx_async_task_retention`
+(`last_accessed_at, created_at`). Both pinned rollback builds still declare the old index, so their
+`AutoMigrate` re-creates it on a schema the current build created — the same additive, own-index
+behavior this document already accepted for `ed15a144`'s owned-uuid indexes (see "The defect this
+exposed"). The result is exactly the state every upgraded deployment is in, since `32df60cf` never
+dropped the old index from them. The alternative, declaring the redundant index on every fresh
+deployment forever, would buy byte-identity for a rollback at a permanent write cost.
+
+Every index a rollback build may re-create is listed, by name and exact definition, in
+`compactRollbackSupersededIndexes` (`model/compact_uuid_rollback_contract_test.go`). One assertion,
+`requireRollbackCatalogContract`, enforces the contract in all three pinned-build suites.
+`TestCompactRollbackSupersededIndexesAreReallySuperseded` proves on every ordinary test run that each
+entry is still absent from the current schema and that its replacement still leads with the same
+column, so the list cannot quietly turn into a hole.
 
 `TestCompactUUIDCompatibilityCorpus` — the artifact, which has no knowledge of compact columns,
 performs a real write through its own v3 writer contract (root-account creation). The database

@@ -198,6 +198,98 @@ func reconcileCompactTarget(ctx context.Context, db *gorm.DB, target compactTarg
 	return progress, nil
 }
 
+// compactTargetHasGap reports whether an owned target has any NULL shadow.
+//
+// This is the post-completion form of the NULL-backlog probe, and its shape is chosen for the
+// planner rather than for paging:
+//
+//   - It asks only "is there one?" An owned shadow is never legitimately NULL, including when
+//     authoritative text is NULL, empty, or malformed, because those source values are blockers.
+//   - It orders by the compact column, not by id. `WHERE <compact> IS NULL ... ORDER BY id
+//     LIMIT n` is what production ran, and because the planner assumes a NULL shadow and
+//     non-NULL text are independent, it expected plentiful matches and walked the primary key
+//     through the whole table to find none: 273,892 rows per column on b1, every idle interval.
+//     Ordering by the compact column gives the compact index the useful ordering while it also
+//     serves the IS NULL predicate. The live planner regression verifies that supported engine
+//     versions choose the bounded index path; production metrics remain the guard for plan drift.
+//
+// It is not the repair feed. Paging repairs by `(compact, id)` would force PostgreSQL, whose
+// single-column index carries heap order rather than id order, to sort every gap row on every
+// batch. Repairs keep the id-ordered keyset read, which is efficient exactly when gaps are
+// plentiful.
+//
+// The steady state calls it only for owned targets. On a clean owned target the NULL index range
+// is empty and the probe is a single seek. Foreign-key shadows are excluded because they are
+// legitimately NULL wherever their references are absent.
+// Parameters:
+//   - ctx: context bounding the query.
+//   - db: authoritative handle for the target table.
+//   - target: registry target to probe.
+//
+// Return values:
+//   - bool: true when at least one gap exists.
+//   - error: wrapped error when the query fails.
+func compactTargetHasGap(ctx context.Context, db *gorm.DB, target compactTarget) (bool, error) {
+	if target.kind != compactKindOwned {
+		return false, errors.Errorf("probe compact owned gaps for non-owned target %s", target.id())
+	}
+	compact := quoteIdentifier(db, target.compactColumn)
+	// Identifiers come only from the compile-time registry; there are no binds.
+	sql := "SELECT " + quoteIdentifier(db, "id") +
+		" FROM " + quoteIdentifier(db, target.table) +
+		" WHERE " + compact + " IS NULL" +
+		" ORDER BY " + compact + " ASC LIMIT 1"
+	ids := []int64{}
+	if err := db.WithContext(ctx).Raw(sql).Scan(&ids).Error; err != nil {
+		return false, errors.Wrapf(err, "probe compact gaps for %s", target.id())
+	}
+	return len(ids) > 0, nil
+}
+
+// readCompactCandidateByID reads one row's observation through its primary key.
+//
+// It is how a repair the read path asked for stays an index lookup rather than a scan: the
+// lookup already knows which row disagreed, so the worker reads exactly that row.
+// Parameters:
+//   - ctx: context bounding the query.
+//   - db: authoritative handle for the target table.
+//   - target: registry target to read.
+//   - id: primary key.
+//
+// Return values:
+//   - []compactCandidate: the row's observation, or none when the row no longer exists.
+//   - error: wrapped error when the query fails.
+func readCompactCandidateByID(ctx context.Context, db *gorm.DB, target compactTarget,
+	id int64) (candidates []compactCandidate, returnErr error) {
+	sql := "SELECT " + quoteIdentifier(db, "id") + " AS id, " +
+		quoteIdentifier(db, target.legacyColumn) + " AS legacy_value, " +
+		quoteIdentifier(db, target.compactColumn) + " AS compact_value" +
+		" FROM " + quoteIdentifier(db, target.table) +
+		" WHERE " + quoteIdentifier(db, "id") + " = ?"
+	rows, err := db.WithContext(ctx).Raw(sql, id).Rows()
+	if err != nil {
+		return nil, errors.Wrapf(err, "read compact row %d for %s", id, target.id())
+	}
+	defer func() {
+		if err := rows.Close(); err != nil && returnErr == nil {
+			returnErr = errors.Wrapf(err, "close compact row %d for %s", id, target.id())
+		}
+	}()
+
+	candidates = make([]compactCandidate, 0, 1)
+	for rows.Next() {
+		candidate := compactCandidate{}
+		if err := rows.Scan(&candidate.id, &candidate.legacy, &candidate.compact); err != nil {
+			return nil, errors.Wrapf(err, "scan compact row %d for %s", id, target.id())
+		}
+		candidates = append(candidates, candidate)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrapf(err, "iterate compact row %d for %s", id, target.id())
+	}
+	return candidates, nil
+}
+
 // reconcileCompactBatch classifies one batch and applies its repairs in one transaction.
 //
 // The cursor to raise is the CALLING PHASE'S own: a sweep batch raising the gap cursor would

@@ -315,6 +315,23 @@ func runCompactHealthAudit(ctx context.Context, topology *databaseTopology) {
 		publishCompactStateMetrics(topology, compactStatePassiveLegacy)
 		return
 	}
+	auditRequired, err := compactFullAuditRequired(ctx, topology)
+	if err != nil {
+		for _, role := range topology.targetRoles() {
+			disableCompactReads(role, compactStatePassiveLegacy, "compact audit-required state could not be read")
+		}
+		recordCompactAction(topology, compactActionAudit, uuidResultFailure)
+		return
+	}
+	if auditRequired {
+		for _, role := range topology.targetRoles() {
+			disableCompactReads(role, compactStateDegraded, "compact data requires a fresh full audit")
+		}
+		publishCompactStateMetrics(topology, compactStateDegraded)
+		recordCompactAction(topology, compactActionAudit, uuidResultSuccess)
+		signalCompactRepair()
+		return
+	}
 
 	verified, objectReason, err := validateCompactObjects(ctx, topology)
 	if err != nil {

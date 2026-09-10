@@ -284,23 +284,16 @@ func TestCompactUUIDOldBinaryDrift(t *testing.T) {
 		// build (4dfec29a) dropped that tag, and TestCompactUUIDOldBinary does assert byte-identity
 		// for it — so the strict form is still enforced where it is achievable.
 		//
-		// What is asserted instead is that every addition is one of ITS OWN declared owned-uuid
-		// text indexes. Anything else appearing would be unexplained and is a failure.
+		// What is asserted instead is the rollback contract: every addition is one of ITS OWN
+		// declared owned-uuid text indexes, or an index the current build superseded. Anything
+		// else appearing would be unexplained and is a failure.
 		added := compactPrevAddedLines(before, after)
 		t.Logf("catalog lines the preceding build added:\n%s", strings.Join(added, "\n"))
-		allowed := map[string]struct{}{}
+		own := map[string]struct{}{}
 		for _, owned := range uuidOwnedRegistry() {
-			allowed["IDX|"+ordinaryUUIDIndexName(owned.table)] = struct{}{}
+			own["IDX|"+ordinaryUUIDIndexName(owned.table)] = struct{}{}
 		}
-		for _, line := range added {
-			prefix := line
-			if cut := strings.LastIndex(line, "|"); cut > 0 {
-				prefix = line[:cut]
-			}
-			_, ok := allowed[prefix]
-			require.True(t, ok,
-				"the preceding build added %q, which is not one of its own declared owned-uuid indexes", line)
-		}
+		requireRollbackCatalogContract(t, "the preceding build", before, after, own)
 	})
 
 	t.Run("an ordinary rollback leaves the legacy-index manifest satisfiable", func(t *testing.T) {

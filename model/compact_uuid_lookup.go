@@ -65,6 +65,12 @@ func resolveIDByUUID(ctx context.Context, db *gorm.DB, target compactTarget, ref
 		return 0, err
 	}
 
+	// repairResolved records that the compact index failed to find a row the text index may
+	// still find. If the text index does find it, that row is proven to have a missing or wrong
+	// shadow, and only then is there anything for the worker to repair.
+	repairResolved := false
+	// queuedMismatch records that this lookup already handed the worker a wrongly-nominated row.
+	queuedMismatch := false
 	if enabled, _ := compactReadsEnabled(target.role); enabled {
 		id, found, reason, err := probeCompactCandidate(ctx, db, target, canonical)
 		switch {
@@ -82,7 +88,12 @@ func resolveIDByUUID(ctx context.Context, db *gorm.DB, target compactTarget, ref
 			// text-disagreement as both a mismatch and a miss, and the two mean different
 			// things: a miss is a gap to fill, a mismatch is a wrong shadow to repair.
 			recordCompactLookupFallback(target.role, reason)
-			signalCompactRepair()
+			if reason == compactFallbackMismatch {
+				// The index nominated this row for an identifier its own text does not hold.
+				enqueueCompactRowRepair(target, id)
+				queuedMismatch = true
+			}
+			repairResolved = true
 		}
 	} else {
 		// No fresh healthy audit, so the compact predicate is not used at all. Section 7 lists
@@ -93,7 +104,18 @@ func resolveIDByUUID(ctx context.Context, db *gorm.DB, target compactTarget, ref
 		recordCompactLookupFallback(target.role, compactFallbackExpiredHealth)
 	}
 
-	return resolveIDByLegacyUUID(ctx, db, target, canonical)
+	resolved, err := resolveIDByLegacyUUID(ctx, db, target, canonical, strings.TrimSpace(ref))
+	if err == nil && repairResolved {
+		// The text index found a row the compact index could not: that row's shadow is proven
+		// missing or wrong. An identifier that exists nowhere reaches this point with an error
+		// instead, so a stream of unknown identifiers never asks the worker to do anything.
+		enqueueCompactRowRepair(target, resolved)
+		signalCompactRepair()
+	} else if queuedMismatch {
+		// The identifier exists nowhere, but a row's shadow claimed it, and that row is queued.
+		signalCompactRepair()
+	}
+	return resolved, err
 }
 
 // canonicalizeLookupRef trims, validates, and canonicalizes one external identifier.
@@ -127,9 +149,11 @@ func canonicalizeLookupRef(ref string) (compactUUID, error) {
 //   - db: authoritative handle for the target table.
 //   - target: registry target identifying the table and columns.
 //   - canonical: parsed request identifier.
+//   - original: trimmed request text before canonicalization.
 //
 // Return values:
-//   - int64: internal row ID when a candidate verified.
+//   - int64: internal row ID when a candidate verified; on a mismatch, the ID of the row whose
+//     shadow nominated it, which is never an answer and only ever a repair target.
 //   - bool: true when a candidate verified against its authoritative text.
 //   - string: compile-time fallback reason when no candidate verified.
 //   - error: raw database error, so the caller can classify a capability race.
@@ -158,9 +182,10 @@ func probeCompactCandidate(ctx context.Context, db *gorm.DB, target compactTarge
 	stored, err := parseCompactUUID(strings.TrimSpace(rows[0].Legacy))
 	if err != nil || stored != canonical {
 		// The shadow nominated a row whose authoritative text says otherwise. Never return
-		// it; fall back and let the worker repair the shadow.
+		// it as the answer; report its ID alongside found=false so the caller can have exactly
+		// that row repaired.
 		recordCompactMismatchBacklog(target, 1)
-		return 0, false, compactFallbackMismatch, nil
+		return rows[0].ID, false, compactFallbackMismatch, nil
 	}
 	return rows[0].ID, true, "", nil
 }
@@ -179,14 +204,33 @@ func probeCompactCandidate(ctx context.Context, db *gorm.DB, target compactTarge
 //   - int64: internal row ID.
 //   - error: idresolve.ErrNotFound for a canonical unknown UUID, or a wrapped database error.
 func resolveIDByLegacyUUID(ctx context.Context, db *gorm.DB, target compactTarget,
-	canonical compactUUID) (int64, error) {
+	canonical compactUUID, original string) (int64, error) {
+	id, err := resolveIDByLegacyText(ctx, db, target, original)
+	if err == nil || !errors.Is(err, idresolve.ErrNotFound) || original == canonical.canonical() {
+		return id, err
+	}
+	return resolveIDByLegacyText(ctx, db, target, canonical.canonical())
+}
+
+// resolveIDByLegacyText resolves one owned UUID through the authoritative text index without
+// changing its stored representation. This preserves legacy behavior while compact health is off.
+// Parameters:
+//   - ctx: context bounding the query.
+//   - db: authoritative handle for the target table.
+//   - target: registry target identifying the table and its owned UUID column.
+//   - text: trimmed legacy identifier in the caller's original representation.
+//
+// Return values:
+//   - int64: internal row ID.
+//   - error: idresolve.ErrNotFound or a wrapped database error.
+func resolveIDByLegacyText(ctx context.Context, db *gorm.DB, target compactTarget, text string) (int64, error) {
 	rows := []compactLookupProjection{}
 	sql := "SELECT " + quoteIdentifier(db, "id") + " AS id, " +
 		quoteIdentifier(db, target.legacyColumn) + " AS uuid" +
 		" FROM " + quoteIdentifier(db, target.table) +
 		" WHERE " + quoteIdentifier(db, target.legacyColumn) + " = ? LIMIT 1"
 
-	if err := db.WithContext(ctx).Raw(sql, canonical.canonical()).Scan(&rows).Error; err != nil {
+	if err := db.WithContext(ctx).Raw(sql, text).Scan(&rows).Error; err != nil {
 		// Cancellation, connection, serialization, and other general database errors keep
 		// their existing behavior and are never relabeled as a miss.
 		return 0, errors.Wrapf(err, "resolve %s by legacy uuid", target.id())
@@ -206,4 +250,38 @@ func resolveIDByLegacyUUID(ctx context.Context, db *gorm.DB, target compactTarge
 //   - error: wrapped error when the table owns no UUID in the registry.
 func compactLookupTarget(table string) (compactTarget, error) {
 	return compactTargetByID(table + ".uuid")
+}
+
+// resolvePublicIDByUUID routes a compatibility lookup through the verified compact contract.
+// Parameters:
+//   - ctx: context bounding compact and legacy database queries.
+//   - db: authoritative database handle for the table.
+//   - table: trusted owned-target table name from the compile-time registry.
+//   - ref: raw external UUID reference.
+//
+// Return values:
+//   - int: internal primary key.
+//   - error: wrapped target lookup, validation, not-found, or database error.
+func resolvePublicIDByUUID(ctx context.Context, db *gorm.DB, table string, ref string) (int, error) {
+	target, err := compactLookupTarget(table)
+	if err != nil {
+		return 0, errors.Wrapf(err, "resolve compact lookup target for %s", table)
+	}
+	if enabled, _ := compactReadsEnabled(target.role); !enabled {
+		trimmed := strings.TrimSpace(ref)
+		if trimmed == "" {
+			return 0, errors.New("uuid is empty")
+		}
+		recordCompactLookupFallback(target.role, compactFallbackExpiredHealth)
+		id, legacyErr := resolveIDByLegacyText(ctx, db, target, trimmed)
+		if legacyErr != nil {
+			return 0, legacyErr
+		}
+		return int(id), nil
+	}
+	id, err := resolveIDByUUID(ctx, db, target, ref)
+	if err != nil {
+		return 0, err
+	}
+	return int(id), nil
 }

@@ -36,6 +36,13 @@ func TestResolveErrorKinds(t *testing.T) {
 	require.ErrorIs(t, err, ErrNotFound)
 	require.Equal(t, errkind.NotFound, errkind.Of(err))
 
+	_, err = Resolve(func(uuid string) (int, error) {
+		return 0, ErrNotFound
+	}, "018f0000-0000-7000-8000-000000000004")
+	require.ErrorIs(t, err, ErrNotFound)
+	require.Equal(t, ErrNotFound.Error(), err.Error(),
+		"a lookup sentinel must not gain an observable wrapper at the resolution boundary")
+
 	// A genuine lookup failure stays unclassified: it may be a database outage,
 	// which must keep reaching ERROR.
 	_, err = Resolve(func(uuid string) (int, error) {

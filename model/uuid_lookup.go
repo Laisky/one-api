@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -47,11 +48,7 @@ func GetUserByUUID(uuid string) (*User, error) {
 //   - int: internal primary key.
 //   - error: wrapped database error when lookup fails.
 func GetUserIdByUUID(uuid string) (int, error) {
-	user, err := GetUserByUUID(uuid)
-	if err != nil {
-		return 0, err
-	}
-	return user.Id, nil
+	return resolvePublicIDByUUID(context.Background(), DB, "users", uuid)
 }
 
 // GetUserUUIDByID retrieves a user's external UUID by internal id.
@@ -99,11 +96,7 @@ func GetChannelByUUID(uuid string) (*Channel, error) {
 //   - int: internal primary key.
 //   - error: wrapped database error when lookup fails.
 func GetChannelIdByUUID(uuid string) (int, error) {
-	channel, err := GetChannelByUUID(uuid)
-	if err != nil {
-		return 0, err
-	}
-	return channel.Id, nil
+	return resolvePublicIDByUUID(context.Background(), DB, "channels", uuid)
 }
 
 // GetChannelUUIDByID retrieves a channel's external UUID by internal id.
@@ -151,11 +144,7 @@ func GetTokenByUUID(uuid string) (*Token, error) {
 //   - int: internal primary key.
 //   - error: wrapped database error when lookup fails.
 func GetTokenIdByUUID(uuid string) (int, error) {
-	token, err := GetTokenByUUID(uuid)
-	if err != nil {
-		return 0, err
-	}
-	return token.Id, nil
+	return resolvePublicIDByUUID(context.Background(), DB, "tokens", uuid)
 }
 
 // GetTokenUUIDByID retrieves a token's external UUID by internal id.
@@ -203,11 +192,7 @@ func GetRedemptionByUUID(uuid string) (*Redemption, error) {
 //   - int: internal primary key.
 //   - error: wrapped database error when lookup fails.
 func GetRedemptionIdByUUID(uuid string) (int, error) {
-	redemption, err := GetRedemptionByUUID(uuid)
-	if err != nil {
-		return 0, err
-	}
-	return redemption.Id, nil
+	return resolvePublicIDByUUID(context.Background(), DB, "redemptions", uuid)
 }
 
 // GetLogByUUID retrieves a log row by its external UUID.
@@ -237,11 +222,7 @@ func GetLogByUUID(uuid string) (*Log, error) {
 //   - int: internal primary key.
 //   - error: wrapped database error when lookup fails.
 func GetLogIdByUUID(uuid string) (int, error) {
-	log, err := GetLogByUUID(uuid)
-	if err != nil {
-		return 0, err
-	}
-	return log.Id, nil
+	return resolvePublicIDByUUID(context.Background(), LOG_DB, "logs", uuid)
 }
 
 // GetMCPServerByUUID retrieves an MCP server by its external UUID.
@@ -271,11 +252,7 @@ func GetMCPServerByUUID(uuid string) (*MCPServer, error) {
 //   - int: internal primary key.
 //   - error: wrapped database error when lookup fails.
 func GetMCPServerIdByUUID(uuid string) (int, error) {
-	server, err := GetMCPServerByUUID(uuid)
-	if err != nil {
-		return 0, err
-	}
-	return server.Id, nil
+	return resolvePublicIDByUUID(context.Background(), DB, "mcp_servers", uuid)
 }
 
 // GetPasskeyCredentialByUUID retrieves a passkey credential by external UUID.
@@ -305,9 +282,5 @@ func GetPasskeyCredentialByUUID(uuid string) (*PasskeyCredential, error) {
 //   - int: internal primary key.
 //   - error: wrapped database error when lookup fails.
 func GetPasskeyCredentialIdByUUID(uuid string) (int, error) {
-	credential, err := GetPasskeyCredentialByUUID(uuid)
-	if err != nil {
-		return 0, err
-	}
-	return credential.Id, nil
+	return resolvePublicIDByUUID(context.Background(), DB, "passkey_credentials", uuid)
 }

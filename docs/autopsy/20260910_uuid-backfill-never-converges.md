@@ -287,6 +287,11 @@ for one restart is the other option. Both are documented in the runbook.
 Unrelated but worth acting on: `b1` runs with `DEBUG_SQL=true`, which emits every statement and was
 the dominant contributor to the log volume in section 2.
 
+Follow-up. This fix shipped as `e000b8eb`, and on `b1` both migrations then completed within an
+hour. One fat backend remained: the completed compact UUID worker re-proving its own completion
+every idle interval. That is a separate defect with its own record,
+[The Completed Compact UUID Migration That Kept Re-Proving Itself](./20260910_compact-uuid-steady-state-cost.md).
+
 ## 8. Lessons
 
 ### 8.1 "The data is the work queue" is an assumption, not a fact
