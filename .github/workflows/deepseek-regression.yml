@@ -29,7 +29,7 @@ jobs:
         run: |
           set -o pipefail
           go test -race -count=1 -timeout 10m -v -run '^TestDeepSeekReview' \
-            ./relay/controller ./relay/adaptor/openai ./relay/model 2>&1 | tee /tmp/deepseek-regression.log
+            ./relay/controller ./relay/adaptor/openai ./relay/adaptor/deepseek ./relay/model ./relay/tooling 2>&1 | tee /tmp/deepseek-regression.log
       - name: Complete affected package suites
         run: |
           go test -race -count=1 -timeout 10m \
@@ -42,13 +42,3 @@ jobs:
           name: deepseek-regression-${{ github.sha }}
           path: /tmp/deepseek-regression.log
           retention-days: 14
-      - name: Snapshot public source for this review
-        if: always()
-        run: git archive --format=tar -o /tmp/deepseek-source.tar HEAD relay common model go.mod go.sum AGENTS.md
-      - name: Save temporary source snapshot
-        if: always()
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: deepseek-source-${{ github.sha }}
-          path: /tmp/deepseek-source.tar
-          retention-days: 1
