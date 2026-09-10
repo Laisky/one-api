@@ -8,8 +8,8 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// TestNormalizeDeepSeekReasoningEffortMatchesOfficialMapping verifies the
-// current DeepSeek low, medium, high, xhigh, and max compatibility mapping.
+// TestNormalizeDeepSeekReasoningEffortMatchesOfficialMapping verifies all seven
+// documented compatibility effort values, normalization, and unknown inputs.
 // Parameters: t is the testing handle used for assertions and subtests.
 // Returns: nothing; the test fails when normalization diverges from the official mapping.
 func TestNormalizeDeepSeekReasoningEffortMatchesOfficialMapping(t *testing.T) {
@@ -21,12 +21,15 @@ func TestNormalizeDeepSeekReasoningEffortMatchesOfficialMapping(t *testing.T) {
 		want    string
 		wantNil bool
 	}{
+		{name: "minimal maps to low", input: "minimal", want: "low"},
 		{name: "low remains low", input: " low ", want: "low"},
 		{name: "medium maps to high", input: "medium", want: "high"},
 		{name: "high remains high", input: "HIGH", want: "high"},
 		{name: "xhigh maps to high", input: "xhigh", want: "high"},
 		{name: "max remains max", input: "max", want: "max"},
-		{name: "unsupported value is cleared", input: "minimal", wantNil: true},
+		{name: "ultra maps to max", input: " ULTRA ", want: "max"},
+		{name: "unsupported value is cleared", input: "unknown", wantNil: true},
+		{name: "empty value is cleared", input: " ", wantNil: true},
 	}
 
 	for _, tt := range tests {
