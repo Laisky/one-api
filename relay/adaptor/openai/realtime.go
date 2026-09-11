@@ -109,7 +109,7 @@ func RealtimeSessionsHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWit
 
 	body, bizErr := enforceRealtimeSessionsBodyModel(body, meta)
 	if bizErr != nil {
-		return bizErr, bizErr.Error.RawError
+		return bizErr, errors.WithStack(bizErr.Error.RawError)
 	}
 
 	// Build upstream URL (honoring any per-endpoint "realtime" override)

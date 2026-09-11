@@ -332,7 +332,7 @@ func collectStreamBody(body io.Reader, limit int) ([]byte, error) {
 	}
 
 	if buffer.Len() == 0 {
-		return buffer.Bytes(), errNoStreamDataReceived
+		return buffer.Bytes(), errors.WithStack(errNoStreamDataReceived)
 	}
 
 	return buffer.Bytes(), nil

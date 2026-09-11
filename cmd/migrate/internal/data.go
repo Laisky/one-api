@@ -58,7 +58,7 @@ func (m *Migrator) migrateData(ctx context.Context, stats *MigrationStats) error
 	for _, tableInfo := range TableMigrationOrder {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		default:
 		}
 
@@ -127,7 +127,7 @@ func (m *Migrator) migrateTableSequential(ctx context.Context, tableInfo TableIn
 	for offset < totalCount {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		default:
 		}
 
@@ -220,7 +220,7 @@ func (m *Migrator) migrateTableConcurrent(ctx context.Context, tableInfo TableIn
 			wg.Wait()
 			close(results)
 			collectorWg.Wait()
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		case jobs <- BatchJob{
 			TableInfo: tableInfo,
 			Offset:    offset,
@@ -510,7 +510,7 @@ func (m *Migrator) ExportData(ctx context.Context) (map[string]any, error) {
 	for _, tableInfo := range TableMigrationOrder {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, errors.WithStack(ctx.Err())
 		default:
 		}
 

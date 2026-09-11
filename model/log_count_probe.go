@@ -117,7 +117,7 @@ func ProbeLogCount(ctx context.Context, scope LogListScope, filter LogListFilter
 		if ctx.Err() != nil {
 			return LogCount{Quality: LogCountUnavailable, AsOf: now}, errors.Wrap(ctx.Err(), "probe log count")
 		}
-		if probeCtx.Err() == context.DeadlineExceeded {
+		if errors.Is(probeCtx.Err(), context.DeadlineExceeded) {
 			return LogCount{Quality: LogCountUnavailable, AsOf: now}, nil
 		}
 		return LogCount{Quality: LogCountUnavailable, AsOf: now}, errors.Wrap(err, "probe log count")

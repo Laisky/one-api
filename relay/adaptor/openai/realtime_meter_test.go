@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
-	rmodel "github.com/Laisky/one-api/relay/model"
-	"github.com/Laisky/one-api/relay/realtime"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
+
+	rmodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/realtime"
 )
 
 // realtimeMeterPair creates a loopback WebSocket pair; it uses no API key, paid

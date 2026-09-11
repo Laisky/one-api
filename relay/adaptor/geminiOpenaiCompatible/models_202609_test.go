@@ -79,17 +79,17 @@ func TestGeminiSeptember2026SpecializedCatalog(t *testing.T) {
 	require.Equal(t, "1280x720", omni.Video.BaseResolution)
 
 	roboticsTests := []struct {
-		model             string
-		cachedInputUsd    float64
+		model            string
+		cachedInputUsd   float64
 		expectedFeatures []string
 	}{
 		{
-			model:             "gemini-robotics-er-2-preview",
-			cachedInputUsd:    0.20,
+			model:            "gemini-robotics-er-2-preview",
+			cachedInputUsd:   0.20,
 			expectedFeatures: []string{"tools", "json_mode", "structured_outputs", "web_search", "reasoning"},
 		},
 		{
-			model:             "gemini-robotics-er-2-streaming-preview",
+			model:            "gemini-robotics-er-2-streaming-preview",
 			expectedFeatures: []string{"tools", "web_search", "reasoning"},
 		},
 	}

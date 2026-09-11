@@ -485,7 +485,7 @@ func resolveDashboardAggregatesForKey(ctx context.Context, key string, compute d
 		aggregates, err := compute(workCtx)
 		if err != nil {
 			// Already wrapped by the computation, per query.
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		storeDashboardAggregates(workCtx, key, aggregates)

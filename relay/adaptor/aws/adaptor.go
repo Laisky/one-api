@@ -83,7 +83,8 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 
 	a.awsAdapter = adaptor
-	return adaptor.ConvertRequest(c, relayMode, request)
+	converted, err := adaptor.ConvertRequest(c, relayMode, request)
+	return converted, errors.WithStack(err)
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
@@ -140,7 +141,8 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 		Model: request.Model,
 	}
 
-	return adaptor.ConvertRequest(c, relaymode.ImagesGenerations, generalRequest)
+	converted, err := adaptor.ConvertRequest(c, relaymode.ImagesGenerations, generalRequest)
+	return converted, errors.WithStack(err)
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {

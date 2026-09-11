@@ -95,7 +95,7 @@ func (r *replayReadCloser) Close() error {
 	if r == nil || r.closer == nil {
 		return nil
 	}
-	return r.closer.Close()
+	return errors.WithStack(r.closer.Close())
 }
 
 // MCPProxyLatest dispatches modern MCP requests and delegates recognized legacy traffic unchanged.

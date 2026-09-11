@@ -182,6 +182,62 @@ func TestCompactSteadyStateDetectsUntouchedWrongNonNullShadow(t *testing.T) {
 		"the wrong non-NULL compact shadow must eventually be restored")
 }
 
+// TestCompactSteadySweepRewindsAndExaminesHeadInSameCycle proves an exhausted cursor does not
+// consume an idle cycle before auditing rows behind it. Parameters: t is the Go test handle.
+// Return values: none.
+func TestCompactSteadySweepRewindsAndExaminesHeadInSameCycle(t *testing.T) {
+	resetCompactRepairQueueForTest(t)
+	db, topology := newCompactTestTopology(t)
+	seedCompactUsers(t, db, 1)
+	coordinator := newCompactCoordinator(topology)
+	driveCompactToReady(t, coordinator)
+	ctx := compactTestContext(t)
+
+	target, err := compactLookupTarget("users")
+	require.NoError(t, err)
+	targetIndex := -1
+	for index, candidate := range compactTargetsForTopology(topology) {
+		if candidate.id() == target.id() {
+			targetIndex = index
+			break
+		}
+	}
+	require.NotEqual(t, -1, targetIndex, "users.uuid must participate in the steady sweep")
+	coordinator.cycles = uint64(targetIndex)
+	coordinator.cursors[target.id()] = compactCursor{sweep: 1}
+
+	// Damage a non-NULL shadow behind the exhausted cursor. Restoring the trigger leaves both
+	// catalog validation and the owned-NULL probe clean, so only the rolling sweep can find it.
+	dropCompactSyncTriggers(t, db, "users")
+	wrong, err := parseCompactUUID(compactUUIDTextFor(999))
+	require.NoError(t, err)
+	require.NoError(t, db.Exec("UPDATE users SET uuid_compact = ? WHERE id = 1",
+		compactBindValue(dialectName(db), wrong)).Error)
+	require.NoError(t, installCompactTriggers(ctx, db, compactTableForTest(t, topology, "users")))
+	verified, reason, err := validateCompactObjects(ctx, topology)
+	require.NoError(t, err)
+	require.True(t, verified, reason)
+	gap, err := compactTargetHasGap(ctx, db, target)
+	require.NoError(t, err)
+	require.False(t, gap, "the fixture must not be visible to the NULL-only probe")
+
+	originalBudget := config.CompactUUIDMaxRowsPerCycle
+	config.CompactUUIDMaxRowsPerCycle = 1
+	t.Cleanup(func() { config.CompactUUIDMaxRowsPerCycle = originalBudget })
+	result := runCompactCycleForTest(t, coordinator)
+
+	require.Equal(t, compactStateDegraded, result.state)
+	require.False(t, result.completed)
+	require.Equal(t, 1, result.examined)
+	require.Equal(t, 1, result.updated)
+	require.LessOrEqual(t, result.examined, compactRowBudget())
+	require.True(t, coordinator.fullAuditRequired)
+	require.Equal(t, int64(1), coordinator.cursors[target.id()].sweep)
+	require.Equal(t, compactUUIDHexForTest(t, compactUUIDTextFor(1)),
+		readCompactShadowHex(t, db, "users", "uuid_compact", 1),
+		"the first cycle after cursor exhaustion must repair drift behind the cursor")
+}
+
 // TestCompactSteadySweepRotatesUnderConstrainedBudget proves that a target sorting behind another
 // populated target cannot be starved by the shared row budget. Parameters: t is the Go test
 // handle. Return values: none.

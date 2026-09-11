@@ -132,13 +132,15 @@ func chooseDB(dsn string) (*gorm.DB, error) {
 func openPostgreSQL(dsn string) (*gorm.DB, error) {
 	logger.Logger.Info("using PostgreSQL as database")
 	common.UsingPostgreSQL.Store(true)
-	return gorm.Open(postgres.New(postgres.Config{
+	db, err := gorm.Open(postgres.New(postgres.Config{
 		DSN:                  dsn,
 		PreferSimpleProtocol: true, // disables implicit prepared statement usage
 	}), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
 		Logger:      gormLogger,
 	})
+	// gorm.Open hands back its handle even on failure; it is passed through unchanged.
+	return db, errors.WithStack(err)
 }
 
 func openMySQL(dsn string) (*gorm.DB, error) {
@@ -149,10 +151,11 @@ func openMySQL(dsn string) (*gorm.DB, error) {
 		return nil, errors.Wrap(err, "normalize MySQL DSN")
 	}
 
-	return gorm.Open(mysql.Open(normalized), &gorm.Config{
+	db, err := gorm.Open(mysql.Open(normalized), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
 		Logger:      gormLogger,
 	})
+	return db, errors.WithStack(err)
 }
 
 func openSQLite() (*gorm.DB, error) {
@@ -171,10 +174,11 @@ func openSQLite() (*gorm.DB, error) {
 	// writer slot is held — combined with the existing sqlite_retry helper
 	// this is the standard recipe for SQLite under multi-goroutine workloads.
 	dsn := fmt.Sprintf("%s?_busy_timeout=%d&_journal_mode=WAL&_synchronous=NORMAL", sqlitePath, common.SQLiteBusyTimeout)
-	return gorm.Open(sqlite.Open(dsn), &gorm.Config{
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
 		Logger:      gormLogger,
 	})
+	return db, errors.WithStack(err)
 }
 
 // ensureSQLitePath prepares the SQLite file path by creating the parent directory if needed

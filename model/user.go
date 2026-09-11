@@ -548,7 +548,7 @@ func increaseUserQuota(ctx context.Context, id int, quota int64) (err error) {
 		ctx = context.Background()
 	}
 	err = runWithSQLiteBusyRetry(ctx, func() error {
-		return DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", quota)).Error
+		return errors.WithStack(DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", quota)).Error)
 	})
 	if err != nil {
 		return identity.Tag(
@@ -583,7 +583,7 @@ func decreaseUserQuota(ctx context.Context, id int, quota int64) (err error) {
 		result = DB.Model(&User{}).
 			Where("id = ? AND quota >= ?", id, quota).
 			Update("quota", gorm.Expr("quota - ?", quota))
-		return result.Error
+		return errors.WithStack(result.Error)
 	})
 	if err != nil {
 		return identity.Tag(

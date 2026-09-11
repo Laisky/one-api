@@ -90,7 +90,7 @@ func ChatHandler(c *gin.Context, resp *http.Response) (
 				return errors.Errorf("task failed, [%s]%s", taskData.Status, taskData.Error)
 			default:
 				time.Sleep(time.Second * 3)
-				return errNextLoop
+				return errors.WithStack(errNextLoop)
 			}
 
 			if ctxMeta.IsStream {

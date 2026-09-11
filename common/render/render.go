@@ -2,6 +2,7 @@ package render
 
 import (
 	"encoding/json"
+	"io"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -46,7 +47,19 @@ func SSEEvent(c *gin.Context, eventType string, data string) {
 	if eventType != "" {
 		// Write the event type line directly; event types are single-line
 		// tokens that need no escaping.
-		c.Writer.Write([]byte("event: " + eventType + "\n")) //nolint:errcheck
+		payload := []byte("event: " + eventType + "\n")
+		written, err := c.Writer.Write(payload)
+		if err != nil {
+			_ = c.Error(errors.Wrap(err, "write SSE event type"))
+			c.Abort()
+			return
+		}
+		if written != len(payload) {
+			_ = c.Error(errors.Wrapf(io.ErrShortWrite,
+				"write SSE event type: wrote %d of %d bytes", written, len(payload)))
+			c.Abort()
+			return
+		}
 	}
 	c.Render(-1, common.CustomEvent{Data: "data: " + data})
 	c.Writer.Flush()

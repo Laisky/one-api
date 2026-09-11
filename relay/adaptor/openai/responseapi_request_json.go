@@ -1,6 +1,10 @@
 package openai
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/Laisky/errors/v2"
+)
 
 // MarshalJSON serializes a ResponseAPIRequest and canonicalizes any explicit reasoning effort for the selected model.
 // It returns the encoded JSON payload or the serialization error without mutating the request.
@@ -14,5 +18,6 @@ func (request ResponseAPIRequest) MarshalJSON() ([]byte, error) {
 		normalized.Reasoning = &reasoning
 	}
 
-	return json.Marshal(normalized)
+	encoded, err := json.Marshal(normalized)
+	return encoded, errors.WithStack(err)
 }

@@ -697,7 +697,7 @@ func DeleteChannelByStatus(status int64) (int64, error) {
 	if result.Error == nil {
 		InvalidateChannelModelCaches(groups...)
 	}
-	return result.RowsAffected, result.Error
+	return result.RowsAffected, errors.WithStack(result.Error)
 }
 
 func DeleteDisabledChannel() (int64, error) {
@@ -711,5 +711,5 @@ func DeleteDisabledChannel() (int64, error) {
 	if result.Error == nil {
 		InvalidateChannelModelCaches(groups...)
 	}
-	return result.RowsAffected, result.Error
+	return result.RowsAffected, errors.WithStack(result.Error)
 }

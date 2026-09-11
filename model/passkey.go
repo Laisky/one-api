@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 

@@ -515,7 +515,7 @@ func applyCompactRepairBatch(ctx context.Context, db *gorm.DB, target compactTar
 			if collided {
 				// Abort to the untransacted path: on PostgreSQL the duplicate-key error has
 				// already poisoned this transaction, so nothing after it could commit anyway.
-				return errCompactRepairCollision
+				return errors.WithStack(errCompactRepairCollision)
 			}
 			updated += wrote
 		}
@@ -525,7 +525,7 @@ func applyCompactRepairBatch(ctx context.Context, db *gorm.DB, target compactTar
 		return updated, 0, nil
 	}
 	if !errors.Is(err, errCompactRepairCollision) && !isDuplicateObjectError(err) {
-		return 0, 0, err
+		return 0, 0, errors.WithStack(err)
 	}
 
 	// The batch contains at least one uncorrectable collision. Replay it row by row under

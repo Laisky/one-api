@@ -78,7 +78,7 @@ func asyncTask(taskID string, key string) (*TaskResponse, error, []byte) {
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return &aliResponse, err, nil
+		return &aliResponse, errors.WithStack(err), nil
 	}
 
 	req.Header.Set("Authorization", "Bearer "+key)
@@ -87,7 +87,7 @@ func asyncTask(taskID string, key string) (*TaskResponse, error, []byte) {
 	resp, err := client.Do(req)
 	if err != nil {
 		// no request context here
-		return &aliResponse, err, nil
+		return &aliResponse, errors.WithStack(err), nil
 	}
 	defer resp.Body.Close()
 
@@ -97,7 +97,7 @@ func asyncTask(taskID string, key string) (*TaskResponse, error, []byte) {
 	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
 		// no request context here
-		return &aliResponse, err, nil
+		return &aliResponse, errors.WithStack(err), nil
 	}
 
 	return &response, nil, responseBody

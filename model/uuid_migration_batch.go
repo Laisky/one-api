@@ -304,7 +304,7 @@ func applyConditionalStringColumnChunk(ctx context.Context, db *gorm.DB, table s
 			Where(missingSQL+" AND ("+whereSQL.String()+")", whereArgs...).
 			Update(column, gorm.Expr(caseSQL.String(), caseArgs...))
 		affected = result.RowsAffected
-		return result.Error
+		return errors.WithStack(result.Error)
 	})
 	if err != nil {
 		return int(affected), errors.Wrapf(err, "conditionally update %s.%s", table, column)

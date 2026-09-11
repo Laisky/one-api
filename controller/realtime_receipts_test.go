@@ -3,11 +3,12 @@ package controller
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	rmodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/quota"
 	"github.com/Laisky/one-api/relay/realtime"
-	"github.com/stretchr/testify/require"
 )
 
 // TestRealtimeReceiptSettlementBoundary ensures the production controller does

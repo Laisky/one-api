@@ -20,7 +20,7 @@ type Ledger struct {
 	seen                  map[string]struct{}
 	pendingResponses      map[string]struct{}
 	pendingTranscriptions map[string]struct{}
-	unkeyedUsageGap        bool
+	unkeyedUsageGap       bool
 	stopped               bool
 }
 
@@ -188,7 +188,7 @@ func (l *Ledger) acceptRecord(record Record, key string, pending map[string]stru
 	if len(l.Records) >= MaxRecords {
 		return l.stop()
 	}
-	return uncertainty
+	return errors.WithStack(uncertainty)
 }
 
 // Finish records unresolved work at disconnect without fabricating provider
@@ -218,7 +218,7 @@ func (l *Ledger) recordIssue(err error) error {
 	if len(l.Issues) < MaxIssues {
 		l.Issues = append(l.Issues, boundedDiagnostic(err.Error()))
 	}
-	return err
+	return errors.WithStack(err)
 }
 
 // bindItem snapshots acknowledged transcription settings once for an input item.

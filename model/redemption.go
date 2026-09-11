@@ -205,11 +205,12 @@ func (redemption *Redemption) Insert() error {
 
 func (redemption *Redemption) SelectUpdate() error {
 	// This can update zero values.
-	// The driver error is returned as-is (no errors.Wrap) to keep the message
-	// byte-identical for callers; Tag only attaches identity beside it.
-	return identity.Tag(
+	// The driver error is not relabeled (no errors.Wrap) to keep the message
+	// byte-identical for callers; WithStack only records where it entered, and
+	// Tag only attaches identity beside it.
+	return errors.WithStack(identity.Tag(
 		DB.Model(redemption).Select("redeemed_time", "status").Updates(redemption).Error,
-		redemption.Ref(), redemption.OwnerRef())
+		redemption.Ref(), redemption.OwnerRef()))
 }
 
 // Update Make sure your token's fields is completed, because this will update non-zero values

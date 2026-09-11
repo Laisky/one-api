@@ -255,7 +255,7 @@ func SettlePaidPaymentOrder(ctx context.Context, sessionID string, paidAtMs int6
 		var found PaymentOrder
 		if e := tx.Where("session_id = ?", sessionID).First(&found).Error; e != nil {
 			if errors.Is(e, gorm.ErrRecordNotFound) {
-				return ErrPaymentOrderNotFound
+				return errors.WithStack(ErrPaymentOrderNotFound)
 			}
 			return errors.Wrap(e, "load payment order in settle tx")
 		}
@@ -324,9 +324,9 @@ func SettlePaidPaymentOrder(ctx context.Context, sessionID string, paidAtMs int6
 	})
 	if err != nil {
 		if errors.Is(err, ErrPaymentOrderNotFound) {
-			return false, nil, ErrPaymentOrderNotFound
+			return false, nil, errors.WithStack(ErrPaymentOrderNotFound)
 		}
-		return false, nil, err
+		return false, nil, errors.WithStack(err)
 	}
 	return transitioned, order, nil
 }

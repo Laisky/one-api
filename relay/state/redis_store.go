@@ -163,7 +163,7 @@ func (s *RedisStore) decode(token string, v any) error {
 func (s *RedisStore) getString(ctx context.Context, key string) (string, error) {
 	val, err := s.rdb.Get(ctx, key).Result()
 	if errors.Is(err, redis.Nil) {
-		return "", ErrNotFound
+		return "", errors.WithStack(ErrNotFound)
 	}
 	if err != nil {
 		return "", errors.Wrap(ErrStoreUnavailable, err.Error())
@@ -179,7 +179,7 @@ func (s *RedisStore) CreateResponse(ctx context.Context, record *ResponseStateRe
 		return nil, errors.New("state: nil response record")
 	}
 	if !record.Owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	count := len(record.InputItems) + len(record.OutputItems)
 	if s.limits.ItemCountExceeded(count) {
@@ -322,7 +322,7 @@ func (s *RedisStore) nodeTTL(expiresAt int64) time.Duration {
 // GetResponse returns the owner's node, or ErrNotFound.
 func (s *RedisStore) GetResponse(ctx context.Context, owner OwnerScope, id string) (*ResponseStateRecord, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	token, err := s.getString(ctx, s.respKey(id))
 	if err != nil {
@@ -333,10 +333,10 @@ func (s *RedisStore) GetResponse(ctx context.Context, owner OwnerScope, id strin
 		return nil, err
 	}
 	if !rec.Owner.Matches(owner) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	if rec.ExpiresAt > 0 && s.now().Unix() >= rec.ExpiresAt {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	return &rec, nil
 }
@@ -371,7 +371,7 @@ func (s *RedisStore) DeleteResponse(ctx context.Context, owner OwnerScope, id st
 // nodes.
 func (s *RedisStore) BatchGetResponses(ctx context.Context, owner OwnerScope, ids []string) ([]*ResponseStateRecord, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	out := make([]*ResponseStateRecord, len(ids))
 	if len(ids) == 0 {
@@ -456,7 +456,7 @@ func (s *RedisStore) deleteItemIndex(ctx context.Context, owner OwnerScope, env 
 // GetItem resolves a stored item under owner scope.
 func (s *RedisStore) GetItem(ctx context.Context, owner OwnerScope, itemID string) (*ItemEnvelope, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	token, err := s.getString(ctx, s.itemKey(owner, itemID))
 	if errors.Is(err, ErrNotFound) {
@@ -473,7 +473,7 @@ func (s *RedisStore) GetItem(ctx context.Context, owner OwnerScope, itemID strin
 		return nil, err
 	}
 	if !blob.Owner.Matches(owner) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	env := blob.Env
 	return &env, nil
@@ -487,7 +487,7 @@ func (s *RedisStore) CreateConversation(ctx context.Context, record *Conversatio
 		return nil, errors.New("state: nil conversation record")
 	}
 	if !record.Owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	if s.limits.ItemCountExceeded(len(record.Items)) {
 		return nil, errors.Wrapf(ErrLimitExceeded, "conversation item count %d", len(record.Items))
@@ -603,7 +603,7 @@ func (s *RedisStore) touchConversation(ctx context.Context, userID int, id strin
 // GetConversation returns the owner's conversation.
 func (s *RedisStore) GetConversation(ctx context.Context, owner OwnerScope, id string) (*ConversationStateRecord, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	token, err := s.getString(ctx, s.convKey(id))
 	if err != nil {
@@ -614,10 +614,10 @@ func (s *RedisStore) GetConversation(ctx context.Context, owner OwnerScope, id s
 		return nil, err
 	}
 	if !rec.Owner.Matches(owner) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	if rec.ExpiresAt > 0 && s.now().Unix() >= rec.ExpiresAt {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	// Reading is activity: slide the idle TTL forward (row L08).
 	s.touchConversation(ctx, owner.UserID, id)
@@ -701,7 +701,7 @@ func (s *RedisStore) acquireAppendLease(ctx context.Context, owner OwnerScope, i
 		lastErr = err
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", errors.WithStack(ctx.Err())
 		case <-time.After(appendLeaseRetryDelay):
 		}
 	}
@@ -732,7 +732,7 @@ func (s *RedisStore) appendConversationItemsLocked(ctx context.Context, owner Ow
 		return nil, err
 	}
 	if expectedVersion != AnyVersion && expectedVersion != rec.Version {
-		return nil, ErrVersionConflict
+		return nil, errors.WithStack(ErrVersionConflict)
 	}
 	projected := len(rec.Items) + len(items)
 	if s.limits.ItemCountExceeded(projected) {
@@ -765,7 +765,7 @@ func (s *RedisStore) UpdateConversationMetadata(ctx context.Context, owner Owner
 		return nil, err
 	}
 	if expectedVersion != AnyVersion && expectedVersion != rec.Version {
-		return nil, ErrVersionConflict
+		return nil, errors.WithStack(ErrVersionConflict)
 	}
 	rec.Metadata = cloneRaw(metadata)
 	rec.Version++
@@ -782,7 +782,7 @@ func (s *RedisStore) DeleteConversationItem(ctx context.Context, owner OwnerScop
 		return nil, err
 	}
 	if expectedVersion != AnyVersion && expectedVersion != rec.Version {
-		return nil, ErrVersionConflict
+		return nil, errors.WithStack(ErrVersionConflict)
 	}
 	filtered := make([]ItemEnvelope, 0, len(rec.Items))
 	removed := false
@@ -796,7 +796,7 @@ func (s *RedisStore) DeleteConversationItem(ctx context.Context, owner OwnerScop
 		filtered = append(filtered, env)
 	}
 	if !removed {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	rec.Items = filtered
 	rec.Version++
@@ -824,7 +824,7 @@ func (s *RedisStore) AcquireConversationLease(ctx context.Context, owner OwnerSc
 		return "", errors.Wrap(ErrStoreUnavailable, err.Error())
 	}
 	if !ok {
-		return "", ErrLeaseHeld
+		return "", errors.WithStack(ErrLeaseHeld)
 	}
 	return token, nil
 }
@@ -836,10 +836,10 @@ func (s *RedisStore) RenewConversationLease(ctx context.Context, owner OwnerScop
 	}
 	current, err := s.getString(ctx, s.leaseKey(id))
 	if err != nil {
-		return ErrLeaseInvalid
+		return errors.WithStack(ErrLeaseInvalid)
 	}
 	if current != leaseToken {
-		return ErrLeaseInvalid
+		return errors.WithStack(ErrLeaseInvalid)
 	}
 	if err := s.rdb.Expire(ctx, s.leaseKey(id), ttl).Err(); err != nil {
 		return errors.Wrap(ErrStoreUnavailable, err.Error())
@@ -857,7 +857,7 @@ func (s *RedisStore) ReleaseConversationLease(ctx context.Context, owner OwnerSc
 		return err
 	}
 	if current != leaseToken {
-		return ErrLeaseInvalid
+		return errors.WithStack(ErrLeaseInvalid)
 	}
 	if err := s.rdb.Del(ctx, s.leaseKey(id)).Err(); err != nil {
 		return errors.Wrap(ErrStoreUnavailable, err.Error())
@@ -873,7 +873,7 @@ func (s *RedisStore) PutCheckpoint(ctx context.Context, record *CheckpointRecord
 		return errors.New("state: nil checkpoint record")
 	}
 	if !record.Owner.Valid() {
-		return ErrInvalidOwner
+		return errors.WithStack(ErrInvalidOwner)
 	}
 	clone := cloneCheckpointRecord(record)
 	if clone.SchemaVersion == 0 {
@@ -906,7 +906,7 @@ func (s *RedisStore) checkpointTTL(expiresAt int64) time.Duration {
 // GetCheckpoint returns a checkpoint for the owner scope.
 func (s *RedisStore) GetCheckpoint(ctx context.Context, owner OwnerScope, key string) (*CheckpointRecord, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	token, err := s.getString(ctx, s.checkpointKey(owner, key))
 	if err != nil {
@@ -917,10 +917,10 @@ func (s *RedisStore) GetCheckpoint(ctx context.Context, owner OwnerScope, key st
 		return nil, err
 	}
 	if !rec.Owner.Matches(owner) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	if rec.ExpiresAt > 0 && s.now().Unix() >= rec.ExpiresAt {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	return &rec, nil
 }

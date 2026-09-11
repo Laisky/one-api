@@ -54,13 +54,13 @@ func execUUIDDDL(ctx context.Context, db *gorm.DB, sql string) error {
 func execUUIDDDLWithTimeout(ctx context.Context, db *gorm.DB, sql string, timeout time.Duration) error {
 	ddlCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return db.WithContext(ddlCtx).Connection(func(tx *gorm.DB) error {
+	return errors.WithStack(db.WithContext(ddlCtx).Connection(func(tx *gorm.DB) error {
 		return withUUIDDDLTimeoutsBounded(tx, uuidLockTimeout(), timeout, func() error {
 			return runWithSQLiteBusyRetry(ddlCtx, func() error {
-				return tx.Exec(sql).Error
+				return errors.WithStack(tx.Exec(sql).Error)
 			})
 		})
-	})
+	}))
 }
 
 // withUUIDDDLTimeouts installs the dialect's lock and statement timeouts on one pinned
@@ -133,11 +133,11 @@ func withUUIDDDLTimeoutsBounded(tx *gorm.DB, lockTimeout time.Duration, statemen
 		statement := strconv.Itoa(int(statementTimeout / time.Millisecond))
 		restore = append(restore, "RESET lock_timeout")
 		if err := tx.Exec("SET lock_timeout = " + lock).Error; err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 		restore = append(restore, "RESET statement_timeout")
 		if err := tx.Exec("SET statement_timeout = " + statement).Error; err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 	case "mysql":
 		// lock_wait_timeout is whole seconds and must be at least 1. MySQL applies
@@ -149,7 +149,7 @@ func withUUIDDDLTimeoutsBounded(tx *gorm.DB, lockTimeout time.Duration, statemen
 		}
 		restore = append(restore, "SET SESSION lock_wait_timeout = DEFAULT")
 		if err := tx.Exec("SET SESSION lock_wait_timeout = " + strconv.Itoa(lock)).Error; err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 	default:
 		// SQLite has no server-side lock timeout; its bounded busy retry plus the context
@@ -217,12 +217,12 @@ func createUUIDIndexPostgres(ctx context.Context, db *gorm.DB, table string, nam
 	}
 	ddlCtx, cancel := context.WithTimeout(ctx, uuidDDLTimeout())
 	defer cancel()
-	return db.WithContext(ddlCtx).Connection(func(tx *gorm.DB) error {
+	return errors.WithStack(db.WithContext(ddlCtx).Connection(func(tx *gorm.DB) error {
 		return withUUIDDDLTimeouts(tx, func() error {
-			return tx.Exec("CREATE " + unique + "INDEX CONCURRENTLY " + quoteIdentifier(db, name) +
-				" ON " + quoteIdentifier(db, table) + " " + columnList).Error
+			return errors.WithStack(tx.Exec("CREATE " + unique + "INDEX CONCURRENTLY " + quoteIdentifier(db, name) +
+				" ON " + quoteIdentifier(db, table) + " " + columnList).Error)
 		})
-	})
+	}))
 }
 
 // dropInvalidPostgresIndex removes a same-name index left invalid by a failed concurrent build.
@@ -267,11 +267,11 @@ func dropInvalidPostgresIndex(ctx context.Context, db *gorm.DB, name string) err
 func createUUIDIndexMySQL(ctx context.Context, db *gorm.DB, table string, name string, columnList string, unique string, kind uuidIndexKind) error {
 	ddlCtx, cancel := context.WithTimeout(ctx, uuidDDLTimeout())
 	defer cancel()
-	return db.WithContext(ddlCtx).Connection(func(tx *gorm.DB) error {
+	return errors.WithStack(db.WithContext(ddlCtx).Connection(func(tx *gorm.DB) error {
 		return withUUIDDDLTimeouts(tx, func() error {
 			return createUUIDIndexMySQLStatement(ctx, tx, db, table, name, columnList, unique, kind)
 		})
-	})
+	}))
 }
 
 // createUUIDIndexMySQLStatement runs the online ALTER on a session whose timeouts are set.
@@ -297,10 +297,10 @@ func createUUIDIndexMySQLStatement(ctx context.Context, tx *gorm.DB, db *gorm.DB
 		", ALGORITHM=INPLACE, LOCK=NONE"
 	err := tx.Exec(online).Error
 	if err == nil || isDuplicateObjectError(err) {
-		return err
+		return errors.WithStack(err)
 	}
 	if !isMySQLOnlineDDLUnsupported(err) {
-		return err
+		return errors.WithStack(err)
 	}
 	if !uuidBlockingDDLAllowed() {
 		// Falling back silently would stall reads and writes on a large table, so
@@ -310,8 +310,8 @@ func createUUIDIndexMySQLStatement(ctx context.Context, tx *gorm.DB, db *gorm.DB
 	}
 	uuidMigrationLogger(ctx).Warn("falling back to blocking mysql index DDL because the operator approved it",
 		zap.String("index_kind", string(kind)))
-	return tx.Exec("ALTER TABLE " + quoteIdentifier(db, table) +
-		" ADD " + indexType + " " + quoteIdentifier(db, name) + " " + columnList).Error
+	return errors.WithStack(tx.Exec("ALTER TABLE " + quoteIdentifier(db, table) +
+		" ADD " + indexType + " " + quoteIdentifier(db, name) + " " + columnList).Error)
 }
 
 // isMySQLOnlineDDLUnsupported reports whether MySQL refused the requested online algorithm.

@@ -19,6 +19,8 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/Laisky/zap/zapcore"
 
+	"github.com/Laisky/errors/v2"
+
 	"github.com/Laisky/one-api/common/config"
 )
 
@@ -83,7 +85,7 @@ func (c *levelBoundedSampler) Check(entry zapcore.Entry, ce *zapcore.CheckedEntr
 // Return values:
 //   - error: whatever the unsampled core reports.
 func (c *levelBoundedSampler) Write(entry zapcore.Entry, fields []zapcore.Field) error {
-	return c.base.Write(entry, fields)
+	return errors.WithStack(c.base.Write(entry, fields))
 }
 
 // Fields implements zapcore.Core (an addition in the Laisky zap fork) by
@@ -104,7 +106,7 @@ func (c *levelBoundedSampler) Fields() []zapcore.Field {
 // Return values:
 //   - error: whatever the unsampled core reports.
 func (c *levelBoundedSampler) Sync() error {
-	return c.base.Sync()
+	return errors.WithStack(c.base.Sync())
 }
 
 // samplingOption builds the zap option that installs the level-bounded sampler.

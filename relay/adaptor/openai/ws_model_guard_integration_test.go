@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
@@ -126,9 +127,10 @@ func TestResponseAPIWS_ModelSwitchAttackRejected(t *testing.T) {
 	for {
 		_, msg, err := clientConn.ReadMessage()
 		if err != nil {
-			if c, ok := err.(*websocket.CloseError); ok {
+			var closeErr *websocket.CloseError
+			if errors.As(err, &closeErr) {
 				sawClose = true
-				closeCode = c.Code
+				closeCode = closeErr.Code
 			}
 			break
 		}

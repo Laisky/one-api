@@ -60,7 +60,8 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 		return nil, errors.Errorf("cannot found vertex image adaptor for model %s", meta.ActualModelName)
 	}
 
-	return adaptor.ConvertImageRequest(c, request)
+	converted, err := adaptor.ConvertImageRequest(c, request)
+	return converted, errors.WithStack(err)
 }
 
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
@@ -71,7 +72,8 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		return nil, errors.Errorf("cannot found vertex chat adaptor for model %s", meta.ActualModelName)
 	}
 
-	return adaptor.ConvertRequest(c, relayMode, request)
+	converted, err := adaptor.ConvertRequest(c, relayMode, request)
+	return converted, errors.WithStack(err)
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
@@ -192,7 +194,8 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	c.Set(ctxkey.OriginalClaudeRequest, request)
 
 	// Now convert the OpenAI request to VertexAI format using existing logic
-	return adaptor.ConvertRequest(c, relaymode.ChatCompletions, openaiRequest)
+	converted, err := adaptor.ConvertRequest(c, relaymode.ChatCompletions, openaiRequest)
+	return converted, errors.WithStack(err)
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {

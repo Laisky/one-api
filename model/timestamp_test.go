@@ -1,10 +1,11 @@
 package model
 
 import (
-	"gorm.io/gorm"
 	"strconv"
 	"testing"
 	"time"
+
+	"gorm.io/gorm"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

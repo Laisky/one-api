@@ -31,11 +31,11 @@ var (
 func Resolve(lookup func(uuid string) (int, error), ref string) (int, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		return 0, ErrInvalidRef
+		return 0, errors.WithStack(ErrInvalidRef)
 	}
 
 	if !strings.Contains(ref, "-") {
-		return 0, ErrInvalidRef
+		return 0, errors.WithStack(ErrInvalidRef)
 	}
 
 	if lookup == nil {
@@ -44,15 +44,15 @@ func Resolve(lookup func(uuid string) (int, error), ref string) (int, error) {
 	id, err := lookup(ref)
 	if err != nil {
 		if errors.Is(err, ErrInvalidRef) || errors.Is(err, ErrNotFound) {
-			return 0, err
+			return 0, errors.WithStack(err)
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return 0, ErrNotFound
+			return 0, errors.WithStack(ErrNotFound)
 		}
 		return 0, errors.Wrap(err, "resolve uuid reference")
 	}
 	if id <= 0 {
-		return 0, ErrNotFound
+		return 0, errors.WithStack(ErrNotFound)
 	}
 	return id, nil
 }

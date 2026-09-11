@@ -172,7 +172,7 @@ func (w *rotationWriter) reopenAfterFailedSizeRotation(start, next time.Time, ca
 	if err := w.openNewFile(start, next, false); err != nil {
 		return errors.Wrapf(err, "reopen log file after failed size rotation (cause: %v)", cause)
 	}
-	return cause
+	return errors.WithStack(cause)
 }
 
 // nextSequencePath returns the next unused sequenced filename for a window.

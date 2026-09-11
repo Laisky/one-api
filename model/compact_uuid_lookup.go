@@ -133,7 +133,7 @@ func canonicalizeLookupRef(ref string) (compactUUID, error) {
 	if err != nil {
 		// The offending value is deliberately not included: it is request input and may be
 		// attacker-supplied.
-		return compactUUID{}, idresolve.ErrInvalidRef
+		return compactUUID{}, errors.WithStack(idresolve.ErrInvalidRef)
 	}
 	return value, nil
 }
@@ -170,7 +170,7 @@ func probeCompactCandidate(ctx context.Context, db *gorm.DB, target compactTarge
 		" WHERE " + quoteIdentifier(db, target.compactColumn) + " = ? LIMIT 1"
 
 	if err := db.WithContext(ctx).Raw(sql, compactBindValue(dialect, canonical)).Scan(&rows).Error; err != nil {
-		return 0, false, "", err
+		return 0, false, "", errors.WithStack(err)
 	}
 	if len(rows) == 0 {
 		// The shadow for this identifier is missing: a gap for the worker to fill.
@@ -236,7 +236,7 @@ func resolveIDByLegacyText(ctx context.Context, db *gorm.DB, target compactTarge
 		return 0, errors.Wrapf(err, "resolve %s by legacy uuid", target.id())
 	}
 	if len(rows) == 0 {
-		return 0, idresolve.ErrNotFound
+		return 0, errors.WithStack(idresolve.ErrNotFound)
 	}
 	return rows[0].ID, nil
 }

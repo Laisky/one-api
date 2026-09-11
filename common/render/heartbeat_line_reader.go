@@ -8,6 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/errors/v2"
+
 	commonsse "github.com/Laisky/one-api/common/sse"
 )
 
@@ -85,7 +87,7 @@ func (h *HeartbeatLineReader) Next() (commonsse.Line, error) {
 		case <-ticker.C:
 			h.sendHeartbeat()
 		case <-clientCtx.Done():
-			return commonsse.Line{}, clientCtx.Err()
+			return commonsse.Line{}, errors.WithStack(clientCtx.Err())
 		case <-h.done:
 			return commonsse.Line{}, io.EOF
 		}
@@ -118,7 +120,7 @@ func (h *HeartbeatLineReader) sendHeartbeat() {
 	_, err := h.c.Writer.Write([]byte(heartbeatPayload))
 	if err != nil {
 		if h.heartbeatWriteErr == nil {
-			h.heartbeatWriteErr = err
+			h.heartbeatWriteErr = errors.WithStack(err)
 		}
 		return
 	}

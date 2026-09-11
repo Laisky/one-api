@@ -215,7 +215,7 @@ func SetSinkForTest(s TraceSink) func() {
 //   - error: wrapped failure reported by the sink, carrying the count of
 //     records that did not persist; nil means everything accepted was stored.
 func Flush(ctx context.Context) error {
-	return Sink().Flush(ctx)
+	return errors.WithStack(Sink().Flush(ctx))
 }
 
 // Shutdown flushes and closes the installed sink. Call it during graceful
@@ -228,7 +228,7 @@ func Flush(ctx context.Context) error {
 //   - error: wrapped failure reported by the sink; a deadline that expires with
 //     work outstanding reports how many accepted records were not persisted.
 func Shutdown(ctx context.Context) error {
-	return Sink().Close(ctx)
+	return errors.WithStack(Sink().Close(ctx))
 }
 
 // nullSink discards every trace after metrics have been recorded.
@@ -282,7 +282,7 @@ func (m *multiSink) Submit(ctx context.Context, row *model.Trace) error {
 			firstErr = err
 		}
 	}
-	return firstErr
+	return errors.WithStack(firstErr)
 }
 
 // Flush implements TraceSink.Flush across every child sink.
@@ -299,7 +299,7 @@ func (m *multiSink) Flush(ctx context.Context) error {
 			firstErr = err
 		}
 	}
-	return firstErr
+	return errors.WithStack(firstErr)
 }
 
 // Close implements TraceSink.Close across every child sink.
@@ -316,7 +316,7 @@ func (m *multiSink) Close(ctx context.Context) error {
 			firstErr = err
 		}
 	}
-	return firstErr
+	return errors.WithStack(firstErr)
 }
 
 // recordSubmitOutcome is a small helper so every sink reports the same

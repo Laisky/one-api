@@ -29,7 +29,7 @@ func PrometheusRateLimitMiddleware() gin.HandlerFunc {
 }
 
 // rateLimitLabels maps a limiter mark (the second segment of the limiter's
-// storage key, see rate-limit.go) to the metric label pair: limit_type names
+// storage key, see rate_limit.go) to the metric label pair: limit_type names
 // the limiter and identifier names what the limiter keys on. Both value sets
 // are fixed at compile time. An empty mark is a 429 produced elsewhere, for
 // example an upstream provider's rate limit relayed to the client.

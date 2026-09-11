@@ -51,7 +51,7 @@ func (t ResponseAPITool) MarshalJSON() ([]byte, error) {
 		if fn != nil {
 			payload["function"] = fn
 		}
-		return json.Marshal(payload)
+		return marshalResponseAPIToolPayload(payload)
 	case "web_search":
 		payload := map[string]any{"type": t.Type}
 		if t.SearchContextSize != nil {
@@ -63,7 +63,7 @@ func (t ResponseAPITool) MarshalJSON() ([]byte, error) {
 		if t.UserLocation != nil {
 			payload["user_location"] = t.UserLocation
 		}
-		return json.Marshal(payload)
+		return marshalResponseAPIToolPayload(payload)
 	case "mcp":
 		payload := map[string]any{"type": t.Type}
 		if t.ServerLabel != "" {
@@ -81,11 +81,24 @@ func (t ResponseAPITool) MarshalJSON() ([]byte, error) {
 		if len(t.Headers) > 0 {
 			payload["headers"] = t.Headers
 		}
-		return json.Marshal(payload)
+		return marshalResponseAPIToolPayload(payload)
 	default:
 		type alias ResponseAPITool
-		return json.Marshal(alias(t))
+		return marshalResponseAPIToolPayload(alias(t))
 	}
+}
+
+// marshalResponseAPIToolPayload encodes one tool payload for ResponseAPITool.MarshalJSON.
+//
+// Parameters:
+//   - payload: the tool's wire representation.
+//
+// Return values:
+//   - []byte: the encoded payload.
+//   - error: the encoding failure, wrapped with a stack; its text and errors.As identity are unchanged.
+func marshalResponseAPIToolPayload(payload any) ([]byte, error) {
+	encoded, err := json.Marshal(payload)
+	return encoded, errors.WithStack(err)
 }
 
 func (t *ResponseAPITool) UnmarshalJSON(data []byte) error {

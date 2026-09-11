@@ -459,7 +459,7 @@ func runUUIDMigrationCoordinator(ctx context.Context, topology *databaseTopology
 		if err := step.run(); err != nil {
 			recordUUIDFinalizerResult(topology, false)
 			recordUUIDCycle(topology, mode, uuidResultFailure, time.Since(started))
-			return result, err
+			return result, errors.WithStack(err)
 		}
 		log.Info("external uuid finalizer phase completed",
 			zap.String("topology", string(topology.mode)),

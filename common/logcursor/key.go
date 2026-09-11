@@ -100,7 +100,7 @@ func aead() (cipher.AEAD, error) {
 		}
 		sealerAEAD = gcm
 	})
-	return sealerAEAD, sealerErr
+	return sealerAEAD, errors.WithStack(sealerErr)
 }
 
 // KeyIsStable reports whether cursors survive a restart and work across nodes.

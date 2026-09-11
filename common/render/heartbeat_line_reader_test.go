@@ -10,12 +10,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	commonsse "github.com/Laisky/one-api/common/sse"
 )
+
+// endOfStream reports whether Next ended the stream. The end must be io.EOF itself, not a wrapped
+// copy: stream readers are compared by identity, and a wrapped io.EOF would turn every caller's
+// clean end of stream into a failure.
+func endOfStream(t *testing.T, err error) bool {
+	t.Helper()
+	if !errors.Is(err, io.EOF) {
+		return false
+	}
+	require.Same(t, io.EOF, err, "Next must return io.EOF itself, not a wrapped copy")
+	return true
+}
 
 // newTestContext creates a gin test context and recorder for heartbeat tests.
 func newTestContext() (*gin.Context, *httptest.ResponseRecorder) {
@@ -113,7 +126,7 @@ func TestHeartbeatLineReader_ForwardsAllLines(t *testing.T) {
 	var lines []string
 	for {
 		line, err := hbr.Next()
-		if err == io.EOF {
+		if endOfStream(t, err) {
 			break
 		}
 		require.NoError(t, err)
@@ -153,7 +166,7 @@ func TestHeartbeatLineReader_SendsHeartbeatDuringDelay(t *testing.T) {
 	var lines []string
 	for {
 		line, err := hbr.Next()
-		if err == io.EOF {
+		if endOfStream(t, err) {
 			break
 		}
 		require.NoError(t, err)
@@ -176,7 +189,7 @@ func TestHeartbeatLineReader_NoHeartbeatWhenDataFlows(t *testing.T) {
 
 	for {
 		_, err := hbr.Next()
-		if err == io.EOF {
+		if endOfStream(t, err) {
 			break
 		}
 		require.NoError(t, err)
@@ -269,7 +282,7 @@ func TestHeartbeatLineReader_InterleavesHeartbeatsWithData(t *testing.T) {
 	var lines []string
 	for {
 		line, err := hbr.Next()
-		if err == io.EOF {
+		if endOfStream(t, err) {
 			break
 		}
 		require.NoError(t, err)
@@ -351,7 +364,7 @@ func TestHeartbeatLineReader_HeartbeatsSentCounter(t *testing.T) {
 
 	for {
 		_, err := hbr.Next()
-		if err == io.EOF {
+		if endOfStream(t, err) {
 			break
 		}
 		require.NoError(t, err)
@@ -372,7 +385,7 @@ func TestHeartbeatLineReader_HeartbeatsSentZeroWhenFast(t *testing.T) {
 
 	for {
 		_, err := hbr.Next()
-		if err == io.EOF {
+		if endOfStream(t, err) {
 			break
 		}
 		require.NoError(t, err)
@@ -401,7 +414,7 @@ func TestHeartbeatLineReader_HeartbeatWriteError(t *testing.T) {
 
 	for {
 		_, err := hbr.Next()
-		if err == io.EOF {
+		if endOfStream(t, err) {
 			break
 		}
 		require.NoError(t, err)
@@ -437,7 +450,7 @@ func TestHeartbeatLineReader_KeepAliveForwardingSimulation(t *testing.T) {
 	var lines []string
 	for {
 		line, err := hbr.Next()
-		if err == io.EOF {
+		if endOfStream(t, err) {
 			break
 		}
 		require.NoError(t, err)

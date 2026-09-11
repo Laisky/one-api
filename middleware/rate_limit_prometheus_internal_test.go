@@ -95,7 +95,7 @@ func TestRateLimitHitLabelsAreBounded(t *testing.T) {
 }
 
 // TestRateLimitLabelsCoverEveryLimiterMark pins the mark-to-label mapping for
-// every limiter mark used by the factories in rate-limit.go, so adding a limiter
+// every limiter mark used by the factories in rate_limit.go, so adding a limiter
 // without extending rateLimitLabels shows up as "unknown" here rather than in a
 // dashboard.
 func TestRateLimitLabelsCoverEveryLimiterMark(t *testing.T) {

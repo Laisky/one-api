@@ -213,7 +213,7 @@ func InsertTraces(ctx context.Context, rows []*Trace, batchSize int) (int, error
 		chunk := rows[start:end]
 
 		err := runWithSQLiteBusyRetryForDB(ctx, writer, func() error {
-			return writer.Create(chunk).Error
+			return errors.WithStack(writer.Create(chunk).Error)
 		})
 		if err == nil {
 			written += len(chunk)
@@ -236,7 +236,7 @@ func InsertTraces(ctx context.Context, rows []*Trace, batchSize int) (int, error
 		// retried request cannot discard the other 499 traces.
 		for _, row := range chunk {
 			if err := runWithSQLiteBusyRetryForDB(ctx, writer, func() error {
-				return writer.Create(row).Error
+				return errors.WithStack(writer.Create(row).Error)
 			}); err != nil {
 				if IsDuplicateTraceKeyError(err) {
 					continue

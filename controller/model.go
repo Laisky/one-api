@@ -1620,7 +1620,7 @@ func GetModelsDisplay(c *gin.Context) {
 		v, err, _ := anonymousModelsDisplayGroup.Do(cacheKey, func() (any, error) {
 			result, err := buildResult()
 			if err != nil {
-				return nil, err
+				return nil, errors.WithStack(err)
 			}
 			anonymousModelsDisplayCache.Store(cacheKey, result)
 			return result, nil

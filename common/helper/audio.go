@@ -43,7 +43,7 @@ func lookupFFProbe() (string, error) {
 		}
 		ffprobePath = path
 	})
-	return ffprobePath, ffprobeErr
+	return ffprobePath, errors.WithStack(ffprobeErr)
 }
 
 // SaveTmpFile saves data to a temporary file. The filename would be apppended with a random string.

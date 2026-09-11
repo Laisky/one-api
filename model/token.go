@@ -428,7 +428,7 @@ func increaseTokenQuota(ctx context.Context, id int, quota int64) (err error) {
 				"accessed_time": helper.GetTimestamp(),
 			},
 		)
-		return result.Error
+		return errors.WithStack(result.Error)
 	})
 	if err != nil {
 		return identity.Tag(
@@ -472,7 +472,7 @@ func decreaseTokenQuota(ctx context.Context, id int, quota int64) (err error) {
 				"used_quota":    gorm.Expr("used_quota + ?", quota),
 				"accessed_time": helper.GetTimestamp(),
 			})
-		return result.Error
+		return errors.WithStack(result.Error)
 	})
 	if err != nil {
 		return identity.Tag(
@@ -621,9 +621,9 @@ func PostConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err e
 	}
 
 	err = runWithSQLiteBusyRetry(ctx, func() error {
-		return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return errors.WithStack(DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			return adjustPostConsumeQuota(tx, token, quota)
-		})
+		}))
 	})
 	if err != nil {
 		return identity.Tag(

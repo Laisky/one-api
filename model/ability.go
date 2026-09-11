@@ -275,7 +275,7 @@ func (channel *Channel) UpdateAbilities() error {
 }
 
 func UpdateAbilityStatus(channelId int, status bool) error {
-	return DB.Model(&Ability{}).Where("channel_id = ?", channelId).Select("enabled").Update("enabled", status).Error
+	return errors.WithStack(DB.Model(&Ability{}).Where("channel_id = ?", channelId).Select("enabled").Update("enabled", status).Error)
 }
 
 func GetGroupModels(ctx context.Context, group string) ([]string, error) {

@@ -107,9 +107,7 @@ func GetImageFromUrl(url string) (mimeType string, data string, err error) {
 		if err := ValidateInlineImageBase64Size(matches[2]); err != nil {
 			return "", "", errors.Wrap(err, "inline image exceeds size limit")
 		}
-		mimeType = "image/" + matches[1]
-		data = matches[2]
-		return
+		return "image/" + matches[1], matches[2], nil
 	}
 
 	isImage, err := IsImageUrl(url)

@@ -350,6 +350,18 @@ func reconcileCompactSteadySweep(ctx context.Context, coordinator *compactCoordi
 		if err != nil {
 			return err
 		}
+		if len(candidates) == 0 && cursor.sweep != 0 {
+			// The sweep reached the end of the table. Rewind and read the first page in the
+			// same cycle: otherwise a table no larger than one page is examined only on every
+			// other cycle, and drift behind the cursor on any table waits one cycle longer
+			// than the budget requires.
+			cursor.sweep = 0
+			candidates, err = readCompactCandidates(rowCtx,
+				coordinator.topology.handle(target.role), target, 0, batch)
+			if err != nil {
+				return err
+			}
+		}
 		if len(candidates) == 0 {
 			cursor.sweep = 0
 			coordinator.cursors[target.id()] = cursor

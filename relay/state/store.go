@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/Laisky/errors/v2"
 )
 
 // AnyVersion is passed as the expected version to skip the compare-and-set check
@@ -83,11 +85,11 @@ func cloneResponseRecord(record *ResponseStateRecord) (*ResponseStateRecord, err
 	}
 	data, err := json.Marshal(record)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	var out ResponseStateRecord
 	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	return &out, nil
 }
@@ -98,11 +100,11 @@ func cloneConversationRecord(record *ConversationStateRecord) (*ConversationStat
 	}
 	data, err := json.Marshal(record)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	var out ConversationStateRecord
 	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	return &out, nil
 }

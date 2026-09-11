@@ -126,12 +126,12 @@ func withCompactSnapshot(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) 
 		// characteristics can't be changed while a transaction is in progress" — because
 		// SET TRANSACTION configures the NEXT transaction, and GORM has already issued BEGIN
 		// by the time the callback runs.
-		return session.Transaction(fn, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+		return errors.WithStack(session.Transaction(fn, &sql.TxOptions{Isolation: sql.LevelRepeatableRead}))
 	default:
 		// SQLite's driver rejects a non-default isolation level, and it does not need one:
 		// its deferred transaction already gives a stable read view for the transaction's
 		// lifetime, which is exactly the snapshot this pass requires.
-		return session.Transaction(fn)
+		return errors.WithStack(session.Transaction(fn))
 	}
 }
 

@@ -15,6 +15,7 @@ package otelbridge
 import (
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap/zapcore"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -82,7 +83,7 @@ func (m *objectEncoder) AddArray(key string, v zapcore.ArrayMarshaler) error {
 	arr := newArrayEncoder()
 	err := v.MarshalLogArray(arr)
 	m.cur.attrs = append(m.cur.attrs, attribute.Slice(key, arr.elems...))
-	return err
+	return errors.WithStack(err)
 }
 
 // AddObject implements zapcore.ObjectEncoder by encoding v as a map attribute.
@@ -99,7 +100,7 @@ func (m *objectEncoder) AddObject(k string, v zapcore.ObjectMarshaler) error {
 	err := v.MarshalLogObject(inner)
 	inner.calculate(inner.root)
 	m.cur.attrs = append(m.cur.attrs, attribute.Map(k, inner.root.attrs...))
-	return err
+	return errors.WithStack(err)
 }
 
 // AddBinary implements zapcore.ObjectEncoder for raw byte fields.
@@ -381,7 +382,7 @@ func (a *arrayEncoder) AppendArray(v zapcore.ArrayMarshaler) error {
 	inner := newArrayEncoder()
 	err := v.MarshalLogArray(inner)
 	a.elems = append(a.elems, attribute.SliceValue(inner.elems...))
-	return err
+	return errors.WithStack(err)
 }
 
 // AppendObject implements zapcore.ArrayEncoder for nested objects.
@@ -396,7 +397,7 @@ func (a *arrayEncoder) AppendObject(v zapcore.ObjectMarshaler) error {
 	err := v.MarshalLogObject(inner)
 	inner.calculate(inner.root)
 	a.elems = append(a.elems, attribute.MapValue(inner.root.attrs...))
-	return err
+	return errors.WithStack(err)
 }
 
 // AppendReflected implements zapcore.ArrayEncoder for values with no dedicated

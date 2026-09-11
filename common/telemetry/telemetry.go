@@ -346,13 +346,15 @@ func buildResource(ctx context.Context) (*sdkresource.Resource, error) {
 		attrs = append(attrs, attribute.String("deployment.environment", config.OpenTelemetryEnvironment))
 	}
 
-	return sdkresource.New(ctx,
+	res, err := sdkresource.New(ctx,
 		sdkresource.WithFromEnv(),
 		sdkresource.WithHost(),
 		sdkresource.WithTelemetrySDK(),
 		sdkresource.WithProcess(),
 		sdkresource.WithAttributes(attrs...),
 	)
+	// resource.New can return a usable resource together with its error; both are passed on.
+	return res, laerrors.WithStack(err)
 }
 
 func buildTraceExporterOptions() []otlptracehttp.Option {

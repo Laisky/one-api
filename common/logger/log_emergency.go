@@ -36,6 +36,8 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/Laisky/zap/zapcore"
 
+	"github.com/Laisky/errors/v2"
+
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/metrics"
 )
@@ -461,7 +463,7 @@ func (c *emergencyCore) Write(entry zapcore.Entry, fields []zapcore.Field) error
 func (c *emergencyCore) Sync() error {
 	err := c.Core.Sync()
 	c.gate.flushWriterFailures()
-	return err
+	return errors.WithStack(err)
 }
 
 // emergencyOption builds the zap option that installs the bounded policy.

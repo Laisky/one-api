@@ -145,12 +145,12 @@ func convertValueDepth(v any, depth int) attribute.Value {
 			return attribute.Value{}
 		}
 		return convertValueDepth(val.Elem().Interface(), depth+1)
+	default:
+		// Never panic on an unexpected type. An attribute carrying an "unhandled:"
+		// prefix is a question an operator can ask; a panic inside the logger is a
+		// crash in the component whose job is to explain crashes.
+		return attribute.StringValue(fmt.Sprintf("unhandled: (%s) %+v", t, v))
 	}
-
-	// Never panic on an unexpected type. An attribute carrying an "unhandled:"
-	// prefix is a question an operator can ask; a panic inside the logger is a
-	// crash in the component whose job is to explain crashes.
-	return attribute.StringValue(fmt.Sprintf("unhandled: (%s) %+v", t, v))
 }
 
 // complexValue renders a complex number as a two-key map of its real and

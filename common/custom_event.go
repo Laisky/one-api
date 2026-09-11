@@ -9,30 +9,11 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/Laisky/errors/v2"
 )
 
-type stringWriter interface {
-	io.Writer
-	writeString(string) (int, error)
-}
-
-type stringWrapper struct {
-	io.Writer
-}
-
-func (w stringWrapper) writeString(str string) (int, error) {
-	return w.Writer.Write([]byte(str))
-}
-
-func checkWriter(writer io.Writer) stringWriter {
-	if w, ok := writer.(stringWriter); ok {
-		return w
-	} else {
-		return stringWrapper{writer}
-	}
-}
-
-// Server-Sent Events
+// Server-Sent Events.
 // W3C Working Draft 29 October 2009
 // http://www.w3.org/TR/2009/WD-eventsource-20091029/
 
@@ -56,17 +37,35 @@ type CustomEvent struct {
 	Data  any
 }
 
+// encode writes one custom event to writer and returns a wrapped write failure.
 func encode(writer io.Writer, event CustomEvent) error {
-	w := checkWriter(writer)
-	return writeData(w, event.Data)
+	return writeData(writer, event.Data)
 }
 
-func writeData(w stringWriter, data any) error {
-	dataReplacer.WriteString(w, fmt.Sprint(data))
-	if strings.HasPrefix(data.(string), "data") {
-		w.writeString("\n\n")
+// writeData formats an event payload, escapes embedded line breaks, and terminates SSE data frames.
+func writeData(writer io.Writer, data any) error {
+	formatted := fmt.Sprint(data)
+	if err := writeCustomEventString(writer, "data", dataReplacer.Replace(formatted)); err != nil {
+		return err
 	}
-	// No error to wrap here, but if error handling is added, wrap with errors.Wrap/Wrapf
+	if strings.HasPrefix(formatted, "data") {
+		if err := writeCustomEventString(writer, "delimiter", "\n\n"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeCustomEventString writes one complete event segment and rejects truncated writes.
+func writeCustomEventString(writer io.Writer, segment string, payload string) error {
+	written, err := io.WriteString(writer, payload)
+	if err != nil {
+		return errors.Wrapf(err, "write custom event %s", segment)
+	}
+	if written != len(payload) {
+		return errors.Wrapf(io.ErrShortWrite,
+			"write custom event %s: wrote %d of %d bytes", segment, written, len(payload))
+	}
 	return nil
 }
 
