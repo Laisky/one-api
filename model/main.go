@@ -542,6 +542,14 @@ func migrateLOGDB() error {
 	return nil
 }
 
+// setDBConns applies the configured connection limits to db, starts pool
+// monitoring, and returns the underlying SQL database handle.
+//
+// Parameters:
+//   - db: the GORM database handle to configure.
+//
+// Return values:
+//   - *sql.DB: the configured underlying SQL database handle.
 func setDBConns(db *gorm.DB) *sql.DB {
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -549,10 +557,9 @@ func setDBConns(db *gorm.DB) *sql.DB {
 		return nil
 	}
 
-	// Increase default connection pool sizes to handle billing load better
-	maxIdleConns := config.SQLMaxIdleConns      // Increased from 100
-	maxOpenConns := config.SQLMaxOpenConns      // Increased from 1000
-	maxLifetime := config.SQLMaxLifetimeSeconds // Increased from 60 seconds
+	maxIdleConns := config.SQLMaxIdleConns
+	maxOpenConns := config.SQLMaxOpenConns
+	maxLifetime := config.SQLMaxLifetimeSeconds
 
 	sqlDB.SetMaxIdleConns(maxIdleConns)
 	sqlDB.SetMaxOpenConns(maxOpenConns)
@@ -570,7 +577,13 @@ func setDBConns(db *gorm.DB) *sql.DB {
 	return sqlDB
 }
 
-// monitorDBConnections monitors database connection pool health
+// monitorDBConnections periodically logs connection-pool saturation and wait
+// pressure until the process exits.
+//
+// Parameters:
+//   - sqlDB: the SQL database pool to monitor.
+//
+// Return values: none.
 func monitorDBConnections(sqlDB *sql.DB) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()

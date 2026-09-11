@@ -237,18 +237,20 @@ var (
 	SQLiteBusyTimeout = env.Int("SQLITE_BUSY_TIMEOUT", 10000)
 
 	// SQLMaxIdleConns controls the primary database pool's idle connection count.
-	// Set based on expected concurrent connections and database server capacity.
+	// The default targets one instance serving about 100 requests per second
+	// while limiting the memory retained by idle database backends.
 	//
 	// Environment variable: SQL_MAX_IDLE_CONNS
-	// Default: 200
-	SQLMaxIdleConns = env.Int("SQL_MAX_IDLE_CONNS", 200)
+	// Default: 10
+	SQLMaxIdleConns = env.Int("SQL_MAX_IDLE_CONNS", defaultSQLMaxIdleConns)
 
 	// SQLMaxOpenConns controls the primary database pool's maximum open connections.
-	// Limit this based on database server connection limits.
+	// The default provides burst headroom for short database operations without
+	// allowing one pool to consume a typical PostgreSQL server's entire capacity.
 	//
 	// Environment variable: SQL_MAX_OPEN_CONNS
-	// Default: 2000
-	SQLMaxOpenConns = env.Int("SQL_MAX_OPEN_CONNS", 2000)
+	// Default: 50
+	SQLMaxOpenConns = env.Int("SQL_MAX_OPEN_CONNS", defaultSQLMaxOpenConns)
 
 	// SQLMaxLifetimeSeconds sets how long database connections live before being
 	// recycled. Helps balance connection freshness with connection setup overhead.
@@ -256,7 +258,7 @@ var (
 	// Environment variable: SQL_MAX_LIFETIME
 	// Default: 300 (5 minutes)
 	// Unit: seconds
-	SQLMaxLifetimeSeconds = env.Int("SQL_MAX_LIFETIME", 300)
+	SQLMaxLifetimeSeconds = env.Int("SQL_MAX_LIFETIME", defaultSQLMaxLifetimeSeconds)
 
 	// LogSQLDSN overrides the DSN used for the logging database.
 	// Useful for separating high-volume logging writes from transactional data.

@@ -259,8 +259,8 @@ func applyProductionPool(tb testing.TB, db *gorm.DB) {
 	if err != nil {
 		tb.Fatalf("resolve sql handle: %+v", errors.WithStack(err))
 	}
-	// Production allows 2000 open connections, but a benchmark container is
-	// configured for far fewer and a suite that opens many handles would
+	// Production defaults to 50 open connections per pool, but a benchmark
+	// container is configured for fewer and a suite that opens many handles would
 	// exhaust the server. The cap is generous relative to the concurrency any
 	// arm actually uses (GOMAXPROCS-way parallelism plus a couple of writers),
 	// so no variant is starved and the comparison stays fair.
