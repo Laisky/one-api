@@ -42,19 +42,17 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Validate workflow contracts
+      - name: Validate workflow contracts and test orchestration
         run: |
           python3 -m pip install --disable-pip-version-check 'PyYAML==6.0.3'
           python3 .github/scripts/test_workflows.py
-
+          python3 .github/scripts/test_go_test_shards.py
       - name: Detect changed frontend paths
         if: github.event_name != 'workflow_dispatch'
         uses: dorny/paths-filter@v4.0.3
         id: filter
         with:
-          # Pushes compare to the previous commit on the SAME long-lived branch.
-          # Empty base preserves paths-filter's native PR/merge-group handling.
+          # Use the previous commit on the same branch for push events.
           base: ${{ github.event_name == 'push' && github.ref || '' }}
           filters: |
             modern:
@@ -79,12 +77,17 @@ jobs:
               - '.dockerignore'
               - 'VERSION'
 
-  # Deliberately unconditional: preserve pr-check's coverage of every PR, including
-  # non-Go fixtures, embedded assets and build configuration. Run the full suite ONCE.
-  go_tests:
-    name: Go tests (race + database integration)
+  # Every package and every top-level model test runs exactly once. Separate runners
+  # isolate model's mutable globals, databases, fixed ports and pinned-binary caches.
+  # Do not add t.Parallel() to tests that mutate shared application configuration.
+  go_test_shards:
+    name: Go tests (${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [packages, model-0, model-1, model-2, model-3]
     services:
       mysql:
         image: mysql:8.4
@@ -122,7 +125,6 @@ jobs:
       COMPACT_UUID_TEST_LOG_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
       COMPACT_UUID_TEST_LOG_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
       COMPACT_UUID_TEST_POSTGRES_BASE_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_workload_base?sslmode=disable
-      # Missing databases or an insufficient timeout must FAIL, not silently skip.
       ONEAPI_REQUIRE_DB_BACKENDS: '1'
       ONEAPI_REQUIRE_COMPACT_UUID_SUITE: '1'
       CGO_ENABLED: '1'
@@ -132,10 +134,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-
       - name: Verify checkout does not retain authentication
         run: |
-          python3 - <<'PY'
+          python3 - <<'PYTHON'
           import subprocess
           keys = subprocess.check_output(
               ["git", "config", "--local", "--name-only", "--list"], text=True
@@ -144,19 +145,14 @@ jobs:
                  key.startswith("credential.") or
                  (key.startswith("includeif.") and key.endswith(".path")) for key in keys):
               raise SystemExit("Checkout retained authentication configuration.")
-          PY
-
+          PYTHON
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-
-      - name: Lint GitHub Actions workflows
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
-
-      - name: Run go vet
-        run: go vet ./...
-
+      - name: Verify orchestration against the real Go toolchain
+        if: matrix.shard == 'packages'
+        run: python3 .github/scripts/test_go_test_shards_integration.py
       - name: Install test dependencies and create secondary databases
         env:
           MYSQL_PWD: root
@@ -172,23 +168,46 @@ jobs:
               "SELECT 1 FROM pg_database WHERE datname = '${db}'" | grep -q 1 \
               || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE ${db};"
           done
-
-      - name: Run all Go tests with race detection and coverage
-        # Includes DeepSeek, GPT Image and Realtime behavior/negative-control tests.
-        # Heavy opt-in scale/replication tiers remain opt-in, as before.
+      - name: Run assigned Go tests with race detection and coverage
+        env:
+          GO_TEST_SHARD: ${{ matrix.shard }}
         run: |
-          set -euo pipefail
-          go test -race -v -cover -coverprofile=coverage.txt -count=1 -timeout 45m ./... \
-            2>&1 | tee "$RUNNER_TEMP/go-tests.log"
-
-      - name: Archive test evidence
+          python3 .github/scripts/go_test_shards.py run \
+            --shard "$GO_TEST_SHARD" --output "$RUNNER_TEMP/go-tests"
+      - name: Archive complete shard evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: go-test-evidence-${{ github.sha }}
-          path: ${{ runner.temp }}/go-tests.log
+          name: go-tests-${{ matrix.shard }}-${{ github.sha }}
+          path: ${{ runner.temp }}/go-tests
           retention-days: 14
 
+  # Keep this job ID as the dependency of CI required and the optional coverage report.
+  # Never publish partial coverage or let a failed/cancelled matrix look successful.
+  go_tests:
+    name: Go test completeness and coverage
+    if: always()
+    needs: go_test_shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require every Go test shard to pass
+        env:
+          SHARD_RESULT: ${{ needs.go_test_shards.result }}
+        run: test "$SHARD_RESULT" = success
+      - name: Checkout validation scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download all shard evidence from this run
+        uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: go-tests-*-${{ github.sha }}
+          path: go-test-results
+      - name: Verify completeness and merge atomic coverage
+        run: |
+          python3 .github/scripts/go_test_shards.py merge \
+            --input go-test-results --output coverage.txt
       - name: Archive code coverage results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -205,7 +224,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - name: Install ast-grep
         env:
           ASG_VERSION: 0.43.0
@@ -219,7 +237,6 @@ jobs:
           unzip -o ast-grep.zip -d "$HOME/.local/bin"
           chmod +x "$HOME/.local/bin/ast-grep" "$HOME/.local/bin/sg"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
       - name: Verify guardrail rules and scan request context use
         run: |
           ast-grep --version
@@ -239,6 +256,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - name: Lint GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
+      - name: Run go vet once for the complete repository
+        run: go vet ./...
       - name: Run noentityresponse analyzer
         run: go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
       - name: Check realtime sentinel error convention
@@ -345,7 +366,6 @@ jobs:
 
   code_coverage:
     name: Code coverage report
-    # Reporting is optional; coverage artifacts exist for forks and Dependabot too.
     if: >-
       github.event_name == 'pull_request' &&
       github.actor != 'dependabot[bot]' &&

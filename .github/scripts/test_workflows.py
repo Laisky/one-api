@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Test workflow contracts and execute the CI gate against representative job results.
-
-Run with Python 3 and PyYAML 6.0.3. GitHub expression/schema validation is also
-performed by actionlint in the Go job; these tests protect repository behavior.
-"""
-
+"""Test workflow coverage, trust boundaries and the actual aggregate status gate."""
 from __future__ import annotations
 
 import copy
@@ -17,6 +12,8 @@ import sys
 import unittest
 
 import yaml
+
+import go_test_shards as shards
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -42,7 +39,7 @@ class UniqueKeyLoader(yaml.BaseLoader):
 
 
 def load_workflow(name: str) -> dict:
-    """load_workflow returns a parsed workflow without YAML 1.1 boolean coercion."""
+    """load_workflow returns YAML without coercing GitHub's on keyword to a boolean."""
     return yaml.load((WORKFLOWS / name).read_text(), Loader=UniqueKeyLoader)
 
 
@@ -52,7 +49,7 @@ def commands(job: dict) -> str:
 
 
 class WorkflowTests(unittest.TestCase):
-    """WorkflowTests protect coverage, trust boundaries and delivery behavior."""
+    """WorkflowTests protect validation and the unchanged delivery policy."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -67,9 +64,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_ci_events_are_not_path_filtered(self) -> None:
         """test_ci_events_are_not_path_filtered keeps the required check reachable."""
-        self.assertEqual(set(self.ci["on"]), {
-            "push", "pull_request", "merge_group", "workflow_dispatch",
-        })
+        self.assertEqual(set(self.ci["on"]), {"push", "pull_request", "merge_group", "workflow_dispatch"})
         self.assertEqual(self.ci["on"]["push"]["branches"], ["master", "main", "test/ci"])
         for event in ("push", "pull_request", "merge_group"):
             trigger = self.ci["on"][event] or {}
@@ -78,26 +73,51 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.ci["concurrency"]["cancel-in-progress"], "true")
         self.assertEqual(self.ci["on"]["workflow_dispatch"]["inputs"]["historical_control"]["default"], "false")
 
-    def test_full_go_suite_runs_once_without_path_skips(self) -> None:
-        """test_full_go_suite_runs_once_without_path_skips protects full race coverage."""
-        all_commands = "\n".join(commands(job) for job in self.ci["jobs"].values())
-        full_suites = re.findall(r"go test[^\n]*\./\.\.\.", all_commands)
-        self.assertEqual(len(full_suites), 1)
-        for flag in ("-race", "-count=1", "-timeout 45m", "-coverprofile=coverage.txt", "-v"):
-            self.assertIn(flag, full_suites[0])
-        self.assertEqual(all_commands.count("go vet ./..."), 1)
-        job = self.ci["jobs"]["go_tests"]
+    def test_go_shards_preserve_fresh_race_coverage_and_complete_inventory(self) -> None:
+        """test_go_shards_preserve_fresh_race_coverage_and_complete_inventory protects selection."""
+        job = self.ci["jobs"]["go_test_shards"]
         self.assertNotIn("if", job)
         self.assertGreaterEqual(int(job["timeout-minutes"]), 90)
+        self.assertEqual(job["strategy"]["fail-fast"], "false")
+        self.assertEqual(job["strategy"]["matrix"]["shard"], list(shards.SHARDS))
         self.assertEqual(job["steps"][0]["with"]["fetch-depth"], "0")
-        self.assertIn('tee "$RUNNER_TEMP/go-tests.log"', commands(job))
-        self.assertIn("actionlint@v1.7.12", commands(job))
-        for step in job["steps"]:
-            self.assertNotIn("continue-on-error", step)
+        for flag in ("-race", "-cover", "-covermode=atomic", "-count=1", "-timeout=45m"):
+            self.assertIn(flag, shards.FLAGS)
+        self.assertNotIn("-short", shards.FLAGS)
+        self.assertIn("go_test_shards.py run", commands(job))
+        self.assertIn('--shard "$GO_TEST_SHARD"', commands(job))
+        evidence = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/upload-artifact@"))
+        self.assertEqual(evidence["if"], "always()")
+        self.assertIn("matrix.shard", evidence["with"]["name"])
+        self.assertEqual(evidence["with"]["retention-days"], "14")
+        aggregate = self.ci["jobs"]["go_tests"]
+        self.assertEqual(aggregate["needs"], "go_test_shards")
+        self.assertEqual(aggregate["if"], "always()")
+        self.assertIn("go_test_shards.py merge", commands(aggregate))
+        download = next(step for step in aggregate["steps"] if step.get("uses", "").startswith("actions/download-artifact@"))
+        self.assertEqual(download["with"]["pattern"], "go-tests-*-${{ github.sha }}")
+        self.assertNotEqual(download["with"].get("merge-multiple"), "true")
+        artifact = aggregate["steps"][-1]["with"]
+        self.assertEqual(artifact["name"], "code-coverage")
+        self.assertEqual(artifact["if-no-files-found"], "error")
+        self.assertEqual(self.ci["jobs"]["code_coverage"]["needs"], "go_tests")
+        for candidate in (job, aggregate):
+            self.assertNotIn("continue-on-error", candidate)
+            for step in candidate["steps"]:
+                self.assertNotIn("continue-on-error", step)
+
+    def test_matrix_failure_cannot_publish_coverage(self) -> None:
+        """test_matrix_failure_cannot_publish_coverage executes the aggregation precondition."""
+        step = self.ci["jobs"]["go_tests"]["steps"][0]
+        self.assertEqual(step["env"]["SHARD_RESULT"], "${{ needs.go_test_shards.result }}")
+        for status in ("success", "failure", "cancelled", "skipped", ""):
+            result = subprocess.run(["bash", "-e", "-c", step["run"]],
+                                    env={**os.environ, "SHARD_RESULT": status}, check=False)
+            self.assertEqual(result.returncode == 0, status == "success", status)
 
     def test_database_qualification_cannot_silently_skip(self) -> None:
-        """test_database_qualification_cannot_silently_skip protects live UUID tests."""
-        job = self.ci["jobs"]["go_tests"]
+        """test_database_qualification_cannot_silently_skip protects live UUID tests on every shard."""
+        job = self.ci["jobs"]["go_test_shards"]
         self.assertEqual(job["services"]["mysql"]["image"], "mysql:8.4")
         self.assertEqual(job["services"]["postgres"]["image"], "postgres:17")
         env = job["env"]
@@ -112,19 +132,23 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn(dependency, commands(job))
 
     def test_static_and_security_guards_remain(self) -> None:
-        """test_static_and_security_guards_remain protects non-test validation."""
+        """test_static_and_security_guards_remain protects non-test validation without duplication."""
         jobs = self.ci["jobs"]
         for name in MANDATORY - {"changes", "go_tests"}:
             self.assertNotIn("if", jobs[name])
         self.assertIn("ast-grep test --skip-snapshot-tests", commands(jobs["goroutine_context_guard"]))
         self.assertIn("ast-grep scan", commands(jobs["goroutine_context_guard"]))
         self.assertIn("sha256sum -c -", commands(jobs["goroutine_context_guard"]))
-        self.assertIn("./tools/analyzers/noentityresponse/cmd/noentityresponse ./...", commands(jobs["entity_response_guard"]))
-        self.assertIn("--enable-only err113", commands(jobs["entity_response_guard"]))
+        static = commands(jobs["entity_response_guard"])
+        self.assertIn("./tools/analyzers/noentityresponse/cmd/noentityresponse ./...", static)
+        self.assertIn("--enable-only err113", static)
+        self.assertIn("actionlint@v1.7.12", static)
+        self.assertIn("go vet ./...", static)
+        self.assertEqual("\n".join(commands(job) for job in jobs.values()).count("go vet ./..."), 1)
         self.assertIn('"$(go env GOPATH)/bin/govulncheck" ./...', commands(jobs["vulnerability_scan"]))
 
     def test_frontend_selection_and_frozen_build(self) -> None:
-        """test_frontend_selection_and_frozen_build protects tests and Modern build."""
+        """test_frontend_selection_and_frozen_build protects tests and Modern production build."""
         changes = self.ci["jobs"]["changes"]
         self.assertEqual(changes["permissions"]["pull-requests"], "read")
         filter_step = next(step for step in changes["steps"] if step.get("id") == "filter")
@@ -218,7 +242,6 @@ class WorkflowTests(unittest.TestCase):
             state = copy.deepcopy(baseline)
             state[name]["result"] = "skipped"
             scenarios.append((f"mandatory {name} skipped", state, False, False, False))
-        for name in MANDATORY:
             state = copy.deepcopy(baseline)
             del state[name]
             scenarios.append((f"mandatory {name} missing", state, False, False, False))
