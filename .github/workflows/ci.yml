@@ -1,4 +1,5 @@
-name: ci
+# Delivery stays independent from read-only PR validation in lint.yml.
+name: Build and deploy
 
 on:
   push:
@@ -17,20 +18,21 @@ permissions:
   contents: read
 
 jobs:
+  # Preserve the existing delivery policy; this never skips quality checks in lint.yml.
   check_skip:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       should_skip: ${{ steps.check.outputs.should_skip }}
     steps:
-      - name: Check if CI should be skipped
+      - name: Check if delivery should be skipped
         id: check
         env:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           if [[ "$COMMIT_MSG" =~ ^(docs:|doc:|tests:|test:|ci:) ]]; then
             echo "should_skip=true" >> "${GITHUB_OUTPUT}"
-            echo "Skipping CI due to commit message prefix"
+            echo "Skipping delivery due to commit message prefix"
           else
             echo "should_skip=false" >> "${GITHUB_OUTPUT}"
           fi
@@ -46,9 +48,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4.2.0
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.3.0
@@ -69,36 +70,14 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64
           tags: |
             ppcelery/one-api:latest
             ppcelery/one-api:${{ steps.vars.outputs.short_sha }}
-          cache-from: type=gha
-
-  build_latest_cache:
-    needs: [check_skip, build_latest]
-    if: needs.check_skip.outputs.should_skip != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    concurrency:
-      group: build_latest_cache-${{ github.ref }}
-      cancel-in-progress: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4.2.0
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.3.0
-
-      - name: Build and export cache only
-        uses: docker/build-push-action@v7.3.0
-        with:
-          context: .
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=one-api-amd64
+          # Export during the real build instead of rebuilding in a second job.
+          # Cache failure must not block deployment (the old cache job was independent).
+          cache-to: type=gha,scope=one-api-amd64,mode=max,ignore-error=true
 
   deploy:
     runs-on: ubuntu-latest
@@ -134,6 +113,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4.2.0
@@ -163,80 +144,5 @@ jobs:
           platforms: linux/arm64
           build-args: |
             TARGETARCH=arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  build_windows:
-    needs: check_skip
-    runs-on: windows-latest
-    if: startsWith(github.ref, 'refs/tags/') && needs.check_skip.outputs.should_skip != 'true'
-    timeout-minutes: 30
-    concurrency:
-      group: build_windows-${{ github.ref }}
-      cancel-in-progress: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-
-      - name: Set up Go
-        uses: actions/setup-go@v7.0.0
-        with:
-          go-version-file: go.mod
-
-      - name: Compute short sha
-        id: vars
-        run: echo "short_sha=${GITHUB_SHA::7}" >> "${GITHUB_OUTPUT}"
-        shell: bash
-
-      - name: Build Windows executables
-        run: |
-          # Build the standard executable
-          go build -trimpath -ldflags "-s -w" -o one-api.exe
-
-          # Make a copy with the short SHA in the name
-          cp one-api.exe "one-api-${{ steps.vars.outputs.short_sha }}.exe"
-        shell: bash
-
-      - name: Upload Windows executables
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: one-api-windows
-          path: |
-            one-api.exe
-            one-api-${{ steps.vars.outputs.short_sha }}.exe
-          retention-days: 90
-
-  create_release:
-    needs: [check_skip, build_windows]
-    if: startsWith(github.ref, 'refs/tags/') && needs.check_skip.outputs.should_skip != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write # Creating a GitHub Release mutates repository contents.
-    concurrency:
-      group: create_release-${{ github.ref }}
-      cancel-in-progress: true
-    steps:
-      - name: Extract version
-        id: extract_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "${GITHUB_OUTPUT}"
-
-      - name: Compute short sha
-        id: vars
-        shell: bash
-        run: echo "short_sha=${GITHUB_SHA::7}" >> "${GITHUB_OUTPUT}"
-
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v8.0.1
-        with:
-          name: one-api-windows
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v3.0.2
-        with:
-          name: Release ${{ steps.extract_version.outputs.VERSION }}
-          files: |
-            one-api.exe
-            one-api-${{ steps.vars.outputs.short_sha }}.exe
-          draft: false
-          prerelease: false
+          cache-from: type=gha,scope=one-api-arm64
+          cache-to: type=gha,scope=one-api-arm64,mode=max

@@ -1,106 +1,212 @@
-name: lint
+# Keep the filename for existing badges and workflow links. This is the only PR CI entrypoint.
+name: CI
 
 on:
   push:
-    branches:
-      - 'master'
-      - 'main'
-      - 'test/ci'
+    branches: [master, main, test/ci]
   pull_request:
-    branches:
-      - 'master'
-      - 'main'
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+    inputs:
+      historical_control:
+        description: Replay the historical Realtime bug (current-code regressions always run)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: lint-${{ github.workflow }}-${{ github.ref }}
+  group: ci-validation-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter uses the PR files API, including for forks.
     outputs:
-      go: ${{ steps.filter.outputs.go }}
       modern: ${{ steps.filter.outputs.modern }}
       air: ${{ steps.filter.outputs.air }}
       berry: ${{ steps.filter.outputs.berry }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Detect changed paths
+      - name: Validate workflow contracts
+        run: |
+          python3 -m pip install --disable-pip-version-check 'PyYAML==6.0.3'
+          python3 .github/scripts/test_workflows.py
+
+      - name: Detect changed frontend paths
+        if: github.event_name != 'workflow_dispatch'
         uses: dorny/paths-filter@v4.0.3
         id: filter
         with:
+          # Pushes compare to the previous commit on the SAME long-lived branch.
+          # Empty base preserves paths-filter's native PR/merge-group handling.
+          base: ${{ github.event_name == 'push' && github.ref || '' }}
           filters: |
-            go:
-              - '**/*.go'
-              - 'go.mod'
-              - 'go.sum'
-              - '.github/**'
             modern:
               - 'web/modern/**'
               - '.github/**'
+              - 'Makefile'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'VERSION'
             air:
               - 'web/air/**'
               - '.github/**'
+              - 'Makefile'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'VERSION'
             berry:
               - 'web/berry/**'
               - '.github/**'
+              - 'Makefile'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'VERSION'
 
+  # Deliberately unconditional: preserve pr-check's coverage of every PR, including
+  # non-Go fixtures, embedded assets and build configuration. Run the full suite ONCE.
   go_tests:
-    name: Go unit tests
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
+    name: Go tests (race + database integration)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=20s
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=10s
+    env:
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      MYSQL_LOG_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      PG_LOG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      COMPACT_UUID_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      COMPACT_UUID_TEST_LOG_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_LOG_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      COMPACT_UUID_TEST_POSTGRES_BASE_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_workload_base?sslmode=disable
+      # Missing databases or an insufficient timeout must FAIL, not silently skip.
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      ONEAPI_REQUIRE_COMPACT_UUID_SUITE: '1'
+      CGO_ENABLED: '1'
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+      - name: Checkout repository and historical compatibility fixtures
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checkout does not retain authentication
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          keys = subprocess.check_output(
+              ["git", "config", "--local", "--name-only", "--list"], text=True
+          ).lower().splitlines()
+          if any(key.endswith(".extraheader") or key == "core.sshcommand" or
+                 key.startswith("credential.") or
+                 (key.startswith("includeif.") and key.endswith(".path")) for key in keys):
+              raise SystemExit("Checkout retained authentication configuration.")
+          PY
 
       - name: Setup Go
-        uses: actions/setup-go@v7.0.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Lint GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
 
-      # When you execute your unit tests, make sure to use the "-coverprofile" flag to write a
-      # coverage profile to a file. You will need the name of the file (e.g. "coverage.txt")
-      # in the next step as well as the next job.
-      - name: Test
-        # ONEAPI_REQUIRE_COMPACT_UUID_SUITE turns the compact-UUID suite's
-        # budget skip into a hard failure: that suite is ~88% of the model
-        # package's runtime and skips itself when -timeout is under 15m, so
-        # without this a future timeout reduction would silently drop 51 tests.
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Install test dependencies and create secondary databases
         env:
-          ONEAPI_REQUIRE_COMPACT_UUID_SUITE: "1"
-        run: go test -race -cover -coverprofile=coverage.txt -count=1 -timeout 20m ./...
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg mysql-client postgresql-client
+          mysql -h 127.0.0.1 -P 3306 -uroot \
+            -e "CREATE DATABASE IF NOT EXISTS oneapi_log CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          for db in oneapi_log oneapi_workload_base; do
+            psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+              "SELECT 1 FROM pg_database WHERE datname = '${db}'" | grep -q 1 \
+              || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE ${db};"
+          done
+
+      - name: Run all Go tests with race detection and coverage
+        # Includes DeepSeek, GPT Image and Realtime behavior/negative-control tests.
+        # Heavy opt-in scale/replication tiers remain opt-in, as before.
+        run: |
+          set -euo pipefail
+          go test -race -v -cover -coverprofile=coverage.txt -count=1 -timeout 45m ./... \
+            2>&1 | tee "$RUNNER_TEMP/go-tests.log"
+
+      - name: Archive test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: go-test-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/go-tests.log
+          retention-days: 14
 
       - name: Archive code coverage results
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: code-coverage
-          path: coverage.txt # Make sure to use the same file name you chose for the "-coverprofile" in the "Test" step
+          path: coverage.txt
+          if-no-files-found: error
 
   goroutine_context_guard:
     name: Goroutine *gin.Context guardrail
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install ast-grep
-        # Pinned prebuilt binary (no npm — project policy uses yarn for the frontend and
-        # avoids npm). Checksum-verified for reproducibility; the zip ships both ast-grep
-        # and its `sg` alias. Bump ASG_VERSION + ASG_SHA256 together when upgrading.
         env:
           ASG_VERSION: 0.43.0
           ASG_SHA256: a26253a9c821d935f7e383e40f0de7c2ca62a4121de1f73a6d81ec32eae631e0
@@ -114,58 +220,43 @@ jobs:
           chmod +x "$HOME/.local/bin/ast-grep" "$HOME/.local/bin/sg"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Verify ast-grep version
-        run: ast-grep --version
-
-      - name: Verify guardrail rule tests
-        run: ast-grep test --skip-snapshot-tests
-
-      - name: Scan for goroutines referencing the request *gin.Context
-        run: ast-grep scan
+      - name: Verify guardrail rules and scan request context use
+        run: |
+          ast-grep --version
+          ast-grep test --skip-snapshot-tests
+          ast-grep scan
 
   entity_response_guard:
-    name: Boundary entity-response guardrail
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
+    name: Go static guardrails
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Go
-        uses: actions/setup-go@v7.0.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-
-      # Type-aware analyzer that forbids serializing raw management-API entities
-      # (model.User/Token/Channel/Redemption/Log) at the HTTP boundary. See
-      # tools/analyzers/noentityresponse and
-      # docs/proposals/archive/20260714_boundary-response-dtos.md (gate E3).
       - name: Run noentityresponse analyzer
         run: go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
+      - name: Check realtime sentinel error convention
+        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2 run --no-config --enable-only err113 --timeout=5m ./relay/realtime
 
   vulnerability_scan:
     name: Dependency vulnerability scan
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Go
-        uses: actions/setup-go@v7.0.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-
-      # `make lint` has always run govulncheck locally, but no CI job did, so two
-      # reachable advisories (GO-2026-6222 unbounded VP8L decode reached through
-      # replicate.ConvertImageToPNG, GO-2026-6061 in the grpc HTTP/2 transport)
-      # sat in go.mod until someone happened to run it. govulncheck only reports
-      # advisories whose vulnerable symbols this code actually calls, so a finding
-      # here is reachable by definition and must be fixed, not waived.
       - name: Run govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -174,51 +265,52 @@ jobs:
   modern_frontend_tests:
     name: Frontend tests (modern)
     needs: changes
-    if: needs.changes.outputs.modern == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.modern == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Node.js
         uses: actions/setup-node@v7.0.0
         with:
           node-version: '24'
-          cache: 'yarn'
+          cache: yarn
           cache-dependency-path: web/modern/yarn.lock
-
       - name: Install dependencies
         working-directory: web/modern
         run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
-
       - name: Run tests
         working-directory: web/modern
         env:
           CI: true
         run: yarn test --run --passWithNoTests
+      - name: Build Modern frontend
+        working-directory: web/modern
+        run: yarn build
 
   air_frontend_tests:
     name: Frontend tests (air)
     needs: changes
-    if: needs.changes.outputs.air == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.air == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Node.js
         uses: actions/setup-node@v7.0.0
         with:
           node-version: '24'
-          cache: 'yarn'
+          cache: yarn
           cache-dependency-path: web/air/yarn.lock
-
       - name: Install dependencies
         working-directory: web/air
         run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
-
       - name: Run tests
         working-directory: web/air
         env:
@@ -228,24 +320,23 @@ jobs:
   berry_frontend_tests:
     name: Frontend tests (berry)
     needs: changes
-    if: needs.changes.outputs.berry == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.berry == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Node.js
         uses: actions/setup-node@v7.0.0
         with:
           node-version: '24'
-          cache: 'yarn'
+          cache: yarn
           cache-dependency-path: web/berry/yarn.lock
-
       - name: Install dependencies
         working-directory: web/berry
         run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
-
       - name: Run tests
         working-directory: web/berry
         env:
@@ -253,31 +344,109 @@ jobs:
         run: yarn test --watchAll=false --passWithNoTests
 
   code_coverage:
-    name: 'Code coverage report'
-    # The report posts a PR comment, which fork workflows cannot do because GitHub downgrades
-    # their token to read-only. Unit tests and coverage artifacts still run for those PRs.
+    name: Code coverage report
+    # Reporting is optional; coverage artifacts exist for forks and Dependabot too.
     if: >-
       github.event_name == 'pull_request' &&
-      needs.changes.outputs.go == 'true' &&
+      github.actor != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    needs: [changes, go_tests] # Depends on the artifact uploaded by the "go_tests" job
+    needs: go_tests
     timeout-minutes: 15
     permissions:
       actions: read
       contents: read
       pull-requests: write
     steps:
-      # Pinned to a full commit SHA (v1.3.1) for supply-chain security: a mutable
-      # tag could be force-pushed and change what CI runs.
-      - uses: fgrosse/go-coverage-report@ae818fbdd0dd79fe6ddc82e1eb0db466bfb0eddd
+      - uses: fgrosse/go-coverage-report@ae818fbdd0dd79fe6ddc82e1eb0db466bfb0eddd # v1.3.1
         with:
-          coverage-artifact-name: 'code-coverage' # can be omitted if you used this default value
-          coverage-file-name: 'coverage.txt' # can be omitted if you used this default value
+          coverage-artifact-name: code-coverage
+          coverage-file-name: coverage.txt
 
+  historical_control:
+    name: Historical Realtime negative control (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.historical_control
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout current regression test
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Checkout reviewed baseline for the negative control
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 6138a94f9749312a9c31c7c2ebdcbea758b04235
+          path: .realtime-baseline
+          persist-credentials: false
+      - name: Verify index regression detects the original bug
+        run: |
+          cp relay/realtime/identity_review_test.go .realtime-baseline/relay/realtime/identity_review_test.go
+          set +e
+          (cd .realtime-baseline && go test -race -count=1 -timeout=2m -v -run '^TestReviewTranscriptionIndexPresence$' ./relay/realtime) > "$RUNNER_TEMP/realtime-index-baseline.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/realtime-index-baseline.log"
+          if [ "$status" -ne 1 ] || ! grep -F -- '--- FAIL: TestReviewTranscriptionIndexPresence' "$RUNNER_TEMP/realtime-index-baseline.log" >/dev/null; then
+            echo '::error::The historical control did not reproduce the intended assertion failure.'
+            exit 1
+          fi
+      - name: Archive historical control evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: realtime-historical-control-${{ github.sha }}
+          path: ${{ runner.temp }}/realtime-index-baseline.log
+          retention-days: 14
 
-  # commit_lint:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - uses: wagoid/commitlint-github-action@v6
+  required:
+    name: CI required
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - changes
+      - go_tests
+      - goroutine_context_guard
+      - entity_response_guard
+      - vulnerability_scan
+      - modern_frontend_tests
+      - air_frontend_tests
+      - berry_frontend_tests
+      - historical_control
+    steps:
+      - name: Require all applicable checks to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          MANUAL_RUN: ${{ github.event_name == 'workflow_dispatch' }}
+          HISTORICAL_CONTROL: ${{ github.event_name == 'workflow_dispatch' && inputs.historical_control }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          jobs = json.loads(os.environ['NEEDS'])
+          required = {'changes', 'go_tests', 'goroutine_context_guard',
+                      'entity_response_guard', 'vulnerability_scan'}
+          outputs = jobs['changes'].get('outputs', {})
+          manual = os.environ['MANUAL_RUN'] == 'true'
+          for theme in ('modern', 'air', 'berry'):
+              changed = outputs.get(theme)
+              if not manual and changed not in ('true', 'false'):
+                  raise SystemExit(f'Missing or invalid change detection for {theme}')
+              if manual or changed == 'true':
+                  required.add(f'{theme}_frontend_tests')
+          if os.environ['HISTORICAL_CONTROL'] == 'true':
+              required.add('historical_control')
+          failed = [name for name, job in jobs.items()
+                    if job['result'] not in ({'success'} if name in required
+                                            else {'success', 'skipped'})]
+          failed.extend(sorted(required - jobs.keys()))
+          if failed:
+              raise SystemExit('Required checks did not pass: ' + ', '.join(failed))
+          print('All applicable CI checks passed.')
+          PY
