@@ -1,104 +1,102 @@
 # GitHub Actions
 
-Maintain two workflow entrypoints. Add ordinary regression tests to the existing
+Keep two workflow entrypoints. Ordinary regression tests belong in the existing
 Go/frontend suites, not a new workflow for each provider, bug or pull request.
-The filenames are retained so existing workflow URLs and badges still resolve.
+Filenames are retained for existing workflow URLs and badges.
 
 | File / display name | Responsibility | Triggers |
 | --- | --- | --- |
-| `workflows/lint.yml` / **CI** | Tests, static analysis, vulnerability scan, coverage and the aggregate check | All PRs; pushes to `main`, `master`, `test/ci`; merge queues; manual |
-| `workflows/ci.yml` / **Build and deploy** | Publish amd64/arm64 images and perform the existing SSH deployment | Existing push branches and delivery exclusions only |
+| `workflows/lint.yml` / **CI** | Tests, analysis, vulnerability scan, coverage and aggregate gate | All PRs; pushes to `main`, `master`, `test/ci`; merge queues; manual |
+| `workflows/ci.yml` / **Build and deploy** | amd64/arm64 images and existing SSH deployment | Existing push branches and delivery exclusions only |
 
-## What CI guarantees
+## Go tests: complete, isolated shards
 
-The single full Go run uses race detection, fresh execution, verbose evidence
-and coverage: `go test -race -v -cover -coverprofile=coverage.txt -count=1
--timeout 45m ./...`. It includes the DeepSeek, GPT Image and Realtime test
-packages previously repeated by standalone workflows. `go vet ./...` runs once.
+The `go_test_shards` matrix contains **packages** and **model-0..3**. Each job
+gets its own runner, MySQL 8.4 and PostgreSQL 17 services, all primary/log/baseline
+DSNs, full history for pinned-binary compatibility tests, and ffmpeg. Every job
+retains `ONEAPI_REQUIRE_DB_BACKENDS=1`, `ONEAPI_REQUIRE_COMPACT_UUID_SUITE=1`,
+`CGO_ENABLED=1` and a 90-minute job budget.
 
-The Go job retains MySQL 8.4, PostgreSQL 17, all primary/log/baseline DSNs,
-secondary database creation, full Git history for pinned old-binary tests,
-`ffmpeg`, a 90-minute job budget and both no-skip guards:
-`ONEAPI_REQUIRE_DB_BACKENDS=1` and `ONEAPI_REQUIRE_COMPACT_UUID_SUITE=1`.
-Scale and replication tiers remain opt-in. Nothing runs with `-short`.
+`.github/scripts/go_test_shards.py` discovers packages with `go list ./...`.
+The packages shard runs everything except the root `model` package. Four model
+shards discover the current top-level tests with `go test -list`, then partition
+them deterministically using checked-in timing hints. New tests are discovered
+automatically; stale hints cannot remove a test. No subtest is split or filtered.
+Fuzz seeds and executable examples remain part of normal Go test execution.
 
-Go checks run for every CI event, including documentation-only PRs, preserving
-the previous unfiltered `pr-check` behavior and covering non-Go fixtures and
-embedded assets without a fragile Go-only path allowlist. Main-branch pushes
-now also receive the live database qualification previously limited to PRs.
+All real runs use `-race -cover -covermode=atomic -count=1 -timeout=45m -json`.
+The build cache remains enabled, but cached test results are not accepted. The
+matrix uses `fail-fast: false` so a failure does not cancel evidence collection
+from the other shards. Go tests remain unconditional on every CI event; the
+existing opt-in scale/replication tiers are not silently promoted or removed.
+Do not run the model shards concurrently against shared local databases: they
+mutate global configuration, schema and fixed ports. CI isolates those resources.
 
-The goroutine/context guard, type-aware entity-response analyzer, Realtime
-`err113` check and `govulncheck` remain blocking. Frontend tests are selected by
-changed theme or shared workflow/build inputs; manual runs test every theme.
-Installs use frozen Yarn lockfiles, and Modern also gets a production build.
+The **Go test completeness and coverage** job (`go_tests`) requires every matrix
+job to succeed. It then verifies exactly one artifact per shard, matching source
+revision and package inventories, complete/disjoint model selection, actual
+JSON test starts/completions, and successful package completion. Missing,
+duplicated, failed, cancelled or incomplete results fail the gate. Existing
+intentional skips remain visible and the tests' database no-skip guards remain
+mandatory. Atomic coverage counters are summed; statement blocks are counted
+only once. Coverage is published only after these checks pass.
 
-**CI required** fails on a failed/cancelled check, missing change-detection
-output or an unexpectedly skipped mandatory job. Only unaffected frontends
-and the unrequested historical replay may be skipped. The coverage PR comment
-is informational; tests and the coverage artifact remain mandatory. Forks and
-Dependabot run validation without needing secrets or a writable PR token.
+Each `go-tests-<shard>-<sha>` artifact retains the manifest, JSON events, readable
+log, coverage and timing summary for 14 days. Job summaries show slow top-level
+tests and skips without double-counting nested subtest durations. The merged
+`code-coverage/coverage.txt` artifact continues to feed the optional PR reporter.
+See [Go test efficiency](../docs/testing/go-test-efficiency.md) for the baseline,
+tradeoffs, reproduction commands and interpretation of the timing data.
 
-Configure branch protection to require **CI required** rather than retired
-workflow/job names. This change does not edit repository protection settings.
-The old `Go unit tests`, `Go Vet`, `Run Tests`, provider-regression checks and
-`Boundary entity-response guardrail` are represented by the consolidated gate.
+## Other required checks
+
+`go vet ./...` and actionlint run once in **Go static guardrails**, alongside the
+type-aware entity-response analyzer and Realtime `err113` check. The goroutine
+context guard and `govulncheck` remain blocking jobs. Frontend checks are selected
+by changed theme/shared build inputs; manual runs test every theme. Frozen Yarn
+installs, all three test suites and the Modern production build are retained.
+
+**CI required** remains the stable branch-protection check. It rejects
+failed/cancelled checks, missing change-detection output and unexpected skips.
+The coverage comment is informational; tests and the merged coverage artifact
+are mandatory. Forks and Dependabot do not need secrets or a writable PR token.
+Repository protection settings are not changed by these workflows.
 
 ## Optional historical evidence
 
-Current-code billing regressions always run in the full suite. To additionally
-prove that the transcription-index test fails against the original broken
-implementation, dispatch **CI** with `historical_control=true`. The job retains
-the pinned baseline `6138a94f9749312a9c31c7c2ebdcbea758b04235` and requires both
-exit status 1 and the intended assertion failure; a build/network error is not
-accepted as a successful negative control. This expensive old-code replay is
-manual rather than repeated automatically on every related PR.
+Current-code DeepSeek, GPT Image and Realtime regressions run in the full
+package inventory. Dispatch **CI** with `historical_control=true` to additionally
+replay the Realtime transcription-index regression against pinned broken
+baseline `6138a94f9749312a9c31c7c2ebdcbea758b04235`. The control requires both exit
+status 1 and the intended assertion failure; build/network errors do not count.
+This manual job is distinct from the mandatory model old-binary compatibility
+scenarios, which remain in every complete Go test run.
 
-## Delivery behavior preserved
+## Delivery policy
 
-Existing push branches, path exclusions, commit-prefix skip rules, image
-names/tags, credentials references, concurrency groups and SSH commands remain
-unchanged. PR/manual CI runs cannot publish images or deploy. Delivery still
-follows its existing independent push policy; this refactor does not introduce
-a new deployment approval gate or claim that CI completion gates deployment.
+Delivery remains an independent push workflow. Branches, path exclusions,
+commit-prefix skip rules, image tags, credential references, concurrency and
+SSH commands are unchanged. PR/manual CI cannot publish or deploy. CI completion
+is **not** a deployment gate under this existing policy. The native amd64 build
+exports its own non-blocking cache; amd64/arm64 caches have separate scopes.
 
-The amd64 publishing build now exports its own cache instead of starting a
-second build-only job. Cache export remains non-blocking for deployment.
-Separate amd64/arm64 cache scopes prevent the two exports overwriting each
-other. The native amd64 build no longer initializes QEMU; arm64 still does.
+The retired provider-specific workflows and temporary frontend security patch
+generators stay removed. No Windows/release job is silently re-enabled.
+Dependabot and frozen installs are retained; this setup does not claim to provide
+a general frontend OSV audit.
 
-The Windows/release jobs were unreachable because the original workflow only
-accepted branch pushes, while those jobs required tag refs. They are removed,
-not silently enabled by adding new release triggers.
-
-## Retired automation
-
-`pr.yml`, `deepseek-regression.yml`, `image-billing-regression.yml` and
-`realtime-billing-regression.yml` are absorbed as described above. No
-application regression-test source is removed. Full Go logs are retained as
-`go-test-evidence-<sha>` for 14 days, replacing provider-specific log artifacts.
-
-`run-frontend-security-update.yml` and its two Python generators were temporary
-patch-generation scaffolding restricted to one branch, not an ongoing general
-security scanner. Their hardening step expected obsolete non-frozen Yarn and
-Node 20 workflow text. They are removed rather than kept as a broken manual
-tool. Dependabot, frozen installs and the existing Go vulnerability scan are
-unchanged; this refactor does not claim to add a general frontend OSV audit.
-
-## Workflow validation
+## Validate workflow changes
 
 ```sh
 python3 -m pip install 'PyYAML==6.0.3'
 python3 .github/scripts/test_workflows.py
+python3 .github/scripts/test_go_test_shards.py
+python3 .github/scripts/test_go_test_shards_integration.py
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
 ```
 
-The contract tests reject duplicate YAML keys, check triggers and preserved
-coverage, parse every shell block, and execute the actual aggregate-gate code
-against successful, failed, cancelled, skipped and missing-job scenarios.
-GitHub Actions runs both the contract tests and actionlint. Application tests,
-live database qualification and frontend builds must also pass on the PR;
-workflow validation alone is not evidence of an application-test pass.
-
-References: [workflow syntax and permissions](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax),
-[paths-filter event/permission behavior](https://github.com/dorny/paths-filter),
-[Docker GitHub Actions cache scopes and export options](https://docs.docker.com/build/cache/backends/gha/).
+The integration test needs Go and a race-capable C toolchain, but uses only small
+stdlib fixtures and no network. It runs after setup-go on the packages shard.
+Workflow tests also execute the real aggregate-gate code for failure,
+cancellation, skipping and missing-job cases. Passing orchestration tests is
+not a substitute for a successful application/live-database CI run.
