@@ -88,7 +88,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 	}
 
 	// openToolCallMsgIdx tracks an assistant message that was just emitted from a
-	// function_call item and is still "open" to receive sibling tool calls. The OpenAI
+	// function_call or assistant text item and is still "open" to receive sibling tool calls. The OpenAI
 	// Responses API represents parallel tool calls (issued in a single assistant turn) as
 	// multiple consecutive function_call items. ChatCompletion upstreams such as DeepSeek
 	// require those to live in ONE assistant message's tool_calls array; otherwise the
@@ -242,6 +242,13 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 			chatReq.Messages = append(chatReq.Messages, *msg)
 			// A non-tool content message ends the current tool-call turn.
 			clear(pendingToolCallIDs)
+			// An assistant text message stays open so directly following function_call
+			// items join it: Chat Completions carries a turn's text and tool calls in one
+			// assistant message, and DeepSeek requires that message to hold the turn's
+			// reasoning_content.
+			if msg.Role == "assistant" {
+				openToolCallMsgIdx = len(chatReq.Messages) - 1
+			}
 		default:
 			return nil, errors.Errorf("unsupported input item of type %T", item)
 		}
