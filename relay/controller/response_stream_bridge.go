@@ -541,10 +541,13 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 	}
 
 	if created {
+		// Clients such as pi derive the tool call identity from call_id on the added
+		// event and never revisit it, so the added item must already carry call_id.
 		item := openai.OutputItem{
 			Id:     state.id,
 			Type:   "function_call",
 			Status: "in_progress",
+			CallId: state.id,
 			Name:   state.name,
 		}
 

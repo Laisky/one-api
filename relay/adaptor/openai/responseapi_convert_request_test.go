@@ -92,6 +92,60 @@ func TestConvertResponseAPIToChatCompletionRequestPreservesToolCallReasoning(t *
 		"older summary-only bridge output must remain replayable")
 }
 
+// TestConvertResponseAPIToChatCompletionRequestMergesAssistantTextWithToolCalls
+// reproduces a DeepSeek thinking-mode turn where the model writes text before
+// calling a tool. Responses clients replay it as reasoning, message, and
+// function_call items; DeepSeek requires one assistant message carrying the
+// text, the tool calls, and the reasoning_content together.
+func TestConvertResponseAPIToChatCompletionRequestMergesAssistantTextWithToolCalls(t *testing.T) {
+	responseReq := &ResponseAPIRequest{
+		Model: "deepseek-v4-pro",
+		Input: ResponseAPIInput{
+			map[string]any{"role": "user", "content": "Summarize README.md"},
+			map[string]any{
+				"type": "reasoning",
+				"content": []any{
+					map[string]any{"type": "text", "text": "Read the file first."},
+				},
+			},
+			map[string]any{
+				"type": "message",
+				"role": "assistant",
+				"content": []any{
+					map[string]any{"type": "output_text", "text": "Let me read it."},
+				},
+			},
+			map[string]any{
+				"type":      "function_call",
+				"id":        "fc_read",
+				"call_id":   "call_read",
+				"name":      "read_file",
+				"arguments": `{"path":"README.md"}`,
+			},
+			map[string]any{
+				"type":    "function_call_output",
+				"call_id": "call_read",
+				"output":  "file contents",
+			},
+		},
+	}
+
+	chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseReq)
+	require.NoError(t, err)
+	require.Len(t, chatReq.Messages, 3)
+
+	assistant := chatReq.Messages[1]
+	require.Equal(t, "assistant", assistant.Role)
+	require.Equal(t, "Let me read it.", assistant.StringContent())
+	require.Len(t, assistant.ToolCalls, 1)
+	require.NotNil(t, assistant.ReasoningContent)
+	require.Equal(t, "Read the file first.", *assistant.ReasoningContent)
+
+	toolResult := chatReq.Messages[2]
+	require.Equal(t, "tool", toolResult.Role)
+	require.Equal(t, assistant.ToolCalls[0].Id, toolResult.ToolCallId)
+}
+
 // TestConvertResponseAPIToChatCompletionRequestPreservesDeepSeekFileImages verifies
 // Responses API file-backed images survive fallback conversion to Chat Completions.
 // Parameters: t is the testing handle used for assertions and test lifecycle control.
