@@ -412,6 +412,32 @@ func TestChatToResponseStreamBridge_ToolCallArgsDoneBeforeOutputItemDone(t *test
 	assert.Equal(t, "call_b", argsDoneEv.ItemId)
 }
 
+// TestChatToResponseStreamBridge_ToolCallAddedCarriesCallID verifies the
+// function_call output_item.added event already carries call_id. Responses
+// clients such as pi build the tool call identity from call_id on the added
+// event; without it every replayed call_id is "undefined" and DeepSeek rejects
+// the duplicate tool_call_id on the next turn.
+func TestChatToResponseStreamBridge_ToolCallAddedCarriesCallID(t *testing.T) {
+	t.Parallel()
+	c, w := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	bridge.HandleChunk(c, bridgeToolCallChunk("call_a", 0, "read_file", `{"path":"a"}`))
+	bridge.HandleChunk(c, bridgeToolCallChunk("call_b", 1, "read_file", `{"path":"b"}`))
+	bridge.HandleChunk(c, bridgeFinishChunk("tool_calls"))
+	bridge.HandleDone(c)
+
+	var callIDs []string
+	for _, e := range bridgeFindEvents(parseBridgeSSE(w.Body.String()), "response.output_item.added") {
+		var ev openai.ResponseAPIStreamEvent
+		bridgeUnmarshal(t, e, &ev)
+		if ev.Item != nil && ev.Item.Type == "function_call" {
+			callIDs = append(callIDs, ev.Item.CallId)
+		}
+	}
+	require.Equal(t, []string{"call_a", "call_b"}, callIDs)
+}
+
 // TestChatToResponseStreamBridge_MultiCallEventOrderingInterleaved exercises two
 // interleaved tool calls in a single response and asserts that for every
 // call_id, the per-call spec ordering (args.done before output_item.done) holds
