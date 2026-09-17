@@ -430,6 +430,16 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
+	case Jina:
+		// Jina natively serves search endpoints and OCR chat. Responses and
+		// Claude Messages use the shared Chat Completions conversion layer.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointEmbeddings,
+			EndpointRerank,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
 	case Custom, OpenAICompatible:
 		return openAICompatibleBasic
 	case ClaudeCompatible:

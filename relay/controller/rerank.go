@@ -256,6 +256,15 @@ func prepareRerankRequestBody(c *gin.Context, meta *metalib.Meta, adaptorImpl ad
 		return nil, errors.New("rerank request is nil")
 	}
 
+	// Native objects must never degrade into accounting placeholders on a
+	// text-only adaptor, including when channel fallback selects another provider.
+	if request.HasStructuredInput() {
+		structured, ok := adaptorImpl.(adaptor.StructuredRerankAdaptor)
+		if !ok || !structured.SupportsStructuredRerank() {
+			return nil, errors.Errorf("structured rerank inputs are not supported by adaptor %s", adaptorImpl.GetChannelName())
+		}
+	}
+
 	if rerankAdaptor, ok := adaptorImpl.(adaptor.RerankAdaptor); ok {
 		converted, err := rerankAdaptor.ConvertRerankRequest(c, request.Clone())
 		if err != nil {
@@ -352,7 +361,7 @@ func postConsumeRerankQuota(ctx context.Context,
 	groupRatio float64,
 	perCallBilling bool) (quota int64) {
 	quota = max(totalQuota, 0)
-	if !perCallBilling && usage != nil && usage.PromptTokens > 0 {
+	if !perCallBilling && usage != nil && (usage.PromptTokens > 0 || meta.ChannelType == channeltype.Jina) {
 		quota = calculateRerankQuota(usage.PromptTokens, modelRatio, groupRatio, false)
 	}
 

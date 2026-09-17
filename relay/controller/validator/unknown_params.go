@@ -71,7 +71,7 @@ func ValidateUnknownParameters(requestBody []byte) error {
 // with request context. Use this variant when you have access to a gin.Context for
 // richer logging context.
 func ValidateUnknownParametersWithContext(c *gin.Context, requestBody []byte) error {
-	unknownParams := findUnknownParameters(requestBody)
+	unknownParams := filterJinaNativeParameters(c, findUnknownParameters(requestBody))
 	if len(unknownParams) > 0 {
 		lg := gmw.GetLogger(c)
 		lg.Warn("request contains unknown parameters that will be ignored",

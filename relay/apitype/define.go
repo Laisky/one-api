@@ -33,6 +33,7 @@ const (
 	Azure
 	DeepInfra
 	Zai
+	Jina
 
 	Dummy // this one is only for count, do not add any channel after this
 )
