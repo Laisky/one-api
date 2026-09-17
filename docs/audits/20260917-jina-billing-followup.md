@@ -16,6 +16,7 @@ system-wide limitations still apply. This is not an all-provider certification.
 | Ambiguous aggregate counters could wrap negative | Summing large positive counters could look like no usage | Saturate the aggregate while retaining the individual counters for checked monetary calculation |
 | Responses fallback left the reservation safety net active during final settlement | The deferred hold settlement could overwrite the final request cost and duplicate accounting side effects | Hand the reservation to final settlement synchronously on both fallback branches, before spawning writes |
 | Shared streaming handlers can return without closing an erroneous response | A failed relay could leave the upstream response transport open | Close the OCR observer on every normal return path, with idempotent transport closure and persistent close-error evidence |
+| Chat's generic streaming tracker could reject already-consumed Jina work when its final fee exceeded available funds | Finalize used an admission check and returned before debt-capable settlement, leaving only the smaller reservation charged | Fully reserved Jina requests bypass incremental tracking and settle the raw receipt or conservative allowance directly; other providers' tracking is unchanged |
 
 Normal completed receipts retain exact token pricing. Repeated cumulative usage is
 not summed. These changes neither retry paid inference nor introduce a second
@@ -41,6 +42,10 @@ retained holds, charges above the hold, and debt when known/estimated consumed
 work exceeds remaining funds. Transport call counts assert no paid replay; close
 counts assert cleanup even after early error returns. Explicit lifecycle draining
 precedes assertions and fixture cleanup, including an assertion failure.
+`jina_billing_debt_test.go` additionally requires complete positive streaming
+receipts to settle beyond available funds for finite/unlimited tokens and both
+published/channel-override prices, without turning the paid request into another
+admission failure.
 
 `model/token_billing_conservation_test.go` tests simultaneous reservations by
 multiple tokens sharing one user, including an unlimited token, plus deterministic
@@ -59,11 +64,13 @@ production migration policy or race detector is disabled.
 CI run `35284249868` executed the new behavioral tests. All four model shards
 passed, including the 800-step aggregate state-machine coverage, concurrent
 multi-token reservation, and finite/unlimited debt settlement. The package shard
-caught the Responses fallback cost overwrite (both streaming and non-streaming)
-and an interrupted OCR debt-ledger assertion. All original charge expectations
-are retained. The follow-up adds the synchronous settlement handoff and explicitly
-joins lifecycle-tracked billing before inspecting balances. These results remain
-negative controls, not a passing qualification of the final branch.
+caught the Responses fallback cost overwrite (streaming and non-streaming) and an
+interrupted OCR debt-ledger assertion. All original charge expectations remain.
+The subsequent run `35285641809` confirmed the Responses correction but still
+failed the Chat debt case even after explicit lifecycle draining. Inspection
+identified the generic quota tracker's post-inference admission failure as the
+cause; it was not merely a test waiting problem. The final change separates Jina's
+fully reserved exact settlement from that incremental tracker.
 
 The PR conversation records the exact final head and current CI status. The
 existing workflow must qualify the final code; no CI workflows or dependencies

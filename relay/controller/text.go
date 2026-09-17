@@ -133,7 +133,12 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
 	var tracker *streaming.QuotaTracker
-	if textRequest.Stream {
+	// Jina already reserves its full bounded input/output budget before dispatch.
+	// Its raw receipt (or labelled estimate) must go directly to exact final
+	// settlement, which can record debt. The generic incremental tracker uses an
+	// admission balance check: a larger final receipt would otherwise fail here
+	// after the work was performed and silently leave only the smaller hold paid.
+	if textRequest.Stream && meta.ChannelType != channeltype.Jina {
 		tracker = streaming.NewQuotaTracker(streaming.QuotaTrackerParams{
 			UserID:                 meta.UserId,
 			TokenID:                meta.TokenId,
@@ -238,7 +243,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			requestID:           requestId,
 			startTime:           meta.StartTime,
 			estimatedQuota:      func() float64 { return float64(usage.PromptTokens+usage.CompletionTokens) * ratio },
-			guardTimeoutLog:     func() bool { return usage != nil },
+			guardTimeoutLog:     func() bool { return true },
 			logMessage:          "CRITICAL BILLING TIMEOUT",
 			includeElapsedField: true,
 		}, func(ctx context.Context) {
