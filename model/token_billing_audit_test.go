@@ -7,19 +7,20 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/config"
 )
 
+var billingAuditSequence atomic.Uint64
+
 // billingAuditRows creates an isolated user/token pair with equal initial quota.
 // It returns their persisted identities for transaction and concurrency tests.
 func billingAuditRows(t *testing.T, quota int64, unlimited bool) (*User, *Token) {
 	t.Helper()
-	name := fmt.Sprintf("test-billing-%d", time.Now().UnixNano())
-	user := &User{Username: name, Quota: quota, Status: UserStatusEnabled, Role: RoleCommonUser}
+	name := fmt.Sprintf("test-billing-%d", billingAuditSequence.Add(1))
+	user := &User{Username: name, AccessToken: name, AffCode: name, Quota: quota, Status: UserStatusEnabled, Role: RoleCommonUser}
 	require.NoError(t, DB.Create(user).Error)
 	token := &Token{UserId: user.Id, Key: name, Name: name, Status: TokenStatusEnabled, RemainQuota: quota, UnlimitedQuota: unlimited}
 	require.NoError(t, DB.Create(token).Error)

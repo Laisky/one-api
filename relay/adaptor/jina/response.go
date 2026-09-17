@@ -71,16 +71,13 @@ func handleSearchResponse(c *gin.Context, resp *http.Response, mode int) (usage 
 		if err == nil {
 			err = errors.New("jina response exceeds 64 MiB limit")
 		}
-		return EstimatedUsage(c, "jina_unreadable_search_body"), openai.ErrorWrapper(err, "read_response_body_failed", http.StatusBadGateway)
+		usage = mergeReceiptEstimate(EstimatedUsage(c, "jina_unreadable_search_body"), partialReceiptEvidence(body), true)
+		return usage, openai.ErrorWrapper(err, "read_response_body_failed", http.StatusBadGateway)
 	}
 	encoded, usage, err := normalizeSearchResponse(body, mode)
 	if usage == nil || usage.TotalTokens == 0 {
 		if estimate := EstimatedUsage(c, "jina_missing_invalid_or_zero_search_usage"); estimate != nil {
-			usage = estimate
-			if evidence := partialReceiptEvidence(body); evidence != nil {
-				usage.PromptTokens = max(usage.PromptTokens, evidence.TotalTokens, evidence.PromptTokens)
-				usage.TotalTokens = usage.PromptTokens
-			}
+			usage = mergeReceiptEstimate(estimate, partialReceiptEvidence(body), true)
 			if err == nil {
 				err = errors.New("jina returned zero usage for nonempty admitted input")
 			}

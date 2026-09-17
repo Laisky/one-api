@@ -96,13 +96,17 @@ func tokenCount(fields map[string]json.RawMessage, key string) (int, error) {
 type receiptBody struct {
 	mu sync.Mutex
 	io.ReadCloser
-	stream  bool
-	pending []byte
-	receipt *model.Usage
-	invalid bool
+	stream     bool
+	pending    []byte
+	receipt    *model.Usage
+	invalid    bool
+	done       bool
+	eof        bool
+	finalUsage bool
 }
 
 // Read observes bytes returned by the wrapped body and preserves its read result.
+// A positive receipt is not final while the transport can still deliver paid work.
 func (b *receiptBody) Read(dst []byte) (int, error) {
 	n, err := b.ReadCloser.Read(dst)
 	b.mu.Lock()
@@ -114,24 +118,30 @@ func (b *receiptBody) Read(dst []byte) (int, error) {
 	} else {
 		b.invalid = true
 	}
-	if err == io.EOF {
+	if err != nil {
+		if err == io.EOF {
+			b.eof = true
+		} else {
+			b.invalid = true
+		}
 		if b.stream {
 			if len(b.pending) > 0 {
 				b.observeLine(b.pending)
 				b.pending = nil
 			}
 		} else {
+			// Recover any complete counters preceding an interrupted JSON body.
 			b.observeJSON(b.pending)
 		}
 	}
 	return n, err
 }
 
-// Close parses a complete non-streaming body when a reader did not request EOF,
-// then closes the transport and retains any close failure as accounting evidence.
+// Close collects any unread-tail evidence, then closes the transport. Closing
+// alone never certifies EOF or an upstream stream-completion sentinel.
 func (b *receiptBody) Close() error {
 	b.mu.Lock()
-	if !b.stream && b.receipt == nil && !b.invalid {
+	if !b.stream && !b.eof {
 		b.observeJSON(b.pending)
 	}
 	b.mu.Unlock()
@@ -169,13 +179,18 @@ func (b *receiptBody) observeLines(fragment []byte) {
 	}
 }
 
-// observeLine extracts the JSON data portion of an SSE line, ignoring comments.
+// observeLine extracts SSE data, records upstream completion and rejects any
+// later data as ambiguous. A downstream-generated DONE never reaches this reader.
 func (b *receiptBody) observeLine(line []byte) {
 	if !bytes.HasPrefix(line, []byte("data:")) {
 		return
 	}
 	data := bytes.TrimSpace(line[5:])
+	if b.done {
+		b.invalid = true
+	}
 	if bytes.Equal(data, []byte("[DONE]")) {
+		b.done = true
 		return
 	}
 	b.observeJSON(data)
@@ -184,8 +199,7 @@ func (b *receiptBody) observeLine(line []byte) {
 // observeJSON collects complete OCR receipts, retaining maxima rather than
 // summing cumulative stream snapshots or trusting a later decreasing counter.
 func (b *receiptBody) observeJSON(body []byte) {
-	// Preserve the higher observed evidence even if uniqueness/consistency checks
-	// below reject this receipt. It can only increase the conservative fallback.
+	// Preserve the higher observed evidence even when the receipt is ambiguous.
 	if evidence := partialReceiptEvidence(body); evidence != nil {
 		if b.receipt == nil {
 			b.receipt = &model.Usage{}
@@ -198,6 +212,22 @@ func (b *receiptBody) observeJSON(body []byte) {
 	if err != nil {
 		b.invalid = true
 		return
+	}
+	if raw := bytes.TrimSpace(fields["error"]); len(raw) > 0 && !bytes.Equal(raw, []byte("null")) {
+		b.invalid = true
+	}
+	if b.stream {
+		var choices []json.RawMessage
+		if raw, exists := fields["choices"]; exists {
+			if err := json.Unmarshal(raw, &choices); err != nil {
+				b.invalid = true
+				return
+			}
+			if len(choices) > 0 {
+				// An earlier cumulative receipt no longer covers this new work.
+				b.finalUsage = false
+			}
+		}
 	}
 	raw, exists := fields["usage"]
 	if !exists || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
@@ -217,23 +247,19 @@ func (b *receiptBody) observeJSON(body []byte) {
 	}
 	if total != prompt+output {
 		b.invalid = true
-	}
-	// Jina OCR output is more expensive than input; unmatched total tokens are
-	// conservatively treated as output rather than discarded.
-	if total > prompt+output {
-		output = total - prompt
+		return
 	}
 	if b.receipt == nil {
 		b.receipt = &model.Usage{}
 	}
 	b.receipt.PromptTokens = max(b.receipt.PromptTokens, prompt)
 	b.receipt.CompletionTokens = max(b.receipt.CompletionTokens, output)
-	b.receipt.TotalTokens = b.receipt.PromptTokens + b.receipt.CompletionTokens
+	b.receipt.TotalTokens = max(b.receipt.TotalTokens, saturatedTokenSum(b.receipt.PromptTokens, b.receipt.CompletionTokens))
+	b.finalUsage = true
 }
 
 // handleOCRResponse uses the normal chat/Messages transport but bills only a raw
-// upstream receipt or an explicitly labelled conservative allowance. Missing
-// final streaming usage must never be replaced by a cheap text-only estimate.
+// completed upstream receipt or an explicitly labelled conservative allowance.
 func handleOCRResponse(c *gin.Context, resp *http.Response, m *meta.Meta) (*model.Usage, *model.ErrorWithStatusCode) {
 	if resp == nil || resp.Body == nil {
 		return EstimatedUsage(c, "jina_missing_ocr_body"), openai.ErrorWrapper(errors.New("jina OCR body missing"), "invalid_upstream_response", http.StatusBadGateway)
@@ -250,29 +276,23 @@ func handleOCRResponse(c *gin.Context, resp *http.Response, m *meta.Meta) (*mode
 	if measured != nil && measured.TotalTokens > 0 && !invalid {
 		return measured, apiErr
 	}
-	estimate := EstimatedUsage(c, "jina_missing_or_invalid_ocr_receipt")
-	if estimate != nil && measured != nil {
-		estimate.PromptTokens = max(estimate.PromptTokens, measured.PromptTokens)
-		estimate.CompletionTokens = max(estimate.CompletionTokens, measured.CompletionTokens)
-		if measured.TotalTokens > estimate.PromptTokens+estimate.CompletionTokens {
-			estimate.CompletionTokens = measured.TotalTokens - estimate.PromptTokens
-		}
-		estimate.TotalTokens = estimate.PromptTokens + estimate.CompletionTokens
-	}
+	estimate := mergeReceiptEstimate(EstimatedUsage(c, "jina_missing_or_invalid_ocr_receipt"), measured, false)
 	if apiErr == nil {
 		apiErr = openai.ErrorWrapper(errors.New("jina OCR usage was not verifiable; conservative reservation retained"), "unverified_jina_usage", http.StatusBadGateway)
 	}
 	return estimate, apiErr
 }
 
-// snapshot returns a value copy of observed usage under the read/close lock.
-// A cancelled shared stream reader may still be unwinding on another goroutine.
+// snapshot returns a locked value copy and whether the receipt is unverified.
+// HTTP EOF alone does not complete SSE; a final receipt followed by upstream DONE
+// is required. A cancelled reader still unwinding cannot authorize a refund.
 func (b *receiptBody) snapshot() (*model.Usage, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	invalid := b.invalid || (b.stream && (!b.done || !b.finalUsage)) || (!b.stream && !b.eof)
 	if b.receipt == nil {
-		return nil, b.invalid
+		return nil, invalid
 	}
 	copy := *b.receipt
-	return &copy, b.invalid
+	return &copy, invalid
 }
