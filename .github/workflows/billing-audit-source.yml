@@ -1,0 +1,36 @@
+name: Billing audit source snapshot
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/billing-audit-source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-snapshot:
+    if: github.head_ref == 'feat/jina-adaptor-20260917'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Archive tracked Go sources without credentials or local instructions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/billing-audit
+          git rev-parse HEAD > /tmp/billing-audit/commit.txt
+          git ls-files -z -- '*.go' go.mod go.sum > /tmp/billing-audit/source-files
+          tar --null -T /tmp/billing-audit/source-files -czf /tmp/billing-audit/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: billing-audit-source-${{ github.event.pull_request.head.sha }}
+          path: |
+            /tmp/billing-audit/source.tar.gz
+            /tmp/billing-audit/commit.txt
+          retention-days: 1
+          if-no-files-found: error
