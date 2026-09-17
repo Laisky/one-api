@@ -84,6 +84,7 @@ func TestJinaBillingInterruptedOCRLedger(t *testing.T) {
 				body, err := json.Marshal(payload)
 				require.NoError(t, err)
 				c, requestID := jinaAuditContext(t, path, string(body), "https://api.jina.ai", "jina-ocr-v1", balance, false, 1, -1)
+				t.Cleanup(func() { drainBilling(t) })
 				var apiErr *relaymodel.ErrorWithStatusCode
 				switch path {
 				case "/v1/responses":
@@ -93,6 +94,10 @@ func TestJinaBillingInterruptedOCRLedger(t *testing.T) {
 				default:
 					apiErr = RelayTextHelper(c)
 				}
+				// Join tracked work, not a fixed sleep, before reading the ledger.
+				// Cleanup also joins it when an earlier assertion aborts the case.
+				drainBilling(t)
+				require.True(t, c.GetBool(ctxkey.BillingReconciled), "final settlement must own the reservation before handler return")
 				if tc.estimated {
 					require.NotNil(t, apiErr)
 					require.True(t, JinaAttemptMayHaveCost(c))
@@ -127,12 +132,14 @@ func TestJinaBillingInterruptedSearchLedger(t *testing.T) {
 					body, actual = `{"model":"alias","query":"q","documents":["one","two"]}`, "jina-reranker-v3.5"
 				}
 				c, requestID := jinaAuditContext(t, path, body, "https://api.jina.ai", actual, balance, false, 1, -1)
+				t.Cleanup(func() { drainBilling(t) })
 				var apiErr *relaymodel.ErrorWithStatusCode
 				if path == "/v1/rerank" {
 					apiErr = RelayRerankHelper(c)
 				} else {
 					apiErr = RelayTextHelper(c)
 				}
+				drainBilling(t)
 				require.NotNil(t, apiErr)
 				require.Less(t, c.GetInt64(ctxkey.PreConsumedQuotaAmount), int64(25000))
 				jinaAuditAssertLedger(t, requestID, balance, 25000, false, true)

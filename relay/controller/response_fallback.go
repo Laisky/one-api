@@ -297,6 +297,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
+		// Final settlement now owns this reservation, including its log and cost.
+		// The deferred safety net must not independently settle the old hold.
+		markBillingReconciled(c)
 		runPostBillingWithTimeout(detachForBilling(c), "postBilling", lg, postBillingTimeoutInfo{
 			userID:              meta.UserId,
 			channelID:           meta.ChannelId,
@@ -458,6 +461,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	quotaId := c.GetInt(ctxkey.Id)
 	requestId := c.GetString(ctxkey.RequestId)
 
+	// Transfer ownership before the asynchronous write can race the deferred
+	// retained-reservation audit and overwrite its final request-cost amount.
+	markBillingReconciled(c)
 	runPostBillingWithTimeout(detachForBilling(c), "postBilling", lg, postBillingTimeoutInfo{
 		userID:              meta.UserId,
 		channelID:           meta.ChannelId,
