@@ -128,7 +128,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		)
 		usage = &relaymodel.Usage{}
 		settledAtEstimate = true
-	} else if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
+	} else if !hasBillableUsage(usage) {
 		gmw.GetLogger(ctx).Warn("response api post-billing received zero usage; settling at the pre-consumed estimate",
 			zap.Int64("pre_consumed_quota", preConsumedQuota),
 			zap.String("model", responseAPIRequest.Model),
@@ -151,7 +151,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 
 	quota = computeResult.TotalQuota
 	totalTokens := computeResult.PromptTokens + computeResult.CompletionTokens
-	if totalTokens == 0 {
+	if totalTokens == 0 && !hasBillableUsage(usage) {
 		quota = 0
 	}
 	if settledAtEstimate {

@@ -301,7 +301,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
-		if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
+		if err := recordZeroCostAfterFailure(c, quotaId, requestId); err != nil {
 			lg.Warn("update user request cost to zero failed", zap.Error(err))
 		}
 		return RelayErrorHandlerWithContext(c, resp)
@@ -431,7 +431,8 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	})
 
-	return nil
+	markResponseSettlement(c, usage, respErr)
+	return respErr
 }
 
 func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.GeneralOpenAIRequest, adaptor adaptor.Adaptor, systemPromptReset bool) (io.Reader, error) {

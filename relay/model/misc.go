@@ -4,6 +4,9 @@ import "github.com/Laisky/one-api/relay/realtime"
 
 // Usage is the token usage information returned by OpenAI API.
 type Usage struct {
+	// BillingEstimateReason is server-only evidence that usage was conservatively
+	// estimated rather than measured. Clients cannot supply it through JSON.
+	BillingEstimateReason string `json:"-"`
 	// Realtime is server-only accounting evidence; clients cannot inject it via JSON.
 	Realtime *realtime.Ledger `json:"-"`
 	// Omitting this field using 'omitempty' is crucial to avoid returning zero values

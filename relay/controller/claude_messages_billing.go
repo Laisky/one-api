@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"github.com/Laisky/one-api/relay/adaptor/jina"
+	"github.com/Laisky/one-api/relay/channeltype"
 	"net/http"
 
 	"github.com/Laisky/errors/v2"
@@ -21,6 +23,25 @@ import (
 
 // preConsumeClaudeMessagesQuota pre-consumes quota for Claude Messages API requests.
 func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesRequest, promptTokens int, ratio float64, completionRatio float64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
+	if meta.ChannelType == channeltype.Jina {
+		if len(request.Tools) > 0 {
+			return 0, openai.ErrorWrapper(errors.New("Jina OCR tool calls have no bounded billing contract"), "unbounded_jina_request", http.StatusBadRequest)
+		}
+		converted, err := (&jina.Adaptor{}).ConvertClaudeRequest(c, request)
+		if err != nil {
+			return 0, openai.ErrorWrapper(err, "invalid_jina_request", http.StatusBadRequest)
+		}
+		chat, ok := converted.(*relaymodel.GeneralOpenAIRequest)
+		if !ok {
+			return 0, openai.ErrorWrapper(errors.New("invalid Jina OCR conversion"), "invalid_jina_request", http.StatusBadRequest)
+		}
+		promptUsage, apiErr := prepareJinaBudget(c, meta, chat)
+		if apiErr != nil {
+			return 0, apiErr
+		}
+		meta.PromptTokens = promptUsage.PromptTokens
+		return preConsumeJinaQuota(c, meta)
+	}
 	// Use similar logic to ChatCompletion pre-consumption
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
@@ -73,9 +94,7 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 // Returns: the final quota charged for the request.
 func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId string, traceId string, usage *relaymodel.Usage, meta *metalib.Meta, request *ClaudeMessagesRequest, ratio float64, preConsumedQuota int64, incrementalCharged int64, modelRatio float64, channelModelRatio map[string]float64, groupRatio float64, channelModelConfigs map[string]model.ModelConfigLocal, channelCompletionRatio map[string]float64) int64 {
 	if usage == nil {
-		// Context may be detached; log with context if available
-		gmw.GetLogger(ctx).Warn("usage is nil for Claude Messages API")
-		return 0
+		usage = &relaymodel.Usage{BillingEstimateReason: "missing_usage_retained_reservation"}
 	}
 
 	pricingAdaptor := resolvePricingAdaptor(meta)
@@ -91,13 +110,17 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		RequestTime:            meta.StartTime,
 	})
 
-	quota := computeResult.TotalQuota
-	totalTokens := computeResult.PromptTokens + computeResult.CompletionTokens
-	if totalTokens == 0 {
-		quota = 0
+	quota := exactJinaUsageQuota(ctx, meta, usage, computeResult.TotalQuota, preConsumedQuota+incrementalCharged,
+		computeResult.UsedModelRatio, computeResult.UsedCompletionRatio, groupRatio)
+	if !hasBillableUsage(usage) {
+		quota = preConsumedQuota + incrementalCharged
+		usage.BillingEstimateReason = "missing_or_zero_usage_retained_reservation"
+	}
+	if usage.BillingEstimateReason != "" {
+		quota = max(quota, preConsumedQuota+incrementalCharged)
 	}
 
-	metadata := model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
+	metadata := billingEstimateMetadata(model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens), usage.BillingEstimateReason)
 
 	// Use centralized detailed billing function with explicit trace ID
 	quotaDelta := quota - preConsumedQuota - incrementalCharged

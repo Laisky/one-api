@@ -188,6 +188,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		return bizErr
 	}
 
+	markPreConsumed(c, preConsumedQuota)
+	defer billingAuditSafetyNet(c)
+	c.Set(ctxkey.ProvisionalLogId, recordProvisionalLog(c, meta, chatRequest.Model, preConsumedQuota))
 	requestAdaptor.Init(meta)
 	if registry != nil {
 		c.Set(ctxkey.ResponseRewriteHandler, nil)
@@ -474,7 +477,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		}
 	})
 
-	return nil
+	markResponseSettlement(c, usage, respErr)
+	return respErr
 }
 
 // pruneResponseOnlyToolsAfterMCPExpansion removes Response API tool definitions that could not be represented as chat function tools after MCP alias expansion.

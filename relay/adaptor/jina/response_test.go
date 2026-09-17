@@ -50,12 +50,13 @@ func TestSearchResponseUsageValidation(t *testing.T) {
 	t.Parallel()
 	for _, body := range []string{
 		`not json`, `null`, `{}`, `{"error":{"message":"failed"}}`,
-		`{"data":null,"usage":{"total_tokens":1}}`,
-		`{"data":{},"usage":{"total_tokens":1}}`,
 		`{"data":[]}`, `{"data":[],"usage":{}}`, `{"data":[],"usage":null}`,
 		`{"data":[],"usage":{"total_tokens":-1}}`,
 		`{"data":[],"usage":{"total_tokens":1.5}}`,
 		`{"data":[],"usage":{"total_tokens":"12"}}`,
+		`{"data":[],"usage":{"total_tokens":9223372036854775808}}`,
+		`{"data":[],"usage":{"total_tokens":100,"total_tokens":1}}`,
+		`{"data":[],"usage":{"total_tokens":100},"usage":{"total_tokens":1}}`,
 	} {
 		_, usage, err := normalizeSearchResponse([]byte(body), relaymode.Embeddings)
 		require.Error(t, err, body)
@@ -90,4 +91,16 @@ func TestSearchResponseHandler(t *testing.T) {
 	_, err = handleSearchResponse(c, nil, relaymode.Rerank)
 	require.NotNil(t, err)
 	require.Equal(t, http.StatusBadGateway, err.StatusCode)
+}
+
+// TestSearchReceiptSurvivesInvalidResults ensures delivered-work evidence is
+// retained even when the results payload cannot be returned to the caller.
+func TestSearchReceiptSurvivesInvalidResults(t *testing.T) {
+	t.Parallel()
+	for _, field := range []string{"null", "{}"} {
+		_, usage, err := normalizeSearchResponse([]byte(`{"data":`+field+`,"usage":{"total_tokens":123}}`), relaymode.Embeddings)
+		require.Error(t, err)
+		require.NotNil(t, usage)
+		require.Equal(t, 123, usage.PromptTokens)
+	}
 }

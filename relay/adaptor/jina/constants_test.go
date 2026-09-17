@@ -38,6 +38,7 @@ func TestModelCatalog(t *testing.T) {
 	}
 	require.Equal(t, int32(134144), ModelRatios["jina-reranker-v3"].ContextLength)
 	require.Contains(t, ModelRatios["jina-reranker-m0"].InputModalities, "image")
-	require.Contains(t, ModelRatios["jina-embeddings-v5-omni-small"].InputModalities, "audio")
+	require.NotContains(t, ModelRatios["jina-embeddings-v5-omni-small"].InputModalities, "audio", "unbounded modalities must not be advertised by the gateway")
+	require.Contains(t, ModelRatios["jina-embeddings-v5-omni-small"].InputModalities, "image")
 	require.InDelta(t, 2.5*ratio.MilliTokensUsd, a.GetModelRatio("custom-model"), 1e-12)
 }

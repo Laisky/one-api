@@ -79,6 +79,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, mode int, request *model.Genera
 		limit := out.MaxTokens
 		out.MaxCompletionTokens = &limit
 	}
+	if out.Model == "jina-ocr-v1" && out.MaxCompletionTokens == nil {
+		limit := int(ModelRatios[out.Model].MaxOutputTokens)
+		out.MaxCompletionTokens = &limit
+	}
 	out.MaxTokens = 0
 	if out.Stream {
 		// OCR billing needs upstream visual-token usage, not text-only estimation.

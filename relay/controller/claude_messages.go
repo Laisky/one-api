@@ -682,5 +682,6 @@ postConsume:
 		}
 	})
 
-	return nil
+	markResponseSettlement(c, usage, respErr)
+	return respErr
 }

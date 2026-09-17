@@ -257,7 +257,7 @@ func Relay(c *gin.Context) {
 	// For 5xx/server transient errors, avoid reusing the same ability first, probe within tier
 	isServerTransient := bizErr.StatusCode >= 500 && bizErr.StatusCode <= 599
 
-	for i := retryTimes; i > 0; i-- {
+	for i := retryTimes; i > 0 && rcontroller.BillingAllowsRetry(c); i-- {
 		var channel *dbmodel.Channel
 		var err error
 

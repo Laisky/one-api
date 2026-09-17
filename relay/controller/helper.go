@@ -124,6 +124,9 @@ func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTok
 // Parameters: c is the current request context, meta contains routing information, and textRequest is the validated upstream payload.
 // Returns: the prompt usage snapshot or an API error when a safe estimate cannot be produced.
 func estimatePromptUsage(c *gin.Context, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
+	if meta.ChannelType == channeltype.Jina {
+		return prepareJinaBudget(c, meta, textRequest)
+	}
 	if meta.Mode == relaymode.Embeddings {
 		return estimateEmbeddingPromptUsage(c, meta, textRequest)
 	}
@@ -220,6 +223,9 @@ func preConsumeQuota(
 ) (int64, *relaymodel.ErrorWithStatusCode) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
+	if meta.ChannelType == channeltype.Jina {
+		return preConsumeJinaQuota(c, meta)
+	}
 	preConsumedQuota := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 
 	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
@@ -278,7 +284,7 @@ func postConsumeQuota(ctx context.Context,
 		)
 		usage = &relaymodel.Usage{}
 		settledAtEstimate = true
-	} else if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && preConsumedQuota > 0 {
+	} else if !hasBillableUsage(usage) && preConsumedQuota > 0 {
 		gmw.GetLogger(ctx).Warn("post-billing received zero usage; settling at the pre-consumed estimate",
 			zap.Int64("pre_consumed_quota", preConsumedQuota),
 			zap.String("model", textRequest.Model),
@@ -299,15 +305,19 @@ func postConsumeQuota(ctx context.Context,
 		RequestTime:            meta.StartTime,
 	})
 
-	quota = computeResult.TotalQuota
-	totalTokens := computeResult.PromptTokens + computeResult.CompletionTokens
-	if totalTokens == 0 {
+	quota = exactJinaUsageQuota(ctx, meta, usage, computeResult.TotalQuota, preConsumedQuota+incrementallyCharged,
+		computeResult.UsedModelRatio, computeResult.UsedCompletionRatio, groupRatio)
+	if !hasBillableUsage(usage) {
 		quota = 0
+	}
+	if usage.BillingEstimateReason != "" {
+		quota = max(quota, preConsumedQuota+incrementallyCharged)
 	}
 	if settledAtEstimate {
 		// Keep exactly what was already debited: a zero delta charges nothing
 		// extra and, crucially, refunds nothing.
 		quota = preConsumedQuota + incrementallyCharged
+		usage.BillingEstimateReason = "missing_or_zero_usage_retained_reservation"
 	}
 
 	quotaDelta := quota - preConsumedQuota - incrementallyCharged
@@ -321,7 +331,7 @@ func postConsumeQuota(ctx context.Context,
 	traceId := billingID.traceID
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
 		toolSummary := billingID.toolSummary
-		metadata := model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
+		metadata := billingEstimateMetadata(model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens), usage.BillingEstimateReason)
 
 		billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
 			Ctx:                ctx,
@@ -392,100 +402,14 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 	systemPromptReset bool,
 	channelModelConfigs map[string]model.ModelConfigLocal,
 	channelCompletionRatio map[string]float64) (quota int64) {
-	if usage == nil {
-		gmw.GetLogger(ctx).Error("usage is nil, which is unexpected")
-		return
+	if ctx == nil {
+		ctx = context.Background()
 	}
-
-	// !! ZERO-USAGE GUARD !!
-	//
-	// Some upstream transports do not reliably return token usage. If we reconcile
-	// with zero usage, the result is quotaDelta = 0 - preConsumedQuota, which
-	// REFUNDS the pre-consumed amount and makes the request free. This is incorrect.
-	//
-	// When usage is zero and pre-consumed quota exists, we return the pre-consumed
-	// amount as the final charge.
-	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && preConsumedQuota > 0 {
-		gmw.GetLogger(ctx).Warn("postConsumeQuota: usage is zero but pre-consumed quota exists, keeping pre-consumed quota",
-			zap.Int64("pre_consumed_quota", preConsumedQuota),
-			zap.String("model", textRequest.Model),
-		)
-		quota = preConsumedQuota
-		return
-	}
-
-	pricingAdaptor := resolvePricingAdaptor(meta)
-	computeResult := quotautil.Compute(quotautil.ComputeInput{
-		Usage:                  usage,
-		ModelName:              textRequest.Model,
-		ModelRatio:             modelRatio,
-		ChannelModelRatio:      channelModelRatio,
-		GroupRatio:             groupRatio,
-		ChannelModelConfigs:    channelModelConfigs,
-		ChannelCompletionRatio: channelCompletionRatio,
-		PricingAdaptor:         pricingAdaptor,
-		RequestTime:            meta.StartTime,
-	})
-
-	quota = computeResult.TotalQuota
-	totalTokens := computeResult.PromptTokens + computeResult.CompletionTokens
-	if totalTokens == 0 {
-		quota = 0
-	}
-
-	quotaDelta := quota - preConsumedQuota
-	billingID := billingIdentityFromContext(ctx)
-	requestId := billingID.requestID
-	provisionalLogId := billingID.provisionalLogID
-	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
-		toolSummary := billingID.toolSummary
-		metadata := model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
-
-		billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
-			Ctx:                ctx,
-			TokenId:            meta.TokenId,
-			QuotaDelta:         quotaDelta,
-			TotalQuota:         quota,
-			UserId:             meta.UserId,
-			UserUUID:           meta.UserUUID,
-			ChannelId:          meta.ChannelId,
-			ChannelUUID:        meta.ChannelUUID,
-			PromptTokens:       computeResult.PromptTokens,
-			CompletionTokens:   computeResult.CompletionTokens,
-			ModelRatio:         computeResult.UsedModelRatio,
-			GroupRatio:         groupRatio,
-			OriginModelName:    meta.OriginModelName,
-			ModelName:          textRequest.Model,
-			TokenUUID:          meta.TokenUUID,
-			TokenName:          meta.TokenName,
-			IsStream:           meta.IsStream,
-			StartTime:          meta.StartTime,
-			SystemPromptReset:  systemPromptReset,
-			CompletionRatio:    computeResult.UsedCompletionRatio,
-			ToolsCost:          usage.ToolsCost,
-			CachedPromptTokens: computeResult.CachedPromptTokens,
-			CacheWrite5mTokens: usage.CacheWrite5mTokens,
-			CacheWrite1hTokens: usage.CacheWrite1hTokens,
-			Metadata:           metadata,
-			RequestId:          requestId,
-			TraceId:            traceId,
-			ProvisionalLogId:   provisionalLogId,
-			UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
-			UpstreamAPIFormat:  apitype.String(meta.APIType),
-			UpstreamEndpoint:   meta.UpstreamRequestURL,
-			ToolUsageSummary:   toolSummary,
-		})
-	} else {
-		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume quota",
-			zap.Int("meta_token_id", meta.TokenId),
-			zap.Int("meta_user_id", meta.UserId),
-			zap.Int("meta_channel_id", meta.ChannelId),
-			zap.String("request_id", requestId),
-			zap.String("trace_id", traceId),
-		)
-	}
-
-	return quota
+	identity := billingIdentityFromContext(ctx)
+	identity.traceID = traceId
+	ctx = context.WithValue(ctx, billingIdentityKey{}, identity)
+	return postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, 0, modelRatio,
+		channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
 }
 
 func isErrorHappened(meta *meta.Meta, resp *http.Response) bool {

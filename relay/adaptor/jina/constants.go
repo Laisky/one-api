@@ -47,13 +47,19 @@ func buildModelRatios() map[string]adaptor.ModelConfig {
 		{"jina-colbert-v1-en", 8192, 128, 0.05, []string{"text"}},
 		{"jina-colbert-v2", 8192, 128, 0.05, []string{"text"}},
 	} {
+		admittedModalities := []string{"text"}
+		for _, modality := range spec.modalities {
+			if modality == "image" {
+				admittedModalities = append(admittedModalities, modality)
+			}
+		}
 		models[spec.name] = adaptor.ModelConfig{
 			Ratio:            spec.usd * ratio.MilliTokensUsd,
 			ContextLength:    spec.context,
-			InputModalities:  spec.modalities,
+			InputModalities:  admittedModalities,
 			OutputModalities: []string{"embeddings"},
 			HuggingFaceID:    "jinaai/" + spec.name,
-			Description:      fmt.Sprintf("Jina embedding model; native vector width %d. Token-priced input; vector width is not a completion-token limit.", spec.dimensions),
+			Description:      fmt.Sprintf("Jina embedding model; native vector width %d. Token-priced input; vector width is not a completion-token limit. Gateway admission currently permits supported text/image input only.", spec.dimensions),
 		}
 	}
 	for _, spec := range []struct {

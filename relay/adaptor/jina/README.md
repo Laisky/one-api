@@ -15,7 +15,7 @@ not the upstream key. Existing channel IDs and stored channels are unchanged.
 
 | Client endpoint | Upstream behavior |
 | --- | --- |
-| `/v1/embeddings` | Native text/multimodal embeddings |
+| `/v1/embeddings` | Native text/image embeddings with conservative admission |
 | `/v1/rerank` | Native text/image ranking |
 | `/v1/chat/completions` | Native `jina-ocr-v1` OCR chat, including streaming |
 | `/v1/responses` | Existing one-api Chat Completions bridge |
@@ -48,15 +48,20 @@ not the catalog's `jina-ai/` prefix.
 Search models are **token-priced**, not billed per request. The response's
 `usage.total_tokens` is authoritative for all search input, including image
 processing and reranking work. It is normalized into `prompt_tokens` for the
-existing billing pipeline. Missing, malformed or negative usage produces a
-502 instead of an invented zero bill. Zero usage remains valid.
+existing billing pipeline. Missing, malformed, duplicate, negative or all-zero
+usage on an admitted nonempty request is **not free**: the conservative reservation
+is retained and explicitly marked estimated. An upstream-response error is also
+reported; a stream already started cannot change its HTTP status retroactively.
 Channel-specific pricing overrides remain available; published defaults are not
 a guarantee of an individual account's negotiated or prepaid-credit costs.
 
 ## Request and response details
 
-Embedding input is preserved, including text, image, audio, video, PDF and grouped
-content where the chosen model supports it. The adaptor forwards `task`,
+The gateway currently admits **text and supported image inputs only**. PDF,
+audio, video and grouped inputs are rejected before upstream dispatch because
+this integration has no verified billable-work bound for those forms. Catalog
+modalities describe this gateway admission policy, not every upstream capability.
+The adaptor forwards `task`,
 `embedding_type`, `normalized`, `truncate`, `late_chunking`, `return_multivector`
 and `return_tokenized_input`. These can be top-level fields or embedding
 `extra_body` fields; top-level native fields take precedence. OpenAI
@@ -77,6 +82,38 @@ native multi-vector or sparse output need a compatible response parser.
 For OCR, legacy `max_tokens` maps to `max_completion_tokens`; an explicit native
 limit wins. Streaming requests ask the upstream for usage to retain image-token
 billing accuracy. OCR is not advertised as a general-purpose tool-calling model.
+
+## Conservative billing contract
+
+Paid Jina calls require a **synchronous database reservation** for every account,
+including high-balance users and unlimited tokens. Unlimited means no token-level
+limit, not a free user balance. Reservations bypass in-memory batch updates.
+Text allowances include context and a byte-based margin; image allowances use
+model context rather than URL length. Rerank budgets include every document and
+repeated query work, regardless of `top_n`. OCR applies an explicit output limit
+(up to 8,192, also its default) upstream so the budget and request agree.
+
+Valid receipts settle at the configured flat token prices using decimal-rational
+arithmetic, with a single upward rounding to the smallest quota unit. Normal
+requests refund unused reservation. Missing/invalid receipts retain at least the
+reservation, preserve higher observed usage evidence and label consume metadata
+with `billing_estimated`, `estimated_charge` and `billing_estimate_reason`.
+These allowances are conservative policy estimates, not a guarantee of an
+arbitrary or changing provider invoice. Ambiguous calls require reconciliation.
+
+Documented authentication/routing/validation/rate-limit rejections are refunded
+synchronously before a retry. Timeouts, 5xx responses, broken streams and missing
+usage after possible dispatch retain the reservation and **do not automatically
+replay paid work**. Failed refunds block replay too. Client cancellation does not
+cancel settlement. Known consumed work that exceeds the remaining balance is
+recorded as debt instead of silently discarded; future admission remains guarded.
+
+Only verified catalog models, bounded inputs and flat token pricing are admitted.
+An intentional zero group/model rate remains free; invalid, non-finite or
+unrepresentable rates are rejected. Tiered/per-call Jina overrides are rejected
+until their reservation contracts are implemented. See the
+[billing audit](../../../docs/audits/20260917-jina-billing.md) for tests and
+important system-wide residual risks, including crash recovery and non-Jina paths.
 
 ## Examples
 

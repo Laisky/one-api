@@ -106,15 +106,24 @@ func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64,
 		return
 	}
 
+	if totalQuota < 0 || quotaDelta > totalQuota {
+		lg.Error("invalid billing arithmetic; balance not changed", zap.Int64("total_quota", totalQuota), zap.Int64("quota_delta", quotaDelta))
+		metrics.Recorder().RecordBillingError("calculation_error", "post_consume_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
+		return
+	}
+
 	// Consume remaining quota
-	if err := model.PostConsumeTokenQuota(ctx, tokenId, quotaDelta); err != nil {
+	if err := model.SettleConsumedTokenQuota(ctx, tokenId, logEntry.UserId, quotaDelta); err != nil {
 		lg.Error("CRITICAL: upstream request was sent but billing failed - unbilled request detected",
 			zap.Error(err),
 			zap.String("model", logEntry.ModelName),
 			zap.Int64("quota_delta", quotaDelta),
 			zap.Int64("total_quota", totalQuota))
 		metrics.Recorder().RecordBillingError("database_error", "post_consume_token_quota_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)
-		billingSuccess = false
+		// Keep any provisional log unresolved. A planned charge is not a debit,
+		// and publishing a successful consume log would hide the missing balance write.
+		metrics.Recorder().RecordBillingOperation(billingStartTime, "post_consume_with_log", false, logEntry.UserId, logEntry.ChannelId, logEntry.ModelName, float64(totalQuota))
+		return
 	}
 	if err := model.CacheUpdateUserQuota(ctx, logEntry.UserId); err != nil {
 		lg.Warn("user quota cache update failed - billing completed successfully",

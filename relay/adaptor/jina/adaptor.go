@@ -111,7 +111,12 @@ func (a *Adaptor) SupportsStructuredRerank() bool { return true }
 
 // DoRequest dispatches with this receiver so Jina routing and authentication apply.
 func (a *Adaptor) DoRequest(c *gin.Context, m *meta.Meta, body io.Reader) (*http.Response, error) {
-	return adaptor.DoRequestHelper(a, c, m, body)
+	resp, err := adaptor.DoRequestHelper(a, c, m, body)
+	if err != nil {
+		return resp, errors.Wrap(err, "dispatch jina request")
+	}
+	recordRejection(c, resp)
+	return resp, nil
 }
 
 // DoResponse normalizes search usage and reuses shared chat/Messages handling.
@@ -119,10 +124,5 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, m *meta.Meta) 
 	if m.Mode == relaymode.Embeddings || m.Mode == relaymode.Rerank {
 		return handleSearchResponse(c, resp, m.Mode)
 	}
-	return openai_compatible.HandleClaudeMessagesResponse(c, resp, m, func(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
-		if m.IsStream {
-			return openai_compatible.StreamHandler(c, resp, promptTokens, modelName)
-		}
-		return openai_compatible.Handler(c, resp, promptTokens, modelName)
-	})
+	return handleOCRResponse(c, resp, m)
 }
