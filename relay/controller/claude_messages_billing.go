@@ -21,7 +21,9 @@ import (
 	quotautil "github.com/Laisky/one-api/relay/quota"
 )
 
-// preConsumeClaudeMessagesQuota pre-consumes quota for Claude Messages API requests.
+// preConsumeClaudeMessagesQuota reserves quota for a Claude Messages request.
+// Jina requests reject unbounded tool calls and reserve their complete prepared
+// allowance; other providers may skip the reservation for trusted balances.
 func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesRequest, promptTokens int, ratio float64, completionRatio float64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	if meta.ChannelType == channeltype.Jina {
 		if len(request.Tools) > 0 {
@@ -89,9 +91,10 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 	return baseQuota, nil
 }
 
-// postConsumeClaudeMessagesQuotaWithTraceID calculates and applies final quota consumption for Claude Messages API with explicit trace ID.
-// Parameters: ctx/requestId/traceId identify the request, usage/meta/request carry usage metadata, ratio/preConsumedQuota/incrementalCharged/modelRatio/groupRatio/channelCompletionRatio drive billing.
-// Returns: the final quota charged for the request.
+// postConsumeClaudeMessagesQuotaWithTraceID calculates and records the final
+// Claude Messages charge with an explicit trace ID. Missing, zero, or estimated
+// usage retains the reservation and incremental charges; Jina usage uses exact
+// settlement pricing. It returns the total quota submitted for settlement.
 func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId string, traceId string, usage *relaymodel.Usage, meta *metalib.Meta, request *ClaudeMessagesRequest, ratio float64, preConsumedQuota int64, incrementalCharged int64, modelRatio float64, channelModelRatio map[string]float64, groupRatio float64, channelModelConfigs map[string]model.ModelConfigLocal, channelCompletionRatio map[string]float64) int64 {
 	if usage == nil {
 		usage = &relaymodel.Usage{BillingEstimateReason: "missing_usage_retained_reservation"}

@@ -139,9 +139,10 @@ func (b *receiptBody) Read(dst []byte) (int, error) {
 	return n, err
 }
 
-// Close collects any unread-tail evidence, then closes the transport. Closing
-// alone never certifies EOF or an upstream stream-completion sentinel. Repeated
-// calls release the underlying response exactly once and return the same error.
+// Close collects buffered non-streaming evidence, then closes the transport.
+// Closing alone never certifies EOF or an upstream stream-completion sentinel.
+// Repeated calls release the underlying response exactly once and return the
+// same error.
 func (b *receiptBody) Close() error {
 	b.closeOnce.Do(func() {
 		b.mu.Lock()

@@ -39,6 +39,8 @@ import (
 	"github.com/Laisky/one-api/relay/pricing"
 )
 
+// GetAdaptor returns a new adaptor for apiType, or nil when the API type is not
+// registered.
 func GetAdaptor(apiType int) adaptor.Adaptor {
 	switch apiType {
 	case apitype.AIProxyLibrary:

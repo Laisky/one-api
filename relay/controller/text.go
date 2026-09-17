@@ -34,6 +34,9 @@ import (
 	"github.com/Laisky/one-api/relay/tooling"
 )
 
+// RelayTextHelper validates, dispatches, and bills a text or embeddings request.
+// It returns an API error for request, upstream, or response failures; response
+// errors with usage still proceed to final settlement.
 func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)

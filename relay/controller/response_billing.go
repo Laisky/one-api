@@ -87,8 +87,9 @@ func calculateResponseAPIPreconsumeQuota(promptTokens int, maxOutputTokens *int,
 	return baseQuota
 }
 
-// postConsumeResponseAPIQuota calculates final quota consumption for Response API requests
-// Following DRY principle by reusing the centralized billing.PostConsumeQuota function
+// postConsumeResponseAPIQuota calculates and records the final Responses API
+// charge. Missing usage or usage without any billable bucket retains the
+// pre-consumed estimate. It returns the total quota submitted for settlement.
 func postConsumeResponseAPIQuota(ctx context.Context,
 	usage *relaymodel.Usage,
 	meta *metalib.Meta,

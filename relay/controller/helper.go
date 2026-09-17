@@ -120,9 +120,9 @@ func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTok
 	return int64(promptQuota + completionQuota)
 }
 
-// estimatePromptUsage computes the prompt-side usage snapshot used for quota reservation.
-// Parameters: c is the current request context, meta contains routing information, and textRequest is the validated upstream payload.
-// Returns: the prompt usage snapshot or an API error when a safe estimate cannot be produced.
+// estimatePromptUsage computes the prompt-side usage used for quota reservation.
+// For Jina, it also validates and stores the request's conservative billing
+// budget. It returns an API error when a safe estimate cannot be produced.
 func estimatePromptUsage(c *gin.Context, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
 	if meta.ChannelType == channeltype.Jina {
 		return prepareJinaBudget(c, meta, textRequest)
@@ -206,9 +206,9 @@ func estimatePreConsumedQuota(
 	return getPreConsumedQuota(textRequest, promptTokens, modelRatio*groupRatio, completionRatio)
 }
 
-// preConsumeQuota reserves quota before the upstream request is sent.
-// Parameters: c is the request context, textRequest is the validated payload, promptUsage is the prompt usage estimate, pricing arguments resolve reservation cost, and meta identifies the active channel.
-// Returns: the reserved quota amount and an API error when the user or token lacks sufficient balance.
+// preConsumeQuota reserves quota before the upstream request is sent. It returns
+// the amount reserved or an API error for insufficient balance or an invalid Jina
+// budget or pricing contract.
 func preConsumeQuota(
 	c *gin.Context,
 	textRequest *relaymodel.GeneralOpenAIRequest,
@@ -254,6 +254,10 @@ func preConsumeQuota(
 	return preConsumedQuota, nil
 }
 
+// postConsumeQuota computes and records the final chat-style request charge. It
+// retains prior reservations for missing, zero, or explicitly estimated usage,
+// accounts for incremental charges, and returns the total quota submitted for
+// settlement.
 func postConsumeQuota(ctx context.Context,
 	usage *relaymodel.Usage,
 	meta *meta.Meta,

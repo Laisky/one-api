@@ -504,6 +504,10 @@ func decreaseTokenQuota(ctx context.Context, id int, quota int64) (err error) {
 	return nil
 }
 
+// PreConsumeTokenQuota validates available user and token balances, then
+// atomically reserves quota from the user and, unless unlimited, the token. The
+// quota must be nonnegative; a failed reservation leaves both balances unchanged.
+// Crossing a reminder threshold may also trigger a best-effort email.
 func PreConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err error) {
 	if ctx == nil {
 		ctx = context.Background()

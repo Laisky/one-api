@@ -16,8 +16,8 @@ func BillingAllowsRetry(c *gin.Context) bool {
 	return c != nil && !c.GetBool(responseSettlementKey) && !JinaAttemptMayHaveCost(c)
 }
 
-// markResponseSettlement records a billable response error before asynchronous
-// settlement. The outer retry loop must not start another paid inference for it.
+// markResponseSettlement records an errored response with usage before
+// asynchronous settlement. The outer retry loop must not replay it.
 func markResponseSettlement(c *gin.Context, usage *relaymodel.Usage, apiErr *relaymodel.ErrorWithStatusCode) {
 	if apiErr != nil && usage != nil {
 		c.Set(responseSettlementKey, true)

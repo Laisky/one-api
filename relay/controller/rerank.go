@@ -261,6 +261,8 @@ func getAndValidateRerankRequest(c *gin.Context) (*relaymodel.RerankRequest, err
 	return rerankRequest, nil
 }
 
+// prepareRerankRequestBody converts a cloned rerank request and returns its JSON
+// body. Structured inputs require an adaptor that explicitly supports them.
 func prepareRerankRequestBody(c *gin.Context, meta *metalib.Meta, adaptorImpl adaptor.Adaptor, request *relaymodel.RerankRequest) (io.Reader, error) {
 	if request == nil {
 		return nil, errors.New("rerank request is nil")
@@ -327,6 +329,9 @@ func calculateRerankQuota(promptTokens int, modelRatio float64, groupRatio float
 	return quota
 }
 
+// preConsumeRerankQuota reserves the calculated rerank charge unless the
+// trusted-balance shortcut applies. Jina requests instead reserve their complete
+// prepared billing allowance. It returns the amount actually reserved.
 func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	if meta.ChannelType == channeltype.Jina {
 		return preConsumeJinaQuota(c, meta)
@@ -364,6 +369,9 @@ func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Met
 	return perCallQuota, nil
 }
 
+// postConsumeRerankQuota computes and records the final rerank charge, using
+// measured token usage when applicable and retaining Jina estimates. It returns
+// the total quota submitted for settlement.
 func postConsumeRerankQuota(ctx context.Context,
 	usage *relaymodel.Usage,
 	meta *metalib.Meta,

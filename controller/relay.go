@@ -80,6 +80,9 @@ func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 	return err
 }
 
+// Relay executes a relay request and any eligible cross-channel retries. It
+// stops retrying when the current attempt's billing state indicates that replay
+// could duplicate a paid upstream request, and writes the final API error.
 func Relay(c *gin.Context) {
 	ctx := relayctx.Detach(c)
 	lg := gmw.GetLogger(c)

@@ -65,9 +65,12 @@ func derefString(value *string) string {
 	return *value
 }
 
-// PostConsumeQuotaWithLog is the unified billing entry that consumes quota, updates caches,
-// records a consume log, and updates user/channel aggregates.
-// Caller must provide a pre-filled log entry (including RequestId/TraceId if desired).
+// PostConsumeQuotaWithLog settles quota for completed work, refreshes the user
+// cache, and records or reconciles a consume log and aggregates. Settlement may
+// create debt. Invalid arguments or a failed durable balance update are logged
+// and leave the consume log unfinished; this function does not return an error.
+// The caller must provide a populated log entry and may identify a provisional
+// log to reconcile.
 func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64, totalQuota int64, logEntry *model.Log, provisionalLogId ...int) {
 	if ctx == nil || logEntry == nil {
 		lg := logger.FromContext(ctx)

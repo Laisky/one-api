@@ -2,6 +2,8 @@ package channeltype
 
 import "github.com/Laisky/one-api/relay/apitype"
 
+// ToAPIType maps a channel type to its adaptor API type. Unmapped channel types
+// use the OpenAI API type.
 func ToAPIType(channelType int) int {
 	apiType := apitype.OpenAI
 	switch channelType {

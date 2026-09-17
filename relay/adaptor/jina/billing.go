@@ -204,7 +204,8 @@ func quoteItem(value any, contextLength int, images bool) (int, error) {
 }
 
 // validateOCRContent rejects unbounded OCR modalities while accepting typed or
-// JSON-decoded text/image content. It returns a wrapped validation error.
+// JSON-decoded text/image content. It returns an error for malformed or
+// unsupported content.
 func validateOCRContent(content any) error {
 	if _, ok := content.(string); ok {
 		return nil
