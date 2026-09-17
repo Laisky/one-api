@@ -243,7 +243,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			requestID:           requestId,
 			startTime:           meta.StartTime,
 			estimatedQuota:      func() float64 { return float64(usage.PromptTokens+usage.CompletionTokens) * ratio },
-			guardTimeoutLog:     func() bool { return true },
+			guardTimeoutLog:     func() bool { return usage != nil },
 			logMessage:          "CRITICAL BILLING TIMEOUT",
 			includeElapsedField: true,
 		}, func(ctx context.Context) {
@@ -402,7 +402,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			userId,
 			username,
 			group,
-			0, // Will be calculated in postConsumeQuota
+			0,
 			usage.PromptTokens,
 			usage.CompletionTokens,
 			userBalance,
