@@ -94,7 +94,9 @@ func tokenCount(fields map[string]json.RawMessage, key string) (int, error) {
 // text-only fallback estimates. It never buffers more than the configured line
 // or JSON limit, and delegates stream reading/closing to the original body.
 type receiptBody struct {
-	mu sync.Mutex
+	mu        sync.Mutex
+	closeOnce sync.Once
+	closeErr  error
 	io.ReadCloser
 	stream     bool
 	pending    []byte
@@ -138,20 +140,23 @@ func (b *receiptBody) Read(dst []byte) (int, error) {
 }
 
 // Close collects any unread-tail evidence, then closes the transport. Closing
-// alone never certifies EOF or an upstream stream-completion sentinel.
+// alone never certifies EOF or an upstream stream-completion sentinel. Repeated
+// calls release the underlying response exactly once and return the same error.
 func (b *receiptBody) Close() error {
-	b.mu.Lock()
-	if !b.stream && !b.eof {
-		b.observeJSON(b.pending)
-	}
-	b.mu.Unlock()
-	if err := b.ReadCloser.Close(); err != nil {
+	b.closeOnce.Do(func() {
 		b.mu.Lock()
-		b.invalid = true
+		if !b.stream && !b.eof {
+			b.observeJSON(b.pending)
+		}
 		b.mu.Unlock()
-		return errors.Wrap(err, "close jina OCR response")
-	}
-	return nil
+		if err := b.ReadCloser.Close(); err != nil {
+			b.mu.Lock()
+			b.invalid = true
+			b.mu.Unlock()
+			b.closeErr = errors.Wrap(err, "close jina OCR response")
+		}
+	})
+	return b.closeErr
 }
 
 // observeLines scans bounded SSE lines from a read fragment without changing it.
@@ -272,6 +277,12 @@ func handleOCRResponse(c *gin.Context, resp *http.Response, m *meta.Meta) (*mode
 		}
 		return openai_compatible.Handler(c, resp, promptTokens, modelName)
 	})
+	// Shared handlers can return early on transport or parsing errors without
+	// closing the body. Stop the upstream work before selecting a final receipt.
+	// Close is idempotent because successful shared handlers may close it first.
+	if closeErr := observer.Close(); closeErr != nil && apiErr == nil {
+		apiErr = openai.ErrorWrapper(closeErr, "close_response_body_failed", http.StatusBadGateway)
+	}
 	measured, invalid := observer.snapshot()
 	if measured != nil && measured.TotalTokens > 0 && !invalid {
 		return measured, apiErr

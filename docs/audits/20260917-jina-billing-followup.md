@@ -14,6 +14,8 @@ system-wide limitations still apply. This is not an all-provider certification.
 | Search read failures discarded partial receipt evidence | A larger already-observed charge could fall back to a smaller reservation | Recover complete counters from interrupted JSON and merge maxima into conservative usage |
 | Missing OCR token attribution assumed output was expensive | Input-heavy channel pricing overrides could make that assumption undercharge | Reserve unassigned total-token evidence at both possible rate directions; estimates remain explicitly labelled |
 | Ambiguous aggregate counters could wrap negative | Summing large positive counters could look like no usage | Saturate the aggregate while retaining the individual counters for checked monetary calculation |
+| Responses fallback left the reservation safety net active during final settlement | The deferred hold settlement could overwrite the final request cost and duplicate accounting side effects | Hand the reservation to final settlement synchronously on both fallback branches, before spawning writes |
+| Shared streaming handlers can return without closing an erroneous response | A failed relay could leave the upstream response transport open | Close the OCR observer on every normal return path, with idempotent transport closure and persistent close-error evidence |
 
 Normal completed receipts retain exact token pricing. Repeated cumulative usage is
 not summed. These changes neither retry paid inference nor introduce a second
@@ -28,20 +30,24 @@ pricing or free groups remain free.
 error in one Read, EOF without DONE, cancellation, deadlines, errors after usage,
 output after usage, data after DONE, early Close, truncated usage objects,
 duplicate-counter maxima, and both input-expensive/output-expensive overrides.
+`receipt_close_test.go` verifies exactly one physical close under concurrent
+callers, including consistent propagation of an underlying close failure.
 
 `relay/controller/jina_billing_interrupt_test.go` drives actual relay helpers and
 SQLite accounting through Chat Completions, Responses fallback, Claude Messages,
 embeddings and rerank. It compares user balance, finite-token balance and usage,
 consume logs and request-cost rows. Cases include a complete-response control,
 retained holds, charges above the hold, and debt when known/estimated consumed
-work exceeds remaining funds. Transport call counts assert no paid replay.
+work exceeds remaining funds. Transport call counts assert no paid replay; close
+counts assert cleanup even after early error returns. Explicit lifecycle draining
+precedes assertions and fixture cleanup, including an assertion failure.
 
 `model/token_billing_conservation_test.go` tests simultaneous reservations by
 multiple tokens sharing one user, including an unlimited token, plus deterministic
 200-request state-machine sequences across finite/unlimited tokens and aggregate
 batching on/off. Every step is checked against an independent integer ledger.
 
-## Qualification blockers found in the baseline CI
+## Qualification findings
 
 Baseline CI run `35280802626` failed two model shards. The billing debt test's
 second fixture reused an empty unique `users.access_token`; fixtures now generate
@@ -50,15 +56,25 @@ caused by `setupTestDatabase` leaving the UUID catch-up worker running into anot
 test's configuration changes. Ordinary model fixtures now join that worker; no
 production migration policy or race detector is disabled.
 
-Baseline Go vet, package shard, other model shards and Modern/Air checks passed,
-but those results do not qualify this follow-up commit. The existing PR workflow
-must run against the new head. No CI workflows or dependencies are added.
+CI run `35284249868` executed the new behavioral tests. All four model shards
+passed, including the 800-step aggregate state-machine coverage, concurrent
+multi-token reservation, and finite/unlimited debt settlement. The package shard
+caught the Responses fallback cost overwrite (both streaming and non-streaming)
+and an interrupted OCR debt-ledger assertion. All original charge expectations
+are retained. The follow-up adds the synchronous settlement handoff and explicitly
+joins lifecycle-tracked billing before inspecting balances. These results remain
+negative controls, not a passing qualification of the final branch.
+
+The PR conversation records the exact final head and current CI status. The
+existing workflow must qualify the final code; no CI workflows or dependencies
+are added. Do not substitute an earlier passing shard for a later commit.
 
 Local qualification is limited to Go formatting/syntax and an isolated replay of
 the actual receipt-reader/evidence logic, with `go test -race -count=20`. That replay
-passed, including concurrent snapshots. It does not execute the complete project,
-Gin handlers or SQL tests: local Go is 1.23.2 and the project requires Go 1.27.1.
-Full results must be taken from CI, not inferred from the local replay.
+passed, including concurrent snapshots and idempotent closure. Removing finality
+validation made its negative control fail as expected. This does not execute the
+complete project, Gin handlers or SQL tests: local Go is 1.23.2 and the project
+requires Go 1.27.1. Full results must be taken from CI, not inferred from the replay.
 
 ## Remaining operational limits
 

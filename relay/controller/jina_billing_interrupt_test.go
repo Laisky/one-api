@@ -21,6 +21,7 @@ import (
 type jinaReceiptFaultReader struct {
 	wire     string
 	terminal error
+	closed   *atomic.Int32
 }
 
 // Read returns a bounded fragment, or the terminal result after all supplied bytes.
@@ -33,11 +34,18 @@ func (r *jinaReceiptFaultReader) Read(dst []byte) (int, error) {
 	return n, nil
 }
 
+// Close records release of the simulated upstream response body.
+func (r *jinaReceiptFaultReader) Close() error {
+	r.closed.Add(1)
+	return nil
+}
+
 // jinaReceiptFaultTransport counts actual dispatches and injects a provider response.
 type jinaReceiptFaultTransport struct {
 	wire, contentType string
 	terminal          error
 	calls             atomic.Int32
+	closes            atomic.Int32
 }
 
 // RoundTrip supplies a deterministic response with an interruptible body.
@@ -45,7 +53,7 @@ func (r *jinaReceiptFaultTransport) RoundTrip(req *http.Request) (*http.Response
 	r.calls.Add(1)
 	return &http.Response{StatusCode: http.StatusOK, Request: req,
 		Header: http.Header{"Content-Type": []string{r.contentType}},
-		Body:   io.NopCloser(&jinaReceiptFaultReader{wire: r.wire, terminal: r.terminal})}, nil
+		Body:   &jinaReceiptFaultReader{wire: r.wire, terminal: r.terminal, closed: &r.closes}}, nil
 }
 
 // TestJinaBillingInterruptedOCRLedger verifies real balance, token, consume-log
@@ -111,6 +119,7 @@ func TestJinaBillingInterruptedOCRLedger(t *testing.T) {
 				}
 				jinaAuditAssertLedger(t, requestID, balance, charge, false, tc.estimated)
 				require.EqualValues(t, 1, transport.calls.Load(), "accounting must not replay paid inference")
+				require.EqualValues(t, 1, transport.closes.Load(), "stop upstream work and release the response body exactly once")
 			})
 		}
 	}
@@ -144,6 +153,7 @@ func TestJinaBillingInterruptedSearchLedger(t *testing.T) {
 				require.Less(t, c.GetInt64(ctxkey.PreConsumedQuotaAmount), int64(25000))
 				jinaAuditAssertLedger(t, requestID, balance, 25000, false, true)
 				require.EqualValues(t, 1, transport.calls.Load())
+				require.EqualValues(t, 1, transport.closes.Load())
 			})
 		}
 	}
