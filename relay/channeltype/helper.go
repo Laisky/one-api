@@ -71,6 +71,8 @@ func ToAPIType(channelType int) int {
 		apiType = apitype.Zai
 	case Jina:
 		apiType = apitype.Jina
+	case TypeSafe:
+		apiType = apitype.TypeSafe
 	}
 
 	return apiType
@@ -206,6 +208,8 @@ func IdToName(channelType int) string {
 		return "zai"
 	case Jina:
 		return "jina"
+	case TypeSafe:
+		return "typesafe"
 	case Dummy:
 		return "dummy"
 	default:

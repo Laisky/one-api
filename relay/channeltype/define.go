@@ -61,5 +61,6 @@ const (
 	DeepInfra
 	Zai
 	Jina
+	TypeSafe
 	Dummy
 )

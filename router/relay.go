@@ -6,6 +6,7 @@ import (
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/controller"
 	"github.com/Laisky/one-api/middleware"
+	relaycontroller "github.com/Laisky/one-api/relay/controller"
 )
 
 // SetRelayRouter registers the public inference and MCP relay endpoints.
@@ -66,6 +67,7 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router := router.Group("/v1")
 	relayV1Router.Use(relayMws...)
 
+	relayV1Router.POST("/systemone", relaycontroller.RelaySystemOne)
 	relayV1Router.GET("/realtime", controller.RelayRealtime)
 	relayV1Router.POST("/realtime/sessions", controller.RelayRealtimeSessions)
 	relayV1Router.Any("/oneapi/proxy/:channelid/*target", controller.Relay)

@@ -73,6 +73,7 @@ var ChannelBaseURLConfigs = []ChannelBaseURLConfig{
 	// which reproduces Z.AI's documented paths exactly, so the bare host is correct.
 	{URL: "https://api.z.ai", Editable: false},   // 58 Zai
 	{URL: "https://api.jina.ai", Editable: true}, // 59 Jina
+	{URL: "https://api.typesafe.ai", Editable: true}, // 60 TypeSafe
 }
 
 // ChannelBaseURLs provides backward compatibility by returning only the URL strings.
