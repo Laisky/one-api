@@ -30,6 +30,9 @@ const systemOneSuccess = `{"model":"jev-1.13.0","answers":{"q":{"type":"noul","n
 func systemOneContext(t *testing.T, base string, balance int64, unlimited bool, group, price float64) (*gin.Context, *httptest.ResponseRecorder, string) {
 	t.Helper()
 	billingAccountingSetup(t, balance)
+	previousTraceMode := config.TraceWriteMode
+	config.TraceWriteMode = "batch"
+	t.Cleanup(func() { config.TraceWriteMode = previousTraceMode })
 	oldBatch := config.BatchUpdateEnabled
 	config.BatchUpdateEnabled = false
 	t.Cleanup(func() { config.BatchUpdateEnabled = oldBatch })

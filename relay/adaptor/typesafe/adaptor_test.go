@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/logger"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/meta"
@@ -68,6 +69,10 @@ func TestURLsAndHeaders(t *testing.T) {
 
 // TestRedirectsAreNotReplayed exercises the actual shared HTTP transport.
 func TestRedirectsAreNotReplayed(t *testing.T) {
+	// This transport-only fixture does not initialize a trace database.
+	previousTraceMode := config.TraceWriteMode
+	config.TraceWriteMode = "batch"
+	t.Cleanup(func() { config.TraceWriteMode = previousTraceMode })
 	var calls atomic.Int32
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)

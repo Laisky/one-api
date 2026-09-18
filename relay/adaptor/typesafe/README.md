@@ -33,6 +33,8 @@ The gateway retains native `model`, `answers`, and `usage.input_tokens` / `usage
 
 **This is not an OpenAI-compatible chat model.** Chat Completions, Responses, Claude Messages, embeddings, image generation and streaming are deliberately not advertised or converted: a conversation does not define the typed evaluation questions required by Jev. This is an explicit native-only exception to the general conversational adaptor pattern. Use `/v1/systemone`, not `/v1/chat/completions`. The gateway's authenticated `/v1/models` remains its standard catalog format, not TypeSafe's native model-list envelope.
 
+The existing administrator channel test is conversation-oriented and skips channels that do not offer a conversational endpoint. TypeSafe is therefore skipped by that generic health check; a skipped test is not evidence of provider connectivity. Use the native request above to verify connectivity, model routing and billing with a valid provider key. This is an explicit, potentially paid inference request, not an automatic background probe.
+
 ## Models and price
 
 | Model | Role | Input USD / million tokens | Output price |
@@ -57,7 +59,7 @@ Native JSON errors and `Retry-After` are preserved when available. Callers may c
 
 ## Validation
 
-The regression suite covers request primitives and structured/null descriptions, duplicate/unknown fields, model registry and prices, lossless response forwarding, malformed billing receipts, documented admission errors, exact input-only arithmetic, HTTPS credential handling and no-redirect replay. Tests use local fixtures and TLS mock servers, not paid provider requests. No dependencies or CI workflows are added.
+The regression suite covers request primitives and structured/null descriptions, duplicate/unknown fields, model registry and prices, lossless response forwarding, malformed billing receipts, documented admission errors, exact input-only arithmetic, HTTPS credential handling and no-redirect replay. Native-handler integration tests use actual SQLite balances to check reservations, settlement, refunds, free/group/custom input pricing, unlimited-token behavior, model mappings and estimated-usage logs. Tests use local fixtures and TLS mock servers, not paid provider requests. No dependencies or CI workflows are added.
 
 Run with the repository's supported Go toolchain:
 
