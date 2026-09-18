@@ -207,7 +207,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case PaLM:
 		return chatOnly
 	case Gemini, GeminiOpenAICompatible:
-		return chatAndEmbeddings
+		return append(chatAndEmbeddings, EndpointRealtime)
 	case Copilot:
 		return copilotDefault
 	case Zhipu:
@@ -405,9 +405,9 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Cerebras:
 		// Cerebras' OpenAI-compatible API (https://api.cerebras.ai/v1) natively
 		// serves Chat Completions only. The Responses API and Anthropic Messages
-		// surfaces are provided through one-api's shared OpenAI-compatible
-		// conversion/fallback layer rather than upstream-native. Cerebras does
-		// not expose embeddings.
+		// surfaces are provided through one-api's Chat Completions fallback. DeepInfra video is
+		// intentionally omitted because its native inference contract does not
+		// match one-api's /v1/videos lifecycle API.
 		return []Endpoint{
 			EndpointChatCompletions,
 			EndpointResponseAPI,

@@ -12,11 +12,10 @@ import (
 //   - https://ai.google.dev/gemini-api/docs/deprecations
 //   - https://ai.google.dev/gemini-api/docs/changelog
 //
-// Like the existing Live entries, these are upstream catalog metadata, not an
-// implementation of the Live API transport. The REST adaptor cannot relay Live
-// sessions. Google's separate $1.00/1M image/video INPUT rate cannot be represented
-// by ModelConfig's image-generation or video-output pricing fields; leave those
-// fields unset rather than advertising an incorrect output charge.
+// Live uses a dedicated native WebSocket transport, not REST generation. Visual
+// INPUT token prices are resolved in relay/quota/gemini_live.go, not misrepresented
+// as image-generation or video-output prices. Built-in search is an upstream
+// capability; the initial Live transport accepts only client-executed tools.
 
 // gemini38LiveConfig builds the documented text/audio prices and Live capabilities.
 // Parameters: extendedThinking selects the configurable background-reasoning variant.
@@ -26,8 +25,10 @@ func gemini38LiveConfig(extendedThinking bool) adaptor.ModelConfig {
 		Ratio:           0.75 * ratio.MilliTokensUsd,
 		CompletionRatio: 4.50 / 0.75,
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:     3.00 / 0.75,
-			CompletionRatio: 12.00 / 4.50,
+			PromptRatio:               3.00 / 0.75,
+			CompletionRatio:           12.00 / 3.00,
+			PromptTokensPerSecond:     25,
+			CompletionTokensPerSecond: 25,
 		},
 		ContextLength:     131_072,
 		MaxOutputTokens:   65_536,
@@ -35,13 +36,13 @@ func gemini38LiveConfig(extendedThinking bool) adaptor.ModelConfig {
 		OutputModalities:  []string{"text", "audio"},
 		SupportedFeatures: []string{"tools", "web_search", "reasoning"},
 		Description: "Gemini 3.8 Live stable voice model with automatic interleaved thinking; " +
-			"thinking configuration is not supported. Catalog metadata only: requires the Live API, " +
+			"thinking configuration is not supported. Requires the native Live WebSocket API, " +
 			"not implemented by this REST adaptor. Text output uses audio transcription.",
 	}
 	if extendedThinking {
 		config.SupportedReasoningEfforts = []string{"low", "medium", "high"}
 		config.Description = "Gemini 3.8 Live Extended Thinking stable voice model with background reasoning " +
-			"and non-blocking function calls. Catalog metadata only: requires the Live API, " +
+			"and non-blocking function calls. Requires the native Live WebSocket API, " +
 			"not implemented by this REST adaptor. Text output uses audio transcription."
 	}
 	// Do not infer a default thinking level, integer thinking budget, caching

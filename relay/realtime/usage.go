@@ -11,6 +11,10 @@ import (
 // Tokens contains inclusive input/output counts. Cached tokens are subsets of
 // their respective input modalities, never additional input tokens.
 type Tokens struct {
+	Video       int64 `json:"video_tokens,omitempty"`
+	CachedVideo int64 `json:"cached_video_tokens,omitempty"`
+	// ReasoningTokens is a subset of OutputText, not an additional charge.
+	ReasoningTokens   int64 `json:"reasoning_tokens,omitempty"`
 	Input             int64 `json:"input_tokens"`
 	Output            int64 `json:"output_tokens"`
 	Text              int64 `json:"text_tokens"`
@@ -37,6 +41,7 @@ type Record struct {
 // Rates contains final, ungrouped quota-per-token rates, plus quota per second.
 // All modality rates are absolute, not completion or cache multipliers.
 type Rates struct {
+	Video, CachedVideo                   float64
 	Text, Audio, Image                   float64
 	CachedText, CachedAudio, CachedImage float64
 	OutputText, OutputAudio, Second      float64
@@ -48,7 +53,7 @@ type Rates struct {
 // prices and overflowing results are rejected, never converted to negative debits.
 func Cost(record Record, rates Rates) (float64, error) {
 	values := []float64{rates.Text, rates.Audio, rates.Image, rates.CachedText,
-		rates.CachedAudio, rates.CachedImage, rates.OutputText, rates.OutputAudio, rates.Second}
+		rates.CachedAudio, rates.CachedImage, rates.OutputText, rates.OutputAudio, rates.Second, rates.Video, rates.CachedVideo}
 	for _, value := range values {
 		if value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
 			return 0, errors.WithStack(ErrInvalidPrice)
@@ -69,6 +74,7 @@ func Cost(record Record, rates Rates) (float64, error) {
 		cost = float64(t.Text-t.CachedText)*rates.Text + float64(t.CachedText)*rates.CachedText +
 			float64(t.Audio-t.CachedAudio)*rates.Audio + float64(t.CachedAudio)*rates.CachedAudio +
 			float64(t.Image-t.CachedImage)*rates.Image + float64(t.CachedImage)*rates.CachedImage +
+			float64(t.Video-t.CachedVideo)*rates.Video + float64(t.CachedVideo)*rates.CachedVideo +
 			float64(t.OutputText)*rates.OutputText + float64(t.OutputAudio)*rates.OutputAudio
 	}
 	if math.IsNaN(cost) || math.IsInf(cost, 0) || cost >= float64(math.MaxInt64) {
@@ -79,12 +85,12 @@ func Cost(record Record, rates Rates) (float64, error) {
 
 // minimumCostCacheAllocation allocates only the unknown subset of validated t
 // to available modalities in descending discount order. This solves the bounded
-// three-bucket linear minimum without inventing a provider-reported cache split.
+// four-bucket linear minimum without inventing a provider-reported cache split.
 func minimumCostCacheAllocation(t Tokens, rates Rates) Tokens {
 	remaining := t.CachedUnallocated
-	counts := [3]int64{t.Text, t.Audio, t.Image}
-	cached := [3]int64{t.CachedText, t.CachedAudio, t.CachedImage}
-	savings := [3]float64{rates.Text - rates.CachedText, rates.Audio - rates.CachedAudio, rates.Image - rates.CachedImage}
+	counts := [4]int64{t.Text, t.Audio, t.Image, t.Video}
+	cached := [4]int64{t.CachedText, t.CachedAudio, t.CachedImage, t.CachedVideo}
+	savings := [4]float64{rates.Text - rates.CachedText, rates.Audio - rates.CachedAudio, rates.Image - rates.CachedImage, rates.Video - rates.CachedVideo}
 	for remaining > 0 {
 		best := -1
 		for i := range counts {
@@ -99,6 +105,7 @@ func minimumCostCacheAllocation(t Tokens, rates Rates) Tokens {
 		remaining -= n
 	}
 	t.CachedText, t.CachedAudio, t.CachedImage = cached[0], cached[1], cached[2]
+	t.CachedVideo = cached[3]
 	t.CachedUnallocated = 0
 	return t
 }
@@ -107,20 +114,20 @@ func minimumCostCacheAllocation(t Tokens, rates Rates) Tokens {
 // negative counts, overflow, or a cached subset exceeding its parent modality.
 func (t Tokens) Validate() error {
 	values := []int64{t.Input, t.Output, t.Text, t.Audio, t.Image, t.CachedText,
-		t.CachedAudio, t.CachedImage, t.CachedUnallocated, t.OutputText, t.OutputAudio}
+		t.CachedAudio, t.CachedImage, t.CachedUnallocated, t.OutputText, t.OutputAudio, t.Video, t.CachedVideo, t.ReasoningTokens}
 	for _, value := range values {
 		if value < 0 {
 			return errors.Wrap(ErrInvalidUsage, "negative realtime token count")
 		}
 	}
-	if t.Text > t.Input || t.Audio > t.Input-t.Text || t.Image != t.Input-t.Text-t.Audio {
+	if t.Text > t.Input || t.Audio > t.Input-t.Text || t.Image > t.Input-t.Text-t.Audio || t.Video != t.Input-t.Text-t.Audio-t.Image {
 		return errors.Wrap(ErrInvalidUsage, "inconsistent realtime input modalities")
 	}
-	if t.OutputText > t.Output || t.OutputAudio != t.Output-t.OutputText {
+	if t.ReasoningTokens > t.OutputText || t.OutputText > t.Output || t.OutputAudio != t.Output-t.OutputText {
 		return errors.Wrap(ErrInvalidUsage, "inconsistent realtime output modalities")
 	}
-	if t.CachedText > t.Text || t.CachedAudio > t.Audio || t.CachedImage > t.Image ||
-		t.CachedUnallocated > t.Input-t.CachedText-t.CachedAudio-t.CachedImage {
+	if t.CachedText > t.Text || t.CachedAudio > t.Audio || t.CachedImage > t.Image || t.CachedVideo > t.Video ||
+		t.CachedUnallocated > t.Input-t.CachedText-t.CachedAudio-t.CachedImage-t.CachedVideo {
 		return errors.Wrap(ErrInvalidUsage, "realtime cache exceeds parent modality")
 	}
 	if t.Input > math.MaxInt64-t.Output {

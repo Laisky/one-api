@@ -19,7 +19,6 @@ import (
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
-	"github.com/Laisky/one-api/relay/adaptor/zhipu"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/meta"
@@ -43,13 +42,14 @@ const (
 	realtimeAudioOutputTokensPerSec = 20
 )
 
-// RelayRealtime handles WebSocket Realtime proxying for OpenAI Realtime API.
+// RelayRealtime handles authenticated WebSocket conversations and receipt billing.
+// Parameters: c is the request context. Returns: none after session settlement.
 //
 // Billing flow (mirrors text endpoints):
 //  1. Pre-consume quota — reserve a conservative estimate BEFORE upgrading WS
 //  2. Record provisional log — audit trail in case of crash
 //  3. Defer billing audit safety net — catch unreconciled pre-consumption
-//  4. Run WebSocket session — proxy all frames, parse usage from response.done
+//  4. Run WebSocket session — preserve native frames and collect provider usage
 //  5. Post-consume quota — settle response and transcription receipts by modality
 func RelayRealtime(c *gin.Context) {
 	lg := gmw.GetLogger(c)
@@ -59,6 +59,12 @@ func RelayRealtime(c *gin.Context) {
 
 	// Record channel requests in flight
 	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
+
+	if err := validateGeminiRealtimeTransport(relayMeta); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": err.Error(), "type": "unsupported_realtime_transport"}})
+		PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, false, 0, 0, 0)
+		return
+	}
 
 	// ── Step 1: Resolve pricing ─────────────────────────────────────────
 	var channelModelRatio map[string]float64
@@ -80,8 +86,14 @@ func RelayRealtime(c *gin.Context) {
 	// ── Step 2: Pre-consume quota ───────────────────────────────────────
 	// Estimate based on a short audio conversation.
 	// Use audio pricing when available (much higher than text), fall back to text.
-	preConsumedQuota := estimateRealtimePreConsumeQuota(
-		modelName, modelRatio, groupRatio, channelModelConfigs, pricingAdaptor, relayMeta.StartTime)
+	preConsumedQuota, reserveErr := estimateRealtimeSessionReservation(
+		relayMeta, modelRatio, groupRatio, channelModelConfigs, pricingAdaptor)
+
+	if reserveErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": reserveErr.Error(), "type": "invalid_realtime_pricing"}})
+		PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, false, 0, 0, 0)
+		return
+	}
 
 	// Check user quota before allowing the session
 	userQuota, err := model.CacheGetUserQuota(ctx, relayMeta.UserId)
@@ -105,7 +117,7 @@ func RelayRealtime(c *gin.Context) {
 	// Check if user has enough quota that we can skip pre-consumption (trusted user)
 	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
 	tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
-	if userQuota > 100*preConsumedQuota &&
+	if !isGeminiLiveRequest(relayMeta) && userQuota > 100*preConsumedQuota &&
 		(tokenQuotaUnlimited || tokenQuota > 100*preConsumedQuota) {
 		// Trusted user with plenty of quota — skip pre-consumption
 		preConsumedQuota = 0
@@ -135,16 +147,7 @@ func RelayRealtime(c *gin.Context) {
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 
 	// ── Step 4: Run WebSocket session ───────────────────────────────────
-	var bizErr *rmodel.ErrorWithStatusCode
-	var usage *rmodel.Usage
-	switch relayMeta.APIType {
-	case apitype.Zhipu:
-		// GLM-Realtime speaks an OpenAI-Realtime-like frame protocol at its own
-		// endpoint; the zhipu adaptor relays frames and parses usage the same way.
-		bizErr, usage = zhipu.RealtimeHandler(c, relayMeta)
-	default:
-		bizErr, usage = openai.RealtimeHandler(c, relayMeta)
-	}
+	bizErr, usage := runRealtimeProviderWithGemini(c, relayMeta)
 	if bizErr != nil {
 		// Handshake/connection error — upstream was NOT reached, safe to refund
 		c.Set(ctxkey.UpstreamRequestPossiblyForwarded, false)
@@ -304,6 +307,9 @@ func postConsumeRealtimeQuota(
 // resolveRealtimePricingAdaptor returns the pricing adaptor for a realtime session
 // using the same two-layer lookup as text endpoints.
 func resolveRealtimePricingAdaptor(relayMeta *meta.Meta) adaptor.Adaptor {
+	if isGeminiLiveRequest(relayMeta) {
+		return geminiLivePricingAdaptor()
+	}
 	if a := relay.GetAdaptor(relayMeta.APIType); a != nil {
 		return a
 	}
@@ -318,7 +324,7 @@ func RelayRealtimeSessions(c *gin.Context) {
 
 	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
 
-	if relayMeta.APIType != apitype.OpenAI {
+	if relayMeta.APIType != apitype.OpenAI || isGeminiLiveRequest(relayMeta) {
 		// GLM-Realtime authenticates with the API key directly over WebSocket
 		// and has no ephemeral-session (WebRTC) minting surface.
 		bizErr := &rmodel.ErrorWithStatusCode{

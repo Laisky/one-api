@@ -31,7 +31,8 @@ func TestGeminiSeptember18LiveCatalog(t *testing.T) {
 			require.InDelta(t, 0.75, config.Ratio/ratio.MilliTokensUsd, 1e-12)
 			require.InDelta(t, 4.50, config.Ratio*config.CompletionRatio/ratio.MilliTokensUsd, 1e-12)
 			require.InDelta(t, 3.00, config.Ratio*config.Audio.PromptRatio/ratio.MilliTokensUsd, 1e-12)
-			require.InDelta(t, 12.00, config.Ratio*config.CompletionRatio*config.Audio.CompletionRatio/ratio.MilliTokensUsd, 1e-12)
+			// Audio completion is relative to AUDIO input, as used by quota.Compute.
+			require.InDelta(t, 12.00, config.Ratio*config.Audio.PromptRatio*config.Audio.CompletionRatio/ratio.MilliTokensUsd, 1e-12)
 			require.InDelta(t, 0.014, GeminiToolingDefaultsForModel(tt.model).Pricing["web_search"].UsdPerCall, 1e-12)
 			require.EqualValues(t, 131_072, config.ContextLength)
 			require.EqualValues(t, 65_536, config.MaxOutputTokens)
