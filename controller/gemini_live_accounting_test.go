@@ -32,10 +32,10 @@ import (
 // handle. Returns: none. No mock replaces pricing or durable quota updates.
 func TestGeminiLiveDurableAccounting(t *testing.T) {
 	for _, tc := range []struct {
-		name                        string
+		name                         string
 		measured, pending, unlimited bool
-		group                       float64
-		want                        int64
+		group                        float64
+		want                         int64
 	}{
 		{"measured", true, false, false, 1, 975},
 		{"idle_refund", false, false, false, 1, 0},

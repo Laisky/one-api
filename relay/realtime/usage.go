@@ -14,18 +14,25 @@ type Tokens struct {
 	Video       int64 `json:"video_tokens,omitempty"`
 	CachedVideo int64 `json:"cached_video_tokens,omitempty"`
 	// ReasoningTokens is a subset of OutputText, not an additional charge.
-	ReasoningTokens   int64 `json:"reasoning_tokens,omitempty"`
-	Input             int64 `json:"input_tokens"`
-	Output            int64 `json:"output_tokens"`
-	Text              int64 `json:"text_tokens"`
-	Audio             int64 `json:"audio_tokens"`
-	Image             int64 `json:"image_tokens"`
+	ReasoningTokens int64 `json:"reasoning_tokens,omitempty"`
+	Input           int64 `json:"input_tokens"`
+	Output          int64 `json:"output_tokens"`
+	Text            int64 `json:"text_tokens"`
+	Audio           int64 `json:"audio_tokens"`
+	Image           int64 `json:"image_tokens"`
+	// Unallocated counts input tokens the provider included in its aggregate but
+	// attributed to no modality. It preserves the receipt exactly instead of
+	// inventing a split, and Cost charges it at the cheapest chargeable input
+	// modality so an unexplained remainder can never overcharge a caller.
+	Unallocated       int64 `json:"unallocated_tokens,omitempty"`
 	CachedText        int64 `json:"cached_text_tokens"`
 	CachedAudio       int64 `json:"cached_audio_tokens"`
 	CachedImage       int64 `json:"cached_image_tokens"`
 	CachedUnallocated int64 `json:"cached_unallocated_tokens,omitempty"`
 	OutputText        int64 `json:"output_text_tokens"`
 	OutputAudio       int64 `json:"output_audio_tokens"`
+	// OutputUnallocated is the output-side counterpart of Unallocated.
+	OutputUnallocated int64 `json:"output_unallocated_tokens,omitempty"`
 }
 
 // Record describes one final response or one independent input transcription.
@@ -75,12 +82,29 @@ func Cost(record Record, rates Rates) (float64, error) {
 			float64(t.Audio-t.CachedAudio)*rates.Audio + float64(t.CachedAudio)*rates.CachedAudio +
 			float64(t.Image-t.CachedImage)*rates.Image + float64(t.CachedImage)*rates.CachedImage +
 			float64(t.Video-t.CachedVideo)*rates.Video + float64(t.CachedVideo)*rates.CachedVideo +
-			float64(t.OutputText)*rates.OutputText + float64(t.OutputAudio)*rates.OutputAudio
+			float64(t.OutputText)*rates.OutputText + float64(t.OutputAudio)*rates.OutputAudio +
+			float64(t.Unallocated)*cheapestRate(rates.Text, rates.Audio, rates.Image, rates.Video) +
+			float64(t.OutputUnallocated)*cheapestRate(rates.OutputText, rates.OutputAudio)
 	}
 	if math.IsNaN(cost) || math.IsInf(cost, 0) || cost >= float64(math.MaxInt64) {
 		return 0, errors.Wrap(ErrQuotaOverflow, "realtime cost exceeds quota range")
 	}
 	return cost, nil
+}
+
+// cheapestRate returns the lowest chargeable rate among candidates, ignoring the
+// zeros that mark an unresolved bucket. Parameters: candidates are the modality
+// rates a receipt could plausibly hide an unattributed token in. Returns: that
+// minimum, or zero when no candidate is priced, so an unexplained remainder is
+// always billed at the lowest price consistent with the provider's own receipt.
+func cheapestRate(candidates ...float64) float64 {
+	cheapest := 0.0
+	for _, rate := range candidates {
+		if rate > 0 && (cheapest == 0 || rate < cheapest) {
+			cheapest = rate
+		}
+	}
+	return cheapest
 }
 
 // minimumCostCacheAllocation allocates only the unknown subset of validated t
@@ -114,20 +138,26 @@ func minimumCostCacheAllocation(t Tokens, rates Rates) Tokens {
 // negative counts, overflow, or a cached subset exceeding its parent modality.
 func (t Tokens) Validate() error {
 	values := []int64{t.Input, t.Output, t.Text, t.Audio, t.Image, t.CachedText,
-		t.CachedAudio, t.CachedImage, t.CachedUnallocated, t.OutputText, t.OutputAudio, t.Video, t.CachedVideo, t.ReasoningTokens}
+		t.CachedAudio, t.CachedImage, t.CachedUnallocated, t.OutputText, t.OutputAudio, t.Video, t.CachedVideo,
+		t.ReasoningTokens, t.Unallocated, t.OutputUnallocated}
 	for _, value := range values {
 		if value < 0 {
 			return errors.Wrap(ErrInvalidUsage, "negative realtime token count")
 		}
 	}
-	if t.Text > t.Input || t.Audio > t.Input-t.Text || t.Image > t.Input-t.Text-t.Audio || t.Video != t.Input-t.Text-t.Audio-t.Image {
+	if t.Text > t.Input || t.Audio > t.Input-t.Text || t.Image > t.Input-t.Text-t.Audio ||
+		t.Unallocated > t.Input-t.Text-t.Audio-t.Image || t.Video != t.Input-t.Text-t.Audio-t.Image-t.Unallocated {
 		return errors.Wrap(ErrInvalidUsage, "inconsistent realtime input modalities")
 	}
-	if t.ReasoningTokens > t.OutputText || t.OutputText > t.Output || t.OutputAudio != t.Output-t.OutputText {
+	if t.ReasoningTokens > t.OutputText || t.OutputText > t.Output ||
+		t.OutputUnallocated > t.Output-t.OutputText || t.OutputAudio != t.Output-t.OutputText-t.OutputUnallocated {
 		return errors.Wrap(ErrInvalidUsage, "inconsistent realtime output modalities")
 	}
+	// Unallocated input has no modality, so a cached subset can never be assigned
+	// to it; keeping it outside the cache capacity preserves the guarantee that
+	// minimumCostCacheAllocation always finds a modality with spare capacity.
 	if t.CachedText > t.Text || t.CachedAudio > t.Audio || t.CachedImage > t.Image || t.CachedVideo > t.Video ||
-		t.CachedUnallocated > t.Input-t.CachedText-t.CachedAudio-t.CachedImage-t.CachedVideo {
+		t.CachedUnallocated > t.Input-t.Unallocated-t.CachedText-t.CachedAudio-t.CachedImage-t.CachedVideo {
 		return errors.Wrap(ErrInvalidUsage, "realtime cache exceeds parent modality")
 	}
 	if t.Input > math.MaxInt64-t.Output {

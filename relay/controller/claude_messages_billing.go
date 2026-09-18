@@ -2,9 +2,10 @@ package controller
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/Laisky/one-api/relay/adaptor/jina"
 	"github.com/Laisky/one-api/relay/channeltype"
-	"net/http"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"

@@ -36,7 +36,7 @@ func deepseekModelConfig(description string, vision bool) adaptor.ModelConfig {
 		SupportedSamplingParameters: []string{"temperature", "top_p", "stop", "max_tokens"},
 		SupportedReasoningEfforts:   []string{"low", "high", "max"},
 		DefaultReasoningEffort:      "high",
-		Description:                description,
+		Description:                 description,
 	}
 }
 

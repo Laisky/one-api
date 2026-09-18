@@ -59,6 +59,23 @@ constructed from the channel base URL or its existing endpoint override. TLS is
 required except for literal loopback addresses used by tests. Authentication is
 sent as `x-goog-api-key`, never in the URL or by forwarding the user's token.
 
+### End-to-end probe
+
+`cmd/test` drives this endpoint against a running server and a real Gemini
+channel:
+
+```bash
+API_BASE=http://127.0.0.1:3000 API_TOKEN=sk-... go run ./cmd/test live
+```
+
+Scenarios: `conversation` (two native turns, then a match of the persisted
+consume log against the provider's own receipts), `thinking` (Extended Thinking
+plus the rejection of a thinking level on the automatic model), `setup-guard`
+(model switch, TEXT modality, unsupported setup field, missing setup),
+`rest-guard` (Live-only model on `/v1/chat/completions`) and `subprotocol` (the
+browser handshake). Select a subset with `--scenarios`, and skip the settlement
+check with `--verify-billing=false`. The conversation scenario spends real quota.
+
 ### Browser handshakes and operator trust
 
 Browser clients using subprotocol authentication must also offer a non-secret
@@ -130,10 +147,35 @@ turn's context; that is not a negative charge or a refund of a previous turn.
 `thoughtsTokenCount` is retained as a subset of normalized output text. The
 normalizer requires aggregate conservation to decide whether thinking/tool-use
 counts are already inclusive or explicitly additional. It never adds thinking
-once as output and again as a separate reasoning fee. Unknown residuals, missing
-nonzero modality splits, negative/fractional counts and contradictory totals
-require reconciliation rather than a guessed cheap-text allocation. Protobuf
-omission of a zero scalar is accepted only when totals and partitions reconcile.
+once as output and again as a separate reasoning fee. Negative/fractional counts,
+a modality count larger than its parent, and totals that reconcile with neither
+`prompt + response` nor `prompt + response + thoughts + tool` are still rejected.
+Protobuf omission of a zero scalar is accepted as zero.
+
+**Live receipts do not close their modality breakdown, and their aggregate does
+not always include thinking.** Both were verified against the production Live API
+on 2026-09-18 and are the normal case, not an error:
+
+- `promptTokensDetails` reports less than `promptTokenCount`. One captured turn
+  reported 548 prompt tokens against TEXT 306 + AUDIO 222, and the remainder grew
+  by a fixed amount per turn. Google documents the field as "modalities that were
+  processed", never as an exhaustive partition.
+- `thoughtsTokenCount` can exceed `responseTokenCount` and sit outside
+  `totalTokenCount` (100 thinking tokens against an AUDIO-only response of 61).
+  Google's Live reference defines the total as prompt + response candidates while
+  its REST reference defines it as prompt + thoughts + response candidates; live
+  sessions produce both shapes, sometimes within one session.
+
+Demanding closure rejected **every** real receipt: a genuine conversation settled
+at zero, and the metering error closed the socket after the first turn. The
+normalizer therefore keeps what the provider did not attribute in explicit
+`unallocated_tokens` / `output_unallocated_tokens` buckets and prices them at the
+cheapest chargeable modality of that direction, which for these models is text
+input and text output. A modality this build does not price, such as a future
+`DOCUMENT` or `MODALITY_UNSPECIFIED` bucket, lands in the same remainder rather
+than ending a paid session. Thinking tokens the aggregate omits are billed as
+additional output text, and only the part that the reported output partition
+cannot already contain.
 
 Example: 100K text, 200K audio, 300K image and 400K video input tokens, plus
 200K text and 300K audio output tokens, cost **$5.875**. A 100K thinking subset
@@ -188,8 +230,15 @@ unpriceable reservation configurations are rejected before provider work.
 
 - **Vertex Live is not enabled.** Its endpoint, credentials and pricing require a
   separate implementation; Developer API prices are not silently reused.
-- Only the two named 3.8 models are admitted. Older Live/transcription models in
-  the catalog are not implicitly declared compatible.
+- Only the two named 3.8 models are admitted for Live sessions. Older
+  Live/transcription models in the catalog are not implicitly declared
+  compatible. They are, however, covered by the REST guard: every model whose
+  only advertised generation method is `bidiGenerateContent`
+  (`gemini-3.1-flash-live-preview`, `gemini-3.5-live-translate-preview`,
+  `gemini-3.5-transcribe-live`) is rejected on a Google channel's REST endpoints
+  with **HTTP 400**, matching Google's own answer to that request. A 5xx would be
+  retried onto further channels and charged against channel health for what is a
+  caller mistake.
 - Client-executed `functionDeclarations` and matching `toolResponse` messages are
   supported, including non-blocking calls. For Extended Thinking, omitted function
   `behavior` defaults to `NON_BLOCKING`; explicit `BLOCKING` is rejected during

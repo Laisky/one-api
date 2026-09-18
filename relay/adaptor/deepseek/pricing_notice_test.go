@@ -69,8 +69,8 @@ func TestDeepSeekReviewPricingNotice(t *testing.T) {
 					})
 				}
 				for _, usage := range []struct {
-					name                    string
-					prompt, cached, output  int
+					name                   string
+					prompt, cached, output int
 				}{
 					{"cache_miss", 100000, 0, 0},
 					{"cache_hit", 100000, 100000, 0},

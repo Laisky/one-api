@@ -47,6 +47,8 @@ func main() {
 		execErr = audio(ctx, logger, os.Args[2:])
 	case "chat":
 		execErr = chat(ctx, logger, os.Args[2:])
+	case "live":
+		execErr = live(ctx, logger, os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n", command)
 		os.Exit(1)

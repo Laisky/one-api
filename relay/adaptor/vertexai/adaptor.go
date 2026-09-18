@@ -220,7 +220,12 @@ func (a *Adaptor) GetModelList() []string {
 	// Add models from each subadaptor
 	models = append(models, adaptor.GetModelListFromPricing(vertexaiClaude.ModelRatios)...)
 	models = append(models, adaptor.GetModelListFromPricing(imagen.ModelRatios)...)
-	models = append(models, adaptor.GetModelListFromPricing(geminiOpenaiCompatible.ModelRatios)...)
+	// Vertex Live needs its own endpoint, credentials and price contract, so this
+	// build has no Live transport for it. Advertising the models Google serves
+	// only over bidiGenerateContent would let an operator publish IDs that every
+	// Vertex transport rejects; their prices stay in the shared catalog.
+	models = append(models, adaptor.WithoutLiveOnlyGoogleModels(
+		adaptor.GetModelListFromPricing(geminiOpenaiCompatible.ModelRatios))...)
 	models = append(models, adaptor.GetModelListFromPricing(veo.ModelRatios)...)
 	models = append(models, adaptor.GetModelListFromPricing(deepseek.ModelRatios)...)
 	models = append(models, adaptor.GetModelListFromPricing(openai.ModelRatios)...)

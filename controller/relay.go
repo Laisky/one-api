@@ -22,6 +22,8 @@ import (
 	"github.com/Laisky/one-api/middleware"
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/monitor"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 	rcontroller "github.com/Laisky/one-api/relay/controller"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -45,6 +47,15 @@ func invokeRelayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode
 }
 
 func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
+	// A Live-only model has no REST transport on a Google channel, and Google
+	// itself answers such a request with HTTP 400. Deciding that here, per relay
+	// attempt, keeps the selected channel in scope (a third-party REST bridge for
+	// the same ID is still allowed) while making the failure a caller error: the
+	// adaptor-level guard would surface as a 500, which retries the same
+	// impossible request on further channels and counts against channel health.
+	if err := adaptor.ValidateModelTransport(meta.GetByContext(c)); err != nil {
+		return openai.ErrorWrapper(err, "unsupported_model_transport", http.StatusBadRequest)
+	}
 	var err *model.ErrorWithStatusCode
 	switch relayMode {
 	case relaymode.Realtime:
