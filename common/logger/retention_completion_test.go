@@ -30,3 +30,23 @@ func TestRetentionWorkerCompletionPublishesCountBeforeJoin(t *testing.T) {
 		require.Zero(t, activeAfterJoin, "cohort %d reported completion with active workers", i)
 	}
 }
+
+// TestRetentionWorkerCanceledWaitAllowsNextCohort verifies a canceled wait leaves
+// no asynchronous WaitGroup waiter behind to race the next worker registration.
+// Live workers still report cancellation; completed work succeeds even when the
+// caller's deadline has already expired.
+func TestRetentionWorkerCanceledWaitAllowsNextCohort(t *testing.T) {
+	joinCtx, joinCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer joinCancel()
+	require.NoError(t, WaitForRetentionWorkers(joinCtx))
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	for i := 0; i < 1000; i++ {
+		addRetentionWorker()
+		err := WaitForRetentionWorkers(canceled)
+		retentionWorkerDone()
+		require.ErrorIs(t, err, context.Canceled)
+		require.NoError(t, WaitForRetentionWorkers(canceled))
+		require.Zero(t, retentionWorkersActive.Load())
+	}
+}
