@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -12,8 +13,9 @@ func ResetSetupLogOnceForTests() {
 }
 
 // WaitForLogRetentionCleanerForTests blocks until all retention cleaner goroutines finish.
+// Background has no cancellation or deadline, so the shared join cannot return a timeout.
 func WaitForLogRetentionCleanerForTests() {
-	retentionWorkerGroup.Wait()
+	_ = WaitForRetentionWorkers(context.Background())
 }
 
 // SetRotationNowFuncForTests overrides the rotation clock to make time deterministic in tests.

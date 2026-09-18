@@ -504,6 +504,10 @@ func decreaseTokenQuota(ctx context.Context, id int, quota int64) (err error) {
 	return nil
 }
 
+// PreConsumeTokenQuota validates available user and token balances, then
+// atomically reserves quota from the user and, unless unlimited, the token. The
+// quota must be nonnegative; a failed reservation leaves both balances unchanged.
+// Crossing a reminder threshold may also trigger a best-effort email.
 func PreConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -580,17 +584,10 @@ func PreConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err er
 			}
 		}(reminderEmail, noMoreQuota, userQuota)
 	}
-	if !token.UnlimitedQuota {
-		if err = DecreaseTokenQuota(ctx, tokenId, quota); err != nil {
-			return identity.Tag(
-				errors.Wrapf(err, "decrease quota for token %d", tokenId),
-				token.Ref(), token.OwnerRef())
-		}
-	}
-	if err = DecreaseUserQuota(ctx, token.UserId, quota); err != nil {
-		return identity.Tag(
-			errors.Wrapf(err, "decrease quota for user %d in pre-consume", token.UserId),
-			token.Ref(), token.OwnerRef())
+	// Admission must reserve both balances durably before paid upstream work.
+	// Never put this debit in the optional in-memory batch update queue.
+	if err = reserveTokenQuota(ctx, token, quota); err != nil {
+		return identity.Tag(errors.Wrap(err, "reserve quota before upstream dispatch"), token.Ref(), token.OwnerRef())
 	}
 	return nil
 }
@@ -612,13 +609,8 @@ func PostConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err e
 	if quota == 0 {
 		return nil
 	}
-	if config.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeUserQuota, token.UserId, -quota)
-		if !token.UnlimitedQuota {
-			addNewRecord(BatchUpdateTypeTokenQuota, tokenId, -quota)
-		}
-		return nil
-	}
+	// Balance movements (including stream debits and refunds) must be durable.
+	// Only non-financial aggregates may use the optional in-memory batch queue.
 
 	err = runWithSQLiteBusyRetry(ctx, func() error {
 		return errors.WithStack(DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

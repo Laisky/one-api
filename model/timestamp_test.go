@@ -190,11 +190,17 @@ func TestCreatedAtUpdatedAtFields(t *testing.T) {
 //
 // Return values: none.
 func setupTestDatabase(t *testing.T) {
+	t.Helper()
+	stopUUIDCatchUpWorker()
 	if !databaseHandleUsable(DB) || !databaseHandleUsable(LOG_DB) {
 		// Initialize primary and log databases for tests
 		InitDB()
 		InitLogDB()
 	}
+	// InitDB may launch a production catch-up worker. Ordinary model fixtures
+	// must join it before deleting rows or a later test mutates migration policy.
+	stopUUIDCatchUpWorker()
+	t.Cleanup(stopUUIDCatchUpWorker)
 	require.NotNil(t, DB, "Database connection not available for testing after InitDB")
 
 	// Clean up test data

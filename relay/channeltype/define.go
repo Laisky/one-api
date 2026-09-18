@@ -60,5 +60,6 @@ const (
 	Cerebras
 	DeepInfra
 	Zai
+	Jina
 	Dummy
 )

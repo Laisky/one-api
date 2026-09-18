@@ -34,6 +34,9 @@ import (
 	"github.com/Laisky/one-api/relay/tooling"
 )
 
+// RelayTextHelper validates, dispatches, and bills a text or embeddings request.
+// It returns an API error for request, upstream, or response failures; response
+// errors with usage still proceed to final settlement.
 func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)
@@ -133,7 +136,12 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
 	var tracker *streaming.QuotaTracker
-	if textRequest.Stream {
+	// Jina already reserves its full bounded input/output budget before dispatch.
+	// Its raw receipt (or labelled estimate) must go directly to exact final
+	// settlement, which can record debt. The generic incremental tracker uses an
+	// admission balance check: a larger final receipt would otherwise fail here
+	// after the work was performed and silently leave only the smaller hold paid.
+	if textRequest.Stream && meta.ChannelType != channeltype.Jina {
 		tracker = streaming.NewQuotaTracker(streaming.QuotaTrackerParams{
 			UserID:                 meta.UserId,
 			TokenID:                meta.TokenId,
@@ -301,7 +309,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
-		if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
+		if err := recordZeroCostAfterFailure(c, quotaId, requestId); err != nil {
 			lg.Warn("update user request cost to zero failed", zap.Error(err))
 		}
 		return RelayErrorHandlerWithContext(c, resp)
@@ -397,7 +405,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			userId,
 			username,
 			group,
-			0, // Will be calculated in postConsumeQuota
+			0,
 			usage.PromptTokens,
 			usage.CompletionTokens,
 			userBalance,
@@ -431,7 +439,8 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	})
 
-	return nil
+	markResponseSettlement(c, usage, respErr)
+	return respErr
 }
 
 func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.GeneralOpenAIRequest, adaptor adaptor.Adaptor, systemPromptReset bool) (io.Reader, error) {

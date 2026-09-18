@@ -207,7 +207,13 @@ func CacheGetUserQuota(ctx context.Context, id int) (quota int64, err error) {
 	return quota, nil
 }
 
+// CacheUpdateUserQuota refreshes a positive user's Redis-cached balance from the
+// database when Redis is enabled. It returns an error for an invalid identity or
+// a failed database or cache operation.
 func CacheUpdateUserQuota(ctx context.Context, id int) error {
+	if id <= 0 {
+		return errors.Errorf("invalid user ID for quota refresh: %d", id)
+	}
 	if !common.IsRedisEnabled() {
 		return nil
 	}

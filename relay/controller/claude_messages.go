@@ -75,7 +75,9 @@ func readAndRestoreResponseBody(resp *http.Response) ([]byte, error) {
 	return body, nil
 }
 
-// RelayClaudeMessagesHelper handles Claude Messages API requests with direct pass-through
+// RelayClaudeMessagesHelper validates, routes, and bills a Claude Messages
+// request through either native pass-through or an adaptor conversion. Response
+// errors with usage are returned after final settlement is scheduled.
 func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)
@@ -682,5 +684,6 @@ postConsume:
 		}
 	})
 
-	return nil
+	markResponseSettlement(c, usage, respErr)
+	return respErr
 }

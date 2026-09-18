@@ -39,6 +39,7 @@ export const CHANNEL_OPTIONS = [
   { key: 56, text: 'Cerebras', value: 56, color: 'orange' },
   { key: 57, text: 'DeepInfra', value: 57, color: 'purple' },
   { key: 58, text: 'Z.ai', value: 58, color: 'teal' },
+  { key: 59, text: 'Jina AI', value: 59, color: 'purple' },
   { key: 42, text: 'VertexAI', value: 42, color: 'blue' },
   { key: 43, text: 'Proxy', value: 43, color: 'blue' },
   { key: 44, text: 'SiliconFlow', value: 44, color: 'blue' },

@@ -28,18 +28,13 @@ import (
 const retentionTargetAppLogFiles = "app_log_files"
 
 var (
-	// retentionWorkerGroup tracks the log retention sweep and the disk-pressure
-	// guard, both of which already honor ctx.Done(); the group is what lets a
-	// shutdown prove they stopped instead of assuming it.
-	retentionWorkerGroup sync.WaitGroup
-	// retentionWorkersActive mirrors the group's counter, which sync.WaitGroup
-	// does not expose. Without it "nothing to wait for" and "waited and timed
-	// out" are indistinguishable when the shutdown deadline has already expired:
-	// Wait must run in another goroutine, so the select would pick randomly
-	// between an immediately-closed done channel and an already-cancelled
-	// context, and a deployment that starts no log workers at all (the
-	// zero-configuration standalone default) could report their work as
-	// unfinished at random.
+	// A completion channel belongs to one nonempty worker cohort. All joiners
+	// observe the same signal, so canceled waits leave no helper goroutine that
+	// could race registration of a subsequent cohort.
+	retentionWorkerMu     sync.Mutex
+	retentionWorkerDoneCh chan struct{}
+	// The atomic count remains observable to shutdown diagnostics and tests.
+	// Mutations and the completion-channel transition share retentionWorkerMu.
 	retentionWorkersActive atomic.Int64
 )
 
@@ -49,28 +44,41 @@ var (
 //
 // Return values: none.
 func addRetentionWorker() {
+	retentionWorkerMu.Lock()
+	defer retentionWorkerMu.Unlock()
+	if retentionWorkersActive.Load() == 0 {
+		retentionWorkerDoneCh = make(chan struct{})
+	}
 	retentionWorkersActive.Add(1)
-	retentionWorkerGroup.Add(1)
 }
 
-// retentionWorkerDone records that one log retention worker returned.
+// retentionWorkerDone publishes the finished worker count before releasing
+// joiners. Completing an unregistered worker is a programming error, as with a
+// negative WaitGroup counter.
 //
 // Parameters: none.
 //
 // Return values: none.
 func retentionWorkerDone() {
-	retentionWorkerGroup.Done()
-	retentionWorkersActive.Add(-1)
+	retentionWorkerMu.Lock()
+	defer retentionWorkerMu.Unlock()
+	remaining := retentionWorkersActive.Add(-1)
+	if remaining < 0 {
+		panic("log retention worker completion without registration")
+	}
+	if remaining == 0 {
+		close(retentionWorkerDoneCh)
+	}
 }
 
 // WaitForRetentionWorkers blocks until the log retention sweep and the disk
 // pressure guard have returned, or until ctx expires.
 //
-// It does NOT cancel anything: the caller owns the workers' context and must
-// cancel it first. The returned error carries ctx's cause so the shutdown
-// sequence can attribute the unfinished work to the expired deadline (proposal
-// docs/proposals/20260905_observability-data-tiering.md, Phase 1 / W1, row
-// "Shutdown": "deadlines report unfinished work").
+// It is a shutdown operation: worker admission must already be stopped before
+// calling it. It does NOT cancel anything: the caller owns the workers' context
+// and must cancel it first. The returned error carries ctx's cause so shutdown
+// can attribute unfinished work to the expired deadline. Waiting uses the
+// cohort's completion channel directly, never an abandoned WaitGroup goroutine.
 //
 // Parameters:
 //   - ctx: the shutdown deadline; a nil context is treated as background.
@@ -82,26 +90,19 @@ func WaitForRetentionWorkers(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	retentionWorkerMu.Lock()
 	if retentionWorkersActive.Load() == 0 {
+		retentionWorkerMu.Unlock()
 		return nil
 	}
-
-	done := make(chan struct{})
-	// sync.WaitGroup has no cancellable Wait, so a timed-out call abandons this
-	// goroutine. That is bounded: it ends as soon as the workers do, and the
-	// process is already shutting down.
-	go func() {
-		retentionWorkerGroup.Wait()
-		close(done)
-	}()
+	done := retentionWorkerDoneCh
+	retentionWorkerMu.Unlock()
 
 	select {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		// A worker that returned in the same instant the deadline expired is
-		// finished work, not unfinished work; give the join that last look
-		// before reporting.
+		// Prefer completed work when completion and cancellation coincide.
 		select {
 		case <-done:
 			return nil
