@@ -35,7 +35,14 @@ func TestGeminiLiveChannelUpdateRequiresOperator(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.role != 0 {
-				require.NoError(t, model.DB.Create(&model.User{Id: 910 + tc.role, Username: "live-auth-" + tc.name, Password: "fixture", Role: tc.role, Status: model.UserStatusEnabled}).Error)
+				// Persist distinct values for both unique user-token columns;
+				// empty strings are real indexed values, not SQL NULL.
+				require.NoError(t, model.DB.Create(&model.User{
+					Id: 910 + tc.role, Username: "live-auth-" + tc.name,
+					Password: "fixture", Role: tc.role, Status: model.UserStatusEnabled,
+					AccessToken: fmt.Sprintf("%032d", 910+tc.role),
+					AffCode:     fmt.Sprintf("live-auth-%d", tc.role),
+				}).Error)
 			}
 			engine := gin.New()
 			engine.Use(sessions.Sessions("live-test", cookie.NewStore([]byte("fixture-signing-key-not-a-real-secret"))))
