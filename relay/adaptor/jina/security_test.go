@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/logger"
 	dbmodel "github.com/Laisky/one-api/model"
@@ -40,10 +41,22 @@ func (tr *jinaSecurityTransport) RoundTrip(req *http.Request) (*http.Response, e
 	return &http.Response{StatusCode: status, Header: headers, Body: io.NopCloser(strings.NewReader(`{}`)), Request: req}, nil
 }
 
+// configureJinaSecurityTracing makes these synthetic transport-only contexts
+// explicitly untraced. They do not install database or tracing middleware
+// fixtures; production tracing behavior is tested in its own package.
+// These tests are serial, and cleanup restores the global before parallel tests.
+func configureJinaSecurityTracing(t *testing.T) {
+	t.Helper()
+	previous := config.TraceSinks
+	config.TraceSinks = []string{config.TraceSinkNone}
+	t.Cleanup(func() { config.TraceSinks = previous })
+}
+
 // TestJinaDispatchValidatesEffectiveURL verifies unsafe base and endpoint URLs
 // never dispatch, and final header setup rejects an unsafe override before
 // copying credentials. Local HTTP requires explicit, literal-loopback opt-in.
 func TestJinaDispatchValidatesEffectiveURL(t *testing.T) {
+	configureJinaSecurityTracing(t)
 	for _, tc := range []struct {
 		name, base, override, optIn string
 		allowed                    bool
@@ -99,6 +112,7 @@ func TestJinaDispatchValidatesEffectiveURL(t *testing.T) {
 // automatically follow. Jina's local client policy must not mutate the shared
 // client's behavior for other adaptors, even for a same-host HTTPS redirect.
 func TestJinaRedirectsNeverReplayPaidRequests(t *testing.T) {
+	configureJinaSecurityTracing(t)
 	for _, status := range []int{301, 302, 303, 307, 308} {
 		for _, target := range []string{"https://api.jina.ai/redirected", "http://api.jina.ai/redirected", "https://other.example/redirected"} {
 			transport := &jinaSecurityTransport{status: status, location: target}

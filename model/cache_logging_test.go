@@ -9,9 +9,9 @@ import (
 
 // TestCacheMissLogging verifies that cache misses are handled gracefully without panics
 func TestCacheMissLogging(t *testing.T) {
-	// initialize database for token queries; if unavailable tests still should not panic
-	InitDB()
-	InitLogDB()
+	// Cache misses fall back to SQL; each test must own a usable database fixture
+	// rather than depending on another test being assigned to the same CI shard.
+	setupTestDatabase(t)
 	// Test cache miss scenarios - we can't easily test log levels without complex setup,
 	// but we can verify the functions handle cache misses gracefully
 
@@ -63,6 +63,7 @@ func TestCacheMissLogging(t *testing.T) {
 
 // TestTokenValidationLogging verifies that token validation handles invalid tokens gracefully
 func TestTokenValidationLogging(t *testing.T) {
+	setupTestDatabase(t)
 	t.Run("ValidateUserToken_not_found", func(t *testing.T) {
 		ctx := context.Background()
 		// This should trigger a "token not found" scenario
@@ -79,6 +80,8 @@ func TestTokenValidationLogging(t *testing.T) {
 
 // TestRedisOperationGracefulHandling verifies that Redis operations handle failures gracefully
 func TestRedisOperationGracefulHandling(t *testing.T) {
+	// Redis failures exercise the SQL fallback, not an uninitialized DB handle.
+	setupTestDatabase(t)
 	t.Run("Cache_operations_dont_panic", func(t *testing.T) {
 		ctx := context.Background()
 

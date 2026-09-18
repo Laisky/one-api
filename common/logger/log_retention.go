@@ -59,13 +59,18 @@ func addRetentionWorker() {
 //
 // Return values: none.
 func retentionWorkerDone() {
-	retentionWorkerGroup.Done()
+	// Publish accounting before releasing joiners. Done can wake Wait before
+	// this goroutine runs again; publishing afterward leaves a stale active
+	// count visible even though the shutdown join has reported success.
 	retentionWorkersActive.Add(-1)
+	retentionWorkerGroup.Done()
 }
 
 // WaitForRetentionWorkers blocks until the log retention sweep and the disk
 // pressure guard have returned, or until ctx expires.
 //
+// It is a shutdown operation: worker admission must already be stopped before
+// calling it, as required when reusing a sync.WaitGroup across worker cohorts.
 // It does NOT cancel anything: the caller owns the workers' context and must
 // cancel it first. The returned error carries ctx's cause so the shutdown
 // sequence can attribute the unfinished work to the expired deadline (proposal
@@ -238,7 +243,7 @@ func startRetentionSweep(ctx context.Context, workerLogger glog.Logger, retentio
 //   - lg: the worker's logger; the package-level Logger must not be read from
 //     the worker goroutine.
 //   - retentionDays: age threshold in days; values <= 0 skip the expiry pass.
-//   - logDir: the directory holding log files.
+//   - logDir: the directory to scan.
 //   - maxTotalBytes: the directory budget; values <= 0 skip the budget pass.
 //
 // Return values: none; failures are logged because retention is best-effort.
