@@ -30,6 +30,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/proxy"
 	"github.com/Laisky/one-api/relay/adaptor/replicate"
 	"github.com/Laisky/one-api/relay/adaptor/tencent"
+	"github.com/Laisky/one-api/relay/adaptor/typesafe"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai"
 	"github.com/Laisky/one-api/relay/adaptor/xai"
 	"github.com/Laisky/one-api/relay/adaptor/xunfei"
@@ -109,6 +110,8 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &zai.Adaptor{}
 	case apitype.Jina:
 		return &jina.Adaptor{}
+	case apitype.TypeSafe:
+		return &typesafe.Adaptor{}
 	}
 
 	return nil

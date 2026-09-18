@@ -310,6 +310,14 @@ export const CHANNEL_TYPES: ChannelType[] = [
       'Jina Search Foundation API: text and multimodal embeddings, rerank, and jina-ocr-v1 chat. Responses and Claude Messages use chat conversion; no image generation.',
   },
   {
+    key: 60,
+    text: 'TypeSafe',
+    value: 60,
+    color: 'teal',
+    description:
+      'TypeSafe System One evaluation (noul, choice, score) via /v1/systemone; input-token pricing and free output. Not a chat or streaming API.',
+  },
+  {
     key: 42,
     text: 'VertexAI',
     value: 42,

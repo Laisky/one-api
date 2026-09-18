@@ -29,6 +29,7 @@ const (
 	EndpointRealtime           Endpoint = Endpoint(relaymode.Realtime)
 	EndpointVideos             Endpoint = Endpoint(relaymode.Videos)
 	EndpointOCR                Endpoint = Endpoint(relaymode.OCR)
+	EndpointSystemOne          Endpoint = Endpoint(relaymode.SystemOne)
 )
 
 // EndpointInfo contains metadata about an endpoint for display purposes.
@@ -58,6 +59,7 @@ func AllEndpoints() []EndpointInfo {
 		{ID: EndpointRealtime, Name: "realtime", Description: "Realtime API (WebSocket)", Path: "/v1/realtime"},
 		{ID: EndpointVideos, Name: "videos", Description: "Video Generation API", Path: "/v1/videos"},
 		{ID: EndpointOCR, Name: "ocr", Description: "OCR / Layout Parsing API", Path: "/api/paas/v4/layout_parsing"},
+		{ID: EndpointSystemOne, Name: "systemone", Description: "TypeSafe System One Evaluation API", Path: "/v1/systemone"},
 	}
 }
 
@@ -440,6 +442,9 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
+	case TypeSafe:
+		// Typed evaluation is not a generative conversation API.
+		return []Endpoint{EndpointSystemOne}
 	case Custom, OpenAICompatible:
 		return openAICompatibleBasic
 	case ClaudeCompatible:
