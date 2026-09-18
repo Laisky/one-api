@@ -1,0 +1,40 @@
+{
+  "modelApi": {
+    "title": "API Usage",
+    "description": "Replace YOUR_API_KEY with a One API token. Requests follow your token's channel routing. Model availability and optional parameters depend on the configured provider.",
+    "format": "API format",
+    "endpoint": "API endpoint",
+    "request": "Request example (curl)",
+    "response": "Response example",
+    "copyEndpoint": "Copy API endpoint",
+    "copyRequest": "Copy curl request",
+    "copyResponse": "Copy response example",
+    "illustrative": "Illustrative, shortened responses only. IDs, generated content, token usage and embedding dimensions vary.",
+    "formats": {
+      "chat": "Chat Completions",
+      "responses": "Responses",
+      "messages": "Claude Messages",
+      "embeddings": "Embeddings",
+      "rerank": "Reranking",
+      "image": "Image generation",
+      "image_edit": "Image editing",
+      "video": "Video generation",
+      "transcription": "Audio transcription",
+      "translation": "Audio translation",
+      "speech": "Speech synthesis",
+      "realtime": "Realtime WebSocket handshake",
+      "moderation": "Moderation",
+      "ocr": "Document OCR",
+      "clone": "Voice cloning",
+      "completions": "Legacy Completions"
+    },
+    "notes": {
+      "upload": "Replace audio.wav or image.png with a local file supported by the model. curl sets the multipart boundary automatically.",
+      "video": "Video generation is asynchronous. Use the returned ID with GET /v1/videos/{video_id} to check status and GET /v1/videos/{video_id}/content to retrieve the result.",
+      "realtime": "This curl example verifies only the WebSocket upgrade and stops after 10 seconds. Use a WebSocket client to exchange realtime events; curl does not run a full conversation.",
+      "voice": "The audio response is saved to speech.wav. Replace YOUR_VOICE_ID, when present, with a voice supported by the model.",
+      "document": "Replace the example document URL with an accessible document URL or an input supported by this provider.",
+      "clone": "Replace YOUR_AUDIO_FILE_ID with a provider reference-audio file ID and text with its exact transcript. The returned voice ID can be used for speech synthesis."
+    }
+  }
+}

@@ -15,6 +15,7 @@ import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { ModelApiExamples } from './ModelApiExamples';
 
 // ---- Types matching the backend ModelDisplayInfo ----
 
@@ -199,7 +200,12 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
     </span>
   );
 
-  const content = <PricingContent modelName={modelName} data={data} channelName={channelName} tr={tr} locale={i18n.language} />;
+  const content = (
+    <div className="min-w-0 space-y-5">
+      <ModelApiExamples key={modelName} modelName={modelName} data={data} />
+      <PricingContent modelName={modelName} data={data} channelName={channelName} tr={tr} locale={i18n.language} />
+    </div>
+  );
 
   if (isMobile) {
     return (

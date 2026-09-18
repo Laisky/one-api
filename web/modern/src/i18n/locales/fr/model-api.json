@@ -1,0 +1,40 @@
+{
+  "modelApi": {
+    "title": "Utilisation de l’API",
+    "description": "Remplacez YOUR_API_KEY par un jeton One API. Les requêtes suivent le routage des canaux de ce jeton. La disponibilité des modèles et les paramètres facultatifs dépendent du fournisseur configuré.",
+    "format": "Format d’API",
+    "endpoint": "Point de terminaison de l’API",
+    "request": "Exemple de requête (curl)",
+    "response": "Exemple de réponse",
+    "copyEndpoint": "Copier le point de terminaison de l’API",
+    "copyRequest": "Copier la requête curl",
+    "copyResponse": "Copier l’exemple de réponse",
+    "illustrative": "Réponses abrégées à titre indicatif uniquement. Les identifiants, le contenu généré, le nombre de jetons et les dimensions des vecteurs varient.",
+    "formats": {
+      "chat": "Chat Completions",
+      "responses": "Responses",
+      "messages": "Claude Messages",
+      "embeddings": "Représentations vectorielles",
+      "rerank": "Reclassement",
+      "image": "Génération d’images",
+      "image_edit": "Modification d’images",
+      "video": "Génération de vidéos",
+      "transcription": "Transcription audio",
+      "translation": "Traduction audio",
+      "speech": "Synthèse vocale",
+      "realtime": "Négociation WebSocket en temps réel",
+      "moderation": "Modération",
+      "ocr": "OCR de documents",
+      "clone": "Clonage vocal",
+      "completions": "Ancienne API Completions"
+    },
+    "notes": {
+      "upload": "Remplacez audio.wav ou image.png par un fichier local pris en charge par le modèle. curl définit automatiquement la limite multipart.",
+      "video": "La génération vidéo est asynchrone. Utilisez l’identifiant renvoyé avec GET /v1/videos/{video_id} pour vérifier l’état et GET /v1/videos/{video_id}/content pour récupérer le résultat.",
+      "realtime": "Cet exemple curl vérifie uniquement la mise à niveau WebSocket et s’arrête après 10 secondes. Utilisez un client WebSocket pour échanger des événements en temps réel ; curl ne mène pas une conversation complète.",
+      "voice": "La réponse audio est enregistrée dans speech.wav. Remplacez YOUR_VOICE_ID, s’il est présent, par une voix prise en charge par le modèle.",
+      "document": "Remplacez l’URL du document d’exemple par une URL accessible ou par une entrée prise en charge par ce fournisseur.",
+      "clone": "Remplacez YOUR_AUDIO_FILE_ID par l’identifiant du fichier audio de référence du fournisseur et text par sa transcription exacte. L’identifiant vocal renvoyé peut servir à la synthèse vocale."
+    }
+  }
+}
