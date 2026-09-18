@@ -165,14 +165,9 @@ func prepareLiveSetup(data []byte, actual, original string) ([]byte, error) {
 		}
 	}
 	if raw := setup["tools"]; raw != nil {
-		var tools []map[string]json.RawMessage
-		if err := json.Unmarshal(raw, &tools); err != nil {
-			return nil, errors.Wrap(ErrLiveProtocol, "invalid Live tools")
-		}
-		for _, tool := range tools {
-			if len(tool) != 1 || tool["functionDeclarations"] == nil {
-				return nil, errors.Wrap(ErrLiveProtocol, "only client-executed function tools are enabled; paid built-in tools require separate usage accounting")
-			}
+		setup["tools"], err = prepareLiveTools(raw, actual)
+		if err != nil {
+			return nil, err
 		}
 	}
 	setup["generationConfig"], err = json.Marshal(generation)

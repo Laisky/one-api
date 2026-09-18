@@ -67,6 +67,7 @@ func (g *GeminiLedger) Observe(message []byte) error {
 		g.last, g.waiting = nil, false
 		g.active = true
 	}
+	wasInProgress := g.inProgress
 	status := event.Status
 	if event.Content != nil && event.Content.Status != "" {
 		status = event.Content.Status
@@ -84,6 +85,11 @@ func (g *GeminiLedger) Observe(message []byte) error {
 			g.active = true
 		}
 	}
+	// An independent IDLE event, without a second spoken turnComplete, also
+	// ends Extended Thinking background work. Repeated idle notifications do
+	// not create phantom turns. A later receipt can fill the waiting boundary.
+	terminal := (event.Content != nil && event.Content.Complete && !g.inProgress) ||
+		(status == "IDLE" && wasInProgress)
 	var observationErr error
 	if event.Usage != nil {
 		r, err := DecodeGeminiUsage(event.Usage)
@@ -92,7 +98,6 @@ func (g *GeminiLedger) Observe(message []byte) error {
 			observationErr = g.Ledger.recordIssue(err)
 		} else {
 			g.invalid = false
-			terminal := event.Content != nil && event.Content.Complete
 			if g.last != nil && !g.active && !g.waiting && !terminal {
 				// Do not globally deduplicate equal token counts. Stage the
 				// snapshot until a new turn boundary identifies its scope.
@@ -107,7 +112,7 @@ func (g *GeminiLedger) Observe(message []byte) error {
 			}
 		}
 	}
-	if event.Content != nil && event.Content.Complete && !g.inProgress {
+	if terminal {
 		if g.pending != nil {
 			return g.commit()
 		}
