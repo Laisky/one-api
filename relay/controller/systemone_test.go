@@ -36,7 +36,7 @@ func systemOneContext(t *testing.T, base string, balance int64, unlimited bool, 
 	oldBatch := config.BatchUpdateEnabled
 	config.BatchUpdateEnabled = false
 	t.Cleanup(func() { config.BatchUpdateEnabled = oldBatch })
-	oldLogEnabled := config.LogConsumeEnabled.Load()
+	oldLogEnabled := config.IsLogConsumeEnabled()
 	config.SetLogConsumeEnabled(true)
 	t.Cleanup(func() { config.SetLogConsumeEnabled(oldLogEnabled) })
 	require.NoError(t, model.LOG_DB.AutoMigrate(&model.Log{}))
