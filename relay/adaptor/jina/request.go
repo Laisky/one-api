@@ -97,6 +97,11 @@ func (a *Adaptor) ConvertRerankRequest(c *gin.Context, request *model.RerankRequ
 	if request == nil {
 		return nil, errors.New("jina rerank request is nil")
 	}
+	// Reuse the model-aware admission contract at the conversion boundary too.
+	// Direct adaptor callers must not send image work to a text-only model.
+	if _, err := QuoteRerank(request); err != nil {
+		return nil, errors.Wrap(err, "validate Jina rerank model and input")
+	}
 	out, err := nativeOptions(c, nil, rerankOptions)
 	if err != nil {
 		return nil, err

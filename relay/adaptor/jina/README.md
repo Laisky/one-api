@@ -13,6 +13,20 @@ select the required models. The default base URL is `https://api.jina.ai`;
 a trailing `/v1` is also accepted. Clients continue using their **one-api token**,
 not the upstream key. Existing channel IDs and stored channels are unchanged.
 
+Jina base URLs and every endpoint override require **HTTPS**. Validation applies
+when creating/updating/loading channel configuration and again at dispatch,
+before credentials are attached to the final request URL. Base URLs cannot have
+queries; endpoint overrides may. Userinfo and URL fragments are rejected.
+Automatic redirects are disabled for Jina, including HTTPS-to-HTTPS redirects:
+configure the final endpoint rather than replaying a potentially paid request.
+Other providers retain their existing redirect policy.
+
+For local development only, `ONEAPI_JINA_ALLOW_LOOPBACK_HTTP=true` explicitly
+permits HTTP to literal loopback IPs such as `127.0.0.1` or `[::1]`. It does not
+permit HTTP to private/public networks or DNS names, including `localhost`.
+The exception is disabled by default. Tests use local TLS servers or explicitly
+exercise this exception; production TLS validation is not disabled for tests.
+
 | Client endpoint | Upstream behavior |
 | --- | --- |
 | `/v1/embeddings` | Native text/image embeddings with conservative admission |
@@ -45,13 +59,14 @@ not the catalog's `jina-ai/` prefix.
 | Later rerankers | `jina-reranker-v2-base-multilingual`, `jina-reranker-m0`, `jina-reranker-v3`, `jina-reranker-v3.5` | 0.05 |
 | OCR chat | `jina-ocr-v1` | 0.50 input; 2.00 output |
 
-Search models are **token-priced**, not billed per request. The response's
-`usage.total_tokens` is authoritative for all search input, including image
-processing and reranking work. It is normalized into `prompt_tokens` for the
-existing billing pipeline. Missing, malformed, duplicate, negative or all-zero
-usage on an admitted nonempty request is **not free**: the conservative reservation
-is retained and explicitly marked estimated. An upstream-response error is also
-reported; a stream already started cannot change its HTTP status retroactively.
+Search models are **token-priced**, not billed per request. A verified response's
+`usage.total_tokens` accounts for all search input, including image processing
+and reranking work. It is normalized into `prompt_tokens` for the existing
+billing pipeline. Missing, malformed, duplicate, negative, out-of-range or
+all-zero usage on an admitted nonempty request is **not free**: a conservative
+charge is retained and explicitly marked estimated. An upstream-response error
+is also reported. Once output has started, its HTTP status cannot change and the
+gateway does not append an unrelated error JSON object or replay the request.
 Channel-specific pricing overrides remain available; published defaults are not
 a guarantee of an individual account's negotiated or prepaid-credit costs.
 
@@ -71,6 +86,7 @@ v4 multi-vector/dimension incompatibility, remain validated by Jina.
 
 Rerank accepts strings and native `{ "text": "..." }` / `{ "image": "..." }`
 documents; image queries and documents require a supporting model such as m0.
+The model-aware check runs at admission and direct adaptor conversion.
 Native `return_documents`, `max_doc_length` and `return_embeddings` are forwarded
 from the top level. The legacy `max_tokens_per_doc` field maps to `max_doc_length`
 for v3/v3.5 only. Other adaptors must explicitly opt into structured rerank input;
@@ -101,17 +117,30 @@ with `billing_estimated`, `estimated_charge` and `billing_estimate_reason`.
 These allowances are conservative policy estimates, not a guarantee of an
 arbitrary or changing provider invoice. Ambiguous calls require reconciliation.
 
-Documented authentication/routing/validation/rate-limit rejections are refunded
-synchronously before a retry. Timeouts, 5xx responses, broken streams and missing
-usage after possible dispatch retain the reservation and **do not automatically
-replay paid work**. Failed refunds block replay too. Client cancellation does not
-cancel settlement. Known consumed work that exceeds the remaining balance is
-recorded as debt instead of silently discarded; future admission remains guarded.
+The admission token limit also bounds **certifiable** receipt counters. Larger
+counters are unverified evidence, not a successful measured receipt. They are
+retained for conservative decimal settlement rather than discarded: a reservation
+is not a cap forgiving higher observed costs. Final arithmetic never falls back
+to an unchecked floating-point result. Costs above the monetary representability
+ceiling (`1 << 52` quota units) retain that bounded estimated amount and emit a
+reconciliation error; this is not a claim to represent an arbitrarily large bill.
+OCR receipt certification also requires no active body read. Closing an active
+reader leaves the receipt uncertain even before it returns later bytes or errors.
+
+Requests rejected locally before dispatch are refundable. After dispatch, only
+classified **pre-inference admission rejections** (401, 403, 404, 422 and 429)
+qualify for a synchronous refund before retry. A generic **400 response is not
+proof of no cost** and is not in that refundable class. Timeouts, 5xx responses,
+broken streams and missing usage after possible dispatch retain a conservative
+charge and **do not automatically replay paid work**. Failed refunds block replay
+too. Client cancellation does not cancel settlement. Known consumed work that
+exceeds the remaining balance is recorded as debt instead of silently discarded;
+future admission remains guarded.
 
 Only verified catalog models, bounded inputs and flat token pricing are admitted.
 An intentional zero group/model rate remains free; invalid, non-finite or
-unrepresentable rates are rejected. Tiered/per-call Jina overrides are rejected
-until their reservation contracts are implemented. See the
+unrepresentable admission rates are rejected. Tiered/per-call Jina overrides are
+rejected until their reservation contracts are implemented. See the
 [billing audit](../../../docs/audits/20260917-jina-billing.md) for tests and
 important system-wide residual risks, including crash recovery and non-Jina paths.
 

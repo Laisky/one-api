@@ -101,19 +101,23 @@ func settleJinaRetainedReservation(c *gin.Context) bool {
 	return true
 }
 
-// exactJinaUsageQuota uses decimal arithmetic for the admitted flat price
-// contract. Unsupported receipt arithmetic retains the larger existing charge
-// or reservation and marks it estimated instead of silently returning zero.
+// exactJinaUsageQuota prices Jina receipt evidence using checked decimal
+// arithmetic, never the shared float fallback. Oversized receipts remain labelled
+// estimates. Unrepresentable fees retain a bounded charge and require review.
 func exactJinaUsageQuota(ctx context.Context, m *metalib.Meta, usage *relaymodel.Usage,
 	calculated, reserved int64, inputRatio, completionRatio, groupRatio float64) int64 {
 	if m.ChannelType != channeltype.Jina {
 		return calculated
 	}
-	amount, err := jina.BudgetQuota(jina.BillingBudget{Input: usage.PromptTokens, Output: usage.CompletionTokens}, inputRatio, completionRatio, groupRatio)
+	if usage.PromptTokens > jina.MaxBillingTokens || usage.CompletionTokens > jina.MaxBillingTokens ||
+		(usage.PromptTokens >= 0 && usage.CompletionTokens > jina.MaxBillingTokens-usage.PromptTokens) {
+		usage.BillingEstimateReason = "jina_oversized_receipt_evidence"
+	}
+	amount, err := jina.ReceiptQuota(usage.PromptTokens, usage.CompletionTokens, inputRatio, completionRatio, groupRatio)
 	if err != nil {
-		usage.BillingEstimateReason = "jina_unrepresentable_usage_retained_reservation"
+		usage.BillingEstimateReason = "jina_unrepresentable_receipt_requires_reconciliation"
 		gmw.GetLogger(ctx).Error("jina usage cannot be settled exactly; manual reconciliation required", zap.Error(err))
-		return max(calculated, reserved)
+		return max(amount, reserved)
 	}
 	return amount
 }

@@ -77,15 +77,16 @@ func uniqueObject(body []byte) (map[string]json.RawMessage, error) {
 	return fields, nil
 }
 
-// tokenCount reads a required nonnegative integer from a receipt. Null, strings,
-// fractions, missing fields and overflowing integers are accounting errors.
+// tokenCount reads a required bounded integer from a verifiable receipt. Larger
+// values are unverified evidence, never normalized successful usage. The separate
+// evidence path retains them for checked, explicitly estimated settlement.
 func tokenCount(fields map[string]json.RawMessage, key string) (int, error) {
 	var count *int
 	if err := json.Unmarshal(fields[key], &count); err != nil {
 		return 0, errors.Wrap(err, "decode jina token count")
 	}
-	if count == nil || *count < 0 {
-		return 0, errors.New("missing or negative jina token count")
+	if count == nil || *count < 0 || *count > MaxBillingTokens {
+		return 0, errors.New("missing, negative or out-of-range jina token count")
 	}
 	return *count, nil
 }
@@ -98,21 +99,36 @@ type receiptBody struct {
 	closeOnce sync.Once
 	closeErr  error
 	io.ReadCloser
-	stream     bool
-	pending    []byte
-	receipt    *model.Usage
-	invalid    bool
-	done       bool
-	eof        bool
-	finalUsage bool
+	stream      bool
+	pending     []byte
+	receipt     *model.Usage
+	invalid     bool
+	done        bool
+	eof         bool
+	finalUsage  bool
+	activeReads int
+	closed      bool
 }
 
 // Read observes bytes returned by the wrapped body and preserves its read result.
-// A positive receipt is not final while the transport can still deliver paid work.
+// Register before the blocking transport call so snapshot cannot certify stale
+// usage while a read is still in flight. Closing prevents any new transport read.
 func (b *receiptBody) Read(dst []byte) (int, error) {
+	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return 0, errors.WithStack(io.ErrClosedPipe)
+	}
+	if b.activeReads != 0 {
+		// Concurrent callers could reorder fragments. Such evidence is not exact.
+		b.invalid = true
+	}
+	b.activeReads++
+	b.mu.Unlock()
 	n, err := b.ReadCloser.Read(dst)
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	defer func() { b.activeReads-- }()
 	if b.stream {
 		b.observeLines(dst[:n])
 	} else if len(b.pending)+n <= 8*1024*1024 {
@@ -140,12 +156,16 @@ func (b *receiptBody) Read(dst []byte) (int, error) {
 }
 
 // Close collects buffered non-streaming evidence, then closes the transport.
-// Closing alone never certifies EOF or an upstream stream-completion sentinel.
-// Repeated calls release the underlying response exactly once and return the
-// same error.
+// Closing an active read makes the receipt permanently uncertain; it must not
+// authorize a refund before that reader reports its final bytes or error.
+// Repeated calls close the transport once and return the same error.
 func (b *receiptBody) Close() error {
 	b.closeOnce.Do(func() {
 		b.mu.Lock()
+		b.closed = true
+		if b.activeReads != 0 {
+			b.invalid = true
+		}
 		if !b.stream && !b.eof {
 			b.observeJSON(b.pending)
 		}
@@ -301,7 +321,7 @@ func handleOCRResponse(c *gin.Context, resp *http.Response, m *meta.Meta) (*mode
 func (b *receiptBody) snapshot() (*model.Usage, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	invalid := b.invalid || (b.stream && (!b.done || !b.finalUsage)) || (!b.stream && !b.eof)
+	invalid := b.invalid || b.activeReads != 0 || (b.stream && (!b.done || !b.finalUsage)) || (!b.stream && !b.eof)
 	if b.receipt == nil {
 		return nil, invalid
 	}

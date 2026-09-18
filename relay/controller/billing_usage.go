@@ -10,10 +10,11 @@ import (
 const responseSettlementKey = "billing_response_settlement_started"
 
 // BillingAllowsRetry reports whether another upstream attempt can be made
-// without replaying a response already submitted for settlement or an uncertain
-// paid Jina call. It does not claim that asynchronous settlement has committed.
+// without replaying committed output, a response submitted for settlement or an
+// uncertain paid Jina call. It does not certify that settlement has committed.
 func BillingAllowsRetry(c *gin.Context) bool {
-	return c != nil && !c.GetBool(responseSettlementKey) && !JinaAttemptMayHaveCost(c)
+	return c != nil && (c.Writer == nil || !c.Writer.Written()) &&
+		!c.GetBool(responseSettlementKey) && !JinaAttemptMayHaveCost(c)
 }
 
 // markResponseSettlement records an errored response with usage before

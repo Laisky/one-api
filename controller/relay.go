@@ -49,7 +49,6 @@ func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 	switch relayMode {
 	case relaymode.Realtime:
 		// For Phase 1, route through text helper which will delegate to adaptor based on meta.Mode
-		// Realtime adaptor code will handle websocket upgrade and upstream pass-through.
 		err = rcontroller.RelayTextHelper(c)
 	case relaymode.ImagesGenerations,
 		relaymode.ImagesEdits:
@@ -354,7 +353,6 @@ func Relay(c *gin.Context) {
 
 		// Debug logging to track which channels are being added to failed list (only when debug is enabled)
 		if config.DebugEnabled {
-			// channelId is the currently bound channel; only the other failed ones need naming.
 			lg.Info("Debug: Added channel to failed channels list",
 				dbmodel.ChannelRefsField("total_failed_channels", getChannelIds(failedChannels)))
 		}
@@ -392,10 +390,7 @@ func Relay(c *gin.Context) {
 		// *bizErr synchronously at spawn time (see goProcessChannelRelayError), so
 		// rewriting Message here no longer races the error-processing goroutine.
 		bizErr.Error.Message = helper.MessageWithRequestId(bizErr.Error.Message, requestId)
-		c.JSON(bizErr.StatusCode, gin.H{
-			"error": bizErr.Error,
-		})
-		if shouldDebugLog {
+		if writeRelayFinalError(c, bizErr) && shouldDebugLog {
 			rcontroller.LogClientResponse(c, "client error response sent")
 		}
 	}
@@ -434,12 +429,10 @@ func retrySelectionPolicyFor(statusCode int) retrySelectionPolicy {
 //
 // The selector is always asked for the HIGHEST priority tier among the
 // remaining candidates (ignoreFirstPriority=false). Both routing paths recompute
-// the tier boundary AFTER exclusions, so once the failed channels are excluded
-// the "highest remaining tier" is precisely the next tier the operator wants
-// tried. Asking to skip that tier (ignoreFirstPriority=true, as the 429 path
-// used to) double-skips: with A(10) rate limited and excluded, the highest
-// remaining tier is B(5), which was then skipped in favour of C(0), producing
-// A → C → B instead of A → B → C.
+// the tier boundary AFTER exclusions, so the "highest remaining tier" is precisely
+// the next tier the operator wants tried. Asking to skip that tier (ignoreFirstPriority=true,
+// as the 429 path used to) double-skips: with A(10) rate limited and excluded, the highest
+// remaining tier is B(5), which was then skipped in favour of C(0), producing A → C → B.
 //
 // Returns the selected channel, or a wrapped error whose text still carries the
 // selector's "no channels available" / "after exclusions" message so

@@ -24,6 +24,12 @@ const (
 	channelAPIKeyPlaceholder = "{{key}}"
 )
 
+// RedirectPolicyAdaptor optionally constrains redirects for one provider without
+// mutating the shared HTTP client. CheckRedirect has net/http.Client semantics.
+type RedirectPolicyAdaptor interface {
+	CheckRedirect(req *http.Request, via []*http.Request) error
+}
+
 // SetupCommonRequestHeader copies shared downstream headers into the upstream
 // request before provider-specific and channel-specific headers are applied.
 // Parameters: c is the incoming Gin context, req is the outbound upstream
@@ -176,7 +182,11 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	tracing.RecordTraceTimestamp(c, model.TimestampRequestForwarded)
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 
-	resp, err := DoRequest(c, req)
+	var redirectPolicy func(*http.Request, []*http.Request) error
+	if provider, ok := a.(RedirectPolicyAdaptor); ok {
+		redirectPolicy = provider.CheckRedirect
+	}
+	resp, err := doRequestWithRedirectPolicy(c, req, redirectPolicy)
 	if err != nil {
 		// Return error without logging - let the calling ErrorWrapper function handle logging
 		// This prevents duplicate logging when ErrorWrapper also logs the error
@@ -196,7 +206,16 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	return resp, nil
 }
 
+// DoRequest sends req using the shared client and its existing redirect policy.
+// It returns the upstream response or a wrapped transport error.
 func DoRequest(c *gin.Context, req *http.Request) (*http.Response, error) {
+	return doRequestWithRedirectPolicy(c, req, nil)
+}
+
+// doRequestWithRedirectPolicy optionally overrides redirects on a client copy,
+// retaining its transport, connection pool and timeout. Other providers' shared
+// client configuration remains unchanged, including under concurrent requests.
+func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPolicy func(*http.Request, []*http.Request) error) (*http.Response, error) {
 	// keep logger from context if available
 	httpClient := client.HTTPClient
 	if httpClient == nil {
@@ -205,6 +224,11 @@ func DoRequest(c *gin.Context, req *http.Request) (*http.Response, error) {
 		if httpClient == nil {
 			httpClient = http.DefaultClient
 		}
+	}
+	if redirectPolicy != nil {
+		localClient := *httpClient
+		localClient.CheckRedirect = redirectPolicy
+		httpClient = &localClient
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {

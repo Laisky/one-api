@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
@@ -64,6 +65,9 @@ func (a *Adaptor) GetRequestURL(m *meta.Meta) (string, error) {
 	if m == nil {
 		return "", errors.New("jina request metadata is nil")
 	}
+	if err := channeltype.ValidateJinaURLs(m.BaseURL, m.Config.EndpointURLs); err != nil {
+		return "", errors.Wrap(err, "validate Jina routing configuration")
+	}
 	var path string
 	switch m.Mode {
 	case relaymode.Embeddings:
@@ -82,11 +86,25 @@ func (a *Adaptor) GetRequestURL(m *meta.Meta) (string, error) {
 	return strings.TrimSuffix(base, "/v1") + path, nil
 }
 
-// SetupRequestHeader applies the channel's Bearer key, never the caller's key.
+// SetupRequestHeader validates the final URL after endpoint overrides, then
+// applies the channel's Bearer key. An unsafe URL never receives credentials.
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, m *meta.Meta) error {
+	if req == nil || req.URL == nil || m == nil {
+		return errors.New("Jina request or metadata is missing")
+	}
+	if err := channeltype.ValidateJinaURL(req.URL.String()); err != nil {
+		return errors.Wrap(err, "validate final Jina dispatch URL")
+	}
 	adaptor.SetupCommonRequestHeader(c, req, m)
 	req.Header.Set("Authorization", "Bearer "+m.APIKey)
 	return nil
+}
+
+// CheckRedirect rejects every automatic redirect of a paid Jina request.
+// This prevents credential forwarding, HTTPS downgrades and unaccounted replay;
+// operators must configure the final HTTPS endpoint instead.
+func (a *Adaptor) CheckRedirect(_ *http.Request, _ []*http.Request) error {
+	return errors.New("automatic redirects are disabled for paid Jina requests")
 }
 
 // ConvertImageRequest rejects image generation; Jina's images are inputs only.

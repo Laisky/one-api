@@ -105,10 +105,10 @@ func jinaAuditAssertLedger(t *testing.T, requestID string, start, charge int64, 
 func TestJinaBillingHTTPBehavior(t *testing.T) {
 	for _, tc := range []struct {
 		name, path, body, actual, response string
-		unlimited                          bool
-		group, override                    float64
-		charge                             int64
-		wantErr, estimated                 bool
+		unlimited                        bool
+		group, override                  float64
+		charge                           int64
+		wantErr, estimated               bool
 	}{
 		{"embedding", "/v1/embeddings", `{"model":"alias","input":["hello"]}`, "jina-embeddings-v3", `{"data":[{"embedding":[0.1]}],"usage":{"total_tokens":123}}`, false, 1, -1, 4, false, false},
 		{"unlimited", "/v1/embeddings", `{"model":"alias","input":["hello"]}`, "jina-embeddings-v3", `{"data":[],"usage":{"total_tokens":123}}`, true, 1, -1, 4, false, false},
@@ -125,7 +125,7 @@ func TestJinaBillingHTTPBehavior(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			const balance = int64(100000000)
 			observations := make(chan jinaAuditObservation, 1)
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var user model.User
 				var token model.Token
 				var body map[string]any
@@ -195,7 +195,7 @@ func TestJinaBillingAdmissionRejectsUnboundedWork(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var calls atomic.Int32
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1); w.WriteHeader(500) }))
+			upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1); w.WriteHeader(500) }))
 			defer upstream.Close()
 			previous := client.HTTPClient
 			client.HTTPClient = upstream.Client()
@@ -252,7 +252,7 @@ func TestJinaBillingOCRFormats(t *testing.T) {
 				t.Run(fmt.Sprintf("%s/stream=%v/receipt=%v", path, stream, receipt), func(t *testing.T) {
 					const balance = int64(1000000)
 					observed := make(chan map[string]any, 1)
-					upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 						var body map[string]any
 						if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 							w.WriteHeader(400)
@@ -341,7 +341,7 @@ func TestJinaBillingOCRFormats(t *testing.T) {
 // refund when preparing a safe cross-channel retry.
 func TestJinaBillingRejectionRefundsOnce(t *testing.T) {
 	const balance = int64(1000000)
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		if _, err := io.WriteString(w, `{"error":{"message":"invalid API key","type":"authentication_error"}}`); err != nil {
