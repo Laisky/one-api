@@ -325,11 +325,15 @@ func RelayRealtimeSessions(c *gin.Context) {
 	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
 
 	if relayMeta.APIType != apitype.OpenAI || isGeminiLiveRequest(relayMeta) {
-		// GLM-Realtime authenticates with the API key directly over WebSocket
-		// and has no ephemeral-session (WebRTC) minting surface.
+		// Keep provider-specific remediation accurate even when a Gemini
+		// OpenAI-compatible channel has the OpenAI API type.
+		message := "realtime sessions (ephemeral tokens) are only supported for OpenAI channels; Zhipu GLM-Realtime connects directly with the API key"
+		if isGeminiLiveRequest(relayMeta) {
+			message = "Gemini Live does not support ephemeral-session/WebRTC token minting through one-api; connect directly to /v1/realtime over WebSocket with a one-api bearer token and Gemini-native frames"
+		}
 		bizErr := &rmodel.ErrorWithStatusCode{
 			Error: rmodel.Error{
-				Message:  "realtime sessions (ephemeral tokens) are only supported for OpenAI channels; Zhipu GLM-Realtime connects directly with the API key",
+				Message:  message,
 				Type:     rmodel.ErrorTypeOneAPI,
 				Code:     "realtime_sessions_unsupported",
 				RawError: errors.New("realtime sessions unsupported for this channel"),

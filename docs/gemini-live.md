@@ -59,6 +59,25 @@ constructed from the channel base URL or its existing endpoint override. TLS is
 required except for literal loopback addresses used by tests. Authentication is
 sent as `x-goog-api-key`, never in the URL or by forwarding the user's token.
 
+### Browser handshakes and operator trust
+
+Browser clients using subprotocol authentication must also offer a non-secret
+protocol, for example `gemini-live` alongside
+`openai-insecure-api-key.<ONE_API_TOKEN>`. The upgrade reuses the existing
+Realtime negotiation helper: it selects a non-authentication protocol and never
+echoes or forwards the authentication protocol to Google. The auth-only case
+intentionally selects no protocol and is not a supported browser handshake.
+The selected label does not translate Gemini frames into OpenAI events.
+
+`base_url` and `endpoint_urls.realtime` are trusted channel-administrator
+configuration. The `/api/channel` management route requires `AdminAuth`;
+ordinary relay callers cannot choose an upstream destination through query,
+body or forwarded-host headers. Administrators intentionally may configure
+private gateways. They must be trusted with both channel keys and server egress:
+this feature is **not** a network sandbox for hostile administrators. Restrict
+admin access and enforce deployment egress rules when internal destinations must
+be prohibited. A Google-host-only restriction would break supported gateways.
+
 ## Pricing: do not copy GPT-Realtime's formula blindly
 
 Published standard paid-tier prices for both supported models, **USD per million
@@ -152,6 +171,13 @@ remain unresolved without a later receipt; clients should end input and wait
 for the final usage/turn boundary before closing. Inspect
 `realtime_billing_complete`, billing issues and estimated-charge metadata.
 
+A rejected receipt at a committed boundary permanently marks that turn as
+incomplete, even when a later turn has valid usage. Its earlier measured snapshot
+is retained, not silently presented as the complete final amount. The original
+decode error also reaches the socket pump so metering can stop the session.
+A corrected snapshot within the same still-unfinished turn can repair that
+collector state; a different turn cannot. Neither path adds transcript charges.
+
 Gemini reservations use a 120-second allowance at 25 audio tokens/second in both
 directions, priced by the actual resolver. This is not a minimum session fee.
 Unlike the historical trusted-user optimization, Live retains this reservation
@@ -165,7 +191,9 @@ unpriceable reservation configurations are rejected before provider work.
 - Only the two named 3.8 models are admitted. Older Live/transcription models in
   the catalog are not implicitly declared compatible.
 - Client-executed `functionDeclarations` and matching `toolResponse` messages are
-  supported, including non-blocking calls. Responses are bound to outstanding
+  supported, including non-blocking calls. For Extended Thinking, omitted function
+  `behavior` defaults to `NON_BLOCKING`; explicit `BLOCKING` is rejected during
+  setup. Responses are bound to outstanding
   call IDs within the connection. Unsolicited, duplicate or cancelled responses
   are rejected. Streaming partial function-response updates are not enabled.
 - Paid built-in search/code/URL tools are rejected in setup. Google lists search
@@ -197,6 +225,15 @@ on exact production invoices, reconcile a consented small real session against
 Google's raw modality receipts and billing export, especially Extended Thinking
 and proactive silence. Do not replace that evidence with a mocked-test claim.
 
+Additional review regressions cover malformed final usage plus a later valid
+turn (ordinary, separate-boundary and background-IDLE cases), reservation-floor
+preservation through the production billing resolver, same-turn correction,
+actual WebSocket subprotocol responses, ephemeral-token error remediation and
+the administrator-only channel-update boundary. Test-only revision
+`edccca4e1529a5134c8ea8455291744d31572b0e` precedes the corresponding production
+fixes. CI run **35377875469** records the red evidence; final acceptance is
+recorded in PR #409 after the fix revision's existing CI completes.
+
 Official sources checked on the research date:
 
 - [Pricing](https://ai.google.dev/gemini-api/docs/pricing)
@@ -207,3 +244,4 @@ Official sources checked on the research date:
 - [Extended Thinking](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-live-extended-thinking)
 - [Google Go SDK Live transport and authentication](https://github.com/googleapis/go-genai/blob/main/live.go)
 - [Google ADK native Live event handling](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py)
+- [Browser WebSocket handshake rules](https://websockets.spec.whatwg.org/)

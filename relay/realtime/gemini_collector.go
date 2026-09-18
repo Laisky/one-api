@@ -114,7 +114,12 @@ func (g *GeminiLedger) Observe(message []byte) error {
 	}
 	if terminal {
 		if g.pending != nil {
-			return g.commit()
+			if err := g.commit(); err != nil {
+				return err
+			}
+			// Committing earlier valid usage must not hide an invalid final
+			// receipt from the transport's stop-on-metering-error boundary.
+			return observationErr
 		}
 		g.waiting, g.active = true, false
 	}
@@ -138,6 +143,12 @@ func (g *GeminiLedger) commit() error {
 	}
 	if err := g.Ledger.appendRecord(*g.pending); err != nil {
 		return err
+	}
+	if g.invalid {
+		// A valid snapshot in a later turn cannot repair this rejected final
+		// receipt. Keep measured work, but preserve its reconciliation gap.
+		_ = g.MarkIncomplete("Gemini turn committed with a rejected usage receipt")
+		g.invalid = false
 	}
 	g.last, g.pending = g.pending, nil
 	g.active, g.waiting, g.unanchored = false, false, false

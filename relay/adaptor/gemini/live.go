@@ -63,7 +63,10 @@ func LiveHandler(c *gin.Context, m *meta.Meta) (*model.ErrorWithStatusCode, *mod
 	defer upstream.Close()
 	// Keep the URL key-free in both metadata and diagnostics.
 	m.UpstreamRequestURL = endpoint
-	upgrader := websocket.Upgrader{HandshakeTimeout: 10 * time.Second}
+	upgrader := websocket.Upgrader{
+		HandshakeTimeout: 10 * time.Second,
+		Subprotocols:     openai.NegotiateRealtimeSubprotocols(c.Request),
+	}
 	client, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		// Upgrade has already written an HTTP error. No setup/input reached the
