@@ -1,0 +1,40 @@
+{
+  "modelApi": {
+    "title": "API 使用",
+    "description": "请将 YOUR_API_KEY 替换为 One API 令牌。请求遵循该令牌的渠道路由。模型可用性和可选参数取决于所配置的提供商。",
+    "format": "API 格式",
+    "endpoint": "API 端点",
+    "request": "请求示例（curl）",
+    "response": "响应示例",
+    "copyEndpoint": "复制 API 端点",
+    "copyRequest": "复制 curl 请求",
+    "copyResponse": "复制响应示例",
+    "illustrative": "响应仅为经过精简的示例。实际 ID、生成内容、令牌用量和向量维度会有所不同。",
+    "formats": {
+      "chat": "Chat Completions",
+      "responses": "Responses",
+      "messages": "Claude Messages",
+      "embeddings": "向量嵌入",
+      "rerank": "重排序",
+      "image": "图像生成",
+      "image_edit": "图像编辑",
+      "video": "视频生成",
+      "transcription": "音频转写",
+      "translation": "音频翻译",
+      "speech": "语音合成",
+      "realtime": "实时 WebSocket 握手",
+      "moderation": "内容审核",
+      "ocr": "文档 OCR",
+      "clone": "声音克隆",
+      "completions": "旧版 Completions"
+    },
+    "notes": {
+      "upload": "请将 audio.wav 或 image.png 替换为模型支持的本地文件。curl 会自动设置 multipart 边界。",
+      "video": "视频生成是异步操作。使用返回的 ID，通过 GET /v1/videos/{video_id} 查询状态，通过 GET /v1/videos/{video_id}/content 获取结果。",
+      "realtime": "此 curl 示例仅验证 WebSocket 协议升级，并在 10 秒后停止。请使用 WebSocket 客户端交换实时事件；curl 不会完成整个对话。",
+      "voice": "音频响应将保存到 speech.wav。如示例包含 YOUR_VOICE_ID，请将其替换为模型支持的声音 ID。",
+      "document": "请将示例文档 URL 替换为可访问的文档 URL，或此提供商支持的输入。",
+      "clone": "请将 YOUR_AUDIO_FILE_ID 替换为提供商的参考音频文件 ID，并将 text 替换为该音频的准确转写。返回的声音 ID 可用于语音合成。"
+    }
+  }
+}

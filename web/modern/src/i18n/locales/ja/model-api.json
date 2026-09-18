@@ -1,0 +1,40 @@
+{
+  "modelApi": {
+    "title": "API の使用方法",
+    "description": "YOUR_API_KEY を One API トークンに置き換えてください。リクエストはそのトークンのチャネルルーティングに従います。モデルの利用可否とオプションのパラメータは、設定されたプロバイダーによって異なります。",
+    "format": "API 形式",
+    "endpoint": "API エンドポイント",
+    "request": "リクエスト例（curl）",
+    "response": "レスポンス例",
+    "copyEndpoint": "API エンドポイントをコピー",
+    "copyRequest": "curl リクエストをコピー",
+    "copyResponse": "レスポンス例をコピー",
+    "illustrative": "レスポンスは説明用の短縮した例です。実際の ID、生成内容、トークン使用量、ベクトルの次元数は異なります。",
+    "formats": {
+      "chat": "Chat Completions",
+      "responses": "Responses",
+      "messages": "Claude Messages",
+      "embeddings": "埋め込みベクトル",
+      "rerank": "再ランキング",
+      "image": "画像生成",
+      "image_edit": "画像編集",
+      "video": "動画生成",
+      "transcription": "音声文字起こし",
+      "translation": "音声翻訳",
+      "speech": "音声合成",
+      "realtime": "リアルタイム WebSocket ハンドシェイク",
+      "moderation": "コンテンツモデレーション",
+      "ocr": "文書 OCR",
+      "clone": "音声クローニング",
+      "completions": "従来の Completions"
+    },
+    "notes": {
+      "upload": "audio.wav または image.png を、モデルが対応するローカルファイルに置き換えてください。curl が multipart の境界を自動的に設定します。",
+      "video": "動画生成は非同期です。返された ID を使用し、GET /v1/videos/{video_id} で状態を確認し、GET /v1/videos/{video_id}/content で結果を取得してください。",
+      "realtime": "この curl の例は WebSocket へのアップグレードのみを確認し、10 秒後に停止します。リアルタイムイベントの交換には WebSocket クライアントを使用してください。curl は会話全体を実行しません。",
+      "voice": "音声レスポンスは speech.wav に保存されます。YOUR_VOICE_ID が含まれる場合は、モデルが対応する音声 ID に置き換えてください。",
+      "document": "文書のサンプル URL を、アクセス可能な文書 URL またはこのプロバイダーが対応する入力に置き換えてください。",
+      "clone": "YOUR_AUDIO_FILE_ID をプロバイダーの参照音声ファイル ID に、text をその正確な文字起こしに置き換えてください。返された音声 ID は音声合成に使用できます。"
+    }
+  }
+}
