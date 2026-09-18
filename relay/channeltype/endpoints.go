@@ -207,7 +207,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case PaLM:
 		return chatOnly
 	case Gemini, GeminiOpenAICompatible:
-		return chatAndEmbeddings
+		return append(chatAndEmbeddings, EndpointRealtime)
 	case Copilot:
 		return copilotDefault
 	case Zhipu:

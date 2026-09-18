@@ -37,7 +37,7 @@ func computeRealtime(input ComputeInput) ComputeResult {
 			appendRealtimeBillingIssue(&result, rateErr.Error())
 		}
 		t := record.Tokens
-		result.CachedPromptTokens += int(t.CachedText + t.CachedAudio + t.CachedImage + t.CachedUnallocated)
+		result.CachedPromptTokens += int(t.CachedText + t.CachedAudio + t.CachedImage + t.CachedVideo + t.CachedUnallocated)
 		if t.CachedUnallocated > 0 && len(ledger.Issues) == 0 {
 			appendRealtimeBillingIssue(&result, realtime.ErrAmbiguousCache.Error())
 		}
@@ -135,6 +135,9 @@ func resolveRealtimeRecordRates(input ComputeInput, record realtime.Record) (rea
 	} else if record.Tokens.Audio > 0 || record.Tokens.OutputAudio > 0 {
 		missing = append(missing, "audio")
 	}
+	if realtime.IsGeminiLiveModel(modelName) {
+		return resolveGeminiLiveVisualRates(input, record, modelName, rates, resolved, missing)
+	}
 	cachedAudioDiscount, imageMultiplier, hasSupplement := realtimeSupplement(modelName)
 	if hasSupplement {
 		rates.CachedAudio = rates.Audio * cachedAudioDiscount
@@ -157,6 +160,9 @@ func resolveRealtimeRecordRates(input ComputeInput, record realtime.Record) (rea
 	}
 	if record.Tokens.Image > 0 && rates.Image == 0 {
 		missing = append(missing, "image")
+	}
+	if record.Tokens.Video > 0 || record.Tokens.CachedVideo > 0 {
+		missing = append(missing, "video")
 	}
 	if len(missing) > 0 {
 		return rates, resolved, errors.Wrapf(ErrRealtimePriceUnavailable, "%s for model %q", strings.Join(missing, ", "), modelName)

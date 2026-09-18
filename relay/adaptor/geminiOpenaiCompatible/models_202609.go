@@ -21,6 +21,7 @@ var gemini37PlusReasoningEfforts = []string{"low", "medium", "high"}
 // geminiSeptember2026FlashConfig builds Gemini 3.6+ Flash metadata and the documented
 // promotional price transition. Parameters: description is the model summary and
 // reasoningEfforts lists accepted thinking levels. Returns: a complete model configuration.
+// Sampling guidance: https://ai.google.dev/gemini-api/docs/latest-model (2026-09-18).
 func geminiSeptember2026FlashConfig(description string, reasoningEfforts []string) adaptor.ModelConfig {
 	return adaptor.ModelConfig{
 		Ratio:            geminiFlashPromotionalInputUsd * ratio.MilliTokensUsd,
@@ -46,7 +47,7 @@ func geminiSeptember2026FlashConfig(description string, reasoningEfforts []strin
 		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
-		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedSamplingParameters: []string{"stop", "max_tokens"},
 		SupportedReasoningEfforts:   append([]string(nil), reasoningEfforts...),
 		DefaultReasoningEffort:      "medium",
 		MaxReasoningTokens:          gemini3LevelMaxThinkingBudget,
@@ -190,5 +191,6 @@ func init() {
 		geminiWebSearchModels[model] = struct{}{}
 	}
 	refreshGeminiSeptember2026LifecycleMetadata()
+	refreshGeminiSeptember18Catalog()
 	ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 }
