@@ -17,7 +17,8 @@ type Request struct {
 	Questions map[string]Question `json:"questions"`
 }
 
-// Question describes one of TypeSafe's noul, choice or score evaluations.
+// Question describes one of TypeSafe's typed evaluations. The provider's own
+// discriminator error enumerates noul, choice, score and bounding_box.
 type Question struct {
 	Type         string          `json:"type"`
 	Instructions json.RawMessage `json:"instructions"`
@@ -47,6 +48,12 @@ func DecodeRequest(body []byte) (*Request, error) {
 	}
 	request.Questions = make(map[string]Question, len(questions))
 	for id, raw := range questions {
+		// Verified upstream: an empty key is rejected unconditionally with
+		// 400 {"detail":"Question key cannot be empty."}, and an answer could
+		// never be addressed by it.
+		if id == "" {
+			return nil, errors.New("question IDs must not be empty")
+		}
 		question, err := decodeQuestion(raw)
 		if err != nil {
 			return nil, errors.Wrapf(err, "question %q", id)
@@ -67,11 +74,15 @@ func decodeQuestion(raw json.RawMessage) (Question, error) {
 		return question, err
 	}
 	if err := json.Unmarshal(fields["type"], &question.Type); err != nil {
-		return question, errors.New("type must be noul, choice or score")
+		return question, errors.New("type must be noul, choice, score or bounding_box")
 	}
 	question.Instructions, question.Criteria = fields["instructions"], fields["criteria"]
-	// The advanced structure reference explicitly permits null instructions.
-	if !isDescription(question.Instructions, true) {
+	// The advanced structure reference explicitly permits null instructions, and
+	// the service accepts a null value for every documented primitive. Whether
+	// null alone is sufficient is a content rule the service owns: noul rejects
+	// a question that carries neither instructions nor criteria, and that
+	// rejection now refunds rather than charging the reservation.
+	if question.Type != "bounding_box" && !isDescription(question.Instructions, true) {
 		return question, errors.New("instructions must be present and contain a string, object, array or null")
 	}
 	switch question.Type {
@@ -102,17 +113,33 @@ func decodeQuestion(raw json.RawMessage) (Question, error) {
 			}
 		}
 	case "score":
+		// The reference recommends two to ten levels, but the service only
+		// enforces a nonempty array (a single level is answered with score 0).
+		// Magnitude caps are the provider's to enforce and to change; the
+		// gateway validates shape so that a future cap change cannot make it
+		// reject requests the service would have accepted.
 		var levels []json.RawMessage
-		if err := json.Unmarshal(question.Criteria, &levels); err != nil || len(levels) < 2 {
-			return question, errors.New("score criteria must be an array containing at least two levels")
+		if err := json.Unmarshal(question.Criteria, &levels); err != nil || len(levels) == 0 {
+			return question, errors.New("score criteria must be a nonempty array of ordered levels")
 		}
 		for _, description := range levels {
 			if !isDescription(description, true) {
 				return question, errors.New("invalid score level description")
 			}
 		}
+	case "bounding_box":
+		// Advertised by the service's discriminator but absent from the public
+		// reference and gated per organization, so its criteria schema is not
+		// knowable here. The envelope is validated and the payload forwarded
+		// verbatim; organizations without the feature receive the provider's
+		// own 400, which refunds the admission reservation.
+		for _, field := range []json.RawMessage{question.Instructions, question.Criteria} {
+			if len(field) > 0 && !isDescription(field, true) {
+				return question, errors.New("bounding_box fields must contain a string, object, array or null")
+			}
+		}
 	default:
-		return question, errors.New("type must be noul, choice or score")
+		return question, errors.New("type must be noul, choice, score or bounding_box")
 	}
 	return question, nil
 }

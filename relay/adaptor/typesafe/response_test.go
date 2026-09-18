@@ -93,10 +93,22 @@ func TestResponseEvidenceSeparatesFailuresFromMeasuredUsage(t *testing.T) {
 
 // TestHTTPRejectionsAndInterruptedBodies checks refunds, retry guidance and cleanup.
 func TestHTTPRejectionsAndInterruptedBodies(t *testing.T) {
-	for _, status := range []int{401, 422, 429, 529, 500, 503} {
+	for status, body := range map[int]string{
+		// Bodies captured from the live service on 2026-09-18.
+		400: `{"detail":{"error_type":"max_tokens_exceeded"}}`,
+		401: `{"detail":{"error_type":"authentication_error","message":"Cannot authenticate with the server. Please check your API key and try again."}}`,
+		403: `{"detail":{"error_type":"authentication_error","message":"Must supply an API key! Check your request and try again."}}`,
+		404: `{"detail":"Not Found"}`,
+		405: `{"detail":"Method Not Allowed"}`,
+		422: `{"detail":[{"type":"missing","loc":["body","state"],"msg":"Field required"}]}`,
+		429: `{"detail":"rate limited"}`,
+		529: `{"detail":"overloaded"}`,
+		500: `{"detail":"server error"}`,
+		503: `{"detail":"unavailable"}`,
+	} {
 		c, writer := responseContext(t)
 		result, usage, apiErr := (&Adaptor{}).ReadResponse(c, &http.Response{StatusCode: status,
-			Header: http.Header{"Retry-After": {"10"}}, Body: io.NopCloser(strings.NewReader(`{"detail":"try later"}`))}, nil)
+			Header: http.Header{"Retry-After": {"10"}}, Body: io.NopCloser(strings.NewReader(body))}, nil)
 		require.NotNil(t, apiErr)
 		require.Equal(t, status, apiErr.StatusCode)
 		if IsAdmissionRejection(status) {
@@ -106,6 +118,7 @@ func TestHTTPRejectionsAndInterruptedBodies(t *testing.T) {
 			require.NotEmpty(t, usage.BillingEstimateReason)
 		}
 		result.Write(c)
+		require.Equal(t, body, writer.Body.String(), "native error body must be forwarded verbatim")
 		require.Equal(t, "10", writer.Header().Get("Retry-After"))
 	}
 	c, _ := responseContext(t)
@@ -115,4 +128,74 @@ func TestHTTPRejectionsAndInterruptedBodies(t *testing.T) {
 	require.NotNil(t, apiErr)
 	require.True(t, body.closed)
 	require.Equal(t, AdmissionInputTokens, usage.PromptTokens)
+}
+
+// TestUpstreamRequestIDIsForwarded keeps estimated charges reconcilable: without
+// the provider's own request id an operator cannot match a retained reservation
+// to an upstream attempt.
+func TestUpstreamRequestIDIsForwarded(t *testing.T) {
+	const requestID = "req_01a0b48b219b7d528f238466de776e44"
+	for _, tc := range []struct {
+		name, body string
+		status     int
+	}{
+		{"success", `{"model":"jev-1.13.0","answers":{"q":{"type":"noul","noul":0.99}},"usage":{"input_tokens":370,"output_tokens":61}}`, 200},
+		{"rejection", `{"detail":{"error_type":"max_tokens_exceeded"}}`, 400},
+		{"ambiguous", `{"detail":"server error"}`, 500},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, writer := responseContext(t)
+			header := http.Header{RequestIDHeader: {requestID}, "Retry-After-Ms": {"1500"}}
+			result, _, _ := (&Adaptor{}).ReadResponse(c, &http.Response{StatusCode: tc.status, Header: header,
+				Body: io.NopCloser(strings.NewReader(tc.body))}, nil)
+			require.Equal(t, requestID, c.GetString(ctxkey.UpstreamRequestId))
+			require.NotNil(t, result)
+			result.Write(c)
+			require.Equal(t, requestID, writer.Header().Get(RequestIDHeader))
+			require.Equal(t, "1500", writer.Header().Get("Retry-After-Ms"))
+		})
+	}
+	// An interrupted body still records the identifier it already observed.
+	c, _ := responseContext(t)
+	_, _, apiErr := (&Adaptor{}).ReadResponse(c, &http.Response{StatusCode: 200,
+		Header: http.Header{RequestIDHeader: {requestID}}, Body: &trackedBody{Reader: failingReader{}}}, nil)
+	require.NotNil(t, apiErr)
+	require.Equal(t, requestID, c.GetString(ctxkey.UpstreamRequestId))
+}
+
+// TestMeasuredUsageOutranksErrorStatus ensures evidence wins over classification:
+// a rejection that nevertheless reports consumed input is billed for that input.
+func TestMeasuredUsageOutranksErrorStatus(t *testing.T) {
+	c, _ := responseContext(t)
+	_, usage, apiErr := (&Adaptor{}).ReadResponse(c, &http.Response{StatusCode: 400,
+		Body: io.NopCloser(strings.NewReader(`{"detail":"late failure","usage":{"input_tokens":312,"output_tokens":0}}`))}, nil)
+	require.NotNil(t, apiErr)
+	require.Equal(t, 312, usage.PromptTokens)
+	require.Empty(t, usage.BillingEstimateReason, "a measured receipt is not an estimate")
+}
+
+// TestLiveAnswerShapesAreForwarded pins the three primitives' real answer bodies,
+// including noul's missing confidence field and score's string-keyed legend.
+func TestLiveAnswerShapesAreForwarded(t *testing.T) {
+	const body = `{"model":"jev-1.13.0","answers":{"positive":{"type":"noul","noul":0.99},` +
+		`"topic":{"type":"choice","choice":"food","confidence":0.98,"probabilities":{"service":0.01,"food":0.99}},` +
+		`"quality":{"type":"score","score":2.0,"confidence":1.0,"legend":{"0":"Poor","1":"Average","2":"Excellent"},` +
+		`"probabilities":{"0":0.0,"1":0.0,"2":1.0}}},"usage":{"input_tokens":370,"output_tokens":61}}`
+	writer := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(writer)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/systemone", nil)
+	gmw.SetLogger(c, logger.Logger)
+	request, err := DecodeRequest([]byte(`{"model":"jev-latest","state":{"review":"The food was excellent and service was quick."},` +
+		`"questions":{"positive":{"type":"noul","instructions":"Is the review positive?"},` +
+		`"topic":{"type":"choice","instructions":"Choose the primary topic.","criteria":{"food":"Food quality","service":"Service quality"}},` +
+		`"quality":{"type":"score","instructions":"Rate the overall experience.","criteria":["Poor","Average","Excellent"]}}}`))
+	require.NoError(t, err)
+	c.Set(ctxkey.ConvertedRequest, request)
+	result, usage, apiErr := (&Adaptor{}).ReadResponse(c, &http.Response{StatusCode: 200,
+		Body: io.NopCloser(strings.NewReader(body))}, nil)
+	require.Nil(t, apiErr)
+	require.Equal(t, 370, usage.PromptTokens)
+	require.Equal(t, 61, usage.CompletionTokens)
+	result.Write(c)
+	require.Equal(t, body, writer.Body.String())
 }

@@ -105,6 +105,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 
 	normalizeDeepSeekThinkingConfig(c, request)
 	normalizeDeepSeekMessageReasoning(request)
+	enforceDeepSeekHistoryContract(c, request)
 
 	normalizeDeepSeekToolMessageContent(c, request)
 
@@ -270,6 +271,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	}
 	normalizeDeepSeekThinkingConfig(c, chatRequest)
 	normalizeDeepSeekMessageReasoning(chatRequest)
+	enforceDeepSeekHistoryContract(c, chatRequest)
 	normalizeDeepSeekToolMessageContent(c, chatRequest)
 	return chatRequest, nil
 }
@@ -305,6 +307,29 @@ func normalizeDeepSeekMessageReasoning(request *model.GeneralOpenAIRequest) {
 			message.Content = ""
 		}
 	}
+}
+
+// enforceDeepSeekHistoryContract repairs replayed history that DeepSeek would
+// reject outright: tool calls nobody answered and an in-flight assistant turn
+// whose thinking was not replayed. The context supplies request-scoped logging,
+// request is mutated in place, and the function returns no value.
+func enforceDeepSeekHistoryContract(c *gin.Context, request *model.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+
+	repaired, stats := deepseekcompat.EnforceHistoryContract(request.Messages)
+	request.Messages = repaired
+	if !stats.Changed() {
+		return
+	}
+
+	gmw.GetLogger(c).Debug("repaired deepseek history for provider validation",
+		zap.String("model", request.Model),
+		zap.Int("unanswered_tool_calls_dropped", stats.UnansweredToolCallsDropped),
+		zap.Int("assistant_messages_dropped", stats.AssistantMessagesDropped),
+		zap.Int("reasoning_placeholders_added", stats.ReasoningPlaceholdersAdded),
+	)
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {

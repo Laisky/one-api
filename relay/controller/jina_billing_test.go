@@ -105,10 +105,10 @@ func jinaAuditAssertLedger(t *testing.T, requestID string, start, charge int64, 
 func TestJinaBillingHTTPBehavior(t *testing.T) {
 	for _, tc := range []struct {
 		name, path, body, actual, response string
-		unlimited                        bool
-		group, override                  float64
-		charge                           int64
-		wantErr, estimated               bool
+		unlimited                          bool
+		group, override                    float64
+		charge                             int64
+		wantErr, estimated                 bool
 	}{
 		{"embedding", "/v1/embeddings", `{"model":"alias","input":["hello"]}`, "jina-embeddings-v3", `{"data":[{"embedding":[0.1]}],"usage":{"total_tokens":123}}`, false, 1, -1, 4, false, false},
 		{"unlimited", "/v1/embeddings", `{"model":"alias","input":["hello"]}`, "jina-embeddings-v3", `{"data":[],"usage":{"total_tokens":123}}`, true, 1, -1, 4, false, false},

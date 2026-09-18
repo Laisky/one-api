@@ -46,6 +46,12 @@ func RelaySystemOne(c *gin.Context) {
 	if usage.BillingEstimateReason != "" {
 		c.Header("X-OneAPI-Billing-Estimated", "true")
 	}
+	// Surface the upstream identifier even when the gateway rejects the provider's
+	// answer: that failure path is precisely where a caller needs it to query the
+	// provider about a charge it cannot see a result for.
+	if upstreamID := c.GetString(ctxkey.UpstreamRequestId); upstreamID != "" {
+		c.Header(typesafe.RequestIDHeader, upstreamID)
+	}
 	if c.Writer.Written() {
 		return
 	}
@@ -166,6 +172,14 @@ func settleSystemOne(c *gin.Context, m *metalib.Meta, usage *relaymodel.Usage, r
 	if usage.BillingEstimateReason != "" {
 		entry.Metadata = billingEstimateMetadata(nil, usage.BillingEstimateReason)
 		entry.Content = "Estimated TypeSafe input charge: upstream usage could not be verified"
+	}
+	// An estimate is only reconcilable if the operator can find the matching
+	// upstream attempt, so carry the provider's own request id when it sent one.
+	if upstreamID := c.GetString(ctxkey.UpstreamRequestId); upstreamID != "" {
+		if entry.Metadata == nil {
+			entry.Metadata = model.LogMetadata{}
+		}
+		entry.Metadata["upstream_request_id"] = upstreamID
 	}
 	if provisionalID > 0 {
 		err := model.ReconcileConsumeLogDetailed(ctx, provisionalID, model.ConsumeLogReconcileDetail{

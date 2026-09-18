@@ -71,8 +71,8 @@ var ChannelBaseURLConfigs = []ChannelBaseURLConfig{
 	{URL: "https://api.deepinfra.com", Editable: false},                                // 57 DeepInfra
 	// Z.AI international GLM platform. The zhipu adaptor appends /api/paas/v4/...,
 	// which reproduces Z.AI's documented paths exactly, so the bare host is correct.
-	{URL: "https://api.z.ai", Editable: false},   // 58 Zai
-	{URL: "https://api.jina.ai", Editable: true}, // 59 Jina
+	{URL: "https://api.z.ai", Editable: false},       // 58 Zai
+	{URL: "https://api.jina.ai", Editable: true},     // 59 Jina
 	{URL: "https://api.typesafe.ai", Editable: true}, // 60 TypeSafe
 }
 

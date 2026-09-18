@@ -16,9 +16,9 @@ import (
 func TestReceiptQuotaCheckedArithmetic(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		input, output         int
+		input, output            int
 		ratio, completion, group float64
-		want                  int64
+		want                     int64
 	}{
 		{40, 0, .025, 0, 1, 1},
 		{41, 0, .025, 0, 1, 2},

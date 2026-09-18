@@ -38,7 +38,7 @@ func (r *gatedReceiptReader) Close() error { return nil }
 func TestOCRReceiptCannotCertifyAnActiveRead(t *testing.T) {
 	t.Parallel()
 	r := &gatedReceiptReader{
-		first: strings.NewReader("data: {\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20,\"total_tokens\":120}}\n\ndata: [DONE]\n\n"),
+		first:   strings.NewReader("data: {\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20,\"total_tokens\":120}}\n\ndata: [DONE]\n\n"),
 		entered: make(chan struct{}), release: make(chan struct{}),
 	}
 	observer := &receiptBody{ReadCloser: r, stream: true}

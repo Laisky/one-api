@@ -67,6 +67,33 @@ Temperature has no effect in thinking mode. In thinking mode `top_p` has a 0.95
 floor; in non-thinking mode it is fixed at 1.0. The gateway leaves these controls
 to the provider rather than introducing local sampling rules.
 
+## Replayed history contract
+
+DeepSeek validates whole-conversation structure before it looks at the prompt.
+Two rules decide whether replayed agent history is accepted at all, both verified
+live against `deepseek-flash` on 2026-09-18:
+
+- Every `tool_call_id` in an assistant message must be answered by one of the tool
+  messages directly following it, even when that assistant message is the last one
+  (OpenAI accepts that as a prefill; DeepSeek answers `An assistant message with
+  'tool_calls' must be followed by tool messages responding to each 'tool_call_id'`).
+  IDs must also be unique inside one `tool_calls` array.
+- Thinking mode is the default, and every assistant message positioned after the
+  last `user` message must carry a `reasoning_content` field unless it carries
+  `tool_calls`; an empty string satisfies it. A missing field fails with
+  ``The `reasoning_content` in the thinking mode must be passed back to the API``,
+  whether or not the conversation uses tools. Earlier turns are exempt.
+
+`deepseekcompat.EnforceHistoryContract` repairs both without inventing tool results
+or overwriting replayed thinking, and runs on every DeepSeek-contract path
+(dedicated channel, Claude Messages conversion, and the Responses -> Chat
+fallback). `relay/adaptor/openai` carries the live suite that pins this against the
+real endpoint; it is skipped unless a key is supplied:
+
+```sh
+ONEAPI_DEEPSEEK_LIVE_KEY=sk-... go test ./relay/adaptor/openai/ -run DeepSeekLive -v
+```
+
 ## Verification
 
 Run with the repository's required Go toolchain:

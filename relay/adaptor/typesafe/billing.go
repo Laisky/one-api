@@ -40,13 +40,32 @@ func InputQuota(tokens int, inputRatio, groupRatio float64) (int64, error) {
 	return quotient.Int64(), nil
 }
 
-// IsAdmissionRejection recognizes only the provider's documented rejection codes.
-// Other statuses, transport failures and interrupted bodies may represent paid work.
+// IsAdmissionRejection reports whether a status proves the provider rejected the
+// request before performing any billable evaluation.
+//
+// System One is a single-shot, non-streaming API that reports usage only on a
+// successful evaluation. Live probes on 2026-09-18 confirmed that every client
+// error is raised by the request-admission layer and carries no usage receipt:
+//
+//	400 {"detail":{"error_type":"max_tokens_exceeded"}}                  context budget
+//	400 {"detail":{"error_type":"api_usage_error","message":"Unknown model: ..."}}
+//	400 {"detail":"Noul question must have criteria or instructions: q"} primitive rules
+//	400 {"detail":"Too many score levels. Must have at most 10 levels."} documented caps
+//	401 {"detail":{"error_type":"authentication_error", ...}}            invalid key
+//	403 {"detail":{"error_type":"authentication_error", ...}}            absent key
+//	404 / 405                                                            wrong base URL or method
+//	422 {"detail":[{"type":"missing","loc":["body","state"], ...}]}      schema validation
+//
+// The provider's published error table lists only 401/422/429/529, so restricting
+// the refund to that subset silently billed the full admission reservation for
+// the most common real failures (an oversized state, a mistyped model, a channel
+// pointed at the wrong base URL). Every 4xx is therefore treated as unpaid, and
+// 529 "Overloaded" is unpaid by definition. Ambiguous 5xx statuses and transport
+// failures keep the reservation and are reported as estimates instead.
 func IsAdmissionRejection(status int) bool {
-	switch status {
-	case 401, 422, 429, 529:
-		return true
-	default:
-		return false
-	}
+	return (status >= 400 && status < 500) || status == StatusOverloaded
 }
+
+// StatusOverloaded is TypeSafe's documented "temporarily overloaded" status. It
+// is outside net/http's registered codes, so it is named here rather than inline.
+const StatusOverloaded = 529

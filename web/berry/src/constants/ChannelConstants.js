@@ -194,6 +194,18 @@ export const CHANNEL_OPTIONS = {
     value: 58,
     color: 'primary'
   },
+  59: {
+    key: 59,
+    text: 'Jina AI',
+    value: 59,
+    color: 'primary'
+  },
+  60: {
+    key: 60,
+    text: 'TypeSafe',
+    value: 60,
+    color: 'primary'
+  },
   50: {
     key: 50,
     text: 'OpenAI Compatible',
