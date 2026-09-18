@@ -37,7 +37,7 @@ import { ModelPricingModal, type ModelDisplayData } from './ModelPricingModal';
 const data: ModelDisplayData = { input_price: 1, output_price: 2 };
 
 /** modal returns the real pricing modal with a selected model and optional capability metadata. */
-function modal(modelName = 'example-chat', modelData = data, open = true) {
+function modal(modelName = 'gpt-4o', modelData = data, open = true) {
   return <ModelPricingModal open={open} onOpenChange={() => {}} modelName={modelName} data={modelData} channelName="Example provider" />;
 }
 
@@ -72,7 +72,7 @@ describe('ModelPricingModal API usage integration', () => {
     expect(screen.getByRole('heading', { name: 'API Usage' })).toBeInTheDocument();
     expect(screen.getByLabelText('API endpoint')).toHaveTextContent(`${window.location.origin}/v1/chat/completions`);
     expect(displayedRequest()).toContain('Authorization: Bearer YOUR_API_KEY');
-    expect(displayedRequest()).toContain('"model": "example-chat"');
+    expect(displayedRequest()).toContain('"model": "gpt-4o"');
     expect(screen.getByLabelText('Response example')).toHaveTextContent('chat.completion');
     expect(screen.getByText(/Illustrative, shortened responses only/)).toBeInTheDocument();
   });
@@ -80,7 +80,7 @@ describe('ModelPricingModal API usage integration', () => {
   it.each([false, true])('keeps API usage after every model detail section (mobile=%s)', (mobile) => {
     mocks.mobile = mobile;
     render(
-      modal('example-embedding', {
+      modal('text-embedding-3-small', {
         ...data,
         description: 'Example model profile.',
         cached_input_price: 0.5,
@@ -131,18 +131,18 @@ describe('ModelPricingModal API usage integration', () => {
   it('does not retain the previous model or format when switching API families', () => {
     const view = render(modal());
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'messages' } });
-    view.rerender(modal('custom-embedding', { ...data, embedding_pricing: { text_token_price: 0.1 } }));
+    view.rerender(modal('text-embedding-3-small', { ...data, embedding_pricing: { text_token_price: 0.1 } }));
 
     expect(screen.getByLabelText('API endpoint')).toHaveTextContent('/v1/embeddings');
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(displayedRequest()).toContain('"model": "custom-embedding"');
-    expect(displayedRequest()).not.toContain('example-chat');
+    expect(displayedRequest()).toContain('"model": "text-embedding-3-small"');
+    expect(displayedRequest()).not.toContain('gpt-4o');
     expect(displayedRequest()).not.toContain('anthropic-version');
   });
 
   it.each([false, true])('does not render API examples for a closed modal (mobile=%s)', (mobile) => {
     mocks.mobile = mobile;
-    render(modal('example-chat', data, false));
+    render(modal('gpt-4o', data, false));
     expect(screen.queryByRole('heading', { name: 'API Usage' })).not.toBeInTheDocument();
   });
 

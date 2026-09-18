@@ -27,7 +27,10 @@
       "ocr": "OCR de documents",
       "clone": "Clonage vocal",
       "completions": "Ancienne API Completions",
-      "systemone": "TypeSafe System One (évaluation)"
+      "systemone": "TypeSafe System One (évaluation)",
+      "gemini_live": "Négociation WebSocket Gemini Live",
+      "diarization": "Transcription avec identification des locuteurs",
+      "jina_ocr": "Jina OCR (transport Chat Completions)"
     },
     "notes": {
       "upload": "Remplacez audio.wav ou image.png par un fichier local pris en charge par le modèle. curl définit automatiquement la limite multipart.",
@@ -36,7 +39,19 @@
       "voice": "La réponse audio est enregistrée dans speech.wav. Remplacez YOUR_VOICE_ID, s’il est présent, par une voix prise en charge par le modèle.",
       "document": "Remplacez l’URL du document d’exemple par une URL accessible ou par une entrée prise en charge par ce fournisseur.",
       "clone": "Remplacez YOUR_AUDIO_FILE_ID par l’identifiant du fichier audio de référence du fournisseur et text par sa transcription exacte. L’identifiant vocal renvoyé peut servir à la synthèse vocale.",
-      "systemone": "Jev est un modèle d’évaluation typée, pas un modèle de chat. Utilisez state et questions (noul, choice ou score) ; les formats de chat et le streaming ne sont pas pris en charge. La réponse contient answers et input_tokens/output_tokens, et model indique la version résolue. Les valeurs ci-dessous sont indicatives."
+      "systemone": "Jev est un modèle d’évaluation typée, pas un modèle de chat. Utilisez state et questions (noul, choice ou score) ; les formats de chat et le streaming ne sont pas pris en charge. La réponse contient answers et input_tokens/output_tokens, et model indique la version résolue. Les valeurs ci-dessous sont indicatives.",
+      "geminiLive": "Cette commande curl vérifie uniquement la mise à niveau HTTP. Pour une session Gemini Live, utilisez un client WebSocket, envoyez d’abord le message natif setup et attendez setupComplete avant toute entrée. Les événements session.update d’OpenAI ne sont pas interchangeables. Cette négociation ne teste ni conversation ni inférence du modèle.",
+      "diarization": "Remplacez audio.wav par votre enregistrement. diarized_json renvoie des segments identifiés par locuteur ; chunking_strategy=auto prend aussi en charge les enregistrements de plus de 30 secondes.",
+      "jinaOcr": "Remplacez document.png par une image de document accessible ou une URL de données d’image prise en charge. Jina OCR utilise Chat Completions pour lire des images et renvoyer du Markdown ; ce n’est pas un exemple de chat textuel général.",
+      "legacy": "Il s’agit de l’ancien contrat Completions. Le retrait de modèles et les paramètres du fournisseur peuvent rendre d’anciennes entrées indisponibles ; vérifiez leur prise en charge avant tout appel."
+    },
+    "reference": "Référence du protocole",
+    "reviewedOn": "Vérifié le {{date}}",
+    "contractScope": "Il s’agit de modèles de protocole de la passerelle, pas de tests de disponibilité en direct. Vérifiez le modèle associé, le point de terminaison activé et les exigences du fournisseur avant tout appel. Les réponses présentent des champs représentatifs, pas des schémas complets.",
+    "unverified": {
+      "title": "Aucun exemple de passerelle vérifié",
+      "unknown": "Le catalogue n’identifie pas de contrat de requête/réponse vérifié pour ce modèle. Les modalités et les prix ne définissent pas une API. Demandez à l’administrateur de vérifier le modèle associé et le point de terminaison du canal ; aucune requête de chat n’est supposée.",
+      "native": "Ce modèle nécessite un protocole propre au fournisseur pour lequel aucun exemple de passerelle n’a été vérifié ici. Consultez la référence et vérifiez l’adaptateur et le point de terminaison plutôt que d’utiliser une requête générique de chat ou de média."
     }
   }
 }

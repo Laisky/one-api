@@ -73,12 +73,12 @@ describe('Jev native examples in the pricing modal', () => {
 
   it.each([false, true])('replaces a previously selected chat format and copies only the native example (mobile=%s)', (mobile) => {
     mocks.mobile = mobile;
-    const view = render(modal('example-chat'));
+    const view = render(modal('gpt-4o'));
     fireEvent.change(screen.getByRole('combobox', { name: 'API format' }), { target: { value: 'responses' } });
     view.rerender(modal('jev-preview'));
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.getByLabelText('API endpoint')).toHaveTextContent('/v1/systemone');
-    expect(screen.getByLabelText('Request example (curl)')).not.toHaveTextContent('example-chat');
+    expect(screen.getByLabelText('Request example (curl)')).not.toHaveTextContent('gpt-4o');
     expect(screen.getByLabelText('Response example')).not.toHaveTextContent('output_text');
 
     for (const [button, content] of [
@@ -89,7 +89,7 @@ describe('Jev native examples in the pricing modal', () => {
       fireEvent.click(screen.getByRole('button', { name: button }));
       expect(mocks.copy).toHaveBeenLastCalledWith(screen.getByLabelText(content).textContent);
     }
-    view.rerender(modal('example-chat'));
+    view.rerender(modal('gpt-4o'));
     expect(screen.getByLabelText('API endpoint')).toHaveTextContent('/v1/chat/completions');
     expect(screen.getByRole('combobox', { name: 'API format' })).toBeInTheDocument();
     expect(screen.queryByText(/not a chat model/)).not.toBeInTheDocument();

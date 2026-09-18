@@ -73,9 +73,10 @@ describe('TypeSafe System One model examples', () => {
     assert.equal(JSON.parse(example.response).model, 'jev-1.13.0');
   });
 
-  it('does not infer native evaluation from text modalities or a coincidental Jev substring', () => {
-    for (const model of ['gpt-4o', 'custom-chat', 'my-jev-latest-chat', 'jevish-chat']) {
-      assert.deepEqual(buildModelApiExamples(model, TEXT_METADATA, BASE).map(({ id }) => id), ['chat', 'responses', 'messages']);
+  it('does not infer native evaluation or chat from text modalities or a coincidental Jev substring', () => {
+    assert.deepEqual(buildModelApiExamples('gpt-4o', TEXT_METADATA, BASE).map(({ id }) => id), ['chat', 'responses', 'messages']);
+    for (const model of ['custom-chat', 'my-jev-latest-chat', 'jevish-chat']) {
+      assert.deepEqual(buildModelApiExamples(model, TEXT_METADATA, BASE), []);
     }
     assert.equal(buildModelApiExamples('jina-embeddings-v3', {}, BASE)[0].id, 'embeddings');
     assert.equal(buildModelApiExamples('rerank-v4.0-pro', {}, BASE)[0].id, 'rerank');

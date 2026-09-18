@@ -27,7 +27,10 @@
       "ocr": "文書 OCR",
       "clone": "音声クローニング",
       "completions": "従来の Completions",
-      "systemone": "TypeSafe System One（評価）"
+      "systemone": "TypeSafe System One（評価）",
+      "gemini_live": "Gemini Live WebSocket ハンドシェイク",
+      "diarization": "話者ラベル付き音声文字起こし",
+      "jina_ocr": "Jina OCR（Chat Completions 通信形式）"
     },
     "notes": {
       "upload": "audio.wav または image.png を、モデルが対応するローカルファイルに置き換えてください。curl が multipart の境界を自動的に設定します。",
@@ -36,7 +39,19 @@
       "voice": "音声レスポンスは speech.wav に保存されます。YOUR_VOICE_ID が含まれる場合は、モデルが対応する音声 ID に置き換えてください。",
       "document": "文書のサンプル URL を、アクセス可能な文書 URL またはこのプロバイダーが対応する入力に置き換えてください。",
       "clone": "YOUR_AUDIO_FILE_ID をプロバイダーの参照音声ファイル ID に、text をその正確な文字起こしに置き換えてください。返された音声 ID は音声合成に使用できます。",
-      "systemone": "Jev は型付き評価モデルであり、チャットモデルではありません。state と questions（noul、choice、score）を使用してください。チャット形式とストリーミングには対応していません。レスポンスには answers と input_tokens/output_tokens が含まれ、model は解決されたモデルバージョンを示します。以下の値は説明用の例です。"
+      "systemone": "Jev は型付き評価モデルであり、チャットモデルではありません。state と questions（noul、choice、score）を使用してください。チャット形式とストリーミングには対応していません。レスポンスには answers と input_tokens/output_tokens が含まれ、model は解決されたモデルバージョンを示します。以下の値は説明用の例です。",
+      "geminiLive": "この curl コマンドは HTTP アップグレードのみを確認します。Gemini Live セッションには WebSocket クライアントを使い、最初にネイティブの setup を送り、setupComplete を待ってから入力を送信してください。OpenAI の session.update イベントとは互換性がありません。このハンドシェイクは会話やモデル推論を検証しません。",
+      "diarization": "audio.wav を録音ファイルに置き換えてください。diarized_json は話者ラベル付きの区間を返します。chunking_strategy=auto により、30 秒を超える録音にも対応します。",
+      "jinaOcr": "document.png をアクセス可能な文書画像または対応する画像データ URL に置き換えてください。Jina OCR は Chat Completions で画像を読み取り Markdown を返します。一般的なテキストチャットの例ではありません。",
+      "legacy": "これは旧 Completions の仕様です。モデルの提供終了やプロバイダーのエンドポイント設定により、古いカタログ項目を利用できない場合があります。呼び出す前に対応状況を確認してください。"
+    },
+    "reference": "プロトコルの参照資料",
+    "reviewedOn": "確認日：{{date}}",
+    "contractScope": "これはゲートウェイのプロトコル例であり、実環境での利用可否を検証した結果ではありません。呼び出す前に、マッピング先モデル、有効なチャネルのエンドポイント、プロバイダーの要件を確認してください。レスポンスは代表的なフィールドのみを示し、完全なスキーマではありません。",
+    "unverified": {
+      "title": "検証済みのゲートウェイ例がありません",
+      "unknown": "このモデルの検証済みリクエスト・レスポンス仕様をカタログから特定できません。入出力形式や料金だけでは API を判断できません。マッピング先モデルとチャネルのエンドポイントを管理者に確認してください。チャット形式とは仮定しません。",
+      "native": "このモデルにはプロバイダー固有のプロトコルが必要ですが、そのゲートウェイ例はここでは検証されていません。一般的なチャットやメディアのリクエストを使うのではなく、参照資料を読み、アダプターとエンドポイントの設定を確認してください。"
     }
   }
 }
