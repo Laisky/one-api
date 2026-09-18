@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"math"
 	"math/big"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
@@ -99,10 +101,7 @@ func QuoteRequest(request *model.GeneralOpenAIRequest, mode int) (BillingBudget,
 	if !strings.Contains(request.Model, "embeddings") && !strings.HasPrefix(request.Model, "jina-clip-") && !strings.HasPrefix(request.Model, "jina-colbert-") {
 		return BillingBudget{}, errors.New("jina model is not an embedding model")
 	}
-	image := false
-	for _, modality := range cfg.InputModalities {
-		image = image || modality == "image"
-	}
+	image := supportsImageInput(cfg)
 	items := []any{request.Input}
 	if values, ok := request.Input.([]any); ok {
 		items = values
@@ -144,13 +143,24 @@ func QuoteRerank(request *model.RerankRequest) (BillingBudget, error) {
 	if n == 0 || n > maxBillingItems {
 		return BillingBudget{}, errors.New("jina rerank requires 1 to 512 documents")
 	}
+	multimodal := supportsImageInput(cfg)
 	query := any(request.Query)
 	if len(request.NativeQuery) > 0 {
 		if err := json.Unmarshal(request.NativeQuery, &query); err != nil {
 			return BillingBudget{}, errors.Wrap(err, "decode jina rerank query")
 		}
+		// Jina's rerank `query` is a bare string on every text-only reranker; only a
+		// multimodal reranker also accepts {"text": ...} / {"image": ...} there.
+		// Documents are deliberately NOT gated the same way, because every reranker
+		// accepts {"text": ...} documents. Verified against api.jina.ai: v3, v3.5,
+		// v2-base-multilingual and colbert-v2 answer 422 "'query' Input should be a
+		// valid string" for any object query, while m0 answers 200.
+		if _, structured := query.(map[string]any); structured && !multimodal {
+			return BillingBudget{}, errors.Errorf(
+				"jina model %s requires a plain string rerank query", request.Model)
+		}
 	}
-	q, err := quoteItem(query, int(cfg.ContextLength), request.Model == "jina-reranker-m0")
+	q, err := quoteItem(query, int(cfg.ContextLength), multimodal)
 	if err != nil {
 		return BillingBudget{}, errors.Wrap(err, "quote jina rerank query")
 	}
@@ -165,7 +175,7 @@ func QuoteRerank(request *model.RerankRequest) (BillingBudget, error) {
 				return BillingBudget{}, errors.Wrap(err, "decode jina rerank document")
 			}
 		}
-		d, err := quoteItem(item, int(cfg.ContextLength), request.Model == "jina-reranker-m0")
+		d, err := quoteItem(item, int(cfg.ContextLength), multimodal)
 		if err != nil {
 			return BillingBudget{}, errors.Wrap(err, "quote jina rerank document")
 		}
@@ -175,6 +185,15 @@ func QuoteRerank(request *model.RerankRequest) (BillingBudget, error) {
 		total += q + d
 	}
 	return BillingBudget{Input: total}, nil
+}
+
+// supportsImageInput reports whether a catalog entry accepts image input. The
+// declared modalities are the single source of truth, so a future multimodal
+// model is admitted by adding it to ModelRatios rather than by editing call sites.
+// Parameters: cfg is the catalog entry for the requested model.
+// Returns: true when the model accepts image input.
+func supportsImageInput(cfg adaptor.ModelConfig) bool {
+	return slices.Contains(cfg.InputModalities, "image")
 }
 
 // quoteItem returns a conservative text/image allowance or rejects opaque work.

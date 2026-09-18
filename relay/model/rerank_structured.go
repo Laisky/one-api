@@ -23,12 +23,14 @@ func (r *RerankRequest) UnmarshalJSON(data []byte) error {
 		return errors.Wrap(err, "decode rerank request")
 	}
 	if len(wire.Query) > 0 && !bytes.Equal(bytes.TrimSpace(wire.Query), []byte("null")) {
-		text, structured, image, err := rerankInputText(wire.Query)
+		// A structured query is preserved exactly like a structured document. Which
+		// shapes an upstream actually accepts is provider- and model-specific (Jina
+		// takes {"text": ...} / {"image": ...} queries only on its multimodal
+		// reranker), so that rule belongs to the adaptor's model-aware admission
+		// contract, not to this provider-agnostic decoder.
+		text, structured, err := rerankInputText(wire.Query)
 		if err != nil {
 			return errors.Wrap(err, "decode rerank query")
-		}
-		if structured && !image {
-			return errors.New("rerank query must be a string or an image object")
 		}
 		decoded.Query = text
 		if structured {
@@ -40,7 +42,7 @@ func (r *RerankRequest) UnmarshalJSON(data []byte) error {
 	}
 	structuredDocuments := false
 	for i, raw := range wire.Documents {
-		text, structured, _, err := rerankInputText(raw)
+		text, structured, err := rerankInputText(raw)
 		if err != nil {
 			return errors.Wrapf(err, "decode rerank document %d", i)
 		}
@@ -54,33 +56,34 @@ func (r *RerankRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// rerankInputText validates one text/image item and returns its text estimate,
-// whether it is structured, and whether it is an image. Image tokens are settled
-// from upstream usage; counting a URL or base64 representation would be incorrect.
-func rerankInputText(raw json.RawMessage) (string, bool, bool, error) {
+// rerankInputText validates one text/image item and returns its text estimate and
+// whether it was structured. Image items estimate as a placeholder: their tokens
+// are settled from upstream usage, because counting a URL or base64
+// representation would be incorrect.
+func rerankInputText(raw json.RawMessage) (string, bool, error) {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
-		return "", false, false, errors.New("rerank input cannot be null")
+		return "", false, errors.New("rerank input cannot be null")
 	}
 	if raw[0] == '"' {
 		var text string
 		if err := json.Unmarshal(raw, &text); err != nil {
-			return "", false, false, errors.Wrap(err, "decode rerank text")
+			return "", false, errors.Wrap(err, "decode rerank text")
 		}
-		return text, false, false, nil
+		return text, false, nil
 	}
 	var item map[string]string
 	if err := json.Unmarshal(raw, &item); err != nil {
-		return "", false, false, errors.Wrap(err, "rerank input must be text or a text/image object")
+		return "", false, errors.Wrap(err, "rerank input must be text or a text/image object")
 	}
 	if len(item) != 1 {
-		return "", false, false, errors.New("rerank object must contain exactly one text or image field")
+		return "", false, errors.New("rerank object must contain exactly one text or image field")
 	}
 	if text, ok := item["text"]; ok {
-		return text, true, false, nil
+		return text, true, nil
 	}
 	if image, ok := item["image"]; ok && strings.TrimSpace(image) != "" {
-		return "[image]", true, true, nil
+		return "[image]", true, nil
 	}
-	return "", false, false, errors.New("rerank object requires text or a nonempty image")
+	return "", false, errors.New("rerank object requires text or a nonempty image")
 }

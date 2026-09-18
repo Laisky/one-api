@@ -85,8 +85,25 @@ Explicit `false` values survive conversion. Model-specific constraints, such as
 v4 multi-vector/dimension incompatibility, remain validated by Jina.
 
 Rerank accepts strings and native `{ "text": "..." }` / `{ "image": "..." }`
-documents; image queries and documents require a supporting model such as m0.
-The model-aware check runs at admission and direct adaptor conversion.
+documents. Upstream's schema is not symmetric between the two fields, so neither
+is the gateway's (verified live against `api.jina.ai/v1/rerank`):
+
+| field | `v3`, `v3.5`, `v2`, ColBERT | `m0` |
+| --- | --- | --- |
+| `query: "string"` | accepted | accepted |
+| `query: { "text": ... }` | rejected | accepted |
+| `query: { "image": ... }` | rejected | accepted |
+| `documents: [{ "text": ... }]` | accepted | accepted |
+| `documents: [{ "image": ... }]` | rejected | accepted |
+
+A text-only reranker answers `422 "'query' Input should be a valid string"` for
+an object query of **any** shape, so a structured query is multimodal-only while
+a `{ "text": ... }` document is accepted everywhere. The model-aware check runs
+at admission and at direct adaptor conversion, and derives multimodality from the
+catalog's declared input modalities rather than a hardcoded model name. A native
+query is forwarded verbatim rather than flattened to its string: `m0` scores
+`{ "text": "q" }` and `"q"` slightly differently, so rewriting it would change
+the ranking the caller receives.
 Native `return_documents`, `max_doc_length` and `return_embeddings` are forwarded
 from the top level. The legacy `max_tokens_per_doc` field maps to `max_doc_length`
 for v3/v3.5 only. Other adaptors must explicitly opt into structured rerank input;

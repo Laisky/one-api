@@ -61,7 +61,6 @@ type streamToolCallState struct {
 	index       int
 	arguments   strings.Builder
 	streamIndex *int
-	orderPos    int
 }
 
 func rawMessageFromString(value string) json.RawMessage {
@@ -505,9 +504,8 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 			id = "call_" + random.GetRandomString(16)
 		}
 		state = &streamToolCallState{
-			id:       id,
-			index:    h.nextOutputIndex(),
-			orderPos: len(h.toolOrder),
+			id:    id,
+			index: h.nextOutputIndex(),
 		}
 		if tool.Index != nil {
 			idx := *tool.Index
@@ -521,10 +519,17 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 	}
 
 	if normalizedID != "" && normalizedID != state.id {
-		delete(h.toolCalls, state.id)
-		state.id = normalizedID
-		h.toolCalls[state.id] = state
-		h.toolOrder[state.orderPos] = state.id
+		// Reaching here means the state already existed, so response.output_item.added
+		// has already published state.id as this call's id and call_id. Clients that
+		// build the tool call identity from the added event never revisit it, so an
+		// upstream that reveals the real tool-call ID only in a later delta must not
+		// rename the call underneath them — doing so made output_item.done contradict
+		// output_item.added. Keep the published ID and register the upstream ID as an
+		// alias so later deltas still resolve to this state. The ID only has to be
+		// self-consistent within the conversation: it is converted back by
+		// convertResponseAPIIDToToolCall on replay and never has to match what the
+		// upstream originally issued.
+		h.toolCalls[normalizedID] = state
 	}
 
 	if tool.Index != nil {

@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -187,6 +188,106 @@ func TestConvertResponseAPIToChatCompletionRequestPreservesDeepSeekFileImages(t 
 			require.Equal(t, source["file_id"], blocks[1].FileID)
 			require.Equal(t, source["file_data"], blocks[1].FileData)
 			require.Equal(t, source["filename"], blocks[1].Filename)
+		})
+	}
+}
+
+// TestConvertResponseAPIToChatCompletionRequestMergesTurnAcrossReasoningItem
+// replays an assistant turn in the order this gateway's own response.output
+// emits it (message, reasoning, function_call). A reasoning item is an
+// intra-turn marker, so it must not split the turn into two assistant messages.
+// Parameters: t is the testing handle used for assertions.
+// Returns: nothing; the test fails through t when the turn is split.
+func TestConvertResponseAPIToChatCompletionRequestMergesTurnAcrossReasoningItem(t *testing.T) {
+	t.Parallel()
+	responseReq := &ResponseAPIRequest{
+		Model: "deepseek-v4-pro",
+		Input: ResponseAPIInput{
+			map[string]any{"role": "user", "content": "Summarize README.md"},
+			map[string]any{
+				"type": "message",
+				"role": "assistant",
+				"content": []any{
+					map[string]any{"type": "output_text", "text": "Let me read it."},
+				},
+			},
+			map[string]any{
+				"type": "reasoning",
+				"content": []any{
+					map[string]any{"type": "text", "text": "Read the file first."},
+				},
+			},
+			map[string]any{
+				"type":      "function_call",
+				"id":        "fc_read",
+				"call_id":   "call_read",
+				"name":      "read_file",
+				"arguments": `{"path":"README.md"}`,
+			},
+			map[string]any{
+				"type":    "function_call_output",
+				"call_id": "call_read",
+				"output":  "file contents",
+			},
+		},
+	}
+
+	chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseReq)
+	require.NoError(t, err)
+	require.Len(t, chatReq.Messages, 3, "reasoning between message and function_call must not split the turn")
+
+	assistant := chatReq.Messages[1]
+	require.Equal(t, "assistant", assistant.Role)
+	require.Equal(t, "Let me read it.", assistant.StringContent())
+	require.Len(t, assistant.ToolCalls, 1)
+	require.NotNil(t, assistant.ReasoningContent)
+	require.Equal(t, "Read the file first.", *assistant.ReasoningContent)
+
+	require.Equal(t, "tool", chatReq.Messages[2].Role)
+	require.Equal(t, assistant.ToolCalls[0].Id, chatReq.Messages[2].ToolCallId)
+}
+
+// TestConvertResponseAPIToChatCompletionRequestKeepsMergedAssistantContentNonNull
+// covers assistant message items whose content decodes to nil. Merging tool calls
+// into such a message must not emit an assistant message without a content field,
+// because `json:"content,omitempty"` drops nil and DeepSeek rejects tool-call
+// history whose assistant content is absent.
+// Parameters: t is the testing handle used for assertions.
+// Returns: nothing; the test fails through t when content is dropped.
+func TestConvertResponseAPIToChatCompletionRequestKeepsMergedAssistantContentNonNull(t *testing.T) {
+	t.Parallel()
+	for name, content := range map[string]any{
+		"empty_content_array":     []any{},
+		"unrecognized_content":    []any{map[string]any{"type": "refusal", "refusal": "no"}},
+		"missing_content_entries": []any{map[string]any{"type": "output_text"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			responseReq := &ResponseAPIRequest{
+				Model: "deepseek-v4-pro",
+				Input: ResponseAPIInput{
+					map[string]any{"type": "message", "role": "assistant", "content": content},
+					map[string]any{
+						"type":      "function_call",
+						"id":        "fc_x",
+						"call_id":   "call_x",
+						"name":      "read_file",
+						"arguments": `{}`,
+					},
+				},
+			}
+
+			chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseReq)
+			require.NoError(t, err)
+			require.Len(t, chatReq.Messages, 1)
+			assistant := chatReq.Messages[0]
+			require.Len(t, assistant.ToolCalls, 1)
+			require.NotNil(t, assistant.Content,
+				"an assistant message carrying tool_calls must serialize a content field")
+
+			encoded, err := json.Marshal(assistant)
+			require.NoError(t, err)
+			require.Contains(t, string(encoded), `"content"`)
 		})
 	}
 }

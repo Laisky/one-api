@@ -1080,7 +1080,50 @@ func TestChatToResponseStreamBridge_ToolCallIndexLookup(t *testing.T) {
 	var ev openai.ResponseAPIStreamEvent
 	bridgeUnmarshal(t, argDone[0], &ev)
 	assert.Equal(t, `{"a":1}`, ev.Arguments)
-	assert.Equal(t, "call_resolved", ev.ItemId)
+
+	// The upstream ID arrives only in the second chunk, after output_item.added has
+	// already published an ID. Adopting it there used to split one logical call across
+	// two item_ids, so a client accumulating arguments by item_id reconstructed `{"a"`
+	// under one ID and `:1}` under the other — invalid JSON for both. The published ID
+	// is therefore stable for the whole call; it only has to be self-consistent, since
+	// convertResponseAPIIDToToolCall maps it back on replay.
+	assert.Equal(t, bridgeSoleToolCallItemID(t, events), ev.ItemId)
+}
+
+// bridgeSoleToolCallItemID returns the single item_id every event of the stream's
+// only function_call must carry, failing the test when the events disagree.
+// Parameters: t is the testing handle and events are the parsed SSE frames.
+// Returns: the one item_id shared by the call's added, delta, and done events.
+func bridgeSoleToolCallItemID(t *testing.T, events []bridgeSSE) string {
+	t.Helper()
+	seen := make(map[string]struct{})
+	for _, name := range []string{
+		"response.output_item.added",
+		"response.function_call_arguments.delta",
+		"response.function_call_arguments.done",
+		"response.output_item.done",
+	} {
+		for _, e := range bridgeFindEvents(events, name) {
+			var ev openai.ResponseAPIStreamEvent
+			bridgeUnmarshal(t, e, &ev)
+			if ev.Item != nil {
+				if ev.Item.Type != "function_call" {
+					continue
+				}
+				seen[ev.Item.Id] = struct{}{}
+				require.Equal(t, ev.Item.Id, ev.Item.CallId, "%s must carry id == call_id", name)
+				continue
+			}
+			if ev.ItemId != "" {
+				seen[ev.ItemId] = struct{}{}
+			}
+		}
+	}
+	require.Len(t, seen, 1, "one tool call must use exactly one item_id across its events")
+	for id := range seen {
+		return id
+	}
+	return ""
 }
 
 func TestChatToResponseStreamBridge_EmptyChunk(t *testing.T) {
@@ -1379,5 +1422,84 @@ func TestChatToResponseStreamBridge_UpstreamDropWithFinishLength(t *testing.T) {
 				assert.Equal(t, "incomplete", evt.Response.Status)
 			}
 		}
+	}
+}
+
+// TestChatToResponseStreamBridge_ToolCallIDStableWhenUpstreamIDArrivesLate pins the
+// identity contract the added event publishes. Upstreams that send an index-only
+// tool_call delta first and the real ID later must not rename the call after
+// response.output_item.added announced it: clients such as pi read call_id off the
+// added event and never revisit it, and every event of one call must share one
+// item_id so argument deltas reassemble into valid JSON.
+func TestChatToResponseStreamBridge_ToolCallIDStableWhenUpstreamIDArrivesLate(t *testing.T) {
+	t.Parallel()
+	c, w := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	bridge.HandleChunk(c, bridgeToolCallChunk("", 0, "read_file", `{"path"`))
+	bridge.HandleChunk(c, bridgeToolCallChunk("call_late", 0, "", `:"a"}`))
+	bridge.HandleChunk(c, bridgeFinishChunk("tool_calls"))
+	bridge.HandleDone(c)
+
+	events := parseBridgeSSE(w.Body.String())
+	stableID := bridgeSoleToolCallItemID(t, events)
+	require.NotEmpty(t, stableID)
+
+	var argsDone openai.ResponseAPIStreamEvent
+	done := bridgeFindEvents(events, "response.function_call_arguments.done")
+	require.Len(t, done, 1)
+	bridgeUnmarshal(t, done[0], &argsDone)
+	require.Equal(t, `{"path":"a"}`, argsDone.Arguments,
+		"a renamed item_id would scatter the argument fragments across two calls")
+
+	var completed openai.ResponseAPIStreamEvent
+	final := bridgeFindEvents(events, "response.completed")
+	require.Len(t, final, 1)
+	bridgeUnmarshal(t, final[0], &completed)
+	require.NotNil(t, completed.Response)
+	for _, item := range completed.Response.Output {
+		if item.Type == "function_call" {
+			require.Equal(t, stableID, item.Id)
+			require.Equal(t, stableID, item.CallId)
+		}
+	}
+}
+
+// TestBuildResponseOutput_FunctionCallCarriesBothIDs verifies the non-streaming
+// fallback emits the same function_call identity as the streaming bridge. A client
+// keying the tool call on the item id must not get an empty string just because the
+// channel answered without streaming.
+func TestBuildResponseOutput_FunctionCallCarriesBothIDs(t *testing.T) {
+	t.Parallel()
+	for name, upstreamID := range map[string]string{
+		"already_prefixed": "call_read",
+		"bare_id":          "read_raw",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			out := buildResponseOutput([]openai_compatible.TextResponseChoice{{
+				Message: model.Message{
+					Role:    "assistant",
+					Content: "Let me read it.",
+					ToolCalls: []model.Tool{{
+						Id:       upstreamID,
+						Type:     "function",
+						Function: &model.Function{Name: "read_file", Arguments: `{"path":"a"}`},
+					}},
+				},
+			}})
+
+			var seen int
+			for _, item := range out {
+				if item.Type != "function_call" {
+					continue
+				}
+				seen++
+				require.NotEmpty(t, item.Id, "function_call items must carry an id")
+				require.Equal(t, item.Id, item.CallId)
+				require.Equal(t, ensureResponseAPICallID(upstreamID), item.CallId)
+			}
+			require.Equal(t, 1, seen)
+		})
 	}
 }
