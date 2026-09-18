@@ -87,16 +87,22 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 		})
 	}
 
-	// openToolCallMsgIdx tracks an assistant message that was just emitted from a
-	// function_call or assistant text item and is still "open" to receive sibling tool calls. The OpenAI
-	// Responses API represents parallel tool calls (issued in a single assistant turn) as
-	// multiple consecutive function_call items. ChatCompletion upstreams such as DeepSeek
-	// require those to live in ONE assistant message's tool_calls array; otherwise the
-	// trailing tool results end up following a tool message instead of an assistant message
-	// with tool_calls, producing the upstream 400 "Messages with role 'tool' must be a
-	// response to a preceding message with 'tool_calls'". The index is reset at the start of
-	// every iteration so only directly-adjacent function_call items are merged; anything else
-	// in between (a tool output, user/assistant text, etc.) starts a fresh assistant turn.
+	// openToolCallMsgIdx tracks the assistant message of the turn currently being
+	// lowered, which is still "open" to receive tool calls. The OpenAI Responses API
+	// represents one assistant turn as several items: an optional reasoning item, an
+	// optional assistant message, and one function_call item per (possibly parallel)
+	// tool call. ChatCompletion upstreams such as DeepSeek require the whole turn to
+	// live in ONE assistant message — its text, its tool_calls array and its
+	// reasoning_content together — otherwise the trailing tool results end up
+	// following a tool message instead of an assistant message with tool_calls,
+	// producing the upstream 400 "Messages with role 'tool' must be a response to a
+	// preceding message with 'tool_calls'".
+	//
+	// The index is reset at the start of every iteration, so only items that belong to
+	// the same turn keep it alive: an assistant content item opens a turn, a
+	// function_call joins or opens one, and a reasoning item passes through. Anything
+	// that ends the turn (a user/system message, a tool output) leaves it at -1 and the
+	// next function_call starts a fresh assistant message.
 	openToolCallMsgIdx := -1
 	// pendingToolCallIDs holds the normalized tool-call IDs from the current assistant
 	// tool-call turn that are still eligible to be answered by an adjacent tool message. It
@@ -124,6 +130,13 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 				case "reasoning":
 					pendingReasoning = extractResponseAPIReasoningContent(v)
 					clear(pendingToolCallIDs)
+					// A reasoning item marks thinking *within* a turn, not a turn
+					// boundary, so it must not close an open assistant message. This
+					// gateway's own response.output orders a turn as message, reasoning,
+					// function_call (see buildFinalResponse in the stream bridge), so
+					// resetting here would split every replayed thinking turn into two
+					// assistant messages.
+					openToolCallMsgIdx = currentToolCallMsgIdx
 					continue
 				case "function_call":
 					fcID, _ := v["id"].(string)
@@ -160,6 +173,13 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					if currentToolCallMsgIdx >= 0 && chatReq.Messages[currentToolCallMsgIdx].Role == role {
 						chatReq.Messages[currentToolCallMsgIdx].ToolCalls = append(
 							chatReq.Messages[currentToolCallMsgIdx].ToolCalls, toolCall)
+						// An assistant message item with empty or unrecognized content
+						// decodes to a nil Content, which `json:"content,omitempty"` drops
+						// entirely. DeepSeek requires non-null content on tool-call history,
+						// so mirror the fresh-message branch below and pin it to "".
+						if chatReq.Messages[currentToolCallMsgIdx].Content == nil {
+							chatReq.Messages[currentToolCallMsgIdx].Content = ""
+						}
 						if pendingReasoning != "" && chatReq.Messages[currentToolCallMsgIdx].ReasoningContent == nil {
 							reasoning := pendingReasoning
 							chatReq.Messages[currentToolCallMsgIdx].ReasoningContent = &reasoning

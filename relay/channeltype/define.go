@@ -60,5 +60,7 @@ const (
 	Cerebras
 	DeepInfra
 	Zai
+	Jina
+	TypeSafe
 	Dummy
 )

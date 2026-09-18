@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Laisky/one-api/relay/adaptor/jina"
 	"io"
 	"math"
 	"net/http"
@@ -63,6 +64,14 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 
 	promptTokens := countRerankPromptTokens(ctx, rerankRequest)
+	if meta.ChannelType == channeltype.Jina {
+		budget, err := jina.QuoteRerank(rerankRequest)
+		if err != nil {
+			return openai.ErrorWrapper(err, "unbounded_jina_request", http.StatusBadRequest)
+		}
+		jina.StoreBillingBudget(c, budget)
+		promptTokens = budget.Input
+	}
 	meta.PromptTokens = promptTokens
 	totalQuota := calculateRerankQuota(promptTokens, modelRatio, groupRatio, perCallBilling)
 
@@ -120,7 +129,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if isErrorHappened(meta, resp) {
 		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		if requestId != "" {
-			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
+			if err := recordZeroCostAfterFailure(c, quotaId, requestId); err != nil {
 				lg.Warn("update user request cost to zero failed", zap.Error(err))
 			}
 		}
@@ -138,7 +147,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		if usage == nil {
 			scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
 			if requestId != "" {
-				if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
+				if err := recordZeroCostAfterFailure(c, quotaId, requestId); err != nil {
 					lg.Warn("update user request cost to zero failed", zap.Error(err))
 				}
 			}
@@ -222,7 +231,8 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	})
 
-	return nil
+	markResponseSettlement(c, usage, respErr)
+	return respErr
 }
 
 func getAndValidateRerankRequest(c *gin.Context) (*relaymodel.RerankRequest, error) {
@@ -251,9 +261,20 @@ func getAndValidateRerankRequest(c *gin.Context) (*relaymodel.RerankRequest, err
 	return rerankRequest, nil
 }
 
+// prepareRerankRequestBody converts a cloned rerank request and returns its JSON
+// body. Structured inputs require an adaptor that explicitly supports them.
 func prepareRerankRequestBody(c *gin.Context, meta *metalib.Meta, adaptorImpl adaptor.Adaptor, request *relaymodel.RerankRequest) (io.Reader, error) {
 	if request == nil {
 		return nil, errors.New("rerank request is nil")
+	}
+
+	// Native objects must never degrade into accounting placeholders on a
+	// text-only adaptor, including when channel fallback selects another provider.
+	if request.HasStructuredInput() {
+		structured, ok := adaptorImpl.(adaptor.StructuredRerankAdaptor)
+		if !ok || !structured.SupportsStructuredRerank() {
+			return nil, errors.Errorf("structured rerank inputs are not supported by adaptor %s", adaptorImpl.GetChannelName())
+		}
 	}
 
 	if rerankAdaptor, ok := adaptorImpl.(adaptor.RerankAdaptor); ok {
@@ -308,7 +329,13 @@ func calculateRerankQuota(promptTokens int, modelRatio float64, groupRatio float
 	return quota
 }
 
+// preConsumeRerankQuota reserves the calculated rerank charge unless the
+// trusted-balance shortcut applies. Jina requests instead reserve their complete
+// prepared billing allowance. It returns the amount actually reserved.
 func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
+	if meta.ChannelType == channeltype.Jina {
+		return preConsumeJinaQuota(c, meta)
+	}
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
 
@@ -342,6 +369,9 @@ func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Met
 	return perCallQuota, nil
 }
 
+// postConsumeRerankQuota computes and records the final rerank charge, using
+// measured token usage when applicable and retaining Jina estimates. It returns
+// the total quota submitted for settlement.
 func postConsumeRerankQuota(ctx context.Context,
 	usage *relaymodel.Usage,
 	meta *metalib.Meta,
@@ -352,10 +382,16 @@ func postConsumeRerankQuota(ctx context.Context,
 	groupRatio float64,
 	perCallBilling bool) (quota int64) {
 	quota = max(totalQuota, 0)
-	if !perCallBilling && usage != nil && usage.PromptTokens > 0 {
+	if !perCallBilling && usage != nil && (usage.PromptTokens > 0 || meta.ChannelType == channeltype.Jina) {
 		quota = calculateRerankQuota(usage.PromptTokens, modelRatio, groupRatio, false)
 	}
 
+	if usage != nil {
+		quota = exactJinaUsageQuota(ctx, meta, usage, quota, preConsumedQuota, modelRatio, 0, groupRatio)
+	}
+	if usage != nil && usage.BillingEstimateReason != "" {
+		quota = max(quota, preConsumedQuota)
+	}
 	quotaDelta := quota - preConsumedQuota
 
 	// Resolve identifiers from the detached billing snapshot (or, for a synchronous
@@ -389,6 +425,9 @@ func postConsumeRerankQuota(ctx context.Context,
 			ElapsedTime:      helper.CalcElapsedTime(meta.StartTime),
 			RequestId:        requestId,
 			TraceId:          traceId,
+		}
+		if usage != nil {
+			logEntry.Metadata = billingEstimateMetadata(logEntry.Metadata, usage.BillingEstimateReason)
 		}
 		model.SetLogExternalUUIDs(logEntry, meta.UserUUID, meta.ChannelUUID, meta.TokenUUID)
 		billing.PostConsumeQuotaWithLog(ctx, meta.TokenId, quotaDelta, quota, logEntry, provLogID)

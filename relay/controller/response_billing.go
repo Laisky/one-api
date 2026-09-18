@@ -87,8 +87,9 @@ func calculateResponseAPIPreconsumeQuota(promptTokens int, maxOutputTokens *int,
 	return baseQuota
 }
 
-// postConsumeResponseAPIQuota calculates final quota consumption for Response API requests
-// Following DRY principle by reusing the centralized billing.PostConsumeQuota function
+// postConsumeResponseAPIQuota calculates and records the final Responses API
+// charge. Missing usage or usage without any billable bucket retains the
+// pre-consumed estimate. It returns the total quota submitted for settlement.
 func postConsumeResponseAPIQuota(ctx context.Context,
 	usage *relaymodel.Usage,
 	meta *metalib.Meta,
@@ -128,7 +129,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		)
 		usage = &relaymodel.Usage{}
 		settledAtEstimate = true
-	} else if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
+	} else if !hasBillableUsage(usage) {
 		gmw.GetLogger(ctx).Warn("response api post-billing received zero usage; settling at the pre-consumed estimate",
 			zap.Int64("pre_consumed_quota", preConsumedQuota),
 			zap.String("model", responseAPIRequest.Model),
@@ -151,7 +152,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 
 	quota = computeResult.TotalQuota
 	totalTokens := computeResult.PromptTokens + computeResult.CompletionTokens
-	if totalTokens == 0 {
+	if totalTokens == 0 && !hasBillableUsage(usage) {
 		quota = 0
 	}
 	if settledAtEstimate {

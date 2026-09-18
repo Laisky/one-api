@@ -9,13 +9,13 @@ import (
 )
 
 // TestZaiRegistration verifies the stable channel ID and backend mappings for the
-// Z.AI channel. Zai is currently the highest channel type, so it also pins the
-// Dummy sentinel that relay/channeltype/url.go's init() asserts against.
+// Z.AI channel. The count sentinel must remain above Zai without reserving the
+// next provider ID; new providers may legitimately be appended before Dummy.
 func TestZaiRegistration(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, 58, Zai)
-	require.Equal(t, 59, Dummy)
+	require.Greater(t, Dummy, Zai)
 	require.Equal(t, apitype.Zai, ToAPIType(Zai))
 	require.Equal(t, "zai", IdToName(Zai))
 	require.Equal(t, "zai", apitype.String(apitype.Zai))

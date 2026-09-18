@@ -14,6 +14,7 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 // ChannelTestingModelSkip is the sentinel testing_model value that excludes a
@@ -251,6 +252,9 @@ func BatchInsertChannels(channels []Channel) error {
 		if err := channels[i].NormalizeHiddenModels(); err != nil {
 			return errors.Wrapf(err, "normalize hidden models for channel at index %d", i)
 		}
+		if err := validateJinaChannelConfiguration(&channels[i]); err != nil {
+			return errors.Wrapf(err, "validate channel at batch index %d", i)
+		}
 	}
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
@@ -353,7 +357,8 @@ func (channel *Channel) GetCheapestSupportedModel() string {
 		}
 		// only consider positive ratios; if zero, still consider but at lowest weight
 		if !initialized {
-			cheapestName, cheapestRatio, initialized = name, r, true
+			cheapestName, cheapestRatio = name, r
+			initialized = true
 			continue
 		}
 		if r < cheapestRatio {
@@ -386,6 +391,9 @@ func (channel *Channel) Insert() error {
 		return identity.Tag(
 			errors.Wrapf(err, "failed to normalize hidden models for channel: name=%s, type=%d", channel.Name, channel.Type),
 			channel.Ref())
+	}
+	if err := validateJinaChannelConfiguration(channel); err != nil {
+		return errors.Wrap(err, "validate new channel")
 	}
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(channel).Error; err != nil {
@@ -501,6 +509,11 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 		if err := tx.First(&persisted, "id = ?", persisted.Id).Error; err != nil {
 			return errors.Wrapf(err, "reload channel %d before rebuilding abilities", persisted.Id)
 		}
+		// Validate the effective row, not an incomplete update DTO. A type-only
+		// change or inherited unsafe endpoint must roll back the whole update.
+		if err := validateJinaChannelConfiguration(&persisted); err != nil {
+			return errors.Wrap(err, "validate updated channel")
+		}
 		if err := deleteAbilitiesWithDB(tx, persisted.Id); err != nil {
 			return errors.Wrapf(err, "delete abilities for channel %d during update", persisted.Id)
 		}
@@ -573,16 +586,21 @@ func (channel *Channel) Delete() error {
 	return nil
 }
 
+// LoadConfig decodes stored channel settings and applies provider-specific URL
+// security policy, including when Config is empty and only BaseURL is present.
 func (channel *Channel) LoadConfig() (ChannelConfig, error) {
 	var cfg ChannelConfig
-	if channel.Config == "" {
-		return cfg, nil
+	if channel.Config != "" {
+		if err := json.Unmarshal([]byte(channel.Config), &cfg); err != nil {
+			return cfg, identity.Tag(
+				errors.Wrapf(err, "unmarshal channel %d config", channel.Id),
+				channel.Ref())
+		}
 	}
-	err := json.Unmarshal([]byte(channel.Config), &cfg)
-	if err != nil {
-		return cfg, identity.Tag(
-			errors.Wrapf(err, "unmarshal channel %d config", channel.Id),
-			channel.Ref())
+	if channel.Type == channeltype.Jina {
+		if err := channeltype.ValidateJinaURLs(channel.GetBaseURL(), cfg.EndpointURLs); err != nil {
+			return cfg, identity.Tag(errors.Wrap(err, "validate Jina channel configuration"), channel.Ref())
+		}
 	}
 	return cfg, nil
 }

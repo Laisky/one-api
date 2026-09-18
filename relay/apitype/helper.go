@@ -66,6 +66,8 @@ func String(apiType int) string {
 		return "deepinfra"
 	case Zai:
 		return "zai"
+	case TypeSafe:
+		return "typesafe"
 	default:
 		return ""
 	}

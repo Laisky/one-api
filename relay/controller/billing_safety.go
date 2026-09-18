@@ -14,12 +14,15 @@ import (
 	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/jina"
 	"github.com/Laisky/one-api/relay/billing"
+	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 )
 
 // shouldSkipPreConsumedRefund reports whether a refund should be skipped because
-// the request may already have been forwarded upstream.
+// the request may already have been forwarded upstream. An explicit Jina
+// pre-inference rejection remains refundable despite the forwarding marker.
 //
 // Parameters:
 //   - c: request context containing forwarding marker.
@@ -28,6 +31,9 @@ import (
 //   - bool: true when conservative policy requires skipping refund.
 func shouldSkipPreConsumedRefund(c *gin.Context) bool {
 	if c == nil {
+		return false
+	}
+	if c.GetInt(ctxkey.Channel) == channeltype.Jina && jina.RejectedBeforeInference(c) {
 		return false
 	}
 	forwardedAny, exists := c.Get(ctxkey.UpstreamRequestPossiblyForwarded)
@@ -102,15 +108,6 @@ func (s conservativeRefundSnapshot) refund(ctx context.Context) bool {
 		return false
 	}
 
-	// Reconcile provisional log to 0 so it doesn't appear as a duplicate entry.
-	if s.provisionalLogID > 0 {
-		if err := model.ReconcileConsumeLog(ctx, s.provisionalLogID, 0,
-			fmt.Sprintf("refunded: %s", s.reason), 0, 0, 0, nil); err != nil {
-			lg.Warn("failed to reconcile provisional log on refund",
-				zap.Error(err), zap.Int("provisional_log_id", s.provisionalLogID))
-		}
-	}
-
 	// Refund the quota via model.PostConsumeTokenQuota directly rather than
 	// billing.ReturnPreConsumedQuota (which logs and swallows the error). The caller
 	// has already marked billing reconciled SYNCHRONOUSLY, so the deferred
@@ -127,14 +124,24 @@ func (s conservativeRefundSnapshot) refund(ctx context.Context) bool {
 		return false
 	}
 
+	// Reconcile provisional log to 0 so it doesn't appear as a duplicate entry.
+	if s.provisionalLogID > 0 {
+		if err := model.ReconcileConsumeLog(ctx, s.provisionalLogID, 0,
+			fmt.Sprintf("refunded: %s", s.reason), 0, 0, 0, nil); err != nil {
+			lg.Warn("failed to reconcile provisional log on refund",
+				zap.Error(err), zap.Int("provisional_log_id", s.provisionalLogID))
+		}
+	}
+
 	if s.userID > 0 {
 		syncUserQuotaCacheAfterRefund(ctx, s.userID, s.reason)
 	}
 	return true
 }
 
-// returnPreConsumedQuotaConservative refunds pre-consumed quota only when the request
-// has not potentially been forwarded upstream.
+// returnPreConsumedQuotaConservative refunds pre-consumed quota when the request
+// was not potentially forwarded upstream or Jina explicitly rejected it before
+// inference. It retains ambiguous Jina charges.
 //
 // This is the SYNCHRONOUS chokepoint, called on the request goroutine from terminal
 // error paths; reading c here is safe. For asynchronous refunds spawned into a
@@ -149,7 +156,8 @@ func (s conservativeRefundSnapshot) refund(ctx context.Context) bool {
 //   - reason: short reason label for logs.
 //
 // Returns:
-//   - bool: true when refund was executed, false when skipped for no-underbilling safety.
+//   - bool: true when the refund completed; false when no refund was needed, the
+//     charge was retained for safety, or the refund failed.
 func returnPreConsumedQuotaConservative(
 	ctx context.Context,
 	c *gin.Context,
@@ -165,7 +173,13 @@ func returnPreConsumedQuotaConservative(
 		return conservativeRefundSnapshot{tokenID: tokenID, reason: reason, quota: preConsumedQuota}.refund(ctx)
 	}
 
+	if handled, refunded := refundJinaAdmission(c, preConsumedQuota, tokenID, reason); handled {
+		return refunded
+	}
 	snap := newConservativeRefundSnapshot(c, preConsumedQuota, tokenID, reason)
+	if JinaAttemptMayHaveCost(c) {
+		return false
+	}
 	// Mark reconciled on the request goroutine in both the skip and refund cases so the
 	// deferred billingAuditSafetyNet observes it (preserves the previous behavior).
 	markBillingReconciled(c)
@@ -173,8 +187,9 @@ func returnPreConsumedQuotaConservative(
 }
 
 // ResetPerAttemptBillingForRetry refunds and clears the request-scoped billing
-// state of a just-failed/abandoned relay attempt so the next cross-channel retry
-// starts from a clean slate.
+// state of a just-failed relay attempt so the next cross-channel retry starts
+// from a clean slate. It leaves the state unchanged when billing forbids replay,
+// including after a possibly paid Jina attempt.
 //
 // It must be called by the retry loop only once a retry channel has been
 // selected and the loop has definitively decided to retry (i.e. immediately
@@ -190,23 +205,18 @@ func returnPreConsumedQuotaConservative(
 // refunded (conservative skip on a forwarded-then-failed attempt), double
 // charging the user.
 //
-// Exactly-once reasoning (verified against billing_safety.go +
-// claude_messages.go refund call sites): the only refund chokepoint is
-// returnPreConsumedQuotaConservative, which NEVER zeroes PreConsumedQuotaAmount.
-// When the attempt was not forwarded it already refunded (or the billing audit
-// safety net did), so re-refunding here would over-credit. When the attempt was
-// forwarded, it skipped the refund and the pre-consumed quota is still
-// outstanding. Gating the refund on shouldSkipPreConsumedRefund (i.e. the
-// forwarded marker) therefore yields EXACTLY one outcome per attempt: one charge
-// on success, one refund when abandoned — never both, never twice.
-//
-// This helper is generic: all relay modes share the same retry loop and the same
-// per-attempt ctxkeys, so it covers text/response/claude/etc.
+// For a retryable abandoned attempt, the function refunds an outstanding hold
+// asynchronously, then clears the generic and Jina-specific attempt markers.
 func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 	if c == nil {
 		return
 	}
 
+	// A possibly paid Jina attempt must never be reset/refunded for replay.
+	if !BillingAllowsRetry(c) {
+		return
+	}
+	jina.ClearBillingBudget(c)
 	lg := gmw.GetLogger(c)
 	userID := c.GetInt(ctxkey.Id)
 	tokenID := c.GetInt(ctxkey.TokenId)
@@ -230,7 +240,10 @@ func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 		// non-cancelled, c-free context (all the values it needs are already value-captured
 		// above), so it neither aborts on request cancellation nor races gin's recycle of c.
 		goDetachedBillingWork(relayctx.Detach(c), "resetPerAttemptBillingForRetry", func(bctx context.Context) {
-			billing.ReturnPreConsumedQuota(bctx, amount, tokenID)
+			if err := model.PostConsumeTokenQuota(bctx, tokenID, -amount); err != nil {
+				lg.Error("retry refund failed; provisional log retained", zap.Error(err))
+				return
+			}
 			syncUserQuotaCacheAfterRefund(bctx, userID, "cross_channel_retry")
 			if provID > 0 {
 				if err := model.ReconcileConsumeLog(bctx, provID, 0, reason, 0, 0, 0, nil); err != nil {
@@ -245,6 +258,7 @@ func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 
 	// Clear the per-attempt billing markers so the next attempt starts clean and
 	// its own pre-consume/refund accounting is independent of this attempt.
+	jina.ClearRejection(c)
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, false)
 	c.Set(ctxkey.PreConsumedQuotaAmount, int64(0))
 	c.Set(ctxkey.ProvisionalLogId, 0)
@@ -264,28 +278,23 @@ var refundGoroutineReleaseForTest chan struct{}
 // not on a recycled/mutated *gin.Context. Always nil in production builds.
 var refundObservedForTest func(ctxErr error, snap conservativeRefundSnapshot)
 
-// scheduleConservativeRefund performs the conservative pre-consumed quota refund
-// in a lifecycle-managed critical goroutine so a slow DB never blocks the handler.
+// scheduleConservativeRefund arranges a safe pre-consumed quota refund. Generic
+// refunds run in a lifecycle-managed goroutine, while a proven Jina
+// pre-inference rejection is refunded synchronously before replay. A possibly
+// paid Jina attempt is retained instead of refunded.
 //
-// Billing is marked reconciled SYNCHRONOUSLY here, before the goroutine is
-// spawned. This is essential: the deferred billingAuditSafetyNet runs on the
-// request goroutine the instant the handler returns, which can happen before the
-// refund goroutine is scheduled. If the reconciled flag were only set inside the
-// goroutine, the safety net would observe an unreconciled pre-consume on a request
-// already forwarded upstream — which it cannot auto-refund — and emit a
-// false-positive "manual reconciliation required" CRITICAL alarm. Marking reconciled
-// up front mirrors the success path, which also marks synchronously before spawning
-// its postBilling goroutine.
-//
-// The refund runs via goDetachedBillingWork on relayctx.Detach(c): a non-cancelled, c-free
-// background context bounded by config.BillingTimeoutSec. Non-cancelled means a client
-// disconnect (request-context cancellation) cannot abort the refund DB write — the silent
-// refund-loss this fixes. c-free means the goroutine holds no live *gin.Context, so it cannot
-// race gin's sync.Pool recycle of c. The timeout bound means a stuck billing DB cannot leak
-// the goroutine or extend graceful drain past the deadline. Every request-scoped value the
-// refund needs is captured up front via the snapshot.
+// The refundable path marks billing reconciled before any asynchronous work so
+// the deferred audit cannot race the refund. Generic refunds use a detached,
+// bounded context and a snapshot of request-scoped values, avoiding cancellation
+// and access to a recycled gin context.
 func scheduleConservativeRefund(c *gin.Context, preConsumedQuota int64, tokenID int, reason string) {
 	if c == nil {
+		return
+	}
+	if JinaAttemptMayHaveCost(c) {
+		return
+	}
+	if handled, _ := refundJinaAdmission(c, preConsumedQuota, tokenID, reason); handled {
 		return
 	}
 	// Mark reconciled SYNCHRONOUSLY, before spawning (see the doc note above).
@@ -361,11 +370,14 @@ func markBillingReconciled(c *gin.Context) {
 	c.Set(ctxkey.BillingReconciled, true)
 }
 
-// billingAuditSafetyNet should be deferred at the start of each relay handler
-// (after pre-consume). It detects cases where pre-consumed quota was never
-// reconciled (post-billed or refunded) and logs a CRITICAL warning for audit.
-// If the request was NOT forwarded upstream, it also attempts to refund the quota.
+// billingAuditSafetyNet should be deferred after pre-consumption. It settles an
+// unresolved, possibly paid Jina reservation as an estimate; otherwise it logs
+// unreconciled quota and attempts an emergency refund only when the request was
+// not forwarded upstream.
 func billingAuditSafetyNet(c *gin.Context) {
+	if settleJinaRetainedReservation(c) {
+		return
+	}
 	reconciled, _ := c.Get(ctxkey.BillingReconciled)
 	if reconciled != nil {
 		if r, ok := reconciled.(bool); ok && r {

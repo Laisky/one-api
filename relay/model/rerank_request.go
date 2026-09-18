@@ -16,6 +16,12 @@ type RerankRequest struct {
 	MaxTokensPerDoc *int     `json:"max_tokens_per_doc,omitempty"`
 	Priority        *int     `json:"priority,omitempty"`
 
+	// NativeQuery and NativeDocuments preserve structured input for adaptors that
+	// explicitly opt in. Query/Documents remain text-only accounting estimates;
+	// image bytes are never treated as tokenizer input or sent as placeholders.
+	NativeQuery     json.RawMessage   `json:"-"`
+	NativeDocuments []json.RawMessage `json:"-"`
+
 	// Legacy compatibility fields accepted by prior OpenAI-style DTOs.
 	Input any `json:"input,omitempty"`
 }
@@ -50,6 +56,11 @@ func (r *RerankRequest) Normalize() error {
 	return nil
 }
 
+// HasStructuredInput reports whether forwarding requires an opted-in adaptor.
+func (r *RerankRequest) HasStructuredInput() bool {
+	return r != nil && (len(r.NativeQuery) > 0 || len(r.NativeDocuments) > 0)
+}
+
 // Clone returns a deep copy of the rerank request to avoid mutating user-supplied slices.
 func (r *RerankRequest) Clone() *RerankRequest {
 	if r == nil {
@@ -58,6 +69,13 @@ func (r *RerankRequest) Clone() *RerankRequest {
 	clone := *r
 	if len(r.Documents) > 0 {
 		clone.Documents = append([]string(nil), r.Documents...)
+	}
+	clone.NativeQuery = append(json.RawMessage(nil), r.NativeQuery...)
+	if len(r.NativeDocuments) > 0 {
+		clone.NativeDocuments = make([]json.RawMessage, len(r.NativeDocuments))
+		for i, document := range r.NativeDocuments {
+			clone.NativeDocuments[i] = append(json.RawMessage(nil), document...)
+		}
 	}
 	return &clone
 }

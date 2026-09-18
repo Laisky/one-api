@@ -43,6 +43,9 @@ func TestPostConsumeQuotaParityAcrossAPIs(t *testing.T) {
 		groupRatio      float64
 		completionRatio float64
 	}{
+		{name: "tool_only", modelName: "gpt-4o-mini", usage: &relaymodel.Usage{ToolsCost: 123}, modelRatio: 1, groupRatio: 1, completionRatio: 2},
+		{name: "cache_read_only", modelName: "claude-test-model", usage: &relaymodel.Usage{PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{CachedTokens: 100}}, modelRatio: 1, groupRatio: 1, completionRatio: 2},
+		{name: "cache_write_only", modelName: "claude-test-model", usage: &relaymodel.Usage{CacheWrite5mTokens: 100, CacheWrite1hTokens: 50}, modelRatio: 1, groupRatio: 1, completionRatio: 2},
 		{
 			name:            "basic_text_usage",
 			modelName:       "gpt-4o-mini",
