@@ -206,6 +206,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	lg := gmw.GetLogger(c)
 	if shouldNormalizeToolMessageContentForDeepSeek(metaInfo, request) {
 		normalizeClaudeThinkingForDeepSeek(lg, request)
+		enforceDeepSeekHistoryContract(lg, request)
 		normalizeDeepSeekToolMessageContent(lg, request)
 	}
 
@@ -444,6 +445,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	metaInfo := meta.GetByContext(c)
 	if shouldNormalizeToolMessageContentForDeepSeek(metaInfo, openaiRequest) {
 		normalizeClaudeThinkingForDeepSeek(gmw.GetLogger(c), openaiRequest)
+		enforceDeepSeekHistoryContract(gmw.GetLogger(c), openaiRequest)
 		normalizeDeepSeekToolMessageContent(gmw.GetLogger(c), openaiRequest)
 	}
 	if rewrites := toolnamesafe.SanitizeRequestToolNames(c, openaiRequest); rewrites > 0 {

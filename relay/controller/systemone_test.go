@@ -26,6 +26,9 @@ import (
 const systemOneRequest = `{"model":"alias","state":{"id":9007199254740993},"questions":{"q":{"type":"noul","instructions":"Is this an object?"}}}`
 const systemOneSuccess = `{"model":"jev-1.13.0","answers":{"q":{"type":"noul","noul":0.95}},"usage":{"input_tokens":312,"output_tokens":999999}}`
 
+// upstreamRequestID mirrors the provider's x-typesafe-request-id header format.
+const upstreamRequestID = "req_01a0b48b219b7d528f238466de776e44"
+
 // systemOneContext prepares real SQLite balances and the distributor's request state.
 func systemOneContext(t *testing.T, base string, balance int64, unlimited bool, group, price float64) (*gin.Context, *httptest.ResponseRecorder, string) {
 	t.Helper()
@@ -83,13 +86,24 @@ func TestSystemOneBillingIntegration(t *testing.T) {
 		{"group", systemOneSuccess, 200, 200, false, 2, -1, 14, false},
 		{"free_group", systemOneSuccess, 200, 200, false, 0, -1, 0, false},
 		{"override_output_still_free", systemOneSuccess, 200, 200, false, 1, 1, 312, false},
-		{"free_input", systemOneSuccess, 200, 200, false, 1, 0, 0, false},
+		// A channel ratio of 0 is indistinguishable from "unset" in
+		// pricing.ResolveModelRatioAt, so it falls back to the catalog price
+		// rather than making the model free. Group ratio 0 is the supported way
+		// to zero a charge, covered by free_group above.
+		{"zero_channel_ratio_falls_back_to_catalog", systemOneSuccess, 200, 200, false, 1, 0, 7, false},
 		{"missing_receipt", `{"model":"jev-latest","answers":{}}`, 200, 502, false, 1, -1, 1377, true},
 		{"invalid_answer_measured", `{"model":"jev-latest","answers":{},"usage":{"input_tokens":312,"output_tokens":1}}`, 200, 502, false, 1, -1, 7, false},
 		{"auth_rejection", `{"detail":"unauthorized"}`, 401, 401, false, 1, -1, 0, false},
 		{"validation_rejection", `{"detail":"invalid"}`, 422, 422, false, 1, -1, 0, false},
 		{"rate_limit", `{"detail":"rate limit"}`, 429, 429, false, 1, -1, 0, false},
 		{"capacity", `{"detail":"overloaded"}`, 529, 529, false, 1, -1, 0, false},
+		// Every client error observed live carries no usage receipt and proves
+		// the evaluation never ran, so the admission reservation is released.
+		{"context_budget_rejection", `{"detail":{"error_type":"max_tokens_exceeded"}}`, 400, 400, false, 1, -1, 0, false},
+		{"unknown_model_rejection", `{"detail":{"error_type":"api_usage_error","message":"Unknown model: jev-9.9.9"}}`, 400, 400, false, 1, -1, 0, false},
+		{"primitive_rejection", `{"detail":"Noul question must have criteria or instructions: q"}`, 400, 400, false, 1, -1, 0, false},
+		{"missing_key_rejection", `{"detail":{"error_type":"authentication_error","message":"Must supply an API key! Check your request and try again."}}`, 403, 403, false, 1, -1, 0, false},
+		{"misrouted_base_url", `{"detail":"Not Found"}`, 404, 404, false, 1, -1, 0, false},
 		{"ambiguous_server_error", `{"detail":"server error"}`, 500, 500, false, 1, -1, 1377, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -113,6 +127,7 @@ func TestSystemOneBillingIntegration(t *testing.T) {
 				seen <- observation{string(body), user.Quota, err, r.URL.Path, r.Header.Get("Authorization")}
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Retry-After", "10")
+				w.Header().Set("X-Typesafe-Request-Id", upstreamRequestID)
 				w.WriteHeader(tc.upstreamStatus)
 				_, _ = io.WriteString(w, tc.response)
 			}))
@@ -150,6 +165,9 @@ func TestSystemOneBillingIntegration(t *testing.T) {
 			require.Len(t, logs, 1)
 			require.EqualValues(t, tc.charge, logs[0].Quota)
 			require.Equal(t, tc.estimated, logs[0].Metadata["billing_estimated"] == true)
+			require.Equal(t, upstreamRequestID, logs[0].Metadata["upstream_request_id"],
+				"an estimated or settled charge must stay traceable to the upstream attempt")
+			require.Equal(t, upstreamRequestID, writer.Header().Get("X-Typesafe-Request-Id"))
 			require.Equal(t, tc.estimated, writer.Header().Get("X-OneAPI-Billing-Estimated") == "true")
 			if tc.wantStatus == 200 {
 				require.Equal(t, tc.response, writer.Body.String())

@@ -34,12 +34,23 @@ func TestInputQuota(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestAdmissionRejections distinguishes documented rejections from ambiguous work.
+// TestAdmissionRejections distinguishes proven rejections from ambiguous work.
+// The 4xx statuses below were all observed live on 2026-09-18 with no usage
+// receipt in the body; billing any of them would charge for zero evaluation.
 func TestAdmissionRejections(t *testing.T) {
-	for _, status := range []int{401, 422, 429, 529} {
-		require.True(t, IsAdmissionRejection(status))
+	for _, status := range []int{
+		400, // max_tokens_exceeded, unknown model, primitive and cap violations
+		401, // invalid API key
+		403, // absent API key
+		404, // base URL missing the /v1 prefix
+		405, // wrong method
+		413, 422, 429,
+		StatusOverloaded,
+	} {
+		require.True(t, IsAdmissionRejection(status), status)
 	}
-	for _, status := range []int{200, 302, 400, 408, 500, 502, 503, 504} {
-		require.False(t, IsAdmissionRejection(status))
+	for _, status := range []int{200, 201, 302, 500, 502, 503, 504, 599} {
+		require.False(t, IsAdmissionRejection(status), status)
 	}
+	require.Equal(t, 529, StatusOverloaded)
 }

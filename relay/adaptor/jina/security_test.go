@@ -59,7 +59,7 @@ func TestJinaDispatchValidatesEffectiveURL(t *testing.T) {
 	configureJinaSecurityTracing(t)
 	for _, tc := range []struct {
 		name, base, override, optIn string
-		allowed                    bool
+		allowed                     bool
 	}{
 		{"default", "", "", "false", true},
 		{"https_proxy", "https://proxy.example/v1", "", "false", true},

@@ -19,17 +19,35 @@ import (
 // maxResponseBytes bounds buffering of native answers and upstream error bodies.
 const maxResponseBytes = 8 << 20
 
+// RequestIDHeader identifies one upstream evaluation in the provider's records.
+// It is the only handle an operator has when reconciling an estimated charge, so
+// it is forwarded downstream and attached to the consume log.
+const RequestIDHeader = "X-Typesafe-Request-Id"
+
+// retryAfterMsHeader is the millisecond retry hint TypeSafe's own SDKs honour
+// alongside the standard Retry-After header.
+const retryAfterMsHeader = "Retry-After-Ms"
+
 // Response retains native JSON unchanged until billing has completed.
 type Response struct {
-	Body       []byte
-	StatusCode int
-	RetryAfter string
+	Body         []byte
+	StatusCode   int
+	RetryAfter   string
+	RetryAfterMs string
+	RequestID    string
 }
 
-// Write commits the buffered native response, including provider retry guidance.
+// Write commits the buffered native response, including provider retry guidance
+// and the upstream request identifier used for reconciliation.
 func (r *Response) Write(c *gin.Context) {
-	if r.RetryAfter != "" {
-		c.Header("Retry-After", r.RetryAfter)
+	for header, value := range map[string]string{
+		"Retry-After":      r.RetryAfter,
+		retryAfterMsHeader: r.RetryAfterMs,
+		RequestIDHeader:    r.RequestID,
+	} {
+		if value != "" {
+			c.Header(header, value)
+		}
 	}
 	c.Data(r.StatusCode, "application/json", r.Body)
 }
@@ -52,6 +70,12 @@ func (a *Adaptor) ReadResponse(c *gin.Context, response *http.Response, _ *meta.
 			lg.Warn("close TypeSafe response body failed", zap.Error(err))
 		}
 	}()
+	requestID := response.Header.Get(RequestIDHeader)
+	if requestID != "" && c != nil {
+		// Recorded before any later failure path so that an estimated charge can
+		// still be traced back to the upstream attempt that produced it.
+		c.Set(ctxkey.UpstreamRequestId, requestID)
+	}
 	if IsAdmissionRejection(response.StatusCode) {
 		usage = &model.Usage{}
 	}
@@ -59,10 +83,16 @@ func (a *Adaptor) ReadResponse(c *gin.Context, response *http.Response, _ *meta.
 	if err != nil || len(body) > maxResponseBytes {
 		return nil, usage, openai.ErrorWrapper(errors.New("incomplete or oversized TypeSafe response"), "typesafe_response_read_failed", http.StatusBadGateway)
 	}
-	result := &Response{Body: body, StatusCode: response.StatusCode, RetryAfter: response.Header.Get("Retry-After")}
+	result := &Response{Body: body, StatusCode: response.StatusCode, RetryAfter: response.Header.Get("Retry-After"),
+		RetryAfterMs: response.Header.Get(retryAfterMsHeader), RequestID: requestID}
 	if response.StatusCode != http.StatusOK {
 		if response.StatusCode < 400 {
 			return nil, usage, openai.ErrorWrapper(errors.New("unexpected TypeSafe success status"), "typesafe_invalid_status", http.StatusBadGateway)
+		}
+		// A measured receipt outranks the status: if the provider ever reports
+		// consumed input alongside an error, that measurement is what is billed.
+		if receipt := errorReceipt(body); receipt != nil {
+			usage = receipt
 		}
 		if !json.Valid(body) {
 			result = nil
@@ -96,6 +126,21 @@ func (a *Adaptor) ReadResponse(c *gin.Context, response *http.Response, _ *meta.
 		}
 	}
 	return result, usage, nil
+}
+
+// errorReceipt returns measured usage carried by a failed response, if any.
+// Observed error bodies contain no usage at all, so this is defensive evidence
+// handling rather than a documented contract.
+func errorReceipt(body []byte) *model.Usage {
+	fields, err := decodeObject(body)
+	if err != nil {
+		return nil
+	}
+	receipt, err := decodeReceipt(fields["usage"])
+	if err != nil {
+		return nil
+	}
+	return receipt
 }
 
 // decodeReceipt accepts complete nonnegative integer counters without float coercion.

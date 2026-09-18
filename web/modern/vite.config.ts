@@ -102,5 +102,13 @@ export default defineConfig(({ mode }) => ({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // Vitest's 5s default is a unit-test budget. This suite renders whole pages
+    // (TanStack Table, Radix portals, react-hook-form) into jsdom and runs its 80
+    // files across every core, so the page-level tests cost far more wall clock
+    // under that contention than they do alone: the channel pagination and email
+    // whitelist cases measure ~1.3-2.1s in isolation but up to ~8.1s in a full
+    // parallel run, which used to time them out. The bound stays well above that
+    // worst case while still failing a genuinely hung test promptly.
+    testTimeout: 30000,
   },
 }));

@@ -380,6 +380,13 @@ const (
 	// with actual usage data.
 	ProvisionalLogId = "provisional_log_id"
 
+	// UpstreamRequestId stores the provider's own request identifier for the
+	// attempt that was just made, when upstream returns one. It is the handle an
+	// operator needs to reconcile an estimated charge against provider records.
+	// Set in: relay/adaptor/typesafe when reading an upstream response.
+	// Read in: relay/controller settlement when writing the consume log.
+	UpstreamRequestId = "upstream_request_id"
+
 	// Identity holds the common/identity.Set bound for this request (user + token
 	// + channel references, each carrying id + uuid + name).
 	// Set in: common/identity.Bind, driven by middleware/auth and middleware/distributor.

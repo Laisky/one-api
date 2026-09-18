@@ -34,7 +34,9 @@ func TestDecodeRequestRejectsLossyOrMalformedShapes(t *testing.T) {
 		`{"model":"jev-latest","state":"x","questions":{"q":{"type":"noul"}}}`,
 		`{"model":"jev-latest","state":"x","questions":{"q":{"type":"noul","instructions":42}}}`,
 		`{"model":"jev-latest","state":"x","questions":{"q":{"type":"chat","instructions":"?"}}}`,
-		`{"model":"jev-latest","state":"x","questions":{"q":{"type":"score","instructions":"?","criteria":["one"]}}}`,
+		`{"model":"jev-latest","state":"x","questions":{"q":{"type":"score","instructions":"?","criteria":[]}}}`,
+		`{"model":"jev-latest","state":"x","questions":{"q":{"type":"score","instructions":"?","criteria":{"0":"low","1":"high"}}}}`,
+		`{"model":"jev-latest","state":"x","questions":{"":{"type":"noul","instructions":"?"}}}`,
 		`{"model":"jev-latest","state":"x","questions":{"q":{"type":"choice","instructions":"?","criteria":[]}}}`,
 		`{"model":"jev-latest","state":"x","questions":{"q":{"type":"choice","instructions":"?","criteria":{"a":true}}}}`,
 		`{"model":"jev-latest","state":"x","questions":{"q":{"type":"noul","instructions":"?","criteria":{"yes":"not true"}}}}`,
@@ -54,7 +56,37 @@ func TestDecodeRequestRejectsLossyOrMalformedShapes(t *testing.T) {
 // TestDecodeRequestStateShapes allows text and structured state without coercion.
 func TestDecodeRequestStateShapes(t *testing.T) {
 	for _, state := range []string{`"plain text"`, `[]`, `{}`, `["text",{"field":"value"}]`} {
-		_, err := DecodeRequest([]byte(`{"model":"jev-preview","state":` + state + `,"questions":{"":{"type":"noul","instructions":"?"}}}`))
+		_, err := DecodeRequest([]byte(`{"model":"jev-preview","state":` + state + `,"questions":{"a.b/c \u00e9moji":{"type":"noul","instructions":"?"}}}`))
 		require.NoError(t, err)
+	}
+}
+
+// TestDecodeRequestAcceptsWhatTheServiceAccepts pins shapes confirmed against the
+// live API on 2026-09-18. Each was answered with HTTP 200 (or, for bounding_box,
+// reached the service's own organization gate rather than a schema error), so the
+// gateway must not reject them locally.
+func TestDecodeRequestAcceptsWhatTheServiceAccepts(t *testing.T) {
+	for name, body := range map[string]string{
+		"score_single_level":       `{"model":"jev-latest","state":"x","questions":{"q":{"type":"score","instructions":"rate","criteria":["Only"]}}}`,
+		"score_structured_levels":  `{"model":"jev-latest","state":"x","questions":{"q":{"type":"score","instructions":"r","criteria":[{"label":"Poor"},{"label":"Good"}]}}}`,
+		"score_null_instructions":  `{"model":"jev-latest","state":"x","questions":{"q":{"type":"score","instructions":null,"criteria":["Bad","Good"]}}}`,
+		"choice_single_option":     `{"model":"jev-latest","state":"x","questions":{"q":{"type":"choice","instructions":"pick","criteria":{"a":"only option"}}}}`,
+		"choice_null_rubrics":      `{"model":"jev-latest","state":"x","questions":{"q":{"type":"choice","instructions":null,"criteria":{"a":null,"b":null}}}}`,
+		"noul_criteria_only":       `{"model":"jev-latest","state":"x","questions":{"q":{"type":"noul","instructions":null,"criteria":{"true":"positive","false":"negative"}}}}`,
+		"noul_object_instructions": `{"model":"jev-latest","state":"x","questions":{"q":{"type":"noul","instructions":{"task":"is it good","hint":"be strict"}}}}`,
+		"bounding_box_minimal":     `{"model":"jev-latest","state":"x","questions":{"q":{"type":"bounding_box","instructions":"find the dog"}}}`,
+		"bounding_box_bare":        `{"model":"jev-latest","state":"x","questions":{"q":{"type":"bounding_box"}}}`,
+		"pinned_version_id":        `{"model":"jev-1.13.0","state":"x","questions":{"q":{"type":"noul","instructions":"?"}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			request, err := DecodeRequest([]byte(body))
+			require.NoError(t, err)
+			encoded, err := json.Marshal(request)
+			require.NoError(t, err)
+			// Re-encoding must stay dispatchable: the bytes actually sent
+			// upstream are the marshalled request, not the client's body.
+			_, err = DecodeRequest(encoded)
+			require.NoError(t, err)
+		})
 	}
 }
