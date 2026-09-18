@@ -26,7 +26,8 @@
       "moderation": "Modération",
       "ocr": "OCR de documents",
       "clone": "Clonage vocal",
-      "completions": "Ancienne API Completions"
+      "completions": "Ancienne API Completions",
+      "systemone": "TypeSafe System One (évaluation)"
     },
     "notes": {
       "upload": "Remplacez audio.wav ou image.png par un fichier local pris en charge par le modèle. curl définit automatiquement la limite multipart.",
@@ -34,7 +35,8 @@
       "realtime": "Cet exemple curl vérifie uniquement la mise à niveau WebSocket et s’arrête après 10 secondes. Utilisez un client WebSocket pour échanger des événements en temps réel ; curl ne mène pas une conversation complète.",
       "voice": "La réponse audio est enregistrée dans speech.wav. Remplacez YOUR_VOICE_ID, s’il est présent, par une voix prise en charge par le modèle.",
       "document": "Remplacez l’URL du document d’exemple par une URL accessible ou par une entrée prise en charge par ce fournisseur.",
-      "clone": "Remplacez YOUR_AUDIO_FILE_ID par l’identifiant du fichier audio de référence du fournisseur et text par sa transcription exacte. L’identifiant vocal renvoyé peut servir à la synthèse vocale."
+      "clone": "Remplacez YOUR_AUDIO_FILE_ID par l’identifiant du fichier audio de référence du fournisseur et text par sa transcription exacte. L’identifiant vocal renvoyé peut servir à la synthèse vocale.",
+      "systemone": "Jev est un modèle d’évaluation typée, pas un modèle de chat. Utilisez state et questions (noul, choice ou score) ; les formats de chat et le streaming ne sont pas pris en charge. La réponse contient answers et input_tokens/output_tokens, et model indique la version résolue. Les valeurs ci-dessous sont indicatives."
     }
   }
 }

@@ -16,7 +16,7 @@ export interface ModelApiExample {
   request: string;
   response: string;
   responseFormat: 'json' | 'http';
-  note?: 'upload' | 'video' | 'realtime' | 'voice' | 'document' | 'clone';
+  note?: 'upload' | 'video' | 'realtime' | 'voice' | 'document' | 'clone' | 'systemone';
 }
 
 const FALLBACK_BASE_URL = 'https://your-one-api.example';
@@ -146,6 +146,24 @@ export function buildModelApiExamples(model: string, data: ModelApiMetadata, bas
   const name = model.toLowerCase().split('/').pop() || model.toLowerCase();
   const output = data.output_modalities ?? [];
   const features = data.supported_features ?? [];
+
+  // Jev is a typed evaluator, even though its catalog modalities are text/text.
+  // Native contract: https://docs.typesafe.ai/api (checked 2026-09-18).
+  // Aliases resolve to a versioned response model: https://docs.typesafe.ai/models.
+  if (/^jev(?:-|$)/.test(name) || features.includes('systemone')) {
+    const responseModel = /^jev-\d+\.\d+\.\d+/.test(name) ? name : 'jev-1.13.0';
+    return [jsonExample('systemone', `${base}/v1/systemone`, {
+      model,
+      state: 'The payment failed again. Please resolve this today.',
+      questions: {
+        is_urgent: { type: 'noul', instructions: 'Does this message request urgent action?' },
+      },
+    }, {
+      model: responseModel,
+      answers: { is_urgent: { type: 'noul', noul: 0.92 } },
+      usage: { input_tokens: 312, output_tokens: 48 },
+    }, 'systemone')];
+  }
 
   // Specialized tasks take precedence over multimodal pricing: embeddings may
   // have image/audio/video prices without supporting media generation.

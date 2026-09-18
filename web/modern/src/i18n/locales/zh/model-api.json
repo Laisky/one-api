@@ -26,7 +26,8 @@
       "moderation": "内容审核",
       "ocr": "文档 OCR",
       "clone": "声音克隆",
-      "completions": "旧版 Completions"
+      "completions": "旧版 Completions",
+      "systemone": "TypeSafe System One（评估）"
     },
     "notes": {
       "upload": "请将 audio.wav 或 image.png 替换为模型支持的本地文件。curl 会自动设置 multipart 边界。",
@@ -34,7 +35,8 @@
       "realtime": "此 curl 示例仅验证 WebSocket 协议升级，并在 10 秒后停止。请使用 WebSocket 客户端交换实时事件；curl 不会完成整个对话。",
       "voice": "音频响应将保存到 speech.wav。如示例包含 YOUR_VOICE_ID，请将其替换为模型支持的声音 ID。",
       "document": "请将示例文档 URL 替换为可访问的文档 URL，或此提供商支持的输入。",
-      "clone": "请将 YOUR_AUDIO_FILE_ID 替换为提供商的参考音频文件 ID，并将 text 替换为该音频的准确转写。返回的声音 ID 可用于语音合成。"
+      "clone": "请将 YOUR_AUDIO_FILE_ID 替换为提供商的参考音频文件 ID，并将 text 替换为该音频的准确转写。返回的声音 ID 可用于语音合成。",
+      "systemone": "Jev 是类型化评估模型，不是聊天模型。请使用 state 和 questions（noul、choice 或 score）；不支持聊天格式或流式输出。响应包含 answers 和 input_tokens/output_tokens，model 表示实际解析到的模型版本。以下数值仅供示例。"
     }
   }
 }
