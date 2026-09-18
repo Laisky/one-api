@@ -41,7 +41,12 @@ PR. A separate Live transport implementation is required. Google's separate
 1.00 USD/million image/video input-token price is not representable by the
 current image-generation/video-output pricing fields and is not approximated
 with them. Accurate Live image/video billing requires a separate billing change.
-The descriptions expose the transport limitation to catalog consumers.
+The descriptions expose the transport limitation to catalog consumers. The shared
+REST dispatcher now rejects both new Live-only IDs on native Gemini, Vertex AI,
+and Gemini OpenAI-compatible channels before URL preparation, credential setup,
+body reads, or network dispatch. It uses the mapped upstream model name. Ordinary
+Flash requests and unrelated providers' own REST bridges are not blocked. This
+change does not add or alter a WebSocket Live transport.
 
 ## Existing-model corrections
 
@@ -67,6 +72,11 @@ both 3.x image previews, 2.5 Flash Image and its preview, and the 3.1 Live
 replacement recommendation. October 2, 2026 is an **earliest** shutdown date for
 2.5 Flash Image, not a claim that it is already unavailable. Preview replacement
 recommendations point to current stable image IDs instead of retired previews.
+The changelog confirms that Gemini 3 Pro preview, Gemini 3.1 Flash-Lite preview,
+and Gemini 2.5 Flash Image preview were shut down on March 9, May 25, and January
+15, 2026 respectively. Their descriptions now state the confirmed shutdowns.
+The Gemini 3 Pro preview identifier points to Gemini 3.1 Pro preview; the
+identifier's continued alias behavior is not the old model's continued availability.
 
 ## Validation
 
@@ -86,3 +96,38 @@ go test -race ./...
 No paid upstream call is necessary for these deterministic regression tests.
 The metadata reflects public documentation; account-specific availability was
 not verified with a provider API key.
+
+## Review and CI reproduction evidence
+
+The test-only commit `46a32b6a063c3ef76f5f7bc357b7bb0e7f179f01` changed no
+production code or CI workflow. Existing CI run `35355460095` tested its merge
+with main `7f3449fd6daea8b603b73d3fcc3a505b7769b4da`, at merge revision
+`6eeca65eafc135f821f14fb7b6426a797fa9e092`, using Go 1.27.1 and race detection.
+The `go-tests-packages` artifact contains the complete JSON events and logs.
+
+- **Confirmed transport defect:** all 12 Google-channel Live cases (three
+  channel types, two model IDs, streaming on/off) reached the local HTTP server
+  before the fix. Each recorded one URL preparation, one header preparation,
+  two body reads, and one network request, with no error. All 20 positive
+  controls for ordinary Flash or third-party REST bridges passed.
+- **Confirmed metadata defect:** all six final-catalog checks (three retired
+  models in native and OpenAI-compatible catalogs) exposed ambiguous earliest-date
+  wording rather than confirmed shutdowns. The regression also checks the
+  Gemini 3 Pro alias and preserves future earliest-date guidance.
+- **Excluded billing false positive:** the original `free_input` assertion
+  expected a channel ModelConfig ratio of zero to make a request free. The
+  behavior probe observed reservation 1,377 and final charge 7 quota. Main's
+  concurrent `fc40b04abf2dd0da13d666750edd0d58dbb857d0` correction explicitly
+  documents that zero means an unset/inherited channel ratio; group ratio zero
+  is the supported free-charge configuration. Its corrected original integration
+  case already passed in the red run. No production billing change is warranted.
+  The additional probe is retained as `TestSystemOnePriceContractBehavior`,
+  testing inherited prices, direct/mapped names, unlimited tokens, positive
+  overrides, and genuinely free groups across admission, balances, receipts,
+  and consumption logs. This is a corrected test expectation, not a billing fix.
+
+The transport and lifecycle reproducers are retained unchanged as regressions.
+The red run reported no race warnings; its three top-level failures were the
+transport test, lifecycle test, and the subsequently excluded billing hypothesis.
+After applying the fixes, acceptance must use the existing full CI run, including
+all test shards and static guardrails; a test-only red run is not acceptance.

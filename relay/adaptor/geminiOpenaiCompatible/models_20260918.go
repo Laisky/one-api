@@ -10,6 +10,7 @@ import (
 //   - https://ai.google.dev/gemini-api/docs/models/gemini-3.8-live-extended-thinking
 //   - https://ai.google.dev/gemini-api/docs/pricing
 //   - https://ai.google.dev/gemini-api/docs/deprecations
+//   - https://ai.google.dev/gemini-api/docs/changelog
 //
 // Like the existing Live entries, these are upstream catalog metadata, not an
 // implementation of the Live API transport. The REST adaptor cannot relay Live
@@ -49,12 +50,12 @@ func gemini38LiveConfig(extendedThinking bool) adaptor.ModelConfig {
 }
 
 var geminiSeptember18LifecycleDescriptions = map[string]string{
-	"gemini-3-pro-preview":           "Gemini 3 Pro preview has a published earliest shutdown date of March 9, 2026. Use gemini-3.1-pro-preview.",
-	"gemini-3.1-flash-lite-preview":  "Gemini 3.1 Flash-Lite preview has a published earliest shutdown date of May 25, 2026. Use gemini-3.1-flash-lite or gemini-3.5-flash-lite.",
+	"gemini-3-pro-preview":           "Gemini 3 Pro preview was shut down on March 9, 2026; the identifier now points to gemini-3.1-pro-preview. Use gemini-3.1-pro-preview.",
+	"gemini-3.1-flash-lite-preview":  "Gemini 3.1 Flash-Lite preview was shut down on May 25, 2026. Use gemini-3.1-flash-lite or gemini-3.5-flash-lite.",
 	"gemini-3.1-flash-image-preview": "Gemini 3.1 Flash Image preview has a published earliest shutdown date of June 25, 2026. Use gemini-3.1-flash-image.",
 	"gemini-3-pro-image-preview":     "Gemini 3 Pro Image preview has a published earliest shutdown date of June 25, 2026. Use gemini-3-pro-image.",
 	"gemini-2.5-flash-image":         "Gemini 2.5 Flash Image stable native image model; earliest shutdown October 2, 2026. Prefer the current stable gemini-3.1-flash-image model.",
-	"gemini-2.5-flash-image-preview": "Gemini 2.5 Flash Image preview has a published earliest shutdown date of January 15, 2026. Prefer the current stable gemini-3.1-flash-image model.",
+	"gemini-2.5-flash-image-preview": "Gemini 2.5 Flash Image preview was shut down on January 15, 2026. Prefer the current stable gemini-3.1-flash-image model.",
 	"gemini-3.1-flash-live-preview":  "Gemini 3.1 Flash Live preview; no shutdown date is announced. Use gemini-3.8-live for new Live API workloads. Catalog metadata does not add Live transport support.",
 }
 
