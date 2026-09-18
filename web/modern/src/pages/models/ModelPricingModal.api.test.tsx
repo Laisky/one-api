@@ -77,6 +77,26 @@ describe('ModelPricingModal API usage integration', () => {
     expect(screen.getByText(/Illustrative, shortened responses only/)).toBeInTheDocument();
   });
 
+  it.each([false, true])('keeps API usage after every model detail section (mobile=%s)', (mobile) => {
+    mocks.mobile = mobile;
+    render(
+      modal('example-embedding', {
+        ...data,
+        description: 'Example model profile.',
+        cached_input_price: 0.5,
+        embedding_pricing: { text_token_price: 0.1 },
+      })
+    );
+
+    // Exercise profile, text, cache, and the final optional pricing section.
+    const headings = screen.getAllByRole('heading', { level: 3 });
+    expect(headings).toHaveLength(5);
+    expect(headings[headings.length - 1]).toBe(screen.getByRole('heading', { name: 'API Usage' }));
+    expect(screen.getByText('Example model profile.')).toBeInTheDocument();
+    const usage = screen.getByRole('region', { name: 'API Usage' });
+    expect(usage.parentElement?.lastElementChild).toBe(usage);
+  });
+
   it.each([false, true])('switches endpoint, payload and response together (mobile=%s)', (mobile) => {
     mocks.mobile = mobile;
     render(modal());

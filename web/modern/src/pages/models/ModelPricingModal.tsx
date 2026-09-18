@@ -202,8 +202,8 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
 
   const content = (
     <div className="min-w-0 space-y-5">
-      <ModelApiExamples key={modelName} modelName={modelName} data={data} />
       <PricingContent modelName={modelName} data={data} channelName={channelName} tr={tr} locale={i18n.language} />
+      <ModelApiExamples key={modelName} modelName={modelName} data={data} />
     </div>
   );
 
