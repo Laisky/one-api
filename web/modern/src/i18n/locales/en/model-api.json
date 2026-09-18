@@ -26,7 +26,11 @@
       "moderation": "Moderation",
       "ocr": "Document OCR",
       "clone": "Voice cloning",
-      "completions": "Legacy Completions"
+      "completions": "Legacy Completions",
+      "systemone": "TypeSafe System One (evaluation)",
+      "gemini_live": "Gemini Live WebSocket handshake",
+      "diarization": "Audio transcription with speaker labels",
+      "jina_ocr": "Jina OCR (Chat Completions transport)"
     },
     "notes": {
       "upload": "Replace audio.wav or image.png with a local file supported by the model. curl sets the multipart boundary automatically.",
@@ -34,7 +38,20 @@
       "realtime": "This curl example verifies only the WebSocket upgrade and stops after 10 seconds. Use a WebSocket client to exchange realtime events; curl does not run a full conversation.",
       "voice": "The audio response is saved to speech.wav. Replace YOUR_VOICE_ID, when present, with a voice supported by the model.",
       "document": "Replace the example document URL with an accessible document URL or an input supported by this provider.",
-      "clone": "Replace YOUR_AUDIO_FILE_ID with a provider reference-audio file ID and text with its exact transcript. The returned voice ID can be used for speech synthesis."
+      "clone": "Replace YOUR_AUDIO_FILE_ID with a provider reference-audio file ID and text with its exact transcript. The returned voice ID can be used for speech synthesis.",
+      "systemone": "Jev is a typed evaluation model, not a chat model. Use state and questions (noul, choice, or score); chat formats and streaming are unsupported. The response contains answers and input_tokens/output_tokens, and model reports the resolved version. Values below are illustrative.",
+      "geminiLive": "This curl command checks only the HTTP upgrade. To run a Gemini Live session, use a WebSocket client, send the native setup message first and wait for setupComplete before input. OpenAI session.update events are not interchangeable. No conversation or model inference is tested by this handshake.",
+      "diarization": "Replace audio.wav with your recording. diarized_json returns speaker-labeled segments; chunking_strategy=auto also handles recordings longer than 30 seconds.",
+      "jinaOcr": "Replace document.png with an accessible document image or a supported image data URL. Jina OCR uses Chat Completions to read images and return Markdown; this is not a general text-chat example.",
+      "legacy": "This is a legacy Completions contract. Model retirement and provider endpoint settings can make old catalog entries unavailable; confirm support before calling."
+    },
+    "reference": "Protocol reference",
+    "reviewedOn": "Reviewed {{date}}",
+    "contractScope": "These are gateway protocol templates, not live availability tests. Confirm the mapped model, enabled channel endpoint and provider requirements before calling. Responses show representative fields, not complete schemas.",
+    "unverified": {
+      "title": "No verified gateway example",
+      "unknown": "The catalog does not identify a reviewed request/response contract for this model. Modalities and prices do not establish an API. Ask the administrator to verify the mapped model and channel endpoint; no chat request is assumed.",
+      "native": "This model needs a provider-specific protocol that is not covered by a verified gateway example here. Consult the reference and confirm the adaptor and endpoint configuration rather than using a generic chat or media request."
     }
   }
 }

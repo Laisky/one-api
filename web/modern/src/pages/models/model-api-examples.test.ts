@@ -2,36 +2,44 @@ import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { describe, it } from 'vitest';
 import { buildModelApiExamples, normalizeApiBaseUrl, quoteShellArgument, type ModelApiExample, type ModelApiMetadata } from './model-api-examples';
+import { MODEL_API_REVIEWED_ON, MODEL_API_SOURCES, resolveModelApiProfile } from './model-api-profiles';
 
 const BASE_URL = 'https://gateway.example';
+// Each row asserts a nonempty, reviewed gateway contract. Uncertain aliases and
+// native media protocols have separate negative cases below, not fake success.
 const cases: Array<[string, ModelApiMetadata, string, string]> = [
   ['gpt-4o', {}, 'chat', '/v1/chat/completions'],
   ['claude-sonnet-4-5', {}, 'chat', '/v1/chat/completions'],
   ['gemini-2.5-pro', { input_modalities: ['text', 'image', 'audio', 'video'], output_modalities: ['text'] }, 'chat', '/v1/chat/completions'],
-  ['my-private-alias', {}, 'chat', '/v1/chat/completions'],
   ['openai/gpt-5-codex', {}, 'responses', '/v1/responses'],
+  ['gpt-5-pro', {}, 'responses', '/v1/responses'],
   ['text-embedding-3-small', {}, 'embeddings', '/v1/embeddings'],
   ['jina-embeddings-v3', {}, 'embeddings', '/v1/embeddings'],
+  ['jina-clip-v2', {}, 'embeddings', '/v1/embeddings'],
   ['text2vec-base-chinese', {}, 'embeddings', '/v1/embeddings'],
-  ['multimodal-encoder', { embedding_pricing: {}, image_pricing: {}, video_pricing: {} }, 'embeddings', '/v1/embeddings'],
+  ['Qwen/Qwen3-Embedding-8B', { image_pricing: {}, video_pricing: {} }, 'embeddings', '/v1/embeddings'],
+  ['multimodal-encoder', { supported_features: ['embeddings'], embedding_pricing: {}, image_pricing: {}, video_pricing: {} }, 'embeddings', '/v1/embeddings'],
   ['bge-reranker-v2-m3', {}, 'rerank', '/v1/rerank'],
   ['rerank-v4.0-pro', {}, 'rerank', '/v1/rerank'],
+  ['jina-reranker-v3.5', {}, 'rerank', '/v1/rerank'],
   ['dall-e-3', {}, 'image', '/v1/images/generations'],
   ['gpt-image-1.5', {}, 'image', '/v1/images/generations'],
-  ['gemini-image-model', { output_modalities: ['text', 'image'] }, 'image', '/v1/images/generations'],
-  ['Qwen/Qwen-Image-Edit', { output_modalities: ['image'] }, 'image_edit', '/v1/images/edits'],
+  ['grok-imagine-image', {}, 'image', '/v1/images/generations'],
+  ['cogview-4', {}, 'image', '/v1/images/generations'],
   ['sora-2', {}, 'video', '/v1/videos'],
-  ['veo-3.1-generate-preview', {}, 'video', '/v1/videos'],
-  ['custom-video', { video_pricing: {} }, 'video', '/v1/videos'],
   ['whisper-1', {}, 'transcription', '/v1/audio/transcriptions'],
+  ['whisper-large-v3-turbo', {}, 'transcription', '/v1/audio/transcriptions'],
   ['gpt-4o-mini-transcribe', {}, 'transcription', '/v1/audio/transcriptions'],
+  ['gpt-4o-transcribe-diarize', {}, 'diarization', '/v1/audio/transcriptions'],
   ['glm-asr-2512', {}, 'transcription', '/v1/audio/transcriptions'],
   ['tts-1', {}, 'speech', '/v1/audio/speech'],
   ['gpt-4o-mini-tts', {}, 'speech', '/v1/audio/speech'],
   ['glm-tts', { output_modalities: ['audio'] }, 'speech', '/v1/audio/speech'],
   ['glm-realtime-flash', { output_modalities: ['audio'] }, 'realtime', '/v1/realtime'],
+  ['gemini-3.8-live', { output_modalities: ['audio'] }, 'gemini_live', '/v1/realtime'],
   ['omni-moderation-latest', {}, 'moderation', '/v1/moderations'],
   ['glm-ocr', {}, 'ocr', '/api/paas/v4/layout_parsing'],
+  ['jina-ocr-v1', {}, 'jina_ocr', '/v1/chat/completions'],
   ['glm-tts-clone', { output_modalities: ['audio'] }, 'clone', '/v1/voice/clones'],
   ['gpt-3.5-turbo-instruct', {}, 'completions', '/v1/completions'],
 ];
@@ -45,6 +53,7 @@ function captureCurlArguments(command: string): string[] {
 /** requestBody decodes the JSON argument actually delivered to the fake curl command. */
 function requestBody(example: ModelApiExample): Record<string, unknown> {
   const args = captureCurlArguments(example.request);
+  assert.ok(args.includes('--data-raw'));
   return JSON.parse(args[args.indexOf('--data-raw') + 1]);
 }
 
@@ -61,6 +70,9 @@ describe('model API examples', () => {
         assert.equal(new URL(example.endpoint).origin, BASE_URL);
         assert.ok(example.request.includes('Authorization: Bearer YOUR_API_KEY'));
         assert.ok(example.response.length > 0);
+        assert.ok(Object.values(MODEL_API_SOURCES).includes(example.source as typeof MODEL_API_SOURCES[keyof typeof MODEL_API_SOURCES]));
+        assert.equal(new URL(example.source!).protocol, 'https:');
+        assert.equal(example.reviewedOn, MODEL_API_REVIEWED_ON);
         if (example.responseFormat === 'json') assert.doesNotThrow(() => JSON.parse(example.response));
       }
     });
@@ -68,7 +80,9 @@ describe('model API examples', () => {
 
   shellTest('all examples send the selected model and documented endpoint without calling a real API', () => {
     for (const [model, metadata] of cases) {
-      for (const example of buildModelApiExamples(model, metadata, BASE_URL)) {
+      const examples = buildModelApiExamples(model, metadata, BASE_URL);
+      assert.ok(examples.length > 0, model);
+      for (const example of examples) {
         const args = captureCurlArguments(example.request);
         assert.equal(args[args.indexOf('--request') + 1], example.method);
         assert.equal(args[args.indexOf('--request') + 2], example.endpoint);
@@ -85,23 +99,24 @@ describe('model API examples', () => {
     }
   });
 
-  shellTest('shell metacharacters in model names remain literal JSON data', () => {
+  shellTest('shell metacharacters in explicitly typed aliases remain literal JSON data', () => {
     const model = `tenant/it's "special" \\ $(printf INJECTED); \`printf INJECTED\`\nmodel`;
-    for (const example of buildModelApiExamples(model, {}, BASE_URL)) {
-      assert.equal(requestBody(example).model, model);
-    }
+    const examples = buildModelApiExamples(model, { supported_features: ['systemone'] }, BASE_URL);
+    assert.equal(examples.length, 1, 'security tests must not pass vacuously');
+    assert.equal(requestBody(examples[0]).model, model);
   });
 
-  shellTest('multipart model names use form-string and cannot become file reads or shell commands', () => {
-    const model = `@whisper-1'$(printf INJECTED)`;
-    const [example] = buildModelApiExamples(model, {}, BASE_URL);
+  shellTest('multipart names and hostile gateway prefixes remain single literal arguments', () => {
+    const model = "tenant'$(printf INJECTED)/whisper-1";
+    const [example] = buildModelApiExamples(model, {}, "https://gateway.example/it's-a-prefix");
     const args = captureCurlArguments(example.request);
+    assert.equal(args[2], example.endpoint);
     assert.equal(args[args.indexOf('--form-string') + 1], `model=${model}`);
     assert.equal(args[args.indexOf('--form') + 1], 'file=@audio.wav');
   });
 
   shellTest('text formats have their own request and response contracts', () => {
-    const [chat, responses, messages] = buildModelApiExamples('test-model', {}, BASE_URL);
+    const [chat, responses, messages] = buildModelApiExamples('gpt-4o', {}, BASE_URL);
     assert.ok(Array.isArray(requestBody(chat).messages));
     assert.equal(requestBody(responses).input, 'Say hello.');
     assert.equal(requestBody(messages).max_tokens, 1024);
@@ -111,14 +126,17 @@ describe('model API examples', () => {
     assert.equal(JSON.parse(messages.response).type, 'message');
   });
 
-  shellTest('GPT Image omits response_format while legacy image models explicitly request base64', () => {
+  shellTest('GPT Image omits response_format while DALL-E explicitly requests base64', () => {
     assert.equal(requestBody(buildModelApiExamples('gpt-image-1', {}, BASE_URL)[0]).response_format, undefined);
     assert.equal(requestBody(buildModelApiExamples('dall-e-3', {}, BASE_URL)[0]).response_format, 'b64_json');
+    const edits = buildModelApiExamples('dall-e-2', {}, BASE_URL).find(({ id }) => id === 'image_edit');
+    assert.ok(edits);
+    assert.ok(captureCurlArguments(edits.request).includes('response_format=b64_json'));
   });
 
-  shellTest('image requests preserve the catalog default size', () => {
-    const [example] = buildModelApiExamples('custom-image', { image_pricing: { default_size: '1024x1536' } }, BASE_URL);
-    assert.equal(requestBody(example).size, '1024x1536');
+  shellTest('image requests preserve valid catalog sizes without copying foreign provider resolution labels', () => {
+    assert.equal(requestBody(buildModelApiExamples('gpt-image-1', { image_pricing: { default_size: '1024x1536' } }, BASE_URL)[0]).size, '1024x1536');
+    assert.equal(requestBody(buildModelApiExamples('dall-e-3', { image_pricing: { default_size: '1k' } }, BASE_URL)[0]).size, undefined);
   });
 
   shellTest('speech requests save a binary response rather than pretending it is JSON', () => {
@@ -130,9 +148,11 @@ describe('model API examples', () => {
     assert.ok(example.response.includes('Content-Type: audio/wav'));
   });
 
-  it('only Whisper examples include audio translation', () => {
+  it('only the reviewed Whisper-1 profile includes audio translation', () => {
     assert.deepEqual(buildModelApiExamples('whisper-1', {}, BASE_URL).map((item) => item.id), ['transcription', 'translation']);
-    assert.deepEqual(buildModelApiExamples('gpt-4o-transcribe', {}, BASE_URL).map((item) => item.id), ['transcription']);
+    for (const model of ['gpt-4o-transcribe', 'whisper-large-v3-turbo', 'glm-asr-2512']) {
+      assert.deepEqual(buildModelApiExamples(model, {}, BASE_URL).map((item) => item.id), ['transcription']);
+    }
   });
 
   it('audio and per-call pricing do not turn a conversational model into TTS or reranking', () => {
@@ -163,11 +183,24 @@ describe('model API examples', () => {
       assert.ok(!example.request.includes('secret'));
     }
     assert.equal(normalizeApiBaseUrl('http://localhost:3000/'), 'http://localhost:3000');
+    assert.equal(quoteShellArgument(''), "''");
   });
 
-  shellTest('quotes empty strings, apostrophes, and hostile gateway paths as single arguments', () => {
-    assert.equal(quoteShellArgument(''), "''");
-    const [example] = buildModelApiExamples('gpt-4o', {}, "https://gateway.example/it's-a-prefix");
-    assert.equal(captureCurlArguments(example.request)[2], example.endpoint);
+  it('treats unknown and conflicting task metadata as unverified, not a chat fallback', () => {
+    for (const model of ['my-private-alias', 'custom-video', 'gemini-image-model', 'Qwen/Qwen-Image-Edit', 'grok-imagine-video', 'mistral-ocr-latest', 'deepl', 'gpt-oss-safeguard', 'qwen3-omni', 'o3-deep-research']) {
+      assert.deepEqual(buildModelApiExamples(model, {}, BASE_URL), [], model);
+    }
+    assert.deepEqual(buildModelApiExamples('alias', { supported_features: ['systemone', 'embeddings'] }, BASE_URL), []);
+    assert.deepEqual(buildModelApiExamples('alias', { embedding_pricing: {} }, BASE_URL), []);
+    assert.equal(resolveModelApiProfile('veo-3.1-generate-preview', {}).reason, 'native');
+  });
+
+  it('matching is case-insensitive while requests preserve the original routing key and model namespace', () => {
+    for (const model of ['JinaAI/JINA-CLIP-V2', 'OpenAI/GPT-5-PRO', 'Google/GEMINI-3.8-LIVE']) {
+      const examples = buildModelApiExamples(model, {}, BASE_URL);
+      assert.ok(examples.length > 0);
+      assert.ok(examples[0].request.includes(model) || examples[0].endpoint.includes(encodeURIComponent(model)));
+    }
+    assert.equal(buildModelApiExamples('alias', { supported_features: [' EMBEDDINGS '] }, BASE_URL)[0].id, 'embeddings');
   });
 });
