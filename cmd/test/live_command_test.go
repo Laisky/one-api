@@ -153,7 +153,7 @@ func TestReadLiveTurnBoundsTranscript(t *testing.T) {
 func TestParseLiveArgsDeduplicatesScenarios(t *testing.T) {
 	t.Parallel()
 	opts, err := parseLiveArgs([]string{"--scenarios", "conversation,thinking,conversation"}, config{
-		APIBase: "http://example.test", Token: "test-token",
+		APIBase: "https://example.test", Token: "test-token",
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"conversation", "thinking"}, opts.scenarios)
