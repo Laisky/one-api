@@ -113,7 +113,7 @@ func TestLiveReviewWebSocketBasesServeHTTP(t *testing.T) {
 					w.WriteHeader(http.StatusNotFound)
 				}
 			}))
-			if strings.HasSuffix(scheme, "s") {
+			if scheme == "https" || scheme == "wss" {
 				server.StartTLS()
 			} else {
 				server.Start()
