@@ -21,7 +21,8 @@ func TestExpectedLiveTokensDoesNotDoubleCountUnallocatedThinking(t *testing.T) {
 	} {
 		var usage map[string]any
 		require.NoError(t, json.Unmarshal([]byte(raw), &usage))
-		prompt, completion := expectedLiveTokens([]map[string]any{usage})
+		prompt, completion, err := expectedLiveTokens([]map[string]any{usage})
+		require.NoError(t, err)
 		require.EqualValues(t, 100, prompt)
 		require.EqualValues(t, 100, completion)
 	}

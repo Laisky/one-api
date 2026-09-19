@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,38 +34,47 @@ type consumeLogEntry struct {
 // bounds the call, apiBase and token address the server, and model optionally
 // narrows rows by model. Returns: the rows, newest first, or an error.
 func fetchConsumeLogs(ctx context.Context, apiBase, token, model string) ([]consumeLogEntry, error) {
+	entries, _, err := fetchConsumeLogPage(ctx, apiBase, token, model, 0)
+	return entries, err
+}
+
+// fetchConsumeLogPage reads a bounded page of token-scoped logs. Parameters:
+// ctx bounds the call, apiBase and token address the server, model optionally
+// filters rows, and page is zero-based. Returns: rows, total count, or an error.
+func fetchConsumeLogPage(ctx context.Context, apiBase, token, model string, page int) ([]consumeLogEntry, int, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	endpoint := apiBase + "/api/token/logs?size=20"
+	endpoint := apiBase + "/api/token/logs?size=20&p=" + strconv.Itoa(page)
 	if strings.TrimSpace(model) != "" {
 		endpoint += "&model_name=" + url.QueryEscape(model)
 	}
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "build consume log request")
+		return nil, 0, errors.Wrap(err, "build consume log request")
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "fetch consume logs")
+		return nil, 0, errors.Wrap(err, "fetch consume logs")
 	}
 	defer func() { _ = resp.Body.Close() }()
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 	if err != nil {
-		return nil, errors.Wrap(err, "read consume logs")
+		return nil, 0, errors.Wrap(err, "read consume logs")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.Errorf("consume log request failed with %d: %s", resp.StatusCode, snippet(payload))
+		return nil, 0, errors.Errorf("consume log request failed with %d: %s", resp.StatusCode, snippet(payload))
 	}
 	var body struct {
 		Success bool              `json:"success"`
 		Data    []consumeLogEntry `json:"data"`
+		Total   int               `json:"total"`
 	}
 	if err := json.Unmarshal(payload, &body); err != nil {
-		return nil, errors.Wrap(err, "decode consume logs")
+		return nil, 0, errors.Wrap(err, "decode consume logs")
 	}
 	if !body.Success {
-		return nil, errors.Errorf("consume log request was not successful: %s", snippet(payload))
+		return nil, 0, errors.Errorf("consume log request was not successful: %s", snippet(payload))
 	}
-	return body.Data, nil
+	return body.Data, body.Total, nil
 }

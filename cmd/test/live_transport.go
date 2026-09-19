@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,7 +33,13 @@ func runLiveRESTGuardScenario(ctx context.Context, logger glog.Logger, _ string,
 	if err != nil {
 		return errors.Wrap(err, "build chat request")
 	}
-	req.Header.Set("Authorization", "Bearer "+opts.apiToken)
+	token := opts.apiToken
+	if opts.restChannel > 0 {
+		// TokenAuth's existing admin-only channel suffix pins this negative test
+		// without changing the credentials used by the actual Live scenarios.
+		token += "-" + strconv.Itoa(opts.restChannel)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -125,7 +132,7 @@ func dialLiveWithRequestID(ctx context.Context, wsURL, token string, protocols [
 
 // resolveLiveWSEndpoint converts a one-api base URL into the realtime websocket
 // URL. Parameters: apiBase is an HTTP(S) or WS(S) base. Returns: the normalized
-// `/v1/realtime` websocket endpoint or a validation error.
+// /v1/realtime websocket endpoint or a validation error.
 func resolveLiveWSEndpoint(apiBase string) (string, error) {
 	raw := strings.TrimSpace(apiBase)
 	if raw == "" {
