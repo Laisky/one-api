@@ -68,13 +68,58 @@ channel:
 API_BASE=http://127.0.0.1:3000 API_TOKEN=sk-... go run ./cmd/test live
 ```
 
-Scenarios: `conversation` (two native turns, then a match of the persisted
-consume log against the provider's own receipts), `thinking` (Extended Thinking
-plus the rejection of a thinking level on the automatic model), `setup-guard`
-(model switch, TEXT modality, unsupported setup field, missing setup),
-`rest-guard` (Live-only model on `/v1/chat/completions`) and `subprotocol` (the
-browser handshake). Select a subset with `--scenarios`, and skip the settlement
-check with `--verify-billing=false`. The conversation scenario spends real quota.
+`--api-base` and `API_BASE` accept HTTP(S) or WS(S) server bases, including a
+reverse-proxy base path. WS maps to HTTP and WSS to HTTPS for the REST guard and
+consume-log lookup; Live connections still use the corresponding WebSocket
+endpoint. Non-loopback bases must use **HTTPS or WSS**. Plaintext HTTP/WS is
+accepted only for `localhost` and literal IPv4/IPv6 loopback addresses, so the
+local workflow above remains valid. Private-network addresses are not loopback;
+use TLS or a loopback tunnel rather than sending a bearer token over a LAN.
+
+The default suite runs `conversation` (two native turns and persisted token
+accounting), `thinking` (Extended Thinking plus rejection of a thinking level on
+the ordinary model), `setup-guard` (model switch, TEXT modality, unsupported
+setup field, missing setup), and `subprotocol` (browser handshake). Select a
+subset with `--scenarios`; duplicate names run only once. `--token` works without
+`API_TOKEN`. `--verify-billing=false` disables only the conversation settlement
+check, not receipt validation. Conversation and thinking scenarios spend real
+provider quota; setup-validation scenarios also establish upstream connections.
+
+`--thinking-model` must be non-empty after trimming when `thinking` is selected,
+including in the default suite. An empty value fails before any scenario runs;
+non-thinking selections do not require this value.
+
+The REST negative test is **opt-in and channel-pinned**. In a mixed deployment,
+a third-party bridge may legitimately accept the same model over REST. Supply an
+unsuffixed admin API token and the ID of a configured Google channel:
+
+```bash
+API_BASE=http://127.0.0.1:3000 API_TOKEN=sk-... \
+  go run ./cmd/test live --scenarios rest-guard --rest-channel 42
+```
+
+`--rest-channel` uses the existing admin-only token channel suffix for this REST
+request only. It does not change the credentials of the Live scenarios. An
+explicit `rest-guard` without a channel ID fails argument validation before any
+provider work. With `--rest-channel` and no explicit scenario list, all five
+scenarios run. Only HTTP **400** with `error.code=unsupported_model_transport`
+passes; 401, 403, 404, 429, 5xx and a successful third-party bridge do not pass.
+
+Settlement is matched by the upgrade's `X-Oneapi-Request-Id`, not timestamps,
+model names or receipt counts. The token-scoped log search is bounded to 100
+pages of 20 rows within the settlement deadline. Model aliases do not become log
+filters, and unrelated concurrent sessions cannot satisfy the assertion. A
+provisional reservation row is polled; a partially reconciled final row fails.
+The probe uses the production receipt decoder to check persisted token totals;
+independent hand-calculated vectors in the regression tests check normalization.
+It is **not** an independent Google invoice or monetary-price oracle. The
+thinking scenario validates lifecycle and receipts, not persisted settlement.
+
+The command is split into options, transport, protocol, scenarios and settlement
+files. `IN_PROGRESS` followed by `IDLE` is terminal even without a spoken
+`turnComplete`; receipt-before-boundary and receipt-after-boundary orders both
+work. Transcripts are limited to a 4 KiB preview, and scenario failures are
+returned for the command entry point to log once.
 
 ### Browser handshakes and operator trust
 
@@ -145,12 +190,19 @@ previous turn's prompt count. Context-window compression can reduce the next
 turn's context; that is not a negative charge or a refund of a previous turn.
 
 `thoughtsTokenCount` is retained as a subset of normalized output text. The
-normalizer requires aggregate conservation to decide whether thinking/tool-use
-counts are already inclusive or explicitly additional. It never adds thinking
-once as output and again as a separate reasoning fee. Negative/fractional counts,
-a modality count larger than its parent, and totals that reconcile with neither
-`prompt + response` nor `prompt + response + thoughts + tool` are still rejected.
-Protobuf omission of a zero scalar is accepted as zero.
+normalizer uses aggregate conservation before refining modality partitions. It
+never adds thinking once as output and again as a separate reasoning fee.
+Negative/fractional counts, a modality count larger than its parent, and totals
+that reconcile with neither `prompt + response` nor
+`prompt + response + thoughts + tool` are still rejected. Protobuf omission of a
+zero scalar is accepted as zero.
+
+An unexplained modality remainder equal to the tool or thinking count is **not**
+proof that the independent counter is inclusive. Explicit additional totals take
+precedence over such numerical coincidences. For inclusive input, known tool
+modalities refine only their proven deficit from unallocated prompt tokens;
+unknown tool modalities remain unallocated. This preserves aggregate counts
+without inventing overlap or adding the tool input twice.
 
 **Live receipts do not close their modality breakdown, and their aggregate does
 not always include thinking.** Both were verified against the production Live API
@@ -166,16 +218,16 @@ on 2026-09-18 and are the normal case, not an error:
   its REST reference defines it as prompt + thoughts + response candidates; live
   sessions produce both shapes, sometimes within one session.
 
-Demanding closure rejected **every** real receipt: a genuine conversation settled
-at zero, and the metering error closed the socket after the first turn. The
-normalizer therefore keeps what the provider did not attribute in explicit
-`unallocated_tokens` / `output_unallocated_tokens` buckets and prices them at the
-cheapest chargeable modality of that direction, which for these models is text
-input and text output. A modality this build does not price, such as a future
-`DOCUMENT` or `MODALITY_UNSPECIFIED` bucket, lands in the same remainder rather
-than ending a paid session. Thinking tokens the aggregate omits are billed as
-additional output text, and only the part that the reported output partition
-cannot already contain.
+Demanding closure rejected **every** real receipt in the captured production
+incident: a genuine conversation settled at zero, and the metering error closed
+the socket after the first turn. The normalizer therefore keeps what the provider
+did not attribute in explicit `unallocated_tokens` / `output_unallocated_tokens`
+buckets and prices them at the cheapest chargeable modality of that direction,
+which for these models is text input and text output. A modality this build does
+not price, such as a future `DOCUMENT` or `MODALITY_UNSPECIFIED` bucket, lands in
+the same remainder rather than ending a paid session. Thinking first refines
+possible inclusive output; only the part that existing text and unallocated
+output cannot contain is added outside an inclusive aggregate.
 
 Example: 100K text, 200K audio, 300K image and 400K video input tokens, plus
 200K text and 300K audio output tokens, cost **$5.875**. A 100K thinking subset
@@ -192,8 +244,10 @@ The implemented receipt contract coalesces monotonic refinements within an
 unfinished server turn and commits its final snapshot at completion. Duplicate
 suppression is turn-local: two different turns can legitimately have identical
 counts. Extended Thinking's `IN_PROGRESS` spoken segments remain pending until
-`IDLE`. Decreasing counters within that unfinished scope are treated as an
-unsupported/ambiguous receipt sequence, not silently subtracted or double-added.
+`IDLE`. Aggregate input and output must not decrease within that unfinished
+scope. Unallocated counts may move into known modalities without falsely marking
+the refinement as a regression. A genuine regression retains the earlier,
+larger accepted snapshot and marks the evidence incomplete.
 
 **Public documentation does not provide a unique receipt ID or a complete
 ordering guarantee for every usage/transcription/background-thinking frame.**
@@ -212,6 +266,16 @@ invented exact bill. Concurrent input after the start of a final response can
 remain unresolved without a later receipt; clients should end input and wait
 for the final usage/turn boundary before closing. Inspect
 `realtime_billing_complete`, billing issues and estimated-charge metadata.
+
+`realtime_billing_complete` describes **receipt/lifecycle completeness**, not
+exact modality pricing. Ordinary input or output unallocated tokens also set
+`realtime_pricing_lower_bound=true`, just like uncertain cache allocation.
+The current settlement policy finalizes complete measured receipts using their
+minimum-rate unallocated buckets. It does not automatically replace that charge
+with a reservation estimate or later increase it to a guessed modality price.
+A row may therefore be billing-complete **and** a pricing lower bound. Missing
+receipt evidence is a separate condition and retains the estimate policy above.
+Do not present a lower-bound row as an exact provider invoice.
 
 A rejected receipt at a committed boundary permanently marks that turn as
 incomplete, even when a later turn has valid usage. Its earlier measured snapshot
@@ -235,10 +299,19 @@ unpriceable reservation configurations are rejected before provider work.
   compatible. They are, however, covered by the REST guard: every model whose
   only advertised generation method is `bidiGenerateContent`
   (`gemini-3.1-flash-live-preview`, `gemini-3.5-live-translate-preview`,
-  `gemini-3.5-transcribe-live`) is rejected on a Google channel's REST endpoints
-  with **HTTP 400**, matching Google's own answer to that request. A 5xx would be
-  retried onto further channels and charged against channel health for what is a
-  caller mistake.
+  `gemini-3.5-transcribe-live`) is incompatible with a Google REST channel.
+  For an unpinned REST request, the relay skips such channels and may use a
+  compatible third-party bridge. Local mismatches neither consume nor expand the
+  provider retry budget. A terminal provider failure stops replay; a later local
+  mismatch cannot hide that real failure behind a transport error. HTTP **400**
+  with `unsupported_model_transport` is returned when no compatible provider was
+  attempted, or the caller explicitly pinned an incompatible channel. Remediation
+  URLs retain and escape the caller's model alias. Internal one-api errors were
+  already excluded from channel-health penalties; the fix is not a new exemption.
+- Pricing metadata, static model suggestions, and operator-configured model
+  catalogs are distinct surfaces. A price entry is not a promise that a model
+  supports every transport. Vertex's static suggestions exclude Live-only IDs;
+  existing operator configuration is not silently rewritten by this patch.
 - Client-executed `functionDeclarations` and matching `toolResponse` messages are
   supported, including non-blocking calls. For Extended Thinking, omitted function
   `behavior` defaults to `NON_BLOCKING`; explicit `BLOCKING` is rejected during
@@ -268,9 +341,11 @@ price vectors through the production resolver; history/compression/duplicates;
 zero omissions and invalid counters; thinking/tool conservation; partial/idle
 settlement; group/override/rounding behavior; and bounded ledger/tool state.
 
-These tests use existing Go/CI dependencies and local fixtures. **No paid Google
-request or account-specific availability check has been made.** Before relying
-on exact production invoices, reconcile a consented small real session against
+These automated tests use existing Go/CI dependencies and local fixtures. The
+captured production receipts above are retained evidence, not fresh provider
+calls made by this review. **No paid Google request or account-specific
+availability check was made during the `fix/live` follow-up.** Before relying on
+exact production invoices, reconcile a consented small real session against
 Google's raw modality receipts and billing export, especially Extended Thinking
 and proactive silence. Do not replace that evidence with a mocked-test claim.
 
@@ -282,6 +357,16 @@ the administrator-only channel-update boundary. Test-only revision
 `edccca4e1529a5134c8ea8455291744d31572b0e` precedes the corresponding production
 fixes. CI run **35377875469** records the red evidence; final acceptance is
 recorded in PR #409 after the fix revision's existing CI completes.
+
+The `fix/live` follow-up preserves the predecessor's fixes and adds test-only
+revision `2bbb865e6bd24e89cb1f78355b1bbd19f1349ae0`. Existing CI run
+**35414178370**, artifact **10575027928**, records nine top-level assertion
+failures before implementation: additional-total ambiguity, inclusive tool
+refinement, four retry scenarios in both cache/database modes, malformed probe
+receipts, the drifting thinking oracle, and IDLE-only completion. The output
+regression preservation control passed unchanged. Accounting, routing and probe
+fixes are separate commits; final acceptance and remaining validation limits
+are recorded in PR #412. No CI workflow was added or weakened.
 
 Official sources checked on the research date:
 

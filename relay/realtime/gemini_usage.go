@@ -31,16 +31,11 @@ type GeminiUsageMetadata struct {
 
 // DecodeGeminiUsage validates and partitions a Live receipt. Parameters: raw is
 // the upstream usageMetadata object. Returns: a record or a classifiable error.
-// Missing modality breakdowns are NOT assumed to be cheap text: they stay in the
-// dedicated unallocated buckets, which Cost prices at the cheapest chargeable
-// modality. Google does not document promptTokensDetails as exhaustive, and live
-// receipts routinely report a remainder (observed 2026-09-18: promptTokenCount
-// 548 against TEXT 306 + AUDIO 222). Rejecting those receipts lost every real
-// turn's billing and ended the session, so an unattributed remainder is now
-// accounted rather than refused. Transcription and audible text are already in
-// the server's TEXT output partition; never tokenize the transcript again.
-// Thinking/tool totals are accepted only when the aggregate unambiguously
-// establishes whether they are additional tokens.
+// Missing modality breakdowns stay unallocated and use minimum-rate pricing.
+// Classify aggregate inclusion before refining partitions: a missing modality
+// count that happens to equal a tool/thinking counter is not evidence of overlap.
+// Transcriptions are already in the provider's TEXT partition and are never
+// tokenized again. Thinking uses unallocated output before adding proven excess.
 func DecodeGeminiUsage(raw json.RawMessage) (Record, error) {
 	if err := ValidateGeminiJSON(raw); err != nil {
 		return Record{}, err
@@ -53,8 +48,7 @@ func DecodeGeminiUsage(raw json.RawMessage) (Record, error) {
 		return Record{}, errors.Wrap(ErrIncompleteUsage, "Gemini usage lacks aggregate counts")
 	}
 	// Protobuf JSON may omit zero-valued scalar fields. Accept an omitted
-	// prompt/response only as zero; the aggregate must still reconcile. A missing
-	// modality count is never invented from a residual: it stays unattributed.
+	// prompt/response only as zero; the aggregate must still reconcile.
 	var zero int64
 	if u.Prompt == nil {
 		u.Prompt = &zero
@@ -67,7 +61,7 @@ func DecodeGeminiUsage(raw json.RawMessage) (Record, error) {
 			return Record{}, errors.Wrap(ErrInvalidUsage, "Gemini count outside int32 range")
 		}
 	}
-	tool, _, err := geminiPartition(u.ToolDetails, u.ToolPrompt, false)
+	tool, toolRemainder, err := geminiPartition(u.ToolDetails, u.ToolPrompt, false)
 	if err != nil {
 		return Record{}, err
 	}
@@ -75,57 +69,51 @@ func DecodeGeminiUsage(raw json.RawMessage) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
-	// A remainder that is exactly the tool-use total means the modality details
-	// describe the prompt without its tool tokens; that is an inclusive subset,
-	// not an unattributed count.
-	inputSubsetAdded := false
-	if inRemainder > 0 && u.ToolPrompt == inRemainder {
-		for i := range in {
-			in[i] += tool[i]
-		}
-		inRemainder, inputSubsetAdded = 0, true
-	}
 	out, outRemainder, err := geminiPartition(u.ResponseDetails, *u.Response, true)
 	if err != nil {
 		return Record{}, err
 	}
-	outputSubsetAdded := false
-	if outRemainder > 0 && u.Thoughts == outRemainder {
-		out[0] += u.Thoughts
-		outRemainder, outputSubsetAdded = 0, true
-	}
 	t := Tokens{Input: *u.Prompt, Output: *u.Response, Text: in[0], Audio: in[1], Image: in[2], Video: in[3],
 		Unallocated: inRemainder, OutputText: out[0], OutputAudio: out[1], OutputUnallocated: outRemainder}
 	base := t.Input + t.Output
-	// The Live reference describes total as prompt + response, whereas the REST
-	// reference and newer receipts add distinct thinking/tool-use counters. Do
-	// not guess which modality owns an unexplained residual or double-charge a
-	// subset that the aggregate already includes.
 	switch {
 	case *u.Total == base:
-		if tool[0] > t.Text || tool[1] > t.Audio || tool[2] > t.Image || tool[3] > t.Video {
-			return Record{}, errors.Wrap(ErrInvalidUsage, "Gemini subset exceeds parent count")
+		if u.ToolPrompt > t.Input {
+			return Record{}, errors.Wrap(ErrInvalidUsage, "Gemini tool subset exceeds prompt count")
 		}
-		// Google's Live reference documents total as prompt + response, while its
-		// REST reference documents prompt + thoughts + response; live receipts use
-		// both. When the reported output partition cannot contain the thinking
-		// tokens, they are additional billable output text that the aggregate
-		// omitted (observed 2026-09-18: thoughtsTokenCount 100 against an
-		// AUDIO-only responseTokenCount of 61). Only the part that does not fit
-		// is added, so an inclusive partition is never charged twice.
-		if extra := u.Thoughts - t.OutputText; extra > 0 {
-			t.Output += extra
-			t.OutputText += extra
+		// A known tool modality is a lower bound for the same prompt modality.
+		// Fill only its deficit from unallocated input; other tool tokens may
+		// already overlap attributed prompt tokens. Never invent extra input.
+		parents := []*int64{&t.Text, &t.Audio, &t.Image, &t.Video}
+		for i, parent := range parents {
+			missing := max(tool[i]-*parent, 0)
+			if missing > t.Unallocated {
+				return Record{}, errors.Wrap(ErrInvalidUsage, "Gemini subset exceeds parent count")
+			}
+			*parent += missing
+			t.Unallocated -= missing
+		}
+		// Live receipts sometimes exclude thinking even from totalTokenCount.
+		// Existing output text and unknown output can already contain thoughts;
+		// only thinking beyond that capacity proves additional output tokens.
+		if remaining := u.Thoughts - t.OutputText; remaining > 0 {
+			reclassified := min(remaining, t.OutputUnallocated)
+			t.OutputText += reclassified
+			t.OutputUnallocated -= reclassified
+			if remaining -= reclassified; remaining > 0 {
+				t.Output += remaining
+				t.OutputText += remaining
+			}
 		}
 	case *u.Total == base+u.Thoughts+u.ToolPrompt:
-		if inputSubsetAdded || outputSubsetAdded {
-			return Record{}, errors.Wrap(ErrInvalidUsage, "Gemini counters contradict inclusive partitions")
-		}
+		// The aggregate proves these counters are additional. Incomplete prompt
+		// or response details cannot contradict that merely by numerical equality.
 		t.Input += u.ToolPrompt
 		t.Text += tool[0]
 		t.Audio += tool[1]
 		t.Image += tool[2]
 		t.Video += tool[3]
+		t.Unallocated += toolRemainder
 		t.Output += u.Thoughts
 		t.OutputText += u.Thoughts
 	default:

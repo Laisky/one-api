@@ -1,6 +1,9 @@
 package adaptor
 
 import (
+	"net/url"
+	"strings"
+
 	"github.com/Laisky/errors/v2"
 
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -49,12 +52,19 @@ func WithoutLiveOnlyGoogleModels(models []string) []string {
 	return filtered
 }
 
-// ValidateModelTransport rejects catalog-only models before a Google REST request
-// can prepare credentials or reach the network. Parameters: m carries the selected
-// channel and mapped upstream model. Returns: a Live API requirement error or nil.
-// Callers must surface it as a client error; answering 5xx would retry the same
-// impossible request on further channels and count it against channel health.
-func ValidateModelTransport(m *meta.Meta) error {
+// IsRESTTransportMismatch reports whether err is the local routing condition where
+// a Google REST adaptor cannot serve a Live-only model. Parameters: err is a
+// normalized or wrapped error. Returns: true when another channel may still provide
+// a compatible REST bridge for the requested model.
+func IsRESTTransportMismatch(err error) bool {
+	return errors.Is(err, ErrModelRequiresLiveTransport)
+}
+
+// ValidateRESTModelTransport rejects catalog-only models before a Google REST
+// request can prepare credentials or reach the network. Parameters: m carries the
+// selected channel and mapped upstream model. Returns: a Live API requirement error
+// or nil. Native realtime requests deliberately do not call this REST-only guard.
+func ValidateRESTModelTransport(m *meta.Meta) error {
 	if m == nil {
 		return nil
 	}
@@ -68,7 +78,11 @@ func ValidateModelTransport(m *meta.Meta) error {
 	if _, live := liveOnlyGoogleModels[m.ActualModelName]; !live {
 		return nil
 	}
+	requestedModel := strings.TrimSpace(m.OriginModelName)
+	if requestedModel == "" {
+		requestedModel = m.ActualModelName
+	}
 	return errors.Wrapf(ErrModelRequiresLiveTransport,
 		"model %q cannot be dispatched through this REST adaptor; connect to GET /v1/realtime?model=%s instead",
-		m.ActualModelName, m.ActualModelName)
+		m.ActualModelName, url.QueryEscape(requestedModel))
 }
