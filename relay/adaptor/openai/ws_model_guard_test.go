@@ -242,7 +242,7 @@ func TestEnforceRealtimeSessionUpdate_NonSessionUpdatePassThrough(t *testing.T) 
 	t.Parallel()
 
 	in := []byte(`{"type":"conversation.item.create","item":{"type":"message"}}`)
-	out, err := enforceRealtimeSessionUpdate(in)
+	out, err := enforceRealtimeSessionUpdate(in, "gpt-realtime", "")
 	require.NoError(t, err)
 	require.Equal(t, in, out)
 }
@@ -251,7 +251,7 @@ func TestEnforceRealtimeSessionUpdate_WithoutModelFieldAllowed(t *testing.T) {
 	t.Parallel()
 
 	in := []byte(`{"type":"session.update","session":{"instructions":"be brief"}}`)
-	out, err := enforceRealtimeSessionUpdate(in)
+	out, err := enforceRealtimeSessionUpdate(in, "gpt-realtime", "")
 	require.NoError(t, err)
 	require.Equal(t, in, out)
 }
@@ -261,7 +261,7 @@ func TestEnforceRealtimeSessionUpdate_WithModelFieldDenied(t *testing.T) {
 	t.Parallel()
 
 	in := []byte(`{"type":"session.update","session":{"model":"gpt-4o-realtime-preview","instructions":"x"}}`)
-	out, err := enforceRealtimeSessionUpdate(in)
+	out, err := enforceRealtimeSessionUpdate(in, "gpt-realtime", "")
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrModelSwitchDenied))
 	require.Equal(t, in, out)
@@ -271,7 +271,7 @@ func TestEnforceRealtimeSessionUpdate_MalformedJSONPassThrough(t *testing.T) {
 	t.Parallel()
 
 	in := []byte(`{not json`)
-	out, err := enforceRealtimeSessionUpdate(in)
+	out, err := enforceRealtimeSessionUpdate(in, "gpt-realtime", "")
 	require.NoError(t, err)
 	require.Equal(t, in, out)
 }
@@ -280,7 +280,7 @@ func TestEnforceRealtimeSessionUpdate_NoSessionFieldPassThrough(t *testing.T) {
 	t.Parallel()
 
 	in := []byte(`{"type":"session.update"}`)
-	out, err := enforceRealtimeSessionUpdate(in)
+	out, err := enforceRealtimeSessionUpdate(in, "gpt-realtime", "")
 	require.NoError(t, err)
 	require.Equal(t, in, out)
 }

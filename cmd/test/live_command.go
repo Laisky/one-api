@@ -248,7 +248,7 @@ func verifyLiveSettlement(ctx context.Context, logger glog.Logger, opts liveOpti
 	deadline := time.Now().Add(liveSettlementTimeout)
 	var last string
 	for {
-		entries, err := fetchLiveConsumeLogs(ctx, opts)
+		entries, err := fetchConsumeLogs(ctx, opts.apiBase, opts.apiToken, opts.model)
 		if err != nil {
 			return err
 		}
@@ -333,59 +333,6 @@ func liveModalityCount(usage map[string]any, field, modality string) int64 {
 		}
 	}
 	return 0
-}
-
-// liveConsumeLog is the subset of a consume-log row this probe asserts on.
-type liveConsumeLog struct {
-	CreatedAt        int64  `json:"created_at"`
-	Quota            int64  `json:"quota"`
-	PromptTokens     int    `json:"prompt_tokens"`
-	CompletionTokens int    `json:"completion_tokens"`
-	Content          string `json:"content"`
-	Metadata         struct {
-		BillingComplete bool `json:"realtime_billing_complete"`
-		Usage           struct {
-			Receipts int  `json:"receipt_count"`
-			UsageGap bool `json:"usage_gap"`
-		} `json:"realtime_usage"`
-	} `json:"metadata"`
-}
-
-// fetchLiveConsumeLogs reads this token's recent consume logs for the probed
-// model. Parameters: ctx and opts describe the request. Returns: the rows,
-// newest first, or a transport/decoding error.
-func fetchLiveConsumeLogs(ctx context.Context, opts liveOptions) ([]liveConsumeLog, error) {
-	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	endpoint := opts.apiBase + "/api/token/logs?size=20&model_name=" + url.QueryEscape(opts.model)
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "build consume log request")
-	}
-	req.Header.Set("Authorization", "Bearer "+opts.apiToken)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, errors.Wrap(err, "fetch consume logs")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
-	if err != nil {
-		return nil, errors.Wrap(err, "read consume logs")
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.Errorf("consume log request failed with %d: %s", resp.StatusCode, snippet(payload))
-	}
-	var body struct {
-		Success bool             `json:"success"`
-		Data    []liveConsumeLog `json:"data"`
-	}
-	if err := json.Unmarshal(payload, &body); err != nil {
-		return nil, errors.Wrap(err, "decode consume logs")
-	}
-	if !body.Success {
-		return nil, errors.Errorf("consume log request was not successful: %s", snippet(payload))
-	}
-	return body.Data, nil
 }
 
 // runLiveThinkingScenario exercises the configurable-thinking variant and the

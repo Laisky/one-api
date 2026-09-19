@@ -85,6 +85,6 @@ func RealtimeHandler(c *gin.Context, meta *meta.Meta) (*model.ErrorWithStatusCod
 
 	// GLM-Realtime selects the model via session.update, so the OpenAI
 	// session-model guard is disabled.
-	usage := openai.RealtimeBidirectionalPump(clientConn, upstreamConn, false, lg)
+	usage := openai.RealtimeBidirectionalPump(clientConn, upstreamConn, false, lg, meta.ActualModelName, meta.OriginModelName)
 	return nil, usage
 }

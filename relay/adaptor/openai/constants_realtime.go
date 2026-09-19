@@ -11,7 +11,7 @@ import (
 // sub-config.
 // Sources verified 2026-05-18:
 //   - https://developers.openai.com/api/docs/pricing (Realtime and audio table)
-var realtimeModelRatios = map[string]adaptor.ModelConfig{
+var realtimeModelRatios = withRealtimeDatedSnapshots(map[string]adaptor.ModelConfig{
 	// gpt-realtime-2.1: text $4/$24 (cached $0.40), audio $32/$64, image $5/$0.50 in.
 	// Same token pricing as gpt-realtime-2; 128K context, 32K max output.
 	// Knowledge cutoff 2024-09-30. Not a replacement for gpt-realtime-2 (both active).
@@ -224,4 +224,35 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: standardSamplingParameters(),
 		Description:                 "GPT-4o mini Realtime preview snapshot from 2024-12-17.",
 	},
+})
+
+// realtimeDatedSnapshots maps each dated Realtime snapshot that /v1/models
+// serves to the alias whose published price it shares. OpenAI lists these IDs
+// alongside their aliases, so an operator who imports a channel's models from
+// upstream gets them; without an entry a session on one settles at zero,
+// because realtime pricing has no snapshot fallback and an entirely unpriced
+// receipt only falls back to the reservation, which trusted accounts skip.
+// No per-snapshot price differentiation is published. Verified 2026-09-18
+// against https://developers.openai.com/api/docs/pricing and /v1/models.
+var realtimeDatedSnapshots = map[string]string{
+	"gpt-realtime-2025-08-28":      "gpt-realtime",
+	"gpt-realtime-mini-2025-12-15": "gpt-realtime-mini",
+}
+
+// withRealtimeDatedSnapshots registers each dated snapshot by copying its alias
+// configuration, so a price correction on the alias cannot leave its snapshot
+// behind. Parameters: catalog is the hand-written Realtime table. Returns: the
+// same map with the snapshots added. This runs during package variable
+// initialization because the assembled ModelRatios reads the result; an init()
+// function would mutate the table after that copy was already taken.
+func withRealtimeDatedSnapshots(catalog map[string]adaptor.ModelConfig) map[string]adaptor.ModelConfig {
+	for snapshot, alias := range realtimeDatedSnapshots {
+		config, ok := catalog[alias]
+		if !ok {
+			continue
+		}
+		config.Description = "Dated snapshot of " + alias + "; identical published pricing."
+		catalog[snapshot] = config
+	}
+	return catalog
 }

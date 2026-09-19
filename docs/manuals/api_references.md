@@ -1283,7 +1283,7 @@ This is a WebSocket upgrade request, not a normal HTTP call. The client sends th
 
 **Response**
 
-On success the server responds with HTTP `101 Switching Protocols` and the socket stays open. After the upgrade, the gateway transparently relays Realtime protocol events in both directions (e.g. `session.update`, `input_audio_buffer.append`, `response.create`, `response.done`); the message shapes follow the upstream OpenAI Realtime schema. Client-to-upstream `session.update` frames that attempt to change the session `model` are rejected: the gateway sends back an `error` event (`{"type":"error","error":{"type":"invalid_request_error","code":"model_switch_denied","message":"..."}}`) and then closes the socket with WebSocket close code `1008` (policy violation) and reason `model_switch_denied`.
+On success the server responds with HTTP `101 Switching Protocols` and the socket stays open. After the upgrade, the gateway transparently relays Realtime protocol events in both directions (e.g. `session.update`, `input_audio_buffer.append`, `response.create`, `response.done`); the message shapes follow the upstream OpenAI Realtime schema. Client-to-upstream `session.update` frames that attempt to change the session `model` to a *different* model are rejected: the gateway sends back an `error` event (`{"type":"error","error":{"type":"invalid_request_error","code":"model_switch_denied","message":"..."}}`) and then closes the socket with WebSocket close code `1008` (policy violation) and reason `model_switch_denied`. Sending the bound model is allowed — `session.created` carries it and clients echo that object back — and the channel's user-facing alias is rewritten to the actual model. A transcription session is opened with `?model=<routing model>&intent=transcription`; the gateway drops the `model` parameter upstream, because OpenAI requires transcription sessions to carry none, and the transcription model is selected inside `session.audio.input.transcription`.
 
 If the handshake or the upstream dial fails the gateway does not return a JSON body over the socket in the normal way:
 - Upgrade failure: the WebSocket upgrade response carries HTTP `400`; the controller records `{"error": {"message": "websocket upgrade failed: ...", "type": "one_api_error", "code": "ws_upgrade_failed"}}`.
@@ -1332,7 +1332,7 @@ curl -i -N \
 | 403 (`pre_consume_failed`) | Pre-consuming the estimated quota from the token failed. |
 | 500 (`one_api_error`) | The gateway could not read the user's quota before starting the session. |
 | 502 (`upstream_connect_failed`) | The gateway could not establish the upstream WebSocket connection; pre-consumed quota is refunded. |
-| 1008 (WS close) | A client `session.update` frame attempted to change the session model (`model_switch_denied`). |
+| 1008 (WS close) | A client `session.update` frame attempted to switch to a different model (`model_switch_denied`). |
 | 1013 (WS close) | The upstream WebSocket connection could not be established (pairs with the `502 upstream_connect_failed` record). |
 
 ### POST /v1/realtime/sessions

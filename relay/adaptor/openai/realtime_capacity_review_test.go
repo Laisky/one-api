@@ -23,7 +23,7 @@ func TestReviewCapacityClosesRealWebSocket(t *testing.T) {
 		require.NoError(t, conn.SetWriteDeadline(time.Now().Add(45*time.Second)))
 	}
 	result := make(chan *rmodel.Usage, 1)
-	go func() { result <- meteredRealtimePump(proxyClient, proxyUpstream, nil) }()
+	go func() { result <- meteredRealtimePump(proxyClient, proxyUpstream, nil, "gpt-realtime", "") }()
 	for i := 0; i < realtime.MaxRecords; i++ {
 		frame := fmt.Sprintf(`{"type":"response.done","response":{"id":"r%d","usage":{"input_tokens":1,"output_tokens":0}}}`, i)
 		require.NoError(t, upstream.WriteMessage(websocket.TextMessage, []byte(frame)))

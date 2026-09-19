@@ -77,16 +77,39 @@ func realtimeWebSocketUpstreamURL(m *rmeta.Meta, clientRawQuery string) string {
 	}
 
 	q, _ := url.ParseQuery(clientRawQuery)
-	if m.ActualModelName != "" {
+	switch {
+	case isRealtimeTranscriptionIntent(q):
+		// A transcription session selects its model inside
+		// `session.audio.input.transcription`, and the upstream rejects the
+		// handshake outright with "You must not provide a model parameter for
+		// transcription sessions" (verified 2026-09-18). The caller still has to
+		// name a model in its own query so one-api can route and bill it, so the
+		// routing model is dropped here rather than forwarded.
+		q.Del("model")
+	case m.ActualModelName != "":
 		q.Set("model", m.ActualModelName)
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
 }
 
+// isRealtimeTranscriptionIntent reports whether a handshake opens a
+// transcription session rather than a conversation. Parameters: query is the
+// client's parsed query string. Returns: true for `intent=transcription`.
+func isRealtimeTranscriptionIntent(query url.Values) bool {
+	return strings.EqualFold(strings.TrimSpace(query.Get("intent")), "transcription")
+}
+
 // RealtimeSessionsHandler proxies a POST request to the upstream OpenAI
 // Realtime Sessions endpoint (/v1/realtime/sessions) which creates ephemeral
 // tokens for WebRTC browser clients.
+//
+// Upstream status: api.openai.com answered this path with 404 "Invalid URL" on
+// 2026-09-18; GA moved ephemeral tokens to POST /v1/realtime/client_secrets,
+// which this gateway does not route. That is not an oversight to fix casually:
+// an ephemeral token lets the client reach the provider directly, so the session
+// it opens cannot be metered or logged here. The path is kept for
+// OpenAI-compatible upstreams that still implement it.
 //
 // Security: the body's `model` field is enforced against `meta.ActualModelName`
 // before forwarding. If the client requests a model that does not match the
@@ -237,7 +260,7 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	}
 	defer func() { _ = upstreamConn.Close() }()
 
-	return nil, meteredRealtimePump(clientConn, upstreamConn, lg)
+	return nil, meteredRealtimePump(clientConn, upstreamConn, lg, meta.ActualModelName, meta.OriginModelName)
 }
 
 // RealtimeBidirectionalPump relays frames between the client and upstream
@@ -252,15 +275,20 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 //   - upstreamConn: the dialed upstream realtime connection.
 //   - guardClientModel: whether to enforce the OpenAI session-model guard.
 //   - lg: request-scoped logger for close diagnostics.
+//   - boundModel: mapped upstream model bound at the handshake; empty disables
+//     the guard, matching the legacy unresolved-binding path.
+//   - originModel: the user-facing alias the caller requested, if different.
 //
 // Returns: the accumulated usage parsed from upstream events, or nil when the
 // upstream never reported usage.
-func RealtimeBidirectionalPump(clientConn, upstreamConn *websocket.Conn, guardClientModel bool, lg glog.Logger) *rmodel.Usage {
+func RealtimeBidirectionalPump(clientConn, upstreamConn *websocket.Conn, guardClientModel bool, lg glog.Logger, boundModel, originModel string) *rmodel.Usage {
 	errc := make(chan error, 2)
 	usage := &rmodel.Usage{}
 	countedResponseIDs := map[string]struct{}{}
 	go func() { errc <- copyWSUpstreamToClient(upstreamConn, clientConn, usage, countedResponseIDs) }()
-	go func() { errc <- copyRealtimeClientToUpstream(clientConn, upstreamConn, guardClientModel) }()
+	go func() {
+		errc <- copyRealtimeClientToUpstream(clientConn, upstreamConn, guardClientModel, boundModel, originModel)
+	}()
 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
@@ -292,12 +320,14 @@ func RealtimeBidirectionalPump(clientConn, upstreamConn *websocket.Conn, guardCl
 // Parameters:
 //   - src: client WebSocket connection (reader).
 //   - dst: upstream realtime WebSocket connection (writer).
-//   - guardClientModel: when true, reject session.update model mutations.
+//   - guardClientModel: when true, hold session.update to the bound model.
+//   - boundModel: mapped upstream model bound at the handshake.
+//   - originModel: the user-facing alias the caller requested, if different.
 //
 // Returns:
 //   - error: nil on clean close; ErrModelSwitchDenied (wrapped) when a client
 //     attempts to mutate `session.model`; other errors propagate I/O failures.
-func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel bool) error {
+func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel bool, boundModel, originModel string) error {
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {
@@ -314,7 +344,8 @@ func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel boo
 		}
 
 		if guardClientModel && mt == websocket.TextMessage {
-			if _, guardErr := enforceRealtimeSessionUpdate(msg); guardErr != nil {
+			forward, guardErr := enforceRealtimeSessionUpdate(msg, boundModel, originModel)
+			if guardErr != nil {
 				errEvent := buildModelSwitchErrorEvent(guardErr.Error())
 				_ = src.WriteMessage(websocket.TextMessage, errEvent)
 				_ = src.WriteControl(
@@ -324,6 +355,7 @@ func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel boo
 				)
 				return errors.WithStack(guardErr)
 			}
+			msg = forward
 		}
 
 		if werr := dst.WriteMessage(mt, msg); werr != nil {

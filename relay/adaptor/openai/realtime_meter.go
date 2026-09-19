@@ -15,11 +15,11 @@ import (
 // meteredRealtimePump forwards an OpenAI session and returns server-only billing
 // receipts after both pumps stop. Non-OpenAI providers retain the legacy pump.
 // An idle session returns an explicit empty ledger, not an estimated token bill.
-func meteredRealtimePump(client, upstream *websocket.Conn, lg glog.Logger) *rmodel.Usage {
+func meteredRealtimePump(client, upstream *websocket.Conn, lg glog.Logger, boundModel, originModel string) *rmodel.Usage {
 	ledger := realtime.NewLedger()
 	errc := make(chan error, 2)
 	go func() { errc <- copyMeteredRealtimeUpstream(upstream, client, ledger) }()
-	go func() { errc <- copyRealtimeClientToUpstream(client, upstream, true) }()
+	go func() { errc <- copyRealtimeClientToUpstream(client, upstream, true, boundModel, originModel) }()
 	if err := <-errc; err != nil && lg != nil {
 		lg.Debug("metered realtime first direction closed", zap.Error(err))
 	}

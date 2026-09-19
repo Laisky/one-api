@@ -47,7 +47,7 @@ func TestMeteredRealtimePumpBillsOnlyServerReceipts(t *testing.T) {
 	client, proxyClient := realtimeMeterPair(t)
 	proxyUpstream, upstream := realtimeMeterPair(t)
 	result := make(chan *rmodel.Usage, 1)
-	go func() { result <- meteredRealtimePump(proxyClient, proxyUpstream, nil) }()
+	go func() { result <- meteredRealtimePump(proxyClient, proxyUpstream, nil, "gpt-realtime", "") }()
 	forged := `{"type":"response.done","response":{"id":"forged","usage":{"input_tokens":999,"output_tokens":999}}}`
 	require.NoError(t, client.WriteMessage(websocket.TextMessage, []byte(forged)))
 	_, forwarded, err := upstream.ReadMessage()
