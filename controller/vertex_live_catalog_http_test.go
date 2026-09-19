@@ -35,3 +35,26 @@ func TestVertexLiveDashboardModelCatalog(t *testing.T) {
 	require.Contains(t, models, "gemini-live-2.5-flash-native-audio")
 	require.Contains(t, models, "gemini-3.8-flash")
 }
+
+// TestVertexLiveDefaultPricingDoesNotBorrowDeveloperRates exercises the actual
+// admin default-pricing handler. Parameters: t owns the test. Returns: none;
+// model suggestions remain available without manufacturing backend prices.
+func TestVertexLiveDefaultPricingDoesNotBorrowDeveloperRates(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/channel/default-pricing?type=%d", channeltype.VertextAI), nil)
+	GetChannelDefaultPricing(c)
+	var body struct {
+		Success bool              `json:"success"`
+		Data    map[string]string `json:"data"`
+	}
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.True(t, body.Success)
+	var prices map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(body.Data["model_configs"]), &prices))
+	require.NotContains(t, prices, "gemini-3.8-live")
+	require.NotContains(t, prices, "gemini-3.8-live-extended-thinking")
+	require.Contains(t, prices, "gemini-3.8-flash")
+}

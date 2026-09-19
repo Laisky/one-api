@@ -21,7 +21,9 @@ func TestVertexLiveSetupPinsResource(t *testing.T) {
 			frame, err := prepareLiveSetupForResource(data, actual, "friendly", resource)
 			require.NoError(t, err)
 			var envelope struct {
-				Setup struct { Model string `json:"model"` } `json:"setup"`
+				Setup struct {
+					Model string `json:"model"`
+				} `json:"setup"`
 			}
 			require.NoError(t, json.Unmarshal(frame, &envelope))
 			require.Equal(t, resource, envelope.Setup.Model)

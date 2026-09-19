@@ -20,13 +20,13 @@ var ErrModelRequiresLiveTransport = errors.New("model requires the Gemini Live A
 // come from https://docs.cloud.google.com/vertex-ai/generative-ai/docs/live-api.
 // This is a REST guard, not an allowlist for native Live model admission.
 var liveOnlyGoogleModels = map[string]struct{}{
-	"gemini-3.8-live":                     {},
-	"gemini-3.8-live-extended-thinking":   {},
-	"gemini-3.1-flash-live-preview":       {},
-	"gemini-3.5-live-translate-preview":   {},
-	"gemini-3.5-transcribe-live":          {},
-	"gemini-live-2.5-flash-native-audio":   {},
-	"gemini-3.5-transcribe-live-preview":  {},
+	"gemini-3.8-live":                    {},
+	"gemini-3.8-live-extended-thinking":  {},
+	"gemini-3.1-flash-live-preview":      {},
+	"gemini-3.5-live-translate-preview":  {},
+	"gemini-3.5-transcribe-live":         {},
+	"gemini-live-2.5-flash-native-audio": {},
+	"gemini-3.5-transcribe-live-preview": {},
 }
 
 // IsLiveOnlyGoogleModel reports whether Google's native generation transport
