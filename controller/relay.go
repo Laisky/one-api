@@ -162,14 +162,13 @@ func Relay(c *gin.Context) {
 	// Record failed relay request metrics
 	PrometheusMonitor.RecordRelayRequest(c, relayMeta, startTime, false, 0, 0, 0)
 
-	retryTimes := config.RetryTimes
+	retryTimes := max(config.RetryTimes, 0)
+	lastDispatchErr := bizErr
 	if adaptor.IsRESTTransportMismatch(bizErr.RawError) {
-		expandedRetries, err := retryTimesForRESTTransportMismatch(ctx, group, originalModel, retryTimes)
-		if err != nil {
-			lg.Warn("unable to expand retries for REST transport mismatch", zap.Error(err))
-		} else {
-			retryTimes = expandedRetries
-		}
+		// No provider attempt was made. Reserve the initial dispatch, not an
+		// expanded budget of paid retries proportional to the channel count.
+		retryTimes++
+		lastDispatchErr = nil
 	}
 	retryableClientError, retryableClientReason := classifyRetryableUpstreamClientError(bizErr)
 	if err := shouldRetry(c, bizErr); err != nil {
@@ -281,7 +280,8 @@ func Relay(c *gin.Context) {
 	// For 5xx/server transient errors, avoid reusing the same ability first, probe within tier
 	isServerTransient := bizErr.StatusCode >= 500 && bizErr.StatusCode <= 599
 
-	for i := retryTimes; i > 0 && rcontroller.BillingAllowsRetry(c); i-- {
+	for i := retryTimes; i > 0 && rcontroller.BillingAllowsRetry(c) &&
+		c.GetInt(ctxkey.SpecificChannelId) == 0 && c.Request.Context().Err() == nil; i-- {
 		var channel *dbmodel.Channel
 		var err error
 
@@ -396,8 +396,31 @@ func Relay(c *gin.Context) {
 			ActualModel:   retryActualModel,
 			RequestURL:    requestURL,
 		})
+		if adaptor.IsRESTTransportMismatch(bizErr.RawError) {
+			// Exclusions make this finite. Local incompatibility consumes neither
+			// a provider call nor its retry slot, wherever it occurs in the pool.
+			i++
+			continue
+		}
+		lastDispatchErr = bizErr
+		if stopErr := shouldRetry(c, bizErr); stopErr != nil {
+			// Apply the existing transient-4xx exception on every real attempt,
+			// but never override cancellation or a terminal provider/client error.
+			if isRetryableUpstreamClientError(bizErr) &&
+				!errors.Is(bizErr.RawError, context.Canceled) &&
+				!errors.Is(bizErr.RawError, context.DeadlineExceeded) {
+				continue
+			}
+			lg.Debug("relay retry stopped after provider failure", zap.String("retry_skip_reason", stopErr.Error()))
+			break
+		}
 	}
 
+	// An exhausted local transport candidate is not evidence that the caller
+	// used an invalid transport when a compatible provider was actually tried.
+	if bizErr != nil && adaptor.IsRESTTransportMismatch(bizErr.RawError) && lastDispatchErr != nil {
+		bizErr = lastDispatchErr
+	}
 	if bizErr != nil {
 		if bizErr.StatusCode == http.StatusTooManyRequests {
 			// Provide more specific messaging for 429 errors after exhausting retries
@@ -416,22 +439,6 @@ func Relay(c *gin.Context) {
 			rcontroller.LogClientResponse(c, "client error response sent")
 		}
 	}
-}
-
-// retryTimesForRESTTransportMismatch expands the retry budget to all currently
-// routable candidates because a Live-only Google REST mismatch is local to one
-// channel type. Parameters: ctx controls the candidate query, group and model
-// identify the routing pool, and configured is the normal retry count. Returns: a
-// retry count sufficient to try every candidate after the first, or an error.
-func retryTimesForRESTTransportMismatch(ctx context.Context, group string, model string, configured int) (int, error) {
-	channelCount, err := dbmodel.CountAvailableChannels(ctx, group, model)
-	if err != nil {
-		return configured, errors.Wrap(err, "count available retry candidates")
-	}
-	if channelCount <= 1 || configured >= channelCount-1 {
-		return configured, nil
-	}
-	return channelCount - 1, nil
 }
 
 // retrySelectionPolicy names how the relay retry loop picks the next channel
