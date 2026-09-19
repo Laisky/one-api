@@ -190,7 +190,9 @@ func TestCompactUUIDOldBinaryDrift(t *testing.T) {
 	require.NoError(t, db.Exec("DELETE FROM users").Error)
 
 	load := compactPrevStartLegacyLoad(t, compactPrevOpenLoadHandle(t, dialect, dsn))
-	output := runPinnedOldBinary(t, binary, oldBinaryDSN(dsn), compactPrevSettleFor)
+	// Keep the artifact alive until the real concurrent workload is qualified;
+	// a faster startup must not truncate the unchanged 1,000-operation contract.
+	output := runPinnedOldBinary(t, binary, oldBinaryDSN(dsn), compactPrevSettleFor, load.waitMinimum)
 	load.halt()
 
 	after := compactCatalogFingerprint(t, db)
