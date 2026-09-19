@@ -10,7 +10,7 @@ import (
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 
-	"github.com/Laisky/one-api/relay/realtime"
+	livert "github.com/Laisky/one-api/relay/realtime"
 )
 
 // verifyLiveSettlement matches the session against its persisted consume log.
@@ -91,14 +91,14 @@ func expectedLiveTokens(receipts []map[string]any) (prompt, completion int64, er
 
 // decodeLiveReceipt validates one observed receipt. Parameters: usage is the
 // decoded usageMetadata. Returns: normalized tokens or the production error.
-func decodeLiveReceipt(usage map[string]any) (realtime.Tokens, error) {
+func decodeLiveReceipt(usage map[string]any) (livert.Tokens, error) {
 	payload, err := json.Marshal(usage)
 	if err != nil {
-		return realtime.Tokens{}, errors.Wrap(err, "encode Live receipt")
+		return livert.Tokens{}, errors.Wrap(err, "encode Live receipt")
 	}
-	record, err := realtime.DecodeGeminiUsage(payload)
+	record, err := livert.DecodeGeminiUsage(payload)
 	if err != nil {
-		return realtime.Tokens{}, errors.Wrap(err, "validate Live receipt")
+		return livert.Tokens{}, errors.Wrap(err, "validate Live receipt")
 	}
 	return record.Tokens, nil
 }
@@ -138,4 +138,20 @@ func fetchLiveSettlementEntries(ctx context.Context, opts liveOptions, requestID
 		}
 	}
 	return nil, errors.Errorf("request %q was not found within the %d-page settlement search budget", requestID, maxPages)
+}
+
+// liveReceiptCount reads a numeric receipt field shared with the existing
+// OpenAI Realtime probe. Parameters: usage is a decoded receipt and key names
+// its counter. Returns: the reported value and whether the counter was present.
+// Gemini Live uses decodeLiveReceipt for strict validation instead.
+func liveReceiptCount(usage map[string]any, key string) (int64, bool) {
+	value, exists := usage[key]
+	if !exists {
+		return 0, false
+	}
+	number, ok := value.(float64)
+	if !ok {
+		return 0, false
+	}
+	return int64(number), true
 }
