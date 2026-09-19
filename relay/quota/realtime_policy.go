@@ -59,7 +59,10 @@ func ValidateRealtimeModelPricing(name string, configs map[string]model.ModelCon
 		local.Image == nil || local.Image.PromptRatio <= 0 || !finite(local.Image.PromptRatio)) {
 		return errors.Wrap(ErrRealtimePriceUnavailable, "configure Live completion_ratio, audio prompt/completion ratios, and image prompt_ratio (image/video input)")
 	}
-	cfg, known := pricing.ResolveModelConfigRatioOnly(name, configs, provider, at)
+	// The ratio-only resolver intentionally removes media metadata. Validate
+	// the full effective configuration so valid audio/image rates survive,
+	// including administrator-owned time-window overlays.
+	cfg, known := pricing.ResolveModelConfig(name, configs, provider, at)
 	if !known || !finite(cfg.Ratio) {
 		return errors.Wrap(ErrRealtimePriceUnavailable, "invalid effective Live pricing")
 	}
