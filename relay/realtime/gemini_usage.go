@@ -67,7 +67,7 @@ func DecodeGeminiUsage(raw json.RawMessage) (Record, error) {
 			return Record{}, errors.Wrap(ErrInvalidUsage, "Gemini count outside int32 range")
 		}
 	}
-	tool, _, err := geminiPartition(u.ToolDetails, u.ToolPrompt, false)
+	tool, toolRemainder, err := geminiPartition(u.ToolDetails, u.ToolPrompt, false)
 	if err != nil {
 		return Record{}, err
 	}
@@ -83,17 +83,16 @@ func DecodeGeminiUsage(raw json.RawMessage) (Record, error) {
 		for i := range in {
 			in[i] += tool[i]
 		}
-		inRemainder, inputSubsetAdded = 0, true
+		// The prompt details omitted the tool subset. Known tool modalities can
+		// be attributed to that subset; omitted and future tool modalities must
+		// remain unallocated to preserve the provider's aggregate exactly.
+		inRemainder, inputSubsetAdded = toolRemainder, true
 	}
 	out, outRemainder, err := geminiPartition(u.ResponseDetails, *u.Response, true)
 	if err != nil {
 		return Record{}, err
 	}
-	outputSubsetAdded := false
-	if outRemainder > 0 && u.Thoughts == outRemainder {
-		out[0] += u.Thoughts
-		outRemainder, outputSubsetAdded = 0, true
-	}
+	outputSubsetAdded := outRemainder > 0 && u.Thoughts == outRemainder
 	t := Tokens{Input: *u.Prompt, Output: *u.Response, Text: in[0], Audio: in[1], Image: in[2], Video: in[3],
 		Unallocated: inRemainder, OutputText: out[0], OutputAudio: out[1], OutputUnallocated: outRemainder}
 	base := t.Input + t.Output
@@ -108,14 +107,17 @@ func DecodeGeminiUsage(raw json.RawMessage) (Record, error) {
 		}
 		// Google's Live reference documents total as prompt + response, while its
 		// REST reference documents prompt + thoughts + response; live receipts use
-		// both. When the reported output partition cannot contain the thinking
-		// tokens, they are additional billable output text that the aggregate
-		// omitted (observed 2026-09-18: thoughtsTokenCount 100 against an
-		// AUDIO-only responseTokenCount of 61). Only the part that does not fit
-		// is added, so an inclusive partition is never charged twice.
-		if extra := u.Thoughts - t.OutputText; extra > 0 {
-			t.Output += extra
-			t.OutputText += extra
+		// both. Attribute thinking to otherwise-unallocated response tokens before
+		// treating it as an aggregate-excluded addition. This avoids charging the
+		// same token twice when a receipt omits response modality details.
+		if remaining := u.Thoughts - t.OutputText; remaining > 0 {
+			reclassified := min(remaining, t.OutputUnallocated)
+			t.OutputText += reclassified
+			t.OutputUnallocated -= reclassified
+			if remaining -= reclassified; remaining > 0 {
+				t.Output += remaining
+				t.OutputText += remaining
+			}
 		}
 	case *u.Total == base+u.Thoughts+u.ToolPrompt:
 		if inputSubsetAdded || outputSubsetAdded {
@@ -126,6 +128,7 @@ func DecodeGeminiUsage(raw json.RawMessage) (Record, error) {
 		t.Audio += tool[1]
 		t.Image += tool[2]
 		t.Video += tool[3]
+		t.Unallocated += toolRemainder
 		t.Output += u.Thoughts
 		t.OutputText += u.Thoughts
 	default:

@@ -110,6 +110,40 @@ func TestGeminiThinkingAndToolConservation(t *testing.T) {
 	}
 }
 
+// TestGeminiThinkingReclassifiesUnallocatedOutput verifies that a thinking
+// counter first consumes an otherwise-unattributed response partition. Parameters:
+// t is the test handle. Returns: none.
+func TestGeminiThinkingReclassifiesUnallocatedOutput(t *testing.T) {
+	t.Parallel()
+	record, err := DecodeGeminiUsage([]byte(`{"promptTokenCount":100,"responseTokenCount":100,"totalTokenCount":200,"thoughtsTokenCount":50,"promptTokensDetails":[{"modality":"TEXT","tokenCount":100}]}`))
+	require.NoError(t, err)
+	require.Equal(t, Tokens{Input: 100, Text: 100, Output: 100, OutputText: 50, OutputUnallocated: 50, ReasoningTokens: 50}, record.Tokens)
+}
+
+// TestGeminiToolUseRemainderPreservesUnattributedTokens verifies that omitted
+// and future tool-use modalities remain reconcilable instead of being discarded.
+// Parameters: t is the test handle. Returns: none.
+func TestGeminiToolUseRemainderPreservesUnattributedTokens(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, promptDetails, toolDetails string
+		total                            int
+		want                             Tokens
+	}{
+		{name: "inclusive_omitted", total: 120, promptDetails: `95`, toolDetails: ``, want: Tokens{Input: 100, Text: 95, Unallocated: 5, Output: 20, OutputText: 20}},
+		{name: "inclusive_unknown", total: 120, promptDetails: `95`, toolDetails: `,"toolUsePromptTokensDetails":[{"modality":"FUTURE_MODALITY","tokenCount":5}]`, want: Tokens{Input: 100, Text: 95, Unallocated: 5, Output: 20, OutputText: 20}},
+		{name: "additional_omitted", total: 125, promptDetails: `100`, toolDetails: ``, want: Tokens{Input: 105, Text: 100, Unallocated: 5, Output: 20, OutputText: 20}},
+		{name: "additional_unknown", total: 125, promptDetails: `100`, toolDetails: `,"toolUsePromptTokensDetails":[{"modality":"FUTURE_MODALITY","tokenCount":5}]`, want: Tokens{Input: 105, Text: 100, Unallocated: 5, Output: 20, OutputText: 20}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := fmt.Sprintf(`{"promptTokenCount":100,"responseTokenCount":20,"totalTokenCount":%d,"toolUsePromptTokenCount":5,"promptTokensDetails":[{"modality":"TEXT","tokenCount":%s}],"responseTokensDetails":[{"modality":"TEXT","tokenCount":20}]%s}`, tc.total, tc.promptDetails, tc.toolDetails)
+			record, err := DecodeGeminiUsage([]byte(raw))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, record.Tokens)
+		})
+	}
+}
+
 // TestGeminiTurnAccountingBehavior verifies repeated context, compression and
 // turn-scoped snapshot handling. Parameters: t is the test handle. Returns: none.
 func TestGeminiTurnAccountingBehavior(t *testing.T) {
@@ -129,6 +163,28 @@ func TestGeminiTurnAccountingBehavior(t *testing.T) {
 	require.False(t, l.HasUsageGap())
 	require.Same(t, l, g.Finish(false))
 	require.Len(t, l.Records, 3)
+}
+
+// TestGeminiTurnSnapshotPartitions verifies aggregate receipt monotonicity and
+// permits a provider to refine an unallocated partition into a known modality.
+// Parameters: t is the test handle. Returns: none.
+func TestGeminiTurnSnapshotPartitions(t *testing.T) {
+	t.Parallel()
+	t.Run("aggregate_regression", func(t *testing.T) {
+		g := NewGeminiLedger()
+		require.NoError(t, g.Observe(geminiServerFixture(`{"promptTokenCount":100,"totalTokenCount":100}`, `{"modelTurn":{}}`)))
+		require.Error(t, g.Observe(geminiServerFixture(`{"promptTokenCount":99,"totalTokenCount":99}`, `{}`)))
+		require.True(t, g.Finish(false).HasUsageGap())
+	})
+	t.Run("unallocated_refinement", func(t *testing.T) {
+		g := NewGeminiLedger()
+		require.NoError(t, g.Observe(geminiServerFixture(`{"promptTokenCount":100,"totalTokenCount":100}`, `{"modelTurn":{}}`)))
+		require.NoError(t, g.Observe(geminiServerFixture(`{"promptTokenCount":100,"totalTokenCount":100,"promptTokensDetails":[{"modality":"TEXT","tokenCount":100}]}`, `{}`)))
+		require.NoError(t, g.Observe(geminiServerFixture("", `{"turnComplete":true}`)))
+		ledger := g.Finish(false)
+		require.False(t, ledger.HasUsageGap())
+		require.Equal(t, Tokens{Input: 100, Text: 100}, ledger.Records[0].Tokens)
+	})
 }
 
 // TestGeminiLatePartialAndIdleUsage covers late receipts, interruptions, active

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"io"
-	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -14,6 +12,8 @@ import (
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 	"github.com/gorilla/websocket"
+
+	sharedconfig "github.com/Laisky/one-api/common/config"
 )
 
 const (
@@ -23,6 +23,7 @@ const (
 	defaultLiveTimeout        = 90 * time.Second
 	liveReadDeadline          = 45 * time.Second
 	liveMaxFramesPerTurn      = 4096
+	maxLiveTranscriptBytes    = 4 << 10
 	liveInvalidSetupCloseCode = websocket.ClosePolicyViolation
 	liveSettlementTimeout     = 30 * time.Second
 )
@@ -51,15 +52,25 @@ func liveScenarioNames() []string {
 // logger reports progress and args are the CLI tokens after `live`. Returns: a
 // non-nil error when any selected scenario does not behave as documented.
 func live(ctx context.Context, logger glog.Logger, args []string) error {
-	cfg, err := loadConfig()
-	if err != nil {
-		return errors.Wrap(err, "load config")
-	}
-	opts, err := parseLiveArgs(args, cfg)
+	opts, err := parseLiveArgs(args, loadLiveConfig())
 	if err != nil {
 		return errors.Wrap(err, "parse live arguments")
 	}
 	return runLiveProbe(ctx, logger, opts)
+}
+
+// loadLiveConfig reads only the settings needed by the standalone Live probe.
+// Parameters: none. Returns: base URL and optional token defaults without
+// validating model-suite settings that the Live command never consumes.
+func loadLiveConfig() config {
+	base := strings.TrimSpace(sharedconfig.APIBase)
+	if base == "" {
+		base = defaultAPIBase
+	}
+	return config{
+		APIBase: strings.TrimSuffix(base, "/"),
+		Token:   strings.TrimSpace(sharedconfig.APIToken),
+	}
 }
 
 // parseLiveArgs parses `live` flags. Parameters: args are raw CLI tokens and cfg
@@ -113,6 +124,7 @@ func parseLiveArgs(args []string, cfg config) (liveOptions, error) {
 	for _, name := range liveScenarioNames() {
 		known[name] = true
 	}
+	selected := make(map[string]bool, len(liveScenarioNames()))
 	for _, part := range strings.Split(scenarios, ",") {
 		name := strings.ToLower(strings.TrimSpace(part))
 		if name == "" {
@@ -121,7 +133,10 @@ func parseLiveArgs(args []string, cfg config) (liveOptions, error) {
 		if !known[name] {
 			return liveOptions{}, errors.Errorf("unknown scenario %q", name)
 		}
-		opts.scenarios = append(opts.scenarios, name)
+		if !selected[name] {
+			opts.scenarios = append(opts.scenarios, name)
+			selected[name] = true
+		}
 	}
 	if len(opts.scenarios) == 0 {
 		return liveOptions{}, errors.New("no scenarios selected")
@@ -171,8 +186,7 @@ func runLiveProbe(ctx context.Context, logger glog.Logger, opts liveOptions) err
 // The receipt assertions are the point of this scenario: a turn that streams
 // audio but reports no usage is a silent billing loss, not a success.
 func runLiveConversationScenario(ctx context.Context, logger glog.Logger, wsBase string, opts liveOptions) error {
-	startedAt := time.Now().Unix()
-	conn, err := dialLive(ctx, appendQueryModel(wsBase, opts.model), opts.apiToken, nil, opts.timeout)
+	conn, requestID, err := dialLiveWithRequestID(ctx, appendQueryModel(wsBase, opts.model), opts.apiToken, nil, opts.timeout)
 	if err != nil {
 		return err
 	}
@@ -234,34 +248,51 @@ func runLiveConversationScenario(ctx context.Context, logger glog.Logger, wsBase
 	if !opts.verifyBilling {
 		return nil
 	}
-	return verifyLiveSettlement(ctx, logger, opts, startedAt, []map[string]any{turn.usage, second.usage})
+	if requestID == "" {
+		return errors.New("live websocket handshake did not include X-Oneapi-Request-Id; cannot verify settlement")
+	}
+	return verifyLiveSettlement(ctx, logger, opts, requestID, []map[string]any{turn.usage, second.usage})
 }
 
 // verifyLiveSettlement matches the session against its persisted consume log.
-// Parameters: ctx, logger and opts describe the run, startedAt bounds the search
-// and receipts are the provider receipts the caller observed. Returns: an error
+// Parameters: ctx, logger and opts describe the run, requestID identifies the
+// upgraded WebSocket request and receipts are the provider receipts the caller observed. Returns: an error
 // when the settled row is missing, incomplete, or disagrees with those receipts.
 // Settlement is asynchronous, so the row is polled for rather than read once.
 func verifyLiveSettlement(ctx context.Context, logger glog.Logger, opts liveOptions,
-	startedAt int64, receipts []map[string]any) error {
+	requestID string, receipts []map[string]any) error {
+	if strings.TrimSpace(requestID) == "" {
+		return errors.New("request ID is required to verify Live settlement")
+	}
 	wantPrompt, wantCompletion := expectedLiveTokens(receipts)
 	deadline := time.Now().Add(liveSettlementTimeout)
 	var last string
 	for {
-		entries, err := fetchConsumeLogs(ctx, opts.apiBase, opts.apiToken, opts.model)
+		entries, err := fetchConsumeLogs(ctx, opts.apiBase, opts.apiToken, "")
 		if err != nil {
 			return err
 		}
 		for _, entry := range entries {
-			if entry.CreatedAt+1 < startedAt || entry.Metadata.Usage.Receipts != len(receipts) {
+			if entry.RequestID != requestID {
 				continue
 			}
 			last = entry.Content
+			// The matching row is created before the WebSocket session settles.
+			// Keep polling only while it is the expected untouched reservation;
+			// a partially reconciled row is a terminal accounting defect.
+			if !entry.Metadata.BillingComplete {
+				if entry.Metadata.Usage.Receipts == 0 && !entry.Metadata.Usage.UsageGap {
+					continue
+				}
+				return errors.Errorf("settled log is incomplete with %d receipts and usage_gap=%t: %s",
+					entry.Metadata.Usage.Receipts, entry.Metadata.Usage.UsageGap, entry.Content)
+			}
+			if entry.Metadata.Usage.Receipts != len(receipts) {
+				return errors.Errorf("settled log reports %d receipts, want %d: %s",
+					entry.Metadata.Usage.Receipts, len(receipts), entry.Content)
+			}
 			if entry.Metadata.Usage.UsageGap {
 				return errors.Errorf("settled log reports a usage gap: %s", entry.Content)
-			}
-			if !entry.Metadata.BillingComplete {
-				return errors.Errorf("settled log is not marked billing-complete: %s", entry.Content)
 			}
 			if int64(entry.PromptTokens) != wantPrompt || int64(entry.CompletionTokens) != wantCompletion {
 				return errors.Errorf("settled tokens %d/%d do not match the provider receipts %d/%d",
@@ -276,8 +307,8 @@ func verifyLiveSettlement(ctx context.Context, logger glog.Logger, opts liveOpti
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return errors.Errorf("no settled consume log with %d receipts appeared within %s (last seen: %s)",
-				len(receipts), liveSettlementTimeout, last)
+			return errors.Errorf("no settled consume log for request %q appeared within %s (last seen: %s)",
+				requestID, liveSettlementTimeout, last)
 		}
 		select {
 		case <-ctx.Done():
@@ -409,46 +440,6 @@ func runLiveSetupGuardScenario(ctx context.Context, logger glog.Logger, wsBase s
 	return nil
 }
 
-// runLiveRESTGuardScenario confirms a Live-only model cannot be dispatched over
-// chat completions. Parameters: ctx, logger, wsBase and opts describe the run.
-// Returns: an error when the REST route accepts the model or answers 5xx.
-func runLiveRESTGuardScenario(ctx context.Context, logger glog.Logger, _ string, opts liveOptions) error {
-	body, err := json.Marshal(map[string]any{
-		"model":    opts.model,
-		"messages": []map[string]any{{"role": "user", "content": opts.prompt}},
-	})
-	if err != nil {
-		return errors.Wrap(err, "encode chat request")
-	}
-	reqCtx, cancel := context.WithTimeout(ctx, opts.timeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, opts.apiBase+"/v1/chat/completions", strings.NewReader(string(body)))
-	if err != nil {
-		return errors.Wrap(err, "build chat request")
-	}
-	req.Header.Set("Authorization", "Bearer "+opts.apiToken)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return errors.Wrap(err, "send chat request")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
-	if err != nil {
-		return errors.Wrap(err, "read chat response")
-	}
-	if resp.StatusCode/100 == 2 {
-		return errors.Errorf("REST dispatch of Live-only model %q succeeded: %s", opts.model, snippet(payload))
-	}
-	if resp.StatusCode/100 == 5 {
-		return errors.Errorf("REST dispatch of Live-only model %q returned a server fault %d: %s",
-			opts.model, resp.StatusCode, snippet(payload))
-	}
-	logger.Info("REST dispatch rejected as expected",
-		zap.Int("status", resp.StatusCode), zap.String("body", snippet(payload)))
-	return nil
-}
-
 // runLiveSubprotocolScenario checks the browser handshake. Parameters: ctx,
 // logger, wsBase and opts describe the run. Returns: an error when the
 // non-authentication protocol is not echoed back to the caller. The token-bearing
@@ -515,12 +506,14 @@ func expectLiveSetupRejected(ctx context.Context, logger glog.Logger, wsBase str
 
 // liveTurn summarizes one server turn without retaining audio payloads.
 type liveTurn struct {
-	audioChunks  int
-	frames       int
-	transcript   string
-	turnComplete bool
-	usage        map[string]any
-	usageJSON    string
+	audioChunks           int
+	frames                int
+	transcript            string
+	turnComplete          bool
+	interactionIdle       bool
+	interactionInProgress bool
+	usage                 map[string]any
+	usageJSON             string
 }
 
 // readLiveTurn consumes frames until the turn completes. Parameters: conn is an
@@ -547,8 +540,9 @@ func readLiveTurn(conn *websocket.Conn, timeout time.Duration) (liveTurn, error)
 		}
 		turn.frames++
 		var event struct {
-			Usage         map[string]any `json:"usageMetadata"`
-			ServerContent *struct {
+			Usage             map[string]any `json:"usageMetadata"`
+			InteractionStatus string         `json:"interactionStatus"`
+			ServerContent     *struct {
 				ModelTurn *struct {
 					Parts []struct {
 						InlineData *struct {
@@ -559,7 +553,8 @@ func readLiveTurn(conn *websocket.Conn, timeout time.Duration) (liveTurn, error)
 				OutputTranscription *struct {
 					Text string `json:"text"`
 				} `json:"outputTranscription"`
-				TurnComplete bool `json:"turnComplete"`
+				TurnComplete      bool   `json:"turnComplete"`
+				InteractionStatus string `json:"interactionStatus"`
 			} `json:"serverContent"`
 		}
 		if err := json.Unmarshal(msg, &event); err != nil {
@@ -569,27 +564,61 @@ func readLiveTurn(conn *websocket.Conn, timeout time.Duration) (liveTurn, error)
 			turn.usage = event.Usage
 			turn.usageJSON = truncateString(string(msg), 512)
 		}
-		if event.ServerContent == nil {
-			continue
-		}
-		if event.ServerContent.ModelTurn != nil {
+		if event.ServerContent != nil && event.ServerContent.ModelTurn != nil {
 			for _, part := range event.ServerContent.ModelTurn.Parts {
 				if part.InlineData != nil {
 					turn.audioChunks++
 				}
 			}
 		}
-		if event.ServerContent.OutputTranscription != nil {
-			turn.transcript += event.ServerContent.OutputTranscription.Text
+		if event.ServerContent != nil && event.ServerContent.OutputTranscription != nil {
+			turn.transcript = appendLiveTranscript(turn.transcript, event.ServerContent.OutputTranscription.Text)
 		}
-		if event.ServerContent.TurnComplete {
+		if event.ServerContent != nil && event.ServerContent.TurnComplete {
 			turn.turnComplete = true
-			if turn.usage != nil {
-				return turn, nil
+		}
+		status := event.InteractionStatus
+		if event.ServerContent != nil && event.ServerContent.InteractionStatus != "" {
+			status = event.ServerContent.InteractionStatus
+		}
+		if status != "" {
+			switch strings.ToUpper(strings.TrimSpace(status)) {
+			case "IN_PROGRESS":
+				turn.interactionInProgress = true
+				turn.interactionIdle = false
+			case "IDLE":
+				if turn.interactionInProgress {
+					turn.interactionIdle = true
+				}
 			}
+		}
+		if turn.turnComplete && turn.usage != nil && (!turn.interactionInProgress || turn.interactionIdle) {
+			return turn, nil
 		}
 	}
 	return turn, errors.New("turn exceeded the frame budget without a receipt")
+}
+
+// appendLiveTranscript retains a bounded, rune-safe diagnostic transcript.
+// Parameters: transcript is the current preview and text is the new provider
+// fragment. Returns: a preview no larger than maxLiveTranscriptBytes.
+func appendLiveTranscript(transcript, text string) string {
+	remaining := maxLiveTranscriptBytes - len(transcript)
+	if remaining <= 0 || text == "" {
+		return transcript
+	}
+	if len(text) <= remaining {
+		return transcript + text
+	}
+	for _, r := range text {
+		fragment := string(r)
+		if len(fragment) > remaining {
+			break
+		}
+		transcript += fragment
+		remaining -= len(fragment)
+	}
+	return transcript
 }
 
 // assertLiveReceipt validates the provider receipt the proxy must be able to
@@ -675,73 +704,4 @@ func writeLiveJSON(conn *websocket.Conn, frame map[string]any) error {
 		return errors.Wrap(err, "set write deadline")
 	}
 	return errors.Wrap(conn.WriteMessage(websocket.TextMessage, payload), "write live frame")
-}
-
-// dialLive opens one authenticated Live socket. Parameters: ctx, wsURL, token,
-// protocols and timeout describe the handshake; an empty token means the caller
-// authenticates through a subprotocol instead. Returns: the socket or an error
-// carrying the rejected HTTP status.
-func dialLive(ctx context.Context, wsURL, token string, protocols []string, timeout time.Duration) (*websocket.Conn, error) {
-	dialCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	dialer := websocket.Dialer{
-		HandshakeTimeout: 20 * time.Second,
-		Proxy:            http.ProxyFromEnvironment,
-		Subprotocols:     protocols,
-		ReadBufferSize:   1 << 16,
-	}
-	headers := http.Header{}
-	if token != "" {
-		headers.Set("Authorization", "Bearer "+token)
-	}
-	conn, resp, err := dialer.DialContext(dialCtx, wsURL, headers)
-	if err != nil {
-		status := 0
-		var body string
-		if resp != nil {
-			status = resp.StatusCode
-			if resp.Body != nil {
-				if payload, readErr := io.ReadAll(io.LimitReader(resp.Body, maxLoggedBodyBytes)); readErr == nil {
-					body = snippet(payload)
-				}
-				_ = resp.Body.Close()
-			}
-		}
-		return nil, errors.Wrapf(err, "dial live websocket (status=%d body=%s)", status, body)
-	}
-	conn.SetReadLimit(4 << 20)
-	return conn, nil
-}
-
-// resolveLiveWSEndpoint converts a one-api base URL into the realtime websocket
-// URL. Parameters: apiBase is an HTTP(S) or WS(S) base. Returns: the normalized
-// `/v1/realtime` websocket endpoint or a validation error.
-func resolveLiveWSEndpoint(apiBase string) (string, error) {
-	raw := strings.TrimSpace(apiBase)
-	if raw == "" {
-		return "", errors.New("empty api-base")
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", errors.Wrap(err, "parse api-base")
-	}
-	switch strings.ToLower(strings.TrimSpace(u.Scheme)) {
-	case "https", "wss":
-		u.Scheme = "wss"
-	case "http", "ws":
-		u.Scheme = "ws"
-	default:
-		return "", errors.Errorf("unsupported api-base scheme %q", u.Scheme)
-	}
-	if strings.TrimSpace(u.Host) == "" {
-		return "", errors.New("api-base host is required")
-	}
-	path := strings.TrimSuffix(strings.TrimSpace(u.Path), "/")
-	if !strings.HasSuffix(path, "/v1/realtime") {
-		path = strings.TrimSuffix(path, "/v1") + "/v1/realtime"
-	}
-	u.Path = path
-	u.RawQuery, u.Fragment = "", ""
-	return u.String(), nil
 }

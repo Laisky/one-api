@@ -131,7 +131,8 @@ func (g *GeminiLedger) Observe(message []byte) error {
 // partitions, including exact duplicate snapshots. Context shrink across turns
 // is intentionally not subject to this check.
 func geminiSnapshotExtends(old, next Tokens) bool {
-	return next.Text >= old.Text && next.Audio >= old.Audio && next.Image >= old.Image && next.Video >= old.Video &&
+	return next.Input >= old.Input && next.Output >= old.Output &&
+		next.Text >= old.Text && next.Audio >= old.Audio && next.Image >= old.Image && next.Video >= old.Video &&
 		next.OutputText >= old.OutputText && next.OutputAudio >= old.OutputAudio && next.ReasoningTokens >= old.ReasoningTokens
 }
 

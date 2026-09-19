@@ -14,7 +14,10 @@ import (
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
@@ -67,4 +70,46 @@ func TestLiveOnlyModelOverRESTIsClientError(t *testing.T) {
 			require.Contains(t, bizErr.Message, "/v1/realtime")
 		})
 	}
+}
+
+// TestRelayHelperAllowsLiveOnlyModelForRealtime verifies that the REST-only
+// transport guard does not intercept a native Gemini Live request. Parameters:
+// t is the test handle. Returns: none.
+func TestRelayHelperAllowsLiveOnlyModelForRealtime(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/realtime?model=gemini-3.8-live", nil)
+	c.Set(ctxkey.RequestModel, "gemini-3.8-live")
+	gmw.SetLogger(c, logger.Logger)
+	base := "https://generativelanguage.googleapis.com"
+	middleware.SetupContextForSelectedChannel(c, &model.Channel{
+		Id: 905, Type: channeltype.Gemini, Name: "selected", Group: "default", BaseURL: &base, Key: "operator-owned-key",
+	}, "gemini-3.8-live")
+
+	called := false
+	relayHelperForTest = func(*gin.Context, int) *relaymodel.ErrorWithStatusCode {
+		called = true
+		return nil
+	}
+	t.Cleanup(func() { relayHelperForTest = nil })
+
+	require.Nil(t, relayHelper(c, relaymode.Realtime))
+	require.True(t, called)
+}
+
+// TestLiveOnlyRESTMismatchDoesNotCountAgainstChannelHealth verifies that an
+// excluded Google REST channel remains healthy while routing continues to a
+// bridge. Parameters: t is the test handle. Returns: none.
+func TestLiveOnlyRESTMismatchDoesNotCountAgainstChannelHealth(t *testing.T) {
+	err := adaptor.ValidateRESTModelTransport(&meta.Meta{
+		ChannelType:     channeltype.Gemini,
+		ActualModelName: "gemini-3.8-live",
+	})
+	require.Error(t, err)
+	require.False(t, countsAgainstChannelHealth(&relaymodel.ErrorWithStatusCode{
+		StatusCode: http.StatusBadRequest,
+		Error: relaymodel.Error{
+			Type:     relaymodel.ErrorTypeOneAPI,
+			RawError: err,
+		},
+	}))
 }

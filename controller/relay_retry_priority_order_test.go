@@ -114,6 +114,15 @@ type retryOrderResult struct {
 // scripted upstream outcomes instead of a live adaptor. memoryCache selects the
 // routing path under test.
 func runRelayRetryScenario(t *testing.T, initial *dbmodel.Channel, outcome retryOrderOutcome, memoryCache bool, retryTimes int) retryOrderResult {
+	return runRelayRetryScenarioForModel(t, initial, retryOrderModel, outcome, memoryCache, retryTimes)
+}
+
+// runRelayRetryScenarioForModel drives the real controller retry loop for a
+// caller-selected model. Parameters: t is the test handle, initial is the
+// selected channel, requestModel is the caller-facing model, outcome scripts
+// compatible upstream attempts, memoryCache selects routing, and retryTimes is
+// the configured retry budget. Returns: the observed routing and response state.
+func runRelayRetryScenarioForModel(t *testing.T, initial *dbmodel.Channel, requestModel string, outcome retryOrderOutcome, memoryCache bool, retryTimes int) retryOrderResult {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -159,7 +168,7 @@ func runRelayRetryScenario(t *testing.T, initial *dbmodel.Channel, outcome retry
 	require.NoError(t, err)
 	gmw.SetLogger(c, requestLogger)
 	body, err := json.Marshal(map[string]any{
-		"model":    retryOrderModel,
+		"model":    requestModel,
 		"messages": []map[string]string{{"role": "user", "content": "hi"}},
 	})
 	require.NoError(t, err)
@@ -168,8 +177,8 @@ func runRelayRetryScenario(t *testing.T, initial *dbmodel.Channel, outcome retry
 	c.Set(ctxkey.Id, 1)
 	c.Set(ctxkey.TokenId, 2)
 	c.Set(ctxkey.Group, retryOrderGroup)
-	c.Set(ctxkey.RequestModel, retryOrderModel)
-	middleware.SetupContextForSelectedChannel(c, initial, retryOrderModel)
+	c.Set(ctxkey.RequestModel, requestModel)
+	middleware.SetupContextForSelectedChannel(c, initial, requestModel)
 
 	Relay(c)
 

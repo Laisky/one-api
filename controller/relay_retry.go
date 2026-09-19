@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -29,6 +30,14 @@ func shouldRetry(c *gin.Context, bizErr *model.ErrorWithStatusCode) error {
 		return errors.Errorf(
 			"specific channel ID (%d) was provided, retry is unvailable",
 			specificChannelId)
+	}
+
+	// A Live-only Google model cannot use this selected channel's REST adaptor,
+	// but a later OpenAI-compatible bridge can legally implement the same model
+	// ID. Keep the pinned-channel contract above, then let normal exclusions walk
+	// the remaining candidates.
+	if adaptor.IsRESTTransportMismatch(rawErr) {
+		return nil
 	}
 
 	// If we received a server error (5xx) but the underlying raw error is due to the caller's

@@ -48,3 +48,20 @@ func TestRealtimeReceiptZeroTokenSettlement(t *testing.T) {
 	require.Zero(t, result.PromptTokens+result.CompletionTokens)
 	require.False(t, retainRealtimeEstimate(usage))
 }
+
+// TestRealtimeReceiptMetadataMarksUnattributedPricing verifies that a complete
+// receipt with unknown input or output modality has a minimum-price estimate.
+// Parameters: t is the test handle. Returns: none.
+func TestRealtimeReceiptMetadataMarksUnattributedPricing(t *testing.T) {
+	t.Parallel()
+	for _, tokens := range []realtime.Tokens{
+		{Input: 1, Unallocated: 1},
+		{Output: 1, OutputUnallocated: 1},
+	} {
+		ledger := realtime.NewLedger()
+		ledger.Records = []realtime.Record{{Tokens: tokens}}
+		metadata := realtimeReceiptMetadata(&rmodel.Usage{Realtime: ledger}, quota.ComputeResult{})
+		require.True(t, metadata["realtime_pricing_lower_bound"].(bool))
+		require.True(t, metadata["realtime_billing_complete"].(bool))
+	}
+}

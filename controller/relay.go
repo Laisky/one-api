@@ -32,17 +32,15 @@ import (
 
 // https://platform.openai.com/docs/api-reference/chat
 
-// relayHelperForTest, when non-nil, replaces relayHelper inside Relay so tests can
-// script the upstream outcome of every attempt (initial and retries) without a real
-// adaptor, and observe the exact channel order the retry loop walks.
+// relayHelperForTest, when non-nil, replaces the post-routing adaptor dispatch so
+// tests can script every compatible upstream attempt without a real adaptor and
+// observe the exact channel order the retry loop walks.
 var relayHelperForTest func(c *gin.Context, relayMode int) *model.ErrorWithStatusCode
 
-// invokeRelayHelper dispatches one relay attempt to relayHelper, or to the test
-// hook when one is installed.
+// invokeRelayHelper dispatches one relay attempt through transport validation and
+// provider handling. Parameters: c carries the request and relayMode selects the
+// endpoint family. Returns: a normalized relay error or nil on success.
 func invokeRelayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
-	if relayHelperForTest != nil {
-		return relayHelperForTest(c, relayMode)
-	}
 	return relayHelper(c, relayMode)
 }
 
@@ -50,11 +48,16 @@ func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 	// A Live-only model has no REST transport on a Google channel, and Google
 	// itself answers such a request with HTTP 400. Deciding that here, per relay
 	// attempt, keeps the selected channel in scope (a third-party REST bridge for
-	// the same ID is still allowed) while making the failure a caller error: the
-	// adaptor-level guard would surface as a 500, which retries the same
-	// impossible request on further channels and counts against channel health.
-	if err := adaptor.ValidateModelTransport(meta.GetByContext(c)); err != nil {
-		return openai.ErrorWrapper(err, "unsupported_model_transport", http.StatusBadRequest)
+	// the same ID is still allowed). The typed routing mismatch below is retryable
+	// so selection can exclude this incompatible channel without treating it as
+	// evidence of channel health.
+	if relayMode != relaymode.Realtime {
+		if err := adaptor.ValidateRESTModelTransport(meta.GetByContext(c)); err != nil {
+			return openai.ErrorWrapper(err, "unsupported_model_transport", http.StatusBadRequest)
+		}
+	}
+	if relayHelperForTest != nil {
+		return relayHelperForTest(c, relayMode)
 	}
 	var err *model.ErrorWithStatusCode
 	switch relayMode {
@@ -160,6 +163,14 @@ func Relay(c *gin.Context) {
 	PrometheusMonitor.RecordRelayRequest(c, relayMeta, startTime, false, 0, 0, 0)
 
 	retryTimes := config.RetryTimes
+	if adaptor.IsRESTTransportMismatch(bizErr.RawError) {
+		expandedRetries, err := retryTimesForRESTTransportMismatch(ctx, group, originalModel, retryTimes)
+		if err != nil {
+			lg.Warn("unable to expand retries for REST transport mismatch", zap.Error(err))
+		} else {
+			retryTimes = expandedRetries
+		}
+	}
 	retryableClientError, retryableClientReason := classifyRetryableUpstreamClientError(bizErr)
 	if err := shouldRetry(c, bizErr); err != nil {
 		if retryableClientError {
@@ -405,6 +416,22 @@ func Relay(c *gin.Context) {
 			rcontroller.LogClientResponse(c, "client error response sent")
 		}
 	}
+}
+
+// retryTimesForRESTTransportMismatch expands the retry budget to all currently
+// routable candidates because a Live-only Google REST mismatch is local to one
+// channel type. Parameters: ctx controls the candidate query, group and model
+// identify the routing pool, and configured is the normal retry count. Returns: a
+// retry count sufficient to try every candidate after the first, or an error.
+func retryTimesForRESTTransportMismatch(ctx context.Context, group string, model string, configured int) (int, error) {
+	channelCount, err := dbmodel.CountAvailableChannels(ctx, group, model)
+	if err != nil {
+		return configured, errors.Wrap(err, "count available retry candidates")
+	}
+	if channelCount <= 1 || configured >= channelCount-1 {
+		return configured, nil
+	}
+	return channelCount - 1, nil
 }
 
 // retrySelectionPolicy names how the relay retry loop picks the next channel
