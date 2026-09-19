@@ -55,7 +55,9 @@ func TestVertexLiveEndpointMetadata(t *testing.T) {
 	GetChannelMetadata(c)
 	var body struct {
 		Success bool `json:"success"`
-		Data struct { Endpoints []string `json:"default_endpoints"` } `json:"data"`
+		Data    struct {
+			Endpoints []string `json:"default_endpoints"`
+		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.True(t, body.Success)
@@ -81,7 +83,18 @@ func TestVertexLiveEligibilityDoesNotGuessEntitlements(t *testing.T) {
 // controller dispatch, OAuth isolation, resource binding, and the receipt ledger.
 // Parameters: t owns the fixtures. Returns: none; no paid provider is contacted.
 func TestVertexLiveNativeDispatchAndReceipt(t *testing.T) {
-	m := vertexLiveFixtureMeta("gemini-3.8-live")
+	for _, name := range []string{"gemini-3.8-live", "gemini-3.8-live-extended-thinking",
+		"gemini-live-2.5-flash-native-audio", "operator-configured-live-id"} {
+		t.Run(name, func(t *testing.T) { runVertexLiveNativeFixture(t, name) })
+	}
+}
+
+// runVertexLiveNativeFixture drives one mapped conversation against a real
+// loopback provider. Parameters: t owns cleanup and name selects the model.
+// Returns: none after checking native frame forwarding and joined usage.
+func runVertexLiveNativeFixture(t *testing.T, name string) {
+	t.Helper()
+	m := vertexLiveFixtureMeta(name)
 	vertexai.Cache.Set("vertexai-token-984211", "vertex-fixture-token", time.Minute)
 	t.Cleanup(func() { vertexai.Cache.Delete("vertexai-token-984211") })
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -97,21 +110,43 @@ func TestVertexLiveNativeDispatchAndReceipt(t *testing.T) {
 		}
 		u := websocket.Upgrader{}
 		conn, err := u.Upgrade(w, r, nil)
-		if err != nil { t.Error(err); return }
+		if err != nil {
+			t.Error(err)
+			return
+		}
 		defer conn.Close()
-		_ = conn.SetReadDeadline(time.Now().Add(5*time.Second))
-		var setup struct { Setup struct { Model string `json:"model"` } `json:"setup"` }
-		if err := conn.ReadJSON(&setup); err != nil { t.Error(err); return }
-		if setup.Setup.Model != "projects/operator-project/locations/europe-west4/publishers/google/models/gemini-3.8-live" {
+		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		var setup struct {
+			Setup struct {
+				Model string `json:"model"`
+			} `json:"setup"`
+		}
+		if err := conn.ReadJSON(&setup); err != nil {
+			t.Error(err)
+			return
+		}
+		if setup.Setup.Model != "projects/operator-project/locations/europe-west4/publishers/google/models/"+name {
 			t.Errorf("setup did not bind the configured Vertex resource: %s", setup.Setup.Model)
 			return
 		}
-		if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"setupComplete":{}}`)); err != nil { t.Error(err); return }
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"setupComplete":{}}`)); err != nil {
+			t.Error(err)
+			return
+		}
 		_, input, err := conn.ReadMessage()
-		if err != nil { t.Error(err); return }
-		if string(input) != `{"realtimeInput":{"text":"Hello"}}` { t.Error("native input changed"); return }
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if string(input) != `{"realtimeInput":{"text":"Hello"}}` {
+			t.Error("native input changed")
+			return
+		}
 		frame := `{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"mimeType":"audio/pcm;rate=24000","data":"AQI="}}]},"turnComplete":true},"usageMetadata":{"promptTokenCount":10,"responseTokenCount":20,"totalTokenCount":30,"promptTokensDetails":[{"modality":"TEXT","tokenCount":10}],"responseTokensDetails":[{"modality":"AUDIO","tokenCount":20}]}}`
-		if err := conn.WriteMessage(websocket.TextMessage, []byte(frame)); err != nil { t.Error(err); return }
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(frame)); err != nil {
+			t.Error(err)
+			return
+		}
 		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "complete"), time.Now().Add(time.Second))
 	}))
 	t.Cleanup(upstream.Close)
@@ -121,17 +156,23 @@ func TestVertexLiveNativeDispatchAndReceipt(t *testing.T) {
 	engine.GET("/v1/realtime", func(c *gin.Context) {
 		gmw.SetLogger(c, logger.Logger)
 		if err := validateGeminiRealtimeTransport(m); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()}); return
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
 		}
 		biz, usage := runRealtimeProviderWithGemini(c, m)
-		if biz != nil { c.JSON(biz.StatusCode, gin.H{"error": biz.Error}); return }
+		if biz != nil {
+			c.JSON(biz.StatusCode, gin.H{"error": biz.Error})
+			return
+		}
 		results <- usage
 	})
 	gateway := httptest.NewServer(engine)
 	t.Cleanup(gateway.Close)
-	client, resp, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(gateway.URL,"http")+"/v1/realtime?model=my-live-alias",
+	client, resp, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(gateway.URL, "http")+"/v1/realtime?model=my-live-alias",
 		http.Header{"Authorization": []string{"Bearer caller-fixture"}})
-	if resp != nil && resp.Body != nil { defer resp.Body.Close() }
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 	require.NoError(t, err)
 	defer client.Close()
 	require.NoError(t, client.SetReadDeadline(time.Now().Add(5*time.Second)))
@@ -151,7 +192,7 @@ func TestVertexLiveNativeDispatchAndReceipt(t *testing.T) {
 		require.Len(t, usage.Realtime.Records, 1)
 		require.Equal(t, 10, usage.PromptTokens)
 		require.Equal(t, 20, usage.CompletionTokens)
-	case <-time.After(5*time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("Vertex session did not finish with usage")
 	}
 }
