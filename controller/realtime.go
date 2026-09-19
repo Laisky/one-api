@@ -308,7 +308,7 @@ func postConsumeRealtimeQuota(
 // using the same two-layer lookup as text endpoints.
 func resolveRealtimePricingAdaptor(relayMeta *meta.Meta) adaptor.Adaptor {
 	if isGeminiLiveRequest(relayMeta) {
-		return geminiLivePricingAdaptor()
+		return geminiLivePricingAdaptor(relayMeta)
 	}
 	if a := relay.GetAdaptor(relayMeta.APIType); a != nil {
 		return a

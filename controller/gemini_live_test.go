@@ -34,9 +34,16 @@ func TestGeminiRealtimeChannelAndReservation(t *testing.T) {
 		free, err := estimateRealtimeSessionReservation(m, .75*ratio.MilliTokensUsd, 0, nil, provider)
 		require.NoError(t, err)
 		require.Zero(t, free)
-		m.ActualModelName = "gemini-3.8-flash"
+		// Catalog membership is no longer a transport admission rule. The
+		// upstream decides model support; unknown prices still require config.
+		m.ActualModelName = "operator-configured-live-id"
+		require.NoError(t, validateGeminiRealtimeTransport(m))
+		_, err = estimateRealtimeSessionReservation(m, .75*ratio.MilliTokensUsd, 1, nil, provider)
+		require.Error(t, err)
+		m.ActualModelName = "../other-project/model"
 		require.Error(t, validateGeminiRealtimeTransport(m))
 	}
+	// A Vertex channel still needs actual local project/credential configuration.
 	require.Error(t, validateGeminiRealtimeTransport(&meta.Meta{ChannelType: channeltype.VertextAI, ActualModelName: "gemini-3.8-live"}))
 	require.NoError(t, validateGeminiRealtimeTransport(&meta.Meta{ChannelType: channeltype.OpenAI, ActualModelName: "gpt-realtime"}))
 }
