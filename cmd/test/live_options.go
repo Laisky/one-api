@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"io"
+	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -61,7 +63,7 @@ func parseLiveArgs(args []string, cfg config) (liveOptions, error) {
 	fs.SetOutput(io.Discard)
 	var opts liveOptions
 	var scenarios string
-	fs.StringVar(&opts.apiBase, "api-base", strings.TrimSuffix(cfg.APIBase, "/"), "one-api base URL")
+	fs.StringVar(&opts.apiBase, "api-base", strings.TrimSuffix(cfg.APIBase, "/"), "one-api base URL (HTTPS/WSS required except on loopback)")
 	fs.StringVar(&opts.apiToken, "token", strings.TrimSpace(cfg.Token), "API token; defaults to API_TOKEN")
 	fs.StringVar(&opts.model, "model", defaultLiveModel, "Live model bound at the handshake")
 	fs.StringVar(&opts.thinkingModel, "thinking-model", defaultLiveThinkingModel, "Extended Thinking model")
@@ -130,5 +132,46 @@ func parseLiveArgs(args []string, cfg config) (liveOptions, error) {
 	if len(opts.scenarios) == 0 {
 		return liveOptions{}, errors.New("no scenarios selected")
 	}
+	if selected["thinking"] && opts.thinkingModel == "" {
+		return liveOptions{}, errors.New("thinking-model is required for the thinking scenario")
+	}
+	base, err := normalizeLiveAPIBase(opts.apiBase)
+	if err != nil {
+		return liveOptions{}, err
+	}
+	opts.apiBase = base
 	return opts, nil
+}
+
+// normalizeLiveAPIBase validates the credential transport and maps a WS(S)
+// base to HTTP(S) for REST and settlement requests. Parameters: apiBase is the
+// CLI or environment base URL. Returns: the HTTP(S) base with its path retained,
+// or an error before any credentials can be sent. Hostnames are not resolved to
+// decide the plaintext exception; only localhost and literal loopback IPs qualify.
+func normalizeLiveAPIBase(apiBase string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(apiBase))
+	if err != nil {
+		return "", errors.Wrap(err, "parse api-base")
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https", "wss":
+		u.Scheme = "https"
+	case "http", "ws":
+		u.Scheme = "http"
+	default:
+		return "", errors.Errorf("unsupported api-base scheme %q", u.Scheme)
+	}
+	host := u.Hostname()
+	if host == "" {
+		return "", errors.New("api-base host is required")
+	}
+	if u.Scheme == "http" && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") {
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsLoopback() {
+			return "", errors.New("api-base requires HTTPS or WSS except for loopback hosts")
+		}
+	}
+	// The WebSocket resolver already discards these; use the same base for HTTP.
+	u.RawQuery, u.Fragment = "", ""
+	return strings.TrimSuffix(u.String(), "/"), nil
 }

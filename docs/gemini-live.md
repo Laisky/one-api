@@ -68,6 +68,14 @@ channel:
 API_BASE=http://127.0.0.1:3000 API_TOKEN=sk-... go run ./cmd/test live
 ```
 
+`--api-base` and `API_BASE` accept HTTP(S) or WS(S) server bases, including a
+reverse-proxy base path. WS maps to HTTP and WSS to HTTPS for the REST guard and
+consume-log lookup; Live connections still use the corresponding WebSocket
+endpoint. Non-loopback bases must use **HTTPS or WSS**. Plaintext HTTP/WS is
+accepted only for `localhost` and literal IPv4/IPv6 loopback addresses, so the
+local workflow above remains valid. Private-network addresses are not loopback;
+use TLS or a loopback tunnel rather than sending a bearer token over a LAN.
+
 The default suite runs `conversation` (two native turns and persisted token
 accounting), `thinking` (Extended Thinking plus rejection of a thinking level on
 the ordinary model), `setup-guard` (model switch, TEXT modality, unsupported
@@ -76,6 +84,10 @@ subset with `--scenarios`; duplicate names run only once. `--token` works withou
 `API_TOKEN`. `--verify-billing=false` disables only the conversation settlement
 check, not receipt validation. Conversation and thinking scenarios spend real
 provider quota; setup-validation scenarios also establish upstream connections.
+
+`--thinking-model` must be non-empty after trimming when `thinking` is selected,
+including in the default suite. An empty value fails before any scenario runs;
+non-thinking selections do not require this value.
 
 The REST negative test is **opt-in and channel-pinned**. In a mixed deployment,
 a third-party bridge may legitimately accept the same model over REST. Supply an
