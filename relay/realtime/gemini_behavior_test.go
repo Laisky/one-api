@@ -270,16 +270,21 @@ func TestGeminiLedgerCapacityPreservesBoundary(t *testing.T) {
 	require.Len(t, g.Finish(false).Records, MaxRecords)
 }
 
-// TestGeminiInclusiveCounterPartitions resolves only explicitly labeled missing
-// thinking/tool subsets. Parameters: t is a test. Returns: none.
+// TestGeminiInclusiveCounterPartitions distinguishes aggregate evidence from
+// coincidentally equal missing partitions. Parameters: t owns the test. Returns: none.
 func TestGeminiInclusiveCounterPartitions(t *testing.T) {
 	t.Parallel()
 	raw := `{"promptTokenCount":100,"responseTokenCount":20,"totalTokenCount":120,"thoughtsTokenCount":10,"toolUsePromptTokenCount":5,"promptTokensDetails":[{"modality":"TEXT","tokenCount":95}],"toolUsePromptTokensDetails":[{"modality":"TEXT","tokenCount":5}],"responseTokensDetails":[{"modality":"AUDIO","tokenCount":10}]}`
 	record, err := DecodeGeminiUsage([]byte(raw))
 	require.NoError(t, err)
-	require.Equal(t, Tokens{Input: 100, Text: 100, Output: 20, OutputText: 10, OutputAudio: 10, ReasoningTokens: 10}, record.Tokens)
-	_, err = DecodeGeminiUsage([]byte(strings.Replace(raw, `"totalTokenCount":120`, `"totalTokenCount":135`, 1)))
-	require.Error(t, err, "do not add inclusive subsets twice")
+	// The five tool tokens may already be inside the 95 known prompt text
+	// tokens. Equality with the remainder cannot prove a new text allocation.
+	require.Equal(t, Tokens{Input: 100, Text: 95, Unallocated: 5, Output: 20, OutputText: 10, OutputAudio: 10, ReasoningTokens: 10}, record.Tokens)
+	record, err = DecodeGeminiUsage([]byte(strings.Replace(raw, `"totalTokenCount":120`, `"totalTokenCount":135`, 1)))
+	require.NoError(t, err, "the aggregate explicitly proves additional thinking and tool input")
+	require.Equal(t, Tokens{Input: 105, Text: 100, Unallocated: 5, Output: 30, OutputText: 10, OutputAudio: 10, OutputUnallocated: 10, ReasoningTokens: 10}, record.Tokens)
+	_, err = DecodeGeminiUsage([]byte(strings.Replace(raw, `"totalTokenCount":120`, `"totalTokenCount":121`, 1)))
+	require.Error(t, err, "an unexplained aggregate remains invalid")
 }
 
 // TestGeminiEqualStandaloneReceiptsNeedTurnScope prevents a legitimate equal-cost
