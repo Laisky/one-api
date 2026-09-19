@@ -351,6 +351,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointImagesGenerations,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
+			EndpointRealtime,
 		}
 	case Proxy:
 		// Proxy mode supports all endpoints - it's a passthrough

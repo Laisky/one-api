@@ -14,7 +14,10 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
+	"github.com/Laisky/one-api/relay/quota"
+	"github.com/Laisky/one-api/relay/realtime"
 )
 
 // pricingAdaptorForChannel builds the adaptor exactly the way the billing path
@@ -37,14 +40,13 @@ func pricingAdaptorForChannel(channelType int) adaptor.Adaptor {
 	return provider
 }
 
-// unpricedByDesign lists models that genuinely have no per-token price to publish.
-// It is deliberately empty: every model this gateway advertises must be priced by
-// the channel that serves it. Add an entry only with the reason recorded here.
+// unpricedByDesign lists unconditional pricing exemptions. Keep this empty:
+// administrator-priced native models instead prove fail-closed billing below.
 var unpricedByDesign = map[string]bool{}
 
-// TestEveryAdvertisedModelIsPricedByItsChannel is the guard for a whole class of
-// silent mis-billing: a channel advertises a model, the provider cannot price it,
-// and billing quietly falls back to DefaultPricingMethods' flat 2.5 USD/1M.
+// TestEveryAdvertisedModelIsPricedByItsChannel guards against silent mis-billing:
+// every suggestion must have a price or an enforced administrator-pricing path.
+// A model must never quietly fall back to DefaultPricingMethods' flat 2.5 USD/1M.
 //
 // Three separate defects produced exactly that and all three were live:
 //   - the OpenAI adaptor ignored a.ChannelType, so all 13 OpenAI-compatible
@@ -77,6 +79,20 @@ func TestEveryAdvertisedModelIsPricedByItsChannel(t *testing.T) {
 		var unpriced []string
 		for _, modelName := range models {
 			if unpricedByDesign[modelName] {
+				continue
+			}
+			policy, explicit := provider.(interface{ RequiresExplicitRealtimePricing(string) bool })
+			if adaptor.IsLiveOnlyGoogleModel(modelName) && explicit && policy.RequiresExplicitRealtimePricing(modelName) {
+				// This is not an exemption: prove both the pre-dispatch price
+				// validation and actual receipt billing refuse guessed defaults.
+				require.ErrorIs(t, quota.ValidateRealtimeModelPricing(modelName, nil, provider, now), quota.ErrRealtimePriceUnavailable)
+				ledger := realtime.NewLedger()
+				ledger.InputTokens = 1
+				ledger.Records = []realtime.Record{{Tokens: realtime.Tokens{Input: 1, Text: 1}}}
+				result := quota.Compute(quota.ComputeInput{Usage: &relaymodel.Usage{Realtime: ledger},
+					ModelName: modelName, ModelRatio: 1, GroupRatio: 1, PricingAdaptor: provider, RequestTime: now})
+				require.True(t, result.UnpricedUsage, modelName)
+				require.Zero(t, result.TotalQuota, "missing explicit pricing must not use a fabricated tariff")
 				continue
 			}
 			if _, found := pricing.ResolveModelConfigRatioOnly(modelName, nil, provider, now); !found {
@@ -142,7 +158,6 @@ func TestNoPerTokenPriceLooksLikeAUnitError(t *testing.T) {
 		}
 		channelName := provider.GetChannelName()
 		for modelName, cfg := range provider.GetDefaultModelPricing() {
-			// Ratio == 0 means "not priced per token" (free tiers and per-call models).
 			if cfg.Ratio <= 0 || cfg.PerCall != nil || cfg.Image != nil || cfg.Video != nil {
 				continue
 			}
@@ -187,8 +202,6 @@ func TestSameVendorTablesAgreeOnSharedModels(t *testing.T) {
 	dashscope := pricingAdaptorForChannel(channeltype.Ali).GetDefaultModelPricing()
 	bailian := pricingAdaptorForChannel(channeltype.AliBailian).GetDefaultModelPricing()
 
-	// A hosted SKU may legitimately be offered on only one of the two surfaces;
-	// only ids present in both are constrained.
 	checked := 0
 	for modelName, dashscopeCfg := range dashscope {
 		bailianCfg, shared := bailian[modelName]
@@ -230,9 +243,6 @@ func TestVideoModelsCarryPerCallOrPerSecondPricing(t *testing.T) {
 		}
 		channelName := provider.GetChannelName()
 		for modelName, cfg := range provider.GetDefaultModelPricing() {
-			// Only a model whose SOLE output is video takes the video-generation
-			// route. An any-to-any model that emits text alongside video (Gemini
-			// Omni) is a chat model and is genuinely billed per token.
 			if len(cfg.OutputModalities) != 1 || cfg.OutputModalities[0] != "video" {
 				continue
 			}
@@ -244,7 +254,6 @@ func TestVideoModelsCarryPerCallOrPerSecondPricing(t *testing.T) {
 
 			billable := (cfg.PerCall != nil && cfg.PerCall.UsdPerThousandCalls > 0) ||
 				(cfg.Video != nil && cfg.Video.HasData())
-			// A genuinely free model (Ratio 0, no per-call price) is fine.
 			if billable || cfg.Ratio == 0 {
 				continue
 			}
