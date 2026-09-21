@@ -35,7 +35,7 @@ func TestGetImageRequestRecordsEditOperation(t *testing.T) {
 			ctx.Request = httptest.NewRequest(
 				http.MethodPost,
 				"/v1/images/"+tt.name,
-				strings.NewReader(`{"model":"grok-imagine-image-2.0","prompt":"test","quality":"auto"}`),
+				strings.NewReader("{\"model\":\"grok-imagine-image-2.0\",\"prompt\":\"test\",\"quality\":\"auto\"}"),
 			)
 			ctx.Request.Header.Set("Content-Type", "application/json")
 
