@@ -40,23 +40,28 @@ const dashboardMetricSums = `COUNT(*) AS request_count,
 const dashboardMetricColumns = `request_count, quota, prompt_tokens, completion_tokens,
  cached_prompt_tokens, cache_hit_count, cache_hit_quota`
 
-// dashboardAggregateQueries builds two parameterized reads for the supplied
+// dashboardAggregateQueries builds three parameterized reads for the supplied
 // user and half-open Unix-second window. It returns the SQL and shared bindings.
-// The first read groups models/tools. The second materializes token groups once
-// and derives user groups in SQL, preserving database collation and NULL groups.
-// This deliberately avoids a day/model/user/token cross-product and avoids
-// persistent rollups, which can become stale after billing reconciliation.
-func dashboardAggregateQueries(userID, start, endExclusive int) (string, string, []any) {
-	where := "type IN (?, ?) AND created_at >= ? AND created_at < ?"
-	args := []any{LogTypeConsume, LogTypeTool, start, endExclusive}
+// Separate model/tool reads preserve each expression's database collation.
+// The third read materializes token groups once and derives user groups in SQL,
+// preserving database collation and NULL groups. This deliberately avoids a
+// day/model/user/token cross-product and persistent rollups, which can become
+// stale after billing reconciliation.
+func dashboardAggregateQueries(userID, start, endExclusive int) (string, string, string, []any) {
+	where := "created_at >= ? AND created_at < ?"
+	args := []any{start, endExclusive}
 	if userID != 0 {
 		where += " AND user_id = ?"
 		args = append(args, userID)
 	}
 	models := `SELECT type, ` + dashboardDayBucket + ` AS day_bucket,
- CASE WHEN type = ` + strconv.Itoa(LogTypeTool) + ` THEN COALESCE(model_name, '') ELSE model_name END AS name,
- ` + dashboardMetricSums + ` FROM logs WHERE ` + where + `
- GROUP BY type, day_bucket, name ORDER BY type, day_bucket, name`
+ model_name AS name, ` + dashboardMetricSums + ` FROM logs
+ WHERE type = ` + strconv.Itoa(LogTypeConsume) + ` AND ` + where + `
+ GROUP BY type, day_bucket, model_name ORDER BY day_bucket, model_name`
+	tools := `SELECT type, ` + dashboardDayBucket + ` AS day_bucket,
+ COALESCE(model_name, '') AS name, ` + dashboardMetricSums + ` FROM logs
+ WHERE type = ` + strconv.Itoa(LogTypeTool) + ` AND ` + where + `
+ GROUP BY type, day_bucket, name ORDER BY day_bucket, name`
 
 	// Keep the raw nullable identity columns inside the CTE. Coalescing them
 	// before regrouping would merge NULL and empty-string historical groups.
@@ -65,7 +70,7 @@ func dashboardAggregateQueries(userID, start, endExclusive int) (string, string,
 	tokens := `WITH token_rows AS (
  SELECT type, ` + dashboardDayBucket + ` AS day_bucket,
  username, user_id, user_uuid, token_name, ` + dashboardMetricSums + `
- FROM logs WHERE ` + where + `
+ FROM logs WHERE type IN (` + strconv.Itoa(LogTypeConsume) + `,` + strconv.Itoa(LogTypeTool) + `) AND ` + where + `
  GROUP BY type, day_bucket, username, user_id, user_uuid, token_name
  )
  SELECT * FROM (
@@ -82,7 +87,7 @@ func dashboardAggregateQueries(userID, start, endExclusive int) (string, string,
  ) AS dashboard_rows
  ORDER BY by_token, type, day_bucket, username,
  CASE WHEN type = ` + strconv.Itoa(LogTypeTool) + ` THEN user_id ELSE 0 END, token_name, user_id, user_uuid`
-	return models, tokens, args
+	return models, tools, tokens, args
 }
 
 // dashboardAggregateMetrics holds one aggregate's numeric values. Quota remains
@@ -97,24 +102,27 @@ func (m *dashboardAggregateMetrics) scanDestinations() []any {
 	return []any{&m.requests, &m.quota, &m.prompt, &m.completion, &m.cached, &m.hits, &m.hitQuota}
 }
 
-// SearchDashboardLogAggregatesWithContext returns all six chart series from two
+// SearchDashboardLogAggregatesWithContext returns all six chart series from three
 // log-table reads. Parameters select a user (zero means site-wide) and the
 // half-open Unix-second window. Database, scan and cancellation errors return no
 // partial bundle. No response cache is consulted here.
 func SearchDashboardLogAggregatesWithContext(ctx context.Context, userID, start, endExclusive int) (*DashboardLogAggregates, error) {
 	started := time.Now()
-	modelsQuery, tokensQuery, args := dashboardAggregateQueries(userID, start, endExclusive)
+	modelsQuery, toolsQuery, tokensQuery, args := dashboardAggregateQueries(userID, start, endExclusive)
 	result := &DashboardLogAggregates{}
 	days := make(map[int64]string)
 	if err := readDashboardModelGroups(ctx, modelsQuery, args, result, days); err != nil {
-		return nil, errors.Wrap(err, "read dashboard model and tool groups")
+		return nil, errors.Wrap(err, "read dashboard model groups")
+	}
+	if err := readDashboardModelGroups(ctx, toolsQuery, args, result, days); err != nil {
+		return nil, errors.Wrap(err, "read dashboard tool groups")
 	}
 	if err := readDashboardTokenGroups(ctx, tokensQuery, args, result, days); err != nil {
 		return nil, errors.Wrap(err, "read dashboard token and user groups")
 	}
 	logger.FromContext(ctx).Debug("collected dashboard aggregates",
 		zap.Duration("duration", time.Since(started)),
-		zap.Int("queries", 2),
+		zap.Int("queries", 3),
 		zap.Int("groups", len(result.Logs)+len(result.UserLogs)+len(result.TokenLogs)+
 			len(result.ToolLogs)+len(result.ToolUserLogs)+len(result.ToolTokenLogs)))
 	return result, nil
@@ -131,8 +139,8 @@ func dashboardDay(days map[int64]string, bucket int64) string {
 	return day
 }
 
-// readDashboardModelGroups streams the first grouped query into result using
-// the request-local date cache. It returns a wrapped query or scan failure.
+// readDashboardModelGroups streams model or tool groups into result using the
+// request-local date cache. It returns a wrapped query or scan failure.
 func readDashboardModelGroups(ctx context.Context, query string, args []any, result *DashboardLogAggregates, days map[int64]string) error {
 	rows, err := LOG_DB.WithContext(ctx).Raw(query, args...).Rows()
 	if err != nil {
