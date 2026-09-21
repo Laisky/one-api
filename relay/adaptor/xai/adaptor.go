@@ -262,64 +262,43 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 // models without configurable reasoning, then adjusts model-specific parameters.
 // Returns the modified request or an error if conversion fails.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
-	// XAI is OpenAI-compatible, so we can pass the request through with minimal changes
-	// Keep reasoning_effort only for models whose metadata documents the parameter.
-	if request.ReasoningEffort != nil {
-		config, ok := ModelRatios[request.Model]
-		if !ok || len(config.SupportedReasoningEfforts) == 0 {
-			request.ReasoningEffort = nil
-		}
+	// XAI is OpenAI-compatible, so we can pass the request through with minimal changes.
+	// Use the catalog as the source of truth instead of maintaining a second model allowlist.
+	config, knownModel := ModelRatios[request.Model]
+	if request.ReasoningEffort != nil && (!knownModel || len(config.SupportedReasoningEfforts) == 0) {
+		request.ReasoningEffort = nil
 	}
-	// Remove presence_penalty and frequency_penalty for grok-4 family reasoning models
-	// per xAI API reference: presencePenalty, frequencyPenalty, and stop cannot be used
-	// with reasoning models. Source: https://docs.x.ai/docs/api-reference#chat-completions
-	switch request.Model {
-	case "grok-4.6",
-		"grok-4.6-latest",
-		"grok-4.5",
-		"grok-4.5-latest",
-		"grok-4.3",
-		"grok-4-0709",
-		"grok-4.20",
-		"grok-4.20-reasoning",
-		"grok-4.20-non-reasoning",
-		"grok-4.20-multi-agent",
-		"grok-4.20-0309-reasoning",
-		"grok-4.20-0309-non-reasoning",
-		"grok-4.20-multi-agent-0309",
-		"grok-4-1-fast-reasoning",
-		"grok-4-1-fast-non-reasoning",
-		"grok-4-fast-reasoning",
-		"grok-4-fast-non-reasoning",
-		"grok-code-fast-1",
-		"grok-build-0.1":
-		if request.PresencePenalty != nil {
+
+	// xAI rejects penalty parameters on models whose published sampling-parameter
+	// set does not include them. Metadata-driven filtering automatically covers
+	// newly released models and official aliases. Keep a legacy fallback for old
+	// redirect slugs whose catalog entries predate sampling-parameter metadata.
+	if knownModel && len(config.SupportedSamplingParameters) > 0 {
+		if request.PresencePenalty != nil && !supportsSamplingParameter(config.SupportedSamplingParameters, "presence_penalty") {
 			request.PresencePenalty = nil
 		}
-		if request.FrequencyPenalty != nil {
+		if request.FrequencyPenalty != nil && !supportsSamplingParameter(config.SupportedSamplingParameters, "frequency_penalty") {
 			request.FrequencyPenalty = nil
 		}
+	} else if isLegacyPenaltyRestrictedModel(request.Model) {
+		request.PresencePenalty = nil
+		request.FrequencyPenalty = nil
 	}
 	return request, nil
 }
 
 // ConvertImageRequest converts and validates image generation requests for x.AI.
 // It maps the shared OpenAI size field to xAI's resolution field and removes
-// parameters that xAI's Imagine endpoint does not accept.
+// parameters that the selected Imagine model does not accept.
 // Returns the modified request or an error if conversion fails.
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {
-	// XAI supports image generation with grok-2-image model
-	// The API is OpenAI-compatible, so we can pass the request through with minimal changes
-
-	// Ensure we're using the correct model name for xAI
+	// Ensure we're using the correct model name for the legacy xAI image model.
 	if request.Model == "grok-2-image" {
-		// XAI API uses grok-2-image as the model name
 		request.Model = "grok-2-image"
 	}
 
-	// xAI's Imagine API uses resolution values such as "1k" and "2k" instead
-	// of OpenAI's pixel-size field. Preserve the billing/validation size while
-	// converting the upstream request field.
+	// xAI's Imagine API exposes 1k and 2k resolution values instead of
+	// OpenAI's pixel-size field. Preserve an explicitly supplied resolution.
 	if request.Resolution == "" && strings.HasPrefix(request.Model, "grok-imagine-image") {
 		switch request.Size {
 		case "2048x2048":
@@ -328,7 +307,18 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 			request.Resolution = "1k"
 		}
 	}
-	request.Quality = ""
+
+	// Image 2.0 accepts low, medium, and auto quality. Older Imagine slugs do
+	// not expose that parameter, so retain the previous compatibility behavior.
+	if request.Model == "grok-imagine-image-2.0" {
+		switch request.Quality {
+		case "", "low", "medium", "auto":
+		default:
+			request.Quality = ""
+		}
+	} else {
+		request.Quality = ""
+	}
 	request.Size = ""
 	request.Style = ""
 
