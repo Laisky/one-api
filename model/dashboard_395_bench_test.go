@@ -158,7 +158,7 @@ func BenchmarkDashboard395(b *testing.B) {
 							name, queries := "legacy", 6
 							collect := legacyDashboard395
 							if optimized {
-								name, queries, collect = "optimized", 2, SearchDashboardLogAggregatesWithContext
+								name, queries, collect = "optimized", 3, SearchDashboardLogAggregatesWithContext
 							}
 							b.Run(name, func(b *testing.B) {
 								b.ReportAllocs()
