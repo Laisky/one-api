@@ -80,6 +80,11 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 		originalMap = map[string]json.RawMessage{}
 	}
 
+	var filteredFields map[string]struct{}
+	if allowUnknown {
+		filteredFields = collectFilteredChatFields(originalMap, updatedMap)
+	}
+
 	// Capture typed defaults before removing the transport-only extra_body key.
 	combinedExtraBody, rejected := collectCombinedExtraBody(originalMap, updatedMap)
 	stats.ExtraBodyRejected += rejected
@@ -91,7 +96,8 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 
 	if allowUnknown {
 		for key, value := range originalMap {
-			if key == "extra_body" || isAllowedExtraBodyKey(key) || isKnownChatRequestField(key) {
+			_, filtered := filteredFields[key]
+			if key == "extra_body" || isAllowedExtraBodyKey(key) || filtered {
 				continue
 			}
 			if _, exists := updatedMap[key]; exists {
@@ -104,7 +110,8 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 	}
 
 	for key, value := range originalMap {
-		if !isAllowedExtraBodyKey(key) || (allowUnknown && isKnownChatRequestField(key)) {
+		_, filtered := filteredFields[key]
+		if !isAllowedExtraBodyKey(key) || filtered {
 			continue
 		}
 		if _, exists := updatedMap[key]; exists {
@@ -118,13 +125,9 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 	for key, value := range combinedExtraBody {
 		// An extension must not resurrect an explicit protocol field that the
 		// converter deliberately removed from this chat payload.
-		if allowUnknown && isKnownChatRequestField(key) {
-			_, supplied := originalMap[key]
-			_, retained := updatedMap[key]
-			if supplied && !retained {
-				stats.ExtraBodySkipped++
-				continue
-			}
+		if _, filtered := filteredFields[key]; filtered {
+			stats.ExtraBodySkipped++
+			continue
 		}
 		if !isAllowedExtraBodyKey(key) {
 			stats.ExtraBodyRejected++
