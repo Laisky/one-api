@@ -3,9 +3,8 @@ package controller
 // Dashboard aggregate caching (proposal
 // docs/proposals/20260905_observability-data-tiering.md, Phase 0 / W0.5).
 //
-// One dashboard load runs six GROUP BY aggregates over the consume log. Until
-// the Phase-2 rollups exist, the only lever available is to stop recomputing
-// them for every viewer and every refresh.
+// The model derives six dashboard views from one shared log preaggregation on
+// supported engines. Caching avoids repeating even that scan for every viewer.
 //
 // Only the aggregates are cached. Quota and status are deliberately left live:
 // they are the numbers a user checks most often, and serving them from a
@@ -131,7 +130,7 @@ func storeDashboardAggregates(ctx context.Context, key string, aggregates *dashb
 	}
 }
 
-// collectDashboardAggregates runs the six per-day aggregate queries.
+// collectDashboardAggregates collects the six per-day aggregate views.
 //
 // Parameters:
 //   - targetUserID: the user to aggregate; 0 means site-wide.
@@ -140,54 +139,39 @@ func storeDashboardAggregates(ctx context.Context, key string, aggregates *dashb
 //
 // Return values:
 //   - *dashboardAggregates: the computed bundle.
-//   - error: wrapped failure from the first query that could not complete.
+//   - error: wrapped failure from the underlying query.
 func collectDashboardAggregates(targetUserID int, start, endExclusive int) (*dashboardAggregates, error) {
 	return collectDashboardAggregatesWithContext(context.Background(), targetUserID, start, endExclusive)
 }
 
-// collectDashboardAggregatesWithContext runs the dashboard aggregate queries
+// collectDashboardAggregatesWithContext collects the dashboard aggregate views
 // with cancellation propagated to the database.
 //
 // Parameters:
-//   - ctx: lifecycle and deadline scope for all aggregate queries.
+//   - ctx: lifecycle and deadline scope for the aggregate computation.
 //   - targetUserID: the user to aggregate; 0 means site-wide.
 //   - start: inclusive start of the window, in Unix seconds.
 //   - endExclusive: exclusive end of the window, in Unix seconds.
 //
 // Return values:
 //   - *dashboardAggregates: the completed aggregate bundle.
-//   - error: wrapped failure from the first query that could not complete.
+//   - error: wrapped failure from the underlying query.
 func collectDashboardAggregatesWithContext(ctx context.Context, targetUserID int, start, endExclusive int) (*dashboardAggregates, error) {
-	aggregates := &dashboardAggregates{}
-
-	var err error
-	if aggregates.Logs, err = model.SearchLogsByDayAndModelWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get dashboard data")
+	a, err := model.SearchDashboardAggregatesWithContext(ctx, targetUserID, start, endExclusive)
+	if err != nil {
+		return nil, errors.Wrap(err, "get dashboard aggregate data")
 	}
-	if aggregates.UserLogs, err = model.SearchLogsByDayAndUserWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get user usage data")
-	}
-	if aggregates.TokenLogs, err = model.SearchLogsByDayAndTokenWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get token usage data")
-	}
-	if aggregates.ToolLogs, err = model.SearchToolLogsByDayAndToolWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get tool usage data")
-	}
-	if aggregates.ToolUserLogs, err = model.SearchToolLogsByDayAndUserWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get tool user usage data")
-	}
-	if aggregates.ToolTokenLogs, err = model.SearchToolLogsByDayAndTokenWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get tool token usage data")
-	}
-
-	return aggregates, nil
+	return &dashboardAggregates{
+		Logs: a.Logs, UserLogs: a.UserLogs, TokenLogs: a.TokenLogs,
+		ToolLogs: a.ToolLogs, ToolUserLogs: a.ToolUserLogs, ToolTokenLogs: a.ToolTokenLogs,
+	}, nil
 }
 
 // Miss coalescing and the per-node concurrency budget (W0.6).
 //
 // The TTL cache above amortizes repeated reads but does nothing for a cold or
 // expired key: without coalescing, every concurrent miss on the same key runs
-// all six aggregates, and because dashboardCacheEnabled reports false whenever
+// the aggregate computation, and because dashboardCacheEnabled reports false whenever
 // Redis is missing, the zero-dependency deployment has EVERY request on that
 // path with no protection at all. Coalescing therefore lives in process and is
 // unconditional; it never consults the cache's availability.
@@ -328,7 +312,7 @@ func WaitForDashboardAggregateWork(ctx context.Context) error {
 }
 
 // dashboardAggregateGroup coalesces concurrent misses so that all callers of
-// one cache key share a single execution of the six aggregate queries.
+// one cache key share a single aggregate computation.
 //
 // The key is the cache key, which already carries the effective authorization
 // scope (see dashboardCacheKey), so two callers can only share a result when
@@ -469,7 +453,7 @@ func resolveDashboardAggregatesForKey(ctx context.Context, key string, compute d
 		defer cancel()
 
 		// Another leader may have finished and cached between the read above and
-		// this call; re-reading the cache is far cheaper than six aggregates.
+		// this call; re-reading the cache is far cheaper than a log scan.
 		if cached := loadCachedDashboardAggregates(workCtx, key); cached != nil {
 			return cached, nil
 		}
