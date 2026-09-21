@@ -18,8 +18,8 @@ jobs:
           POSTGRES_DB: oneapi_bench
         ports: ['5432:5432']
         options: >-
-          --health-cmd 'pg_isready -U bench -d oneapi_bench'
-          --health-interval 5s --health-timeout 5s --health-retries 20
+          --health-cmd="pg_isready -U bench -d oneapi_bench"
+          --health-interval=5s --health-timeout=5s --health-retries=20
       mysql:
         image: mysql:8.4
         env:
@@ -27,18 +27,18 @@ jobs:
           MYSQL_DATABASE: oneapi_bench
         ports: ['3306:3306']
         options: >-
-          --health-cmd 'mysqladmin ping -pbench'
-          --health-interval 5s --health-timeout 5s --health-retries 30
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pbench"
+          --health-interval=5s --health-timeout=5s --health-retries=30
     env:
       ONEAPI_BENCH_PG_DSN: postgres://bench:bench@127.0.0.1:5432/oneapi_bench?sslmode=disable
       ONEAPI_BENCH_MYSQL_DSN: root:bench@tcp(127.0.0.1:3306)/oneapi_bench?charset=utf8mb4&parseTime=true&loc=UTC
       GOMAXPROCS: '4'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
       - name: Record environment
@@ -48,6 +48,7 @@ jobs:
           git rev-parse HEAD >> /tmp/evidence/environment.txt
           lscpu >> /tmp/evidence/environment.txt
           git diff --check
+          gofmt -l model/dashboard_aggregates.go model/dashboard_395_test.go model/dashboard_395_bench_test.go controller/dashboard_395_test.go controller/user_dashboard_cache.go | tee /tmp/evidence/format.txt
       - name: Reproduce redundant reads on original collector
         run: |
           cp controller/user_dashboard_cache.go /tmp/fixed-controller.go
@@ -69,7 +70,7 @@ jobs:
         run: |
           set -o pipefail
           go test ./model -run '^$' -bench '^BenchmarkDashboard395$' -benchtime=3x -count=1 -benchmem -timeout=20m 2>&1 | tee /tmp/evidence/bench.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: issue-395-evidence
