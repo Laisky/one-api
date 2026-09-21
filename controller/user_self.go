@@ -21,6 +21,9 @@ import (
 	"github.com/Laisky/one-api/model"
 )
 
+// GenerateAccessToken replaces the authenticated user's access token.
+// Parameter c carries the caller identity and receives the newly persisted token
+// or an error response. The handler returns no value.
 func GenerateAccessToken(c *gin.Context) {
 	id := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(id, true)
@@ -47,6 +50,9 @@ func GenerateAccessToken(c *gin.Context) {
 	})
 }
 
+// GetAffCode returns the caller's affiliate code, creating one when absent.
+// Parameter c carries the authenticated identity and receives the code or an
+// error response. The handler returns no value.
 func GetAffCode(c *gin.Context) {
 	id := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(id, true)
@@ -159,6 +165,9 @@ func GetSelfByToken(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// GetSelf returns the authenticated caller's public user DTO.
+// Parameter c supplies the caller identity and receives the DTO or an error
+// response. The handler returns no value.
 func GetSelf(c *gin.Context) {
 	id := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(id, false)
@@ -173,6 +182,9 @@ func GetSelf(c *gin.Context) {
 	})
 }
 
+// UpdateSelf updates the caller's profile and optional password.
+// Parameter c supplies the authenticated identity and partial JSON payload. It
+// returns no value and writes the outcome while respecting password locking.
 func UpdateSelf(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	var user dto.UserSelfUpdateRequest
@@ -287,6 +299,9 @@ func UpdateSelf(c *gin.Context) {
 	})
 }
 
+// DeleteSelf deletes the caller's account unless it is the root account.
+// Parameter c supplies the authenticated identity and receives the operation
+// result. The handler returns no value.
 func DeleteSelf(c *gin.Context) {
 	id := c.GetInt("id")
 	user, _ := model.GetUserById(id, false)
@@ -307,6 +322,10 @@ func DeleteSelf(c *gin.Context) {
 	})
 }
 
+// EmailBind binds an email after validating its verification code.
+// Parameter c carries the caller identity and email/code query values. It
+// returns no value and writes the outcome, updating root email configuration
+// when the caller is the root account.
 func EmailBind(c *gin.Context) {
 	email := c.Query("email")
 	code := c.Query("code")
@@ -343,6 +362,10 @@ type topUpRequest struct {
 	Key string `json:"key"`
 }
 
+// TopUp redeems a quota code for the authenticated caller.
+// Parameter c supplies the caller identity, request context and code payload.
+// It returns no value and writes credited quota or an error, while enforcing
+// the existing failed-redemption attempt budget.
 func TopUp(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	req := topUpRequest{}

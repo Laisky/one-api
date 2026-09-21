@@ -98,18 +98,21 @@ func TestTrace395AdminCorrelationReadAvoidsLogDependency(t *testing.T) {
 	t.Cleanup(cleanup)
 	router := traceAccessTestRouter(fixture.user.Id, fixture.user.Id+100)
 	queries := 0
-	require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register("issue395:query_budget", func(tx *gorm.DB) {
+	queryCallbacks, rowCallbacks := model.DB.Callback().Query(), model.DB.Callback().Row()
+	require.NoError(t, queryCallbacks.Before("gorm:query").Register("issue395:query_budget", func(tx *gorm.DB) {
 		queries++
 		if tx.Statement.Table == "logs" {
 			tx.AddError(errors.New("billing log read is unavailable"))
 		}
 	}))
-	require.NoError(t, model.DB.Callback().Row().Before("gorm:row").Register("issue395:raw_budget", func(tx *gorm.DB) {
+	t.Cleanup(func() { require.NoError(t, queryCallbacks.Remove("issue395:query_budget")) })
+	require.NoError(t, rowCallbacks.Before("gorm:row").Register("issue395:raw_budget", func(tx *gorm.DB) {
 		queries++
 		if strings.Contains(tx.Statement.SQL.String(), "logs") {
 			tx.AddError(errors.New("billing log lookup is unavailable"))
 		}
 	}))
+	t.Cleanup(func() { require.NoError(t, rowCallbacks.Remove("issue395:raw_budget")) })
 	legacy := performTraceAccessRequest(router, "/api/trace/log/"+fixture.log.UUID, "root")
 	require.NotEqual(t, http.StatusOK, legacy.Code, "negative control must reach the unavailable log dependency")
 	queries = 0
@@ -133,8 +136,11 @@ func TestTrace395LogReadCancellation(t *testing.T) {
 			uncancelled++
 		}
 	}
-	require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register("issue395:query_context", observe))
-	require.NoError(t, model.DB.Callback().Row().Before("gorm:row").Register("issue395:raw_context", observe))
+	queryCallbacks, rowCallbacks := model.DB.Callback().Query(), model.DB.Callback().Row()
+	require.NoError(t, queryCallbacks.Before("gorm:query").Register("issue395:query_context", observe))
+	t.Cleanup(func() { require.NoError(t, queryCallbacks.Remove("issue395:query_context")) })
+	require.NoError(t, rowCallbacks.Before("gorm:row").Register("issue395:raw_context", observe))
+	t.Cleanup(func() { require.NoError(t, rowCallbacks.Remove("issue395:raw_context")) })
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	request := httptest.NewRequest(http.MethodGet, "/api/trace/log/"+fixture.log.UUID, nil).WithContext(ctx)

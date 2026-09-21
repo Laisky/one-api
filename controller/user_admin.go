@@ -24,6 +24,9 @@ import (
 	"github.com/Laisky/one-api/model"
 )
 
+// GetAllUsers lists paginated user DTOs for an administrator.
+// Parameter c supplies paging and sorting values and receives the JSON response.
+// It returns no value; route middleware authorizes access.
 func GetAllUsers(c *gin.Context) {
 	p, _ := strconv.Atoi(c.Query("p"))
 	if p < 0 {
@@ -69,6 +72,9 @@ func GetAllUsers(c *gin.Context) {
 	})
 }
 
+// SearchUsers searches user DTOs by keyword for an administrator.
+// Parameter c supplies the search and sorting values and receives the response.
+// It returns no value; route middleware authorizes access.
 func SearchUsers(c *gin.Context) {
 	keyword := c.Query("keyword")
 	sortBy := c.Query("sort")
@@ -89,6 +95,9 @@ func SearchUsers(c *gin.Context) {
 	})
 }
 
+// GetUser reads a referenced user subject to the caller's role.
+// Parameter c supplies the user reference and authenticated role. It returns no
+// value and writes either a user DTO or an error response.
 func GetUser(c *gin.Context) {
 	id, err := resolveUserRef(c.Param("id"))
 	if err != nil {
@@ -112,6 +121,9 @@ func GetUser(c *gin.Context) {
 	})
 }
 
+// UpdateUser applies validated, authorized partial account updates.
+// Parameter c supplies the administrator identity and JSON payload. It returns
+// no value and writes the outcome, recording quota changes in the audit log.
 func UpdateUser(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	adminUserID := c.GetInt(ctxkey.Id)
@@ -446,6 +458,9 @@ func UpdateUser(c *gin.Context) {
 	})
 }
 
+// DeleteUser deletes a referenced account below the caller's role.
+// Parameter c supplies the user reference and authenticated role. It returns no
+// value and writes a success or error response.
 func DeleteUser(c *gin.Context) {
 	id, err := resolveUserRef(c.Param("id"))
 	if err != nil {
@@ -473,6 +488,9 @@ func DeleteUser(c *gin.Context) {
 	})
 }
 
+// CreateUser creates an account from an administrator's validated request.
+// Parameter c carries the authenticated role and account payload. It returns no
+// value and writes the result after applying requested quota and group overrides.
 func CreateUser(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
@@ -637,6 +655,9 @@ type adminTopUpRequest struct {
 	Remark   string `json:"remark"`
 }
 
+// AdminTopUp adjusts the referenced account's quota and records a top-up log.
+// Parameter c supplies the administrator-authorized JSON request and context.
+// It returns no value and writes a success or error response.
 func AdminTopUp(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	req := adminTopUpRequest{}

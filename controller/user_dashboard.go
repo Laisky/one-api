@@ -6,6 +6,7 @@ import (
 	"time"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
@@ -28,6 +29,7 @@ import (
 // Parameters: c carries the authenticated identity and requested date/user scope.
 // Return values: none; writes the dashboard envelope without changing user state.
 func GetUserDashboard(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	id := c.GetInt(ctxkey.Id)
 	role := c.GetInt(ctxkey.Role)
 	now := time.Now()
@@ -112,9 +114,10 @@ func GetUserDashboard(c *gin.Context) {
 	// Get log statistics, using half-open interval [startTs, endTsExclusive).
 	aggregates, err := resolveDashboardAggregates(gmw.Ctx(c), targetUserId, startTs, endTsExclusive)
 	if err != nil {
+		lg.Error("failed to get dashboard data", zap.Error(err))
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "Failed to get dashboard data: " + err.Error(),
+			"message": "Failed to get dashboard data",
 			"data":    nil,
 		})
 		return
@@ -130,9 +133,10 @@ func GetUserDashboard(c *gin.Context) {
 		// once there are a million rows.
 		totalQuota, usedQuota, status, err = model.GetSiteWideQuotaStatsCached()
 		if err != nil {
+			lg.Error("failed to get site-wide quota stats", zap.Error(err))
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
-				"message": "Failed to get site-wide quota stats: " + err.Error(),
+				"message": "Failed to get site-wide quota stats",
 				"data":    nil,
 			})
 			return
@@ -141,9 +145,10 @@ func GetUserDashboard(c *gin.Context) {
 		// Individual user statistics
 		user, err := model.GetUserById(targetUserId, false)
 		if err != nil {
+			lg.Error("failed to get user data", zap.Error(err))
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
-				"message": "Failed to get user data: " + err.Error(),
+				"message": "Failed to get user data",
 				"data":    nil,
 			})
 			return
@@ -186,6 +191,7 @@ func GetUserDashboard(c *gin.Context) {
 // Parameters: c carries the authenticated viewer. Returns: no value; only UUID,
 // username and display name are emitted, never credentials or internal IDs.
 func GetDashboardUsers(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	role := c.GetInt(ctxkey.Role)
 
 	// Administrators and root users can access this endpoint
@@ -201,9 +207,10 @@ func GetDashboardUsers(c *gin.Context) {
 	// Get all users with basic info (id, username, display_name)
 	users, err := model.GetAllUsers(0, 1000, "", "", "") // Get up to 1000 users
 	if err != nil {
+		lg.Error("failed to get user list", zap.Error(err))
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "Failed to get user list: " + err.Error(),
+			"message": "Failed to get user list",
 			"data":    nil,
 		})
 		return

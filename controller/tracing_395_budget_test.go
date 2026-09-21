@@ -25,8 +25,11 @@ func TestTrace395ReadQueryBudget(t *testing.T) {
 	router := traceAccessTestRouter(fixture.user.Id, fixture.user.Id+100)
 	queries := 0
 	count := func(*gorm.DB) { queries++ }
-	require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register("trace395:count_query", count))
-	require.NoError(t, model.DB.Callback().Row().Before("gorm:row").Register("trace395:count_row", count))
+	queryCallbacks, rowCallbacks := model.DB.Callback().Query(), model.DB.Callback().Row()
+	require.NoError(t, queryCallbacks.Before("gorm:query").Register("trace395:count_query", count))
+	t.Cleanup(func() { require.NoError(t, queryCallbacks.Remove("trace395:count_query")) })
+	require.NoError(t, rowCallbacks.Before("gorm:row").Register("trace395:count_row", count))
+	t.Cleanup(func() { require.NoError(t, rowCallbacks.Remove("trace395:count_row")) })
 	for _, viewer := range []string{"owner", "admin", "root"} {
 		t.Run(viewer, func(t *testing.T) {
 			wantDirect := 1
