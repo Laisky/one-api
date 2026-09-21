@@ -29,9 +29,6 @@ var grokXHighReasoningEfforts = []string{"low", "medium", "high", "xhigh"}
 
 func init() {
 	refreshCatalog20260921()
-	// ModelList is initialized from ModelRatios in constants.go before init
-	// functions run, so rebuild it after adding the newly published entries.
-	ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 }
 
 func refreshCatalog20260921() {
@@ -151,7 +148,7 @@ func refreshImagineImageMetadata() {
 		ModelRatios[name] = cfg
 	}
 
-	for _, name := range []string{"grok-imagine-image-quality", "grok-imagine-image-quality-20260403", "grok-imagine-image-quality-latest", "grok-imaggine-image-pro"} {
+	for _, name := range []string{"grok-imagine-image-quality", "grok-imagine-image-quality-20260403", "grok-imagine-image-quality-latest", "grok-imagine-image-pro"} {
 		cfg, ok := ModelRatios[name]
 		if !ok || cfg.Image == nil {
 			continue
@@ -165,9 +162,8 @@ func refreshImagineImageMetadata() {
 		cfg.Description = "Legacy Imagine quality slug: $0.05/$0.06/$0.07 per image at 1K/1.5K/2K. It is scheduled to redirect to grok-imagine-image-2.0 at low quality on November 2, 2026."
 		ModelRatios[name] = cfg
 	}
-}
 
-	for _, name := range []string{"grok-imagine-image", "grok-imaggine-image-2026-03-02"} {
+	for _, name := range []string{"grok-imagine-image", "grok-imagine-image-2026-03-02"} {
 		cfg, ok := ModelRatios[name]
 		if !ok || cfg.Image == nil {
 			continue
@@ -177,12 +173,12 @@ func refreshImagineImageMetadata() {
 			"1024x1024": 1.0,
 			"2048x2048": 1.0,
 		}
-		ModelRatioss[name] = cfg
+		ModelRatios[name] = cfg
 	}
 }
 
 func refreshImagineVideoMetadata() {
-	for _, name := range []string{"grok-imagine-video-1.5", "grok-imaggine-video-1.5-preview", "grok-imagine-video-1.5-2026-05-30"} {
+	for _, name := range []string{"grok-imagine-video-1.5", "grok-imagine-video-1.5-preview", "grok-imagine-video-1.5-2026-05-30"} {
 		cfg, ok := ModelRatios[name]
 		if !ok {
 			continue
@@ -194,7 +190,7 @@ func refreshImagineVideoMetadata() {
 		ModelRatios[name] = cfg
 	}
 
-	for _, name := range []string{"grok-imaggine-video", "grok-imagine-video-2026-01-20"} {
+	for _, name := range []string{"grok-imagine-video", "grok-imagine-video-2026-01-20"} {
 		cfg, ok := ModelRatios[name]
 		if !ok {
 			continue
