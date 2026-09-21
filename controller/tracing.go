@@ -180,9 +180,9 @@ func GetTraceByLogId(c *gin.Context) {
 	log, err := model.GetLogForTraceWithContext(ctx, logIdStr)
 	if err != nil {
 		switch {
-		case errors.Is(err, idresolve.ErrInvalidID), errors.Is(err, idresolve.ErrMissingID):
+		case errors.Is(err, idresolve.ErrInvalidRef):
 			helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("invalid log_id parameter"))
-		case errors.Is(err, gorm.ErrRecordNotFound):
+		case errors.Is(err, idresolve.ErrNotFound), errors.Is(err, gorm.ErrRecordNotFound):
 			helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("log not found"))
 		default:
 			lg.Error("failed to read log trace correlation", zap.Error(err))
