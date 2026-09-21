@@ -125,7 +125,7 @@ func runURLDiagnosticScenario(t *testing.T, tc urlDiagnosticScenario, response u
 				require.Equal(t, logURL, field.String, entry.Message)
 			}
 		}
-		require.Positive(t, urlFields)
+		require.Equal(t, 2, urlFields, "preserve both the bound and explicit diagnostic URL fields")
 		require.Equal(t, "stub", entry.ContextMap()["adaptor"])
 		require.Equal(t, "fixture-model", entry.ContextMap()["model"])
 	}
