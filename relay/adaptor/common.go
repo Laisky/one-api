@@ -3,6 +3,7 @@ package adaptor
 import (
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -11,6 +12,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
+	appcommon "github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/identity"
@@ -159,6 +161,10 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 		return nil, errors.Wrap(err, "apply channel custom headers")
 	}
 
+	// Sanitize diagnostics only: dispatch and metadata still need the original
+	// query values. Sanitize the bound logger as well as each explicit URL field.
+	logRequestURL := appcommon.SanitizeURLForLogging(fullRequestURL)
+
 	// Prepare tagged logger and propagate to context.
 	// The request-scoped logger is already bound with the full user/token/channel
 	// identity (id + uuid + name) by the auth and distributor middlewares, so only
@@ -166,7 +172,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	// implementation name (e.g. "aws", "zhipu"), which is distinct from the
 	// operator-chosen "channel_name" carried by the bound logger.
 	lg := gmw.GetLogger(c).With(
-		zap.String("url", fullRequestURL),
+		zap.String("url", logRequestURL),
 		zap.String("adaptor", a.GetChannelName()),
 		zap.String("model", meta.ActualModelName),
 	)
@@ -176,7 +182,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	// Log upstream request for billing tracking
 	fields := []zap.Field{
 		zap.String("method", req.Method),
-		zap.String("url", fullRequestURL),
+		zap.String("url", logRequestURL),
 		zap.Bool("body_logging_suppressed", true),
 	}
 	if bodySize >= 0 {
@@ -205,7 +211,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 		lg.Debug("upstream returned error status",
 			zap.Int("status", resp.StatusCode),
 			zap.String("model", meta.ActualModelName),
-			zap.String("url", fullRequestURL),
+			zap.String("url", logRequestURL),
 		)
 	}
 
@@ -238,6 +244,13 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		// Client.Do returns *url.Error; redact a copy before downstream
+		// wrapping/logging without changing the cause or outbound URL.
+		if urlErr, ok := err.(*url.Error); ok {
+			sanitized := *urlErr
+			sanitized.URL = appcommon.SanitizeURLForLogging(urlErr.URL)
+			err = &sanitized
+		}
 		return nil, errors.Wrap(err, "perform upstream request")
 	}
 	if resp == nil {
