@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
+import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
@@ -26,7 +27,7 @@ vi.mock('@/components/ui/tooltip', () => {
 const LOG_UUID = '018f0000-0000-7000-8000-000000000901';
 const USER_UUID = '018f0000-0000-7000-8000-000000000101';
 const TRACE_ID = 'issue395-correlation';
-const get = vi.mocked(api.get);
+const get = api.get as Mock;
 
 /** logFixture returns a log-list snapshot with an independently available trace correlation. */
 function logFixture(overrides: Partial<LogEntry> = {}): LogEntry {
@@ -104,7 +105,7 @@ describe('issue #395 trace-details follow-up', () => {
     expect(screen.getByText(/HTTP 503/)).toBeInTheDocument();
     expect(screen.queryByText(/private SQL detail/)).not.toBeInTheDocument();
     expect(get).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+    fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
     expect(await screen.findByText('/v1/issue395/retained')).toBeInTheDocument();
     expect(get).toHaveBeenCalledTimes(2);
     expect(screen.queryByText(/failed to load trace information/i)).not.toBeInTheDocument();
@@ -132,7 +133,7 @@ describe('issue #395 trace-details follow-up', () => {
     render(modal(logFixture()));
     expect(await screen.findByText(/trace data was not retained locally/i)).toBeInTheDocument();
     expect(screen.queryByText(/failed to load trace information/i)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+    fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
     expect(await screen.findByText('/v1/issue395/retained')).toBeInTheDocument();
   });
 

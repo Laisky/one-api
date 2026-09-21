@@ -85,7 +85,7 @@ func TestDashboard395AdministratorReadAccess(t *testing.T) {
 				require.JSONEq(t, "true", string(response["success"]), string(response["message"]))
 				var data struct {
 					Logs []struct {
-						RequestCount int `json:"count"`
+						RequestCount int `json:"RequestCount"`
 					} `json:"logs"`
 					Users []struct {
 						UUID string `json:"user_uuid"`
