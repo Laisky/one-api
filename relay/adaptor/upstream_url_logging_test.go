@@ -15,13 +15,13 @@ import (
 type urlDiagnosticScenario struct {
 	name, query, wantQuery, body string
 	nilBody, unknownSize         bool
-	secrets                     []string
+	secrets                      []string
 }
 
 // urlDiagnosticResponse defines the bytes, status and headers returned upstream.
 type urlDiagnosticResponse struct {
 	name, contentType, body string
-	status                 int
+	status                  int
 }
 
 // TestDoRequestHelperRedactsQueryCredentialsWithoutChangingDispatch exercises

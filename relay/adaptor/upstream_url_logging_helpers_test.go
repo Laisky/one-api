@@ -24,7 +24,7 @@ import (
 // diagnosticRequest captures an upstream request for assertions on the test goroutine.
 type diagnosticRequest struct {
 	method, path, rawQuery, body, authorization, contentType, accept string
-	readErr                                                       error
+	readErr                                                          error
 }
 
 // runURLDiagnosticScenario sends one real HTTP request using the test-owned
@@ -41,7 +41,7 @@ func runURLDiagnosticScenario(t *testing.T, tc urlDiagnosticScenario, response u
 			method: r.Method, path: r.URL.Path, rawQuery: r.URL.RawQuery,
 			body: string(body), readErr: err,
 			authorization: r.Header.Get("Authorization"),
-			contentType: r.Header.Get("Content-Type"), accept: r.Header.Get("Accept"),
+			contentType:   r.Header.Get("Content-Type"), accept: r.Header.Get("Accept"),
 		}
 		w.Header().Set("Content-Type", response.contentType)
 		w.Header().Set("X-Upstream-Marker", "preserved")
