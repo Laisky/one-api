@@ -3,9 +3,9 @@ package controller
 // Dashboard aggregate caching (proposal
 // docs/proposals/20260905_observability-data-tiering.md, Phase 0 / W0.5).
 //
-// One dashboard load runs six GROUP BY aggregates over the consume log. Until
-// the Phase-2 rollups exist, the only lever available is to stop recomputing
-// them for every viewer and every refresh.
+// Each cold dashboard load uses two grouped log reads for all six chart series.
+// This cache amortizes repeat loads; query consolidation also improves cold
+// loads and deployments without Redis.
 //
 // Only the aggregates are cached. Quota and status are deliberately left live:
 // they are the numbers a user checks most often, and serving them from a
@@ -27,7 +27,6 @@ import (
 	"github.com/Laisky/one-api/common/admission"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/logger"
-	"github.com/Laisky/one-api/dto"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -36,14 +35,7 @@ const dashboardCacheKeyPrefix = "oneapi:dashboard:agg:"
 
 // dashboardAggregates bundles the six per-day aggregate result sets a dashboard
 // request needs, so they are cached and invalidated as one unit.
-type dashboardAggregates struct {
-	Logs          []*dto.LogStatistic            `json:"logs"`
-	UserLogs      []*dto.LogStatisticByUser      `json:"user_logs"`
-	TokenLogs     []*dto.LogStatisticByToken     `json:"token_logs"`
-	ToolLogs      []*dto.ToolLogStatistic        `json:"tool_logs"`
-	ToolUserLogs  []*dto.ToolLogStatisticByUser  `json:"tool_user_logs"`
-	ToolTokenLogs []*dto.ToolLogStatisticByToken `json:"tool_token_logs"`
-}
+type dashboardAggregates = model.DashboardLogAggregates
 
 // dashboardCacheKey builds the cache key for one aggregate window.
 //
@@ -131,7 +123,7 @@ func storeDashboardAggregates(ctx context.Context, key string, aggregates *dashb
 	}
 }
 
-// collectDashboardAggregates runs the six per-day aggregate queries.
+// collectDashboardAggregates collects all six chart series using two grouped reads.
 //
 // Parameters:
 //   - targetUserID: the user to aggregate; 0 means site-wide.
@@ -158,29 +150,7 @@ func collectDashboardAggregates(targetUserID int, start, endExclusive int) (*das
 //   - *dashboardAggregates: the completed aggregate bundle.
 //   - error: wrapped failure from the first query that could not complete.
 func collectDashboardAggregatesWithContext(ctx context.Context, targetUserID int, start, endExclusive int) (*dashboardAggregates, error) {
-	aggregates := &dashboardAggregates{}
-
-	var err error
-	if aggregates.Logs, err = model.SearchLogsByDayAndModelWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get dashboard data")
-	}
-	if aggregates.UserLogs, err = model.SearchLogsByDayAndUserWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get user usage data")
-	}
-	if aggregates.TokenLogs, err = model.SearchLogsByDayAndTokenWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get token usage data")
-	}
-	if aggregates.ToolLogs, err = model.SearchToolLogsByDayAndToolWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get tool usage data")
-	}
-	if aggregates.ToolUserLogs, err = model.SearchToolLogsByDayAndUserWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get tool user usage data")
-	}
-	if aggregates.ToolTokenLogs, err = model.SearchToolLogsByDayAndTokenWithContext(ctx, targetUserID, start, endExclusive); err != nil {
-		return nil, errors.Wrap(err, "get tool token usage data")
-	}
-
-	return aggregates, nil
+	return model.SearchDashboardLogAggregatesWithContext(ctx, targetUserID, start, endExclusive)
 }
 
 // Miss coalescing and the per-node concurrency budget (W0.6).
@@ -328,7 +298,7 @@ func WaitForDashboardAggregateWork(ctx context.Context) error {
 }
 
 // dashboardAggregateGroup coalesces concurrent misses so that all callers of
-// one cache key share a single execution of the six aggregate queries.
+// one cache key share a single computation of the six chart series.
 //
 // The key is the cache key, which already carries the effective authorization
 // scope (see dashboardCacheKey), so two callers can only share a result when
@@ -469,7 +439,7 @@ func resolveDashboardAggregatesForKey(ctx context.Context, key string, compute d
 		defer cancel()
 
 		// Another leader may have finished and cached between the read above and
-		// this call; re-reading the cache is far cheaper than six aggregates.
+		// this call; re-reading the cache avoids repeating the aggregation work.
 		if cached := loadCachedDashboardAggregates(workCtx, key); cached != nil {
 			return cached, nil
 		}
