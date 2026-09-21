@@ -120,7 +120,15 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 			stats.ExtraBodyRejected++
 			continue
 		}
-		if _, exists := updatedMap[key]; exists {
+		if existing, exists := updatedMap[key]; exists {
+			if key == "chat_template_kwargs" {
+				if merged, added := mergeChatTemplateDefaults(existing, value); added {
+					updatedMap[key] = merged
+					stats.ExtraBodyMerged++
+					changed = true
+					continue
+				}
+			}
 			stats.ExtraBodySkipped++
 			continue
 		}
@@ -155,6 +163,7 @@ func hasPassthroughDiagnostics(stats passthroughMergeStats) bool {
 func collectCombinedExtraBody(originalMap, updatedMap map[string]json.RawMessage) (map[string]json.RawMessage, int) {
 	combined := map[string]json.RawMessage{}
 	rejected := 0
+	invalidObjectReported := false
 
 	for index, source := range []map[string]json.RawMessage{originalMap, updatedMap} {
 		rawExtra, ok := source["extra_body"]
@@ -170,7 +179,12 @@ func collectCombinedExtraBody(originalMap, updatedMap map[string]json.RawMessage
 
 		extraBody, ok := decodeRawMessageMap(rawExtra)
 		if !ok {
-			rejected++
+			// Original and converted forms represent one rejected field, even
+			// when a converter changed its malformed value.
+			if !invalidObjectReported {
+				rejected++
+				invalidObjectReported = true
+			}
 			continue
 		}
 
@@ -180,7 +194,12 @@ func collectCombinedExtraBody(originalMap, updatedMap map[string]json.RawMessage
 				rejected++
 				continue
 			}
-			if _, exists := combined[normalizedKey]; exists {
+			if existing, exists := combined[normalizedKey]; exists {
+				if normalizedKey == "chat_template_kwargs" {
+					if merged, added := mergeChatTemplateDefaults(existing, value); added {
+						combined[normalizedKey] = merged
+					}
+				}
 				continue
 			}
 			combined[normalizedKey] = value
