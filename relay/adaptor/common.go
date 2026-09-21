@@ -3,6 +3,7 @@ package adaptor
 import (
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -243,6 +244,13 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		// Client.Do returns *url.Error; redact a copy before downstream
+		// wrapping/logging without changing the cause or outbound URL.
+		if urlErr, ok := err.(*url.Error); ok {
+			sanitized := *urlErr
+			sanitized.URL = appcommon.SanitizeURLForLogging(urlErr.URL)
+			err = &sanitized
+		}
 		return nil, errors.Wrap(err, "perform upstream request")
 	}
 	if resp == nil {
