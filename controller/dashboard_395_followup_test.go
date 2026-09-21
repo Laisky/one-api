@@ -84,12 +84,18 @@ func TestDashboard395AdministratorReadAccess(t *testing.T) {
 					"/api/user/dashboard?from_date=2026-01-01&to_date=2026-01-30"+scenario.suffix)
 				require.JSONEq(t, "true", string(response["success"]), string(response["message"]))
 				var data struct {
-					Logs []struct { RequestCount int `json:"request_count"` } `json:"logs"`
-					Users []struct { UUID string `json:"user_uuid"` } `json:"user_logs"`
+					Logs []struct {
+						RequestCount int `json:"count"`
+					} `json:"logs"`
+					Users []struct {
+						UUID string `json:"user_uuid"`
+					} `json:"user_logs"`
 				}
 				require.NoError(t, json.Unmarshal(response["data"], &data))
 				count := 0
-				for _, row := range data.Logs { count += row.RequestCount }
+				for _, row := range data.Logs {
+					count += row.RequestCount
+				}
 				require.Equal(t, scenario.requests, count)
 				if scenario.owner != "" {
 					require.Len(t, data.Users, 1)
@@ -97,6 +103,11 @@ func TestDashboard395AdministratorReadAccess(t *testing.T) {
 				}
 			})
 		}
+		t.Run(stringRole395(role)+"/short cross-user window", func(t *testing.T) {
+			response := dashboard395FollowupRequest(t, fixture.user.Id, role,
+				"/api/user/dashboard?from_date=2026-01-01&to_date=2026-01-07&user_id="+other.UUID)
+			require.JSONEq(t, "true", string(response["success"]), string(response["message"]))
+		})
 		t.Run(stringRole395(role)+"/selector", func(t *testing.T) {
 			response := dashboard395FollowupRequest(t, fixture.user.Id, role, "/api/user/dashboard/users")
 			require.JSONEq(t, "true", string(response["success"]), string(response["message"]))
@@ -123,7 +134,7 @@ func TestDashboard395AdministratorReadAccess(t *testing.T) {
 	for _, path := range []string{
 		"/api/user/dashboard/users",
 		"/api/user/dashboard?from_date=2026-01-01&to_date=2026-01-07&user_id=all",
-		"/api/user/dashboard?from_date=2026-01-01&to_date=2026-01-07&user_id="+other.UUID,
+		"/api/user/dashboard?from_date=2026-01-01&to_date=2026-01-07&user_id=" + other.UUID,
 		"/api/user/dashboard?from_date=2026-01-01&to_date=2026-01-08",
 	} {
 		response := dashboard395FollowupRequest(t, fixture.user.Id, model.RoleCommonUser, path)
@@ -133,7 +144,11 @@ func TestDashboard395AdministratorReadAccess(t *testing.T) {
 	response := dashboard395FollowupRequest(t, fixture.user.Id, model.RoleCommonUser,
 		"/api/user/dashboard?from_date=2026-01-01&to_date=2026-01-07")
 	require.JSONEq(t, "true", string(response["success"]), string(response["message"]))
-	var own struct { Users []struct { UUID string `json:"user_uuid"` } `json:"user_logs"` }
+	var own struct {
+		Users []struct {
+			UUID string `json:"user_uuid"`
+		} `json:"user_logs"`
+	}
 	require.NoError(t, json.Unmarshal(response["data"], &own))
 	require.Len(t, own.Users, 1)
 	require.Equal(t, fixture.user.UUID, own.Users[0].UUID)
@@ -141,6 +156,8 @@ func TestDashboard395AdministratorReadAccess(t *testing.T) {
 
 // stringRole395 returns the stable test label for an administrator/root role.
 func stringRole395(role int) string {
-	if role == model.RoleAdminUser { return "admin" }
+	if role == model.RoleAdminUser {
+		return "admin"
+	}
 	return "root"
 }
