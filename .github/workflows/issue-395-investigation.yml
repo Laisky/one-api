@@ -1,0 +1,27 @@
+name: Issue 395 investigation
+on:
+  push:
+    branches: [work/issue-395-performance]
+permissions:
+  contents: read
+jobs:
+  investigate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect dashboard test entry points
+        run: |
+          git rev-parse HEAD
+          find . -name AGENTS.md -print
+          grep -R -n 'func resolveDashboardAggregates\|type dashboardAggregates\|func fetchDashboardAggregates' controller model || true
+          find controller model dto -maxdepth 1 -iname '*dashboard*' -o -iname '*statistic*'
+          head -30 go.mod
+          git archive --format=tar HEAD > /tmp/issue-395-source.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue-395-source
+          path: /tmp/issue-395-source.tar
+          retention-days: 1
