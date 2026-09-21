@@ -14,17 +14,19 @@ import (
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // getImageRequest parses and normalizes an image request from c. Parameters: c
-// carries the reusable request body; the relay-mode argument is reserved.
+// carries the reusable request body and relayMode identifies generation versus edit.
 // Returns: the normalized request or a wrapped parsing error.
-func getImageRequest(c *gin.Context, _ int) (*relaymodel.ImageRequest, error) {
+func getImageRequest(c *gin.Context, relayMode int) (*relaymodel.ImageRequest, error) {
 	imageRequest := &relaymodel.ImageRequest{}
 	err := common.UnmarshalBodyReusable(c, imageRequest)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+	imageRequest.IsEdit = relayMode == relaymode.ImagesEdits
 
 	if imageRequest.N == 0 {
 		imageRequest.N = 1
@@ -95,6 +97,17 @@ func normalizeImageSizeKey(value string) string {
 // lowercase quality key.
 func normalizeImageQualityKey(value string) string {
 	return strings.TrimSpace(strings.ToLower(value))
+}
+
+// effectiveImagePricingQuality resolves endpoint-specific billing semantics.
+// Parameters: req contains the mapped model, requested quality, and operation.
+// Returns: the quality tier used only for pricing; the upstream request is unchanged.
+func effectiveImagePricingQuality(req *relaymodel.ImageRequest) string {
+	quality := normalizeImageQualityKey(req.Quality)
+	if req.IsEdit && req.Model == "grok-imagine-image-2.0" && quality == "auto" {
+		return "medium"
+	}
+	return quality
 }
 
 // applyImageDefaults applies configured and model-specific request defaults.
@@ -218,7 +231,7 @@ func isWithinRange(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePricingC
 func getImageCostRatio(imageRequest *relaymodel.ImageRequest, cfg *relayadaptor.ImagePricingConfig) (float64, error) {
 	if cfg != nil {
 		sizeKey := normalizeImageSizeKey(imageRequest.Size)
-		qualityKey := normalizeImageQualityKey(imageRequest.Quality)
+		qualityKey := effectiveImagePricingQuality(imageRequest)
 		if qualityKey == "" {
 			qualityKey = "default"
 		}
