@@ -258,29 +258,33 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 }
 
 // ConvertRequest converts and validates OpenAI-compatible requests for x.AI.
-// It preserves reasoning_effort for models that document it and removes it for
-// models without configurable reasoning, then adjusts model-specific parameters.
+// It preserves only model-supported reasoning and sampling parameters.
 // Returns the modified request or an error if conversion fails.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	// XAI is OpenAI-compatible, so we can pass the request through with minimal changes.
 	// Use the catalog as the source of truth instead of maintaining a second model allowlist.
 	config, knownModel := ModelRatios[request.Model]
-	if request.ReasoningEffort != nil && (!knownModel || len(config.SupportedReasoningEfforts) == 0) {
+	if request.ReasoningEffort != nil &&
+		(!knownModel || !supportsStringValue(config.SupportedReasoningEfforts, *request.ReasoningEffort)) {
 		request.ReasoningEffort = nil
 	}
 
-	// xAI rejects penalty parameters on models whose published sampling-parameter
-	// set does not include them. Metadata-driven filtering automatically covers
-	// newly released models and official aliases. Keep a legacy fallback for old
-	// redirect slugs whose catalog entries predate sampling-parameter metadata.
+	// Retired aliases retain their historical compatibility filtering even when
+	// their copied metadata advertises a wider sampling set than the redirect target.
+	legacyPenaltyRestricted := isLegacyPenaltyRestrictedModel(request.Model)
 	if knownModel && len(config.SupportedSamplingParameters) > 0 {
-		if request.PresencePenalty != nil && !supportsSamplingParameter(config.SupportedSamplingParameters, "presence_penalty") {
+		if request.PresencePenalty != nil &&
+			(legacyPenaltyRestricted || !supportsStringValue(config.SupportedSamplingParameters, "presence_penalty")) {
 			request.PresencePenalty = nil
 		}
-		if request.FrequencyPenalty != nil && !supportsSamplingParameter(config.SupportedSamplingParameters, "frequency_penalty") {
+		if request.FrequencyPenalty != nil &&
+			(legacyPenaltyRestricted || !supportsStringValue(config.SupportedSamplingParameters, "frequency_penalty")) {
 			request.FrequencyPenalty = nil
 		}
-	} else if isLegacyPenaltyRestrictedModel(request.Model) {
+		if request.Stop != nil && !supportsStringValue(config.SupportedSamplingParameters, "stop") {
+			request.Stop = nil
+		}
+	} else if legacyPenaltyRestricted {
 		request.PresencePenalty = nil
 		request.FrequencyPenalty = nil
 	}
