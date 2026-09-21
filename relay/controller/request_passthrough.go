@@ -91,7 +91,7 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 
 	if allowUnknown {
 		for key, value := range originalMap {
-			if key == "extra_body" || isAllowedExtraBodyKey(key) {
+			if key == "extra_body" || isAllowedExtraBodyKey(key) || isKnownChatRequestField(key) {
 				continue
 			}
 			if _, exists := updatedMap[key]; exists {
@@ -104,7 +104,7 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 	}
 
 	for key, value := range originalMap {
-		if !isAllowedExtraBodyKey(key) {
+		if !isAllowedExtraBodyKey(key) || (allowUnknown && isKnownChatRequestField(key)) {
 			continue
 		}
 		if _, exists := updatedMap[key]; exists {
@@ -116,6 +116,16 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 	}
 
 	for key, value := range combinedExtraBody {
+		// An extension must not resurrect an explicit protocol field that the
+		// converter deliberately removed from this chat payload.
+		if allowUnknown && isKnownChatRequestField(key) {
+			_, supplied := originalMap[key]
+			_, retained := updatedMap[key]
+			if supplied && !retained {
+				stats.ExtraBodySkipped++
+				continue
+			}
+		}
 		if !isAllowedExtraBodyKey(key) {
 			stats.ExtraBodyRejected++
 			continue
