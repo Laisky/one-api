@@ -135,9 +135,8 @@ func refreshImagineImageMetadata() {
 				"1024x1024": 1.00,
 				"2048x2048": 1.50,
 			},
-			// For image generation, auto currently resolves to low. Image editing
-			// resolves auto to medium upstream; one-api's shared metadata cannot
-			// express endpoint-specific defaults, so explicit medium remains below.
+			// Image generation resolves auto to low. Image editing resolves auto
+			// to medium; the controller converts that billing-only effective quality.
 			"auto": {
 				"1024x1024": 1.00,
 				"2048x2048": 1.50,
@@ -162,7 +161,8 @@ func refreshImagineImageMetadata() {
 			"1408x1408": 1.2,
 			"2048x2048": 1.4,
 		}
-		cfg.Description = "Legacy Imagine quality slug: $0.05/$0.06/$0.07 per image at 1K/1.5K/2K. It is scheduled to redirect to grok-imagine-image-2.0 at low quality on November 2, 2026."
+		cfg.TimeWindows = append([]adaptor.TimeWindow{legacyImagineQualityRedirectWindow()}, cfg.TimeWindows...)
+		cfg.Description = "Legacy Imagine quality slug: $0.05/$0.06/$0.07 per image at 1K/1.5K/2K through November 1, 2026; from November 2 it redirects to Image 2.0 low quality at $0.04/$0.05/$0.06."
 		ModelRatios[name] = cfg
 	}
 
@@ -177,6 +177,29 @@ func refreshImagineImageMetadata() {
 			"2048x2048": 1.0,
 		}
 		ModelRatios[name] = cfg
+	}
+}
+
+// legacyImagineQualityRedirectWindow switches legacy quality aliases to the
+// Image 2.0 low-quality tariff at the documented November 2, 2026 migration.
+func legacyImagineQualityRedirectWindow() adaptor.TimeWindow {
+	return adaptor.TimeWindow{
+		Name:     "xai-imagine-quality-redirect",
+		TimeZone: "UTC",
+		DateFrom: "2026-11-02",
+		Ranges: []adaptor.ClockRange{
+			{Start: "00:00", End: "00:00"},
+		},
+		Overlay: adaptor.ModelConfig{
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				SizeMultipliers: map[string]float64{
+					"1024x1024": 1.00,
+					"1408x1408": 1.25,
+					"2048x2048": 1.50,
+				},
+			},
+		},
 	}
 }
 
@@ -205,8 +228,8 @@ func refreshImagineVideoMetadata() {
 	}
 }
 
-func supportsSamplingParameter(parameters []string, name string) bool {
-	return slices.Contains(parameters, name)
+func supportsStringValue(values []string, value string) bool {
+	return slices.Contains(values, value)
 }
 
 func isLegacyPenaltyRestrictedModel(model string) bool {
