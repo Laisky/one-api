@@ -20,8 +20,8 @@ func TestGetImageRequestRecordsEditOperation(t *testing.T) {
 	t.Parallel()
 
 	for _, tt := range []struct {
-		name      string
-		mode      int
+		name       string
+		mode       int
 		wantIsEdit bool
 	}{
 		{name: "generation", mode: relaymode.ImagesGenerations, wantIsEdit: false},
