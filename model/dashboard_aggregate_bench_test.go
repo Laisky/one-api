@@ -30,7 +30,7 @@ type dashboard395Seed struct {
 	Metadata           string
 }
 
-// seedDashboard395 fills the temporary table with exact-size deterministic
+// seedDashboard395 fills the isolated fixture table with exact-size deterministic
 // workloads. Most traffic belongs to user 7; the tail belongs to 100 other users.
 // The distinct arm assigns a unique token per row to expose materialization cost.
 func seedDashboard395(tb testing.TB, db *gorm.DB, count, days int, distinct bool) {
@@ -65,10 +65,10 @@ func seedDashboard395(tb testing.TB, db *gorm.DB, count, days int, distinct bool
 				CompletionTokens: 10 + i%20, CachedPromptTokens: cached, Content: payload, Metadata: "{}",
 			})
 		}
-		require.NoError(tb, db.Table("logs").Create(&batch).Error)
+		require.NoError(tb, db.Table(dashboard395Table(db)).Create(&batch).Error)
 	}
 	var seeded int64
-	require.NoError(tb, db.Table("logs").Count(&seeded).Error)
+	require.NoError(tb, db.Table(dashboard395Table(db)).Count(&seeded).Error)
 	require.EqualValues(tb, count, seeded, "a partial fixture must never produce a false speedup")
 }
 

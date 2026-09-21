@@ -2,9 +2,12 @@ package model
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -44,9 +47,11 @@ func dashboard395Targets(t *testing.T) []benchdb.Target {
 	return targets
 }
 
-// dashboard395Database opens a connection-local temporary logs table. The pool
-// is pinned to one connection, so tests cannot read or mutate persistent logs.
-// It returns the handle and restores LOG_DB and dialect flags during cleanup.
+// dashboard395Database creates an isolated fixture and restores global handles
+// during cleanup. SQLite and PostgreSQL use connection-local temporary tables.
+// MySQL cannot reuse a temporary table through this CTE, so its fixture uses a
+// random regular table and a handle-local SQL identifier rewrite. No persistent
+// logs table is read, truncated, migrated, or dropped by these tests.
 func dashboard395Database(tb testing.TB, target benchdb.Target, nocase bool) *gorm.DB {
 	tb.Helper()
 	db, restore := benchdb.Open(tb, target)
@@ -55,23 +60,58 @@ func dashboard395Database(tb testing.TB, target benchdb.Target, nocase bool) *go
 	sqlDB.SetMaxOpenConns(1)
 	sqlDB.SetMaxIdleConns(1)
 	sqlDB.SetConnMaxLifetime(0)
+	tableName, temporary := "logs", " TEMPORARY"
+	if target.Engine == benchdb.EngineMySQL {
+		var suffix [12]byte
+		_, err := rand.Read(suffix[:])
+		require.NoError(tb, err)
+		tableName = fmt.Sprintf("logs_dashboard395_%x", suffix)
+		temporary = ""
+	}
+	db = db.Set("dashboard395:table", tableName).Session(&gorm.Session{})
+	previous, created := LOG_DB, false
+	tb.Cleanup(func() {
+		defer restore()
+		LOG_DB = previous
+		if temporary == "" && created {
+			require.NoError(tb, db.Exec("DROP TABLE "+tableName).Error)
+		}
+	})
+	LOG_DB = db
+	if temporary == "" {
+		// Only our fresh GORM handle is affected. Word boundaries prevent a
+		// second rewrite or an accidental match on a longer table name.
+		source := regexp.MustCompile(`\bFROM logs\b`)
+		require.NoError(tb, db.Callback().Row().Before("gorm:row").Register("dashboard395:source", func(tx *gorm.DB) {
+			query := source.ReplaceAllString(tx.Statement.SQL.String(), "FROM "+tableName)
+			tx.Statement.SQL.Reset()
+			tx.Statement.SQL.WriteString(query)
+		}))
+	}
 	collation := ""
 	if nocase {
 		require.Equal(tb, "sqlite", db.Dialector.Name())
 		collation = " COLLATE NOCASE"
 	}
-	schema := `CREATE TEMPORARY TABLE logs (
+	schema := `CREATE%s TABLE %s (
 		user_id BIGINT, user_uuid VARCHAR(36)%s, created_at BIGINT, type INTEGER,
 		model_name VARCHAR(255)%s, username VARCHAR(255)%s, token_name VARCHAR(255)%s,
 		quota BIGINT, prompt_tokens BIGINT, completion_tokens BIGINT, cached_prompt_tokens BIGINT,
 		content TEXT, metadata TEXT)`
-	require.NoError(tb, db.Exec(fmt.Sprintf(schema, collation, collation, collation, collation)).Error)
-	require.NoError(tb, db.Exec("CREATE INDEX idx_created_at_type ON logs (created_at, type)").Error)
-	require.NoError(tb, db.Exec("CREATE INDEX idx_logs_user_id ON logs (user_id)").Error)
-	previous := LOG_DB
-	LOG_DB = db
-	tb.Cleanup(func() { LOG_DB = previous; restore() })
+	require.NoError(tb, db.Exec(fmt.Sprintf(schema, temporary, tableName, collation, collation, collation, collation)).Error)
+	created = true
+	require.NoError(tb, db.Exec("CREATE INDEX idx_created_at_type ON "+tableName+" (created_at, type)").Error)
+	require.NoError(tb, db.Exec("CREATE INDEX idx_logs_user_id ON "+tableName+" (user_id)").Error)
 	return db
+}
+
+// dashboard395Table returns the isolated fixture name for GORM seed writes.
+// The fallback is the connection-local temporary logs table used by SQLite/PG.
+func dashboard395Table(db *gorm.DB) string {
+	if value, ok := db.Get("dashboard395:table"); ok {
+		return value.(string)
+	}
+	return "logs"
 }
 
 // dashboard395Rows returns adversarial records for independent old/new queries:
@@ -140,14 +180,29 @@ func dashboard395Rows() []map[string]any {
 
 // requireDashboard395Equal compares every metric and identity. SQL does not
 // promise an ordering between equal sort keys, so ties are compared as multisets.
+// Sorting avoids a quadratic ElementsMatch comparison on the 100k-token fixture.
 func requireDashboard395Equal(tb testing.TB, want, got *DashboardAggregates) {
 	tb.Helper()
-	require.ElementsMatch(tb, want.Logs, got.Logs)
-	require.ElementsMatch(tb, want.UserLogs, got.UserLogs)
-	require.ElementsMatch(tb, want.TokenLogs, got.TokenLogs)
-	require.ElementsMatch(tb, want.ToolLogs, got.ToolLogs)
-	require.ElementsMatch(tb, want.ToolUserLogs, got.ToolUserLogs)
-	require.ElementsMatch(tb, want.ToolTokenLogs, got.ToolTokenLogs)
+	require.Equal(tb, dashboard395CanonicalRows(tb, want.Logs), dashboard395CanonicalRows(tb, got.Logs))
+	require.Equal(tb, dashboard395CanonicalRows(tb, want.UserLogs), dashboard395CanonicalRows(tb, got.UserLogs))
+	require.Equal(tb, dashboard395CanonicalRows(tb, want.TokenLogs), dashboard395CanonicalRows(tb, got.TokenLogs))
+	require.Equal(tb, dashboard395CanonicalRows(tb, want.ToolLogs), dashboard395CanonicalRows(tb, got.ToolLogs))
+	require.Equal(tb, dashboard395CanonicalRows(tb, want.ToolUserLogs), dashboard395CanonicalRows(tb, got.ToolUserLogs))
+	require.Equal(tb, dashboard395CanonicalRows(tb, want.ToolTokenLogs), dashboard395CanonicalRows(tb, got.ToolTokenLogs))
+}
+
+// dashboard395CanonicalRows retains every DTO field and duplicate group while
+// producing an O(n log n) multiset comparison suitable for the large benchmarks.
+func dashboard395CanonicalRows[T any](tb testing.TB, rows []*T) []string {
+	tb.Helper()
+	result := make([]string, len(rows))
+	for i, row := range rows {
+		encoded, err := json.Marshal(row)
+		require.NoError(tb, err)
+		result[i] = string(encoded)
+	}
+	sort.Strings(result)
+	return result
 }
 
 // TestDashboardPreaggregationEquivalent verifies all six views against the
@@ -164,7 +219,7 @@ func TestDashboardPreaggregationEquivalent(t *testing.T) {
 				require.NoError(t, db.Exec("SET time_zone = '+09:00'").Error)
 			}
 			rows := dashboard395Rows()
-			require.NoError(t, db.Table("logs").Create(&rows).Error)
+			require.NoError(t, db.Table(dashboard395Table(db)).Create(&rows).Error)
 			// The LOG_DB dialect must win even in a split-engine deployment.
 			pg, my, lite := common.UsingPostgreSQL.Load(), common.UsingMySQL.Load(), common.UsingSQLite.Load()
 			common.UsingPostgreSQL.Store(true)
@@ -214,7 +269,7 @@ func TestDashboardPreaggregationEquivalent(t *testing.T) {
 func TestDashboardPreaggregationOneScan(t *testing.T) {
 	db := dashboard395Database(t, benchdb.Target{Engine: benchdb.EngineSQLite}, false)
 	rows := dashboard395Rows()
-	require.NoError(t, db.Table("logs").Create(&rows).Error)
+	require.NoError(t, db.Table(dashboard395Table(db)).Create(&rows).Error)
 	calls := 0
 	require.NoError(t, db.Callback().Row().Before("gorm:row").Register("dashboard395:count", func(tx *gorm.DB) {
 		if strings.Contains(strings.ToLower(tx.Statement.SQL.String()), "from logs") {
@@ -277,7 +332,7 @@ func TestDashboardPreaggregationCollation(t *testing.T) {
 				"quota": 11, "prompt_tokens": 2, "completion_tokens": 1, "cached_prompt_tokens": 1})
 		}
 	}
-	require.NoError(t, db.Table("logs").Create(&rows).Error)
+	require.NoError(t, db.Table(dashboard395Table(db)).Create(&rows).Error)
 	want, err := searchDashboardAggregatesLegacy(context.Background(), 7, 0, 1)
 	require.NoError(t, err)
 	got, err := SearchDashboardAggregatesWithContext(context.Background(), 7, 0, 1)
