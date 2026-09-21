@@ -48,7 +48,10 @@ func TestSystematicNativeXAIReasoningWire(t *testing.T) {
 // leak onto custom providers or unknown model IDs. Parameters: t runs cases.
 // Returns: none; explicit opaque provider vocabulary remains untouched.
 func TestSystematicNativeReasoningProviderIsolation(t *testing.T) {
-	for _, tc := range []struct { model string; channel int }{
+	for _, tc := range []struct {
+		model   string
+		channel int
+	}{
 		{"grok-4.7", channeltype.OpenAICompatible},
 		{"grok-future", channeltype.XAI},
 	} {

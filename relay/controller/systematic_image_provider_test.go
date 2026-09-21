@@ -19,8 +19,8 @@ import (
 func TestSystematicImageResolutionBilling(t *testing.T) {
 	for _, tc := range []struct {
 		name, size, resolution, wantSize string
-		wantMultiplier float64
-		wantError bool
+		wantMultiplier                  float64
+		wantError                       bool
 	}{
 		{"native_2k", "", "2k", "2048x2048", 2, false},
 		{"native_normalized", "", " 2K ", "2048x2048", 2, false},
@@ -60,7 +60,7 @@ func TestSystematicImageResolutionBilling(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.wantMultiplier, multiplier)
 			override, ok := getChannelImageTierOverride(map[string]float64{
-				"$image-tier:"+req.Model+"|size="+tc.wantSize+"|quality=medium": 3.5,
+				"$image-tier:" + req.Model + "|size=" + tc.wantSize + "|quality=medium": 3.5,
 			}, req.Model, req.Size, req.Quality)
 			require.True(t, ok)
 			require.Equal(t, 3.5, override)
