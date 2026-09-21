@@ -115,11 +115,15 @@ func effectiveImagePricingQuality(req *relaymodel.ImageRequest) string {
 // constraints. Returns: none.
 func applyImageDefaults(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePricingConfig) {
 	if cfg != nil {
+		// Use the same canonical values for billing and provider conversion.
+		// Without a configured image contract, preserve unknown vendor values.
+		req.Size = normalizeImageSizeKey(req.Size)
+		req.Quality = normalizeImageQualityKey(req.Quality)
 		if req.Size == "" && cfg.DefaultSize != "" {
-			req.Size = cfg.DefaultSize
+			req.Size = normalizeImageSizeKey(cfg.DefaultSize)
 		}
 		if req.Quality == "" && cfg.DefaultQuality != "" {
-			req.Quality = cfg.DefaultQuality
+			req.Quality = normalizeImageQualityKey(cfg.DefaultQuality)
 		}
 		if cfg.MinImages > 0 && req.N < cfg.MinImages {
 			req.N = cfg.MinImages
@@ -157,7 +161,7 @@ func applyImageDefaults(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePri
 // override global rules. Returns: true when the combination is allowed.
 func isValidImageSize(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePricingConfig) bool {
 	sizeKey := normalizeImageSizeKey(req.Size)
-	qualityKey := normalizeImageQualityKey(req.Quality)
+	qualityKey := effectiveImagePricingQuality(req)
 	if qualityKey == "" {
 		qualityKey = "default"
 	}

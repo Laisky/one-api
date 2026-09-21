@@ -28,7 +28,7 @@ type responseCaptureWriter struct {
 	wroteHeader bool
 }
 
-// newResponseCaptureWriter creates a new responseCaptureWriter
+// newResponseCaptureWriter creates a newResponseCaptureWriter
 func newResponseCaptureWriter(w gin.ResponseWriter) *responseCaptureWriter {
 	return &responseCaptureWriter{ResponseWriter: w}
 }
@@ -154,6 +154,9 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		return patched, stats, true, nil
 	}
 
+	if root == nil {
+		return nil, stats, false, errors.New("Response API request body must be a JSON object")
+	}
 	changed := false
 
 	if request.Model != "" {
@@ -228,30 +231,29 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		}
 	}
 
-	// Normalize reasoning.summary for channels that follow OpenAI's strict validation.
+	// Normalize the typed summary before synchronizing all known reasoning
+	// fields. The query path may have changed effort even when summary is valid.
 	if request.Reasoning != nil && (channelType == channeltype.OpenAI || channelType == channeltype.Azure) {
 		norm := openai.NormalizeResponseReasoningSummaryForModel(request.Model, request.Reasoning)
 		if norm.Changed {
 			stats.ReasoningSummaryFixed++
-			reasoningMap := map[string]any{}
-			if rawReasoning, ok := root["reasoning"]; ok && len(rawReasoning) > 0 {
-				_ = json.Unmarshal(rawReasoning, &reasoningMap)
-				if reasoningMap == nil {
-					reasoningMap = map[string]any{}
-				}
-			}
-			if request.Reasoning.Summary == nil {
-				delete(reasoningMap, "summary")
-			} else {
-				reasoningMap["summary"] = *request.Reasoning.Summary
-			}
-			reasoningBytes, err := json.Marshal(reasoningMap)
-			if err != nil {
-				return nil, stats, false, errors.Wrap(err, "marshal normalized reasoning config")
-			}
-			root["reasoning"] = reasoningBytes
-			changed = true
 		}
+	}
+	if reasoningChanged, err := syncResponseReasoning(root, request.Reasoning); err != nil {
+		return nil, stats, false, errors.Wrap(err, "synchronize Response API reasoning")
+	} else {
+		changed = changed || reasoningChanged
+	}
+
+	// Make query-injected allowlisted extensions visible to the common merge.
+	// Its raw-first precedence still preserves explicit client extension values.
+	if len(request.ExtraBody) > 0 {
+		extraBody, err := json.Marshal(request.ExtraBody)
+		if err != nil {
+			return nil, stats, false, errors.Wrap(err, "marshal response extra_body")
+		}
+		root["extra_body"] = extraBody
+		changed = true
 	}
 
 	// Backward-compat: normalize historical assistant/user message content item types.
@@ -333,7 +335,7 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		return nil, stats, false, errors.Wrap(err, "merge response passthrough fields")
 	}
 
-	return merged, stats, changed || mergeChanged, nil
+	return merged, stats, (changed || mergeChanged) && !bytes.Equal(rawBody, merged), nil
 }
 
 // mergeResponseToolsPreservingUnknown overlays sanitized typed tool fields on

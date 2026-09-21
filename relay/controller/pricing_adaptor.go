@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/Laisky/one-api/relay"
 	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 )
 
@@ -15,8 +16,10 @@ func resolvePricingAdaptor(meta *metalib.Meta) relayadaptor.Adaptor {
 	}
 
 	resolved := relay.GetAdaptor(meta.APIType)
-	if resolved == nil {
-		resolved = relay.GetAdaptor(meta.ChannelType)
+	if resolved == nil && meta.ChannelType > channeltype.Unknown && meta.ChannelType < channeltype.Dummy {
+		// Channel IDs and API IDs are different namespaces. A channel must
+		// pass through the registry mapping before selecting its adaptor.
+		resolved = relay.GetAdaptor(channeltype.ToAPIType(meta.ChannelType))
 	}
 
 	// The OpenAI adaptor serves every OpenAI-compatible channel, so it must be told

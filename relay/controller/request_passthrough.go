@@ -80,6 +80,9 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 		originalMap = map[string]json.RawMessage{}
 	}
 
+	// Capture typed defaults before removing the transport-only extra_body key.
+	combinedExtraBody, rejected := collectCombinedExtraBody(originalMap, updatedMap)
+	stats.ExtraBodyRejected += rejected
 	changed := false
 	if _, ok := updatedMap["extra_body"]; ok {
 		delete(updatedMap, "extra_body")
@@ -112,8 +115,6 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 		changed = true
 	}
 
-	combinedExtraBody, rejected := collectCombinedExtraBody(originalMap, updatedMap)
-	stats.ExtraBodyRejected += rejected
 	for key, value := range combinedExtraBody {
 		if !isAllowedExtraBodyKey(key) {
 			stats.ExtraBodyRejected++
