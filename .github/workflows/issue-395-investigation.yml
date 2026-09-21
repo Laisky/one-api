@@ -6,22 +6,72 @@ permissions:
   contents: read
 jobs:
   investigate:
+    if: github.event.head_commit.message == 'test: execute issue-395 benchmark suite'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: bench
+          POSTGRES_PASSWORD: bench
+          POSTGRES_DB: oneapi_bench
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U bench -d oneapi_bench'
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: bench
+          MYSQL_DATABASE: oneapi_bench
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd 'mysqladmin ping -pbench'
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      ONEAPI_BENCH_PG_DSN: postgres://bench:bench@127.0.0.1:5432/oneapi_bench?sslmode=disable
+      ONEAPI_BENCH_MYSQL_DSN: root:bench@tcp(127.0.0.1:3306)/oneapi_bench?charset=utf8mb4&parseTime=true&loc=UTC
+      GOMAXPROCS: '4'
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Inspect dashboard test entry points
-        run: |
-          git rev-parse HEAD
-          find . -name AGENTS.md -print
-          grep -R -n 'func resolveDashboardAggregates\|type dashboardAggregates\|func fetchDashboardAggregates' controller model || true
-          find controller model dto -maxdepth 1 -iname '*dashboard*' -o -iname '*statistic*'
-          head -30 go.mod
-          git archive --format=tar HEAD > /tmp/issue-395-source.tar
-      - uses: actions/upload-artifact@v4
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
         with:
-          name: issue-395-source
-          path: /tmp/issue-395-source.tar
-          retention-days: 1
+          go-version-file: go.mod
+      - name: Record environment
+        run: |
+          mkdir -p /tmp/evidence
+          go version | tee /tmp/evidence/environment.txt
+          git rev-parse HEAD >> /tmp/evidence/environment.txt
+          lscpu >> /tmp/evidence/environment.txt
+          git diff --check
+      - name: Reproduce redundant reads on original collector
+        run: |
+          cp controller/user_dashboard_cache.go /tmp/fixed-controller.go
+          trap 'cp /tmp/fixed-controller.go controller/user_dashboard_cache.go' EXIT
+          git show 9b15575609948525723f6977b649ad898438f2f7:controller/user_dashboard_cache.go > controller/user_dashboard_cache.go
+          set +e
+          go test ./controller -run '^TestDashboard395ColdQueryBudget$' -count=1 -v -timeout=10m > /tmp/evidence/red.txt 2>&1
+          status=$?
+          set -e
+          cat /tmp/evidence/red.txt
+          test "$status" -ne 0
+          grep -q 'actual  : 6' /tmp/evidence/red.txt
+      - name: Differential correctness and race tests
+        run: |
+          set -o pipefail
+          go test ./model ./controller -run '^TestDashboard395' -count=1 -v -timeout=10m 2>&1 | tee /tmp/evidence/green.txt
+          go test -race ./model ./controller -run 'Dashboard|SearchLogsByDay|SearchToolLogs' -count=1 -timeout=15m 2>&1 | tee /tmp/evidence/race.txt
+      - name: Measure both issue-scale workloads
+        run: |
+          set -o pipefail
+          go test ./model -run '^$' -bench '^BenchmarkDashboard395$' -benchtime=3x -count=1 -benchmem -timeout=20m 2>&1 | tee /tmp/evidence/bench.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: issue-395-evidence
+          path: /tmp/evidence
+          retention-days: 7
