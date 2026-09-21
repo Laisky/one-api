@@ -29,6 +29,9 @@ var grokXHighReasoningEfforts = []string{"low", "medium", "high", "xhigh"}
 
 func init() {
 	refreshCatalog20260921()
+	// ModelList is initialized from ModelRatios in constants.go before init
+	// functions run, so rebuild it after adding the newly published entries.
+	ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 }
 
 func refreshCatalog20260921() {
@@ -49,8 +52,8 @@ func refreshCatalog20260921() {
 		Description:                 "Grok 4.7 is SpaceXAI's public-API flagship for coding, agentic tasks, and knowledge work (500K context, text and image input, configurable reasoning through xhigh).",
 	}
 
-	// Grok 4.6, Grok 4.5, and Grok 4.3 all accept xhigh. Keep it in the
-	// accepted-value list so the aggregator does not reject an upstream value.
+	// Grok 4.6 and Grok 4.3 explicitly advertise xhigh. Grok 4.5
+	// accepts xhigh as an alias for high, so keep it in the accepted-value list.
 	setReasoningEfforts([]string{"grok-4.6", "grok-4.6-latest"}, grokXHighReasoningEfforts)
 	setReasoningEfforts([]string{"grok-4.5", "grok-4.5-latest"}, grokXHighReasoningEfforts)
 	setReasoningEfforts([]string{"grok-4.3"}, []string{"none", "low", "medium", "high", "xhigh"})
