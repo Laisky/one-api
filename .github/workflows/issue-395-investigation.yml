@@ -8,7 +8,7 @@ jobs:
   investigate:
     if: contains(github.event.head_commit.message, 'execute-issue-395')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     services:
       postgres:
         image: postgres:17
@@ -47,8 +47,10 @@ jobs:
           go version | tee /tmp/evidence/environment.txt
           git rev-parse HEAD >> /tmp/evidence/environment.txt
           lscpu >> /tmp/evidence/environment.txt
+          docker exec ${{ job.services.postgres.id }} postgres --version >> /tmp/evidence/environment.txt
+          docker exec ${{ job.services.mysql.id }} mysql --version >> /tmp/evidence/environment.txt
           git diff --check
-          gofmt -l model/dashboard_aggregates.go model/dashboard_395_test.go model/dashboard_395_bench_test.go controller/dashboard_395_test.go controller/user_dashboard_cache.go | tee /tmp/evidence/format.txt
+          gofmt -l model/dashboard_aggregates.go model/dashboard_395_test.go model/dashboard_395_bench_test.go model/dashboard_395_edge_test.go controller/dashboard_395_test.go controller/user_dashboard_cache.go | tee /tmp/evidence/format.txt
       - name: Reproduce redundant reads on original collector
         run: |
           cp controller/user_dashboard_cache.go /tmp/fixed-controller.go
@@ -60,7 +62,7 @@ jobs:
           set -e
           cat /tmp/evidence/red.txt
           test "$status" -ne 0
-          grep -q 'actual  : 6' /tmp/evidence/red.txt
+          grep -Eq 'actual.*int64\(6\)' /tmp/evidence/red.txt
       - name: Differential correctness and race tests
         run: |
           set -o pipefail
@@ -69,7 +71,11 @@ jobs:
       - name: Measure both issue-scale workloads
         run: |
           set -o pipefail
-          go test ./model -run '^$' -bench '^BenchmarkDashboard395$' -benchtime=3x -count=1 -benchmem -timeout=20m 2>&1 | tee /tmp/evidence/bench.txt
+          go test ./model -run '^$' -bench '^BenchmarkDashboard395$' -benchtime=3x -count=3 -benchmem -timeout=30m 2>&1 | tee /tmp/evidence/bench.txt
+      - name: Static analysis
+        run: |
+          set -o pipefail
+          go vet ./... 2>&1 | tee /tmp/evidence/vet.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
