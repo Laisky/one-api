@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -73,7 +74,9 @@ func TestTrace395CorrelationReadContract(t *testing.T) {
 	t.Run("real database failure is not a retention miss", func(t *testing.T) {
 		failure := errors.New("injected internal database detail must not reach the response")
 		require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register("issue395:trace_failure", func(tx *gorm.DB) {
-			if tx.Statement.Table == "traces" { tx.AddError(failure) }
+			if tx.Statement.Table == "traces" {
+				tx.AddError(failure)
+			}
 		}))
 		t.Cleanup(func() { require.NoError(t, model.DB.Callback().Query().Remove("issue395:trace_failure")) })
 		recorder := performTraceAccessRequest(router, "/api/trace/"+fixture.trace.TraceId, "root")
@@ -97,11 +100,15 @@ func TestTrace395AdminCorrelationReadAvoidsLogDependency(t *testing.T) {
 	queries := 0
 	require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register("issue395:query_budget", func(tx *gorm.DB) {
 		queries++
-		if tx.Statement.Table == "logs" { tx.AddError(errors.New("billing log read is unavailable")) }
+		if tx.Statement.Table == "logs" {
+			tx.AddError(errors.New("billing log read is unavailable"))
+		}
 	}))
 	require.NoError(t, model.DB.Callback().Row().Before("gorm:row").Register("issue395:raw_budget", func(tx *gorm.DB) {
 		queries++
-		if strings.Contains(tx.Statement.SQL.String(), "logs") { tx.AddError(errors.New("billing log lookup is unavailable")) }
+		if strings.Contains(tx.Statement.SQL.String(), "logs") {
+			tx.AddError(errors.New("billing log lookup is unavailable"))
+		}
 	}))
 	legacy := performTraceAccessRequest(router, "/api/trace/log/"+fixture.log.UUID, "root")
 	require.NotEqual(t, http.StatusOK, legacy.Code, "negative control must reach the unavailable log dependency")
@@ -122,7 +129,9 @@ func TestTrace395LogReadCancellation(t *testing.T) {
 	router := traceAccessTestRouter(fixture.user.Id, fixture.user.Id+100)
 	uncancelled := 0
 	observe := func(tx *gorm.DB) {
-		if tx.Statement.Context.Err() == nil { uncancelled++ }
+		if tx.Statement.Context.Err() == nil {
+			uncancelled++
+		}
 	}
 	require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register("issue395:query_context", observe))
 	require.NoError(t, model.DB.Callback().Row().Before("gorm:row").Register("issue395:raw_context", observe))
@@ -132,8 +141,32 @@ func TestTrace395LogReadCancellation(t *testing.T) {
 	request.Header.Set("X-Test-Viewer", "owner")
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
-	var response struct { Success bool `json:"success"` }
+	var response struct {
+		Success bool `json:"success"`
+	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
 	require.False(t, response.Success)
 	require.Zero(t, uncancelled, "cancelled trace inspection must not issue background log queries")
+}
+
+// TestTrace395LogLookupDoesNotDecodeUnrelatedMetadata reproduces a trace
+// loading failure even though the trace itself is intact. Parameters: t is the
+// test handle. Returns: none. Trace correlation must not decode provider billing
+// metadata that this endpoint neither authorizes with nor returns.
+func TestTrace395LogLookupDoesNotDecodeUnrelatedMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	fixture, cleanup := setupUUIDContractTestEnvironment(t)
+	t.Cleanup(cleanup)
+	require.NoError(t, model.LOG_DB.Exec("UPDATE logs SET metadata = ? WHERE id = ?", "legacy non-JSON metadata", fixture.log.Id).Error)
+	router := traceAccessTestRouter(fixture.user.Id, fixture.user.Id+100)
+	for _, viewer := range []string{"owner", "admin", "root"} {
+		t.Run(viewer, func(t *testing.T) {
+			recorder := performTraceAccessRequest(router, "/api/trace/log/"+fixture.log.UUID, viewer)
+			data := decodeUUIDContractData(t, recorder)
+			require.Equal(t, fixture.trace.TraceId, data["trace_id"])
+			require.NotContains(t, recorder.Body.String(), "legacy non-JSON metadata")
+		})
+	}
+	recorder := performTraceAccessRequest(router, "/api/trace/log/"+fixture.log.UUID, "other")
+	require.Equal(t, http.StatusNotFound, recorder.Code)
 }
