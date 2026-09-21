@@ -19,7 +19,6 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/replicate"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
@@ -60,14 +59,17 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 	}
 
-	adaptor := relay.GetAdaptor(meta.APIType)
+	// Bind channel-aware catalogs before resolving image defaults or prices.
+	adaptor := resolvePricingAdaptor(meta)
 	if adaptor == nil {
 		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
 	}
 
 	imagePricingCfg, _ := pricing.ResolveImagePricing(imageRequest.Model, channelModelConfigs, adaptor, meta.StartTime)
 	imagePricingCfg = completeGPTImage25Defaults(imageRequest.Model, imagePricingCfg)
-	applyImageDefaults(imageRequest, imagePricingCfg)
+	if err := prepareImageRequest(imageRequest, imagePricingCfg, meta); err != nil {
+		return openai.ErrorWrapper(err, "invalid_image_request", http.StatusBadRequest)
+	}
 
 	bizErr := validateImageRequest(imageRequest, meta, imagePricingCfg)
 	if bizErr != nil {
@@ -112,7 +114,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		channeltype.VertextAI,
 		channeltype.Baidu,
 		channeltype.XAI:
-		finalRequest, err := adaptor.ConvertImageRequest(c, imageRequest)
+		finalRequest, err := convertImageRequestForUpstream(c, imageRequest, adaptor.ConvertImageRequest)
 		if err != nil {
 			// Check if this is a validation error and preserve the correct HTTP status code for AWS Bedrock
 			if strings.Contains(err.Error(), "does not support image generation") {
@@ -128,7 +130,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 		requestBody = bytes.NewBuffer(jsonStr)
 	case channeltype.Replicate:
-		finalRequest, err := replicate.ConvertImageRequest(c, imageRequest)
+		finalRequest, err := convertImageRequestForUpstream(c, imageRequest, replicate.ConvertImageRequest)
 		if err != nil {
 			return openai.ErrorWrapper(err, "convert_image_request_failed", http.StatusInternalServerError)
 		}

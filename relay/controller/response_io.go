@@ -28,7 +28,7 @@ type responseCaptureWriter struct {
 	wroteHeader bool
 }
 
-// newResponseCaptureWriter creates a newResponseCaptureWriter
+// newResponseCaptureWriter creates a new responseCaptureWriter
 func newResponseCaptureWriter(w gin.ResponseWriter) *responseCaptureWriter {
 	return &responseCaptureWriter{ResponseWriter: w}
 }
@@ -136,6 +136,8 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 	if request == nil {
 		return rawBody, stats, false, nil
 	}
+
+	normalizeResponseProviderReasoning(request, channelType)
 
 	if len(rawBody) == 0 {
 		patched, err := json.Marshal(request)
