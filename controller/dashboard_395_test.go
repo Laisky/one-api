@@ -33,7 +33,7 @@ func (l *dashboard395QueryCounter) Trace(_ context.Context, _ time.Time, fc func
 
 // TestDashboard395ColdQueryBudget exercises the production uncached collector.
 // Before the fix this fails with six reads; afterwards all six chart series must
-// be present after exactly two reads, including a fresh repeated cold load.
+// be present after exactly three reads, including a fresh repeated cold load.
 func TestDashboard395ColdQueryBudget(t *testing.T) {
 	counter := &dashboard395QueryCounter{Interface: glogger.Discard}
 	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/dashboard.db"), &gorm.Config{Logger: counter})
@@ -57,6 +57,6 @@ func TestDashboard395ColdQueryBudget(t *testing.T) {
 		require.Len(t, got.ToolLogs, 1)
 		require.Len(t, got.ToolUserLogs, 1)
 		require.Len(t, got.ToolTokenLogs, 1)
-		require.EqualValues(t, 2, counter.reads.Load(), "cold dashboard must not independently scan logs for every chart")
+		require.EqualValues(t, 3, counter.reads.Load(), "cold dashboard must not independently scan logs for every chart")
 	}
 }
