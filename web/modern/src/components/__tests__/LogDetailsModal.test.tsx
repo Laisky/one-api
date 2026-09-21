@@ -253,7 +253,7 @@ describe('LogDetailsModal', () => {
     });
 
     await waitFor(() => {
-      expect(apiGetMock()).toHaveBeenCalledWith(`/api/trace/log/${LOG_UUID}`);
+      expect(apiGetMock()).toHaveBeenCalledWith('/api/trace/trace-abc', expect.objectContaining({ signal: expect.any(AbortSignal) }));
     });
 
     expect(await screen.findByText(/request information/i)).toBeInTheDocument();
@@ -332,6 +332,7 @@ describe('LogDetailsModal', () => {
           id: 12,
           trace_id: 'trace-any',
           url: '/api/channel/test/3',
+          body_size: 0,
           method: 'GET',
           status: 200,
           created_at: 1_700_200_000,
@@ -348,7 +349,7 @@ describe('LogDetailsModal', () => {
     });
 
     await waitFor(() => {
-      expect(apiGetMock()).toHaveBeenCalledWith(`/api/trace/log/${LOG_UUID}`);
+      expect(apiGetMock()).toHaveBeenCalledWith('/api/trace/trace-any', expect.objectContaining({ signal: expect.any(AbortSignal) }));
     });
   });
 

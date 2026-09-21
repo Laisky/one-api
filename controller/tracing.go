@@ -13,6 +13,7 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/identity"
+	"github.com/Laisky/one-api/common/idresolve"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -120,10 +121,14 @@ func GetTraceByTraceId(c *gin.Context) {
 
 	trace, err := lookupTrace(ctx, traceId)
 	if err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			lg.Error("failed to get trace by trace ID", zap.Error(err), zap.String("trace_id", traceId))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Ownership was checked before lookup; do not turn an ordinary
+			// retention miss into the generic load failure shown by clients.
+			c.JSON(http.StatusOK, localTraceUnavailableResponse(traceId))
+			return
 		}
-		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("trace not found"))
+		lg.Error("failed to get trace by trace ID", zap.Error(err), zap.String("trace_id", traceId))
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.New("failed to retrieve trace information"))
 		return
 	}
 
@@ -150,6 +155,7 @@ func GetTraceByTraceId(c *gin.Context) {
 			"created_at": trace.CreatedAt,
 			"updated_at": trace.UpdatedAt,
 			"timestamps": timestamps,
+			"durations":  calculateTraceDurations(timestamps),
 		},
 	}
 
@@ -165,21 +171,26 @@ func GetTraceByLogId(c *gin.Context) {
 		return
 	}
 
-	logId, err := resolveLogRef(logIdStr)
+	ctx := gmw.Ctx(c)
+	if ctx == nil && c.Request != nil {
+		ctx = c.Request.Context()
+	}
+	// Read only correlation, ownership and the legacy response fields. Provider
+	// billing metadata is unrelated to trace inspection and must not be decoded.
+	log, err := model.GetLogForTraceWithContext(ctx, logIdStr)
 	if err != nil {
-		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("invalid log_id parameter"))
+		switch {
+		case errors.Is(err, idresolve.ErrInvalidRef):
+			helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("invalid log_id parameter"))
+		case errors.Is(err, idresolve.ErrNotFound), errors.Is(err, gorm.ErrRecordNotFound):
+			helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("log not found"))
+		default:
+			lg.Error("failed to read log trace correlation", zap.Error(err))
+			helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.New("failed to retrieve trace information"))
+		}
 		return
 	}
 
-	// Get the log entry to find the trace_id
-	log, err := model.GetLogById(logId)
-	if err != nil {
-		lg.Error("failed to get log by ID",
-			zap.Error(err),
-			zap.Int("log_id", logId))
-		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("log not found"))
-		return
-	}
 	if !logReadAllowed(c, log) {
 		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("log not found"))
 		return
@@ -190,11 +201,7 @@ func GetTraceByLogId(c *gin.Context) {
 		return
 	}
 
-	// Get the trace information
-	ctx := gmw.Ctx(c)
-	if ctx == nil && c.Request != nil {
-		ctx = c.Request.Context()
-	}
+	// Get the trace information using the same cancellation scope.
 
 	trace, err := lookupTrace(ctx, log.TraceId)
 	if err != nil {
