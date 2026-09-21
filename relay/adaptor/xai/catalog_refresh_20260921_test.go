@@ -260,18 +260,18 @@ func TestImagineImageQualityParameterCompatibility(t *testing.T) {
 		{name: "legacy model strips quality", model: "grok-imagine-image", quality: "medium"},
 	}
 
-	for _, tt := range tests {
-		t := tt
-		t.Run(tt.name, func(t *testing.T) {
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			request := &model.ImageRequest{Model: tt.model, Prompt: "test", Quality: tt.quality}
+			request := &model.ImageRequest{Model: tc.model, Prompt: "test", Quality: tc.quality}
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			converted, err := (&Adaptor{}).ConvertImageRequest(ctx, request)
 			require.NoError(t, err)
 
 			got, ok := converted.(*model.ImageRequest)
 			require.True(t, ok)
-			assert.Equal(t, tt.wantQuality, got.Quality)
+			assert.Equal(t, tc.wantQuality, got.Quality)
 		})
 	}
 }
