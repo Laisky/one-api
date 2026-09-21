@@ -156,9 +156,15 @@ func collectCombinedExtraBody(originalMap, updatedMap map[string]json.RawMessage
 	combined := map[string]json.RawMessage{}
 	rejected := 0
 
-	for _, source := range []map[string]json.RawMessage{originalMap, updatedMap} {
+	for index, source := range []map[string]json.RawMessage{originalMap, updatedMap} {
 		rawExtra, ok := source["extra_body"]
 		if !ok || len(rawExtra) == 0 {
+			continue
+		}
+
+		// The raw and typed payload may retain the same malformed transport
+		// field. Diagnose it once, while still merging genuinely new defaults.
+		if index > 0 && bytes.Equal(bytes.TrimSpace(rawExtra), bytes.TrimSpace(originalMap["extra_body"])) {
 			continue
 		}
 
