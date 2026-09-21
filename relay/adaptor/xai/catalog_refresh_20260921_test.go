@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -12,6 +13,7 @@ import (
 
 	ratio "github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
@@ -23,7 +25,7 @@ func TestGrok47CatalogMetadata(t *testing.T) {
 	assert.Equal(t, 2.0*ratio.MilliTokensUsd, cfg.Ratio)
 	assert.Equal(t, 3.0, cfg.CompletionRatio)
 	assert.Equal(t, 0.5*ratio.MilliTokensUsd, cfg.CachedInputRatio)
-	assert.Equal(t, 500000, cfg.ContextLength)
+	assert.Equal(t, int32(500000), cfg.ContextLength)
 	assert.Equal(t, []string{"text", "image"}, cfg.InputModalities)
 	assert.Equal(t, []string{"text"}, cfg.OutputModalities)
 	assert.Equal(t, []string{"low", "medium", "high", "xhigh"}, cfg.SupportedReasoningEfforts)
@@ -101,7 +103,8 @@ func TestImaginePricingAndModalitiesRefresh(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, quality.Image)
 	assert.Equal(t, 1.2, quality.Image.SizeMultipliers["1408x1408"])
-	assert.Contains(t, quality.Description, "November 2, 2026")
+	assert.Contains(t, quality.Description, "November 2")
+	require.Len(t, quality.TimeWindows, 1)
 
 	image1, ok := ModelRatios["grok-imagine-image"]
 	require.True(t, ok)
@@ -118,6 +121,38 @@ func TestImaginePricingAndModalitiesRefresh(t *testing.T) {
 	assert.Equal(t, []string{"text", "image", "video"}, classicVideo.InputModalities)
 }
 
+func TestLegacyImagineQualityPricingTransitionsAtRedirectDate(t *testing.T) {
+	t.Parallel()
+
+	before := time.Date(2026, time.November, 1, 23, 59, 0, 0, time.UTC)
+	after := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
+	for _, name := range []string{
+		"grok-imagine-image-quality",
+		"grok-imagine-image-quality-20260403",
+		"grok-imagine-image-quality-latest",
+		"grok-imagine-image-pro",
+	} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			oldPricing, ok := pricing.ResolveImagePricing(name, nil, &Adaptor{}, before)
+			require.True(t, ok)
+			require.NotNil(t, oldPricing)
+			assert.InDelta(t, 0.05, oldPricing.PricePerImageUsd, 1e-12)
+			assert.InDelta(t, 1.2, oldPricing.SizeMultipliers["1408x1408"], 1e-12)
+			assert.InDelta(t, 1.4, oldPricing.SizeMultipliers["2048x2048"], 1e-12)
+
+			redirectPricing, ok := pricing.ResolveImagePricing(name, nil, &Adaptor{}, after)
+			require.True(t, ok)
+			require.NotNil(t, redirectPricing)
+			assert.InDelta(t, 0.04, redirectPricing.PricePerImageUsd, 1e-12)
+			assert.InDelta(t, 1.25, redirectPricing.SizeMultipliers["1408x1408"], 1e-12)
+			assert.InDelta(t, 1.5, redirectPricing.SizeMultipliers["2048x2048"], 1e-12)
+		})
+	}
+}
+
 func TestGrok47RequestConversionUsesCatalogMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -129,6 +164,7 @@ func TestGrok47RequestConversionUsesCatalogMetadata(t *testing.T) {
 		ReasoningEffort:  &effort,
 		PresencePenalty:  &presence,
 		FrequencyPenalty: &frequency,
+		Stop:             []string{"END"},
 		Messages:         []model.Message{{Role: "user", Content: "hello"}},
 	}
 
@@ -142,6 +178,26 @@ func TestGrok47RequestConversionUsesCatalogMetadata(t *testing.T) {
 	assert.Equal(t, "xhigh", *got.ReasoningEffort)
 	assert.Nil(t, got.PresencePenalty)
 	assert.Nil(t, got.FrequencyPenalty)
+	assert.Nil(t, got.Stop)
+}
+
+func TestGrok47StripsUnsupportedReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	effort := "none"
+	request := &model.GeneralOpenAIRequest{
+		Model:           "grok-4.7",
+		ReasoningEffort: &effort,
+		Messages:        []model.Message{{Role: "user", Content: "hello"}},
+	}
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	converted, err := (&Adaptor{}).ConvertRequest(ctx, relaymode.ChatCompletions, request)
+	require.NoError(t, err)
+
+	got, ok := converted.(*model.GeneralOpenAIRequest)
+	require.True(t, ok)
+	assert.Nil(t, got.ReasoningEffort)
 }
 
 func TestLegacyPenaltyFilteringRemainsCompatible(t *testing.T) {
@@ -205,7 +261,7 @@ func TestImagineImageQualityParameterCompatibility(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
+		t := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			request := &model.ImageRequest{Model: tt.model, Prompt: "test", Quality: tt.quality}
