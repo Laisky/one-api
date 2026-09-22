@@ -1,0 +1,22 @@
+name: Model protocol audit
+on:
+  push:
+    branches: [work/model-protocol-audit-20260922]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export source without local configuration
+        run: |
+          git archive --format=tar HEAD ':!/.github/instructions' | gzip > "$RUNNER_TEMP/source.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-protocol-source
+          path: ${{ runner.temp }}/source.tar.gz
+          retention-days: 1
