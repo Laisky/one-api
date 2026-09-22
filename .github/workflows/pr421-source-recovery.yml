@@ -1,0 +1,26 @@
+name: PR 421 source recovery
+on:
+  push:
+    branches: [work/pr421-review-completion-20260922]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 20
+      - name: Export pinned review source and baseline
+        run: |
+          mkdir -p "$RUNNER_TEMP/pr421-source"
+          git archive 87a5344103933b284e37c2c809583a604bb17fa2 | gzip > "$RUNNER_TEMP/pr421-source/baseline.tar.gz"
+          git archive 44490b5dd4b66a4c79c163878b5c170111f1d083 | gzip > "$RUNNER_TEMP/pr421-source/candidate.tar.gz"
+          git diff 87a5344103933b284e37c2c809583a604bb17fa2 44490b5dd4b66a4c79c163878b5c170111f1d083 > "$RUNNER_TEMP/pr421-source/review.patch"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr421-recovered-review-source
+          path: ${{ runner.temp }}/pr421-source
+          retention-days: 1
