@@ -19,8 +19,11 @@ jobs:
           go-version-file: go.mod
       - name: Physical audio test dependency
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-      - name: Functional and billing regressions
-        run: go test -race -count=1 -timeout=15m -json ./relay/adaptor/cohere ./relay/adaptor/zhipu ./relay/adaptor/zai ./relay/adaptor/openai ./relay/controller ./model ./relay/pricing ./relay/channeltype -run 'Test(ProtocolAudit|CohereEmbedding|CohereInvalid|AudioTariff|AudioRejected|AudioExact)' > "$RUNNER_TEMP/focused.jsonl" 2>&1
+      - name: Affected package race suites
+        run: go test -race -count=1 -timeout=15m -json ./relay/adaptor/cohere ./relay/adaptor/zhipu ./relay/adaptor/zai ./relay/adaptor/openai ./relay/adaptor/siliconflow ./relay/adaptor/groq ./relay/adaptor/mistral ./relay/controller ./relay/pricing ./relay/channeltype ./middleware ./controller ./router > "$RUNNER_TEMP/affected.jsonl" 2>&1
+      - name: Persisted pricing and usage regressions
+        if: always()
+        run: go test -race -count=1 -timeout=5m -json ./model -run 'Test.*(ProtocolAudit|Audio|Video|Pricing|ModelPrice|ModelConfig)' > "$RUNNER_TEMP/model.jsonl" 2>&1
       - name: Repository vet
         if: always()
         run: go vet ./... > "$RUNNER_TEMP/vet.log" 2>&1
@@ -30,9 +33,41 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: protocol-continuation-validation
+          name: protocol-go-qualification
           path: |
-            ${{ runner.temp }}/focused.jsonl
+            ${{ runner.temp }}/*.jsonl
             ${{ runner.temp }}/vet.log
             ${{ runner.temp }}/catalog.json
+          retention-days: 7
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Apply candidate
+        run: python3 .github/apply-protocol-candidate.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+          cache-dependency-path: web/modern/yarn.lock
+      - name: Install
+        working-directory: web/modern
+        run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+      - name: I18n and behavior
+        working-directory: web/modern
+        run: |
+          yarn check:i18n > "$RUNNER_TEMP/i18n.log" 2>&1
+          yarn test --run > "$RUNNER_TEMP/frontend.log" 2>&1
+      - name: TypeScript and production build
+        if: always()
+        working-directory: web/modern
+        run: yarn build > "$RUNNER_TEMP/build.log" 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protocol-frontend-qualification
+          path: ${{ runner.temp }}/*.log
           retention-days: 7
