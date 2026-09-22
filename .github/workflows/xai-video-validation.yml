@@ -27,12 +27,20 @@ jobs:
       - name: Go race and integration suites
         run: |
           set -o pipefail
-          go test -race -count=1 -timeout=15m -json ./relay/adaptor/xai ./relay/adaptor/openai ./relay/pricing ./relay/controller ./middleware ./model ./controller ./router > "$RUNNER_TEMP/xai-go.jsonl" 2>&1
+          go test -race -count=1 -timeout=15m -json ./relay/adaptor/xai ./relay/adaptor/openai ./relay/pricing ./relay/controller ./middleware ./controller ./router > "$RUNNER_TEMP/xai-go.jsonl" 2>&1
+      - name: Model pricing round-trip regressions
+        if: always()
+        run: go test -race -count=1 -timeout=5m -json ./model -run 'Test.*(Video|Pricing|ModelPrice|ModelConfig)' > "$RUNNER_TEMP/xai-model.jsonl" 2>&1
+      - name: Repository-wide Go vet
+        if: always()
+        run: go vet ./... > "$RUNNER_TEMP/xai-vet.log" 2>&1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: xai-go-validation
-          path: ${{ runner.temp }}/xai-go.jsonl
+          path: |
+            ${{ runner.temp }}/xai-*.jsonl
+            ${{ runner.temp }}/xai-vet.log
           retention-days: 7
   frontend:
     runs-on: ubuntu-latest
