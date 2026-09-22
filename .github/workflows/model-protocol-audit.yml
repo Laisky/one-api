@@ -5,30 +5,34 @@ on:
 permissions:
   contents: read
 jobs:
-  snapshot:
+  go:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Export base and recover reviewed changes
-        run: |
-          git archive HEAD | gzip > "$RUNNER_TEMP/base.tar.gz"
-          python3 - <<'PY'
-          import hashlib,lzma,pathlib,subprocess,tarfile,os
-          for prefix,digest in [('core','f7428fc50f92e8c902f65f3a8494c9b82150e4046fb8b712c519923bc7196233'),('media','909a43ff48a25319d1f8d1a949fe93d3995499405b55e04a21499a7df8176c29')]:
-              patch=lzma.decompress(b''.join(p.read_bytes() for p in sorted(pathlib.Path('.github').glob('protocol-'+prefix+'.[0-3]'))))
-              assert hashlib.sha256(patch).hexdigest()==digest
-              subprocess.run(['git','apply','--check','-'],input=patch,check=True)
-              subprocess.run(['git','apply','-'],input=patch,check=True)
-          with tarfile.open(os.environ['RUNNER_TEMP']+'/working.tar.gz','w:gz') as archive:
-              for path in pathlib.Path('.').iterdir():
-                  if path.name != '.git':
-                      archive.add(path,arcname=str(path))
-          PY
-      - uses: actions/upload-artifact@v4
+      - name: Apply candidate
+        run: python3 .github/apply-protocol-candidate.py
+      - uses: actions/setup-go@v5
         with:
-          name: protocol-audit-recovered-source
-          path: ${{ runner.temp }}/*.tar.gz
-          retention-days: 1
+          go-version-file: go.mod
+      - name: Physical audio test dependency
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Functional and billing regressions
+        run: go test -race -count=1 -timeout=15m -json ./relay/adaptor/cohere ./relay/adaptor/zhipu ./relay/adaptor/zai ./relay/adaptor/openai ./relay/controller ./model ./relay/pricing ./relay/channeltype -run 'Test(ProtocolAudit|CohereEmbedding|CohereInvalid|AudioTariff|AudioRejected|AudioExact)' > "$RUNNER_TEMP/focused.jsonl" 2>&1
+      - name: Repository vet
+        if: always()
+        run: go vet ./... > "$RUNNER_TEMP/vet.log" 2>&1
+      - name: Runtime catalogue inventory
+        if: always()
+        run: go run .github/protocol-inventory.go "$RUNNER_TEMP/catalog.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protocol-continuation-validation
+          path: |
+            ${{ runner.temp }}/focused.jsonl
+            ${{ runner.temp }}/vet.log
+            ${{ runner.temp }}/catalog.json
+          retention-days: 7
