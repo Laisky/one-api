@@ -96,6 +96,10 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	videoRequest.Model = meta.ActualModelName
 	metalib.Set2Context(c, meta)
 
+	videoPrepared, prepareErr := prepareVideoForBilling(c, meta, videoRequest)
+	if prepareErr != nil {
+		return openai.ErrorWrapper(prepareErr, "invalid_video_request", http.StatusBadRequest)
+	}
 	durationSeconds := videoRequest.RequestedDurationSeconds()
 
 	var channelModelConfigs map[string]model.ModelConfigLocal
@@ -242,7 +246,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	bodyBytes := rawBody
 	contentType := strings.ToLower(c.GetHeader("Content-Type"))
-	if meta.OriginModelName != meta.ActualModelName && strings.HasPrefix(contentType, "application/json") {
+	if !videoPrepared && meta.OriginModelName != meta.ActualModelName && strings.HasPrefix(contentType, "application/json") {
 		var payload map[string]any
 		if err := json.Unmarshal(rawBody, &payload); err != nil {
 			return openai.ErrorWrapper(errors.Wrap(err, "unmarshal video request for model mapping"), "invalid_video_request", http.StatusBadRequest)
@@ -254,7 +258,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 		c.Set(ctxkey.KeyRequestBody, bodyBytes)
 		rawBody = bodyBytes
-	} else if meta.OriginModelName != meta.ActualModelName && !strings.HasPrefix(contentType, "application/json") {
+	} else if !videoPrepared && meta.OriginModelName != meta.ActualModelName && !strings.HasPrefix(contentType, "application/json") {
 		lg.Warn("model mapping for non-JSON video request not applied", zap.String("content_type", contentType))
 	}
 
