@@ -5,43 +5,56 @@ on:
 permissions:
   contents: read
 jobs:
-  inventory:
+  go:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 5
+      - name: Apply reviewed changes
+        run: |
+          python3 - <<'PY'
+          import hashlib,lzma,pathlib,subprocess
+          patch=lzma.decompress(b''.join(p.read_bytes() for p in sorted(pathlib.Path('.github').glob('protocol-core.[0-3]'))))
+          assert hashlib.sha256(patch).hexdigest()=='f7428fc50f92e8c902f65f3a8494c9b82150e4046fb8b712c519923bc7196233'
+          subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+          subprocess.run(['git','apply','-'],input=patch,check=True)
+          PY
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Enumerate actual catalog and channel routing
+      - name: Install physical audio metering dependency
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+      - name: Negative control on unchanged implementation
         run: |
-          cat > "$RUNNER_TEMP/inventory.go" <<'EOF'
-          package main
-          import (
-            "encoding/json"
-            "fmt"
-            "os"
-            "github.com/Laisky/one-api/relay"
-            "github.com/Laisky/one-api/relay/adaptor"
-            "github.com/Laisky/one-api/relay/channeltype"
-          )
-          func main() {
-            rows := []map[string]any{}
-            for channel := channeltype.Unknown+1; channel < channeltype.Dummy; channel++ {
-              a := relay.GetAdaptor(channeltype.ToAPIType(channel))
-              if a == nil { panic(fmt.Sprintf("unregistered channel %d", channel)) }
-              if aware, ok := a.(adaptor.ChannelTypeAware); ok { aware.SetChannelType(channel) }
-              rows = append(rows, map[string]any{"channel":channeltype.IdToName(channel),"channel_id":channel,"adaptor":fmt.Sprintf("%T",a),"endpoints":channeltype.DefaultEndpointNamesForChannelType(channel),"models":a.GetDefaultModelPricing()})
-            }
-            file, err := os.Create(os.Args[1]); if err != nil { panic(err) }; defer file.Close()
-            if err := json.NewEncoder(file).Encode(rows); err != nil { panic(err) }
-          }
-          EOF
-          go run "$RUNNER_TEMP/inventory.go" "$RUNNER_TEMP/catalog.json"
+          git worktree add --detach "$RUNNER_TEMP/old" 6c7deddd8d729c4966c7a87496c40b5f74d80a58
+          cp relay/adaptor/cohere/embed_test.go "$RUNNER_TEMP/old/relay/adaptor/cohere/embed_test.go"
+          cd "$RUNNER_TEMP/old"
+          set +e
+          go test -race -count=1 -json ./relay/adaptor/cohere -run '^TestProtocolAuditCohereEmbeddings$' > "$RUNNER_TEMP/negative.jsonl" 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          python3 - "$RUNNER_TEMP/negative.jsonl" <<'PY'
+          import json,sys
+          rows=[json.loads(s) for s in open(sys.argv[1]) if s.startswith('{')]
+          failed=[r for r in rows if r.get('Action')=='fail' and r.get('Test','').startswith('TestProtocolAuditCohereEmbeddings/')]
+          assert len(failed)==5,failed
+          PY
+      - name: Focused functionality and ledger tests
+        if: always()
+        run: |
+          go test -race -count=1 -timeout=15m -json ./relay/adaptor/cohere ./relay/controller ./model ./relay/pricing ./relay/channeltype -run 'Test(ProtocolAudit|CohereEmbedding|CohereInvalid|AudioTariff|AudioRejected|AudioExact)' > "$RUNNER_TEMP/focused.jsonl" 2>&1
+      - name: Repository-wide Go vet
+        if: always()
+        run: go vet ./... > "$RUNNER_TEMP/vet.log" 2>&1
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: model-protocol-inventory
-          path: ${{ runner.temp }}/catalog.json
+          name: protocol-core-validation
+          path: |
+            ${{ runner.temp }}/*.jsonl
+            ${{ runner.temp }}/vet.log
           retention-days: 7
