@@ -130,7 +130,10 @@ func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRe
 	return bytes.NewReader(patched), nil
 }
 
-// normalizeResponseAPIRawBody normalizes the raw request body for Response API requests
+// normalizeResponseAPIRawBody normalizes native Responses payloads and typed fallbacks.
+// Parameters: rawBody is the original payload, request holds sanitized fields,
+// and channelType selects provider semantics. Returns: normalized JSON, content
+// statistics, whether the payload changed, and a wrapped error when preparation fails.
 func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequest, channelType int) ([]byte, openai.ResponseAPIInputContentNormalizationStats, bool, error) {
 	var stats openai.ResponseAPIInputContentNormalizationStats
 	if request == nil {
@@ -139,21 +142,24 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 
 	normalizeResponseProviderReasoning(request, channelType)
 
-	if len(rawBody) == 0 {
-		patched, err := json.Marshal(request)
-		if err != nil {
-			return rawBody, stats, false, errors.Wrap(err, "marshal response API request")
-		}
-		return patched, stats, true, nil
-	}
-
+	// Rebuild unavailable raw input from the typed request, then run it through
+	// the same normalization and controlled extension merge as ordinary input.
+	// Returning json.Marshal(request) here would leak extra_body to the wire
+	// and skip query-injected thinking settings and content normalization.
+	usedTypedFallback := false
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(rawBody, &root); err != nil {
-		patched, err2 := json.Marshal(request)
-		if err2 != nil {
-			return rawBody, stats, false, errors.Wrap(err2, "marshal response API request after unmarshal failure")
+		patched, marshalErr := json.Marshal(request)
+		if marshalErr != nil {
+			return rawBody, stats, false, errors.Wrap(marshalErr, "marshal response API request for fallback")
 		}
-		return patched, stats, true, nil
+		// Discard any partially decoded fields from the invalid original body.
+		root = nil
+		if decodeErr := json.Unmarshal(patched, &root); decodeErr != nil {
+			return rawBody, stats, false, errors.Wrap(decodeErr, "decode typed response API fallback")
+		}
+		rawBody = patched
+		usedTypedFallback = true
 	}
 
 	if root == nil {
@@ -324,7 +330,7 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		if err != nil {
 			return nil, stats, false, errors.Wrap(err, "merge response passthrough fields")
 		}
-		return merged, stats, mergeChanged, nil
+		return merged, stats, usedTypedFallback || mergeChanged, nil
 	}
 
 	patched, err := json.Marshal(root)
@@ -337,7 +343,7 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		return nil, stats, false, errors.Wrap(err, "merge response passthrough fields")
 	}
 
-	return merged, stats, (changed || mergeChanged) && !bytes.Equal(rawBody, merged), nil
+	return merged, stats, usedTypedFallback || (changed || mergeChanged) && !bytes.Equal(rawBody, merged), nil
 }
 
 // mergeResponseToolsPreservingUnknown overlays sanitized typed tool fields on
