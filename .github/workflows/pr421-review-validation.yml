@@ -11,9 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: 87a5344103933b284e37c2c809583a604bb17fa2
           persist-credentials: false
       - name: Export reviewed source
-        run: git archive --format=tar.gz --output="$RUNNER_TEMP/pr421-source.tar.gz" 87a5344103933b284e37c2c809583a604bb17fa2
+        run: git archive --format=tar.gz --output="$RUNNER_TEMP/pr421-source.tar.gz" HEAD
       - uses: actions/upload-artifact@v4
         with:
           name: pr421-source
