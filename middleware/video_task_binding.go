@@ -48,16 +48,27 @@ func BindAsyncTaskChannel() gin.HandlerFunc {
 		binding, err := model.GetAsyncTaskBindingByTaskID(gmw.Ctx(c), videoID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				if lg != nil {
-					lg.Debug("async task binding not found for request", zap.String("task_id", videoID), zap.String("path", path))
-				}
-				c.Next()
-				return
+				AbortWithError(c, http.StatusNotFound, errors.New("video task not found"))
+			} else {
+				AbortWithError(c, http.StatusInternalServerError, errors.Wrap(err, "resolve video task"))
 			}
-			if lg != nil {
-				lg.Warn("async task binding lookup failed", zap.String("task_id", videoID), zap.Error(err))
-			}
-			c.Next()
+			return
+		}
+		if binding.UserID <= 0 || binding.UserID != c.GetInt(ctxkey.Id) ||
+			(binding.UserUUID != nil && *binding.UserUUID != "" && *binding.UserUUID != c.GetString(ctxkey.UserUUID)) {
+			AbortWithError(c, http.StatusNotFound, errors.New("video task not found"))
+			return
+		}
+		boundModel := strings.TrimSpace(binding.OriginModel)
+		if boundModel == "" {
+			boundModel = strings.TrimSpace(binding.ActualModel)
+		}
+		if allowed := c.GetString(ctxkey.AvailableModels); allowed != "" && !IsModelInList(boundModel, allowed) {
+			AbortWithError(c, http.StatusForbidden, errors.New("token does not allow the video task model"))
+			return
+		}
+		if binding.ChannelID <= 0 || boundModel == "" {
+			AbortWithError(c, http.StatusNotFound, errors.New("video task not found"))
 			return
 		}
 

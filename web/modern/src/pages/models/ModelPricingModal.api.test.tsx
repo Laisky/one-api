@@ -115,6 +115,27 @@ describe('ModelPricingModal API usage integration', () => {
     expect(screen.getByLabelText('Response example')).toHaveTextContent('end_turn');
   });
 
+  it.each([false, true])('shows native Grok creation, image inputs and polling at the bottom (mobile=%s)', (mobile) => {
+    mocks.mobile = mobile;
+    render(modal('grok-imagine-video-1.5', { ...data, video_pricing: { per_second_usd: 0.08, input_image_usd: 0.01 } }));
+    expect(screen.queryByText('No verified gateway example')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('API endpoint')).toHaveTextContent('/v1/videos/generations');
+    expect(displayedRequest()).toContain('"duration": 5');
+    expect(screen.getByLabelText('Response example')).toHaveTextContent('request_id');
+    const usage = screen.getByRole('region', { name: 'API Usage' });
+    expect(usage.parentElement?.lastElementChild).toBe(usage);
+    fireEvent.change(screen.getByRole('combobox', { name: 'API format' }), { target: { value: 'grok_video_image' } });
+    expect(displayedRequest()).toContain('"image"');
+    fireEvent.change(screen.getByRole('combobox', { name: 'API format' }), { target: { value: 'grok_video_status' } });
+    expect(displayedRequest()).toContain('--request GET');
+    expect(displayedRequest()).not.toContain('--data-raw');
+    expect(screen.getByLabelText('API endpoint')).toHaveTextContent('/v1/videos/YOUR_REQUEST_ID');
+    expect(screen.getByLabelText('Response example')).toHaveTextContent('respect_moderation');
+    expect(displayedRequest()).not.toContain('/content');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy curl request' }));
+    expect(mocks.copy).toHaveBeenLastCalledWith(displayedRequest());
+  });
+
   it('passes the current endpoint, curl command and response to their copy actions', () => {
     render(modal());
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'responses' } });

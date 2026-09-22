@@ -30,7 +30,10 @@
       "systemone": "TypeSafe System One（评估）",
       "gemini_live": "Gemini Live WebSocket 握手",
       "diarization": "带说话人标记的音频转写",
-      "jina_ocr": "Jina OCR（Chat Completions 传输格式）"
+      "jina_ocr": "Jina OCR（Chat Completions 传输格式）",
+      "grok_video": "Grok 视频生成",
+      "grok_video_image": "Grok 图生视频",
+      "grok_video_status": "Grok 视频任务状态"
     },
     "notes": {
       "upload": "请将 audio.wav 或 image.png 替换为模型支持的本地文件。curl 会自动设置 multipart 边界。",
@@ -43,7 +46,8 @@
       "geminiLive": "此 curl 命令仅检查 HTTP 协议升级。运行 Gemini Live 会话需要 WebSocket 客户端：首先发送原生 setup 消息，收到 setupComplete 后再发送输入。不能直接替换为 OpenAI 的 session.update 事件。此次握手不验证完整会话或模型推理。",
       "diarization": "请将 audio.wav 替换为录音文件。diarized_json 返回带说话人标记的分段；chunking_strategy=auto 也可处理超过 30 秒的录音。",
       "jinaOcr": "请将 document.png 替换为可访问的文档图片或支持的图片 data URL。Jina OCR 通过 Chat Completions 读取图片并返回 Markdown；这不是普通文本聊天示例。",
-      "legacy": "这是旧版 Completions 协议。模型下线及提供商端点配置可能导致旧目录条目不可用；调用前请确认支持情况。"
+      "legacy": "这是旧版 Completions 协议。模型下线及提供商端点配置可能导致旧目录条目不可用；调用前请确认支持情况。",
+      "grokVideo": "使用已启用 Videos 的 xAI 渠道。请明确指定 duration（1–15 秒），默认分辨率为 480p。输入图片单独计费。将 YOUR_REQUEST_ID 替换为返回的 request_id，在 pending 状态下每隔几秒查询一次；遇到 done、failed 或 expired 时停止。完成后读取 video.url 并及时保存临时链接中的视频。没有 /content 接口。"
     },
     "reference": "协议参考资料",
     "reviewedOn": "核对日期：{{date}}",

@@ -110,7 +110,8 @@ func convertAdaptorVideoPricing(cfg *adaptor.VideoPricingConfig) *model.VideoPri
 		return nil
 	}
 	local := &model.VideoPricingLocal{
-		PerSecondUsd: cfg.PerSecondUsd,
+		PerSecondUsd:  cfg.PerSecondUsd,
+		InputImageUsd: cfg.InputImageUsd,
 	}
 	if strings.TrimSpace(cfg.BaseResolution) != "" {
 		local.BaseResolution = cfg.BaseResolution

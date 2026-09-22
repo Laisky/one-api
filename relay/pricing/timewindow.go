@@ -230,6 +230,9 @@ func mergeVideoPricing(base *adaptor.VideoPricingConfig, overlay *adaptor.VideoP
 	if overlay.PerSecondUsd != 0 {
 		merged.PerSecondUsd = overlay.PerSecondUsd
 	}
+	if overlay.InputImageUsd != 0 {
+		merged.InputImageUsd = overlay.InputImageUsd
+	}
 	if overlay.BaseResolution != "" {
 		merged.BaseResolution = overlay.BaseResolution
 	}

@@ -248,6 +248,8 @@ func (cfg *PerCallPricingConfig) Clone() *PerCallPricingConfig {
 // Pricing is expressed as a per-second USD cost that can be adjusted via resolution
 // multipliers relative to the base resolution.
 type VideoPricingConfig struct {
+	// InputImageUsd is the USD fee for each image/frame supplied to video generation.
+	InputImageUsd float64 `json:"input_image_usd,omitempty"`
 	// PerSecondUsd is the USD price per rendered second at the base resolution.
 	PerSecondUsd float64 `json:"per_second_usd,omitempty"`
 	// BaseResolution identifies the resolution treated as multiplier 1. Empty means unspecified.
@@ -262,7 +264,7 @@ func (cfg *VideoPricingConfig) HasData() bool {
 	if cfg == nil {
 		return false
 	}
-	if cfg.PerSecondUsd > 0 {
+	if cfg.PerSecondUsd > 0 || cfg.InputImageUsd > 0 {
 		return true
 	}
 	return len(cfg.ResolutionMultipliers) > 0
@@ -275,6 +277,7 @@ func (cfg *VideoPricingConfig) Clone() *VideoPricingConfig {
 	}
 	clone := &VideoPricingConfig{
 		PerSecondUsd:   cfg.PerSecondUsd,
+		InputImageUsd:  cfg.InputImageUsd,
 		BaseResolution: cfg.BaseResolution,
 	}
 	if len(cfg.ResolutionMultipliers) > 0 {
