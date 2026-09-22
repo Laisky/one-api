@@ -18,8 +18,8 @@ jobs:
           import hashlib, lzma, pathlib, subprocess
           patch = lzma.decompress(b''.join(p.read_bytes() for p in sorted(pathlib.Path('.github').glob('xai-video-patch.[0-3]'))))
           assert hashlib.sha256(patch).hexdigest() == '59552e27b20ceb15c31083f4be5103f168b098303655f2f3e93148b6348ddedd'
-          subprocess.run(['git', 'apply', '--check', '-'], input=patch, check=True)
           subprocess.run(['git', 'apply', '-'], input=patch, check=True)
+          subprocess.run(['git', 'apply', '-'], input=lzma.decompress(pathlib.Path('.github/xai-video-fixup.xz').read_bytes()), check=True)
           PY
       - uses: actions/setup-go@v5
         with:
@@ -27,7 +27,7 @@ jobs:
       - name: Go race and integration suites
         run: |
           set -o pipefail
-          go test -race -count=1 -timeout=15m -json ./relay/adaptor/xai ./relay/adaptor/openai ./relay/pricing ./relay/controller ./middleware ./controller ./router > "$RUNNER_TEMP/xai-go.jsonl" 2>&1
+          go test -race -count=1 -timeout=15m -json ./relay/adaptor/xai ./relay/adaptor/openai ./relay/asyncvideo ./relay/pricing ./relay/controller ./middleware ./controller ./router > "$RUNNER_TEMP/xai-go.jsonl" 2>&1
       - name: Model pricing round-trip regressions
         if: always()
         run: go test -race -count=1 -timeout=5m -json ./model -run 'Test.*(Video|Pricing|ModelPrice|ModelConfig)' > "$RUNNER_TEMP/xai-model.jsonl" 2>&1
@@ -56,6 +56,7 @@ jobs:
           patch = lzma.decompress(b''.join(p.read_bytes() for p in sorted(pathlib.Path('.github').glob('xai-video-patch.[0-3]'))))
           assert hashlib.sha256(patch).hexdigest() == '59552e27b20ceb15c31083f4be5103f168b098303655f2f3e93148b6348ddedd'
           subprocess.run(['git', 'apply', '-'], input=patch, check=True)
+          subprocess.run(['git', 'apply', '-'], input=lzma.decompress(pathlib.Path('.github/xai-video-fixup.xz').read_bytes()), check=True)
           PY
       - uses: actions/setup-node@v4
         with:
@@ -100,8 +101,9 @@ jobs:
           patch = lzma.decompress(b''.join(p.read_bytes() for p in sorted(pathlib.Path('.github').glob('xai-video-patch.[0-3]'))))
           assert hashlib.sha256(patch).hexdigest() == '59552e27b20ceb15c31083f4be5103f168b098303655f2f3e93148b6348ddedd'
           subprocess.run(['git', 'apply', '-'], input=patch, check=True)
+          subprocess.run(['git', 'apply', '-'], input=lzma.decompress(pathlib.Path('.github/xai-video-fixup.xz').read_bytes()), check=True)
           PY
-          git rm .github/xai-video-patch.[0-3]
+          git rm .github/xai-video-patch.[0-3] .github/xai-video-fixup.xz
           git add controller middleware model relay router web docs
           git diff --cached --check
           git config user.name 'github-actions[bot]'
