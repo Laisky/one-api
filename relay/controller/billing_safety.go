@@ -9,6 +9,7 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/relayctx"
@@ -343,7 +344,8 @@ func scheduleConservativeRefund(c *gin.Context, preConsumedQuota int64, tokenID 
 // snapshotted by the caller on the request goroutine and passed in by value.
 // Refund ownership is claimed before spawning, so a concurrent retry cannot
 // credit the same reservation again. The owning user's cache refresh follows
-// the durable refund and uses only a value-captured user identity.
+// the durable refund and uses only a value-captured user identity. A unique
+// durable intent, not the per-attempt Gin marker, owns recovery after failure.
 func goRollbackPreConsumed(
 	c *gin.Context,
 	taskName string,
@@ -365,6 +367,10 @@ func goRollbackPreConsumed(
 		// owned refund from a hold deliberately retained by conservative policy.
 		c.Set(ctxkey.PreConsumedQuotaRefundClaimed, true)
 	}
+	intent := model.QuotaRefund{ID: uuid.NewString(), TokenID: tokenID, UserID: userID, Amount: quotaToReturn, Reason: taskName}
+	if c != nil {
+		intent.RequestID = c.GetString(ctxkey.RequestId)
+	}
 	goDetachedBillingWork(relayctx.Detach(c), taskName, func(ctx context.Context) {
 		if gate != nil {
 			<-gate
@@ -372,11 +378,15 @@ func goRollbackPreConsumed(
 		if observeCtxErr != nil {
 			observeCtxErr(ctx.Err())
 		}
-		if err := model.PostConsumeTokenQuota(ctx, tokenID, -quotaToReturn); err != nil {
-			gmw.GetLogger(ctx).Error("error rolling back pre-consumed quota", zap.Error(err))
-			return
+		if persisted, err := model.RefundQuotaWithRecovery(ctx, intent); err != nil {
+			// A persisted intent stays pending across retry reset, request reuse,
+			// and process restart. An enqueue outage has a replayable audit ID
+			// rather than falling back to an unsafe non-idempotent credit.
+			gmw.GetLogger(ctx).Error("CRITICAL BILLING AUDIT: owned refund requires recovery",
+				zap.String("refund_id", intent.ID), zap.Bool("intent_persisted", persisted),
+				zap.Int("user_id", userID), zap.Int("token_id", tokenID), zap.Int64("quota", quotaToReturn),
+				zap.String("request_id", intent.RequestID), zap.Error(err))
 		}
-		syncUserQuotaCacheAfterRefund(ctx, userID, taskName)
 	})
 }
 
