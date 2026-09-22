@@ -19,7 +19,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
-	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
@@ -29,30 +28,31 @@ import (
 
 // normalizeAudioWire rewrites only the authoritative model and documented
 // provider aliases. Files, extension fields, explicit false and large integers
-// remain unchanged. The normalized cache is shared by metering and dispatch.
-func normalizeAudioWire(c *gin.Context, mode, channel int, actualModel string, tts *openai.TextToSpeechRequest) error {
+// remain unchanged. It returns this attempt's body and Content-Type without
+// changing the cached client bytes, multipart boundary, or parsed client form.
+func normalizeAudioWire(c *gin.Context, mode, channel int, actualModel string, tts *openai.TextToSpeechRequest) ([]byte, string, error) {
 	body, err := common.GetRequestBody(c)
 	if err != nil {
-		return errors.Wrap(err, "read audio request")
+		return nil, "", errors.Wrap(err, "read audio request")
 	}
 	var wire []byte
 	contentType := c.GetHeader("Content-Type")
 	if mode == relaymode.AudioSpeech {
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal(body, &fields); err != nil {
-			return errors.Wrap(err, "decode speech request")
+			return nil, "", errors.Wrap(err, "decode speech request")
 		}
 		if fields == nil {
-			return errors.New("speech body must be a JSON object")
+			return nil, "", errors.New("speech body must be a JSON object")
 		}
 		if raw, ok := fields["extra_body"]; ok {
 			var extra map[string]json.RawMessage
 			if err := json.Unmarshal(raw, &extra); err != nil {
-				return errors.Wrap(err, "decode audio extra_body")
+				return nil, "", errors.Wrap(err, "decode audio extra_body")
 			}
 			for key, value := range extra {
 				if key == "model" || key == "input" {
-					return errors.New("extra_body cannot override audio model or metered input")
+					return nil, "", errors.New("extra_body cannot override audio model or metered input")
 				}
 				if _, present := fields[key]; !present {
 					fields[key] = value
@@ -62,40 +62,40 @@ func normalizeAudioWire(c *gin.Context, mode, channel int, actualModel string, t
 		}
 		modelJSON, err := json.Marshal(actualModel)
 		if err != nil {
-			return errors.Wrap(err, "encode audio model")
+			return nil, "", errors.Wrap(err, "encode audio model")
 		}
 		fields["model"] = modelJSON
 		if channel == channeltype.Mistral {
 			if raw, ok := fields["stream"]; ok {
 				var stream bool
 				if err := json.Unmarshal(raw, &stream); err != nil {
-					return errors.Wrap(err, "decode speech stream")
+					return nil, "", errors.Wrap(err, "decode speech stream")
 				}
 				if stream {
-					return errors.New("Mistral standard audio/speech currently requires stream=false")
+					return nil, "", errors.New("Mistral standard audio/speech currently requires stream=false")
 				}
 			}
 			var voice, voiceID, reference string
 			for key, target := range map[string]*string{"voice": &voice, "voice_id": &voiceID, "ref_audio": &reference} {
 				if raw, ok := fields[key]; ok {
 					if err := json.Unmarshal(raw, target); err != nil {
-						return errors.Wrapf(err, "decode %s", key)
+						return nil, "", errors.Wrapf(err, "decode %s", key)
 					}
 				}
 			}
 			if voice != "" && voiceID != "" && voice != voiceID {
-				return errors.New("voice and voice_id conflict")
+				return nil, "", errors.New("voice and voice_id conflict")
 			}
 			if voiceID == "" {
 				voiceID = voice
 			}
 			if (voiceID == "") == (reference == "") {
-				return errors.New("Mistral speech requires exactly one voice (voice_id) or ref_audio")
+				return nil, "", errors.New("Mistral speech requires exactly one voice (voice_id) or ref_audio")
 			}
 			if voiceID != "" {
 				encoded, err := json.Marshal(voiceID)
 				if err != nil {
-					return errors.Wrap(err, "encode voice_id")
+					return nil, "", errors.Wrap(err, "encode voice_id")
 				}
 				fields["voice_id"] = encoded
 			}
@@ -103,17 +103,17 @@ func normalizeAudioWire(c *gin.Context, mode, channel int, actualModel string, t
 			if raw, ok := fields["speed"]; ok {
 				var speed float64
 				if err := json.Unmarshal(raw, &speed); err != nil {
-					return errors.Wrap(err, "decode speech speed")
+					return nil, "", errors.Wrap(err, "decode speech speed")
 				}
 				if speed != 1 {
-					return errors.New("Mistral speech does not support the standard speed parameter")
+					return nil, "", errors.New("Mistral speech does not support the standard speed parameter")
 				}
 				delete(fields, "speed")
 			}
 			format := tts.ResponseFormat
 			if raw, ok := fields["response_format"]; ok {
 				if err := json.Unmarshal(raw, &format); err != nil {
-					return errors.Wrap(err, "decode response_format")
+					return nil, "", errors.Wrap(err, "decode response_format")
 				}
 			}
 			tts.ResponseFormat = format
@@ -124,41 +124,41 @@ func normalizeAudioWire(c *gin.Context, mode, channel int, actualModel string, t
 			switch format {
 			case "mp3", "wav", "flac", "opus":
 			default:
-				return errors.New("Mistral standard speech supports mp3, wav, flac, or opus; native float32 PCM is not standard PCM16")
+				return nil, "", errors.New("Mistral standard speech supports mp3, wav, flac, or opus; native float32 PCM is not standard PCM16")
 			}
 			encoded, err := json.Marshal(format)
 			if err != nil {
-				return errors.Wrap(err, "encode response_format")
+				return nil, "", errors.Wrap(err, "encode response_format")
 			}
 			fields["response_format"] = encoded
 		}
 		if channel == channeltype.Groq && strings.HasPrefix(actualModel, "canopylabs/orpheus-") {
 			if utf8.RuneCountInString(tts.Input) > 200 {
-				return errors.New("Orpheus speech input exceeds 200 characters")
+				return nil, "", errors.New("Orpheus speech input exceeds 200 characters")
 			}
 			var format string
 			if raw, ok := fields["response_format"]; ok {
 				if err := json.Unmarshal(raw, &format); err != nil {
-					return errors.Wrap(err, "decode Orpheus response_format")
+					return nil, "", errors.Wrap(err, "decode Orpheus response_format")
 				}
 			}
 			if format != "" && format != "wav" {
-				return errors.New("Orpheus supports WAV output only")
+				return nil, "", errors.New("Orpheus supports WAV output only")
 			}
 			fields["response_format"] = json.RawMessage(`"wav"`)
 			tts.ResponseFormat = "wav"
 		}
 		wire, err = json.Marshal(fields)
 		if err != nil {
-			return errors.Wrap(err, "encode normalized speech request")
+			return nil, "", errors.Wrap(err, "encode normalized speech request")
 		}
 	} else {
 		mediaType, params, err := mime.ParseMediaType(contentType)
 		if err != nil {
-			return errors.Wrap(err, "decode audio Content-Type")
+			return nil, "", errors.Wrap(err, "decode audio Content-Type")
 		}
 		if mediaType != "multipart/form-data" || params["boundary"] == "" {
-			return errors.New("standard transcription requires a multipart file upload")
+			return nil, "", errors.New("standard transcription requires a multipart file upload")
 		}
 		reader := multipart.NewReader(bytes.NewReader(body), params["boundary"])
 		var out bytes.Buffer
@@ -170,18 +170,18 @@ func normalizeAudioWire(c *gin.Context, mode, channel int, actualModel string, t
 				break
 			}
 			if err != nil {
-				return errors.Wrap(err, "read audio form part")
+				return nil, "", errors.Wrap(err, "read audio form part")
 			}
 			if part.FormName() == "url" || part.FormName() == "file_url" || part.FormName() == "audio_url" {
-				return errors.New("a metered file upload cannot also select a remote audio URL")
+				return nil, "", errors.New("a metered file upload cannot also select a remote audio URL")
 			}
 			if part.FormName() == "model" {
 				models++
 				if models > 1 {
-					return errors.New("audio request contains duplicate model fields")
+					return nil, "", errors.New("audio request contains duplicate model fields")
 				}
 				if err := part.Close(); err != nil {
-					return errors.Wrap(err, "close model form part")
+					return nil, "", errors.Wrap(err, "close model form part")
 				}
 				continue
 			}
@@ -190,42 +190,28 @@ func normalizeAudioWire(c *gin.Context, mode, channel int, actualModel string, t
 			}
 			target, err := writer.CreatePart(part.Header)
 			if err != nil {
-				return errors.Wrap(err, "write audio form part")
+				return nil, "", errors.Wrap(err, "write audio form part")
 			}
 			if _, err := io.Copy(target, part); err != nil {
-				return errors.Wrap(err, "copy audio form part")
+				return nil, "", errors.Wrap(err, "copy audio form part")
 			}
 			if err := part.Close(); err != nil {
-				return errors.Wrap(err, "close audio form part")
+				return nil, "", errors.Wrap(err, "close audio form part")
 			}
 		}
 		if files != 1 {
-			return errors.New("audio request requires exactly one file")
+			return nil, "", errors.New("audio request requires exactly one file")
 		}
 		if err := writer.WriteField("model", actualModel); err != nil {
-			return errors.Wrap(err, "write mapped audio model")
+			return nil, "", errors.Wrap(err, "write mapped audio model")
 		}
 		if err := writer.Close(); err != nil {
-			return errors.Wrap(err, "close audio multipart body")
+			return nil, "", errors.Wrap(err, "close audio multipart body")
 		}
 		wire = out.Bytes()
 		contentType = writer.FormDataContentType()
-		if c.Request.MultipartForm != nil {
-			if err := c.Request.MultipartForm.RemoveAll(); err != nil {
-				return errors.Wrap(err, "remove parsed audio form temporary files")
-			}
-		}
-		c.Request.MultipartForm = nil
-		c.Request.Form = nil
-		c.Request.PostForm = nil
 	}
-	c.Set(ctxkey.KeyRequestBody, wire)
-	c.Request.Body = io.NopCloser(bytes.NewReader(wire))
-	c.Request.ContentLength = int64(len(wire))
-	c.Request.Header.Set("Content-Type", contentType)
-	c.Request.Header.Set("Content-Length", strconv.Itoa(len(wire)))
-	c.Set(ctxkey.ContentType, contentType)
-	return nil
+	return wire, contentType, nil
 }
 
 // decimalQuotaProduct multiplies nonnegative finite quantities as decimal

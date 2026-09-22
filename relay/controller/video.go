@@ -142,7 +142,15 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	} else if providerHasConfig && providerCfg.PerCall != nil && resolvedCfg.Video == nil {
 		// A scalar administrator override for a per-call model is quota/call,
 		// not quota/token and not a reason to fall back to per-second pricing.
-		value, err := decimalQuotaProduct(resolvedCfg.Ratio, groupRatio)
+		var value int64
+		var err error
+		if resolvedCfg.Ratio != 0 {
+			value, err = decimalQuotaProduct(resolvedCfg.Ratio, groupRatio)
+		} else {
+			// Metadata alone must not turn a paid provider task into a free
+			// invocation. Explicit PerCall={} remains the way to configure free.
+			value, err = decimalQuotaRate(1000, providerCfg.PerCall.UsdPerThousandCalls, billingratio.QuotaPerUsd, groupRatio)
+		}
 		if err != nil {
 			return openai.ErrorWrapper(err, "invalid_video_pricing", http.StatusBadRequest)
 		}

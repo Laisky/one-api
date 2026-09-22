@@ -193,3 +193,29 @@ describe('ModelPricingModal API usage integration', () => {
     expect(JSON.stringify(locale)).not.toContain('""');
   });
 });
+
+// Zero is a price, not the absence of a tariff, for both modal layouts.
+describe('PR421 explicit free per-call tariffs', () => {
+  beforeEach(() => { mocks.mobile = false; });
+  afterEach(cleanup);
+  it.each([false, true])('renders base and free scheduled rates (mobile=%s)', (mobile) => {
+    mocks.mobile = mobile;
+    render(modal('cogvideox-flash', {
+      input_price: 0, output_price: 0,
+      per_call_pricing: { usd_per_thousand_calls: 0, usd_per_call: 0 },
+      time_windows: [{ name: 'free-period', timezone: 'UTC', ranges: [{ start: '00:00', end: '00:00' }],
+        overlay: { per_call_pricing: { usd_per_thousand_calls: 0, usd_per_call: 0 } } }],
+    }));
+    expect(screen.getAllByText('Per-Call Pricing')).toHaveLength(2);
+    expect(screen.getByText('Base Rate')).toBeInTheDocument();
+    expect(screen.getByText('Per Call')).toBeInTheDocument();
+    expect(screen.queryByText('Text Token Pricing')).not.toBeInTheDocument();
+    expect(screen.getAllByText('$0').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText('free-period')).toBeInTheDocument();
+  });
+  it('keeps a legacy per-call-only zero response visible', () => {
+    render(modal('custom-call', {input_price: 0, output_price: 0, per_call_pricing: {usd_per_call: 0}}));
+    expect(screen.getByText('Per Call')).toBeInTheDocument();
+    expect(screen.getByText('$0')).toBeInTheDocument();
+  });
+});
