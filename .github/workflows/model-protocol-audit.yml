@@ -12,15 +12,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          fetch-depth: 5
+          fetch-depth: 10
       - name: Apply reviewed changes
         run: |
           python3 - <<'PY'
           import hashlib,lzma,pathlib,subprocess
-          patch=lzma.decompress(b''.join(p.read_bytes() for p in sorted(pathlib.Path('.github').glob('protocol-core.[0-3]'))))
-          assert hashlib.sha256(patch).hexdigest()=='f7428fc50f92e8c902f65f3a8494c9b82150e4046fb8b712c519923bc7196233'
-          subprocess.run(['git','apply','--check','-'],input=patch,check=True)
-          subprocess.run(['git','apply','-'],input=patch,check=True)
+          for prefix,digest in [('core','f7428fc50f92e8c902f65f3a8494c9b82150e4046fb8b712c519923bc7196233'),('media','909a43ff48a25319d1f8d1a949fe93d3995499405b55e04a21499a7df8176c29')]:
+              patch=lzma.decompress(b''.join(p.read_bytes() for p in sorted(pathlib.Path('.github').glob('protocol-'+prefix+'.[0-3]'))))
+              assert hashlib.sha256(patch).hexdigest()==digest
+              subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+              subprocess.run(['git','apply','-'],input=patch,check=True)
           PY
       - uses: actions/setup-go@v5
         with:
@@ -46,14 +47,14 @@ jobs:
       - name: Focused functionality and ledger tests
         if: always()
         run: |
-          go test -race -count=1 -timeout=15m -json ./relay/adaptor/cohere ./relay/controller ./model ./relay/pricing ./relay/channeltype -run 'Test(ProtocolAudit|CohereEmbedding|CohereInvalid|AudioTariff|AudioRejected|AudioExact)' > "$RUNNER_TEMP/focused.jsonl" 2>&1
+          go test -race -count=1 -timeout=15m -json ./relay/adaptor/cohere ./relay/adaptor/zhipu ./relay/adaptor/zai ./relay/adaptor/openai ./relay/controller ./model ./relay/pricing ./relay/channeltype -run 'Test(ProtocolAudit|CohereEmbedding|CohereInvalid|AudioTariff|AudioRejected|AudioExact)' > "$RUNNER_TEMP/focused.jsonl" 2>&1
       - name: Repository-wide Go vet
         if: always()
         run: go vet ./... > "$RUNNER_TEMP/vet.log" 2>&1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: protocol-core-validation
+          name: protocol-media-validation
           path: |
             ${{ runner.temp }}/*.jsonl
             ${{ runner.temp }}/vet.log
