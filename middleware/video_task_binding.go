@@ -14,32 +14,27 @@ import (
 	"github.com/Laisky/one-api/model"
 )
 
-// BindAsyncTaskChannel resolves asynchronous task metadata (e.g., video jobs) before channel distribution.
-// When a task id is present without an explicit model, this middleware pins the request to the original channel.
+// BindAsyncTaskChannel authorizes video task access before channel distribution.
+// Parameters: none. Returns: middleware that pins an owned task to its original
+// channel and rejects missing or foreign tasks without disclosing their metadata.
 func BindAsyncTaskChannel() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		req := c.Request
-		if req == nil {
+		if req == nil || req.URL == nil {
 			c.Next()
 			return
 		}
-
-		method := req.Method
-		if method != http.MethodGet && method != http.MethodDelete && method != http.MethodPost {
+		if req.Method != http.MethodGet && req.Method != http.MethodDelete && req.Method != http.MethodPost {
 			c.Next()
 			return
 		}
-
-		path := req.URL.Path
-		if !strings.HasPrefix(path, "/v1/videos/") {
+		if !strings.HasPrefix(req.URL.Path, "/v1/videos/") {
 			c.Next()
 			return
 		}
-
-		// POST /v1/videos/<id>/remix should still supply a model; existing flow covers it.
-		// We only need binding for retrieval endpoints containing a video id parameter.
 		videoID := strings.TrimSpace(c.Param("video_id"))
 		if videoID == "" {
+			// Creation routes have no video_id and do not need an existing task.
 			c.Next()
 			return
 		}
@@ -48,26 +43,23 @@ func BindAsyncTaskChannel() gin.HandlerFunc {
 		binding, err := model.GetAsyncTaskBindingByTaskID(gmw.Ctx(c), videoID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				if lg != nil {
-					lg.Debug("async task binding not found for request", zap.String("task_id", videoID), zap.String("path", path))
-				}
-				c.Next()
+				c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "invalid_request_error", "message": "Video task not found"}})
 				return
 			}
-			if lg != nil {
-				lg.Warn("async task binding lookup failed", zap.String("task_id", videoID), zap.Error(err))
-			}
-			c.Next()
+			lg.Warn("async task binding lookup failed", zap.Error(err))
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "server_error", "message": "Video task lookup unavailable"}})
+			return
+		}
+		userID := c.GetInt(ctxkey.Id)
+		if binding == nil || userID <= 0 || binding.UserID != userID || binding.TaskType != "video" {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "invalid_request_error", "message": "Video task not found"}})
 			return
 		}
 
-		// Update access time but do not fail the request if the touch operation encounters a transient error.
-		if touchErr := model.TouchAsyncTaskBinding(gmw.Ctx(c), videoID); touchErr != nil && lg != nil {
-			if !errors.Is(touchErr, gorm.ErrRecordNotFound) {
-				lg.Debug("async task binding touch failed", zap.String("task_id", videoID), zap.Error(touchErr))
-			}
+		// Only an authorized caller may touch retention metadata or select a channel.
+		if touchErr := model.TouchAsyncTaskBinding(gmw.Ctx(c), videoID); touchErr != nil {
+			lg.Debug("async task binding touch failed", zap.Error(touchErr))
 		}
-
 		if binding.ChannelID > 0 {
 			c.Set(ctxkey.SpecificChannelId, binding.ChannelID)
 		}
@@ -76,15 +68,10 @@ func BindAsyncTaskChannel() gin.HandlerFunc {
 		} else if trimmed := strings.TrimSpace(binding.ActualModel); trimmed != "" {
 			c.Set(ctxkey.RequestModel, trimmed)
 		}
-
-		if lg != nil {
-			lg.Debug("async task binding resolved",
-				zap.String("task_id", videoID),
-				zap.String("task_type", binding.TaskType),
-				zap.Int("channel_id", binding.ChannelID),
-				zap.String("model", c.GetString(ctxkey.RequestModel)))
-		}
-
+		lg.Debug("async task binding resolved",
+			zap.String("task_id", videoID),
+			zap.String("task_type", binding.TaskType),
+			zap.Int("channel_id", binding.ChannelID))
 		c.Next()
 	}
 }
