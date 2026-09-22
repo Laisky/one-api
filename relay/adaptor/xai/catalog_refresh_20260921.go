@@ -27,6 +27,9 @@ import (
 
 var grokXHighReasoningEfforts = []string{"low", "medium", "high", "xhigh"}
 
+// init applies the dated catalog additions before the package is used.
+// Parameters: none. Returns: none; the exported compatibility list is rebuilt
+// after the pricing map has received all new model entries.
 func init() {
 	refreshCatalog20260921()
 	// ModelList is initialized from ModelRatios in constants.go before init
@@ -34,6 +37,9 @@ func init() {
 	ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 }
 
+// refreshCatalog20260921 installs the verified model and capability updates.
+// Parameters: none. Returns: none; it updates package-owned catalog entries
+// during initialization while retaining existing legacy model identifiers.
 func refreshCatalog20260921() {
 	ModelRatios["grok-4.7"] = adaptor.ModelConfig{
 		Ratio:            2.0 * ratio.MilliTokensUsd,
@@ -98,6 +104,9 @@ func refreshCatalog20260921() {
 	refreshImagineVideoMetadata()
 }
 
+// setReasoningEfforts replaces accepted effort values for existing models.
+// Parameters: models selects catalog entries and efforts supplies the accepted
+// vocabulary. Returns: none; each updated entry owns a separate effort slice.
 func setReasoningEfforts(models []string, efforts []string) {
 	for _, name := range models {
 		cfg, ok := ModelRatios[name]
@@ -110,6 +119,9 @@ func setReasoningEfforts(models []string, efforts []string) {
 	}
 }
 
+// addOfficialAliases copies canonical metadata to documented aliases.
+// Parameters: aliases maps each alias to its existing canonical model.
+// Returns: none; alias entries are deep copies with their own descriptions.
 func addOfficialAliases(aliases map[string]string) {
 	for alias, canonical := range aliases {
 		cfg, ok := ModelRatios[canonical]
@@ -122,6 +134,9 @@ func addOfficialAliases(aliases map[string]string) {
 	}
 }
 
+// refreshImagineImageMetadata updates image quality tiers and dated tariffs.
+// Parameters: none. Returns: none; existing image entries are cloned before
+// their request defaults, pricing tables, and migration windows are changed.
 func refreshImagineImageMetadata() {
 	for _, name := range []string{"grok-imagine-image-2.0"} {
 		cfg, ok := ModelRatios[name]
@@ -182,6 +197,7 @@ func refreshImagineImageMetadata() {
 
 // legacyImagineQualityRedirectWindow switches legacy quality aliases to the
 // Image 2.0 low-quality tariff at the documented November 2, 2026 migration.
+// Parameters: none. Returns: an all-day UTC pricing overlay with no end date.
 func legacyImagineQualityRedirectWindow() adaptor.TimeWindow {
 	return adaptor.TimeWindow{
 		Name:     "xai-imagine-quality-redirect",
@@ -203,6 +219,9 @@ func legacyImagineQualityRedirectWindow() adaptor.TimeWindow {
 	}
 }
 
+// refreshImagineVideoMetadata corrects the modalities of existing video models.
+// Parameters: none. Returns: none; cloned entries retain their pricing while
+// recording the documented inputs, outputs, and model descriptions.
 func refreshImagineVideoMetadata() {
 	for _, name := range []string{"grok-imagine-video-1.5", "grok-imagine-video-1.5-preview", "grok-imagine-video-1.5-2026-05-30"} {
 		cfg, ok := ModelRatios[name]
@@ -228,10 +247,16 @@ func refreshImagineVideoMetadata() {
 	}
 }
 
+// supportsStringValue checks exact membership in a capability vocabulary.
+// Parameters: values contains accepted strings and value is the requested one.
+// Returns: true only when an accepted string equals the requested value.
 func supportsStringValue(values []string, value string) bool {
 	return slices.Contains(values, value)
 }
 
+// isLegacyPenaltyRestrictedModel identifies compatibility-only penalty rules.
+// Parameters: model is the upstream model identifier. Returns: true for legacy
+// redirects whose penalty restrictions must survive catalog metadata changes.
 func isLegacyPenaltyRestrictedModel(model string) bool {
 	switch model {
 	case "grok-4-0709",
