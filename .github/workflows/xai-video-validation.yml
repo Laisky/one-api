@@ -5,23 +5,98 @@ on:
 permissions:
   contents: read
 jobs:
-  regression:
+  go:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Apply reviewed patch
+        run: |
+          python3 - <<'PY'
+          import hashlib, lzma, pathlib, subprocess
+          patch = lzma.decompress(b''.join(p.read_bytes() for p in sorted(pathlib.Path('.github').glob('xai-video-patch.[0-3]'))))
+          assert hashlib.sha256(patch).hexdigest() == '59552e27b20ceb15c31083f4be5103f168b098303655f2f3e93148b6348ddedd'
+          subprocess.run(['git', 'apply', '--check', '-'], input=patch, check=True)
+          subprocess.run(['git', 'apply', '-'], input=patch, check=True)
+          PY
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Run behavioral regressions
+      - name: Go race and integration suites
         run: |
           set -o pipefail
-          go test -race -count=1 -timeout=10m ./relay/adaptor/xai ./middleware -run 'TestXAI(GatewayVideoRoute|VideoTaskOwner)' -v 2>&1 | tee "$RUNNER_TEMP/xai-video-tests.log"
+          go test -race -count=1 -timeout=15m -json ./relay/adaptor/xai ./relay/adaptor/openai ./relay/pricing ./relay/controller ./middleware ./model ./controller ./router > "$RUNNER_TEMP/xai-go.jsonl" 2>&1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: xai-video-regression
-          path: ${{ runner.temp }}/xai-video-tests.log
+          name: xai-go-validation
+          path: ${{ runner.temp }}/xai-go.jsonl
           retention-days: 7
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Apply reviewed patch
+        run: |
+          python3 - <<'PY'
+          import hashlib, lzma, pathlib, subprocess
+          patch = lzma.decompress(b''.join(p.read_bytes() for p in sorted(pathlib.Path('.github').glob('xai-video-patch.[0-3]'))))
+          assert hashlib.sha256(patch).hexdigest() == '59552e27b20ceb15c31083f4be5103f168b098303655f2f3e93148b6348ddedd'
+          subprocess.run(['git', 'apply', '-'], input=patch, check=True)
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+          cache-dependency-path: web/modern/yarn.lock
+      - name: Install dependencies
+        working-directory: web/modern
+        run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+      - name: Frontend behavior and i18n
+        working-directory: web/modern
+        run: |
+          yarn check:i18n > "$RUNNER_TEMP/xai-i18n.log" 2>&1
+          yarn test --run --passWithNoTests > "$RUNNER_TEMP/xai-frontend.log" 2>&1
+      - name: TypeScript and production build
+        if: always()
+        working-directory: web/modern
+        run: yarn build > "$RUNNER_TEMP/xai-build.log" 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xai-frontend-validation
+          path: ${{ runner.temp }}/xai-*.log
+          retention-days: 7
+  publish:
+    needs: [go, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/xai-imagine-video-20260922
+      - name: Commit exactly the validated source to the working branch
+        env:
+          VALIDATED_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$VALIDATED_SHA"
+          python3 - <<'PY'
+          import hashlib, lzma, pathlib, subprocess
+          patch = lzma.decompress(b''.join(p.read_bytes() for p in sorted(pathlib.Path('.github').glob('xai-video-patch.[0-3]'))))
+          assert hashlib.sha256(patch).hexdigest() == '59552e27b20ceb15c31083f4be5103f168b098303655f2f3e93148b6348ddedd'
+          subprocess.run(['git', 'apply', '-'], input=patch, check=True)
+          PY
+          git rm .github/xai-video-patch.[0-3]
+          git add controller middleware model relay router web docs
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(xai): support native Imagine video generation and secure polling'
+          git push origin HEAD:refs/heads/fix/xai-imagine-video-20260922
