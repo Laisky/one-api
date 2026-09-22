@@ -496,6 +496,7 @@ type ModelDisplayTier struct {
 
 // VideoDisplayPricing represents video generation pricing for display
 type VideoDisplayPricing struct {
+	InputImageUsd         float64            `json:"input_image_usd,omitempty"`
 	PerSecondUsd          float64            `json:"per_second_usd"`                   // USD per rendered second at base resolution
 	BaseResolution        string             `json:"base_resolution,omitempty"`        // Base resolution (e.g. "1280x720")
 	ResolutionMultipliers map[string]float64 `json:"resolution_multipliers,omitempty"` // Resolution -> multiplier map
@@ -586,6 +587,7 @@ func buildVideoDisplayPricing(cfg *adaptorpkg.VideoPricingConfig) *VideoDisplayP
 	}
 	return &VideoDisplayPricing{
 		PerSecondUsd:          cfg.PerSecondUsd,
+		InputImageUsd:         cfg.InputImageUsd,
 		BaseResolution:        cfg.BaseResolution,
 		ResolutionMultipliers: cfg.ResolutionMultipliers,
 	}
@@ -760,6 +762,7 @@ func convertLocalDisplayConfig(cfg model.ModelConfigLocal) adaptorpkg.ModelConfi
 	if cfg.Video != nil {
 		converted.Video = &adaptorpkg.VideoPricingConfig{
 			PerSecondUsd:          cfg.Video.PerSecondUsd,
+			InputImageUsd:         cfg.Video.InputImageUsd,
 			BaseResolution:        cfg.Video.BaseResolution,
 			ResolutionMultipliers: cfg.Video.ResolutionMultipliers,
 		}
@@ -1434,6 +1437,7 @@ func GetModelsDisplay(c *gin.Context) {
 				if cfg.Video != nil && cfg.Video.HasData() {
 					videoPricing = &VideoDisplayPricing{
 						PerSecondUsd:          cfg.Video.PerSecondUsd,
+						InputImageUsd:         cfg.Video.InputImageUsd,
 						BaseResolution:        cfg.Video.BaseResolution,
 						ResolutionMultipliers: cfg.Video.ResolutionMultipliers,
 					}

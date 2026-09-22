@@ -229,6 +229,7 @@ func refreshImagineVideoMetadata() {
 			continue
 		}
 		cfg = cfg.Clone()
+		cfg.Video.InputImageUsd = 0.01 // Official video 1.5 input-image price, verified 2026-09-22.
 		cfg.InputModalities = []string{"text", "image", "audio"}
 		cfg.OutputModalities = []string{"video"}
 		cfg.Description = "Grok Imagine Video 1.5 accepts text, image, and preset-voice audio references and generates 480p, 720p, or 1080p video at $0.08/$0.14/$0.25 per second."
@@ -241,6 +242,7 @@ func refreshImagineVideoMetadata() {
 			continue
 		}
 		cfg = cfg.Clone()
+		cfg.Video.InputImageUsd = 0.002 // Classic video input-image price, verified 2026-09-22.
 		cfg.InputModalities = []string{"text", "image", "video"}
 		cfg.OutputModalities = []string{"video"}
 		ModelRatios[name] = cfg

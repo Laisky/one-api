@@ -30,7 +30,10 @@
       "systemone": "TypeSafe System One (evaluación)",
       "gemini_live": "Negociación WebSocket de Gemini Live",
       "diarization": "Transcripción con etiquetas de hablante",
-      "jina_ocr": "Jina OCR (transporte Chat Completions)"
+      "jina_ocr": "Jina OCR (transporte Chat Completions)",
+      "grok_video": "Generación de vídeo Grok",
+      "grok_video_image": "Imagen a vídeo Grok",
+      "grok_video_status": "Estado de la tarea de vídeo Grok"
     },
     "notes": {
       "upload": "Sustituya audio.wav o image.png por un archivo local compatible con el modelo. curl establece automáticamente el límite multipart.",
@@ -43,7 +46,8 @@
       "geminiLive": "Este comando curl solo comprueba la actualización HTTP. Para una sesión Gemini Live, use un cliente WebSocket, envíe primero el mensaje nativo setup y espere setupComplete antes de enviar datos. Los eventos session.update de OpenAI no son intercambiables. Esta negociación no prueba una conversación ni inferencia del modelo.",
       "diarization": "Sustituya audio.wav por su grabación. diarized_json devuelve segmentos etiquetados por hablante; chunking_strategy=auto también permite grabaciones de más de 30 segundos.",
       "jinaOcr": "Sustituya document.png por una imagen de documento accesible o una URL de datos de imagen compatible. Jina OCR utiliza Chat Completions para leer imágenes y devolver Markdown; no es un ejemplo de chat de texto general.",
-      "legacy": "Es un contrato de Completions heredado. La retirada de modelos y los ajustes del proveedor pueden impedir usar entradas antiguas del catálogo; confirme la compatibilidad antes de llamar."
+      "legacy": "Es un contrato de Completions heredado. La retirada de modelos y los ajustes del proveedor pueden impedir usar entradas antiguas del catálogo; confirme la compatibilidad antes de llamar.",
+      "grokVideo": "Use el canal xAI con Videos habilitado. Indique duration (1–15 segundos); la resolución predeterminada es 480p. Las imágenes de entrada se cobran por separado. Sustituya YOUR_REQUEST_ID por el request_id recibido y consulte cada pocos segundos mientras el estado sea pending; deténgase en done, failed o expired. Al finalizar, lea video.url y guarde pronto el vídeo de esa URL temporal. No existe un endpoint /content."
     },
     "reference": "Referencia del protocolo",
     "reviewedOn": "Revisado el {{date}}",

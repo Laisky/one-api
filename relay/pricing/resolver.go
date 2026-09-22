@@ -130,6 +130,7 @@ func convertLocalVideo(local *model.VideoPricingLocal) *adaptor.VideoPricingConf
 	}
 	cfg := &adaptor.VideoPricingConfig{
 		PerSecondUsd:   local.PerSecondUsd,
+		InputImageUsd:  local.InputImageUsd,
 		BaseResolution: local.BaseResolution,
 	}
 	if len(local.ResolutionMultipliers) > 0 {

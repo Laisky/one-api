@@ -245,6 +245,10 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 		return openai_compatible.GetFullRequestURL(meta.BaseURL, meta.RequestURLPath, meta.ChannelType), nil
 	}
 
+	if meta.Mode == relaymode.Videos && requestPath == "/v1/videos" {
+		return openai_compatible.GetFullRequestURL(meta.BaseURL, "/v1/videos/generations"+strings.TrimPrefix(meta.RequestURLPath, requestPath), meta.ChannelType), nil
+	}
+
 	// XAI uses OpenAI-compatible API endpoints
 	return openai_compatible.GetFullRequestURL(meta.BaseURL, meta.RequestURLPath, meta.ChannelType), nil
 }
@@ -341,6 +345,11 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 // It uses the common request helper for standard HTTP handling.
 // Returns the HTTP response or an error if the request fails.
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if meta.Mode == relaymode.Videos {
+		if err := validateVideoOperation(c); err != nil {
+			return nil, err
+		}
+	}
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
@@ -348,6 +357,9 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 // It handles different response types including images, Response API, and Claude Messages.
 // Returns usage information and any errors encountered during processing.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	if meta.Mode == relaymode.Videos {
+		return a.handleVideoResponse(c, resp)
+	}
 	// Handle image generation requests differently
 	if meta.Mode == relaymode.ImagesGenerations {
 		// TODO: Do we need a meta tag to include the actual model name for this image generation?
