@@ -5,18 +5,43 @@ on:
 permissions:
   contents: read
 jobs:
-  source:
+  inventory:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Export source without local configuration
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Enumerate actual catalog and channel routing
         run: |
-          git archive --format=tar HEAD ':!/.github/instructions' | gzip > "$RUNNER_TEMP/source.tar.gz"
+          cat > "$RUNNER_TEMP/inventory.go" <<'EOF'
+          package main
+          import (
+            "encoding/json"
+            "fmt"
+            "os"
+            "github.com/Laisky/one-api/relay"
+            "github.com/Laisky/one-api/relay/adaptor"
+            "github.com/Laisky/one-api/relay/channeltype"
+          )
+          func main() {
+            rows := []map[string]any{}
+            for channel := channeltype.Unknown+1; channel < channeltype.Dummy; channel++ {
+              a := relay.GetAdaptor(channeltype.ToAPIType(channel))
+              if a == nil { panic(fmt.Sprintf("unregistered channel %d", channel)) }
+              if aware, ok := a.(adaptor.ChannelTypeAware); ok { aware.SetChannelType(channel) }
+              rows = append(rows, map[string]any{"channel":channeltype.IdToName(channel),"channel_id":channel,"adaptor":fmt.Sprintf("%T",a),"endpoints":channeltype.DefaultEndpointNamesForChannelType(channel),"models":a.GetDefaultModelPricing()})
+            }
+            file, err := os.Create(os.Args[1]); if err != nil { panic(err) }; defer file.Close()
+            if err := json.NewEncoder(file).Encode(rows); err != nil { panic(err) }
+          }
+          EOF
+          go run "$RUNNER_TEMP/inventory.go" "$RUNNER_TEMP/catalog.json"
       - uses: actions/upload-artifact@v4
         with:
-          name: model-protocol-source
-          path: ${{ runner.temp }}/source.tar.gz
-          retention-days: 1
+          name: model-protocol-inventory
+          path: ${{ runner.temp }}/catalog.json
+          retention-days: 7
