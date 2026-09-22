@@ -1,0 +1,99 @@
+name: PR 421 refund recovery qualification
+on:
+  push:
+    branches: [work/pr421-refund-recovery-20260922]
+permissions:
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 20
+      - name: Apply pinned source change
+        run: |
+          python3 - <<'PY'
+          import hashlib,lzma,pathlib,subprocess
+          patch=lzma.decompress(pathlib.Path('.github/pr421-refund-recovery.xz').read_bytes())
+          assert hashlib.sha256(patch).hexdigest()=='4b88389db9d8ed3259d02957ae4ae0d4afaa57ce798a862bcec3a08c68aaeeb4'
+          subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+          subprocess.run(['git','apply','-'],input=patch,check=True)
+          PY
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install physical audio dependency
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+      - name: Reproduce lost refunds on original PR head
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/negative" c8b2585c1cf962ca755aab564f97480bbdf4893f
+          cp relay/controller/refund_recovery_test.go "$RUNNER_TEMP/negative/relay/controller/refund_recovery_test.go"
+          cd "$RUNNER_TEMP/negative"
+          set +e
+          go test -race -count=1 -timeout=5m -json ./relay/controller -run '^TestPR421TransientRefundRecovery$' > "$RUNNER_TEMP/refund-negative.jsonl" 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          python3 - "$RUNNER_TEMP/refund-negative.jsonl" <<'PY'
+          import json,sys
+          text=open(sys.argv[1]).read()
+          assert '[build failed]' not in text,text[-10000:]
+          rows=[json.loads(s) for s in text.splitlines() if s.startswith('{')]
+          leaves=[r['Test'] for r in rows if r.get('Action')=='fail' and r.get('Test','').count('/')==2]
+          assert len(leaves)==4,leaves
+          print('Verified financial-write failure negative controls:',leaves)
+          PY
+      - name: Fault recovery and durable ledger tests
+        if: always()
+        run: go test -race -count=1 -timeout=6m -json ./model ./relay/controller -run '^Test(QuotaRefund|PR421(TransientRefund|PendingRefund|RollbackRetry)).*' > "$RUNNER_TEMP/refund-focused.jsonl" 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr421-refund-focused
+          path: ${{ runner.temp }}/refund-*.jsonl
+          retention-days: 7
+      - name: Complete affected package and server race suites
+        if: always()
+        run: go test -race -count=1 -timeout=15m -json ./relay/controller ./controller ./relay/adaptor/openai ./relay/adaptor/mistral ./relay/pricing ./middleware . > "$RUNNER_TEMP/refund-positive.jsonl" 2>&1
+      - name: Repository vet
+        if: always()
+        run: go vet ./... > "$RUNNER_TEMP/refund-vet.log" 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr421-refund-recovery-evidence
+          path: |
+            ${{ runner.temp }}/refund-*.jsonl
+            ${{ runner.temp }}/refund-vet.log
+          retention-days: 7
+  publish:
+    needs: [go]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/pr421-refund-recovery-20260922
+      - name: Publish only qualified source
+        env:
+          QUALIFIED_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$QUALIFIED_SHA"
+          python3 - <<'PY'
+          import hashlib,lzma,pathlib,subprocess
+          patch=lzma.decompress(pathlib.Path('.github/pr421-refund-recovery.xz').read_bytes())
+          assert hashlib.sha256(patch).hexdigest()=='4b88389db9d8ed3259d02957ae4ae0d4afaa57ce798a862bcec3a08c68aaeeb4'
+          subprocess.run(['git','apply','-'],input=patch,check=True)
+          PY
+          git rm .github/pr421-refund-recovery.xz .github/workflows/pr421-refund-recovery.yml
+          git add main.go model relay/controller docs/model-protocol-support-20260922.md
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: recover owned media refunds with durable idempotent intents'
+          git push origin HEAD:refs/heads/work/pr421-refund-recovery-20260922
