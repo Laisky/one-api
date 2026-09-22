@@ -1,0 +1,21 @@
+name: PR 421 review validation
+on:
+  push:
+    branches: [work/pr421-review-fixes-20260922]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export reviewed source
+        run: git archive --format=tar.gz --output="$RUNNER_TEMP/pr421-source.tar.gz" 87a5344103933b284e37c2c809583a604bb17fa2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr421-source
+          path: ${{ runner.temp }}/pr421-source.tar.gz
+          retention-days: 1
