@@ -14,16 +14,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 20
       - name: Apply candidate
-        run: |
-          python3 - <<'PY'
-          import hashlib,lzma,pathlib,subprocess
-          blobs=[(b''.join(pathlib.Path('.github/pr421-review-patch.'+str(i)).read_bytes() for i in range(2)),'acaedd644377d017fd682f42087be707c0f0f2aebd548094c7890e3a1119cad5'),(pathlib.Path('.github/pr421-review-extra.xz').read_bytes(),'26633a8ccfa7fe93e8833b08520f66e0f89520f3f5f5a12a6e09716b73e56996'),(pathlib.Path('.github/pr421-review-refund.xz').read_bytes(),'d33b9bbdfacb476bd69ca36efa4346e35e739f2865c5034a6f95287a0705a757')]
-          for blob,digest in blobs:
-              patch=lzma.decompress(blob)
-              assert hashlib.sha256(patch).hexdigest()==digest
-              subprocess.run(['git','apply','--check','-'],input=patch,check=True)
-              subprocess.run(['git','apply','-'],input=patch,check=True)
-          PY
+        run: python3 .github/pr421-apply.py
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -81,15 +72,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 20
       - name: Apply candidate
-        run: |
-          python3 - <<'PY'
-          import hashlib,lzma,pathlib,subprocess
-          blobs=[(b''.join(pathlib.Path('.github/pr421-review-patch.'+str(i)).read_bytes() for i in range(2)),'acaedd644377d017fd682f42087be707c0f0f2aebd548094c7890e3a1119cad5'),(pathlib.Path('.github/pr421-review-extra.xz').read_bytes(),'26633a8ccfa7fe93e8833b08520f66e0f89520f3f5f5a12a6e09716b73e56996'),(pathlib.Path('.github/pr421-review-refund.xz').read_bytes(),'d33b9bbdfacb476bd69ca36efa4346e35e739f2865c5034a6f95287a0705a757')]
-          for blob,digest in blobs:
-              patch=lzma.decompress(blob)
-              assert hashlib.sha256(patch).hexdigest()==digest
-              subprocess.run(['git','apply','-'],input=patch,check=True)
-          PY
+        run: python3 .github/pr421-apply.py
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -148,15 +131,8 @@ jobs:
           QUALIFIED_SHA: ${{ github.sha }}
         run: |
           test "$(git rev-parse HEAD)" = "$QUALIFIED_SHA"
-          python3 - <<'PY'
-          import hashlib,lzma,pathlib,subprocess
-          blobs=[(b''.join(pathlib.Path('.github/pr421-review-patch.'+str(i)).read_bytes() for i in range(2)),'acaedd644377d017fd682f42087be707c0f0f2aebd548094c7890e3a1119cad5'),(pathlib.Path('.github/pr421-review-extra.xz').read_bytes(),'26633a8ccfa7fe93e8833b08520f66e0f89520f3f5f5a12a6e09716b73e56996'),(pathlib.Path('.github/pr421-review-refund.xz').read_bytes(),'d33b9bbdfacb476bd69ca36efa4346e35e739f2865c5034a6f95287a0705a757')]
-          for blob,digest in blobs:
-              patch=lzma.decompress(blob)
-              assert hashlib.sha256(patch).hexdigest()==digest
-              subprocess.run(['git','apply','-'],input=patch,check=True)
-          PY
-          git rm .github/pr421-review-patch.[01] .github/pr421-review-extra.xz .github/pr421-review-refund.xz .github/workflows/pr421-review-validation.yml
+          python3 .github/pr421-apply.py
+          git rm .github/pr421-review-patch.[01] .github/pr421-review-extra.xz .github/pr421-review-refund.xz .github/pr421-review-fixture.patch .github/pr421-apply.py .github/workflows/pr421-review-validation.yml
           git add common controller relay web
           git diff --cached --check
           git config user.name 'github-actions[bot]'
