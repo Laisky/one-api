@@ -5,7 +5,7 @@ export type ModelApiKind =
   | 'chat' | 'responses' | 'systemone' | 'embeddings' | 'rerank' | 'moderation'
   | 'ocr' | 'jina_ocr' | 'clone' | 'realtime' | 'gemini_live' | 'transcription'
   | 'diarization' | 'speech' | 'video' | 'image' | 'cogview' | 'grok_image'
-  | 'grok_video' | 'completions' | 'unverified';
+  | 'grok_video' | 'zhipu_video' | 'siliconflow_image' | 'completions' | 'unverified';
 
 /** ModelApiProfile records a template's protocol and the primary reference used in its audit. */
 export interface ModelApiProfile {
@@ -32,6 +32,13 @@ export const MODEL_API_SOURCES = {
   gemini_live: 'https://ai.google.dev/gemini-api/docs/live-api',
   transcription: 'https://developers.openai.com/api/docs/guides/speech-to-text',
   groq_asr: 'https://console.groq.com/docs/speech-to-text',
+  cohere_embed: 'https://docs.cohere.com/reference/embed',
+  orpheus: 'https://console.groq.com/docs/text-to-speech/orpheus',
+  cosyvoice: 'https://docs.siliconflow.com/en/api-reference/audio/create-speech',
+  mistral_tts: 'https://docs.mistral.ai/studio/audio/text_to_speech/speech',
+  mistral_asr: 'https://docs.mistral.ai/capabilities/audio_transcription',
+  siliconflow_image: 'https://docs.siliconflow.com/en/api-reference/images/images-generations',
+  zhipu_video: 'https://docs.bigmodel.cn/api-reference/模型-api/视频生成异步',
   mistral_embed: 'https://docs.mistral.ai/api/endpoint/embeddings',
   glm_asr: 'https://docs.z.ai/api-reference/audio/audio-transcriptions',
   speech: 'https://developers.openai.com/api/reference/resources/audio/subresources/speech/methods/create',
@@ -60,6 +67,16 @@ export function resolveModelApiProfile(model: string, data: ModelApiMetadata): M
   const uncertain = (source = '', reason: 'unknown' | 'native' = 'unknown'): ModelApiProfile => ({ kind: 'unverified', source, reason });
   if (taskFeatures.length > 1) return uncertain();
   if (/^jev(?:-|$)/.test(name) || taskFeatures[0] === 'systemone') return known('systemone', MODEL_API_SOURCES.systemone);
+
+  // Only exact audited model IDs or a provider's explicit gateway contract can
+  // select these examples. A modality or an image price alone is insufficient.
+  if (features.includes('gateway_siliconflow_image')) return known('siliconflow_image', MODEL_API_SOURCES.siliconflow_image);
+  if (['embed-v4.0', 'embed-english-v3.0', 'embed-english-light-v3.0', 'embed-multilingual-v3.0', 'embed-multilingual-light-v3.0'].includes(name)) return known('embeddings', MODEL_API_SOURCES.cohere_embed);
+  if (['canopylabs/orpheus-v1-english', 'canopylabs/orpheus-arabic-saudi'].includes(model.toLowerCase())) return known('speech', MODEL_API_SOURCES.orpheus);
+  if (model.toLowerCase() === 'funaudiollm/cosyvoice2-0.5b') return known('speech', MODEL_API_SOURCES.cosyvoice);
+  if (['voxtral-tts-2603', 'voxtral-mini-tts-2603', 'voxtral-mini-tts-latest'].includes(name)) return known('speech', MODEL_API_SOURCES.mistral_tts);
+  if (['voxtral-mini-transcribe-2602', 'voxtral-mini-2602'].includes(name)) return known('transcription', MODEL_API_SOURCES.mistral_asr);
+  if (['cogvideox-2', 'cogvideox-3', 'cogvideox-flash', 'viduq1-text', 'viduq1-image', 'viduq1-start-end', 'vidu2-image', 'vidu2-start-end', 'vidu2-reference'].includes(name)) return known('zhipu_video', MODEL_API_SOURCES.zhipu_video);
 
   // Specific non-conversational tasks win over broad family names such as GPT,
   // Gemini, Qwen and GLM. Pricing objects never establish a request encoding.

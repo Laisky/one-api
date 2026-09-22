@@ -136,6 +136,16 @@ describe('ModelPricingModal API usage integration', () => {
     expect(mocks.copy).toHaveBeenLastCalledWith(displayedRequest());
   });
 
+  it('shows exact input tariffs and provider-valid speech examples at the bottom', () => {
+    render(modal('canopylabs/orpheus-v1-english', { ...data, audio_pricing: { input_unit: 'characters', input_price_quantity: 1000000, input_price_usd: 22 } }));
+    expect(screen.getByLabelText('Input audio tariff')).toHaveTextContent('$22 per 1000000 characters');
+    expect(displayedRequest()).toContain('"voice": "troy"');
+    expect(displayedRequest()).toContain('"response_format": "wav"');
+    const usage = screen.getByRole('region', { name: 'API Usage' });
+    expect(usage.parentElement?.lastElementChild).toBe(usage);
+    expect(screen.queryByText('No verified gateway example')).not.toBeInTheDocument();
+  });
+
   it('passes the current endpoint, curl command and response to their copy actions', () => {
     render(modal());
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'responses' } });

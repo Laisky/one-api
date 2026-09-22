@@ -211,11 +211,13 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   32768,
 		InputModalities: []string{"audio"},
 		Audio: &adaptor.AudioPricingConfig{
+			InputUnit: "seconds", InputPriceUsd: 0.003, InputPriceQuantity: 60,
 			UsdPerSecond: 0.003 / 60.0, // $0.003 per audio minute
 		},
 		Description: "Voxtral Mini Transcribe 2 (2026-02) low-latency speech-to-text model at $0.003 per audio minute.",
 	},
 	"voxtral-tts-2603": {
+		Audio: &adaptor.AudioPricingConfig{InputUnit: "characters", InputPriceUsd: 16, InputPriceQuantity: 1e6},
 		// Voxtral TTS bills at $16 per million characters ($0.016/1k chars).
 		// We surface the per-character rate via the token ratio so prompt billing
 		// fires consistently when callers pass text input.

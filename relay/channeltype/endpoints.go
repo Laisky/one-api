@@ -213,6 +213,9 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Zhipu:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
+			EndpointAudioTranscription,
+			EndpointVideos,
 			EndpointEmbeddings,
 			EndpointImagesGenerations,
 			EndpointResponseAPI,
@@ -281,6 +284,8 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Mistral:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
+			EndpointAudioTranscription,
 			EndpointEmbeddings,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
@@ -288,6 +293,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Groq:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
 			EndpointAudioTranscription,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
@@ -310,6 +316,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Cohere:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointEmbeddings,
 			EndpointRerank,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
@@ -359,6 +366,8 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case SiliconFlow:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
+			EndpointImagesGenerations,
 			EndpointEmbeddings,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,

@@ -18,7 +18,7 @@ export interface ModelApiExample {
   request: string;
   response: string;
   responseFormat: 'json' | 'http';
-  note?: 'upload' | 'video' | 'grokVideo' | 'realtime' | 'voice' | 'document' | 'clone' | 'systemone' | 'geminiLive' | 'diarization' | 'jinaOcr' | 'legacy';
+  note?: 'upload' | 'video' | 'grokVideo' | 'realtime' | 'voice' | 'document' | 'clone' | 'systemone' | 'geminiLive' | 'diarization' | 'jinaOcr' | 'legacy' | 'zhipuVideo' | 'siliconflowImage' | 'meteredAudio';
   source?: string;
   reviewedOn?: string;
 }
@@ -230,9 +230,15 @@ function examplesForProfile(model: string, data: ModelApiMetadata, base: string)
       return examples;
     }
     case 'speech': {
-      const example = jsonExample('speech', `${base}/v1/audio/speech`, {
-        model, input: 'Hello, world!', voice: name === 'glm-tts' ? 'tongtong' : 'alloy', response_format: 'wav',
-      }, {}, 'voice');
+      const voices: Record<string, string> = {
+        'glm-tts': 'tongtong', 'orpheus-v1-english': 'troy', 'orpheus-arabic-saudi': 'fahad',
+        'cosyvoice2-0.5b': 'FunAudioLLM/CosyVoice2-0.5B:alex',
+      };
+      const body: Record<string, unknown> = { model, input: 'Hello, world!', response_format: 'wav' };
+      if (name.startsWith('voxtral-')) body.voice_id = 'YOUR_VOICE_ID';
+      else body.voice = voices[name] ?? 'alloy';
+      const metered = ['orpheus-v1-english', 'orpheus-arabic-saudi', 'cosyvoice2-0.5b'].includes(name) || name.startsWith('voxtral-');
+      const example = jsonExample('speech', `${base}/v1/audio/speech`, body, {}, metered ? 'meteredAudio' : 'voice');
       return [{ ...example, request: `${example.request} \\\n  --output speech.wav`, response: 'HTTP/1.1 200 OK\nContent-Type: audio/wav\n\n<binary WAV audio saved to speech.wav>', responseFormat: 'http' }];
     }
     case 'video':
@@ -257,6 +263,25 @@ function examplesForProfile(model: string, data: ModelApiMetadata, base: string)
         },
       ];
     }
+    case 'zhipu_video': {
+      const body: Record<string, unknown> = { model, prompt };
+      if (name.endsWith('-image')) body.image_url = 'https://example.com/input.png';
+      if (name.endsWith('-start-end')) body.image_url = ['https://example.com/first.png', 'https://example.com/last.png'];
+      if (name.endsWith('-reference')) body.image_url = ['https://example.com/reference.png'];
+      const endpoint = `${base}/v1/videos/YOUR_TASK_ID`;
+      return [
+        jsonExample('zhipu_video', `${base}/v1/videos/generations`, body, { model, id: 'YOUR_TASK_ID', task_status: 'PROCESSING' }, 'zhipuVideo'),
+        {
+          id: 'zhipu_video_status', method: 'GET', endpoint, request: formatCurl('GET', endpoint, []),
+          response: JSON.stringify({ model, id: 'YOUR_TASK_ID', task_status: 'SUCCESS', video_result: [{ url: 'https://example.com/video.mp4' }] }, null, 2),
+          responseFormat: 'json', note: 'zhipuVideo',
+        },
+      ];
+    }
+    case 'siliconflow_image':
+      return [jsonExample('image', `${base}/v1/images/generations`, {
+        model, prompt, n: 1, response_format: 'url', size: name === 'flux.2-pro' ? '512x512' : '1024x1024',
+      }, { created: 1700000000, data: [{ url: 'https://example.com/generated.png' }] }, 'siliconflowImage')];
     case 'cogview':
       // The Zhipu image converter forwards model/prompt, not response_format.
       return [jsonExample('image', `${base}/v1/images/generations`, { model, prompt }, {
@@ -292,6 +317,6 @@ export function buildModelApiExamples(model: string, data: ModelApiMetadata, bas
   return examplesForProfile(model, data, normalizeApiBaseUrl(baseUrl)).map((example) => ({
     ...example,
     source: example.id === 'messages' ? MODEL_API_SOURCES.messages : example.id === 'responses' ? MODEL_API_SOURCES.responses : example.id === 'image_edit' ? MODEL_API_SOURCES.image_edit : profile.source,
-    reviewedOn: profile.kind === 'grok_video' ? '2026-09-22' : MODEL_API_REVIEWED_ON,
+    reviewedOn: ['grok_video', 'zhipu_video', 'siliconflow_image'].includes(profile.kind) || [MODEL_API_SOURCES.cohere_embed, MODEL_API_SOURCES.orpheus, MODEL_API_SOURCES.cosyvoice, MODEL_API_SOURCES.mistral_tts, MODEL_API_SOURCES.mistral_asr].some((source) => source === profile.source) ? '2026-09-22' : MODEL_API_REVIEWED_ON,
   }));
 }

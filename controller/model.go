@@ -504,6 +504,13 @@ type VideoDisplayPricing struct {
 
 // AudioDisplayPricing represents audio pricing for display
 type AudioDisplayPricing struct {
+	InputPriceQuantity float64 `json:"input_price_quantity,omitempty"`
+	// InputUnit makes direct input pricing explicit: characters, utf8_bytes, or seconds.
+	InputUnit               string  `json:"input_unit,omitempty"`
+	InputPriceUsd           float64 `json:"input_price_usd,omitempty"`
+	MinimumBillableSeconds  float64 `json:"minimum_billable_seconds,omitempty"`
+	BillingIncrementSeconds float64 `json:"billing_increment_seconds,omitempty"`
+
 	PromptTokenRatio          float64 `json:"prompt_token_ratio,omitempty"`           // Audio-to-text token conversion ratio for prompt
 	CompletionTokenRatio      float64 `json:"completion_token_ratio,omitempty"`       // Audio-to-text token conversion ratio for completion
 	PromptTokensPerSecond     float64 `json:"prompt_tokens_per_second,omitempty"`     // Tokens generated per second of prompt audio
@@ -606,6 +613,11 @@ func buildAudioDisplayPricing(cfg *adaptorpkg.AudioPricingConfig) *AudioDisplayP
 		PromptTokensPerSecond:     cfg.PromptTokensPerSecond,
 		CompletionTokensPerSecond: cfg.CompletionTokensPerSecond,
 		UsdPerSecond:              cfg.UsdPerSecond,
+		InputUnit:                 cfg.InputUnit,
+		InputPriceUsd:             cfg.InputPriceUsd,
+		InputPriceQuantity:        cfg.InputPriceQuantity,
+		MinimumBillableSeconds:    cfg.MinimumBillableSeconds,
+		BillingIncrementSeconds:   cfg.BillingIncrementSeconds,
 	}
 }
 
@@ -759,6 +771,9 @@ func convertLocalDisplayConfig(cfg model.ModelConfigLocal) adaptorpkg.ModelConfi
 			})
 		}
 	}
+	if cfg.PerCall != nil {
+		converted.PerCall = &adaptorpkg.PerCallPricingConfig{UsdPerThousandCalls: cfg.PerCall.UsdPerThousandCalls}
+	}
 	if cfg.Video != nil {
 		converted.Video = &adaptorpkg.VideoPricingConfig{
 			PerSecondUsd:          cfg.Video.PerSecondUsd,
@@ -774,6 +789,11 @@ func convertLocalDisplayConfig(cfg model.ModelConfigLocal) adaptorpkg.ModelConfi
 			PromptTokensPerSecond:     cfg.Audio.PromptTokensPerSecond,
 			CompletionTokensPerSecond: cfg.Audio.CompletionTokensPerSecond,
 			UsdPerSecond:              cfg.Audio.UsdPerSecond,
+			InputUnit:                 cfg.Audio.InputUnit,
+			InputPriceUsd:             cfg.Audio.InputPriceUsd,
+			InputPriceQuantity:        cfg.Audio.InputPriceQuantity,
+			MinimumBillableSeconds:    cfg.Audio.MinimumBillableSeconds,
+			BillingIncrementSeconds:   cfg.Audio.BillingIncrementSeconds,
 		}
 	}
 	if cfg.Image != nil {
@@ -1450,6 +1470,11 @@ func GetModelsDisplay(c *gin.Context) {
 						PromptTokensPerSecond:     cfg.Audio.PromptTokensPerSecond,
 						CompletionTokensPerSecond: cfg.Audio.CompletionTokensPerSecond,
 						UsdPerSecond:              cfg.Audio.UsdPerSecond,
+						InputUnit:                 cfg.Audio.InputUnit,
+						InputPriceUsd:             cfg.Audio.InputPriceUsd,
+						InputPriceQuantity:        cfg.Audio.InputPriceQuantity,
+						MinimumBillableSeconds:    cfg.Audio.MinimumBillableSeconds,
+						BillingIncrementSeconds:   cfg.Audio.BillingIncrementSeconds,
 					}
 				}
 				// Embedding pricing

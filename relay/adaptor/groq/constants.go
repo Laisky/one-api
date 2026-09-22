@@ -114,7 +114,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: []string{"language", "prompt", "response_format", "temperature"},
 		// Groq publishes Whisper pricing as $0.111 per audio-hour (=$0.111/3600 USD/sec).
 		// Source: https://groq.com/pricing
-		Audio:         &adaptor.AudioPricingConfig{UsdPerSecond: 0.111 / 3600},
+		Audio:         &adaptor.AudioPricingConfig{InputUnit: "seconds", InputPriceUsd: 0.111, InputPriceQuantity: 3600, UsdPerSecond: 0.111 / 3600, MinimumBillableSeconds: 10},
 		HuggingFaceID: "openai/whisper-large-v3",
 		Description:   "OpenAI Whisper large-v3 speech-to-text model (audio input, text output) with 99+ language support.",
 	},
@@ -126,7 +126,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: []string{"language", "prompt", "response_format", "temperature"},
 		// Groq publishes Whisper Turbo pricing as $0.04 per audio-hour.
 		// Source: https://groq.com/pricing
-		Audio:         &adaptor.AudioPricingConfig{UsdPerSecond: 0.04 / 3600},
+		Audio:         &adaptor.AudioPricingConfig{InputUnit: "seconds", InputPriceUsd: 0.04, InputPriceQuantity: 3600, UsdPerSecond: 0.04 / 3600, MinimumBillableSeconds: 10},
 		HuggingFaceID: "openai/whisper-large-v3-turbo",
 		Description:   "Whisper large-v3 turbo variant (audio input, text output) with 228x real-time speed factor.",
 	},
@@ -266,6 +266,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// Current preview text-to-speech models.
 	"canopylabs/orpheus-arabic-saudi": {
+		Audio:            &adaptor.AudioPricingConfig{InputUnit: "characters", InputPriceUsd: 40, InputPriceQuantity: 1e6},
 		Ratio:            40.0 * ratio.MilliTokensUsd, // per 1M characters
 		CompletionRatio:  1,
 		ContextLength:    4000,
@@ -275,6 +276,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:      "Canopy Labs Orpheus text-to-speech model (Saudi Arabic). Output is rendered audio billed per character.",
 	},
 	"canopylabs/orpheus-v1-english": {
+		Audio:            &adaptor.AudioPricingConfig{InputUnit: "characters", InputPriceUsd: 22, InputPriceQuantity: 1e6},
 		Ratio:            22.0 * ratio.MilliTokensUsd, // per 1M characters
 		CompletionRatio:  1,
 		ContextLength:    4000,
