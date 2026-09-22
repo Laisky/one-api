@@ -49,7 +49,7 @@ func decodeInvokeJSON(raw []byte, destination any) error {
 // Handler executes one non-streaming Claude Invoke request. It returns the last
 // verified receipt even when response conversion or client delivery fails, so
 // the existing controller can settle consumed tokens rather than refund them.
-func Handler(c *gin.Context, client *bedrockruntime.Client, modelName string) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
+func Handler(c *gin.Context, client *bedrockruntime.Client, modelName string) (result *relaymodel.ErrorWithStatusCode, usage *relaymodel.Usage) {
 	target, err := resolveClaudeInvokeModel(c, client)
 	if err != nil {
 		return invokeError(err), nil
@@ -66,6 +66,14 @@ func Handler(c *gin.Context, client *bedrockruntime.Client, modelName string) (*
 	if err != nil {
 		return invokeError(err), nil
 	}
+	// HTTP success proves AWS accepted the invocation, not that zero tokens
+	// were billed. Preserve the existing estimated-settlement path when a
+	// malformed response prevents receipt recovery, and forbid paid replay.
+	defer func() {
+		if result != nil && usage == nil {
+			usage = &relaymodel.Usage{BillingEstimateReason: "missing_usage_after_accepted_aws_claude_invoke"}
+		}
+	}()
 	if response == nil {
 		return invokeError(errors.New("missing Claude Invoke response")), nil
 	}
@@ -83,7 +91,7 @@ func Handler(c *gin.Context, client *bedrockruntime.Client, modelName string) (*
 	if err := receipt.apply(envelope.Usage); err != nil {
 		return invokeError(err), nil
 	}
-	usage := receipt.snapshot()
+	usage = receipt.snapshot()
 	if envelope.Type != "message" || envelope.Error.Type != "" {
 		return invokeError(errors.New("Claude Invoke returned an error or invalid message envelope")), usage
 	}

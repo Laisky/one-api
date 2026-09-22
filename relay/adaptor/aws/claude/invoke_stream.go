@@ -65,6 +65,14 @@ func StreamHandler(c *gin.Context, client *bedrockruntime.Client) (result *relay
 	if err != nil {
 		return invokeError(err), nil
 	}
+	// An accepted stream with no readable receipt is unknown cost, not a
+	// confirmed free rejection. A non-nil estimated receipt makes existing
+	// controller settlement retain the reservation and prevent replay.
+	defer func() {
+		if result != nil && usage == nil {
+			usage = &relaymodel.Usage{BillingEstimateReason: "missing_usage_after_accepted_aws_claude_invoke"}
+		}
+	}()
 	if response == nil || response.GetStream() == nil {
 		return invokeError(errors.New("missing Claude EventStream")), nil
 	}
