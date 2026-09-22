@@ -5,17 +5,23 @@ on:
 permissions:
   contents: read
 jobs:
-  workspace:
+  regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Export source for offline review
-        run: tar --exclude=.git --exclude=.github/instructions -czf "$RUNNER_TEMP/source.tar.gz" .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/setup-go@v5
         with:
-          name: xai-video-source
-          path: ${{ runner.temp }}/source.tar.gz
-          retention-days: 1
+          go-version-file: go.mod
+      - name: Run behavioral regressions
+        run: |
+          set -o pipefail
+          go test -race -count=1 -timeout=10m ./relay/adaptor/xai ./middleware -run 'TestXAI(GatewayVideoRoute|VideoTaskOwner)' -v 2>&1 | tee "$RUNNER_TEMP/xai-video-tests.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xai-video-regression
+          path: ${{ runner.temp }}/xai-video-tests.log
+          retention-days: 7
