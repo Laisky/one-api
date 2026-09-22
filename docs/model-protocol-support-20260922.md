@@ -126,3 +126,28 @@ not a replacement for repository-wide race/coverage checks.
 - SiliconFlow Z-Image model: https://www.siliconflow.com/models/z-image-turbo
 - BigModel asynchronous video: https://docs.bigmodel.cn/api-reference/模型-api/视频生成异步
 - Google OpenAI compatibility: https://ai.google.dev/gemini-api/docs/openai
+
+## Review follow-up: immediate refund recovery
+
+Rejected audio/video requests now have an internal `quota_refunds` intent with a
+server-generated per-attempt ID. The intent is persisted before a credit; its
+completion marker and both balance adjustments share one database transaction.
+Repeated execution, including after an uncertain commit acknowledgement, cannot
+credit the same ID twice. Request retries may reset their Gin markers without
+losing the independent pending intent.
+
+Transient enqueue/credit failures receive five bounded attempts. Persisted pending
+intents are recovered by the master node at startup and every ten seconds, in
+bounded batches, using the existing joined worker lifecycle. Failed intents stay
+pending and are deferred rather than blocking later work. A complete database
+outage before the intent can be persisted still emits a critical audit record
+with its refund ID, owner/token IDs, amount and request ID for reconciliation;
+there is no unsafe fallback to an untracked credit. Keep completed IDs for replay
+deduplication. Recovery does not change the charge-on-accepted-video policy or
+refund jobs that fail asynchronously after acceptance.
+
+The database migration creates `quota_refunds`; roll out a migrating master before
+non-migrating replicas, as with other gateway schema changes. Tests cover transient
+and persistent financial-write failures, partial-transaction rollback, request
+reset/cancellation, duplicate executions and recovery after closing/reopening the
+on-disk ledger.
