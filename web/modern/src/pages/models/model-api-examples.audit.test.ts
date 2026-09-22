@@ -90,7 +90,7 @@ describe('model demo protocol audit regressions', () => {
     assert.match(examples[1].request, /image=@image.png/);
   });
 
-  for (const model of ['veo-3.1-generate-preview', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-flash-image', 'mistral-ocr-latest', 'deepl', 'grok-imagine-video', 'Qwen/Qwen-Image-Edit']) {
+  for (const model of ['veo-3.1-generate-preview', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-flash-image', 'mistral-ocr-latest', 'deepl', 'grok-unverified-video', 'Qwen/Qwen-Image-Edit']) {
     it(`does not invent a gateway codec for ${model}`, () => {
       assert.deepEqual(buildModelApiExamples(model, {}, BASE), []);
     });

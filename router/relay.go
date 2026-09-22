@@ -84,6 +84,7 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.POST("/images/edits", controller.Relay)
 	relayV1Router.POST("/images/variations", controller.RelayNotImplemented)
 	relayV1Router.POST("/videos", controller.Relay)
+	relayV1Router.POST("/videos/generations", controller.Relay)
 	relayV1Router.GET("/videos", controller.Relay)
 	relayV1Router.GET("/videos/:video_id", controller.Relay)
 	relayV1Router.GET("/videos/:video_id/content", controller.Relay)

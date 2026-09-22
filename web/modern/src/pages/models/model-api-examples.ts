@@ -18,7 +18,7 @@ export interface ModelApiExample {
   request: string;
   response: string;
   responseFormat: 'json' | 'http';
-  note?: 'upload' | 'video' | 'realtime' | 'voice' | 'document' | 'clone' | 'systemone' | 'geminiLive' | 'diarization' | 'jinaOcr' | 'legacy';
+  note?: 'upload' | 'video' | 'grokVideo' | 'realtime' | 'voice' | 'document' | 'clone' | 'systemone' | 'geminiLive' | 'diarization' | 'jinaOcr' | 'legacy';
   source?: string;
   reviewedOn?: string;
 }
@@ -240,6 +240,23 @@ function examplesForProfile(model: string, data: ModelApiMetadata, base: string)
       return [jsonExample('video', `${base}/v1/videos`, { model, prompt, seconds: '4', size: '1280x720' }, {
         id: 'video_example', object: 'video', model, status: 'queued', seconds: '4', size: '1280x720',
       }, 'video')];
+    case 'grok_video': {
+      const endpoint = `${base}/v1/videos/YOUR_REQUEST_ID`;
+      const body = { model, prompt, duration: 5, aspect_ratio: '16:9', resolution: '720p' };
+      const receipt = { request_id: 'YOUR_REQUEST_ID' };
+      return [
+        jsonExample('grok_video', `${base}/v1/videos/generations`, body, receipt, 'grokVideo'),
+        jsonExample('grok_video_image', `${base}/v1/videos/generations`, {
+          ...body, image: { url: 'https://example.com/input-image.png' },
+        }, receipt, 'grokVideo'),
+        {
+          id: 'grok_video_status', method: 'GET', endpoint,
+          request: formatCurl('GET', endpoint, []),
+          response: JSON.stringify({ status: 'done', video: { url: 'https://vidgen.x.ai/example/video.mp4', duration: 5, respect_moderation: true }, model }, null, 2),
+          responseFormat: 'json', note: 'grokVideo',
+        },
+      ];
+    }
     case 'cogview':
       // The Zhipu image converter forwards model/prompt, not response_format.
       return [jsonExample('image', `${base}/v1/images/generations`, { model, prompt }, {
@@ -275,6 +292,6 @@ export function buildModelApiExamples(model: string, data: ModelApiMetadata, bas
   return examplesForProfile(model, data, normalizeApiBaseUrl(baseUrl)).map((example) => ({
     ...example,
     source: example.id === 'messages' ? MODEL_API_SOURCES.messages : example.id === 'responses' ? MODEL_API_SOURCES.responses : example.id === 'image_edit' ? MODEL_API_SOURCES.image_edit : profile.source,
-    reviewedOn: MODEL_API_REVIEWED_ON,
+    reviewedOn: profile.kind === 'grok_video' ? '2026-09-22' : MODEL_API_REVIEWED_ON,
   }));
 }

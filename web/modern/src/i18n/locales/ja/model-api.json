@@ -30,7 +30,10 @@
       "systemone": "TypeSafe System One（評価）",
       "gemini_live": "Gemini Live WebSocket ハンドシェイク",
       "diarization": "話者ラベル付き音声文字起こし",
-      "jina_ocr": "Jina OCR（Chat Completions 通信形式）"
+      "jina_ocr": "Jina OCR（Chat Completions 通信形式）",
+      "grok_video": "Grok 動画生成",
+      "grok_video_image": "Grok 画像から動画",
+      "grok_video_status": "Grok 動画タスクの状態"
     },
     "notes": {
       "upload": "audio.wav または image.png を、モデルが対応するローカルファイルに置き換えてください。curl が multipart の境界を自動的に設定します。",
@@ -43,7 +46,8 @@
       "geminiLive": "この curl コマンドは HTTP アップグレードのみを確認します。Gemini Live セッションには WebSocket クライアントを使い、最初にネイティブの setup を送り、setupComplete を待ってから入力を送信してください。OpenAI の session.update イベントとは互換性がありません。このハンドシェイクは会話やモデル推論を検証しません。",
       "diarization": "audio.wav を録音ファイルに置き換えてください。diarized_json は話者ラベル付きの区間を返します。chunking_strategy=auto により、30 秒を超える録音にも対応します。",
       "jinaOcr": "document.png をアクセス可能な文書画像または対応する画像データ URL に置き換えてください。Jina OCR は Chat Completions で画像を読み取り Markdown を返します。一般的なテキストチャットの例ではありません。",
-      "legacy": "これは旧 Completions の仕様です。モデルの提供終了やプロバイダーのエンドポイント設定により、古いカタログ項目を利用できない場合があります。呼び出す前に対応状況を確認してください。"
+      "legacy": "これは旧 Completions の仕様です。モデルの提供終了やプロバイダーのエンドポイント設定により、古いカタログ項目を利用できない場合があります。呼び出す前に対応状況を確認してください。",
+      "grokVideo": "Videos を有効にした xAI チャネルを使用します。duration（1–15 秒）を明示してください。既定の解像度は 480p です。入力画像には別料金がかかります。YOUR_REQUEST_ID を返された request_id に置き換え、pending の間は数秒おきに確認し、done、failed、expired で停止します。完了したら video.url を読み取り、一時 URL の動画を速やかに保存してください。/content エンドポイントはありません。"
     },
     "reference": "プロトコルの参照資料",
     "reviewedOn": "確認日：{{date}}",

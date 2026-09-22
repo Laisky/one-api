@@ -57,13 +57,6 @@ type ModelRatioTierLocal struct {
 	OutputTokenThreshold int     `json:"output_token_threshold,omitempty"`
 }
 
-// VideoPricingLocal represents channel-scoped video pricing metadata stored alongside model configs.
-type VideoPricingLocal struct {
-	PerSecondUsd          float64            `json:"per_second_usd,omitempty"`
-	BaseResolution        string             `json:"base_resolution,omitempty"`
-	ResolutionMultipliers map[string]float64 `json:"resolution_multipliers,omitempty"`
-}
-
 // AudioPricingLocal mirrors adaptor.AudioPricingConfig for persistence without creating import cycles.
 type AudioPricingLocal struct {
 	PromptRatio               float64 `json:"prompt_ratio,omitempty"`
@@ -456,67 +449,6 @@ func hasOverlayPricingData(cfg ModelConfigLocal) bool {
 		hasAudioPricingData(cfg.Audio) ||
 		hasImagePricingData(cfg.Image) ||
 		hasEmbeddingPricingData(cfg.Embedding)
-}
-
-func normalizeVideoPricingLocal(cfg *VideoPricingLocal) (*VideoPricingLocal, error) {
-	if cfg == nil {
-		return nil, nil
-	}
-
-	if cfg.PerSecondUsd < 0 {
-		return nil, errors.New("video per_second_usd cannot be negative")
-	}
-
-	normalized := &VideoPricingLocal{
-		PerSecondUsd: cfg.PerSecondUsd,
-	}
-	if strings.TrimSpace(cfg.BaseResolution) != "" {
-		normalized.BaseResolution = normalizeVideoResolutionKey(cfg.BaseResolution)
-	}
-
-	if len(cfg.ResolutionMultipliers) > 0 {
-		normalized.ResolutionMultipliers = make(map[string]float64, len(cfg.ResolutionMultipliers))
-		for rawKey, value := range cfg.ResolutionMultipliers {
-			key := normalizeVideoResolutionKey(rawKey)
-			if key == "" {
-				return nil, errors.Errorf("video resolution multiplier key cannot be empty for '%s'", rawKey)
-			}
-			if value <= 0 {
-				return nil, errors.Errorf("video resolution multiplier for %s must be positive", rawKey)
-			}
-			normalized.ResolutionMultipliers[key] = value
-		}
-	}
-
-	return normalized, nil
-}
-
-func validateVideoPricingLocal(cfg *VideoPricingLocal, modelName string) (bool, error) {
-	if cfg == nil {
-		return false, nil
-	}
-	if cfg.PerSecondUsd < 0 {
-		return false, errors.Errorf("video per_second_usd cannot be negative for model %s", modelName)
-	}
-	for key, value := range cfg.ResolutionMultipliers {
-		if strings.TrimSpace(key) == "" {
-			return false, errors.Errorf("video resolution multiplier key cannot be empty for model %s", modelName)
-		}
-		if value <= 0 {
-			return false, errors.Errorf("video resolution multiplier for %s must be positive (model %s)", key, modelName)
-		}
-	}
-	return hasVideoPricingData(cfg), nil
-}
-
-func hasVideoPricingData(cfg *VideoPricingLocal) bool {
-	if cfg == nil {
-		return false
-	}
-	if cfg.PerSecondUsd > 0 {
-		return true
-	}
-	return len(cfg.ResolutionMultipliers) > 0
 }
 
 func validateAudioPricingLocal(cfg *AudioPricingLocal, modelName string) (bool, error) {

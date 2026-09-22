@@ -30,7 +30,10 @@
       "systemone": "TypeSafe System One (evaluation)",
       "gemini_live": "Gemini Live WebSocket handshake",
       "diarization": "Audio transcription with speaker labels",
-      "jina_ocr": "Jina OCR (Chat Completions transport)"
+      "jina_ocr": "Jina OCR (Chat Completions transport)",
+      "grok_video": "Grok video generation",
+      "grok_video_image": "Grok image-to-video",
+      "grok_video_status": "Grok video task status"
     },
     "notes": {
       "upload": "Replace audio.wav or image.png with a local file supported by the model. curl sets the multipart boundary automatically.",
@@ -43,7 +46,8 @@
       "geminiLive": "This curl command checks only the HTTP upgrade. To run a Gemini Live session, use a WebSocket client, send the native setup message first and wait for setupComplete before input. OpenAI session.update events are not interchangeable. No conversation or model inference is tested by this handshake.",
       "diarization": "Replace audio.wav with your recording. diarized_json returns speaker-labeled segments; chunking_strategy=auto also handles recordings longer than 30 seconds.",
       "jinaOcr": "Replace document.png with an accessible document image or a supported image data URL. Jina OCR uses Chat Completions to read images and return Markdown; this is not a general text-chat example.",
-      "legacy": "This is a legacy Completions contract. Model retirement and provider endpoint settings can make old catalog entries unavailable; confirm support before calling."
+      "legacy": "This is a legacy Completions contract. Model retirement and provider endpoint settings can make old catalog entries unavailable; confirm support before calling.",
+      "grokVideo": "Use the xAI channel with Videos enabled. Supply duration explicitly (1–15 seconds); resolution defaults to 480p. Input images are billed separately. Replace YOUR_REQUEST_ID with the returned request_id and poll every few seconds while status is pending; stop on done, failed or expired. Read video.url when done and save the temporary URL promptly. There is no /content endpoint."
     },
     "reference": "Protocol reference",
     "reviewedOn": "Reviewed {{date}}",

@@ -64,8 +64,30 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		originalRequestedModel = videoRequest.Model
 	}
 
+	meta.OriginModelName = videoRequest.Model
+	meta.ActualModelName = metalib.GetMappedModelName(videoRequest.Model, meta.ModelMapping)
+	meta.EnsureActualModelName(videoRequest.Model)
+	videoRequest.Model = meta.ActualModelName
+	metalib.Set2Context(c, meta)
+
+	ad := relay.GetAdaptor(meta.APIType)
+	if ad == nil {
+		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
+	}
+	ad.Init(meta)
+
+	inputImages := 0
+	if preparer, ok := ad.(adaptor.VideoRequestPreparer); ok {
+		var err error
+		inputImages, err = preparer.PrepareVideoRequest(c, videoRequest)
+		if err != nil {
+			return openai.ErrorWrapper(err, "invalid_video_request", http.StatusBadRequest)
+		}
+	}
+
 	requestSnapshot := map[string]any{
-		"model": originalRequestedModel,
+		"model":        originalRequestedModel,
+		"input_images": inputImages,
 	}
 	if trimmedPrompt := strings.TrimSpace(videoRequest.Prompt); trimmedPrompt != "" {
 		runes := []rune(trimmedPrompt)
@@ -89,12 +111,6 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	requestSnapshot["method"] = c.Request.Method
 	requestSnapshot["path"] = c.Request.URL.Path
 	c.Set(ctxkey.AsyncTaskRequestMetadata, requestSnapshot)
-
-	meta.OriginModelName = videoRequest.Model
-	meta.ActualModelName = metalib.GetMappedModelName(videoRequest.Model, meta.ModelMapping)
-	meta.EnsureActualModelName(videoRequest.Model)
-	videoRequest.Model = meta.ActualModelName
-	metalib.Set2Context(c, meta)
 
 	durationSeconds := videoRequest.RequestedDurationSeconds()
 
@@ -140,9 +156,12 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 		resolutionKey := videoRequest.RequestedResolution()
 		multiplier = videoPricing.EffectiveMultiplier(resolutionKey)
-		costUsd := videoPricing.PerSecondUsd * multiplier * durationSeconds
-		usedQuota = max(int64(math.Ceil(costUsd*billingratio.QuotaPerUsd*groupRatio)), 0)
-		logContent = fmt.Sprintf("video seconds %.2f, usd %.3f, multiplier %.2f, group rate %.2f", durationSeconds, videoPricing.PerSecondUsd, multiplier, groupRatio)
+		var quotaErr error
+		usedQuota, quotaErr = videoQuota(videoPricing.PerSecondUsd, multiplier, durationSeconds, videoPricing.InputImageUsd, inputImages, groupRatio)
+		if quotaErr != nil {
+			return openai.ErrorWrapper(quotaErr, "invalid_video_pricing", http.StatusBadRequest)
+		}
+		logContent = fmt.Sprintf("video seconds %.2f, usd %.3f, multiplier %.2f, input images %d at usd %.4f, group rate %.2f", durationSeconds, videoPricing.PerSecondUsd, multiplier, inputImages, videoPricing.InputImageUsd, groupRatio)
 	}
 
 	tokenId := c.GetInt(ctxkey.TokenId)
@@ -258,12 +277,6 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		lg.Warn("model mapping for non-JSON video request not applied", zap.String("content_type", contentType))
 	}
 
-	ad := relay.GetAdaptor(meta.APIType)
-	if ad == nil {
-		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
-	}
-	ad.Init(meta)
-
 	requestBody := bytes.NewBuffer(bodyBytes)
 	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
@@ -274,6 +287,12 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	usage, respErr := ad.DoResponse(c, resp, meta)
 	_ = usage // video responses currently do not return usage metrics
+	if c.GetBool(adaptor.AsyncVideoAcceptedKey) {
+		// Accepted jobs remain billable even if writing the response to a
+		// disconnected client fails. The provider has accepted the paid work.
+		succeed = true
+		markBillingReconciled(c)
+	}
 	if respErr != nil {
 		return respErr
 	}
@@ -307,6 +326,7 @@ func convertVideoLocalToAdaptor(local *model.VideoPricingLocal) *adaptor.VideoPr
 	}
 	cfg := &adaptor.VideoPricingConfig{
 		PerSecondUsd:   local.PerSecondUsd,
+		InputImageUsd:  local.InputImageUsd,
 		BaseResolution: local.BaseResolution,
 	}
 	if len(local.ResolutionMultipliers) > 0 {

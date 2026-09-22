@@ -5,7 +5,7 @@ export type ModelApiKind =
   | 'chat' | 'responses' | 'systemone' | 'embeddings' | 'rerank' | 'moderation'
   | 'ocr' | 'jina_ocr' | 'clone' | 'realtime' | 'gemini_live' | 'transcription'
   | 'diarization' | 'speech' | 'video' | 'image' | 'cogview' | 'grok_image'
-  | 'completions' | 'unverified';
+  | 'grok_video' | 'completions' | 'unverified';
 
 /** ModelApiProfile records a template's protocol and the primary reference used in its audit. */
 export interface ModelApiProfile {
@@ -70,6 +70,7 @@ export function resolveModelApiProfile(model: string, data: ModelApiMetadata): M
   if (/^gemini-.*tts/.test(name)) return uncertain(MODEL_API_SOURCES.gemini_tts, 'native');
   if (/^gemini-.*image|^imagen(?:-|$)/.test(name)) return uncertain(MODEL_API_SOURCES.gemini_image, 'native');
   if (/^veo(?:-|$)/.test(name)) return uncertain(MODEL_API_SOURCES.veo, 'native');
+  if (['grok-imagine-video', 'grok-imagine-video-2026-01-20', 'grok-imagine-video-1.5', 'grok-imagine-video-1.5-preview', 'grok-imagine-video-1.5-2026-05-30'].includes(name)) return known('grok_video', MODEL_API_SOURCES.grok_video);
   if (/^grok-.*video/.test(name)) return uncertain(MODEL_API_SOURCES.grok_video, 'native');
   if (/^mistral-ocr/.test(name)) return uncertain(MODEL_API_SOURCES.mistral_ocr, 'native');
 

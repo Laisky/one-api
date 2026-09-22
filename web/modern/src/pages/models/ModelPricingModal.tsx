@@ -60,6 +60,7 @@ interface TierData {
 }
 
 interface VideoPricingData {
+  input_image_usd?: number;
   per_second_usd: number;
   base_resolution?: string;
   resolution_multipliers?: Record<string, number>;
@@ -907,6 +908,9 @@ function PricingContent({
               tr={tr}
               raw
             />
+            {data.video_pricing.input_image_usd !== undefined && data.video_pricing.input_image_usd > 0 && (
+              <PriceCell label={tr('input', 'Input')} sublabel={tr('per_image', 'per image')} value={data.video_pricing.input_image_usd} tr={tr} raw />
+            )}
           </PriceGrid>
           {data.video_pricing.base_resolution && (
             <div className="mt-2">
