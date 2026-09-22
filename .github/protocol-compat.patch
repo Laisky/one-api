@@ -1,0 +1,70 @@
+diff --git a/relay/adaptor/zhipu/video.go b/relay/adaptor/zhipu/video.go
+index 6a4f420..01a5f81 100644
+--- a/relay/adaptor/zhipu/video.go
++++ b/relay/adaptor/zhipu/video.go
+@@ -34,12 +34,32 @@ func VideoHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCo
+ 			c.Header(key, value)
+ 		}
+ 	}
+-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+-		return openai.ErrorWrapper(errors.Errorf("BigModel video upstream returned HTTP %d", resp.StatusCode), "upstream_video_error", resp.StatusCode), nil
+-	}
+ 	if len(body) > limit {
+ 		return openai.ErrorWrapper(errors.New("video response exceeds limit"), "invalid_video_response", http.StatusBadGateway), nil
+ 	}
++	// Preserve the provider's actionable code/message for both HTTP failures
++	// and error envelopes carried by an otherwise successful HTTP response.
++	var providerError struct {
++		Error *struct {
++			Code    json.RawMessage `json:"code"`
++			Message string          `json:"message"`
++		} `json:"error"`
++	}
++	if decodeErr := json.Unmarshal(body, &providerError); decodeErr == nil && providerError.Error != nil && providerError.Error.Message != "" {
++		status := resp.StatusCode
++		if status >= 200 && status < 300 {
++			status = http.StatusBadGateway
++		}
++		code := string(providerError.Error.Code)
++		var codeText string
++		if codeErr := json.Unmarshal(providerError.Error.Code, &codeText); codeErr == nil {
++			code = codeText
++		}
++		return &model.ErrorWithStatusCode{Error: model.Error{Message: providerError.Error.Message, Type: model.ErrorTypeZhipu, Code: code}, StatusCode: status}, nil
++	}
++	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
++		return openai.ErrorWrapper(errors.Errorf("BigModel video upstream returned HTTP %d", resp.StatusCode), "upstream_video_error", resp.StatusCode), nil
++	}
+ 	var payload struct {
+ 		ID         string          `json:"id"`
+ 		TaskStatus string          `json:"task_status"`
+diff --git a/relay/adaptor/zhipu/video_contract_test.go b/relay/adaptor/zhipu/video_contract_test.go
+index 65fc3e2..1750851 100644
+--- a/relay/adaptor/zhipu/video_contract_test.go
++++ b/relay/adaptor/zhipu/video_contract_test.go
+@@ -12,6 +12,7 @@ import (
+ func TestProtocolAuditVideoLookup(t *testing.T) {
+ 	for _, base := range []string{"https://example.com", "https://example.com/api", "https://example.com/api/paas/v4"} {
+ 		for _, tc := range []struct{ path, want string }{
++			{"", "/videos/generations"},
+ 			{"/v1/videos", "/videos/generations"},
+ 			{"/v1/videos/generations", "/videos/generations"},
+ 			{"/v1/videos/job_123?trace=1", "/async-result/job_123?trace=1"},
+diff --git a/relay/adaptor/zhipu/video_request.go b/relay/adaptor/zhipu/video_request.go
+index b68ee17..29ea891 100644
+--- a/relay/adaptor/zhipu/video_request.go
++++ b/relay/adaptor/zhipu/video_request.go
+@@ -19,7 +19,12 @@ import (
+ // videoRequestURL maps gateway creation and owner-bound polling to BigModel's
+ // native endpoints, retaining query parameters and accepting versioned bases.
+ func videoRequestURL(m *meta.Meta) (string, error) {
+-	parsed, err := url.ParseRequestURI(m.RequestURLPath)
++	path := m.RequestURLPath
++	// Older mode-only adaptor callers use the creation endpoint implicitly.
++	if path == "" {
++		path = "/v1/videos/generations"
++	}
++	parsed, err := url.ParseRequestURI(path)
+ 	if err != nil {
+ 		return "", errors.Wrap(err, "parse video path")
+ 	}

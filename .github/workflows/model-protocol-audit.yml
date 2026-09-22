@@ -27,9 +27,15 @@ jobs:
       - name: Repository vet
         if: always()
         run: go vet ./... > "$RUNNER_TEMP/vet.log" 2>&1
-      - name: Runtime catalogue inventory
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Reproducible inventory and its contracts
         if: always()
-        run: go run .github/protocol-inventory.go "$RUNNER_TEMP/catalog.json"
+        run: |
+          go run ./tools/model-protocol-audit "$RUNNER_TEMP/catalog.json"
+          node --experimental-strip-types --test scripts/model-protocol-audit.test.mjs > "$RUNNER_TEMP/inventory-tests.log"
+          node --experimental-strip-types scripts/model-protocol-audit.mjs "$RUNNER_TEMP/catalog.json" "$RUNNER_TEMP/model-protocol-audit-20260922.csv" > "$RUNNER_TEMP/inventory-summary.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -38,6 +44,9 @@ jobs:
             ${{ runner.temp }}/*.jsonl
             ${{ runner.temp }}/vet.log
             ${{ runner.temp }}/catalog.json
+            ${{ runner.temp }}/model-protocol-audit-20260922.csv
+            ${{ runner.temp }}/inventory-tests.log
+            ${{ runner.temp }}/inventory-summary.json
           retention-days: 7
   frontend:
     runs-on: ubuntu-latest
@@ -71,3 +80,30 @@ jobs:
           name: protocol-frontend-qualification
           path: ${{ runner.temp }}/*.log
           retention-days: 7
+  publish:
+    needs: [go, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/model-protocol-audit-20260922
+      - uses: actions/download-artifact@v4
+        with:
+          name: protocol-go-qualification
+          path: ${{ runner.temp }}/evidence
+      - name: Commit only the qualified source and generated inventory
+        env:
+          VALIDATED_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$VALIDATED_SHA"
+          python3 .github/apply-protocol-candidate.py
+          cp "$RUNNER_TEMP/evidence/model-protocol-audit-20260922.csv" docs/
+          git add controller model relay web tools scripts docs
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: standardize embedding and media protocols with exact billing'
+          git push origin HEAD:refs/heads/work/model-protocol-audit-20260922
