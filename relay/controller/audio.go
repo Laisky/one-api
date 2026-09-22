@@ -143,7 +143,8 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	if relayMode == relaymode.AudioSpeech && strings.TrimSpace(ttsRequest.Input) == "" {
 		return openai.ErrorWrapper(errors.New("speech input must not be empty"), "invalid_audio_input", http.StatusBadRequest)
 	}
-	if err := normalizeAudioWire(c, relayMode, channelType, audioModel, &ttsRequest); err != nil {
+	wireBody, wireContentType, err := normalizeAudioWire(c, relayMode, channelType, audioModel, &ttsRequest)
+	if err != nil {
 		return openai.ErrorWrapper(err, "invalid_audio_request", http.StatusBadRequest)
 	}
 
@@ -277,17 +278,9 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 	}
 
-	// Reconstruct the original request body from cache to ensure full payload is forwarded
-	rawBody, err := common.GetRequestBody(c)
-	if err != nil {
-		return openai.ErrorWrapper(err, "get_request_body_failed", http.StatusInternalServerError)
-	}
-	requestBody := bytes.NewBuffer(rawBody)
-	// Reset gin Request.Body for any subsequent operations that may need it
-	c.Request.Body = io.NopCloser(bytes.NewReader(rawBody))
-	// responseFormat := c.DefaultPostForm("response_format", "json")
-
-	req, err := http.NewRequestWithContext(ctx, c.Request.Method, fullRequestURL, requestBody)
+	// Dispatch only this attempt's normalized bytes. Keep the client body and
+	// transport headers intact for another channel's mapping and audio metering.
+	req, err := http.NewRequestWithContext(ctx, c.Request.Method, fullRequestURL, bytes.NewReader(wireBody))
 	if err != nil {
 		return openai.ErrorWrapper(err, "new_request_failed", http.StatusInternalServerError)
 	}
@@ -300,7 +293,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	} else {
 		req.Header.Set("Authorization", c.Request.Header.Get("Authorization"))
 	}
-	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
+	req.Header.Set("Content-Type", wireContentType)
 	req.Header.Set("Accept", c.Request.Header.Get("Accept"))
 
 	// Record what the caller actually asked for. The multipart body is excluded from

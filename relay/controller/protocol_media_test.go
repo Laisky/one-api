@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/model"
@@ -42,6 +43,7 @@ func TestProtocolAuditZhipuVideoLedger(t *testing.T) {
 		{name: "international", actual: "cogvideox-3", channel: channeltype.Zai, status: 200, cost: 100000, group: 1},
 		{name: "group", actual: "cogvideox-3", channel: channeltype.Zai, status: 200, cost: 150000, group: 1.5},
 		{name: "free_group", actual: "cogvideox-3", channel: channeltype.Zai, status: 200, group: 0},
+		{name: "metadata_only", actual: "cogvideox-3", channel: channeltype.Zai, status: 200, cost: 100000, group: 1, override: &model.ModelConfigLocal{MaxTokens: 123}},
 		{name: "operator_per_call", actual: "cogvideox-3", channel: channeltype.Zai, status: 200, cost: 10000, group: 1, override: &model.ModelConfigLocal{PerCall: &model.PerCallPricingLocal{UsdPerThousandCalls: 20}}},
 		{name: "operator_free", actual: "cogvideox-3", channel: channeltype.Zai, status: 200, group: 1, override: &model.ModelConfigLocal{PerCall: &model.PerCallPricingLocal{}}},
 		{name: "legacy_ratio_override", actual: "cogvideox-3", channel: channeltype.Zai, status: 200, cost: 70, group: 2, override: &model.ModelConfigLocal{Ratio: 35}},
@@ -73,7 +75,11 @@ func TestProtocolAuditZhipuVideoLedger(t *testing.T) {
 				decoder.UseNumber()
 				var payload map[string]any
 				err := decoder.Decode(&payload)
-				seen <- map[string]any{"path": r.URL.Path, "body": payload, "error": err, "auth": r.Header.Get("Authorization")}
+				select {
+				case seen <- map[string]any{"path": r.URL.Path, "body": payload, "error": err, "auth": r.Header.Get("Authorization")}:
+				default:
+					// The atomic call count detects duplicates without blocking server shutdown.
+				}
 				w.WriteHeader(tc.status)
 				if tc.status >= 400 {
 					_, _ = io.WriteString(w, `{"error":{"code":1302,"message":"rejected"}}`)
@@ -119,7 +125,12 @@ func TestProtocolAuditZhipuVideoLedger(t *testing.T) {
 			var token model.Token
 			require.NoError(t, model.DB.First(&token, fallbackTokenID).Error)
 			require.Equal(t, tc.cost, token.UsedQuota)
-			observed := <-seen
+			var observed map[string]any
+			select {
+			case observed = <-seen:
+			case <-time.After(5 * time.Second):
+				t.Fatal("upstream create request was not received")
+			}
 			require.Nil(t, observed["error"])
 			require.Equal(t, "/api/paas/v4/videos/generations", observed["path"])
 			require.Equal(t, tc.actual, observed["body"].(map[string]any)["model"])
@@ -130,6 +141,7 @@ func TestProtocolAuditZhipuVideoLedger(t *testing.T) {
 			} else {
 				require.Len(t, strings.Split(observed["auth"].(string), "."), 3)
 			}
+			require.EqualValues(t, 1, creates.Load(), "exactly one creation even on failure")
 			if tc.status >= 400 || tc.failedEnvelope {
 				require.NotNil(t, apiErr)
 				return
@@ -194,7 +206,11 @@ func TestProtocolAuditSiliconFlowImages(t *testing.T) {
 				decoder.UseNumber()
 				var payload map[string]any
 				err := decoder.Decode(&payload)
-				seen <- map[string]any{"body": payload, "error": err, "path": r.URL.Path, "auth": r.Header.Get("Authorization"), "watermark": r.Header.Get("X-Enable-Watermark")}
+				select {
+				case seen <- map[string]any{"body": payload, "error": err, "path": r.URL.Path, "auth": r.Header.Get("Authorization"), "watermark": r.Header.Get("X-Enable-Watermark")}:
+				default:
+					// The atomic call count detects duplicates without blocking server shutdown.
+				}
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("X-Siliconcloud-Trace-Id", "trace-fixture")
 				w.WriteHeader(tc.status)
@@ -228,7 +244,12 @@ func TestProtocolAuditSiliconFlowImages(t *testing.T) {
 			var token model.Token
 			require.NoError(t, model.DB.First(&token, fallbackTokenID).Error)
 			require.Equal(t, tc.cost, token.UsedQuota)
-			observed := <-seen
+			var observed map[string]any
+			select {
+			case observed = <-seen:
+			case <-time.After(5 * time.Second):
+				t.Fatal("upstream create request was not received")
+			}
 			require.Nil(t, observed["error"])
 			wire := observed["body"].(map[string]any)
 			expectedModel := tc.actual

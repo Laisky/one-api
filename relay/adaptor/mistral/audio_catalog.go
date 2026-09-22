@@ -1,5 +1,7 @@
 package mistral
 
+import "github.com/Laisky/one-api/relay/adaptor"
+
 // init registers the published Voxtral speech and transcription aliases without
 // removing historical administrator-configured slugs. These aliases share exact
 // tariff metadata, not independent estimates.
@@ -9,4 +11,5 @@ func init() {
 		cfg := ModelRatios["voxtral-tts-2603"].Clone()
 		ModelRatios[name] = cfg
 	}
+	ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 }
