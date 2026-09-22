@@ -31,10 +31,16 @@ func RecoverQuotaRefunds(ctx context.Context) error {
 			failures = append(failures, errors.Wrapf(err, "recover quota refund %s", intent.ID))
 			// A lost commit acknowledgement may already have completed the row.
 			// This update cannot reopen it or undo a concurrent worker's success.
-			if updateErr := DB.WithContext(ctx).Model(&QuotaRefund{}).
+			// A sweep timeout must not strand this row at the queue head.
+			// Preserve trace values, but allow at most one extra second for
+			// deferral after the sweep deadline or worker cancellation.
+			deferCtx, cancelDefer := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+			updateErr := DB.WithContext(deferCtx).Model(&QuotaRefund{}).
 				Where("id = ? AND status = ?", intent.ID, QuotaRefundPending).
 				Updates(map[string]any{"retry_at": time.Now().UTC().Add(30 * time.Second).Unix(),
-					"attempts": gorm.Expr("attempts + 1")}).Error; updateErr != nil {
+					"attempts": gorm.Expr("attempts + 1")}).Error
+			cancelDefer()
+			if updateErr != nil {
 				failures = append(failures, errors.Wrap(updateErr, "defer failed quota refund"))
 			}
 		}
