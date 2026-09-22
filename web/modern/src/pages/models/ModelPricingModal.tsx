@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ModelApiExamples } from './ModelApiExamples';
+import { AudioTariffDetails, type AudioInputTariff } from './AudioTariffDetails';
 
 // ---- Types matching the backend ModelDisplayInfo ----
 
@@ -66,7 +67,7 @@ interface VideoPricingData {
   resolution_multipliers?: Record<string, number>;
 }
 
-interface AudioPricingData {
+interface AudioPricingData extends AudioInputTariff {
   prompt_token_ratio?: number;
   completion_token_ratio?: number;
   prompt_tokens_per_second?: number;
@@ -720,6 +721,7 @@ function PricingContent({
                           raw
                         />
                       )}
+                      <AudioTariffDetails pricing={window.overlay.audio_pricing} />
                       {window.overlay.audio_pricing?.usd_per_second !== undefined && window.overlay.audio_pricing.usd_per_second > 0 && (
                         <PriceCell
                           label={tr('audio_pricing', 'Audio Pricing')}
@@ -937,6 +939,7 @@ function PricingContent({
       {data.audio_pricing && (
         <PricingSection title={tr('audio_pricing', 'Audio Pricing')} icon="audio">
           <PriceGrid>
+            <AudioTariffDetails pricing={data.audio_pricing} />
             {data.audio_pricing.usd_per_second !== undefined && data.audio_pricing.usd_per_second > 0 && (
               <PriceCell
                 label={tr('base_rate', 'Base Rate')}
