@@ -77,40 +77,6 @@ func ResolveAudioPricing(modelName string, channelConfigs map[string]model.Model
 	return nil, false
 }
 
-// ResolveImagePricing resolves image pricing metadata with three-layer precedence:
-// channel overrides (when they include image pricing), provider defaults, then global pricing.
-// It returns nil when no image metadata is defined in any layer.
-func ResolveImagePricing(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (*adaptor.ImagePricingConfig, bool) {
-	if channelConfigs != nil {
-		if local, ok := channelConfigs[modelName]; ok {
-			cfg := ApplyTimeWindow(convertLocalModelConfig(local), at)
-			if cfg.Image != nil && cfg.Image.HasData() {
-				return cfg.Image.Clone(), true
-			}
-		}
-	}
-
-	if provider != nil {
-		if defaults := provider.GetDefaultModelPricing(); defaults != nil {
-			if cfg, ok := defaults[modelName]; ok {
-				cfg = ApplyTimeWindow(cloneModelConfig(cfg), at)
-				if cfg.Image != nil && cfg.Image.HasData() {
-					return cfg.Image.Clone(), true
-				}
-			}
-		}
-	}
-
-	if cfg, ok := GetGlobalModelConfig(modelName); ok {
-		cfg = ApplyTimeWindow(cfg, at)
-		if cfg.Image != nil && cfg.Image.HasData() {
-			return cfg.Image.Clone(), true
-		}
-	}
-
-	return nil, false
-}
-
 func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 	cfg := adaptor.ModelConfig{
 		Ratio:             local.Ratio,

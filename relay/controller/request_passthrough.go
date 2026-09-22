@@ -80,6 +80,14 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 		originalMap = map[string]json.RawMessage{}
 	}
 
+	var filteredFields map[string]struct{}
+	if allowUnknown {
+		filteredFields = collectFilteredChatFields(originalMap, updatedMap)
+	}
+
+	// Capture typed defaults before removing the transport-only extra_body key.
+	combinedExtraBody, rejected := collectCombinedExtraBody(originalMap, updatedMap)
+	stats.ExtraBodyRejected += rejected
 	changed := false
 	if _, ok := updatedMap["extra_body"]; ok {
 		delete(updatedMap, "extra_body")
@@ -88,7 +96,8 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 
 	if allowUnknown {
 		for key, value := range originalMap {
-			if key == "extra_body" || isAllowedExtraBodyKey(key) {
+			_, filtered := filteredFields[key]
+			if key == "extra_body" || isAllowedExtraBodyKey(key) || filtered {
 				continue
 			}
 			if _, exists := updatedMap[key]; exists {
@@ -101,7 +110,8 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 	}
 
 	for key, value := range originalMap {
-		if !isAllowedExtraBodyKey(key) {
+		_, filtered := filteredFields[key]
+		if !isAllowedExtraBodyKey(key) || filtered {
 			continue
 		}
 		if _, exists := updatedMap[key]; exists {
@@ -112,14 +122,26 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 		changed = true
 	}
 
-	combinedExtraBody, rejected := collectCombinedExtraBody(originalMap, updatedMap)
-	stats.ExtraBodyRejected += rejected
 	for key, value := range combinedExtraBody {
+		// An extension must not resurrect an explicit protocol field that the
+		// converter deliberately removed from this chat payload.
+		if _, filtered := filteredFields[key]; filtered {
+			stats.ExtraBodySkipped++
+			continue
+		}
 		if !isAllowedExtraBodyKey(key) {
 			stats.ExtraBodyRejected++
 			continue
 		}
-		if _, exists := updatedMap[key]; exists {
+		if existing, exists := updatedMap[key]; exists {
+			if key == "chat_template_kwargs" {
+				if merged, added := mergeChatTemplateDefaults(existing, value); added {
+					updatedMap[key] = merged
+					stats.ExtraBodyMerged++
+					changed = true
+					continue
+				}
+			}
 			stats.ExtraBodySkipped++
 			continue
 		}
@@ -154,16 +176,28 @@ func hasPassthroughDiagnostics(stats passthroughMergeStats) bool {
 func collectCombinedExtraBody(originalMap, updatedMap map[string]json.RawMessage) (map[string]json.RawMessage, int) {
 	combined := map[string]json.RawMessage{}
 	rejected := 0
+	invalidObjectReported := false
 
-	for _, source := range []map[string]json.RawMessage{originalMap, updatedMap} {
+	for index, source := range []map[string]json.RawMessage{originalMap, updatedMap} {
 		rawExtra, ok := source["extra_body"]
 		if !ok || len(rawExtra) == 0 {
 			continue
 		}
 
+		// The raw and typed payload may retain the same malformed transport
+		// field. Diagnose it once, while still merging genuinely new defaults.
+		if index > 0 && bytes.Equal(bytes.TrimSpace(rawExtra), bytes.TrimSpace(originalMap["extra_body"])) {
+			continue
+		}
+
 		extraBody, ok := decodeRawMessageMap(rawExtra)
 		if !ok {
-			rejected++
+			// Original and converted forms represent one rejected field, even
+			// when a converter changed its malformed value.
+			if !invalidObjectReported {
+				rejected++
+				invalidObjectReported = true
+			}
 			continue
 		}
 
@@ -173,7 +207,12 @@ func collectCombinedExtraBody(originalMap, updatedMap map[string]json.RawMessage
 				rejected++
 				continue
 			}
-			if _, exists := combined[normalizedKey]; exists {
+			if existing, exists := combined[normalizedKey]; exists {
+				if normalizedKey == "chat_template_kwargs" {
+					if merged, added := mergeChatTemplateDefaults(existing, value); added {
+						combined[normalizedKey] = merged
+					}
+				}
 				continue
 			}
 			combined[normalizedKey] = value

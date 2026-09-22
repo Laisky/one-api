@@ -10,6 +10,9 @@ type ImageRequest struct {
 	ResponseFormat *string `json:"response_format,omitempty" form:"response_format"`
 	Style          string  `json:"style,omitempty" form:"style"`
 	User           string  `json:"user,omitempty" form:"user"`
+	// IsEdit records the normalized relay operation for endpoint-specific billing.
+	// It is internal metadata and is never serialized to upstream providers.
+	IsEdit bool `json:"-" form:"-"`
 	// -------------------------------------
 	// additional fields
 	// -------------------------------------
