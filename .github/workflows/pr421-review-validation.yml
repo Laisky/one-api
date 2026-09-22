@@ -21,6 +21,9 @@ jobs:
           assert hashlib.sha256(patch).hexdigest()=='acaedd644377d017fd682f42087be707c0f0f2aebd548094c7890e3a1119cad5'
           subprocess.run(['git','apply','--check','-'],input=patch,check=True)
           subprocess.run(['git','apply','-'],input=patch,check=True)
+          extra=lzma.decompress(pathlib.Path('.github/pr421-review-extra.xz').read_bytes())
+          assert hashlib.sha256(extra).hexdigest()=='26633a8ccfa7fe93e8833b08520f66e0f89520f3f5f5a12a6e09716b73e56996'
+          subprocess.run(['git','apply','-'],input=extra,check=True)
           PY
       - uses: actions/setup-go@v5
         with:
@@ -30,10 +33,10 @@ jobs:
       - name: Negative control against original PR
         run: |
           git worktree add --detach "$RUNNER_TEMP/negative" 87a5344103933b284e37c2c809583a604bb17fa2
-          for f in relay/controller/audio_failover_ledger_test.go relay/adaptor/openai/mistral_model_list_test.go controller/model_display_native_pricing_test.go; do cp "$f" "$RUNNER_TEMP/negative/$f"; done
+          for f in relay/controller/audio_failover_ledger_test.go relay/controller/protocol_media_test.go relay/adaptor/openai/mistral_model_list_test.go controller/model_display_native_pricing_test.go; do cp "$f" "$RUNNER_TEMP/negative/$f"; done
           cd "$RUNNER_TEMP/negative"
           set +e
-          go test -race -count=1 -timeout=10m -json ./relay/controller ./controller ./relay/adaptor/openai -run '^TestPR421' > "$RUNNER_TEMP/negative.jsonl" 2>&1
+          go test -race -count=1 -timeout=10m -json ./relay/controller ./controller ./relay/adaptor/openai -run '^(TestPR421.*|TestProtocolAuditZhipuVideoLedger)$' > "$RUNNER_TEMP/negative.jsonl" 2>&1
           result=$?
           set -e
           test "$result" -ne 0
@@ -43,7 +46,7 @@ jobs:
           assert '[build failed]' not in text,text[-10000:]
           rows=[json.loads(s) for s in text.splitlines() if s.startswith('{')]
           failed={r.get('Test') for r in rows if r.get('Action')=='fail' and '/' not in r.get('Test','')}
-          expected={'TestPR421AudioFailoverLedger','TestPR421NativePricingDisplay','TestPR421MistralAudioListings','TestPR421FreePerCallWindowJSON'}
+          expected={'TestPR421AudioFailoverLedger','TestPR421NativePricingDisplay','TestPR421MistralAudioListings','TestPR421FreePerCallWindowJSON','TestProtocolAuditZhipuVideoLedger'}
           assert expected <= failed,(expected,failed,text[-10000:])
           print('Verified behavioral failures:',sorted(expected))
           PY
@@ -76,6 +79,9 @@ jobs:
           patch=lzma.decompress(b''.join(pathlib.Path('.github/pr421-review-patch.'+str(i)).read_bytes() for i in range(2)))
           assert hashlib.sha256(patch).hexdigest()=='acaedd644377d017fd682f42087be707c0f0f2aebd548094c7890e3a1119cad5'
           subprocess.run(['git','apply','-'],input=patch,check=True)
+          extra=lzma.decompress(pathlib.Path('.github/pr421-review-extra.xz').read_bytes())
+          assert hashlib.sha256(extra).hexdigest()=='26633a8ccfa7fe93e8833b08520f66e0f89520f3f5f5a12a6e09716b73e56996'
+          subprocess.run(['git','apply','-'],input=extra,check=True)
           PY
       - uses: actions/setup-node@v4
         with:
@@ -140,8 +146,11 @@ jobs:
           patch=lzma.decompress(b''.join(pathlib.Path('.github/pr421-review-patch.'+str(i)).read_bytes() for i in range(2)))
           assert hashlib.sha256(patch).hexdigest()=='acaedd644377d017fd682f42087be707c0f0f2aebd548094c7890e3a1119cad5'
           subprocess.run(['git','apply','-'],input=patch,check=True)
+          extra=lzma.decompress(pathlib.Path('.github/pr421-review-extra.xz').read_bytes())
+          assert hashlib.sha256(extra).hexdigest()=='26633a8ccfa7fe93e8833b08520f66e0f89520f3f5f5a12a6e09716b73e56996'
+          subprocess.run(['git','apply','-'],input=extra,check=True)
           PY
-          git rm .github/pr421-review-patch.[01] .github/workflows/pr421-review-validation.yml
+          git rm .github/pr421-review-patch.[01] .github/pr421-review-extra.xz .github/workflows/pr421-review-validation.yml
           git add controller relay web
           git diff --cached --check
           git config user.name 'github-actions[bot]'
