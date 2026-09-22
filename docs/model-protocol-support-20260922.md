@@ -101,7 +101,7 @@ go test -race -count=1 ./relay/adaptor/cohere ./relay/adaptor/zhipu \
   ./relay/adaptor/zai ./relay/adaptor/openai ./relay/adaptor/siliconflow \
   ./relay/adaptor/groq ./relay/adaptor/mistral ./relay/controller \
   ./relay/pricing ./relay/channeltype ./middleware ./controller ./router
-go test -race -count=1 ./model -run 'Test.*(ProtocolAudit|Audio|Video|Pricing|ModelPrice|ModelConfig)'
+go test -race -count=1 ./model -run 'Test.*(ProtocolAudit|Audio|Video|Pricing|ModelPrice|ModelConfig|QuotaRefund)'
 go vet ./...
 (cd web/modern && yarn check:i18n && yarn test --run && yarn build)
 ```
@@ -151,3 +151,8 @@ non-migrating replicas, as with other gateway schema changes. Tests cover transi
 and persistent financial-write failures, partial-transaction rollback, request
 reset/cancellation, duplicate executions and recovery after closing/reopening the
 on-disk ledger.
+
+A timed-out refund is deferred on a fresh one-second context, preserving trace
+values without inheriting the expired sweep deadline. This prevents a blocked
+head row from starving later refunds. Shutdown may wait up to this extra second;
+a failed deferral still leaves the refund pending without a financial movement.
