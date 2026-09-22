@@ -230,6 +230,13 @@ func (a *Adaptor) Init(meta *meta.Meta) {}
 // It handles routing for Chat Completions, Claude Messages, Response API, and other x.AI endpoints.
 // Returns the full URL with base URL and path, or an error if URL construction fails.
 func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
+	if meta.Mode == relaymode.Videos {
+		path, err := videoRequestPath(meta.RequestURLPath)
+		if err != nil {
+			return "", errors.Wrap(err, "resolve xAI video endpoint")
+		}
+		return openai_compatible.GetFullRequestURL(meta.BaseURL, path, meta.ChannelType), nil
+	}
 	// Handle Claude Messages requests - convert to OpenAI Chat Completions endpoint
 	requestPath := meta.RequestURLPath
 	if idx := strings.Index(requestPath, "?"); idx >= 0 {
@@ -341,6 +348,11 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 // It uses the common request helper for standard HTTP handling.
 // Returns the HTTP response or an error if the request fails.
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if meta.Mode == relaymode.Videos {
+		if rejection := videoOperationError(c); rejection != nil {
+			return rejection, nil
+		}
+	}
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
@@ -348,6 +360,9 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 // It handles different response types including images, Response API, and Claude Messages.
 // Returns usage information and any errors encountered during processing.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	if meta.Mode == relaymode.Videos {
+		return a.handleVideoResponse(c, resp)
+	}
 	// Handle image generation requests differently
 	if meta.Mode == relaymode.ImagesGenerations {
 		// TODO: Do we need a meta tag to include the actual model name for this image generation?
