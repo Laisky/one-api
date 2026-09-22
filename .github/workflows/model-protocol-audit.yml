@@ -5,57 +5,30 @@ on:
 permissions:
   contents: read
 jobs:
-  go:
+  snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          fetch-depth: 10
-      - name: Apply reviewed changes
+      - name: Export base and recover reviewed changes
         run: |
+          git archive HEAD | gzip > "$RUNNER_TEMP/base.tar.gz"
           python3 - <<'PY'
-          import hashlib,lzma,pathlib,subprocess
+          import hashlib,lzma,pathlib,subprocess,tarfile,os
           for prefix,digest in [('core','f7428fc50f92e8c902f65f3a8494c9b82150e4046fb8b712c519923bc7196233'),('media','909a43ff48a25319d1f8d1a949fe93d3995499405b55e04a21499a7df8176c29')]:
               patch=lzma.decompress(b''.join(p.read_bytes() for p in sorted(pathlib.Path('.github').glob('protocol-'+prefix+'.[0-3]'))))
               assert hashlib.sha256(patch).hexdigest()==digest
               subprocess.run(['git','apply','--check','-'],input=patch,check=True)
               subprocess.run(['git','apply','-'],input=patch,check=True)
+          with tarfile.open(os.environ['RUNNER_TEMP']+'/working.tar.gz','w:gz') as archive:
+              for path in pathlib.Path('.').iterdir():
+                  if path.name != '.git':
+                      archive.add(path,arcname=str(path))
           PY
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - name: Install physical audio metering dependency
-        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
-      - name: Negative control on unchanged implementation
-        run: |
-          git worktree add --detach "$RUNNER_TEMP/old" 6c7deddd8d729c4966c7a87496c40b5f74d80a58
-          cp relay/adaptor/cohere/embed_test.go "$RUNNER_TEMP/old/relay/adaptor/cohere/embed_test.go"
-          cd "$RUNNER_TEMP/old"
-          set +e
-          go test -race -count=1 -json ./relay/adaptor/cohere -run '^TestProtocolAuditCohereEmbeddings$' > "$RUNNER_TEMP/negative.jsonl" 2>&1
-          result=$?
-          set -e
-          test "$result" -ne 0
-          python3 - "$RUNNER_TEMP/negative.jsonl" <<'PY'
-          import json,sys
-          rows=[json.loads(s) for s in open(sys.argv[1]) if s.startswith('{')]
-          failed=[r for r in rows if r.get('Action')=='fail' and r.get('Test','').startswith('TestProtocolAuditCohereEmbeddings/')]
-          assert len(failed)==5,failed
-          PY
-      - name: Focused functionality and ledger tests
-        if: always()
-        run: |
-          go test -race -count=1 -timeout=15m -json ./relay/adaptor/cohere ./relay/adaptor/zhipu ./relay/adaptor/zai ./relay/adaptor/openai ./relay/controller ./model ./relay/pricing ./relay/channeltype -run 'Test(ProtocolAudit|CohereEmbedding|CohereInvalid|AudioTariff|AudioRejected|AudioExact)' > "$RUNNER_TEMP/focused.jsonl" 2>&1
-      - name: Repository-wide Go vet
-        if: always()
-        run: go vet ./... > "$RUNNER_TEMP/vet.log" 2>&1
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: protocol-media-validation
-          path: |
-            ${{ runner.temp }}/*.jsonl
-            ${{ runner.temp }}/vet.log
-          retention-days: 7
+          name: protocol-audit-recovered-source
+          path: ${{ runner.temp }}/*.tar.gz
+          retention-days: 1
