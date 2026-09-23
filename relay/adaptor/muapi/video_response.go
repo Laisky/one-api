@@ -1,9 +1,11 @@
 package muapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -69,7 +71,7 @@ func (a *Adaptor) handleVideoResponse(c *gin.Context, resp *http.Response) (*mod
 	if logger := gmw.GetLogger(c); logger != nil {
 		logger.Debug("MuAPI video response", zap.Bool("creating", creating), zap.String("status", payload.Status), zap.Int("body_bytes", len(body)), zap.Bool("body_logging_suppressed", true))
 	}
-	for _, key := range []string{"Content-Type", "Retry-After", "X-Request-Id", "X-MuAPI-Cost-USD", "X-MuAPI-Cost-Credits"} {
+	for _, key := range []string{"Content-Type", "Retry-After", "X-Request-Id"} {
 		if value := resp.Header.Get(key); value != "" {
 			c.Header(key, value)
 		}
@@ -84,10 +86,19 @@ func (a *Adaptor) handleVideoResponse(c *gin.Context, resp *http.Response) (*mod
 	return nil, nil
 }
 
-// hasMuAPIError reports whether an optional error field contains a non-null
-// value. Parameters: raw is the provider's JSON error field. Return value is
-// true when the field indicates a failed creation.
+// hasMuAPIError reports whether an optional error field contains a meaningful
+// error. Parameters: raw is the provider's JSON error field. Return value is
+// true when the field indicates a failed creation; false and empty strings are
+// treated as non-error values, while other JSON values remain errors.
 func hasMuAPIError(raw json.RawMessage) bool {
-	trimmed := string(raw)
-	return len(raw) > 0 && trimmed != "" && trimmed != "null"
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return false
+	}
+
+	var message string
+	if err := json.Unmarshal(trimmed, &message); err == nil {
+		return strings.TrimSpace(message) != ""
+	}
+	return true
 }
