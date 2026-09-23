@@ -1038,12 +1038,15 @@ func ensureResponseFallbackFixtures(t *testing.T) {
 		&model.Token{},
 		&model.Channel{},
 		&model.UserRequestCost{},
+		&model.QuotaRefund{},
 		&model.Log{},
 		&model.Trace{},
 		&model.MCPServer{},
 		&model.MCPTool{},
 	)
 	require.NoError(t, err, "failed to migrate tables")
+
+	require.NoError(t, model.DB.Where("token_id = ?", fallbackTokenID).Delete(&model.QuotaRefund{}).Error)
 
 	err = model.DB.Where("id = ?", fallbackUserID).Delete(&model.User{}).Error
 	require.NoError(t, err, "failed to clean user fixture")

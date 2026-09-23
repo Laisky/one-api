@@ -162,6 +162,9 @@ func main() {
 			model.SyncChannelCacheContext(ctx, config.SyncFrequency)
 		})
 	}
+	if config.IsMasterNode {
+		model.StartBackgroundWorker(workerCtx, model.RunQuotaRefundRecovery)
+	}
 	mcp.StartAutoSync(workerCtx)
 	if config.ChannelTestFrequency > 0 {
 		model.StartBackgroundWorker(workerCtx, func(ctx context.Context) {

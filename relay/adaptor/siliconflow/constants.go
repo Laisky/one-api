@@ -947,12 +947,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// === Audio models ===
 	"FunAudioLLM/CosyVoice2-0.5B": {
-		// SiliconFlow bills CosyVoice2 at $7.15 per 1M UTF-8 input bytes.
-		// Approximate 1 token ≈ 4 UTF-8 bytes for English/Chinese mix → ~$0.029 / M tokens
-		// expressed as audio prompt-token billing for accounting purposes.
-		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio: (7.15 / 4.0) * ratio.MilliTokensUsd,
-		},
+		// Direct UTF-8 input-byte billing, never an estimated tokenizer conversion.
+		Audio:            &adaptor.AudioPricingConfig{InputUnit: "utf8_bytes", InputPriceUsd: 7.15, InputPriceQuantity: 1e6},
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"audio"},
 		HuggingFaceID:    "FunAudioLLM/CosyVoice2-0.5B",

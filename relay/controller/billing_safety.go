@@ -9,6 +9,7 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/relayctx"
@@ -197,8 +198,8 @@ func returnPreConsumedQuotaConservative(
 // reach this point, so the no-underbilling guarantee on terminal failures is
 // preserved.
 //
-// The four per-attempt billing ctxkeys (UpstreamRequestPossiblyForwarded,
-// PreConsumedQuotaAmount, ProvisionalLogId, BillingReconciled) are set per
+// The per-attempt billing ctxkeys (UpstreamRequestPossiblyForwarded,
+// PreConsumedQuotaAmount, PreConsumedQuotaRefundClaimed, ProvisionalLogId, BillingReconciled) are set per
 // attempt but never reset between attempts; SetupContextForSelectedChannel only
 // resets channel keys. Left untouched, the next attempt pre-consumes again and
 // post-consumes in full while the abandoned attempt's pre-consume is never
@@ -228,7 +229,10 @@ func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 	// refund because the request may have been forwarded upstream. In every other
 	// case the normal refund path (or the billing audit safety net) has already
 	// returned the quota, so doing it again would over-credit the user.
-	if amount > 0 && shouldSkipPreConsumedRefund(c) {
+	// Audio/video explicitly refund rejected work even after forwarding. Their
+	// rollback owns the refund before its goroutine starts; BillingReconciled
+	// alone cannot distinguish this from a conservative, retained reservation.
+	if amount > 0 && shouldSkipPreConsumedRefund(c) && !c.GetBool(ctxkey.PreConsumedQuotaRefundClaimed) {
 		const reason = "refunded: superseded by cross-channel retry"
 		lg.Info("refunding abandoned attempt pre-consumed quota before cross-channel retry",
 			zap.Int64("pre_consumed_quota", amount),
@@ -261,6 +265,7 @@ func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 	jina.ClearRejection(c)
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, false)
 	c.Set(ctxkey.PreConsumedQuotaAmount, int64(0))
+	c.Set(ctxkey.PreConsumedQuotaRefundClaimed, false)
 	c.Set(ctxkey.ProvisionalLogId, 0)
 	c.Set(ctxkey.BillingReconciled, false)
 }
@@ -337,6 +342,10 @@ func scheduleConservativeRefund(c *gin.Context, preConsumedQuota int64, tokenID 
 // observeCtxErr are test seams (always nil in production) so audio and video can keep
 // their own deterministic reproduce-first tests while sharing this body. They are
 // snapshotted by the caller on the request goroutine and passed in by value.
+// Refund ownership is claimed before spawning, so a concurrent retry cannot
+// credit the same reservation again. The owning user's cache refresh follows
+// the durable refund and uses only a value-captured user identity. A unique
+// durable intent, not the per-attempt Gin marker, owns recovery after failure.
 func goRollbackPreConsumed(
 	c *gin.Context,
 	taskName string,
@@ -345,6 +354,23 @@ func goRollbackPreConsumed(
 	gate chan struct{},
 	observeCtxErr func(error),
 ) {
+	if quotaToReturn <= 0 {
+		return
+	}
+	userID := 0
+	if c != nil {
+		userID = c.GetInt(ctxkey.Id)
+		if c.GetBool(ctxkey.PreConsumedQuotaRefundClaimed) {
+			return
+		}
+		// Claim synchronously before spawning. The retry reset can now tell an
+		// owned refund from a hold deliberately retained by conservative policy.
+		c.Set(ctxkey.PreConsumedQuotaRefundClaimed, true)
+	}
+	intent := model.QuotaRefund{ID: uuid.NewString(), TokenID: tokenID, UserID: userID, Amount: quotaToReturn, Reason: taskName}
+	if c != nil {
+		intent.RequestID = c.GetString(ctxkey.RequestId)
+	}
 	goDetachedBillingWork(relayctx.Detach(c), taskName, func(ctx context.Context) {
 		if gate != nil {
 			<-gate
@@ -352,8 +378,14 @@ func goRollbackPreConsumed(
 		if observeCtxErr != nil {
 			observeCtxErr(ctx.Err())
 		}
-		if err := model.PostConsumeTokenQuota(ctx, tokenID, -quotaToReturn); err != nil {
-			gmw.GetLogger(ctx).Error("error rolling back pre-consumed quota", zap.Error(err))
+		if persisted, err := model.RefundQuotaWithRecovery(ctx, intent); err != nil {
+			// A persisted intent stays pending across retry reset, request reuse,
+			// and process restart. An enqueue outage has a replayable audit ID
+			// rather than falling back to an unsafe non-idempotent credit.
+			gmw.GetLogger(ctx).Error("CRITICAL BILLING AUDIT: owned refund requires recovery",
+				zap.String("refund_id", intent.ID), zap.Bool("intent_persisted", persisted),
+				zap.Int("user_id", userID), zap.Int("token_id", tokenID), zap.Int64("quota", quotaToReturn),
+				zap.String("request_id", intent.RequestID), zap.Error(err))
 		}
 	})
 }
@@ -361,6 +393,7 @@ func goRollbackPreConsumed(
 // markPreConsumed records the pre-consumed quota amount in the gin context
 // for the billing audit safety net.
 func markPreConsumed(c *gin.Context, amount int64) {
+	c.Set(ctxkey.PreConsumedQuotaRefundClaimed, false)
 	c.Set(ctxkey.PreConsumedQuotaAmount, amount)
 }
 

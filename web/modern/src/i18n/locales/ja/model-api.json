@@ -33,7 +33,9 @@
       "jina_ocr": "Jina OCR（Chat Completions 通信形式）",
       "grok_video": "Grok 動画生成",
       "grok_video_image": "Grok 画像から動画",
-      "grok_video_status": "Grok 動画タスクの状態"
+      "grok_video_status": "Grok 動画タスクの状態",
+      "zhipu_video": "BigModel 動画生成",
+      "zhipu_video_status": "BigModel 動画タスクの状態"
     },
     "notes": {
       "upload": "audio.wav または image.png を、モデルが対応するローカルファイルに置き換えてください。curl が multipart の境界を自動的に設定します。",
@@ -47,7 +49,10 @@
       "diarization": "audio.wav を録音ファイルに置き換えてください。diarized_json は話者ラベル付きの区間を返します。chunking_strategy=auto により、30 秒を超える録音にも対応します。",
       "jinaOcr": "document.png をアクセス可能な文書画像または対応する画像データ URL に置き換えてください。Jina OCR は Chat Completions で画像を読み取り Markdown を返します。一般的なテキストチャットの例ではありません。",
       "legacy": "これは旧 Completions の仕様です。モデルの提供終了やプロバイダーのエンドポイント設定により、古いカタログ項目を利用できない場合があります。呼び出す前に対応状況を確認してください。",
-      "grokVideo": "Videos を有効にした xAI チャネルを使用します。duration（1–15 秒）を明示してください。既定の解像度は 480p です。入力画像には別料金がかかります。YOUR_REQUEST_ID を返された request_id に置き換え、pending の間は数秒おきに確認し、done、failed、expired で停止します。完了したら video.url を読み取り、一時 URL の動画を速やかに保存してください。/content エンドポイントはありません。"
+      "grokVideo": "Videos を有効にした xAI チャネルを使用します。duration（1–15 秒）を明示してください。既定の解像度は 480p です。入力画像には別料金がかかります。YOUR_REQUEST_ID を返された request_id に置き換え、pending の間は数秒おきに確認し、done、failed、expired で停止します。完了したら video.url を読み取り、一時 URL の動画を速やかに保存してください。/content エンドポイントはありません。",
+      "zhipuVideo": "Videos を有効にした BigModel または Z.AI チャネルを使用します。受理された生成タスクは一度だけ課金され、照会は課金されません。YOUR_TASK_ID には request_id ではなく id を指定します。PROCESSING の間は照会し、SUCCESS または FAIL で停止します。video_result の URL にはゲートウェイトークンを送信しないでください。/content は使用しません。",
+      "siliconflowImage": "SiliconFlow チャネルを使用します。各リクエストは画像を一枚生成し data[].url を返します。画像編集の入力やバッチ生成には対応しません。FLUX.2-pro には対応する解像度を指定します。一時 URL のダウンロード時にゲートウェイトークンを送信しないでください。",
+      "meteredAudio": "音声は speech.wav に保存されます。Orpheus は WAV のみ、入力は 200 文字までです。CosyVoice は UTF-8 バイト数、Orpheus と Voxtral TTS は文字数で課金されます。YOUR_VOICE_ID を利用可能な音声に置換してください。送信前に入力を計量しますが、上流のアクセス権も必要です。"
     },
     "reference": "プロトコルの参照資料",
     "reviewedOn": "確認日：{{date}}",
@@ -56,6 +61,15 @@
       "title": "検証済みのゲートウェイ例がありません",
       "unknown": "このモデルの検証済みリクエスト・レスポンス仕様をカタログから特定できません。入出力形式や料金だけでは API を判断できません。マッピング先モデルとチャネルのエンドポイントを管理者に確認してください。チャット形式とは仮定しません。",
       "native": "このモデルにはプロバイダー固有のプロトコルが必要ですが、そのゲートウェイ例はここでは検証されていません。一般的なチャットやメディアのリクエストを使うのではなく、参照資料を読み、アダプターとエンドポイントの設定を確認してください。"
+    },
+    "audioTariff": {
+      "title": "音声入力料金",
+      "rate": "{{quantity}} {{unit}} あたり ${{price}}",
+      "characters": "文字",
+      "utf8_bytes": "UTF-8 バイト",
+      "seconds": "秒",
+      "minimum": "最低課金時間：{{seconds}} 秒",
+      "increment": "課金単位：{{seconds}} 秒"
     }
   }
 }

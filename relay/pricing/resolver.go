@@ -106,6 +106,9 @@ func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 			return cfg.Tiers[i].InputTokenThreshold < cfg.Tiers[j].InputTokenThreshold
 		})
 	}
+	if local.PerCall != nil {
+		cfg.PerCall = &adaptor.PerCallPricingConfig{UsdPerThousandCalls: local.PerCall.UsdPerThousandCalls}
+	}
 	if local.Video != nil {
 		cfg.Video = convertLocalVideo(local.Video)
 	}
@@ -152,6 +155,11 @@ func convertLocalAudio(local *model.AudioPricingLocal) *adaptor.AudioPricingConf
 		PromptTokensPerSecond:     local.PromptTokensPerSecond,
 		CompletionTokensPerSecond: local.CompletionTokensPerSecond,
 		UsdPerSecond:              local.UsdPerSecond,
+		InputUnit:                 local.InputUnit,
+		InputPriceUsd:             local.InputPriceUsd,
+		InputPriceQuantity:        local.InputPriceQuantity,
+		MinimumBillableSeconds:    local.MinimumBillableSeconds,
+		BillingIncrementSeconds:   local.BillingIncrementSeconds,
 	}
 }
 

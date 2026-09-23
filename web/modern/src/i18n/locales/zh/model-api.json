@@ -33,7 +33,9 @@
       "jina_ocr": "Jina OCR（Chat Completions 传输格式）",
       "grok_video": "Grok 视频生成",
       "grok_video_image": "Grok 图生视频",
-      "grok_video_status": "Grok 视频任务状态"
+      "grok_video_status": "Grok 视频任务状态",
+      "zhipu_video": "智谱视频生成",
+      "zhipu_video_status": "智谱视频任务状态"
     },
     "notes": {
       "upload": "请将 audio.wav 或 image.png 替换为模型支持的本地文件。curl 会自动设置 multipart 边界。",
@@ -47,7 +49,10 @@
       "diarization": "请将 audio.wav 替换为录音文件。diarized_json 返回带说话人标记的分段；chunking_strategy=auto 也可处理超过 30 秒的录音。",
       "jinaOcr": "请将 document.png 替换为可访问的文档图片或支持的图片 data URL。Jina OCR 通过 Chat Completions 读取图片并返回 Markdown；这不是普通文本聊天示例。",
       "legacy": "这是旧版 Completions 协议。模型下线及提供商端点配置可能导致旧目录条目不可用；调用前请确认支持情况。",
-      "grokVideo": "使用已启用 Videos 的 xAI 渠道。请明确指定 duration（1–15 秒），默认分辨率为 480p。输入图片单独计费。将 YOUR_REQUEST_ID 替换为返回的 request_id，在 pending 状态下每隔几秒查询一次；遇到 done、failed 或 expired 时停止。完成后读取 video.url 并及时保存临时链接中的视频。没有 /content 接口。"
+      "grokVideo": "使用已启用 Videos 的 xAI 渠道。请明确指定 duration（1–15 秒），默认分辨率为 480p。输入图片单独计费。将 YOUR_REQUEST_ID 替换为返回的 request_id，在 pending 状态下每隔几秒查询一次；遇到 done、failed 或 expired 时停止。完成后读取 video.url 并及时保存临时链接中的视频。没有 /content 接口。",
+      "zhipuVideo": "使用已启用 Videos 的智谱或 Z.AI 渠道。每个已受理的生成任务计费一次，查询不重复计费。将返回的 id（不是 request_id）填入 YOUR_TASK_ID。在 task_status 为 PROCESSING 时查询，遇到 SUCCESS 或 FAIL 后停止。下载 video_result 中的 URL 时不要携带网关令牌；此流程不使用 /content。",
+      "siliconflowImage": "使用 SiliconFlow 渠道。该网关接口每次只生成一张图片，返回 data[].url。不接受图片编辑输入或批量生成。FLUX.2-pro 应使用明确支持的分辨率。下载临时图片 URL 时不要携带网关令牌。",
+      "meteredAudio": "音频保存到 speech.wav。Orpheus 仅支持 WAV，输入最多 200 字符。CosyVoice 按输入 UTF-8 字节计费；Orpheus 和 Voxtral TTS 按输入字符计费。将 YOUR_VOICE_ID 替换为可用音色。网关在发送请求前计量输入，但仍需上游账号权限。"
     },
     "reference": "协议参考资料",
     "reviewedOn": "核对日期：{{date}}",
@@ -56,6 +61,15 @@
       "title": "暂无已核验的网关示例",
       "unknown": "目录信息不足以确定此模型已核验的请求和响应协议。输入输出模态和价格不能证明 API 兼容性。请联系管理员核对映射后的模型及渠道端点；不会默认生成聊天请求。",
       "native": "此模型需要提供商专用协议，但这里尚无经过核验的网关示例。请参考协议资料并核对适配器及端点配置，不要直接使用通用聊天或媒体请求。"
+    },
+    "audioTariff": {
+      "title": "音频输入费率",
+      "rate": "每 {{quantity}} {{unit}} ${{price}}",
+      "characters": "字符",
+      "utf8_bytes": "UTF-8 字节",
+      "seconds": "秒",
+      "minimum": "最低计费时长：{{seconds}} 秒",
+      "increment": "计费步长：{{seconds}} 秒"
     }
   }
 }

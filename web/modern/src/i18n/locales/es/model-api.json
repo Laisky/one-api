@@ -33,7 +33,9 @@
       "jina_ocr": "Jina OCR (transporte Chat Completions)",
       "grok_video": "Generación de vídeo Grok",
       "grok_video_image": "Imagen a vídeo Grok",
-      "grok_video_status": "Estado de la tarea de vídeo Grok"
+      "grok_video_status": "Estado de la tarea de vídeo Grok",
+      "zhipu_video": "Generación de vídeo BigModel",
+      "zhipu_video_status": "Estado de tarea de vídeo BigModel"
     },
     "notes": {
       "upload": "Sustituya audio.wav o image.png por un archivo local compatible con el modelo. curl establece automáticamente el límite multipart.",
@@ -47,7 +49,10 @@
       "diarization": "Sustituya audio.wav por su grabación. diarized_json devuelve segmentos etiquetados por hablante; chunking_strategy=auto también permite grabaciones de más de 30 segundos.",
       "jinaOcr": "Sustituya document.png por una imagen de documento accesible o una URL de datos de imagen compatible. Jina OCR utiliza Chat Completions para leer imágenes y devolver Markdown; no es un ejemplo de chat de texto general.",
       "legacy": "Es un contrato de Completions heredado. La retirada de modelos y los ajustes del proveedor pueden impedir usar entradas antiguas del catálogo; confirme la compatibilidad antes de llamar.",
-      "grokVideo": "Use el canal xAI con Videos habilitado. Indique duration (1–15 segundos); la resolución predeterminada es 480p. Las imágenes de entrada se cobran por separado. Sustituya YOUR_REQUEST_ID por el request_id recibido y consulte cada pocos segundos mientras el estado sea pending; deténgase en done, failed o expired. Al finalizar, lea video.url y guarde pronto el vídeo de esa URL temporal. No existe un endpoint /content."
+      "grokVideo": "Use el canal xAI con Videos habilitado. Indique duration (1–15 segundos); la resolución predeterminada es 480p. Las imágenes de entrada se cobran por separado. Sustituya YOUR_REQUEST_ID por el request_id recibido y consulte cada pocos segundos mientras el estado sea pending; deténgase en done, failed o expired. Al finalizar, lea video.url y guarde pronto el vídeo de esa URL temporal. No existe un endpoint /content.",
+      "zhipuVideo": "Use un canal BigModel o Z.AI con Videos habilitado. Cada tarea aceptada se cobra una vez; las consultas no se cobran. Use id, no request_id, como YOUR_TASK_ID. Consulte mientras task_status sea PROCESSING y pare en SUCCESS o FAIL. Descargue las URL de video_result sin el token de la pasarela. No se utiliza /content.",
+      "siliconflowImage": "Use un canal SiliconFlow. Cada petición genera una imagen y devuelve data[].url. No se admiten entradas de edición ni lotes. FLUX.2-pro necesita una resolución permitida. Descargue las URL temporales sin enviar el token de la pasarela.",
+      "meteredAudio": "El audio se guarda en speech.wav. Orpheus solo admite WAV y un máximo de 200 caracteres. CosyVoice factura bytes UTF-8; Orpheus y Voxtral TTS facturan caracteres. Sustituya YOUR_VOICE_ID por una voz disponible. Se mide la entrada antes del envío; se necesita acceso al proveedor."
     },
     "reference": "Referencia del protocolo",
     "reviewedOn": "Revisado el {{date}}",
@@ -56,6 +61,15 @@
       "title": "No hay un ejemplo verificado para la pasarela",
       "unknown": "El catálogo no identifica un contrato de solicitud/respuesta revisado para este modelo. Las modalidades y los precios no determinan una API. Pida al administrador que verifique el modelo mapeado y el endpoint del canal; no se presupone una solicitud de chat.",
       "native": "Este modelo necesita un protocolo específico del proveedor que no cuenta aquí con un ejemplo verificado para la pasarela. Consulte la referencia y confirme el adaptador y el endpoint en vez de usar una solicitud genérica de chat o multimedia."
+    },
+    "audioTariff": {
+      "title": "Tarifa de entrada de audio",
+      "rate": "${{price}} por {{quantity}} {{unit}}",
+      "characters": "caracteres",
+      "utf8_bytes": "bytes UTF-8",
+      "seconds": "segundos",
+      "minimum": "Duración mínima facturable: {{seconds}} segundos",
+      "increment": "Incremento de facturación: {{seconds}} segundos"
     }
   }
 }
