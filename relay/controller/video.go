@@ -145,11 +145,20 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		usedQuota = max(int64(math.Ceil(perCallUsd*billingratio.QuotaPerUsd*groupRatio)), 0)
 		logContent = fmt.Sprintf("video per-call usd %.4f, group rate %.2f", perCallUsd, groupRatio)
 	} else {
-		if durationSeconds <= 0 {
-			return openai.ErrorWrapper(errors.New("seconds must be positive for video generation"), "invalid_video_duration", http.StatusBadRequest)
-		}
 		if ok && resolvedCfg.Video != nil && resolvedCfg.Video.HasData() {
 			videoPricing = resolvedCfg.Video
+		}
+		if videoPricing == nil {
+			if estimator, supportsDynamicPricing := pricingAdaptor.(adaptor.VideoPricingEstimator); supportsDynamicPricing {
+				var estimateErr error
+				videoPricing, estimateErr = estimator.EstimateVideoPricing(c, meta, videoRequest)
+				if estimateErr != nil {
+					return openai.ErrorWrapper(errors.Wrap(estimateErr, "estimate video pricing"), "video_pricing_unavailable", http.StatusBadGateway)
+				}
+			}
+		}
+		if durationSeconds <= 0 {
+			return openai.ErrorWrapper(errors.New("seconds must be positive for video generation"), "invalid_video_duration", http.StatusBadRequest)
 		}
 		if videoPricing == nil {
 			return openai.ErrorWrapper(errors.Errorf("video pricing missing for model %s", meta.ActualModelName), "video_pricing_missing", http.StatusBadRequest)

@@ -35,6 +35,7 @@ const (
 	Zai
 	Jina
 	TypeSafe
+	MuAPI
 
 	Dummy // this one is only for count, do not add any channel after this
 )

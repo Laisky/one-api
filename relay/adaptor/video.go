@@ -3,6 +3,7 @@ package adaptor
 import (
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -15,4 +16,12 @@ const AsyncVideoAcceptedKey = "relay.async_video_accepted"
 // images, or an error when the request cannot be priced and forwarded safely.
 type VideoRequestPreparer interface {
 	PrepareVideoRequest(c *gin.Context, request *model.VideoRequest) (int, error)
+}
+
+// VideoPricingEstimator resolves request-specific video pricing before quota admission.
+// Parameters: c carries the normalized request, meta identifies the upstream channel,
+// and request contains the billing fields. Return values are the effective pricing
+// configuration or an error when the provider cannot quote the request safely.
+type VideoPricingEstimator interface {
+	EstimateVideoPricing(c *gin.Context, meta *meta.Meta, request *model.VideoRequest) (*VideoPricingConfig, error)
 }

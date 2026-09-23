@@ -446,6 +446,10 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case TypeSafe:
 		// Typed evaluation is not a generative conversation API.
 		return []Endpoint{EndpointSystemOne}
+	case MuAPI:
+		// MuAPI uses a model-scoped submit-and-poll media API rather than the
+		// generic OpenAI chat/image surfaces. The adaptor exposes it as videos.
+		return []Endpoint{EndpointVideos}
 	case Custom, OpenAICompatible:
 		return openAICompatibleBasic
 	case ClaudeCompatible:

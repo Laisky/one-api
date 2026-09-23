@@ -68,6 +68,8 @@ func String(apiType int) string {
 		return "zai"
 	case TypeSafe:
 		return "typesafe"
+	case MuAPI:
+		return "muapi"
 	default:
 		return ""
 	}

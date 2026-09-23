@@ -318,6 +318,14 @@ export const CHANNEL_TYPES: ChannelType[] = [
       'TypeSafe System One evaluation (noul, choice, score) via /v1/systemone; input-token pricing and free output. Not a chat or streaming API.',
   },
   {
+    key: 61,
+    text: 'MuAPI',
+    value: 61,
+    color: 'purple',
+    description:
+      'MuAPI unified video generation: route any catalog model slug through submit-and-poll /v1/videos; request-specific pricing is quoted before quota admission.',
+  },
+  {
     key: 42,
     text: 'VertexAI',
     value: 42,

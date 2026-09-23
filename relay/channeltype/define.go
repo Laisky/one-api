@@ -62,5 +62,6 @@ const (
 	Zai
 	Jina
 	TypeSafe
+	MuAPI
 	Dummy
 )
