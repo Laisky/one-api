@@ -1,0 +1,30 @@
+name: PR 425 offline source
+on:
+  push:
+    branches: [feat/adaptor-catalog-audit-20260924]
+    paths: [.github/workflows/pr425-source-export.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: d68f7dc1c2b1a21e352fec6994183d32ee305d80
+          persist-credentials: false
+      - name: Archive pinned public source without sensitive instructions
+        env:
+          OUT: ${{ runner.temp }}/pr425-source
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT"
+          git rev-parse HEAD > "$OUT/commit.txt"
+          git ls-tree -r HEAD > "$OUT/tree.txt"
+          git archive --format=tar --output="$OUT/source.tar" HEAD . ':(exclude).github/instructions/**' ':(exclude)**/*.woff' ':(exclude)**/*.woff2' ':(exclude)**/*.ttf' ':(exclude)**/*.otf'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr425-pinned-source
+          path: ${{ runner.temp }}/pr425-source
+          retention-days: 1
