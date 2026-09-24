@@ -8,6 +8,7 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
+// TestCurrentGroqTokenPricing checks published prices through the adaptor using t and returns no value.
 func TestCurrentGroqTokenPricing(t *testing.T) {
 	t.Parallel()
 
@@ -51,9 +52,9 @@ func TestCurrentGroqTokenPricing(t *testing.T) {
 			contextLength:       131_072,
 			maxOutputTokens:     65_536,
 		},
-		"qwen/qwen3.6-27b": {
-			inputUSDPerMillion:  0.60,
-			outputUSDPerMillion: 3.00,
+		"qwen/qwen3.8-27b": {
+			inputUSDPerMillion:  0.80,
+			outputUSDPerMillion: 4.00,
 			contextLength:       131_072,
 			maxOutputTokens:     16_384,
 		},
@@ -64,8 +65,11 @@ func TestCurrentGroqTokenPricing(t *testing.T) {
 		t.Run(modelID, func(t *testing.T) {
 			t.Parallel()
 
-			got, ok := ModelRatios[modelID]
+			a := &Adaptor{}
+			got, ok := a.GetDefaultModelPricing()[modelID]
 			require.True(t, ok)
+			require.Equal(t, got.Ratio, a.GetModelRatio(modelID))
+			require.Equal(t, got.CompletionRatio, a.GetCompletionRatio(modelID))
 			require.InDelta(t, want.inputUSDPerMillion, got.Ratio/ratio.MilliTokensUsd, 1e-12)
 			require.InDelta(t, want.cachedUSDPerMillion, got.CachedInputRatio/ratio.MilliTokensUsd, 1e-12)
 			require.InDelta(t, want.outputUSDPerMillion, got.Ratio*got.CompletionRatio/ratio.MilliTokensUsd, 1e-12)
@@ -76,6 +80,7 @@ func TestCurrentGroqTokenPricing(t *testing.T) {
 	}
 }
 
+// TestCurrentGroqNonTokenPricing checks audio units and unquoted legacy rates using t and returns no value.
 func TestCurrentGroqNonTokenPricing(t *testing.T) {
 	t.Parallel()
 
@@ -83,14 +88,31 @@ func TestCurrentGroqNonTokenPricing(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, whisper.Audio)
 	require.InDelta(t, 0.111/3600, whisper.Audio.UsdPerSecond, 1e-12)
+	require.Equal(t, "seconds", whisper.Audio.InputUnit)
+	require.EqualValues(t, 3600, whisper.Audio.InputPriceQuantity)
+	require.EqualValues(t, 10, whisper.Audio.MinimumBillableSeconds)
 
 	whisperTurbo, ok := ModelRatios["whisper-large-v3-turbo"]
 	require.True(t, ok)
 	require.NotNil(t, whisperTurbo.Audio)
 	require.InDelta(t, 0.04/3600, whisperTurbo.Audio.UsdPerSecond, 1e-12)
+	require.Equal(t, "seconds", whisperTurbo.Audio.InputUnit)
+	require.EqualValues(t, 3600, whisperTurbo.Audio.InputPriceQuantity)
+	require.EqualValues(t, 10, whisperTurbo.Audio.MinimumBillableSeconds)
 
 	require.InDelta(t, 40.0, ModelRatios["canopylabs/orpheus-arabic-saudi"].Ratio/ratio.MilliTokensUsd, 1e-12)
 	require.InDelta(t, 22.0, ModelRatios["canopylabs/orpheus-v1-english"].Ratio/ratio.MilliTokensUsd, 1e-12)
+
+	for modelID, price := range map[string]float64{
+		"canopylabs/orpheus-arabic-saudi": 40,
+		"canopylabs/orpheus-v1-english":   22,
+	} {
+		audio := ModelRatios[modelID].Audio
+		require.NotNil(t, audio)
+		require.Equal(t, "characters", audio.InputUnit)
+		require.EqualValues(t, 1_000_000, audio.InputPriceQuantity)
+		require.InDelta(t, price, audio.InputPriceUsd, 1e-12)
+	}
 
 	for _, modelID := range []string{"groq/compound", "groq/compound-mini", "minimaxai/minimax-m2.7"} {
 		require.Zero(t, ModelRatios[modelID].Ratio)
