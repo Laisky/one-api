@@ -4,92 +4,23 @@ on:
     branches: [work/compact-table-toolbar-20260924]
     paths: [.github/workflows/compact-toolbar-validation.yml]
 permissions:
-  contents: write
+  contents: read
 jobs:
-  verify:
+  source:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: 2e18433922a99de17c4066652741e8aace37e0ff
           persist-credentials: false
-      - name: Verify transported patch and apply to the exact PR head
-        shell: bash
+      - name: Archive tracked frontend source for local verification
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import base64, hashlib, lzma, os
-          from pathlib import Path
-          encoded = ''.join(Path(f'.github/toolbar-transfer/part-{index}.b64').read_text().strip() for index in range(4))
-          patch = lzma.decompress(base64.b64decode(encoded, validate=True))
-          assert hashlib.sha256(patch).hexdigest() == 'f6ba3531703aa612064379f27ed6170c29e7f18f80ae5c6cc6f822507ac9828e'
-          Path(os.environ['RUNNER_TEMP'], 'toolbar.patch').write_bytes(patch)
-          PY
-          git fetch --no-tags origin 89a6910e4a41bd3c49296a8a57e5c0f2ac76325a
-          git checkout --detach 89a6910e4a41bd3c49296a8a57e5c0f2ac76325a
-          git apply --check "$RUNNER_TEMP/toolbar.patch"
-          git apply --index "$RUNNER_TEMP/toolbar.patch"
-          git diff --cached --check
-          python3 - <<'PY'
-          import subprocess
-          paths = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()
-          assert len(paths) == 25, paths
-          assert all(path.startswith('web/modern/') or path == 'docs/ui/list-selection.md' for path in paths), paths
-          PY
-      - name: Publish isolated UI delivery branch without stored credentials
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'style(tables): compact contextual selection and action toolbars'
-          mkdir -p "$RUNNER_TEMP/toolbar-evidence"
-          git rev-parse HEAD > "$RUNNER_TEMP/toolbar-evidence/commit.txt"
-          git diff HEAD^ HEAD --stat > "$RUNNER_TEMP/toolbar-evidence/changes.txt"
-          python3 - <<'PY'
-          import base64, os, subprocess
-          env = os.environ.copy()
-          token = env.pop('GH_TOKEN')
-          env.update(GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='http.https://github.com/.extraheader', GIT_CONFIG_VALUE_0='AUTHORIZATION: basic ' + base64.b64encode(('x-access-token:' + token).encode()).decode())
-          subprocess.run(['git', 'push', 'origin', 'HEAD:refs/heads/work/compact-toolbar-delivery-' + env['GITHUB_RUN_ID']], env=env, check=True)
-          PY
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '22'
-      - name: Install locked frontend dependencies
-        working-directory: web/modern
-        run: yarn install --frozen-lockfile --non-interactive
-      - name: TypeScript and locale checks
-        working-directory: web/modern
-        shell: bash
-        run: |
-          set -euo pipefail
-          yarn tsc -b 2>&1 | tee "$RUNNER_TEMP/toolbar-evidence/typescript.log"
-          yarn check:i18n 2>&1 | tee "$RUNNER_TEMP/toolbar-evidence/i18n.log"
-      - name: Complete Modern regression suite
-        working-directory: web/modern
-        shell: bash
-        run: |
-          set -euo pipefail
-          yarn test run --maxWorkers=4 2>&1 | tee "$RUNNER_TEMP/toolbar-evidence/tests.log"
-      - name: Production Modern build
-        working-directory: web/modern
-        shell: bash
-        run: |
-          set -euo pipefail
-          yarn build:prod 2>&1 | tee "$RUNNER_TEMP/toolbar-evidence/build.log"
-      - name: Verify real Chromium layouts and confirmation flow offline
-        working-directory: web/modern
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m pip install 'playwright==1.57.0'
-          python3 scripts/test-table-toolbar-browser.py --browser "$(command -v google-chrome)" --output "$RUNNER_TEMP/toolbar-evidence/browser" 2>&1 | tee "$RUNNER_TEMP/toolbar-evidence/browser.log"
+          mkdir -p "$RUNNER_TEMP/status-source"
+          git archive --format=tar HEAD web/modern docs/ui AGENTS.md .prettierrc .prettierignore > "$RUNNER_TEMP/status-source/source.tar"
+          git rev-parse HEAD > "$RUNNER_TEMP/status-source/commit.txt"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
         with:
-          name: compact-toolbar-verification-${{ github.run_id }}
-          path: ${{ runner.temp }}/toolbar-evidence
-          retention-days: 7
+          name: channel-status-source
+          path: ${{ runner.temp }}/status-source
+          retention-days: 1
