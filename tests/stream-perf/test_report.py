@@ -38,6 +38,9 @@ class ReportTests(unittest.TestCase):
         self.assertAlmostEqual(cells[0]['metrics']['gateway_cpu_ms_per_success']['paired_change_pct_median'], -100 / 6)
         self.assertIn('not proof of statistical significance', report.markdown(cells))
         self.assertIn('p95 TTFT', report.markdown(cells))
+        table = report.markdown(cells).split('## First-content latency and repeatability')[1]
+        rows = [line for line in table.splitlines() if line.startswith('|')]
+        self.assertTrue(all(row.count('|') == rows[0].count('|') for row in rows))
 
     def test_atomic_progress_checkpoint(self):
         """test_atomic_progress_checkpoint preserves completion state and leaves no partial JSON in the canonical file."""

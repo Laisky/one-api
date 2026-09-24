@@ -124,7 +124,7 @@ def markdown(cells: list[dict]) -> str:
             f"{metrics['gateway_cpu_ms_per_success']['paired_change_pct_median']:+.2f}% | {values('completion_p95_ms')} | {values('gateway_peak_rss_mib')} |")
     lines.extend(['', '## First-content latency and repeatability', '',
         '| Profile | Concurrency | p95 TTFT ms baseline / candidate | Paired RPS change range | Paired CPU change range |',
-        '| --- | ---: | ---: | ---: | ---: | ---: |'])
+        '| --- | ---: | ---: | ---: | ---: |'])
     for cell in cells:
         m = cell['metrics']
         lines.append(f"| {cell['profile']} | {cell['concurrency']} | {m['ttft_p95_ms']['baseline_median']:.2f} / "

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-24",
+  "runs": 142,
+  "runs_csv_sha256": "6aa8356688ff545690af8d706afbca0c675f44b7b68042b4c4b0a85e33085898",
+  "environment": {
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+    "cpu_count": 5,
+    "cpu_affinity": [0, 1, 2, 3, 4],
+    "cgroup_cpu_max": "400000 100000",
+    "GOMAXPROCS": 2,
+    "database": "fresh SQLite; default WAL, quota, trace, logging, pool and billing settings",
+    "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+    "memory_cgroup_max": "4294967296",
+    "limiter": "enabled; GLOBAL_RELAY_RATE_LIMIT and GLOBAL_API_RATE_LIMIT=10000000",
+    "driver_sha256": "859ba111a0a1f70a82fdaff25a6ab04dd53d04a1523bf068211521606beceab1",
+    "resource_sampling_ms": 20
+  },
+  "binaries": {
+    "reference": {
+      "sha256": "00f549f7cfd9323d15d81ce42cba67390a61759fba174ae599c30ff458bf0707",
+      "production_revision": "a8782e3dc0dad7704acb0d008e7d30a26096338d",
+      "build_revision": "0eec195cd35d3ea33185a8b6de879345a87fedd2",
+      "artifact_id": 10815044617,
+      "workflow_run": 36018328921
+    },
+    "optimized": {
+      "sha256": "92b31496afc468a3444e8bac89cb075f2a33dcd7f1b4a4e2873f8d2741a67275",
+      "production_revision": "ce0c12f84e5fab29d0c8a778f7b98ca735dcc4d9",
+      "artifact_id": 10818038382,
+      "workflow_run": 36024642561
+    },
+    "format-rejected": {
+      "sha256": "d58a7c196fbaa1dd630a6f00663db55a58532835c3ba307fe3105e3d19ad4418",
+      "base_revision": "ce0c12f84e5fab29d0c8a778f7b98ca735dcc4d9",
+      "patch": "rejected-format.patch",
+      "artifact_id": 10818038382,
+      "workflow_run": 36024642561
+    }
+  },
+  "build": {
+    "go_version": "go1.27.1 linux/amd64",
+    "flags": "go build -trimpath",
+    "embed": "API-only frontend index fixture; not production frontend assets",
+    "measurement_location": "Local Linux execution of immutable GitHub Actions build artifacts, not GitHub runner timings"
+  },
+  "qualification": {
+    "baseline": {"normal": 0, "crlf": 0, "fragmented": 0, "missing-done": 8, "wrong-content": 8, "malformed": 8, "cancellation": "8/8 producers released within 5 seconds"},
+    "candidate": {"normal": 0, "crlf": 0, "fragmented": 0, "missing-done": 8, "wrong-content": 8, "malformed": 8, "cancellation": "8/8 producers released within 5 seconds"}
+  },
+  "experiments": {
+    "main-comparison": {"repeats": 3, "concurrency": [1, 8, 32, 64], "profiles": ["saturated", "paced"], "variants": {"baseline": "reference", "candidate": "optimized"}, "requests": {"saturated": 128, "paced": 256}, "direct": false, "chunks": {"saturated": 1024, "paced": 32}, "rate": 0, "raw_summary_sha256": "5cc2b16ad59700cf16f181672922ea09b650481944d81087b2751953f2e7b876"},
+    "format-comparison": {"repeats": 5, "concurrency": [8, 64], "profiles": ["saturated", "paced"], "variants": {"baseline": "optimized", "candidate": "format-rejected"}, "requests": {"saturated": 128, "paced": 256}, "direct": false, "chunks": {"saturated": 1024, "paced": 32}, "rate": 0, "raw_summary_sha256": "9e6247f29573ccc996432d5d608e305bce5e68c0e76a403cbde84408c4cb1356"},
+    "paced-confirmation": {"repeats": 10, "concurrency": [64], "profiles": ["paced"], "variants": {"baseline": "reference", "candidate": "optimized"}, "requests": {"paced": 1024}, "direct": false, "chunks": {"saturated": 1024, "paced": 32}, "rate": 0, "raw_summary_sha256": "c483006760a6f13c432c9917d97e56c867a1c745ae598885d2e6c3895c1fac9b"},
+    "long-c32-confirmation": {"repeats": 5, "concurrency": [32], "profiles": ["saturated"], "variants": {"baseline": "reference", "candidate": "optimized"}, "requests": {"saturated": 256}, "direct": false, "chunks": {"saturated": 1024, "paced": 32}, "rate": 0, "raw_summary_sha256": "3fb6c2e597343af11d8cacbb6dfe6b0979652545d289ec7bbafd0eeee24753d9"},
+    "direct-calibration": {"repeats": 3, "concurrency": [8, 64], "profiles": ["saturated", "paced"], "variants": {"candidate": "optimized"}, "requests": {"saturated": 128, "paced": 256}, "direct": true, "chunks": {"saturated": 1024, "paced": 32}, "rate": 0, "raw_summary_sha256": "2022f98fff17bdcd96826bc81dd960379d51a3ba8cf21f02e437b9a3f0938e82"},
+    "rate-50": {"repeats": 3, "concurrency": [64], "profiles": ["paced"], "variants": {"candidate": "optimized"}, "requests": {"paced": 1024}, "rate": 50, "direct": false, "chunks": {"saturated": 1024, "paced": 32}, "raw_summary_sha256": "6c06e018b78b88aa740cd366ede820fdb2a83ae7f73e2a71a1cc6c12f6e4df59"},
+    "rate-100": {"repeats": 3, "concurrency": [64], "profiles": ["paced"], "variants": {"candidate": "optimized"}, "requests": {"paced": 1024}, "rate": 100, "direct": false, "chunks": {"saturated": 1024, "paced": 32}, "raw_summary_sha256": "76a419c2c44313904a94f279e243b8a83703297788e50d5739899c9017f5838a"},
+    "rate-200": {"repeats": 3, "concurrency": [64], "profiles": ["paced"], "variants": {"candidate": "optimized"}, "requests": {"paced": 1024}, "rate": 200, "direct": false, "chunks": {"saturated": 1024, "paced": 32}, "raw_summary_sha256": "5bf7e34ec505298456a3cda2c79d2ca6e81ac071d6da2cca4cddfcdf1fb414e4"},
+    "rate-400": {"repeats": 3, "concurrency": [64], "profiles": ["paced"], "variants": {"candidate": "optimized"}, "requests": {"paced": 1024}, "rate": 400, "direct": false, "chunks": {"saturated": 1024, "paced": 32}, "raw_summary_sha256": "6776741ff5cf8711a109625697f325dd8047bb8d1acc6e9dd1cda97ef60de198"}
+  },
+  "notes": [
+    "CSV floats retain nine significant digits; full JSON summaries and per-request observations are retained in the accompanying evidence archive.",
+    "Every A/B pair must have identical billed request counts and used quota. Timing includes real auth, routing, token accounting, quota and log/billing paths.",
+    "The initial main-comparison used the legacy runner. Its CPU/request and RSS values are unaffected by the later average_cores denominator correction; do not use its average_cores field.",
+    "Later source merges include current main model catalogs, which were not re-benchmarked. These numbers apply to the exact binaries listed here; the streaming implementation itself is unchanged.",
+    "No significance, equivalence or production SLO claim is made. Original unfavorable cells are retained. Confirmation experiments are separately identified and never pooled with their different request counts."
+  ]
+}
