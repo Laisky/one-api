@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"unicode/utf8"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
@@ -65,7 +66,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 	} else {
 		err = Handler(c, resp, meta.ActualModelName)
 	}
-	promptTokens := len(a.promptText)
+	promptTokens := utf8.RuneCountInString(a.promptText)
 	usage = &model.Usage{
 		PromptTokens: promptTokens,
 		TotalTokens:  promptTokens,

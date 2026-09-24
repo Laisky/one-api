@@ -29,8 +29,8 @@ func TestCurrentMistralCachePricing(t *testing.T) {
 		"ministral-8b-2512":     {0.15, 0.015, 0.15},
 		"ministral-3b-latest":   {0.1, 0.01, 0.1},
 		"ministral-3b-2512":     {0.1, 0.01, 0.1},
-		"codestral-latest":     {0.3, 0.03, 0.9},
-		"codestral-2508":       {0.3, 0.03, 0.9},
+		"codestral-latest":      {0.3, 0.03, 0.9},
+		"codestral-2508":        {0.3, 0.03, 0.9},
 		"codestral-embed-2505":  {0.15, 0.015, 0.15},
 	} {
 		t.Run(id, func(t *testing.T) {

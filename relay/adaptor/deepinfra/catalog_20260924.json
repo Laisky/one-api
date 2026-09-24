@@ -1,0 +1,2259 @@
+{
+  "currency": "USD",
+  "models": {
+    "BAAI/bge-base-en-v1.5": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "BAAI/bge-base-en-v1.5 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.005
+      },
+      "ratio": 0.005,
+      "tiers": null,
+      "time_windows": null
+    },
+    "BAAI/bge-en-icl": {
+      "completion_ratio": 0.0,
+      "context_length": 8192,
+      "description": "BAAI/bge-en-icl on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "BAAI/bge-large-en-v1.5": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "BAAI/bge-large-en-v1.5 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "BAAI/bge-m3": {
+      "completion_ratio": 0.0,
+      "context_length": 8192,
+      "description": "BAAI/bge-m3 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "BAAI/bge-m3-multi": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "BAAI/bge-m3-multi on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "BAAI/bge-m3-multi-8k": {
+      "completion_ratio": 0.0,
+      "context_length": 8192,
+      "description": "BAAI/bge-m3-multi-8k on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "ByteDance/Seed-1.8": {
+      "cached_input_ratio": 0.05,
+      "completion_ratio": 8.0,
+      "context_length": 256000,
+      "description": "ByteDance/Seed-1.8 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.25,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "ByteDance/Seed-2.0-code": {
+      "cached_input_ratio": 0.1,
+      "completion_ratio": 5.999999999999999,
+      "context_length": 256000,
+      "description": "ByteDance/Seed-2.0-code on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.5,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "ByteDance/Seed-2.0-mini": {
+      "cached_input_ratio": 0.020000000000000004,
+      "completion_ratio": 4.0,
+      "context_length": 256000,
+      "description": "ByteDance/Seed-2.0-mini on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.1,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "ByteDance/Seed-2.0-pro": {
+      "cached_input_ratio": 0.1,
+      "completion_ratio": 5.999999999999999,
+      "context_length": 256000,
+      "description": "ByteDance/Seed-2.0-pro on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.5,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Gryphe/MythoMax-L2-13b": {
+      "completion_ratio": 1.0,
+      "context_length": 4096,
+      "description": "Gryphe/MythoMax-L2-13b on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.4,
+      "supported_features": [
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "MiniMaxAI/MiniMax-M2.7-Turbo": {
+      "cached_input_ratio": 0.07000000140000001,
+      "completion_ratio": 4.473684210526316,
+      "context_length": 196608,
+      "description": "MiniMaxAI/MiniMax-M2.7-Turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.38,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "MiniMaxAI/MiniMax-M3": {
+      "cached_input_ratio": 0.055999999999999994,
+      "completion_ratio": 3.9285714285714293,
+      "context_length": 524288,
+      "description": "MiniMaxAI/MiniMax-M3 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.27999999999999997,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "NousResearch/Hermes-3-Llama-3.1-405B": {
+      "completion_ratio": 1.0,
+      "context_length": 131072,
+      "description": "NousResearch/Hermes-3-Llama-3.1-405B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.0,
+      "supported_features": [
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "NousResearch/Hermes-3-Llama-3.1-70B": {
+      "completion_ratio": 1.0,
+      "context_length": 131072,
+      "description": "NousResearch/Hermes-3-Llama-3.1-70B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.7,
+      "supported_features": [
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen2.5-72B-Instruct": {
+      "completion_ratio": 1.1111111111111112,
+      "context_length": 32768,
+      "description": "Qwen/Qwen2.5-72B-Instruct on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.36,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-14B": {
+      "completion_ratio": 2.0,
+      "context_length": 40960,
+      "description": "Qwen/Qwen3-14B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.12000000000000001,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-235B-A22B-Instruct-2507": {
+      "completion_ratio": 6.111111111111112,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3-235B-A22B-Instruct-2507 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.09,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-30B-A3B": {
+      "completion_ratio": 4.166666666666666,
+      "context_length": 40960,
+      "description": "Qwen/Qwen3-30B-A3B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.12000000000000001,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-32B": {
+      "completion_ratio": 3.4999999999999996,
+      "context_length": 40960,
+      "description": "Qwen/Qwen3-32B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.08,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo": {
+      "cached_input_ratio": 0.09999999899999999,
+      "completion_ratio": 3.3333333333333335,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-Embedding-0.6B": {
+      "completion_ratio": 0.0,
+      "context_length": 32768,
+      "description": "Qwen/Qwen3-Embedding-0.6B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-Embedding-4B": {
+      "completion_ratio": 0.0,
+      "context_length": 32768,
+      "description": "Qwen/Qwen3-Embedding-4B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.02
+      },
+      "ratio": 0.02,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-Embedding-8B": {
+      "completion_ratio": 0.0,
+      "context_length": 32768,
+      "description": "Qwen/Qwen3-Embedding-8B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-Max": {
+      "cached_input_ratio": 0.24,
+      "completion_ratio": 4.999999999999999,
+      "context_length": 256000,
+      "description": "Qwen/Qwen3-Max on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.2,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-Max-Thinking": {
+      "cached_input_ratio": 0.24,
+      "completion_ratio": 4.999999999999999,
+      "context_length": 256000,
+      "description": "Qwen/Qwen3-Max-Thinking on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.2,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-Next-80B-A3B-Instruct": {
+      "completion_ratio": 12.222222222222223,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3-Next-80B-A3B-Instruct on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.09,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-Reranker-0.6B": {
+      "completion_ratio": 0.0,
+      "context_length": 32768,
+      "description": "Qwen/Qwen3-Reranker-0.6B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-Reranker-4B": {
+      "completion_ratio": 0.0,
+      "context_length": 32768,
+      "description": "Qwen/Qwen3-Reranker-4B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "ratio": 0.025,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-Reranker-8B": {
+      "completion_ratio": 0.0,
+      "context_length": 32768,
+      "description": "Qwen/Qwen3-Reranker-8B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "ratio": 0.05,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-VL-235B-A22B-Instruct": {
+      "cached_input_ratio": 0.11000000000000001,
+      "completion_ratio": 4.3999999999999995,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3-VL-235B-A22B-Instruct on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.2,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3-VL-30B-A3B-Instruct": {
+      "completion_ratio": 4.0,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3-VL-30B-A3B-Instruct on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.15,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.5-122B-A10B": {
+      "completion_ratio": 8.275862068965518,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3.5-122B-A10B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.29,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.5-27B": {
+      "completion_ratio": 9.999999999999998,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3.5-27B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.26,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.5-35B-A3B": {
+      "cached_input_ratio": 0.050000000399999994,
+      "completion_ratio": 7.142857142857143,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3.5-35B-A3B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.13999999999999999,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.5-397B-A17B": {
+      "cached_input_ratio": 0.22000000050000001,
+      "completion_ratio": 6.666666666666665,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3.5-397B-A17B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.45,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.5-9B": {
+      "completion_ratio": 1.4999999999999998,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3.5-9B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.1,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.6-27B": {
+      "completion_ratio": 10.0,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3.6-27B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.32,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.6-35B-A3B": {
+      "completion_ratio": 9.5,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3.6-35B-A3B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.1,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.7-Max": {
+      "cached_input_ratio": 0.5,
+      "completion_ratio": 3.0,
+      "context_length": 256000,
+      "description": "Qwen/Qwen3.7-Max on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 2.5,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.8-2.4T-A95B": {
+      "cached_input_ratio": 0.2,
+      "completion_ratio": 2.9999999999999996,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3.8-2.4T-A95B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 2.0,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.8-27B": {
+      "cached_input_ratio": 0.037500000000000006,
+      "completion_ratio": 12.499999999999998,
+      "context_length": 262144,
+      "description": "Qwen/Qwen3.8-27B on DeepInfra. Observed 25% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.15000000000000002,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.8-Flash": {
+      "cached_input_ratio": 0.01409999988,
+      "completion_ratio": 3.3805309734513274,
+      "context_length": 1000000,
+      "description": "Qwen/Qwen3.8-Flash on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.113,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.8-Max": {
+      "cached_input_ratio": 0.205999992,
+      "completion_ratio": 3.000606060606061,
+      "context_length": 256000,
+      "description": "Qwen/Qwen3.8-Max on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.65,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Sao10K/L3-8B-Lunaris-v1-Turbo": {
+      "completion_ratio": 1.25,
+      "context_length": 8192,
+      "description": "Sao10K/L3-8B-Lunaris-v1-Turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.04,
+      "supported_features": [
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "Sao10K/L3.1-70B-Euryale-v2.2": {
+      "completion_ratio": 1.0,
+      "context_length": 131072,
+      "description": "Sao10K/L3.1-70B-Euryale-v2.2 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.8500000000000001,
+      "supported_features": [
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "anthropic/claude-fable-5": {
+      "completion_ratio": 5.0,
+      "context_length": 1000000,
+      "description": "anthropic/claude-fable-5 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 10.0,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "anthropic/claude-haiku-4-5": {
+      "completion_ratio": 5.0,
+      "context_length": 200000,
+      "description": "anthropic/claude-haiku-4-5 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.0,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "anthropic/claude-opus-4-7": {
+      "completion_ratio": 5.0,
+      "context_length": 1000000,
+      "description": "anthropic/claude-opus-4-7 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 5.0,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "anthropic/claude-opus-4-8": {
+      "completion_ratio": 5.0,
+      "context_length": 1000000,
+      "description": "anthropic/claude-opus-4-8 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 5.0,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "anthropic/claude-opus-5": {
+      "completion_ratio": 5.0,
+      "context_length": 1000000,
+      "description": "anthropic/claude-opus-5 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 5.0,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "anthropic/claude-opus-5-5": {
+      "cached_input_ratio": 0.2,
+      "completion_ratio": 5.0,
+      "context_length": 1000000,
+      "description": "anthropic/claude-opus-5-5 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 4.0,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "anthropic/claude-sonnet-4-6": {
+      "completion_ratio": 5.000000000000001,
+      "context_length": 1000000,
+      "description": "anthropic/claude-sonnet-4-6 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 2.9999999999999996,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "anthropic/claude-sonnet-5": {
+      "completion_ratio": 5.000000000000001,
+      "context_length": 1000000,
+      "description": "anthropic/claude-sonnet-5 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 2.9999999999999996,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-R1-0528": {
+      "cached_input_ratio": 0.35,
+      "completion_ratio": 4.3,
+      "context_length": 163840,
+      "description": "deepseek-ai/DeepSeek-R1-0528 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.5,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V3": {
+      "completion_ratio": 2.7812499999999996,
+      "context_length": 163840,
+      "description": "deepseek-ai/DeepSeek-V3 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.32,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V3.1": {
+      "cached_input_ratio": 0.13,
+      "completion_ratio": 3.8000000000000003,
+      "context_length": 163840,
+      "description": "deepseek-ai/DeepSeek-V3.1 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.25,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V3.2": {
+      "cached_input_ratio": 0.13,
+      "completion_ratio": 1.4615384615384615,
+      "context_length": 163840,
+      "description": "deepseek-ai/DeepSeek-V3.2 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.26,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V4-Flash": {
+      "cached_input_ratio": 0.018,
+      "completion_ratio": 2.0,
+      "context_length": 1048576,
+      "description": "deepseek-ai/DeepSeek-V4-Flash on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.09,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V4-Flash-0731": {
+      "cached_input_ratio": 0.015000000000000001,
+      "completion_ratio": 2.9999999999999996,
+      "context_length": 1048576,
+      "description": "deepseek-ai/DeepSeek-V4-Flash-0731 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.060000000000000005,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": {
+      "cached_input_ratio": 0.006859999608,
+      "completion_ratio": 3.0000000000000004,
+      "context_length": 1048576,
+      "description": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp on DeepInfra. Observed 51% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.21559999999999999,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V4-Pro": {
+      "cached_input_ratio": 0.10000000399999999,
+      "completion_ratio": 2.0,
+      "context_length": 1048576,
+      "description": "deepseek-ai/DeepSeek-V4-Pro on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.2999999999999998,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V4-Pro-0813": {
+      "cached_input_ratio": 0.10000000399999999,
+      "completion_ratio": 2.0,
+      "context_length": 1048576,
+      "description": "deepseek-ai/DeepSeek-V4-Pro-0813 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.2999999999999998,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V4.1-Flash": {
+      "cached_input_ratio": 0.0042,
+      "completion_ratio": 3.0,
+      "context_length": 1048576,
+      "description": "deepseek-ai/DeepSeek-V4.1-Flash on DeepInfra. Observed 30% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.13999999999999999,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/embeddinggemma-300m": {
+      "completion_ratio": 0.0,
+      "context_length": 2048,
+      "description": "google/embeddinggemma-300m on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.002
+      },
+      "ratio": 0.002,
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/gemma-3-12b-it": {
+      "completion_ratio": 2.9999999999999996,
+      "context_length": 131072,
+      "description": "google/gemma-3-12b-it on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.05,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/gemma-3-27b-it": {
+      "completion_ratio": 2.0,
+      "context_length": 131072,
+      "description": "google/gemma-3-27b-it on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.08,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/gemma-3-4b-it": {
+      "completion_ratio": 2.0,
+      "context_length": 131072,
+      "description": "google/gemma-3-4b-it on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.05,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/gemma-4-26B-A4B-it": {
+      "completion_ratio": 4.857142857142858,
+      "context_length": 262144,
+      "description": "google/gemma-4-26B-A4B-it on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.06999999999999999,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/gemma-4-31B-it-Ultra": {
+      "completion_ratio": 2.8148148148148153,
+      "context_length": 131072,
+      "description": "google/gemma-4-31B-it-Ultra on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.26999999999999996,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/gemma-4-31B-it-turbo": {
+      "cached_input_ratio": 0.050000000399999994,
+      "completion_ratio": 3.777777777777778,
+      "context_length": 262144,
+      "description": "google/gemma-4-31B-it-turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.09,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/gemma-4-E4B-it": {
+      "completion_ratio": 5.0,
+      "context_length": 131072,
+      "description": "google/gemma-4-E4B-it on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.02,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "ibm-granite/granite-4.2-30b": {
+      "cached_input_ratio": 0.04,
+      "completion_ratio": 4.062499999999999,
+      "context_length": 131072,
+      "description": "ibm-granite/granite-4.2-30b on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.16,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "ibm-granite/granite-4.2-3b": {
+      "cached_input_ratio": 0.007500000000000001,
+      "completion_ratio": 4.0,
+      "context_length": 131072,
+      "description": "ibm-granite/granite-4.2-3b on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.030000000000000002,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "ibm-granite/granite-4.2-8b": {
+      "cached_input_ratio": 0.015000000000000001,
+      "completion_ratio": 4.166666666666666,
+      "context_length": 131072,
+      "description": "ibm-granite/granite-4.2-8b on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.060000000000000005,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "inclusionAI/Ling-3.0-flash": {
+      "cached_input_ratio": 0.012000000000000002,
+      "completion_ratio": 2.9999999999999996,
+      "context_length": 131072,
+      "description": "inclusionAI/Ling-3.0-flash on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.060000000000000005,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "inclusionAI/Ling-3.0-flash-Fin": {
+      "cached_input_ratio": 0.012000000000000002,
+      "completion_ratio": 2.9999999999999996,
+      "context_length": 262144,
+      "description": "inclusionAI/Ling-3.0-flash-Fin on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.060000000000000005,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "inclusionAI/Ling-3.0-flash-VL": {
+      "cached_input_ratio": 0.012000000000000002,
+      "completion_ratio": 2.9999999999999996,
+      "context_length": 131072,
+      "description": "inclusionAI/Ling-3.0-flash-VL on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.060000000000000005,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "intfloat/e5-base-v2": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "intfloat/e5-base-v2 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.005
+      },
+      "ratio": 0.005,
+      "tiers": null,
+      "time_windows": null
+    },
+    "intfloat/e5-large-v2": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "intfloat/e5-large-v2 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "intfloat/multilingual-e5-large": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "intfloat/multilingual-e5-large on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "intfloat/multilingual-e5-large-instruct": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "intfloat/multilingual-e5-large-instruct on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
+      "completion_ratio": 3.1999999999999997,
+      "context_length": 131072,
+      "description": "meta-llama/Llama-3.3-70B-Instruct-Turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.1,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8": {
+      "completion_ratio": 4.0,
+      "context_length": 1048576,
+      "description": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.2,
+      "supported_features": [
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-llama/Llama-4-Scout-17B-16E-Instruct": {
+      "completion_ratio": 2.9999999999999996,
+      "context_length": 327680,
+      "description": "meta-llama/Llama-4-Scout-17B-16E-Instruct on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.1,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-llama/Llama-Guard-4-12B": {
+      "completion_ratio": 1.0,
+      "context_length": 163840,
+      "description": "meta-llama/Llama-Guard-4-12B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.18,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo": {
+      "completion_ratio": 1.0,
+      "context_length": 131072,
+      "description": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.4,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo": {
+      "completion_ratio": 2.0,
+      "context_length": 131072,
+      "description": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.02,
+      "supported_features": [
+        "tools",
+        "json_mode"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-models/Muse-Glimmer-30B": {
+      "cached_input_ratio": 0.039999999,
+      "completion_ratio": 4.0,
+      "context_length": 131072,
+      "description": "meta-models/Muse-Glimmer-30B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "microsoft/phi-4": {
+      "completion_ratio": 2.0,
+      "context_length": 16384,
+      "description": "microsoft/phi-4 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.06999999999999999,
+      "supported_features": [
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "mistralai/Mistral-Nemo-Instruct-2407": {
+      "completion_ratio": 1.5789473684210529,
+      "context_length": 131072,
+      "description": "mistralai/Mistral-Nemo-Instruct-2407 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.019,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "mistralai/Mistral-Small-24B-Instruct-2501": {
+      "completion_ratio": 1.5999999999999999,
+      "context_length": 32768,
+      "description": "mistralai/Mistral-Small-24B-Instruct-2501 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.05,
+      "supported_features": [
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "mistralai/Mistral-Small-3.2-24B-Instruct-2506": {
+      "completion_ratio": 2.666666666666667,
+      "context_length": 128000,
+      "description": "mistralai/Mistral-Small-3.2-24B-Instruct-2506 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.075,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "moonshotai/Kimi-K2.6": {
+      "cached_input_ratio": 0.15,
+      "completion_ratio": 4.666666666666667,
+      "context_length": 262144,
+      "description": "moonshotai/Kimi-K2.6 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.7499999999999999,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "moonshotai/Kimi-K3": {
+      "cached_input_ratio": 0.28500000000000003,
+      "completion_ratio": 5.0,
+      "context_length": 1048576,
+      "description": "moonshotai/Kimi-K3 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 2.85,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": {
+      "completion_ratio": 4.705882352941177,
+      "context_length": 262144,
+      "description": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.085,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": {
+      "cached_input_ratio": 0.1,
+      "completion_ratio": 4.4,
+      "context_length": 262144,
+      "description": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.5,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning": {
+      "cached_input_ratio": 0.04,
+      "completion_ratio": 2.5,
+      "context_length": 262144,
+      "description": "nvidia/NVIDIA-Nemotron-3.5-Lightning on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.08,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "nvidia/Nemotron-3-Nano-30B-A3B": {
+      "cached_input_ratio": 0.025,
+      "completion_ratio": 4.0,
+      "context_length": 262144,
+      "description": "nvidia/Nemotron-3-Nano-30B-A3B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.05,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "nvidia/Nemotron-Content-Safety-3.5": {
+      "completion_ratio": 1.0,
+      "context_length": 131072,
+      "description": "nvidia/Nemotron-Content-Safety-3.5 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.2,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "nvidia/llama-nemotron-embed-vl-1b-v2": {
+      "completion_ratio": 0.0,
+      "context_length": 10240,
+      "description": "nvidia/llama-nemotron-embed-vl-1b-v2 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "openai/gpt-oss-120b": {
+      "completion_ratio": 4.594594594594595,
+      "context_length": 131072,
+      "description": "openai/gpt-oss-120b on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.037,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "openai/gpt-oss-120b-Turbo": {
+      "completion_ratio": 4.0,
+      "context_length": 131072,
+      "description": "openai/gpt-oss-120b-Turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.15,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "openai/gpt-oss-120b-Ultra": {
+      "completion_ratio": 4.75,
+      "context_length": 131072,
+      "description": "openai/gpt-oss-120b-Ultra on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.2,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "openai/gpt-oss-20b": {
+      "completion_ratio": 4.666666666666666,
+      "context_length": 131072,
+      "description": "openai/gpt-oss-20b on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.030000000000000002,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "sentence-transformers/all-MiniLM-L12-v2": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "sentence-transformers/all-MiniLM-L12-v2 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.005
+      },
+      "ratio": 0.005,
+      "tiers": null,
+      "time_windows": null
+    },
+    "sentence-transformers/all-MiniLM-L6-v2": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "sentence-transformers/all-MiniLM-L6-v2 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.005
+      },
+      "ratio": 0.005,
+      "tiers": null,
+      "time_windows": null
+    },
+    "sentence-transformers/all-mpnet-base-v2": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "sentence-transformers/all-mpnet-base-v2 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.005
+      },
+      "ratio": 0.005,
+      "tiers": null,
+      "time_windows": null
+    },
+    "sentence-transformers/clip-ViT-B-32": {
+      "completion_ratio": 0.0,
+      "context_length": 77,
+      "description": "sentence-transformers/clip-ViT-B-32 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.005
+      },
+      "ratio": 0.005,
+      "tiers": null,
+      "time_windows": null
+    },
+    "sentence-transformers/clip-ViT-B-32-multilingual-v1": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "sentence-transformers/clip-ViT-B-32-multilingual-v1 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.005
+      },
+      "ratio": 0.005,
+      "tiers": null,
+      "time_windows": null
+    },
+    "sentence-transformers/multi-qa-mpnet-base-dot-v1": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "sentence-transformers/multi-qa-mpnet-base-dot-v1 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.005
+      },
+      "ratio": 0.005,
+      "tiers": null,
+      "time_windows": null
+    },
+    "sentence-transformers/paraphrase-MiniLM-L6-v2": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "sentence-transformers/paraphrase-MiniLM-L6-v2 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.005
+      },
+      "ratio": 0.005,
+      "tiers": null,
+      "time_windows": null
+    },
+    "shibing624/text2vec-base-chinese": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "shibing624/text2vec-base-chinese on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.005
+      },
+      "ratio": 0.005,
+      "tiers": null,
+      "time_windows": null
+    },
+    "stepfun-ai/Step-3.7-Flash": {
+      "cached_input_ratio": 0.03200000000000001,
+      "completion_ratio": 5.75,
+      "context_length": 262144,
+      "description": "stepfun-ai/Step-3.7-Flash on DeepInfra. Observed 20% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.16000000000000003,
+      "supported_features": [
+        "tools"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "tencent/Hy3": {
+      "cached_input_ratio": 0.0329999995,
+      "completion_ratio": 4.076923076923077,
+      "context_length": 262144,
+      "description": "tencent/Hy3 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.13,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "thenlper/gte-base": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "thenlper/gte-base on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.005
+      },
+      "ratio": 0.005,
+      "tiers": null,
+      "time_windows": null
+    },
+    "thenlper/gte-large": {
+      "completion_ratio": 0.0,
+      "context_length": 512,
+      "description": "thenlper/gte-large on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.01
+      },
+      "ratio": 0.01,
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/GLM-4.6": {
+      "cached_input_ratio": 0.1,
+      "completion_ratio": 4.0,
+      "context_length": 202752,
+      "description": "zai-org/GLM-4.6 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.5,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/GLM-4.7": {
+      "cached_input_ratio": 0.08000000000000002,
+      "completion_ratio": 4.375,
+      "context_length": 202752,
+      "description": "zai-org/GLM-4.7 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.4,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/GLM-5.1": {
+      "cached_input_ratio": 0.205000005,
+      "completion_ratio": 3.333333333333333,
+      "context_length": 202752,
+      "description": "zai-org/GLM-5.1 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.05,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/GLM-5.2": {
+      "cached_input_ratio": 0.10500000187499998,
+      "completion_ratio": 3.2,
+      "context_length": 1048576,
+      "description": "zai-org/GLM-5.2 on DeepInfra. Observed 25% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.5624999999999999,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/GLM-5.3": {
+      "cached_input_ratio": 0.12499999875,
+      "completion_ratio": 4.444444444444445,
+      "context_length": 1048576,
+      "description": "zai-org/GLM-5.3 on DeepInfra. Observed 37.5% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.5625,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/GLM-5.3-Flash": {
+      "cached_input_ratio": 0.015,
+      "completion_ratio": 3.3333333333333335,
+      "context_length": 1048576,
+      "description": "zai-org/GLM-5.3-Flash on DeepInfra. Observed 50% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.075,
+      "supported_features": [
+        "tools",
+        "json_mode",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    }
+  },
+  "sources": [
+    {
+      "sha256": "d95ea63098af069f27e4d4625035fb8e217e00c601a5830b45347fb72a3679b7",
+      "url": "https://api.deepinfra.com/models/list"
+    }
+  ],
+  "version": 1
+}

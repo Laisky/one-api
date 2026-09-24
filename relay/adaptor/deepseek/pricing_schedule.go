@@ -34,20 +34,13 @@ func deepseekPricingWindows(dateFrom, dateTo string, input, cachedInput, output 
 	}
 }
 
-// deepseekProPricingWindows retains Pro prices until the announced switch to
-// Flash on September 14, 2026 at 12:00 Beijing time (04:00 UTC).
-// Parameters: none. Returns: first-match windows, including a one-day bridge
-// because DateFrom/DateTo express dates rather than arbitrary timestamps.
+// deepseekProPricingWindows keeps the published Pro peak/off-peak tariff.
+// DeepSeek canceled the September 14 Pro-to-Flash migration; its updated change
+// log explicitly keeps V4 Pro API service and billing unchanged. No model-ID
+// rewrite or Flash discount is applied to requests for Pro.
+// Source: https://api-docs.deepseek.com/updates/ (verified 2026-09-24).
 func deepseekProPricingWindows() []adaptor.TimeWindow {
-	const switchDate = "2026-09-14"
-	windows := deepseekPricingWindows("", switchDate, deepseekProInputPrice, deepseekProCachedInputPrice, deepseekProOutputPrice)
-	bridge := deepseekPricingWindows(switchDate, "2026-09-15", deepseekProInputPrice, deepseekProCachedInputPrice, deepseekProOutputPrice)
-	bridge[0].Name = "deepseek-pro-final-peak"
-	bridge[0].Ranges = []adaptor.ClockRange{{Start: "01:00", End: "04:00"}}
-	bridge[1].Name = "deepseek-pro-final-offpeak"
-	bridge[1].Ranges = []adaptor.ClockRange{{Start: "00:00", End: "01:00"}}
-	windows = append(windows, bridge...)
-	return append(windows, deepseekPricingWindows(switchDate, "", deepseekFlashInputPrice, deepseekFlashCachedInputPrice, deepseekFlashOutputPrice)...)
+	return deepseekPricingWindows("", "", deepseekProInputPrice, deepseekProCachedInputPrice, deepseekProOutputPrice)
 }
 
 // deepseekFlashPricingWindows applies the announced Flash price change at

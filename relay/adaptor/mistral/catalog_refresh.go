@@ -26,8 +26,8 @@ func init() {
 		"ministral-8b-2512":     0.015,
 		"ministral-3b-latest":   0.01,
 		"ministral-3b-2512":     0.01,
-		"codestral-latest":     0.03,
-		"codestral-2508":       0.03,
+		"codestral-latest":      0.03,
+		"codestral-2508":        0.03,
 		"codestral-embed-2505":  0.015,
 	} {
 		cfg, ok := ModelRatios[name]

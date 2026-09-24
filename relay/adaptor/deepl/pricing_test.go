@@ -13,7 +13,7 @@ import (
 // in DeepL's own unit.
 //
 // DeepL is metered in characters, not tokens — DoResponse reports
-// len(a.promptText) as PromptTokens — so the framework's per-token ratio is a
+// utf8.RuneCountInString(a.promptText) as PromptTokens — so the framework's per-token ratio is a
 // per-character ratio here. The adaptor previously embedded DefaultPricingMethods
 // without publishing any table, so every translation billed at the 2.5 USD/1M
 // fallback, roughly 11x below DeepL's published $27.50 per 1M characters.

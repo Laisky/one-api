@@ -1,0 +1,382 @@
+{
+  "currency": "CNY",
+  "models": {
+    "BAAI/bge-large-en-v1.5": {
+      "completion_ratio": 1,
+      "description": "BAAI/bge-large-en-v1.5 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.0
+      },
+      "ratio": 0.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "BAAI/bge-large-zh-v1.5": {
+      "completion_ratio": 1,
+      "description": "BAAI/bge-large-zh-v1.5 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.0
+      },
+      "ratio": 0.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "BAAI/bge-m3": {
+      "completion_ratio": 1,
+      "description": "BAAI/bge-m3 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.0
+      },
+      "ratio": 0.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "BAAI/bge-reranker-v2-m3": {
+      "completion_ratio": 1,
+      "description": "BAAI/bge-reranker-v2-m3 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 0.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "ByteDance-Seed/Seed-OSS-36B-Instruct": {
+      "completion_ratio": 2.6666666666666665,
+      "description": "ByteDance-Seed/Seed-OSS-36B-Instruct on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 1.5,
+      "tiers": null,
+      "time_windows": null
+    },
+    "PaddlePaddle/PaddleOCR-VL-1.5": {
+      "completion_ratio": 1,
+      "description": "PaddlePaddle/PaddleOCR-VL-1.5 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 0.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Pro/BAAI/bge-m3": {
+      "completion_ratio": 0.0,
+      "description": "Pro/BAAI/bge-m3 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.07
+      },
+      "ratio": 0.07,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Pro/BAAI/bge-reranker-v2-m3": {
+      "completion_ratio": 0.0,
+      "description": "Pro/BAAI/bge-reranker-v2-m3 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 0.07,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": {
+      "cached_input_ratio": 0.4,
+      "completion_ratio": 3.0,
+      "description": "Pro/deepseek-ai/DeepSeek-V3.1-Terminus on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 4.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Pro/deepseek-ai/DeepSeek-V3.2": {
+      "cached_input_ratio": 0.4,
+      "completion_ratio": 1.5,
+      "description": "Pro/deepseek-ai/DeepSeek-V3.2 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 4.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Pro/moonshotai/Kimi-K2.6": {
+      "cached_input_ratio": 1.1,
+      "completion_ratio": 4.153846153846154,
+      "description": "Pro/moonshotai/Kimi-K2.6 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 6.5,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Pro/zai-org/GLM-5.1": {
+      "cached_input_ratio": 1.3,
+      "completion_ratio": 4.0,
+      "description": "Pro/zai-org/GLM-5.1 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 6.0,
+      "tiers": [
+        {
+          "cached_input_ratio": 2.0,
+          "completion_ratio": 3.5,
+          "input_token_threshold": 32000,
+          "ratio": 8.0
+        }
+      ],
+      "time_windows": null
+    },
+    "Qwen/Qwen3.5-122B-A10B": {
+      "completion_ratio": 8.0,
+      "description": "Qwen/Qwen3.5-122B-A10B on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 0.8,
+      "tiers": [
+        {
+          "completion_ratio": 8.0,
+          "input_token_threshold": 128000,
+          "ratio": 2.0
+        }
+      ],
+      "time_windows": null
+    },
+    "Qwen/Qwen3.5-27B": {
+      "completion_ratio": 8.0,
+      "description": "Qwen/Qwen3.5-27B on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 0.6,
+      "tiers": [
+        {
+          "completion_ratio": 8.0,
+          "input_token_threshold": 128000,
+          "ratio": 1.8
+        }
+      ],
+      "time_windows": null
+    },
+    "Qwen/Qwen3.5-35B-A3B": {
+      "completion_ratio": 8.0,
+      "description": "Qwen/Qwen3.5-35B-A3B on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 0.4,
+      "tiers": [
+        {
+          "completion_ratio": 8.0,
+          "input_token_threshold": 128000,
+          "ratio": 1.6
+        }
+      ],
+      "time_windows": null
+    },
+    "Qwen/Qwen3.6-27B": {
+      "completion_ratio": 6.0,
+      "description": "Qwen/Qwen3.6-27B on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 3.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.6-35B-A3B": {
+      "completion_ratio": 6.0,
+      "description": "Qwen/Qwen3.6-35B-A3B on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 1.8,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Qwen/Qwen3.8-27B": {
+      "completion_ratio": 4.0,
+      "description": "Qwen/Qwen3.8-27B on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 3.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "THUDM/GLM-4-32B-0414": {
+      "completion_ratio": 1.0,
+      "description": "THUDM/GLM-4-32B-0414 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 1.89,
+      "tiers": null,
+      "time_windows": null
+    },
+    "XingChenAGI/Xing4.0-29B": {
+      "completion_ratio": 1,
+      "description": "XingChenAGI/Xing4.0-29B on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 0.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V3.1-Terminus": {
+      "cached_input_ratio": 0.4,
+      "completion_ratio": 3.0,
+      "description": "deepseek-ai/DeepSeek-V3.1-Terminus on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 4.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V3.2": {
+      "cached_input_ratio": 0.4,
+      "completion_ratio": 1.5,
+      "description": "deepseek-ai/DeepSeek-V3.2 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 4.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek-ai/DeepSeek-V4-Flash": {
+      "cached_input_ratio": 0.15,
+      "completion_ratio": 3.0,
+      "description": "deepseek-ai/DeepSeek-V4-Flash on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 1.5,
+      "tiers": null,
+      "time_windows": [
+        {
+          "name": "siliconflow-daypart",
+          "overlay": {
+            "cached_input_ratio": 0.15,
+            "completion_ratio": 3.0,
+            "ratio": 1.5
+          },
+          "ranges": [
+            {
+              "end": "08:00",
+              "start": "02:00"
+            }
+          ],
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "name": "siliconflow-daypart",
+          "overlay": {
+            "cached_input_ratio": 0.3,
+            "completion_ratio": 3.0,
+            "ratio": 3.0
+          },
+          "ranges": [
+            {
+              "end": "02:00",
+              "start": "00:00"
+            },
+            {
+              "end": "00:00",
+              "start": "08:00"
+            }
+          ],
+          "timezone": "Asia/Shanghai"
+        }
+      ]
+    },
+    "deepseek-ai/DeepSeek-V4-Pro": {
+      "cached_input_ratio": 1.0,
+      "completion_ratio": 2.0,
+      "description": "deepseek-ai/DeepSeek-V4-Pro on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 12.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "inclusionAI/Ling-flash-2.0": {
+      "completion_ratio": 4.0,
+      "description": "inclusionAI/Ling-flash-2.0 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 1.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "inclusionAI/Ling-mini-2.0": {
+      "completion_ratio": 4.0,
+      "description": "inclusionAI/Ling-mini-2.0 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 0.5,
+      "tiers": null,
+      "time_windows": null
+    },
+    "meituan-longcat/LongCat-2.0": {
+      "cached_input_ratio": 0.1,
+      "completion_ratio": 4.0,
+      "description": "meituan-longcat/LongCat-2.0 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 5.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "moonshotai/Kimi-K2.7-Code": {
+      "cached_input_ratio": 1.3,
+      "completion_ratio": 4.153846153846154,
+      "description": "moonshotai/Kimi-K2.7-Code on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 6.5,
+      "tiers": null,
+      "time_windows": null
+    },
+    "stepfun-ai/Step-3.5-Flash": {
+      "completion_ratio": 3.0000000000000004,
+      "description": "stepfun-ai/Step-3.5-Flash on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 0.7,
+      "tiers": null,
+      "time_windows": null
+    },
+    "tencent/Hunyuan-A13B-Instruct": {
+      "completion_ratio": 4.0,
+      "description": "tencent/Hunyuan-A13B-Instruct on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 1.0,
+      "tiers": null,
+      "time_windows": [
+        {
+          "name": "siliconflow-daypart",
+          "overlay": {
+            "completion_ratio": 4.0,
+            "ratio": 1.0
+          },
+          "ranges": [
+            {
+              "end": "18:00",
+              "start": "09:00"
+            }
+          ],
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "name": "siliconflow-daypart",
+          "overlay": {
+            "completion_ratio": 4.0,
+            "ratio": 0.8
+          },
+          "ranges": [
+            {
+              "end": "09:00",
+              "start": "00:00"
+            },
+            {
+              "end": "00:00",
+              "start": "18:00"
+            }
+          ],
+          "timezone": "Asia/Shanghai"
+        }
+      ]
+    },
+    "tencent/Hunyuan-MT-7B": {
+      "completion_ratio": 1,
+      "description": "tencent/Hunyuan-MT-7B on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 0.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "tencent/Hy4-preview": {
+      "cached_input_ratio": 0.3,
+      "completion_ratio": 3.0,
+      "description": "tencent/Hy4-preview on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 6.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/GLM-4.5-Air": {
+      "completion_ratio": 6.0,
+      "description": "zai-org/GLM-4.5-Air on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 1.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/GLM-4.5V": {
+      "completion_ratio": 6.0,
+      "description": "zai-org/GLM-4.5V on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 1.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/GLM-5.2": {
+      "cached_input_ratio": 2.0,
+      "completion_ratio": 3.5,
+      "description": "zai-org/GLM-5.2 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 8.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/GLM-5.3": {
+      "cached_input_ratio": 2.0,
+      "completion_ratio": 3.5,
+      "description": "zai-org/GLM-5.3 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 8.0,
+      "tiers": null,
+      "time_windows": null
+    }
+  },
+  "sources": [
+    {
+      "sha256": "df66e4d040500294f30d2b7e35a4078664bb3bb7c7e1de2cdc35ca9b97d239ad",
+      "url": "https://siliconflow.cn/pricing"
+    }
+  ],
+  "version": 1
+}

@@ -14,7 +14,7 @@ import (
 const deeplUsdPerMillionCharacters = 27.5
 
 // ModelRatios prices DeepL per SOURCE CHARACTER, which is the unit this adaptor
-// actually meters: DoResponse reports `len(a.promptText)` as PromptTokens, i.e.
+// actually meters: DoResponse reports `utf8.RuneCountInString(a.promptText)` as PromptTokens, i.e.
 // the character count of the source text, so the framework's per-token ratio is a
 // per-character ratio here and DeepL's published per-character rate applies
 // directly.
