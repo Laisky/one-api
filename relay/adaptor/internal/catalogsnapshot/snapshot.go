@@ -59,7 +59,9 @@ func Decode(base map[string]adaptor.ModelConfig, raw []byte) (map[string]adaptor
 	default:
 		return nil, errors.New("unsupported catalog currency")
 	}
-	result := make(map[string]adaptor.ModelConfig, len(base)+len(snapshot.Models))
+	// Avoid adding independently sized map lengths in an allocation hint.
+	// Growth handles new model IDs, and overlapping IDs need no extra capacity.
+	result := make(map[string]adaptor.ModelConfig, len(base))
 	for id, config := range base {
 		result[id] = config.Clone()
 	}
@@ -95,6 +97,15 @@ func Decode(base map[string]adaptor.ModelConfig, raw []byte) (map[string]adaptor
 		}
 		if _, supplied := fields["completion_ratio"]; !existing && !supplied {
 			return nil, errors.New("new catalog model requires an explicit output price")
+		}
+		// Supplied schedules replace the entire array, not individual fields of
+		// reused elements. Otherwise omitted prices/dates survive from base and
+		// already-normalized quota prices are scaled a second time below.
+		if _, supplied := fields["tiers"]; supplied {
+			config.Tiers = nil
+		}
+		if _, supplied := fields["time_windows"]; supplied {
+			config.TimeWindows = nil
 		}
 		if err := decodeStrict(patch, &config); err != nil {
 			return nil, errors.Wrap(err, "decode model metadata")

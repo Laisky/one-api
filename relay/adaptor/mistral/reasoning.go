@@ -28,6 +28,12 @@ func reasoningRequest(request *model.GeneralOpenAIRequest) (any, error) {
 		out.ReasoningEffort = out.Reasoning.Effort
 	}
 	out.Reasoning = nil
+	// Keep the previous omission behavior for models without advertised effort
+	// support. Use catalog metadata rather than a fixed list of hybrid aliases;
+	// supported models retain caller values for upstream validation.
+	if cfg, ok := ModelRatios[out.Model]; !ok || len(cfg.SupportedReasoningEfforts) == 0 {
+		out.ReasoningEffort = nil
+	}
 	if out.MaxTokens == 0 && out.MaxCompletionTokens != nil {
 		out.MaxTokens = *out.MaxCompletionTokens
 	}

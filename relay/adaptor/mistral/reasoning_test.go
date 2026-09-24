@@ -59,7 +59,7 @@ func TestReasoningRequestCompatibility(t *testing.T) {
 	_, err := (&Adaptor{}).ConvertRequest(nil, 0, nil)
 	require.Error(t, err)
 	low, high := "none", "high"
-	req := &model.GeneralOpenAIRequest{ReasoningEffort: &low, Reasoning: &model.OpenAIResponseReasoning{Effort: &high}}
+	req := &model.GeneralOpenAIRequest{Model: "mistral-medium-3-5", ReasoningEffort: &low, Reasoning: &model.OpenAIResponseReasoning{Effort: &high}}
 	converted, err := reasoningRequest(req)
 	require.NoError(t, err)
 	encoded, err := json.Marshal(converted)
