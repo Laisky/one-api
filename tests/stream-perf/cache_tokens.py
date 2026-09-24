@@ -13,32 +13,39 @@ ASSETS = {
 }
 
 
-def prepare(cache: Path) -> None:
-    """prepare verifies cached assets or atomically downloads exactly the pinned tokenizer dictionaries."""
-    cache.mkdir(parents=True, exist_ok=True)
+def prepare(cache: Path, *, check_only: bool = False) -> None:
+    """prepare validates pinned assets; check_only forbids network access and all cache mutations."""
+    if not check_only:
+        cache.mkdir(parents=True, exist_ok=True)
     for name, expected in ASSETS.items():
         url = f'https://openaipublic.blob.core.windows.net/encodings/{name}.tiktoken'
         target = cache / hashlib.sha1(url.encode()).hexdigest()
         if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == expected:
             continue
+        if check_only:
+            raise ValueError(f'missing or corrupt tokenizer asset {name}; prepare the cache explicitly before running offline')
         with urllib.request.urlopen(url, timeout=60) as response:
             data = response.read(8 << 20)
         if hashlib.sha256(data).hexdigest() != expected:
             raise ValueError(f'checksum mismatch for {name}')
-        with tempfile.NamedTemporaryFile(dir=cache, delete=False) as stream:
-            temporary = Path(stream.name)
-            stream.write(data)
+        temporary = None
         try:
+            with tempfile.NamedTemporaryFile(dir=cache, delete=False) as stream:
+                temporary = Path(stream.name)
+                stream.write(data)
             temporary.replace(target)
         finally:
-            temporary.unlink(missing_ok=True)
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
 
 def main() -> None:
-    """main reads the destination cache directory and prepares its verified encoding files."""
+    """main reads the destination and either prepares or checks verified encoding files."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cache', type=Path, required=True)
-    prepare(parser.parse_args().cache)
+    parser.add_argument('--check-only', action='store_true', help='verify existing assets without network access or writes')
+    args = parser.parse_args()
+    prepare(args.cache, check_only=args.check_only)
 
 
 if __name__ == '__main__':
