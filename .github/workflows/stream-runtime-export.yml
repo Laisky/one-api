@@ -1,0 +1,42 @@
+name: Stream performance offline runtime
+on:
+  push:
+    branches: [work/stream-perf-runtime-20260924]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 36829cfdfddb29f6a7a2d4e20a42eb02b0f3ef4c
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Export source, verified dependencies and compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/stream-runtime"
+          mkdir -p "$out/source" "$out/token-cache"
+          git archive HEAD -- . ':!.github/instructions/laisky.instructions.md' | tar -x -C "$out/source"
+          go mod vendor
+          cp -a vendor "$out/source/vendor"
+          python3 tests/stream-perf/cache_tokens.py --cache "$out/token-cache"
+          git rev-parse HEAD > "$out/source.sha"
+          go version > "$out/toolchain.txt"
+          tar -czf "$out/source.tar.gz" -C "$out/source" .
+          tar -czf "$out/go.tar.gz" -C "$(go env GOROOT)" .
+          rm -rf "$out/source"
+          cd "$out"
+          sha256sum source.tar.gz go.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: stream-perf-offline-runtime-36829cf
+          path: ${{ runner.temp }}/stream-runtime
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
