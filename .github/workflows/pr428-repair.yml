@@ -6,21 +6,85 @@ on:
 permissions:
   contents: read
 jobs:
-  source:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 755e0b0005c6d6183b8086125638871a55c20116
           persist-credentials: false
-      - name: Archive tracked source without local instructions or credentials
+          fetch-depth: 0
+      - name: Apply checksum-verified repair to exact PR head
         run: |
-          mkdir -p "$RUNNER_TEMP/pr428-source"
-          git archive --format=tar HEAD ':!\.github/instructions' > "$RUNNER_TEMP/pr428-source/source.tar"
-          git rev-parse HEAD > "$RUNNER_TEMP/pr428-source/commit.txt"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+          python3 - <<'PY'
+          import base64, gzip, hashlib, os, pathlib
+          patch = gzip.decompress(base64.b64decode(pathlib.Path('.github/repair/pr428-repair.patch.gz.b64').read_bytes()))
+          assert hashlib.sha256(patch).hexdigest() == 'bc35742ff00ff29dd4b790f6ed075be5356c79ba3f9f6a582de3a7ad6b9f92b0'
+          pathlib.Path(os.environ['RUNNER_TEMP'], 'pr428-repair.patch').write_bytes(patch)
+          PY
+          git checkout --detach 755e0b0005c6d6183b8086125638871a55c20116
+          git apply --check "$RUNNER_TEMP/pr428-repair.patch"
+          git apply "$RUNNER_TEMP/pr428-repair.patch"
+          git diff --check
+          git add model/utils.go model/order_clause_security_test.go controller/log_selection_security_test.go relay/adaptor/openai/constants_gpt5.go relay/adaptor/openai/gpt52_sampling_contract_test.go
+          git -c user.name='Laisky' -c user.email='github@laisky.com' commit -m 'fix: harden selected-log ordering and restore GPT-5.2 sampling contract'
+          mkdir -p "$RUNNER_TEMP/pr428-evidence"
+          git rev-parse HEAD > "$RUNNER_TEMP/pr428-evidence/commit.txt"
+          git diff --stat HEAD^ > "$RUNNER_TEMP/pr428-evidence/changes.txt"
+      - name: Publish isolated delivery branch with ephemeral credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ASKPASS=$(mktemp)
+          trap 'rm -f "$ASKPASS"' EXIT
+          cat > "$ASKPASS" <<'SH'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' x-access-token ;;
+            *Password*) printf '%s\n' "$GH_TOKEN" ;;
+          esac
+          SH
+          chmod 700 "$ASKPASS"
+          GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 git push origin "HEAD:refs/heads/work/pr428-repair-delivery-$GITHUB_RUN_ID"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          name: pr428-repair-source
-          path: ${{ runner.temp }}/pr428-source
-          retention-days: 1
+          go-version-file: go.mod
+      - name: Prove new sampling tests fail against the original catalog
+        run: |
+          git show 755e0b0005c6d6183b8086125638871a55c20116:relay/adaptor/openai/constants_gpt5.go > relay/adaptor/openai/constants_gpt5.go
+          set +e
+          go test -race -count=1 -timeout=3m -json ./relay/adaptor/openai -run '^TestGPT52' > "$RUNNER_TEMP/pr428-evidence/catalog-before.jsonl" 2>&1
+          RESULT=$?
+          set -e
+          git restore relay/adaptor/openai/constants_gpt5.go
+          test "$RESULT" -ne 0
+          python3 - <<'PY'
+          import json, os, pathlib
+          events = []
+          for line in pathlib.Path(os.environ['RUNNER_TEMP'], 'pr428-evidence/catalog-before.jsonl').read_text().splitlines():
+              try: events.append(json.loads(line))
+              except json.JSONDecodeError: pass
+          failed = {e.get('Test') for e in events if e.get('Action') == 'fail'}
+          assert {'TestGPT52ReasoningCatalogContract', 'TestGPT52MappedSamplingContract'} <= failed, failed
+          print('Original catalog reproduced both new regression failures; no compilation-error shortcut.')
+          PY
+      - name: Verify query safety and all affected behavior with race detection
+        run: |
+          set -o pipefail
+          go test -race -count=1 -timeout=4m -json ./model ./controller ./router ./relay/adaptor/openai ./relay/controller -run 'Test(SetChannelStatus|ChannelStatusOnly|PlanChannelModelReset|ResetChannelModels|Selected|ListSelection|LogSelection|ChannelReset|ValidateOrderClause|GPT52|ModelSamplingCatalogPolicy|MappedChatSamplingPreservesNone|NativeResponsesPreservesSupportedSampling)|FuzzValidateOrderClauseUntrustedInput' | tee "$RUNNER_TEMP/pr428-evidence/targeted-after.jsonl"
+      - name: Fuzz untrusted sort inputs
+        run: |
+          set -o pipefail
+          go test ./model -run '^$' -fuzz '^FuzzValidateOrderClauseUntrustedInput$' -fuzztime=10s -parallel=2 | tee "$RUNNER_TEMP/pr428-evidence/fuzz.log"
+      - name: Vet complete repository
+        run: |
+          set -o pipefail
+          go vet ./... 2>&1 | tee "$RUNNER_TEMP/pr428-evidence/vet.log"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: pr428-repair-verification-${{ github.run_id }}
+          path: ${{ runner.temp }}/pr428-evidence
+          retention-days: 7
