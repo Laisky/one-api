@@ -1,0 +1,55 @@
+name: Check unchanged catalog baseline
+on:
+  push:
+    branches: [work/catalog-baseline-check-20260924]
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOMAXPROCS: '4'
+      GOFLAGS: '-mod=readonly -p=2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: a8782e3dc0dad7704acb0d008e7d30a26096338d
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Reproduce the exact untouched-main failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/baseline-repro"
+          git rev-parse HEAD > "$RUNNER_TEMP/baseline-repro/commit.txt"
+          set +e
+          go test -race -count=1 -json -run '^(TestModelSamplingCatalogPolicy|TestMappedChatSamplingPreservesNone)$' ./relay/adaptor/openai > "$RUNNER_TEMP/baseline-repro/events.jsonl" 2>&1
+          code=$?
+          set -e
+          echo "$code" > "$RUNNER_TEMP/baseline-repro/exit.txt"
+          python3 - "$RUNNER_TEMP/baseline-repro/events.jsonl" <<'PY'
+          import json, sys
+          events=[]
+          for line in open(sys.argv[1]):
+              try: events.append(json.loads(line))
+              except ValueError: print(line.rstrip())
+          failures=[r.get('Test') for r in events if r.get('Action')=='fail' and r.get('Test')]
+          print('Untouched main failures:', failures)
+          for r in events:
+              if r.get('Action')=='output' and ('gpt-5.2' in r.get('Test','') or 'Error:' in r.get('Output','')):
+                  print(r.get('Output','').rstrip())
+          expected={'TestModelSamplingCatalogPolicy', 'TestModelSamplingCatalogPolicy/gpt-5.2/none', 'TestMappedChatSamplingPreservesNone', 'TestMappedChatSamplingPreservesNone/gpt-5.2'}
+          assert set(failures)==expected, failures
+          assert not any('WARNING: DATA RACE' in r.get('Output','') for r in events)
+          print('Confirmed: the same two gpt-5.2 cases fail before the catalog refactor.')
+          PY
+          test "$code" = 1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: untouched-main-sampling-reproduction
+          path: ${{ runner.temp }}/baseline-repro
+          retention-days: 14
