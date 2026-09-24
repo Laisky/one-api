@@ -1,0 +1,96 @@
+package deepinfra
+
+import "github.com/Laisky/one-api/relay/adaptor"
+
+// zai_orgModels returns the zai_org model defaults for deepinfra.
+// It takes no arguments and returns independently owned, directly editable Go configurations.
+func zai_orgModels() map[string]adaptor.ModelConfig {
+	return map[string]adaptor.ModelConfig{
+		"zai-org/GLM-4.6": {
+			Ratio:                       nativeRate(0.5),
+			CompletionRatio:             4,
+			CachedInputRatio:            nativeRate(0.1),
+			ContextLength:               202752,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
+			Description:                 "zai-org/GLM-4.6 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"zai-org/GLM-4.7": {
+			Ratio:                       nativeRate(0.4),
+			CompletionRatio:             4.375,
+			CachedInputRatio:            nativeRate(0.08000000000000002),
+			ContextLength:               202752,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
+			Description:                 "zai-org/GLM-4.7 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"zai-org/GLM-4.7-Flash": {
+			Ratio:                       nativeRate(0.06),
+			CompletionRatio:             6.666666666666667,
+			CachedInputRatio:            nativeRate(0.01),
+			ContextLength:               198000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
+			Description:                 "GLM 4.7 Flash economical reasoning model.",
+		},
+		"zai-org/GLM-5": {
+			Ratio:                       nativeRate(0.6),
+			CompletionRatio:             3.466666666666667,
+			CachedInputRatio:            nativeRate(0.12),
+			ContextLength:               198000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
+			Description:                 "GLM 5 reasoning model.",
+		},
+		"zai-org/GLM-5.1": {
+			Ratio:                       nativeRate(1.05),
+			CompletionRatio:             3.333333333333333,
+			CachedInputRatio:            nativeRate(0.205000005),
+			ContextLength:               202752,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
+			Description:                 "zai-org/GLM-5.1 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"zai-org/GLM-5.2": {
+			Ratio:                       nativeRate(0.5624999999999999),
+			CompletionRatio:             3.2,
+			CachedInputRatio:            nativeRate(0.10500000187499998),
+			ContextLength:               1048576,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
+			Description:                 "zai-org/GLM-5.2 on DeepInfra. Observed 25% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+		},
+		"zai-org/GLM-5.3": {
+			Ratio:             nativeRate(0.5625),
+			CompletionRatio:   4.444444444444445,
+			CachedInputRatio:  nativeRate(0.12499999875),
+			ContextLength:     1048576,
+			InputModalities:   []string{"text"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			Description:       "zai-org/GLM-5.3 on DeepInfra. Observed 37.5% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+		},
+		"zai-org/GLM-5.3-Flash": {
+			Ratio:             nativeRate(0.075),
+			CompletionRatio:   3.3333333333333335,
+			CachedInputRatio:  nativeRate(0.015),
+			ContextLength:     1048576,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			Description:       "zai-org/GLM-5.3-Flash on DeepInfra. Observed 50% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+		},
+	}
+}
