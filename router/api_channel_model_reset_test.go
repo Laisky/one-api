@@ -5,11 +5,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -21,6 +23,7 @@ func TestChannelResetRoutesRequireAdministrator(t *testing.T) {
 	engine := gin.New()
 	engine.Use(sessions.Sessions("reset-auth-test", cookie.NewStore([]byte("channel-reset-test-cookie-secret!"))))
 	engine.Use(func(c *gin.Context) {
+		gmw.SetLogger(c, logger.Logger)
 		session := sessions.Default(c)
 		session.Set("username", "ordinary-user")
 		session.Set("role", model.RoleCommonUser)
