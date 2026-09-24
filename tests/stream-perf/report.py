@@ -28,10 +28,40 @@ def metric(trial: dict, path: tuple[str, ...]) -> float:
     return float(value)
 
 
+def expected_cells(summary: dict, repeats: int) -> set[tuple]:
+    """expected_cells requires explicit completion and qualification, then reconstructs the entire planned matrix."""
+    if summary.get('schema_version') != 2 or summary.get('complete') is not True:
+        raise ValueError('a complete schema-version-2 experiment is required')
+    config = summary.get('configuration', {})
+    if config.get('repeats') != repeats or config.get('skip_qualification') is not False:
+        raise ValueError('repetition count must match the plan and correctness qualification must be enabled')
+    for label in ('baseline', 'candidate'):
+        proof = summary.get('qualification', {}).get(label, {})
+        expected = {'normal': 0, 'crlf': 0, 'fragmented': 0, 'missing-done': 8, 'wrong-content': 8, 'malformed': 8,
+                    'cancellation': '8/8 producers released within 5 seconds'}
+        if proof != expected:
+            raise ValueError('missing or failed correctness qualification')
+    try:
+        levels = [int(value) for value in config['concurrency'].split(',')]
+        profiles = config['profiles'].split(',')
+        if not levels or not profiles or len(set(levels)) != len(levels) or len(set(profiles)) != len(profiles):
+            raise ValueError('empty or duplicate planned dimensions')
+        if any(c < 1 or c > 4096 for c in levels) or set(profiles) - {'saturated', 'paced'}:
+            raise ValueError('invalid planned dimensions')
+        return {(profile, concurrency,
+                 max(config['requests'] if profile == 'saturated' else config['paced_requests'], concurrency * 2),
+                 config['chunks'] if profile == 'saturated' else config['paced_chunks'], config['chunk_bytes'],
+                 0 if profile == 'saturated' else config['pace_ms'], config['rate'], config['direct'])
+                for profile in profiles for concurrency in levels}
+    except (KeyError, TypeError, AttributeError) as error:
+        raise ValueError('incomplete experiment configuration') from error
+
+
 def compare(summary: dict, expected_repeats: int) -> list[dict]:
-    """compare validates complete A/B pairs and billing, then summarizes independent trial ratios."""
-    if expected_repeats < 2 or summary.get('complete') is False:
-        raise ValueError('a complete experiment with at least two repetitions is required')
+    """compare validates the complete planned matrix, A/B pairs and billing before summarizing trial ratios."""
+    if type(expected_repeats) is not int or expected_repeats < 2:
+        raise ValueError('at least two repetitions are required')
+    planned = expected_cells(summary, expected_repeats)
     trials = summary.get('trials', [])
     if not trials:
         raise ValueError('no trials')
@@ -52,6 +82,8 @@ def compare(summary: dict, expected_repeats: int) -> list[dict]:
             raise ValueError('duplicate variant/repetition')
         cells[key][label, repeat] = trial
         binaries[label].add(trial['binary_sha256'])
+    if set(cells) != planned:
+        raise ValueError('missing planned cells or mismatched workload configuration')
     if any(len(values) != 1 for values in binaries.values()):
         raise ValueError('a variant changed binaries during the experiment')
     expected = {(label, repeat) for label in ('baseline', 'candidate') for repeat in range(expected_repeats)}
@@ -90,6 +122,15 @@ def markdown(cells: list[dict]) -> str:
         lines.append(f"| {cell['profile']} | {cell['concurrency']} | {cell['pairs']} | {values('successful_rps')} | "
             f"{metrics['successful_rps']['paired_change_pct_median']:+.2f}% | {values('gateway_cpu_ms_per_success')} | "
             f"{metrics['gateway_cpu_ms_per_success']['paired_change_pct_median']:+.2f}% | {values('completion_p95_ms')} | {values('gateway_peak_rss_mib')} |")
+    lines.extend(['', '## First-content latency and repeatability', '',
+        '| Profile | Concurrency | p95 TTFT ms baseline / candidate | Paired RPS change range | Paired CPU change range |',
+        '| --- | ---: | ---: | ---: | ---: | ---: |'])
+    for cell in cells:
+        m = cell['metrics']
+        lines.append(f"| {cell['profile']} | {cell['concurrency']} | {m['ttft_p95_ms']['baseline_median']:.2f} / "
+            f"{m['ttft_p95_ms']['candidate_median']:.2f} | {m['successful_rps']['paired_change_pct_min']:+.2f}% to "
+            f"{m['successful_rps']['paired_change_pct_max']:+.2f}% | {m['gateway_cpu_ms_per_success']['paired_change_pct_min']:+.2f}% to "
+            f"{m['gateway_cpu_ms_per_success']['paired_change_pct_max']:+.2f}% |")
     return '\n'.join(lines) + '\n'
 
 

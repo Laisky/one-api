@@ -19,7 +19,13 @@ def fixture() -> dict:
                 'billing': {'requests': 128, 'used_quota': 42}, 'successful_rps': speed * factor,
                 'ttft_ms': {'p95': 1}, 'total_ms': {'p95': 2},
                 'resources': {'gateway': {'cpu_ms_per_success': 10 / factor, 'peak_rss_mib': 100}}})
-    return {'complete': True, 'trials': trials}
+    proof = {'normal': 0, 'crlf': 0, 'fragmented': 0, 'missing-done': 8, 'wrong-content': 8, 'malformed': 8,
+             'cancellation': '8/8 producers released within 5 seconds'}
+    return {'schema_version': 2, 'complete': True, 'trials': trials,
+            'qualification': {label: copy.deepcopy(proof) for label in ('baseline', 'candidate')},
+            'configuration': {'repeats': 3, 'skip_qualification': False, 'concurrency': '8', 'profiles': 'saturated',
+                              'requests': 128, 'paced_requests': 128, 'chunks': 32, 'paced_chunks': 32,
+                              'chunk_bytes': 128, 'pace_ms': 2, 'rate': 0, 'direct': False}}
 
 
 class ReportTests(unittest.TestCase):
@@ -31,6 +37,7 @@ class ReportTests(unittest.TestCase):
         self.assertAlmostEqual(cells[0]['metrics']['successful_rps']['paired_change_pct_median'], 20)
         self.assertAlmostEqual(cells[0]['metrics']['gateway_cpu_ms_per_success']['paired_change_pct_median'], -100 / 6)
         self.assertIn('not proof of statistical significance', report.markdown(cells))
+        self.assertIn('p95 TTFT', report.markdown(cells))
 
     def test_atomic_progress_checkpoint(self):
         """test_atomic_progress_checkpoint preserves completion state and leaves no partial JSON in the canonical file."""
@@ -48,6 +55,9 @@ class ReportTests(unittest.TestCase):
         """test_rejects_invalid_evidence covers missing pairs, duplicates, drops, billing drift and binary drift."""
         mutations = (
             lambda s: s.update(complete=False),
+            lambda s: s.pop('complete'),
+            lambda s: s.update(complete=None),
+            lambda s: s.pop('schema_version'),
             lambda s: s['trials'].pop(),
             lambda s: s['trials'].append(copy.deepcopy(s['trials'][0])),
             lambda s: s['trials'][0].update(dropped=1),
@@ -58,6 +68,14 @@ class ReportTests(unittest.TestCase):
             lambda s: s['trials'][0]['billing'].update(used_quota=43),
             lambda s: s['trials'][0]['billing'].update(requests=127),
             lambda s: s['trials'][0].update(successful_rps=float('nan')),
+            lambda s: s['configuration'].update(repeats=4),
+            lambda s: s['configuration'].update(concurrency='8,32'),
+            lambda s: s['configuration'].update(profiles='saturated,paced'),
+            lambda s: s['configuration'].update(concurrency='8,8'),
+            lambda s: s['configuration'].update(skip_qualification=True),
+            lambda s: s['qualification'].pop('candidate'),
+            lambda s: s['qualification']['baseline'].update(normal=1),
+            lambda s: s['qualification']['candidate'].update(cancellation='not checked'),
         )
         for mutation in mutations:
             with self.subTest(mutation=mutation):
@@ -65,6 +83,19 @@ class ReportTests(unittest.TestCase):
                 mutation(evidence)
                 with self.assertRaises(ValueError):
                     report.compare(evidence, 3)
+
+    def test_missing_entire_cell_is_rejected(self):
+        """test_missing_entire_cell_is_rejected prevents silently dropping a whole slow or failed concurrency level."""
+        evidence = fixture()
+        evidence['configuration']['concurrency'] = '8,32'
+        extra = copy.deepcopy(evidence['trials'])
+        for trial in extra:
+            trial['concurrency'] = 32
+        evidence['trials'].extend(extra)
+        self.assertEqual(len(report.compare(evidence, 3)), 2)
+        evidence['trials'] = [trial for trial in evidence['trials'] if trial['concurrency'] == 8]
+        with self.assertRaisesRegex(ValueError, 'missing planned cells'):
+            report.compare(evidence, 3)
 
 
 if __name__ == '__main__':
