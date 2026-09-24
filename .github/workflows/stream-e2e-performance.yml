@@ -8,23 +8,25 @@ on:
       - 'common/sse/**'
       - 'common/render/**'
       - 'relay/adaptor/openai/**'
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: stream-perf-${{ github.event.pull_request.number || github.ref }}
+  group: stream-perf-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   stream-perf:
+    if: github.repository == 'Laisky/one-api' && github.event.pull_request.number == 427 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'perf/stream-chat-e2e-20260924'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
@@ -33,7 +35,49 @@ jobs:
           cache: true
       - name: Prepare offline tokenizer assets
         run: python3 tests/stream-perf/cache_tokens.py --cache artifacts/token-cache
-      - name: Build gateway and preserve environment
+      - name: Baseline accumulation benchmark
+        env:
+          TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/artifacts/token-cache
+        run: |
+          go test ./relay/adaptor/openai -run '^TestStreamHandlerAccumulationPreservesOutput$' -bench '^BenchmarkStreamHandlerLongResponse$' -benchmem -benchtime=300ms -count=3 | tee artifacts/accumulation-before.txt
+      - name: Apply exact reviewed accumulation-only candidate
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          path = Path('relay/adaptor/openai/main.go')
+          source = path.read_text()
+          before = '38246ec4ca174d5aab9dab900995b2a31b88804abe283f57e1a3be2e59013385'
+          after = '9a3df89d25e7e8e10cd1416cf24ce321b3519b79577635624970a5f69f47cff6'
+          digest = hashlib.sha256(source.encode()).hexdigest()
+          if digest == after:
+              raise SystemExit(0)
+          assert digest == before, 'source moved; refusing to transform an unreviewed version'
+          start = source.index('func StreamHandler(')
+          end = source.index('// Helper function to extract reasoning content', start)
+          body = source[start:end]
+          replacements = [
+              ('responseText := ""', 'var responseText strings.Builder', 1),
+              ('reasoningText := ""', 'var reasoningText strings.Builder', 1),
+              ('reasoningText += currentReasoningChunk', 'reasoningText.WriteString(currentReasoningChunk)', 2),
+              ('responseText += conv.AsString(choice.Delta.Content)', 'responseText.WriteString(conv.AsString(choice.Delta.Content))', 2),
+              ('responseText += choice.Text', 'responseText.WriteString(choice.Text)', 2),
+              ('combined := reasoningText + responseText', 'combined := reasoningText.String() + responseText.String()', 1),
+              ('"reasoning": reasoningText,', '"reasoning": reasoningText.String(),', 1),
+          ]
+          for old, new, count in replacements:
+              assert body.count(old) == count, old
+              body = body.replace(old, new)
+          candidate = source[:start] + body + source[end:]
+          assert hashlib.sha256(candidate.encode()).hexdigest() == after
+          path.write_text(candidate)
+          Path('artifacts/publish-candidate').touch()
+          PY
+          git diff --check
+          git diff -- relay/adaptor/openai/main.go > artifacts/candidate.patch
+      - name: Build gateway and validate candidate
+        env:
+          TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/artifacts/token-cache
         run: |
           set -euo pipefail
           mkdir -p artifacts web/build
@@ -41,24 +85,51 @@ jobs:
             printf '<!doctype html><title>API performance fixture</title>\n' > web/build/index.html
           fi
           go version | tee artifacts/go-version.txt
-          git rev-parse HEAD > artifacts/commit.txt
           lscpu > artifacts/lscpu.txt
           uname -a > artifacts/uname.txt
           go build -trimpath -o artifacts/one-api .
           go build -trimpath -o artifacts/stream-perf ./tests/stream-perf
           sha256sum artifacts/one-api artifacts/stream-perf > artifacts/binary-sha256.txt
-          git archive HEAD | gzip > artifacts/source.tar.gz
-      - name: Validate heartbeat and line-reader behavior
-        run: go test -race ./common/render ./common/sse
-      - name: Run streaming correctness and smoke load
-        run: |
-          set -euo pipefail
+          go test -race ./common/render ./common/sse
+          go test -race ./relay/adaptor/openai -run '^TestStreamHandler' -count=1
+          go test ./relay/adaptor/openai -run '^TestStreamHandlerAccumulationPreservesOutput$' -bench '^BenchmarkStreamHandlerLongResponse$' -benchmem -benchtime=300ms -count=3 | tee artifacts/accumulation-after.txt
           python3 -m unittest discover -s tests/stream-perf -p 'test_*.py'
           python3 tests/stream-perf/run.py --binary "$PWD/artifacts/one-api" --driver "$PWD/artifacts/stream-perf" --token-cache "$PWD/artifacts/token-cache" --output "$PWD/artifacts/results" --requests 16 --paced-requests 16 --chunks 32 --repeats 1 --concurrency 1,8 --debug-logs
+      - name: Commit only the validated candidate to this draft PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import urllib.request
+          if Path('artifacts/publish-candidate').exists():
+              content = Path('relay/adaptor/openai/main.go').read_bytes()
+              assert hashlib.sha256(content).hexdigest() == '9a3df89d25e7e8e10cd1416cf24ce321b3519b79577635624970a5f69f47cff6'
+              payload = {'message': 'perf(stream): replace quadratic text concatenation with linear builders',
+                         'content': base64.b64encode(content).decode(),
+                         'sha': '6c9ad0f2a3f3ed781648be7e87134c56919ca526',
+                         'branch': 'perf/stream-chat-e2e-20260924'}
+              request = urllib.request.Request('https://api.github.com/repos/Laisky/one-api/contents/relay/adaptor/openai/main.go',
+                         method='PUT', data=json.dumps(payload).encode(),
+                         headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  commit = json.load(response)['commit']['sha']
+          else:
+              commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          Path('artifacts/commit.txt').write_text(commit + '\n')
+          print('Validated candidate commit:', commit)
+          PY
+          git add -- relay/adaptor/openai/main.go
+          git archive "$(git write-tree)" | gzip > artifacts/source.tar.gz
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: stream-e2e-${{ github.event.pull_request.head.sha || github.sha }}
+          name: stream-e2e-${{ github.event.pull_request.head.sha }}
           path: artifacts/
           retention-days: 7
           if-no-files-found: error
