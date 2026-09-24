@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -23,8 +24,8 @@ import (
 type options struct {
 	mode, address, target, model, output, id, fault                string
 	concurrency, requests, chunks, chunkBytes, paceMS, cancelAfter int
-	rate                                                         float64
-	timeout                                                      time.Duration
+	rate                                                           float64
+	timeout                                                        time.Duration
 }
 
 type sample struct {
@@ -95,7 +96,7 @@ func execute(o options) error {
 	if o.mode != "load" {
 		return fmt.Errorf("mode must be load or mock")
 	}
-	if o.concurrency < 1 || o.concurrency > 4096 || o.requests < 1 || o.requests > 1000000 || o.rate < 0 || o.rate > 100000 || o.timeout <= 0 || o.cancelAfter < 0 || o.cancelAfter > o.chunks {
+	if o.concurrency < 1 || o.concurrency > 4096 || o.requests < 1 || o.requests > 1000000 || math.IsNaN(o.rate) || math.IsInf(o.rate, 0) || o.rate < 0 || o.rate > 100000 || o.timeout <= 0 || o.cancelAfter < 0 || o.cancelAfter > o.chunks {
 		return fmt.Errorf("invalid concurrency, requests, rate or timeout")
 	}
 	if len(o.id) > 40 || strings.ContainsAny(o.id, "\r\n") {
@@ -150,7 +151,15 @@ type job struct {
 // runLoad drives bounded workers, counts offered-load drops, and returns every completed observation.
 func runLoad(o options, client *http.Client, key string) result {
 	r := result{SchemaVersion: 1, GoVersion: runtime.Version(), Concurrency: o.concurrency, Offered: o.requests}
-	jobs := make(chan job) // An unbuffered queue exposes overload instead of hiding unbounded wait time.
+	queueSize := 0
+	if o.rate > 0 {
+		queueSize = o.concurrency
+	}
+	jobs := make(chan job, queueSize)
+	// Admission counts both scheduled and executing requests against the same
+	// concurrency bound. It must not depend on an idle worker being scheduled
+	// at the exact arrival instant; queued scheduling delay remains measured.
+	admitted := make(chan struct{}, o.concurrency)
 	results := make(chan sample, o.concurrency)
 	var wg sync.WaitGroup
 	var drops atomic.Int64
@@ -161,6 +170,9 @@ func runLoad(o options, client *http.Client, key string) result {
 			defer wg.Done()
 			for j := range jobs {
 				results <- requestOnce(o, client, key, j)
+				if o.rate > 0 {
+					<-admitted
+				}
 			}
 		}()
 	}
@@ -174,7 +186,8 @@ func runLoad(o options, client *http.Client, key string) result {
 					time.Sleep(delay)
 				}
 				select {
-				case jobs <- job{i, scheduled}:
+				case admitted <- struct{}{}:
+					jobs <- job{i, scheduled}
 				default:
 					drops.Add(1)
 				}
