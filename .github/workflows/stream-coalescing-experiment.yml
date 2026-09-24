@@ -1,0 +1,62 @@
+name: Isolated streaming experiment
+on:
+  push:
+    branches: [perf/stream-coalescing-experiment-20260924]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: go1.27.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Build immutable baseline and patched candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/stream-build
+          git rev-parse HEAD > /tmp/stream-build/experiment-revision.txt
+          go version > /tmp/stream-build/toolchain.txt
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, zlib
+          patch = zlib.decompress(base64.b64decode(pathlib.Path('tests/stream-perf/experiments/coalescing.patch.zlib.b64').read_text()))
+          assert hashlib.sha256(patch).hexdigest() == '7305fc7bd8e52fc3c5dce20bd0d640d81697985c234544bc968cf5886fcc09bb'
+          pathlib.Path('/tmp/stream-build/candidate.patch').write_bytes(patch)
+          PY
+          git worktree add --detach /tmp/stream-control 57bd4834bad32629a9c6b068ec1c30dd0c4256a4
+          mkdir -p /tmp/stream-control/web/build web/build
+          printf '<!doctype html><title>API performance fixture</title>\n' > web/build/index.html
+          cp web/build/index.html /tmp/stream-control/web/build/index.html
+          (cd /tmp/stream-control && go build -trimpath -o /tmp/stream-build/one-api-control .)
+          git apply --check /tmp/stream-build/candidate.patch
+          git apply /tmp/stream-build/candidate.patch
+          go build -trimpath -o /tmp/stream-build/one-api-candidate .
+          go build -trimpath -o /tmp/stream-build/stream-perf ./tests/stream-perf
+          python3 tests/stream-perf/cache_tokens.py --cache /tmp/stream-build/token-cache
+          git diff --check
+          test -z "$(gofmt -l common/render/buffered_stream_writer*.go common/render/heartbeat_line_reader.go common/sse/buffered.go tests/stream-perf/content_gap_test.go tests/stream-perf/main.go tests/stream-perf/protocol.go)"
+          git diff > /tmp/stream-build/applied.diff
+          tar --exclude=.git -czf /tmp/stream-build/source.tar.gz .
+          (cd /tmp/stream-build && sha256sum one-api-* stream-perf candidate.patch source.tar.gz > SHA256SUMS)
+      - name: Run race and stream correctness tests
+        shell: bash
+        env:
+          TIKTOKEN_CACHE_DIR: /tmp/stream-build/token-cache
+        run: |
+          set -euo pipefail
+          go test -race -count=1 ./common/render ./common/sse ./relay/adaptor/openai -run 'Test(Buffered|Heartbeat|NextBuffered|LineReader|Stream|Ordinary|GPT52|MappedChat|ModelSampling|NativeResponses)' -timeout 12m 2>&1 | tee /tmp/stream-build/race.log
+          go test -race -count=1 ./tests/stream-perf -timeout 12m 2>&1 | tee /tmp/stream-build/e2e.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: stream-coalescing-build
+          path: /tmp/stream-build
+          retention-days: 14
