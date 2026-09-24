@@ -59,11 +59,11 @@ func TestGroqLegacyPricingCompatibility(t *testing.T) {
 	// These are compatibility defaults, not current enterprise quotes. Updating
 	// discovery must not silently make an existing paid configuration free.
 	for modelID, prices := range map[string][2]float64{
-		"llama-3.1-8b-instant":                     {0.05, 0.08},
-		"llama-3.3-70b-versatile":                  {0.59, 0.79},
+		"llama-3.1-8b-instant":                      {0.05, 0.08},
+		"llama-3.3-70b-versatile":                   {0.59, 0.79},
 		"meta-llama/llama-4-scout-17b-16e-instruct": {0.11, 0.34},
-		"qwen/qwen3-32b":                          {0.29, 0.59},
-		"qwen/qwen3.6-27b":                        {0.60, 3.00},
+		"qwen/qwen3-32b":                            {0.29, 0.59},
+		"qwen/qwen3.6-27b":                          {0.60, 3.00},
 	} {
 		t.Run(modelID, func(t *testing.T) {
 			t.Parallel()
