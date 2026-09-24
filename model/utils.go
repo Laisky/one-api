@@ -152,17 +152,18 @@ func addNewRecord(type_ int, id int, value int64) {
 }
 
 // ValidateOrderClause ensures that the sort field and order are valid to prevent SQL injection.
-// It returns a sanitized ORDER BY clause string.
+// It returns an ORDER BY clause built only from the server-owned column allowlist
+// and literal direction tokens. The allowlist and fallback must never come from
+// a request; request strings are used only to choose between these trusted values.
 func ValidateOrderClause(sortBy, sortOrder string, allowed map[string]string, defaultClause string) string {
 	sortBy = strings.ToLower(strings.TrimSpace(sortBy))
 	sortOrder = strings.ToLower(strings.TrimSpace(sortOrder))
 
-	if sortOrder != "asc" && sortOrder != "desc" {
-		sortOrder = "desc"
-	}
-
 	if col, ok := allowed[sortBy]; ok {
-		return col + " " + sortOrder
+		if sortOrder == "asc" {
+			return col + " asc"
+		}
+		return col + " desc"
 	}
 
 	return defaultClause

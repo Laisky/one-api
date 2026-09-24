@@ -143,6 +143,8 @@ export function TokensPage() {
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState(searchParams.get('keyword') || '');
+  const [appliedKeyword, setAppliedKeyword] = useState('');
+  const loadSequence = useRef(0);
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('id');
@@ -212,28 +214,30 @@ export function TokensPage() {
     [formatTokenLabel, tr]
   );
 
-  const load = async (p = 0, size = pageSize) => {
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword) => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/token/?p=${p}&size=${size}`;
+      let url = keyword
+        ? `/api/token/search?keyword=${encodeURIComponent(keyword)}&p=${p}&size=${size}`
+        : `/api/token/?p=${p}&size=${size}`;
       if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-
       const res = await api.get(url);
-      const { success, data: responseData, total: responseTotal } = res.data;
-
-      if (success) {
-        setData(responseData || []);
-        setTotal(responseTotal || 0);
-        setPageIndex(p);
-        setPageSize(size);
-      }
+      if (sequence !== loadSequence.current) return;
+      if (!res.data?.success) throw new Error(res.data?.message || t('table_selection.failed'));
+      const rows: Token[] = res.data.data || [];
+      setData(rows);
+      setTotal(res.data.total ?? rows.length);
+      setPageIndex(p);
+      setPageSize(size);
+      setAppliedKeyword(keyword);
     } catch (error) {
-      console.error('Failed to load tokens:', error);
+      if (sequence !== loadSequence.current) return;
       setData([]);
       setTotal(0);
+      notify({ type: 'error', message: (error as Error)?.message || t('table_selection.failed') });
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   };
 
@@ -306,39 +310,14 @@ export function TokensPage() {
     }
   };
 
-  const performSearch = async () => {
-    if (!searchKeyword.trim()) {
-      setSearchParams((prev) => {
-        prev.delete('keyword');
-        return prev;
-      });
-      return load(0, pageSize);
-    }
-
+  const performSearch = () => {
     setSearchParams((prev) => {
-      prev.set('keyword', searchKeyword);
-      return prev;
+      const next = new URLSearchParams(prev);
+      if (searchKeyword.trim()) next.set('keyword', searchKeyword.trim());
+      else next.delete('keyword');
+      return next;
     });
-    setLoading(true);
-    try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/token/search?keyword=${encodeURIComponent(searchKeyword)}`;
-      if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-      url += `&size=${pageSize}`;
-
-      const res = await api.get(url);
-      const { success, data: responseData } = res.data;
-
-      if (success) {
-        setData(responseData || []);
-        setPageIndex(0);
-        setTotal(responseData?.length || 0);
-      }
-    } catch (error) {
-      console.error('Search failed:', error);
-    } finally {
-      setLoading(false);
-    }
+    return load(0, pageSize, searchKeyword.trim());
   };
 
   const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete') => {
@@ -457,11 +436,7 @@ export function TokensPage() {
       accessorKey: 'name',
       header: tr('columns.name', 'Name'),
       cell: ({ row }) => (
-        <NameWithId
-          name={formatTokenLabel(row.original)}
-          refId={tokenRefText(row.original)}
-          idLabel={tr('columns.id', 'ID')}
-        />
+        <NameWithId name={formatTokenLabel(row.original)} refId={tokenRefText(row.original)} idLabel={tr('columns.id', 'ID')} />
       ),
     },
     {
@@ -677,6 +652,8 @@ export function TokensPage() {
         <Card className="border-0 md:border shadow-none md:shadow-sm">
           <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
             <EnhancedDataTable
+              selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
+              selectionDisabled={searchKeyword.trim() !== appliedKeyword}
               columns={columns}
               data={data}
               floatingRowActions={(row) => (
