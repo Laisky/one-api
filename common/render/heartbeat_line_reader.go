@@ -63,6 +63,23 @@ func NewHeartbeatLineReader(c *gin.Context, reader *commonsse.LineReader, interv
 
 // Next returns the next SSE line while sending heartbeats during idle periods.
 func (h *HeartbeatLineReader) Next() (commonsse.Line, error) {
+	clientCtx := context.Background()
+	if h.c != nil && h.c.Request != nil {
+		clientCtx = h.c.Request.Context()
+	}
+	select {
+	case <-h.done:
+		return commonsse.Line{}, io.EOF
+	case <-clientCtx.Done():
+		return commonsse.Line{}, errors.WithStack(clientCtx.Err())
+	default:
+	}
+	// Buffered complete lines need no asynchronous I/O or heartbeat timer.
+	// A partial or oversized line keeps the original blocking/heartbeat path.
+	if line, ready, err := h.reader.NextBuffered(); ready {
+		return line, err
+	}
+
 	resultCh := make(chan heartbeatLineResult, 1)
 	go func() {
 		line, err := h.reader.Next()
@@ -74,11 +91,6 @@ func (h *HeartbeatLineReader) Next() (commonsse.Line, error) {
 
 	ticker := time.NewTicker(h.interval)
 	defer ticker.Stop()
-
-	clientCtx := context.Background()
-	if h.c != nil && h.c.Request != nil {
-		clientCtx = h.c.Request.Context()
-	}
 
 	for {
 		select {
