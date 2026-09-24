@@ -34,6 +34,21 @@ Build the baseline from its immutable commit in a separate checkout with the **s
 
 The existing `go test ./...` CI entrypoint discovers `TestStreamingGatewayE2E`: it builds the gateway and driver and runs correctness plus a small concurrent smoke matrix. No fixed RPS threshold gates noisy shared CI runners.
 
+### Local smoke tests and offline setup
+
+Ordinary local test runs skip the streaming E2E smoke test with an explicit reason when `-short` is requested, the host is not Linux, `python3` is missing, or `TIKTOKEN_CACHE_DIR` is unset. Unit tests still run. To enable the local E2E smoke test, prepare the Go toolchain/dependencies and pinned tokenizer assets first:
+
+```sh
+python3 tests/stream-perf/cache_tokens.py --cache /tmp/stream-token-cache
+export TIKTOKEN_CACHE_DIR=/tmp/stream-token-cache
+python3 tests/stream-perf/cache_tokens.py --cache "$TIKTOKEN_CACHE_DIR" --check-only
+go test -count=1 ./tests/stream-perf -run '^TestStreamingGatewayE2E$' -v
+```
+
+A supplied cache is verified without network access or writes. Missing or corrupt assets are an error; the test does not silently repair them or convert a broken configured environment into a skip. `--check-only` is also suitable for verifying a read-only cache. It does not install Go dependencies; preload those separately for a fully offline build.
+
+GitHub Actions (`GITHUB_ACTIONS=true`) and explicit required runs (`ONEAPI_REQUIRE_STREAM_E2E=1`) **fail instead of skipping** when host prerequisites are unavailable, including an incompatible `-short` request. Required runs without a supplied cache may download the pinned public dictionaries during setup into a temporary directory; the timed workload remains entirely local. No new workflow or weakened required check is needed.
+
 ## Measurement contract
 
 - TTFT is the first **content** delta, excluding HTTP headers, role-only events and heartbeats. Report client-observed TTFT, DONE and HTTP EOF p50/p95/p99, successful requests/s and content chunks/s. Chunks are not tokenizer tokens.
@@ -52,7 +67,7 @@ The fixture pins GOMAXPROCS=2 for each process and uses a fresh SQLite database,
 
 ## Safety and interpretation
 
-Targets and the mock listener must be literal loopback HTTP addresses. Proxy settings and ambient gateway configuration are not inherited. Random fixture credentials are passed through environment variables, never command lines or reports. The harness owns and reaps only its own processes; temporary databases and normal logs are deleted. Optional failure logs are redacted. Tokenizer downloads happen during setup and are SHA-256 verified; request traffic is fully local.
+Targets and the mock listener must be literal loopback HTTP addresses. Proxy settings and ambient gateway configuration are not inherited. Random fixture credentials are passed through environment variables, never command lines or reports. The harness owns and reaps only its own processes; temporary databases and normal logs are deleted. Optional failure logs are redacted. Tokenizer downloads happen during explicit preparation or required-run setup and are SHA-256 verified; request traffic is fully local.
 
 Accept an optimization only after correctness passes and repeated E2E measurements show a material improvement without unacceptable latency, CPU, RSS or billing regressions. Revert unsuccessful candidates. A stop decision is scoped to the tested candidates, workload and machine; it is not proof that no future optimization exists. Raw evidence and the final measured decision belong alongside the PR before marking it ready.
 
