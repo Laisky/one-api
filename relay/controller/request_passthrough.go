@@ -55,11 +55,11 @@ var allowedExtraBodyKeys = map[string]struct{}{
 
 // passthroughMergeStats captures non-sensitive diagnostics for controlled passthrough merges.
 type passthroughMergeStats struct {
-	UnknownPreserved              int
-	AllowedRootPreserved          int
-	ExtraBodyMerged               int
-	ExtraBodySkipped              int
-	ExtraBodyRejected             int
+	UnknownPreserved             int
+	AllowedRootPreserved         int
+	ExtraBodyMerged              int
+	ExtraBodySkipped             int
+	ExtraBodyRejected            int
 	UnsupportedParametersRemoved int
 }
 
