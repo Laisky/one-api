@@ -46,14 +46,15 @@ describe('LogsPage action feedback', () => {
     (api.get as any).mockResolvedValue({ data: { success: true, data: [], total: 0 } });
   });
 
-  it('disables record actions when no logs are selected', async () => {
+  it('hides record actions when no logs are selected', async () => {
     render(
       <MemoryRouter>
         <LogsPage />
       </MemoryRouter>
     );
-    expect(await screen.findByRole('button', { name: 'Delete selected logs' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Export selected logs' })).toBeDisabled();
+    await screen.findByRole('group', { name: 'Table controls' });
+    expect(screen.queryByRole('menuitem', { name: 'Delete selected logs' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
     expect(api.delete).not.toHaveBeenCalled();
   });
 
@@ -142,7 +143,7 @@ describe('LogsPage action feedback', () => {
         </MemoryRouter>
       );
 
-      await screen.findByRole('button', { name: 'Delete selected logs' });
+      await screen.findByRole('group', { name: 'Table controls' });
       const findTrigger = (label: string) => {
         const trigger = screen.getAllByRole('combobox').find((el) => el.textContent?.trim() === label);
         if (!trigger) throw new Error(`combobox "${label}" not found`);

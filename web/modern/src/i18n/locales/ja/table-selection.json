@@ -25,6 +25,13 @@
     "summary": "選択 {{total}} 件：成功 {{success}}、スキップ {{skipped}}、失敗または拒否 {{failed}}。",
     "skipped_enabled": "このチャネルは有効のため削除されませんでした。",
     "missing": "このレコードは存在しないか、アクセスできません。",
-    "deleted": "選択したログ {{count}} 件を削除しました。"
+    "deleted": "選択したログ {{count}} 件を削除しました。",
+    "toolbar": "テーブル操作",
+    "select": "選択",
+    "all_pages_short": "全ページ",
+    "actions": "操作",
+    "selected_actions": "選択した行の操作",
+    "all_pages_hint": "全ページの選択対象は、現在の絞り込み条件に一致する結果のみです。",
+    "all_count_short": "全 {{count}} 件"
   }
 }

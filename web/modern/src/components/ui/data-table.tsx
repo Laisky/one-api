@@ -1,3 +1,4 @@
+import { TableToolbar, type TableToolbarProps } from '@/components/ui/table-toolbar';
 import { useSelectableTable, type TableSelectionOptions } from '@/components/ui/table-selection';
 import * as React from 'react';
 import { flexRender, type RowData, type SortingState, useTable } from '@tanstack/react-table';
@@ -10,7 +11,8 @@ import { AdvancedPagination } from '@/components/ui/advanced-pagination';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-export interface DataTableProps<TData extends RowData, TValue = unknown> extends TableSelectionOptions<TData> {
+export interface DataTableProps<TData extends RowData, TValue = unknown>
+  extends TableSelectionOptions<TData>, Omit<TableToolbarProps, 'selectionControl' | 'hasSelection'> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   pageIndex?: number;
@@ -44,6 +46,13 @@ export function DataTable<TData extends RowData, TValue = unknown>({
   sortOrder = 'desc',
   onSortChange,
   loading = false,
+  searchControl,
+  onSearchSubmit,
+  onRefresh,
+  toolbarActions,
+  batchActions,
+  batchActionsDisabled,
+  batchActionsBusy,
 }: DataTableProps<TData, TValue>) {
   const { t } = useTranslation();
   const selectable = useSelectableTable({
@@ -133,7 +142,18 @@ export function DataTable<TData extends RowData, TValue = unknown>({
 
   return (
     <div className="space-y-2">
-      {selectable.controls}
+      <TableToolbar
+        selectionControl={selectable.controls}
+        hasSelection={selectable.hasSelection}
+        searchControl={searchControl}
+        onSearchSubmit={onSearchSubmit}
+        onRefresh={onRefresh}
+        toolbarActions={toolbarActions}
+        batchActions={batchActions}
+        batchActionsDisabled={selectionDisabled || batchActionsDisabled}
+        batchActionsBusy={batchActionsBusy}
+        loading={loading}
+      />
       <div className="relative">
         {/* Loading overlay to prevent repeated actions */}
         {loading && (

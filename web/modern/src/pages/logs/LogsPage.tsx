@@ -1,3 +1,4 @@
+import type { TableBatchAction } from '@/components/ui/table-toolbar';
 import { LogDetailsModal } from '@/components/LogDetailsModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -430,6 +431,13 @@ export function LogsPage() {
   const selectionDisabled = loading || selectedActions.busy || loadedScope !== selectionScope;
   const batchDisabled = selectionDisabled || !selection.hasSelection;
 
+  const batchActions: TableBatchAction[] = [
+    { id: 'export', label: t('table_selection.export'), icon: <FileDown className="h-4 w-4" />, onSelect: selectedActions.exportSelected },
+    ...(isAdminOrRoot
+      ? [{ id: 'delete', label: t('table_selection.delete'), onSelect: selectedActions.deleteSelected, destructive: true }]
+      : []),
+  ];
+
   return (
     <ResponsivePageContainer
       title={t('logs.title')}
@@ -453,27 +461,6 @@ export function LogsPage() {
               {showStat ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               {showStat ? t('logs.actions.hide_stats') : t('logs.actions.show_stats')}
             </Button>
-            <Button
-              variant="outline"
-              onClick={selectedActions.exportSelected}
-              className="gap-2 whitespace-nowrap w-full sm:w-auto"
-              size="sm"
-              disabled={batchDisabled}
-            >
-              {selectedActions.busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              {t('table_selection.export')}
-            </Button>
-            {isAdminOrRoot && (
-              <Button
-                variant="destructive"
-                disabled={batchDisabled}
-                onClick={selectedActions.deleteSelected}
-                size="sm"
-                className="w-full sm:w-auto"
-              >
-                {t('table_selection.delete')}
-              </Button>
-            )}
           </div>
         </div>
       }
@@ -615,6 +602,9 @@ export function LogsPage() {
           </div>
 
           <EnhancedDataTable
+            batchActions={batchActions}
+            batchActionsDisabled={batchDisabled}
+            batchActionsBusy={selectedActions.busy}
             selection={selection}
             selectionDisabled={selectionDisabled}
             selectionTotal={cursorActive ? null : total}

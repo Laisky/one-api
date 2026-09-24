@@ -25,6 +25,13 @@
     "summary": "所选 {{total}} 项：成功 {{success}}，跳过 {{skipped}}，失败或拒绝 {{failed}}。",
     "skipped_enabled": "该渠道处于启用状态，未删除。",
     "missing": "该记录已不存在或无法访问。",
-    "deleted": "已删除 {{count}} 条所选日志。"
+    "deleted": "已删除 {{count}} 条所选日志。",
+    "toolbar": "表格工具栏",
+    "select": "选择",
+    "all_pages_short": "跨页全选",
+    "actions": "操作",
+    "selected_actions": "对所选记录执行操作",
+    "all_pages_hint": "跨页全选仅包含符合当前筛选条件的记录。",
+    "all_count_short": "跨页 {{count}} 项"
   }
 }

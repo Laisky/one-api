@@ -1,3 +1,4 @@
+import { chooseTableSelection, chooseTableAction } from '@/test/table-toolbar';
 import type { TableSelectionSnapshot } from '@/hooks/useTableSelection';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -64,7 +65,7 @@ describe('selected log actions', () => {
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     renderPage();
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Select user-1' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Export selected logs' }));
+    await chooseTableAction('Export selected logs');
     await waitFor(() => expect(csv).toHaveBeenCalled());
     expect(csv.mock.calls[0][0]).toHaveLength(2); // Header plus one selected record.
     expect(JSON.stringify(csv.mock.calls[0][0])).toContain('model-1');
@@ -79,9 +80,9 @@ describe('selected log actions', () => {
   it('confirms a cross-page selection with exclusions and deletes only frozen UUIDs', async () => {
     renderPage();
     await screen.findByText('model-1');
-    await userEvent.click(screen.getByRole('button', { name: 'Select all pages' }));
+    await chooseTableSelection('Select all pages');
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select user-2' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Delete selected logs' }));
+    await chooseTableAction('Delete selected logs');
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('the 2 selected records');
     expect(post).toHaveBeenCalledTimes(1);
@@ -97,14 +98,14 @@ describe('selected log actions', () => {
     );
     expect(api.delete).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith({ type: 'success', message: 'Deleted 2 selected logs.' });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete selected logs' })).toBeDisabled());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument());
     expect(get.mock.calls.filter(([url]) => url.startsWith('/api/log/')).length).toBeGreaterThan(1);
   });
 
   it('does not delete when confirmation is canceled and shows mutation failures honestly', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Select user-1' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Delete selected logs' }));
+    await chooseTableAction('Delete selected logs');
     await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }));
     expect(post).toHaveBeenCalledTimes(1);
     post.mockImplementation(async (url) =>
@@ -112,7 +113,7 @@ describe('selected log actions', () => {
         ? { data: { success: true, data: [rows[0]] } }
         : { data: { success: false, message: 'deletion rejected' } }
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Delete selected logs' }));
+    await chooseTableAction('Delete selected logs');
     await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith({ type: 'error', message: 'deletion rejected' }));
     expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
@@ -121,9 +122,9 @@ describe('selected log actions', () => {
   it('invalidates selection as soon as a filter changes, before Apply is pressed', async () => {
     const { container } = renderPage();
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Select user-1' }));
-    expect(screen.getByRole('button', { name: 'Export selected logs' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Actions' })).toBeEnabled();
     fireEvent.change(container.querySelector('input[type="datetime-local"]')!, { target: { value: '2026-01-01T01:00' } });
-    expect(screen.getByRole('button', { name: 'Export selected logs' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Select user-1' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Select user-1' })).toBeDisabled();
     expect(post).not.toHaveBeenCalled();

@@ -1,3 +1,13 @@
+import { useId } from 'react';
+import { ChevronDown, ListChecks } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useAuthStore } from '@/lib/stores/auth';
 import { useTranslation } from 'react-i18next';
 import type { RowData } from '@tanstack/react-table';
@@ -40,6 +50,7 @@ export function useSelectableTable<TData extends RowData, TValue>(
   options: TableSelectionOptions<TData> & { columns: ModernColumnDef<TData, TValue>[]; data: TData[]; total: number; loading: boolean }
 ) {
   const { t } = useTranslation();
+  const statusId = useId();
   const user = useAuthStore((state) => state.user);
   const local = useTableSelection(JSON.stringify([user?.uuid || user?.username, user?.role, options.selectionScope ?? '']));
   const selection = options.selection ?? local;
@@ -78,33 +89,69 @@ export function useSelectableTable<TData extends RowData, TValue>(
       );
     },
   };
+  const status =
+    selection.snapshot.mode === 'all_matching'
+      ? t(count == null ? 'table_selection.all_unknown' : 'table_selection.all_count', { count, excluded })
+      : t('table_selection.count', { count });
+  const label =
+    selection.snapshot.mode === 'all_matching'
+      ? t(count == null ? 'table_selection.all_pages_short' : 'table_selection.all_count_short', { count })
+      : selection.hasSelection
+        ? t('table_selection.count', { count })
+        : t('table_selection.select');
   const controls = enabled ? (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border p-2" aria-label={t('table_selection.controls')}>
-      <Button type="button" variant="outline" size="sm" disabled={disabled || !ids.length} onClick={() => selection.setPage(ids, true)}>
-        {t('table_selection.page')}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={disabled || total === 0 || (total == null && !ids.length)}
-        onClick={selection.selectAllMatching}
-      >
-        {t('table_selection.all_pages')}
-      </Button>
-      <Button type="button" variant="ghost" size="sm" disabled={disabled || !selection.hasSelection} onClick={selection.clear}>
-        {t('table_selection.clear')}
-      </Button>
-      <span role="status" className="text-sm text-muted-foreground">
-        {selection.snapshot.mode === 'all_matching'
-          ? t(count == null ? 'table_selection.all_unknown' : 'table_selection.all_count', { count, excluded })
-          : t('table_selection.count', { count })}
+    <>
+      <DropdownMenu key={selection.scopeVersion}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant={selection.hasSelection ? 'secondary' : 'outline'}
+            size="sm"
+            className="table-toolbar-control max-w-full gap-2"
+            disabled={disabled}
+            aria-label={t('table_selection.controls')}
+            aria-describedby={statusId}
+            title={status}
+          >
+            <ListChecks className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">{label}</span>
+            <ChevronDown className="h-4 w-4 shrink-0" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="table-toolbar-menu" aria-label={t('table_selection.controls')}>
+          <DropdownMenuLabel>{t('table_selection.controls')}</DropdownMenuLabel>
+          <p className="max-w-xs px-2 pb-2 text-xs text-muted-foreground">{status}</p>
+          <p className="max-w-xs px-2 pb-2 text-xs text-muted-foreground">{t('table_selection.all_pages_hint')}</p>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="table-toolbar-menu__item"
+            disabled={disabled || !ids.length}
+            onSelect={() => selection.setPage(ids, true)}
+          >
+            {t('table_selection.page')}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="table-toolbar-menu__item"
+            disabled={disabled || total === 0 || (total == null && !ids.length)}
+            onSelect={selection.selectAllMatching}
+          >
+            {t('table_selection.all_pages')}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="table-toolbar-menu__item" disabled={disabled || !selection.hasSelection} onSelect={selection.clear}>
+            {t('table_selection.clear')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <span id={statusId} role="status" className="sr-only">
+        {status}
       </span>
-    </div>
+    </>
   ) : null;
   return {
     columns: enabled ? [column, ...options.columns] : options.columns,
     controls,
+    hasSelection: enabled && selection.hasSelection && count !== 0,
     isSelected: (row: TData) => enabled && selection.isSelected(rowId(row)),
   };
 }

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -89,23 +89,23 @@ describe('ChannelsPage default model reset', () => {
     renderPage();
     await rowResetButton();
     await rowResetButton('Private B');
-    expect(screen.getByRole('button', { name: 'Reset selected models' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /refresh all balances/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /bulk actions/i })).not.toBeInTheDocument();
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  it.each(['single'])('does not send a mutation when the %s confirmation is canceled', async (scope) => {
+  it('does not send a mutation when the single-row confirmation is canceled', async () => {
     renderPage();
     const row = await rowResetButton();
     const user = userEvent.setup();
-    await user.click(scope === 'single' ? row : screen.getByRole('button', { name: 'Reset selected models' }));
+    await user.click(row);
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/Channel status and compatible mappings\/pricing remain unchanged/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(mockPost).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Reset selected models' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
   });
 
   it('posts the UUID with no client model list and refreshes the current page', async () => {
@@ -148,7 +148,7 @@ describe('ChannelsPage default model reset', () => {
     await waitFor(() => expect(mockGet.mock.calls.length).toBeGreaterThan(1));
   });
 
-  it('disables both row and all-channel resets while a request is pending', async () => {
+  it('disables both row and selected-channel resets while a request is pending', async () => {
     let finish!: () => void;
     mockPost.mockImplementationOnce(
       () =>
@@ -159,15 +159,17 @@ describe('ChannelsPage default model reset', () => {
     renderPage();
     const button = await rowResetButton();
     const user = userEvent.setup();
-    await user.click(button);
+    await user.click(screen.getByRole('checkbox', { name: 'Select Provider A' }));
+    await user.click(await rowResetButton());
     await confirmReset(user);
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
-    const allButton = screen.getByRole('button', { name: 'Reset selected models' });
+    const allButton = screen.getByRole('button', { name: 'Actions' });
     expect(allButton).toBeDisabled();
     const currentButton = screen.getAllByRole('button', { name: 'Reset Provider A to default models' })[0];
     expect(currentButton).toBeDisabled();
-    await user.click(allButton);
-    await user.click(currentButton);
+    // Disabled controls must also ignore programmatically dispatched clicks.
+    fireEvent.click(allButton);
+    fireEvent.click(currentButton);
     expect(mockPost).toHaveBeenCalledTimes(1);
     finish();
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Reset Provider A to default models' })[0]).toBeEnabled());
@@ -205,7 +207,10 @@ describe('ChannelsPage default model reset', () => {
     responsive.isMobile = true;
     renderPage();
     expect(await rowResetButton()).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reset selected models' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Provider A' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Actions' }));
+    expect(screen.getByRole('menuitem', { name: 'Reset selected models' })).toBeInTheDocument();
   });
 
   it('provides the complete reset vocabulary in every supported locale', () => {

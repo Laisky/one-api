@@ -25,6 +25,13 @@
     "summary": "{{total}} sélectionnés : {{success}} réussis, {{skipped}} ignorés, {{failed}} échoués ou refusés.",
     "skipped_enabled": "Ce canal est actif et n’a pas été supprimé.",
     "missing": "Cet enregistrement n’existe plus ou n’est plus accessible.",
-    "deleted": "{{count}} journaux sélectionnés supprimés."
+    "deleted": "{{count}} journaux sélectionnés supprimés.",
+    "toolbar": "Commandes du tableau",
+    "select": "Sélectionner",
+    "all_pages_short": "Toutes les pages",
+    "actions": "Actions",
+    "selected_actions": "Actions sur la sélection",
+    "all_pages_hint": "Toutes les pages inclut uniquement les résultats des filtres actuels.",
+    "all_count_short": "Tout : {{count}}"
   }
 }

@@ -1,3 +1,4 @@
+import { chooseTableAction } from '@/test/table-toolbar';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
@@ -249,7 +250,7 @@ describe('ChannelsPage Pagination', () => {
     renderChannelsPage();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('checkbox', { name: 'Select Channel 1' }));
-    await user.click(screen.getByRole('button', { name: 'Test selected channels' }));
+    await chooseTableAction('Test selected channels');
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
     await screen.findByText(/selected test rejected/);

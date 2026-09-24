@@ -1,3 +1,4 @@
+import { chooseTableSelection, chooseTableAction } from '@/test/table-toolbar';
 import type { TableSelectionSnapshot } from '@/hooks/useTableSelection';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -62,7 +63,7 @@ describe('selected channel batch actions', () => {
     await user.click(await screen.findByRole('checkbox', { name: 'Select Provider 1' }));
     await user.click(screen.getByRole('button', { name: 'Page 2' }));
     await user.click(await screen.findByRole('checkbox', { name: 'Select Provider 11' }));
-    await user.click(screen.getByRole('button', { name: 'Reset selected models' }));
+    await chooseTableAction('Reset selected models');
     expect(await screen.findByText(/the 2 selected records/)).toBeInTheDocument();
     expect(post).toHaveBeenCalledTimes(1);
     await confirmBatch();
@@ -82,9 +83,9 @@ describe('selected channel batch actions', () => {
     renderPage();
     const user = userEvent.setup();
     await screen.findByText('Provider 1');
-    await user.click(screen.getByRole('button', { name: 'Select all pages' }));
+    await chooseTableSelection('Select all pages');
     await user.click(screen.getByRole('checkbox', { name: 'Select Provider 2' }));
-    await user.click(screen.getByRole('button', { name: 'Reset selected models' }));
+    await chooseTableAction('Reset selected models');
     expect(await screen.findByText(/the 24 selected records/)).toBeInTheDocument();
     expect(post).toHaveBeenCalledWith('/api/channel/selection', {
       selection: { mode: 'all_matching', excluded_ids: [rows[1].uuid] },
@@ -113,8 +114,8 @@ describe('selected channel batch actions', () => {
     );
     renderPage();
     await screen.findByText('Provider 1');
-    await userEvent.click(screen.getByRole('button', { name: 'Select this page' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Reset selected models' }));
+    await chooseTableSelection('Select this page');
+    await chooseTableAction('Reset selected models');
     await confirmBatch();
     const report = await screen.findByRole('region', { name: 'Selected action results' });
     expect(report).toHaveTextContent('2 selected: 1 succeeded, 0 skipped, 1 failed or rejected.');
@@ -133,9 +134,9 @@ describe('selected channel batch actions', () => {
     );
     renderPage();
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Provider 1' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Delete selected disabled channels' }));
+    await chooseTableAction('Delete selected disabled channels');
     await confirmBatch();
-    const button = screen.getByRole('button', { name: 'Delete selected disabled channels' });
+    const button = screen.getByRole('button', { name: 'Actions' });
     expect(button).toBeDisabled();
     await userEvent.click(button);
     expect(post).toHaveBeenCalledTimes(2);

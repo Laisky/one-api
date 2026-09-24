@@ -25,6 +25,13 @@
     "summary": "{{total}} selected: {{success}} succeeded, {{skipped}} skipped, {{failed}} failed or rejected.",
     "skipped_enabled": "This channel is enabled and was not deleted.",
     "missing": "This record no longer exists or is no longer accessible.",
-    "deleted": "Deleted {{count}} selected logs."
+    "deleted": "Deleted {{count}} selected logs.",
+    "toolbar": "Table controls",
+    "select": "Select",
+    "all_pages_short": "All pages",
+    "actions": "Actions",
+    "selected_actions": "Actions for selected rows",
+    "all_pages_hint": "All pages includes only results matching the current filters.",
+    "all_count_short": "All {{count}}"
   }
 }

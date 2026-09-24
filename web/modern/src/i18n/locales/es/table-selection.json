@@ -25,6 +25,13 @@
     "summary": "{{total}} seleccionados: {{success}} correctos, {{skipped}} omitidos, {{failed}} fallidos o rechazados.",
     "skipped_enabled": "Este canal está activo y no se eliminó.",
     "missing": "Este registro ya no existe o no es accesible.",
-    "deleted": "Se eliminaron {{count}} registros seleccionados."
+    "deleted": "Se eliminaron {{count}} registros seleccionados.",
+    "toolbar": "Controles de tabla",
+    "select": "Seleccionar",
+    "all_pages_short": "Todas las páginas",
+    "actions": "Acciones",
+    "selected_actions": "Acciones para las filas seleccionadas",
+    "all_pages_hint": "Todas las páginas incluye solo los resultados de los filtros actuales.",
+    "all_count_short": "Todo: {{count}}"
   }
 }

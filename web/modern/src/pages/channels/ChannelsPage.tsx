@@ -1,3 +1,4 @@
+import type { TableBatchAction } from '@/components/ui/table-toolbar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -510,28 +511,27 @@ export function ChannelsPage() {
     }
   };
 
-  const toolbarActions = (
-    <div className="flex flex-wrap gap-2">
-      <Button variant="outline" size="sm" disabled={batchDisabled} onClick={() => selectedActions.run('test')} className="gap-2">
-        <FlaskConical className="h-4 w-4" />
-        {t('table_selection.test')}
-      </Button>
-      <Button variant="outline" size="sm" disabled={batchDisabled} onClick={() => selectedActions.run('reset')} className="gap-2">
-        <RotateCcw className="h-4 w-4" />
-        {t('table_selection.reset')}
-      </Button>
-      <Button
-        variant="destructive"
-        size="sm"
-        disabled={batchDisabled}
-        onClick={() => selectedActions.run('delete_disabled')}
-        className="gap-2"
-      >
-        <Trash2 className="h-4 w-4" />
-        {t('table_selection.delete_disabled')}
-      </Button>
-    </div>
-  );
+  const batchActions: TableBatchAction[] = [
+    {
+      id: 'reset',
+      label: t('table_selection.reset'),
+      icon: <RotateCcw className="h-4 w-4" />,
+      onSelect: () => selectedActions.run('reset'),
+    },
+    {
+      id: 'test',
+      label: t('table_selection.test'),
+      icon: <FlaskConical className="h-4 w-4" />,
+      onSelect: () => selectedActions.run('test'),
+    },
+    {
+      id: 'delete_disabled',
+      label: t('table_selection.delete_disabled'),
+      icon: <Trash2 className="h-4 w-4" />,
+      onSelect: () => selectedActions.run('delete_disabled'),
+      destructive: true,
+    },
+  ];
 
   return (
     <>
@@ -608,7 +608,9 @@ export function ChannelsPage() {
               onSearchSubmit={performSearch}
               searchPlaceholder={t('channels.search.placeholder')}
               allowSearchAdditions={true}
-              toolbarActions={toolbarActions}
+              batchActions={batchActions}
+              batchActionsDisabled={batchDisabled}
+              batchActionsBusy={selectedActions.busy}
               onRefresh={refresh}
               loading={loading}
               emptyMessage={t('channels.empty')}

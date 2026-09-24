@@ -1,3 +1,4 @@
+import { TableToolbar, type TableBatchAction } from '@/components/ui/table-toolbar';
 import { useSelectableTable, type TableSelectionOptions } from '@/components/ui/table-selection';
 import { AdvancedPagination } from '@/components/ui/advanced-pagination';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { cn } from '@/lib/utils';
 import { flexRender, type RowData, type SortingState, useTable } from '@tanstack/react-table';
 import { modernTableFeatures, type ModernColumnDef as ColumnDef } from '@/lib/table';
-import { ArrowDown, ArrowUp, ArrowUpDown, RotateCcw, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -50,6 +51,9 @@ export interface EnhancedDataTableProps<TData extends RowData, TValue = unknown>
 
   // Toolbar actions
   toolbarActions?: React.ReactNode;
+  batchActions?: TableBatchAction[];
+  batchActionsDisabled?: boolean;
+  batchActionsBusy?: boolean;
   onRefresh?: () => void;
 
   // Row interaction
@@ -102,6 +106,9 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
   searchPlaceholder,
   allowSearchAdditions = true,
   toolbarActions,
+  batchActions,
+  batchActionsDisabled,
+  batchActionsBusy,
   onRefresh,
   onRowClick,
   floatingRowActions,
@@ -292,66 +299,38 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
 
   return (
     <div className={cn('space-y-4', className)}>
-      {/* Search and Actions Toolbar */}
-      {(onSearchChange || toolbarActions || onRefresh) && (
-        <div className={cn('flex gap-4 flex-wrap', isMobile ? 'flex-col space-y-4' : 'items-center justify-between')}>
-          <div className={cn('flex gap-2 flex-wrap', isMobile ? 'flex-col space-y-2' : 'flex-1 items-center')}>
-            {onSearchChange && (
-              <>
-                <div className={cn(isMobile ? 'w-full' : 'flex-1 max-w-md')}>
-                  <SearchableDropdown
-                    value={searchValue}
-                    placeholder={effectiveSearchPlaceholder}
-                    searchPlaceholder={effectiveSearchPlaceholder}
-                    options={searchOptions}
-                    // The page owns the search (onSearchChange feeds searchOptions),
-                    // so the dropdown must render those results verbatim.
-                    remoteFiltered
-                    onSearchChange={onSearchChange}
-                    onChange={onSearchValueChange}
-                    onSelect={onSearchSelect}
-                    onAddItem={allowSearchAdditions ? handleSearchAddition : undefined}
-                    loading={searchLoading}
-                    noResultsMessage={t('common.no_results', 'No results found')}
-                    additionLabel={t('common.search_for', 'Search for: ')}
-                    allowAdditions={allowSearchAdditions}
-                    clearable={true}
-                  />
-                </div>
-                {onSearchSubmit && (
-                  <Button
-                    onClick={onSearchSubmit}
-                    disabled={loading}
-                    variant="outline"
-                    className={cn(isMobile ? 'w-full touch-target' : '', 'gap-2')}
-                  >
-                    <Search className="h-4 w-4" />
-                    {!isMobile && t('common.search', 'Search')}
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className={cn('flex gap-2 flex-wrap', isMobile ? 'w-full' : 'items-center')}>
-            {onRefresh && (
-              <Button
-                onClick={onRefresh}
-                disabled={loading}
-                variant="outline"
-                size={compactMode || isMobile ? 'sm' : 'sm'}
-                className={cn(isMobile ? 'flex-1 touch-target' : '', 'gap-2')}
-              >
-                <RotateCcw className="h-4 w-4" />
-                {!compactMode && !isMobile && t('common.refresh', 'Refresh')}
-              </Button>
-            )}
-            <div className={cn(isMobile ? 'flex gap-2 flex-1' : 'flex gap-2')}>{toolbarActions}</div>
-          </div>
-        </div>
-      )}
-
-      {selectable.controls}
+      <TableToolbar
+        selectionControl={selectable.controls}
+        hasSelection={selectable.hasSelection}
+        loading={loading}
+        onRefresh={onRefresh}
+        onSearchSubmit={onSearchSubmit}
+        toolbarActions={toolbarActions}
+        batchActions={batchActions}
+        batchActionsDisabled={selectionDisabled || batchActionsDisabled}
+        batchActionsBusy={batchActionsBusy}
+        searchControl={
+          onSearchChange ? (
+            <SearchableDropdown
+              value={searchValue}
+              placeholder={effectiveSearchPlaceholder}
+              searchPlaceholder={effectiveSearchPlaceholder}
+              options={searchOptions}
+              remoteFiltered
+              onSearchChange={onSearchChange}
+              onChange={onSearchValueChange}
+              onSelect={onSearchSelect}
+              onAddItem={allowSearchAdditions ? handleSearchAddition : undefined}
+              loading={searchLoading}
+              noResultsMessage={t('common.no_results', 'No results found')}
+              additionLabel={t('common.search_for', 'Search for: ')}
+              allowAdditions={allowSearchAdditions}
+              clearable
+              className="table-toolbar-control"
+            />
+          ) : undefined
+        }
+      />
 
       {/* Data Table */}
       <div className="relative">

@@ -1,3 +1,4 @@
+import { chooseTableSelection } from '@/test/table-toolbar';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,8 +41,8 @@ for (const [label, Component] of [
         />
       );
       expect(screen.getByRole('checkbox', { name: 'Select Charlie' })).not.toBeChecked();
-      await user.click(screen.getByRole('button', { name: 'Select this page' }));
-      expect(screen.getByText('3 selected')).toBeInTheDocument();
+      await chooseTableSelection('Select this page');
+      expect(screen.getByRole('status')).toHaveTextContent('3 selected');
       rerender(<Component {...props} data={[rows[1], rows[0]]} />);
       expect(screen.getByRole('checkbox', { name: 'Select Alpha' })).toBeChecked();
       expect(screen.getByRole('checkbox', { name: 'Select Bravo' })).not.toBeChecked();
@@ -53,14 +54,14 @@ for (const [label, Component] of [
       const user = userEvent.setup();
       const props = { columns, data: rows, total: 25, pageSize: 2 };
       const { rerender } = render(<Component {...props} />);
-      await user.click(screen.getByRole('button', { name: 'Select all pages' }));
+      await chooseTableSelection('Select all pages');
       await user.click(screen.getByRole('checkbox', { name: 'Select Alpha' }));
       rerender(<Component {...props} data={[{ uuid: 'c', name: 'Charlie' }]} pageIndex={1} />);
       expect(screen.getByRole('checkbox', { name: 'Select Charlie' })).toBeChecked();
       expect(screen.getByText('All matching pages selected: 24 items (1 excluded).')).toBeInTheDocument();
       rerender(<Component {...props} />);
       expect(screen.getByRole('checkbox', { name: 'Select Alpha' })).not.toBeChecked();
-      await user.click(screen.getByRole('button', { name: 'Clear selection' }));
+      await chooseTableSelection('Clear selection');
       expect(screen.getByRole('checkbox', { name: 'Select Bravo' })).not.toBeChecked();
     });
 
@@ -97,7 +98,7 @@ for (const [label, Component] of [
       const { rerender } = render(<Component {...props} loading />);
       expect(screen.getByRole('checkbox', { name: 'Select Alpha' })).toBeDisabled();
       rerender(<Component {...props} />);
-      await userEvent.click(screen.getByRole('button', { name: 'Select all pages' }));
+      await chooseTableSelection('Select all pages');
       expect(screen.getByText(/The exact count is resolved before execution/)).toBeInTheDocument();
     });
   });
