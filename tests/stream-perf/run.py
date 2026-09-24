@@ -3,6 +3,7 @@
 from __future__ import annotations
 import argparse
 import contextlib
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -197,6 +198,7 @@ def qualify(args: argparse.Namespace, binary: Path, label: str) -> dict:
         for fault in ('', 'crlf', 'fragmented', 'missing-done', 'wrong-content', 'malformed'):
             name = fault or 'normal'
             cmd = driver_command(args, f['url'], directory / f'{name}.json', name, 4, 8, 4, 1, fault)
+            cmd[-1] = '0'  # Correctness qualification must not inherit an overload schedule.
             report = run_driver(cmd, f['env'], fault in ('', 'crlf', 'fragmented'))
             expected = {'missing-done': 'incomplete stream', 'wrong-content': 'content mismatch', 'malformed': 'invalid SSE JSON'}
             if fault in expected and any(expected[fault] not in sample.get('error', '') for sample in report['samples']):
@@ -270,7 +272,8 @@ def measure(args: argparse.Namespace, binary: Path, label: str, repeat: int, con
             resources = monitor.finish(1, 1)  # Always join the sampling thread, including failing clients.
         for value in resources.values():
             value['cpu_ms_per_success'] = value['cpu_seconds'] * 1000 / report['completed'] if report['completed'] else None
-            value['average_cores'] = value['cpu_seconds'] / report['seconds']
+            value['average_cores'] = value['cpu_seconds'] / settled_seconds
+            value['measurement_seconds'] = settled_seconds
         driver_cpu = report['load_generator_cpu_seconds']
         resources['driver'] = {'cpu_seconds': driver_cpu, 'cpu_ms_per_success': driver_cpu * 1000 / report['completed'] if report['completed'] else None,
                                'average_cores': driver_cpu / report['seconds'], 'peak_rss_mib': None}
@@ -282,6 +285,13 @@ def measure(args: argparse.Namespace, binary: Path, label: str, repeat: int, con
         (args.output / f'{trial}.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps({key: report[key] for key in ('label', 'repeat', 'profile', 'concurrency', 'successful_rps', 'ttft_ms', 'total_ms', 'resources')}), flush=True)
         return {key: value for key, value in report.items() if key != 'samples'}
+
+
+def checkpoint(summary: dict, output: Path) -> None:
+    """checkpoint atomically saves progress so an interrupted experiment cannot masquerade as complete."""
+    temporary = output / 'summary.json.tmp'
+    temporary.write_text(json.dumps(summary, indent=2) + '\n')
+    temporary.replace(output / 'summary.json')
 
 
 def main() -> None:
@@ -317,6 +327,8 @@ def main() -> None:
     profiles = args.profiles.split(',')
     if not 1 <= args.repeats <= 20 or not 1 <= args.requests <= 1000000 or not 1 <= args.paced_requests <= 1000000 or any(c < 1 or c > 4096 for c in levels) or set(profiles) - {'saturated', 'paced'}:
         parser.error('invalid bounded test matrix')
+    if args.output.exists() and any(args.output.iterdir()):
+        parser.error('output directory must be empty; refusing to overwrite experiment evidence')
     args.output.mkdir(parents=True, exist_ok=True)
     variants = [('candidate', args.binary)] if args.baseline is None else [('baseline', args.baseline), ('candidate', args.binary)]
     summary = {'environment': {'platform': platform.platform(), 'cpu_count': os.cpu_count(),
@@ -326,17 +338,24 @@ def main() -> None:
                 'memory_cgroup_max': Path('/sys/fs/cgroup/memory.max').read_text().strip() if Path('/sys/fs/cgroup/memory.max').exists() else None,
                 'limiter': 'enabled; GLOBAL_RELAY_RATE_LIMIT and GLOBAL_API_RATE_LIMIT=10000000',
                 'driver_sha256': sha256(args.driver), 'resource_sampling_ms': 20}, 'qualification': {}, 'trials': []}
+    summary.update(schema_version=2, complete=False, started_at_utc=datetime.now(timezone.utc).isoformat(),
+                   configuration={key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()})
+    checkpoint(summary, args.output)
     try:
         for label, binary in variants:
             if not args.skip_qualification:
                 summary['qualification'][label] = qualify(args, binary, label)
+                checkpoint(summary, args.output)
         for repeat in range(args.repeats):
             for profile in profiles:
                 for concurrency in levels:
                     for label, binary in variants[::1 if repeat % 2 == 0 else -1]:
                         summary['trials'].append(measure(args, binary, label, repeat, concurrency, profile))
+                        checkpoint(summary, args.output)
+        summary['complete'] = True
     finally:
-        (args.output / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+        summary['finished_at_utc'] = datetime.now(timezone.utc).isoformat()
+        checkpoint(summary, args.output)
 
 
 if __name__ == '__main__':

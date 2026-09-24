@@ -40,7 +40,7 @@ func TestStreamingGatewayE2E(t *testing.T) {
 	environment := os.Environ()
 	runE2ECommand(t, ctx, root, environment, "go", "build", "-trimpath", "-o", driver, "./tests/stream-perf")
 	runE2ECommand(t, ctx, root, environment, "go", "build", "-trimpath", "-o", gateway, ".")
-	runE2ECommand(t, ctx, directory, environment, "python3", "-m", "unittest", "-v", "test_harness")
+	runE2ECommand(t, ctx, directory, environment, "python3", "-m", "unittest", "discover", "-v", "-s", ".", "-p", "test_*.py")
 	runE2ECommand(t, ctx, directory, environment, "python3", "cache_tokens.py", "--cache", cache)
 	runE2ECommand(t, ctx, directory, environment, "python3", "run.py", "--binary", gateway, "--driver", driver,
 		"--token-cache", cache, "--output", filepath.Join(temporary, "results"), "--concurrency", "1,8",
