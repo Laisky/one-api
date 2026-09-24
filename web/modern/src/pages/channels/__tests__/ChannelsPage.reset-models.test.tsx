@@ -57,7 +57,10 @@ async function confirmReset(user: ReturnType<typeof userEvent.setup>) {
 
 describe('ChannelsPage default model reset', () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    // Preserve the shared DOM/observer implementations installed by test setup.
+    vi.clearAllMocks();
+    mockGet.mockReset();
+    mockPost.mockReset();
     responsive.isMobile = false;
     window.history.replaceState({}, '', '/channels');
     mockGet.mockResolvedValue({ data: { success: true, data: channels, total: 25 } });

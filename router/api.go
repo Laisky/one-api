@@ -25,7 +25,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/about", controller.GetAbout)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/verification", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendEmailVerification)
-		apiRouter.GET("/reset_password", middleware.CriticalRateLimit(), controller.SendPasswordResetEmail)
+		apiRouter.GET("/reset_password", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendPasswordResetEmail)
 		apiRouter.GET("/user/get-by-token", middleware.TokenAuth(), controller.GetSelfByToken)
 		apiRouter.GET("/available_models", middleware.TokenAuth(), controller.GetAvailableModelsByToken)
 		apiRouter.POST("/user/reset", middleware.CriticalRateLimit(), controller.ResetPassword)
@@ -126,8 +126,8 @@ func SetApiRouter(router *gin.Engine) {
 			debugRoute.POST("/channel/:id/fix", controller.FixChannelModelConfigs)
 			debugRoute.GET("/channels/validate", controller.ValidateAllChannelModelConfigs)
 			debugRoute.POST("/channels/remigrate", controller.RemigratAllChannels)
-			debugRoute.POST("/channels/clean", controller.CleanAllMixedModelData)
 			debugRoute.GET("/channel/:id/migration-status", controller.GetChannelMigrationStatus)
+			debugRoute.POST("/channels/clean", controller.CleanAllMixedModelData)
 		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())

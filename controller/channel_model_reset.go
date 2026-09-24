@@ -20,7 +20,7 @@ type channelModelResetOutcome struct {
 	Success    bool                             `json:"success"`
 	ModelCount int                              `json:"model_count,omitempty"`
 	Message    string                           `json:"message,omitempty"`
-	Conflict   *model.ChannelModelResetConflict  `json:"conflict,omitempty"`
+	Conflict   *model.ChannelModelResetConflict `json:"conflict,omitempty"`
 }
 
 // channelModelResetSummary distinguishes successful resets, policy rejections,
