@@ -1,3 +1,4 @@
+import { channelResetTranslations } from '../channel-reset';
 import auth from './auth.json';
 import billing from './billing.json';
 import common from './common.json';
@@ -24,6 +25,7 @@ const translations = {
   ...logs,
   ...mcp,
   ...tools,
+  channel_reset: channelResetTranslations.es,
 };
 
 export default translations;

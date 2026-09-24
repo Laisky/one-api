@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { ListActionButton } from '@/components/ui/list-action-button';
 import { useNotifications } from '@/components/ui/notifications';
@@ -13,13 +12,14 @@ import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Ban, Banknote, CheckCircle, ChevronDown, Copy, FlaskConical, Plus, RefreshCw, Settings, Trash2 } from 'lucide-react';
+import { Ban, CheckCircle, Copy, FlaskConical, Plus, RefreshCw, RotateCcw, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CHANNEL_TYPE_LABELS as CHANNEL_TYPES } from './constants';
 import { resolveChannelColor } from './utils/colorGenerator';
 import { channelRef, channelRefPayload, createChannelColumns, sameChannelRef, type Channel } from './channels-page-columns';
+import { ChannelModelResetButton, useChannelModelReset } from './useChannelModelReset';
 
 /** ChannelsPage renders searchable channel administration, bulk actions, and pagination. */
 export function ChannelsPage() {
@@ -40,7 +40,6 @@ export function ChannelsPage() {
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [bulkTesting, setBulkTesting] = useState(false);
-  const [bulkBusy, setBulkBusy] = useState(false);
   const [refreshingBalanceIds, setRefreshingBalanceIds] = useState<Set<string | number>>(new Set());
   const initializedRef = useRef(false);
   const skipFirstSortEffect = useRef(true);
@@ -453,56 +452,6 @@ export function ChannelsPage() {
     }
   };
 
-  const handleBulkStatus = async (status: 1 | 2) => {
-    const targets = data;
-    if (targets.length === 0) {
-      notify({
-        type: 'info',
-        message: t('channels.notifications.bulk_status_empty', 'No channels available to update.'),
-      });
-      return;
-    }
-    setBulkBusy(true);
-    try {
-      notify({
-        type: 'info',
-        message: t('channels.notifications.bulk_status_started', 'Updating {{count}} channels…', { count: targets.length }),
-      });
-      let success = 0;
-      let failed = 0;
-      for (const ch of targets) {
-        try {
-          const res = await api.put('/api/channel/?status_only=1', { ...channelRefPayload(channelRef(ch)), status });
-          if (res.data?.success) {
-            success += 1;
-          } else {
-            failed += 1;
-          }
-        } catch (_err) {
-          failed += 1;
-        }
-      }
-      notify({
-        type: failed === 0 ? 'success' : 'error',
-        title:
-          status === 1
-            ? t('channels.notifications.bulk_enable_summary_title', 'Enable summary')
-            : t('channels.notifications.bulk_disable_summary_title', 'Disable summary'),
-        message: t('channels.notifications.bulk_status_summary', 'Updated {{success}} channels, {{failed}} failed.', {
-          success,
-          failed,
-        }),
-      });
-      if (searchKeyword.trim()) {
-        performSearch();
-      } else {
-        load(pageIndex, pageSize);
-      }
-    } finally {
-      setBulkBusy(false);
-    }
-  };
-
   const handleBalanceRefresh = async (channel: Channel) => {
     const ref = channelRef(channel);
     setRefreshingBalanceIds((prev) => {
@@ -552,40 +501,6 @@ export function ChannelsPage() {
     }
   };
 
-  const handleBulkBalanceRefresh = async () => {
-    setBulkBusy(true);
-    try {
-      const res = await api.get('/api/channel/update_balance');
-      const { success, message } = res.data || {};
-      if (success) {
-        notify({
-          type: 'success',
-          message: t('channels.notifications.bulk_balance_success', 'All channel balances refreshed.'),
-        });
-      } else {
-        notify({
-          type: 'error',
-          title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
-          message: message || t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
-        });
-      }
-      if (searchKeyword.trim()) {
-        performSearch();
-      } else {
-        load(pageIndex, pageSize);
-      }
-    } catch (error) {
-      console.error('Bulk balance refresh failed:', error);
-      notify({
-        type: 'error',
-        title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
-        message: error instanceof Error ? error.message : t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
-      });
-    } finally {
-      setBulkBusy(false);
-    }
-  };
-
   const handleDeleteDisabled = async () => {
     const confirmed = await confirmAction({
       title: t('channels.confirm.delete_disabled_title', 'Delete Disabled Channels'),
@@ -619,12 +534,18 @@ export function ChannelsPage() {
     }
   };
 
+  const resetModels = useChannelModelReset(() => (searchKeyword.trim() ? performSearch() : load(pageIndex, pageSize)));
+  const renderResetAction = (channel: Channel, compact = false) => (
+    <ChannelModelResetButton channel={channel} compact={compact} disabled={loading || resetModels.busy} onReset={resetModels.resetChannel} />
+  );
+
   const columns = createChannelColumns({
     t,
     navigate,
     refreshingBalanceIds,
     renderChannelTypeBadge,
     renderStatusBadge,
+    renderResetAction,
     onPriorityUpdate: handlePriorityUpdate,
     onBalanceRefresh: handleBalanceRefresh,
     onTestingModelUpdate: updateTestingModel,
@@ -683,39 +604,14 @@ export function ChannelsPage() {
         </TooltipProvider>
         <Button
           variant="outline"
-          onClick={handleBulkBalanceRefresh}
-          disabled={bulkBusy || loading}
+          onClick={resetModels.resetAll}
+          disabled={resetModels.busy || loading}
           className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
           size="sm"
         >
-          <Banknote className="h-4 w-4" />
-          {isMobile
-            ? t('channels.toolbar.refresh_balances_mobile', 'Refresh Balances')
-            : t('channels.toolbar.refresh_balances', 'Refresh All Balances')}
+          <RotateCcw className={cn('h-4 w-4', resetModels.busy && 'animate-spin')} />
+          {t('channel_reset.all')}
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={bulkBusy || loading || data.length === 0}
-              className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
-            >
-              {t('channels.toolbar.bulk_actions', 'Bulk Actions')}
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => handleBulkStatus(1)} className="gap-2">
-              <CheckCircle className="h-4 w-4 text-success" />
-              {t('channels.toolbar.enable_visible', 'Enable visible channels')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => handleBulkStatus(2)} className="gap-2">
-              <Ban className="h-4 w-4 text-warning" />
-              {t('channels.toolbar.disable_visible', 'Disable visible channels')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
         <Button
           variant="destructive"
           onClick={handleDeleteDisabled}
@@ -747,6 +643,7 @@ export function ChannelsPage() {
       >
         <Card className="border-0 md:border shadow-none md:shadow-sm">
           <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
+            {resetModels.report}
             <EnhancedDataTable
               columns={columns}
               data={data}
@@ -764,6 +661,7 @@ export function ChannelsPage() {
                     aria-label={t('channels.actions.duplicate', 'Duplicate')}
                     icon={<Copy className="h-4 w-4" />}
                   />
+                  {renderResetAction(row, true)}
                   <ListActionButton
                     onClick={() => manage(channelRef(row), row.status === 1 ? 'disable' : 'enable')}
                     title={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
@@ -812,6 +710,7 @@ export function ChannelsPage() {
       </ResponsivePageContainer>
 
       <ConfirmActionDialog />
+      {resetModels.confirmation}
     </>
   );
 }

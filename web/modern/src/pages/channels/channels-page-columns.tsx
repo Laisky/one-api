@@ -92,6 +92,7 @@ interface ChannelColumnsOptions {
   refreshingBalanceIds: Set<string | number>;
   renderChannelTypeBadge: (type: number) => ReactNode;
   renderStatusBadge: (status: number, priority?: number) => ReactNode;
+  renderResetAction?: (channel: Channel) => ReactNode;
   onPriorityUpdate: (channel: Channel, priority: number) => void;
   onBalanceRefresh: (channel: Channel) => void;
   onTestingModelUpdate: (channel: Channel, testingModel: string | null) => void;
@@ -106,6 +107,7 @@ export const createChannelColumns = ({
   refreshingBalanceIds,
   renderChannelTypeBadge,
   renderStatusBadge,
+  renderResetAction,
   onPriorityUpdate,
   onBalanceRefresh,
   onTestingModelUpdate,
@@ -293,6 +295,7 @@ export const createChannelColumns = ({
           >
             {t('channels.actions.duplicate', 'Duplicate')}
           </ListActionButton>
+          {renderResetAction?.(channel)}
           <ListActionButton
             variant="outline"
             size="sm"
