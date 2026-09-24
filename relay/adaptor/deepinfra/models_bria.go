@@ -1,0 +1,178 @@
+package deepinfra
+
+import "github.com/Laisky/one-api/relay/adaptor"
+
+// briaModels returns the bria model defaults for deepinfra.
+// It takes no arguments and returns independently owned, directly editable Go configurations.
+func briaModels() map[string]adaptor.ModelConfig {
+	return map[string]adaptor.ModelConfig{
+		"Bria/Bria-3.2": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria 3.2 commercial text-to-image model.",
+		},
+		"Bria/Bria-3.2-vector": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria 3.2 Vector text-to-vector-image model.",
+		},
+		"Bria/blur_background": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text", "image"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria licensed-data background blur model.",
+		},
+		"Bria/enhance": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text", "image"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria licensed-data image enhancement model.",
+		},
+		"Bria/erase": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text", "image"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria licensed-data object eraser.",
+		},
+		"Bria/erase_foreground": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text", "image"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria licensed-data foreground eraser.",
+		},
+		"Bria/expand": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text", "image"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria licensed-data image expansion model.",
+		},
+		"Bria/fibo": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria FIBO structured text-to-image model.",
+		},
+		"Bria/fibo_edit": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text", "image"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria FIBO image editing model.",
+		},
+		"Bria/gen_fill": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text", "image"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria licensed-data generative fill model.",
+		},
+		"Bria/remove_background": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.018,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text", "image"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria background removal model.",
+		},
+		"Bria/replace_background": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.04,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				MinImages:        1,
+				MaxImages:        4,
+			},
+			InputModalities:  []string{"text", "image"},
+			OutputModalities: []string{"image"},
+			Description:      "Bria background replacement model.",
+		},
+	}
+}
