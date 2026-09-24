@@ -4,6 +4,19 @@ This harness measures a **real one-api process** over loopback HTTP. Only the up
 
 ## Run
 
+For an immutable baseline and candidate build using the same toolchain:
+
+```sh
+bash tests/stream-perf/compare.sh BASELINE_COMMIT /tmp/new-stream-study \
+  --repeats 5 --concurrency 1,8,32,64
+python3 tests/stream-perf/report.py /tmp/new-stream-study/results/summary.json \
+  --expected-repeats 5 --json-output /tmp/new-stream-study/comparison.json
+```
+
+The script builds **committed HEAD**, not uncommitted edits, in disposable worktrees. It uses identical API-only frontend embed fixtures, preserves binary hashes and source revisions, and never overwrites an existing output directory. The JSON reporter rejects incomplete studies, missing/duplicate A/B trials, changed binaries, workload mismatch, failed/dropped traffic and unequal billing. It prints median run observations plus paired changes; the JSON comparison also retains their observed min/max ranges.
+
+For prebuilt binaries:
+
 Requirements: Linux with `/proc`, the repository Go toolchain, Python 3.10+, and public tokenizer dictionaries cached before starting the experiment. No paid provider, production token, Docker or third-party Python package is needed.
 
 ```sh
@@ -27,7 +40,7 @@ The existing `go test ./...` CI entrypoint discovers `TestStreamingGatewayE2E`: 
 - Exact request-specific Unicode content, sequence, stop, final usage and one DONE must survive through EOF. Deliberately truncated, corrupted and malformed streams must fail for the expected reason. Invalid authentication and client cancellation are tested separately.
 - Gateway and mock CPU deltas and sampled peak RSS are separate; driver CPU is reported separately. RSS sampling is every 20 ms, not an exact kernel high-water mark. Missing resource data is an error, not a zero. CPU/request includes waiting for completed requests to settle in the database.
 - Durable root-account request counts must match successful traffic exactly and quota consumption must increase. Baseline/candidate quota totals can be compared in JSON. Warm-up traffic is excluded. Production billing is never disabled to improve scores.
-- Every client result and failure is persisted as JSON. Aggregates in `summary.json` include binary/driver SHA-256, platform, CPU affinity, cgroup limits and configuration. Compare **run-level repetitions**, not thousands of dependent requests as independent experiments.
+- Every client result and failure is persisted as JSON. Aggregates in `summary.json` include binary/driver SHA-256, platform, CPU affinity, cgroup limits and configuration. Compare **run-level repetitions**, not thousands of dependent requests as independent experiments. Each completed trial is checkpointed atomically. `complete: false` identifies interrupted studies; a completed subset is not a completed matrix. Use a new output directory rather than overwriting or silently resuming mixed evidence.
 
 ## Capacity and failure visibility
 
@@ -42,3 +55,7 @@ The fixture pins GOMAXPROCS=2 for each process and uses a fresh SQLite database,
 Targets and the mock listener must be literal loopback HTTP addresses. Proxy settings and ambient gateway configuration are not inherited. Random fixture credentials are passed through environment variables, never command lines or reports. The harness owns and reaps only its own processes; temporary databases and normal logs are deleted. Optional failure logs are redacted. Tokenizer downloads happen during setup and are SHA-256 verified; request traffic is fully local.
 
 Accept an optimization only after correctness passes and repeated E2E measurements show a material improvement without unacceptable latency, CPU, RSS or billing regressions. Revert unsuccessful candidates. A stop decision is scoped to the tested candidates, workload and machine; it is not proof that no future optimization exists. Raw evidence and the final measured decision belong alongside the PR before marking it ready.
+
+## Measured reference
+
+See [the September 24, 2026 experiment report](results/20260924/REPORT.md), the adjacent run-level CSV evidence and JSON manifest. The long-stream result is not a promise of higher throughput for short, paced streams. Hardware quotas, a single shared account, SQLite billing and run-to-run variability all matter. An unsuccessful subsequent optimization is deliberately excluded rather than hidden.
