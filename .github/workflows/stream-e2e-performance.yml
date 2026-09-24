@@ -22,22 +22,34 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
+      - name: Prepare offline tokenizer assets
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import pathlib
+          import urllib.request
+          cache = pathlib.Path('artifacts/token-cache')
+          cache.mkdir(parents=True, exist_ok=True)
+          for name in ('cl100k_base', 'o200k_base'):
+              url = f'https://openaipublic.blob.core.windows.net/encodings/{name}.tiktoken'
+              with urllib.request.urlopen(url, timeout=60) as response:
+                  data = response.read()
+              (cache / hashlib.sha1(url.encode()).hexdigest()).write_bytes(data)
+              print(name, len(data), hashlib.sha256(data).hexdigest())
+          PY
       - name: Build gateway and preserve environment
-        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts web/build
-          # This API-only workload does not require a frontend bundle. Keep an
-          # existing bundle intact; satisfy go:embed only when it is absent.
           if ! find web/build -type f -print -quit | grep -q .; then
             printf '<!doctype html><title>API performance fixture</title>\n' > web/build/index.html
           fi
@@ -47,18 +59,15 @@ jobs:
           uname -a > artifacts/uname.txt
           go build -trimpath -o artifacts/one-api .
           sha256sum artifacts/one-api > artifacts/binary-sha256.txt
-          # The source archive makes local reproduction possible without
-          # including .git credentials, generated binaries or private dotfiles.
           git archive HEAD | gzip > artifacts/source.tar.gz
       - name: Run streaming performance suite when present
-        shell: bash
         run: |
           set -euo pipefail
           if test -f tests/stream-perf/run.py; then
             python3 -m unittest discover -s tests/stream-perf -p 'test_*.py'
-            python3 tests/stream-perf/run.py --binary "$PWD/artifacts/one-api" --output "$PWD/artifacts/results"
+            python3 tests/stream-perf/run.py --binary "$PWD/artifacts/one-api" --token-cache "$PWD/artifacts/token-cache" --output "$PWD/artifacts/results"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: stream-e2e-${{ github.event.pull_request.head.sha || github.sha }}
