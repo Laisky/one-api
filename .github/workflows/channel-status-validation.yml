@@ -1,0 +1,26 @@
+name: Selected channel status validation
+on:
+  push:
+    branches: [work/compact-table-toolbar-20260924]
+    paths: [.github/workflows/channel-status-validation.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 2e18433922a99de17c4066652741e8aace37e0ff
+          persist-credentials: false
+      - name: Archive exact tracked source without credentials
+        run: |
+          mkdir -p "$RUNNER_TEMP/channel-status-source"
+          git archive --format=tar HEAD web/modern docs/ui AGENTS.md .prettierrc .prettierignore controller model router common go.mod go.sum > "$RUNNER_TEMP/channel-status-source/source.tar"
+          git rev-parse HEAD > "$RUNNER_TEMP/channel-status-source/commit.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: channel-status-source
+          path: ${{ runner.temp }}/channel-status-source
+          retention-days: 1
