@@ -21,7 +21,7 @@ func TestGPT52SamplingDefaultsAndSnapshots(t *testing.T) {
 			require.Equal(t, "none", *normalizeReasoningEffortForModel(name, nil))
 			for _, effort := range []string{"", "none", "low", "medium", "high", "xhigh"} {
 				root := map[string]json.RawMessage{
-					"model": json.RawMessage(`"` + name + `"`),
+					"model":       json.RawMessage(`"` + name + `"`),
 					"temperature": json.RawMessage(`0`), "top_p": json.RawMessage(`0.9`),
 				}
 				if effort != "" {

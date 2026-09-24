@@ -45,7 +45,7 @@ func streamingE2EUnavailable(short bool, goos string, pythonAvailable bool, cach
 func TestStreamingE2EPrerequisites(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name, goos, cache string
+		name, goos, cache                    string
 		short, python, required, unavailable bool
 	}{
 		{name: "prepared local", goos: "linux", cache: "/cache", python: true},
