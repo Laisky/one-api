@@ -475,7 +475,7 @@ func UpdateChannel(c *gin.Context) {
 			return
 		}
 		if channel.Status != model.ChannelStatusEnabled && channel.Status != model.ChannelStatusManuallyDisabled && channel.Status != model.ChannelStatusAutoDisabled {
-			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid channel status")))
+			helper.RespondErrorWithStatus(c, http.StatusBadRequest, errkind.InvalidRequestErr(errors.New("Invalid channel status")))
 			return
 		}
 		if err := model.SetChannelStatusWithContext(gmw.Ctx(c), channel.Id, channel.Status); err != nil {
