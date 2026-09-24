@@ -1,0 +1,26 @@
+name: Compact toolbar validation runtime
+on:
+  push:
+    branches: [work/compact-table-toolbar-20260924]
+    paths: [.github/workflows/compact-toolbar-validation.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 89a6910e4a41bd3c49296a8a57e5c0f2ac76325a
+          persist-credentials: false
+      - name: Archive tracked Modern source and contributor instructions
+        run: |
+          mkdir -p "$RUNNER_TEMP/toolbar-source"
+          git archive --format=tar HEAD web/modern docs/ui AGENTS.md .prettierrc .prettierignore > "$RUNNER_TEMP/toolbar-source/source.tar"
+          git rev-parse HEAD > "$RUNNER_TEMP/toolbar-source/commit.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: compact-toolbar-source
+          path: ${{ runner.temp }}/toolbar-source
+          retention-days: 1
