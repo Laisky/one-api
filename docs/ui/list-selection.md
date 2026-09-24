@@ -11,7 +11,9 @@ Channels, Users, Tokens, Redemptions, MCP Servers, and Logs share the same deskt
 
 ## Selected actions
 
-Channel toolbar actions are **Test selected channels**, **Reset selected models**, and **Delete selected disabled channels**. They appear inside the contextual **Actions** menu only after a selection. While loading or running a batch, the menu and commands are disabled. Individual row actions remain available. Disabled-channel deletion checks each channel's current status inside its transaction and skips enabled channels.
+Channel toolbar actions are **Enable selected channels**, **Disable selected channels**, **Test selected channels**, **Reset selected models**, and **Delete selected disabled channels**. They appear inside the contextual **Actions** menu only after a selection. While loading or running a batch, the menu and commands are disabled. Individual row actions remain available. Disabled-channel deletion checks each channel's current status inside its transaction and skips enabled channels.
+
+Enable/disable resolves and confirms the selected UUID snapshot, then sends at most three concurrent `PUT /api/channel/?status_only=1` requests with only `uuid` and `status` (1 or 2). It sets an explicit state, never toggles a stale status or overwrites models, mappings, pricing, or priority. Each channel and its routing abilities update transactionally; persistence errors return failure. Per-channel failures remain in the report, other targets continue, and the current page refreshes after attempted writes. New queued work stops if the list scope or authenticated principal changes. The legacy background status helper is unchanged.
 
 Log actions are **Export selected logs** and **Delete selected logs**. Export enriches only selected rows with trace data. Deletion requires administrator access. Ordinary users can resolve/export only their own logs, regardless of UUIDs submitted by the browser.
 

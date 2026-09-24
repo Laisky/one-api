@@ -81,6 +81,30 @@ def check_confirmation(page) -> None:
     expect(page.get_by_role("button", name="Actions", exact=True)).to_have_count(0)
 
 
+def check_status_confirmation(page) -> None:
+    """check_status_confirmation checks enable/disable cancellation and explicit status-only payloads."""
+    for label, status in [("Enable selected channels", 1), ("Disable selected channels", 2)]:
+        first = page.get_by_role("checkbox", name="Select OpenAI Production", exact=True)
+        first.check()
+        before = page.evaluate("window.toolbarCalls.filter(call => call.method === 'put').length")
+        page.get_by_role("button", name="Actions", exact=True).click()
+        page.get_by_role("menuitem", name=label, exact=True).click()
+        dialog = page.get_by_role("dialog", name=label, exact=True)
+        expect(dialog).to_contain_text("1 selected channels")
+        dialog.get_by_role("button", name="Cancel", exact=True).click()
+        assert page.evaluate("window.toolbarCalls.filter(call => call.method === 'put').length") == before
+        expect(first).to_be_checked()
+        page.get_by_role("button", name="Actions", exact=True).click()
+        page.get_by_role("menuitem", name=label, exact=True).click()
+        page.get_by_role("dialog").get_by_role("button", name="Confirm", exact=True).click()
+        expect(page.get_by_role("button", name="Actions", exact=True)).to_have_count(0)
+        calls = page.evaluate("window.toolbarCalls.filter(call => call.method === 'put')")
+        assert len(calls) == before + 1 and calls[-1] == {
+            "url": "/api/channel/", "method": "put", "search": "?status_only=1",
+            "data": {"uuid": "018fcf6d-c484-7000-8000-000000000001", "status": status},
+        }, calls
+
+
 def main() -> None:
     """main compiles the fixture, checks both table renderers, and writes screenshots and geometry evidence."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -161,12 +185,13 @@ def main() -> None:
                         menu.wait_for()
                         bounds = menu.bounding_box()
                         assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= width + 1, (name, bounds)
+                        assert bounds["y"] >= 0 and bounds["y"] + bounds["height"] <= 901, (name, bounds)
                         if language == "en" and width in [390, 888, 1280] and theme == "light":
                             page.screenshot(path=str(args.output / f"{name}-actions.png"), animations="disabled")
                         page.keyboard.press("Escape")
                         assert action.evaluate("el => el === document.activeElement"), name
                         # Opening menus must never execute a record mutation.
-                        assert page.evaluate("window.toolbarCalls.every(call => !call.url.endsWith('reset_models'))"), name
+                        assert page.evaluate("window.toolbarCalls.every(call => call.method !== 'put' && !call.url.endsWith('reset_models'))"), name
                     if language == "en" and width in [390, 888, 1280] and theme == "light":
                         page.screenshot(path=str(args.output / f"{name}-selected.png"), animations="disabled")
                     selector.click()
@@ -175,6 +200,7 @@ def main() -> None:
                         assert page.get_by_role("button", name=labels["actions"], exact=True).count() == 0
                     if (width, language, theme, kind) == (1280, "en", "light", "channels"):
                         check_confirmation(page)
+                        check_status_confirmation(page)
                     assert not errors, (name, errors)
                     results.append({"case": name, "idle": idle, "selected": selected})
                     page.close()

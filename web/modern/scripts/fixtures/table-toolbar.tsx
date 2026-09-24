@@ -14,7 +14,7 @@ import { changeAppLanguage } from '@/i18n';
 /** ToolbarFixtureWindow holds only synthetic browser-test inputs and recorded mock requests. */
 interface ToolbarFixtureWindow extends Window {
   toolbarFixture?: { language?: string; page?: string };
-  toolbarCalls: { url: string; data: unknown }[];
+  toolbarCalls: { url: string; method?: string; search: string; data: unknown }[];
 }
 const fixtureWindow = window as unknown as ToolbarFixtureWindow;
 fixtureWindow.toolbarCalls = [];
@@ -37,7 +37,7 @@ const rows = Array.from({ length: 125 }, (_, index) => ({
 api.defaults.adapter = async (config) => {
   const url = new URL(config.url || '/', 'https://fixture.invalid');
   const payload = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
-  fixtureWindow.toolbarCalls.push({ url: url.pathname, data: payload });
+  fixtureWindow.toolbarCalls.push({ url: url.pathname, method: config.method, search: url.search, data: payload });
   let data: unknown;
   if (url.pathname === '/api/channel/selection') {
     const selection = payload.selection;
@@ -46,6 +46,11 @@ api.defaults.adapter = async (config) => {
     data = {
       results: payload.selection.ids.map((uuid: string) => ({ uuid, name: rows.find((row) => row.uuid === uuid)?.name, success: true })),
     };
+  } else if (config.method === 'put' && url.pathname === '/api/channel/' && url.searchParams.get('status_only') === '1') {
+    const channel = rows.find((row) => row.uuid === payload.uuid);
+    if (!channel || ![1, 2].includes(payload.status)) throw new Error('Invalid fixture status update');
+    channel.status = payload.status;
+    data = null;
   } else {
     const page = Number(url.searchParams.get('p') || 0);
     const size = Number(url.searchParams.get('size') || 10);

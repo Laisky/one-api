@@ -32,6 +32,10 @@
     "actions": "Actions",
     "selected_actions": "Actions for selected rows",
     "all_pages_hint": "All pages includes only results matching the current filters.",
-    "all_count_short": "All {{count}}"
+    "all_count_short": "All {{count}}",
+    "enable": "Enable selected channels",
+    "disable": "Disable selected channels",
+    "confirm_enable": "Enable the {{count}} selected channels, including any automatically disabled channels? Models, mappings, pricing, and priority remain unchanged.",
+    "confirm_disable": "Disable the {{count}} selected channels to stop routing new requests to them? Models, mappings, pricing, and priority remain unchanged."
   }
 }

@@ -21,7 +21,7 @@ interface ChannelOutcome extends ChannelTarget {
   conflict?: { code: string; field?: string; models?: string[] };
 }
 /** ChannelBatchAction names the existing record operations now restricted to selected channels. */
-export type ChannelBatchAction = 'reset' | 'test' | 'delete_disabled';
+export type ChannelBatchAction = 'reset' | 'test' | 'enable' | 'disable' | 'delete_disabled';
 
 /** useSelectedChannelActions resolves a stable selected UUID set, confirms its size, and never calls an unscoped mutation. */
 export function useSelectedChannelActions(selection: TableSelection, keyword: string, onCompleted: () => Promise<void>) {
@@ -49,26 +49,39 @@ export function useSelectedChannelActions(selection: TableSelection, keyword: st
         return;
       }
       if (current.current.version !== selection.scopeVersion) return;
+      const changesStatus = action === 'enable' || action === 'disable';
+      const confirmationKey = changesStatus
+        ? `table_selection.confirm_${action}`
+        : action === 'delete_disabled'
+          ? 'table_selection.confirm_disabled'
+          : 'table_selection.confirm';
       const confirmed = await confirm({
         title: t(`table_selection.${action}`),
-        description: t(action === 'delete_disabled' ? 'table_selection.confirm_disabled' : 'table_selection.confirm', {
+        description: t(confirmationKey, {
           count: targets.length,
         }),
         details: [{ label: t('table_selection.scope'), value: keyword || t('table_selection.unfiltered') }],
         confirmLabel: t('common.confirm'),
-        variant: action === 'test' ? 'default' : 'destructive',
+        variant: action === 'test' || action === 'enable' ? 'default' : 'destructive',
       });
       if (!confirmed || current.current.version !== selection.scopeVersion) return;
       setResults(null);
       attempted = true;
       const payload = { selection: { mode: 'ids', ids: targets.map((target) => target.uuid) } };
       let outcomes: ChannelOutcome[];
-      if (action === 'test') {
+      if (action === 'test' || changesStatus) {
         outcomes = await mapWithConcurrency(
           targets,
           async (target) => {
+            // Stop queued work if filters or the authenticated principal change.
+            // Requests already in flight may have committed; report them normally.
+            if (current.current.version !== selection.scopeVersion) {
+              return { ...target, success: false, message: t('table_selection.scope_changed') };
+            }
             try {
-              const result = (await api.get(`/api/channel/test/${encodeURIComponent(target.uuid)}`)).data;
+              const result = changesStatus
+                ? (await api.put('/api/channel/?status_only=1', { uuid: target.uuid, status: action === 'enable' ? 1 : 2 })).data
+                : (await api.get(`/api/channel/test/${encodeURIComponent(target.uuid)}`)).data;
               return {
                 ...target,
                 success: Boolean(result?.success) && !result?.skipped,

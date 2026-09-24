@@ -32,6 +32,10 @@
     "actions": "操作",
     "selected_actions": "对所选记录执行操作",
     "all_pages_hint": "跨页全选仅包含符合当前筛选条件的记录。",
-    "all_count_short": "跨页 {{count}} 项"
+    "all_count_short": "跨页 {{count}} 项",
+    "enable": "启用所选渠道",
+    "disable": "停用所选渠道",
+    "confirm_enable": "启用所选的 {{count}} 个渠道（包括自动停用的渠道）？模型、映射、价格和优先级保持不变。",
+    "confirm_disable": "停用所选的 {{count}} 个渠道，停止向其路由新请求？模型、映射、价格和优先级保持不变。"
   }
 }

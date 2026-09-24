@@ -513,6 +513,18 @@ export function ChannelsPage() {
 
   const batchActions: TableBatchAction[] = [
     {
+      id: 'enable',
+      label: t('table_selection.enable'),
+      icon: <CheckCircle className="h-4 w-4" />,
+      onSelect: () => selectedActions.run('enable'),
+    },
+    {
+      id: 'disable',
+      label: t('table_selection.disable'),
+      icon: <Ban className="h-4 w-4" />,
+      onSelect: () => selectedActions.run('disable'),
+    },
+    {
       id: 'reset',
       label: t('table_selection.reset'),
       icon: <RotateCcw className="h-4 w-4" />,

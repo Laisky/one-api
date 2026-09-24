@@ -32,6 +32,10 @@
     "actions": "Actions",
     "selected_actions": "Actions sur la sélection",
     "all_pages_hint": "Toutes les pages inclut uniquement les résultats des filtres actuels.",
-    "all_count_short": "Tout : {{count}}"
+    "all_count_short": "Tout : {{count}}",
+    "enable": "Activer les canaux sélectionnés",
+    "disable": "Désactiver les canaux sélectionnés",
+    "confirm_enable": "Activer les {{count}} canaux sélectionnés, y compris ceux désactivés automatiquement ? Les modèles, les correspondances, les tarifs et la priorité restent inchangés.",
+    "confirm_disable": "Désactiver les {{count}} canaux sélectionnés pour ne plus y acheminer de nouvelles requêtes ? Les modèles, les correspondances, les tarifs et la priorité restent inchangés."
   }
 }
