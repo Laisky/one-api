@@ -1,0 +1,67 @@
+name: Stream e2e performance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/stream-e2e-performance.yml'
+      - 'tests/stream-perf/**'
+      - 'common/sse/**'
+      - 'common/render/**'
+      - 'relay/adaptor/openai/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stream-perf-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stream-perf:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build gateway and preserve environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts web/build
+          # This API-only workload does not require a frontend bundle. Keep an
+          # existing bundle intact; satisfy go:embed only when it is absent.
+          if ! find web/build -type f -print -quit | grep -q .; then
+            printf '<!doctype html><title>API performance fixture</title>\n' > web/build/index.html
+          fi
+          go version | tee artifacts/go-version.txt
+          git rev-parse HEAD > artifacts/commit.txt
+          lscpu > artifacts/lscpu.txt
+          uname -a > artifacts/uname.txt
+          go build -trimpath -o artifacts/one-api .
+          sha256sum artifacts/one-api > artifacts/binary-sha256.txt
+          # The source archive makes local reproduction possible without
+          # including .git credentials, generated binaries or private dotfiles.
+          git archive HEAD | gzip > artifacts/source.tar.gz
+      - name: Run streaming performance suite when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -f tests/stream-perf/run.py; then
+            python3 -m unittest discover -s tests/stream-perf -p 'test_*.py'
+            python3 tests/stream-perf/run.py --binary "$PWD/artifacts/one-api" --output "$PWD/artifacts/results"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stream-e2e-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: error
