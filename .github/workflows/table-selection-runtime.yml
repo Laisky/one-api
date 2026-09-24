@@ -9,48 +9,15 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          fetch-depth: 0
+          ref: 89a6910e4a41bd3c49296a8a57e5c0f2ac76325a
           persist-credentials: false
-      - name: Verify transported patch and apply to exact PR head
-        env:
-          EXPECTED_PATCH_SHA256: 9c495e4710fce680825127b3687e71f87f3243b6f2f982730ad802f968735fd8
+      - name: Record verified source identity
         run: |
-          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/selection-evidence"
-          python3 - <<'PY'
-          import base64, hashlib, lzma, os
-          from pathlib import Path
-          parts = sorted(Path('.github/selection-transfer').glob('part-*.b64'))
-          assert len(parts) == 5
-          payload = ''.join(part.read_text().strip() for part in parts)
-          patch = lzma.decompress(base64.b64decode(payload, validate=True))
-          digest = hashlib.sha256(patch).hexdigest()
-          assert digest == os.environ['EXPECTED_PATCH_SHA256'], digest
-          Path(os.environ['RUNNER_TEMP'], 'selection.patch').write_bytes(patch)
-          print('Verified patch:', digest, len(patch), 'bytes')
-          PY
-          git checkout --detach 12070b60a12ae4be56f4051cac1a94fb3c55e10f
-          git apply --check --unidiff-zero "$RUNNER_TEMP/selection.patch"
-          git apply --unidiff-zero "$RUNNER_TEMP/selection.patch"
-          git diff --check
-          git add --all
-          git diff --cached --stat | tee "$RUNNER_TEMP/selection-evidence/changes.txt"
-          git -c user.name=Codex -c user.email=noreply@openai.com commit -m "feat(lists): add scoped cross-page selection and selected-only batch actions"
           git rev-parse HEAD | tee "$RUNNER_TEMP/selection-evidence/commit.txt"
-      - name: Publish isolated delivery branch without stored credentials
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DELIVERY_BRANCH: work/table-selection-delivery-${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$DELIVERY_BRANCH"
-          printf '%s\n' "$DELIVERY_BRANCH" > "$RUNNER_TEMP/selection-evidence/branch.txt"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
@@ -61,6 +28,12 @@ jobs:
         run: |
           set -o pipefail
           go test -race -count=1 -timeout=3m -json ./model ./controller ./router -run '^Test(PlanChannelModelReset|ResetChannelModels|Selected|ListSelection|LogSelection|ChannelReset)' 2>&1 | tee "$RUNNER_TEMP/selection-evidence/go-selection-tests.jsonl"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: ${{ always() }}
+        with:
+          name: table-selection-targeted-tests-${{ github.run_id }}
+          path: ${{ runner.temp }}/selection-evidence
+          retention-days: 3
       - name: Vet complete repository
         if: ${{ !cancelled() }}
         run: |
