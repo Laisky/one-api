@@ -33,6 +33,9 @@ func TestModelSamplingCatalogPolicy(t *testing.T) {
 		{"gpt-4o", "", true},
 		{"openai/gpt-oss-120b", "high", true},
 		{"Qwen/Qwen3.5-35B-A3B", "high", true},
+		{"deepseek-flash", "high", true},
+		{"gemini-3.8-flash", "high", true},
+		{"grok-4.3", "high", true},
 	} {
 		t.Run(tc.name+"/"+tc.effort, func(t *testing.T) {
 			var effort *string
@@ -40,6 +43,20 @@ func TestModelSamplingCatalogPolicy(t *testing.T) {
 				effort = &tc.effort
 			}
 			require.Equal(t, tc.sampling, modelSupportsSampling(tc.name, effort))
+			modelJSON, err := json.Marshal(tc.name)
+			require.NoError(t, err)
+			effortJSON, err := json.Marshal(tc.effort)
+			require.NoError(t, err)
+			root := map[string]json.RawMessage{
+				"model": modelJSON, "messages": json.RawMessage(`[]`),
+				"reasoning_effort": effortJSON, "temperature": json.RawMessage(`0`),
+				"top_p": json.RawMessage(`0.97`),
+			}
+			NormalizeModelRequestParameters(root)
+			_, retained := root["temperature"]
+			require.Equal(t, tc.sampling, retained)
+			_, retained = root["top_p"]
+			require.Equal(t, tc.sampling, retained)
 		})
 	}
 	root := map[string]json.RawMessage{"model": json.RawMessage(`42`), "temperature": json.RawMessage(`0`)}
@@ -97,7 +114,7 @@ func TestMappedChatSamplingPreservesNone(t *testing.T) {
 			request := &model.GeneralOpenAIRequest{
 				Model: "tenant-alias", Temperature: &temperature, TopP: &topP,
 				ReasoningEffort: &effort,
-				Messages: []model.Message{{Role: "user", Content: "hello"}},
+				Messages:        []model.Message{{Role: "user", Content: "hello"}},
 			}
 			info := &relaymeta.Meta{
 				ChannelType: channeltype.OpenAI, Mode: relaymode.ChatCompletions,
