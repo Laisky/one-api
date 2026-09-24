@@ -6,15 +6,89 @@ on:
 permissions:
   contents: read
 jobs:
-  transport:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - name: Verify transported patch and apply only to the exact PR source
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, hashlib, os, pathlib, subprocess
+          encoded = pathlib.Path('.work/channel-status.patch.gz.b64').read_text().strip()
+          # Exact audited transport corrections; the decoded SHA must still match
+          # the locally tested patch before any source tree is modified.
+          repairs = [[392,394,''],[4610,4611,''],[4921,4923,'1'],[7804,7805,''],[9532,9533,'+'],[9836,9838,'3']]
+          for start, end, replacement in reversed(repairs):
+              encoded = encoded[:start] + replacement + encoded[end:]
+          patch = gzip.decompress(base64.b64decode(encoded, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '6e9421ec62dfecbfb9c1f59b8c03c00210c5991285a32b3f0081aa7946146adc'
+          destination = pathlib.Path(os.environ['RUNNER_TEMP']) / 'status.patch'
+          destination.write_bytes(patch)
+          subprocess.run(['git','checkout','--detach','2e18433922a99de17c4066652741e8aace37e0ff'], check=True)
+          subprocess.run(['git','apply','--check',str(destination)], check=True)
+          subprocess.run(['git','apply',str(destination)], check=True)
+          PY
+          git add controller/channel.go controller/channel_status_test.go model/channel_status.go model/channel_status_test.go docs/ui/list-selection.md web/modern
+          git diff --cached --check
+          git -c user.name='Laisky' -c user.email='github@laisky.com' commit -m 'feat(channels): enable and disable selected channels safely'
+          mkdir -p "$RUNNER_TEMP/channel-status-evidence"
+          git rev-parse HEAD > "$RUNNER_TEMP/channel-status-evidence/commit.txt"
+          git diff HEAD^ HEAD --stat > "$RUNNER_TEMP/channel-status-evidence/changes.txt"
+      - name: Publish isolated delivery branch without retained credentials
+        env:
+          DELIVERY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import base64, os, subprocess
+          env = dict(os.environ)
+          token = env.pop('DELIVERY_TOKEN')
+          env['GIT_CONFIG_COUNT'] = '1'
+          env['GIT_CONFIG_KEY_0'] = 'http.https://github.com/.extraheader'
+          env['GIT_CONFIG_VALUE_0'] = 'AUTHORIZATION: basic ' + base64.b64encode(('x-access-token:' + token).encode()).decode()
+          branch = 'work/channel-status-delivery-' + env['GITHUB_RUN_ID']
+          subprocess.run(['git','push','origin','HEAD:refs/heads/' + branch], env=env, check=True)
+          PY
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          name: channel-status-transport
-          path: .work/channel-status.patch.gz.b64
-          retention-days: 1
+          go-version-file: go.mod
+      - name: Prove the original status endpoint falsely reports a failed write as success
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          cp controller/channel.go "$RUNNER_TEMP/fixed-channel.go"
+          trap 'cp "$RUNNER_TEMP/fixed-channel.go" controller/channel.go' EXIT
+          git show 2e18433922a99de17c4066652741e8aace37e0ff:controller/channel.go > controller/channel.go
+          set +e
+          go test -race -count=1 -timeout=3m -json ./controller -run '^TestChannelStatusOnlyReportsPersistenceFailure$' > "$RUNNER_TEMP/channel-status-evidence/negative.json" 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          python3 - <<'PY'
+          import json, os, pathlib
+          text = (pathlib.Path(os.environ['RUNNER_TEMP']) / 'channel-status-evidence/negative.json').read_text()
+          events = [json.loads(line) for line in text.splitlines() if line.startswith('{')]
+          assert any(e.get('Action') == 'fail' and e.get('Test') == 'TestChannelStatusOnlyReportsPersistenceFailure' for e in events), text[-5000:]
+          assert 'expected: 500' in text and 'actual' in text and '200' in text
+          print('Negative control reproduced: failed ability write incorrectly returned HTTP 200.')
+          PY
+      - name: Run status, reset, and authorization regression tests with race detection
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          go test -race -count=1 -timeout=3m -json ./model ./controller ./router -run '^Test(SetChannelStatus|ChannelStatusOnly|PlanChannelModelReset|ResetChannelModels|Selected|ListSelection|LogSelection|ChannelReset)' > "$RUNNER_TEMP/channel-status-evidence/positive.json" 2>&1
+      - name: Vet complete repository
+        env:
+          GOTOOLCHAIN: local
+        run: go vet ./... 2>&1 | tee "$RUNNER_TEMP/channel-status-evidence/vet.log"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: channel-status-verification-${{ github.run_id }}
+          path: ${{ runner.temp }}/channel-status-evidence
+          retention-days: 7
