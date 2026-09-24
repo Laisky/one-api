@@ -1,0 +1,26 @@
+name: PR 428 repair verification
+on:
+  push:
+    branches: [work/compact-table-toolbar-20260924]
+    paths: [.github/workflows/pr428-repair.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 755e0b0005c6d6183b8086125638871a55c20116
+          persist-credentials: false
+      - name: Archive tracked source without local instructions or credentials
+        run: |
+          mkdir -p "$RUNNER_TEMP/pr428-source"
+          git archive --format=tar HEAD ':!\.github/instructions' > "$RUNNER_TEMP/pr428-source/source.tar"
+          git rev-parse HEAD > "$RUNNER_TEMP/pr428-source/commit.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr428-repair-source
+          path: ${{ runner.temp }}/pr428-source
+          retention-days: 1
