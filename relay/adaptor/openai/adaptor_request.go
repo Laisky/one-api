@@ -304,18 +304,21 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 	supportsReasoning := isModelSupportedReasoning(actualModel)
 
 	if supportsReasoning {
-		targetsResponseAPI := meta.Mode == relaymode.ResponseAPI ||
-			(meta.ChannelType == channeltype.OpenAI && !IsModelsOnlySupportedByChatCompletionAPI(actualModel))
-
-		if targetsResponseAPI {
-			request.Temperature = nil
-		} else {
-			temperature := float64(1)
-			request.Temperature = &temperature
-		}
-
-		request.TopP = nil
+		// Sampling depends on the effective effort, not merely on whether the
+		// model is capable of reasoning. Preserve explicit zero values at none.
 		request.ReasoningEffort = normalizeReasoningEffortForModel(actualModel, request.ReasoningEffort)
+		if !modelSupportsSampling(actualModel, request.ReasoningEffort) {
+			targetsResponseAPI := meta.Mode == relaymode.ResponseAPI ||
+				(meta.ChannelType == channeltype.OpenAI && !IsModelsOnlySupportedByChatCompletionAPI(actualModel))
+
+			if targetsResponseAPI {
+				request.Temperature = nil
+			} else {
+				temperature := float64(1)
+				request.Temperature = &temperature
+			}
+			request.TopP = nil
+		}
 
 		request.Messages = func(raw []model.Message) (filtered []model.Message) {
 			for i := range raw {
