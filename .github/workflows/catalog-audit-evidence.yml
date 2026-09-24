@@ -1,0 +1,78 @@
+# One-time, read-only evidence collection for this audit branch. No credentials,
+# paid inference, deployments, or repository writes are used by the job.
+name: Catalog audit evidence
+on:
+  push:
+    branches: [feat/adaptor-catalog-audit-20260924]
+    paths: [.github/workflows/catalog-audit-evidence.yml]
+permissions:
+  contents: read
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Collect public model documents and tracked adaptor sources
+        env:
+          OUT: ${{ runner.temp }}/catalog-evidence
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT"
+          git rev-parse HEAD > "$OUT/source-commit.txt"
+          git archive --format=tar --output="$OUT/relay-sources.tar" HEAD relay
+          python3 - <<'PY'
+          import concurrent.futures, hashlib, json, os, pathlib, urllib.request
+          out = pathlib.Path(os.environ['OUT'])
+          sources = {
+              'openrouter': 'https://openrouter.ai/api/v1/models',
+              'cerebras': 'https://api.cerebras.ai/public/v1/models',
+              'deepinfra': 'https://api.deepinfra.com/models/list',
+              'bigmodel-pricing': 'https://bigmodel.cn/pricing',
+              'bigmodel-overview': 'https://docs.bigmodel.cn/cn/guide/start/model-overview',
+              'zai-pricing': 'https://docs.z.ai/guides/overview/pricing',
+              'mistral-pricing': 'https://docs.mistral.ai/inference/pricing',
+              'mistral-models': 'https://docs.mistral.ai/models',
+              'cohere-models': 'https://docs.cohere.com/docs/models',
+              'cohere-pricing': 'https://cohere.com/pricing',
+              'kimi-models': 'https://platform.kimi.com/docs/models',
+              'kimi-pricing': 'https://platform.kimi.com/docs/pricing/chat',
+              'deepseek-pricing': 'https://api-docs.deepseek.com/quick_start/pricing',
+              'cloudflare-models': 'https://developers.cloudflare.com/workers-ai/models/',
+              'fireworks-models': 'https://fireworks.ai/models?modelTypes=Serverless',
+              'nvidia-models': 'https://integrate.api.nvidia.com/v1/models',
+              'ali-models': 'https://help.aliyun.com/zh/model-studio/models',
+              'ali-pricing': 'https://help.aliyun.com/zh/model-studio/model-pricing',
+              'typesafe-models': 'https://docs.typesafe.ai/models',
+              'jina-models': 'https://api.jina.ai/v1/models',
+          }
+          def collect(item):
+              name, url = item
+              result = {'name': name, 'url': url}
+              try:
+                  request = urllib.request.Request(url, headers={'User-Agent': 'one-api-catalog-audit/1.0'})
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      data = response.read(20 * 1024 * 1024 + 1)
+                      if len(data) > 20 * 1024 * 1024:
+                          raise ValueError('response exceeds 20 MiB evidence limit')
+                      result.update(status=response.status, final_url=response.url,
+                                    content_type=response.headers.get('Content-Type', ''),
+                                    bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+                  (out / (name + '.data')).write_bytes(data)
+              except Exception as exc:
+                  result['error'] = str(exc)
+              return result
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+              results = list(executor.map(collect, sources.items()))
+          (out / 'sources.json').write_text(json.dumps(results, indent=2) + '\n')
+          for result in results:
+              print(result['name'], result.get('status', 'unavailable'), result.get('bytes', 0))
+          PY
+      - name: Archive audit evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: catalog-audit-evidence
+          path: ${{ runner.temp }}/catalog-evidence
+          retention-days: 7
