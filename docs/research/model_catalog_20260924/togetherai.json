@@ -1,0 +1,37 @@
+{
+  "currency": "USD",
+  "date": "2026-09-24",
+  "excluded": {},
+  "included": [
+    "MiniMaxAI/MiniMax-M3",
+    "Prism-ML/Ternary-Bonsai-27B",
+    "Qwen/Qwen3.5-9B",
+    "Qwen/Qwen3.6-Plus",
+    "Qwen/Qwen3.7-Max",
+    "Qwen/Qwen3.7-Plus",
+    "Qwen/Qwen3.8-2.4T-A95B",
+    "Qwen/Qwen3.8-Flash",
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "deepseek-ai/DeepSeek-V4-Pro-0813",
+    "deepseek-ai/DeepSeek-V4.1-Flash",
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "meta-models/Muse-Glimmer-30B",
+    "moonshotai/Kimi-K3",
+    "openai/gpt-oss-120b",
+    "thinkingmachines/Inkling",
+    "together/Tev1-4B-experimental",
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
+  ],
+  "notes": {
+    "native_media": "Image MP/step and audio tables reviewed separately; existing billing blocks retained."
+  },
+  "provider": "togetherai",
+  "sources": [
+    {
+      "sha256": "0558dae4ecc0208e723a0470f7b7fea44c6ffe1f861808edf4427199655c3291",
+      "url": "https://docs.together.ai/docs/serverless-models"
+    }
+  ]
+}

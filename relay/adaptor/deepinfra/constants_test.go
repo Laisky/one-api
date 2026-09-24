@@ -38,12 +38,12 @@ func TestModelPricing(t *testing.T) {
 	t.Parallel()
 
 	flash := ModelRatios["deepseek-ai/DeepSeek-V4-Flash-0731"]
-	require.InDelta(t, 0.08*billingratio.MilliTokensUsd, flash.Ratio, 1e-12)
-	require.InDelta(t, 0.18/0.08, flash.CompletionRatio, 1e-12)
-	require.InDelta(t, 0.016*billingratio.MilliTokensUsd, flash.CachedInputRatio, 1e-12)
+	require.InDelta(t, 0.06*billingratio.MilliTokensUsd, flash.Ratio, 1e-12)
+	require.InDelta(t, 0.18/0.06, flash.CompletionRatio, 1e-12)
+	require.InDelta(t, 0.015*billingratio.MilliTokensUsd, flash.CachedInputRatio, 1e-12)
 
 	claude := ModelRatios["anthropic/claude-sonnet-5"]
-	require.InDelta(t, 2.0*billingratio.MilliTokensUsd, claude.Ratio, 1e-12)
+	require.InDelta(t, 3.0*billingratio.MilliTokensUsd, claude.Ratio, 1e-12)
 	require.InDelta(t, 5.0, claude.CompletionRatio, 1e-12)
 	require.Equal(t, []string{"text", "image"}, claude.InputModalities)
 
@@ -88,6 +88,6 @@ func TestGetModelListIsSorted(t *testing.T) {
 	t.Parallel()
 
 	models := (&Adaptor{}).GetModelList()
-	require.Len(t, models, 184)
+	require.Len(t, models, 196)
 	require.True(t, sort.StringsAreSorted(models))
 }

@@ -5,6 +5,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/adaptor/ali"
+	"github.com/Laisky/one-api/relay/adaptor/zai"
+	"github.com/Laisky/one-api/relay/adaptor/zhipu"
 )
 
 // TestStaticModelsAreDeterministicallyDeduped pins the contract that the
@@ -34,13 +38,13 @@ func TestStaticModelsAreDeterministicallyDeduped(t *testing.T) {
 	require.Len(t, byID, len(allModels))
 }
 
-// TestSharedGLMIdOwnedDeterministically pins the FALLBACK tie-break for the Zhipu
-// (open.bigmodel.cn) and Zai (api.z.ai) channels, which are two brands of the
-// same company advertising the same GLM model ids.
+// TestSharedGLMIdOwnedDeterministically pins the FALLBACK tie-break for shared
+// GLM IDs using t. Alibaba now advertises the same IDs as Zhipu and Z.AI, so the
+// compiled catalog must rank all providers rather than assume only two owners.
 //
 // allModels is the compiled-in catalog, built at init() before any channel is
-// readable, so byte order is all there is to rank by and "zai" sorts before
-// "zhipu". This label is NOT what /v1/models reports: once channels exist the
+// readable, so byte order is all there is to rank by: "ali" sorts before
+// "zai" and "zhipu". This label is NOT what /v1/models reports: once channels exist the
 // owner is resolved from the channel backing the ability (see
 // TestResolveUserAvailableModelsOwnerFollowsChannelPriority), so a deployment
 // running only a Zhipu channel reports "zhipu".
@@ -56,8 +60,14 @@ func TestSharedGLMIdOwnedDeterministically(t *testing.T) {
 		owners[m.Id] = m.OwnedBy
 	}
 
-	require.Equal(t, "zai", owners["glm-4.7"])
-	require.Equal(t, "zai", owners["glm-5.3"])
+	for _, id := range []string{"glm-4.7", "glm-5.3"} {
+		// Establish the actual catalog overlap before asserting the byte-order
+		// winner; do not change production ranking to preserve an old fixture.
+		require.Contains(t, (&ali.Adaptor{}).GetModelList(), id)
+		require.Contains(t, (&zai.Adaptor{}).GetModelList(), id)
+		require.Contains(t, (&zhipu.Adaptor{}).GetModelList(), id)
+		require.Equal(t, "ali", owners[id])
+	}
 
 	// Z.AI-exclusive ids survive the dedup rather than being dropped with the
 	// rest of the overlapping catalog.

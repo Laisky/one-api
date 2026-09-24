@@ -1,0 +1,2189 @@
+{
+  "currency": "USD",
+  "models": {
+    "Sao10K/L3-8B-Stheno-v3.2": {
+      "completion_ratio": 1.0,
+      "context_length": 8192,
+      "description": "Sao10K/L3-8B-Stheno-v3.2 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.05,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "baichuan/baichuan-m2-32b": {
+      "completion_ratio": 1.0,
+      "context_length": 131072,
+      "description": "baichuan/baichuan-m2-32b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.07,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "baidu/cobuddy": {
+      "cached_input_ratio": 0.07,
+      "completion_ratio": 4.035714285714285,
+      "context_length": 131072,
+      "description": "baidu/cobuddy on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.28,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "baidu/ernie-4.5-21B-a3b": {
+      "completion_ratio": 4.0,
+      "context_length": 120000,
+      "description": "baidu/ernie-4.5-21B-a3b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 8000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.07,
+      "supported_features": [
+        "tools"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "baidu/ernie-4.5-vl-424b-a47b": {
+      "completion_ratio": 2.9761904761904763,
+      "context_length": 123000,
+      "description": "baidu/ernie-4.5-vl-424b-a47b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 16000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.42,
+      "supported_features": [
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-ocr-2": {
+      "completion_ratio": 1.0,
+      "context_length": 8192,
+      "description": "deepseek/deepseek-ocr-2 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 8192,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.03,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-r1": {
+      "completion_ratio": 1.0,
+      "context_length": 64000,
+      "description": "deepseek/deepseek-r1 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 16000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 4.0,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-r1-0528": {
+      "cached_input_ratio": 0.35,
+      "completion_ratio": 3.5714285714285716,
+      "context_length": 163840,
+      "description": "deepseek/deepseek-r1-0528 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.7,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-r1-0528-qwen3-8b": {
+      "completion_ratio": 1.5,
+      "context_length": 128000,
+      "description": "deepseek/deepseek-r1-0528-qwen3-8b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.06,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-r1-distill-llama-70b": {
+      "completion_ratio": 1.0,
+      "context_length": 8192,
+      "description": "deepseek/deepseek-r1-distill-llama-70b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 8192,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.8,
+      "supported_features": [
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-r1-turbo": {
+      "completion_ratio": 3.5714285714285716,
+      "context_length": 64000,
+      "description": "deepseek/deepseek-r1-turbo on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 16000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.7,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-r1/community": {
+      "completion_ratio": 1.0,
+      "context_length": 64000,
+      "description": "deepseek/deepseek-r1/community on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 8000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 4.0,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v3.1": {
+      "cached_input_ratio": 0.135,
+      "completion_ratio": 3.7037037037037033,
+      "context_length": 131072,
+      "description": "deepseek/deepseek-v3.1 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.27,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v3.1-terminus": {
+      "cached_input_ratio": 0.135,
+      "completion_ratio": 3.7037037037037033,
+      "context_length": 131072,
+      "description": "deepseek/deepseek-v3.1-terminus on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.27,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v3.2": {
+      "cached_input_ratio": 0.1345,
+      "completion_ratio": 1.486988847583643,
+      "context_length": 163840,
+      "description": "deepseek/deepseek-v3.2 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.269,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v3.2-exp": {
+      "completion_ratio": 1.5185185185185184,
+      "context_length": 163840,
+      "description": "deepseek/deepseek-v3.2-exp on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.27,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v3/community": {
+      "completion_ratio": 1.0,
+      "context_length": 64000,
+      "description": "deepseek/deepseek-v3/community on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 8000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.89,
+      "supported_features": [
+        "tools"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v4-flash": {
+      "cached_input_ratio": 0.028,
+      "completion_ratio": 2.0,
+      "context_length": 1048576,
+      "description": "deepseek/deepseek-v4-flash on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 393216,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.14,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v4-flash-0731": {
+      "cached_input_ratio": 0.028,
+      "completion_ratio": 3.0,
+      "context_length": 1048576,
+      "description": "deepseek/deepseek-v4-flash-0731 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 393216,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.44,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v4-flash-vision-exp": {
+      "cached_input_ratio": 0.028,
+      "completion_ratio": 3.0,
+      "context_length": 1048576,
+      "description": "deepseek/deepseek-v4-flash-vision-exp on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 393216,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.44,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v4-pro": {
+      "cached_input_ratio": 0.135,
+      "completion_ratio": 2.0,
+      "context_length": 1048576,
+      "description": "deepseek/deepseek-v4-pro on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 393216,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.6,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v4-pro-0813": {
+      "cached_input_ratio": 0.044,
+      "completion_ratio": 3.0,
+      "context_length": 1048576,
+      "description": "deepseek/deepseek-v4-pro-0813 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 393216,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.32,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v4.1-flash": {
+      "cached_input_ratio": 0.006,
+      "completion_ratio": 4.0,
+      "context_length": 1048576,
+      "description": "deepseek/deepseek-v4.1-flash on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 393216,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek-v4.1-flash-z": {
+      "cached_input_ratio": 0.03,
+      "completion_ratio": 4.0,
+      "context_length": 1048576,
+      "description": "deepseek/deepseek-v4.1-flash-z on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 393216,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "deepseek/deepseek_v3": {
+      "completion_ratio": 1.0,
+      "context_length": 64000,
+      "description": "deepseek/deepseek_v3 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 16000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.89,
+      "supported_features": [
+        "tools"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/gemma-3-12b-it": {
+      "completion_ratio": 2.0,
+      "context_length": 131072,
+      "description": "google/gemma-3-12b-it on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 8192,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.05,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/gemma-3-27b-it": {
+      "completion_ratio": 1.6806722689075633,
+      "context_length": 98304,
+      "description": "google/gemma-3-27b-it on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 16384,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.119,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/gemma-4-26b-a4b-it": {
+      "completion_ratio": 3.076923076923077,
+      "context_length": 262144,
+      "description": "google/gemma-4-26b-a4b-it on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.13,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "google/gemma-4-31b-it": {
+      "completion_ratio": 2.857142857142857,
+      "context_length": 262144,
+      "description": "google/gemma-4-31b-it on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.14,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "gryphe/mythomax-l2-13b": {
+      "completion_ratio": 1.0,
+      "context_length": 4096,
+      "description": "gryphe/mythomax-l2-13b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 3200,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.09,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "inclusionai/ling-3.0-flash": {
+      "cached_input_ratio": 0.012,
+      "completion_ratio": 3.0,
+      "context_length": 262144,
+      "description": "inclusionai/ling-3.0-flash on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.06,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "inclusionai/ling-3.0-flash-vl": {
+      "cached_input_ratio": 0.015,
+      "completion_ratio": 2.9333333333333336,
+      "context_length": 262144,
+      "description": "inclusionai/ling-3.0-flash-vl on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.075,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-llama/llama-3.1-8b-instruct": {
+      "completion_ratio": 2.5,
+      "context_length": 16384,
+      "description": "meta-llama/llama-3.1-8b-instruct on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 16384,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.02,
+      "supported_features": [
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-llama/llama-3.2-1b-instruct": {
+      "completion_ratio": 1.0,
+      "context_length": 131000,
+      "description": "meta-llama/llama-3.2-1b-instruct on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.02,
+      "supported_features": [
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-llama/llama-3.3-70b-instruct": {
+      "completion_ratio": 2.962962962962963,
+      "context_length": 12288,
+      "description": "meta-llama/llama-3.3-70b-instruct on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 12288,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.135,
+      "supported_features": [
+        "tools",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-llama/llama-4-maverick-17b-128e-instruct-fp8": {
+      "completion_ratio": 3.148148148148148,
+      "context_length": 1048576,
+      "description": "meta-llama/llama-4-maverick-17b-128e-instruct-fp8 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 8192,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.27,
+      "supported_features": [
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "meta-llama/llama-4-scout-17b-16e-instruct": {
+      "completion_ratio": 3.2777777777777777,
+      "context_length": 131072,
+      "description": "meta-llama/llama-4-scout-17b-16e-instruct on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.18,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "microsoft/wizardlm-2-8x22b": {
+      "completion_ratio": 1.0,
+      "context_length": 65535,
+      "description": "microsoft/wizardlm-2-8x22b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 8000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.62,
+      "supported_features": [
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "mindai/macaron-v1-tall": {
+      "cached_input_ratio": 0.044,
+      "completion_ratio": 5.777777777777778,
+      "context_length": 262144,
+      "description": "mindai/macaron-v1-tall on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.2475,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "mindai/macaron-v1-venti": {
+      "cached_input_ratio": 0.165,
+      "completion_ratio": 3.0000000000000004,
+      "context_length": 1048576,
+      "description": "mindai/macaron-v1-venti on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.825,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "minimax/minimax-m2": {
+      "cached_input_ratio": 0.03,
+      "completion_ratio": 4.0,
+      "context_length": 204800,
+      "description": "minimax/minimax-m2 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "minimax/minimax-m2.1": {
+      "cached_input_ratio": 0.03,
+      "completion_ratio": 4.0,
+      "context_length": 204800,
+      "description": "minimax/minimax-m2.1 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "minimax/minimax-m2.5": {
+      "cached_input_ratio": 0.03,
+      "completion_ratio": 4.0,
+      "context_length": 204800,
+      "description": "minimax/minimax-m2.5 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131100,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "minimax/minimax-m2.5-highspeed": {
+      "cached_input_ratio": 0.03,
+      "completion_ratio": 4.0,
+      "context_length": 204800,
+      "description": "minimax/minimax-m2.5-highspeed on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131100,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.6,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "minimax/minimax-m2.7": {
+      "cached_input_ratio": 0.06,
+      "completion_ratio": 4.0,
+      "context_length": 204800,
+      "description": "minimax/minimax-m2.7 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "minimax/minimax-m2.7-highspeed": {
+      "cached_input_ratio": 0.06,
+      "completion_ratio": 4.0,
+      "context_length": 204800,
+      "description": "minimax/minimax-m2.7-highspeed on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.6,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "minimaxai/minimax-m1-80k": {
+      "completion_ratio": 4.0,
+      "context_length": 1000000,
+      "description": "minimaxai/minimax-m1-80k on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 40000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.55,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "mistralai/mistral-nemo": {
+      "completion_ratio": 4.25,
+      "context_length": 60288,
+      "description": "mistralai/mistral-nemo on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 16000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.04,
+      "supported_features": [
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "moonshotai/kimi-k2-0905": {
+      "completion_ratio": 4.166666666666667,
+      "context_length": 262144,
+      "description": "moonshotai/kimi-k2-0905 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 98304,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.6,
+      "supported_features": [
+        "tools",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "moonshotai/kimi-k2-instruct": {
+      "completion_ratio": 4.035087719298246,
+      "context_length": 131072,
+      "description": "moonshotai/kimi-k2-instruct on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 98304,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.57,
+      "supported_features": [
+        "tools"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "moonshotai/kimi-k2-thinking": {
+      "cached_input_ratio": 0.15,
+      "completion_ratio": 4.166666666666667,
+      "context_length": 262144,
+      "description": "moonshotai/kimi-k2-thinking on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 98304,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.6,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "moonshotai/kimi-k2.5": {
+      "cached_input_ratio": 0.1,
+      "completion_ratio": 5.0,
+      "context_length": 262144,
+      "description": "moonshotai/kimi-k2.5 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 262144,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.6,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "moonshotai/kimi-k2.6": {
+      "cached_input_ratio": 0.16,
+      "completion_ratio": 4.25,
+      "context_length": 262144,
+      "description": "moonshotai/kimi-k2.6 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 262144,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.8,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "moonshotai/kimi-k2.7-code": {
+      "cached_input_ratio": 0.19,
+      "completion_ratio": 4.2105263157894735,
+      "context_length": 262144,
+      "description": "moonshotai/kimi-k2.7-code on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 262144,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.95,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "moonshotai/kimi-k3": {
+      "cached_input_ratio": 0.3,
+      "completion_ratio": 5.0,
+      "context_length": 1048576,
+      "description": "moonshotai/kimi-k3 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 1048576,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 3.0,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "nousresearch/hermes-2-pro-llama-3-8b": {
+      "completion_ratio": 1.0,
+      "context_length": 8192,
+      "description": "nousresearch/hermes-2-pro-llama-3-8b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 8192,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.14,
+      "supported_features": [
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "nvidia/nemotron-3-nano-30b-a3b": {
+      "completion_ratio": 4.0,
+      "context_length": 262144,
+      "description": "nvidia/nemotron-3-nano-30b-a3b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.05,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "openai/gpt-oss-120b": {
+      "completion_ratio": 5.0,
+      "context_length": 131072,
+      "description": "openai/gpt-oss-120b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.05,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "openai/gpt-oss-20b": {
+      "completion_ratio": 3.75,
+      "context_length": 131072,
+      "description": "openai/gpt-oss-20b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.04,
+      "supported_features": [
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "paddlepaddle/paddleocr-vl": {
+      "completion_ratio": 1.0,
+      "context_length": 16384,
+      "description": "paddlepaddle/paddleocr-vl on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 16384,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.02,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen-2.5-72b-instruct": {
+      "completion_ratio": 1.0526315789473684,
+      "context_length": 32000,
+      "description": "qwen/qwen-2.5-72b-instruct on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 8192,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.38,
+      "supported_features": [
+        "tools",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen-mt-plus": {
+      "completion_ratio": 3.0,
+      "context_length": 16384,
+      "description": "qwen/qwen-mt-plus on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 8192,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.25,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3-235b-a22b-fp8": {
+      "completion_ratio": 4.0,
+      "context_length": 40960,
+      "description": "qwen/qwen3-235b-a22b-fp8 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 20000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.2,
+      "supported_features": [
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3-235b-a22b-instruct-2507": {
+      "completion_ratio": 6.444444444444445,
+      "context_length": 131072,
+      "description": "qwen/qwen3-235b-a22b-instruct-2507 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 16384,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.09,
+      "supported_features": [
+        "tools",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3-235b-a22b-thinking-2507": {
+      "completion_ratio": 10.0,
+      "context_length": 131072,
+      "description": "qwen/qwen3-235b-a22b-thinking-2507 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3-coder-30b-a3b-instruct": {
+      "completion_ratio": 3.857142857142857,
+      "context_length": 160000,
+      "description": "qwen/qwen3-coder-30b-a3b-instruct on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.07,
+      "supported_features": [
+        "tools",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3-coder-480b-a35b-instruct": {
+      "completion_ratio": 4.078947368421053,
+      "context_length": 262144,
+      "description": "qwen/qwen3-coder-480b-a35b-instruct on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.38,
+      "supported_features": [
+        "tools",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3-coder-next": {
+      "completion_ratio": 7.5,
+      "context_length": 262144,
+      "description": "qwen/qwen3-coder-next on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.2,
+      "supported_features": [
+        "tools",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3-next-80b-a3b-instruct": {
+      "completion_ratio": 10.0,
+      "context_length": 131072,
+      "description": "qwen/qwen3-next-80b-a3b-instruct on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.15,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3-vl-235b-a22b-instruct": {
+      "completion_ratio": 5.0,
+      "context_length": 131072,
+      "description": "qwen/qwen3-vl-235b-a22b-instruct on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3-vl-235b-a22b-thinking": {
+      "completion_ratio": 4.030612244897959,
+      "context_length": 131072,
+      "description": "qwen/qwen3-vl-235b-a22b-thinking on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.98,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3-vl-30b-a3b-instruct": {
+      "completion_ratio": 3.4999999999999996,
+      "context_length": 131072,
+      "description": "qwen/qwen3-vl-30b-a3b-instruct on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "video",
+        "image"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.2,
+      "supported_features": [
+        "tools",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3.5-122b-a10b": {
+      "completion_ratio": 8.0,
+      "context_length": 262144,
+      "description": "qwen/qwen3.5-122b-a10b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.4,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3.5-27b": {
+      "completion_ratio": 8.0,
+      "context_length": 262144,
+      "description": "qwen/qwen3.5-27b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3.5-35b-a3b": {
+      "completion_ratio": 8.0,
+      "context_length": 262144,
+      "description": "qwen/qwen3.5-35b-a3b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.25,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3.5-397b-a17b": {
+      "completion_ratio": 6.0,
+      "context_length": 262144,
+      "description": "qwen/qwen3.5-397b-a17b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.6,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3.6-27b": {
+      "completion_ratio": 6.0,
+      "context_length": 262144,
+      "description": "qwen/qwen3.6-27b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.6,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3.6-35b-a3b": {
+      "completion_ratio": 5.987903225806452,
+      "context_length": 262144,
+      "description": "qwen/qwen3.6-35b-a3b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.248,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3.7-max": {
+      "cached_input_ratio": 0.25,
+      "completion_ratio": 3.0,
+      "context_length": 1000000,
+      "description": "qwen/qwen3.7-max on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.25,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3.8-2.4t-a95b": {
+      "cached_input_ratio": 0.25,
+      "completion_ratio": 3.0,
+      "context_length": 1000000,
+      "description": "qwen/qwen3.8-2.4t-a95b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 2.0,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3.8-27b": {
+      "cached_input_ratio": 0.085,
+      "completion_ratio": 7.142857142857143,
+      "context_length": 1000000,
+      "description": "qwen/qwen3.8-27b on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.42,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3.8-flash": {
+      "cached_input_ratio": 0.016,
+      "completion_ratio": 3.1333333333333333,
+      "context_length": 1000000,
+      "description": "qwen/qwen3.8-flash on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.15,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "qwen/qwen3.8-max": {
+      "cached_input_ratio": 0.25,
+      "completion_ratio": 3.0,
+      "context_length": 1000000,
+      "description": "qwen/qwen3.8-max on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 2.0,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "sao10k/l3-70b-euryale-v2.1": {
+      "completion_ratio": 1.0,
+      "context_length": 8192,
+      "description": "sao10k/l3-70b-euryale-v2.1 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 8192,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.48,
+      "supported_features": [
+        "tools"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "sao10k/l3-8b-lunaris": {
+      "completion_ratio": 1.0,
+      "context_length": 8192,
+      "description": "sao10k/l3-8b-lunaris on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 8192,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.05,
+      "supported_features": [
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "sao10k/l31-70b-euryale-v2.2": {
+      "completion_ratio": 1.0,
+      "context_length": 8192,
+      "description": "sao10k/l31-70b-euryale-v2.2 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 8192,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.48,
+      "supported_features": [
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "stepfun/step-3.7-flash": {
+      "cached_input_ratio": 0.04,
+      "completion_ratio": 5.749999999999999,
+      "context_length": 262144,
+      "description": "stepfun/step-3.7-flash on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 256000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.2,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "tencent/hy3": {
+      "cached_input_ratio": 0.035,
+      "completion_ratio": 4.142857142857142,
+      "context_length": 262144,
+      "description": "tencent/hy3 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 262144,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.14,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "tencent/hy4-preview": {
+      "cached_input_ratio": 0.042,
+      "completion_ratio": 2.998800959232614,
+      "context_length": 1000000,
+      "description": "tencent/hy4-preview on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 64000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.834,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "thudm/glm-4-32b-0414": {
+      "completion_ratio": 3.0181818181818176,
+      "context_length": 32000,
+      "description": "thudm/glm-4-32b-0414 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 32000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.55,
+      "supported_features": [
+        "tools",
+        "structured_outputs"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "xiaomimimo/mimo-v2.5": {
+      "cached_input_ratio": 0.0034,
+      "completion_ratio": 2.0,
+      "context_length": 1048576,
+      "description": "xiaomimimo/mimo-v2.5 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.168,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "xiaomimimo/mimo-v2.5-pro": {
+      "cached_input_ratio": 0.0043,
+      "completion_ratio": 2.0,
+      "context_length": 1048576,
+      "description": "xiaomimimo/mimo-v2.5-pro on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.522,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/autoglm-phone-9b-multilingual": {
+      "completion_ratio": 3.9428571428571426,
+      "context_length": 65536,
+      "description": "zai-org/autoglm-phone-9b-multilingual on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_output_tokens": 65536,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.035,
+      "supported_features": [],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-4.5-air": {
+      "cached_input_ratio": 0.025,
+      "completion_ratio": 6.538461538461538,
+      "context_length": 131072,
+      "description": "zai-org/glm-4.5-air on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 98304,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.13,
+      "supported_features": [
+        "tools",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-4.5v": {
+      "cached_input_ratio": 0.11,
+      "completion_ratio": 3.0,
+      "context_length": 65536,
+      "description": "zai-org/glm-4.5v on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "video",
+        "image"
+      ],
+      "max_output_tokens": 16384,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.6,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-4.6": {
+      "cached_input_ratio": 0.11,
+      "completion_ratio": 4.0,
+      "context_length": 204800,
+      "description": "zai-org/glm-4.6 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.55,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-4.6v": {
+      "cached_input_ratio": 0.055,
+      "completion_ratio": 3.0,
+      "context_length": 131072,
+      "description": "zai-org/glm-4.6v on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "video",
+        "image"
+      ],
+      "max_output_tokens": 32768,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.3,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-4.7": {
+      "cached_input_ratio": 0.11,
+      "completion_ratio": 3.666666666666667,
+      "context_length": 204800,
+      "description": "zai-org/glm-4.7 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.6,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-4.7-flash": {
+      "cached_input_ratio": 0.01,
+      "completion_ratio": 5.714285714285714,
+      "context_length": 200000,
+      "description": "zai-org/glm-4.7-flash on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 128000,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.07,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-4.7-h": {
+      "cached_input_ratio": 0.11,
+      "completion_ratio": 3.666666666666667,
+      "context_length": 204800,
+      "description": "zai-org/glm-4.7-h on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.6,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-5": {
+      "cached_input_ratio": 0.2,
+      "completion_ratio": 3.2,
+      "context_length": 202800,
+      "description": "zai-org/glm-5 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.0,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-5-turbo": {
+      "cached_input_ratio": 0.24,
+      "completion_ratio": 3.3333333333333335,
+      "context_length": 202800,
+      "description": "zai-org/glm-5-turbo on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.2,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-5.1": {
+      "cached_input_ratio": 0.26,
+      "completion_ratio": 3.1884057971014497,
+      "context_length": 204800,
+      "description": "zai-org/glm-5.1 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.38,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-5.2": {
+      "cached_input_ratio": 0.26,
+      "completion_ratio": 3.1428571428571432,
+      "context_length": 1048576,
+      "description": "zai-org/glm-5.2 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.4,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-5.3": {
+      "cached_input_ratio": 0.26,
+      "completion_ratio": 3.1428571428571432,
+      "context_length": 1048576,
+      "description": "zai-org/glm-5.3 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.4,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-5.3-flash": {
+      "cached_input_ratio": 0.03,
+      "completion_ratio": 3.3333333333333335,
+      "context_length": 1048576,
+      "description": "zai-org/glm-5.3-flash on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 0.15,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-5.3-p": {
+      "cached_input_ratio": 0.26,
+      "completion_ratio": 3.1428571428571432,
+      "context_length": 1048576,
+      "description": "zai-org/glm-5.3-p on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.4,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    },
+    "zai-org/glm-5v-turbo": {
+      "cached_input_ratio": 0.24,
+      "completion_ratio": 3.3333333333333335,
+      "context_length": 204800,
+      "description": "zai-org/glm-5v-turbo on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "max_output_tokens": 131072,
+      "output_modalities": [
+        "text"
+      ],
+      "ratio": 1.2,
+      "supported_features": [
+        "tools",
+        "structured_outputs",
+        "reasoning"
+      ],
+      "tiers": null,
+      "time_windows": null
+    }
+  },
+  "sources": [
+    {
+      "sha256": "77f2cffcae35780d2f72a5ccedce887c2e1e49e050ccfab777ea258581b61cd4",
+      "url": "https://api.novita.ai/v3/openai/models"
+    }
+  ],
+  "version": 1
+}

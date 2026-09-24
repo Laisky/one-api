@@ -1,0 +1,139 @@
+{
+  "currency": "CNY",
+  "models": {
+    "Baichuan-M2": {
+      "completion_ratio": 10.0,
+      "context_length": 32000,
+      "description": "Baichuan-M2 on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 2.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Baichuan-M2-Plus": {
+      "completion_ratio": 3.0,
+      "context_length": 32000,
+      "description": "Baichuan-M2-Plus on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 10.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Baichuan-M3": {
+      "completion_ratio": 3.0,
+      "context_length": 32000,
+      "description": "Baichuan-M3 on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 10.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Baichuan-M3-Plus": {
+      "completion_ratio": 1.8,
+      "context_length": 32000,
+      "description": "Baichuan-M3-Plus on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 5.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Baichuan-Text-Embedding": {
+      "completion_ratio": 0.0,
+      "description": "Baichuan-Text-Embedding on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "embedding": {
+        "text_token_ratio": 0.5
+      },
+      "ratio": 0.5,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Baichuan2-53B": {
+      "completion_ratio": 1.0,
+      "context_length": 32000,
+      "description": "Baichuan2-53B on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 20.0,
+      "tiers": null,
+      "time_windows": [
+        {
+          "name": "baichuan-daypart",
+          "overlay": {
+            "completion_ratio": 1.0,
+            "ratio": 10.0
+          },
+          "ranges": [
+            {
+              "end": "08:00",
+              "start": "00:00"
+            }
+          ],
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "name": "baichuan-daypart",
+          "overlay": {
+            "completion_ratio": 1.0,
+            "ratio": 20.0
+          },
+          "ranges": [
+            {
+              "end": "00:00",
+              "start": "08:00"
+            }
+          ],
+          "timezone": "Asia/Shanghai"
+        }
+      ]
+    },
+    "Baichuan2-Turbo": {
+      "completion_ratio": 1.0,
+      "context_length": 32000,
+      "description": "Baichuan2-Turbo on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 8.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Baichuan3-Turbo": {
+      "completion_ratio": 1.0,
+      "context_length": 32000,
+      "description": "Baichuan3-Turbo on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 12.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Baichuan3-Turbo-128k": {
+      "completion_ratio": 1.0,
+      "context_length": 128000,
+      "description": "Baichuan3-Turbo-128k on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 24.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Baichuan4": {
+      "completion_ratio": 1.0,
+      "context_length": 32000,
+      "description": "Baichuan4 on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 100.0,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Baichuan4-Air": {
+      "completion_ratio": 1.0,
+      "context_length": 32000,
+      "description": "Baichuan4-Air on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 0.98,
+      "tiers": null,
+      "time_windows": null
+    },
+    "Baichuan4-Turbo": {
+      "completion_ratio": 1.0,
+      "context_length": 32000,
+      "description": "Baichuan4-Turbo on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+      "ratio": 15.0,
+      "tiers": null,
+      "time_windows": null
+    }
+  },
+  "sources": [
+    {
+      "sha256": "6d5fd4f22c5ae9dc3254b22d25f194872af641fec2a55e3111b592a6e2250718",
+      "url": "https://platform.baichuan-ai.com/prices"
+    }
+  ],
+  "version": 1
+}

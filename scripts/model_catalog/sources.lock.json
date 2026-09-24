@@ -1,0 +1,47 @@
+{
+  "ali-models": {
+    "path": "first/ali-models.data",
+    "sha256": "f7da5fd6f4c161e426cd7eb7a360ded21e066c1ca6af363e4ba443d551380dca",
+    "url": "https://help.aliyun.com/zh/model-studio/models"
+  },
+  "ali-pricing": {
+    "path": "first/ali-pricing.data",
+    "sha256": "ff984661add8ab353a49c9f77ba1a83fa42d315bb483cc44c295993b6bd3e3ee",
+    "url": "https://help.aliyun.com/zh/model-studio/model-pricing"
+  },
+  "baichuan-pricing": {
+    "path": "second/baichuan-pricing.data",
+    "sha256": "6d5fd4f22c5ae9dc3254b22d25f194872af641fec2a55e3111b592a6e2250718",
+    "url": "https://platform.baichuan-ai.com/prices"
+  },
+  "baidu-pricing": {
+    "path": "final/baidu-pricing.data",
+    "sha256": "419717c13f402bf4f5ce8d4e850d0a37f6866c9d2baf87213987ceb5c9eec1ff",
+    "url": "https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya"
+  },
+  "deepinfra-models": {
+    "path": "final/deepinfra-models.data",
+    "sha256": "d95ea63098af069f27e4d4625035fb8e217e00c601a5830b45347fb72a3679b7",
+    "url": "https://api.deepinfra.com/models/list"
+  },
+  "novita-models": {
+    "path": "final/novita-models.data",
+    "sha256": "77f2cffcae35780d2f72a5ccedce887c2e1e49e050ccfab777ea258581b61cd4",
+    "url": "https://api.novita.ai/v3/openai/models"
+  },
+  "openrouter-models": {
+    "path": "final/openrouter-models.data",
+    "sha256": "2d166a4455a3c27a741a9b1d5592506c63650090980a07ece185ecdb99ac151c",
+    "url": "https://openrouter.ai/api/v1/models"
+  },
+  "siliconflow-cn": {
+    "path": "second/siliconflow-cn.data",
+    "sha256": "df66e4d040500294f30d2b7e35a4078664bb3bb7c7e1de2cdc35ca9b97d239ad",
+    "url": "https://siliconflow.cn/pricing"
+  },
+  "together-models": {
+    "path": "second/together-models.data",
+    "sha256": "0558dae4ecc0208e723a0470f7b7fea44c6ffe1f861808edf4427199655c3291",
+    "url": "https://docs.together.ai/docs/serverless-models"
+  }
+}

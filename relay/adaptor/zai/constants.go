@@ -160,6 +160,28 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}),
 
 	// ---- vision / multimodal ------------------------------------------------
+	// FlashX is a separately priced speed variant, not a billing alias for Flash.
+	// Sources verified 2026-09-24: https://docs.z.ai/guides/overview/pricing,
+	// https://docs.z.ai/guides/vlm/glm-5.3-flash and the Chat Completion API.
+	"glm-5.3-flashx": {
+		Ratio:                     0.37 * ratio.MilliTokensUsd,
+		CachedInputRatio:          0.075 * ratio.MilliTokensUsd,
+		CompletionRatio:           1.25 / 0.37,
+		ContextLength:             1_000_000,
+		MaxOutputTokens:           131_072,
+		InputModalities:           []string{"text", "image", "video", "file"},
+		OutputModalities:          []string{"text"},
+		SupportedFeatures:         []string{"tools", "json_mode", "web_search", "reasoning"},
+		SupportedReasoningEfforts: []string{"low", "high", "max"},
+		DefaultReasoningEffort:    "max",
+		SupportedSamplingParameters: []string{
+			"temperature", "top_p", "max_tokens", "stop", "response_format",
+			"tools", "tool_choice", "reasoning_effort",
+		},
+		// Do not inherit Flash's expired launch promotion or BigModel's CNY rates.
+		// The structured-output guide documents JSON mode, not strict json_schema.
+		Description: "GLM-5.3-FlashX on Z.AI: separately priced high-throughput native multimodal variant, 1M context and 128K maximum output. Always-on reasoning with low/high/max effort (default max). Available through the model API independently of Coding Plan availability. Flat $0.37/$1.25 per 1M input/output and $0.075 cached input.",
+	},
 	// Z.AI runs a 50% launch promotion ($0.075/$0.015/$0.25) that ends 24:00 on
 	// 2026-09-09 (UTC+8, Singapore time). The base price is the list price and
 	// the promotion is a time window, so quota reverts to list automatically the
