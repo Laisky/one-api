@@ -72,6 +72,8 @@ export function RedemptionsPage() {
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [appliedKeyword, setAppliedKeyword] = useState('');
+  const loadSequence = useRef(0);
   const [sortBy, setSortBy] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [open, setOpen] = useState(false);
@@ -97,21 +99,30 @@ export function RedemptionsPage() {
     defaultValues: { name: '', count: 1, quota: 0 },
   });
 
-  const load = async (p = 0, size = pageSize) => {
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword) => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/redemption/?p=${p}&size=${size}`;
+      let url = keyword
+        ? `/api/redemption/search?keyword=${encodeURIComponent(keyword)}&p=${p}&size=${size}`
+        : `/api/redemption/?p=${p}&size=${size}`;
       if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
       const res = await api.get(url);
-      const { success, data, total } = res.data;
-      if (success) {
-        setData(data);
-        setTotal(total);
-        setPageIndex(p);
-      }
+      if (sequence !== loadSequence.current) return;
+      if (!res.data?.success) throw new Error(res.data?.message || t('table_selection.failed'));
+      const rows: RedemptionRow[] = res.data.data || [];
+      setData(rows);
+      setTotal(res.data.total ?? rows.length);
+      setPageIndex(p);
+      setPageSize(size);
+      setAppliedKeyword(keyword);
+    } catch (error) {
+      if (sequence !== loadSequence.current) return;
+      setData([]);
+      setTotal(0);
+      notify({ type: 'error', message: (error as Error)?.message || t('table_selection.failed') });
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   };
 
@@ -128,24 +139,7 @@ export function RedemptionsPage() {
     }
   }, [sortBy, sortOrder]);
 
-  const search = async () => {
-    if (!searchKeyword.trim()) return load(0, pageSize);
-    setLoading(true);
-    try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/redemption/search?keyword=${encodeURIComponent(searchKeyword)}`;
-      if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-      url += `&size=${pageSize}`;
-      const res = await api.get(url);
-      const { success, data } = res.data;
-      if (success) {
-        setData(data);
-        setPageIndex(0);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  const search = () => load(0, pageSize, searchKeyword.trim());
 
   const columns: ColumnDef<RedemptionRow>[] = [
     {
@@ -304,6 +298,8 @@ export function RedemptionsPage() {
             </Button>
           </div>
           <DataTable
+            selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
+            selectionDisabled={searchKeyword.trim() !== appliedKeyword}
             columns={columns}
             data={data}
             pageIndex={pageIndex}

@@ -18,16 +18,6 @@ type ChannelModelResetTarget struct {
 	Name string `json:"name"`
 }
 
-// ListChannelModelResetTargets returns every channel identity in stable ID order
-// with cancellation bound to ctx. Keys and other channel configuration are not read.
-func ListChannelModelResetTargets(ctx context.Context) ([]ChannelModelResetTarget, error) {
-	var targets []ChannelModelResetTarget
-	if err := DB.WithContext(ctx).Model(&Channel{}).Select("id", "uuid", "name").Order("id").Scan(&targets).Error; err != nil {
-		return nil, errors.Wrap(err, "list channels for model reset")
-	}
-	return targets, nil
-}
-
 // ResetChannelModelsToDefaults atomically validates the current channel, replaces
 // its models, and rebuilds routing abilities. The catalog callback is supplied by
 // the controller to avoid a model/relay import cycle. It returns the persisted row

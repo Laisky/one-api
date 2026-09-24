@@ -34,6 +34,9 @@ func TestChannelResetRoutesRequireAdministrator(t *testing.T) {
 
 	for _, path := range []string{
 		"/api/channel/reset_models",
+		"/api/channel/selection",
+		"/api/channel/delete_selected_disabled",
+		"/api/log/delete_selected",
 		"/api/channel/018fcf6d-c484-7000-8000-000000000101/reset_models",
 	} {
 		t.Run(path, func(t *testing.T) {

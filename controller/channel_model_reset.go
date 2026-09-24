@@ -72,18 +72,14 @@ func ResetChannelModels(c *gin.Context) {
 	})
 }
 
-// ResetAllChannelModels applies the single-channel safety contract to every
-// channel, regardless of pagination, search filters, or status. Each channel is
-// atomic; conflicts leave that channel untouched without blocking eligible ones.
-func ResetAllChannelModels(c *gin.Context) {
+// ResetSelectedChannelModels applies the safety contract to confirmed channel UUIDs only.
+// Each channel is atomic; conflicts leave it untouched without blocking eligible selected channels.
+func ResetSelectedChannelModels(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)
-	targets, err := model.ListChannelModelResetTargets(ctx)
+	targets, err := selectedChannelTargets(c, true)
 	if err != nil {
-		if lg != nil {
-			lg.Error("list channels for model reset failed", zap.Error(err))
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to list channels. No resets were attempted."})
+		respondListSelectionError(c, err)
 		return
 	}
 	summary := channelModelResetSummary{Total: len(targets), Results: make([]channelModelResetOutcome, 0, len(targets))}

@@ -1,0 +1,30 @@
+{
+  "table_selection": {
+    "page": "Select this page",
+    "all_pages": "Select all pages",
+    "clear": "Clear selection",
+    "row": "Select {{name}}",
+    "controls": "Row selection",
+    "count": "{{count}} selected",
+    "all_count": "All matching pages selected: {{count}} items ({{excluded}} excluded).",
+    "all_unknown": "All matching pages selected ({{excluded}} excluded). The exact count is resolved before execution.",
+    "reset": "Reset selected models",
+    "test": "Test selected channels",
+    "delete_disabled": "Delete selected disabled channels",
+    "delete": "Delete selected logs",
+    "export": "Export selected logs",
+    "confirm": "Apply this action to the {{count}} selected records? Only these confirmed records will be affected.",
+    "confirm_disabled": "Check {{count}} selected channels and delete only those that are still disabled. Enabled channels will be skipped.",
+    "scope": "Search scope",
+    "unfiltered": "Unfiltered list",
+    "empty": "No selected records remain. Select rows before running an action.",
+    "failed": "The selected action failed or its final result could not be confirmed. Refresh the list before retrying.",
+    "scope_changed": "The filters changed. Select records again.",
+    "finished": "Selected action completed. Review the results below.",
+    "results": "Selected action results",
+    "summary": "{{total}} selected: {{success}} succeeded, {{skipped}} skipped, {{failed}} failed or rejected.",
+    "skipped_enabled": "This channel is enabled and was not deleted.",
+    "missing": "This record no longer exists or is no longer accessible.",
+    "deleted": "Deleted {{count}} selected logs."
+  }
+}

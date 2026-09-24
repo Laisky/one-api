@@ -1,3 +1,4 @@
+import { useSelectableTable, type TableSelectionOptions } from '@/components/ui/table-selection';
 import { AdvancedPagination } from '@/components/ui/advanced-pagination';
 import { Button } from '@/components/ui/button';
 import { SearchableDropdown, type SearchOption } from '@/components/ui/searchable-dropdown';
@@ -11,9 +12,18 @@ import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
-const INTERACTIVE_ROW_TARGET_SELECTOR = ['button', 'a[href]', 'input', 'select', 'textarea', '[role="button"]', '[role="link"]'].join(', ');
+const INTERACTIVE_ROW_TARGET_SELECTOR = [
+  'button',
+  'a[href]',
+  'input',
+  'select',
+  'textarea',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="checkbox"]',
+].join(', ');
 
-export interface EnhancedDataTableProps<TData extends RowData, TValue = unknown> {
+export interface EnhancedDataTableProps<TData extends RowData, TValue = unknown> extends TableSelectionOptions<TData> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   pageIndex?: number;
@@ -65,8 +75,15 @@ export interface EnhancedDataTableProps<TData extends RowData, TValue = unknown>
 }
 
 export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
-  columns,
+  columns: originalColumns,
   data,
+  enableSelection,
+  selection,
+  selectionScope,
+  selectionDisabled,
+  selectionTotal,
+  getSelectionId,
+  getSelectionLabel,
   pageIndex = 0,
   pageSize = 20,
   total = 0,
@@ -97,6 +114,20 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
   emptyMessage,
 }: EnhancedDataTableProps<TData, TValue>) {
   const { t } = useTranslation();
+  const selectable = useSelectableTable({
+    columns: originalColumns,
+    data,
+    total,
+    loading,
+    enableSelection,
+    selection,
+    selectionScope: selectionScope ?? searchValue,
+    selectionDisabled,
+    selectionTotal,
+    getSelectionId,
+    getSelectionLabel,
+  });
+  const columns = selectable.columns;
   const { isMobile, isTablet } = useResponsive();
   // Client-side sorting state (for display only when no server-side sorting)
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -221,22 +252,25 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
     } as ColumnDef<TData, TValue>;
   });
 
-  const table = useTable({
-    features: modernTableFeatures,
-    data,
-    columns: enhancedColumns as ColumnDef<TData, unknown>[],
-    state: {
-      sorting,
-      pagination: {
-        pageIndex,
-        pageSize,
+  const table = useTable(
+    {
+      features: modernTableFeatures,
+      data,
+      columns: enhancedColumns as ColumnDef<TData, unknown>[],
+      state: {
+        sorting,
+        pagination: {
+          pageIndex,
+          pageSize,
+        },
       },
+      onSortingChange: setSorting,
+      manualSorting: !!onSortChange, // Use manual sorting if server-side sorting is available
+      manualPagination: true,
+      pageCount: Math.ceil(total / pageSize),
     },
-    onSortingChange: setSorting,
-    manualSorting: !!onSortChange, // Use manual sorting if server-side sorting is available
-    manualPagination: true,
-    pageCount: Math.ceil(total / pageSize),
-  }, (state) => state);
+    (state) => state
+  );
 
   const handleSearchAddition = (value: string) => {
     if (onSearchValueChange) {
@@ -317,6 +351,8 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
         </div>
       )}
 
+      {selectable.controls}
+
       {/* Data Table */}
       <div className="relative">
         {/* Loading overlay */}
@@ -335,11 +371,16 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
                   key={row.id}
                   className={cn(
                     'bg-card border rounded-lg p-3 space-y-2 shadow-sm',
+                    selectable.isSelected(row.original) && 'bg-muted/50 ring-1 ring-primary',
                     onRowClick && 'cursor-pointer transition-colors hover:bg-muted/40'
                   )}
-                  onClick={() => onRowClick?.(row.original)}
+                  onClick={(event) => {
+                    if (!shouldIgnoreFloatingActions(event.target)) onRowClick?.(row.original);
+                  }}
                 >
                   {row.getVisibleCells().map((cell) => {
+                    if (cell.column.id === '__selection__')
+                      return <div key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</div>;
                     const headerDef = cell.column.columnDef.header;
                     const label =
                       typeof headerDef === 'string' ? headerDef : typeof headerDef === 'function' ? cell.column.id : cell.column.id || '';
@@ -396,9 +437,11 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
                     table.getRowModel().rows.map((row) => (
                       <TableRow
                         key={row.id}
-                        data-state={row.getIsSelected() && 'selected'}
+                        data-state={selectable.isSelected(row.original) ? 'selected' : undefined}
                         className={cn('hover:bg-muted/50 transition-colors', onRowClick && 'cursor-pointer')}
-                        onClick={() => onRowClick?.(row.original)}
+                        onClick={(event) => {
+                          if (!shouldIgnoreFloatingActions(event.target)) onRowClick?.(row.original);
+                        }}
                         onMouseEnter={(e) => handleRowMouseEnter(e, row.original)}
                         onMouseMove={(e) => handleRowMouseMove(e, row.original)}
                         onMouseLeave={handleRowMouseLeave}

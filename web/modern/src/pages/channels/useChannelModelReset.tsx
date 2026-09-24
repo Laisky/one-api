@@ -45,7 +45,7 @@ interface ResetResponse {
 }
 
 /** resetFailureMessage localizes known policy codes while retaining safe model details. */
-function resetFailureMessage(t: TFunction, outcome: Pick<ResetOutcome, 'conflict' | 'message'>): string {
+export function resetFailureMessage(t: TFunction, outcome: Pick<ResetOutcome, 'conflict' | 'message'>): string {
   const conflict = outcome.conflict;
   if (!conflict) return outcome.message || t('channel_reset.failed_message');
   const reason = t(`channel_reset.reasons.${conflict.code}`, outcome.message || t('channel_reset.failed_message'));
@@ -93,16 +93,19 @@ function ChannelModelResetReport({ summary, onDismiss }: { summary: ResetSummary
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">{t('channel_reset.result_title')}</h2>
-          <p role="status" className="text-sm">{t('channel_reset.summary', { ...summary })}</p>
+          <p role="status" className="text-sm">
+            {t('channel_reset.summary', { ...summary })}
+          </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={onDismiss}>{t('channel_reset.dismiss')}</Button>
+        <Button variant="ghost" size="sm" onClick={onDismiss}>
+          {t('channel_reset.dismiss')}
+        </Button>
       </div>
       {failures.length > 0 && (
         <ul className="max-h-80 overflow-y-auto space-y-3 text-sm">
           {failures.map((result) => (
             <li key={result.uuid} className="break-words">
-              <span className="font-medium">{result.name}</span>{' '}
-              <span className="text-muted-foreground">({result.uuid})</span>
+              <span className="font-medium">{result.name}</span> <span className="text-muted-foreground">({result.uuid})</span>
               <p>{resetFailureMessage(t, result)}</p>
             </li>
           ))}
@@ -129,25 +132,33 @@ export function useChannelModelReset(onCompleted: () => Promise<void>) {
     notify({ type: 'error', title: t('channel_reset.failed_title'), message: resetFailureMessage(t, response) });
     if (channel) {
       setSummary({
-        total: 1, reset: 0, rejected: response.conflict ? 1 : 0, failed: response.conflict ? 0 : 1,
-        results: [{
-          uuid: String(channelRef(channel)), name: channel.name, success: false,
-          message: response.message, conflict: response.conflict,
-        }],
+        total: 1,
+        reset: 0,
+        rejected: response.conflict ? 1 : 0,
+        failed: response.conflict ? 0 : 1,
+        results: [
+          {
+            uuid: String(channelRef(channel)),
+            name: channel.name,
+            success: false,
+            message: response.message,
+            conflict: response.conflict,
+          },
+        ],
       });
     }
   };
 
-  /** reset performs a single or all-channel reset only after explicit confirmation. */
-  const reset = async (channel?: Channel): Promise<void> => {
+  /** reset performs a single-channel reset only after explicit confirmation. */
+  const reset = async (channel: Channel): Promise<void> => {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     let attempted = false;
     try {
       const confirmed = await confirm({
-        title: t(channel ? 'channel_reset.confirm_title' : 'channel_reset.confirm_all_title'),
-        description: t(channel ? 'channel_reset.confirm_body' : 'channel_reset.confirm_all_body', { name: channel?.name }),
+        title: t('channel_reset.confirm_title'),
+        description: t('channel_reset.confirm_body', { name: channel.name }),
         confirmLabel: t('channel_reset.confirm'),
         variant: 'destructive',
         details: channel ? [{ label: t('channel_reset.channel'), value: `${channel.name} (${channelRef(channel)})` }] : undefined,
@@ -155,28 +166,14 @@ export function useChannelModelReset(onCompleted: () => Promise<void>) {
       if (!confirmed) return;
       setSummary(null);
       attempted = true;
-      const endpoint = channel
-        ? `/api/channel/${encodeURIComponent(channelRef(channel))}/reset_models`
-        : '/api/channel/reset_models';
-      // A global reset can legitimately outlast the shared API client's ten-second
-      // timeout. Keep a bounded request while avoiding routine partial-batch timeouts.
+      const endpoint = `/api/channel/${encodeURIComponent(channelRef(channel))}/reset_models`;
       const response = (await api.post(endpoint, undefined, { timeout: 120_000 })).data as ResetResponse;
       if (!response.success || !response.data) {
         reportFailure(response, channel);
         return;
       }
-      if (channel) {
-        const result = response.data as ResetOutcome;
-        notify({ type: 'success', message: t('channel_reset.single_success', { name: channel.name, count: result.model_count }) });
-      } else {
-        const result = response.data as ResetSummary;
-        setSummary(result);
-        notify({
-          type: result.rejected || result.failed ? 'error' : result.total ? 'success' : 'info',
-          title: t('channel_reset.result_title'),
-          message: result.total ? t('channel_reset.summary', { ...result }) : t('channel_reset.empty'),
-        });
-      }
+      const result = response.data as ResetOutcome;
+      notify({ type: 'success', message: t('channel_reset.single_success', { name: channel.name, count: result.model_count }) });
     } catch (error) {
       const response = (error as { response?: { data?: ResetResponse } } | null)?.response?.data;
       reportFailure(response || { success: false, message: t('channel_reset.failed_message') }, channel);
@@ -197,7 +194,6 @@ export function useChannelModelReset(onCompleted: () => Promise<void>) {
   return {
     busy,
     resetChannel: (channel: Channel) => reset(channel),
-    resetAll: () => reset(),
     confirmation: <ConfirmResetDialog />,
     report: summary ? <ChannelModelResetReport summary={summary} onDismiss={() => setSummary(null)} /> : null,
   };

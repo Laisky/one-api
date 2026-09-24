@@ -1,0 +1,30 @@
+{
+  "table_selection": {
+    "page": "Sélectionner cette page",
+    "all_pages": "Sélectionner toutes les pages",
+    "clear": "Effacer la sélection",
+    "row": "Sélectionner {{name}}",
+    "controls": "Sélection des lignes",
+    "count": "{{count}} éléments sélectionnés",
+    "all_count": "Toutes les pages correspondantes : {{count}} éléments ({{excluded}} exclus).",
+    "all_unknown": "Toutes les pages correspondantes sélectionnées ({{excluded}} exclus). Le nombre exact est résolu avant exécution.",
+    "reset": "Réinitialiser les modèles sélectionnés",
+    "test": "Tester les canaux sélectionnés",
+    "delete_disabled": "Supprimer les canaux désactivés sélectionnés",
+    "delete": "Supprimer les journaux sélectionnés",
+    "export": "Exporter les journaux sélectionnés",
+    "confirm": "Appliquer cette action aux {{count}} enregistrements sélectionnés ? Seuls ces enregistrements confirmés seront concernés.",
+    "confirm_disabled": "Vérifier {{count}} canaux sélectionnés et supprimer uniquement ceux encore désactivés. Les canaux actifs seront ignorés.",
+    "scope": "Périmètre de recherche",
+    "unfiltered": "Liste non filtrée",
+    "empty": "Aucun enregistrement sélectionné restant. Sélectionnez des lignes avant une action.",
+    "failed": "L’action a échoué ou son résultat final reste inconnu. Actualisez la liste avant de réessayer.",
+    "scope_changed": "Les filtres ont changé. Sélectionnez à nouveau les enregistrements.",
+    "finished": "Action terminée. Consultez les résultats ci-dessous.",
+    "results": "Résultats de l’action",
+    "summary": "{{total}} sélectionnés : {{success}} réussis, {{skipped}} ignorés, {{failed}} échoués ou refusés.",
+    "skipped_enabled": "Ce canal est actif et n’a pas été supprimé.",
+    "missing": "Cet enregistrement n’existe plus ou n’est plus accessible.",
+    "deleted": "{{count}} journaux sélectionnés supprimés."
+  }
+}

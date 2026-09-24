@@ -27,19 +27,35 @@ const mockPost = vi.mocked(api.post);
 const channels = [
   {
     uuid: '018fcf6d-c484-7000-8000-000000000101',
-    name: 'Provider A', type: 1, status: 1, created_time: 1,
-    priority: 0, weight: 0, models: 'old-model', group: 'default',
+    name: 'Provider A',
+    type: 1,
+    status: 1,
+    created_time: 1,
+    priority: 0,
+    weight: 0,
+    models: 'old-model',
+    group: 'default',
   },
   {
     uuid: '018fcf6d-c484-7000-8000-000000000102',
-    name: 'Private B', type: 50, status: 2, created_time: 1,
-    priority: 0, weight: 0, models: 'private-model', group: 'default',
+    name: 'Private B',
+    type: 50,
+    status: 2,
+    created_time: 1,
+    priority: 0,
+    weight: 0,
+    models: 'private-model',
+    group: 'default',
   },
 ];
 
 /** renderPage mounts the real list and confirmation dialogs, mocking only the API. */
 function renderPage() {
-  return render(<BrowserRouter><ChannelsPage /></BrowserRouter>);
+  return render(
+    <BrowserRouter>
+      <ChannelsPage />
+    </BrowserRouter>
+  );
 }
 
 /** rowResetButton locates a visible row reset action after the list has loaded. */
@@ -52,7 +68,7 @@ async function rowResetButton(name = 'Provider A') {
 /** confirmReset accepts the actual destructive confirmation rather than bypassing it. */
 async function confirmReset(user: ReturnType<typeof userEvent.setup>) {
   const dialog = await screen.findByRole('dialog');
-  await user.click(within(dialog).getByRole('button', { name: 'Reset models', exact: true }));
+  await user.click(within(dialog).getByRole('button', { name: 'Reset models' }));
 }
 
 describe('ChannelsPage default model reset', () => {
@@ -73,23 +89,23 @@ describe('ChannelsPage default model reset', () => {
     renderPage();
     await rowResetButton();
     await rowResetButton('Private B');
-    expect(screen.getByRole('button', { name: 'Reset All', exact: true })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Reset selected models' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /refresh all balances/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /bulk actions/i })).not.toBeInTheDocument();
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  it.each(['single', 'all'])('does not send a mutation when the %s confirmation is canceled', async (scope) => {
+  it.each(['single'])('does not send a mutation when the %s confirmation is canceled', async (scope) => {
     renderPage();
     const row = await rowResetButton();
     const user = userEvent.setup();
-    await user.click(scope === 'single' ? row : screen.getByRole('button', { name: 'Reset All', exact: true }));
+    await user.click(scope === 'single' ? row : screen.getByRole('button', { name: 'Reset selected models' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/Channel status and compatible mappings\/pricing remain unchanged/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(mockPost).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Reset All', exact: true })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Reset selected models' })).toBeDisabled();
   });
 
   it('posts the UUID with no client model list and refreshes the current page', async () => {
@@ -101,9 +117,9 @@ describe('ChannelsPage default model reset', () => {
     await user.click(button);
     expect(mockPost).not.toHaveBeenCalled();
     await confirmReset(user);
-    await waitFor(() => expect(mockPost).toHaveBeenCalledWith(
-      `/api/channel/${channels[0].uuid}/reset_models`, undefined, { timeout: 120_000 },
-    ));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith(`/api/channel/${channels[0].uuid}/reset_models`, undefined, { timeout: 120_000 })
+    );
     expect(mockPost).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('/api/channel/?p=1&')));
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'success', message: 'Provider A now uses 2 default models.' }));
@@ -132,59 +148,29 @@ describe('ChannelsPage default model reset', () => {
     await waitFor(() => expect(mockGet.mock.calls.length).toBeGreaterThan(1));
   });
 
-  it('resets all server-side channels once and reports off-page failures separately', async () => {
-    mockPost.mockResolvedValue({
-      data: {
-        success: true,
-        data: {
-          total: 4, reset: 2, rejected: 1, failed: 1,
-          results: [
-            { uuid: channels[0].uuid, name: channels[0].name, success: true, model_count: 2 },
-            { uuid: channels[1].uuid, name: channels[1].name, success: false, conflict: { code: 'unsupported_channel', field: 'type' } },
-            { uuid: 'off-page-success', name: 'Other page provider', success: true, model_count: 3 },
-            { uuid: 'off-page-failure', name: 'Other page failure', success: false, message: 'Database unavailable; no changes applied.' },
-          ],
-        },
-      },
-    });
-    renderPage();
-    await rowResetButton();
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Reset All', exact: true }));
-    expect(await screen.findByText(/including other pages and channels outside the current search/)).toBeInTheDocument();
-    await confirmReset(user);
-    const report = await screen.findByRole('region', { name: 'Model reset results' });
-    expect(mockPost).toHaveBeenCalledTimes(1);
-    expect(mockPost).toHaveBeenCalledWith('/api/channel/reset_models', undefined, { timeout: 120_000 });
-    expect(report).toHaveTextContent('Reset 2 of 4 channels; 1 rejected; 1 failed.');
-    expect(report).toHaveTextContent('Private B');
-    expect(report).toHaveTextContent('Other page failure');
-    expect(report).toHaveTextContent('off-page-failure');
-    expect(report).toHaveTextContent('Database unavailable; no changes applied.');
-    expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
-    await user.click(within(report).getByRole('button', { name: 'Dismiss', exact: true }));
-    expect(screen.queryByRole('region', { name: 'Model reset results' })).not.toBeInTheDocument();
-  });
-
   it('disables both row and all-channel resets while a request is pending', async () => {
     let finish!: () => void;
-    mockPost.mockImplementationOnce(() => new Promise((resolve) => {
-      finish = () => resolve({ data: { success: true, data: { success: true, model_count: 2 } } });
-    }));
+    mockPost.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ data: { success: true, data: { success: true, model_count: 2 } } });
+        })
+    );
     renderPage();
     const button = await rowResetButton();
     const user = userEvent.setup();
     await user.click(button);
     await confirmReset(user);
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
-    const allButton = screen.getByRole('button', { name: 'Reset All', exact: true });
+    const allButton = screen.getByRole('button', { name: 'Reset selected models' });
     expect(allButton).toBeDisabled();
-    expect(button).toBeDisabled();
+    const currentButton = screen.getAllByRole('button', { name: 'Reset Provider A to default models' })[0];
+    expect(currentButton).toBeDisabled();
     await user.click(allButton);
-    await user.click(button);
+    await user.click(currentButton);
     expect(mockPost).toHaveBeenCalledTimes(1);
     finish();
-    await waitFor(() => expect(allButton).toBeEnabled());
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Reset Provider A to default models' })[0]).toBeEnabled());
   });
 
   it('reloads after an ambiguous transport failure and does not claim rollback', async () => {
@@ -193,9 +179,14 @@ describe('ChannelsPage default model reset', () => {
     const user = userEvent.setup();
     await user.click(await rowResetButton());
     await confirmReset(user);
-    await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'error', message: expect.stringContaining('a connection can fail after changes are saved'),
-    })));
+    await waitFor(() =>
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          message: expect.stringContaining('a connection can fail after changes are saved'),
+        })
+      )
+    );
     await waitFor(() => expect(mockGet.mock.calls.length).toBeGreaterThan(1));
     expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
   });
@@ -214,7 +205,7 @@ describe('ChannelsPage default model reset', () => {
     responsive.isMobile = true;
     renderPage();
     expect(await rowResetButton()).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reset All', exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reset selected models' })).toBeInTheDocument();
   });
 
   it('provides the complete reset vocabulary in every supported locale', () => {

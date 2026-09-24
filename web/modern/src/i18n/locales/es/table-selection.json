@@ -1,0 +1,30 @@
+{
+  "table_selection": {
+    "page": "Seleccionar esta página",
+    "all_pages": "Seleccionar todas las páginas",
+    "clear": "Borrar selección",
+    "row": "Seleccionar {{name}}",
+    "controls": "Selección de filas",
+    "count": "{{count}} seleccionados",
+    "all_count": "Todas las páginas coincidentes: {{count}} elementos ({{excluded}} excluidos).",
+    "all_unknown": "Todas las páginas coincidentes seleccionadas ({{excluded}} excluidos). El total exacto se determina antes de ejecutar.",
+    "reset": "Restablecer modelos seleccionados",
+    "test": "Probar canales seleccionados",
+    "delete_disabled": "Eliminar canales desactivados seleccionados",
+    "delete": "Eliminar registros seleccionados",
+    "export": "Exportar registros seleccionados",
+    "confirm": "¿Aplicar esta acción a los {{count}} registros seleccionados? Solo se modificarán estos registros confirmados.",
+    "confirm_disabled": "Comprobar {{count}} canales y eliminar solo los que sigan desactivados. Los activos se omitirán.",
+    "scope": "Ámbito de búsqueda",
+    "unfiltered": "Lista sin filtrar",
+    "empty": "No quedan registros seleccionados. Seleccione filas antes de ejecutar.",
+    "failed": "La acción falló o no se pudo confirmar el resultado. Actualice la lista antes de reintentar.",
+    "scope_changed": "Los filtros cambiaron. Vuelva a seleccionar los registros.",
+    "finished": "Acción completada. Revise los resultados a continuación.",
+    "results": "Resultados de la acción",
+    "summary": "{{total}} seleccionados: {{success}} correctos, {{skipped}} omitidos, {{failed}} fallidos o rechazados.",
+    "skipped_enabled": "Este canal está activo y no se eliminó.",
+    "missing": "Este registro ya no existe o no es accesible.",
+    "deleted": "Se eliminaron {{count}} registros seleccionados."
+  }
+}

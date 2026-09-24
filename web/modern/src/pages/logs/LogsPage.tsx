@@ -2,7 +2,6 @@ import { LogDetailsModal } from '@/components/LogDetailsModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,7 +14,8 @@ import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { api } from '@/lib/api';
 import { LOG_TYPES, LOG_TYPE_OPTIONS } from '@/lib/constants/logs';
 import type { LogCursorFilters } from '@/lib/logCursor';
-import { useLogExport } from './useLogExport';
+import { useSelectedLogActions } from './useSelectedLogActions';
+import { useTableSelection } from '@/hooks/useTableSelection';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, fromDateTimeLocal, renderQuota, toDateTimeLocal } from '@/lib/utils';
 import { Eye, EyeOff, FileDown, Filter, RefreshCw } from 'lucide-react';
@@ -40,7 +40,6 @@ export function LogsPage() {
   const { t } = useTranslation();
   const { notify } = useNotifications();
   const { user } = useAuthStore();
-  const [confirmAction, ConfirmActionDialog] = useConfirmDialog();
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -83,6 +82,14 @@ export function LogsPage() {
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  const selectionScope = JSON.stringify([user?.uuid || user?.username, user?.role, filters, searchKeyword.trim()]);
+  const selection = useTableSelection(selectionScope);
+  const [loadedScope, setLoadedScope] = useState('');
+  const [filterApplyVersion, setFilterApplyVersion] = useState(0);
+  const requestSequence = useRef(0);
+  const scopeRef = useRef(selectionScope);
+  scopeRef.current = selectionScope;
+
   // Tracing modal — driven by URL ?id=xxx
   const selectedLog = useMemo(() => {
     const idStr = searchParams.get('id');
@@ -120,6 +127,7 @@ export function LogsPage() {
     // setSortBy still sees the previous value in this closure.
     const activeSortBy = sortOverride?.by ?? sortBy;
     const activeSortOrder = sortOverride?.order ?? sortOrder;
+    const sequence = ++requestSequence.current;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -143,7 +151,9 @@ export function LogsPage() {
       const res = await api.get(path);
       const { success, data: responseData, total: responseTotal } = res.data;
 
+      if (sequence !== requestSequence.current || scopeRef.current !== selectionScope) return;
       if (success) {
+        setLoadedScope(selectionScope);
         setData(responseData || []);
         setTotal(responseTotal || 0);
         setPageIndex(p);
@@ -151,15 +161,14 @@ export function LogsPage() {
         setCursorActive(false);
       }
     } catch (error) {
-      console.error('Failed to load logs:', error);
+      if (sequence !== requestSequence.current || scopeRef.current !== selectionScope) return;
+      console.error(`Failed to load logs: ${String(error)}`);
       setData([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   };
-
-  const { exporting, exportLogs: handleExportLogs } = useLogExport({ filters, isAdminOrRoot, sortBy, sortOrder });
 
   const cursor = useLogCursorPagination<LogRow>({
     isAdminOrRoot,
@@ -197,18 +206,21 @@ export function LogsPage() {
     const eligible = cursor.supported && !searchKeyword.trim() && activeSortBy === 'created_at' && activeSortOrder === 'desc';
 
     if (eligible) {
+      const sequence = ++requestSequence.current;
       setLoading(true);
       try {
         if (navigation === 'first') cursor.reset();
         const rows = await cursor.fetchPage(navigation);
+        if (sequence !== requestSequence.current || scopeRef.current !== selectionScope) return;
         if (rows) {
+          setLoadedScope(selectionScope);
           setData(rows);
           setPageSize(size);
           setCursorActive(true);
           return;
         }
       } finally {
-        setLoading(false);
+        if (sequence === requestSequence.current) setLoading(false);
       }
       // rows === null means this server cannot answer with a cursor; fall
       // through to the legacy route rather than showing an empty list.
@@ -286,30 +298,29 @@ export function LogsPage() {
     }
   };
 
-  const performSearch = async () => {
-    if (!searchKeyword.trim()) {
-      return loadPage('first');
-    }
-
+  /** performSearch paginates the keyword universe without silently switching to the unfiltered list. */
+  const performSearch = async (p = 0, size = pageSize, activeSort = sortBy, activeOrder = sortOrder) => {
+    if (!searchKeyword.trim()) return loadPage('first');
+    const sequence = ++requestSequence.current;
     setLoading(true);
     try {
-      // Unified API call - complete URL with /api prefix
-      const url = isAdminOrRoot ? '/api/log/search' : '/api/log/self/search';
-      const res = await api.get(url + '?keyword=' + encodeURIComponent(searchKeyword));
-      const { success, data: responseData } = res.data;
-
-      if (success) {
-        setData(responseData || []);
-        setPageIndex(0);
-        setTotal(responseData?.length || 0);
-        // Keyword search is a separate route with its own result set; the
-        // keyset pager describes nothing about it.
+      const path = isAdminOrRoot ? '/api/log/search' : '/api/log/self/search';
+      const res = await api.get(
+        `${path}?keyword=${encodeURIComponent(searchKeyword.trim())}&p=${p}&size=${size}&sort=${activeSort}&order=${activeOrder}`
+      );
+      if (sequence !== requestSequence.current || scopeRef.current !== selectionScope) return;
+      if (res.data?.success) {
+        setData(res.data.data || []);
+        setPageIndex(p);
+        setPageSize(size);
+        setTotal(res.data.total ?? res.data.data?.length ?? 0);
+        setLoadedScope(selectionScope);
         setCursorActive(false);
       }
     } catch (error) {
-      console.error('Search failed:', error);
+      notify({ type: 'error', message: String(error) });
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   };
 
@@ -325,7 +336,8 @@ export function LogsPage() {
       }
       return;
     }
-    loadPage('first');
+    if (searchKeyword.trim()) performSearch();
+    else loadPage('first');
   }, [pageSize]);
 
   useEffect(() => {
@@ -338,53 +350,16 @@ export function LogsPage() {
     setShowStat(!showStat);
   };
 
+  // Form filters and keyword search use different existing API routes. Applying
+  // form filters exits keyword mode so both the displayed rows and selection
+  // resolver use the same universe, after the updated state has committed.
+  useEffect(() => {
+    if (filterApplyVersion > 0) void loadPage('first');
+  }, [filterApplyVersion]);
   const handleFilterSubmit = () => {
-    loadPage('first');
-  };
-
-  const handleClearLogs = async () => {
-    const ts = fromDateTimeLocal(filters.end_timestamp);
-    const confirmed = await confirmAction({
-      title: t('logs.actions.clear'),
-      description: t('logs.confirm.delete_before', { timestamp: filters.end_timestamp }),
-      details: [
-        {
-          label: t('logs.filters.end'),
-          value: filters.end_timestamp,
-        },
-      ],
-      variant: 'destructive',
-    });
-    if (!confirmed) return;
-
-    try {
-      // Unified API call - complete URL with /api prefix
-      const res = await api.delete('/api/log?target_timestamp=' + ts);
-      if (!res.data?.success) {
-        notify({
-          type: 'error',
-          title: t('logs.notifications.clear_failed_title', 'Clear failed'),
-          message: res.data?.message || t('logs.notifications.clear_failed_message', 'Failed to clear logs.'),
-        });
-        return;
-      }
-      loadPage('first');
-      notify({
-        type: 'success',
-        title: t('logs.notifications.clear_success_title', 'Logs cleared'),
-        message: t('logs.notifications.clear_success_message', 'Logs cleared successfully.'),
-      });
-    } catch (error) {
-      console.error('Failed to clear logs:', error);
-      notify({
-        type: 'error',
-        title: t('logs.notifications.clear_failed_title', 'Clear failed'),
-        message:
-          (error as any)?.response?.data?.message ||
-          (error as Error)?.message ||
-          t('logs.notifications.clear_failed_message', 'Failed to clear logs.'),
-      });
-    }
+    selection.clear();
+    setSearchKeyword('');
+    setFilterApplyVersion((version) => version + 1);
   };
 
   const columns = createLogColumns({
@@ -402,7 +377,7 @@ export function LogsPage() {
       return prev;
     });
     if (searchKeyword.trim()) {
-      setPageIndex(newPageIndex);
+      performSearch(newPageIndex, newPageSize);
     } else {
       load(newPageIndex, newPageSize);
     }
@@ -411,7 +386,7 @@ export function LogsPage() {
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize);
     if (searchKeyword.trim()) {
-      performSearch();
+      performSearch(0, newPageSize);
     } else {
       loadPage('first', { size: newPageSize });
     }
@@ -420,7 +395,8 @@ export function LogsPage() {
   const handleSortChange = (newSortBy: string, newSortOrder: 'asc' | 'desc') => {
     setSortBy(newSortBy);
     setSortOrder(newSortOrder);
-    loadPage('first', { sortBy: newSortBy, sortOrder: newSortOrder });
+    if (searchKeyword.trim()) performSearch(0, pageSize, newSortBy, newSortOrder);
+    else loadPage('first', { sortBy: newSortBy, sortOrder: newSortOrder });
   };
 
   const handleRowClick = (log: LogRow) => {
@@ -448,6 +424,11 @@ export function LogsPage() {
       load(pageIndex, pageSize);
     }
   };
+  const selectedActions = useSelectedLogActions(selection, filters, searchKeyword.trim(), sortBy, sortOrder, () =>
+    searchKeyword.trim() ? performSearch(pageIndex, pageSize) : loadPage('first')
+  );
+  const selectionDisabled = loading || selectedActions.busy || loadedScope !== selectionScope;
+  const batchDisabled = selectionDisabled || !selection.hasSelection;
 
   return (
     <ResponsivePageContainer
@@ -474,17 +455,23 @@ export function LogsPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={handleExportLogs}
+              onClick={selectedActions.exportSelected}
               className="gap-2 whitespace-nowrap w-full sm:w-auto"
               size="sm"
-              disabled={exporting}
+              disabled={batchDisabled}
             >
-              {exporting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              {t('logs.actions.export')}
+              {selectedActions.busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+              {t('table_selection.export')}
             </Button>
-            {isAdmin && (
-              <Button variant="destructive" onClick={handleClearLogs} size="sm" className="w-full sm:w-auto">
-                {t('logs.actions.clear')}
+            {isAdminOrRoot && (
+              <Button
+                variant="destructive"
+                disabled={batchDisabled}
+                onClick={selectedActions.deleteSelected}
+                size="sm"
+                className="w-full sm:w-auto"
+              >
+                {t('table_selection.delete')}
               </Button>
             )}
           </div>
@@ -586,7 +573,7 @@ export function LogsPage() {
                 clearable
               />
             </div>
-            {isAdmin && (
+            {isAdminOrRoot && (
               <>
                 <div>
                   <Label className="text-xs">{t('logs.filters.channel')}</Label>
@@ -628,6 +615,9 @@ export function LogsPage() {
           </div>
 
           <EnhancedDataTable
+            selection={selection}
+            selectionDisabled={selectionDisabled}
+            selectionTotal={cursorActive ? null : total}
             columns={columns}
             data={data}
             pageIndex={pageIndex}
@@ -663,7 +653,7 @@ export function LogsPage() {
         </CardContent>
       </Card>
 
-      <ConfirmActionDialog />
+      {selectedActions.confirmation}
       <LogDetailsModal open={detailsModalOpen} onOpenChange={handleDetailsModalChange} log={selectedLog} />
     </ResponsivePageContainer>
   );

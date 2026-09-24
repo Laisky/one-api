@@ -46,22 +46,15 @@ describe('LogsPage action feedback', () => {
     (api.get as any).mockResolvedValue({ data: { success: true, data: [], total: 0 } });
   });
 
-  it('shows an error when clear logs returns success false', async () => {
-    (api.delete as any).mockResolvedValue({ data: { success: false, message: 'clear logs rejected' } });
-
-    const user = userEvent.setup();
+  it('disables record actions when no logs are selected', async () => {
     render(
       <MemoryRouter>
         <LogsPage />
       </MemoryRouter>
     );
-
-    const clearButton = await screen.findByRole('button', { name: 'Clear' });
-    await user.click(clearButton);
-
-    await waitFor(() => {
-      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: 'clear logs rejected' }));
-    });
+    expect(await screen.findByRole('button', { name: 'Delete selected logs' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export selected logs' })).toBeDisabled();
+    expect(api.delete).not.toHaveBeenCalled();
   });
 
   it('shows channel names and reveals channel UUIDs from the channel column', async () => {
@@ -149,7 +142,7 @@ describe('LogsPage action feedback', () => {
         </MemoryRouter>
       );
 
-      await screen.findByRole('button', { name: 'Clear' });
+      await screen.findByRole('button', { name: 'Delete selected logs' });
       const findTrigger = (label: string) => {
         const trigger = screen.getAllByRole('combobox').find((el) => el.textContent?.trim() === label);
         if (!trigger) throw new Error(`combobox "${label}" not found`);

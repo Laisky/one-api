@@ -1,0 +1,30 @@
+{
+  "table_selection": {
+    "page": "选择当页",
+    "all_pages": "选择全部页面",
+    "clear": "清空选择",
+    "row": "选择 {{name}}",
+    "controls": "行选择",
+    "count": "已选择 {{count}} 项",
+    "all_count": "已选择符合筛选条件的全部页面：{{count}} 项（排除 {{excluded}} 项）。",
+    "all_unknown": "已选择符合筛选条件的全部页面（排除 {{excluded}} 项），执行前将确认准确数量。",
+    "reset": "重置所选模型",
+    "test": "测试所选渠道",
+    "delete_disabled": "删除所选已停用渠道",
+    "delete": "删除所选日志",
+    "export": "导出所选日志",
+    "confirm": "对所选的 {{count}} 条记录执行此操作？仅处理本次确认的记录。",
+    "confirm_disabled": "检查所选的 {{count}} 个渠道，仅删除仍处于停用状态的渠道，跳过启用中的渠道。",
+    "scope": "搜索范围",
+    "unfiltered": "未筛选列表",
+    "empty": "没有可处理的所选记录，请先选择记录。",
+    "failed": "所选操作失败或无法确认最终结果。请先刷新列表再重试。",
+    "scope_changed": "筛选条件已更改，请重新选择记录。",
+    "finished": "所选操作已完成，请查看下方结果。",
+    "results": "所选操作结果",
+    "summary": "所选 {{total}} 项：成功 {{success}}，跳过 {{skipped}}，失败或拒绝 {{failed}}。",
+    "skipped_enabled": "该渠道处于启用状态，未删除。",
+    "missing": "该记录已不存在或无法访问。",
+    "deleted": "已删除 {{count}} 条所选日志。"
+  }
+}

@@ -85,6 +85,8 @@ export function MCPServersPage() {
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [appliedKeyword, setAppliedKeyword] = useState('');
+  const loadSequence = useRef(0);
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('id');
@@ -96,9 +98,7 @@ export function MCPServersPage() {
       {
         accessorKey: 'name',
         header: t('mcp.list.columns.name', 'Name'),
-        cell: ({ row }) => (
-          <NameWithId name={row.original.name} refId={serverRef(row.original)} idLabel={t('mcp.list.columns.id', 'ID')} />
-        ),
+        cell: ({ row }) => <NameWithId name={row.original.name} refId={serverRef(row.original)} idLabel={t('mcp.list.columns.id', 'ID')} />,
       },
       {
         accessorKey: 'status',
@@ -216,7 +216,8 @@ export function MCPServersPage() {
     updateSearchParamPage(nextPageIndex);
   };
 
-  const load = async (p = 0, size = pageSize, keyword = searchKeyword) => {
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword) => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
       // The backend owns keyword filtering (name / base URL / UUID, including a
@@ -233,6 +234,8 @@ export function MCPServersPage() {
           ...item.server,
           tool_count: item.tool_count,
         }));
+        if (sequence !== loadSequence.current) return;
+        setAppliedKeyword(keyword.trim());
         setData(rows);
         setTotal(totalCount ?? rows.length);
       } else {
@@ -249,7 +252,7 @@ export function MCPServersPage() {
         message: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   };
 
@@ -421,6 +424,8 @@ export function MCPServersPage() {
     >
       <Card>
         <EnhancedDataTable
+          selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
+          selectionDisabled={searchKeyword.trim() !== appliedKeyword}
           columns={columns}
           data={data}
           loading={loading}

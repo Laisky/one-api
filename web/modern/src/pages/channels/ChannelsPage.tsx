@@ -1,6 +1,5 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
@@ -9,10 +8,13 @@ import { useNotifications } from '@/components/ui/notifications';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { type SearchOption } from '@/components/ui/searchable-dropdown';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
+import { useAuthStore } from '@/lib/stores/auth';
+import { useTableSelection } from '@/hooks/useTableSelection';
+import { useSelectedChannelActions } from './useSelectedChannelActions';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Ban, CheckCircle, Copy, FlaskConical, Plus, RefreshCw, RotateCcw, Settings, Trash2 } from 'lucide-react';
+import { Ban, CheckCircle, Copy, FlaskConical, Plus, RotateCcw, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -39,7 +41,10 @@ export function ChannelsPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [bulkTesting, setBulkTesting] = useState(false);
+  const [appliedKeyword, setAppliedKeyword] = useState('');
+  const loadSequence = useRef(0);
+  const { user } = useAuthStore();
+  const selection = useTableSelection(JSON.stringify([user?.uuid || user?.username, user?.role, searchKeyword.trim(), appliedKeyword]));
   const [refreshingBalanceIds, setRefreshingBalanceIds] = useState<Set<string | number>>(new Set());
   const initializedRef = useRef(false);
   const skipFirstSortEffect = useRef(true);
@@ -92,28 +97,33 @@ export function ChannelsPage() {
     });
   };
 
-  const load = async (p = 0, size = pageSize) => {
+  /** load binds rows to the applied keyword and keeps page navigation within that result set. */
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword) => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/channel/?p=${p}&size=${size}`;
+      let url = keyword ? `/api/channel/search?keyword=${encodeURIComponent(keyword)}` : `/api/channel/?p=${p}&size=${size}`;
       if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-
+      if (keyword) url += `&size=${size}`;
       const res = await api.get(url);
-      const { success, data: responseData, total: responseTotal } = res.data;
-
-      if (success) {
-        setData(responseData || []);
-        setTotal(responseTotal || 0);
-        setPageIndex(p);
-        setPageSize(size);
-      }
+      if (sequence !== loadSequence.current) return;
+      const { success, data: responseData, total: responseTotal, message } = res.data;
+      if (!success) throw new Error(message || t('table_selection.failed'));
+      const rows: Channel[] = responseData || [];
+      // This search API returns the complete result set. Slice locally instead
+      // of falling back to an unfiltered API when changing pages.
+      setData(keyword ? rows.slice(p * size, (p + 1) * size) : rows);
+      setTotal(keyword ? rows.length : responseTotal || 0);
+      setAppliedKeyword(keyword);
+      setPageIndex(p);
+      setPageSize(size);
     } catch (error) {
-      console.error('Failed to load channels:', error);
+      if (sequence !== loadSequence.current) return;
+      console.error(`Failed to load channels: ${String(error)}`);
       setData([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   };
 
@@ -160,32 +170,7 @@ export function ChannelsPage() {
     }
   };
 
-  const performSearch = async () => {
-    if (!searchKeyword.trim()) {
-      return load(0, pageSize);
-    }
-
-    setLoading(true);
-    try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/channel/search?keyword=${encodeURIComponent(searchKeyword)}`;
-      if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-      url += `&size=${pageSize}`;
-
-      const res = await api.get(url);
-      const { success, data: responseData } = res.data;
-
-      if (success) {
-        setData(responseData || []);
-        setPageIndex(0);
-        setTotal(responseData?.length || 0);
-      }
-    } catch (error) {
-      console.error('Search failed:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const performSearch = () => load(0, pageSize, searchKeyword.trim());
 
   // Load initial data
   useEffect(() => {
@@ -391,36 +376,6 @@ export function ChannelsPage() {
     }
   };
 
-  const handleBulkTest = async () => {
-    setBulkTesting(true);
-    try {
-      // Unified API call - complete URL with /api prefix
-      const res = await api.get('/api/channel/test');
-      if (!res.data?.success) {
-        notify({
-          type: 'error',
-          title: t('channels.notifications.bulk_test_failed_title'),
-          message: res.data?.message || t('channels.notifications.test_failed_message'),
-        });
-        return;
-      }
-      load(pageIndex, pageSize);
-      notify({
-        type: 'info',
-        message: t('channels.notifications.bulk_test_started'),
-      });
-    } catch (error) {
-      console.error('Bulk test failed:', error);
-      notify({
-        type: 'error',
-        title: t('channels.notifications.bulk_test_failed_title'),
-        message: error instanceof Error ? error.message : t('channels.notifications.test_failed_message'),
-      });
-    } finally {
-      setBulkTesting(false);
-    }
-  };
-
   const handlePriorityUpdate = async (channel: Channel, newPriority: number) => {
     if ((channel.priority ?? 0) === newPriority) return;
     try {
@@ -501,42 +456,17 @@ export function ChannelsPage() {
     }
   };
 
-  const handleDeleteDisabled = async () => {
-    const confirmed = await confirmAction({
-      title: t('channels.confirm.delete_disabled_title', 'Delete Disabled Channels'),
-      description: t('channels.confirm.delete_disabled'),
-    });
-    if (!confirmed) return;
-
-    try {
-      // Unified API call - complete URL with /api prefix
-      const res = await api.delete('/api/channel/disabled');
-      if (!res.data?.success) {
-        notify({
-          type: 'error',
-          title: t('channels.notifications.delete_failed_title'),
-          message: res.data?.message || t('channels.notifications.delete_failed_message'),
-        });
-        return;
-      }
-      load(pageIndex, pageSize);
-      notify({
-        type: 'success',
-        message: t('channels.notifications.delete_disabled_success'),
-      });
-    } catch (error) {
-      console.error('Failed to delete disabled channels:', error);
-      notify({
-        type: 'error',
-        title: t('channels.notifications.delete_failed_title'),
-        message: error instanceof Error ? error.message : t('channels.notifications.delete_failed_message'),
-      });
-    }
-  };
-
-  const resetModels = useChannelModelReset(() => (searchKeyword.trim() ? performSearch() : load(pageIndex, pageSize)));
+  const resetModels = useChannelModelReset(() => load(pageIndex, pageSize));
+  const selectedActions = useSelectedChannelActions(selection, searchKeyword.trim(), () => load(pageIndex, pageSize));
+  const selectionDisabled = loading || selectedActions.busy || resetModels.busy || searchKeyword.trim() !== appliedKeyword;
+  const batchDisabled = selectionDisabled || !selection.hasSelection || selection.selectedCount(total) === 0;
   const renderResetAction = (channel: Channel, compact = false) => (
-    <ChannelModelResetButton channel={channel} compact={compact} disabled={loading || resetModels.busy} onReset={resetModels.resetChannel} />
+    <ChannelModelResetButton
+      channel={channel}
+      compact={compact}
+      disabled={loading || resetModels.busy || selectedActions.busy}
+      onReset={resetModels.resetChannel}
+    />
   );
 
   const columns = createChannelColumns({
@@ -581,47 +511,25 @@ export function ChannelsPage() {
   };
 
   const toolbarActions = (
-    <div className={cn('flex gap-2 flex-wrap max-w-full', isMobile ? 'flex-col w-full' : 'items-center')}>
-      <div className="flex gap-2 w-full md:w-auto">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                onClick={handleBulkTest}
-                disabled={bulkTesting || loading}
-                className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
-                size="sm"
-              >
-                {bulkTesting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
-                {isMobile ? t('channels.toolbar.test_all_mobile') : t('channels.toolbar.test_all')}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="start" className="max-w-[360px] whitespace-pre-line">
-              {t('channels.toolbar.test_all_help')}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <Button
-          variant="outline"
-          onClick={resetModels.resetAll}
-          disabled={resetModels.busy || loading}
-          className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
-          size="sm"
-        >
-          <RotateCcw className={cn('h-4 w-4', resetModels.busy && 'animate-spin')} />
-          {t('channel_reset.all')}
-        </Button>
-        <Button
-          variant="destructive"
-          onClick={handleDeleteDisabled}
-          className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
-          size="sm"
-        >
-          <Trash2 className="h-4 w-4" />
-          {isMobile ? t('channels.toolbar.delete_disabled_mobile') : t('channels.toolbar.delete_disabled')}
-        </Button>
-      </div>
+    <div className="flex flex-wrap gap-2">
+      <Button variant="outline" size="sm" disabled={batchDisabled} onClick={() => selectedActions.run('test')} className="gap-2">
+        <FlaskConical className="h-4 w-4" />
+        {t('table_selection.test')}
+      </Button>
+      <Button variant="outline" size="sm" disabled={batchDisabled} onClick={() => selectedActions.run('reset')} className="gap-2">
+        <RotateCcw className="h-4 w-4" />
+        {t('table_selection.reset')}
+      </Button>
+      <Button
+        variant="destructive"
+        size="sm"
+        disabled={batchDisabled}
+        onClick={() => selectedActions.run('delete_disabled')}
+        className="gap-2"
+      >
+        <Trash2 className="h-4 w-4" />
+        {t('table_selection.delete_disabled')}
+      </Button>
     </div>
   );
 
@@ -644,7 +552,10 @@ export function ChannelsPage() {
         <Card className="border-0 md:border shadow-none md:shadow-sm">
           <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
             {resetModels.report}
+            {selectedActions.report}
             <EnhancedDataTable
+              selection={selection}
+              selectionDisabled={selectionDisabled}
               columns={columns}
               data={data}
               floatingRowActions={(row) => (
@@ -711,6 +622,7 @@ export function ChannelsPage() {
 
       <ConfirmActionDialog />
       {resetModels.confirmation}
+      {selectedActions.confirmation}
     </>
   );
 }

@@ -1256,15 +1256,7 @@ func GetUserLogsCount(userId int, logType int, startTimestamp int64, endTimestam
 // SearchAllLogs performs a keyword search across all log entries with pagination.
 func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrder string) (logs []*Log, total int64, err error) {
 	db := excludeProvisionalScope(LOG_DB.Model(&Log{}))
-	if keyword != "" {
-		// FK uuid arms let an operator paste a user/token/channel UUID and get the rows
-		// that entity produced; the provisional exclusion above still ANDs.
-		if scoped, matched := applyUUIDKeyword(db, keyword, "uuid", "user_uuid", "token_uuid", "channel_uuid"); matched {
-			db = scoped
-		} else {
-			db = db.Where("(content LIKE ?)", "%"+keyword+"%")
-		}
-	}
+	db = applyLogKeyword(db, keyword)
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error
@@ -1280,15 +1272,7 @@ func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrd
 // SearchUserLogs searches logs owned by a specific user using a keyword filter.
 func SearchUserLogs(userId int, keyword string, startIdx int, num int, sortBy string, sortOrder string) (logs []*Log, total int64, err error) {
 	db := excludeProvisionalScope(LOG_DB.Model(&Log{}).Where("user_id = ?", userId))
-	if keyword != "" {
-		// FK uuid arms let the owner paste a token/channel UUID and get the rows it
-		// produced; the user_id scope above still ANDs, so nothing crosses owners.
-		if scoped, matched := applyUUIDKeyword(db, keyword, "uuid", "user_uuid", "token_uuid", "channel_uuid"); matched {
-			db = scoped
-		} else {
-			db = db.Where("(content LIKE ?)", "%"+keyword+"%")
-		}
-	}
+	db = applyLogKeyword(db, keyword)
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error

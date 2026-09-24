@@ -21,7 +21,7 @@ func channelResetTestRouter() *gin.Engine {
 	router := gin.New()
 	router.Use(func(c *gin.Context) { gmwSetLoggerForUUIDContract(c) })
 	router.POST("/api/channel/:id/reset_models", ResetChannelModels)
-	router.POST("/api/channel/reset_models", ResetAllChannelModels)
+	router.POST("/api/channel/reset_models", ResetSelectedChannelModels)
 	return router
 }
 
@@ -90,9 +90,9 @@ func TestResetChannelModelsRefusesConflict(t *testing.T) {
 	require.Equal(t, before, after)
 }
 
-// TestResetAllChannelModelsIncludesOffPageAndDisabled verifies global scope and
+// TestResetSelectedChannelModelsIncludesOffPageAndDisabled verifies global scope and
 // per-channel isolation when a compatible channel is refused between valid rows.
-func TestResetAllChannelModelsIncludesOffPageAndDisabled(t *testing.T) {
+func TestResetSelectedChannelModelsIncludesOffPageAndDisabled(t *testing.T) {
 	fixture, cleanup := setupUUIDContractTestEnvironment(t)
 	t.Cleanup(cleanup)
 	compatible := &model.Channel{Type: channeltype.OpenAICompatible, Name: "custom", Models: "private-model", Group: "default"}
@@ -101,7 +101,7 @@ func TestResetAllChannelModelsIncludesOffPageAndDisabled(t *testing.T) {
 	require.NoError(t, disabled.Insert())
 
 	recorder := httptest.NewRecorder()
-	channelResetTestRouter().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/channel/reset_models?p=0&size=1&keyword=uuid-contract", nil))
+	channelResetTestRouter().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/channel/reset_models?p=0&size=1&keyword=uuid-contract", strings.NewReader(`{"selection":{"mode":"ids","ids":["`+fixture.channel.UUID+`","`+compatible.UUID+`","`+disabled.UUID+`"]}}`)))
 	require.Equal(t, http.StatusOK, recorder.Code)
 	var payload struct {
 		Success bool                     `json:"success"`
