@@ -9,6 +9,9 @@ import (
 	"github.com/Laisky/one-api/common/errkind"
 )
 
+// ErrSelectedChannelMissing identifies a confirmed channel removed before its deletion transaction.
+var ErrSelectedChannelMissing = errors.New("This channel no longer exists.")
+
 // applyChannelSearch applies the list's existing prefix-name or exact-UUID search predicate.
 func applyChannelSearch(db *gorm.DB, keyword string) *gorm.DB {
 	if scoped, matched := applyUUIDKeyword(db, keyword, "uuid"); matched {
@@ -41,7 +44,9 @@ func SelectChannelTargets(ctx context.Context, selection ListSelection, keyword 
 }
 
 // DeleteSelectedDisabledChannel atomically checks the current status and removes one disabled channel and its abilities.
-// An enabled channel is skipped even when its status changed after the selection confirmation.
+// The id identifies the selected channel. The result reports deletion; enabled channels
+// return false without error, missing channels return ErrSelectedChannelMissing, and
+// database failures return wrapped errors. No failed transaction invalidates caches.
 func DeleteSelectedDisabledChannel(ctx context.Context, id int) (bool, error) {
 	var current Channel
 	deleted := false
@@ -50,6 +55,9 @@ func DeleteSelectedDisabledChannel(ctx context.Context, id int) (bool, error) {
 			return errors.Wrap(err, "lock selected channel before deletion")
 		}
 		if err := tx.Omit("key").First(&current, "id = ?", id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return errors.WithStack(ErrSelectedChannelMissing)
+			}
 			return errors.Wrap(err, "read selected channel before deletion")
 		}
 		if current.Status != ChannelStatusAutoDisabled && current.Status != ChannelStatusManuallyDisabled {

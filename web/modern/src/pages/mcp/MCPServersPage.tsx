@@ -86,6 +86,8 @@ export function MCPServersPage() {
   const [total, setTotal] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [appliedKeyword, setAppliedKeyword] = useState('');
+  // Keep the submitted query available before a page-reset effect can run.
+  const requestedKeyword = useRef('');
   const loadSequence = useRef(0);
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -216,7 +218,7 @@ export function MCPServersPage() {
     updateSearchParamPage(nextPageIndex);
   };
 
-  const load = async (p = 0, size = pageSize, keyword = appliedKeyword) => {
+  const load = async (p = 0, size = pageSize, keyword = requestedKeyword.current) => {
     const sequence = ++loadSequence.current;
     setLoading(true);
     try {
@@ -484,9 +486,13 @@ export function MCPServersPage() {
           onSearchValueChange={setSearchKeyword}
           onSearchSelect={(key) => navigate(`/mcps/edit/${key}`)}
           onSearchSubmit={() => {
-            setPageIndex(0);
+            requestedKeyword.current = searchKeyword.trim();
             searchServers(searchKeyword);
-            load(0, pageSize, searchKeyword);
+            if (pageIndex !== 0) {
+              handlePageChange(0, pageSize);
+            } else {
+              load(0, pageSize);
+            }
           }}
           searchPlaceholder={t('mcp.list.search_placeholder', 'Search MCP servers by name, URL, or UUID...')}
           allowSearchAdditions={true}

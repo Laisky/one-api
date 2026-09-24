@@ -151,4 +151,22 @@ describe('selected channel batch actions', () => {
     await screen.findByText('1 selected: 0 succeeded, 1 skipped, 0 failed or rejected.');
     expect(api.delete).not.toHaveBeenCalled();
   });
+
+  it('reports an already-removed selected channel as missing, not as enabled or failed', async () => {
+    post.mockImplementation(async (url) =>
+      url === '/api/channel/selection'
+        ? { data: { success: true, data: [rows[0]] } }
+        : { data: { success: true, data: [{ ...rows[0], success: false, skipped: true, message: 'This channel no longer exists.' }] } }
+    );
+    renderPage();
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Provider 1' }));
+    await chooseTableAction('Delete selected disabled channels');
+    await confirmBatch();
+    const report = await screen.findByRole('region', { name: 'Selected action results' });
+    expect(report).toHaveTextContent('1 selected: 0 succeeded, 1 skipped, 0 failed or rejected.');
+    expect(report).toHaveTextContent('This channel no longer exists.');
+    expect(report).not.toHaveTextContent('Failed to delete');
+    expect(report).not.toHaveTextContent('enabled');
+    expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+  });
 });

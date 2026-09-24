@@ -57,7 +57,8 @@ func ResolveChannelSelection(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": targets})
 }
 
-// DeleteSelectedDisabledChannels applies deletion to confirmed UUIDs only and reports enabled channels as skipped.
+// DeleteSelectedDisabledChannels applies deletion to confirmed UUIDs in c and returns
+// per-channel results, distinguishing enabled or already-missing skips from failures.
 func DeleteSelectedDisabledChannels(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	targets, err := selectedChannelTargets(c, true)
@@ -69,7 +70,10 @@ func DeleteSelectedDisabledChannels(c *gin.Context) {
 	for _, target := range targets {
 		deleted, err := model.DeleteSelectedDisabledChannel(gmw.Ctx(c), target.Id)
 		outcome := gin.H{"uuid": target.UUID, "name": target.Name, "success": deleted, "skipped": !deleted && err == nil}
-		if err != nil {
+		if errors.Is(err, model.ErrSelectedChannelMissing) {
+			outcome["skipped"] = true
+			outcome["message"] = model.ErrSelectedChannelMissing.Error()
+		} else if err != nil {
 			lg.Error("selected channel deletion failed", zap.String("channel_uuid", target.UUID), zap.Error(err))
 			outcome["message"] = "Failed to delete this channel."
 		}
