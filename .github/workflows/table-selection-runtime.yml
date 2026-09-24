@@ -1,0 +1,35 @@
+name: Table selection development runtime
+on:
+  push:
+    branches: [work/table-selection-runtime-20260924]
+    paths: [.github/workflows/table-selection-runtime.yml]
+permissions:
+  contents: read
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Package tracked source without local instructions or credentials
+        run: |
+          mkdir -p "$RUNNER_TEMP/selection-runtime"
+          git archive --format=tar HEAD common controller dto model relay router web scripts tools test cmd .github/scripts .github/workflows Makefile go.mod go.sum main.go main_test.go AGENTS.md .prettierrc .prettierignore > "$RUNNER_TEMP/selection-runtime/source.tar"
+      - name: Install locked Modern dependencies
+        working-directory: web/modern
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Package offline frontend runtime
+        run: |
+          tar -czf "$RUNNER_TEMP/selection-runtime/modern-dependencies.tar.gz" -C web/modern node_modules
+          cp "$(command -v node)" "$RUNNER_TEMP/selection-runtime/node"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: table-selection-development-runtime
+          path: ${{ runner.temp }}/selection-runtime
+          retention-days: 1
+          compression-level: 0
