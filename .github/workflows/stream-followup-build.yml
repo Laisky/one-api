@@ -21,6 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: 21dc0af145560e3ff2df01bcc8383212b8d2e628
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
@@ -36,7 +37,9 @@ jobs:
           mkdir -p "$out"
           git rev-parse HEAD > "$out/revision.txt"
           go version > "$out/toolchain.txt"
+          git diff --name-only ada1af2dd8f793a64360a6d1c6f5ecd87a9344a4 HEAD > "$out/source-differences.txt"
           go build -trimpath -o "$out/one-api-candidate" .
+          go version -m "$out/one-api-candidate" > "$out/build-info.txt"
           go build -trimpath -o "$out/stream-perf" ./tests/stream-perf
           go test -c -o "$out/openai-tests" ./relay/adaptor/openai
           git worktree add --detach "$RUNNER_TEMP/control" 36829cfdfddb29f6a7a2d4e20a42eb02b0f3ef4c
