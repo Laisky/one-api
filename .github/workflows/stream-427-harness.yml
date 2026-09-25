@@ -1,0 +1,51 @@
+name: Prepare stream 427 harness objects
+on:
+  push:
+    branches: [perf/stream-427-harness-20260925]
+permissions:
+  contents: write
+jobs:
+  objects:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Apply and validate harness improvements
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '6e718c9ae01bff04b39952ababc0b11b1d7729a410e94ab5f2cf22c168592fcd  tests/stream-perf/experiments/harness-updates.patch' | sha256sum -c -
+          git apply tests/stream-perf/experiments/harness-updates.patch
+          git diff --check
+          mkdir -p /tmp/stream-harness
+          cd tests/stream-perf
+          python3 -m unittest -v test_report test_content_gap_report test_failure_evidence 2>&1 | tee /tmp/stream-harness/tests.log
+      - name: Store only validated harness source blobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, urllib.request
+          paths = ['tests/stream-perf/report.py', 'tests/stream-perf/run.py', 'tests/stream-perf/test_content_gap_report.py', 'tests/stream-perf/test_failure_evidence.py']
+          result = {'source_revision': os.environ['GITHUB_SHA'], 'production_base': '57bd4834bad32629a9c6b068ec1c30dd0c4256a4', 'ref_updates': False, 'blobs': []}
+          for path in paths:
+              data = pathlib.Path(path).read_bytes()
+              expected = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+              request = urllib.request.Request('https://api.github.com/repos/Laisky/one-api/git/blobs', data=json.dumps({'content': data.decode(), 'encoding': 'utf-8'}).encode(), headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'}, method='POST')
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  blob = json.load(response)
+              assert blob['sha'] == expected
+              result['blobs'].append({'path': path, 'sha': expected, 'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)})
+          pathlib.Path('/tmp/stream-harness/blobs.json').write_text(json.dumps(result, indent=2) + '\n')
+          print('Stored', len(result['blobs']), 'verified harness blobs; no branch was updated.')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: stream-427-harness-objects
+          path: /tmp/stream-harness
+          retention-days: 14

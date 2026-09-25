@@ -1,0 +1,269 @@
+--- a/tests/stream-perf/report.py
++++ b/tests/stream-perf/report.py
+@@ -18,12 +18,12 @@
+ CELL_FIELDS = ('profile', 'concurrency', 'offered', 'chunks', 'chunk_bytes', 'pace_ms', 'rate', 'direct')
+ 
+ 
+-def metric(trial: dict, path: tuple[str, ...]) -> float:
+-    """metric reads one strictly positive finite measurement or rejects invalid evidence."""
++def metric(trial: dict, path: tuple[str, ...], *, allow_zero: bool = False) -> float:
++    """metric validates finite measurements; only content-gap metrics may legitimately be zero."""
+     value = trial
+     for part in path:
+         value = value[part]
+-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
++    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0 or (value == 0 and not allow_zero):
+         raise ValueError(f'invalid metric {path}: {value!r}')
+     return float(value)
+ 
+@@ -65,6 +65,12 @@
+     trials = summary.get('trials', [])
+     if not trials:
+         raise ValueError('no trials')
++    gap_present = ['max_inter_content_gap_ms' in trial for trial in trials]
++    if any(gap_present) and not all(gap_present):
++        raise ValueError('content-gap telemetry must be present in every trial or explicitly absent from all legacy trials')
++    metrics = dict(METRICS)
++    if all(gap_present):
++        metrics['max_inter_content_gap_p95_ms'] = ('max_inter_content_gap_ms', 'p95')
+     cells = defaultdict(dict)
+     binaries = defaultdict(set)
+     for trial in trials:
+@@ -96,13 +102,17 @@
+             if a['billing'] != b['billing']:
+                 raise ValueError('baseline/candidate durable billing differs')
+         cell = {**dict(zip(CELL_FIELDS, key)), 'pairs': expected_repeats, 'metrics': {}}
+-        for name, path in METRICS.items():
+-            baseline = [metric(pairs['baseline', repeat], path) for repeat in range(expected_repeats)]
+-            candidate = [metric(pairs['candidate', repeat], path) for repeat in range(expected_repeats)]
+-            deltas = [(b / a - 1) * 100 for a, b in zip(baseline, candidate)]
++        for name, path in metrics.items():
++            allow_zero = name == 'max_inter_content_gap_p95_ms'
++            baseline = [metric(pairs['baseline', repeat], path, allow_zero=allow_zero) for repeat in range(expected_repeats)]
++            candidate = [metric(pairs['candidate', repeat], path, allow_zero=allow_zero) for repeat in range(expected_repeats)]
++            deltas = [(b / a - 1) * 100 for a, b in zip(baseline, candidate)] if all(baseline) else []
+             cell['metrics'][name] = {'baseline_median': statistics.median(baseline),
+-                'candidate_median': statistics.median(candidate), 'paired_change_pct_median': statistics.median(deltas),
+-                'paired_change_pct_min': min(deltas), 'paired_change_pct_max': max(deltas)}
++                'candidate_median': statistics.median(candidate),
++                'paired_change_abs_median': statistics.median(b - a for a, b in zip(baseline, candidate)),
++                'paired_change_pct_median': statistics.median(deltas) if deltas else None,
++                'paired_change_pct_min': min(deltas) if deltas else None,
++                'paired_change_pct_max': max(deltas) if deltas else None}
+         result.append(cell)
+     return result
+ 
+@@ -131,6 +141,19 @@
+             f"{m['ttft_p95_ms']['candidate_median']:.2f} | {m['successful_rps']['paired_change_pct_min']:+.2f}% to "
+             f"{m['successful_rps']['paired_change_pct_max']:+.2f}% | {m['gateway_cpu_ms_per_success']['paired_change_pct_min']:+.2f}% to "
+             f"{m['gateway_cpu_ms_per_success']['paired_change_pct_max']:+.2f}% |")
++    if cells and 'max_inter_content_gap_p95_ms' in cells[0]['metrics']:
++        lines.extend(['', '## Streaming continuity', '',
++            'Each request records its largest gap between observed nonempty content deltas. The metric below is the p95 of those request maxima, not a pooled token-gap percentile. First-content latency remains separate.',
++            'Zero-baseline percentage changes are undefined; absolute paired differences remain available.', '',
++            '| Profile | Concurrency | p95 request-max gap ms baseline / candidate | Paired absolute change ms | Paired change |',
++            '| --- | ---: | ---: | ---: | ---: |'])
++        for cell in cells:
++            gap = cell['metrics']['max_inter_content_gap_p95_ms']
++            change = gap['paired_change_pct_median']
++            percent = 'undefined (zero baseline)' if change is None else f'{change:+.2f}%'
++            lines.append(f"| {cell['profile']} | {cell['concurrency']} | {gap['baseline_median']:.2f} / {gap['candidate_median']:.2f} | {gap['paired_change_abs_median']:+.2f} | {percent} |")
++    else:
++        lines.extend(['', 'Content-gap telemetry was not captured in this legacy study; no continuity conclusion can be inferred.'])
+     return '\n'.join(lines) + '\n'
+ 
+ 
+--- a/tests/stream-perf/run.py
++++ b/tests/stream-perf/run.py
+@@ -234,17 +234,28 @@
+     return row
+ 
+ 
++class BillingMismatch(AssertionError):
++    """BillingMismatch retains credential-free expected and observed durable counters for failed experiments."""
++    def __init__(self, expected: int, observed: tuple[int, int], reason: str):
++        """__init__ records only numeric accounting evidence and a fixed reason, never database or request secrets."""
++        self.evidence = {'expected_requests': expected, 'observed_requests': observed[1],
++                         'observed_used_quota': observed[0], 'reason': reason}
++        super().__init__(f'{reason}: expected {expected} requests, observed {observed[1]}')
++
++
+ def wait_usage(database: Path, count: int) -> tuple[int, int]:
+-    """wait_usage requires all completed requests to reach durable billing before accepting an experiment."""
++    """wait_usage requires exact durable accounting within ten seconds; a mismatch remains a hard failure."""
+     deadline = time.monotonic() + 10
+-    while time.monotonic() < deadline:
+-        usage = usage_snapshot(database)
++    usage = usage_snapshot(database)
++    while True:
+         if usage[1] == count:
+             return usage
+         if usage[1] > count:
+-            raise AssertionError('more billed requests than offered; possible retry or duplicate billing')
++            raise BillingMismatch(count, usage, 'more billed requests than expected')
++        if time.monotonic() >= deadline:
++            raise BillingMismatch(count, usage, 'completed requests did not settle in durable billing')
+         time.sleep(.01)
+-    raise AssertionError('completed requests did not settle in durable billing')
++        usage = usage_snapshot(database)
+ 
+ 
+ def measure(args: argparse.Namespace, binary: Path, label: str, repeat: int, concurrency: int, profile: str) -> dict:
+@@ -341,18 +352,28 @@
+     summary.update(schema_version=2, complete=False, started_at_utc=datetime.now(timezone.utc).isoformat(),
+                    configuration={key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()})
+     checkpoint(summary, args.output)
++    stage = {'phase': 'qualification'}
+     try:
+         for label, binary in variants:
+             if not args.skip_qualification:
++                stage = {'phase': 'qualification', 'label': label}
+                 summary['qualification'][label] = qualify(args, binary, label)
+                 checkpoint(summary, args.output)
+         for repeat in range(args.repeats):
+             for profile in profiles:
+                 for concurrency in levels:
+                     for label, binary in variants[::1 if repeat % 2 == 0 else -1]:
++                        stage = {'phase': 'measurement', 'label': label, 'profile': profile,
++                                 'concurrency': concurrency, 'repeat': repeat}
+                         summary['trials'].append(measure(args, binary, label, repeat, concurrency, profile))
+                         checkpoint(summary, args.output)
+         summary['complete'] = True
++    except Exception as error:
++        # Do not copy arbitrary exception text: it can contain a fixture URL or secret.
++        summary['failure'] = {**stage, 'error_type': type(error).__name__}
++        if isinstance(error, BillingMismatch):
++            summary['failure']['billing'] = error.evidence
++        raise
+     finally:
+         summary['finished_at_utc'] = datetime.now(timezone.utc).isoformat()
+         checkpoint(summary, args.output)
+--- /dev/null
++++ b/tests/stream-perf/test_content_gap_report.py
+@@ -0,0 +1,65 @@
++"""Behavior tests keep stream continuity visible without fabricating missing legacy telemetry."""
++import math
++import unittest
++
++import report
++from test_report import fixture
++
++
++class ContentGapReportTests(unittest.TestCase):
++    """ContentGapReportTests cover regressions, zero gaps, missing fields and invalid evidence."""
++
++    def test_reports_continuity_regression_even_with_faster_throughput(self):
++        """test_reports_continuity_regression_even_with_faster_throughput prevents a throughput-only verdict."""
++        study = fixture()
++        for trial in study['trials']:
++            trial['max_inter_content_gap_ms'] = {'p95': 10 if trial['label'] == 'baseline' else 30}
++        cells = report.compare(study, 3)
++        gap = cells[0]['metrics']['max_inter_content_gap_p95_ms']
++        self.assertEqual(gap['paired_change_pct_median'], 200)
++        self.assertEqual(gap['paired_change_abs_median'], 20)
++        text = report.markdown(cells)
++        self.assertIn('Streaming continuity', text)
++        self.assertIn('+200.00%', text)
++        self.assertIn('not a pooled token-gap percentile', text)
++
++    def test_legacy_is_explicitly_unmeasured(self):
++        """test_legacy_is_explicitly_unmeasured keeps historical records usable without inventing zero gaps."""
++        cells = report.compare(fixture(), 3)
++        self.assertNotIn('max_inter_content_gap_p95_ms', cells[0]['metrics'])
++        self.assertIn('not captured in this legacy study', report.markdown(cells))
++
++    def test_mixed_telemetry_is_rejected(self):
++        """test_mixed_telemetry_is_rejected prevents omission of an unfavorable variant or repetition."""
++        for missing in range(6):
++            with self.subTest(missing=missing):
++                study = fixture()
++                for index, trial in enumerate(study['trials']):
++                    if index != missing:
++                        trial['max_inter_content_gap_ms'] = {'p95': 5}
++                with self.assertRaisesRegex(ValueError, 'every trial'):
++                    report.compare(study, 3)
++
++    def test_zero_gap_keeps_absolute_comparison(self):
++        """test_zero_gap_keeps_absolute_comparison handles single-content streams without dividing by zero."""
++        study = fixture()
++        for trial in study['trials']:
++            trial['max_inter_content_gap_ms'] = {'p95': 0 if trial['label'] == 'baseline' else 2}
++        cells = report.compare(study, 3)
++        gap = cells[0]['metrics']['max_inter_content_gap_p95_ms']
++        self.assertIsNone(gap['paired_change_pct_median'])
++        self.assertIsNone(gap['paired_change_pct_min'])
++        self.assertIsNone(gap['paired_change_pct_max'])
++        self.assertEqual(gap['paired_change_abs_median'], 2)
++        self.assertIn('undefined (zero baseline)', report.markdown(cells))
++
++    def test_invalid_gap_values_are_rejected(self):
++        """test_invalid_gap_values_are_rejected excludes booleans, negative durations and nonfinite numbers."""
++        for invalid in (True, False, -1, math.nan, math.inf, -math.inf, '1', None):
++            with self.subTest(value=invalid):
++                study = fixture()
++                for trial in study['trials']:
++                    trial['max_inter_content_gap_ms'] = {'p95': 1}
++                study['trials'][-1]['max_inter_content_gap_ms']['p95'] = invalid
++                with self.assertRaises(ValueError):
++                    report.compare(study, 3)
+--- /dev/null
++++ b/tests/stream-perf/test_failure_evidence.py
+@@ -0,0 +1,58 @@
++"""Keep failed billing trials identifiable without weakening admission or exposing fixture credentials."""
++import json
++from pathlib import Path
++import tempfile
++import unittest
++from unittest import mock
++
++import run
++
++
++class FailureEvidenceTests(unittest.TestCase):
++    """FailureEvidenceTests verify exact accounting gates and durable incomplete-study checkpoints."""
++
++    def test_wait_usage_reports_timeout_counters(self):
++        """test_wait_usage_reports_timeout_counters preserves the observed count rather than reporting success."""
++        with mock.patch.object(run, 'usage_snapshot', return_value=(120, 9)), \
++             mock.patch.object(run.time, 'monotonic', side_effect=[0, 10]):
++            with self.assertRaises(run.BillingMismatch) as caught:
++                run.wait_usage(Path('/unused'), 10)
++        self.assertEqual(caught.exception.evidence['expected_requests'], 10)
++        self.assertEqual(caught.exception.evidence['observed_requests'], 9)
++        self.assertEqual(caught.exception.evidence['observed_used_quota'], 120)
++
++    def test_wait_usage_rejects_duplicate_and_accepts_exact_counts(self):
++        """test_wait_usage_rejects_duplicate_and_accepts_exact_counts checks both sides of the equality gate."""
++        with mock.patch.object(run, 'usage_snapshot', return_value=(120, 11)):
++            with self.assertRaisesRegex(run.BillingMismatch, 'more billed'):
++                run.wait_usage(Path('/unused'), 10)
++        with mock.patch.object(run, 'usage_snapshot', return_value=(120, 10)):
++            self.assertEqual(run.wait_usage(Path('/unused'), 10), (120, 10))
++
++    def test_failed_trial_is_checkpointed_without_credentials(self):
++        """test_failed_trial_is_checkpointed_without_credentials keeps completed trials and failing coordinates separate."""
++        for failure in (run.BillingMismatch(272, (123, 271), 'unsettled'), RuntimeError('secret-must-not-be-published')):
++            with self.subTest(error=type(failure).__name__), tempfile.TemporaryDirectory() as directory:
++                root = Path(directory)
++                binary = root / 'binary'
++                binary.write_bytes(b'fixture binary, never executed')
++                output = root / 'result'
++                argv = ['run.py', '--binary', str(binary), '--driver', str(binary), '--token-cache', str(root),
++                        '--output', str(output), '--concurrency', '8,64', '--profiles', 'saturated', '--repeats', '1']
++                with mock.patch('sys.argv', argv), mock.patch.object(run, 'qualify', return_value={'normal': 0}), \
++                     mock.patch.object(run, 'measure', side_effect=[{'completed': 128}, failure]):
++                    with self.assertRaises(type(failure)):
++                        run.main()
++                saved = json.loads((output / 'summary.json').read_text())
++                self.assertIs(saved['complete'], False)
++                self.assertEqual(saved['trials'], [{'completed': 128}])
++                self.assertEqual(saved['failure']['concurrency'], 64)
++                self.assertEqual(saved['failure']['label'], 'candidate')
++                self.assertEqual(saved['failure']['phase'], 'measurement')
++                self.assertIn('finished_at_utc', saved)
++                self.assertNotIn('secret-must-not-be-published', json.dumps(saved))
++                if isinstance(failure, run.BillingMismatch):
++                    self.assertEqual(saved['failure']['billing']['observed_requests'], 271)
++                else:
++                    self.assertNotIn('billing', saved['failure'])
++                self.assertFalse((output / 'summary.json.tmp').exists())
