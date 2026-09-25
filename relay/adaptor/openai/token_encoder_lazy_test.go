@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pkoukk/tiktoken-go"
+	"github.com/Laisky/one-api/internal/tokenizer"
 	"github.com/stretchr/testify/require"
 )
 
