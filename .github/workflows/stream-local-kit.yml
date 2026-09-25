@@ -1,0 +1,50 @@
+name: Isolated streaming development kit
+on:
+  push:
+    branches: [perf/stream-local-kit-20260925]
+permissions:
+  contents: read
+jobs:
+  kit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 299deffa58aa1e87aa699a038484cbdaae3ab450
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - name: Prepare immutable offline development kit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/kit"
+          export GOMODCACHE="$RUNNER_TEMP/modules"
+          go mod download
+          go build -trimpath -o "$RUNNER_TEMP/kit/one-api-control" .
+          go build -trimpath -o "$RUNNER_TEMP/kit/stream-perf" ./tests/stream-perf
+          python3 tests/stream-perf/cache_tokens.py --cache "$RUNNER_TEMP/kit/token-cache"
+          git rev-parse HEAD > "$RUNNER_TEMP/kit/revision.txt"
+          git rev-parse HEAD^{tree} > "$RUNNER_TEMP/kit/tree.txt"
+          go version > "$RUNNER_TEMP/kit/toolchain.txt"
+          go version -m "$RUNNER_TEMP/kit/one-api-control" > "$RUNNER_TEMP/kit/build-info.txt"
+          if git config --local --get-regexp 'http\..*extraheader'; then
+            echo 'Unexpected retained checkout authentication' >&2
+            exit 1
+          fi
+          tar -czf "$RUNNER_TEMP/kit/source-git.tar.gz" --exclude='./.git/hooks' --exclude='./.git/logs' .
+          tar -czf "$RUNNER_TEMP/kit/go.tar.gz" -C "$(go env GOROOT)" .
+          tar -czf "$RUNNER_TEMP/kit/modules.tar.gz" -C "$GOMODCACHE" .
+          cd "$RUNNER_TEMP/kit"
+          sha256sum one-api-control stream-perf *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: stream-local-kit
+          path: ${{ runner.temp }}/kit
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
