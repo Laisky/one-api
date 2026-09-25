@@ -29,6 +29,14 @@ git -C "$root" worktree add --detach "$temporary/baseline" "$baseline"
 git -C "$root" worktree add --detach "$temporary/candidate" "$candidate"
 printf '%s\n' "$baseline" > "$output/build/baseline-commit.txt"
 printf '%s\n' "$candidate" > "$output/build/candidate-commit.txt"
+# A supplied cache is explicit offline input, not permission to download or repair assets.
+# Resolve it in the caller's directory before any command enters a detached worktree.
+token_cache="$output/build/token-cache"
+if [[ -n "${TIKTOKEN_CACHE_DIR:-}" ]]; then
+  token_cache=$(realpath -m "$TIKTOKEN_CACHE_DIR")
+  python3 "$temporary/candidate/tests/stream-perf/cache_tokens.py" --cache "$token_cache" --check-only
+fi
+printf '%s\n' "$token_cache" > "$output/build/token-cache-path.txt"
 # Pin the candidate toolchain; auto-selection must not silently build the baseline with another Go version.
 toolchain=$(go env GOVERSION)
 export GOTOOLCHAIN="$toolchain"
@@ -46,10 +54,12 @@ done
   cd "$temporary/candidate"
   go build -trimpath -o "$output/build/stream-perf" ./tests/stream-perf
 )
-python3 "$temporary/candidate/tests/stream-perf/cache_tokens.py" --cache "$output/build/token-cache"
+if [[ -z "${TIKTOKEN_CACHE_DIR:-}" ]]; then
+  python3 "$temporary/candidate/tests/stream-perf/cache_tokens.py" --cache "$token_cache"
+fi
 python3 -m unittest discover -s "$temporary/candidate/tests/stream-perf" -p 'test_*.py'
 sha256sum "$output/build/one-api-baseline" "$output/build/one-api-candidate" "$output/build/stream-perf" > "$output/build/sha256.txt"
 python3 "$temporary/candidate/tests/stream-perf/run.py" \
   --binary "$output/build/one-api-candidate" --baseline "$output/build/one-api-baseline" \
-  --driver "$output/build/stream-perf" --token-cache "$output/build/token-cache" \
+  --driver "$output/build/stream-perf" --token-cache "$token_cache" \
   --output "$output/results" "$@"

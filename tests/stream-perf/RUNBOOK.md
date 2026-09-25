@@ -6,6 +6,8 @@ Continue this work only in [PR #427](https://github.com/Laisky/one-api/pull/427)
 
 The retained production revision is `299deffa58aa1e87aa699a038484cbdaae3ab450`. Its [full CI run 36084278200](https://github.com/Laisky/one-api/actions/runs/36084278200) passed. Later documentation or harness changes do not turn that run into evidence for a newer head: inspect the current PR checks separately. Frontend tests at the retained revision were path-filtered, not rebuilt.
 
+Consolidation is recorded in this PR, and the offline comparison-cache repair is implemented in this tree. [Consolidation validation](results/20260925-consolidation/VALIDATION.md) records 37 passing Python tests, the old-script negative controls and a 64-request retained-gateway smoke. These are recovery/correctness results, not a new performance improvement.
+
 Retained work: streaming E2E framework; Builder accumulation; already-buffered SSE-line fast path; equivalent ordinary token encoding; GPT-5.2 sampling/default fixes; host/offline-cache prerequisites; SQLite usage-statistics busy retry; gated real-HTTP delivery tests; inter-content-gap telemetry; and failed-study accounting evidence. Keep authentication, quota, durable usage accounting, logging and tracing enabled.
 
 The native SSE flush-coalescing candidate `3d671dd7a9fe18865aad1b05be4527f5295d8749` was **rejected**, not left awaiting adoption. Its throughput gains did not excuse its first-content latency regression. Do not restore its buffered writer simply because a helper branch is ahead of the PR.
@@ -56,10 +58,16 @@ Keep the existing [predeclared rule](https://github.com/Laisky/one-api/pull/427#
 
 The owner prioritizes unchanged behavior, lower memory and lower latency. A throughput improvement alone is not sufficient. Profile one selected workload before proposing a new production change; keep first-content delivery, cancellation, framing and accounting as hard constraints.
 
-## Next actions and stop/restart protocol
+## Offline comparison and next action
 
-The next small deliverable is to make `compare.sh` reuse an explicitly configured, verified offline tokenizer cache, with real-worktree behavior tests. This changes setup, not production streaming behavior, and earns no new performance claim. Commit it directly to this PR and check that head's CI before starting another optimization.
+`compare.sh` now honors an explicit tokenizer cache, resolves a relative path before entering a detached worktree, checks it without downloads or writes, and rejects missing/corrupt assets before compiling. It records the resolved location in `build/token-cache-path.txt`. Without `TIKTOKEN_CACHE_DIR`, explicit preparation into the new experiment directory retains its original behavior. The Go toolchain and dependencies must still be available locally for a fully offline build.
 
-After that, recover/verify the exact retained source; select one profiled CPU/allocation bottleneck; add a behavior regression test; and evaluate one candidate in detached **local** worktrees. Keep a rejected candidate as an unapplied patch plus complete evidence. Only accepted code belongs on this PR. No new remote branches or temporary third workflow.
+```sh
+export TIKTOKEN_CACHE_DIR=/tmp/verified-stream-token-cache
+bash tests/stream-perf/compare.sh 299deffa58aa1e87aa699a038484cbdaae3ab450 /tmp/new-stream-study \
+  --repeats 5 --concurrency 8,64 --requests 256 --paced-requests 512
+```
+
+Do not run the full comparison merely to benchmark this harness-only change. First check the current PR head's CI. Then recover/verify the exact retained source; select one profiled CPU/allocation bottleneck; add a behavior regression test; and evaluate one candidate in detached **local** worktrees. Keep a rejected candidate as an unapplied patch plus complete evidence. Only accepted code belongs on this PR. No new remote branches or temporary third workflow.
 
 Before stopping a session, update this file's current state and next action, commit completed work, and record exact source/binary identities and evidence location in the PR. An interrupted benchmark stays incomplete. Do not replace known results with estimates or leave the only recovery instructions in chat.
