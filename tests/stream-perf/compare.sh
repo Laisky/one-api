@@ -59,7 +59,9 @@ if [[ -z "${TIKTOKEN_CACHE_DIR:-}" ]]; then
 fi
 python3 -m unittest discover -s "$temporary/candidate/tests/stream-perf" -p 'test_*.py'
 sha256sum "$output/build/one-api-baseline" "$output/build/one-api-candidate" "$output/build/stream-perf" > "$output/build/sha256.txt"
-python3 "$temporary/candidate/tests/stream-perf/run.py" \
+# Managed identities are authoritative even when caller options repeat or abbreviate them.
+# Put workload options first; argparse uses the last value for each managed option.
+python3 "$temporary/candidate/tests/stream-perf/run.py" "$@" \
   --binary "$output/build/one-api-candidate" --baseline "$output/build/one-api-baseline" \
   --driver "$output/build/stream-perf" --token-cache "$token_cache" \
-  --output "$output/results" "$@"
+  --output "$output/results"
