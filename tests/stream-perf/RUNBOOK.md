@@ -2,72 +2,66 @@
 
 ## Authority and current state
 
-Continue this work only in [PR #427](https://github.com/Laisky/one-api/pull/427), branch `perf/stream-chat-e2e-20260924`. The owner requested consolidation on September 25, 2026. Do not create another remote experiment branch or PR, merge historical experiment branches wholesale, force-push this branch, or change `main` directly.
+Continue only in [PR #427](https://github.com/Laisky/one-api/pull/427), branch `perf/stream-chat-e2e-20260924`. Do not create remote experiment branches or PRs, merge historical branches wholesale, force-push, delete evidence refs, or change main directly. The owner requires unchanged behavior, lower memory and lower latency; throughput alone is insufficient.
 
-The retained production revision is `299deffa58aa1e87aa699a038484cbdaae3ab450`. Its [full CI run 36084278200](https://github.com/Laisky/one-api/actions/runs/36084278200) passed. Later documentation or harness changes do not turn that run into evidence for a newer head: inspect the current PR checks separately. Frontend tests at the retained revision were path-filtered, not rebuilt.
+Retained production remains `299deffa58aa1e87aa699a038484cbdaae3ab450`. Commit `88fdd66985af1ff7bfce8b6998c1923f352e3b11` fixes managed comparison arguments. Its [full CI run 36090527420](https://github.com/Laisky/one-api/actions/runs/36090527420) passed; the preceding consolidation head d1f7c95 also passed run 36088839322. Always inspect the actual current head: an earlier green run does not certify a later evidence/test commit. Frontend tests were path-filtered, not rebuilt.
 
-Consolidation is recorded in this PR, and the offline comparison-cache repair is implemented in this tree. [Consolidation validation](results/20260925-consolidation/VALIDATION.md) records 37 passing Python tests, the old-script negative controls and a 64-request retained-gateway smoke. These are recovery/correctness results, not a new performance improvement.
+**Latest iteration is complete and the candidate is rejected.** [Report, exact-source limitations and reproduction](results/20260925-copy/REPORT.md), [40-run ledger](results/20260925-copy/runs.csv), [identities](results/20260925-copy/manifest.json), and [unapplied production patch](results/20260925-copy/rejected-production.patch) are committed together. The full per-request/qualification/profile archive is linked in the PR discussion and conversation, not embedded in the repository.
 
-Retained work: streaming E2E framework; Builder accumulation; already-buffered SSE-line fast path; equivalent ordinary token encoding; GPT-5.2 sampling/default fixes; host/offline-cache prerequisites; SQLite usage-statistics busy retry; gated real-HTTP delivery tests; inter-content-gap telemetry; and failed-study accounting evidence. Keep authentication, quota, durable usage accounting, logging and tracing enabled.
+The redundant-copy candidate completed 40 trials / 15,360 verified requests, zero failures/drops, exact paired usage. It fails both the long/c8 TTFT gate (+17.75% / +12.02 ms) and the material, repeat-consistent long-stream benefit gate. Long/c64 RPS gained 11.64% but improved in only 3/5 pairs; long/c8 CPU improved 3.62%, below 5%. Allocation microbenchmarks are not evidence of lower end-to-end RSS. Do not reapply this patch or the older rejected flush-coalescing implementation.
 
-The native SSE flush-coalescing candidate `3d671dd7a9fe18865aad1b05be4527f5295d8749` was **rejected**, not left awaiting adoption. Its throughput gains did not excuse its first-content latency regression. Do not restore its buffered writer simply because a helper branch is ahead of the PR.
+Retained from this iteration: authoritative binary/baseline/driver/cache/output arguments, three negative-controlled option regressions, and differential SSE byte/framing/header/error/flush and normalization tests. All 40 Python tests passed locally. The new Go guards passed three race repetitions on retained production; deliberately broken flush/normalization controls failed. Six archive-only audit self-tests passed, but are not claimed as extra repository CI tests. The copy candidate's zero-allocation assertion is not retained.
+
+Earlier retained work: streaming E2E framework, Builder accumulation, already-buffered SSE-line fast path, equivalent ordinary token encoding, GPT-5.2 sampling/default fixes, host/offline-cache checks, bounded SQLite usage-statistics busy retry, gated HTTP delivery tests, content-gap telemetry and failed-study accounting evidence. Authentication, quota, exact token counting, logging, tracing and durable accounting stay enabled.
 
 ## Reconciled branch inventory
 
-Snapshot verified against GitHub on September 25, 2026. The search for branch names containing `stream` returned these nine branches; the continuation page was empty. Ahead/behind counts compare each recorded tip with `299deff`, not with a later documentation commit. Diverged comparisons describe changes from their merge base and are not instructions to overwrite the PR tree.
+These nine names and original tips were inspected during consolidation on September 25, 2026; the continuation page was empty. The delivery branch has advanced since this historical snapshot. The eight auxiliary refs are frozen by execution policy, not deleted or technically archived. Ahead-of-PR does not mean approved.
 
-| Branch | Recorded tip | Ahead / behind | Disposition |
-| --- | --- | ---: | --- |
-| `perf/stream-chat-e2e-20260924` | `299deffa58aa1e87aa699a038484cbdaae3ab450` | 0 / 0 | Sole active delivery branch. |
-| `perf/stream-427-acceptance-20260925` | `dc0bff5f4d14b8335ee8c4311c80f8c68296fbb7` | 2 / 1 | Historical delivery/SQLite validation. The PR retains the plain-code repair and tests; do not merge its temporary workflow or encoded patch. |
-| `perf/stream-427-harness-20260925` | `2644bd4e2b177cb9486f8e702b4680f2a89f769a` | 1 / 1 | Historical content-gap/failed-study patch carrier. The corresponding reporter/runner changes and tests are already in the retained PR. Do not reapply the carrier or its workflow. |
-| `perf/stream-427-immutable-20260925` | `1d58202a0d74e85a39e9760ad2d20710847e159b` | 2 / 0 | Builds the rejected coalescing candidate. Ahead is not acceptance. Keep its patch and measurements as historical evidence, not production code. |
-| `perf/stream-427-objects-20260925` | `dbef1e4b802bc44b4d6c6b78cf84e0f6dafcee3e` | 3 / 1 | Historical Git-blob preparation, based on acceptance work. It explicitly stored source objects without moving a ref. No additional production feature to merge. |
-| `perf/stream-coalescing-experiment-20260924` | `dde3342a15716f1ec2b2e2231c5f76e491aad0cf` | 1 / 1 | Older coalescing patch carrier and temporary build workflow; superseded by the completed rejection experiment. |
-| `perf/stream-local-kit-20260925` | `276df2f6301a64f7b7a40a19da3b3840ba14ddd8` | 1 / 0 | Tooling export only. Successful artifact is larger than the connector download limit; use the recovered smaller runtime below. Do not merge its workflow. |
-| `work/stream-perf-followup-20260924` | `201852a4f00b47aabaac5e0d88afe5505909f037` | 1 / 3 | Extra changes are build-workflow-only; production follow-up is already retained in the PR. |
-| `work/stream-perf-runtime-20260924` | `f64ce699fff8d81299e4d1c6e00beca6812930a0` | 1 / 13 | Historical offline runtime export; reuse its artifact, not its obsolete source revision as the new baseline. |
+| Branch | Original inspected tip | Disposition |
+| --- | --- | --- |
+| `perf/stream-chat-e2e-20260924` | `299deffa58aa1e87aa699a038484cbdaae3ab450` | Sole active delivery branch; use its current head. |
+| `perf/stream-427-acceptance-20260925` | `dc0bff5f4d14b8335ee8c4311c80f8c68296fbb7` | Delivery/SQLite repair already retained; do not merge temporary workflow or encoded patch. |
+| `perf/stream-427-harness-20260925` | `2644bd4e2b177cb9486f8e702b4680f2a89f769a` | Reporter, gap and failure-evidence work already retained; no carrier workflow to merge. |
+| `perf/stream-427-immutable-20260925` | `1d58202a0d74e85a39e9760ad2d20710847e159b` | Builds rejected coalescing code; preserve as evidence, not production. |
+| `perf/stream-427-objects-20260925` | `dbef1e4b802bc44b4d6c6b78cf84e0f6dafcee3e` | Historical source-blob preparation; no outstanding production feature. |
+| `perf/stream-coalescing-experiment-20260924` | `dde3342a15716f1ec2b2e2231c5f76e491aad0cf` | Superseded experimental patch/workflow. |
+| `perf/stream-local-kit-20260925` | `276df2f6301a64f7b7a40a19da3b3840ba14ddd8` | Tooling export only; archive exceeds connector download limit. |
+| `work/stream-perf-followup-20260924` | `201852a4f00b47aabaac5e0d88afe5505909f037` | Extra changes are build-workflow-only; production follow-up is retained. |
+| `work/stream-perf-runtime-20260924` | `f64ce699fff8d81299e4d1c6e00beca6812930a0` | Reuse runtime artifact, not obsolete source as a new baseline. |
 
-These eight auxiliary refs are frozen by execution policy, not deleted or technically archived in GitHub. Preserve their exact tips until evidence retention and owner-authorized deletion are settled. No unresolved candidate is made safe by consolidating its branch name.
+## Evidence and source recovery
 
-## Evidence and environment recovery
+[Original 142-trial report](results/20260924/REPORT.md), [76-trial ordinary-encoding follow-up](results/20260924-followup/REPORT.md), [coalescing rejection and 40-run ledger](https://github.com/Laisky/one-api/pull/427#issuecomment-5825675787), and [consolidation validation](results/20260925-consolidation/VALIDATION.md) remain distinct studies. Do not pool measurements from different sessions/CPUs or relabel historical binaries.
 
-- [Original 142-trial study](results/20260924/REPORT.md): immutable historical baseline and Builder/SSE improvements; retains the rejected formatting shortcut and adverse cells.
-- [76-trial ordinary-encoding follow-up](results/20260924-followup/REPORT.md): separate host/session and binaries; do not pool its absolute capacity with the original study.
-- [Completed coalescing rejection report and 40-run ledger](https://github.com/Laisky/one-api/pull/427#issuecomment-5825675787): 40 A/B trials, 15,360 verified requests, rejected latency tradeoff. [Predeclared decision rule](https://github.com/Laisky/one-api/pull/427#issuecomment-5825472402).
-- The latest full raw archive was reported separately as `one-api-pr427-20260925-evidence.zip`, SHA-256 `f4bb2eb295c9c438c236a136bf78b121d76615760fdcdeffe804c4dfc17b4bad`. It is **not a committed repository file**. The PR discussion is accessible; do not claim that the raw archive has been recovered or independently reverified from that discussion alone.
+The older raw archive `one-api-pr427-20260925-evidence.zip` was reported with SHA-256 `f4bb2eb295c9c438c236a136bf78b121d76615760fdcdeffe804c4dfc17b4bad`. It is not a repository file and was not reverified during this iteration. The latest copy study has a separate archive and manifest.
 
-Recovered existing build artifacts, without creating a branch or running another build workflow:
-
-| Purpose | Workflow run / artifact ID | Archive SHA-256 | Limits |
+| Recovery input | Run / artifact | Archive SHA-256 | Limits |
 | --- | --- | --- | --- |
-| Go 1.27.1, vendored dependencies and tokenizer cache | `36045112587` / `10828256842` | `3d461291142c615be6184921d77e7361f5d30b1c39069d0270aba5c4a8d451c4` | Source is historical `36829cf`; replace it with verified retained source before building a new candidate. |
-| Immutable `299deff` control, rejected `3d671dd` candidate, harness and patch | `36084329116` / `10842988144` | `348204d2866e7c136abb237327c984b2a10a1abdbc0f7807095b9c746198be76` | Reuse the control/harness for diagnostics; do not deploy the rejected candidate. |
+| Go 1.27.1, vendored dependencies, tokenizer cache | `36045112587` / `10828256842` | `3d461291142c615be6184921d77e7361f5d30b1c39069d0270aba5c4a8d451c4` | Source is historical 36829cf; replace with verified retained sources. |
+| Immutable 299deff control, rejected 3d671dd candidate and harness | `36084329116` / `10842988144` | `348204d2866e7c136abb237327c984b2a10a1abdbc0f7807095b9c746198be76` | Diagnostic control is usable; rejected candidate must not be deployed. |
+| 21dc0af source/build artifact | `36068339476` / `10836434460` | `14738f5b1207dcad408c138fe9eae3e30eae1dab06c06d5128f57df66e96e36d` | Apply and verify later source changes; local recovery commits are not GitHub originals. |
 
-Artifact retention is finite. Check availability and hashes when recovering; do not invent a local path from an artifact name. The newer `10844767167` kit is 585,766,240 bytes and exceeds the connector's 536,870,912-byte limit. Its workflow passed, but that does not make it downloadable through that action. Do not repeat this failed route or create another helper branch to work around it.
+Availability is finite. Verify availability and hashes; never infer a local path. Artifact 10844767167 is 585,766,240 bytes, exceeding the 536,870,912-byte connector limit. Do not repeat that route or create another helper branch. Exclude sensitive local instruction files from exported recovery packages.
+
+The latest study rebuilt both variants locally from recovered sources with the same Go 1.27.1, vendored dependencies and embed assets, using `-p 2 -mod=vendor -trimpath -buildvcs=false`. User/channel blobs were verified against 299deff, and go.mod/go.sum match the dependency bundle. Exact local identities, binary hashes and limitations are in the latest manifest/report. Do not label these reconstructed commits as the original GitHub commits or future heads.
 
 ## Quantitative decision contract
 
-Keep the existing [predeclared rule](https://github.com/Laisky/one-api/pull/427#issuecomment-5825472402) unless an explicit new experiment plan records a justified change **before** measurement:
+Keep the [original rule](https://github.com/Laisky/one-api/pull/427#issuecomment-5825472402), also explicitly retained by the [copy experiment plan](https://github.com/Laisky/one-api/pull/427#issuecomment-5826152136). Any justified change must be recorded before a new measurement, not chosen to rescue an unfavorable result.
 
-1. Both immutable variants independently pass exact content, framing, cancellation and durable accounting qualification. Every A/B pair has matching usage totals; the accounting deadline remains ten seconds.
-2. Five alternating pairs in each of four cells: concurrency 8/64; long unpaced 1,024 x 128-byte chunks, 256 requests/run; short paced 32 x 128-byte chunks at 2 ms/chunk, 512 requests/run.
-3. At least 5% paired-median throughput or CPU/request improvement in a long-stream cell, with the same direction in at least four of five pairs. Reject a greater-than-5% paired-median short-stream throughput/CPU regression.
-4. Reject paired-median regressions that exceed **both 10% and 5 ms** in first-content latency, completion latency or p95 request-max inter-content gap. Reject a paired-median RSS increase greater than 10%.
-5. Preserve every adverse cell, qualification failure and aborted study. Never resume mixed binaries in an existing output directory or describe a completed subset as a completed matrix. Operational thresholds are not confidence intervals.
+1. Both immutable variants independently pass exact content, framing, cancellation and usage qualification. Paired durable usage matches; settlement deadline remains ten seconds.
+2. Five alternating pairs in each of four cells: concurrency 8/64; long unpaced 1,024 x 128-byte chunks, 256 requests/run; short 32 x 128-byte chunks at 2 ms/chunk, 512 requests/run.
+3. At least 5% paired-median long-stream RPS or CPU/request benefit with favorable direction in at least 4/5 pairs. Reject short-stream RPS/CPU median regression greater than 5%.
+4. Reject paired-median regressions exceeding both 10% and 5 ms in TTFT, completion or p95 request-max content gap. Reject RSS paired-median increase greater than 10%.
+5. Retain adverse cells, qualification failures and aborted studies. No mixed-binary resume, favorable-subset replacement, pooled-request significance claims, or production capacity guarantee.
 
-The owner prioritizes unchanged behavior, lower memory and lower latency. A throughput improvement alone is not sufficient. Profile one selected workload before proposing a new production change; keep first-content delivery, cancellation, framing and accounting as hard constraints.
+## Next bounded action
 
-## Offline comparison and next action
+First inspect current-head CI/review status and finish any genuine failures. For another performance iteration, use the retained branch and a detached local worktree. The diagnostic identifies exact token encoding as the dominant sampled CPU cost; investigate allocation/algorithm costs while preserving complete token sequences, quota enforcement, final usage and cancellation. Do not substitute approximate counting, disable logging/accounting, cache synthetic-only repeated content, or reintroduce delayed SSE delivery.
 
-`compare.sh` now honors an explicit tokenizer cache, resolves a relative path before entering a detached worktree, checks it without downloads or writes, and rejects missing/corrupt assets before compiling. It records the resolved location in `build/token-cache-path.txt`. Without `TIKTOKEN_CACHE_DIR`, explicit preparation into the new experiment directory retains its original behavior. The Go toolchain and dependencies must still be available locally for a fully offline build.
+Profile and predeclare one candidate before measurement. Preserve unchanged behavior with differential and real-HTTP tests; run the complete registered A/B matrix; retain only a candidate that meets every gate. Rejected code belongs in an unapplied patch and evidence, not an active remote branch. No global optimum is claimed by this completed rejection.
 
-```sh
-export TIKTOKEN_CACHE_DIR=/tmp/verified-stream-token-cache
-bash tests/stream-perf/compare.sh 299deffa58aa1e87aa699a038484cbdaae3ab450 /tmp/new-stream-study \
-  --repeats 5 --concurrency 8,64 --requests 256 --paced-requests 512
-```
+`compare.sh` honors `TIKTOKEN_CACHE_DIR`, resolves relative paths before worktree changes, validates supplied assets without downloading/writing, and fails before compilation on missing/corrupt data. The generated five managed arguments follow caller workload options and cannot be replaced by them. It records the actual cache path. A fully offline build still requires the compiler and dependencies to be available.
 
-Do not run the full comparison merely to benchmark this harness-only change. First check the current PR head's CI. Then recover/verify the exact retained source; select one profiled CPU/allocation bottleneck; add a behavior regression test; and evaluate one candidate in detached **local** worktrees. Keep a rejected candidate as an unapplied patch plus complete evidence. Only accepted code belongs on this PR. No new remote branches or temporary third workflow.
-
-Before stopping a session, update this file's current state and next action, commit completed work, and record exact source/binary identities and evidence location in the PR. An interrupted benchmark stays incomplete. Do not replace known results with estimates or leave the only recovery instructions in chat.
+Before ending a session, update this record, commit finished work, and record exact head, current CI and evidence location in the PR. Keep unfinished studies explicitly incomplete; never leave the only recovery instructions in chat.
