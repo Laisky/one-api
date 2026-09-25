@@ -29,13 +29,14 @@ type options struct {
 }
 
 type sample struct {
-	Index            int     `json:"index"`
-	QueueMS          float64 `json:"queue_ms"`
-	TTFTMS           float64 `json:"ttft_ms"`
-	DoneMS           float64 `json:"done_ms"`
-	TotalMS          float64 `json:"total_ms"`
-	ScheduledTotalMS float64 `json:"scheduled_total_ms"`
-	Error            string  `json:"error,omitempty"`
+	MaxInterContentGapMS float64 `json:"max_inter_content_gap_ms"`
+	Index                int     `json:"index"`
+	QueueMS              float64 `json:"queue_ms"`
+	TTFTMS               float64 `json:"ttft_ms"`
+	DoneMS               float64 `json:"done_ms"`
+	TotalMS              float64 `json:"total_ms"`
+	ScheduledTotalMS     float64 `json:"scheduled_total_ms"`
+	Error                string  `json:"error,omitempty"`
 }
 
 type distribution struct {
@@ -56,6 +57,7 @@ type result struct {
 	Seconds                float64      `json:"seconds"`
 	SuccessfulRPS          float64      `json:"successful_rps"`
 	ContentChunksPerSecond float64      `json:"content_chunks_per_second"`
+	MaxInterContentGap     distribution `json:"max_inter_content_gap_ms"`
 	TTFT                   distribution `json:"ttft_ms"`
 	Done                   distribution `json:"done_ms"`
 	Total                  distribution `json:"total_ms"`
@@ -202,13 +204,14 @@ func runLoad(o options, client *http.Client, key string) result {
 	}
 	r.Seconds = time.Since(start).Seconds()
 	r.Dropped = int(drops.Load())
-	var ttft, done, total, scheduled []float64
+	var ttft, done, total, scheduled, gaps []float64
 	for _, s := range r.Samples {
 		if s.Error != "" {
 			r.Failed++
 			continue
 		}
 		r.Completed++
+		gaps = append(gaps, s.MaxInterContentGapMS)
 		ttft = append(ttft, s.TTFTMS)
 		done = append(done, s.DoneMS)
 		total = append(total, s.TotalMS)
@@ -219,6 +222,7 @@ func runLoad(o options, client *http.Client, key string) result {
 	if o.cancelAfter > 0 {
 		r.ContentChunksPerSecond = r.SuccessfulRPS * float64(o.cancelAfter)
 	}
+	r.MaxInterContentGap = quantiles(gaps)
 	r.TTFT = quantiles(ttft)
 	r.Done = quantiles(done)
 	r.Total = quantiles(total)

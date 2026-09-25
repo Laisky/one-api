@@ -18,12 +18,12 @@ METRICS = {
 CELL_FIELDS = ('profile', 'concurrency', 'offered', 'chunks', 'chunk_bytes', 'pace_ms', 'rate', 'direct')
 
 
-def metric(trial: dict, path: tuple[str, ...]) -> float:
-    """metric reads one strictly positive finite measurement or rejects invalid evidence."""
+def metric(trial: dict, path: tuple[str, ...], *, allow_zero: bool = False) -> float:
+    """metric validates finite measurements; only content-gap metrics may legitimately be zero."""
     value = trial
     for part in path:
         value = value[part]
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0 or (value == 0 and not allow_zero):
         raise ValueError(f'invalid metric {path}: {value!r}')
     return float(value)
 
@@ -65,6 +65,12 @@ def compare(summary: dict, expected_repeats: int) -> list[dict]:
     trials = summary.get('trials', [])
     if not trials:
         raise ValueError('no trials')
+    gap_present = ['max_inter_content_gap_ms' in trial for trial in trials]
+    if any(gap_present) and not all(gap_present):
+        raise ValueError('content-gap telemetry must be present in every trial or explicitly absent from all legacy trials')
+    metrics = dict(METRICS)
+    if all(gap_present):
+        metrics['max_inter_content_gap_p95_ms'] = ('max_inter_content_gap_ms', 'p95')
     cells = defaultdict(dict)
     binaries = defaultdict(set)
     for trial in trials:
@@ -96,13 +102,17 @@ def compare(summary: dict, expected_repeats: int) -> list[dict]:
             if a['billing'] != b['billing']:
                 raise ValueError('baseline/candidate durable billing differs')
         cell = {**dict(zip(CELL_FIELDS, key)), 'pairs': expected_repeats, 'metrics': {}}
-        for name, path in METRICS.items():
-            baseline = [metric(pairs['baseline', repeat], path) for repeat in range(expected_repeats)]
-            candidate = [metric(pairs['candidate', repeat], path) for repeat in range(expected_repeats)]
-            deltas = [(b / a - 1) * 100 for a, b in zip(baseline, candidate)]
+        for name, path in metrics.items():
+            allow_zero = name == 'max_inter_content_gap_p95_ms'
+            baseline = [metric(pairs['baseline', repeat], path, allow_zero=allow_zero) for repeat in range(expected_repeats)]
+            candidate = [metric(pairs['candidate', repeat], path, allow_zero=allow_zero) for repeat in range(expected_repeats)]
+            deltas = [(b / a - 1) * 100 for a, b in zip(baseline, candidate)] if all(baseline) else []
             cell['metrics'][name] = {'baseline_median': statistics.median(baseline),
-                'candidate_median': statistics.median(candidate), 'paired_change_pct_median': statistics.median(deltas),
-                'paired_change_pct_min': min(deltas), 'paired_change_pct_max': max(deltas)}
+                'candidate_median': statistics.median(candidate),
+                'paired_change_abs_median': statistics.median(b - a for a, b in zip(baseline, candidate)),
+                'paired_change_pct_median': statistics.median(deltas) if deltas else None,
+                'paired_change_pct_min': min(deltas) if deltas else None,
+                'paired_change_pct_max': max(deltas) if deltas else None}
         result.append(cell)
     return result
 
@@ -131,6 +141,19 @@ def markdown(cells: list[dict]) -> str:
             f"{m['ttft_p95_ms']['candidate_median']:.2f} | {m['successful_rps']['paired_change_pct_min']:+.2f}% to "
             f"{m['successful_rps']['paired_change_pct_max']:+.2f}% | {m['gateway_cpu_ms_per_success']['paired_change_pct_min']:+.2f}% to "
             f"{m['gateway_cpu_ms_per_success']['paired_change_pct_max']:+.2f}% |")
+    if cells and 'max_inter_content_gap_p95_ms' in cells[0]['metrics']:
+        lines.extend(['', '## Streaming continuity', '',
+            'Each request records its largest gap between observed nonempty content deltas. The metric below is the p95 of those request maxima, not a pooled token-gap percentile. First-content latency remains separate.',
+            'Zero-baseline percentage changes are undefined; absolute paired differences remain available.', '',
+            '| Profile | Concurrency | p95 request-max gap ms baseline / candidate | Paired absolute change ms | Paired change |',
+            '| --- | ---: | ---: | ---: | ---: |'])
+        for cell in cells:
+            gap = cell['metrics']['max_inter_content_gap_p95_ms']
+            change = gap['paired_change_pct_median']
+            percent = 'undefined (zero baseline)' if change is None else f'{change:+.2f}%'
+            lines.append(f"| {cell['profile']} | {cell['concurrency']} | {gap['baseline_median']:.2f} / {gap['candidate_median']:.2f} | {gap['paired_change_abs_median']:+.2f} | {percent} |")
+    else:
+        lines.extend(['', 'Content-gap telemetry was not captured in this legacy study; no continuity conclusion can be inferred.'])
     return '\n'.join(lines) + '\n'
 
 

@@ -207,11 +207,17 @@ func writeFixture(w http.ResponseWriter, r *http.Request, s spec, model string) 
 
 // validateStream checks exact request-specific content and usage through EOF, excluding role and heartbeat frames from TTFT.
 func validateStream(body io.Reader, spec spec, cancelAfter int, start time.Time, s *sample) error {
+	return validateStreamWithClock(body, spec, cancelAfter, start, s, time.Now)
+}
+
+// validateStreamWithClock validates frames with an injectable monotonic clock for deterministic latency tests.
+func validateStreamWithClock(body io.Reader, spec spec, cancelAfter int, start time.Time, s *sample, now func() time.Time) error {
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 4096), 1<<20)
 	var data []string
 	eventBytes := 0
 	chunks, done, stops, usages := 0, 0, 0, 0
+	var lastContent time.Time
 	process := func() error {
 		if len(data) == 0 {
 			return nil
@@ -224,7 +230,7 @@ func validateStream(body io.Reader, spec spec, cancelAfter int, start time.Time,
 		}
 		if payload == "[DONE]" {
 			done++
-			s.DoneMS = float64(time.Since(start)) / float64(time.Millisecond)
+			s.DoneMS = float64(now().Sub(start)) / float64(time.Millisecond)
 			return nil
 		}
 		var event struct {
@@ -256,9 +262,14 @@ func validateStream(body io.Reader, spec spec, cancelAfter int, start time.Time,
 				if chunks >= spec.Chunks || choice.Delta.Content != contentChunk(spec, chunks) {
 					return fmt.Errorf("content mismatch at chunk %d", chunks)
 				}
+				observed := now()
 				if chunks == 0 {
-					s.TTFTMS = float64(time.Since(start)) / float64(time.Millisecond)
+					s.TTFTMS = float64(observed.Sub(start)) / float64(time.Millisecond)
+				} else {
+					gap := float64(observed.Sub(lastContent)) / float64(time.Millisecond)
+					s.MaxInterContentGapMS = max(s.MaxInterContentGapMS, gap)
 				}
+				lastContent = observed
 				chunks++
 			}
 			if choice.Finish != nil {

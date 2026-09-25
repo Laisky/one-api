@@ -234,17 +234,28 @@ def usage_snapshot(database: Path) -> tuple[int, int]:
     return row
 
 
+class BillingMismatch(AssertionError):
+    """BillingMismatch retains credential-free expected and observed durable counters for failed experiments."""
+    def __init__(self, expected: int, observed: tuple[int, int], reason: str):
+        """__init__ records only numeric accounting evidence and a fixed reason, never database or request secrets."""
+        self.evidence = {'expected_requests': expected, 'observed_requests': observed[1],
+                         'observed_used_quota': observed[0], 'reason': reason}
+        super().__init__(f'{reason}: expected {expected} requests, observed {observed[1]}')
+
+
 def wait_usage(database: Path, count: int) -> tuple[int, int]:
-    """wait_usage requires all completed requests to reach durable billing before accepting an experiment."""
+    """wait_usage requires exact durable accounting within ten seconds; a mismatch remains a hard failure."""
     deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        usage = usage_snapshot(database)
+    usage = usage_snapshot(database)
+    while True:
         if usage[1] == count:
             return usage
         if usage[1] > count:
-            raise AssertionError('more billed requests than offered; possible retry or duplicate billing')
+            raise BillingMismatch(count, usage, 'more billed requests than expected')
+        if time.monotonic() >= deadline:
+            raise BillingMismatch(count, usage, 'completed requests did not settle in durable billing')
         time.sleep(.01)
-    raise AssertionError('completed requests did not settle in durable billing')
+        usage = usage_snapshot(database)
 
 
 def measure(args: argparse.Namespace, binary: Path, label: str, repeat: int, concurrency: int, profile: str) -> dict:
@@ -341,18 +352,28 @@ def main() -> None:
     summary.update(schema_version=2, complete=False, started_at_utc=datetime.now(timezone.utc).isoformat(),
                    configuration={key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()})
     checkpoint(summary, args.output)
+    stage = {'phase': 'qualification'}
     try:
         for label, binary in variants:
             if not args.skip_qualification:
+                stage = {'phase': 'qualification', 'label': label}
                 summary['qualification'][label] = qualify(args, binary, label)
                 checkpoint(summary, args.output)
         for repeat in range(args.repeats):
             for profile in profiles:
                 for concurrency in levels:
                     for label, binary in variants[::1 if repeat % 2 == 0 else -1]:
+                        stage = {'phase': 'measurement', 'label': label, 'profile': profile,
+                                 'concurrency': concurrency, 'repeat': repeat}
                         summary['trials'].append(measure(args, binary, label, repeat, concurrency, profile))
                         checkpoint(summary, args.output)
         summary['complete'] = True
+    except Exception as error:
+        # Do not copy arbitrary exception text: it can contain a fixture URL or secret.
+        summary['failure'] = {**stage, 'error_type': type(error).__name__}
+        if isinstance(error, BillingMismatch):
+            summary['failure']['billing'] = error.evidence
+        raise
     finally:
         summary['finished_at_utc'] = datetime.now(timezone.utc).isoformat()
         checkpoint(summary, args.output)
