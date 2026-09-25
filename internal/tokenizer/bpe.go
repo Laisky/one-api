@@ -4,8 +4,19 @@ import (
 	"math"
 )
 
+// checkedMergePartCount returns the sentinel-inclusive table length without overflowing int.
+// Invalid dimensions panic before arithmetic, matching the original allocation failure
+// class without introducing a smaller limit for representable inputs.
+func checkedMergePartCount(pieceBytes int) int {
+	if pieceBytes < 0 || pieceBytes >= math.MaxInt {
+		panic("tokenizer: BPE part count exceeds int range")
+	}
+	return pieceBytes + 1
+}
+
+// bytePairMerge applies the pinned upstream merge algorithm to piece and returns f's values.
 func bytePairMerge[T any](piece []byte, ranks map[string]int, f func(start, end int) T) []T {
-	parts := make([][2]int, len(piece)+1)
+	parts := make([][2]int, checkedMergePartCount(len(piece)))
 	for i := 0; i < len(parts); i++ {
 		parts[i][0], parts[i][1] = i, math.MaxInt // use max int as sentinel
 	}
@@ -64,6 +75,7 @@ func bytePairMerge[T any](piece []byte, ranks map[string]int, f func(start, end 
 	return out
 }
 
+// bytePairEncode returns the original rank sequence for one pre-tokenized piece.
 func bytePairEncode(piece []byte, ranks map[string]int) []int {
 	if len(piece) == 1 {
 		v := ranks[string(piece)]
