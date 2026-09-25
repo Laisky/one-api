@@ -1,0 +1,73 @@
+name: Isolated stream 427 acceptance
+on:
+  push:
+    branches: [perf/stream-427-acceptance-20260925]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: go1.27.1
+      TIKTOKEN_CACHE_DIR: /tmp/stream-acceptance/token-cache
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Validate baseline delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/stream-acceptance web/build
+          printf '<!doctype html><title>API performance fixture</title>\n' > web/build/index.html
+          git rev-parse HEAD > /tmp/stream-acceptance/revision.txt
+          go version > /tmp/stream-acceptance/toolchain.txt
+          python3 tests/stream-perf/cache_tokens.py --cache "$TIKTOKEN_CACHE_DIR"
+          test -z "$(gofmt -l relay/adaptor/openai/stream_delivery_test.go)"
+          go test -race -count=3 ./relay/adaptor/openai -run '^TestStreamHandlerDeliversBeforeUpstreamContinues$' -timeout 5m -v 2>&1 | tee /tmp/stream-acceptance/baseline-delivery.log
+      - name: Validate candidate and instrumented driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show dde3342a15716f1ec2b2e2231c5f76e491aad0cf:tests/stream-perf/experiments/coalescing.patch.zlib.b64 > /tmp/stream-acceptance/patch.b64
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, zlib
+          root = pathlib.Path('/tmp/stream-acceptance')
+          patch = zlib.decompress(base64.b64decode((root / 'patch.b64').read_text()))
+          assert hashlib.sha256(patch).hexdigest() == '7305fc7bd8e52fc3c5dce20bd0d640d81697985c234544bc968cf5886fcc09bb'
+          (root / 'candidate.patch').write_bytes(patch)
+          PY
+          git apply --check /tmp/stream-acceptance/candidate.patch
+          git apply /tmp/stream-acceptance/candidate.patch
+          go test -race -count=3 ./relay/adaptor/openai -run '^TestStreamHandlerDeliversBeforeUpstreamContinues$' -timeout 5m -v 2>&1 | tee /tmp/stream-acceptance/candidate-delivery.log
+          go test -race -count=1 ./common/render ./common/sse ./relay/adaptor/openai -run 'Test(Buffered|Heartbeat|NextBuffered|LineReader|Stream|Ordinary|GPT52|MappedChat|ModelSampling|NativeResponses)' -timeout 12m 2>&1 | tee /tmp/stream-acceptance/race.log
+          go test -race -count=1 ./tests/stream-perf -timeout 12m -v 2>&1 | tee /tmp/stream-acceptance/e2e.log
+          git diff --check
+      - name: Prove delivery test detects withheld flush
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp common/render/heartbeat_line_reader.go /tmp/stream-acceptance/heartbeat.good
+          trap 'cp /tmp/stream-acceptance/heartbeat.good common/render/heartbeat_line_reader.go' EXIT
+          python3 - <<'PY'
+          import pathlib
+          p = pathlib.Path('common/render/heartbeat_line_reader.go')
+          text = p.read_text()
+          assert text.count('flusher.FlushPending()') == 1
+          p.write_text(text.replace('flusher.FlushPending()', '_ = flusher // intentionally broken negative control'))
+          PY
+          if go test -count=1 ./relay/adaptor/openai -run '^TestStreamHandlerDeliversBeforeUpstreamContinues/subsequent_content/blank_line$' -timeout 30s -v > /tmp/stream-acceptance/negative-control.log 2>&1; then
+            echo 'ERROR: broken flush unexpectedly passed'; exit 1
+          fi
+          grep -F 'pending content must be flushed before reading more upstream bytes' /tmp/stream-acceptance/negative-control.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: stream-427-acceptance
+          path: /tmp/stream-acceptance
+          retention-days: 14
