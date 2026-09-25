@@ -276,7 +276,7 @@ func main() {
 	if port == "" {
 		port = strconv.Itoa(*common.Port)
 	}
-	addr := ":" + port
+	addr := config.APIListenAddress(port)
 	srv := &http.Server{Addr: addr, Handler: server}
 
 	// Start the pprof profiling listener (separate from the API server) when enabled.
