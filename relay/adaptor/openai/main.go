@@ -105,6 +105,12 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 	}
 
 	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
+	// Restrict flush coalescing to native Chat streams; conversion keeps its existing timing.
+	var bufferedWriter *render.BufferedStreamWriter
+	if relayMode == relaymode.ChatCompletions && streamRewriter == nil {
+		bufferedWriter = render.NewBufferedStreamWriter(c, lineReader)
+		defer bufferedWriter.Close()
+	}
 
 	// Set response headers for SSE
 	common.SetEventStreamHeaders(c)
@@ -132,6 +138,9 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 	// Process each line from the stream
 streamLoop:
 	for {
+		if bufferedWriter != nil && (responseText.Len() > 0 || reasoningText.Len() > 0) {
+			bufferedWriter.AllowBuffering()
+		}
 		line, err := hbr.Next()
 		if err != nil {
 			if errors.Is(err, io.EOF) {

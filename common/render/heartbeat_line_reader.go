@@ -80,6 +80,14 @@ func (h *HeartbeatLineReader) Next() (commonsse.Line, error) {
 		return line, err
 	}
 
+	// A skipped blank/comment line can leave a previous frame pending. Publish it
+	// before waiting on I/O, rather than making delivery depend on the next token.
+	if h.c != nil {
+		if flusher, ok := h.c.Writer.(interface{ FlushPending() }); ok {
+			flusher.FlushPending()
+		}
+	}
+
 	resultCh := make(chan heartbeatLineResult, 1)
 	go func() {
 		line, err := h.reader.Next()

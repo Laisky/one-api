@@ -28,3 +28,13 @@ func (r *LineReader) NextBuffered() (Line, bool, error) {
 	}
 	return classifyLine(trimTrailingLineEnding(fragment)), true, nil
 }
+
+// BufferedLineReady reports whether a complete line can be read without upstream I/O.
+// Oversized payload ownership always disables this optimization; Next retains error handling.
+func (r *LineReader) BufferedLineReady() bool {
+	if r.activeLarge != nil || r.reader.Buffered() == 0 {
+		return false
+	}
+	buffered, err := r.reader.Peek(r.reader.Buffered())
+	return err == nil && bytes.IndexByte(buffered, '\n') >= 0
+}
