@@ -1,0 +1,61 @@
+name: Immutable stream 427 comparison build
+on:
+  push:
+    branches: [perf/stream-427-immutable-20260925]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: go1.27.1
+      TIKTOKEN_CACHE_DIR: /tmp/stream-immutable/token-cache
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Build committed source revisions with identical settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/stream-immutable
+          git worktree add --detach /tmp/stream-control 299deffa58aa1e87aa699a038484cbdaae3ab450
+          git worktree add --detach /tmp/stream-candidate 3d671dd7a9fe18865aad1b05be4527f5295d8749
+          go version > /tmp/stream-immutable/toolchain.txt
+          for variant in control candidate; do
+            (
+              cd /tmp/stream-$variant
+              mkdir -p web/build
+              printf '<!doctype html><title>API performance fixture</title>\n' > web/build/index.html
+              test -z "$(git status --porcelain --untracked-files=no)"
+              git rev-parse HEAD > /tmp/stream-immutable/$variant-revision.txt
+              go build -trimpath -o /tmp/stream-immutable/one-api-$variant .
+              go version -m /tmp/stream-immutable/one-api-$variant > /tmp/stream-immutable/$variant-buildinfo.txt
+            )
+          done
+          cd /tmp/stream-candidate
+          go build -trimpath -o /tmp/stream-immutable/stream-perf ./tests/stream-perf
+          python3 tests/stream-perf/cache_tokens.py --cache "$TIKTOKEN_CACHE_DIR"
+          tar -czf /tmp/stream-immutable/harness.tar.gz tests/stream-perf
+          git diff 299deffa58aa1e87aa699a038484cbdaae3ab450..3d671dd7a9fe18865aad1b05be4527f5295d8749 > /tmp/stream-immutable/candidate.patch
+          cd /tmp/stream-immutable
+          sha256sum one-api-control one-api-candidate stream-perf candidate.patch > SHA256SUMS
+      - name: Validate exact committed candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/stream-candidate
+          go test -race -count=1 ./model -run '^TestUsageCounters' -timeout 6m -v 2>&1 | tee /tmp/stream-immutable/usage-race.log
+          go test -race -count=1 ./common/render ./common/sse ./relay/adaptor/openai -run 'Test(Buffered|Heartbeat|NextBuffered|LineReader|Stream)' -timeout 10m 2>&1 | tee /tmp/stream-immutable/stream-race.log
+          go test -race -count=1 ./tests/stream-perf -timeout 12m -v 2>&1 | tee /tmp/stream-immutable/e2e.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: stream-427-immutable
+          path: /tmp/stream-immutable
+          retention-days: 14
