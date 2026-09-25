@@ -10,7 +10,7 @@ jobs:
     timeout-minutes: 30
     env:
       GOTOOLCHAIN: go1.27.1
-      TIKTOKEN_CACHE_DIR: /tmp/stream-acceptance/token-cache
+      TIKTOKEN_CACHE_DIR: /tmp/stream-usage/token-cache
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -19,55 +19,61 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.1'
-      - name: Validate baseline delivery
+      - name: Prepare controlled patches
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/stream-acceptance web/build
+          mkdir -p /tmp/stream-usage web/build
           printf '<!doctype html><title>API performance fixture</title>\n' > web/build/index.html
-          git rev-parse HEAD > /tmp/stream-acceptance/revision.txt
-          go version > /tmp/stream-acceptance/toolchain.txt
+          git rev-parse HEAD > /tmp/stream-usage/revision.txt
+          go version > /tmp/stream-usage/toolchain.txt
           python3 tests/stream-perf/cache_tokens.py --cache "$TIKTOKEN_CACHE_DIR"
-          test -z "$(gofmt -l relay/adaptor/openai/stream_delivery_test.go)"
-          go test -race -count=3 ./relay/adaptor/openai -run '^TestStreamHandlerDeliversBeforeUpstreamContinues$' -timeout 5m -v 2>&1 | tee /tmp/stream-acceptance/baseline-delivery.log
-      - name: Validate candidate and instrumented driver
-        shell: bash
-        run: |
-          set -euo pipefail
-          git show dde3342a15716f1ec2b2e2231c5f76e491aad0cf:tests/stream-perf/experiments/coalescing.patch.zlib.b64 > /tmp/stream-acceptance/patch.b64
+          git show dde3342a15716f1ec2b2e2231c5f76e491aad0cf:tests/stream-perf/experiments/coalescing.patch.zlib.b64 > /tmp/stream-usage/coalescing.b64
           python3 - <<'PY'
           import base64, hashlib, pathlib, zlib
-          root = pathlib.Path('/tmp/stream-acceptance')
-          patch = zlib.decompress(base64.b64decode((root / 'patch.b64').read_text()))
-          assert hashlib.sha256(patch).hexdigest() == '7305fc7bd8e52fc3c5dce20bd0d640d81697985c234544bc968cf5886fcc09bb'
-          (root / 'candidate.patch').write_bytes(patch)
+          root = pathlib.Path('/tmp/stream-usage')
+          pairs = [('usage', pathlib.Path('tests/stream-perf/experiments/usage-retry.patch.zlib.b64'), 'cec7133e8bf67709dd7b32bc821992b55e07435d47b6f139af5c4de466722d54'), ('coalescing', root / 'coalescing.b64', '7305fc7bd8e52fc3c5dce20bd0d640d81697985c234544bc968cf5886fcc09bb')]
+          for name, source, expected in pairs:
+              patch = zlib.decompress(base64.b64decode(source.read_text()))
+              assert hashlib.sha256(patch).hexdigest() == expected
+              (root / (name + '.patch')).write_bytes(patch)
           PY
-          git apply --check /tmp/stream-acceptance/candidate.patch
-          git apply /tmp/stream-acceptance/candidate.patch
-          go test -race -count=3 ./relay/adaptor/openai -run '^TestStreamHandlerDeliversBeforeUpstreamContinues$' -timeout 5m -v 2>&1 | tee /tmp/stream-acceptance/candidate-delivery.log
-          go test -race -count=1 ./common/render ./common/sse ./relay/adaptor/openai -run 'Test(Buffered|Heartbeat|NextBuffered|LineReader|Stream|Ordinary|GPT52|MappedChat|ModelSampling|NativeResponses)' -timeout 12m 2>&1 | tee /tmp/stream-acceptance/race.log
-          go test -race -count=1 ./tests/stream-perf -timeout 12m -v 2>&1 | tee /tmp/stream-acceptance/e2e.log
-          git diff --check
-      - name: Prove delivery test detects withheld flush
+      - name: Prove pre-fix counter loss under a real SQLite lock
         shell: bash
         run: |
           set -euo pipefail
-          cp common/render/heartbeat_line_reader.go /tmp/stream-acceptance/heartbeat.good
-          trap 'cp /tmp/stream-acceptance/heartbeat.good common/render/heartbeat_line_reader.go' EXIT
-          python3 - <<'PY'
-          import pathlib
-          p = pathlib.Path('common/render/heartbeat_line_reader.go')
-          text = p.read_text()
-          assert text.count('flusher.FlushPending()') == 1
-          p.write_text(text.replace('flusher.FlushPending()', '_ = flusher // intentionally broken negative control'))
-          PY
-          if go test -count=1 ./relay/adaptor/openai -run '^TestStreamHandlerDeliversBeforeUpstreamContinues/subsequent_content/blank_line$' -timeout 30s -v > /tmp/stream-acceptance/negative-control.log 2>&1; then
-            echo 'ERROR: broken flush unexpectedly passed'; exit 1
+          git apply --include=model/usage_busy_test.go /tmp/stream-usage/usage.patch
+          if go test -count=1 ./model -run '^TestUsageCountersRetrySQLiteLock$' -timeout 5m -v > /tmp/stream-usage/negative-control.log 2>&1; then
+            echo 'ERROR: pre-fix counters unexpectedly survived lock'; exit 1
           fi
-          grep -F 'pending content must be flushed before reading more upstream bytes' /tmp/stream-acceptance/negative-control.log
+          grep -F 'one failed write and one successful retry' /tmp/stream-usage/negative-control.log
+      - name: Validate counter fix and build corrected baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --exclude=model/usage_busy_test.go /tmp/stream-usage/usage.patch
+          test -z "$(gofmt -l model/user.go model/channel.go model/usage_busy_test.go)"
+          go test -race -count=3 ./model -run '^Test(UsageCounters|RunWithSQLiteBusyRetry|ShouldRetrySQLiteBusy)' -timeout 10m -v 2>&1 | tee /tmp/stream-usage/usage-race.log
+          go build -trimpath -o /tmp/stream-usage/one-api-control .
+          git diff --binary > /tmp/stream-usage/control.diff
+      - name: Build and validate coalescing candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply /tmp/stream-usage/coalescing.patch
+          go test -race -count=3 ./relay/adaptor/openai -run '^TestStreamHandlerDeliversBeforeUpstreamContinues$' -timeout 5m -v 2>&1 | tee /tmp/stream-usage/delivery-race.log
+          go test -race -count=1 ./common/render ./common/sse ./relay/adaptor/openai -run 'Test(Buffered|Heartbeat|NextBuffered|LineReader|Stream|Ordinary|GPT52|MappedChat|ModelSampling|NativeResponses)' -timeout 12m 2>&1 | tee /tmp/stream-usage/stream-race.log
+          go test -race -count=1 ./tests/stream-perf -timeout 12m -v 2>&1 | tee /tmp/stream-usage/e2e.log
+          go build -trimpath -o /tmp/stream-usage/one-api-candidate .
+          go build -trimpath -o /tmp/stream-usage/stream-perf ./tests/stream-perf
+          git diff --check
+          git diff --binary > /tmp/stream-usage/candidate.diff
+          tar -czf /tmp/stream-usage/harness.tar.gz tests/stream-perf
+          cd /tmp/stream-usage
+          sha256sum one-api-control one-api-candidate stream-perf usage.patch coalescing.patch > SHA256SUMS
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: stream-427-acceptance
-          path: /tmp/stream-acceptance
+          name: stream-usage-build
+          path: /tmp/stream-usage
           retention-days: 14
