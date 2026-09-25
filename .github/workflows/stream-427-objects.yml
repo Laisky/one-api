@@ -1,0 +1,58 @@
+name: Prepare stream 427 Git objects
+on:
+  push:
+    branches: [perf/stream-427-objects-20260925]
+permissions:
+  contents: write
+jobs:
+  objects:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare exact tested source files without updating any ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/stream-objects
+          git show dde3342a15716f1ec2b2e2231c5f76e491aad0cf:tests/stream-perf/experiments/coalescing.patch.zlib.b64 > /tmp/stream-objects/coalescing.b64
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, zlib
+          root = pathlib.Path('/tmp/stream-objects')
+          for name, path, expected in [('usage', pathlib.Path('tests/stream-perf/experiments/usage-retry.patch.zlib.b64'), 'cec7133e8bf67709dd7b32bc821992b55e07435d47b6f139af5c4de466722d54'), ('coalescing', root / 'coalescing.b64', '7305fc7bd8e52fc3c5dce20bd0d640d81697985c234544bc968cf5886fcc09bb')]:
+              data = zlib.decompress(base64.b64decode(path.read_text()))
+              assert hashlib.sha256(data).hexdigest() == expected
+              (root / (name + '.patch')).write_bytes(data)
+          PY
+          git apply /tmp/stream-objects/usage.patch
+          git apply /tmp/stream-objects/coalescing.patch
+          git diff --check
+      - name: Store only allowlisted source blobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, urllib.request
+          paths = ['model/user.go', 'model/channel.go', 'model/usage_busy_test.go', 'common/sse/buffered.go', 'common/render/heartbeat_line_reader.go', 'common/render/buffered_stream_writer.go', 'common/render/buffered_stream_writer_test.go', 'relay/adaptor/openai/main.go', 'relay/adaptor/openai/stream_delivery_test.go', 'tests/stream-perf/main.go', 'tests/stream-perf/protocol.go', 'tests/stream-perf/content_gap_test.go']
+          result = {'source_revision': os.environ['GITHUB_SHA'], 'production_base': '57bd4834bad32629a9c6b068ec1c30dd0c4256a4', 'ref_updates': False, 'blobs': []}
+          for path in paths:
+              data = pathlib.Path(path).read_bytes()
+              expected = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+              request = urllib.request.Request('https://api.github.com/repos/Laisky/one-api/git/blobs', data=json.dumps({'content': data.decode(), 'encoding': 'utf-8'}).encode(), headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'}, method='POST')
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  blob = json.load(response)
+              assert blob['sha'] == expected
+              result['blobs'].append({'path': path, 'sha': expected, 'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)})
+          pathlib.Path('/tmp/stream-objects/blobs.json').write_text(json.dumps(result, indent=2) + '\n')
+          print('Stored', len(result['blobs']), 'verified source blobs; no branch was updated.')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: stream-427-git-objects
+          path: /tmp/stream-objects/blobs.json
+          retention-days: 14
