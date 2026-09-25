@@ -124,14 +124,21 @@ def driver_command(args: argparse.Namespace, url: str, output: Path, trial: str,
 
 
 @contextlib.contextmanager
-def fixture(args: argparse.Namespace, binary: Path):
+def fixture(args: argparse.Namespace, binary: Path, *, gateway_procs: int = 2,
+            auxiliary_procs: int = 2, pprof_port: int | None = None):
     """fixture provisions only temporary local state via real admin APIs and guarantees process cleanup."""
+    if not 1 <= gateway_procs <= 64 or not 1 <= auxiliary_procs <= 64:
+        raise ValueError('invalid fixture process CPU slots')
+    if pprof_port is not None and not 1 <= pprof_port <= 65535:
+        raise ValueError('invalid loopback pprof port')
     with tempfile.TemporaryDirectory(prefix='oneapi-stream-') as directory:
         root = Path(directory)
         admin, token, upstream = (secrets.token_hex(24) for _ in range(3))
-        base_env = {'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'HOME': directory, 'TZ': 'UTC', 'GOMAXPROCS': '2'}
+        base_env = {'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'HOME': directory, 'TZ': 'UTC', 'GOMAXPROCS': str(auxiliary_procs)}
         mock_port, gateway_port = free_port(), free_port()
-        while mock_port == gateway_port:
+        while mock_port == pprof_port:
+            mock_port = free_port()
+        while mock_port == gateway_port or gateway_port == pprof_port:
             gateway_port = free_port()
         mock_url, gateway_url = f'http://127.0.0.1:{mock_port}', f'http://127.0.0.1:{gateway_port}'
         children = []
@@ -142,10 +149,13 @@ def fixture(args: argparse.Namespace, binary: Path):
                                         stdout=mock_log, stderr=subprocess.STDOUT)
                 children.append(mock)
                 wait_ready(mock_url + '/health', mock)
-                environment = {**base_env, 'PORT': str(gateway_port), 'GIN_MODE': 'release',
+                environment = {**base_env, 'PORT': str(gateway_port), 'LISTEN_HOST': '127.0.0.1',
+                               'GOMAXPROCS': str(gateway_procs), 'GIN_MODE': 'release',
                                'SQLITE_PATH': str(root / 'one-api.db'), 'TIKTOKEN_CACHE_DIR': str(args.token_cache),
                                'INITIAL_ROOT_ACCESS_TOKEN': admin, 'INITIAL_ROOT_TOKEN': token,
                                'GLOBAL_RELAY_RATE_LIMIT': '10000000', 'GLOBAL_API_RATE_LIMIT': '10000000'}
+                if pprof_port is not None:
+                    environment.update(ENABLE_PPROF='true', PPROF_LISTEN=f'127.0.0.1:{pprof_port}')
                 gateway = subprocess.Popen([str(binary)], cwd=root, env=environment,
                                            stdout=gateway_log, stderr=subprocess.STDOUT)
                 children.append(gateway)
@@ -157,7 +167,8 @@ def fixture(args: argparse.Namespace, binary: Path):
                 yield {'url': gateway_url + '/v1/chat/completions', 'direct': mock_url + '/v1/chat/completions',
                        'mock_url': mock_url, 'env': {**base_env, 'STREAM_PERF_TOKEN': 'sk-' + token},
                        'upstream_env': {**base_env, 'STREAM_PERF_TOKEN': upstream},
-                       'pids': {'gateway': gateway.pid, 'mock': mock.pid}, 'root': root}
+                       'pids': {'gateway': gateway.pid, 'mock': mock.pid}, 'root': root,
+                       'pprof_url': f'http://127.0.0.1:{pprof_port}/debug/pprof' if pprof_port is not None else None}
             except Exception:
                 # Never export the database or credentials. Optional diagnostics
                 # redact every generated credential before retaining a failure log.
