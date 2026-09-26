@@ -68,13 +68,13 @@ class Executor:
 class ProfileTraceTests(unittest.TestCase):
     """ProfileTraceTests ensure a five-second trace is never claimed as a full-minute profile."""
 
-    def exercise(self, *, mode='trace', overrun=False, fail=False):
+    def exercise(self, *, mode='trace', overrun=False, fail=False, client_procs=None):
         """exercise drives the actual diagnostic function with synthetic local services and a controlled clock."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             clock, calls = Clock(), []
             args = SimpleNamespace(output=root/'evidence', binary=root/'gateway', driver=root/'driver',
-                token_cache=root/'cache', mode=mode, gateway_procs=3, auxiliary_procs=2,
+                token_cache=root/'cache', mode=mode, gateway_procs=3, auxiliary_procs=2, client_procs=client_procs,
                 concurrency=32, requests=100, chunks=1024, chunk_bytes=128, pace_ms=0,
                 warmup=30, seconds=60, deadline=120, trace_seconds=5, trace_offset=15, rate=0)
             client = SimpleNamespace(pid=99, poll=lambda: 0 if clock.at >= 100 else None, wait=lambda **kw: 0)
@@ -83,13 +83,21 @@ class ProfileTraceTests(unittest.TestCase):
             def fixture(*unused, **options):
                 """fixture supplies an isolated service contract without starting real subprocesses."""
                 self.assertEqual(options['pprof_port'], 6060)
+                self.assertEqual(options['client_procs'], client_procs)
                 yield {'url': 'http://127.0.0.1:3000/v1/chat/completions', 'pids': {'gateway': 97, 'mock': 98},
-                       'root': root, 'env': {}, 'mock_url': 'http://127.0.0.1:3001',
+                       'root': root, 'env': {'GOMAXPROCS': str(client_procs or 2)},
+                       'process_slots': {'gateway': 3, 'mock': 2, 'driver': client_procs or 2}, 'mock_url': 'http://127.0.0.1:3001',
                        'pprof_url': 'http://127.0.0.1:6060/debug/pprof'}
+
+            def qualify(*unused, **options):
+                """qualify requires functional checks to use the same requested process settings."""
+                self.assertEqual(options, {'gateway_procs': 3, 'auxiliary_procs': 2, 'client_procs': client_procs})
+                return {'qualified': True}
 
             def start(*unused, **options):
                 """start supplies a completed synthetic report, independent from trace capture success."""
                 (args.output/'requests.json').write_text(json.dumps({'completed': 100, 'failed': 0, 'dropped': 0, 'samples': []}))
+                self.assertEqual(options['env']['GOMAXPROCS'], str(client_procs or 2))
                 return client
 
             def snapshot(*unused):
@@ -115,7 +123,7 @@ class ProfileTraceTests(unittest.TestCase):
                     (profile_run, 'cpu_allowance', lambda: {'effective_cores': 4, 'stat_path': '/unused'}),
                     (profile_run, 'assert_loopback_listeners', lambda *a: None), (profile_run, 'snapshot', snapshot),
                     (profile_run, 'ThreadPoolExecutor', Executor), (profile_run, 'capture', capture),
-                    (profile_run.run, 'qualify', lambda *a: {'qualified': True}),
+                    (profile_run.run, 'qualify', qualify),
                     (profile_run.run, 'free_port', lambda: 6060), (profile_run.run, 'sha256', lambda *a: 'fixture'),
                     (profile_run.run, 'fixture', fixture), (profile_run.run, 'run_driver', lambda *a: {}),
                     (profile_run.subprocess, 'Popen', start), (profile_run.time, 'monotonic', clock.monotonic),
@@ -164,3 +172,16 @@ class ProfileTraceTests(unittest.TestCase):
         self.assertFalse(result['complete'])
         self.assertEqual(result['failure_type'], 'RuntimeError')
         self.assertNotIn('sustained_protocol_qualified', result)
+
+    def test_client_control_is_explicit_in_qualification_capture_and_summary(self):
+        """test_client_control_is_explicit_in_qualification_capture_and_summary prevents a control-arm mislabel."""
+        result, _ = self.exercise(client_procs=4)
+        self.assertTrue(result['sustained_protocol_qualified'])
+        self.assertEqual(result['configuration']['client_procs'], 4)
+        self.assertEqual(result['process_slots'], {'gateway': 3, 'mock': 2, 'driver': 4})
+
+    def test_default_client_control_retains_auxiliary_slots(self):
+        """test_default_client_control_retains_auxiliary_slots preserves historical default fixture behavior."""
+        result, _ = self.exercise()
+        self.assertIsNone(result['configuration']['client_procs'])
+        self.assertEqual(result['process_slots'], {'gateway': 3, 'mock': 2, 'driver': 2})

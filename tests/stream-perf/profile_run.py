@@ -30,10 +30,13 @@ def diagnose(args: argparse.Namespace) -> dict:
                'profile_captures': [], 'admission_rule_version': 2}
     write_json(args.output / 'summary.json', summary)
     try:
-        summary['qualification'] = run.qualify(args, args.binary, 'diagnostic')
+        summary['qualification'] = run.qualify(args, args.binary, 'diagnostic', gateway_procs=args.gateway_procs,
+                                              auxiliary_procs=args.auxiliary_procs, client_procs=getattr(args, 'client_procs', None))
         pprof_port = run.free_port() if args.mode in ('cpu', 'heap', 'trace') else None
         with run.fixture(args, args.binary, gateway_procs=args.gateway_procs,
-                         auxiliary_procs=args.auxiliary_procs, pprof_port=pprof_port) as fixture:
+                         auxiliary_procs=args.auxiliary_procs, pprof_port=pprof_port,
+                         client_procs=getattr(args, 'client_procs', None)) as fixture:
+            summary['process_slots'] = fixture['process_slots']
             ports = {int(fixture['url'].split(':')[2].split('/')[0])}
             if pprof_port is not None:
                 ports.add(pprof_port)
@@ -143,6 +146,8 @@ def main() -> None:
     parser.add_argument('--mode', choices=('calibration', 'steady', 'cpu', 'heap', 'trace'), required=True)
     parser.add_argument('--gateway-procs', type=int, default=4)
     parser.add_argument('--auxiliary-procs', type=int, default=1)
+    parser.add_argument('--client-procs', type=int, default=None,
+                        help='explicit load-client slots; default uses auxiliary-procs, without changing mock slots')
     parser.add_argument('--concurrency', type=int, default=32)
     parser.add_argument('--requests', type=int, default=10000)
     parser.add_argument('--chunks', type=int, default=1024)
@@ -161,6 +166,8 @@ def main() -> None:
             and args.chunks * args.chunk_bytes <= 64 << 20 and 0 <= args.pace_ms <= 1000
             and 1 <= args.warmup <= 300 and 1 <= args.seconds <= 300 and args.warmup + args.seconds < args.deadline <= 1200):
         parser.error('invalid bounded diagnostic configuration')
+    if args.client_procs is not None and not 1 <= args.client_procs <= 64:
+        parser.error('client-procs must be between 1 and 64')
     if args.mode == 'trace' and not (1 <= args.trace_seconds <= 10 and 0 <= args.trace_offset
             and args.trace_offset + args.trace_seconds <= args.seconds):
         parser.error('trace subwindow must be 1-10 seconds within the observation')

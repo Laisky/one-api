@@ -125,9 +125,10 @@ def driver_command(args: argparse.Namespace, url: str, output: Path, trial: str,
 
 @contextlib.contextmanager
 def fixture(args: argparse.Namespace, binary: Path, *, gateway_procs: int = 2,
-            auxiliary_procs: int = 2, pprof_port: int | None = None):
+            auxiliary_procs: int = 2, pprof_port: int | None = None, client_procs: int | None = None):
     """fixture provisions only temporary local state via real admin APIs and guarantees process cleanup."""
-    if not 1 <= gateway_procs <= 64 or not 1 <= auxiliary_procs <= 64:
+    client_slots = auxiliary_procs if client_procs is None else client_procs
+    if any(type(slots) is not int or not 1 <= slots <= 64 for slots in (gateway_procs, auxiliary_procs, client_slots)):
         raise ValueError('invalid fixture process CPU slots')
     if pprof_port is not None and not 1 <= pprof_port <= 65535:
         raise ValueError('invalid loopback pprof port')
@@ -165,8 +166,9 @@ def fixture(args: argparse.Namespace, binary: Path, *, gateway_procs: int = 2,
                 if response.get('success') is not True:
                     raise RuntimeError('mock channel creation failed')
                 yield {'url': gateway_url + '/v1/chat/completions', 'direct': mock_url + '/v1/chat/completions',
-                       'mock_url': mock_url, 'env': {**base_env, 'STREAM_PERF_TOKEN': 'sk-' + token},
-                       'upstream_env': {**base_env, 'STREAM_PERF_TOKEN': upstream},
+                       'mock_url': mock_url, 'env': {**base_env, 'GOMAXPROCS': str(client_slots), 'STREAM_PERF_TOKEN': 'sk-' + token},
+                       'upstream_env': {**base_env, 'GOMAXPROCS': str(client_slots), 'STREAM_PERF_TOKEN': upstream},
+                       'process_slots': {'gateway': gateway_procs, 'mock': auxiliary_procs, 'driver': client_slots},
                        'pids': {'gateway': gateway.pid, 'mock': mock.pid}, 'root': root,
                        'pprof_url': f'http://127.0.0.1:{pprof_port}/debug/pprof' if pprof_port is not None else None}
             except Exception:
@@ -200,12 +202,14 @@ def run_driver(command: list[str], environment: dict, success: bool | None = Tru
     return report
 
 
-def qualify(args: argparse.Namespace, binary: Path, label: str) -> dict:
+def qualify(args: argparse.Namespace, binary: Path, label: str, *, gateway_procs: int = 2,
+            auxiliary_procs: int = 2, client_procs: int | None = None) -> dict:
     """qualify checks real-gateway delivery, injected truncation detection, authentication and cancellation before timing."""
     evidence = {}
     directory = args.output / ('correctness-' + label)
     directory.mkdir()
-    with fixture(args, binary) as f:
+    with fixture(args, binary, gateway_procs=gateway_procs, auxiliary_procs=auxiliary_procs,
+                 client_procs=client_procs) as f:
         for fault in ('', 'crlf', 'fragmented', 'missing-done', 'wrong-content', 'malformed'):
             name = fault or 'normal'
             cmd = driver_command(args, f['url'], directory / f'{name}.json', name, 4, 8, 4, 1, fault)
