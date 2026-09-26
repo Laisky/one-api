@@ -1,0 +1,13 @@
+# Web API performance checkpoint
+
+Only PR430 / `perf/web-api-e2e-20260926`, based on main c131839 (merged streaming PR427). Do not reopen PR427 or create more remote experiment branches.
+
+The temporary read-only build completed successfully (run36246623576, artifact10908065782). Exact source7494f6b, vendor dependencies and immutable baseline fixture were downloaded; ZIP SHA-256 35a5184ced396534d113949a236492287e7cba0893f1a9a639a9a447a5959c14. The temporary workflow is now removed. Its presence caused the first normal CI's two-workflow-contract failure; all Go shards, coverage and static checks passed in that initial run. No guardrail is relaxed.
+
+Candidate: add only the ordered nonunique Log(user_id,created_at,id) index, retaining all old indexes, queries, caches and cursor defaults. Target actual Modern dashboard and logs paths. SQLite fixture:200,000 synthetic rows across90days and32users,80% heavy user,~1KiB content. Scope/field/filter/page/count, admin rejection, cursor isolation and post-write freshness are independently checked. Native PostgreSQL/MySQL migration tests are intended for the normal existing CI engines.
+
+The first completed experiment contains160 endpoint-trials/5,120 verified requests. All personal targets accelerate, but admin logs/c8 p95 violates the originally registered control gate (+70.68%/+11.335ms). It is explicitly NOT accepted or discarded. Its extremely short32-request control runs last31–66ms and include worker/connection startup; this limitation does not prove the regression is harmless.
+
+A separate steady-connection confirmation was registered in PR comment5846944353 BEFORE measurement: same binaries/database/routes and all original no-regression gates; every persistent worker independently validates two warm-up requests before a start barrier.128 measured requests per target endpoint and512 per control, c1/c8, five alternating pairs. Store both full matrices separately; never relabel the first result or pool favorable observations. First-hit measurements remain separate from warmed latency and neither measures browser paint or cold OS-page-cache latency.
+
+Current local workspace during capture: /mnt/data/webapi, source/tests/web-perf, source and detached candidate worktree. Baseline4091b2e6969c605ee6c4309bb82c33a4b604db157133112e1506c27261d80da7; candidate5caefa24b032eaee8298555ffffcf24f289514527c4f9442e915246716c70562. This checkpoint does not claim confirmation completion; update it with exact outcomes before final delivery. The production candidate has not yet been published. Preserve the first failed matrix, diagnostic profiles, five repeated index-build/insert costs and every subsequent outcome.
