@@ -67,8 +67,9 @@ def evidence() -> dict:
        'binaries':{'baseline':'base','candidate':'new'},'qualification':{},'schema':{},'freshness':{},'trials':[]}
     for label in s['binaries']:
         s['qualification'][label]=dict.fromkeys(('complete','all_eight_endpoints','auth_and_tenant_isolation','cursor_continuation_and_cross_user_rejection','empty_shape'),True)
-        s['schema'][label]={'rows':200000,'index_names':[d.INDEX] if label=='candidate' else []}
-        s['freshness'][label]={'all_dashboard_aggregates':True}
+        s['schema'][label]={'rows':200000,'index_names':[d.INDEX] if label=='candidate' else [],
+                            'index_columns':['user_id','created_at','id'] if label=='candidate' else []}
+        s['freshness'][label]=dict.fromkeys(('committed_insert','legacy_rows_and_count','all_dashboard_aggregates'),True)
         for e in report.TARGETS|report.CONTROLS:
             for c in (1,8):
                 for r in range(5):

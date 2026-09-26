@@ -32,9 +32,12 @@ def compare(summary: dict, *, strict: bool = True) -> dict:
         q=summary['qualification'].get(label,{})
         require(all(q.get(k) is True for k in ('complete','all_eight_endpoints','auth_and_tenant_isolation','cursor_continuation_and_cross_user_rejection','empty_shape')),
                 'variant lacks independent HTTP qualification')
-        require(summary['freshness'].get(label,{}).get('all_dashboard_aggregates') is True,'missing post-write freshness')
+        require(all(summary['freshness'].get(label,{}).get(k) is True
+                    for k in ('committed_insert','legacy_rows_and_count','all_dashboard_aggregates')),'missing post-write freshness')
         require(summary['schema'][label]['rows']==config['rows'],'fixture row count drift')
         require((('idx_logs_user_created_at_id' in summary['schema'][label]['index_names']) == (label=='candidate')),'wrong migrated index identity')
+        if label=='candidate':
+            require(summary['schema'][label].get('index_columns')==['user_id','created_at','id'],'wrong migrated index columns')
     seen={}
     for t in summary['trials']:
         key=t['endpoint'],t['concurrency'],t['label'],t['repeat']
