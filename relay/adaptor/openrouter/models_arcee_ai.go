@@ -1,0 +1,98 @@
+package openrouter
+
+import "github.com/Laisky/one-api/relay/adaptor"
+
+// arcee_aiModels returns the arcee_ai model defaults for openrouter.
+// It takes no arguments and returns independently owned, directly editable Go configurations.
+func arcee_aiModels() map[string]adaptor.ModelConfig {
+	return map[string]adaptor.ModelConfig{
+		"arcee-ai/coder-large": {
+			Ratio:                       nativeRate(0.5),
+			CompletionRatio:             1.6,
+			ContextLength:               32768,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "max_tokens", "logit_bias"},
+			Description:                 "Coder‑Large is a 32 B‑parameter offspring of Qwen 2.5‑Instruct that has been further trained on permissively‑licensed GitHub, CodeSearchNet and synthetic bug‑fix corpora. It supports a 32k context window, enabling multi‑file...",
+		},
+		"arcee-ai/maestro-reasoning": {
+			Ratio:                       nativeRate(0.9),
+			CompletionRatio:             3.6666666666666665,
+			ContextLength:               131072,
+			MaxOutputTokens:             32000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "max_tokens", "logit_bias"},
+			Description:                 "Maestro Reasoning is Arcee's flagship analysis model: a 32 B‑parameter derivative of Qwen 2.5‑32 B tuned with DPO and chain‑of‑thought RL for step‑by‑step logic. Compared to the earlier 7 B... [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
+		},
+		"arcee-ai/spotlight": {
+			Ratio:                       nativeRate(0.18),
+			CompletionRatio:             1,
+			ContextLength:               131072,
+			MaxOutputTokens:             65537,
+			InputModalities:             []string{"image", "text"},
+			OutputModalities:            []string{"text"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "max_tokens", "logit_bias"},
+			Description:                 "Spotlight is a 7‑billion‑parameter vision‑language model derived from Qwen 2.5‑VL and fine‑tuned by Arcee AI for tight image‑text grounding tasks. It offers a 32 k‑token context window, enabling rich multimodal... [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
+		},
+		"arcee-ai/trinity-large-preview": {
+			Ratio:                       nativeRate(0.15),
+			CompletionRatio:             3,
+			ContextLength:               131000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "max_tokens"},
+			HuggingFaceID:               "arcee-ai/Trinity-Large-Preview",
+			Description:                 "Trinity-Large-Preview is a frontier-scale open-weight language model from Arcee, built as a 400B-parameter sparse Mixture-of-Experts with 13B active parameters per token using 4-of-256 expert routing. It excels in creative writing,... [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
+		},
+		"arcee-ai/trinity-large-thinking": {
+			Ratio:                       nativeRate(0.25),
+			CompletionRatio:             3.1999999999999997,
+			CachedInputRatio:            nativeRate(0.06),
+			ContextLength:               262144,
+			MaxOutputTokens:             80000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_tokens", "reasoning", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			HuggingFaceID:               "arcee-ai/Trinity-Large-Thinking",
+			Description:                 "arcee-ai/trinity-large-thinking on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"arcee-ai/trinity-large-thinking:free": {
+			Ratio:                       0,
+			CompletionRatio:             1,
+			ContextLength:               262144,
+			MaxOutputTokens:             80000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "stop", "max_tokens"},
+			HuggingFaceID:               "arcee-ai/Trinity-Large-Thinking",
+			Description:                 "Free tier of Trinity Large Thinking reasoning model from Arcee AI with rate limits. [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
+		},
+		"arcee-ai/trinity-mini": {
+			Ratio:                       nativeRate(0.045),
+			CompletionRatio:             3.3333333333333335,
+			ContextLength:               131072,
+			MaxOutputTokens:             131072,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "stop", "max_tokens", "max_completion_tokens"},
+			HuggingFaceID:               "arcee-ai/Trinity-Mini",
+			Description:                 "Trinity Mini is a 26B-parameter (3B active) sparse mixture-of-experts language model featuring 128 experts with 8 active per token. Engineered for efficient reasoning over long contexts (131k) with robust function... [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
+		},
+		"arcee-ai/virtuoso-large": {
+			Ratio:                       nativeRate(0.75),
+			CompletionRatio:             1.5999999999999999,
+			ContextLength:               131072,
+			MaxOutputTokens:             64000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "max_tokens", "logit_bias"},
+			Description:                 "Virtuoso‑Large is Arcee's top‑tier general‑purpose LLM at 72 B parameters, tuned to tackle cross‑domain reasoning, creative writing and enterprise QA. Unlike many 70 B peers, it retains the 128 k...",
+		},
+	}
+}

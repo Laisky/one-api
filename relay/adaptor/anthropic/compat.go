@@ -33,6 +33,17 @@ func IsClaudeAdaptiveThinkingModel(modelName string) bool {
 	return false
 }
 
+// claudeRejectsSamplingParameters reports the documented sampling restriction,
+// independently of thinking-mode conversion. Mythos Preview also rejects these
+// fields, but its inclusion here must not rewrite the caller's thinking mode.
+// Source (verified 2026-09-24):
+// https://platform.claude.com/docs/en/about-claude/model-deprecations
+func claudeRejectsSamplingParameters(modelName string) bool {
+	name := strings.ToLower(strings.TrimSpace(modelName))
+	return IsClaudeAdaptiveThinkingModel(name) || name == "claude-mythos-preview" ||
+		strings.HasPrefix(name, "claude-mythos-preview-")
+}
+
 // NormalizeModelCompatibility normalizes Anthropic request parameters for model-specific compatibility.
 // It mutates the provided parameter pointers in place and strips or rewrites fields that upstream rejects.
 func NormalizeModelCompatibility(modelName string, temperature **float64, topP **float64, topK **int, thinking **model.Thinking) {
@@ -40,7 +51,7 @@ func NormalizeModelCompatibility(modelName string, temperature **float64, topP *
 		*topP = nil
 	}
 
-	if !IsClaudeAdaptiveThinkingModel(modelName) {
+	if !claudeRejectsSamplingParameters(modelName) {
 		return
 	}
 
@@ -53,7 +64,7 @@ func NormalizeModelCompatibility(modelName string, temperature **float64, topP *
 	if topK != nil {
 		*topK = nil
 	}
-	if thinking == nil || *thinking == nil {
+	if !IsClaudeAdaptiveThinkingModel(modelName) || thinking == nil || *thinking == nil {
 		return
 	}
 

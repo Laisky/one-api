@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -23,6 +23,7 @@ import (
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -81,6 +82,8 @@ func countAudioTokens(c *gin.Context, tokensPerSecond float64) (float64, error) 
 		tokensPerSecond)
 }
 
+// RelayAudioHelper normalizes one standard audio request, meters its actual input
+// unit and settles accepted work even if writing the result to the caller fails.
 func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatusCode {
 	ctx := gmw.Ctx(c)
 	meta := meta.GetByContext(c)
@@ -103,7 +106,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 		audioModel = ttsRequest.Model
 		// Check if text is too long 4096
-		if len(ttsRequest.Input) > 4096 {
+		if utf8.RuneCountInString(ttsRequest.Input) > 4096 {
 			return openai.ErrorWrapper(errors.New("input is too long (over 4096 characters)"), "text_too_long", http.StatusBadRequest)
 		}
 	} else if relayMode == relaymode.AudioTranscription || relayMode == relaymode.AudioTranslation {
@@ -111,6 +114,38 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		if m := extractAudioModelFromMultipart(c); m != "" {
 			audioModel = m
 		}
+	}
+
+	if strings.TrimSpace(audioModel) == "" {
+		return openai.ErrorWrapper(errors.New("audio model must not be empty"), "invalid_audio_model", http.StatusBadRequest)
+	}
+	originalAudioModel := audioModel
+	meta.OriginModelName = audioModel
+	modelMapping := c.GetStringMapString(ctxkey.ModelMapping)
+	if mapped := modelMapping[audioModel]; mapped != "" {
+		audioModel = mapped
+	}
+	pricingModel := audioModel
+	// Keep historical slugs usable without bypassing their administrator tariff.
+	if channelType == channeltype.Mistral && audioModel == "voxtral-tts-2603" {
+		audioModel = "voxtral-mini-tts-2603"
+	}
+	if channelType == channeltype.Mistral && audioModel == "voxtral-mini-transcribe-2602" {
+		audioModel = "voxtral-mini-2602"
+	}
+	meta.ActualModelName = audioModel
+	if (channelType == channeltype.Mistral || channelType == channeltype.Zhipu || channelType == channeltype.Zai) && relayMode == relaymode.AudioTranslation {
+		return openai.ErrorWrapper(errors.New("this channel supports transcription, not a standard translation endpoint"), "unsupported_audio_translation", http.StatusBadRequest)
+	}
+	if channelType == channeltype.Groq && audioModel == "whisper-large-v3-turbo" && relayMode == relaymode.AudioTranslation {
+		return openai.ErrorWrapper(errors.New("Whisper Large V3 Turbo supports transcription only"), "unsupported_audio_translation", http.StatusBadRequest)
+	}
+	if relayMode == relaymode.AudioSpeech && strings.TrimSpace(ttsRequest.Input) == "" {
+		return openai.ErrorWrapper(errors.New("speech input must not be empty"), "invalid_audio_input", http.StatusBadRequest)
+	}
+	wireBody, wireContentType, err := normalizeAudioWire(c, relayMode, channelType, audioModel, &ttsRequest)
+	if err != nil {
+		return openai.ErrorWrapper(err, "invalid_audio_request", http.StatusBadRequest)
 	}
 
 	// get channel-specific pricing if available
@@ -126,33 +161,31 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 
 	// Use three-layer pricing system
 	pricingAdaptor := resolvePricingAdaptor(meta)
-	modelRatio := pricing.ResolveModelRatioAt(audioModel, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
+	modelRatio := pricing.ResolveModelRatioAt(pricingModel, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
-	ratio := modelRatio * groupRatio
 
-	audioPricingCfg, hasAudioPricing := pricing.ResolveAudioPricing(audioModel, channelModelConfigs, pricingAdaptor, meta.StartTime)
+	audioPricingCfg, hasAudioPricing := pricing.ResolveAudioPricing(pricingModel, channelModelConfigs, pricingAdaptor, meta.StartTime)
 	tokensPerSecond := pricing.DefaultAudioPromptTokensPerSecond
 	if hasAudioPricing && audioPricingCfg != nil && audioPricingCfg.PromptTokensPerSecond > 0 {
 		tokensPerSecond = audioPricingCfg.PromptTokensPerSecond
 	}
-	var quota int64
-	var preConsumedQuota int64
-	switch relayMode {
-	case relaymode.AudioSpeech:
-		preConsumedQuota = int64(float64(len(ttsRequest.Input)) * ratio)
-		quota = preConsumedQuota
-	case relaymode.AudioTranscription,
-		relaymode.AudioTranslation:
-		audioTokens, err := countAudioTokens(c, tokensPerSecond)
+	seconds := float64(0)
+	if relayMode == relaymode.AudioTranscription || relayMode == relaymode.AudioTranslation {
+		measured, err := countAudioTokens(c, 1)
 		if err != nil {
-			return openai.ErrorWrapper(err, "count_audio_tokens_failed", http.StatusInternalServerError)
+			return openai.ErrorWrapper(err, "invalid_audio_duration", http.StatusBadRequest)
 		}
-
-		preConsumedQuota = int64(math.Ceil(audioTokens * ratio))
-		quota = preConsumedQuota
-	default:
-		return openai.ErrorWrapper(errors.New("unexpected_relay_mode"), "unexpected_relay_mode", http.StatusInternalServerError)
+		seconds = measured
+	} else if relayMode != relaymode.AudioSpeech {
+		return openai.ErrorWrapper(errors.New("unexpected audio relay mode"), "unexpected_relay_mode", http.StatusBadRequest)
 	}
+	local, hasLocal := channelModelConfigs[pricingModel]
+	ratioOverride := hasLocal && local.Ratio != 0 && local.Audio == nil
+	quota, unit, err := quoteAudioInput(relayMode, ttsRequest.Input, seconds, tokensPerSecond, modelRatio, groupRatio, audioPricingCfg, ratioOverride)
+	if err != nil {
+		return openai.ErrorWrapper(err, "invalid_audio_pricing", http.StatusBadRequest)
+	}
+	preConsumedQuota := quota
 
 	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
 	tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
@@ -165,8 +198,8 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	if userQuota-preConsumedQuota < 0 {
 		return openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
 	}
-	if userQuota > 100*preConsumedQuota &&
-		(tokenQuotaUnlimited || tokenQuota > 100*preConsumedQuota) {
+	if preConsumedQuota < userQuota/100 &&
+		(tokenQuotaUnlimited || preConsumedQuota < tokenQuota/100) {
 		// in this case, we do not pre-consume quota
 		// because the user has enough quota
 		preConsumedQuota = 0
@@ -182,14 +215,23 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		markPreConsumed(c, preConsumedQuota)
 		defer billingAuditSafetyNet(c)
 
-		provisionalLogId := recordProvisionalLog(c, meta, audioModel, preConsumedQuota)
+		provisionalLogId := recordProvisionalLog(c, meta, originalAudioModel, preConsumedQuota)
 		c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 	}
 	provLogID := c.GetInt(ctxkey.ProvisionalLogId)
+	lg := gmw.GetLogger(c)
 	succeed := false
 	defer func() {
 		if succeed {
 			return
+		}
+		if provLogID > 0 {
+			if err := model.ReconcileConsumeLog(detachForBilling(c), provLogID, 0, "audio request failed, refunded", 0, 0, 0, nil); err != nil {
+				lg.Warn("reconcile failed audio consume log", zap.Error(err))
+			}
+		}
+		if err := model.UpdateUserRequestCostQuotaByRequestID(userId, c.GetString(ctxkey.RequestId), 0); err != nil {
+			lg.Warn("reconcile failed audio request cost", zap.Error(err))
 		}
 		markBillingReconciled(c)
 		if preConsumedQuota > 0 {
@@ -197,12 +239,6 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			goAudioRollbackPreConsumed(c, tokenId, preConsumedQuota)
 		}
 	}()
-
-	// map model name
-	modelMapping := c.GetStringMapString(ctxkey.ModelMapping)
-	if modelMapping != nil && modelMapping[audioModel] != "" {
-		audioModel = modelMapping[audioModel]
-	}
 
 	baseURL := channeltype.ChannelBaseURLs[channelType]
 	requestURL := c.Request.URL.String()
@@ -223,6 +259,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 	}
 	if channelType == channeltype.Zhipu || channelType == channeltype.Zai {
+		baseURL = strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/api/paas/v4")
 		// Zhipu and Z.AI are the same platform under two brands and expose the same
 		// OpenAI-compatible audio endpoints under /api/paas/v4. Z.AI serves only
 		// transcription (GLM-ASR-2512); it publishes no text-to-speech model.
@@ -241,17 +278,9 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 	}
 
-	// Reconstruct the original request body from cache to ensure full payload is forwarded
-	rawBody, err := common.GetRequestBody(c)
-	if err != nil {
-		return openai.ErrorWrapper(err, "get_request_body_failed", http.StatusInternalServerError)
-	}
-	requestBody := bytes.NewBuffer(rawBody)
-	// Reset gin Request.Body for any subsequent operations that may need it
-	c.Request.Body = io.NopCloser(bytes.NewReader(rawBody))
-	// responseFormat := c.DefaultPostForm("response_format", "json")
-
-	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
+	// Dispatch only this attempt's normalized bytes. Keep the client body and
+	// transport headers intact for another channel's mapping and audio metering.
+	req, err := http.NewRequestWithContext(ctx, c.Request.Method, fullRequestURL, bytes.NewReader(wireBody))
 	if err != nil {
 		return openai.ErrorWrapper(err, "new_request_failed", http.StatusInternalServerError)
 	}
@@ -261,14 +290,12 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		apiKey := c.Request.Header.Get("Authorization")
 		apiKey = strings.TrimPrefix(apiKey, "Bearer ")
 		req.Header.Set("api-key", apiKey)
-		req.ContentLength = c.Request.ContentLength
 	} else {
 		req.Header.Set("Authorization", c.Request.Header.Get("Authorization"))
 	}
-	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
+	req.Header.Set("Content-Type", wireContentType)
 	req.Header.Set("Accept", c.Request.Header.Get("Accept"))
 
-	lg := gmw.GetLogger(c)
 	// Record what the caller actually asked for. The multipart body is excluded from
 	// the generic request logger, so without this an upstream parameter rejection
 	// leaves no gateway-side evidence of the request that caused it.
@@ -279,11 +306,18 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		zap.String("model", audioModel),
 		zap.Int("relay_mode", relayMode))
 
+	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 	resp, err := client.HTTPClient.Do(req)
 	if err != nil {
 		// Let ErrorWrapper handle the logging to avoid duplicate logging
 		return openai.ErrorWrapper(errors.Wrapf(err, "upstream audio request failed for channel %d", channelId), "do_request_failed", http.StatusInternalServerError)
 	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			lg.Warn("close upstream audio response", zap.Error(err))
+		}
+	}()
 
 	// Immediately record a provisional request cost using the estimated quota, even if we skipped physical pre-consume
 	// (trusted path). This ensures cancellation cases are still tracked and later reconciled.
@@ -294,75 +328,15 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 	}
 
-	err = req.Body.Close()
-	if err != nil {
-		return openai.ErrorWrapper(err, "close_request_body_failed", http.StatusInternalServerError)
-	}
-	err = c.Request.Body.Close()
-	if err != nil {
-		return openai.ErrorWrapper(err, "close_request_body_failed", http.StatusInternalServerError)
-	}
-
-	// https://github.com/Laisky/one-api/pull/21
-	// Commenting out the following code because Whisper's transcription
-	// only charges for the length of the input audio, not for the output.
-	// -------------------------------------
-	// if relayMode != relaymode.AudioSpeech {
-	// 	responseBody, err := io.ReadAll(resp.Body)
-	// 	if err != nil {
-	// 		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
-	// 	}
-	// 	err = resp.Body.Close()
-	// 	if err != nil {
-	// 		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError)
-	// 	}
-
-	// 	var openAIErr openai.SlimTextResponse
-	// 	if err = json.Unmarshal(responseBody, &openAIErr); err == nil {
-	// 		if openAIErr.Error.Message != "" {
-	// 			return openai.ErrorWrapper(errors.Errorf("type %s, code %v, message %s", openAIErr.Error.Type, openAIErr.Error.Code, openAIErr.Error.Message), "request_error", http.StatusInternalServerError)
-	// 		}
-	// 	}
-
-	// 	var text string
-	// 	switch responseFormat {
-	// 	case "json":
-	// 		text, err = getTextFromJSON(responseBody)
-	// 	case "text":
-	// 		text, err = getTextFromText(responseBody)
-	// 	case "srt":
-	// 		text, err = getTextFromSRT(responseBody)
-	// 	case "verbose_json":
-	// 		text, err = getTextFromVerboseJSON(responseBody)
-	// 	case "vtt":
-	// 		text, err = getTextFromVTT(responseBody)
-	// 	default:
-	// 		return openai.ErrorWrapper(errors.New("unexpected_response_format"), "unexpected_response_format", http.StatusInternalServerError)
-	// 	}
-	// 	if err != nil {
-	// 		return openai.ErrorWrapper(err, "get_text_from_body_err", http.StatusInternalServerError)
-	// 	}
-	// 	quota = int64(openai.CountTokenText(text, audioModel))
-	// 	resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
-	// }
-
 	if resp.StatusCode != http.StatusOK {
-		// Reconcile provisional log to 0 since upstream returned error
-		if provLogID > 0 {
-			if err := model.ReconcileConsumeLog(ctx, provLogID, 0,
-				"upstream error, refunded", 0, 0, 0, nil); err != nil {
-				lg.Warn("failed to reconcile provisional log on upstream error",
-					zap.Error(err), zap.Int("provisional_log_id", provLogID))
-			}
-		}
-		// Reconcile provisional record to 0 since upstream returned error
-		if err := model.UpdateUserRequestCostQuotaByRequestID(userId, c.GetString(ctxkey.RequestId), 0); err != nil {
-			lg.Warn("update user request cost to zero failed", zap.Error(err))
-		}
 		return RelayErrorHandler(resp)
+	}
+	if err := normalizeAudioResponse(resp, relayMode, channelType, ttsRequest.ResponseFormat); err != nil {
+		return openai.ErrorWrapper(err, "invalid_audio_response", http.StatusBadGateway)
 	}
 
 	succeed = true
+	c.Set(adaptor.AudioReceiptAcceptedKey, true)
 	markBillingReconciled(c)
 	quotaDelta := quota - preConsumedQuota
 
@@ -377,15 +351,15 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		defer cancel()
 
 		// Build a full log entry with IDs from gin.Context
-		logContent := fmt.Sprintf("model rate %.2f, group rate %.2f", modelRatio, groupRatio)
+		logContent := fmt.Sprintf("audio input unit %s, model rate %.8g, group rate %.8g", unit, modelRatio, groupRatio)
 		entry := &model.Log{
 			UserId:           userId,
 			UserUUID:         model.StringPtrIfNotEmpty(meta.UserUUID),
 			ChannelId:        channelId,
 			ChannelUUID:      model.StringPtrIfNotEmpty(meta.ChannelUUID),
-			PromptTokens:     int(quota), // audio API logs total as prompt tokens
+			PromptTokens:     0, // Input units are not model tokens; the exact tariff is in Content.
 			CompletionTokens: 0,
-			ModelName:        audioModel,
+			ModelName:        originalAudioModel,
 			TokenName:        tokenName,
 			TokenUUID:        model.StringPtrIfNotEmpty(meta.TokenUUID),
 			Content:          logContent,
@@ -411,10 +385,6 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	_, err = io.Copy(c.Writer, resp.Body)
 	if err != nil {
 		return openai.ErrorWrapper(err, "copy_response_body_failed", http.StatusInternalServerError)
-	}
-	err = resp.Body.Close()
-	if err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError)
 	}
 	return nil
 }

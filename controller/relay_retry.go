@@ -28,6 +28,9 @@ func shouldRetry(c *gin.Context, bizErr *model.ErrorWithStatusCode) error {
 		c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) {
 		return errors.New("video creation may already have created a paid job; automatic replay is unsafe")
 	}
+	if c.GetBool(adaptor.ImageReceiptAcceptedKey) || c.GetBool(adaptor.AudioReceiptAcceptedKey) {
+		return errors.New("upstream work is already accepted; replay after downstream failure is unsafe")
+	}
 	statusCode := bizErr.StatusCode
 	rawErr := bizErr.RawError
 

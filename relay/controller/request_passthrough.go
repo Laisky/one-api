@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 )
 
 var allowedExtraBodyKeys = map[string]struct{}{
@@ -53,11 +55,12 @@ var allowedExtraBodyKeys = map[string]struct{}{
 
 // passthroughMergeStats captures non-sensitive diagnostics for controlled passthrough merges.
 type passthroughMergeStats struct {
-	UnknownPreserved     int
-	AllowedRootPreserved int
-	ExtraBodyMerged      int
-	ExtraBodySkipped     int
-	ExtraBodyRejected    int
+	UnknownPreserved             int
+	AllowedRootPreserved         int
+	ExtraBodyMerged              int
+	ExtraBodySkipped             int
+	ExtraBodyRejected            int
+	UnsupportedParametersRemoved int
 }
 
 // mergeControlledPassthroughJSON merges allowlisted passthrough fields from the
@@ -150,6 +153,14 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 		changed = true
 	}
 
+	// This is the final wire object, after model mapping, conversion and raw
+	// extension merging. Filtering earlier alone lets passthrough resurrect
+	// parameters that the actual upstream model rejects.
+	if removed := openai.NormalizeModelRequestParameters(updatedMap); len(removed) > 0 {
+		stats.UnsupportedParametersRemoved = len(removed)
+		changed = true
+	}
+
 	if !changed {
 		return updated, stats, false, nil
 	}
@@ -168,7 +179,8 @@ func hasPassthroughDiagnostics(stats passthroughMergeStats) bool {
 		stats.AllowedRootPreserved > 0 ||
 		stats.ExtraBodyMerged > 0 ||
 		stats.ExtraBodySkipped > 0 ||
-		stats.ExtraBodyRejected > 0
+		stats.ExtraBodyRejected > 0 ||
+		stats.UnsupportedParametersRemoved > 0
 }
 
 // collectCombinedExtraBody merges raw and typed extra_body maps, prioritizing raw

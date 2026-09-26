@@ -12,8 +12,8 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/one-api/internal/tokenizer"
 	"github.com/Laisky/zap"
-	"github.com/pkoukk/tiktoken-go"
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"
@@ -109,11 +109,14 @@ func getTokenEncoder(model string) *tiktoken.Tiktoken {
 	return nil
 }
 
+// getTokenNum counts ordinary text exactly, retaining the configured approximate fallback.
 func getTokenNum(tokenEncoder *tiktoken.Tiktoken, text string) int {
 	if config.ApproximateTokenEnabled || tokenEncoder == nil {
 		return int(float64(len(text)) * 0.38)
 	}
-	return len(tokenEncoder.Encode(text, nil, nil))
+	// Encode(text, nil, nil) enables no special tokens. EncodeOrdinary has the
+	// same tokenization contract without scanning for unusable special tokens.
+	return len(tokenEncoder.EncodeOrdinary(text))
 }
 
 // CountTokenMessages counts the number of tokens in a list of messages.

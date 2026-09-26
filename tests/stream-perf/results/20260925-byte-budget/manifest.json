@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "production_commit": "b6efcb89ddee034d33148d66d8c3d6c755056cf7",
+  "integration_parent": "f9b85f7725aac6383098abc14ed201e32a1591c5",
+  "historical_baseline": "299deffa58aa1e87aa699a038484cbdaae3ab450",
+  "local_measured_candidate": "eee3e056801ae7ed45abc329be86a9d261765df6",
+  "local_recovery_is_original_git_history": false,
+  "final_run_ledger_sha256": "679e5246c3caa2fb1d39557c9963ab123f76fbcbf683c454ac958b13938fd265",
+  "ledger_precision": "9 significant digits; full precision and qualification are in the separate raw archive",
+  "raw_archive": "one-api-pr427-byte-budget-evidence.zip",
+  "raw_archive_sha256": "e09795b55fc81ad0006c7b8fa9f24011bb43da6a7200252f54084e300d5c5e83",
+  "raw_archive_verified_files": 263,
+  "studies": {
+    "encoder-local": {"accepted": false, "trials": 40, "requests": 15360, "summary_sha256": "7ba26b1955465ed1d69b1b0ab6e0ac3e7f9fb2c320327052abcc31b238aa515b"},
+    "stream-boundary": {"accepted": true, "trials": 40, "requests": 15360, "summary_sha256": "c5d5523eb449504e83503f3e4ff382c17303e71eb6647a6ed9ff9bfc011c3f4b"},
+    "final-confirmation": {"accepted": true, "trials": 40, "requests": 15360, "summary_sha256": "9294c994ed93abed3bc9a0e8818a0a5886d5695686f9448868922894f9cdfeb7"}
+  },
+  "final_build": {
+    "toolchain": "go1.27.1",
+    "flags": ["-p=2", "-mod=vendor", "-trimpath", "-buildvcs=false"],
+    "baseline_sha256": "5974873e2ab135d927b04f8401e194db5a197c664b96fa482268e8d8daea6fd8",
+    "candidate_sha256": "6550a116e0d978f4ce7d5f323bc69ab83321adfe484fab15f154f404f993304b",
+    "driver_sha256": "7f52e6fef16f2ad4fa9ecb27d937663e18325813f60ce26d7e29b56b117fc61e",
+    "integration_rebuild_matches_candidate_and_driver": true
+  },
+  "environment": {
+    "platform": "Linux x86_64", "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+    "cgroup_cpu_max": "400000 100000", "memory_bytes": 4294967296,
+    "GOMAXPROCS_per_process": 2, "database": "fresh SQLite", "tenants": 1,
+    "shared_host": true, "cpu_affinity_isolation": false, "rss_sample_ms": 20,
+    "driver_peak_rss_measured": false
+  },
+  "workloads": {
+    "saturated": {"concurrency": [8,64], "chunks": 1024, "chunk_bytes": 128, "pace_ms": 0, "requests": 256},
+    "paced": {"concurrency": [8,64], "chunks": 32, "chunk_bytes": 128, "pace_ms": 2, "requests": 512}
+  },
+  "final_confirmation": {"pairs_per_cell": 5, "alternating_order": true, "trials": 40, "offered": 15360, "completed": 15360, "failed": 0, "dropped": 0, "paired_usage_matches": true, "accepted": true},
+  "bounds": "The compact ledger verifies performance arithmetic only. Raw framing, cancellations, per-request timings and durable usage require the separately delivered, hash-bound archive. No production capacity or universal memory improvement is certified."
+}

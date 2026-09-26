@@ -1,0 +1,112 @@
+package openrouter
+
+import "github.com/Laisky/one-api/relay/adaptor"
+
+// bytedance_seedModels returns the bytedance_seed model defaults for openrouter.
+// It takes no arguments and returns independently owned, directly editable Go configurations.
+func bytedance_seedModels() map[string]adaptor.ModelConfig {
+	return map[string]adaptor.ModelConfig{
+		"bytedance-seed/seed-1.6": {
+			Ratio:           nativeRate(0.25),
+			CompletionRatio: 8,
+			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+				Ratio:               nativeRate(0.5),
+				CompletionRatio:     8,
+				InputTokenThreshold: 128000,
+			},
+			},
+			ContextLength:               262144,
+			MaxOutputTokens:             32768,
+			InputModalities:             []string{"image", "text", "video"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "reasoning", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
+			Description:                 "bytedance-seed/seed-1.6 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"bytedance-seed/seed-1.6-flash": {
+			Ratio:           nativeRate(0.075),
+			CompletionRatio: 4,
+			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+				Ratio:               nativeRate(0.09999999999999999),
+				CompletionRatio:     8,
+				InputTokenThreshold: 128000,
+			},
+			},
+			ContextLength:               262144,
+			MaxOutputTokens:             32768,
+			InputModalities:             []string{"image", "text", "video"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "reasoning", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
+			Description:                 "bytedance-seed/seed-1.6-flash on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"bytedance-seed/seed-2-1-turbo": {
+			Ratio:                       nativeRate(0.5),
+			CompletionRatio:             5,
+			ContextLength:               262144,
+			MaxOutputTokens:             235929,
+			InputModalities:             []string{"text", "image", "video"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "reasoning", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
+			Description:                 "bytedance-seed/seed-2-1-turbo on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"bytedance-seed/seed-2.0-code": {
+			Ratio:           nativeRate(0.5),
+			CompletionRatio: 6,
+			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+				Ratio:               nativeRate(1),
+				CompletionRatio:     6,
+				InputTokenThreshold: 128000,
+			},
+			},
+			ContextLength:               262144,
+			MaxOutputTokens:             131072,
+			InputModalities:             []string{"text", "image", "video"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
+			SupportedReasoningEfforts:   []string{"high", "medium", "low"},
+			DefaultReasoningEffort:      "medium",
+			Description:                 "bytedance-seed/seed-2.0-code on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"bytedance-seed/seed-2.0-lite": {
+			Ratio:           nativeRate(0.25),
+			CompletionRatio: 8,
+			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+				Ratio:               nativeRate(0.5),
+				CompletionRatio:     8,
+				InputTokenThreshold: 128000,
+			},
+			},
+			ContextLength:               262144,
+			MaxOutputTokens:             131072,
+			InputModalities:             []string{"text", "image", "video"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
+			SupportedReasoningEfforts:   []string{"high", "medium", "low", "minimal"},
+			DefaultReasoningEffort:      "medium",
+			Description:                 "bytedance-seed/seed-2.0-lite on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"bytedance-seed/seed-2.0-mini": {
+			Ratio:           nativeRate(0.09999999999999999),
+			CompletionRatio: 4,
+			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+				Ratio:               nativeRate(0.19999999999999998),
+				CompletionRatio:     4,
+				InputTokenThreshold: 128000,
+			},
+			},
+			ContextLength:               262144,
+			MaxOutputTokens:             131072,
+			InputModalities:             []string{"text", "image", "video"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
+			SupportedReasoningEfforts:   []string{"high", "medium", "low", "minimal"},
+			DefaultReasoningEffort:      "medium",
+			Description:                 "bytedance-seed/seed-2.0-mini on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+	}
+}

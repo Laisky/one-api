@@ -93,8 +93,8 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 	tracker := streaming.FromContext(c)
 	var trackerErr error
 	// Initialize accumulators for the response
-	responseText := ""
-	reasoningText := ""
+	var responseText strings.Builder
+	var reasoningText strings.Builder
 	var usage *model.Usage
 
 	var streamRewriter openai_compatible.StreamRewriteHandler
@@ -164,11 +164,11 @@ streamLoop:
 				for _, choice := range streamResponse.Choices {
 					currentReasoningChunk := extractReasoningContent(&choice.Delta)
 					if currentReasoningChunk != "" {
-						reasoningText += currentReasoningChunk
+						reasoningText.WriteString(currentReasoningChunk)
 					}
 
 					choice.Delta.SetReasoningContent(c.Query("reasoning_format"), currentReasoningChunk)
-					responseText += conv.AsString(choice.Delta.Content)
+					responseText.WriteString(conv.AsString(choice.Delta.Content))
 
 					if tracker != nil && metaInfo != nil {
 						deltaTokens := 0
@@ -237,7 +237,7 @@ streamLoop:
 				render.StringData(c, "data: "+string(payload))
 
 				for _, choice := range streamResponse.Choices {
-					responseText += choice.Text
+					responseText.WriteString(choice.Text)
 					if tracker != nil && metaInfo != nil {
 						if tokens := CountTokenText(choice.Text, metaInfo.ActualModelName); tokens > 0 {
 							if err := tracker.RecordCompletionTokens(tokens); err != nil {
@@ -327,14 +327,14 @@ streamLoop:
 
 				// Update accumulated reasoning text
 				if currentReasoningChunk != "" {
-					reasoningText += currentReasoningChunk
+					reasoningText.WriteString(currentReasoningChunk)
 				}
 
 				// Set the reasoning content in the format requested by client
 				choice.Delta.SetReasoningContent(c.Query("reasoning_format"), currentReasoningChunk)
 
 				// Accumulate response content
-				responseText += conv.AsString(choice.Delta.Content)
+				responseText.WriteString(conv.AsString(choice.Delta.Content))
 
 				if tracker != nil && metaInfo != nil {
 					deltaTokens := 0
@@ -409,7 +409,7 @@ streamLoop:
 
 			// Accumulate text from all choices
 			for _, choice := range streamResponse.Choices {
-				responseText += choice.Text
+				responseText.WriteString(choice.Text)
 				if tracker != nil && metaInfo != nil {
 					if tokens := CountTokenText(choice.Text, metaInfo.ActualModelName); tokens > 0 {
 						if err := tracker.RecordCompletionTokens(tokens); err != nil {
@@ -477,11 +477,11 @@ streamLoop:
 	// Record when upstream streaming is completed
 	recordUpstreamCompleted(c)
 
-	combined := reasoningText + responseText
+	combined := reasoningText.String() + responseText.String()
 	if combined != "" || usage != nil {
 		c.Set(ctxkey.ConvertedResponse, map[string]any{
 			"stream":    true,
-			"reasoning": reasoningText,
+			"reasoning": reasoningText.String(),
 			"content":   combined,
 			"usage":     usage,
 		})

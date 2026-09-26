@@ -1,0 +1,75 @@
+diff --git a/common/custom_event.go b/common/custom_event.go
+index a8695f0..66a6ff9 100644
+--- a/common/custom_event.go
++++ b/common/custom_event.go
+@@ -44,7 +44,11 @@ func encode(writer io.Writer, event CustomEvent) error {
+ 
+ // writeData formats an event payload, escapes embedded line breaks, and terminates SSE data frames.
+ func writeData(writer io.Writer, data any) error {
+-	formatted := fmt.Sprint(data)
++	return writeStringData(writer, fmt.Sprint(data))
++}
++
++// writeStringData escapes a string payload and preserves the existing SSE delimiter and write-error contract.
++func writeStringData(writer io.Writer, formatted string) error {
+ 	if err := writeCustomEventString(writer, "data", dataReplacer.Replace(formatted)); err != nil {
+ 		return err
+ 	}
+diff --git a/common/render/render.go b/common/render/render.go
+index fcbe67c..03169f9 100644
+--- a/common/render/render.go
++++ b/common/render/render.go
+@@ -13,9 +13,11 @@ import (
+ 
+ // StringData streams an SSE data chunk to the client using the provided string payload.
+ func StringData(c *gin.Context, str string) {
+-	str = strings.TrimPrefix(str, "data: ")
+ 	str = strings.TrimSuffix(str, "\r")
+-	c.Render(-1, common.CustomEvent{Data: "data: " + str})
++	if !strings.HasPrefix(str, "data: ") {
++		str = "data: " + str
++	}
++	c.Render(-1, common.StringEvent(str))
+ 	c.Writer.Flush()
+ }
+ 
+diff --git a/common/string_event.go b/common/string_event.go
+new file mode 100644
+index 0000000..13ace0e
+--- /dev/null
++++ b/common/string_event.go
+@@ -0,0 +1,17 @@
++package common
++
++import "net/http"
++
++// StringEvent is an already formatted SSE string, without the generic CustomEvent formatting step.
++type StringEvent string
++
++// Render writes the same headers, escaped bytes and delimiters as CustomEvent for a string payload.
++func (r StringEvent) Render(w http.ResponseWriter) error {
++	r.WriteContentType(w)
++	return writeStringData(w, string(r))
++}
++
++// WriteContentType preserves CustomEvent content-type and caller-supplied cache-control semantics.
++func (r StringEvent) WriteContentType(w http.ResponseWriter) {
++	CustomEvent{}.WriteContentType(w)
++}
+diff --git a/relay/adaptor/openai_compatible/utils.go b/relay/adaptor/openai_compatible/utils.go
+index 6e8e56a..217b1d5 100644
+--- a/relay/adaptor/openai_compatible/utils.go
++++ b/relay/adaptor/openai_compatible/utils.go
+@@ -76,8 +76,11 @@ type TextResponseChoice struct {
+ 	FinishReason string        `json:"finish_reason"`
+ }
+ 
+-// NormalizeDataLine normalizes SSE data lines
++// NormalizeDataLine normalizes ASCII spaces after the SSE data prefix while reusing canonical lines.
+ func NormalizeDataLine(data string) string {
++	if strings.HasPrefix(data, "data: ") && (len(data) == len("data: ") || data[len("data: ")] != ' ') {
++		return data
++	}
+ 	if strings.HasPrefix(data, "data:") {
+ 		content := strings.TrimLeft(data[len("data:"):], " ")
+ 		return "data: " + content

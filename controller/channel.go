@@ -474,7 +474,15 @@ func UpdateChannel(c *gin.Context) {
 			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Channel id is required")))
 			return
 		}
-		model.UpdateChannelStatusByIdWithContext(gmw.Ctx(c), channel.Id, channel.Status)
+		if channel.Status != model.ChannelStatusEnabled && channel.Status != model.ChannelStatusManuallyDisabled && channel.Status != model.ChannelStatusAutoDisabled {
+			helper.RespondErrorWithStatus(c, http.StatusBadRequest, errkind.InvalidRequestErr(errors.New("Invalid channel status")))
+			return
+		}
+		if err := model.SetChannelStatusWithContext(gmw.Ctx(c), channel.Id, channel.Status); err != nil {
+			lg.Error("channel status update failed", zap.String("channel_uuid", ref), zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to update channel status."})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 		return
 	}

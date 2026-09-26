@@ -1,3 +1,5 @@
+import { TableToolbar, type TableToolbarProps } from '@/components/ui/table-toolbar';
+import { useSelectableTable, type TableSelectionOptions } from '@/components/ui/table-selection';
 import * as React from 'react';
 import { flexRender, type RowData, type SortingState, useTable } from '@tanstack/react-table';
 import { modernTableFeatures, type ModernColumnDef as ColumnDef } from '@/lib/table';
@@ -9,7 +11,8 @@ import { AdvancedPagination } from '@/components/ui/advanced-pagination';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-export interface DataTableProps<TData extends RowData, TValue = unknown> {
+export interface DataTableProps<TData extends RowData, TValue = unknown>
+  extends TableSelectionOptions<TData>, Omit<TableToolbarProps, 'selectionControl' | 'hasSelection'> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   pageIndex?: number;
@@ -25,8 +28,15 @@ export interface DataTableProps<TData extends RowData, TValue = unknown> {
 }
 
 export function DataTable<TData extends RowData, TValue = unknown>({
-  columns,
+  columns: originalColumns,
   data,
+  enableSelection,
+  selection,
+  selectionScope,
+  selectionDisabled,
+  selectionTotal,
+  getSelectionId,
+  getSelectionLabel,
   pageIndex = 0,
   pageSize = 20,
   total = 0,
@@ -36,8 +46,29 @@ export function DataTable<TData extends RowData, TValue = unknown>({
   sortOrder = 'desc',
   onSortChange,
   loading = false,
+  searchControl,
+  onSearchSubmit,
+  onRefresh,
+  toolbarActions,
+  batchActions,
+  batchActionsDisabled,
+  batchActionsBusy,
 }: DataTableProps<TData, TValue>) {
   const { t } = useTranslation();
+  const selectable = useSelectableTable({
+    columns: originalColumns,
+    data,
+    total,
+    loading,
+    enableSelection,
+    selection,
+    selectionScope: selectionScope ?? '',
+    selectionDisabled,
+    selectionTotal,
+    getSelectionId,
+    getSelectionLabel,
+  });
+  const columns = selectable.columns;
   const { isMobile } = useResponsive();
   // Client-side sorting state (for display only when no server-side sorting)
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -89,25 +120,40 @@ export function DataTable<TData extends RowData, TValue = unknown>({
     } as ColumnDef<TData, TValue>;
   });
 
-  const table = useTable({
-    features: modernTableFeatures,
-    data,
-    columns: enhancedColumns as ColumnDef<TData, unknown>[],
-    state: {
-      sorting,
-      pagination: {
-        pageIndex,
-        pageSize,
+  const table = useTable(
+    {
+      features: modernTableFeatures,
+      data,
+      columns: enhancedColumns as ColumnDef<TData, unknown>[],
+      state: {
+        sorting,
+        pagination: {
+          pageIndex,
+          pageSize,
+        },
       },
+      onSortingChange: setSorting,
+      manualSorting: !!onSortChange, // Use manual sorting if server-side sorting is available
+      manualPagination: true,
+      pageCount: Math.ceil(total / pageSize),
     },
-    onSortingChange: setSorting,
-    manualSorting: !!onSortChange, // Use manual sorting if server-side sorting is available
-    manualPagination: true,
-    pageCount: Math.ceil(total / pageSize),
-  }, (state) => state);
+    (state) => state
+  );
 
   return (
     <div className="space-y-2">
+      <TableToolbar
+        selectionControl={selectable.controls}
+        hasSelection={selectable.hasSelection}
+        searchControl={searchControl}
+        onSearchSubmit={onSearchSubmit}
+        onRefresh={onRefresh}
+        toolbarActions={toolbarActions}
+        batchActions={batchActions}
+        batchActionsDisabled={selectionDisabled || batchActionsDisabled}
+        batchActionsBusy={batchActionsBusy}
+        loading={loading}
+      />
       <div className="relative">
         {/* Loading overlay to prevent repeated actions */}
         {loading && (
@@ -119,8 +165,16 @@ export function DataTable<TData extends RowData, TValue = unknown>({
           <div className={cn('space-y-3', loading && 'pointer-events-none opacity-60')}>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <section key={row.id} className="rounded-xl border bg-card p-4 shadow-sm">
+                <section
+                  key={row.id}
+                  className={cn(
+                    'rounded-xl border bg-card p-4 shadow-sm',
+                    selectable.isSelected(row.original) && 'bg-muted/50 ring-1 ring-primary'
+                  )}
+                >
                   {row.getVisibleCells().map((cell) => {
+                    if (cell.column.id === '__selection__')
+                      return <div key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</div>;
                     const meta = cell.column.columnDef.meta as { mobileLabel?: string } | undefined;
                     const headerDef = cell.column.columnDef.header;
                     const label = meta?.mobileLabel || (typeof headerDef === 'string' ? headerDef : cell.column.id || '');
@@ -159,7 +213,7 @@ export function DataTable<TData extends RowData, TValue = unknown>({
               <TableBody>
                 {table.getRowModel().rows?.length ? (
                   table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'}>
+                    <TableRow key={row.id} data-state={selectable.isSelected(row.original) ? 'selected' : undefined}>
                       {row.getVisibleCells().map((cell) => {
                         const meta = cell.column.columnDef.meta as { mobileLabel?: string } | undefined;
                         const headerDef = cell.column.columnDef.header;

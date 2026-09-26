@@ -33,7 +33,9 @@
       "jina_ocr": "Jina OCR (transport Chat Completions)",
       "grok_video": "Génération vidéo Grok",
       "grok_video_image": "Image vers vidéo Grok",
-      "grok_video_status": "État de la tâche vidéo Grok"
+      "grok_video_status": "État de la tâche vidéo Grok",
+      "zhipu_video": "Génération vidéo BigModel",
+      "zhipu_video_status": "État de tâche vidéo BigModel"
     },
     "notes": {
       "upload": "Remplacez audio.wav ou image.png par un fichier local pris en charge par le modèle. curl définit automatiquement la limite multipart.",
@@ -47,7 +49,10 @@
       "diarization": "Remplacez audio.wav par votre enregistrement. diarized_json renvoie des segments identifiés par locuteur ; chunking_strategy=auto prend aussi en charge les enregistrements de plus de 30 secondes.",
       "jinaOcr": "Remplacez document.png par une image de document accessible ou une URL de données d’image prise en charge. Jina OCR utilise Chat Completions pour lire des images et renvoyer du Markdown ; ce n’est pas un exemple de chat textuel général.",
       "legacy": "Il s’agit de l’ancien contrat Completions. Le retrait de modèles et les paramètres du fournisseur peuvent rendre d’anciennes entrées indisponibles ; vérifiez leur prise en charge avant tout appel.",
-      "grokVideo": "Utilisez le canal xAI avec Videos activé. Indiquez duration (1–15 secondes) ; la résolution par défaut est 480p. Les images en entrée sont facturées séparément. Remplacez YOUR_REQUEST_ID par le request_id reçu et vérifiez toutes les quelques secondes tant que le statut est pending ; arrêtez à done, failed ou expired. À la fin, utilisez video.url et enregistrez rapidement la vidéo accessible par cette URL temporaire. Aucun endpoint /content."
+      "grokVideo": "Utilisez le canal xAI avec Videos activé. Indiquez duration (1–15 secondes) ; la résolution par défaut est 480p. Les images en entrée sont facturées séparément. Remplacez YOUR_REQUEST_ID par le request_id reçu et vérifiez toutes les quelques secondes tant que le statut est pending ; arrêtez à done, failed ou expired. À la fin, utilisez video.url et enregistrez rapidement la vidéo accessible par cette URL temporaire. Aucun endpoint /content.",
+      "zhipuVideo": "Utilisez un canal BigModel ou Z.AI avec Videos activé. Chaque tâche acceptée est facturée une fois ; les consultations sont gratuites. Utilisez id, et non request_id, pour YOUR_TASK_ID. Consultez tant que task_status vaut PROCESSING et arrêtez sur SUCCESS ou FAIL. Téléchargez les URL video_result sans le jeton de passerelle. Aucun téléchargement /content.",
+      "siliconflowImage": "Utilisez un canal SiliconFlow. Une seule image est produite par requête, dans data[].url. Les entrées de retouche et les lots ne sont pas pris en charge. FLUX.2-pro nécessite une résolution autorisée. Téléchargez les URL temporaires sans transmettre le jeton de passerelle.",
+      "meteredAudio": "Le fichier audio est enregistré dans speech.wav. Orpheus accepte uniquement WAV et 200 caractères maximum. CosyVoice facture les octets UTF-8 ; Orpheus et Voxtral TTS facturent les caractères. Remplacez YOUR_VOICE_ID par une voix disponible. Les entrées sont mesurées avant envoi ; un accès fournisseur reste nécessaire."
     },
     "reference": "Référence du protocole",
     "reviewedOn": "Vérifié le {{date}}",
@@ -56,6 +61,15 @@
       "title": "Aucun exemple de passerelle vérifié",
       "unknown": "Le catalogue n’identifie pas de contrat de requête/réponse vérifié pour ce modèle. Les modalités et les prix ne définissent pas une API. Demandez à l’administrateur de vérifier le modèle associé et le point de terminaison du canal ; aucune requête de chat n’est supposée.",
       "native": "Ce modèle nécessite un protocole propre au fournisseur pour lequel aucun exemple de passerelle n’a été vérifié ici. Consultez la référence et vérifiez l’adaptateur et le point de terminaison plutôt que d’utiliser une requête générique de chat ou de média."
+    },
+    "audioTariff": {
+      "title": "Tarif d’entrée audio",
+      "rate": "${{price}} pour {{quantity}} {{unit}}",
+      "characters": "caractères",
+      "utf8_bytes": "octets UTF-8",
+      "seconds": "secondes",
+      "minimum": "Durée minimale facturée : {{seconds}} secondes",
+      "increment": "Pas de facturation : {{seconds}} secondes"
     }
   }
 }

@@ -1,25 +1,28 @@
+import type { TableBatchAction } from '@/components/ui/table-toolbar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { ListActionButton } from '@/components/ui/list-action-button';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { type SearchOption } from '@/components/ui/searchable-dropdown';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
+import { useAuthStore } from '@/lib/stores/auth';
+import { useTableSelection } from '@/hooks/useTableSelection';
+import { useSelectedChannelActions } from './useSelectedChannelActions';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Ban, Banknote, CheckCircle, ChevronDown, Copy, FlaskConical, Plus, RefreshCw, Settings, Trash2 } from 'lucide-react';
+import { Ban, CheckCircle, Copy, FlaskConical, Plus, RotateCcw, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CHANNEL_TYPE_LABELS as CHANNEL_TYPES } from './constants';
 import { resolveChannelColor } from './utils/colorGenerator';
 import { channelRef, channelRefPayload, createChannelColumns, sameChannelRef, type Channel } from './channels-page-columns';
+import { ChannelModelResetButton, useChannelModelReset } from './useChannelModelReset';
 
 /** ChannelsPage renders searchable channel administration, bulk actions, and pagination. */
 export function ChannelsPage() {
@@ -39,8 +42,10 @@ export function ChannelsPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [bulkTesting, setBulkTesting] = useState(false);
-  const [bulkBusy, setBulkBusy] = useState(false);
+  const [appliedKeyword, setAppliedKeyword] = useState('');
+  const loadSequence = useRef(0);
+  const { user } = useAuthStore();
+  const selection = useTableSelection(JSON.stringify([user?.uuid || user?.username, user?.role, searchKeyword.trim(), appliedKeyword]));
   const [refreshingBalanceIds, setRefreshingBalanceIds] = useState<Set<string | number>>(new Set());
   const initializedRef = useRef(false);
   const skipFirstSortEffect = useRef(true);
@@ -93,28 +98,33 @@ export function ChannelsPage() {
     });
   };
 
-  const load = async (p = 0, size = pageSize) => {
+  /** load binds rows to the applied keyword and keeps page navigation within that result set. */
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword) => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/channel/?p=${p}&size=${size}`;
+      let url = keyword ? `/api/channel/search?keyword=${encodeURIComponent(keyword)}` : `/api/channel/?p=${p}&size=${size}`;
       if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-
+      if (keyword) url += `&size=${size}`;
       const res = await api.get(url);
-      const { success, data: responseData, total: responseTotal } = res.data;
-
-      if (success) {
-        setData(responseData || []);
-        setTotal(responseTotal || 0);
-        setPageIndex(p);
-        setPageSize(size);
-      }
+      if (sequence !== loadSequence.current) return;
+      const { success, data: responseData, total: responseTotal, message } = res.data;
+      if (!success) throw new Error(message || t('table_selection.failed'));
+      const rows: Channel[] = responseData || [];
+      // This search API returns the complete result set. Slice locally instead
+      // of falling back to an unfiltered API when changing pages.
+      setData(keyword ? rows.slice(p * size, (p + 1) * size) : rows);
+      setTotal(keyword ? rows.length : responseTotal || 0);
+      setAppliedKeyword(keyword);
+      setPageIndex(p);
+      setPageSize(size);
     } catch (error) {
-      console.error('Failed to load channels:', error);
+      if (sequence !== loadSequence.current) return;
+      console.error(`Failed to load channels: ${String(error)}`);
       setData([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   };
 
@@ -161,32 +171,7 @@ export function ChannelsPage() {
     }
   };
 
-  const performSearch = async () => {
-    if (!searchKeyword.trim()) {
-      return load(0, pageSize);
-    }
-
-    setLoading(true);
-    try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/channel/search?keyword=${encodeURIComponent(searchKeyword)}`;
-      if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-      url += `&size=${pageSize}`;
-
-      const res = await api.get(url);
-      const { success, data: responseData } = res.data;
-
-      if (success) {
-        setData(responseData || []);
-        setPageIndex(0);
-        setTotal(responseData?.length || 0);
-      }
-    } catch (error) {
-      console.error('Search failed:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const performSearch = () => load(0, pageSize, searchKeyword.trim());
 
   // Load initial data
   useEffect(() => {
@@ -392,36 +377,6 @@ export function ChannelsPage() {
     }
   };
 
-  const handleBulkTest = async () => {
-    setBulkTesting(true);
-    try {
-      // Unified API call - complete URL with /api prefix
-      const res = await api.get('/api/channel/test');
-      if (!res.data?.success) {
-        notify({
-          type: 'error',
-          title: t('channels.notifications.bulk_test_failed_title'),
-          message: res.data?.message || t('channels.notifications.test_failed_message'),
-        });
-        return;
-      }
-      load(pageIndex, pageSize);
-      notify({
-        type: 'info',
-        message: t('channels.notifications.bulk_test_started'),
-      });
-    } catch (error) {
-      console.error('Bulk test failed:', error);
-      notify({
-        type: 'error',
-        title: t('channels.notifications.bulk_test_failed_title'),
-        message: error instanceof Error ? error.message : t('channels.notifications.test_failed_message'),
-      });
-    } finally {
-      setBulkTesting(false);
-    }
-  };
-
   const handlePriorityUpdate = async (channel: Channel, newPriority: number) => {
     if ((channel.priority ?? 0) === newPriority) return;
     try {
@@ -450,56 +405,6 @@ export function ChannelsPage() {
         title: t('channels.notifications.priority_failed_title', 'Update failed'),
         message: error instanceof Error ? error.message : t('channels.notifications.priority_failed_message', 'Failed to update priority.'),
       });
-    }
-  };
-
-  const handleBulkStatus = async (status: 1 | 2) => {
-    const targets = data;
-    if (targets.length === 0) {
-      notify({
-        type: 'info',
-        message: t('channels.notifications.bulk_status_empty', 'No channels available to update.'),
-      });
-      return;
-    }
-    setBulkBusy(true);
-    try {
-      notify({
-        type: 'info',
-        message: t('channels.notifications.bulk_status_started', 'Updating {{count}} channels…', { count: targets.length }),
-      });
-      let success = 0;
-      let failed = 0;
-      for (const ch of targets) {
-        try {
-          const res = await api.put('/api/channel/?status_only=1', { ...channelRefPayload(channelRef(ch)), status });
-          if (res.data?.success) {
-            success += 1;
-          } else {
-            failed += 1;
-          }
-        } catch (_err) {
-          failed += 1;
-        }
-      }
-      notify({
-        type: failed === 0 ? 'success' : 'error',
-        title:
-          status === 1
-            ? t('channels.notifications.bulk_enable_summary_title', 'Enable summary')
-            : t('channels.notifications.bulk_disable_summary_title', 'Disable summary'),
-        message: t('channels.notifications.bulk_status_summary', 'Updated {{success}} channels, {{failed}} failed.', {
-          success,
-          failed,
-        }),
-      });
-      if (searchKeyword.trim()) {
-        performSearch();
-      } else {
-        load(pageIndex, pageSize);
-      }
-    } finally {
-      setBulkBusy(false);
     }
   };
 
@@ -552,72 +457,18 @@ export function ChannelsPage() {
     }
   };
 
-  const handleBulkBalanceRefresh = async () => {
-    setBulkBusy(true);
-    try {
-      const res = await api.get('/api/channel/update_balance');
-      const { success, message } = res.data || {};
-      if (success) {
-        notify({
-          type: 'success',
-          message: t('channels.notifications.bulk_balance_success', 'All channel balances refreshed.'),
-        });
-      } else {
-        notify({
-          type: 'error',
-          title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
-          message: message || t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
-        });
-      }
-      if (searchKeyword.trim()) {
-        performSearch();
-      } else {
-        load(pageIndex, pageSize);
-      }
-    } catch (error) {
-      console.error('Bulk balance refresh failed:', error);
-      notify({
-        type: 'error',
-        title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
-        message: error instanceof Error ? error.message : t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
-      });
-    } finally {
-      setBulkBusy(false);
-    }
-  };
-
-  const handleDeleteDisabled = async () => {
-    const confirmed = await confirmAction({
-      title: t('channels.confirm.delete_disabled_title', 'Delete Disabled Channels'),
-      description: t('channels.confirm.delete_disabled'),
-    });
-    if (!confirmed) return;
-
-    try {
-      // Unified API call - complete URL with /api prefix
-      const res = await api.delete('/api/channel/disabled');
-      if (!res.data?.success) {
-        notify({
-          type: 'error',
-          title: t('channels.notifications.delete_failed_title'),
-          message: res.data?.message || t('channels.notifications.delete_failed_message'),
-        });
-        return;
-      }
-      load(pageIndex, pageSize);
-      notify({
-        type: 'success',
-        message: t('channels.notifications.delete_disabled_success'),
-      });
-    } catch (error) {
-      console.error('Failed to delete disabled channels:', error);
-      notify({
-        type: 'error',
-        title: t('channels.notifications.delete_failed_title'),
-        message: error instanceof Error ? error.message : t('channels.notifications.delete_failed_message'),
-      });
-    }
-  };
+  const resetModels = useChannelModelReset(() => load(pageIndex, pageSize));
+  const selectedActions = useSelectedChannelActions(selection, searchKeyword.trim(), () => load(pageIndex, pageSize));
+  const selectionDisabled = loading || selectedActions.busy || resetModels.busy || searchKeyword.trim() !== appliedKeyword;
+  const batchDisabled = selectionDisabled || !selection.hasSelection || selection.selectedCount(total) === 0;
+  const renderResetAction = (channel: Channel, compact = false) => (
+    <ChannelModelResetButton
+      channel={channel}
+      compact={compact}
+      disabled={loading || resetModels.busy || selectedActions.busy}
+      onReset={resetModels.resetChannel}
+    />
+  );
 
   const columns = createChannelColumns({
     t,
@@ -625,6 +476,7 @@ export function ChannelsPage() {
     refreshingBalanceIds,
     renderChannelTypeBadge,
     renderStatusBadge,
+    renderResetAction,
     onPriorityUpdate: handlePriorityUpdate,
     onBalanceRefresh: handleBalanceRefresh,
     onTestingModelUpdate: updateTestingModel,
@@ -659,75 +511,39 @@ export function ChannelsPage() {
     }
   };
 
-  const toolbarActions = (
-    <div className={cn('flex gap-2 flex-wrap max-w-full', isMobile ? 'flex-col w-full' : 'items-center')}>
-      <div className="flex gap-2 w-full md:w-auto">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                onClick={handleBulkTest}
-                disabled={bulkTesting || loading}
-                className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
-                size="sm"
-              >
-                {bulkTesting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
-                {isMobile ? t('channels.toolbar.test_all_mobile') : t('channels.toolbar.test_all')}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="start" className="max-w-[360px] whitespace-pre-line">
-              {t('channels.toolbar.test_all_help')}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <Button
-          variant="outline"
-          onClick={handleBulkBalanceRefresh}
-          disabled={bulkBusy || loading}
-          className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
-          size="sm"
-        >
-          <Banknote className="h-4 w-4" />
-          {isMobile
-            ? t('channels.toolbar.refresh_balances_mobile', 'Refresh Balances')
-            : t('channels.toolbar.refresh_balances', 'Refresh All Balances')}
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={bulkBusy || loading || data.length === 0}
-              className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
-            >
-              {t('channels.toolbar.bulk_actions', 'Bulk Actions')}
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => handleBulkStatus(1)} className="gap-2">
-              <CheckCircle className="h-4 w-4 text-success" />
-              {t('channels.toolbar.enable_visible', 'Enable visible channels')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => handleBulkStatus(2)} className="gap-2">
-              <Ban className="h-4 w-4 text-warning" />
-              {t('channels.toolbar.disable_visible', 'Disable visible channels')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button
-          variant="destructive"
-          onClick={handleDeleteDisabled}
-          className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
-          size="sm"
-        >
-          <Trash2 className="h-4 w-4" />
-          {isMobile ? t('channels.toolbar.delete_disabled_mobile') : t('channels.toolbar.delete_disabled')}
-        </Button>
-      </div>
-    </div>
-  );
+  const batchActions: TableBatchAction[] = [
+    {
+      id: 'enable',
+      label: t('table_selection.enable'),
+      icon: <CheckCircle className="h-4 w-4" />,
+      onSelect: () => selectedActions.run('enable'),
+    },
+    {
+      id: 'disable',
+      label: t('table_selection.disable'),
+      icon: <Ban className="h-4 w-4" />,
+      onSelect: () => selectedActions.run('disable'),
+    },
+    {
+      id: 'reset',
+      label: t('table_selection.reset'),
+      icon: <RotateCcw className="h-4 w-4" />,
+      onSelect: () => selectedActions.run('reset'),
+    },
+    {
+      id: 'test',
+      label: t('table_selection.test'),
+      icon: <FlaskConical className="h-4 w-4" />,
+      onSelect: () => selectedActions.run('test'),
+    },
+    {
+      id: 'delete_disabled',
+      label: t('table_selection.delete_disabled'),
+      icon: <Trash2 className="h-4 w-4" />,
+      onSelect: () => selectedActions.run('delete_disabled'),
+      destructive: true,
+    },
+  ];
 
   return (
     <>
@@ -747,7 +563,11 @@ export function ChannelsPage() {
       >
         <Card className="border-0 md:border shadow-none md:shadow-sm">
           <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
+            {resetModels.report}
+            {selectedActions.report}
             <EnhancedDataTable
+              selection={selection}
+              selectionDisabled={selectionDisabled}
               columns={columns}
               data={data}
               floatingRowActions={(row) => (
@@ -764,6 +584,7 @@ export function ChannelsPage() {
                     aria-label={t('channels.actions.duplicate', 'Duplicate')}
                     icon={<Copy className="h-4 w-4" />}
                   />
+                  {renderResetAction(row, true)}
                   <ListActionButton
                     onClick={() => manage(channelRef(row), row.status === 1 ? 'disable' : 'enable')}
                     title={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
@@ -799,7 +620,9 @@ export function ChannelsPage() {
               onSearchSubmit={performSearch}
               searchPlaceholder={t('channels.search.placeholder')}
               allowSearchAdditions={true}
-              toolbarActions={toolbarActions}
+              batchActions={batchActions}
+              batchActionsDisabled={batchDisabled}
+              batchActionsBusy={selectedActions.busy}
               onRefresh={refresh}
               loading={loading}
               emptyMessage={t('channels.empty')}
@@ -812,6 +635,8 @@ export function ChannelsPage() {
       </ResponsivePageContainer>
 
       <ConfirmActionDialog />
+      {resetModels.confirmation}
+      {selectedActions.confirmation}
     </>
   );
 }

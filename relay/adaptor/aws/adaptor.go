@@ -48,15 +48,12 @@ func (a *Adaptor) Init(meta *meta.Meta) {
 }
 
 // DefaultToolingConfig returns Bedrock AgentCore tooling defaults (search, tool invocation, identity, memory fees).
-func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
-	return AWSToolingDefaults
-}
+func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig { return AWSToolingDefaults }
 
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-
 	// Check if the model supports embedding for embedding requests
 	if relayMode == relaymode.Embeddings {
 		capabilities := GetModelCapabilities(request.Model)
@@ -64,24 +61,20 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 			return nil, errors.Errorf("model '%s' does not support embedding", request.Model)
 		}
 	}
-
 	adaptor := GetAdaptor(request.Model)
 	if adaptor == nil {
 		return nil, errors.New("adaptor not found")
 	}
-
 	// Validate parameters using the new model-based validation
 	if validationErr := ValidateUnsupportedParameters(request, request.Model); validationErr != nil {
 		return nil, errors.Errorf("validation failed: %s", validationErr.Error.Message)
 	}
-
 	// Prefer max_completion_tokens; for providers that do not support it, map to max_tokens
 	capabilities := GetModelCapabilities(request.Model)
 	if request.MaxCompletionTokens != nil && *request.MaxCompletionTokens > 0 && !capabilities.SupportsMaxCompletionTokens {
 		// Always prefer MaxCompletionTokens value
 		request.MaxTokens = *request.MaxCompletionTokens
 	}
-
 	a.awsAdapter = adaptor
 	converted, err := adaptor.ConvertRequest(c, relayMode, request)
 	return converted, errors.WithStack(err)
@@ -101,14 +94,8 @@ func (a *Adaptor) GetModelList() (models []string) {
 	return
 }
 
-func (a *Adaptor) GetChannelName() string {
-	return "aws"
-}
-
-func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
-	return "", nil
-}
-
+func (a *Adaptor) GetChannelName() string                      { return "aws" }
+func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) { return "", nil }
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	return nil
 }
@@ -117,30 +104,23 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-
 	// Check if the model supports image generation
 	capabilities := GetModelCapabilities(request.Model)
 	if !capabilities.SupportsImageGeneration {
 		return nil, errors.Errorf("model '%s' does not support image generation", request.Model)
 	}
-
 	// Initialize the AWS adapter based on the model
 	adaptor := GetAdaptor(request.Model)
 	if adaptor == nil {
 		return nil, errors.New("adaptor not found for model: " + request.Model)
 	}
 	a.awsAdapter = adaptor
-
 	// Store the image request in context for the Titan or Canvas adapter to use later
 	c.Set(ctxkey.ImageRequest, *request)
 	c.Set(ctxkey.RequestModel, request.Model)
-
 	// For image generation, we need to convert to GeneralOpenAIRequest format
 	// and then let the specific adapter handle the conversion
-	generalRequest := &model.GeneralOpenAIRequest{
-		Model: request.Model,
-	}
-
+	generalRequest := &model.GeneralOpenAIRequest{Model: request.Model}
 	converted, err := adaptor.ConvertRequest(c, relaymode.ImagesGenerations, generalRequest)
 	return converted, errors.WithStack(err)
 }
@@ -149,13 +129,11 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-
 	// Check if this model supports Claude Messages API (v1/messages)
 	// Only Claude models should use this endpoint; other models should use v1/chat/completions
 	if !IsClaudeModel(request.Model) {
 		return nil, errors.Errorf("model '%s' does not support the v1/messages endpoint. Please use v1/chat/completions instead", request.Model)
 	}
-
 	// AWS Bedrock supports Claude Messages natively. Do not convert payload.
 	// Just set context for billing/routing and mark direct pass-through.
 	sub := GetAdaptor(request.Model)
@@ -167,40 +145,43 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	c.Set(ctxkey.ClaudeDirectPassthrough, true)
 	c.Set(ctxkey.OriginalClaudeRequest, request)
 	c.Set(ctxkey.RequestModel, request.Model)
-	// Also parse into anthropic.Request for AWS SDK payload building
-	if parsed, perr := anthropicAdaptor.ConvertClaudeRequest(c, *request); perr == nil {
-		c.Set(ctxkey.ConvertedRequest, parsed)
-	} else {
-		return nil, perr
+	// This typed view is for billing only. DoRequest retains the controller's
+	// lossless, sanitized payload separately for the actual SDK invocation.
+	parsed, err := anthropicAdaptor.ConvertClaudeRequest(c, *request)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse Claude request for billing")
 	}
-	// Return the original request object; controller will forward original body
+	c.Set(ctxkey.ConvertedRequest, parsed)
 	return request, nil
 }
 
+// invokeBodyPreparer lets a provider retain the authoritative request body
+// without changing the SDK transport contract of other AWS sub-adapters.
+type invokeBodyPreparer interface {
+	// PrepareRequestBody validates and stores request-local body bytes.
+	PrepareRequestBody(*gin.Context, io.Reader) error
+}
+
+// DoRequest prepares a request for SDK-backed response handling. It preserves
+// the Claude controller's sanitized body and returns preparation errors before
+// any upstream invocation, while leaving other AWS providers unchanged.
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
-	// AWS Bedrock doesn't use HTTP requests - it uses the AWS SDK directly
-	// For Claude Messages API, we should return nil to indicate DoResponse should handle everything
-	// But we need to ensure the controller doesn't try to access a nil response
 	if a.awsAdapter == nil {
 		return nil, errors.New("AWS sub-adapter not initialized")
 	}
-
-	// Add logging to match other adapters that use DoRequestHelper
-	// Since AWS uses SDK directly, we manually add the upstream request logging here
-	// The request-scoped logger already carries the full user/token/channel identity
-	// (id + uuid + name), so only the non-identity fields are added here. "adaptor"
-	// is the upstream provider implementation name, distinct from the
-	// operator-chosen "channel_name" carried by the bound logger.
+	if preparer, ok := a.awsAdapter.(invokeBodyPreparer); ok {
+		if err := preparer.PrepareRequestBody(c, requestBody); err != nil {
+			return nil, errors.Wrap(err, "prepare AWS Invoke request")
+		}
+	}
+	// The request-scoped logger already carries the full user/token/channel identity.
 	lg := gmw.GetLogger(c).With(
 		zap.String("url", "AWS Bedrock SDK"),
 		zap.String("adaptor", a.GetChannelName()),
 		zap.String("model", meta.ActualModelName),
 	)
-	// Log upstream request for billing tracking (matches common.go:70)
 	lg.Info("sending request to upstream channel")
-
-	// For AWS Bedrock, we don't make HTTP requests - we use the AWS SDK directly
-	// Return nil response to indicate DoResponse should handle the entire flow
+	// DoResponse owns the AWS SDK invocation and its usage receipt.
 	return nil, nil
 }
 
@@ -278,18 +259,12 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 	if awsArnMatch != nil && awsArnMatch.MatchString(modelName) {
 		adaptorType = AwsClaude
 	}
-
 	// If model is not in registry, return minimal capabilities
 	if adaptorType == 0 {
-		return ProviderCapabilities{
-			SupportsImageGeneration: false,
-			SupportsEmbedding:       false,
-		}
+		return ProviderCapabilities{SupportsImageGeneration: false, SupportsEmbedding: false}
 	}
-
 	// Get base capabilities for the adapter type
 	var baseCapabilities ProviderCapabilities
-
 	switch adaptorType {
 	case AwsClaude:
 		baseCapabilities = ProviderCapabilities{
@@ -315,7 +290,7 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 	case AwsCohere:
 		baseCapabilities = ProviderCapabilities{
 			SupportsTools:               true,  // Cohere models on AWS Bedrock support tool calling via Converse API
-			SupportsFunctions:           false, // Cohere doesn't support OpenAI functions
+			SupportsFunctions:           false, // Cohere doesn't supportOpenAI functions
 			SupportsLogprobs:            false,
 			SupportsResponseFormat:      false,
 			SupportsReasoningEffort:     false,
@@ -330,7 +305,7 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 			SupportsPrediction:          false,
 			SupportsMaxCompletionTokens: false,
 			SupportsStop:                true,  // Cohere Command R models support stop parameter
-			SupportsImageGeneration:     false, // Cohere Command R models don't support image generation
+			SupportsImageGeneration:     false, // Cohere models don't support image generation
 			SupportsEmbedding:           false, // Cohere Command R models don't support embedding
 		}
 	case AwsQwen:
@@ -425,7 +400,7 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 	case AwsOpenAI:
 		baseCapabilities = ProviderCapabilities{
 			SupportsTools:               false, // OpenAI OSS models don't support tool calling yet
-			SupportsFunctions:           false, // OpenAI OSS models don't support OpenAI functions
+			SupportsFunctions:           false, // OpenAI doesn't support OpenAI functions
 			SupportsLogprobs:            false,
 			SupportsResponseFormat:      false,
 			SupportsReasoningEffort:     false,
@@ -466,12 +441,8 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 		}
 	default:
 		// Default to minimal capabilities for unknown models
-		return ProviderCapabilities{
-			SupportsImageGeneration: false,
-			SupportsEmbedding:       false,
-		}
+		return ProviderCapabilities{SupportsImageGeneration: false, SupportsEmbedding: false}
 	}
-
 	// Override capabilities based on specific model characteristics
 	// This ensures consistency with the actual model registry used by GetModelList
 	if isEmbeddingModel(modelName) {
@@ -487,6 +458,5 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 		baseCapabilities.SupportsImageGeneration = false
 		baseCapabilities.SupportsEmbedding = false
 	}
-
 	return baseCapabilities
 }

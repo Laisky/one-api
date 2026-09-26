@@ -33,7 +33,9 @@
       "jina_ocr": "Jina OCR (Chat Completions transport)",
       "grok_video": "Grok video generation",
       "grok_video_image": "Grok image-to-video",
-      "grok_video_status": "Grok video task status"
+      "grok_video_status": "Grok video task status",
+      "zhipu_video": "BigModel video generation",
+      "zhipu_video_status": "BigModel video task status"
     },
     "notes": {
       "upload": "Replace audio.wav or image.png with a local file supported by the model. curl sets the multipart boundary automatically.",
@@ -47,7 +49,10 @@
       "diarization": "Replace audio.wav with your recording. diarized_json returns speaker-labeled segments; chunking_strategy=auto also handles recordings longer than 30 seconds.",
       "jinaOcr": "Replace document.png with an accessible document image or a supported image data URL. Jina OCR uses Chat Completions to read images and return Markdown; this is not a general text-chat example.",
       "legacy": "This is a legacy Completions contract. Model retirement and provider endpoint settings can make old catalog entries unavailable; confirm support before calling.",
-      "grokVideo": "Use the xAI channel with Videos enabled. Supply duration explicitly (1–15 seconds); resolution defaults to 480p. Input images are billed separately. Replace YOUR_REQUEST_ID with the returned request_id and poll every few seconds while status is pending; stop on done, failed or expired. Read video.url when done and save the temporary URL promptly. There is no /content endpoint."
+      "grokVideo": "Use the xAI channel with Videos enabled. Supply duration explicitly (1–15 seconds); resolution defaults to 480p. Input images are billed separately. Replace YOUR_REQUEST_ID with the returned request_id and poll every few seconds while status is pending; stop on done, failed or expired. Read video.url when done and save the temporary URL promptly. There is no /content endpoint.",
+      "zhipuVideo": "Use a BigModel or Z.AI channel with Videos enabled. Generation is billed once per accepted job; polling is not billed. Use id (not request_id) as YOUR_TASK_ID. Poll while task_status is PROCESSING and stop on SUCCESS or FAIL. Download video_result URLs without sending your gateway token. These are generation examples, not /content downloads.",
+      "siliconflowImage": "Use a SiliconFlow channel. This gateway contract generates one image per request and returns data[].url. Do not submit image-editing inputs or batches. FLUX.2-pro uses an explicit supported resolution. Download temporary image URLs without forwarding your gateway token.",
+      "meteredAudio": "Audio is saved to speech.wav. Orpheus accepts WAV only and at most 200 characters. CosyVoice bills UTF-8 input bytes; Orpheus and Voxtral TTS bill input characters. Replace YOUR_VOICE_ID with an available provider voice. These inputs are metered before dispatch; account access is still required."
     },
     "reference": "Protocol reference",
     "reviewedOn": "Reviewed {{date}}",
@@ -56,6 +61,15 @@
       "title": "No verified gateway example",
       "unknown": "The catalog does not identify a reviewed request/response contract for this model. Modalities and prices do not establish an API. Ask the administrator to verify the mapped model and channel endpoint; no chat request is assumed.",
       "native": "This model needs a provider-specific protocol that is not covered by a verified gateway example here. Consult the reference and confirm the adaptor and endpoint configuration rather than using a generic chat or media request."
+    },
+    "audioTariff": {
+      "title": "Input audio tariff",
+      "rate": "${{price}} per {{quantity}} {{unit}}",
+      "characters": "characters",
+      "utf8_bytes": "UTF-8 bytes",
+      "seconds": "seconds",
+      "minimum": "Minimum billable duration: {{seconds}} seconds",
+      "increment": "Billing increment: {{seconds}} seconds"
     }
   }
 }
