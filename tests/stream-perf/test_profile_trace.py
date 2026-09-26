@@ -68,7 +68,8 @@ class Executor:
 class ProfileTraceTests(unittest.TestCase):
     """ProfileTraceTests ensure a five-second trace is never claimed as a full-minute profile."""
 
-    def exercise(self, *, mode='trace', overrun=False, fail=False, client_procs=None):
+    def exercise(self, *, mode='trace', overrun=False, fail=False, client_procs=None,
+                 paired=False, client_fail=False, client_overrun=False):
         """exercise drives the actual diagnostic function with synthetic local services and a controlled clock."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -76,7 +77,7 @@ class ProfileTraceTests(unittest.TestCase):
             args = SimpleNamespace(output=root/'evidence', binary=root/'gateway', driver=root/'driver',
                 token_cache=root/'cache', mode=mode, gateway_procs=3, auxiliary_procs=2, client_procs=client_procs,
                 concurrency=32, requests=100, chunks=1024, chunk_bytes=128, pace_ms=0,
-                warmup=30, seconds=60, deadline=120, trace_seconds=5, trace_offset=15, rate=0)
+                warmup=30, seconds=60, deadline=120, trace_seconds=5, trace_offset=15, rate=0, client_trace=paired)
             client = SimpleNamespace(pid=99, poll=lambda: 0 if clock.at >= 100 else None, wait=lambda **kw: 0)
 
             @contextmanager
@@ -118,11 +119,21 @@ class ProfileTraceTests(unittest.TestCase):
                         'started_monotonic': clock.at, 'finished_monotonic': clock.at + length,
                         'wall_seconds': length}
 
+            def client_capture(pid, port, seconds, path):
+                """client_capture independently models the second process and its failure interval."""
+                if client_fail:
+                    raise RuntimeError('synthetic client capture failure')
+                result = capture(f'http://127.0.0.1:{port}/debug/pprof/trace?seconds={seconds}', path, seconds+15)
+                result['process_role'] = 'driver'
+                if client_overrun:
+                    result['finished_monotonic'] = clock.at + 70
+                return result
+
             with ExitStack() as stack:
                 for target, name, replacement in ((profile_run.platform, 'platform', lambda: 'synthetic Linux'),
                     (profile_run, 'cpu_allowance', lambda: {'effective_cores': 4, 'stat_path': '/unused'}),
                     (profile_run, 'assert_loopback_listeners', lambda *a: None), (profile_run, 'snapshot', snapshot),
-                    (profile_run, 'ThreadPoolExecutor', Executor), (profile_run, 'capture', capture),
+                    (profile_run.profile_client, 'collect', client_capture), (profile_run, 'ThreadPoolExecutor', Executor), (profile_run, 'capture', capture),
                     (profile_run.run, 'qualify', qualify),
                     (profile_run.run, 'free_port', lambda: 6060), (profile_run.run, 'sha256', lambda *a: 'fixture'),
                     (profile_run.run, 'fixture', fixture), (profile_run.run, 'run_driver', lambda *a: {}),
@@ -131,7 +142,7 @@ class ProfileTraceTests(unittest.TestCase):
                     stack.enter_context(mock.patch.object(target, name, replacement))
                 stack.enter_context(mock.patch.object(profile_run.run, 'wait_usage', side_effect=[(0, 16), (100, 116)]))
                 stop = stack.enter_context(mock.patch.object(profile_run.run, 'stop'))
-                if fail:
+                if fail or client_fail:
                     with self.assertRaisesRegex(RuntimeError, 'synthetic'):
                         profile_run.diagnose(args)
                     result = json.loads((args.output/'summary.json').read_text())
@@ -150,7 +161,6 @@ class ProfileTraceTests(unittest.TestCase):
         self.assertEqual(result['profile_captures'][0]['started_elapsed'], 45)
         self.assertEqual(result['profile_captures'][0]['finished_elapsed'], 50)
         self.assertEqual(result['window']['coverage_seconds'], 60)
-        self.assertEqual(result['window_started_elapsed'], 30.0)
 
     def test_capture_outside_window_cannot_qualify(self):
         """test_capture_outside_window_cannot_qualify distinguishes successful data transfer from valid observation."""
@@ -180,9 +190,44 @@ class ProfileTraceTests(unittest.TestCase):
         self.assertTrue(result['sustained_protocol_qualified'])
         self.assertEqual(result['configuration']['client_procs'], 4)
         self.assertEqual(result['process_slots'], {'gateway': 3, 'mock': 2, 'driver': 4})
+        self.assertEqual(result['window_started_elapsed'], 30.0)
 
     def test_default_client_control_retains_auxiliary_slots(self):
         """test_default_client_control_retains_auxiliary_slots preserves historical default fixture behavior."""
         result, _ = self.exercise()
         self.assertIsNone(result['configuration']['client_procs'])
         self.assertEqual(result['process_slots'], {'gateway': 3, 'mock': 2, 'driver': 2})
+
+    def test_paired_trace_uses_two_independent_captures(self):
+        """test_paired_trace_uses_two_independent_captures records distinct files without merging process roles."""
+        result, calls = self.exercise(paired=True)
+        self.assertTrue(result['sustained_protocol_qualified'])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(result['profile_captures'][0]['file'], 'runtime.trace')
+        self.assertEqual(result['client_trace_capture']['file'], 'client.trace')
+        self.assertEqual(result['client_trace_capture']['process_role'], 'driver')
+        self.assertTrue(result['client_trace_window_valid'])
+
+    def test_client_trace_failure_is_not_hidden_by_gateway_success(self):
+        """test_client_trace_failure_is_not_hidden_by_gateway_success retains an incomplete study."""
+        result, _ = self.exercise(paired=True, client_fail=True)
+        self.assertFalse(result['complete'])
+        self.assertEqual(result['failure_type'], 'RuntimeError')
+
+    def test_client_trace_overrun_rejects_the_study(self):
+        """test_client_trace_overrun_rejects_the_study does not weaken the gateway window rule."""
+        result, _ = self.exercise(paired=True, client_overrun=True)
+        self.assertTrue(result['trace_window_within_observation'])
+        self.assertFalse(result['client_trace_window_valid'])
+        self.assertFalse(result['sustained_protocol_qualified'])
+
+    def test_paired_trace_preserves_explicit_client_cpu_control(self):
+        """test_paired_trace_preserves_explicit_client_cpu_control composes independent CPU-slot and trace controls."""
+        for slots in (1, 4):
+            with self.subTest(slots=slots):
+                result, calls = self.exercise(client_procs=slots, paired=True)
+                self.assertTrue(result['sustained_protocol_qualified'])
+                self.assertEqual(result['process_slots'], {'gateway': 3, 'mock': 2, 'driver': slots})
+                self.assertEqual(result['configuration']['client_procs'], slots)
+                self.assertEqual(result['client_trace_capture']['process_role'], 'driver')
+                self.assertEqual(len(calls), 2)

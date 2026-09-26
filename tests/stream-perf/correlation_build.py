@@ -48,6 +48,15 @@ def overlay_sources(sources: dict[str, bytes]) -> dict[str, str]:
 \tc.Writer.Flush()
 \tobserved.AfterFlush()''')
     name = 'tests/stream-perf/main.go'
+    texts[name] = replace_once(texts[name], '\tr := runLoad(o, client, key)', '''
+	clientTrace, traceErr := observation.StartClientTrace(os.Getenv(observation.ClientTraceEnvironment))
+	if traceErr != nil { return traceErr }
+	var traceCloseErr error
+	r := func() result {
+		defer func() { traceCloseErr = clientTrace.Close() }()
+		return runLoad(o, client, key)
+	}()
+	if traceCloseErr != nil { return traceCloseErr }''')
     texts[name] = replace_once(texts[name], 'type sample struct {', '''type sample struct {
 \tObservedEventNS []int64 `json:"observed_event_ns,omitempty"`
 \tobserve bool''')
@@ -62,7 +71,7 @@ def overlay_sources(sources: dict[str, bytes]) -> dict[str, str]:
     texts[name] = replace_once(texts[name], '\t\tpayload := strings.Join(data, "\\n")', '''\t\tpayload := strings.Join(data, "\\n")
 \t\tif s.observe {
 \t\t\tvar observationErr error
-\t\t\ts.ObservedEventNS, observationErr = observation.AppendClient(s.ObservedEventNS)
+\t\t\ts.ObservedEventNS, observationErr = observation.ObserveClient(s.ObservedEventNS, s.Index)
 \t\t\tif observationErr != nil { return observationErr }
 \t\t}''')
     return texts
@@ -83,7 +92,8 @@ def prepare(repository: Path, output: Path) -> dict:
         entries[name] = {'original_git_blob': PINS[name], 'overlay_sha256': hashlib.sha256(text.encode()).hexdigest()}
     descriptor = {'Replace': replacements}
     (output / 'overlay.json').write_text(json.dumps(descriptor, indent=2) + '\n')
-    manifest = {'schema_version': 1, 'diagnostic_only': True, 'sources': entries,
+    manifest = {'schema_version': 2, 'diagnostic_only': True, 'sources': entries,
+                'client_trace': 'explicit loopback listener; same-process numeric observation markers only',
                 'request_stride': 32, 'max_requests': 8192, 'max_events_per_request': 2048,
                 'clock': 'Linux CLOCK_MONOTONIC; verify epoch identity or restrict comparisons to per-process intervals',
                 'render_semantics': 'StringData only; call/flush order and data bytes unchanged',

@@ -30,7 +30,7 @@ class CorrelationBuildTests(unittest.TestCase):
         self.assertIn('o.requests > observation.MaxRequests || o.chunks > 1024', driver)
         self.assertIn('if s.observe { req.Header.Set', driver)
         protocol = transformed['tests/stream-perf/protocol.go']
-        self.assertLess(protocol.index('observation.AppendClient'), protocol.index('if payload == "[DONE]"'))
+        self.assertLess(protocol.index('observation.ObserveClient'), protocol.index('if payload == "[DONE]"'))
         self.assertEqual(self.sources, {name: (ROOT / name).read_bytes() for name in build.PINS})
 
     def test_changed_input_is_rejected_before_output_creation(self):

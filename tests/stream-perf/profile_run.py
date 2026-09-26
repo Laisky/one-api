@@ -13,12 +13,16 @@ import time
 
 import cache_tokens
 import run
+import profile_client
 from profile_capture import capture
 from profile_support import assert_loopback_listeners, cpu_allowance, snapshot, stable_window, write_json
 
 
 def diagnose(args: argparse.Namespace) -> dict:
     """diagnose qualifies a fresh gateway, samples a fixed workload and retains failed stability/correctness results."""
+    client_requested = getattr(args, 'client_trace', False)
+    if type(client_requested) is not bool or client_requested and args.mode != 'trace':
+        raise ValueError('client trace requires trace mode')
     args.output.mkdir(parents=True, exist_ok=False)
     allowance = cpu_allowance()
     summary = {'complete': False, 'diagnostic_only': True, 'started_utc': datetime.now(timezone.utc).isoformat(),
@@ -47,17 +51,19 @@ def diagnose(args: argparse.Namespace) -> dict:
             before = run.wait_usage(database, 16)
             command = run.driver_command(args, fixture['url'], args.output / 'requests.json', 'steady', args.concurrency,
                                          args.requests, args.chunks, args.pace_ms)
+            client_env, client_port = profile_client.configuration(args, fixture['env'])
             log = args.output / 'driver.log'
             with log.open('w') as output:
-                client = subprocess.Popen(command, env=fixture['env'], stdout=output, stderr=subprocess.STDOUT)
+                client = subprocess.Popen(command, env=client_env, stdout=output, stderr=subprocess.STDOUT)
                 try:
                     started = time.monotonic()
                     pids = {**fixture['pids'], 'driver': client.pid}
                     rows, profile_started, profile_finished = [], None, False
                     future = None
+                    client_future, client_capture = None, None
                     trace_started = False
                     next_sample = started
-                    with ThreadPoolExecutor(max_workers=1) as profiler, (args.output / 'samples.jsonl').open('w') as samples:
+                    with ThreadPoolExecutor(max_workers=2 if client_requested else 1) as profiler, (args.output / 'samples.jsonl').open('w') as samples:
                         while client.poll() is None:
                             elapsed = time.monotonic() - started
                             if elapsed > args.deadline:
@@ -76,6 +82,9 @@ def diagnose(args: argparse.Namespace) -> dict:
                                 trace_started = True
                                 future = profiler.submit(capture, fixture['pprof_url'] + f'/trace?seconds={args.trace_seconds}',
                                                          args.output / 'runtime.trace', args.trace_seconds + 15)
+                                if client_port is not None:
+                                    client_future = profiler.submit(profile_client.collect, client.pid, client_port, args.trace_seconds,
+                                                                    args.output / 'client.trace')
                             if profile_started is not None and elapsed >= profile_started + args.seconds and not profile_finished:
                                 if future is not None:
                                     summary['profile_captures'].append(future.result(timeout=15))
@@ -83,6 +92,9 @@ def diagnose(args: argparse.Namespace) -> dict:
                                 elif args.mode == 'heap':
                                     summary['profile_captures'].append(capture(
                                         fixture['pprof_url'] + '/heap?gc=1', args.output / 'heap-after.pprof', 15))
+                                if client_future is not None:
+                                    client_capture = client_future.result(timeout=15)
+                                    client_future = None
                                 profile_finished = client.poll() is None
                             try:
                                 row = snapshot(pids, fixture['mock_url'], database, Path(allowance['stat_path']), started)
@@ -97,6 +109,14 @@ def diagnose(args: argparse.Namespace) -> dict:
                             time.sleep(max(0, next_sample - time.monotonic()))
                         if future is not None:
                             summary['profile_captures'].append(future.result(timeout=args.seconds + 15))
+                        if client_future is not None:
+                            client_capture = client_future.result(timeout=args.trace_seconds + 15)
+                    client_valid = not client_requested or profile_client.inside(client_capture, started, profile_started, args.seconds)
+                    if client_capture is not None:
+                        client_capture['started_elapsed'] = client_capture.pop('started_monotonic') - started
+                        client_capture['finished_elapsed'] = client_capture.pop('finished_monotonic') - started
+                    summary['client_trace_capture'] = client_capture
+                    summary['client_trace_window_valid'] = client_valid
                     for captured in summary['profile_captures']:
                         captured['started_elapsed'] = captured.pop('started_monotonic') - started
                         captured['finished_elapsed'] = captured.pop('finished_monotonic') - started
@@ -121,7 +141,7 @@ def diagnose(args: argparse.Namespace) -> dict:
                                        and captures[0]['finished_elapsed'] <= profile_started + args.seconds)
                         summary['trace_window_within_observation'] = trace_valid
                     summary['profile_window_completed_while_load_alive'] = profile_finished
-                    summary['sustained_protocol_qualified'] = (summary['window']['qualified'] and profile_finished and trace_valid
+                    summary['sustained_protocol_qualified'] = (summary['window']['qualified'] and profile_finished and trace_valid and client_valid
                                                              and args.warmup >= 30 and args.seconds >= 60)
                     summary['complete'] = True
                 finally:
@@ -157,6 +177,7 @@ def main() -> None:
     parser.add_argument('--warmup', type=int, default=30)
     parser.add_argument('--seconds', type=int, default=60)
     parser.add_argument('--deadline', type=int, default=600)
+    parser.add_argument('--client-trace', action='store_true', help='require a separately instrumented driver and an independent bounded client trace')
     parser.add_argument('--trace-seconds', type=int, default=5)
     parser.add_argument('--trace-offset', type=int, default=15)
     args = parser.parse_args()
@@ -169,6 +190,8 @@ def main() -> None:
         parser.error('invalid bounded diagnostic configuration')
     if args.client_procs is not None and not 1 <= args.client_procs <= 64:
         parser.error('client-procs must be between 1 and 64')
+    if args.client_trace and args.mode != 'trace':
+        parser.error('client trace is only supported in explicit trace mode')
     if args.mode == 'trace' and not (1 <= args.trace_seconds <= 10 and 0 <= args.trace_offset
             and args.trace_offset + args.trace_seconds <= args.seconds):
         parser.error('trace subwindow must be 1-10 seconds within the observation')
