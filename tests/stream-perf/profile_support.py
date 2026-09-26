@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import os
+import re
 from pathlib import Path
 import time
 
@@ -51,7 +52,8 @@ def snapshot(pids: dict[str, int], mock_url: str, database: Path, stat_path: Pat
     at = time.monotonic()
     processes = {name: dict(zip(('cpu_seconds', 'rss_bytes'), run.proc_sample(pid))) for name, pid in pids.items()}
     return {'elapsed': at - started, 'processes': processes, 'upstream': run.api(mock_url + '/health'),
-            'durable_requests': run.usage_snapshot(database)[1], 'cgroup': cgroup_stats(stat_path)}
+            'durable_requests': run.usage_snapshot(database)[1], 'cgroup': cgroup_stats(stat_path),
+            'clock_domain': clock_domain(pids)}
 
 
 def assert_loopback_listeners(pid: int, expected_ports: set[int]) -> None:
@@ -86,3 +88,33 @@ def write_json(path: Path, data: dict) -> None:
     temporary = path.with_suffix(path.suffix + '.tmp')
     temporary.write_text(json.dumps(data, indent=2, allow_nan=False) + '\n')
     temporary.replace(path)
+
+
+def clock_domain(pids: dict[str, int], proc: Path = Path('/proc')) -> dict:
+    """clock_domain records verified epoch identity or explicitly limits interpretation to within-process intervals."""
+    boot = (proc / 'sys/kernel/random/boot_id').read_text().strip()
+    if not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', boot):
+        raise ValueError('invalid boot clock identity')
+    namespaces = {}
+    targets = {'observer': 'self', **pids}
+    for name, pid in targets.items():
+        if name != 'observer' and (type(pid) is not int or pid <= 0):
+            raise ValueError('invalid process identity')
+        path = proc / str(pid) / 'ns/time'
+        try:
+            namespaces[name] = os.readlink(path)
+        except FileNotFoundError:
+            # Do not confuse a dead process with a kernel lacking this namespace API.
+            if not path.parent.is_dir():
+                raise
+            namespaces[name] = None
+    known = [value for value in namespaces.values() if value is not None]
+    if known and len(known) != len(namespaces):
+        raise ValueError('partial time namespace evidence')
+    if any(not re.fullmatch(r'time:\[\d+\]', value) for value in known):
+        raise ValueError('invalid time namespace identity')
+    if len(set(known)) > 1:
+        raise ValueError('cross-process monotonic clocks have different namespaces')
+    return {'clock': 'CLOCK_MONOTONIC', 'boot_id': boot, 'time_namespaces': namespaces,
+            'absolute_cross_process_verified': bool(known),
+            'comparison_scope': 'shared epoch' if known else 'within-process intervals only; constant epoch offsets cancel'}
