@@ -53,7 +53,9 @@ func VideoHandler(c *gin.Context, resp *http.Response) (*relaymodel.ErrorWithSta
 	}
 
 	if resp.StatusCode < http.StatusBadRequest && c.Request.Method == http.MethodPost {
-		PersistAsyncVideoTask(c, body)
+		if err := PersistAsyncVideoTask(c, body); err != nil {
+			logger.Warn("async video task binding persistence failed", zap.Error(err))
+		}
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(body))
@@ -77,6 +79,6 @@ func VideoHandler(c *gin.Context, resp *http.Response) (*relaymodel.ErrorWithSta
 
 // PersistAsyncVideoTask preserves the shared task-binding entrypoint used by
 // OpenAI and compatible providers without coupling provider implementations.
-func PersistAsyncVideoTask(c *gin.Context, body []byte) {
-	asyncvideo.PersistTask(c, body)
+func PersistAsyncVideoTask(c *gin.Context, body []byte) error {
+	return asyncvideo.PersistTask(c, body)
 }

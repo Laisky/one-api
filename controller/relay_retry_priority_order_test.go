@@ -123,6 +123,13 @@ func runRelayRetryScenario(t *testing.T, initial *dbmodel.Channel, outcome retry
 // compatible upstream attempts, memoryCache selects routing, and retryTimes is
 // the configured retry budget. Returns: the observed routing and response state.
 func runRelayRetryScenarioForModel(t *testing.T, initial *dbmodel.Channel, requestModel string, outcome retryOrderOutcome, memoryCache bool, retryTimes int) retryOrderResult {
+	return runRelayRetryScenarioForRequest(t, initial, requestModel, http.MethodPost, "/v1/chat/completions", outcome, memoryCache, retryTimes)
+}
+
+// runRelayRetryScenarioForRequest drives the real retry loop with an arbitrary
+// HTTP method and path. Video creation bodies contain the fields needed by the
+// relay-mode classifier; chat paths retain the standard chat fixture.
+func runRelayRetryScenarioForRequest(t *testing.T, initial *dbmodel.Channel, requestModel, method, requestPath string, outcome retryOrderOutcome, memoryCache bool, retryTimes int) retryOrderResult {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -153,6 +160,11 @@ func runRelayRetryScenarioForModel(t *testing.T, initial *dbmodel.Channel, reque
 	relayHelperForTest = func(c *gin.Context, _ int) *model.ErrorWithStatusCode {
 		id := c.GetInt(ctxkey.ChannelId)
 		order = append(order, id)
+		if c.Request.Method == http.MethodPost && (c.Request.URL.Path == "/v1/videos" || c.Request.URL.Path == "/v1/videos/generations") {
+			// The scripted adaptor represents a dispatched paid creation. If its
+			// response fails, Relay must not invoke the helper for another channel.
+			c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
+		}
 		return outcome(id)
 	}
 	t.Cleanup(func() { relayHelperForTest = nil })
@@ -167,12 +179,13 @@ func runRelayRetryScenarioForModel(t *testing.T, initial *dbmodel.Channel, reque
 	)
 	require.NoError(t, err)
 	gmw.SetLogger(c, requestLogger)
-	body, err := json.Marshal(map[string]any{
-		"model":    requestModel,
-		"messages": []map[string]string{{"role": "user", "content": "hi"}},
-	})
+	requestBody := map[string]any{"model": requestModel, "messages": []map[string]string{{"role": "user", "content": "hi"}}}
+	if requestPath == "/v1/videos" || requestPath == "/v1/videos/generations" {
+		requestBody = map[string]any{"model": requestModel, "prompt": "hi", "duration": 5}
+	}
+	body, err := json.Marshal(requestBody)
 	require.NoError(t, err)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request = httptest.NewRequest(method, requestPath, bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Set(ctxkey.Id, 1)
 	c.Set(ctxkey.TokenId, 2)

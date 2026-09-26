@@ -1,13 +1,19 @@
 package muapi
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
@@ -101,4 +107,47 @@ func TestSetupRequestHeaderUsesMuAPIKey(t *testing.T) {
 	require.NoError(t, (&Adaptor{}).SetupRequestHeader(c, req, metaInfo))
 	require.Equal(t, "test-key", req.Header.Get("x-api-key"))
 	require.Empty(t, req.Header.Get("Authorization"))
+}
+
+// TestVideoCreationRedirectsNeverForwardCredentialsOrPaidPayload verifies the
+// adaptor refuses POST redirects before following them, including redirects
+// whose HTTP semantics would replay the generation body.
+func TestVideoCreationRedirectsNeverForwardCredentialsOrPaidPayload(t *testing.T) {
+	for _, status := range []int{http.StatusFound, http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			previousTraceSinks := config.TraceSinks
+			config.TraceSinks = []string{config.TraceSinkNone}
+			t.Cleanup(func() { config.TraceSinks = previousTraceSinks })
+			var targetRequests atomic.Int32
+			var badAuth atomic.Bool
+			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				targetRequests.Add(1)
+				_, _ = io.Copy(io.Discard, r.Body)
+			}))
+			defer target.Close()
+
+			source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("x-api-key") != "secret-key" {
+					badAuth.Store(true)
+				}
+				http.Redirect(w, r, target.URL+"/collect", status)
+			}))
+			defer source.Close()
+
+			previousClient := client.HTTPClient
+			client.HTTPClient = source.Client()
+			t.Cleanup(func() { client.HTTPClient = previousClient })
+
+			c := newMuAPITestContext(http.MethodPost, "/v1/videos", `{"duration":5,"prompt":"a lighthouse"}`)
+			c.Set(ctxkey.ContentType, "application/json")
+			response, err := (&Adaptor{}).DoRequest(c, &meta.Meta{
+				Mode: relaymode.Videos, BaseURL: source.URL, APIKey: "secret-key",
+				ActualModelName: "veo3-fast", RequestURLPath: "/v1/videos", ChannelId: 1,
+			}, strings.NewReader(`{"duration":5,"prompt":"a lighthouse"}`))
+			require.Error(t, err)
+			require.Nil(t, response)
+			require.False(t, badAuth.Load())
+			require.Zero(t, targetRequests.Load(), "redirect target must receive neither x-api-key nor generation body")
+		})
+	}
 }

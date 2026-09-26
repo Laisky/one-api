@@ -24,7 +24,7 @@ type Adaptor struct {
 
 var _ adaptor.Adaptor = (*Adaptor)(nil)
 var _ adaptor.VideoRequestPreparer = (*Adaptor)(nil)
-var _ adaptor.VideoPricingEstimator = (*Adaptor)(nil)
+var _ adaptor.DynamicVideoPricingAdaptor = (*Adaptor)(nil)
 
 // Init initializes the MuAPI adaptor for a request. MuAPI has no per-request
 // adaptor state, so this method intentionally performs no work.
@@ -119,6 +119,19 @@ func (a *Adaptor) GetModelList() []string {
 // listings.
 func (a *Adaptor) GetChannelName() string {
 	return "muapi"
+}
+
+// SupportsDynamicVideoPricing declares that MuAPI's configured video model
+// slugs are priced by the request-specific estimator rather than a frozen table.
+func (a *Adaptor) SupportsDynamicVideoPricing(modelName string) bool {
+	return validMuAPIModelName(strings.TrimSpace(modelName))
+}
+
+// CheckRedirect rejects automatic redirects for paid MuAPI requests. This
+// prevents credential forwarding, HTTPS downgrades, and replay of a creation
+// POST against an untrusted redirect target.
+func (a *Adaptor) CheckRedirect(_ *http.Request, _ []*http.Request) error {
+	return errors.New("automatic redirects are disabled for paid MuAPI requests")
 }
 
 // GetDefaultModelPricing returns no frozen tariff table. MuAPI pricing is

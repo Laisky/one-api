@@ -25,3 +25,12 @@ type VideoRequestPreparer interface {
 type VideoPricingEstimator interface {
 	EstimateVideoPricing(c *gin.Context, meta *meta.Meta, request *model.VideoRequest) (*VideoPricingConfig, error)
 }
+
+// DynamicVideoPricingAdaptor marks advertised video models whose request cost
+// must be quoted by the provider before quota admission. Implementations must
+// return true only for model identifiers they can price dynamically; callers
+// must fail closed when the quote is unavailable.
+type DynamicVideoPricingAdaptor interface {
+	VideoPricingEstimator
+	SupportsDynamicVideoPricing(modelName string) bool
+}

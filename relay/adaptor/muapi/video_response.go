@@ -63,7 +63,11 @@ func (a *Adaptor) handleVideoResponse(c *gin.Context, resp *http.Response) (*mod
 			return nil, openai_compatible.ErrorWrapper(errors.Wrap(err, "encode MuAPI task binding"), "invalid_video_response", http.StatusInternalServerError)
 		}
 		c.Set(adaptor.AsyncVideoAcceptedKey, true)
-		asyncvideo.PersistTask(c, bindingBody)
+		if err := asyncvideo.PersistTask(c, bindingBody); err != nil {
+			if logger := gmw.GetLogger(c); logger != nil {
+				logger.Warn("MuAPI async video task binding persistence failed", zap.Error(err), zap.String("task_id", payload.RequestID))
+			}
+		}
 	} else if payload.Status == "" {
 		return nil, openai_compatible.ErrorWrapper(errors.New("MuAPI video polling response has no status"), "invalid_video_response", http.StatusBadGateway)
 	}
@@ -88,8 +92,8 @@ func (a *Adaptor) handleVideoResponse(c *gin.Context, resp *http.Response) (*mod
 
 // hasMuAPIError reports whether an optional error field contains a meaningful
 // error. Parameters: raw is the provider's JSON error field. Return value is
-// true when the field indicates a failed creation; false and empty strings are
-// treated as non-error values, while other JSON values remain errors.
+// true when the field indicates a failed creation; missing, null, empty, and
+// whitespace-only strings are non-errors, while other JSON values remain errors.
 func hasMuAPIError(raw json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {

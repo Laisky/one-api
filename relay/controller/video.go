@@ -163,14 +163,22 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		if videoPricing == nil {
 			return openai.ErrorWrapper(errors.Errorf("video pricing missing for model %s", meta.ActualModelName), "video_pricing_missing", http.StatusBadRequest)
 		}
-		resolutionKey := videoRequest.RequestedResolution()
-		multiplier = videoPricing.EffectiveMultiplier(resolutionKey)
 		var quotaErr error
-		usedQuota, quotaErr = videoQuota(videoPricing.PerSecondUsd, multiplier, durationSeconds, videoPricing.InputImageUsd, inputImages, groupRatio)
+		if videoPricing.TotalUsdDecimal != "" {
+			usedQuota, quotaErr = videoQuotaFromTotalDecimal(videoPricing.TotalUsdDecimal, groupRatio)
+			logContent = fmt.Sprintf("video quoted total usd %s, group rate %.2f", videoPricing.TotalUsdDecimal, groupRatio)
+		} else if videoPricing.TotalUsd > 0 {
+			usedQuota, quotaErr = videoQuotaFromTotal(videoPricing.TotalUsd, groupRatio)
+			logContent = fmt.Sprintf("video quoted total usd %.6f, group rate %.2f", videoPricing.TotalUsd, groupRatio)
+		} else {
+			resolutionKey := videoRequest.RequestedResolution()
+			multiplier = videoPricing.EffectiveMultiplier(resolutionKey)
+			usedQuota, quotaErr = videoQuota(videoPricing.PerSecondUsd, multiplier, durationSeconds, videoPricing.InputImageUsd, inputImages, groupRatio)
+			logContent = fmt.Sprintf("video seconds %.2f, usd %.3f, multiplier %.2f, input images %d at usd %.4f, group rate %.2f", durationSeconds, videoPricing.PerSecondUsd, multiplier, inputImages, videoPricing.InputImageUsd, groupRatio)
+		}
 		if quotaErr != nil {
 			return openai.ErrorWrapper(quotaErr, "invalid_video_pricing", http.StatusBadRequest)
 		}
-		logContent = fmt.Sprintf("video seconds %.2f, usd %.3f, multiplier %.2f, input images %d at usd %.4f, group rate %.2f", durationSeconds, videoPricing.PerSecondUsd, multiplier, inputImages, videoPricing.InputImageUsd, groupRatio)
 	}
 
 	tokenId := c.GetInt(ctxkey.TokenId)

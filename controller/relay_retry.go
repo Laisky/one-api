@@ -11,7 +11,6 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor"
-	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -26,8 +25,8 @@ func shouldRetry(c *gin.Context, bizErr *model.ErrorWithStatusCode) error {
 	}
 	if c.Request != nil && c.Request.Method == http.MethodPost &&
 		(c.Request.URL.Path == "/v1/videos" || c.Request.URL.Path == "/v1/videos/generations") &&
-		c.GetInt(ctxkey.Channel) == channeltype.XAI && c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) {
-		return errors.New("xAI video creation may already have created a paid job; automatic replay is unsafe")
+		c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) {
+		return errors.New("video creation may already have created a paid job; automatic replay is unsafe")
 	}
 	statusCode := bizErr.StatusCode
 	rawErr := bizErr.RawError

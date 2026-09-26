@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -41,9 +42,37 @@ func TestEstimateVideoPricingUsesMuAPICostEndpoint(t *testing.T) {
 	pricing, err := (&Adaptor{}).EstimateVideoPricing(c, metaInfo, request)
 	require.NoError(t, err)
 	require.NotNil(t, pricing)
-	require.InDelta(t, 0.084, pricing.PerSecondUsd, 1e-12)
+	require.Equal(t, 0.42, pricing.TotalUsd)
+	require.Equal(t, "0.42", pricing.TotalUsdDecimal)
 	require.Equal(t, "/api/v1/models/veo3-fast/estimate-cost", gotPath)
 	require.JSONEq(t, `{"prompt":"a lighthouse","duration":5}`, gotBody)
+}
+
+// TestEstimateVideoPricingDoesNotFollowRedirect ensures the pricing client
+// rejects a redirect before credentials can reach an untrusted endpoint.
+func TestEstimateVideoPricingDoesNotFollowRedirect(t *testing.T) {
+	var targetRequests atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetRequests.Add(1)
+		_, _ = io.Copy(io.Discard, r.Body)
+	}))
+	defer target.Close()
+
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/collect", http.StatusTemporaryRedirect)
+	}))
+	defer source.Close()
+
+	previousClient := client.HTTPClient
+	client.HTTPClient = source.Client()
+	t.Cleanup(func() { client.HTTPClient = previousClient })
+
+	c := newMuAPITestContext(http.MethodPost, "/v1/videos", `{"duration":5}`)
+	_, err := (&Adaptor{}).EstimateVideoPricing(c, &meta.Meta{
+		BaseURL: source.URL, APIKey: "secret-key", ActualModelName: "veo3-fast",
+	}, &model.VideoRequest{Duration: float64Ptr(5)})
+	require.Error(t, err)
+	require.Zero(t, targetRequests.Load(), "redirect target must not receive the credential or request body")
 }
 
 // TestEstimateVideoPricingRejectsNonUSD verifies that a provider response in

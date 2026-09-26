@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"io"
 	"math"
+	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,8 +32,8 @@ const (
 // EstimateVideoPricing asks MuAPI for the exact cost of the normalized request
 // before one-api reserves quota. Parameters: c carries the request body, meta
 // identifies the configured MuAPI host and key, and request supplies duration
-// and resolution billing hints. Return values are an equivalent per-second
-// tariff or an error when MuAPI cannot quote the request.
+// and resolution billing hints. Return values preserve the provider's exact
+// total USD decimal or an error when MuAPI cannot quote the request.
 func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, request *model.VideoRequest) (*adaptor.VideoPricingConfig, error) {
 	if c == nil || metaInfo == nil || request == nil {
 		return nil, errors.New("MuAPI pricing estimate requires request context and metadata")
@@ -73,6 +75,7 @@ func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, requ
 	if boundedClient.Timeout == 0 || boundedClient.Timeout > muAPIPricingTimeout {
 		boundedClient.Timeout = muAPIPricingTimeout
 	}
+	boundedClient.CheckRedirect = a.CheckRedirect
 	resp, err := boundedClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "request MuAPI video pricing")
@@ -93,8 +96,8 @@ func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, requ
 	}
 
 	var estimate struct {
-		Cost     float64 `json:"cost"`
-		Currency string  `json:"currency"`
+		Cost     json.Number `json:"cost"`
+		Currency string      `json:"currency"`
 	}
 	if err := json.Unmarshal(responseBody, &estimate); err != nil {
 		return nil, errors.Wrap(err, "decode MuAPI pricing response")
@@ -102,12 +105,19 @@ func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, requ
 	if estimate.Currency != "" && !strings.EqualFold(estimate.Currency, muAPIPricingCurrency) {
 		return nil, errors.Errorf("MuAPI pricing response uses unsupported currency %q", estimate.Currency)
 	}
-	if estimate.Cost <= 0 || math.IsNaN(estimate.Cost) || math.IsInf(estimate.Cost, 0) {
+	quotedCost := strings.TrimSpace(estimate.Cost.String())
+	quotedRational, ok := new(big.Rat).SetString(quotedCost)
+	if !ok || quotedRational.Sign() <= 0 {
 		return nil, errors.New("MuAPI pricing response did not contain a positive USD cost")
+	}
+	costFloat, err := strconv.ParseFloat(quotedCost, 64)
+	if err != nil || costFloat <= 0 || math.IsInf(costFloat, 0) || math.IsNaN(costFloat) {
+		return nil, errors.New("MuAPI pricing response cost is outside the supported range")
 	}
 
 	return &adaptor.VideoPricingConfig{
-		PerSecondUsd:   estimate.Cost / duration,
-		BaseResolution: request.RequestedResolution(),
+		TotalUsd:        costFloat,
+		TotalUsdDecimal: quotedCost,
+		BaseResolution:  request.RequestedResolution(),
 	}, nil
 }
