@@ -10,6 +10,7 @@ import secrets
 import socket
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -61,12 +62,15 @@ def get(conn: http.client.HTTPConnection, path: str, token: str = '') -> tuple[i
 
 
 @contextlib.contextmanager
-def gateway(binary: Path, directory: Path, *, cursor: bool = True, pprof_port: int | None = None):
+def gateway(binary: Path, directory: Path, *, cursor: bool = True, pprof_port: int | None = None, gateway_procs: int = 2):
     """gateway starts a normal isolated process and guarantees cleanup without exporting its private log or database."""
-    directory.mkdir(parents=True, exist_ok=True)
+    require(type(gateway_procs) is int and 1 <= gateway_procs <= 64, 'invalid gateway CPU slots')
+    require(pprof_port is None or type(pprof_port) is int and 1 <= pprof_port <= 65535, 'invalid pprof port')
+    check_cache(Path(os.environ.get('TIKTOKEN_CACHE_DIR', '')))
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     port, admin = free_port(), secrets.token_hex(24)
     env = {'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'HOME': str(directory), 'TZ': 'UTC',
-           'GOMAXPROCS': '2', 'GIN_MODE': 'release', 'PORT': str(port), 'LISTEN_HOST': '127.0.0.1',
+           'GOMAXPROCS': str(gateway_procs), 'GIN_MODE': 'release', 'PORT': str(port), 'LISTEN_HOST': '127.0.0.1',
            'SQLITE_PATH': str(directory/'one-api.db'), 'INITIAL_ROOT_ACCESS_TOKEN': admin,
            'GLOBAL_API_RATE_LIMIT': '10000000', 'TIKTOKEN_CACHE_DIR': os.environ.get('TIKTOKEN_CACHE_DIR', ''), 'LOG_CURSOR_ENABLED': str(cursor).lower()}
     if pprof_port:
@@ -106,3 +110,10 @@ def clone_database(source: Path, destination: Path) -> None:
     """clone_database creates a consistent private copy including committed WAL state, without copying secret logs."""
     with sqlite3.connect(source) as src, sqlite3.connect(destination) as dst:
         src.backup(dst)
+
+
+def check_cache(directory: Path) -> None:
+    """check_cache calls the existing pinned read-only validator before any gateway can try an implicit download."""
+    script = Path(__file__).resolve().parents[1] / 'stream-perf/cache_tokens.py'
+    subprocess.run([sys.executable, str(script), '--cache', str(directory), '--check-only'],
+                   check=True, capture_output=True, timeout=30)
