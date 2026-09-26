@@ -4,6 +4,7 @@ import hashlib
 import math
 
 from profile_window import stable_window
+from window_replay import replay_window
 
 METRICS = ('ttft_ms', 'done_ms', 'total_ms', 'scheduled_total_ms', 'max_inter_content_gap_ms')
 
@@ -52,17 +53,10 @@ def check_inputs(summary: dict, requests: dict, rows: list[dict], trace: bytes) 
             summary['profile_window_completed_while_load_alive'] is True, 'incomplete live trace window')
     window = summary['window']
     require(window['qualified'] is True and window['intervals'], 'no qualified interval evidence')
-    start = window['intervals'][0]['start']
-    require(config['warmup'] <= start <= config['warmup'] + 2.5, 'recorded window does not follow warm-up')
-    # The captured start may be a fraction after the nominal warm-up. Reconstruct
-    # every retained interval and field; never replace the original decision with
-    # an alternative selected window that happened to pass.
-    rebuilt = stable_window(rows, summary['allowance']['effective_cores'], config['gateway_procs'],
-                            start, config['seconds'])
-    require(rebuilt == window, 'recorded window differs from raw counters')
+    replay = replay_window(summary, rows)
     nominal = stable_window(rows, summary['allowance']['effective_cores'], config['gateway_procs'],
                            config['warmup'], config['seconds'])
-    return {'request_samples': len(samples), 'recorded_window_reproduced': True,
+    return {'request_samples': len(samples), 'recorded_window_reproduced': True, 'window_origin': replay,
             'nominal_window_qualified': nominal['qualified'], 'nominal_coverage_seconds': nominal['coverage_seconds'],
             'nominal_gateway_cores_mean': nominal['gateway_cores_mean'],
             'qualification_and_positive_usage_checked': True,

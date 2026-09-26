@@ -64,6 +64,7 @@ def diagnose(args: argparse.Namespace) -> dict:
                                 raise TimeoutError('bounded diagnostic workload exceeded its deadline')
                             if elapsed >= args.warmup and profile_started is None:
                                 profile_started = elapsed
+                                summary['window_started_elapsed'] = elapsed
                                 if args.mode == 'cpu':
                                     future = profiler.submit(capture, fixture['pprof_url'] + f'/profile?seconds={args.seconds}',
                                                              args.output / 'cpu.pprof', args.seconds + 15)

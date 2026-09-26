@@ -150,6 +150,7 @@ class ProfileTraceTests(unittest.TestCase):
         self.assertEqual(result['profile_captures'][0]['started_elapsed'], 45)
         self.assertEqual(result['profile_captures'][0]['finished_elapsed'], 50)
         self.assertEqual(result['window']['coverage_seconds'], 60)
+        self.assertEqual(result['window_started_elapsed'], 30.0)
 
     def test_capture_outside_window_cannot_qualify(self):
         """test_capture_outside_window_cannot_qualify distinguishes successful data transfer from valid observation."""
