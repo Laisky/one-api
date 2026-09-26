@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "public_source_head": "809018189b96c1224693c949c07ae1eb5c1e9a1c",
+  "baseline_reference": "c13183989f47d1ee1d797151b81a1e36d5fb48a4",
+  "binaries": {
+    "baseline": "5f32abdcdb53d10d970c7367d41ea9421d23f7f40a76c0035d50b2243783e3fd",
+    "candidate": "b0f1b08c18b18e1dbe864d9ab973ba1324b6da7d3cbc53849b0f2debda1d455a"
+  },
+  "dataset_sha256": "9d5b2e471179ee23169b33e26b06ad9333f308107a44fefb5def021535eed9a8",
+  "summary_sha256": "1abf5808bdf4d1f78d471506e304dfa2ab35690f8832d9399bf609ba4ea2b5f7",
+  "accepted": true,
+  "trials": 160,
+  "timed_requests": 51200,
+  "excluded_worker_warmups": 1440,
+  "endpoints": {
+    "self-dashboard": {
+      "path": "/api/user/dashboard?from_date=2026-09-20&to_date=2026-09-26",
+      "principal": 2,
+      "target": true
+    },
+    "self-logs": {
+      "path": "/api/log/self?p=0&start_timestamp=1789862400&end_timestamp=1790467199&sort=created_at&order=desc&size=20",
+      "principal": 2,
+      "target": true
+    },
+    "self-deep": {
+      "path": "/api/log/self?p=50&start_timestamp=1789862400&end_timestamp=1790467199&sort=created_at&order=desc&size=20",
+      "principal": 2,
+      "target": true
+    },
+    "self-cursor": {
+      "path": "/api/log/self/cursor?start_timestamp=1789862400&end_timestamp=1790467199&sort=created_at&order=desc&size=20",
+      "principal": 2,
+      "target": true
+    },
+    "site-dashboard": {
+      "path": "/api/user/dashboard?from_date=2026-09-20&to_date=2026-09-26",
+      "principal": 1,
+      "target": false
+    },
+    "admin-logs": {
+      "path": "/api/log/?p=0&start_timestamp=1789862400&end_timestamp=1790467199&sort=created_at&order=desc&size=20",
+      "principal": 1,
+      "target": false
+    },
+    "admin-stat": {
+      "path": "/api/log/stat?start_timestamp=1789862400&end_timestamp=1790467199",
+      "principal": 1,
+      "target": false
+    },
+    "user-self": {
+      "path": "/api/user/self",
+      "principal": 2,
+      "target": false
+    }
+  },
+  "environment": {
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+    "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+    "cpu_max": "400000 100000",
+    "memory_max": "4294967296",
+    "GOMAXPROCS": 2,
+    "database": "fresh file-backed SQLite",
+    "rate_limiter": "enabled; GLOBAL_API_RATE_LIMIT=10000000",
+    "cursor": "explicit fixture opt-in; product default remains disabled",
+    "dashboard_cache": "standalone default, TTL=0",
+    "resource_sampling_ms": 20,
+    "latency_scope": "request send through complete body read, before JSON/oracle validation",
+    "throughput_scope": "includes client validation; not browser paint or server-only capacity"
+  },
+  "configuration": {
+    "baseline": "/mnt/data/pr430/build/baseline",
+    "candidate": "/mnt/data/pr430/build/candidate",
+    "token_cache": "/mnt/data/pr430/recovery/token-cache",
+    "output": "/mnt/data/pr430/evidence/steady-confirmation",
+    "rows": 200000,
+    "repeats": 5,
+    "concurrency": "1,8",
+    "target_requests": 128,
+    "control_requests": 512
+  },
+  "started_utc": "2026-09-26T18:36:29.513053+00:00",
+  "finished_utc": "2026-09-26T18:51:43.128990+00:00",
+  "recovered_source_zip_sha256": "35a5184ced396534d113949a236492287e7cba0893f1a9a639a9a447a5959c14",
+  "old_short_study_raw_available": false,
+  "files": {
+    "summary.json.gz": "2f2c98fba40a7cdde45f81606563a7bf4e6f87b5adc977ff69554b1a677536b8",
+    "PLAN.md": "899c2aeecc92c7fcfc551e08d25795415a4f326ae0b661a71bbca912f4c6dd90",
+    "REPORT.md": "e7fdc2caa9ece7c889c7e266c97a7ead9615422ec98fa728e8e7fd8541221fc8",
+    "verify.py": "400deb7847683a0c03a5a52fa738c82ca6c00a5b7bafc6a8fef251a32d397e6d"
+  },
+  "supplementary": {
+    "costs_summary_sha256": "fd5e566efcc34fe86f769cb96221ddc4421327c5bece17a7f379bce595e61ae3",
+    "diagnostic_responses": 18867,
+    "native_ci_run": 36260390183,
+    "native_ci_tested_merge": "e334d31bbce7398da6c2f189536766f53b1bdbf0"
+  }
+}

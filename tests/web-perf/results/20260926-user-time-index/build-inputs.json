@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "reviewed_head": "100aab0303d46828e862b613f1a5dd16470cd096",
+  "baseline_reference": "c13183989f47d1ee1d797151b81a1e36d5fb48a4",
+  "source_export_revision": "7494f6b15670968f23c25e7fb747a272b0ee8e85",
+  "source_export_zip_sha256": "35a5184ced396534d113949a236492287e7cba0893f1a9a639a9a447a5959c14",
+  "go_version": "go version go1.27.1 linux/amd64",
+  "build_flags": [
+    "-mod=vendor",
+    "-p=2",
+    "-trimpath",
+    "-buildvcs=false"
+  ],
+  "inputs_per_variant": 974,
+  "changed_inputs": [
+    "model/log.go"
+  ],
+  "model_log_blobs": {
+    "baseline": "6718493fbecdd7181eb8709fa1cb5d2fe4c45e3d",
+    "candidate": "0e27f60edd05da81b40df95c2f9fc6aba3c794d0"
+  },
+  "go_list_embed_files": {
+    "baseline": [
+      "web/build/.gitkeep"
+    ],
+    "candidate": [
+      "web/build/.gitkeep"
+    ]
+  },
+  "embed_sha256": {
+    "web/build/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "rebuilt_binaries": {
+    "baseline": {
+      "sha256": "5f32abdcdb53d10d970c7367d41ea9421d23f7f40a76c0035d50b2243783e3fd",
+      "matches_published_measurement": true
+    },
+    "candidate": {
+      "sha256": "b0f1b08c18b18e1dbe864d9ab973ba1324b6da7d3cbc53849b0f2debda1d455a",
+      "matches_published_measurement": true
+    }
+  },
+  "inventory_sha256": "8e913fbafab3d1d2e102f334edd24826b676e5de0fdd473db6270c2056f72f5a",
+  "inventory_scope": "non-test repository Go source, go.mod, go.sum and actual main EmbedFiles; full vendored files are bound separately by archive identity",
+  "new_performance_trial": false,
+  "raw_request_archive_reverified": false
+}
