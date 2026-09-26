@@ -1,0 +1,40 @@
+name: Web API isolated build fixture
+on:
+  push:
+    branches: [perf/web-api-e2e-20260926]
+    paths: [.github/workflows/web-api-fixture-build.yml]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Build immutable API fixture without secrets or deployment
+        env:
+          OUT: ${{ runner.temp }}/web-api-fixture
+          CGO_ENABLED: '1'
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT" web/build
+          git rev-parse HEAD > "$OUT/revision.txt"
+          git archive --format=tar.gz -o "$OUT/source.tar.gz" HEAD -- . ':(exclude).github/instructions/laisky.instructions.md'
+          printf '<!doctype html><title>API performance fixture</title>\n' > web/build/index.html
+          go mod vendor
+          tar -czf "$OUT/vendor.tar.gz" vendor
+          GOMAXPROCS=2 go build -p=2 -mod=vendor -trimpath -buildvcs=false -o "$OUT/one-api" .
+          go version > "$OUT/toolchain.txt"
+          go version -m "$OUT/one-api" >> "$OUT/toolchain.txt"
+          cd "$OUT"
+          sha256sum source.tar.gz vendor.tar.gz one-api > SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: web-api-fixture
+          path: ${{ runner.temp }}/web-api-fixture
+          retention-days: 7
