@@ -45,3 +45,31 @@ Scheduler/GC overlaps are computed only on the gateway trace clock between the p
 Report the deterministic cohort, trace overlap, all exclusions, sample size and exceptions. A five-second trace covering a few requests is not an unbiased distribution of all users or evidence that one change will improve tails. Form a separately registered runtime hypothesis only after preserving the complete result; retain the original behavior, accounting and no-regression gates.
 
 References: https://pkg.go.dev/net/http#Flusher ; https://pkg.go.dev/runtime/trace#Log ; https://man7.org/linux/man-pages/man7/time_namespaces.7.html
+
+
+## Optional paired client trace and bounded selection
+
+The published client-scheduling tooling adds an explicit `--client-trace` switch to the existing trace runner. Use it only with the matching diagnostic overlay; ordinary binaries do not start this listener or emit client trace markers. The driver private listener is IPv4 loopback and accepts only bounded1–10s trace captures. Default runs discard ambient `STREAM_PERF_CLIENT_TRACE_LISTEN`; both actual capture roles, hashes and complete in-window intervals must qualify.
+
+Build as above, then add `--client-trace` to the existing profile_run command. Capture gateway and driver concurrently in the same declared subwindow. Do not start another runner or compare absolute epochs. Afterwards:
+
+```sh
+python3 tests/stream-perf/correlation_decode.py --selected-only \
+  --trace-tool "$work/trace-tool" --trace "$work/capture/runtime.trace" --output "$work/capture/events.jsonl"
+python3 tests/stream-perf/correlation_decode.py --selected-only \
+  --trace-tool "$work/trace-tool" --trace "$work/capture/client.trace" --output "$work/capture/client-events.jsonl"
+python3 tests/stream-perf/correlation_client.py "$work/capture" --output "$work/client-analysis.json"
+```
+
+Selection makes two independently bounded offline passes, first discovering marker goroutines, then retaining complete captured histories for that cohort. It preserves pre-marker states/global pauses, verifies marker identity across passes, and does not raise the128MiB output limit. Retain failed whole-trace partial output; use a new output name/directory rather than overwriting. `correlation_selection.py` audits both pass metadata and records. The helper does not prove that unsupported Go trace syntax was understood; parser changes still require explicit tests and tool pinning.
+
+Client runtime intervals and gateway intervals are attributed only on their own trace clocks. A `Waiting`/network reason is not a claim of network causality. The complete [client scheduling report](results/20260926-client-scheduling/REPORT.md) preserves the small cohort, skew/boundary exclusions and diagnostic overhead limits. The tooling is published in PR427; this is diagnostic support, not a new runtime speedup.
+
+
+### Published integration and concurrent controls
+
+The paired tooling is published as `fcd6fb6b25a3263a398eff116a9eff1fef4a3614`, above `a57e34809322ce382ebc87f5abbe353e8b88b5bd`. Both independent client CPU slots (`7849709`) and exact observation origins/cohort replay (`a57e348`) are preserved. `--client-procs` and `--client-trace` compose without altering default2/2/2 unprofiled A/B. New captures record `window_started_elapsed`; legacy replays require every saved field to match an explicitly named origin convention, never a favorable replacement window.
+
+The existing `correlation_cohort.py` decoder and this paired selected-pass decoder coexist. Their metadata formats differ; preserve original decoder/selection identities when auditing an old capture, and do not substitute one output or historical acceptance decision for another. `correlation_audit.py` retains the current strict `window_replay` behavior.
+
+The merged source passes93 targeted Python tests and explicit probe/client endpoint race tests. Historical capture source and measurements predate this integration and are not relabeled as new-head results. Recheck the exact current CI; no completed workload needs repeating just to publish or restore context.
