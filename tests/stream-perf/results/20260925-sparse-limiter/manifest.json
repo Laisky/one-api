@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "production_commit": "de6985d9e4b4a966fe7c875b54273ee0339d3ec2",
+  "integration_parent": "3b22ffba0e0144a6bd7dd943531df9c20f7448b1",
+  "measured_baseline_reference": "1783b4990bbf79030452fdbe262e561d6d2b3207",
+  "measured_baseline_binary_sha256": "13a1ec75315310d1ada3f9b343d63ccb3770ffcc604d4790e92a0e0344a51f3b",
+  "measured_candidate_binary_sha256": "57a589f490a38a87dea56b0f2d84a582cdecb3c9676846c18882c7952735318e",
+  "measured_driver_sha256": "7f52e6fef16f2ad4fa9ecb27d937663e18325813f60ce26d7e29b56b117fc61e",
+  "archive_name": "one-api-pr427-sparse-limiter-evidence.zip",
+  "archive_sha256": "64dd0e7fd92b688b578541177234f45b0257ca9fd6b27c77e83f99aed6556c9a",
+  "archive_verified_files": 143,
+  "run_ledger_sha256": "6fd2af37a39c80f76366686a63991858fa8cc0927b6db7b6ef8060ad698bf97b",
+  "trials": 40,
+  "completed_requests": 15360,
+  "failed_requests": 0,
+  "dropped_requests": 0,
+  "accepted_memory_gate": true,
+  "accepted_original_material_gate": true,
+  "integration_is_new_performance_measurement": false,
+  "scope": "high configured limiter ceiling with sparse actual histories; all raw qualification and diagnostic data remain in the separately delivered archive"
+}

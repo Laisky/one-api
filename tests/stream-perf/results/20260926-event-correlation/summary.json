@@ -1,0 +1,246 @@
+{
+  "scope": "One instrumented event-correlation diagnostic, not A/B or a runtime speedup.",
+  "selected_requests": 256,
+  "matched_requests": 6,
+  "complete_frames": 4875,
+  "incomplete_boundary_frames": 0,
+  "observed_content_frames": 4855,
+  "adjacent_content_pairs": 4849,
+  "alignment_excluded_pairs": 1,
+  "excluded_runtime_ranges": {
+    "unfinished_range_begins": 0
+  },
+  "absolute_cross_process_verified": false,
+  "frame_metrics": {
+    "render_to_flush_start_ms": {
+      "count": 4855,
+      "p50": 0.002644,
+      "p95": 0.007633,
+      "max": 1.213733,
+      "min": 0.002066
+    },
+    "flush_call_ms": {
+      "count": 4855,
+      "p50": 0.007184,
+      "p95": 0.033205,
+      "max": 32.001517,
+      "min": 0.002782
+    }
+  },
+  "gap_metrics": {
+    "client_gap_ms": {
+      "count": 4849,
+      "p50": 0.036338,
+      "p95": 5.153498,
+      "max": 32.025382,
+      "min": 0.003581
+    },
+    "gateway_flush_gap_ms": {
+      "count": 4849,
+      "p50": 0.050238,
+      "p95": 5.1402,
+      "max": 38.996215,
+      "min": 0.038123
+    },
+    "between_render_calls_ms": {
+      "count": 4849,
+      "p50": 0.037935,
+      "p95": 5.03482,
+      "max": 30.813399,
+      "min": 0.032956
+    },
+    "downstream_lag_change_ms": {
+      "count": 4849,
+      "p50": -0.029728,
+      "p95": 0.069736,
+      "max": 31.962482,
+      "min": -34.664025
+    },
+    "marker_interval_skew_ms": {
+      "count": 4849,
+      "p50": -3.3e-05,
+      "p95": 0.00173,
+      "max": 0.122138,
+      "min": -6.508683
+    }
+  },
+  "stalls_above_10ms": 83,
+  "stalls_with_usable_state_alignment": 82,
+  "stall_overlaps": {
+    "running_ms": {
+      "sum_ms": 8.115137,
+      "count": 82,
+      "p50": 0.04448,
+      "p95": 0.095872,
+      "max": 3.791553,
+      "min": 0.03392
+    },
+    "runnable_ms": {
+      "sum_ms": 1094.78464,
+      "count": 82,
+      "p50": 12.571712,
+      "p95": 22.539648,
+      "max": 30.769728,
+      "min": 0.0
+    },
+    "goschedrunnable_ms": {
+      "sum_ms": 1094.784384,
+      "count": 82,
+      "p50": 12.571712,
+      "p95": 22.539648,
+      "max": 30.769728,
+      "min": 0.0
+    },
+    "waiting_ms": {
+      "sum_ms": 0.0,
+      "count": 82,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "syscall_ms": {
+      "sum_ms": 0.084991,
+      "count": 82,
+      "p50": 0.001024,
+      "p95": 0.001536,
+      "max": 0.002496,
+      "min": 0.00032
+    },
+    "stw_overlap_ms": {
+      "sum_ms": 1.937023,
+      "count": 82,
+      "p50": 0.0,
+      "p95": 0.160767,
+      "max": 0.978624,
+      "min": 0.0
+    },
+    "mark_assist_overlap_ms": {
+      "sum_ms": 0.0,
+      "count": 82,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    }
+  },
+  "clock_domain": {
+    "clock": "CLOCK_MONOTONIC",
+    "boot_id": "98fe2613-b386-45ed-b9b5-23270aa1130a",
+    "time_namespaces": {
+      "observer": null,
+      "gateway": null,
+      "mock": null,
+      "driver": null
+    },
+    "absolute_cross_process_verified": false,
+    "comparison_scope": "within-process intervals only; constant epoch offsets cancel"
+  },
+  "raw_checks": {
+    "request_samples": 8192,
+    "recorded_window_reproduced": true,
+    "nominal_window_qualified": true,
+    "nominal_coverage_seconds": 58.999553574999936,
+    "nominal_gateway_cores_mean": 2.414086062853742,
+    "qualification_and_positive_usage_checked": true,
+    "financial_ledger_audit": false
+  },
+  "inputs": {
+    "summary.json": "a0cbace9e2a5fdcb300471902b3def7513f0c9e5abbdf4d7b953720a3451bd1d",
+    "requests.json": "5608f2c411a029457cb5865473f33d4e0435556b1fd7c5f431334b524c3d0989",
+    "samples.jsonl": "8b7b2e96f759bbcfd619d4f1e00a7e4cf8bc219f965a2b6c9e1b9449cb2813bf",
+    "runtime.trace": "4f0e75c4afe0a46d2d32dcaacb70f6ef36a72869d959ea019197a2681a32f2b9",
+    "events.jsonl": "9dcf95332acd4294bf1e91d1ff06671099b42ad7de01a684bf672d38fe62f040"
+  },
+  "schema_version": 1,
+  "parent": "19976b3acfca4fc0f2df2f290f0794899bb3fd0d",
+  "tooling_commit": "1b50b74faf31ae0b2c24da6f1e14e448d38a84b5",
+  "requests": 8192,
+  "usage": {
+    "requests": 8192,
+    "used_quota": 40280064
+  },
+  "window": {
+    "rule_version": 2,
+    "qualified": true,
+    "cpu_only_qualified": true,
+    "failure_reasons": [],
+    "coverage_seconds": 59.999576008000076,
+    "fraction_at_or_above_target": 1.0,
+    "high_load_duration_seconds": 59.999576008000076,
+    "sample_fraction_at_or_above_target": 1.0,
+    "fraction_basis": "elapsed duration",
+    "target_machine_utilization": 0.5,
+    "required_fraction": 0.8,
+    "gateway_cores_mean": 2.4166837442428983,
+    "half_window_gateway_cores": [
+      2.404503591073973,
+      2.421783140550827
+    ],
+    "relative_cpu_drift": 0.007186327165823014,
+    "half_window_coverage_seconds": [
+      28.999748746000023,
+      29.99855717200012
+    ],
+    "half_window_upstream_rps": [
+      37.9658461748522,
+      38.76853121074484
+    ],
+    "upstream_rate_drift": 0.021142292791153983,
+    "maximum_upstream_rate_drift": 0.15,
+    "upstream_active_peak": 4,
+    "progress_note": "Upstream completions and durable statistics are proxies, not client completion timestamps. An interval crossing the half-window boundary is excluded from half-rate calculations."
+  },
+  "effective_cores": 4.0,
+  "binary_sha256": "08f4177394eba0b189f655e440d5f7ea96c73edc03df4cfbda973a5a7f61a7fc",
+  "driver_sha256": "5687629c373d253daafeaaa42217e4beaa02443e7f1a1d0cb1aaa6c29279ce42",
+  "trace_sha256": "4f0e75c4afe0a46d2d32dcaacb70f6ef36a72869d959ea019197a2681a32f2b9",
+  "trace_bytes": 10415873,
+  "decode_counts": {
+    "StateTransition": 652974,
+    "RangeBegin": 536,
+    "RangeEnd": 536,
+    "Log": 14625
+  },
+  "runnable_dominant_stalls": 78,
+  "example_pairs": [
+    {
+      "request": 1600,
+      "frame": 431,
+      "gateway_g": 1028,
+      "client_gap_ms": 32.025382,
+      "gateway_flush_gap_ms": 0.0629,
+      "between_render_calls_ms": 0.041948,
+      "downstream_lag_change_ms": 31.962482,
+      "marker_interval_skew_ms": -0.002076,
+      "state_alignment_usable": true,
+      "running_ms": 0.039552,
+      "runnable_ms": 0.0,
+      "waiting_ms": 0.0,
+      "syscall_ms": 0.00032,
+      "goschedrunnable_ms": 0.0,
+      "state_coverage_ms": 0.039872,
+      "stw_overlap_ms": 0.0,
+      "mark_assist_overlap_ms": 0.0
+    },
+    {
+      "request": 1504,
+      "frame": 79,
+      "gateway_g": 1024,
+      "client_gap_ms": 30.317073,
+      "gateway_flush_gap_ms": 30.836723,
+      "between_render_calls_ms": 30.813399,
+      "downstream_lag_change_ms": -0.51965,
+      "marker_interval_skew_ms": 0.001961,
+      "state_alignment_usable": true,
+      "running_ms": 0.04448,
+      "runnable_ms": 30.769728,
+      "waiting_ms": 0.0,
+      "syscall_ms": 0.001152,
+      "goschedrunnable_ms": 30.769728,
+      "state_coverage_ms": 30.815360000000002,
+      "stw_overlap_ms": 0.219072,
+      "mark_assist_overlap_ms": 0.0
+    }
+  ]
+}

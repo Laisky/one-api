@@ -685,8 +685,13 @@ func UpdateChannelUsedQuotaWithContext(ctx context.Context, id int, quota int64)
 	updateChannelUsedQuota(ctx, id, quota)
 }
 
+// updateChannelUsedQuota increments channel usage, retrying only failed SQLite busy writes within ctx.
 func updateChannelUsedQuota(ctx context.Context, id int, quota int64) {
-	err := DB.Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error
+	db := DB
+	err := runWithSQLiteBusyRetryForDB(ctx, db, func() error {
+		return errors.WithStack(db.WithContext(ctx).Model(&Channel{}).Where("id = ?", id).
+			Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error)
+	})
 	if err != nil {
 		logger.FromContext(ctx).Error("failed to update channel used quota - channel statistics may be inaccurate",
 			append(LookupChannelRef(ctx, id).Zap(),

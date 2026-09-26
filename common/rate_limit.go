@@ -67,7 +67,9 @@ func (l *InMemoryRateLimiter) Request(key string, maxRequestNum int, duration in
 			}
 		}
 	} else {
-		s := make([]int64, 0, maxRequestNum)
+		// Reserve for observed traffic, not a possibly very large configured ceiling.
+		// append preserves the same timestamp history as it grows on demand.
+		s := make([]int64, 0, min(maxRequestNum, 16))
 		l.store[key] = &s
 		*(l.store[key]) = append(*(l.store[key]), now)
 	}
@@ -101,7 +103,9 @@ func (l *InMemoryRateLimiter) Record(key string, maxRequestNum int) {
 	now := time.Now().Unix()
 	queue, ok := l.store[key]
 	if !ok {
-		s := make([]int64, 0, maxRequestNum)
+		// Reserve for observed traffic, not a possibly very large configured ceiling.
+		// append preserves the same timestamp history as it grows on demand.
+		s := make([]int64, 0, min(maxRequestNum, 16))
 		s = append(s, now)
 		l.store[key] = &s
 		return
