@@ -206,6 +206,12 @@ export const CHANNEL_OPTIONS = {
     value: 60,
     color: 'primary'
   },
+  61: {
+    key: 61,
+    text: 'MuAPI',
+    value: 61,
+    color: 'primary'
+  },
   50: {
     key: 50,
     text: 'OpenAI Compatible',

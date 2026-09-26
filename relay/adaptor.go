@@ -22,6 +22,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/jina"
 	"github.com/Laisky/one-api/relay/adaptor/mistral"
 	"github.com/Laisky/one-api/relay/adaptor/moonshot"
+	"github.com/Laisky/one-api/relay/adaptor/muapi"
 	"github.com/Laisky/one-api/relay/adaptor/nvidia"
 	"github.com/Laisky/one-api/relay/adaptor/ollama"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
@@ -112,6 +113,8 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &jina.Adaptor{}
 	case apitype.TypeSafe:
 		return &typesafe.Adaptor{}
+	case apitype.MuAPI:
+		return &muapi.Adaptor{}
 	}
 
 	return nil

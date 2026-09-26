@@ -38,4 +38,12 @@ func TestVideoQuotaDecimal(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+
+	got, err := videoQuotaFromTotal(0.40, 1)
+	require.NoError(t, err)
+	require.EqualValues(t, 200000, got, "a quoted total must not round-trip through per-second float arithmetic")
+
+	got, err = videoQuotaFromTotalDecimal("0.40", 1)
+	require.NoError(t, err)
+	require.EqualValues(t, 200000, got, "a provider decimal quote must be converted without float rounding")
 }

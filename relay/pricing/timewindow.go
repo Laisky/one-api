@@ -227,6 +227,12 @@ func mergeVideoPricing(base *adaptor.VideoPricingConfig, overlay *adaptor.VideoP
 		return overlay.Clone()
 	}
 	merged := base.Clone()
+	if overlay.TotalUsd != 0 {
+		merged.TotalUsd = overlay.TotalUsd
+	}
+	if overlay.TotalUsdDecimal != "" {
+		merged.TotalUsdDecimal = overlay.TotalUsdDecimal
+	}
 	if overlay.PerSecondUsd != 0 {
 		merged.PerSecondUsd = overlay.PerSecondUsd
 	}

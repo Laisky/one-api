@@ -141,6 +141,7 @@ func TestApplyTimeWindowNestedPricingMerge(t *testing.T) {
 	at := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
 	cfg := adaptor.ModelConfig{
 		Video: &adaptor.VideoPricingConfig{
+			TotalUsdDecimal:       "0.30",
 			PerSecondUsd:          0.10,
 			BaseResolution:        "720p",
 			ResolutionMultipliers: map[string]float64{"720p": 1, "1080p": 2},
@@ -172,6 +173,7 @@ func TestApplyTimeWindowNestedPricingMerge(t *testing.T) {
 			Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "00:00"}},
 			Overlay: adaptor.ModelConfig{
 				Video: &adaptor.VideoPricingConfig{
+					TotalUsdDecimal:       "0.40",
 					BaseResolution:        "1080p",
 					ResolutionMultipliers: map[string]float64{"4k": 4},
 				},
@@ -199,6 +201,7 @@ func TestApplyTimeWindowNestedPricingMerge(t *testing.T) {
 	}
 
 	merged := ApplyTimeWindow(cfg, at)
+	require.Equal(t, "0.40", merged.Video.TotalUsdDecimal)
 	require.InDelta(t, 0.10, merged.Video.PerSecondUsd, 1e-12)
 	require.Equal(t, "1080p", merged.Video.BaseResolution)
 	require.Equal(t, map[string]float64{"720p": 1, "1080p": 2, "4k": 4}, merged.Video.ResolutionMultipliers)
