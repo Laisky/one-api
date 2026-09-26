@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "accepted": false,
+  "public_baseline": "de6985d9e4b4a966fe7c875b54273ee0339d3ec2",
+  "local_candidate": "9f9a42908e63fa85adecc44f4d19beedb20d4fbb",
+  "registration_comment": 5841256299,
+  "rejection_comment": 5841352187,
+  "binaries": {
+    "baseline": "b194162e565267d03678863531ca2e66cd47e465770b43fa5c50039f98e81a46",
+    "candidate": "76c651c0d03174973f34d59d31117665958b53da88983f7b731fa748065703ff",
+    "driver": "7f52e6fef16f2ad4fa9ecb27d937663e18325813f60ce26d7e29b56b117fc61e"
+  },
+  "trials": 40,
+  "completed_requests": 15360,
+  "diagnostic_requests": 16384,
+  "raw_data_in_repository": false,
+  "raw_summary_sha256": "b997ca6687ba5316a31e91b3a9c3b23d2a3b12ce6bafa81f9b5adec7663c60b4",
+  "compressed_full_study_sha256": "249bbd7c27e5a07863b71447b20a17563cd8b1c383551591e34aaea1cca530c6",
+  "files": {
+    "REPORT.md": "1b5bb91374173074fdf811774f875180cd38770fcc9f52fc8c51d76d0a4c0c47",
+    "PLAN.md": "25fbbd43869c5925c72cc76a10b8786c4f82cddee52e8b6571a6a95a74c8afa6",
+    "diagnostics.json": "a84aa4a65c5b2aa22b8c522e29370844f1defc4d05cc2d95477e47054ac85af0",
+    "rejected-production.patch": "642b918803a0542b21aa2ceeea0f0f7be93c28c8d5952d2b35a2c9f1adefb671",
+    "runs.csv": "dda2ca97e54f0d56831e3f9e1bcf5b72864c3f715d9138aad87f37f603cabb40"
+  }
+}

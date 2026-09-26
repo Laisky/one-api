@@ -1,0 +1,28 @@
+{
+  "baseline": {
+    "qualified_load_window": true,
+    "request_samples": 8192,
+    "coverage_seconds": 59.80855848199997,
+    "gateway_machine_cpu_mean": 0.6029901531609901,
+    "fraction_at_or_above_50_percent": 0.9833333333333333,
+    "half_window_upstream_rates": [
+      65.88708875608681,
+      69.60003033865337
+    ],
+    "upstream_rate_drift_pct": 5.635309819670176,
+    "used_quota": 40280064
+  },
+  "candidate": {
+    "qualified_load_window": true,
+    "request_samples": 8192,
+    "coverage_seconds": 59.83555846500008,
+    "gateway_machine_cpu_mean": 0.6036004324843374,
+    "fraction_at_or_above_50_percent": 1.0,
+    "half_window_upstream_rates": [
+      68.03964311411875,
+      63.099976812861726
+    ],
+    "upstream_rate_drift_pct": -7.259982673589304,
+    "used_quota": 40280064
+  }
+}
