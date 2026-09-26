@@ -10,19 +10,11 @@ from pathlib import Path
 import platform
 import subprocess
 import time
-import urllib.request
 
 import cache_tokens
 import run
+from profile_capture import capture
 from profile_support import assert_loopback_listeners, cpu_allowance, snapshot, stable_window, write_json
-
-
-def capture(url: str, path: Path, timeout: float) -> None:
-    """capture stores one binary pprof response from the validated local fixture, without proxies or credentials."""
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open(url, timeout=timeout) as response, path.open('wb') as output:
-        while block := response.read(65536):
-            output.write(block)
 
 
 def diagnose(args: argparse.Namespace) -> dict:
@@ -34,11 +26,12 @@ def diagnose(args: argparse.Namespace) -> dict:
                'allowance': allowance, 'platform': platform.platform(),
                'cpu_model': next(line.split(':', 1)[1].strip() for line in Path('/proc/cpuinfo').read_text().splitlines()
                                  if line.startswith('model name')),
-               'binary_sha256': run.sha256(args.binary), 'driver_sha256': run.sha256(args.driver)}
+               'binary_sha256': run.sha256(args.binary), 'driver_sha256': run.sha256(args.driver),
+               'profile_captures': [], 'admission_rule_version': 2}
     write_json(args.output / 'summary.json', summary)
     try:
         summary['qualification'] = run.qualify(args, args.binary, 'diagnostic')
-        pprof_port = run.free_port() if args.mode in ('cpu', 'heap') else None
+        pprof_port = run.free_port() if args.mode in ('cpu', 'heap', 'trace') else None
         with run.fixture(args, args.binary, gateway_procs=args.gateway_procs,
                          auxiliary_procs=args.auxiliary_procs, pprof_port=pprof_port) as fixture:
             ports = {int(fixture['url'].split(':')[2].split('/')[0])}
@@ -59,6 +52,7 @@ def diagnose(args: argparse.Namespace) -> dict:
                     pids = {**fixture['pids'], 'driver': client.pid}
                     rows, profile_started, profile_finished = [], None, False
                     future = None
+                    trace_started = False
                     next_sample = started
                     with ThreadPoolExecutor(max_workers=1) as profiler, (args.output / 'samples.jsonl').open('w') as samples:
                         while client.poll() is None:
@@ -71,13 +65,21 @@ def diagnose(args: argparse.Namespace) -> dict:
                                     future = profiler.submit(capture, fixture['pprof_url'] + f'/profile?seconds={args.seconds}',
                                                              args.output / 'cpu.pprof', args.seconds + 15)
                                 elif args.mode == 'heap':
-                                    capture(fixture['pprof_url'] + '/heap?gc=1', args.output / 'heap-before.pprof', 15)
+                                    summary['profile_captures'].append(capture(
+                                        fixture['pprof_url'] + '/heap?gc=1', args.output / 'heap-before.pprof', 15))
+                            if (args.mode == 'trace' and profile_started is not None and not trace_started
+                                    and elapsed >= profile_started + args.trace_offset):
+                                trace_started = True
+                                future = profiler.submit(capture, fixture['pprof_url'] + f'/trace?seconds={args.trace_seconds}',
+                                                         args.output / 'runtime.trace', args.trace_seconds + 15)
                             if profile_started is not None and elapsed >= profile_started + args.seconds and not profile_finished:
                                 if future is not None:
-                                    future.result(timeout=15)
+                                    summary['profile_captures'].append(future.result(timeout=15))
+                                    future = None
                                 elif args.mode == 'heap':
-                                    capture(fixture['pprof_url'] + '/heap?gc=1', args.output / 'heap-after.pprof', 15)
-                                profile_finished = True
+                                    summary['profile_captures'].append(capture(
+                                        fixture['pprof_url'] + '/heap?gc=1', args.output / 'heap-after.pprof', 15))
+                                profile_finished = client.poll() is None
                             try:
                                 row = snapshot(pids, fixture['mock_url'], database, Path(allowance['stat_path']), started)
                             except FileNotFoundError:
@@ -90,7 +92,13 @@ def diagnose(args: argparse.Namespace) -> dict:
                             next_sample += 1
                             time.sleep(max(0, next_sample - time.monotonic()))
                         if future is not None:
-                            future.result(timeout=args.seconds + 15)
+                            summary['profile_captures'].append(future.result(timeout=args.seconds + 15))
+                    for captured in summary['profile_captures']:
+                        captured['started_elapsed'] = captured.pop('started_monotonic') - started
+                        captured['finished_elapsed'] = captured.pop('finished_monotonic') - started
+                    if args.mode == 'trace':
+                        summary['trace_note'] = ('A bounded subwindow only; not a full-observation trace. '
+                                                 'Capture wall time includes HTTP overhead, not just tracer-active time.')
                     report = json.loads((args.output / 'requests.json').read_text())
                     summary['requests'] = {k: v for k, v in report.items() if k != 'samples'}
                     if client.wait(timeout=5) or report['failed'] or report['dropped'] or report['completed'] != args.requests:
@@ -101,8 +109,15 @@ def diagnose(args: argparse.Namespace) -> dict:
                         raise AssertionError('durable usage did not increase')
                     summary['window'] = stable_window(rows, allowance['effective_cores'], args.gateway_procs,
                                                       profile_started or args.warmup, args.seconds)
+                    trace_valid = True
+                    if args.mode == 'trace':
+                        captures = summary['profile_captures']
+                        trace_valid = (len(captures) == 1 and profile_started is not None
+                                       and captures[0]['started_elapsed'] >= profile_started
+                                       and captures[0]['finished_elapsed'] <= profile_started + args.seconds)
+                        summary['trace_window_within_observation'] = trace_valid
                     summary['profile_window_completed_while_load_alive'] = profile_finished
-                    summary['sustained_protocol_qualified'] = (summary['window']['qualified'] and profile_finished
+                    summary['sustained_protocol_qualified'] = (summary['window']['qualified'] and profile_finished and trace_valid
                                                              and args.warmup >= 30 and args.seconds >= 60)
                     summary['complete'] = True
                 finally:
@@ -125,7 +140,7 @@ def main() -> None:
     parser.add_argument('--driver', type=Path, required=True)
     parser.add_argument('--token-cache', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--mode', choices=('calibration', 'steady', 'cpu', 'heap'), required=True)
+    parser.add_argument('--mode', choices=('calibration', 'steady', 'cpu', 'heap', 'trace'), required=True)
     parser.add_argument('--gateway-procs', type=int, default=4)
     parser.add_argument('--auxiliary-procs', type=int, default=1)
     parser.add_argument('--concurrency', type=int, default=32)
@@ -136,6 +151,8 @@ def main() -> None:
     parser.add_argument('--warmup', type=int, default=30)
     parser.add_argument('--seconds', type=int, default=60)
     parser.add_argument('--deadline', type=int, default=600)
+    parser.add_argument('--trace-seconds', type=int, default=5)
+    parser.add_argument('--trace-offset', type=int, default=15)
     args = parser.parse_args()
     if platform.system() != 'Linux':
         parser.error('Linux is required')
@@ -144,6 +161,9 @@ def main() -> None:
             and args.chunks * args.chunk_bytes <= 64 << 20 and 0 <= args.pace_ms <= 1000
             and 1 <= args.warmup <= 300 and 1 <= args.seconds <= 300 and args.warmup + args.seconds < args.deadline <= 1200):
         parser.error('invalid bounded diagnostic configuration')
+    if args.mode == 'trace' and not (1 <= args.trace_seconds <= 10 and 0 <= args.trace_offset
+            and args.trace_offset + args.trace_seconds <= args.seconds):
+        parser.error('trace subwindow must be 1-10 seconds within the observation')
     if args.mode != 'calibration' and (args.warmup < 30 or args.seconds < 60):
         parser.error('sustained diagnostics require at least 30s warmup and 60s observation')
     for name in ('binary', 'driver', 'token_cache', 'output'):

@@ -1,13 +1,12 @@
 """Linux process and cgroup evidence for isolated sustained streaming diagnostics."""
 from __future__ import annotations
 import json
-import math
 import os
 from pathlib import Path
-import statistics
 import time
 
 import run
+from profile_window import stable_window
 
 
 def cpu_allowance(cgroup: Path = Path('/sys/fs/cgroup'), affinity: set[int] | None = None) -> dict:
@@ -53,40 +52,6 @@ def snapshot(pids: dict[str, int], mock_url: str, database: Path, stat_path: Pat
     processes = {name: dict(zip(('cpu_seconds', 'rss_bytes'), run.proc_sample(pid))) for name, pid in pids.items()}
     return {'elapsed': at - started, 'processes': processes, 'upstream': run.api(mock_url + '/health'),
             'durable_requests': run.usage_snapshot(database)[1], 'cgroup': cgroup_stats(stat_path)}
-
-
-def stable_window(rows: list[dict], cores: float, gateway_procs: int, start: float, seconds: float,
-                  minimum: float = .5, fraction: float = .8) -> dict:
-    """stable_window evaluates gateway-only CPU admission and publishes progress/drift without replacing failed intervals."""
-    if not math.isfinite(cores) or cores <= 0 or gateway_procs < 1:
-        raise ValueError('invalid CPU allowance')
-    intervals = []
-    for previous, current in zip(rows, rows[1:]):
-        if previous['elapsed'] < start or current['elapsed'] > start + seconds + .25:
-            continue
-        duration = current['elapsed'] - previous['elapsed']
-        cpu = current['processes']['gateway']['cpu_seconds'] - previous['processes']['gateway']['cpu_seconds']
-        if duration <= 0 or cpu < 0:
-            raise ValueError('non-monotonic samples')
-        used = cpu / duration
-        intervals.append({'start': previous['elapsed'], 'end': current['elapsed'], 'seconds': duration,
-                          'gateway_cores': used, 'machine_utilization': used / cores,
-                          'gateway_slot_utilization': used / min(cores, gateway_procs),
-                          'upstream_completed': current['upstream']['completed'] - previous['upstream']['completed'],
-                          'durable_requests': current['durable_requests'] - previous['durable_requests'],
-                          'upstream_active': current['upstream']['active']})
-    coverage = sum(x['seconds'] for x in intervals)
-    ratio = sum(x['machine_utilization'] >= minimum for x in intervals) / len(intervals) if intervals else 0
-    half = len(intervals) // 2
-    means = [statistics.mean(x['gateway_cores'] for x in part) for part in (intervals[:half], intervals[half:]) if part]
-    drift = abs(means[-1] / means[0] - 1) if len(means) == 2 and means[0] else None
-    qualified = bool(intervals) and coverage >= seconds - 2 and max(x['seconds'] for x in intervals) <= 2.5 and ratio >= fraction
-    return {'qualified': qualified, 'intervals': intervals, 'coverage_seconds': coverage,
-            'fraction_at_or_above_target': ratio, 'target_machine_utilization': minimum,
-            'required_fraction': fraction, 'gateway_cores_mean': statistics.mean(x['gateway_cores'] for x in intervals) if intervals else None,
-            'half_window_gateway_cores': means, 'relative_cpu_drift': drift,
-            'upstream_active_peak': max((x['upstream_active'] for x in intervals), default=None),
-            'progress_note': 'Upstream completions and durable statistics are proxies, not client completion timestamps.'}
 
 
 def assert_loopback_listeners(pid: int, expected_ports: set[int]) -> None:
