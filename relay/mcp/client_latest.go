@@ -264,7 +264,7 @@ func (c *StreamableHTTPClient) doModernRPCWithOptions(ctx context.Context, metho
 		return errors.New("mcp client is nil")
 	}
 	if options.Meta != nil {
-		copied := make(map[string]any, len(params)+1)
+		copied := make(map[string]any)
 		for key, value := range params {
 			copied[key] = value
 		}

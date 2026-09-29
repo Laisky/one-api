@@ -260,7 +260,10 @@ func (c *StreamableHTTPClient) CallTool(ctx context.Context, name string, argume
 	}
 	var result CallToolResult
 	if err := c.doRPC(ctx, "tools/call", params, &result); err != nil {
-		return nil, errors.Wrapf(err, "mcp rpc tools/call %s", name)
+		// The server may have performed the operation before its receipt failed.
+		// Keep pre-execution initialization/argument failures above retryable, but
+		// never replay this attempted call on another eligible server.
+		return nil, &ToolExecutionUncertainError{Err: errors.Wrapf(err, "mcp rpc tools/call %s", name)}
 	}
 	return &result, nil
 }

@@ -29,7 +29,7 @@ type ToolDescriptor struct {
 //   - []byte: the encoded MCP tool descriptor.
 //   - error: a wrapped encoding error when a field cannot be represented as JSON.
 func (t ToolDescriptor) MarshalJSON() ([]byte, error) {
-	payload := make(map[string]any, len(t.AdditionalFields)+8)
+	payload := make(map[string]any)
 	for key, value := range t.AdditionalFields {
 		payload[key] = value
 	}
@@ -179,7 +179,7 @@ type CallToolResult struct {
 //   - []byte: the encoded MCP tool result.
 //   - error: a wrapped encoding error when a field cannot be represented as JSON.
 func (c CallToolResult) MarshalJSON() ([]byte, error) {
-	payload := make(map[string]any, len(c.AdditionalFields)+7)
+	payload := make(map[string]any)
 	for key, value := range c.AdditionalFields {
 		payload[key] = value
 	}

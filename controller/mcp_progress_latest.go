@@ -22,7 +22,7 @@ const modernMCPStreamContextKey = "one-api.mcp.response-stream"
 // forwardedModernMCPToolMeta returns a request-local metadata copy and the capabilities the tools gateway can relay.
 // Optional task/subscription/App extensions and deprecated logging are not negotiated by this tools-only gateway.
 func forwardedModernMCPToolMeta(meta map[string]any) map[string]any {
-	forwarded := make(map[string]any, len(meta)+1)
+	forwarded := make(map[string]any)
 	for key, value := range meta {
 		if key == "io.modelcontextprotocol/logLevel" {
 			continue
