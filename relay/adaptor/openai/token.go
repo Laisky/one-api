@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"
 	imgutil "github.com/Laisky/one-api/common/image"
+	"github.com/Laisky/one-api/relay/adaptor/common/claudevision"
 	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
@@ -124,6 +125,7 @@ func CountTokenMessages(ctx context.Context,
 	messages []model.Message, actualModel string) int {
 	lg := gmw.GetLogger(ctx)
 
+	actualModel = claudeImageReservationModel(ctx, actualModel)
 	tokenEncoder := getTokenEncoder(actualModel)
 	// Reference:
 	// https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
@@ -217,6 +219,9 @@ func CountTokenMessages(ctx context.Context,
 		}
 		if deepseekcompat.IsFlashVisionModel(actualModel) {
 			tokenNum += countDeepSeekFileImageTokens(message.Content)
+		}
+		if claudevision.IsSonnet55(actualModel) {
+			tokenNum += countSonnet55FileImages(message.Content) * claudevision.Sonnet55MaxImageTokens
 		}
 
 		tokenNum += getTokenNum(tokenEncoder, message.Role)
@@ -357,6 +362,9 @@ func getVisionBaseTile(model string) (base int, tile int) {
 }
 
 func countImageTokens(url string, detail string, model string) (_ int, err error) {
+	if claudevision.IsSonnet55(model) {
+		return claudevision.Sonnet55MaxImageTokens, nil
+	}
 	// DeepSeek's exact image-token count is returned by the API usage object.
 	// For pre-consume estimation, use the documented per-image upper bound rather
 	// than applying OpenAI's unrelated tile formula or fetching a remote image.

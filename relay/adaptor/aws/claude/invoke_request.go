@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
 )
 
@@ -63,6 +64,9 @@ func normalizeInvokeBody(c *gin.Context, raw []byte) ([]byte, error) {
 	}
 	if payload == nil {
 		return nil, errors.New("Claude Invoke body must be an object")
+	}
+	if err := anthropic.NormalizeSonnet55Controls(c.GetString(ctxkey.RequestModel), payload); err != nil {
+		return nil, err
 	}
 	delete(payload, "model")
 	delete(payload, "stream")

@@ -68,6 +68,22 @@ func NormalizeModelCompatibility(modelName string, temperature **float64, topP *
 		return
 	}
 
-	(*thinking).Type = "adaptive"
-	(*thinking).BudgetTokens = nil
+	copy := **thinking
+	*thinking = &copy
+	if IsClaudeSonnet55(modelName) {
+		switch copy.Type {
+		case "disabled":
+			copy.Type = "between_tools"
+		case "enabled":
+			copy.Type = "adaptive"
+			copy.BudgetTokens = nil
+		}
+		return
+	}
+	// Sonnet 5 can disable thinking; unlike always-thinking Opus/Fable profiles.
+	if strings.TrimSpace(strings.ToLower(modelName)) == "claude-sonnet-5" && copy.Type == "disabled" {
+		return
+	}
+	copy.Type = "adaptive"
+	copy.BudgetTokens = nil
 }

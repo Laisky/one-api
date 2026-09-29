@@ -1,10 +1,15 @@
 package openai
 
-import "github.com/Laisky/one-api/relay/model"
+import (
+	"encoding/json"
+	"github.com/Laisky/one-api/relay/model"
+)
 
 // ResponseAPIRequest represents the OpenAI Response API request structure
 // https://platform.openai.com/docs/api-reference/responses
 type ResponseAPIRequest struct {
+	Thinking           *model.Thinking                `json:"thinking,omitempty"`
+	OutputConfig       json.RawMessage                `json:"output_config,omitempty"`
 	Input              ResponseAPIInput               `json:"input,omitempty"`                // Optional: Text, image, or file inputs to the model (string or array) - mutually exclusive with prompt
 	Model              string                         `json:"model"`                          // Required: Model ID used to generate the response
 	ExtraBody          map[string]any                 `json:"extra_body,omitempty"`           // Optional: Allowlisted provider-specific parameters merged into the upstream root payload

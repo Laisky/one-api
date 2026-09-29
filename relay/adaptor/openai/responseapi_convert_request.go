@@ -30,16 +30,18 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 	}
 
 	chatReq := &model.GeneralOpenAIRequest{
-		Model:       request.Model,
-		ExtraBody:   maps.Clone(request.ExtraBody),
-		Store:       request.Store,
-		Metadata:    request.Metadata,
-		Stream:      request.Stream != nil && *request.Stream,
-		Reasoning:   request.Reasoning,
-		ServiceTier: request.ServiceTier,
-		Temperature: request.Temperature,
-		TopP:        request.TopP,
-		ToolChoice:  request.ToolChoice,
+		Thinking:     request.Thinking,
+		OutputConfig: request.OutputConfig,
+		Model:        request.Model,
+		ExtraBody:    maps.Clone(request.ExtraBody),
+		Store:        request.Store,
+		Metadata:     request.Metadata,
+		Stream:       request.Stream != nil && *request.Stream,
+		Reasoning:    request.Reasoning,
+		ServiceTier:  request.ServiceTier,
+		Temperature:  request.Temperature,
+		TopP:         request.TopP,
+		ToolChoice:   request.ToolChoice,
 	}
 
 	if request.MaxOutputTokens != nil {

@@ -128,7 +128,8 @@ type GeneralOpenAIRequest struct {
 	// -------------------------------------
 	// Anthropic
 	// -------------------------------------
-	Thinking *Thinking `json:"thinking,omitempty"`
+	Thinking     *Thinking       `json:"thinking,omitempty"`
+	OutputConfig json.RawMessage `json:"output_config,omitempty"`
 	// -------------------------------------
 	// Response API
 	// -------------------------------------
@@ -192,9 +193,11 @@ type ThinkingBlockBinding struct {
 }
 
 type Thinking struct {
-	Type         string                `json:"type"`
-	BudgetTokens *int                  `json:"budget_tokens,omitempty" binding:"omitempty,min=1024"`
-	BlockBinding *ThinkingBlockBinding `json:"block_binding,omitempty"`
+	// ExtraFields retains provider-specific controls without losing unknown JSON values.
+	ExtraFields  map[string]json.RawMessage `json:"-"`
+	Type         string                     `json:"type"`
+	BudgetTokens *int                       `json:"budget_tokens,omitempty" binding:"omitempty,min=1024"`
+	BlockBinding *ThinkingBlockBinding      `json:"block_binding,omitempty"`
 }
 
 // IntPtr is a helper to create a pointer to an int value.
@@ -240,7 +243,9 @@ type OpenaiImageEditRequest struct {
 // ClaudeRequest represents a Claude Messages API request
 // This is a flexible structure that can handle both simple and complex content
 type ClaudeRequest struct {
-	Model string `json:"model" binding:"required"`
+	CompatibilityModel string          `json:"-"`
+	OutputConfig       json.RawMessage `json:"output_config,omitempty"`
+	Model              string          `json:"model" binding:"required"`
 	// ExtraBody stores allowlisted provider-specific parameters that should be
 	// merged into the upstream root payload after Claude-to-OpenAI conversion.
 	ExtraBody     map[string]any  `json:"extra_body,omitempty"`

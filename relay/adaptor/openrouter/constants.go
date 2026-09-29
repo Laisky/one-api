@@ -6,13 +6,15 @@ import (
 )
 
 // Model definitions are production Go code: edit the relevant models_*.go file.
-// These defaults preserve the effective configuration at a8782e3dc0dad7704acb0d008e7d30a26096338d.
+// Existing defaults retain the a8782e3dc0dad7704acb0d008e7d30a26096338d baseline;
+// later model-family files document their separately researched changes.
 // Provider-specific prices, unknown fields, and retained historical IDs remain distinct.
 // Source: https://openrouter.ai/api/v1/models
 // ModelRatios contains each provider model exactly once, with no patch overlays.
 var ModelRatios = adaptor.JoinModelCatalogs(
 	aion_labsModels(),
 	anthropicModels(),
+	sonnet55Models(),
 	arcee_aiModels(),
 	baiduModels(),
 	bytedance_seedModels(),

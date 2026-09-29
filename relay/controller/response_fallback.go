@@ -326,6 +326,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "convert_request_failed")
 		return wrapConvertRequestError(err)
 	}
+	convertedRequest = sanitizeConvertedChatFields(convertedRequest)
 	c.Set(ctxkey.ConvertedRequest, convertedRequest)
 
 	jsonData, err := json.Marshal(convertedRequest)
@@ -364,6 +365,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	}
 	if respErr != nil {
 		if usage == nil {
+			if refundClaudeAdmission(c, respErr, preConsumedQuota, meta.TokenId) {
+				return respErr
+			}
 			scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
 			return respErr
 		}
