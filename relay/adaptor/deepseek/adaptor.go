@@ -182,6 +182,7 @@ func normalizeDeepSeekThinkingConfig(c *gin.Context, request *model.GeneralOpenA
 	// block_binding controls Anthropic signature validation and has no DeepSeek
 	// equivalent. Remove it while retaining portable thinking mode and budget data.
 	request.Thinking.BlockBinding = nil
+	request.Thinking.ExtraFields = nil
 
 	originalType := request.Thinking.Type
 	normalizedType, changed := deepseekcompat.NormalizeThinkingType(originalType, request.Thinking.BudgetTokens)

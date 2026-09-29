@@ -91,6 +91,14 @@ func StreamHandler(c *gin.Context, client *bedrockruntime.Client) (result *relay
 	defer func() { c.Writer = original }()
 	common.SetEventStreamHeaders(c)
 	state := &invokeStreamState{blocks: map[int]*invokeContentBlock{}, id: tracing.GenerateChatCompletionID(c), created: helper.GetTimestamp()}
+	defer func() {
+		if result != nil && !state.finished {
+			if usage == nil {
+				usage = &relaymodel.Usage{}
+			}
+			usage.BillingEstimateReason = "incomplete_stream_usage_after_accepted_aws_claude_invoke"
+		}
+	}()
 	for {
 		if err := gmw.Ctx(c).Err(); err != nil {
 			return invokeError(errors.WithStack(err)), state.receipt.snapshot()

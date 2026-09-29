@@ -18,12 +18,26 @@ func sanitizeClaudeMessagesRequest(request *ClaudeMessagesRequest) {
 	if request == nil {
 		return
 	}
-	anthropic.NormalizeModelCompatibility(request.Model, &request.Temperature, &request.TopP, &request.TopK, &request.Thinking)
+	name := request.Model
+	if request.CompatibilityModel != "" {
+		name = request.CompatibilityModel
+	}
+	anthropic.NormalizeModelCompatibility(name, &request.Temperature, &request.TopP, &request.TopK, &request.Thinking)
 }
 
 // applyClaudeRequestRewriteFields rewrites sanitized top-level Claude request fields in obj.
 // It updates only the top-level fields that one-api intentionally normalizes and returns any rewrite error.
 func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *ClaudeMessagesRequest) error {
+	if obj == nil {
+		return errors.New("validation failed: Claude request must be an object")
+	}
+	name := request.Model
+	if request.CompatibilityModel != "" {
+		name = request.CompatibilityModel
+	}
+	if err := anthropic.NormalizeSonnet55Controls(name, obj); err != nil {
+		return err
+	}
 	if request.Model != "" {
 		modelBytes, merr := json.Marshal(request.Model)
 		if merr != nil {
@@ -43,7 +57,10 @@ func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *Cl
 		delete(obj, "top_k")
 	}
 
-	if anthropic.IsClaudeAdaptiveThinkingModel(request.Model) {
+	if anthropic.IsClaudeAdaptiveThinkingModel(name) && !anthropic.IsClaudeSonnet55(name) {
+		if name == "claude-sonnet-5" && request.Thinking != nil && request.Thinking.Type == "disabled" {
+			return nil
+		}
 		rewrittenThinking, changed, err := rewriteClaudeAdaptiveThinking(obj["thinking"])
 		if err != nil {
 			return errors.Wrap(err, "rewrite Claude adaptive thinking")

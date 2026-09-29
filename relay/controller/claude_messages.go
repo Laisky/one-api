@@ -99,6 +99,20 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	meta.ActualModelName = claudeRequest.Model
 	metalib.Set2Context(c, meta)
 
+	claudeRequest.CompatibilityModel = anthropic.CompatibilityModel(c, claudeRequest.Model)
+	if anthropic.IsClaudeSonnet55(claudeRequest.CompatibilityModel) {
+		raw, bodyErr := common.GetRequestBody(c)
+		if bodyErr != nil {
+			return openai.ErrorWrapper(bodyErr, "invalid_claude_messages_request", http.StatusBadRequest)
+		}
+		var fields map[string]json.RawMessage
+		if bodyErr := json.Unmarshal(raw, &fields); bodyErr != nil {
+			return openai.ErrorWrapper(bodyErr, "invalid_claude_messages_request", http.StatusBadRequest)
+		}
+		if bodyErr := anthropic.NormalizeSonnet55Controls(claudeRequest.CompatibilityModel, fields); bodyErr != nil {
+			return openai.ErrorWrapper(bodyErr, "invalid_claude_messages_request", http.StatusBadRequest)
+		}
+	}
 	sanitizeClaudeMessagesRequest(claudeRequest)
 
 	// Fold any mid-array role:"system" messages (Claude Code v2.1.154+ /
@@ -433,52 +447,7 @@ handleResponse:
 		// and extract usage for billing from the Claude response
 		// For AWS Bedrock, resp might be nil since it uses SDK calls
 		if resp != nil {
-			body, rerr := io.ReadAll(resp.Body)
-			if rerr != nil {
-				respErr = openai.ErrorWrapper(rerr, "read_upstream_response_failed", http.StatusInternalServerError)
-			} else {
-				// Close upstream body
-				_ = resp.Body.Close()
-
-				// Forward headers
-				for k, v := range resp.Header {
-					if len(v) > 0 {
-						c.Header(k, v[0])
-					}
-				}
-				c.Status(resp.StatusCode)
-				c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
-
-				// Parse usage from Claude native response for billing
-				var claudeResp anthropic.Response
-				if perr := json.Unmarshal(body, &claudeResp); perr == nil {
-					usage = &relaymodel.Usage{
-						PromptTokens:     claudeResp.Usage.InputTokens,
-						CompletionTokens: claudeResp.Usage.OutputTokens,
-						TotalTokens:      claudeResp.Usage.InputTokens + claudeResp.Usage.OutputTokens,
-						ServiceTier:      claudeResp.Usage.ServiceTier,
-					}
-					// Map cached prompt token details
-					if claudeResp.Usage.CacheReadInputTokens > 0 {
-						usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{CachedTokens: claudeResp.Usage.CacheReadInputTokens}
-					}
-					if claudeResp.Usage.CacheCreation != nil {
-						usage.CacheWrite5mTokens = claudeResp.Usage.CacheCreation.Ephemeral5mInputTokens
-						usage.CacheWrite1hTokens = claudeResp.Usage.CacheCreation.Ephemeral1hInputTokens
-					} else if claudeResp.Usage.CacheCreationInputTokens > 0 {
-						// Legacy field: treat as 5m cache write
-						usage.CacheWrite5mTokens = claudeResp.Usage.CacheCreationInputTokens
-					}
-				} else {
-					// Fallback usage on parse error
-					promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
-					usage = &relaymodel.Usage{
-						PromptTokens:     promptTokens,
-						CompletionTokens: 0,
-						TotalTokens:      promptTokens,
-					}
-				}
-			}
+			respErr, usage = anthropic.ClaudeNativeHandler(c, resp, promptTokens, meta.ActualModelName)
 		} else {
 			// For AWS Bedrock non-streaming, delegate to adapter's DoResponse
 			c.Set(ctxkey.SkipAdaptorResponseBodyLog, true)

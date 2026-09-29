@@ -14,6 +14,7 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor"
 	channelhelper "github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 	vertexaiClaude "github.com/Laisky/one-api/relay/adaptor/vertexai/claude"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/deepseek"
@@ -87,6 +88,10 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	adaptor := GetAdaptor(meta.ActualModelName)
 	if adaptor == nil {
 		return nil, errors.Errorf("cannot found vertex adaptor for model %s", meta.ActualModelName)
+	}
+
+	if claude, ok := adaptor.(*vertexaiClaude.Adaptor); ok {
+		return claude.ConvertClaudeRequest(c, request)
 	}
 
 	// Convert Claude Messages API request to OpenAI format first
@@ -573,6 +578,18 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	return nil
 }
 
-func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
-	return channelhelper.DoRequestHelper(a, c, meta, requestBody)
+// DoRequest prepares native Claude transport fields before using the shared HTTP path.
+func (a *Adaptor) DoRequest(c *gin.Context, m *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if _, ok := GetAdaptor(m.ActualModelName).(*vertexaiClaude.Adaptor); ok {
+		normalized, err := anthropic.PrepareRequestBody(c, m.ActualModelName, requestBody)
+		if err != nil {
+			return nil, err
+		}
+		prepared, err := vertexaiClaude.PrepareRequestBody(normalized)
+		if err != nil {
+			return nil, err
+		}
+		requestBody = prepared
+	}
+	return channelhelper.DoRequestHelper(a, c, m, requestBody)
 }

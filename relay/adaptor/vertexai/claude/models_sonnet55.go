@@ -28,6 +28,8 @@ func init() {
 		// Keep the common converter's feature profile; do not inherit first-party tools.
 		SupportedFeatures:           []string{"tools", "reasoning"},
 		SupportedSamplingParameters: []string{"stop", "max_tokens"},
+		SupportedReasoningEfforts:   []string{"low", "medium", "high", "xhigh", "max"},
+		DefaultReasoningEffort:      "high",
 		Description:                 "Claude Sonnet 5.5 on Vertex AI with 1M-token context and 128K output. Adaptive thinking defaults to high effort. Forced tool choice is not supported. Global standard input/output pricing is $2/$10 per million tokens; cache reads $0.20, 5-minute writes $2.50, and 1-hour writes $4. Regional and multi-region premiums are not included.",
 	}
 	ModelList = adaptor.GetModelListFromPricing(ModelRatios)

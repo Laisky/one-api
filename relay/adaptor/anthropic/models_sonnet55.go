@@ -27,6 +27,8 @@ func init() {
 		OutputModalities:            claudeTextOutputs,
 		SupportedFeatures:           claudeFeaturesWithReasoning,
 		SupportedSamplingParameters: claudeAdaptiveOnlySamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high", "xhigh", "max"},
+		DefaultReasoningEffort:      "high",
 		Description:                 "Claude Sonnet 5.5 with 1M-token context and 128K output. Adaptive thinking defaults to high effort. Forced tool choice is not supported. Standard input/output pricing is $2/$10 per million tokens; cache reads cost $0.20, 5-minute writes $2.50, and 1-hour writes $4 per million tokens.",
 	}
 }

@@ -5,12 +5,9 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// init registers Sonnet 5.5's standard launch reference prices and Bedrock's
-// independently documented capabilities. It takes no arguments and returns nothing.
-// The prices follow Anthropic's explicit Sonnet 5 price-parity announcement and
-// the existing Bedrock Sonnet 5 defaults, not a separately retrieved AWS tariff.
-// Confirm the AWS Marketplace agreement or configure channel overrides before
-// deployment; do not treat these defaults as a verified account-specific quote.
+// init registers Bedrock Sonnet 5.5 with Claude-equivalent default prices,
+// explicitly approved by the repository owner on 2026-09-28. It takes no
+// arguments and returns nothing. Account-specific tariffs remain configurable.
 // Sources (2026-09-28):
 //   - https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5-5.html
 //   - https://platform.claude.com/docs/en/models/sonnet-5-5/whats-new-sonnet-5-5#pricing
@@ -29,6 +26,8 @@ func init() {
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           []string{"tools", "reasoning"},
 		SupportedSamplingParameters: []string{"stop", "max_tokens"},
-		Description:                 "Claude Sonnet 5.5 on Amazon Bedrock: 1M context, 128K output, adaptive thinking (default high). Commercial-region Invoke calls use a global inference profile. Native structured outputs and Batch are not supported by the launch model card. Reference input/output prices are $2/$10 per million tokens, cache read $0.20 and 5m/1h writes $2.50/$4, following the published Sonnet 5 price parity; independently confirm the AWS tariff or configure channel overrides before deployment.",
+		SupportedReasoningEfforts:   []string{"low", "medium", "high", "xhigh", "max"},
+		DefaultReasoningEffort:      "high",
+		Description:                 "Claude Sonnet 5.5 on Amazon Bedrock: 1M context, 128K output, adaptive thinking (default high). Commercial-region Invoke calls use a global inference profile. Native structured outputs and Batch are not supported by the launch model card. Default input/output prices are $2/$10 per million tokens, cache read $0.20 and 5m/1h writes $2.50/$4, following the owner-approved Claude price-parity policy. Channel price overrides remain supported.",
 	}
 }

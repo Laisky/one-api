@@ -15,7 +15,7 @@ import (
 )
 
 // TestClaudeSonnet55BedrockCatalog checks the public catalog, child dispatch, and
-// explicit launch reference rates. It takes a test handle and returns nothing;
+// owner-approved Claude-equivalent default rates. It takes a test handle and returns nothing;
 // these assertions verify gateway defaults, not an AWS Marketplace invoice.
 func TestClaudeSonnet55BedrockCatalog(t *testing.T) {
 	t.Parallel()
