@@ -227,10 +227,10 @@ func mergeVideoPricing(base *adaptor.VideoPricingConfig, overlay *adaptor.VideoP
 		return overlay.Clone()
 	}
 	merged := base.Clone()
-	if overlay.TotalUsd != 0 {
+	if overlay.TotalUsd != 0 || overlay.TotalUsdDecimal != "" {
+		// A total quote's float and decimal forms describe one pricing choice.
+		// Replacing either form must not leave the inherited form behind.
 		merged.TotalUsd = overlay.TotalUsd
-	}
-	if overlay.TotalUsdDecimal != "" {
 		merged.TotalUsdDecimal = overlay.TotalUsdDecimal
 	}
 	if overlay.PerSecondUsd != 0 {

@@ -223,6 +223,40 @@ func TestApplyTimeWindowNestedPricingMerge(t *testing.T) {
 	require.InDelta(t, 0.1, merged.PerCall.UsdPerThousandCalls, 1e-12)
 }
 
+// TestMergeVideoTotalPricingReplacesBothRepresentations verifies a time-window overlay cannot combine a new total quote with an inherited stale representation.
+func TestMergeVideoTotalPricingReplacesBothRepresentations(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		base     *adaptor.VideoPricingConfig
+		overlay  *adaptor.VideoPricingConfig
+		wantUsd  float64
+		wantText string
+	}{
+		{
+			name:     "float overlay clears inherited decimal",
+			base:     &adaptor.VideoPricingConfig{TotalUsd: 0.4, TotalUsdDecimal: "0.40"},
+			overlay:  &adaptor.VideoPricingConfig{TotalUsd: 0.5},
+			wantUsd:  0.5,
+			wantText: "",
+		},
+		{
+			name:     "decimal overlay clears inherited float",
+			base:     &adaptor.VideoPricingConfig{TotalUsd: 0.4},
+			overlay:  &adaptor.VideoPricingConfig{TotalUsdDecimal: "0.50"},
+			wantUsd:  0,
+			wantText: "0.50",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			merged := mergeVideoPricing(test.base, test.overlay)
+			require.Equal(t, test.wantUsd, merged.TotalUsd)
+			require.Equal(t, test.wantText, merged.TotalUsdDecimal)
+		})
+	}
+}
+
 // TestApplyTimeWindowRatioOnlyMergesEmbedding verifies token billing keeps windowed embedding overlays.
 func TestApplyTimeWindowRatioOnlyMergesEmbedding(t *testing.T) {
 	t.Parallel()

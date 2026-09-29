@@ -169,6 +169,9 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			videoPricing = resolvedCfg.Video
 		}
 		if videoPricing == nil {
+			if durationSeconds <= 0 {
+				return openai.ErrorWrapper(errors.New("seconds must be positive for video generation"), "invalid_video_duration", http.StatusBadRequest)
+			}
 			if estimator, supportsDynamicPricing := pricingAdaptor.(adaptor.VideoPricingEstimator); supportsDynamicPricing {
 				var estimateErr error
 				videoPricing, estimateErr = estimator.EstimateVideoPricing(c, meta, videoRequest)
