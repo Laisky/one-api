@@ -200,8 +200,9 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 // handleClaudeHTTPJSON validates usage independently of content and checks the final downstream write.
 func handleClaudeHTTPJSON(c *gin.Context, resp *http.Response, modelName string, native bool) (result *model.ErrorWithStatusCode, usage *model.Usage) {
 	var receipt httpUsageReceipt
+	admissionRejected := false
 	defer func() {
-		if usage == nil {
+		if usage == nil && !admissionRejected {
 			usage = retainedHTTPUsage(&receipt)
 		}
 	}()
@@ -230,6 +231,15 @@ func handleClaudeHTTPJSON(c *gin.Context, resp *http.Response, modelName string,
 	}
 	if closeErr != nil {
 		return claudeHTTPError(errors.Wrap(closeErr, "close Claude response")), nil
+	}
+	if status := claudeAdmissionStatus(resp.StatusCode, envelope.Type, envelope.Error.Type, envelope.Usage); status != 0 {
+		// Clean read, JSON decoding, receipt validation, and Close all succeeded.
+		// Only this narrow proof can release a forwarded request's reservation.
+		admissionRejected = true
+		return &model.ErrorWithStatusCode{StatusCode: status, Error: model.Error{
+			Type: model.ErrorType(envelope.Error.Type), Code: envelope.Error.Type, Message: envelope.Error.Message,
+			RawError: errors.WithStack(&admissionRejectionError{}),
+		}}, nil
 	}
 	if envelope.Error.Type != "" {
 		status := resp.StatusCode

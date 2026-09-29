@@ -34,7 +34,8 @@ func stopReasonClaude2OpenAI(reason *string) string {
 	}
 }
 
-// https://docs.anthropic.com/claude/reference/messages-streaming
+// StreamResponseClaude2OpenAI converts one Claude event and any receipt to Chat metadata.
+// Incremental events have no finish reason; real stop reasons retain their mapping.
 func StreamResponseClaude2OpenAI(c *gin.Context, claudeResponse *StreamResponse) (*openai.ChatCompletionsStreamResponse, *Response) {
 	logger := gmw.GetLogger(c)
 
@@ -166,7 +167,7 @@ func StreamResponseClaude2OpenAI(c *gin.Context, claudeResponse *StreamResponse)
 	}
 	choice.Delta.Role = "assistant"
 	finishReason := stopReasonClaude2OpenAI(&stopReason)
-	if finishReason != "null" {
+	if finishReason != "" && finishReason != "null" {
 		choice.FinishReason = &finishReason
 	}
 	var openaiResponse openai.ChatCompletionsStreamResponse

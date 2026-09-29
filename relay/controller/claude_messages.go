@@ -262,6 +262,8 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			lg.Debug("analyzed Claude passthrough thinking blocks", fields...)
 		}
 	} else {
+		convertedRequest = sanitizeConvertedChatFields(convertedRequest)
+		c.Set(ctxkey.ConvertedRequest, convertedRequest)
 		requestBytes, merr := json.Marshal(convertedRequest)
 		if merr != nil {
 			return openai.ErrorWrapper(merr, "marshal_request_failed", http.StatusInternalServerError)
@@ -618,6 +620,9 @@ handleResponse:
 		// If usage is available (e.g., client disconnected after upstream response),
 		// proceed with billing; otherwise, refund pre-consumed quota and return error.
 		if usage == nil {
+			if refundClaudeAdmission(c, respErr, preConsumedQuota, c.GetInt(ctxkey.TokenId)) {
+				return respErr
+			}
 			scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "do_response_failed_without_usage")
 			return respErr
 		}

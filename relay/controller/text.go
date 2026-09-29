@@ -328,6 +328,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		// proceed to billing to ensure forwarded requests are charged; do not refund pre-consumed quota.
 		// Otherwise, refund pre-consumed quota and return error.
 		if usage == nil {
+			if refundClaudeAdmission(c, respErr, preConsumedQuota, meta.TokenId) {
+				return respErr
+			}
 			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
 			return respErr
 		}
@@ -443,6 +446,8 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	return respErr
 }
 
+// getRequestBody constructs the mapped provider payload while preserving explicit raw passthrough.
+// Shared Chat DTOs exclude Claude-only controls without mutating caller-owned request fields.
 func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.GeneralOpenAIRequest, adaptor adaptor.Adaptor, systemPromptReset bool) (io.Reader, error) {
 	originalBody, err := common.GetRequestBody(c)
 	if err != nil {
@@ -485,6 +490,7 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 	if err != nil {
 		return nil, errors.Wrap(err, "convert request failed")
 	}
+	convertedRequest = sanitizeConvertedChatFields(convertedRequest)
 	c.Set(ctxkey.ConvertedRequest, convertedRequest)
 
 	jsonData, err := json.Marshal(convertedRequest)
