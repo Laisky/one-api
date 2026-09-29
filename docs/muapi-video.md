@@ -55,14 +55,16 @@ additional image, reference, audio, resolution, or motion-control fields.
 
 MuAPI prices many media models dynamically by model and request parameters. The
 adaptor calls the documented `estimate-cost` endpoint before one-api reserves
-quota, converts the returned USD cost into the gateway's per-second billing
-contract for that request, and refuses to submit when a positive USD estimate
-is unavailable. No generation request is replayed automatically.
+quota, converts the returned total USD quote directly to quota, and refuses to
+submit when a positive USD estimate is unavailable. No generation request is
+replayed automatically.
 
 Accepted request ids are bound to the authenticated user, token, model, and
-channel through one-api's shared async-video task store. Listing, deletion, and
-`/content` routes are intentionally not emulated; download the output URL from
-MuAPI's completed result.
+channel through one-api's shared async-video task store. Failed binding writes
+are recorded for retry and replayed at startup or on an authenticated poll after
+the database recovers; retrying the local record never resubmits or refunds the
+accepted generation. Listing, deletion, and `/content` routes are intentionally
+not emulated; download the output URL from MuAPI's completed result.
 
 References:
 

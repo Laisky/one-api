@@ -39,6 +39,7 @@ import (
 	"github.com/Laisky/one-api/monitor"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/asyncvideo"
 	"github.com/Laisky/one-api/relay/mcp"
 	responsestate "github.com/Laisky/one-api/relay/state"
 	"github.com/Laisky/one-api/router"
@@ -110,6 +111,17 @@ func main() {
 	// exactly once, so the InitDB/InitLogDB compatibility wrappers are not used here.
 	if err := model.InitDatabases(ctx); err != nil {
 		logger.Logger.Fatal("database bootstrap error", zap.Error(err))
+	}
+	for batch := 0; batch < 10; batch++ {
+		recovered, recoverErr := asyncvideo.ReplayPendingTaskBindings(ctx, 100)
+		if recoverErr != nil {
+			logger.Logger.Warn("async task binding retry replay incomplete", zap.Error(recoverErr))
+			break
+		}
+		if recovered == 0 {
+			break
+		}
+		logger.Logger.Info("replayed async task binding retries", zap.Int("count", recovered))
 	}
 	model.StartTraceRetentionCleaner(workerCtx, config.TraceRetentionDays)
 

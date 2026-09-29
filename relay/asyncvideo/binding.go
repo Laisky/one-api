@@ -93,17 +93,19 @@ func PersistTask(c *gin.Context, body []byte) error {
 	}
 
 	if err := dbmodel.SaveAsyncTaskBinding(gmw.Ctx(c), binding); err != nil {
-		queueBindingRetry(binding, gmw.Ctx(c))
+		if retryErr := queueBindingRetry(binding, gmw.Ctx(c)); retryErr != nil {
+			return errors.Wrapf(err, "persist async task binding %s; durable recovery record failed: %v", taskID, retryErr)
+		}
 		return errors.Wrapf(err, "persist async task binding %s", taskID)
 	}
 	pendingBindings.Delete(taskID)
 	return nil
 }
 
-// queueBindingRetry retains a failed binding for short-lived recovery when the
-// database is temporarily unavailable. The paid upstream task is never replayed;
-// only the local routing record is retried and failures remain visible in logs.
-// RetryPendingTaskBinding retries a queued local task-binding write for its owning user. Parameters are the request context, task ID, and authenticated user ID. Returns whether a queued binding existed and any persistence error.
+// RetryPendingTaskBinding retries a queued or durable local task-binding write
+// for its owning user. Parameters are the request context, task ID, and
+// authenticated user ID. Returns whether a retry record existed and any
+// persistence error.
 func RetryPendingTaskBinding(ctx context.Context, taskID string, userID int) (bool, error) {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
@@ -111,7 +113,7 @@ func RetryPendingTaskBinding(ctx context.Context, taskID string, userID int) (bo
 	}
 	raw, ok := pendingBindings.Load(taskID)
 	if !ok {
-		return false, nil
+		return dbmodel.RecoverAsyncTaskBindingRetry(ctx, taskID, userID)
 	}
 	queued := raw.(*pendingBinding)
 	if userID <= 0 || queued.record.UserID != userID {
@@ -120,13 +122,22 @@ func RetryPendingTaskBinding(ctx context.Context, taskID string, userID int) (bo
 	return true, persistPendingBinding(ctx, taskID, queued)
 }
 
-func queueBindingRetry(binding *dbmodel.AsyncTaskBinding, ctx context.Context) {
+// ReplayPendingTaskBindings replays a bounded set of durable retry records during startup. Parameters: ctx bounds startup database work and limit caps the batch. Returns the number restored and any recovery error.
+func ReplayPendingTaskBindings(ctx context.Context, limit int) (int, error) {
+	return dbmodel.RecoverAsyncTaskBindingRetries(ctx, limit)
+}
+
+// queueBindingRetry durably records a failed binding and schedules short-lived
+// in-process retries. It retries only the local routing write; it never resubmits
+// the paid upstream task. Returns any durable-record error.
+func queueBindingRetry(binding *dbmodel.AsyncTaskBinding, ctx context.Context) error {
 	if binding == nil || strings.TrimSpace(binding.TaskID) == "" {
-		return
+		return errors.New("async task binding retry requires a task id")
 	}
+	durableErr := dbmodel.SaveAsyncTaskBindingRetry(ctx, binding)
 	queued := &pendingBinding{record: *binding}
 	if _, loaded := pendingBindings.LoadOrStore(binding.TaskID, queued); loaded {
-		return
+		return durableErr
 	}
 	detached := context.Background()
 	if ctx != nil {
@@ -143,6 +154,7 @@ func queueBindingRetry(binding *dbmodel.AsyncTaskBinding, ctx context.Context) {
 			}
 		}
 	}()
+	return durableErr
 }
 
 // persistPendingBinding saves one queued binding under its mutex. Parameters are the database context, task ID, and queued binding. Returns any database write error and removes the queue entry after success.
@@ -150,6 +162,9 @@ func persistPendingBinding(ctx context.Context, taskID string, queued *pendingBi
 	queued.mu.Lock()
 	defer queued.mu.Unlock()
 	if err := dbmodel.SaveAsyncTaskBinding(ctx, &queued.record); err != nil {
+		return err
+	}
+	if err := dbmodel.DeleteAsyncTaskBindingRetry(ctx, taskID); err != nil {
 		return err
 	}
 	pendingBindings.CompareAndDelete(taskID, queued)

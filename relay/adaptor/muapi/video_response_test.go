@@ -32,7 +32,7 @@ func TestMuAPIVideoResponseBindsAcceptedTask(t *testing.T) {
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	require.NoError(t, db.AutoMigrate(&dbmodel.AsyncTaskBinding{}))
+	require.NoError(t, db.AutoMigrate(&dbmodel.AsyncTaskBinding{}, &dbmodel.AsyncTaskBindingRetry{}))
 	previousDB := dbmodel.DB
 	dbmodel.DB = db
 	t.Cleanup(func() { dbmodel.DB = previousDB })
@@ -76,7 +76,7 @@ func TestMuAPIVideoResponseRetriesOnlyBindingPersistence(t *testing.T) {
 	require.NoError(t, err)
 	recoverySQL.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = recoverySQL.Close() })
-	require.NoError(t, recoveryDB.AutoMigrate(&dbmodel.AsyncTaskBinding{}))
+	require.NoError(t, recoveryDB.AutoMigrate(&dbmodel.AsyncTaskBinding{}, &dbmodel.AsyncTaskBindingRetry{}))
 	var failedWrites atomic.Int32
 	require.NoError(t, recoveryDB.Callback().Create().Before("gorm:create").Register("test:transient_async_task_binding_write", func(tx *gorm.DB) {
 		if tx.Statement.Table == "async_task_bindings" && failedWrites.Add(1) <= 4 {
