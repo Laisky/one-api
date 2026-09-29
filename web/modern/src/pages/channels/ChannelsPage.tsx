@@ -46,6 +46,7 @@ export function ChannelsPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [appliedKeyword, setAppliedKeyword] = useState('');
   const loadSequence = useRef(0);
+  const latestListRefresh = useRef<(() => Promise<void>) | null>(null);
   const { user } = useAuthStore();
   const selection = useTableSelection(JSON.stringify([user?.uuid || user?.username, user?.role, searchKeyword.trim(), appliedKeyword]));
   const [refreshingBalanceIds, setRefreshingBalanceIds] = useState<Set<string | number>>(new Set());
@@ -101,7 +102,9 @@ export function ChannelsPage() {
   };
 
   /** load preserves the applied result set and optionally propagates refresh errors to the duplicate interaction. */
-  const load = async (p = 0, size = pageSize, keyword = appliedKeyword, propagateError = false) => {
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword, propagateError = false): Promise<void> => {
+    // Capture requested page/filter/sort before awaiting, including navigation not yet committed by React.
+    latestListRefresh.current = () => load(p, size, keyword, true);
     const sequence = ++loadSequence.current;
     setLoading(true);
     try {
@@ -312,7 +315,7 @@ export function ChannelsPage() {
     }
   };
 
-  const duplicateAction = useDuplicateChannel(() => load(pageIndex, pageSize, appliedKeyword, true));
+  const duplicateAction = useDuplicateChannel(() => latestListRefresh.current?.());
 
   /** duplicateChannel identifies the selected channel for the shared one-click duplicate interaction. */
   const duplicateChannel = (channel: Channel) => duplicateAction.duplicate(channelRef(channel));

@@ -146,6 +146,7 @@ export function TokensPage() {
   const [searchKeyword, setSearchKeyword] = useState(searchParams.get('keyword') || '');
   const [appliedKeyword, setAppliedKeyword] = useState('');
   const loadSequence = useRef(0);
+  const latestListRefresh = useRef<(() => Promise<void>) | null>(null);
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('id');
@@ -216,7 +217,9 @@ export function TokensPage() {
   );
 
   /** load preserves the applied result set and optionally propagates refresh errors to the duplicate interaction. */
-  const load = async (p = 0, size = pageSize, keyword = appliedKeyword, propagateError = false) => {
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword, propagateError = false): Promise<void> => {
+    // Capture requested page/filter/sort before awaiting, including navigation not yet committed by React.
+    latestListRefresh.current = () => load(p, size, keyword, true);
     const sequence = ++loadSequence.current;
     setLoading(true);
     try {
@@ -245,7 +248,7 @@ export function TokensPage() {
     }
   };
 
-  const duplicateAction = useDuplicateToken(() => load(pageIndex, pageSize, appliedKeyword, true));
+  const duplicateAction = useDuplicateToken(() => latestListRefresh.current?.());
 
   // Load initial data (perform search if keyword is pre-filled from URL)
   useEffect(() => {
