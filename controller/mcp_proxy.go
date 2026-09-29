@@ -41,7 +41,7 @@ type mcpCallParams struct {
 
 const (
 	mcpServerName    = "one-api-mcp-proxy"
-	mcpServerVersion = "1.1.0"
+	mcpServerVersion = mcp.ImplementationVersion
 )
 
 const (

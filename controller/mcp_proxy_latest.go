@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
@@ -38,11 +39,13 @@ type modernMCPParamsEnvelope struct {
 
 // modernMCPCallParams contains one tools/call request and optional multi-round-trip state.
 type modernMCPCallParams struct {
-	Name           string         `json:"name"`
-	Arguments      map[string]any `json:"arguments"`
-	Signature      string         `json:"signature,omitempty"`
-	InputResponses map[string]any `json:"inputResponses,omitempty"`
-	RequestState   string         `json:"requestState,omitempty"`
+	Meta           map[string]any          `json:"_meta"`
+	OnNotification mcp.NotificationHandler `json:"-"`
+	Name           string                  `json:"name"`
+	Arguments      map[string]any          `json:"arguments"`
+	Signature      string                  `json:"signature,omitempty"`
+	InputResponses map[string]any          `json:"inputResponses,omitempty"`
+	RequestState   string                  `json:"requestState,omitempty"`
 }
 
 // modernMCPValidationError carries HTTP and JSON-RPC details for one rejected modern request.
@@ -157,7 +160,7 @@ func MCPProxyLatest(c *gin.Context) {
 	}
 
 	var request mcpRPCRequest
-	if err := json.Unmarshal(body, &request); err != nil {
+	if err := mcp.DecodeJSON(body, &request); err != nil {
 		if len(versionValues) == 0 {
 			MCPProxy(c)
 			return
@@ -174,7 +177,11 @@ func MCPProxyLatest(c *gin.Context) {
 		return
 	}
 	if err := validateModernMCPRequest(c, request); err != nil {
-		respondModernValidationError(c, request.ID, err)
+		id := request.ID
+		if id != nil && !isValidModernMCPRequestID(id) {
+			id = nil
+		}
+		respondModernValidationError(c, id, err)
 		return
 	}
 	handleModernMCPPost(c, request)
@@ -245,7 +252,7 @@ func isModernMCPRequest(c *gin.Context, request mcpRPCRequest) bool {
 		return true
 	}
 	var params modernMCPParamsEnvelope
-	if json.Unmarshal(request.Params, &params) == nil && strings.TrimSpace(params.Meta.ProtocolVersion) != "" {
+	if mcp.DecodeJSON(request.Params, &params) == nil && strings.TrimSpace(params.Meta.ProtocolVersion) != "" {
 		return true
 	}
 	versions := c.Request.Header.Values(mcp.ProtocolVersionHeader)
@@ -276,15 +283,15 @@ func validateModernMCPRequest(c *gin.Context, request mcpRPCRequest) error {
 	}
 
 	var params modernMCPParamsEnvelope
-	if err := json.Unmarshal(request.Params, &params); err != nil {
-		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidRequest, Err: errors.Wrap(err, "decode modern mcp metadata")}
+	if err := mcp.DecodeJSON(request.Params, &params); err != nil {
+		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidParams, Err: errors.Wrap(err, "decode modern mcp metadata")}
 	}
 	bodyVersion := strings.TrimSpace(params.Meta.ProtocolVersion)
+	if bodyVersion == "" || params.Meta.ClientCapabilities == nil {
+		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidParams, Err: errors.New("modern mcp requests require protocol version and client capabilities in _meta")}
+	}
 	headerVersion, err := singleMCPHeaderValue(c.Request.Header, mcp.ProtocolVersionHeader)
-	if err != nil || bodyVersion == "" {
-		if err == nil {
-			err = errors.New("modern mcp requests require protocol version metadata")
-		}
+	if err != nil {
 		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcp.ErrorCodeHeaderMismatch, Err: err}
 	}
 	if bodyVersion != headerVersion {
@@ -301,9 +308,6 @@ func validateModernMCPRequest(c *gin.Context, request mcpRPCRequest) error {
 			},
 		}
 	}
-	if params.Meta.ClientCapabilities == nil {
-		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidRequest, Err: errors.New("modern mcp requests require client capabilities in _meta")}
-	}
 	headerMethod, err := singleMCPHeaderValue(c.Request.Header, mcp.MethodHeader)
 	if err != nil || headerMethod != request.Method {
 		if err == nil {
@@ -316,7 +320,7 @@ func validateModernMCPRequest(c *gin.Context, request mcpRPCRequest) error {
 	}
 
 	var callParams modernMCPCallParams
-	if err := json.Unmarshal(request.Params, &callParams); err != nil {
+	if err := mcp.DecodeJSON(request.Params, &callParams); err != nil {
 		return &modernMCPValidationError{Status: http.StatusBadRequest, Code: mcpErrInvalidParams, Err: errors.Wrap(err, "decode mcp call params")}
 	}
 	headerName, err := singleMCPHeaderValue(c.Request.Header, mcp.NameHeader)
@@ -360,6 +364,8 @@ func isValidModernMCPRequestID(id any) bool {
 	switch typed := id.(type) {
 	case string:
 		return true
+	case json.Number:
+		return mcp.IsJSONInteger(typed)
 	case float64:
 		return !math.IsNaN(typed) && !math.IsInf(typed, 0) && math.Trunc(typed) == typed
 	default:
@@ -452,9 +458,19 @@ func handleModernMCPPost(c *gin.Context, request mcpRPCRequest) {
 		respondMCPModernResult(c, request.ID, result)
 	case "tools/call":
 		var params modernMCPCallParams
-		if err := json.Unmarshal(request.Params, &params); err != nil {
+		if err := mcp.DecodeJSON(request.Params, &params); err != nil {
 			respondMCPModernError(c, request.ID, http.StatusBadRequest, mcpErrInvalidParams, errors.Wrap(err, "decode mcp call params"), nil)
 			return
+		}
+		if token, exists := params.Meta["progressToken"]; exists && !isValidModernMCPRequestID(token) {
+			respondMCPModernError(c, request.ID, http.StatusBadRequest, mcpErrInvalidParams, errors.New("progressToken must be a string or integer"), nil)
+			return
+		}
+		params.Meta = forwardedModernMCPToolMeta(params.Meta)
+		if params.Meta["progressToken"] != nil && acceptsModernMCPSSE(c.Request.Header) {
+			params.OnNotification = func(ctx context.Context, notification json.RawMessage) error {
+				return forwardModernMCPProgress(ctx, c, notification)
+			}
 		}
 		result, err := executeModernMCPTool(gmw.Ctx(c), c, params)
 		if err != nil {
@@ -503,7 +519,7 @@ func respondMCPModernResult(c *gin.Context, id any, result any) {
 		return
 	}
 	var normalized map[string]any
-	if err := json.Unmarshal(encoded, &normalized); err != nil {
+	if err := mcp.DecodeJSON(encoded, &normalized); err != nil {
 		respondMCPModernError(c, id, http.StatusOK, mcpErrInternal, errors.Wrap(err, "normalize modern mcp result"), nil)
 		return
 	}
@@ -523,7 +539,7 @@ func respondMCPModernResult(c *gin.Context, id any, result any) {
 	}
 	meta[mcp.MetaServerInfoKey] = gin.H{"name": mcpServerName, "version": mcpServerVersion}
 	normalized["_meta"] = meta
-	c.JSON(http.StatusOK, gin.H{"jsonrpc": "2.0", "id": id, "result": normalized})
+	writeModernMCPResponse(c, http.StatusOK, gin.H{"jsonrpc": "2.0", "id": id, "result": normalized})
 }
 
 // promoteModernResultAlias moves one legacy result field to its current camelCase name.
@@ -569,5 +585,5 @@ func respondMCPModernError(c *gin.Context, id any, status int, code int, err err
 	if data != nil {
 		errorObject["data"] = data
 	}
-	c.JSON(status, gin.H{"jsonrpc": "2.0", "id": id, "error": errorObject})
+	writeModernMCPResponse(c, status, gin.H{"jsonrpc": "2.0", "id": id, "error": errorObject})
 }
