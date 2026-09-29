@@ -45,11 +45,16 @@ jobs:
       - name: Run real-page mobile regression matrix
         working-directory: web/modern
         run: python scripts/test-mobile-list-browser.py
+      - name: Preserve contextual toolbar browser regressions
+        working-directory: web/modern
+        run: python scripts/test-table-toolbar-browser.py
       - name: Preserve browser evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mobile-list-browser-evidence
-          path: web/modern/test-results/mobile-list
+          path: |
+            web/modern/test-results/mobile-list
+            web/modern/test-results/table-toolbar
           if-no-files-found: ignore
           retention-days: 7

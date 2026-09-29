@@ -155,7 +155,7 @@ for (const [kind, Component, defaultOrder] of [
       await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
       expect(onPageChange).toHaveBeenCalledWith(1, 10);
       await userEvent.click(screen.getByRole('combobox', { name: 'Rows per page:' }));
-      await userEvent.click(screen.getByRole('option', { name: '20', exact: true }));
+      await userEvent.click(screen.getByRole('option', { name: '20' }));
       expect(onPageSizeChange).toHaveBeenCalledWith(20);
       expect(onPageChange).toHaveBeenLastCalledWith(0, 20);
     });

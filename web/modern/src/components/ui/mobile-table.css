@@ -1,30 +1,12 @@
-/* Mobile table styles are deliberately scoped: dialog buttons and desktop
-   tables must not inherit record layout or blanket full-width controls. */
-.data-table-shell {
-  min-width: 0;
-  max-width: 100%;
-}
-
-.mobile-data-list {
-  display: grid;
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
+/* Scoped to mobile records: never restyle desktop tables or portaled dialogs. */
+.data-table-shell { min-width: 0; max-width: 100%; }
+.mobile-data-list { display: grid; gap: 0.75rem; margin: 0; padding: 0; list-style: none; }
 .mobile-data-list > li,
 .mobile-record,
 .mobile-record__identity,
 .mobile-record__field,
-.mobile-record__field dd {
-  min-width: 0;
-}
-
-.mobile-data-list[inert] {
-  opacity: 0.6;
-}
-
+.mobile-record__field dd { min-width: 0; }
+.mobile-data-list[inert] { opacity: 0.6; }
 .mobile-record {
   padding: 0.75rem;
   border: 1px solid hsl(var(--border));
@@ -33,33 +15,11 @@
   color: hsl(var(--card-foreground));
   overflow-wrap: anywhere;
 }
-
-.mobile-record--selected {
-  border-color: hsl(var(--primary));
-  box-shadow: 0 0 0 1px hsl(var(--primary));
-}
-
-.mobile-record__header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 2.75rem;
-}
-
-.mobile-record__identity {
-  flex: 1;
-  margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-.mobile-record__identity dd {
-  margin: 0;
-}
-
-/* The label is the 44px hit area; the checkbox itself remains a 20px glyph.
-   Native label activation also works on the Radix button checkbox. */
+.mobile-record--selected { border-color: hsl(var(--primary)); box-shadow: 0 0 0 1px hsl(var(--primary)); }
+.mobile-record__header { display: flex; align-items: center; gap: 0.5rem; min-height: 2.75rem; }
+.mobile-record__identity { flex: 1; margin: 0; font-size: 0.9375rem; font-weight: 600; line-height: 1.5; }
+.mobile-record__identity dd { margin: 0; }
+/* Native label activation makes the padding part of the actual hit target. */
 .mobile-record__selection {
   display: flex;
   flex: 0 0 2.75rem;
@@ -69,202 +29,56 @@
   height: 2.75rem;
   cursor: pointer;
 }
-
-.mobile-record__selection button[role='checkbox'] {
-  width: 1.25rem;
-  height: 1.25rem;
-  min-width: 1.25rem;
-  min-height: 1.25rem;
-  padding: 0;
-}
-
-.mobile-record button:not([role='checkbox']) {
-  min-width: 2.75rem;
-  min-height: 2.75rem;
-}
-
-.mobile-record__action-trigger {
-  flex: 0 0 2.75rem;
-}
-
-.mobile-record__fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.625rem 1rem;
-  margin: 0.5rem 0 0;
-}
-
-.mobile-record__field dt {
-  margin-bottom: 0.125rem;
-  color: hsl(var(--muted-foreground));
-  font-size: 0.75rem;
-  line-height: 1.4;
-}
-
-.mobile-record__field dd {
-  margin: 0;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  font-variant-numeric: tabular-nums;
-}
-
-/* A value can contain a key plus copy/reveal buttons, badges, or links. */
-.mobile-record__field dd > div {
-  max-width: 100%;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.mobile-record__field dd > div > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
+.mobile-record__selection button[role='checkbox'] { width: 1.25rem; height: 1.25rem; min-width: 1.25rem; min-height: 1.25rem; padding: 0; }
+.mobile-record button:not([role='checkbox']) { min-width: 2.75rem; min-height: 2.75rem; }
+.mobile-record__action-trigger { flex: 0 0 2.75rem; }
+.mobile-record__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem 1rem; margin: 0.5rem 0 0; }
+.mobile-record__field dt { margin-bottom: 0.125rem; color: hsl(var(--muted-foreground)); font-size: 0.75rem; line-height: 1.4; }
+.mobile-record__field dd { margin: 0; font-size: 0.875rem; line-height: 1.5; font-variant-numeric: tabular-nums; }
+/* Preserve wrapping in interactive key, badge, and copy/reveal cells. */
+.mobile-record__field dd > div { max-width: 100%; min-width: 0; flex-wrap: wrap; }
+.mobile-record__field dd > div > span { min-width: 0; overflow-wrap: anywhere; }
 .mobile-record__details,
-.mobile-record__actions {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid hsl(var(--border));
-}
-
-.mobile-record__details .mobile-record__fields {
-  margin-top: 0;
-}
-
+.mobile-record__actions { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid hsl(var(--border)); }
+.mobile-record__details .mobile-record__fields { margin-top: 0; }
 .mobile-record__details[hidden],
-.mobile-record__actions[hidden] {
-  display: none;
-}
-
+.mobile-record__actions[hidden] { display: none; }
 .mobile-record__actions .responsive-action-group {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
   width: 100%;
-}
-
-.mobile-record__actions .responsive-action-group > div {
-  min-width: 0;
+  /* Some legacy action renderers still carry mobile-table-cell. The disclosure
+     owns its separator; do not inherit a second label, padding, or border. */
   margin: 0;
+  padding: 0;
+  border: 0;
 }
-
-.mobile-record__actions button {
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.mobile-record__actions .responsive-action-group button {
-  width: 100%;
-  height: auto;
-  padding: 0.5rem;
-}
-
-.mobile-record__footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem;
-  margin-top: 0.5rem;
-}
-
+.mobile-record__actions .responsive-action-group::before { display: none; }
+.mobile-record__actions .responsive-action-group > div { min-width: 0; margin: 0; }
+.mobile-record__actions button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.mobile-record__actions .responsive-action-group button { width: 100%; height: auto; padding: 0.5rem; }
+.mobile-record__footer { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; margin-top: 0.5rem; }
 .mobile-record__detail-trigger,
-.mobile-record__open {
-  gap: 0.375rem;
-  height: auto;
-  white-space: normal;
-}
-
-.mobile-record__open {
-  margin-inline-start: auto;
-}
-
-.mobile-table-empty {
-  padding: 2rem 1rem;
-  border: 1px solid hsl(var(--border));
-  border-radius: 0.75rem;
-  color: hsl(var(--muted-foreground));
-  text-align: center;
-}
-
-.mobile-table-sort {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) 2.75rem;
-  gap: 0.5rem;
-  align-items: center;
-  min-width: 0;
-  font-size: 0.875rem;
-}
-
+.mobile-record__open { gap: 0.375rem; height: auto; white-space: normal; }
+.mobile-record__open { margin-inline-start: auto; }
+.mobile-table-empty { padding: 2rem 1rem; border: 1px solid hsl(var(--border)); border-radius: 0.75rem; color: hsl(var(--muted-foreground)); text-align: center; }
+.mobile-table-sort { display: grid; grid-template-columns: auto minmax(0, 1fr) 2.75rem; gap: 0.5rem; align-items: center; min-width: 0; font-size: 0.875rem; }
 .mobile-table-sort select {
-  width: 100%;
-  min-width: 0;
-  min-height: 2.75rem;
-  padding: 0.5rem;
-  border: 1px solid hsl(var(--border));
-  border-radius: 0.5rem;
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
-  font-size: 1rem;
+  width: 100%; min-width: 0; min-height: 2.75rem; padding: 0.5rem;
+  border: 1px solid hsl(var(--border)); border-radius: 0.5rem;
+  background: hsl(var(--background)); color: hsl(var(--foreground)); font-size: 1rem;
 }
-
-.mobile-table-sort button {
-  width: 2.75rem;
-  height: 2.75rem;
-}
-
-.mobile-table-sort select:focus-visible {
-  outline: 2px solid hsl(var(--ring));
-  outline-offset: 2px;
-}
-
-.mobile-pagination {
-  display: grid;
-  gap: 0.5rem;
-  padding-block: 0.5rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
-}
-
-.mobile-pagination__navigation {
-  display: grid;
-  grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.mobile-pagination__navigation button {
-  width: 2.75rem;
-  height: 2.75rem;
-}
-
-.mobile-pagination__position {
-  text-align: center;
-  overflow-wrap: anywhere;
-  font-variant-numeric: tabular-nums;
-}
-
-.mobile-pagination__summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  color: hsl(var(--muted-foreground));
-  font-size: 0.75rem;
-}
-
-.mobile-pagination__size {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.mobile-pagination__size button {
-  min-height: 2.75rem;
-}
-
+.mobile-table-sort button { width: 2.75rem; height: 2.75rem; }
+.mobile-table-sort select:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.mobile-pagination { display: grid; gap: 0.5rem; padding-block: 0.5rem calc(0.5rem + env(safe-area-inset-bottom, 0px)); }
+.mobile-pagination__navigation { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem; align-items: center; gap: 0.5rem; }
+.mobile-pagination__navigation button { width: 2.75rem; height: 2.75rem; }
+.mobile-pagination__position { text-align: center; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.mobile-pagination__summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; color: hsl(var(--muted-foreground)); font-size: 0.75rem; }
+.mobile-pagination__size { display: flex; align-items: center; gap: 0.375rem; }
+.mobile-pagination__size button { min-height: 2.75rem; }
 @media (max-width: 767px) {
   .data-table-shell .table-toolbar__search-field input,
-  .data-table-shell .table-toolbar__search-field [role='combobox'] {
-    font-size: 1rem;
-  }
+  .data-table-shell .table-toolbar__search-field [role='combobox'] { font-size: 1rem; }
 }
