@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { ListTableCard } from '@/components/shared/ListTableCard';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -215,7 +215,8 @@ export function TokensPage() {
     [formatTokenLabel, tr]
   );
 
-  const load = async (p = 0, size = pageSize, keyword = appliedKeyword) => {
+  /** load preserves the applied result set and optionally propagates refresh errors to the duplicate interaction. */
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword, propagateError = false) => {
     const sequence = ++loadSequence.current;
     setLoading(true);
     try {
@@ -234,6 +235,8 @@ export function TokensPage() {
       setAppliedKeyword(keyword);
     } catch (error) {
       if (sequence !== loadSequence.current) return;
+      // Keep the visible rows when a successful duplicate cannot refresh the list.
+      if (propagateError) throw error;
       setData([]);
       setTotal(0);
       notify({ type: 'error', message: (error as Error)?.message || t('table_selection.failed') });
@@ -242,7 +245,7 @@ export function TokensPage() {
     }
   };
 
-  const duplicateAction = useDuplicateToken(() => load(pageIndex, pageSize, appliedKeyword));
+  const duplicateAction = useDuplicateToken(() => load(pageIndex, pageSize, appliedKeyword, true));
 
   // Load initial data (perform search if keyword is pre-filled from URL)
   useEffect(() => {
@@ -653,74 +656,72 @@ export function TokensPage() {
           </Button>
         }
       >
-        <Card className="border-0 md:border shadow-none md:shadow-sm">
-          <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
-            <EnhancedDataTable
-              selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
-              selectionDisabled={searchKeyword.trim() !== appliedKeyword}
-              columns={columns}
-              data={data}
-              floatingRowActions={(row) => (
-                <div className="flex items-center gap-1">
-                  <ListActionButton
-                    onClick={() => navigate(`/tokens/edit/${tokenRef(row)}`)}
-                    title={tr('actions.edit', 'Edit')}
-                    icon={<Settings className="h-4 w-4" />}
-                  />
-                  <TokenDuplicateAction tokenRef={tokenRef(row)} action={duplicateAction} compact />
-                  <ListActionButton
-                    onClick={() => manage(tokenRef(row), row.status === TOKEN_STATUS.ENABLED ? 'disable' : 'enable')}
-                    title={row.status === TOKEN_STATUS.ENABLED ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
-                    className={
-                      row.status === TOKEN_STATUS.ENABLED ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'
-                    }
-                    icon={row.status === TOKEN_STATUS.ENABLED ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-                  />
-                  <ListActionButton
-                    onClick={async () => {
-                      const label =
-                        row.name ||
-                        tr('table.id_placeholder', '(ID {{id}})', {
-                          id: tokenRefText(row),
-                        });
-                      const confirmed = await confirmDelete({
-                        title: tr('confirm.delete_title', 'Delete Token'),
-                        description: tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }),
-                        details: buildTokenDeleteDetails(row),
+        <ListTableCard>
+          <EnhancedDataTable
+            selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
+            selectionDisabled={searchKeyword.trim() !== appliedKeyword}
+            columns={columns}
+            data={data}
+            floatingRowActions={(row) => (
+              <div className="flex items-center gap-1">
+                <ListActionButton
+                  onClick={() => navigate(`/tokens/edit/${tokenRef(row)}`)}
+                  title={tr('actions.edit', 'Edit')}
+                  icon={<Settings className="h-4 w-4" />}
+                />
+                <TokenDuplicateAction tokenRef={tokenRef(row)} action={duplicateAction} compact />
+                <ListActionButton
+                  onClick={() => manage(tokenRef(row), row.status === TOKEN_STATUS.ENABLED ? 'disable' : 'enable')}
+                  title={row.status === TOKEN_STATUS.ENABLED ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
+                  className={
+                    row.status === TOKEN_STATUS.ENABLED ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'
+                  }
+                  icon={row.status === TOKEN_STATUS.ENABLED ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                />
+                <ListActionButton
+                  onClick={async () => {
+                    const label =
+                      row.name ||
+                      tr('table.id_placeholder', '(ID {{id}})', {
+                        id: tokenRefText(row),
                       });
-                      if (confirmed) manage(tokenRef(row), 'delete');
-                    }}
-                    title={tr('actions.delete', 'Delete')}
-                    icon={<Trash2 className="h-4 w-4" />}
-                  />
-                </div>
-              )}
-              pageIndex={pageIndex}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={handlePageChange}
-              onPageSizeChange={handlePageSizeChange}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              onSortChange={handleSortChange}
-              searchValue={searchKeyword}
-              searchOptions={searchOptions}
-              searchLoading={searchLoading}
-              onSearchChange={searchTokens}
-              onSearchValueChange={setSearchKeyword}
-              onSearchSubmit={performSearch}
-              onSearchSelect={(key) => navigate(`/tokens/edit/${key}`)}
-              searchPlaceholder={tr('search.placeholder', 'Search tokens by name or UUID...')}
-              allowSearchAdditions={true}
-              onRefresh={refresh}
-              loading={loading}
-              emptyMessage={tr('empty', 'No tokens found. Create your first token to get started.')}
-              mobileCardLayout={true}
-              hideColumnsOnMobile={['created_time', 'accessed_time', 'expired_time']}
-              compactMode={isMobile}
-            />
-          </CardContent>
-        </Card>
+                    const confirmed = await confirmDelete({
+                      title: tr('confirm.delete_title', 'Delete Token'),
+                      description: tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }),
+                      details: buildTokenDeleteDetails(row),
+                    });
+                    if (confirmed) manage(tokenRef(row), 'delete');
+                  }}
+                  title={tr('actions.delete', 'Delete')}
+                  icon={<Trash2 className="h-4 w-4" />}
+                />
+              </div>
+            )}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={handleSortChange}
+            searchValue={searchKeyword}
+            searchOptions={searchOptions}
+            searchLoading={searchLoading}
+            onSearchChange={searchTokens}
+            onSearchValueChange={setSearchKeyword}
+            onSearchSubmit={performSearch}
+            onSearchSelect={(key) => navigate(`/tokens/edit/${key}`)}
+            searchPlaceholder={tr('search.placeholder', 'Search tokens by name or UUID...')}
+            allowSearchAdditions={true}
+            onRefresh={refresh}
+            loading={loading}
+            emptyMessage={tr('empty', 'No tokens found. Create your first token to get started.')}
+            mobileCardLayout={true}
+            hideColumnsOnMobile={['created_time', 'accessed_time', 'expired_time']}
+            compactMode={isMobile}
+          />
+        </ListTableCard>
       </ResponsivePageContainer>
 
       <ConfirmDeleteDialog />

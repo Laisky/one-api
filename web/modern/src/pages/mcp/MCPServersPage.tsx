@@ -1,6 +1,6 @@
 import { NameWithId } from '@/components/shared/NameWithId';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { ListTableCard } from '@/components/shared/ListTableCard';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { ListActionButton } from '@/components/ui/list-action-button';
 import { useNotifications } from '@/components/ui/notifications';
@@ -424,7 +424,7 @@ export function MCPServersPage() {
         </div>
       }
     >
-      <Card>
+      <ListTableCard>
         <EnhancedDataTable
           selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
           selectionDisabled={searchKeyword.trim() !== appliedKeyword}
@@ -498,7 +498,7 @@ export function MCPServersPage() {
           allowSearchAdditions={true}
           onRefresh={() => load(pageIndex, pageSize)}
         />
-      </Card>
+      </ListTableCard>
     </ResponsivePageContainer>
   );
 }

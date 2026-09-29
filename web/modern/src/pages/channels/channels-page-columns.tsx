@@ -1,3 +1,4 @@
+import { DuplicateAction } from '@/components/shared/DuplicateAction';
 import { NameWithId } from '@/components/shared/NameWithId';
 import { Button } from '@/components/ui/button';
 import { ListActionButton } from '@/components/ui/list-action-button';
@@ -6,7 +7,7 @@ import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { cn, formatTimestamp } from '@/lib/utils';
-import { Copy, FlaskConical, Info, RefreshCw, Settings, Trash2 } from 'lucide-react';
+import { FlaskConical, Info, RefreshCw, Settings, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { TFunction } from 'i18next';
 import type { NavigateFunction } from 'react-router-dom';
@@ -96,7 +97,8 @@ interface ChannelColumnsOptions {
   onPriorityUpdate: (channel: Channel, priority: number) => void;
   onBalanceRefresh: (channel: Channel) => void;
   onTestingModelUpdate: (channel: Channel, testingModel: string | null) => void;
-  onDuplicate: (channel: Channel) => void;
+  onDuplicate: (channel: Channel) => void | Promise<void>;
+  duplicatingIds?: ReadonlySet<string>;
   onManage: (id: string | number, action: 'enable' | 'disable' | 'delete' | 'test', index?: number) => void;
 }
 
@@ -112,6 +114,7 @@ export const createChannelColumns = ({
   onBalanceRefresh,
   onTestingModelUpdate,
   onDuplicate,
+  duplicatingIds,
   onManage,
 }: ChannelColumnsOptions): ColumnDef<Channel>[] => [
   {
@@ -286,15 +289,10 @@ export const createChannelColumns = ({
           >
             {t('channels.actions.edit')}
           </ListActionButton>
-          <ListActionButton
-            variant="outline"
-            size="sm"
-            onClick={() => onDuplicate(channel)}
-            className="gap-1"
-            icon={<Copy className="h-3 w-3" />}
-          >
-            {t('channels.actions.duplicate', 'Duplicate')}
-          </ListActionButton>
+          <DuplicateAction
+            onDuplicate={() => onDuplicate(channel)}
+            pending={duplicatingIds?.has(String(channelRef(channel)))}
+          />
           {renderResetAction?.(channel)}
           <ListActionButton
             variant="outline"

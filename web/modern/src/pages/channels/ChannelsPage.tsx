@@ -1,7 +1,7 @@
 import type { TableBatchAction } from '@/components/ui/table-toolbar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { ListTableCard } from '@/components/shared/ListTableCard';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { ListActionButton } from '@/components/ui/list-action-button';
@@ -13,9 +13,11 @@ import { useAuthStore } from '@/lib/stores/auth';
 import { useTableSelection } from '@/hooks/useTableSelection';
 import { useSelectedChannelActions } from './useSelectedChannelActions';
 import { useResponsive } from '@/hooks/useResponsive';
+import { DuplicateAction } from '@/components/shared/DuplicateAction';
+import { useDuplicateChannel } from './useDuplicateChannel';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Ban, CheckCircle, Copy, FlaskConical, Plus, RotateCcw, Settings, Trash2 } from 'lucide-react';
+import { Ban, CheckCircle, FlaskConical, Plus, RotateCcw, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -98,8 +100,8 @@ export function ChannelsPage() {
     });
   };
 
-  /** load binds rows to the applied keyword and keeps page navigation within that result set. */
-  const load = async (p = 0, size = pageSize, keyword = appliedKeyword) => {
+  /** load preserves the applied result set and optionally propagates refresh errors to the duplicate interaction. */
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword, propagateError = false) => {
     const sequence = ++loadSequence.current;
     setLoading(true);
     try {
@@ -120,6 +122,8 @@ export function ChannelsPage() {
       setPageSize(size);
     } catch (error) {
       if (sequence !== loadSequence.current) return;
+      // Keep the visible rows when a successful duplicate cannot refresh the list.
+      if (propagateError) throw error;
       console.error(`Failed to load channels: ${String(error)}`);
       setData([]);
       setTotal(0);
@@ -308,38 +312,10 @@ export function ChannelsPage() {
     }
   };
 
-  const duplicateChannel = async (channel: Channel) => {
-    try {
-      const duplicateResponse = await api.post(`/api/channel/${channelRef(channel)}/duplicate`);
-      if (duplicateResponse.data?.success) {
-        notify({
-          type: 'success',
-          message: t('channels.notifications.duplicate_success', 'Channel duplicated.'),
-        });
+  const duplicateAction = useDuplicateChannel(() => load(pageIndex, pageSize, appliedKeyword, true));
 
-        if (searchKeyword.trim()) {
-          await performSearch();
-        } else {
-          await load(pageIndex, pageSize);
-        }
-        return;
-      }
-
-      notify({
-        type: 'error',
-        title: t('channels.notifications.duplicate_failed_title', 'Duplicate failed'),
-        message: duplicateResponse.data?.message || t('channels.notifications.duplicate_failed_message', 'Failed to duplicate channel.'),
-      });
-    } catch (error) {
-      console.error('Failed to duplicate channel:', error);
-      notify({
-        type: 'error',
-        title: t('channels.notifications.duplicate_failed_title', 'Duplicate failed'),
-        message:
-          error instanceof Error ? error.message : t('channels.notifications.duplicate_failed_message', 'Failed to duplicate channel.'),
-      });
-    }
-  };
+  /** duplicateChannel identifies the selected channel for the shared one-click duplicate interaction. */
+  const duplicateChannel = (channel: Channel) => duplicateAction.duplicate(channelRef(channel));
 
   const updateTestingModel = async (channel: Channel, testingModel: string | null) => {
     try {
@@ -481,6 +457,7 @@ export function ChannelsPage() {
     onBalanceRefresh: handleBalanceRefresh,
     onTestingModelUpdate: updateTestingModel,
     onDuplicate: duplicateChannel,
+    duplicatingIds: duplicateAction.pending,
     onManage: manage,
   });
 
@@ -561,77 +538,74 @@ export function ChannelsPage() {
           </Button>
         }
       >
-        <Card className="border-0 md:border shadow-none md:shadow-sm">
-          <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
-            {resetModels.report}
-            {selectedActions.report}
-            <EnhancedDataTable
-              selection={selection}
-              selectionDisabled={selectionDisabled}
-              columns={columns}
-              data={data}
-              floatingRowActions={(row) => (
-                <div className="flex items-center gap-1">
-                  <ListActionButton
-                    onClick={() => navigate(`/channels/edit/${channelRef(row)}`)}
-                    title={t('channels.actions.edit')}
-                    aria-label={t('channels.actions.edit')}
-                    icon={<Settings className="h-4 w-4" />}
-                  />
-                  <ListActionButton
-                    onClick={() => duplicateChannel(row)}
-                    title={t('channels.actions.duplicate', 'Duplicate')}
-                    aria-label={t('channels.actions.duplicate', 'Duplicate')}
-                    icon={<Copy className="h-4 w-4" />}
-                  />
-                  {renderResetAction(row, true)}
-                  <ListActionButton
-                    onClick={() => manage(channelRef(row), row.status === 1 ? 'disable' : 'enable')}
-                    title={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
-                    aria-label={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
-                    className={row.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'}
-                    icon={row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-                  />
-                  <ListActionButton
-                    onClick={() => {
-                      const idx = data.findIndex((c) => sameChannelRef(c, row));
-                      manage(channelRef(row), 'test', idx !== -1 ? idx : undefined);
-                    }}
-                    title={t('channels.actions.test')}
-                    aria-label={t('channels.actions.test')}
-                    icon={<FlaskConical className="h-4 w-4" />}
-                  />
-                </div>
-              )}
-              pageIndex={pageIndex}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={handlePageChange}
-              onPageSizeChange={handlePageSizeChange}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              onSortChange={handleSortChange}
-              searchValue={searchKeyword}
-              searchOptions={searchOptions}
-              searchLoading={searchLoading}
-              onSearchChange={searchChannels}
-              onSearchValueChange={setSearchKeyword}
-              onSearchSelect={(key) => navigate(`/channels/edit/${key}`)}
-              onSearchSubmit={performSearch}
-              searchPlaceholder={t('channels.search.placeholder')}
-              allowSearchAdditions={true}
-              batchActions={batchActions}
-              batchActionsDisabled={batchDisabled}
-              batchActionsBusy={selectedActions.busy}
-              onRefresh={refresh}
-              loading={loading}
-              emptyMessage={t('channels.empty')}
-              mobileCardLayout={true}
-              hideColumnsOnMobile={['created_time', 'response_time', 'balance']}
-              compactMode={isMobile}
-            />
-          </CardContent>
-        </Card>
+        <ListTableCard>
+          {resetModels.report}
+          {selectedActions.report}
+          <EnhancedDataTable
+            selection={selection}
+            selectionDisabled={selectionDisabled}
+            columns={columns}
+            data={data}
+            floatingRowActions={(row) => (
+              <div className="flex items-center gap-1">
+                <ListActionButton
+                  onClick={() => navigate(`/channels/edit/${channelRef(row)}`)}
+                  title={t('channels.actions.edit')}
+                  aria-label={t('channels.actions.edit')}
+                  icon={<Settings className="h-4 w-4" />}
+                />
+                <DuplicateAction
+                  onDuplicate={() => duplicateChannel(row)}
+                  pending={duplicateAction.pending.has(String(channelRef(row)))}
+                  compact
+                />
+                {renderResetAction(row, true)}
+                <ListActionButton
+                  onClick={() => manage(channelRef(row), row.status === 1 ? 'disable' : 'enable')}
+                  title={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
+                  aria-label={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
+                  className={row.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'}
+                  icon={row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                />
+                <ListActionButton
+                  onClick={() => {
+                    const idx = data.findIndex((c) => sameChannelRef(c, row));
+                    manage(channelRef(row), 'test', idx !== -1 ? idx : undefined);
+                  }}
+                  title={t('channels.actions.test')}
+                  aria-label={t('channels.actions.test')}
+                  icon={<FlaskConical className="h-4 w-4" />}
+                />
+              </div>
+            )}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={handleSortChange}
+            searchValue={searchKeyword}
+            searchOptions={searchOptions}
+            searchLoading={searchLoading}
+            onSearchChange={searchChannels}
+            onSearchValueChange={setSearchKeyword}
+            onSearchSelect={(key) => navigate(`/channels/edit/${key}`)}
+            onSearchSubmit={performSearch}
+            searchPlaceholder={t('channels.search.placeholder')}
+            allowSearchAdditions={true}
+            batchActions={batchActions}
+            batchActionsDisabled={batchDisabled}
+            batchActionsBusy={selectedActions.busy}
+            onRefresh={refresh}
+            loading={loading}
+            emptyMessage={t('channels.empty')}
+            mobileCardLayout={true}
+            hideColumnsOnMobile={['created_time', 'response_time', 'balance']}
+            compactMode={isMobile}
+          />
+        </ListTableCard>
       </ResponsivePageContainer>
 
       <ConfirmActionDialog />
