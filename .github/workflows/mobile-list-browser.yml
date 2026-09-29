@@ -1,0 +1,55 @@
+name: Mobile list browser regression
+
+on:
+  pull_request:
+    paths:
+      - 'web/modern/**'
+      - '.github/workflows/mobile-list-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-list-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mobile-list:
+    name: Real-browser mobile lists
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: yarn
+          cache-dependency-path: web/modern/yarn.lock
+      - name: Install locked frontend dependencies
+        working-directory: web/modern
+        run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+      - name: Build production frontend and check locales
+        working-directory: web/modern
+        run: |
+          yarn build
+          yarn check:i18n
+      - name: Install browser test tools
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium
+      - name: Run real-page mobile regression matrix
+        working-directory: web/modern
+        run: python scripts/test-mobile-list-browser.py
+      - name: Preserve browser evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-list-browser-evidence
+          path: web/modern/test-results/mobile-list
+          if-no-files-found: ignore
+          retention-days: 7
