@@ -47,7 +47,7 @@ const (
 	mcpDefaultProtocolVersion = LegacyProtocolVersion
 	mcpAcceptHeaderValue      = "application/json, text/event-stream"
 	mcpClientName             = "one-api-mcp-client"
-	mcpClientVersion          = "1.0.0"
+	mcpClientVersion          = ImplementationVersion
 )
 
 // NewStreamableHTTPClient constructs a StreamableHTTPClient from MCP server metadata.
@@ -553,7 +553,7 @@ func (c *StreamableHTTPClient) debugLogRequest(method string, headers http.Heade
 			zap.String("url", c.BaseURL),
 			zap.Any("headers", sanitizeHeadersForLog(headers)),
 			zap.Int("body_bytes", len(body)),
-			zap.String("body", sanitizeBodyForLog(body)),
+			zap.String("body", "<MCP payload omitted>"),
 		)...)
 }
 
@@ -576,7 +576,7 @@ func (c *StreamableHTTPClient) debugLogResponse(method string, resp *http.Respon
 			zap.Int("status_code", resp.StatusCode),
 			zap.Any("headers", sanitizeHeadersForLog(resp.Header)),
 			zap.Int("body_bytes", len(body)),
-			zap.String("body", sanitizeBodyForLog(body)),
+			zap.String("body", "<MCP payload omitted>"),
 		)...)
 }
 
