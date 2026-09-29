@@ -2,16 +2,18 @@ import { Copy, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { cn } from '@/lib/utils';
 
 /** DuplicateActionProps describes the same duplicate interaction in full and compact row layouts. */
 interface DuplicateActionProps {
   onDuplicate: () => void | Promise<void>;
   pending?: boolean;
   compact?: boolean;
+  className?: string;
 }
 
 /** DuplicateAction renders shared labels, icons, touch targets, and accessible progress for tokens and channels. */
-export function DuplicateAction({ onDuplicate, pending = false, compact = false }: DuplicateActionProps) {
+export function DuplicateAction({ onDuplicate, pending = false, compact = false, className }: DuplicateActionProps) {
   const { t } = useTranslation();
   const label = pending ? t('duplicate_action.pending', 'Duplicating...') : t('duplicate_action.action', 'Duplicate');
   return (
@@ -19,7 +21,7 @@ export function DuplicateAction({ onDuplicate, pending = false, compact = false 
       type="button"
       variant={compact ? 'ghost' : 'outline'}
       size={compact ? 'icon' : 'sm'}
-      className="touch-target gap-1"
+      className={cn('touch-target gap-1', className)}
       onClick={() => void onDuplicate()}
       disabled={pending}
       aria-busy={pending}

@@ -100,7 +100,14 @@ describe.each(['token', 'channel'] as const)('%s page duplicate UX', (kind) => {
   ] as const)('creates one independent copy from %s actions with UUID availability %s', async (layout, hasUUID) => {
     renderPage(hasUUID);
     await screen.findByText('source-9');
-    fireEvent.click(duplicateButton(layout));
+    const button = duplicateButton(layout);
+    if (layout === 'inline') {
+      // ResponsiveActionGroup injects these classes through the resource wrapper.
+      expect(button).toHaveClass('max-sm:w-full', 'max-sm:flex-1', 'max-sm:justify-center', 'max-sm:whitespace-normal');
+    } else {
+      expect(button).not.toHaveClass('max-sm:w-full');
+    }
+    fireEvent.click(button);
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     if (kind === 'channel') {
       expect(post).toHaveBeenCalledWith(`/api/channel/${hasUUID ? row.uuid : row.id}/duplicate`);

@@ -54,13 +54,15 @@ interface TokenDuplicateActionProps {
   tokenRef: string | number;
   action: ReturnType<typeof useDuplicateToken>;
   compact?: boolean;
+  className?: string;
 }
 
 /** TokenDuplicateAction adapts a token reference to the same button rendered by the channels page. */
-export function TokenDuplicateAction({ tokenRef, action, compact = false }: TokenDuplicateActionProps) {
+export function TokenDuplicateAction({ tokenRef, action, compact = false, className }: TokenDuplicateActionProps) {
   return (
     <DuplicateAction
       compact={compact}
+      className={className}
       pending={action.pending.has(String(tokenRef))}
       onDuplicate={() => action.duplicate(tokenRef)}
     />
