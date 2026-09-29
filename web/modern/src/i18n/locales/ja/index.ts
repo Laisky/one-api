@@ -1,5 +1,7 @@
 import tableSelection from './table-selection.json';
 import { channelResetTranslations } from '../channel-reset';
+import { tokenDuplicateTranslations } from '../token-duplicate';
+import { duplicateActionTranslations } from '../duplicate-action';
 import auth from './auth.json';
 import billing from './billing.json';
 import common from './common.json';
@@ -28,6 +30,8 @@ const translations = {
   ...mcp,
   ...tools,
   channel_reset: channelResetTranslations.ja,
+  token_duplicate: tokenDuplicateTranslations.ja,
+  duplicate_action: duplicateActionTranslations.ja,
 };
 
 export default translations;
