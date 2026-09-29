@@ -24,6 +24,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useClipboardManager } from './useClipboardManager';
+import { TokenDuplicateAction, useDuplicateToken } from './useDuplicateToken';
 
 export interface Token {
   id?: number;
@@ -240,6 +241,8 @@ export function TokensPage() {
       if (sequence === loadSequence.current) setLoading(false);
     }
   };
+
+  const duplicateAction = useDuplicateToken(() => load(pageIndex, pageSize, appliedKeyword));
 
   // Load initial data (perform search if keyword is pre-filled from URL)
   useEffect(() => {
@@ -571,6 +574,7 @@ export function TokensPage() {
             <Button variant="outline" size="sm" onClick={() => navigate(`/tokens/edit/${tokenRef(token)}`)} className="touch-target">
               {tr('actions.edit', 'Edit')}
             </Button>
+            <TokenDuplicateAction tokenRef={tokenRef(token)} action={duplicateAction} />
             {renderClientDropdown(token)}
             <Button
               variant="outline"
@@ -663,6 +667,7 @@ export function TokensPage() {
                     title={tr('actions.edit', 'Edit')}
                     icon={<Settings className="h-4 w-4" />}
                   />
+                  <TokenDuplicateAction tokenRef={tokenRef(row)} action={duplicateAction} compact />
                   <ListActionButton
                     onClick={() => manage(tokenRef(row), row.status === TOKEN_STATUS.ENABLED ? 'disable' : 'enable')}
                     title={row.status === TOKEN_STATUS.ENABLED ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
