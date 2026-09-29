@@ -4,13 +4,15 @@ import * as React from 'react';
 import { flexRender, type RowData, type SortingState, useTable } from '@tanstack/react-table';
 import { modernTableFeatures, type ModernColumnDef as ColumnDef } from '@/lib/table';
 import { useResponsive } from '@/hooks/useResponsive';
-import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { AdvancedPagination } from '@/components/ui/advanced-pagination';
+import { getMobileColumnLabel, getMobileField, MobileTable, MobileTableSort } from '@/components/ui/mobile-table';
+import { getMobileRecordId } from '@/components/ui/mobile-table-identity';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+/** DataTableProps describes shared selection, server pagination, sorting, and toolbar controls. */
 export interface DataTableProps<TData extends RowData, TValue = unknown>
   extends TableSelectionOptions<TData>, Omit<TableToolbarProps, 'selectionControl' | 'hasSelection'> {
   columns: ColumnDef<TData, TValue>[];
@@ -20,13 +22,13 @@ export interface DataTableProps<TData extends RowData, TValue = unknown>
   total?: number;
   onPageChange?: (pageIndex: number, pageSize: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
-  // Server-side sorting support
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void;
   loading?: boolean;
 }
 
+/** DataTable renders the same cell definitions as a desktop table or a progressively disclosed mobile list. */
 export function DataTable<TData extends RowData, TValue = unknown>({
   columns: originalColumns,
   data,
@@ -70,53 +72,42 @@ export function DataTable<TData extends RowData, TValue = unknown>({
   });
   const columns = selectable.columns;
   const { isMobile } = useResponsive();
-  // Client-side sorting state (for display only when no server-side sorting)
   const [sorting, setSorting] = React.useState<SortingState>([]);
 
-  // Handle column header click for server-side sorting
+  /** handleSort changes server ordering while retaining the basic table's descending-first convention. */
   const handleSort = (accessorKey: string) => {
-    if (!onSortChange) return;
-    if (loading) return; // Prevent repeated actions while loading
-
-    // If clicking the same column, toggle order
-    if (sortBy === accessorKey) {
-      const newOrder = sortOrder === 'desc' ? 'asc' : 'desc';
-      onSortChange(accessorKey, newOrder);
-    } else {
-      // New column, default to desc
-      onSortChange(accessorKey, 'desc');
-    }
+    if (!onSortChange || loading) return;
+    onSortChange(accessorKey, sortBy === accessorKey && sortOrder === 'desc' ? 'asc' : 'desc');
   };
 
+  /** getSortIcon returns the current server ordering indicator for a column. */
   const getSortIcon = (accessorKey: string) => {
     if (!onSortChange) return null;
-
     if (sortBy === accessorKey) {
       return sortOrder === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
     }
     return <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />;
   };
 
-  // Enhanced columns with sorting support
+  const sortOptions = originalColumns.flatMap((column) => {
+    const key = 'accessorKey' in column && typeof column.accessorKey === 'string' ? column.accessorKey : '';
+    return key && column.enableSorting !== false ? [{ value: key, label: getMobileColumnLabel(column, key) }] : [];
+  });
   const enhancedColumns = columns.map((column) => {
-    // Check if column has accessorKey for sorting
-    const hasAccessorKey = 'accessorKey' in column && typeof column.accessorKey === 'string';
-    const accessorKey = hasAccessorKey ? (column.accessorKey as string) : '';
-
-    if (!accessorKey || !onSortChange) return column;
-
+    const accessorKey = 'accessorKey' in column && typeof column.accessorKey === 'string' ? column.accessorKey : '';
+    if (!accessorKey || !onSortChange || column.enableSorting === false) return column;
+    const label = getMobileColumnLabel(column, accessorKey);
     return {
       ...column,
-      header: () => {
-        const headerContent = typeof column.header === 'string' ? column.header : accessorKey;
-
-        return (
-          <Button variant="ghost" onClick={() => handleSort(accessorKey)} className="h-auto p-0 font-semibold hover:bg-transparent">
-            <span>{headerContent}</span>
-            {getSortIcon(accessorKey)}
-          </Button>
-        );
-      },
+      // The sortable header is a function. Keep its original localized label
+      // instead of exposing accessor keys such as display_name on mobile.
+      meta: { ...column.meta, mobileLabel: label },
+      header: () => (
+        <Button variant="ghost" onClick={() => handleSort(accessorKey)} disabled={loading} className="h-auto p-0 font-semibold hover:bg-transparent">
+          <span>{label}</span>
+          {getSortIcon(accessorKey)}
+        </Button>
+      ),
     } as ColumnDef<TData, TValue>;
   });
 
@@ -125,15 +116,9 @@ export function DataTable<TData extends RowData, TValue = unknown>({
       features: modernTableFeatures,
       data,
       columns: enhancedColumns as ColumnDef<TData, unknown>[],
-      state: {
-        sorting,
-        pagination: {
-          pageIndex,
-          pageSize,
-        },
-      },
+      state: { sorting, pagination: { pageIndex, pageSize } },
       onSortingChange: setSorting,
-      manualSorting: !!onSortChange, // Use manual sorting if server-side sorting is available
+      manualSorting: !!onSortChange,
       manualPagination: true,
       pageCount: Math.ceil(total / pageSize),
     },
@@ -141,7 +126,7 @@ export function DataTable<TData extends RowData, TValue = unknown>({
   );
 
   return (
-    <div className="space-y-2">
+    <div className="data-table-shell space-y-2">
       <TableToolbar
         selectionControl={selectable.controls}
         hasSelection={selectable.hasSelection}
@@ -154,56 +139,46 @@ export function DataTable<TData extends RowData, TValue = unknown>({
         batchActionsBusy={batchActionsBusy}
         loading={loading}
       />
-      <div className="relative">
-        {/* Loading overlay to prevent repeated actions */}
+      {isMobile && (
+        <MobileTableSort options={sortOptions} sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} loading={loading} defaultOrder="desc" />
+      )}
+      <div className="relative" aria-busy={loading}>
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-background/60 backdrop-blur-sm">
             <div className="text-sm text-muted-foreground">{t('common.loading', 'Loading...')}</div>
           </div>
         )}
         {isMobile ? (
-          <div className={cn('space-y-3', loading && 'pointer-events-none opacity-60')}>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <section
-                  key={row.id}
-                  className={cn(
-                    'rounded-xl border bg-card p-4 shadow-sm',
-                    selectable.isSelected(row.original) && 'bg-muted/50 ring-1 ring-primary'
-                  )}
-                >
-                  {row.getVisibleCells().map((cell) => {
-                    if (cell.column.id === '__selection__')
-                      return <div key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</div>;
-                    const meta = cell.column.columnDef.meta as { mobileLabel?: string } | undefined;
-                    const headerDef = cell.column.columnDef.header;
-                    const label = meta?.mobileLabel || (typeof headerDef === 'string' ? headerDef : cell.column.id || '');
-
-                    return (
-                      <div key={cell.id} className="grid gap-1 border-b border-border/60 py-3 first:pt-0 last:border-b-0 last:pb-0">
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
-                        <div className="text-sm text-foreground break-words break-all">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </section>
-              ))
-            ) : (
-              <div className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground shadow-sm">
-                {loading ? t('common.loading', 'Loading...') : t('common.no_data', 'No results.')}
-              </div>
-            )}
-          </div>
+          <MobileTable
+            loading={loading}
+            emptyMessage={loading ? t('common.loading', 'Loading...') : t('common.no_data', 'No results.')}
+            records={table.getRowModel().rows.map((row) => {
+              const cells = row.getVisibleCells();
+              const multipleFields = cells.filter((cell) => cell.column.id !== '__selection__').length > 1;
+              return {
+                id: JSON.stringify([selectionScope ?? '', pageIndex, getMobileRecordId(row.original, row.id, getSelectionId)]),
+                selected: selectable.isSelected(row.original),
+                fields: cells.map((cell, index) => getMobileField(
+                  cell.column.columnDef,
+                  cell.column.id,
+                  flexRender(cell.column.columnDef.cell, cell.getContext()),
+                  multipleFields && index === cells.length - 1
+                )),
+              };
+            })}
+          />
         ) : (
-          <div className="rounded-md border overflow-x-auto">
+          <div className="rounded-md border overflow-x-auto" inert={loading}>
             <Table className={loading ? 'pointer-events-none opacity-60' : ''}>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id} className="text-left mobile:whitespace-normal mobile:break-words">
+                      <TableHead
+                        key={header.id}
+                        className="text-left mobile:whitespace-normal mobile:break-words"
+                        aria-sort={onSortChange && header.column.id === sortBy ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
+                      >
                         {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                       </TableHead>
                     ))}
@@ -214,16 +189,11 @@ export function DataTable<TData extends RowData, TValue = unknown>({
                 {table.getRowModel().rows?.length ? (
                   table.getRowModel().rows.map((row) => (
                     <TableRow key={row.id} data-state={selectable.isSelected(row.original) ? 'selected' : undefined}>
-                      {row.getVisibleCells().map((cell) => {
-                        const meta = cell.column.columnDef.meta as { mobileLabel?: string } | undefined;
-                        const headerDef = cell.column.columnDef.header;
-                        const label = meta?.mobileLabel || (typeof headerDef === 'string' ? headerDef : cell.column.id || '');
-                        return (
-                          <TableCell key={cell.id} data-label={label} className="mobile-table-cell break-words break-all">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        );
-                      })}
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id} data-label={getMobileColumnLabel(cell.column.columnDef, cell.column.id)} className="mobile-table-cell break-words break-all">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
                     </TableRow>
                   ))
                 ) : (
@@ -238,8 +208,6 @@ export function DataTable<TData extends RowData, TValue = unknown>({
           </div>
         )}
       </div>
-
-      {/* Advanced Pagination */}
       <AdvancedPagination
         currentPage={pageIndex + 1}
         totalPages={Math.ceil(total / pageSize)}
@@ -248,7 +216,6 @@ export function DataTable<TData extends RowData, TValue = unknown>({
         onPageChange={(page) => onPageChange?.(page - 1, pageSize)}
         onPageSizeChange={(newPageSize) => {
           onPageSizeChange?.(newPageSize);
-          // Reset to first page when changing page size
           onPageChange?.(0, newPageSize);
         }}
         loading={loading}
