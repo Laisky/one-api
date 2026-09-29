@@ -24,11 +24,11 @@ import (
 
 // Log represents a persisted usage or management entry emitted by the billing pipeline.
 type Log struct {
-	Id        int     `json:"id"`
-	UserId    int     `json:"user_id" gorm:"index;index:idx_user_token,priority:1"`
+	Id        int     `json:"id" gorm:"index:idx_logs_user_created_at_id,priority:3"`
+	UserId    int     `json:"user_id" gorm:"index;index:idx_user_token,priority:1;index:idx_logs_user_created_at_id,priority:1"`
 	UUID      string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	UserUUID  *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
-	CreatedAt int64   `json:"created_at" gorm:"bigint;index:idx_created_at_type"`
+	CreatedAt int64   `json:"created_at" gorm:"bigint;index:idx_created_at_type;index:idx_logs_user_created_at_id,priority:2"`
 	Type      int     `json:"type" gorm:"index:idx_created_at_type"`
 	Content   string  `json:"content" gorm:"type:text"`
 	Username  string  `json:"username" gorm:"index:index_username_model_name,priority:2;default:''"`
