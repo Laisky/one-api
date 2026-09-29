@@ -203,13 +203,26 @@ describe('ChannelsPage default model reset', () => {
     expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
   });
 
-  it('also exposes the reset action in the mobile channel layout', async () => {
+  it('exposes row reset on demand while keeping selected actions separate on mobile', async () => {
     responsive.isMobile = true;
     renderPage();
-    expect(await rowResetButton()).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Provider A' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Actions' }));
+    const checkbox = await screen.findByRole('checkbox', { name: 'Select Provider A' });
+    await waitFor(() => expect(checkbox).toBeEnabled());
+    const card = checkbox.closest('article');
+    if (!card) throw new Error('Expected the mobile channel record');
+    expect(within(card).queryByRole('button', { name: 'Reset Provider A to default models' })).not.toBeInTheDocument();
+    await userEvent.click(within(card).getByRole('button', { name: 'Actions' }));
+    const reset = await rowResetButton();
+    expect(reset).toBeInTheDocument();
+    expect(mockPost).not.toHaveBeenCalled();
+    await userEvent.click(reset);
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /cancel/i }));
+    expect(mockPost).not.toHaveBeenCalled();
+    const toolbar = screen.getByRole('group', { name: 'Table controls' });
+    expect(within(toolbar).queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
+    await userEvent.click(checkbox);
+    await userEvent.click(within(toolbar).getByRole('button', { name: 'Actions' }));
     expect(screen.getByRole('menuitem', { name: 'Reset selected models' })).toBeInTheDocument();
   });
 
