@@ -12,50 +12,20 @@ const { notify, responsive } = vi.hoisted(() => ({
   responsive: { isMobile: false, isTablet: false },
 }));
 
-vi.mock('@/components/ui/notifications', () => ({
-  useNotifications: () => ({ notify }),
-}));
-vi.mock('@/lib/api', () => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
-}));
-vi.mock('@/hooks/useResponsive', () => ({
-  useResponsive: () => responsive,
-}));
+vi.mock('@/components/ui/notifications', () => ({ useNotifications: () => ({ notify }) }));
+vi.mock('@/lib/api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
+vi.mock('@/hooks/useResponsive', () => ({ useResponsive: () => responsive }));
 
 const mockGet = vi.mocked(api.get);
 const mockPost = vi.mocked(api.post);
 const channels = [
-  {
-    uuid: '018fcf6d-c484-7000-8000-000000000101',
-    name: 'Provider A',
-    type: 1,
-    status: 1,
-    created_time: 1,
-    priority: 0,
-    weight: 0,
-    models: 'old-model',
-    group: 'default',
-  },
-  {
-    uuid: '018fcf6d-c484-7000-8000-000000000102',
-    name: 'Private B',
-    type: 50,
-    status: 2,
-    created_time: 1,
-    priority: 0,
-    weight: 0,
-    models: 'private-model',
-    group: 'default',
-  },
+  { uuid: '018fcf6d-c484-7000-8000-000000000101', name: 'Provider A', type: 1, status: 1, created_time: 1, priority: 0, weight: 0, models: 'old-model', group: 'default' },
+  { uuid: '018fcf6d-c484-7000-8000-000000000102', name: 'Private B', type: 50, status: 2, created_time: 1, priority: 0, weight: 0, models: 'private-model', group: 'default' },
 ];
 
 /** renderPage mounts the real list and confirmation dialogs, mocking only the API. */
 function renderPage() {
-  return render(
-    <BrowserRouter>
-      <ChannelsPage />
-    </BrowserRouter>
-  );
+  return render(<BrowserRouter><ChannelsPage /></BrowserRouter>);
 }
 
 /** rowResetButton locates a visible row reset action after the list has loaded. */
@@ -73,16 +43,13 @@ async function confirmReset(user: ReturnType<typeof userEvent.setup>) {
 
 describe('ChannelsPage default model reset', () => {
   beforeEach(() => {
-    // Preserve the shared DOM/observer implementations installed by test setup.
     vi.clearAllMocks();
     mockGet.mockReset();
     mockPost.mockReset();
     responsive.isMobile = false;
     window.history.replaceState({}, '', '/channels');
     mockGet.mockResolvedValue({ data: { success: true, data: channels, total: 25 } });
-    mockPost.mockResolvedValue({
-      data: { success: true, data: { uuid: channels[0].uuid, name: channels[0].name, success: true, model_count: 2 } },
-    });
+    mockPost.mockResolvedValue({ data: { success: true, data: { uuid: channels[0].uuid, name: channels[0].name, success: true, model_count: 2 } } });
   });
 
   it('replaces the two old toolbar controls and exposes a reset for every row', async () => {
@@ -117,9 +84,7 @@ describe('ChannelsPage default model reset', () => {
     await user.click(button);
     expect(mockPost).not.toHaveBeenCalled();
     await confirmReset(user);
-    await waitFor(() =>
-      expect(mockPost).toHaveBeenCalledWith(`/api/channel/${channels[0].uuid}/reset_models`, undefined, { timeout: 120_000 })
-    );
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith(`/api/channel/${channels[0].uuid}/reset_models`, undefined, { timeout: 120_000 }));
     expect(mockPost).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('/api/channel/?p=1&')));
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'success', message: 'Provider A now uses 2 default models.' }));
@@ -131,9 +96,7 @@ describe('ChannelsPage default model reset', () => {
     ['pricing_conflict', 'model_configs', 'Custom pricing references models outside the default list.'],
     ['unsupported_channel', 'type', 'Custom compatible channels cannot be reset to provider defaults.'],
   ])('shows a persistent, actionable %s rejection without a success message', async (code, field, reason) => {
-    mockPost.mockRejectedValue({
-      response: { status: 409, data: { success: false, message: 'Rejected', conflict: { code, field, models: ['Alias'] } } },
-    });
+    mockPost.mockRejectedValue({ response: { status: 409, data: { success: false, message: 'Rejected', conflict: { code, field, models: ['Alias'] } } } });
     renderPage();
     const user = userEvent.setup();
     await user.click(await rowResetButton());
@@ -150,14 +113,11 @@ describe('ChannelsPage default model reset', () => {
 
   it('disables both row and selected-channel resets while a request is pending', async () => {
     let finish!: () => void;
-    mockPost.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finish = () => resolve({ data: { success: true, data: { success: true, model_count: 2 } } });
-        })
-    );
+    mockPost.mockImplementationOnce(() => new Promise((resolve) => {
+      finish = () => resolve({ data: { success: true, data: { success: true, model_count: 2 } } });
+    }));
     renderPage();
-    const button = await rowResetButton();
+    await rowResetButton();
     const user = userEvent.setup();
     await user.click(screen.getByRole('checkbox', { name: 'Select Provider A' }));
     await user.click(await rowResetButton());
@@ -167,7 +127,6 @@ describe('ChannelsPage default model reset', () => {
     expect(allButton).toBeDisabled();
     const currentButton = screen.getAllByRole('button', { name: 'Reset Provider A to default models' })[0];
     expect(currentButton).toBeDisabled();
-    // Disabled controls must also ignore programmatically dispatched clicks.
     fireEvent.click(allButton);
     fireEvent.click(currentButton);
     expect(mockPost).toHaveBeenCalledTimes(1);
@@ -181,14 +140,7 @@ describe('ChannelsPage default model reset', () => {
     const user = userEvent.setup();
     await user.click(await rowResetButton());
     await confirmReset(user);
-    await waitFor(() =>
-      expect(notify).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'error',
-          message: expect.stringContaining('a connection can fail after changes are saved'),
-        })
-      )
-    );
+    await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: expect.stringContaining('a connection can fail after changes are saved') })));
     await waitFor(() => expect(mockGet.mock.calls.length).toBeGreaterThan(1));
     expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
   });
@@ -203,13 +155,30 @@ describe('ChannelsPage default model reset', () => {
     expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
   });
 
-  it('also exposes the reset action in the mobile channel layout', async () => {
+  it('exposes row reset on demand while keeping selected actions separate on mobile', async () => {
     responsive.isMobile = true;
     renderPage();
-    expect(await rowResetButton()).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
+    const checkbox = await screen.findByRole('checkbox', { name: 'Select Provider A' });
+    await waitFor(() => expect(checkbox).toBeEnabled());
+    const card = checkbox.closest('article');
+    if (!card) throw new Error('Expected the mobile channel record');
+    expect(within(card).queryByRole('button', { name: 'Reset Provider A to default models' })).not.toBeInTheDocument();
+    await userEvent.click(within(card).getByRole('button', { name: 'Actions' }));
+    const reset = await rowResetButton();
+    expect(reset).toBeInTheDocument();
+    expect(mockPost).not.toHaveBeenCalled();
+    await userEvent.click(reset);
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /cancel/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(mockPost).not.toHaveBeenCalled();
+    const toolbar = screen.getByRole('group', { name: 'Table controls' });
+    expect(within(toolbar).queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
+    // Dialog state changes recreate the page's cell renderers. Reacquire the
+    // current checkbox instead of dispatching events on a detached DOM node.
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Provider A' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Actions' }));
+    expect(screen.getByRole('checkbox', { name: 'Select Provider A' })).toBeChecked();
+    await userEvent.click(await within(toolbar).findByRole('button', { name: 'Actions' }));
     expect(screen.getByRole('menuitem', { name: 'Reset selected models' })).toBeInTheDocument();
   });
 

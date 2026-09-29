@@ -4,6 +4,7 @@ import { ConfirmDetailsList } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { MobileTableSort } from '@/components/ui/mobile-table';
 import { NameWithId } from '@/components/shared/NameWithId';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
@@ -475,6 +476,12 @@ export function UsersPage() {
     }
   };
 
+  /** changeSort updates the existing server sort state; the effect remains the only reload owner. */
+  const changeSort = (key: string, order: 'asc' | 'desc') => {
+    setSortBy(key);
+    setSortOrder(order);
+  };
+
   const toolbarActions = (
     <div className={cn('flex gap-2', isMobile ? 'flex-col w-full' : 'items-center')}>
       <Button
@@ -484,31 +491,48 @@ export function UsersPage() {
       >
         {tr('toolbar.add_user', 'Add User')}
       </Button>
-      <div className="flex gap-2 w-full">
-        <select
-          className={cn('h-9 border rounded-md px-3 py-2 text-sm flex-1', isMobile ? '' : 'min-w-[120px]')}
-          value={sortBy}
-          onChange={(e) => {
-            setSortBy(e.target.value);
-            setSortOrder('desc');
-          }}
-        >
-          <option value="">{tr('toolbar.sort.default', 'Default')}</option>
-          <option value="quota">{tr('toolbar.sort.quota', 'Remaining Quota')}</option>
-          <option value="used_quota">{tr('toolbar.sort.used_quota', 'Used Quota')}</option>
-          <option value="username">{tr('toolbar.sort.username', 'Username')}</option>
-          <option value="id">{tr('toolbar.sort.id', 'ID')}</option>
-          <option value="created_at">{tr('toolbar.sort.register_time', 'Register Time')}</option>
-        </select>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
-          className={cn('h-9 px-3', isMobile ? 'flex-shrink-0' : '')}
-        >
-          {sortOrder === 'asc' ? tr('toolbar.sort_order.asc', 'ASC') : tr('toolbar.sort_order.desc', 'DESC')}
-        </Button>
-      </div>
+      {isMobile ? (
+        <MobileTableSort
+          options={[
+            { value: 'quota', label: tr('toolbar.sort.quota', 'Remaining Quota') },
+            { value: 'used_quota', label: tr('toolbar.sort.used_quota', 'Used Quota') },
+            { value: 'username', label: tr('toolbar.sort.username', 'Username') },
+            { value: 'id', label: tr('toolbar.sort.id', 'ID') },
+            { value: 'created_at', label: tr('toolbar.sort.register_time', 'Register Time') },
+          ]}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSortChange={changeSort}
+          loading={loading}
+          defaultOrder="desc"
+        />
+      ) : (
+        <div className="flex gap-2 w-full">
+          <select
+            className="h-9 border rounded-md px-3 py-2 text-sm flex-1 min-w-[120px]"
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value);
+              setSortOrder('desc');
+            }}
+          >
+            <option value="">{tr('toolbar.sort.default', 'Default')}</option>
+            <option value="quota">{tr('toolbar.sort.quota', 'Remaining Quota')}</option>
+            <option value="used_quota">{tr('toolbar.sort.used_quota', 'Used Quota')}</option>
+            <option value="username">{tr('toolbar.sort.username', 'Username')}</option>
+            <option value="id">{tr('toolbar.sort.id', 'ID')}</option>
+            <option value="created_at">{tr('toolbar.sort.register_time', 'Register Time')}</option>
+          </select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
+            className="h-9 px-3"
+          >
+            {sortOrder === 'asc' ? tr('toolbar.sort_order.asc', 'ASC') : tr('toolbar.sort_order.desc', 'DESC')}
+          </Button>
+        </div>
+      )}
     </div>
   );
 
@@ -588,11 +612,9 @@ export function UsersPage() {
             onPageSizeChange={handlePageSizeChange}
             sortBy={sortBy}
             sortOrder={sortOrder}
-            onSortChange={(newSortBy, newSortOrder) => {
-              setSortBy(newSortBy);
-              setSortOrder(newSortOrder);
-              // Let useEffect handle the reload to avoid double requests
-            }}
+            // The page's mobile control includes ID sorting, which is not a
+            // data column. Keep that full contract without a second selector.
+            onSortChange={isMobile ? undefined : changeSort}
             searchValue={searchKeyword}
             searchOptions={searchOptions}
             searchLoading={searchLoading}

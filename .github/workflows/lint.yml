@@ -311,6 +311,28 @@ jobs:
       - name: Build Modern frontend
         working-directory: web/modern
         run: yarn build
+      - name: Check Modern translations
+        working-directory: web/modern
+        run: yarn check:i18n
+      - name: Install pinned browser test tools
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Verify real-page mobile lists and contextual toolbars
+        working-directory: web/modern
+        run: |
+          python3 scripts/test-mobile-list-browser.py
+          python3 scripts/test-table-toolbar-browser.py
+      - name: Archive mobile browser evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-list-browser-evidence
+          path: |
+            web/modern/test-results/mobile-list
+            web/modern/test-results/table-toolbar
+          if-no-files-found: ignore
+          retention-days: 7
 
   air_frontend_tests:
     name: Frontend tests (air)
