@@ -3,6 +3,7 @@ import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
 import en from './locales/en';
+import { mobileTableTranslations } from './locales/mobile-table';
 
 type SupportedLanguage = 'en' | 'zh' | 'fr' | 'es' | 'ja';
 type LocaleModule = { default: Record<string, unknown> };
@@ -25,15 +26,11 @@ const normalizeLanguage = (lng?: string): SupportedLanguage => {
 
 export const loadLanguageResources = async (lng?: string): Promise<SupportedLanguage> => {
   const language = normalizeLanguage(lng);
-  if (loadedLanguages.has(language)) {
-    return language;
-  }
-  if (language === 'en') {
-    return language;
-  }
+  if (loadedLanguages.has(language)) return language;
+  if (language === 'en') return language;
 
   const locale = await localeLoaders[language]();
-  i18n.addResourceBundle(language, 'translation', locale.default, true, true);
+  i18n.addResourceBundle(language, 'translation', { ...locale.default, mobile_table: mobileTableTranslations[language] }, true, true);
   loadedLanguages.add(language);
   return language;
 };
@@ -44,37 +41,27 @@ export const changeAppLanguage = async (lng: string) => {
 };
 
 const resources = {
-  en: { translation: en },
+  en: { translation: { ...en, mobile_table: mobileTableTranslations.en } },
 };
 
 i18n
-  // Detect user language
   .use(LanguageDetector)
-  // Pass the i18n instance to react-i18next
   .use(initReactI18next)
-  // Init i18next
   .init({
     resources,
-    fallbackLng: 'en', // Default fallback
+    fallbackLng: 'en',
     supportedLngs: supportedLanguages,
     partialBundledLanguages: true,
     debug: process.env.NODE_ENV === 'development',
-
-    interpolation: {
-      escapeValue: false, // React already safes from xss
-    },
-
+    interpolation: { escapeValue: false },
     detection: {
-      // Order and from where user language should be detected
       order: ['localStorage', 'navigator'],
-      // Keys or params to lookup language from
       lookupLocalStorage: 'i18nextLng',
-      // Cache user language on
       caches: ['localStorage'],
     },
   });
 
-// Sync the <html lang> attribute with the current i18next language
+// Sync the <html lang> attribute with the current i18next language.
 const syncHtmlLang = (lng: string) => {
   document.documentElement.lang = lng;
 };
@@ -84,16 +71,12 @@ i18n.on('languageChanged', (lng) => {
   const language = normalizeLanguage(lng);
   const alreadyLoaded = loadedLanguages.has(language);
   void loadLanguageResources(lng).then((language) => {
-    if (!alreadyLoaded && normalizeLanguage(i18n.language) === language) {
-      void i18n.changeLanguage(language);
-    }
+    if (!alreadyLoaded && normalizeLanguage(i18n.language) === language) void i18n.changeLanguage(language);
   });
 });
 
 void loadLanguageResources(i18n.language).then((language) => {
-  if (language !== 'en') {
-    void i18n.changeLanguage(language);
-  }
+  if (language !== 'en') void i18n.changeLanguage(language);
 });
 
 export default i18n;
