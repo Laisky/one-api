@@ -85,7 +85,7 @@ func TestGeminiSeptember2026SpecializedCatalog(t *testing.T) {
 	}{
 		{
 			model:            "gemini-robotics-er-2-preview",
-			cachedInputUsd:   0.20,
+			cachedInputUsd:   0.10,
 			expectedFeatures: []string{"tools", "json_mode", "structured_outputs", "web_search", "reasoning"},
 		},
 		{
@@ -98,8 +98,8 @@ func TestGeminiSeptember2026SpecializedCatalog(t *testing.T) {
 		t.Run(tt.model, func(t *testing.T) {
 			config, ok := ModelRatios[tt.model]
 			require.True(t, ok, "%s missing from pricing map", tt.model)
-			require.InDelta(t, 2.00*ratio.MilliTokensUsd, config.Ratio, 1e-12)
-			require.InDelta(t, 10.00/2.00, config.CompletionRatio, 1e-12)
+			require.InDelta(t, 1.00*ratio.MilliTokensUsd, config.Ratio, 1e-12)
+			require.InDelta(t, 5.00/1.00, config.CompletionRatio, 1e-12)
 			require.InDelta(t, tt.cachedInputUsd*ratio.MilliTokensUsd, config.CachedInputRatio, 1e-12)
 			require.EqualValues(t, 131_072, config.ContextLength)
 			require.EqualValues(t, 65_536, config.MaxOutputTokens)
