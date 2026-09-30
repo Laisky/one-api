@@ -7,9 +7,9 @@ import json
 import os
 from pathlib import Path
 import re
-import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -18,6 +18,8 @@ from urllib.parse import parse_qs, urlsplit
 from urllib.request import urlopen
 
 from playwright.sync_api import expect, sync_playwright
+
+from browser_process import stop_process
 
 ROOT = Path(__file__).resolve().parents[2]
 USER = {"id": 1, "uuid": "10000000-0000-0000-0000-000000000001", "username": "quality", "display_name": "Quality", "role": 100, "status": 1, "group": "default", "quota": 100000, "used_quota": 0}
@@ -202,8 +204,7 @@ def main() -> None:
                             raise RuntimeError('Vite development server did not become ready')
                         exercise(browser, base, server, args.theme, evidence, 'development')
                     finally:
-                        os.killpg(process.pid, signal.SIGTERM)
-                        process.wait(timeout=10)
+                        stop_process(process)
                 print(f'{args.theme}: production and development browser acceptance passed')
             finally:
                 browser.close()
@@ -214,4 +215,5 @@ def main() -> None:
 
 
 if __name__ == '__main__':
+    subprocess.run([sys.executable, str(Path(__file__).with_name('test_browser_process.py'))], check=True)
     main()
