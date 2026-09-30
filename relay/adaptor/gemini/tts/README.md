@@ -70,6 +70,13 @@ Gemini Live protocol.
 }
 ```
 
+A valid `MAX_TOKENS` response is a **terminal truncated success**: buffered audio
+is encoded and returned instead of discarded, and trailing usage is still read.
+`speech.audio.done` includes `truncated: true`; unary and buffered responses also
+include `X-Gemini-Finish-Reason: MAX_TOKENS`. An already-started binary PCM stream
+cannot retroactively gain that header. Refusals, invalid audio, exceeded byte/token
+budgets, and invalid or regressing usage remain errors.
+
 ## Optional two-speaker extension
 
 The gateway accepts `gemini` at the top level or inside the existing `extra_body`
@@ -105,7 +112,9 @@ multipliers and legacy scalar/completion overrides remain effective. Buckets are
 summed with decimal arithmetic and rounded once. The temporary reservation covers
 8,192 input tokens and the requested output budget (default 16,384); unused quota
 is released at settlement. The shared trusted-balance reservation optimization
-remains in effect, but accepted requests still receive their final charge.
+remains in effect. Accepted requests are charged except for the explicit gateway
+encoder-failure credit below. Audio overrides are resolved from the full effective
+configuration, including time windows; an empty audio block is not an override.
 
 Cumulative upstream usage snapshots replace earlier snapshots instead of being
 added per audio chunk. Missing, negative, regressing, or oversized counters cannot
@@ -114,6 +123,14 @@ existing accepted-work flag **before** writing downstream, preventing automatic
 replay and erroneous refunds after client disconnect. Before any valid audio is
 received, failures release the reservation. Settlement runs on the existing
 lifecycle-tracked detached billing path, with request/user/token ledgers reconciled.
+
+If the gateway encoder fails before any audio is delivered, the gateway absorbs
+the provider cost and **credits the entire customer charge**. The same settlement
+path refunds a reservation or records zero charge for a trusted/no-hold request.
+The consume log retains input/cache/output usage and `encoding_failed_refund=true`;
+provider acceptance stays recorded so automatic retries cannot duplicate paid work.
+Caller cancellation and downstream write failures do not receive this codec credit.
+A codec timeout with an otherwise live request is a gateway failure.
 
 When a stream ends before complete final usage, the receipt is explicitly marked
 `usage_complete=false`; missing output is estimated from received PCM at 25 audio

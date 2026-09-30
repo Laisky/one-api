@@ -241,12 +241,19 @@ func settleGeminiSpeech(c *gin.Context, m *meta.Meta, prices *geminiSpeechPrices
 		return
 	}
 	c.Set(adaptor.AudioReceiptAcceptedKey, true)
-	total, err := prices.charge(receipt)
-	if err != nil {
-		// Keep the reservation unresolved for billingAuditSafetyNet; never refund accepted work.
-		lg.Error("Gemini speech receipt needs billing reconciliation", zap.Error(err))
-		return
+	var total int64
+	if !receipt.EncodingFailed {
+		var err error
+		total, err = prices.charge(receipt)
+		if err != nil {
+			// Keep the reservation unresolved for billingAuditSafetyNet.
+			lg.Error("Gemini speech receipt needs billing reconciliation", zap.Error(err))
+			return
+		}
 	}
+	// An internal encoder failure before delivery is a full customer credit,
+	// not a claim that Google did no work. Keep the receipt and replay guard,
+	// and settle total=0 through the same ledger (including trusted/no-hold paths).
 	var traceID string
 	if id, err := gmw.TraceID(c); err == nil {
 		traceID = id.String()
@@ -256,9 +263,10 @@ func settleGeminiSpeech(c *gin.Context, m *meta.Meta, prices *geminiSpeechPrices
 		ChannelId: m.ChannelId, ChannelUUID: model.StringPtrIfNotEmpty(m.ChannelUUID),
 		TokenName: c.GetString(ctxkey.TokenName), TokenUUID: model.StringPtrIfNotEmpty(m.TokenUUID),
 		PromptTokens: receipt.PromptTokens, CompletionTokens: receipt.OutputTokens,
+		CachedPromptTokens: receipt.CachedTokens, IsStream: m.IsStream,
 		ModelName: m.OriginModelName, RequestId: requestID, TraceId: traceID,
 		ElapsedTime: helper.CalcElapsedTime(m.StartTime),
-		Content:     fmt.Sprintf("Gemini speech token billing: cached_input=%d usage_complete=%t output_estimated_from_pcm=%t pcm_bytes=%d", receipt.CachedTokens, receipt.UsageComplete, receipt.EstimatedOutput, receipt.AudioBytes),
+		Content:     fmt.Sprintf("Gemini speech token billing: cached_input=%d usage_complete=%t output_estimated_from_pcm=%t pcm_bytes=%d truncated=%t encoding_failed_refund=%t", receipt.CachedTokens, receipt.UsageComplete, receipt.EstimatedOutput, receipt.AudioBytes, receipt.Truncated, receipt.EncodingFailed),
 	}
 	if !receipt.UsageComplete {
 		lg.Warn("Gemini speech usage is incomplete; recording received-audio estimate", zap.Int("pcm_bytes", receipt.AudioBytes), zap.Int("prompt_tokens", receipt.PromptTokens), zap.Int("output_tokens", receipt.OutputTokens))

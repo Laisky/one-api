@@ -24,6 +24,12 @@ type Receipt struct {
 	Accepted        bool
 	UsageComplete   bool
 	EstimatedOutput bool
+	// Truncated marks a valid terminal MAX_TOKENS response, not a failed receipt.
+	Truncated bool
+	// EncodingFailed requests a customer refund for a gateway codec failure before
+	// delivery. Accepted remains true to prevent replay of paid upstream work.
+	// Caller cancellation and downstream write errors never set this flag.
+	EncodingFailed bool
 }
 
 // usageSnapshot contains cumulative token counters, never per-chunk increments.
@@ -154,11 +160,11 @@ func (d *decoder) consume(body []byte) error {
 				return errors.Wrap(err, "deliver speech audio")
 			}
 		}
-		if candidate.FinishReason == "MAX_TOKENS" {
-			return errors.New("speech generation reached its output limit")
-		}
-		if candidate.FinishReason == "STOP" {
+		if candidate.FinishReason == "STOP" || candidate.FinishReason == "MAX_TOKENS" {
+			// A token limit terminates valid audio; keep it for buffered codecs and
+			// continue reading any trailing authoritative usage event.
 			d.terminal = true
+			d.receipt.Truncated = candidate.FinishReason == "MAX_TOKENS"
 		}
 	}
 	if usageErr != nil {
@@ -279,7 +285,19 @@ func (p *Plan) Forward(ctx context.Context, resp *http.Response, w http.Response
 	if err == nil && !incremental {
 		var audio []byte
 		audio, err = p.encode(ctx, pcm.Bytes())
-		if err == nil {
+		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				// A caller disconnect does not cancel already accepted provider work.
+				err = errors.WithStack(ctxErr)
+			} else {
+				// No audio has been emitted on this buffered path. The gateway
+				// absorbs conversion failures rather than billing an unusable result.
+				result.EncodingFailed = true
+			}
+		} else {
+			if result.Truncated {
+				w.Header().Set("X-Gemini-Finish-Reason", "MAX_TOKENS")
+			}
 			err = emitter.audio(audio)
 		}
 	}
@@ -367,7 +385,7 @@ func (e *speechEmitter) done(receipt Receipt) error {
 		return nil
 	}
 	return e.event("speech.audio.done", map[string]any{
-		"type": "speech.audio.done", "usage_complete": receipt.UsageComplete,
+		"type": "speech.audio.done", "usage_complete": receipt.UsageComplete, "truncated": receipt.Truncated,
 		"usage": map[string]any{"input_tokens": receipt.PromptTokens, "output_tokens": receipt.OutputTokens,
 			"total_tokens":        receipt.PromptTokens + receipt.OutputTokens,
 			"input_token_details": map[string]int{"text_tokens": receipt.PromptTokens, "audio_tokens": 0, "cached_tokens": receipt.CachedTokens}},

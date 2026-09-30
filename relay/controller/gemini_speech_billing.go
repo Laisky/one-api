@@ -50,7 +50,10 @@ func loadGeminiSpeechPrices(c *gin.Context, m *meta.Meta) (*geminiSpeechPrices, 
 
 // newGeminiSpeechPrices validates all rates before dispatch and preserves explicit audio overrides.
 func newGeminiSpeechPrices(input quota.ComputeInput) (*geminiSpeechPrices, error) {
-	cfg, ok := pricing.ResolveModelConfigRatioOnly(input.ModelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime)
+	// The ratio-only resolver intentionally removes Audio, including window overlays.
+	// Keep the full effective local config to distinguish an explicit audio tariff
+	// from provider fallback; both reservation and settlement use that decision.
+	cfg, ok := pricing.ResolveModelConfig(input.ModelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime)
 	if !ok {
 		return nil, errors.New("Gemini speech token pricing is unavailable")
 	}
@@ -78,7 +81,7 @@ func newGeminiSpeechPrices(input quota.ComputeInput) (*geminiSpeechPrices, error
 		}
 	}
 	_, exists := input.ChannelModelConfigs[input.ModelName]
-	return &geminiSpeechPrices{input: input, config: cfg, audio: audio, explicitAudio: exists && cfg.Audio != nil}, nil
+	return &geminiSpeechPrices{input: input, config: cfg, audio: audio, explicitAudio: exists && cfg.Audio != nil && cfg.Audio.HasData()}, nil
 }
 
 // outputFactors returns unrounded factors for an audio completion token.

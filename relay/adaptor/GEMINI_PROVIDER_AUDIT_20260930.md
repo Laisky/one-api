@@ -2,7 +2,7 @@
 
 ## Scope and sources
 
-This update refreshes bundled model information, not transport implementation or upstream account entitlements. Prices use paid **Standard** Gemini Developer API rates in USD per million tokens. Existing channel overrides remain administrator-owned.
+This audit records the initial catalog commit of PR #438. Later commits implement the standard `/v1/audio/speech` endpoint; see the [speech implementation guide](gemini/tts/README.md). Model availability still depends on upstream account entitlements. Prices use paid **Standard** Gemini Developer API rates in USD per million tokens. Existing channel overrides remain administrator-owned.
 
 Primary sources reviewed on September 30, 2026:
 
@@ -50,7 +50,7 @@ The old 3.1 and 2.5 TTS previews retain their original IDs and prices. No shutdo
 
 ### TTS protocol boundary
 
-Adding a catalog entry does **not** implement Gemini 3.8 TTS in the native REST, OpenAI-compatible, Responses, or Claude conversion paths. The new descriptions state this explicitly. An end-to-end TTS implementation requires separate request conversion, binary audio response handling, and live-provider validation:
+The initial catalog commit did not implement Gemini 3.8 TTS transport. The subsequent implementation adds `/v1/audio/speech` over native GenerateContent on Gemini, Gemini OpenAI-compatible, and Vertex channels; see [gemini/tts/README.md](gemini/tts/README.md). Chat, Responses, and Claude conversion paths remain unchanged. Live-provider validation has not been performed. These protocol constraints still apply:
 
 - Speaker/style instructions belong in per-part `speech_metadata`; ordinary input text is treated as a verbatim transcript.
 - Multi-speaker turns must identify the speaker in structured metadata.
@@ -59,13 +59,21 @@ Adding a catalog entry does **not** implement Gemini 3.8 TTS in the native REST,
 
 ### Vertex AI boundary
 
-Vertex AI already consumes the shared Gemini catalog as configuration suggestions, not an entitlement allowlist. This change does not alter endpoint selection, regional availability, authentication, or its existing exclusion of Live-only Developer API defaults. Google Cloud separately lists the new TTS models as Preview and describes promotional pricing as credits on net spend. Its published effective TTS input/output amounts match the table above, but that does not establish identical caching support, billing-credit eligibility, or account entitlement. Vertex operators must verify backend-specific channel overrides; Developer API lifecycle wording is explicitly scoped to that API.
+Vertex AI already consumes the shared Gemini catalog as configuration suggestions, not an entitlement allowlist. The initial catalog change did not alter endpoint selection, regional availability, authentication, or its existing exclusion of Live-only Developer API defaults. The later speech bridge reuses Vertex routing and ADC but requires explicit channel input/output tariffs before dispatch. Google Cloud separately lists the new TTS models as Preview and describes promotional pricing as credits on net spend. Its published effective TTS input/output amounts match the table above, but that does not establish identical caching support, billing-credit eligibility, or account entitlement. Vertex operators must verify backend-specific channel overrides; Developer API lifecycle wording is explicitly scoped to that API.
+
+### Review follow-up
+
+The speech bridge now retains valid `MAX_TOKENS` audio as a terminal truncated result, including buffered formats and trailing usage metadata. SSE completion reports `truncated`; buffered responses include `X-Gemini-Finish-Reason: MAX_TOKENS`. Empty, refused, over-budget, or malformed responses remain errors.
+
+Gateway encoder failures before delivery receive a full customer credit, recorded as `encoding_failed_refund=true` alongside the retained upstream usage. The accepted-work replay guard remains set. Caller cancellation and downstream write failures are not encoder credits. Both pre-reserved and trusted/no-hold requests use the same settlement ledger.
+
+The CI failure in `TestGeminiSpeechHTTP/override` was caused by selecting explicit audio pricing from a ratio-only configuration that deliberately removes media metadata. Speech now resolves the full effective configuration, including time-window audio overrides; an empty audio block still falls back to scalar pricing. Regression tests keep the original 40-quota expectation unchanged and cover exact reservations as well as final charges.
 
 ## Regression coverage and validation
 
 Added regression tests cover exact IDs and derived lists, limits/modalities, absence of unsupported chat/reasoning capabilities, independent configuration allocations, legacy price preservation, and shared native-adaptor initialization. Pricing tests call the production `pricing.ApplyTimeWindow` resolver for all four models on the audit date, at the final promotional nanosecond, at the first standard instant, and at the same instant expressed in UTC−5. Existing Robotics expectations are updated to the published current rates.
 
-Local checks performed: Go formatting/syntax parsing and exact Git blob SHA verification of both edited baseline files before applying minimal changes. Full project tests were not executable in the authoring container: it has Go 1.23.2, no full checkout, and GitHub DNS resolution is unavailable. The project targets Go 1.27. No paid upstream calls or live model entitlement checks were performed.
+Initial catalog authoring checks: Go formatting/syntax parsing and exact Git blob SHA verification of both edited baseline files before applying minimal changes. Full project tests were not executable in the authoring container: it has Go 1.23.2, no full checkout, and GitHub DNS resolution is unavailable. The project targets Go 1.27. No paid upstream calls or live model entitlement checks were performed.
 
 Required acceptance commands in a complete checkout with the repository toolchain:
 
