@@ -46,6 +46,7 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check 'PyYAML==6.0.3'
           python3 .github/scripts/test_workflows.py
+          python3 .github/scripts/test_frontend_contracts.py
           python3 .github/scripts/test_go_test_shards.py
       - name: Detect changed frontend paths
         if: github.event_name != 'workflow_dispatch'
@@ -64,6 +65,7 @@ jobs:
               - 'VERSION'
             air:
               - 'web/air/**'
+              - 'web/legacy/**'
               - '.github/**'
               - 'Makefile'
               - 'Dockerfile'
@@ -71,6 +73,7 @@ jobs:
               - 'VERSION'
             berry:
               - 'web/berry/**'
+              - 'web/legacy/**'
               - '.github/**'
               - 'Makefile'
               - 'Dockerfile'
@@ -303,6 +306,10 @@ jobs:
       - name: Install dependencies
         working-directory: web/modern
         run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+      - name: Audit every dependency including development tools
+        run: |
+          node --test .github/scripts/frontend-audit.test.mjs
+          node .github/scripts/frontend-audit.mjs modern
       - name: Run tests
         working-directory: web/modern
         env:
@@ -334,6 +341,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Archive complete dependency audit evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dependency-audit-modern
+          path: ${{ runner.temp }}/modern-audit.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
+
   air_frontend_tests:
     name: Frontend tests (air)
     needs: changes
@@ -354,11 +370,44 @@ jobs:
       - name: Install dependencies
         working-directory: web/air
         run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+      - name: Audit every dependency including development tools
+        run: |
+          node --test .github/scripts/frontend-audit.test.mjs
+          node .github/scripts/frontend-audit.mjs air
       - name: Run tests
         working-directory: web/air
         env:
           CI: true
-        run: yarn test --watchAll=false --passWithNoTests
+        run: yarn test
+
+      - name: Build legacy production frontend
+        working-directory: web/air
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: yarn build
+      - name: Install pinned browser test tools
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Verify production and development request recovery
+        run: python3 .github/scripts/legacy-browser.py air
+      - name: Archive legacy browser evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: legacy-browser-air
+          path: ${{ runner.temp }}/legacy-browser-air
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Archive complete dependency audit evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dependency-audit-air
+          path: ${{ runner.temp }}/air-audit.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
 
   berry_frontend_tests:
     name: Frontend tests (berry)
@@ -380,11 +429,44 @@ jobs:
       - name: Install dependencies
         working-directory: web/berry
         run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+      - name: Audit every dependency including development tools
+        run: |
+          node --test .github/scripts/frontend-audit.test.mjs
+          node .github/scripts/frontend-audit.mjs berry
       - name: Run tests
         working-directory: web/berry
         env:
           CI: true
-        run: yarn test --watchAll=false --passWithNoTests
+        run: yarn test
+
+      - name: Build legacy production frontend
+        working-directory: web/berry
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: yarn build
+      - name: Install pinned browser test tools
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Verify production and development request recovery
+        run: python3 .github/scripts/legacy-browser.py berry
+      - name: Archive legacy browser evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: legacy-browser-berry
+          path: ${{ runner.temp }}/legacy-browser-berry
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Archive complete dependency audit evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dependency-audit-berry
+          path: ${{ runner.temp }}/berry-audit.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
 
   code_coverage:
     name: Code coverage report
