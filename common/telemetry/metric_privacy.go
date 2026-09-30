@@ -14,7 +14,7 @@ func newPrivateMetricView() sdkmetric.View {
 	base := newZeroExemplarReservoirView()
 	return func(instrument sdkmetric.Instrument) (sdkmetric.Stream, bool) {
 		stream, ok := base(instrument)
-		stream.AttributeFilter = privateMetricAttribute
+		stream.AttributeFilter = privateMetricFilter(instrument.Name)
 		return stream, ok
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -77,7 +78,7 @@ func (e privacyMetricExporter) Export(ctx context.Context, original *metricdata.
 				metricPrivacyDrops.Add(1)
 				continue
 			}
-			data := privateMetricAggregation(metric.Data)
+			data := privateMetricAggregation(metric.Data, privateMetricFilter(metric.Name))
 			if data == nil {
 				metricPrivacyDrops.Add(1)
 				continue
@@ -117,61 +118,61 @@ func privateMetricUnit(name string) string {
 
 // privateMetricAggregation filters each supported aggregation's attributes and
 // removes exemplars, which have their own unfiltered attribute surface.
-func privateMetricAggregation(data metricdata.Aggregation) metricdata.Aggregation {
+func privateMetricAggregation(data metricdata.Aggregation, filter attribute.Filter) metricdata.Aggregation {
 	switch value := data.(type) {
 	case metricdata.Sum[int64]:
-		value.DataPoints = privateMetricPoints(value.DataPoints)
+		value.DataPoints = privateMetricPoints(value.DataPoints, filter)
 		return value
 	case metricdata.Sum[float64]:
-		value.DataPoints = privateMetricPoints(value.DataPoints)
+		value.DataPoints = privateMetricPoints(value.DataPoints, filter)
 		return value
 	case metricdata.Gauge[int64]:
-		value.DataPoints = privateMetricPoints(value.DataPoints)
+		value.DataPoints = privateMetricPoints(value.DataPoints, filter)
 		return value
 	case metricdata.Gauge[float64]:
-		value.DataPoints = privateMetricPoints(value.DataPoints)
+		value.DataPoints = privateMetricPoints(value.DataPoints, filter)
 		return value
 	case metricdata.Histogram[int64]:
-		value.DataPoints = privateHistogramPoints(value.DataPoints)
+		value.DataPoints = privateHistogramPoints(value.DataPoints, filter)
 		return value
 	case metricdata.Histogram[float64]:
-		value.DataPoints = privateHistogramPoints(value.DataPoints)
+		value.DataPoints = privateHistogramPoints(value.DataPoints, filter)
 		return value
 	case metricdata.ExponentialHistogram[int64]:
-		value.DataPoints = privateExponentialPoints(value.DataPoints)
+		value.DataPoints = privateExponentialPoints(value.DataPoints, filter)
 		return value
 	case metricdata.ExponentialHistogram[float64]:
-		value.DataPoints = privateExponentialPoints(value.DataPoints)
+		value.DataPoints = privateExponentialPoints(value.DataPoints, filter)
 		return value
 	}
 	return nil
 }
 
 // privateMetricPoints returns independent scalar datapoint views.
-func privateMetricPoints[N int64 | float64](original []metricdata.DataPoint[N]) []metricdata.DataPoint[N] {
+func privateMetricPoints[N int64 | float64](original []metricdata.DataPoint[N], filter attribute.Filter) []metricdata.DataPoint[N] {
 	points := slices.Clone(original)
 	for i := range points {
-		points[i].Attributes, _ = points[i].Attributes.Filter(privateMetricAttribute)
+		points[i].Attributes, _ = points[i].Attributes.Filter(filter)
 		points[i].Exemplars = nil
 	}
 	return points
 }
 
 // privateHistogramPoints returns independent histogram datapoint views.
-func privateHistogramPoints[N int64 | float64](original []metricdata.HistogramDataPoint[N]) []metricdata.HistogramDataPoint[N] {
+func privateHistogramPoints[N int64 | float64](original []metricdata.HistogramDataPoint[N], filter attribute.Filter) []metricdata.HistogramDataPoint[N] {
 	points := slices.Clone(original)
 	for i := range points {
-		points[i].Attributes, _ = points[i].Attributes.Filter(privateMetricAttribute)
+		points[i].Attributes, _ = points[i].Attributes.Filter(filter)
 		points[i].Exemplars = nil
 	}
 	return points
 }
 
 // privateExponentialPoints returns independent exponential histogram views.
-func privateExponentialPoints[N int64 | float64](original []metricdata.ExponentialHistogramDataPoint[N]) []metricdata.ExponentialHistogramDataPoint[N] {
+func privateExponentialPoints[N int64 | float64](original []metricdata.ExponentialHistogramDataPoint[N], filter attribute.Filter) []metricdata.ExponentialHistogramDataPoint[N] {
 	points := slices.Clone(original)
 	for i := range points {
-		points[i].Attributes, _ = points[i].Attributes.Filter(privateMetricAttribute)
+		points[i].Attributes, _ = points[i].Attributes.Filter(filter)
 		points[i].Exemplars = nil
 	}
 	return points
