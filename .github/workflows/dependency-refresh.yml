@@ -1,21 +1,16 @@
 name: Dependency refresh workbench
-
 on:
   push:
     branches: [chore/dependencies-20260930]
     paths: [.github/workflows/dependency-refresh.yml]
-
 permissions:
   contents: read
-
 concurrency:
   group: dependency-refresh-workbench
   cancel-in-progress: true
-
 defaults:
   run:
     shell: bash
-
 jobs:
   go:
     runs-on: ubuntu-latest
@@ -64,7 +59,6 @@ jobs:
           path: ${{ runner.temp }}/go.patch
           if-no-files-found: error
           retention-days: 7
-
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -97,22 +91,19 @@ jobs:
           theme = os.environ['THEME']
           path = Path('web') / theme / 'package.json'
           package = json.loads(path.read_text())
-          lines = (Path(os.environ['RUNNER_TEMP']) / 'outdated.json').read_text().splitlines()
-          for line in lines:
+          for line in (Path(os.environ['RUNNER_TEMP']) / 'outdated.json').read_text().splitlines():
               entry = json.loads(line)
               if entry.get('type') != 'table':
                   continue
               for name, current, wanted, latest, section, *_ in entry['data']['body']:
-                  # Modern follows stable latest. Legacy component/build-system
-                  # majors require a separate migration, not forced resolutions.
                   target = latest if theme == 'modern' else wanted
-                  if not re.fullmatch(r'\d+\.\d+\.\d+', target):
+                  if not re.fullmatch(r'\d+\.\d+\.\d+', target) or name not in package.get(section, {}):
                       continue
-                  if name not in package.get(section, {}):
+                  original = package[section][name]
+                  if original.startswith('npm:'):
                       continue
-                  if package[section][name].startswith('npm:'):
-                      continue  # Preserve the intentional TS6/TS7 tool aliases.
-                  package[section][name] = '^' + target
+                  prefix = '^' if theme == 'modern' or original.startswith('^') else '~' if original.startswith('~') else ''
+                  package[section][name] = prefix + target
                   print(f'{theme}: {name} {current} -> {target}')
           with urllib.request.urlopen('https://registry.npmjs.org/axios/latest', timeout=30) as response:
               axios = json.load(response)['version']
@@ -121,13 +112,14 @@ jobs:
           package['dependencies']['axios'] = '^' + axios
           package['dependencies']['react-router-dom'] = '^' + dom['version']
           if 'react-router' in package['dependencies']:
-              # Align to the core required by DOM, not the unrelated latest core major.
               package['dependencies']['react-router'] = dom['dependencies']['react-router']
               package['dependencies']['react-router-dom'] = dom['version']
           print(f"{theme}: axios={axios}, react-router-dom={dom['version']}")
           path.write_text(json.dumps(package, indent=2) + '\n')
           PY
-          yarn --cwd "web/$THEME" upgrade --non-interactive --network-timeout 600000
+          # A full refresh is intentional: resolve all transitive ranges too.
+          rm "web/$THEME/yarn.lock"
+          yarn --cwd "web/$THEME" install --non-interactive --network-timeout 600000
           yarn --cwd "web/$THEME" install --frozen-lockfile --non-interactive --network-timeout 600000
           git diff --binary -- "web/$THEME/package.json" "web/$THEME/yarn.lock" > "$RUNNER_TEMP/$THEME.patch"
       - name: Reproduce the original swallowed-error bug
@@ -188,7 +180,6 @@ jobs:
             ${{ runner.temp }}/${{ matrix.theme }}-audit.json
           if-no-files-found: error
           retention-days: 7
-
   persist:
     name: Commit generated dependency files only
     if: always() && !cancelled()
@@ -198,7 +189,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      # No package managers, project code, or dependency scripts run in this job.
+      # No dependency scripts run in this isolated write job.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
