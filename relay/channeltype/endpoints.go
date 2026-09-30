@@ -207,7 +207,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case PaLM:
 		return chatOnly
 	case Gemini, GeminiOpenAICompatible:
-		return append(chatAndEmbeddings, EndpointRealtime)
+		return append(chatAndEmbeddings, EndpointRealtime, EndpointAudioSpeech)
 	case Copilot:
 		return copilotDefault
 	case Zhipu:
@@ -359,6 +359,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 			EndpointRealtime,
+			EndpointAudioSpeech,
 		}
 	case Proxy:
 		// Proxy mode supports all endpoints - it's a passthrough

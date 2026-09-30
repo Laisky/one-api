@@ -90,11 +90,13 @@ func geminiSeptember2026OmniConfig(description string) adaptor.ModelConfig {
 }
 
 // geminiSeptember2026RoboticsConfig builds Gemini Robotics ER 2 metadata.
+// Prices verified 2026-09-30: https://ai.google.dev/gemini-api/docs/pricing.
 // Parameters: streaming selects the Live API endpoint. Returns: a model configuration.
 func geminiSeptember2026RoboticsConfig(streaming bool) adaptor.ModelConfig {
 	config := adaptor.ModelConfig{
-		Ratio:            2.00 * ratio.MilliTokensUsd,
-		CompletionRatio:  10.00 / 2.00,
+		Ratio:            1.00 * ratio.MilliTokensUsd,
+		CompletionRatio:  5.00 / 1.00,
+		TimeWindows:      []adaptor.TimeWindow{gemini2027PriceWindow(2.00, 10.00, 0)},
 		ContextLength:    131_072,
 		MaxOutputTokens:  gemini3FlashMaxOutput,
 		InputModalities:  geminiInputMultimodal,
@@ -113,7 +115,8 @@ func geminiSeptember2026RoboticsConfig(streaming bool) adaptor.ModelConfig {
 		config.Description = "Gemini Robotics ER 2 Streaming preview for low-latency bidirectional audio and video robotics agents over the Live API."
 		return config
 	}
-	config.CachedInputRatio = 0.20 * ratio.MilliTokensUsd
+	config.CachedInputRatio = 0.10 * ratio.MilliTokensUsd
+	config.TimeWindows[0].Overlay.CachedInputRatio = 0.20 * ratio.MilliTokensUsd
 	return config
 }
 
@@ -192,5 +195,6 @@ func init() {
 	}
 	refreshGeminiSeptember2026LifecycleMetadata()
 	refreshGeminiSeptember18Catalog()
+	refreshGeminiSeptember30Catalog()
 	ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 }

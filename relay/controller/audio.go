@@ -85,6 +85,9 @@ func countAudioTokens(c *gin.Context, tokensPerSecond float64) (float64, error) 
 // RelayAudioHelper normalizes one standard audio request, meters its actual input
 // unit and settles accepted work even if writing the result to the caller fails.
 func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatusCode {
+	if relayMode == relaymode.AudioSpeech && isGeminiSpeechChannel(c.GetInt(ctxkey.Channel)) {
+		return relayGeminiSpeech(c)
+	}
 	ctx := gmw.Ctx(c)
 	meta := meta.GetByContext(c)
 	audioModel := "whisper-1"
