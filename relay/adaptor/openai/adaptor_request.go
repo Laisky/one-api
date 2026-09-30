@@ -28,10 +28,21 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-// azureRequiresResponseAPI returns true when Azure supports the model only via the Response API.
+// azureRequiresResponseAPI reports whether an Azure model uses the tool-safe
+// Responses path. It preserves GPT-5 routing and recognizes only the published
+// GPT-6 IDs; arbitrary deployment names must not inherit a model contract.
+// Verified 2026-09-30: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure
 func azureRequiresResponseAPI(modelName string) bool {
 	normalized := normalizedModelName(modelName)
-	return strings.HasPrefix(normalized, "gpt-5")
+	if strings.HasPrefix(normalized, "gpt-5") {
+		return true
+	}
+	switch normalized {
+	case "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol":
+		return true
+	default:
+		return false
+	}
 }
 
 // AzureRequiresResponseAPI reports whether an Azure deployment must be called via the Response API surface.
@@ -309,7 +320,8 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 		request.ReasoningEffort = normalizeReasoningEffortForModel(actualModel, request.ReasoningEffort)
 		if !modelSupportsSampling(actualModel, request.ReasoningEffort) {
 			targetsResponseAPI := meta.Mode == relaymode.ResponseAPI ||
-				(meta.ChannelType == channeltype.OpenAI && !IsModelsOnlySupportedByChatCompletionAPI(actualModel))
+				(meta.ChannelType == channeltype.OpenAI && !IsModelsOnlySupportedByChatCompletionAPI(actualModel)) ||
+				(meta.ChannelType == channeltype.Azure && azureRequiresResponseAPI(actualModel))
 
 			if targetsResponseAPI {
 				request.Temperature = nil
