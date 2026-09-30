@@ -32,6 +32,7 @@ var ModelRatios = adaptor.JoinModelCatalogs(
 	nvidiaModels(),
 	openaiModels(),
 	openai_2Models(),
+	gpt61SolModels(),
 	otherModels(),
 	other_2Models(),
 	poolsideModels(),
