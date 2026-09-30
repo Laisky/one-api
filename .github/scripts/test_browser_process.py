@@ -12,6 +12,8 @@ import unittest
 from unittest.mock import Mock, call, patch
 
 from browser_process import stop_process
+# unittest.main also discovers this imported suite; browser CI requires both.
+from test_browser_cleanup_failures import BrowserCleanupFailureTests
 
 
 class BrowserProcessTests(unittest.TestCase):
@@ -111,8 +113,8 @@ class BrowserProcessTests(unittest.TestCase):
 
     def test_unexpected_signal_errors_are_not_suppressed(self) -> None:
         """test_unexpected_signal_errors_are_not_suppressed checks permission errors at both signals."""
-        for failures in ([PermissionError('denied')], [None, PermissionError('denied')]):
-            with self.subTest(signal_count=len(failures)):
+        for failures in ([PermissionError('denied'), None], [None, PermissionError('denied')]):
+            with self.subTest(failed_signal='TERM' if failures[0] is not None else 'KILL'):
                 process = Mock(pid=12345, poll=Mock(return_value=0))
                 with patch('browser_process.os.killpg', side_effect=failures):
                     with self.assertRaises(PermissionError):

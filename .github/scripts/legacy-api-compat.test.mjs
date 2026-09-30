@@ -17,6 +17,12 @@ const require = createRequire(path.join(root, 'web', theme, 'package.json'));
 const axios = require('axios');
 const helper = theme === 'air' ? 'src/helpers/api.js' : 'src/utils/api.js';
 
+/**
+ * fixture returns the real API helper with a local HTTP server and captured effects.
+ * @param {import('node:test').TestContext} t owns the server's teardown hook.
+ * @param {string} pathname selects the browser path used by authentication guards.
+ * @returns {Promise<object>} The configured client, notifications, redirects, actions, and storage.
+ */
 async function fixture(t, pathname = '/dashboard') {
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');

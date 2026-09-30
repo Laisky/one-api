@@ -21,7 +21,7 @@ There is no change to production application code or dependency versions.
 
 ## Regression coverage
 
-The cleanup suite now contains 13 tests: the original seven updated for the
+The descendant follow-up established 13 tests (retained in the current suite): the original seven updated for the
 stronger group contract, two real descendant cases, and four additional cases
 covering exit-before-poll, a bounded forced wait, permission errors at either
 signal, and invalid timeouts. Both real descendant cases verify the initial
@@ -48,7 +48,7 @@ run. See [the UI-boundary acceptance contract](dependency-ui-boundaries-2026-09-
 
 ## Reproduce
 
-Run all cleanup regressions without frontend dependencies:
+Run all 24 cleanup regressions with Python 3.11+ and no frontend dependencies:
 
 ```sh
 python3 .github/scripts/test_browser_process.py
@@ -60,10 +60,59 @@ must fail on both `Cleanup left the SIGTERM-ignoring descendant alive` assertion
 ```sh
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
-cp .github/scripts/test_browser_process.py "$scratch/"
+cp .github/scripts/test_browser_process.py .github/scripts/test_browser_cleanup_failures.py "$scratch/"
 git show bae918b8ccad0ac8fd00b2f0a95c5cdaf468e52f:.github/scripts/browser_process.py \
   > "$scratch/browser_process.py"
 python3 "$scratch/test_browser_process.py" \
   BrowserProcessTests.test_real_descendant_survives_graceful_leader_exit \
   BrowserProcessTests.test_real_descendant_survives_already_exited_leader
 ```
+
+## Interruption and concurrent failure follow-up
+
+The helper at `cb0c87745364587a0a2c83e6b89a40307eeb4d8d` passes those
+13 tests, but an interruption during its graceful wait skips the forced phase.
+A new real-child test reproduces the live, unreaped child; a separate signal-call
+test confirms that SIGKILL was never attempted. Their teardown is independent
+of the helper, so the negative controls do not leave processes behind.
+
+Cleanup now attempts the graceful phase, forced group signal, and final leader
+reaping independently. Unexpected errors and interruptions are retained until
+those bounded attempts finish. One failure is re-raised unchanged; multiple
+failures use Python 3.11's `BaseExceptionGroup`, including cancellations. At most
+two waits use the supplied finite, positive timeout; NaN and infinities are
+rejected before signaling. Missing groups remain an expected exit race.
+
+The actual browser runner uses `process_cleanup` around readiness and browser
+execution. If the task fails and cleanup succeeds, the original task error is
+re-raised unchanged. If both fail, both exceptions remain in a group, with the
+task failure first. A cleanup-only failure is still a failed acceptance run.
+This does not hide errors, log request payloads, or retry cleanup indefinitely.
+It cannot guarantee cleanup after SIGKILL of the harness, loss of signal
+permission, or a descendant deliberately leaving its owned process group.
+
+Eleven additional cases cover interruption, TERM/KILL errors, multiple failures,
+nonfinite budgets, success/failure/cancellation in the cleanup scope, the actual
+runner's use of that scope, and interrupted reaping of a real child. The existing
+entry point imports this suite, so both legacy browser CI jobs run all 24 tests.
+Eight full local runs at concurrency four passed **192/192 test executions**,
+with no skipped cases on Linux. The final tests still produce two assertion
+failures against `cb0c877`, while its original 13 tests pass. These local results
+do not replace the final-head frontend, backend, browser, and security CI gates.
+
+To replay the two interruption failures using the final tests:
+
+```sh
+scratch=$(mktemp -d)
+trap 'rm -rf "$scratch"' EXIT
+cp .github/scripts/test_browser_cleanup_failures.py "$scratch/"
+git show cb0c87745364587a0a2c83e6b89a40307eeb4d8d:.github/scripts/browser_process.py \
+  > "$scratch/browser_process.py"
+python3 "$scratch/test_browser_cleanup_failures.py" \
+  BrowserCleanupFailureTests.test_interrupted_wait_still_kills_and_reaps \
+  BrowserCleanupFailureTests.test_real_child_is_reaped_after_interrupted_wait
+```
+
+The request-fixture JSDoc and Modern DOM-mock/translation documentation were also
+completed. Their comment-free parsed source was compared before and after the
+edit; these documentation changes do not alter test behavior or relax checks.

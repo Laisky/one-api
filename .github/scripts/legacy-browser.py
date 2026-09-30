@@ -19,7 +19,7 @@ from urllib.request import urlopen
 
 from playwright.sync_api import expect, sync_playwright
 
-from browser_process import stop_process
+from browser_process import process_cleanup
 
 ROOT = Path(__file__).resolve().parents[2]
 USER = {"id": 1, "uuid": "10000000-0000-0000-0000-000000000001", "username": "quality", "display_name": "Quality", "role": 100, "status": 1, "group": "default", "quota": 100000, "used_quota": 0}
@@ -189,7 +189,7 @@ def main() -> None:
                 environment = {**os.environ, 'PORT': str(port), 'PROXY_TARGET': api, 'HOST': '127.0.0.1'}
                 with (evidence / 'vite-dev.log').open('w') as output:
                     process = subprocess.Popen(['yarn', 'dev'], cwd=ROOT / 'web' / args.theme, env=environment, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
-                    try:
+                    with process_cleanup(process):
                         base = f'http://127.0.0.1:{port}'
                         for _ in range(120):
                             if process.poll() is not None:
@@ -203,8 +203,6 @@ def main() -> None:
                         else:
                             raise RuntimeError('Vite development server did not become ready')
                         exercise(browser, base, server, args.theme, evidence, 'development')
-                    finally:
-                        stop_process(process)
                 print(f'{args.theme}: production and development browser acceptance passed')
             finally:
                 browser.close()
