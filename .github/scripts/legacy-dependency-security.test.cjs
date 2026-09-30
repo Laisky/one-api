@@ -7,17 +7,11 @@ const theme = process.env.LEGACY_THEME || path.basename(process.cwd());
 assert.ok(['air', 'berry'].includes(theme), 'Run from air/berry or set LEGACY_THEME');
 const themeRequire = createRequire(path.resolve(__dirname, '../../web', theme, 'package.json'));
 
-// jsonpath pins an old underscore patch in the CRA toolchain. Resolve from
-// that actual consumer instead of accidentally testing an unrelated hoist.
-test(`${theme}: jsonpath uses the patched underscore without changing queries`, () => {
-  const consumerRequire = createRequire(themeRequire.resolve('jsonpath'));
-  const version = consumerRequire('underscore/package.json').version.split('.').map(Number);
-  assert.equal(version[0], 1, 'The resolution must not silently cross a major version');
-  assert.ok(version[1] > 13 || (version[1] === 13 && version[2] >= 8), 'underscore must include the 1.13.8 security fix');
-  const underscore = consumerRequire('underscore');
-  assert.equal(underscore.template('Hello <%= name %>')({ name: 'One API' }), 'Hello One API');
-  const jsonpath = themeRequire('jsonpath');
-  assert.deepEqual(jsonpath.query({ items: [{ id: 1 }, { id: 2 }] }, '$.items[*].id'), [1, 2]);
+// Retiring CRA removes its vulnerable transitive build chain entirely.
+test(`${theme}: the retired CRA dependency graph cannot return`, () => {
+  for (const name of ['react-scripts', 'webpack-dev-server', 'jsonpath']) {
+    assert.throws(() => themeRequire.resolve(name), { code: 'MODULE_NOT_FOUND' });
+  }
 });
 
 if (theme === 'air') {

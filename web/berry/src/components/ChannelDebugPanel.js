@@ -24,49 +24,58 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
   const [migrationStatus, setMigrationStatus] = useState(null);
 
   const checkMigrationStatus = async () => {
-    setLoading(true);
     try {
-      const res = await API.get(`/api/debug/channel/${channelId}/migration-status`);
-      if (res.data.success) {
-        setMigrationStatus(res.data.data);
-      } else {
-        showError('Failed to get migration status: ' + res.data.message);
+      setLoading(true);
+      try {
+        const res = await API.get(`/api/debug/channel/${channelId}/migration-status`);
+        if (res.data.success) {
+          setMigrationStatus(res.data.data);
+        } else {
+          showError('Failed to get migration status: ' + res.data.message);
+        }
+      } catch (error) {
+        showError('Failed to check migration status: ' + error.message);
       }
-    } catch (error) {
-      showError('Failed to check migration status: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const fixChannel = async () => {
-    setLoading(true);
     try {
-      const res = await API.post(`/api/debug/channel/${channelId}/fix`);
-      if (res.data.success) {
-        showSuccess('Channel fixed successfully. Please refresh the page.');
-        await checkMigrationStatus(); // Refresh status
-      } else {
-        showError('Failed to fix channel: ' + res.data.message);
+      setLoading(true);
+      try {
+        const res = await API.post(`/api/debug/channel/${channelId}/fix`);
+        if (res.data.success) {
+          showSuccess('Channel fixed successfully. Please refresh the page.');
+          await checkMigrationStatus(); // Refresh status
+        } else {
+          showError('Failed to fix channel: ' + res.data.message);
+        }
+      } catch (error) {
+        showError('Failed to fix channel: ' + error.message);
       }
-    } catch (error) {
-      showError('Failed to fix channel: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const debugChannel = async () => {
-    setLoading(true);
     try {
-      const res = await API.post(`/api/debug/channel/${channelId}/debug`);
-      if (res.data.success) {
-        showSuccess('Debug information logged. Check application logs.');
-      } else {
-        showError('Failed to debug channel: ' + res.data.message);
+      setLoading(true);
+      try {
+        const res = await API.post(`/api/debug/channel/${channelId}/debug`);
+        if (res.data.success) {
+          showSuccess('Debug information logged. Check application logs.');
+        } else {
+          showError('Failed to debug channel: ' + res.data.message);
+        }
+      } catch (error) {
+        showError('Failed to debug channel: ' + error.message);
       }
-    } catch (error) {
-      showError('Failed to debug channel: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const getMigrationStatusColor = (status) => {

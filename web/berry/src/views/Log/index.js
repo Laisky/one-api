@@ -56,51 +56,54 @@ export default function Log() {
   const keywordActive = (searchKeyword.keyword || '').trim() !== '';
 
   const loadLogs = async (startIdx) => {
-    setSearching(true);
-    const query = { ...searchKeyword };
+    try {
+      setSearching(true);
+      const query = { ...searchKeyword };
 
-    query.p = startIdx;
-    if (sortBy) {
-      query.sort_by = sortBy;
-      query.sort_order = sortOrder;
-    }
-    if (!userIsAdmin) {
-      delete query.username;
-      delete query.channel;
-    }
-
-    // A non-empty keyword goes to the server-side log search endpoint, which
-    // also resolves a pasted log/user/token UUID. Admins search every log,
-    // regular users only their own.
-    const keyword = (query.keyword || '').trim();
-    let url;
-    let params;
-    if (keyword) {
-      url = userIsAdmin ? '/api/log/search' : '/api/log/self/search';
-      params = { keyword: keyword, p: startIdx, size: ITEMS_PER_PAGE };
+      query.p = startIdx;
       if (sortBy) {
-        params.sort = sortBy;
-        params.order = sortOrder;
+        query.sort_by = sortBy;
+        query.sort_order = sortOrder;
       }
-    } else {
-      url = userIsAdmin ? '/api/log/' : '/api/log/self';
-      delete query.keyword;
-      params = query;
-    }
-    const res = await API.get(url, { params: params });
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setLogs(data);
+      if (!userIsAdmin) {
+        delete query.username;
+        delete query.channel;
+      }
+
+      // A non-empty keyword goes to the server-side log search endpoint, which
+      // also resolves a pasted log/user/token UUID. Admins search every log,
+      // regular users only their own.
+      const keyword = (query.keyword || '').trim();
+      let url;
+      let params;
+      if (keyword) {
+        url = userIsAdmin ? '/api/log/search' : '/api/log/self/search';
+        params = { keyword: keyword, p: startIdx, size: ITEMS_PER_PAGE };
+        if (sortBy) {
+          params.sort = sortBy;
+          params.order = sortOrder;
+        }
       } else {
-        let newLogs = [...logs];
-        newLogs.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
-        setLogs(newLogs);
+        url = userIsAdmin ? '/api/log/' : '/api/log/self';
+        delete query.keyword;
+        params = query;
       }
-    } else {
-      showError(message);
+      const res = await API.get(url, { params: params });
+      const { success, message, data } = res.data;
+      if (success) {
+        if (startIdx === 0) {
+          setLogs(data);
+        } else {
+          let newLogs = [...logs];
+          newLogs.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
+          setLogs(newLogs);
+        }
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const onPaginationChange = (event, activePage) => {

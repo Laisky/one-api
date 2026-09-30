@@ -31,21 +31,24 @@ export default function Users() {
   const [editUserId, setEditUserId] = useState('');
 
   const loadUsers = async (startIdx) => {
-    setSearching(true);
-    const res = await API.get(`/api/user/?p=${startIdx}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setUsers(data);
+    try {
+      setSearching(true);
+      const res = await API.get(`/api/user/?p=${startIdx}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (startIdx === 0) {
+          setUsers(data);
+        } else {
+          let newUsers = [...users];
+          newUsers.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
+          setUsers(newUsers);
+        }
       } else {
-        let newUsers = [...users];
-        newUsers.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
-        setUsers(newUsers);
+        showError(message);
       }
-    } else {
-      showError(message);
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const onPaginationChange = (event, activePage) => {
@@ -59,22 +62,25 @@ export default function Users() {
   };
 
   const searchUsers = async (event) => {
-    event.preventDefault();
-    if (searchKeyword === '') {
-      await loadUsers(0);
-      setActivePage(0);
-      return;
+    try {
+      event.preventDefault();
+      if (searchKeyword === '') {
+        await loadUsers(0);
+        setActivePage(0);
+        return;
+      }
+      setSearching(true);
+      const res = await API.get(`/api/user/search?keyword=${searchKeyword}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setUsers(data);
+        setActivePage(0);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(true);
-    const res = await API.get(`/api/user/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setUsers(data);
-      setActivePage(0);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
   };
 
   const handleSearchKeyword = (event) => {

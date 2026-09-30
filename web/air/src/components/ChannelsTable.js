@@ -282,28 +282,31 @@ const ChannelsTable = () => {
   };
 
   const loadChannels = async (startIdx, currentPageSize, sortByIdAsc) => {
-    setLoading(true);
     try {
-      const sortParams = sortByIdAsc ? '&sort=id&order=asc' : '&sort=id&order=desc';
-      const res = await API.get(`/api/channel/?p=${startIdx}&size=${currentPageSize}${sortParams}`);
-      const { success, message, data, total } = res.data;
-      if (success) {
-        const totalCount = typeof total === 'number' ? total : (Array.isArray(data) ? data.length : 0);
-        if (startIdx === 0) {
-          setChannelFormat(data, totalCount);
+      setLoading(true);
+      try {
+        const sortParams = sortByIdAsc ? '&sort=id&order=asc' : '&sort=id&order=desc';
+        const res = await API.get(`/api/channel/?p=${startIdx}&size=${currentPageSize}${sortParams}`);
+        const { success, message, data, total } = res.data;
+        if (success) {
+          const totalCount = typeof total === 'number' ? total : (Array.isArray(data) ? data.length : 0);
+          if (startIdx === 0) {
+            setChannelFormat(data, totalCount);
+          } else {
+            const pageData = Array.isArray(data) ? data : [];
+            const newChannels = [...channels];
+            newChannels.splice(startIdx * currentPageSize, pageData.length, ...pageData);
+            setChannelFormat(newChannels, totalCount);
+          }
         } else {
-          const pageData = Array.isArray(data) ? data : [];
-          const newChannels = [...channels];
-          newChannels.splice(startIdx * currentPageSize, pageData.length, ...pageData);
-          setChannelFormat(newChannels, totalCount);
+          showError(message);
         }
-      } else {
-        showError(message);
+      } catch (err) {
+        showError(err?.message || err);
       }
-    } catch (err) {
-      showError(err?.message || err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const refresh = async () => {
@@ -448,26 +451,29 @@ const ChannelsTable = () => {
   };
 
   const searchChannels = async (searchKeyword, searchGroup, searchModel) => {
-    if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
-      // if keyword is blank, load files instead.
-      await loadChannels(0, pageSize, idSort);
-      setActivePage(1);
-      return;
-    }
-    setSearching(true);
     try {
-      const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
-      const { success, message, data } = res.data;
-      if (success) {
-        setChannelFormat(data, Array.isArray(data) ? data.length : 0);
+      if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
+        // if keyword is blank, load files instead.
+        await loadChannels(0, pageSize, idSort);
         setActivePage(1);
-      } else {
-        showError(message);
+        return;
       }
-    } catch (err) {
-      showError(err?.message || err);
+      setSearching(true);
+      try {
+        const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
+        const { success, message, data } = res.data;
+        if (success) {
+          setChannelFormat(data, Array.isArray(data) ? data.length : 0);
+          setActivePage(1);
+        } else {
+          showError(message);
+        }
+      } catch (err) {
+        showError(err?.message || err);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const testChannel = async (record, model) => {
@@ -536,24 +542,27 @@ const ChannelsTable = () => {
   };
 
   const batchDeleteChannels = async () => {
-    if (selectedChannels.length === 0) {
-      showError('请先选择要删除的渠道！');
-      return;
+    try {
+      if (selectedChannels.length === 0) {
+        showError('请先选择要删除的渠道！');
+        return;
+      }
+      setLoading(true);
+      let ids = [];
+      selectedChannels.forEach((channel) => {
+        ids.push(channelRef(channel));
+      });
+      const res = await API.post(`/api/channel/batch`, { ids: ids });
+      const { success, message, data } = res.data;
+      if (success) {
+        showSuccess(`已删除 ${data} 个渠道！`);
+        await refresh();
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(true);
-    let ids = [];
-    selectedChannels.forEach((channel) => {
-      ids.push(channelRef(channel));
-    });
-    const res = await API.post(`/api/channel/batch`, { ids: ids });
-    const { success, message, data } = res.data;
-    if (success) {
-      showSuccess(`已删除 ${data} 个渠道！`);
-      await refresh();
-    } else {
-      showError(message);
-    }
-    setLoading(false);
   };
 
   const fixChannelsAbilities = async () => {

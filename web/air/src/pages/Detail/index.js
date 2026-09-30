@@ -193,43 +193,46 @@ const Detail = (props) => {
     };
 
     const loadQuotaData = async (lineChart, pieChart) => {
-        setLoading(true);
+      try {
+          setLoading(true);
 
-        let url = '';
-        let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-        let localEndTimestamp = Date.parse(end_timestamp) / 1000;
-        if (isAdminUser) {
-            url = `/api/data/?username=${username}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
-        } else {
-            url = `/api/data/self/?start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
-        }
-        const res = await API.get(url);
-        const {success, message, data} = res.data;
-        if (success) {
-            setQuotaData(data);
-            if (data.length === 0) {
-                data.push({
-                    'count': 0,
-                    'model_name': '无数据',
-                    'quota': 0,
-                    'created_at': now.getTime() / 1000
-                })
-            }
-            // 根据dataExportDefaultTime重制时间粒度
-            let timeGranularity = 3600;
-            if (dataExportDefaultTime === 'day') {
-                timeGranularity = 86400;
-            } else if (dataExportDefaultTime === 'week') {
-                timeGranularity = 604800;
-            }
-            data.forEach(item => {
-                item['created_at'] = Math.floor(item['created_at'] / timeGranularity) * timeGranularity;
-            });
-            updateChart(lineChart, pieChart, data);
-        } else {
-            showError(message);
-        }
+          let url = '';
+          let localStartTimestamp = Date.parse(start_timestamp) / 1000;
+          let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+          if (isAdminUser) {
+              url = `/api/data/?username=${username}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
+          } else {
+              url = `/api/data/self/?start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
+          }
+          const res = await API.get(url);
+          const {success, message, data} = res.data;
+          if (success) {
+              setQuotaData(data);
+              if (data.length === 0) {
+                  data.push({
+                      'count': 0,
+                      'model_name': '无数据',
+                      'quota': 0,
+                      'created_at': now.getTime() / 1000
+                  })
+              }
+              // 根据dataExportDefaultTime重制时间粒度
+              let timeGranularity = 3600;
+              if (dataExportDefaultTime === 'day') {
+                  timeGranularity = 86400;
+              } else if (dataExportDefaultTime === 'week') {
+                  timeGranularity = 604800;
+              }
+              data.forEach(item => {
+                  item['created_at'] = Math.floor(item['created_at'] / timeGranularity) * timeGranularity;
+              });
+              updateChart(lineChart, pieChart, data);
+          } else {
+              showError(message);
+          }
+      } finally {
         setLoading(false);
+      }
     };
 
     const refresh = async () => {

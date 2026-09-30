@@ -16,7 +16,7 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import dayjs from "dayjs";
-require("dayjs/locale/zh-cn");
+import 'dayjs/locale/zh-cn';
 
 const OperationSetting = () => {
   let now = new Date();

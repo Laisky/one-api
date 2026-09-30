@@ -209,11 +209,7 @@ const TokensTable = () => {
             okType={'danger'}
             position={'left'}
             onConfirm={() => {
-              manageToken(tokenRef(record), 'delete', record).then(
-                () => {
-                  removeRecord(record.key);
-                }
-              );
+              manageToken(tokenRef(record), 'delete', record).catch(showError);
             }}
           >
             <Button theme="light" type="danger" style={{ marginRight: 1 }}>删除</Button>
@@ -226,7 +222,7 @@ const TokensTable = () => {
                     tokenRef(record),
                     'disable',
                     record
-                  );
+                  ).catch(showError);
                 }
               }>禁用</Button> :
               <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={
@@ -235,7 +231,7 @@ const TokensTable = () => {
                     tokenRef(record),
                     'enable',
                     record
-                  );
+                  ).catch(showError);
                 }
               }>启用</Button>
           }
@@ -288,21 +284,24 @@ const TokensTable = () => {
 
   let pageData = tokens.slice((activePage - 1) * pageSize, activePage * pageSize);
   const loadTokens = async (startIdx) => {
-    setLoading(true);
-    const res = await API.get(`/api/token/?p=${startIdx}&size=${pageSize}&order=${orderBy}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setTokensFormat(data);
+    try {
+      setLoading(true);
+      const res = await API.get(`/api/token/?p=${startIdx}&size=${pageSize}&order=${orderBy}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (startIdx === 0) {
+          setTokensFormat(data);
+        } else {
+          let newTokens = [...tokens];
+          newTokens.splice(startIdx * pageSize, data.length, ...data);
+          setTokensFormat(newTokens);
+        }
       } else {
-        let newTokens = [...tokens];
-        newTokens.splice(startIdx * pageSize, data.length, ...data);
-        setTokensFormat(newTokens);
+        showError(message);
       }
-    } else {
-      showError(message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const onPaginationChange = (e, { activePage }) => {
@@ -422,72 +421,63 @@ const TokensTable = () => {
       });
   }, [pageSize, orderBy]);
 
-  const removeRecord = key => {
-    let newDataSource = [...tokens];
-    if (key != null) {
-      let idx = newDataSource.findIndex(data => data.key === key);
-
-      if (idx > -1) {
-        newDataSource.splice(idx, 1);
-        setTokensFormat(newDataSource);
-      }
-    }
-  };
-
-  const manageToken = async (id, action, record) => {
+  // manageToken updates local rows only after a confirmed server mutation.
+  const manageToken = async (id, action) => {
     setLoading(true);
-    let data = typeof id === 'string' ? { uuid: id } : { id };
-    let res;
-    switch (action) {
-      case 'delete':
-        res = await API.delete(`/api/token/${id}`);
-        break;
-      case 'enable':
-        data.status = 1;
-        res = await API.put('/api/token/?status_only=true', data);
-        break;
-      case 'disable':
-        data.status = 2;
-        res = await API.put('/api/token/?status_only=true', data);
-        break;
-    }
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess('操作成功完成！');
-      let token = res.data.data;
-      let newTokens = [...tokens];
-      // let realIdx = (activePage - 1) * ITEMS_PER_PAGE + idx;
-      if (action === 'delete') {
-
-      } else {
-        record.status = token.status;
-        // newTokens[realIdx].status = token.status;
+    try {
+      const data = typeof id === 'string' ? { uuid: id } : { id };
+      let res;
+      switch (action) {
+        case 'delete':
+          res = await API.delete(`/api/token/${id}`);
+          break;
+        case 'enable':
+        case 'disable':
+          data.status = action === 'enable' ? 1 : 2;
+          res = await API.put('/api/token/?status_only=true', data);
+          break;
+        default:
+          throw new Error('Unsupported token action');
       }
-      setTokensFormat(newTokens);
-    } else {
-      showError(message);
+      const { success, message } = res.data;
+      if (!success) {
+        showError(message);
+        return false;
+      }
+      if (action === 'delete') {
+        setTokensFormat(tokens.filter(token => tokenRef(token) !== id));
+      } else {
+        setTokensFormat(tokens.map(token => tokenRef(token) === id
+          ? { ...token, status: res.data.data.status } : token));
+      }
+      showSuccess('操作成功完成！');
+      return true;
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const searchTokens = async () => {
-    if (searchKeyword === '' && searchToken === '') {
-      // if keyword is blank, load files instead.
-      await loadTokens(0);
-      setActivePage(1);
-      setOrderBy('');
-      return;
+    try {
+      if (searchKeyword === '' && searchToken === '') {
+        // if keyword is blank, load files instead.
+        await loadTokens(0);
+        setActivePage(1);
+        setOrderBy('');
+        return;
+      }
+      setSearching(true);
+      const res = await API.get(`/api/token/search?keyword=${searchKeyword}&token=${searchToken}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setTokensFormat(data);
+        setActivePage(1);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(true);
-    const res = await API.get(`/api/token/search?keyword=${searchKeyword}&token=${searchToken}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setTokensFormat(data);
-      setActivePage(1);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
   };
 
   const handleKeywordChange = async (value) => {

@@ -35,21 +35,24 @@ export default function Token() {
   const siteInfo = useSelector((state) => state.siteInfo);
 
   const loadTokens = async (startIdx) => {
-    setSearching(true);
-    const res = await API.get(`/api/token/?p=${startIdx}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setTokens(data);
+    try {
+      setSearching(true);
+      const res = await API.get(`/api/token/?p=${startIdx}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (startIdx === 0) {
+          setTokens(data);
+        } else {
+          let newTokens = [...tokens];
+          newTokens.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
+          setTokens(newTokens);
+        }
       } else {
-        let newTokens = [...tokens];
-        newTokens.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
-        setTokens(newTokens);
+        showError(message);
       }
-    } else {
-      showError(message);
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   useEffect(() => {
@@ -71,22 +74,25 @@ export default function Token() {
   };
 
   const searchTokens = async (event) => {
-    event.preventDefault();
-    if (searchKeyword === '') {
-      await loadTokens(0);
-      setActivePage(0);
-      return;
+    try {
+      event.preventDefault();
+      if (searchKeyword === '') {
+        await loadTokens(0);
+        setActivePage(0);
+        return;
+      }
+      setSearching(true);
+      const res = await API.get(`/api/token/search?keyword=${searchKeyword}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setTokens(data);
+        setActivePage(0);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(true);
-    const res = await API.get(`/api/token/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setTokens(data);
-      setActivePage(0);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
   };
 
   const handleSearchKeyword = (event) => {

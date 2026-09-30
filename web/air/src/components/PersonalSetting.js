@@ -258,23 +258,26 @@ const PersonalSetting = () => {
   };
 
   const bindEmail = async () => {
-    if (inputs.email_verification_code === '') {
-      showError('请输入邮箱验证码！');
-      return;
+    try {
+      if (inputs.email_verification_code === '') {
+        showError('请输入邮箱验证码！');
+        return;
+      }
+      setLoading(true);
+      const res = await API.get(
+        `/api/oauth/email/bind?email=${inputs.email}&code=${inputs.email_verification_code}`
+      );
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess('邮箱账户绑定成功！');
+        setShowEmailBindModal(false);
+        userState.user.email = inputs.email;
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(true);
-    const res = await API.get(
-      `/api/oauth/email/bind?email=${inputs.email}&code=${inputs.email_verification_code}`
-    );
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess('邮箱账户绑定成功！');
-      setShowEmailBindModal(false);
-      userState.user.email = inputs.email;
-    } else {
-      showError(message);
-    }
-    setLoading(false);
   };
 
   const getUsername = () => {

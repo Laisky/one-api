@@ -222,23 +222,26 @@ const UsersTable = () => {
   };
 
   const searchUsers = async () => {
-    if (searchKeyword === '') {
-      // if keyword is blank, load files instead.
-      await loadUsers(0);
-      setActivePage(1);
-      setOrderBy('');
-      return;
+    try {
+      if (searchKeyword === '') {
+        // if keyword is blank, load files instead.
+        await loadUsers(0);
+        setActivePage(1);
+        setOrderBy('');
+        return;
+      }
+      setSearching(true);
+      const res = await API.get(`/api/user/search?keyword=${searchKeyword}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setUsers(data);
+        setActivePage(1);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(true);
-    const res = await API.get(`/api/user/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setUsers(data);
-      setActivePage(1);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
   };
 
   const handleKeywordChange = async (value) => {

@@ -351,36 +351,39 @@ const LogsTable = () => {
   };
 
   const loadLogs = async (startIdx, pageSize, logType = 0) => {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    let url = '';
-    let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-    let localEndTimestamp = Date.parse(end_timestamp) / 1000;
-    let sortParams = '';
-    if (sortBy) {
-      sortParams = `&sort_by=${sortBy}&sort_order=${sortOrder}`;
-    }
-    if (isAdminUser) {
-      url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${logType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}${sortParams}`;
-    } else {
-      url = `/api/log/self?p=${startIdx}&page_size=${pageSize}&type=${logType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}${sortParams}`;
-    }
-    const res = await API.get(url);
-    const { success, message, data } = res.data;
-    if (success) {
-      // Leaving search mode: the rows now come from the structured listing.
-      setActiveSearch('');
-      if (startIdx === 0) {
-        setLogsFormat(data);
-      } else {
-        let newLogs = [...logs];
-        newLogs.splice(startIdx * pageSize, data.length, ...data);
-        setLogsFormat(newLogs);
+      let url = '';
+      let localStartTimestamp = Date.parse(start_timestamp) / 1000;
+      let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+      let sortParams = '';
+      if (sortBy) {
+        sortParams = `&sort_by=${sortBy}&sort_order=${sortOrder}`;
       }
-    } else {
-      showError(message);
+      if (isAdminUser) {
+        url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${logType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}${sortParams}`;
+      } else {
+        url = `/api/log/self?p=${startIdx}&page_size=${pageSize}&type=${logType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}${sortParams}`;
+      }
+      const res = await API.get(url);
+      const { success, message, data } = res.data;
+      if (success) {
+        // Leaving search mode: the rows now come from the structured listing.
+        setActiveSearch('');
+        if (startIdx === 0) {
+          setLogsFormat(data);
+        } else {
+          let newLogs = [...logs];
+          newLogs.splice(startIdx * pageSize, data.length, ...data);
+          setLogsFormat(newLogs);
+        }
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // loadSearchPage fetches one page from the keyword search endpoint and keeps

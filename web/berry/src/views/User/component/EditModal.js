@@ -70,27 +70,31 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
   const [totpLoading, setTotpLoading] = useState(false);
 
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
-    setSubmitting(true);
+    try {
+      setSubmitting(true);
 
-    let res;
-    if (values.is_edit) {
-      res = await API.put(`/api/user/`, { ...values, uuid: userId });
-    } else {
-      res = await API.post(`/api/user/`, values);
-    }
-    const { success, message } = res.data;
-    if (success) {
+      let res;
       if (values.is_edit) {
-        showSuccess('用户更新成功！');
+        res = await API.put(`/api/user/`, { ...values, uuid: userId });
       } else {
-        showSuccess('用户创建成功！');
+        res = await API.post(`/api/user/`, values);
       }
+      const { success, message } = res.data;
+      if (success) {
+        if (values.is_edit) {
+          showSuccess('用户更新成功！');
+        } else {
+          showSuccess('用户创建成功！');
+        }
+        setSubmitting(false);
+        setStatus({ success: true });
+        onOk(true);
+      } else {
+        showError(message);
+        setErrors({ submit: message });
+      }
+    } finally {
       setSubmitting(false);
-      setStatus({ success: true });
-      onOk(true);
-    } else {
-      showError(message);
-      setErrors({ submit: message });
     }
   };
 

@@ -18,19 +18,22 @@ const AddUser = (props) => {
   };
 
   const submit = async () => {
-    setLoading(true);
-    if (inputs.username === '' || inputs.password === '') return;
-    const res = await API.post(`/api/user/`, inputs);
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess('用户账户创建成功！');
-      setInputs(originInputs);
-      props.refresh();
-      props.handleClose();
-    } else {
-      showError(message);
+    try {
+      setLoading(true);
+      if (inputs.username === '' || inputs.password === '') return;
+      const res = await API.post(`/api/user/`, inputs);
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess('用户账户创建成功！');
+        setInputs(originInputs);
+        props.refresh();
+        props.handleClose();
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleCancel = () => {

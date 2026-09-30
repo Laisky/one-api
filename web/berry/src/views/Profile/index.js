@@ -27,8 +27,8 @@ import WechatModal from 'views/Authentication/AuthForms/WechatModal';
 import { useSelector } from 'react-redux';
 import EmailModal from './component/EmailModal';
 import Turnstile from 'react-turnstile';
-import { ReactComponent as Lark } from 'assets/images/icons/lark.svg';
-import { ReactComponent as OIDC } from 'assets/images/icons/oidc.svg';
+import Lark from 'assets/images/icons/lark.svg?react';
+import OIDC from 'assets/images/icons/oidc.svg?react';
 
 const validationSchema = Yup.object().shape({
   username: Yup.string().required('用户名 不能为空').min(3, '用户名 不能小于 3 个字符'),

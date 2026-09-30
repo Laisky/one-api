@@ -43,29 +43,32 @@ export default function ChannelPage() {
   const [pricingChannelType, setPricingChannelType] = useState(0);
 
   const loadChannels = async (startIdx) => {
-    setSearching(true);
     try {
-      const res = await API.get(`/api/channel/?p=${startIdx}&size=${ITEMS_PER_PAGE}`);
-      const { success, message, data, total } = res.data;
-      if (success) {
-        const resolvedTotal = typeof total === 'number' ? total : (Array.isArray(data) ? data.length : 0);
-        setTotalChannels(resolvedTotal);
-        setChannels((prev) => {
-          if (startIdx === 0) {
-            return Array.isArray(data) ? data : [];
-          }
-          const next = Array.isArray(prev) ? [...prev] : [];
-          const pageData = Array.isArray(data) ? data : [];
-          next.splice(startIdx * ITEMS_PER_PAGE, pageData.length, ...pageData);
-          return next;
-        });
-      } else {
-        showError(message);
+      setSearching(true);
+      try {
+        const res = await API.get(`/api/channel/?p=${startIdx}&size=${ITEMS_PER_PAGE}`);
+        const { success, message, data, total } = res.data;
+        if (success) {
+          const resolvedTotal = typeof total === 'number' ? total : (Array.isArray(data) ? data.length : 0);
+          setTotalChannels(resolvedTotal);
+          setChannels((prev) => {
+            if (startIdx === 0) {
+              return Array.isArray(data) ? data : [];
+            }
+            const next = Array.isArray(prev) ? [...prev] : [];
+            const pageData = Array.isArray(data) ? data : [];
+            next.splice(startIdx * ITEMS_PER_PAGE, pageData.length, ...pageData);
+            return next;
+          });
+        } else {
+          showError(message);
+        }
+      } catch (err) {
+        showError(err?.message || err);
       }
-    } catch (err) {
-      showError(err?.message || err);
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const onPaginationChange = (event, activePage) => {
@@ -80,27 +83,30 @@ export default function ChannelPage() {
   };
 
   const searchChannels = async (event) => {
-    event.preventDefault();
-    if (searchKeyword === '') {
-      await loadChannels(0);
-      setActivePage(0);
-      return;
-    }
-    setSearching(true);
     try {
-      const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
-      const { success, message, data } = res.data;
-      if (success) {
-        setChannels(Array.isArray(data) ? data : []);
-        setTotalChannels(Array.isArray(data) ? data.length : 0);
+      event.preventDefault();
+      if (searchKeyword === '') {
+        await loadChannels(0);
         setActivePage(0);
-      } else {
-        showError(message);
+        return;
       }
-    } catch (err) {
-      showError(err?.message || err);
+      setSearching(true);
+      try {
+        const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
+        const { success, message, data } = res.data;
+        if (success) {
+          setChannels(Array.isArray(data) ? data : []);
+          setTotalChannels(Array.isArray(data) ? data.length : 0);
+          setActivePage(0);
+        } else {
+          showError(message);
+        }
+      } catch (err) {
+        showError(err?.message || err);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const handleSearchKeyword = (event) => {
@@ -202,15 +208,18 @@ export default function ChannelPage() {
 
   // 处理更新所有启用渠道余额
   const updateAllChannelsBalance = async () => {
-    setSearching(true);
-    const res = await API.get(`/api/channel/update_balance`);
-    const { success, message } = res.data;
-    if (success) {
-      showInfo('已更新完毕所有已启用渠道余额！');
-    } else {
-      showError(message);
+    try {
+      setSearching(true);
+      const res = await API.get(`/api/channel/update_balance`);
+      const { success, message } = res.data;
+      if (success) {
+        showInfo('已更新完毕所有已启用渠道余额！');
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const handleOpenModal = (channelId) => {

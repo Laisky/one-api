@@ -330,63 +330,67 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
   };
 
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
-    setSubmitting(true);
-    if (values.base_url && values.base_url.endsWith('/')) {
-      values.base_url = values.base_url.slice(0, values.base_url.length - 1);
-    }
-    if (values.type === 3 && values.other === '') {
-      values.other = '2023-09-01-preview';
-    }
-    if (values.type === 18 && values.other === '') {
-      values.other = 'v2.1';
-    }
-    if (values.key === '') {
-      if (values.config.ak && values.config.sk && values.config.region) {
-        values.key = `${values.config.ak}|${values.config.sk}|${values.config.region}`;
-      } else if (values.config.region && values.config.vertex_ai_project_id && values.config.vertex_ai_adc) {
-        values.key = `${values.config.region}|${values.config.vertex_ai_project_id}|${values.config.vertex_ai_adc}`;
+    try {
+      setSubmitting(true);
+      if (values.base_url && values.base_url.endsWith('/')) {
+        values.base_url = values.base_url.slice(0, values.base_url.length - 1);
       }
-    }
+      if (values.type === 3 && values.other === '') {
+        values.other = '2023-09-01-preview';
+      }
+      if (values.type === 18 && values.other === '') {
+        values.other = 'v2.1';
+      }
+      if (values.key === '') {
+        if (values.config.ak && values.config.sk && values.config.region) {
+          values.key = `${values.config.ak}|${values.config.sk}|${values.config.region}`;
+        } else if (values.config.region && values.config.vertex_ai_project_id && values.config.vertex_ai_adc) {
+          values.key = `${values.config.region}|${values.config.vertex_ai_project_id}|${values.config.vertex_ai_adc}`;
+        }
+      }
 
-    let res;
-    const modelsStr = values.models.map((model) => model.id).join(',');
-    const configStr = JSON.stringify(values.config);
-    values.group = values.groups.join(',');
+      let res;
+      const modelsStr = values.models.map((model) => model.id).join(',');
+      const configStr = JSON.stringify(values.config);
+      values.group = values.groups.join(',');
 
-    // Handle pricing fields - convert empty strings to null for the API
-    if (values.model_ratio === '') {
-      values.model_ratio = null;
-    }
-    if (values.completion_ratio === '') {
-      values.completion_ratio = null;
-    }
-    if (values.model_configs === '') {
-      values.model_configs = null;
-    }
-    if (channelId) {
-      res = await API.put(`/api/channel/`, {
-        ...values,
-        uuid: channelId,
-        models: modelsStr,
-        config: configStr
-      });
-    } else {
-      res = await API.post(`/api/channel/`, { ...values, models: modelsStr, config: configStr });
-    }
-    const { success, message } = res.data;
-    if (success) {
+      // Handle pricing fields - convert empty strings to null for the API
+      if (values.model_ratio === '') {
+        values.model_ratio = null;
+      }
+      if (values.completion_ratio === '') {
+        values.completion_ratio = null;
+      }
+      if (values.model_configs === '') {
+        values.model_configs = null;
+      }
       if (channelId) {
-        showSuccess('渠道更新成功！');
+        res = await API.put(`/api/channel/`, {
+          ...values,
+          uuid: channelId,
+          models: modelsStr,
+          config: configStr
+        });
       } else {
-        showSuccess('渠道创建成功！');
+        res = await API.post(`/api/channel/`, { ...values, models: modelsStr, config: configStr });
       }
+      const { success, message } = res.data;
+      if (success) {
+        if (channelId) {
+          showSuccess('渠道更新成功！');
+        } else {
+          showSuccess('渠道创建成功！');
+        }
+        setSubmitting(false);
+        setStatus({ success: true });
+        onOk(true);
+      } else {
+        setStatus({ success: false });
+        showError(message);
+        setErrors({ submit: message });
+      }
+    } finally {
       setSubmitting(false);
-      setStatus({ success: true });
-      onOk(true);
-    } else {
-      setStatus({ success: false });
-      showError(message);
-      setErrors({ submit: message });
     }
   };
 

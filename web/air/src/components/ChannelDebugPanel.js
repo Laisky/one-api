@@ -26,49 +26,58 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
   };
 
   const checkMigrationStatus = async () => {
-    setLoading(true);
     try {
-      const res = await API.get(`/api/debug/channel/${channelId}/migration-status`);
-      if (res.data.success) {
-        setMigrationStatus(res.data.data);
-      } else {
-        showError('获取迁移状态失败: ' + res.data.message);
+      setLoading(true);
+      try {
+        const res = await API.get(`/api/debug/channel/${channelId}/migration-status`);
+        if (res.data.success) {
+          setMigrationStatus(res.data.data);
+        } else {
+          showError('获取迁移状态失败: ' + res.data.message);
+        }
+      } catch (error) {
+        showError('检查迁移状态失败: ' + error.message);
       }
-    } catch (error) {
-      showError('检查迁移状态失败: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const fixChannel = async () => {
-    setLoading(true);
     try {
-      const res = await API.post(`/api/debug/channel/${channelId}/fix`);
-      if (res.data.success) {
-        showSuccess('渠道修复成功，请刷新页面。');
-        await checkMigrationStatus(); // Refresh status
-      } else {
-        showError('修复渠道失败: ' + res.data.message);
+      setLoading(true);
+      try {
+        const res = await API.post(`/api/debug/channel/${channelId}/fix`);
+        if (res.data.success) {
+          showSuccess('渠道修复成功，请刷新页面。');
+          await checkMigrationStatus(); // Refresh status
+        } else {
+          showError('修复渠道失败: ' + res.data.message);
+        }
+      } catch (error) {
+        showError('修复渠道失败: ' + error.message);
       }
-    } catch (error) {
-      showError('修复渠道失败: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const debugChannel = async () => {
-    setLoading(true);
     try {
-      const res = await API.post(`/api/debug/channel/${channelId}/debug`);
-      if (res.data.success) {
-        showSuccess('调试信息已记录，请查看应用程序日志。');
-      } else {
-        showError('调试渠道失败: ' + res.data.message);
+      setLoading(true);
+      try {
+        const res = await API.post(`/api/debug/channel/${channelId}/debug`);
+        if (res.data.success) {
+          showSuccess('调试信息已记录，请查看应用程序日志。');
+        } else {
+          showError('调试渠道失败: ' + res.data.message);
+        }
+      } catch (error) {
+        showError('调试渠道失败: ' + error.message);
       }
-    } catch (error) {
-      showError('调试渠道失败: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const getMigrationStatusColor = (status) => {

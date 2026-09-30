@@ -325,30 +325,33 @@ const LogsTable = () => {
   };
 
   const loadLogs = async (startIdx) => {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    let url = '';
-    let localStartTimestamp = Date.parse(start_timestamp);
-    let localEndTimestamp = Date.parse(end_timestamp);
-    if (isAdminUser) {
-      url = `/api/mj/?p=${startIdx}&channel_id=${channel_id}&mj_id=${mj_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
-    } else {
-      url = `/api/mj/self/?p=${startIdx}&mj_id=${mj_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
-    }
-    const res = await API.get(url);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setLogsFormat(data);
+      let url = '';
+      let localStartTimestamp = Date.parse(start_timestamp);
+      let localEndTimestamp = Date.parse(end_timestamp);
+      if (isAdminUser) {
+        url = `/api/mj/?p=${startIdx}&channel_id=${channel_id}&mj_id=${mj_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
       } else {
-        let newLogs = [...logs];
-        newLogs.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
-        setLogsFormat(newLogs);
+        url = `/api/mj/self/?p=${startIdx}&mj_id=${mj_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
       }
-    } else {
-      showError(message);
+      const res = await API.get(url);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (startIdx === 0) {
+          setLogsFormat(data);
+        } else {
+          let newLogs = [...logs];
+          newLogs.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
+          setLogsFormat(newLogs);
+        }
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const pageData = logs.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE);

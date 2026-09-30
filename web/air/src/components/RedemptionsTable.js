@@ -268,22 +268,25 @@ const RedemptionsTable = () => {
   };
 
   const searchRedemptions = async () => {
-    if (searchKeyword === '') {
-      // if keyword is blank, load files instead.
-      await loadRedemptions(0);
-      setActivePage(1);
-      return;
+    try {
+      if (searchKeyword === '') {
+        // if keyword is blank, load files instead.
+        await loadRedemptions(0);
+        setActivePage(1);
+        return;
+      }
+      setSearching(true);
+      const res = await API.get(`/api/redemption/search?keyword=${searchKeyword}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setRedemptions(data);
+        setActivePage(1);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(true);
-    const res = await API.get(`/api/redemption/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setRedemptions(data);
-      setActivePage(1);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
   };
 
   const handleKeywordChange = async (value) => {
