@@ -21,7 +21,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -135,7 +134,7 @@ func TestEdgeTLSAllSignals(t *testing.T) {
 	ca := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: peer.Certificate().Raw}), 0600))
 	t.Setenv("OTEL_EXPORTER_OTLP_CERTIFICATE", ca)
-	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "Authorization="+url.QueryEscape("Bearer "+token))
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "Authorization="+url.PathEscape("Bearer "+token))
 	for _, signal := range []string{"LOGS", "METRICS", "TRACES"} {
 		for _, suffix := range []string{"HEADERS", "CERTIFICATE", "CLIENT_CERTIFICATE", "CLIENT_KEY", "ENDPOINT", "INSECURE"} {
 			t.Setenv("OTEL_EXPORTER_OTLP_"+signal+"_"+suffix, "")
@@ -153,7 +152,7 @@ func TestEdgeTLSAllSignals(t *testing.T) {
 	require.NoError(t, err)
 	var record sdklog.Record
 	record.SetTimestamp(now)
-	record.SetBody(log.StringValue("edge-canary"))
+	record.SetBody(attribute.StringValue("edge-canary"))
 	require.NoError(t, logs.Export(ctx, []sdklog.Record{record}))
 	require.NoError(t, logs.Shutdown(ctx))
 	metrics, err := otlpmetrichttp.New(ctx, buildMetricExporterOptions()...)
