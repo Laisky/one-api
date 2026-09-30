@@ -65,7 +65,7 @@ func otlpBridgeOption() (zap.Option, bool) {
 
 	level := effectiveBridgeLevel()
 	return zap.WrapCore(func(core zapcore.Core) zapcore.Core {
-		return zapcore.NewTee(core, otelbridge.NewCore(otelbridge.Shared, otelbridge.DefaultScopeName, level))
+		return zapcore.NewTee(core, otelbridge.NewPrivacyCore(otelbridge.Shared, otelbridge.DefaultScopeName, level))
 	}), true
 }
 

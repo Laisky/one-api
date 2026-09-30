@@ -210,13 +210,13 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 		return nil, laerrors.Wrap(err, "create OTLP metric exporter")
 	}
 
-	reader := sdkmetric.NewPeriodicReader(metricExporter,
+	reader := sdkmetric.NewPeriodicReader(privacyMetricExporter{Exporter: metricExporter},
 		sdkmetric.WithInterval(metricExportInterval()))
 
 	meterProvider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(reader),
 		sdkmetric.WithResource(res),
-		sdkmetric.WithView(newZeroExemplarReservoirView()),
+		sdkmetric.WithView(newPrivateMetricView()),
 	)
 	otel.SetMeterProvider(meterProvider)
 
@@ -280,7 +280,7 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 func newTracerProvider(exporter sdktrace.SpanExporter, res *sdkresource.Resource) *sdktrace.TracerProvider {
 	opts := []sdktrace.TracerProviderOption{
 		sdktrace.WithSpanProcessor(newUTF8AttributeSanitizer()),
-		sdktrace.WithBatcher(exporter),
+		sdktrace.WithBatcher(privacySpanExporter{SpanExporter: exporter}),
 	}
 	if res != nil {
 		opts = append(opts, sdktrace.WithResource(res))
@@ -363,6 +363,9 @@ func buildResource(ctx context.Context) (*sdkresource.Resource, error) {
 		sdkresource.WithAttributes(attrs...),
 	)
 	// resource.New can return a usable resource together with its error; both are passed on.
+	if res != nil {
+		res = privateResource(res)
+	}
 	return res, laerrors.WithStack(err)
 }
 
