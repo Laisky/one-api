@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { showError } from 'utils/common';
@@ -48,7 +49,7 @@ const LarkOAuth = () => {
   useEffect(() => {
     let code = searchParams.get('code');
     let state = searchParams.get('state');
-    sendCode(code, state, 0).then();
+    sendCode(code, state, 0).then().catch(reportUIError);
   }, []);
 
   return (

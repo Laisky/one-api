@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../../utils/common';
 import { useState, useRef, useEffect } from 'react';
 
 import { useSelector } from 'react-redux';
@@ -153,7 +154,7 @@ const ProfileSection = () => {
                       <ListItemText primary={<Typography variant="body2">设置</Typography>} />
                     </ListItemButton>
 
-                    <ListItemButton sx={{ borderRadius: `${customization.borderRadius}px` }} onClick={handleLogout}>
+                    <ListItemButton sx={{ borderRadius: `${customization.borderRadius}px` }} onClick={(...uiArgs) => handleLogout(...uiArgs).catch(reportUIError)}>
                       <ListItemIcon>
                         <IconLogout stroke={1.5} size="1.3rem" />
                       </ListItemIcon>

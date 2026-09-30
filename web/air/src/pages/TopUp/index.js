@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, {useEffect, useState} from 'react';
 import {API, isMobile, showError, showInfo, showSuccess} from '../../helpers';
 import {renderNumber, renderQuota} from '../../helpers/render';
@@ -150,7 +151,7 @@ const TopUp = () => {
                 setEnableOnlineTopUp(status.enable_online_topup);
             }
         }
-        getUserQuota().then();
+        getUserQuota().then().catch(reportUIError);
     }, []);
 
     const renderAmount = () => {
@@ -237,7 +238,7 @@ const TopUp = () => {
                                                     获取兑换码
                                                 </Button> : null
                                         }
-                                        <Button type={"warning"} theme={'solid'} onClick={topUp}
+                                        <Button type={"warning"} theme={'solid'} onClick={(...uiArgs) => topUp(...uiArgs).catch(reportUIError)}
                                                 disabled={isSubmitting}>
                                             {isSubmitting ? '兑换中...' : '兑换'}
                                         </Button>

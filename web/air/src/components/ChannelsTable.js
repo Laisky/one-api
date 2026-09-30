@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { API, isMobile, shouldShowPrompt, showError, showInfo, showSuccess, timestamp2string } from '../helpers';
 
@@ -121,7 +122,7 @@ const ChannelsTable = () => {
               </Tooltip>
               <Tooltip content={'剩余额度' + record.balance + '，点击更新'}>
                 <Tag color="white" type="ghost" size="large" onClick={() => {
-                  updateChannelBalance(record);
+                  updateChannelBalance(record).catch(reportUIError);
                 }}>${renderNumberWithPoint(record.balance)}</Tag>
               </Tooltip>
             </Space>
@@ -139,7 +140,7 @@ const ChannelsTable = () => {
               style={{ width: 70 }}
               name="priority"
               onBlur={e => {
-                manageChannel(channelRef(record), 'priority', record, e.target.value);
+                manageChannel(channelRef(record), 'priority', record, e.target.value).catch(reportUIError);
               }}
               keepFocus={true}
               innerButtons
@@ -164,7 +165,7 @@ const ChannelsTable = () => {
               <Button style={{ padding: '8px 4px' }} type="primary" icon={<IconTreeTriangleDown />}></Button>
             </Dropdown>
           </SplitButtonGroup> */}
-          <Button theme='light' type='primary' style={{ marginRight: 1 }} onClick={() => testChannel(record)}>测试</Button>
+          <Button theme='light' type='primary' style={{ marginRight: 1 }} onClick={() => testChannel(record).catch(reportUIError)}>测试</Button>
           <Popconfirm
             title="确定是否要删除此渠道？"
             content="此修改将不可逆"
@@ -175,7 +176,7 @@ const ChannelsTable = () => {
                 () => {
                   removeRecord(channelRef(record));
                 }
-              );
+              ).catch(reportUIError);
             }}
           >
             <Button theme="light" type="danger" style={{ marginRight: 1 }}>删除</Button>
@@ -183,22 +184,22 @@ const ChannelsTable = () => {
           {
             record.status === 1 ?
               <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={
-                async () => {
+                (...uiArgs) => (async () => {
                   manageChannel(
                     channelRef(record),
                     'disable',
                     record
-                  );
-                }
+                  ).catch(reportUIError);
+                })(...uiArgs).catch(reportUIError)
               }>禁用</Button> :
               <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={
-                async () => {
+                (...uiArgs) => (async () => {
                   manageChannel(
                     channelRef(record),
                     'enable',
                     record
-                  );
-                }
+                  ).catch(reportUIError);
+                })(...uiArgs).catch(reportUIError)
               }>启用</Button>
           }
           <Button theme="light" type="tertiary" style={{ marginRight: 1 }} onClick={
@@ -270,7 +271,7 @@ const ChannelsTable = () => {
           node: 'item',
           name: item,
           onClick: () => {
-            testChannel(formatted[i], item);
+            testChannel(formatted[i], item).catch(reportUIError);
           }
         });
       });
@@ -282,28 +283,31 @@ const ChannelsTable = () => {
   };
 
   const loadChannels = async (startIdx, currentPageSize, sortByIdAsc) => {
-    setLoading(true);
     try {
-      const sortParams = sortByIdAsc ? '&sort=id&order=asc' : '&sort=id&order=desc';
-      const res = await API.get(`/api/channel/?p=${startIdx}&size=${currentPageSize}${sortParams}`);
-      const { success, message, data, total } = res.data;
-      if (success) {
-        const totalCount = typeof total === 'number' ? total : (Array.isArray(data) ? data.length : 0);
-        if (startIdx === 0) {
-          setChannelFormat(data, totalCount);
+      setLoading(true);
+      try {
+        const sortParams = sortByIdAsc ? '&sort=id&order=asc' : '&sort=id&order=desc';
+        const res = await API.get(`/api/channel/?p=${startIdx}&size=${currentPageSize}${sortParams}`);
+        const { success, message, data, total } = res.data;
+        if (success) {
+          const totalCount = typeof total === 'number' ? total : (Array.isArray(data) ? data.length : 0);
+          if (startIdx === 0) {
+            setChannelFormat(data, totalCount);
+          } else {
+            const pageData = Array.isArray(data) ? data : [];
+            const newChannels = [...channels];
+            newChannels.splice(startIdx * currentPageSize, pageData.length, ...pageData);
+            setChannelFormat(newChannels, totalCount);
+          }
         } else {
-          const pageData = Array.isArray(data) ? data : [];
-          const newChannels = [...channels];
-          newChannels.splice(startIdx * currentPageSize, pageData.length, ...pageData);
-          setChannelFormat(newChannels, totalCount);
+          showError(message);
         }
-      } else {
-        showError(message);
+      } catch (err) {
+        showError(err?.message || err);
       }
-    } catch (err) {
-      showError(err?.message || err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const refresh = async () => {
@@ -321,7 +325,7 @@ const ChannelsTable = () => {
       .catch((reason) => {
         showError(reason);
       });
-    fetchGroups().then();
+    fetchGroups().then().catch(reportUIError);
   }, []);
 
   const manageChannel = async (id, action, record, value) => {
@@ -402,7 +406,8 @@ const ChannelsTable = () => {
       }
       setChannels(newChannels);
     } else {
-      showError(message);
+      // Rejection prevents success-only callers from deleting a visible row.
+      throw new Error(message || 'The server rejected this operation.');
     }
   };
 
@@ -448,26 +453,29 @@ const ChannelsTable = () => {
   };
 
   const searchChannels = async (searchKeyword, searchGroup, searchModel) => {
-    if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
-      // if keyword is blank, load files instead.
-      await loadChannels(0, pageSize, idSort);
-      setActivePage(1);
-      return;
-    }
-    setSearching(true);
     try {
-      const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
-      const { success, message, data } = res.data;
-      if (success) {
-        setChannelFormat(data, Array.isArray(data) ? data.length : 0);
+      if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
+        // if keyword is blank, load files instead.
+        await loadChannels(0, pageSize, idSort);
         setActivePage(1);
-      } else {
-        showError(message);
+        return;
       }
-    } catch (err) {
-      showError(err?.message || err);
+      setSearching(true);
+      try {
+        const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
+        const { success, message, data } = res.data;
+        if (success) {
+          setChannelFormat(data, Array.isArray(data) ? data.length : 0);
+          setActivePage(1);
+        } else {
+          showError(message);
+        }
+      } catch (err) {
+        showError(err?.message || err);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const testChannel = async (record, model) => {
@@ -536,24 +544,27 @@ const ChannelsTable = () => {
   };
 
   const batchDeleteChannels = async () => {
-    if (selectedChannels.length === 0) {
-      showError('请先选择要删除的渠道！');
-      return;
+    try {
+      if (selectedChannels.length === 0) {
+        showError('请先选择要删除的渠道！');
+        return;
+      }
+      setLoading(true);
+      let ids = [];
+      selectedChannels.forEach((channel) => {
+        ids.push(channelRef(channel));
+      });
+      const res = await API.post(`/api/channel/batch`, { ids: ids });
+      const { success, message, data } = res.data;
+      if (success) {
+        showSuccess(`已删除 ${data} 个渠道！`);
+        await refresh();
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(true);
-    let ids = [];
-    selectedChannels.forEach((channel) => {
-      ids.push(channelRef(channel));
-    });
-    const res = await API.post(`/api/channel/batch`, { ids: ids });
-    const { success, message, data } = res.data;
-    if (success) {
-      showSuccess(`已删除 ${data} 个渠道！`);
-      await refresh();
-    } else {
-      showError(message);
-    }
-    setLoading(false);
   };
 
   const fixChannelsAbilities = async () => {
@@ -574,7 +585,7 @@ const ChannelsTable = () => {
     if (page === Math.ceil(channels.length / pageSize) + 1) {
       // In this case we have to load more data and then append them.
       loadChannels(page - 1, pageSize, idSort).then(r => {
-      });
+      }).catch(reportUIError);
     }
   };
 
@@ -599,7 +610,7 @@ const ChannelsTable = () => {
         value: group
       })));
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -635,7 +646,7 @@ const ChannelsTable = () => {
       <EditChannel refresh={refresh} visible={showEdit} handleClose={closeEdit} editingChannel={editingChannel} />
       <div style={{ display: "flex", placeItems: "center", justifyContent: "space-between" }}>
         <Form onSubmit={() => {
-          searchChannels(searchKeyword, searchGroup, searchModel);
+          searchChannels(searchKeyword, searchGroup, searchModel).catch(reportUIError);
         }} labelPosition="left">
           <div style={{ display: 'flex' }}>
             <Space>
@@ -687,7 +698,7 @@ const ChannelsTable = () => {
             <Popconfirm
               title="确定？"
               okType={'warning'}
-              onConfirm={() => { testChannels("all") }}
+              onConfirm={() => { testChannels("all").catch(reportUIError) }}
               position={isMobile() ? 'top' : 'left'}
             >
               <Button theme="light" type="warning" style={{ marginRight: 8 }}>测试所有渠道</Button>
@@ -695,7 +706,7 @@ const ChannelsTable = () => {
             <Popconfirm
               title="确定？"
               okType={'warning'}
-              onConfirm={() => { testChannels("disabled") }}
+              onConfirm={() => { testChannels("disabled").catch(reportUIError) }}
               position={isMobile() ? 'top' : 'left'}
             >
               <Button theme="light" type="warning" style={{ marginRight: 8 }}>测试禁用渠道</Button>
@@ -717,7 +728,7 @@ const ChannelsTable = () => {
               <Button theme="light" type="danger" style={{ marginRight: 8 }}>删除禁用渠道</Button>
             </Popconfirm>
 
-            <Button theme="light" type="primary" style={{ marginRight: 8 }} onClick={refresh}>刷新</Button>
+            <Button theme="light" type="primary" style={{ marginRight: 8 }} onClick={(...uiArgs) => refresh(...uiArgs).catch(reportUIError)}>刷新</Button>
           </Space>
           {/*<div style={{width: '100%', pointerEvents: 'none', position: 'absolute'}}>*/}
 
@@ -776,7 +787,7 @@ const ChannelsTable = () => {
         showSizeChanger: true,
         formatPageText: (page) => '',
         onPageSizeChange: (size) => {
-          handlePageSizeChange(size).then();
+          handlePageSizeChange(size).then().catch(reportUIError);
         },
         onPageChange: handlePageChange
       }} loading={loading} onRow={handleRow} rowSelection={

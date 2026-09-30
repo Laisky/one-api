@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import { useState } from 'react';
 
@@ -124,7 +125,7 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
 
         <TableCell>
           {' '}
-          <TableSwitch id={`switch-${ref}`} checked={statusSwitch === 1} onChange={handleStatus} />
+          <TableSwitch id={`switch-${ref}`} checked={statusSwitch === 1} onChange={(...uiArgs) => handleStatus(...uiArgs).catch(reportUIError)} />
         </TableCell>
         <TableCell>
           <IconButton onClick={handleOpenMenu} sx={{ color: 'rgb(99, 115, 129)' }}>
@@ -178,7 +179,7 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDeleteClose}>关闭</Button>
-          <Button onClick={handleDelete} sx={{ color: 'error.main' }} autoFocus>
+          <Button onClick={(...uiArgs) => handleDelete(...uiArgs).catch(reportUIError)} sx={{ color: 'error.main' }} autoFocus>
             删除
           </Button>
         </DialogActions>
