@@ -28,6 +28,13 @@ signal, and invalid timeouts. Both real descendant cases verify the initial
 parent PID and process-group ID, a successful leader exit, descendant termination
 by `SIGKILL`, and the disappearance of the reaped process group.
 
+The real descendant fixture allows a five-second graceful leader wait so
+scheduler and interpreter-shutdown latency under parallel load do not turn the
+normal-exit scenario into an unintended timeout scenario. The zero leader exit
+assertion is retained, and separate timeout regressions still require bounded
+graceful and forced waits. Parallel stress exposed the original 200-millisecond
+fixture budget as too short; this changes the test budget, not helper defaults.
+
 The descendant tests use Linux's child-subreaper API only in the standalone test
 process, restore the original setting, and independently kill and reap fixtures
 on failure. This keeps historical negative-control runs from leaking live

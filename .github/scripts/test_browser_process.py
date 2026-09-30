@@ -179,7 +179,9 @@ class BrowserProcessTests(unittest.TestCase):
                         process.stdin.write('exit\n')
                         process.stdin.flush()
                         self.assertEqual(process.wait(timeout=5), 0)
-                    stop_process(process, timeout=0.2)
+                    # Allow scheduler/interpreter shutdown latency under CI load.
+                    # The mocked timeout cases separately enforce bounded waits.
+                    stop_process(process, timeout=5)
                     self.assertEqual(process.returncode, 0, 'The leader must exit gracefully, not time out')
                     status = self._wait_for_descendant(descendant, timeout=2)
                     self.assertIsNotNone(status, 'Cleanup left the SIGTERM-ignoring descendant alive')
