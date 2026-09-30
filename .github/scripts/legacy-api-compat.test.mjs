@@ -8,11 +8,11 @@ import { fileURLToPath } from 'node:url';
 import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
 
 // Exercise the real legacy helpers and installed Axios without importing their
-// UI notification libraries. Run after installing the selected theme:
-// LEGACY_THEME=berry node --experimental-vm-modules --test scripts/legacy-api-compat.test.mjs
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const theme = process.env.LEGACY_THEME || 'berry';
-assert.ok(['air', 'berry'].includes(theme), 'LEGACY_THEME must be air or berry');
+// UI notification libraries. Each theme runs this through its pretest hook.
+// Standalone: LEGACY_THEME=berry node --experimental-vm-modules --test .github/scripts/legacy-api-compat.test.mjs
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const theme = process.env.LEGACY_THEME || path.basename(process.cwd());
+assert.ok(['air', 'berry'].includes(theme), 'Run from a legacy theme or set LEGACY_THEME to air or berry');
 const require = createRequire(path.join(root, 'web', theme, 'package.json'));
 const axios = require('axios');
 const helper = theme === 'air' ? 'src/helpers/api.js' : 'src/utils/api.js';
@@ -78,6 +78,7 @@ async function fixture(t, pathname = '/dashboard') {
   const api = module.namespace.API;
   api.defaults.adapter = 'http';
   api.defaults.proxy = false;
+  api.defaults.timeout = 10000;
   return { api, errors, redirects, actions, storage };
 }
 
