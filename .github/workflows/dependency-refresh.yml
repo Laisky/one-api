@@ -1,0 +1,53 @@
+name: Dependency refresh workbench
+
+on:
+  push:
+    branches: [chore/dependencies-20260930]
+    paths: [.github/workflows/dependency-refresh.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-refresh-workbench
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout dependency branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Setup Node
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+      - name: Audit available Go updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          go list -m -u -f '{{if .Update}}{{.Path}} {{.Version}} -> {{.Update.Version}}{{end}}' all
+      - name: Audit frontend dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for theme in modern default air berry; do
+            if [[ ! -f "web/$theme/package.json" ]]; then
+              continue
+            fi
+            echo "::group::$theme dependency audit"
+            status=0
+            yarn --cwd "web/$theme" outdated --json --non-interactive > "$RUNNER_TEMP/$theme-outdated.json" || status=$?
+            cat "$RUNNER_TEMP/$theme-outdated.json"
+            if [[ "$status" -gt 1 ]]; then
+              exit "$status"
+            fi
+            echo '::endgroup::'
+          done
