@@ -52,6 +52,31 @@ var gpt6ModelRatios = map[string]adaptor.ModelConfig{
 		DefaultReasoningEffort:      "medium",
 		Description:                 "GPT-6 Astra: flagship reasoning model for complex end-to-end work with cache-write and long-context billing.",
 	},
+	// Verified 2026-09-30 against the model page, pricing table, and GPT-6 guide:
+	// https://developers.openai.com/api/docs/models/gpt-6.1-sol
+	// Unlike GPT-6 Sol, Sol 6.1 has 5% cache-hit pricing and no "none" effort.
+	"gpt-6.1-sol": {
+		Ratio:             2.0 * ratio.MilliTokensUsd,
+		CompletionRatio:   10.0 / 2.0,
+		CachedInputRatio:  0.1 * ratio.MilliTokensUsd,
+		CacheWrite5mRatio: 2.5 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{{
+			Ratio:               4.0 * ratio.MilliTokensUsd,
+			CompletionRatio:     15.0 / 4.0,
+			CachedInputRatio:    0.2 * ratio.MilliTokensUsd,
+			CacheWrite5mRatio:   5.0 * ratio.MilliTokensUsd,
+			InputTokenThreshold: 272_001,
+		}},
+		ContextLength:               1_050_000,
+		MaxOutputTokens:             128_000,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           append([]string{"web_search"}, gpt5ReasoningFeatures...),
+		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   []string{"low", "medium", "high", "xhigh", "max"},
+		DefaultReasoningEffort:      "medium",
+		Description:                 "GPT-6.1 Sol: reasoning model for coding, computer use, and professional work. Tool calling requires Responses; Chat Completions supports text without tools. Neither none nor minimal reasoning is supported.",
+	},
 	"gpt-6-sol": {
 		Ratio:             2.0 * ratio.MilliTokensUsd,
 		CompletionRatio:   10.0 / 2.0,
