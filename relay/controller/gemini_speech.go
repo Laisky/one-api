@@ -38,7 +38,8 @@ func isGeminiSpeechChannel(channel int) bool {
 
 // geminiSpeechURL resolves a native endpoint while keeping administrator path prefixes intact.
 func geminiSpeechURL(m *meta.Meta, streaming bool) (string, error) {
-	if !tts.SupportsModel(m.ActualModelName) {
+	modelID := tts.CanonicalModelID(m.ActualModelName)
+	if modelID == "" {
 		return "", errors.New("unsupported Gemini speech model")
 	}
 	override := m.UpstreamEndpointURLOverride()
@@ -47,6 +48,7 @@ func geminiSpeechURL(m *meta.Meta, streaming bool) (string, error) {
 			return "", errors.New("Vertex speech requires a project ID")
 		}
 		copy := *m
+		copy.ActualModelName = modelID
 		copy.IsStream = streaming
 		copy.Mode = relaymode.AudioSpeech
 		value, err := (&vertexai.Adaptor{}).GetRequestURL(&copy)
@@ -92,7 +94,7 @@ func geminiSpeechURL(m *meta.Meta, streaming bool) (string, error) {
 		if streaming {
 			action = "streamGenerateContent"
 		}
-		parsed.Path = path + "/" + version + "/models/" + m.ActualModelName + ":" + action
+		parsed.Path = path + "/" + version + "/models/" + modelID + ":" + action
 		parsed.RawPath = ""
 	}
 	if streaming {

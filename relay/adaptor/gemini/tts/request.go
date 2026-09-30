@@ -65,9 +65,22 @@ type speechRequest struct {
 	Gemini         extension `json:"gemini,omitempty"`
 }
 
+// CanonicalModelID returns a constant upstream identifier for a supported client model.
+// Untrusted model text is never returned for interpolation into a network request URL.
+func CanonicalModelID(model string) string {
+	switch model {
+	case "gemini-3.8-flash-tts":
+		return "gemini-3.8-flash-tts"
+	case "gemini-3.8-flash-lite-tts":
+		return "gemini-3.8-flash-lite-tts"
+	default:
+		return ""
+	}
+}
+
 // SupportsModel reports whether model uses the explicitly implemented 3.8 TTS protocol.
 func SupportsModel(model string) bool {
-	return model == "gemini-3.8-flash-tts" || model == "gemini-3.8-flash-lite-tts"
+	return CanonicalModelID(model) != ""
 }
 
 // strictJSON decodes exactly one JSON value, rejecting unknown fields and trailing data.
