@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 
 import yaml
@@ -49,7 +50,7 @@ def commands(job: dict) -> str:
 
 
 class WorkflowTests(unittest.TestCase):
-    """WorkflowTests protect validation and the unchanged delivery policy."""
+    """WorkflowTests protect validation and the safeguarded delivery policy."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -211,13 +212,97 @@ class WorkflowTests(unittest.TestCase):
             if not prefix:
                 self.assertIn("ignore-error=true", build["cache-to"])
 
+    def test_delivery_binds_release_to_pushed_digest(self) -> None:
+        """test_delivery_binds_release_to_pushed_digest rejects mutable deployment identity."""
+        build = self.delivery["jobs"]["build_latest"]
+        step = next(step for step in build["steps"] if step.get("id") == "build")
+        self.assertTrue(step["uses"].startswith("docker/build-push-action@"))
+        self.assertEqual(step["with"]["push"], "true")
+        self.assertEqual(step["with"]["provenance"], "mode=max")
+        self.assertEqual(step["with"]["labels"],
+                         "org.opencontainers.image.revision=${{ github.sha }}")
+        self.assertEqual(build["outputs"]["image_digest"], "${{ steps.build.outputs.digest }}")
+        deploy = self.delivery["jobs"]["deploy"]
+        self.assertEqual(deploy["if"],
+                         "needs.check_skip.outputs.should_skip != 'true' && github.ref == 'refs/heads/main'")
+        self.assertEqual(len(deploy["steps"]), 1)
+        caller = deploy["steps"][0]
+        self.assertTrue(caller["uses"].startswith("appleboy/ssh-action@"))
+        self.assertEqual(caller["env"], {
+            "RELEASE_SHA": "${{ github.sha }}",
+            "IMAGE_DIGEST": "${{ needs.build_latest.outputs.image_digest }}",
+        })
+        self.assertEqual(caller["with"]["envs"], "RELEASE_SHA,IMAGE_DIGEST")
+        self.assertEqual(caller["with"]["command_timeout"], "20m")
+        self.assertGreater(int(deploy["timeout-minutes"]), 20)
+
+    def test_deployment_is_host_serialized_and_has_no_legacy_fallback(self) -> None:
+        """test_deployment_is_host_serialized_and_has_no_legacy_fallback protects rollout inputs."""
+        deploy = self.delivery["jobs"]["deploy"]
+        self.assertEqual(deploy["concurrency"], {
+            "group": "deploy-oneapi-b1", "cancel-in-progress": "false",
+        })
+        self.assertNotIn("concurrency", self.delivery)
+        script = deploy["steps"][0]["with"]["script"]
+        self.assertIn("set -eu", script)
+        self.assertIn("python3 /opt/configs/observability/deploy_oneapi.py", script)
+        self.assertIn('--release-sha "$RELEASE_SHA" --image-digest "$IMAGE_DIGEST"', script)
+        for legacy in ("docker pull", "docker-compose", "docker compose", "latest",
+                       "--remove-orphans", "--force-recreate", "source ", ".zshrc", "op run",
+                       "docker ps", "|| true"):
+            self.assertNotIn(legacy, script)
+
+    def test_remote_caller_preserves_arguments_and_propagates_failure(self) -> None:
+        """test_remote_caller_preserves_arguments_and_propagates_failure executes the thin caller."""
+        script = self.delivery["jobs"]["deploy"]["steps"][0]["with"]["script"]
+        release = "a" * 40
+        digest = "sha256:" + "b" * 64
+        with tempfile.TemporaryDirectory() as directory:
+            shim = Path(directory) / "python3"
+            output = Path(directory) / "arguments.json"
+            shim.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, pathlib, sys\n"
+                "pathlib.Path(os.environ['CALLER_ARGUMENTS']).write_text(json.dumps(sys.argv[1:]))\n"
+                "sys.exit(int(os.environ['CALLER_STATUS']))\n"
+            )
+            shim.chmod(0o700)
+            for status in (0, 23):
+                result = subprocess.run(["/bin/sh", "-c", script], capture_output=True, text=True,
+                                        env={**os.environ, "PATH": directory,
+                                             "RELEASE_SHA": release, "IMAGE_DIGEST": digest,
+                                             "CALLER_ARGUMENTS": str(output),
+                                             "CALLER_STATUS": str(status)}, check=False)
+                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertEqual(json.loads(output.read_text()), [
+                    "/opt/configs/observability/deploy_oneapi.py",
+                    "--release-sha", release, "--image-digest", digest,
+                ])
+            output.unlink()
+            for invalid_name in ("RELEASE_SHA", "IMAGE_DIGEST"):
+                for invalid_value in (None, ""):
+                    env = {**os.environ, "PATH": directory, "RELEASE_SHA": release,
+                           "IMAGE_DIGEST": digest, "CALLER_ARGUMENTS": str(output),
+                           "CALLER_STATUS": "0"}
+                    if invalid_value is None:
+                        env.pop(invalid_name, None)
+                    else:
+                        env[invalid_name] = invalid_value
+                    result = subprocess.run(["/bin/sh", "-c", script], env=env,
+                                            capture_output=True, text=True, check=False)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertFalse(output.exists(), f"Missing {invalid_name} reached deployment")
+
     def test_shell_blocks_parse(self) -> None:
         """test_shell_blocks_parse validates shell syntax without executing workflow actions."""
         for workflow in (self.ci, self.delivery):
             for job in workflow["jobs"].values():
                 for step in job.get("steps", []):
-                    if "run" in step:
-                        script = re.sub(r"\$\{\{.*?\}\}", "expression", step["run"])
+                    scripts = [step["run"]] if "run" in step else []
+                    if step.get("uses", "").startswith("appleboy/ssh-action@"):
+                        scripts.append(step["with"]["script"])
+                    for source in scripts:
+                        script = re.sub(r"\$\{\{.*?\}\}", "expression", source)
                         result = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True, check=False)
                         self.assertEqual(result.returncode, 0, f"{step.get('name')}: {result.stderr}")
 

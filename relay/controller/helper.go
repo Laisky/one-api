@@ -442,6 +442,7 @@ func isErrorHappened(meta *meta.Meta, resp *http.Response) bool {
 	return false
 }
 
+// setSystemPrompt applies the channel system prompt and logs only its byte count.
 func setSystemPrompt(ctx context.Context, request *relaymodel.GeneralOpenAIRequest, prompt string) (reset bool) {
 	if prompt == "" {
 		return false
@@ -452,13 +453,13 @@ func setSystemPrompt(ctx context.Context, request *relaymodel.GeneralOpenAIReque
 	lg := gmw.GetLogger(ctx)
 	if request.Messages[0].Role == role.System {
 		request.Messages[0].Content = prompt
-		lg.Info("rewrite system prompt", zap.String("prompt", prompt))
+		lg.Info("rewrite system prompt", zap.Int("prompt_bytes", len(prompt)))
 		return true
 	}
 	request.Messages = append([]relaymodel.Message{{
 		Role:    role.System,
 		Content: prompt,
 	}}, request.Messages...)
-	lg.Info("add system prompt", zap.String("prompt", prompt))
+	lg.Info("add system prompt", zap.Int("prompt_bytes", len(prompt)))
 	return true
 }

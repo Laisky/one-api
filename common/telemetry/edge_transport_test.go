@@ -49,7 +49,8 @@ func TestEdgeResourcePrivacyAndIdentity(t *testing.T) {
 	require.NotContains(t, attrs, "process.command_args")
 	require.NotContains(t, attrs, "process.owner")
 	require.Equal(t, "b1", attrs["host.name"])
-	require.Equal(t, "retained", attrs["operator.test"])
+	// Unknown operator fields must not expand the export surface with secrets.
+	require.NotContains(t, attrs, "operator.test")
 	if config.OpenTelemetryEnvironment != "" {
 		require.Equal(t, config.OpenTelemetryEnvironment, attrs["deployment.environment.name"])
 		require.Equal(t, config.OpenTelemetryEnvironment, attrs["deployment.environment"])

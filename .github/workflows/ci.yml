@@ -42,6 +42,8 @@ jobs:
     if: needs.check_skip.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
     concurrency:
       group: build_latest-${{ github.ref }}
       cancel-in-progress: true
@@ -66,11 +68,14 @@ jobs:
         run: echo "short_sha=${GITHUB_SHA::7}" >> "${GITHUB_OUTPUT}"
 
       - name: Build and push (latest + hash)
+        id: build
         uses: docker/build-push-action@v7.3.0
         with:
           context: .
           push: true
           platforms: linux/amd64
+          provenance: mode=max
+          labels: org.opencontainers.image.revision=${{ github.sha }}
           tags: |
             ppcelery/one-api:latest
             ppcelery/one-api:${{ steps.vars.outputs.short_sha }}
@@ -82,25 +87,30 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [check_skip, build_latest]
-    if: needs.check_skip.outputs.should_skip != 'true'
+    if: needs.check_skip.outputs.should_skip != 'true' && github.ref == 'refs/heads/main'
     timeout-minutes: 30
     concurrency:
-      group: deploy-${{ github.ref }}
-      cancel-in-progress: true
+      # All delivery branches target the same host. Never interrupt its rollout.
+      group: deploy-oneapi-b1
+      cancel-in-progress: false
     steps:
-      - name: executing remote ssh commands using password
+      - name: Deploy immutable release through configs preservation gates
         uses: appleboy/ssh-action@v1.2.5
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          IMAGE_DIGEST: ${{ needs.build_latest.outputs.image_digest }}
         with:
           host: ${{ secrets.TARGET_HOST }}
           username: ${{ secrets.TARGET_HOST_USERNAME }}
           password: ${{ secrets.TARGET_HOST_PASSWORD }}
           port: ${{ secrets.TARGET_HOST_SSH_PORT }}
+          envs: RELEASE_SHA,IMAGE_DIGEST
+          command_timeout: 20m
           script: |
-            source /home/laisky/.zshrc
-            docker pull ppcelery/one-api:latest
-            cd /home/laisky/repo/VPS
-            op run --env-file=./one-api/b1.env -- docker-compose -f b1-docker-compose.yml up -d --remove-orphans --force-recreate oneapi
-            docker ps
+            set -eu
+            : "${RELEASE_SHA:?Missing release SHA}" "${IMAGE_DIGEST:?Missing pushed image digest}"
+            python3 /opt/configs/observability/deploy_oneapi.py \
+              --release-sha "$RELEASE_SHA" --image-digest "$IMAGE_DIGEST"
 
   build_arm64_hash:
     needs: check_skip

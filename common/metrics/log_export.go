@@ -19,6 +19,8 @@ package metrics
 // constant so the metric stays low-cardinality; never pass a log message,
 // logger name, request id, or error string as a label.
 const (
+	// AppLogExportOutcomeDroppedPrivacy counts records with unsafe SDK metadata.
+	AppLogExportOutcomeDroppedPrivacy = "dropped_privacy"
 	// AppLogExportOutcomeEmitted counts log records admitted into the export
 	// pipeline. It is the denominator every other outcome is measured against.
 	AppLogExportOutcomeEmitted = "emitted"
