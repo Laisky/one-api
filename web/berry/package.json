@@ -47,7 +47,7 @@
     "build": "react-scripts build && rm -rf ../build/berry && mv -f build ../build/berry",
     "build:dev": "GENERATE_SOURCEMAP=true react-scripts build && rm -rf ../build/berry && mv -f build ../build/berry",
     "build:prod": "DISABLE_ESLINT_PLUGIN='true' REACT_APP_VERSION=$(node -e 'process.stdout.write(Math.floor(Date.now()/1000).toString())') react-scripts build && rm -rf ../build/berry && mv -f build ../build/berry",
-    "pretest": "node --experimental-vm-modules --test ../../.github/scripts/legacy-api-compat.test.mjs",
+    "pretest": "node --experimental-vm-modules --test ../../.github/scripts/legacy-api-compat.test.mjs && node --test ../../.github/scripts/legacy-dependency-security.test.cjs",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -87,5 +87,8 @@
     "immutable": "^4.3.9",
     "prettier": "^2.8.8",
     "sass": "^1.105.1"
+  },
+  "resolutions": {
+    "**/jsonpath/underscore": "1.13.8"
   }
 }

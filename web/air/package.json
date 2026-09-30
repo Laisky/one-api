@@ -33,7 +33,7 @@
     "build": "react-scripts build && rm -rf ../build/air && mv -f build ../build/air",
     "build:dev": "GENERATE_SOURCEMAP=true react-scripts build && rm -rf ../build/air && mv -f build ../build/air",
     "build:prod": "DISABLE_ESLINT_PLUGIN='true' REACT_APP_VERSION=$(node -e 'process.stdout.write(Math.floor(Date.now()/1000).toString())') react-scripts build && rm -rf ../build/air && mv -f build ../build/air",
-    "pretest": "node --experimental-vm-modules --test ../../.github/scripts/legacy-api-compat.test.mjs",
+    "pretest": "node --experimental-vm-modules --test ../../.github/scripts/legacy-api-compat.test.mjs && node --test ../../.github/scripts/legacy-dependency-security.test.cjs",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -63,5 +63,9 @@
     "singleQuote": true,
     "jsxSingleQuote": true
   },
-  "proxy": "http://100.113.170.10:3000"
+  "proxy": "http://100.113.170.10:3000",
+  "resolutions": {
+    "**/jsonpath/underscore": "1.13.8",
+    "**/geojson-flatten/minimist": "1.2.8"
+  }
 }
