@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useState } from 'react';
 import { Button, Modal, Typography, List, Tag, Notification } from '@douyinfe/semi-ui';
 import { API } from '../helpers';
@@ -107,7 +108,7 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
         theme="borderless"
         onClick={() => {
           setVisible(true);
-          checkMigrationStatus();
+          checkMigrationStatus().catch(reportUIError);
         }}
         style={{ marginLeft: '10px' }}
       >
@@ -121,14 +122,14 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
         width={600}
         footer={
           <div style={{ textAlign: 'right' }}>
-            <Button onClick={debugChannel} loading={loading} style={{ marginRight: 8 }}>
+            <Button onClick={(...uiArgs) => debugChannel(...uiArgs).catch(reportUIError)} loading={loading} style={{ marginRight: 8 }}>
               记录调试信息
             </Button>
-            <Button onClick={checkMigrationStatus} loading={loading} style={{ marginRight: 8 }}>
+            <Button onClick={(...uiArgs) => checkMigrationStatus(...uiArgs).catch(reportUIError)} loading={loading} style={{ marginRight: 8 }}>
               刷新状态
             </Button>
             {migrationStatus && migrationStatus.migration_status === 'needs_migration' && (
-              <Button type="warning" onClick={fixChannel} loading={loading} style={{ marginRight: 8 }}>
+              <Button type="warning" onClick={(...uiArgs) => fixChannel(...uiArgs).catch(reportUIError)} loading={loading} style={{ marginRight: 8 }}>
                 修复渠道
               </Button>
             )}

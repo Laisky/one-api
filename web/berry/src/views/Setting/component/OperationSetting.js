@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { useState, useEffect } from "react";
 import SubCard from "ui-component/cards/SubCard";
 import {
@@ -63,7 +64,7 @@ const OperationSetting = () => {
   };
 
   useEffect(() => {
-    getOptions().then();
+    getOptions().then().catch(reportUIError);
   }, []);
 
   const updateOption = async (key, value) => {
@@ -206,7 +207,7 @@ const OperationSetting = () => {
                 id="TopUpLink"
                 name="TopUpLink"
                 value={inputs.TopUpLink}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 label="充值链接"
                 placeholder="例如发卡网站的购买链接"
                 disabled={loading}
@@ -218,7 +219,7 @@ const OperationSetting = () => {
                 id="ChatLink"
                 name="ChatLink"
                 value={inputs.ChatLink}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 label="聊天链接"
                 placeholder="例如 ChatGPT Next Web 的部署地址"
                 disabled={loading}
@@ -230,7 +231,7 @@ const OperationSetting = () => {
                 id="QuotaPerUnit"
                 name="QuotaPerUnit"
                 value={inputs.QuotaPerUnit}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 label="单位额度"
                 placeholder="一单位货币能兑换的额度"
                 disabled={loading}
@@ -242,7 +243,7 @@ const OperationSetting = () => {
                 id="RetryTimes"
                 name="RetryTimes"
                 value={inputs.RetryTimes}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 label="重试次数"
                 placeholder="重试次数"
                 disabled={loading}
@@ -261,7 +262,7 @@ const OperationSetting = () => {
               control={
                 <Checkbox
                   checked={inputs.DisplayInCurrencyEnabled === "true"}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   name="DisplayInCurrencyEnabled"
                 />
               }
@@ -272,7 +273,7 @@ const OperationSetting = () => {
               control={
                 <Checkbox
                   checked={inputs.DisplayTokenStatEnabled === "true"}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   name="DisplayTokenStatEnabled"
                 />
               }
@@ -283,7 +284,7 @@ const OperationSetting = () => {
               control={
                 <Checkbox
                   checked={inputs.ApproximateTokenEnabled === "true"}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   name="ApproximateTokenEnabled"
                 />
               }
@@ -292,7 +293,7 @@ const OperationSetting = () => {
           <Button
             variant="contained"
             onClick={() => {
-              submitConfig("general").then();
+              submitConfig("general").then().catch(reportUIError);
             }}
           >
             保存通用设置
@@ -311,7 +312,7 @@ const OperationSetting = () => {
             control={
               <Checkbox
                 checked={inputs.LogConsumeEnabled === "true"}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 name="LogConsumeEnabled"
               />
             }
@@ -349,7 +350,7 @@ const OperationSetting = () => {
           <Button
             variant="contained"
             onClick={() => {
-              deleteHistoryLogs().then();
+              deleteHistoryLogs().then().catch(reportUIError);
             }}
           >
             清理历史日志
@@ -371,7 +372,7 @@ const OperationSetting = () => {
                 name="ChannelDisableThreshold"
                 type="number"
                 value={inputs.ChannelDisableThreshold}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 label="最长响应时间"
                 placeholder="单位秒，当运行渠道全部测试时，超过此时间将自动禁用渠道"
                 disabled={loading}
@@ -386,7 +387,7 @@ const OperationSetting = () => {
                 name="QuotaRemindThreshold"
                 type="number"
                 value={inputs.QuotaRemindThreshold}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 label="额度提醒阈值"
                 placeholder="低于此额度时将发送邮件提醒用户"
                 disabled={loading}
@@ -398,7 +399,7 @@ const OperationSetting = () => {
             control={
               <Checkbox
                 checked={inputs.AutomaticDisableChannelEnabled === "true"}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 name="AutomaticDisableChannelEnabled"
               />
             }
@@ -408,7 +409,7 @@ const OperationSetting = () => {
             control={
               <Checkbox
                 checked={inputs.AutomaticEnableChannelEnabled === "true"}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 name="AutomaticEnableChannelEnabled"
               />
             }
@@ -416,7 +417,7 @@ const OperationSetting = () => {
           <Button
             variant="contained"
             onClick={() => {
-              submitConfig("monitor").then();
+              submitConfig("monitor").then().catch(reportUIError);
             }}
           >
             保存监控设置
@@ -436,7 +437,7 @@ const OperationSetting = () => {
                 name="QuotaForNewUser"
                 type="number"
                 value={inputs.QuotaForNewUser}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 label="新用户初始额度"
                 placeholder="例如：100"
                 disabled={loading}
@@ -449,7 +450,7 @@ const OperationSetting = () => {
                 name="PreConsumedQuota"
                 type="number"
                 value={inputs.PreConsumedQuota}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 label="请求预扣费额度"
                 placeholder="请求结束后多退少补"
                 disabled={loading}
@@ -465,7 +466,7 @@ const OperationSetting = () => {
                 type="number"
                 label="邀请新用户奖励额度"
                 value={inputs.QuotaForInviter}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 placeholder="例如：2000"
                 disabled={loading}
               />
@@ -480,7 +481,7 @@ const OperationSetting = () => {
                 type="number"
                 label="新用户使用邀请码奖励额度"
                 value={inputs.QuotaForInvitee}
-                onChange={handleInputChange}
+                onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                 autoComplete="new-password"
                 placeholder="例如：1000"
                 disabled={loading}
@@ -490,7 +491,7 @@ const OperationSetting = () => {
           <Button
             variant="contained"
             onClick={() => {
-              submitConfig("quota").then();
+              submitConfig("quota").then().catch(reportUIError);
             }}
           >
             保存额度设置

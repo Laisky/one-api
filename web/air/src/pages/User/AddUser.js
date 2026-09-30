@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useState } from 'react';
 import { API, isMobile, showError, showSuccess } from '../../helpers';
 import Title from '@douyinfe/semi-ui/lib/es/typography/title';
@@ -51,7 +52,7 @@ const AddUser = (props) => {
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Space>
-              <Button theme="solid" size={'large'} onClick={submit}>提交</Button>
+              <Button theme="solid" size={'large'} onClick={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>提交</Button>
               <Button theme="solid" size={'large'} type={'tertiary'} onClick={handleCancel}>取消</Button>
             </Space>
           </div>

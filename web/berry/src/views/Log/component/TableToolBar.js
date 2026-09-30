@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from "prop-types";
 import { useTheme } from "@mui/material/styles";
 import { useState } from "react";
@@ -251,7 +252,7 @@ export default function TableToolBar({
               getOptionLabel={(option) => typeof option === 'string' ? option : option.username}
               value={filterName.username}
               onInputChange={(_, newInputValue) => {
-                searchUsers(newInputValue);
+                searchUsers(newInputValue).catch(reportUIError);
                 handleFilterName({
                   target: { name: 'username', value: newInputValue }
                 });

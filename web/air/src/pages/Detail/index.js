@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, {useEffect, useRef, useState} from 'react';
 import {Button, Col, Form, Layout, Row, Spin, AutoComplete} from "@douyinfe/semi-ui";
 import VChart from '@visactor/vchart';
@@ -282,7 +283,7 @@ const Detail = (props) => {
         }
 
         // Immediately trigger data refresh
-        loadQuotaData(modelDataChart, modelDataPieChart);
+        loadQuotaData(modelDataChart, modelDataPieChart).catch(reportUIError);
     };
 
     const initChart = async () => {
@@ -367,12 +368,12 @@ const Detail = (props) => {
         // }
         if (!initialized.current) {
             initialized.current = true;
-            initChart();
+            initChart().catch(reportUIError);
         }
 
         // Fetch users for admin users
         if (isAdminUser) {
-            fetchUsers();
+            fetchUsers().catch(reportUIError);
         }
     }, []);
 
@@ -465,7 +466,7 @@ const Detail = (props) => {
                             }
                             <Form.Section>
                                 <Button label='查询' type="primary" htmlType="submit" className="btn-margin-right"
-                                        onClick={refresh} loading={loading}>查询</Button>
+                                        onClick={(...uiArgs) => refresh(...uiArgs).catch(reportUIError)} loading={loading}>查询</Button>
                             </Form.Section>
                         </>
                     </Form>

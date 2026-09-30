@@ -64,6 +64,26 @@ class FixtureHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
 
+    def do_POST(self) -> None:
+        """do_POST accepts only the local user-creation fixture and injects one failure."""
+        size = int(self.headers.get('Content-Length', '0'))
+        assert 0 < size < 4096, 'The fixture accepts only bounded JSON payloads'
+        data = json.loads(self.rfile.read(size))
+        if urlsplit(self.path).path != '/api/user/':
+            self.send_error(404)
+            return
+        assert data['username'] == 'quality-user'
+        assert data['password'] == 'quality-password-for-fixture'
+        self.server.user_calls += 1
+        status = 500 if self.server.user_calls == 1 else 200
+        payload = json.dumps({'success': status == 200, 'message': 'fixture create failure' if status != 200 else '', 'data': {}}).encode()
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+
 def reserve_port() -> int:
     """reserve_port chooses an ephemeral loopback port for the Vite subprocess."""
     with socket.socket() as listener:
@@ -81,6 +101,7 @@ def exercise(browser, base: str, server, theme: str, evidence: Path, mode: str) 
     server.reset_calls = 0
     server.token_calls = 0
     server.token_fail = True
+    server.user_calls = 0
     try:
         page.goto(base + '/reset', wait_until='networkidle', timeout=60000)
         email = page.locator('input[name="email"]')
@@ -114,6 +135,23 @@ def exercise(browser, base: str, server, theme: str, evidence: Path, mode: str) 
         assert server.token_calls > failed_calls, 'A visible retry must issue a new request'
         assert page.evaluate('document.styleSheets.length') > 0, 'Built CSS must load'
         page.screenshot(path=str(evidence / f'{theme}-{mode}-tokens.png'), full_page=True)
+        if theme == 'air':
+            page.goto(base + '/user', wait_until='networkidle', timeout=60000)
+            page.get_by_role('button', name='添加用户', exact=True).click()
+            username = page.locator('input[name="username"]:visible')
+            password = page.locator('input[name="password"]:visible')
+            username.fill('quality-user')
+            password.fill('quality-password-for-fixture')
+            create = page.get_by_role('button', name='提交', exact=True)
+            with page.expect_response(lambda response: urlsplit(response.url).path == '/api/user/' and response.request.method == 'POST'):
+                create.click()
+            page.wait_for_function("document.querySelectorAll('.semi-spin-spinning').length === 0")
+            expect(username).to_have_value('quality-user')
+            assert server.user_calls == 1
+            create.click()
+            page.wait_for_function("document.body.innerText.includes('用户账户创建成功')")
+            assert server.user_calls == 2, 'The failed UI event must support an explicit successful retry'
+            page.screenshot(path=str(evidence / f'{theme}-{mode}-user-create.png'), full_page=True)
         assert not errors, f'Unexpected page errors in {theme}/{mode}: {errors}'
     except Exception:
         page.screenshot(path=str(evidence / f'{theme}-{mode}-failure.png'), full_page=True)
@@ -136,6 +174,7 @@ def main() -> None:
     server.reset_calls = 0
     server.token_calls = 0
     server.token_fail = True
+    server.user_calls = 0
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     api = f'http://127.0.0.1:{server.server_port}'

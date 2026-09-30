@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API, copy, isRoot, showError, showInfo, showSuccess, normalizeUser } from '../helpers';
@@ -70,9 +71,9 @@ const PersonalSetting = () => {
       (res) => {
         console.log(userState);
       }
-    );
-    loadModels().then();
-    getAffLink().then();
+    ).catch(reportUIError);
+    loadModels().then().catch(reportUIError);
+    getAffLink().then().catch(reportUIError);
     setTransferAmount(getQuotaPerUnit());
   }, []);
 
@@ -221,7 +222,7 @@ const PersonalSetting = () => {
     if (success) {
       showSuccess(message);
       setOpenTransfer(false);
-      getUserData().then();
+      getUserData().then().catch(reportUIError);
     } else {
       showError(message);
     }
@@ -360,7 +361,7 @@ const PersonalSetting = () => {
                 <Space wrap>
                   {models.map((model) => (
                     <Tag key={model} color="cyan" onClick={() => {
-                      copyText(model);
+                      copyText(model).catch(reportUIError);
                     }}>
                       {model}
                     </Tag>
@@ -404,7 +405,7 @@ const PersonalSetting = () => {
               <Input
                 style={{ marginTop: 10 }}
                 value={affLink}
-                onClick={handleAffLinkClick}
+                onClick={(...uiArgs) => handleAffLinkClick(...uiArgs).catch(reportUIError)}
                 readOnly
               />
             </Card>
@@ -473,7 +474,7 @@ const PersonalSetting = () => {
 
               <div style={{ marginTop: 10 }}>
                 <Space>
-                  <Button onClick={generateAccessToken}>生成系统访问令牌</Button>
+                  <Button onClick={(...uiArgs) => generateAccessToken(...uiArgs).catch(reportUIError)}>生成系统访问令牌</Button>
                   <Button onClick={() => {
                     setShowChangePasswordModal(true);
                   }}>修改密码</Button>
@@ -486,7 +487,7 @@ const PersonalSetting = () => {
                   <Input
                     readOnly
                     value={systemToken}
-                    onClick={handleSystemTokenClick}
+                    onClick={(...uiArgs) => handleSystemTokenClick(...uiArgs).catch(reportUIError)}
                     style={{ marginTop: '10px' }}
                   />
                 )}
@@ -519,7 +520,7 @@ const PersonalSetting = () => {
                     value={inputs.wechat_verification_code}
                     onChange={(v) => handleInputChange('wechat_verification_code', v)}
                   />
-                  <Button color="" fluid size="large" onClick={bindWeChat}>
+                  <Button color="" fluid size="large" onClick={(...uiArgs) => bindWeChat(...uiArgs).catch(reportUIError)}>
                     绑定
                   </Button>
                 </Modal>
@@ -543,7 +544,7 @@ const PersonalSetting = () => {
                   name="email"
                   type="email"
                 />
-                <Button onClick={sendVerificationCode}
+                <Button onClick={(...uiArgs) => sendVerificationCode(...uiArgs).catch(reportUIError)}
                   disabled={disableButton || loading}>
                   {disableButton ? `重新发送(${countdown})` : '获取验证码'}
                 </Button>

@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import React from "react";
@@ -110,7 +111,7 @@ const EmailModal = ({ open, handleClose, turnstileToken }) => {
             }}
             enableReinitialize
             validationSchema={validationSchema}
-            onSubmit={submit}
+            onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}
           >
             {({
               errors,
@@ -139,7 +140,7 @@ const EmailModal = ({ open, handleClose, turnstileToken }) => {
                         <Button
                           variant="contained"
                           color="primary"
-                          onClick={() => handleSendCode(values.email)}
+                          onClick={() => handleSendCode(values.email).catch(reportUIError)}
                           disabled={disableButton || loading}
                         >
                           {disableButton

@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import { useEffect, useState } from 'react';
 import { Grid, Typography, Card, CardContent, TextField, Button, ButtonGroup, Alert, Autocomplete } from '@mui/material';
 import { gridSpacing } from 'store/constant';
@@ -105,23 +106,23 @@ const Dashboard = () => {
     setFromDate(sevenDaysAgo.toISOString().split('T')[0]);
 
     if (rootUser) {
-      fetchDashboardUsers();
+      fetchDashboardUsers().catch(reportUIError);
     } else {
-      userDashboard();
+      userDashboard().catch(reportUIError);
     }
-    loadUser();
+    loadUser().catch(reportUIError);
   }, []);
 
   useEffect(() => {
     if (selectedUserId && fromDate && toDate) {
-      userDashboard(selectedUserId, fromDate, toDate);
+      userDashboard(selectedUserId, fromDate, toDate).catch(reportUIError);
     }
   }, [selectedUserId, fromDate, toDate]);
 
   useEffect(() => {
     // Refresh data when statistics metric changes
     if (selectedUserId && fromDate && toDate) {
-      userDashboard(selectedUserId, fromDate, toDate);
+      userDashboard(selectedUserId, fromDate, toDate).catch(reportUIError);
     }
   }, [statisticsMetric]);
 
@@ -136,7 +137,7 @@ const Dashboard = () => {
   };
 
   const handleRefresh = () => {
-    userDashboard(selectedUserId, fromDate, toDate);
+    userDashboard(selectedUserId, fromDate, toDate).catch(reportUIError);
   };
 
   const handlePresetDateRange = (preset) => {
@@ -165,7 +166,7 @@ const Dashboard = () => {
     // Set dates and immediately trigger data fetch
     setFromDate(fromDateStr);
     setToDate(toDateStr);
-    userDashboard(selectedUserId, fromDateStr, toDateStr);
+    userDashboard(selectedUserId, fromDateStr, toDateStr).catch(reportUIError);
   };
 
   const getMaxDate = () => {

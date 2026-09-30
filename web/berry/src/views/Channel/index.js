@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import { useState, useEffect } from 'react';
 import { showError, showSuccess, showInfo, loadChannelModels } from 'utils/common';
 
@@ -235,7 +236,7 @@ export default function ChannelPage() {
   const handleOkModal = (status) => {
     if (status === true) {
       handleCloseModal();
-      handleRefresh();
+      handleRefresh().catch(reportUIError);
     }
   };
 
@@ -259,7 +260,7 @@ export default function ChannelPage() {
       .catch((reason) => {
         showError(reason);
       });
-    loadChannelModels().then();
+    loadChannelModels().then().catch(reportUIError);
   }, []);
 
   return (
@@ -271,7 +272,7 @@ export default function ChannelPage() {
         </Button>
       </Stack>
       <Card>
-        <Box component="form" onSubmit={searchChannels} noValidate sx={{ marginTop: 2 }}>
+        <Box component="form" onSubmit={(...uiArgs) => searchChannels(...uiArgs).catch(reportUIError)} noValidate sx={{ marginTop: 2 }}>
           <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索渠道的 ID，UUID，名称和密钥 ...'} />
         </Box>
         <Toolbar
@@ -286,16 +287,16 @@ export default function ChannelPage() {
           <Container>
             {matchUpMd ? (
               <ButtonGroup variant="outlined" aria-label="outlined small primary button group" sx={{ marginBottom: 2 }}>
-                <Button onClick={handleRefresh} startIcon={<IconRefresh width={'18px'} />}>
+                <Button onClick={(...uiArgs) => handleRefresh(...uiArgs).catch(reportUIError)} startIcon={<IconRefresh width={'18px'} />}>
                   刷新
                 </Button>
-                <Button onClick={testAllChannels} startIcon={<IconBrandSpeedtest width={'18px'} />}>
+                <Button onClick={(...uiArgs) => testAllChannels(...uiArgs).catch(reportUIError)} startIcon={<IconBrandSpeedtest width={'18px'} />}>
                   测试启用渠道
                 </Button>
                 {/*<Button onClick={updateAllChannelsBalance} startIcon={<IconCoinYuan width={'18px'} />}>*/}
                 {/*  更新启用余额*/}
                 {/*</Button>*/}
-                <Button onClick={deleteAllDisabledChannels} startIcon={<IconHttpDelete width={'18px'} />}>
+                <Button onClick={(...uiArgs) => deleteAllDisabledChannels(...uiArgs).catch(reportUIError)} startIcon={<IconHttpDelete width={'18px'} />}>
                   删除禁用渠道
                 </Button>
               </ButtonGroup>
@@ -307,16 +308,16 @@ export default function ChannelPage() {
                 justifyContent="space-around"
                 alignItems="center"
               >
-                <IconButton onClick={handleRefresh} size="large">
+                <IconButton onClick={(...uiArgs) => handleRefresh(...uiArgs).catch(reportUIError)} size="large">
                   <IconRefresh />
                 </IconButton>
-                <IconButton onClick={testAllChannels} size="large">
+                <IconButton onClick={(...uiArgs) => testAllChannels(...uiArgs).catch(reportUIError)} size="large">
                   <IconBrandSpeedtest />
                 </IconButton>
-                <IconButton onClick={updateAllChannelsBalance} size="large">
+                <IconButton onClick={(...uiArgs) => updateAllChannelsBalance(...uiArgs).catch(reportUIError)} size="large">
                   <IconCoinYuan />
                 </IconButton>
-                <IconButton onClick={deleteAllDisabledChannels} size="large">
+                <IconButton onClick={(...uiArgs) => deleteAllDisabledChannels(...uiArgs).catch(reportUIError)} size="large">
                   <IconHttpDelete />
                 </IconButton>
               </Stack>

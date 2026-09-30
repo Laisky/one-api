@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import * as Yup from 'yup';
 import { Formik } from 'formik';
@@ -93,7 +94,7 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
       showError(message);
     }
     } catch (error) {
-      showError(error.message);
+      showError(error);
     } finally {
       setLoading(false);
     }
@@ -101,7 +102,7 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
 
   useEffect(() => {
     if (redemptiondId) {
-      loadRedemptiond().then();
+      loadRedemptiond().then().catch(reportUIError);
     } else {
       setInputs(originInputs);
     }
@@ -140,7 +141,7 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
             </Box>
           </Box>
         ) : (
-          <Formik initialValues={inputs} enableReinitialize validationSchema={validationSchema} onSubmit={submit}>
+          <Formik initialValues={inputs} enableReinitialize validationSchema={validationSchema} onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>
             {({ errors, handleBlur, handleChange, handleSubmit, touched, values, isSubmitting }) => (
             <form noValidate onSubmit={handleSubmit}>
               <FormControl fullWidth error={Boolean(touched.name && errors.name)} sx={{ ...theme.typography.otherInput }}>

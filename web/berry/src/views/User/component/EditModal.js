@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import * as Yup from 'yup';
 import { Formik } from 'formik';
@@ -120,7 +121,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
       showError(message);
     }
     } catch (error) {
-      showError(error.message);
+      showError(error);
     } finally {
       setLoading(false);
     }
@@ -142,7 +143,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
       let res = await API.get(`/api/group/`);
       setGroupOptions(res.data.data);
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -163,9 +164,9 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
   };
 
   useEffect(() => {
-    fetchGroups().then();
+    fetchGroups().then().catch(reportUIError);
     if (userId) {
-      loadUser().then();
+      loadUser().then().catch(reportUIError);
     } else {
       setInputs(originInputs);
     }
@@ -204,7 +205,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
             </Box>
           </Box>
         ) : (
-          <Formik initialValues={inputs} enableReinitialize validationSchema={validationSchema} onSubmit={submit}>
+          <Formik initialValues={inputs} enableReinitialize validationSchema={validationSchema} onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>
             {({ errors, handleBlur, handleChange, handleSubmit, touched, values, isSubmitting }) => (
             <form noValidate onSubmit={handleSubmit}>
               <FormControl fullWidth error={Boolean(touched.username && errors.username)} sx={{ ...theme.typography.otherInput }}>
@@ -359,7 +360,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                       <Button
                         variant="contained"
                         color="error"
-                        onClick={adminDisableTotp}
+                        onClick={(...uiArgs) => adminDisableTotp(...uiArgs).catch(reportUIError)}
                         disabled={totpLoading}
                       >
                         {totpLoading ? '处理中...' : '管理员禁用 TOTP'}

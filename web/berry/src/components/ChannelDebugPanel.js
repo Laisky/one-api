@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../utils/common';
 import React, { useState } from 'react';
 import { 
   Button, 
@@ -105,7 +106,7 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
         variant="outlined"
         onClick={() => {
           setOpen(true);
-          checkMigrationStatus();
+          checkMigrationStatus().catch(reportUIError);
         }}
         sx={{ ml: 1 }}
       >
@@ -233,14 +234,14 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={debugChannel} disabled={loading}>
+          <Button onClick={(...uiArgs) => debugChannel(...uiArgs).catch(reportUIError)} disabled={loading}>
             Log Debug Info
           </Button>
-          <Button onClick={checkMigrationStatus} disabled={loading}>
+          <Button onClick={(...uiArgs) => checkMigrationStatus(...uiArgs).catch(reportUIError)} disabled={loading}>
             Refresh Status
           </Button>
           {migrationStatus && migrationStatus.migration_status === 'needs_migration' && (
-            <Button color="warning" onClick={fixChannel} disabled={loading}>
+            <Button color="warning" onClick={(...uiArgs) => fixChannel(...uiArgs).catch(reportUIError)} disabled={loading}>
               Fix Channel
             </Button>
           )}

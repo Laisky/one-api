@@ -48,7 +48,7 @@
     "build:prod": "yarn lint && REACT_APP_VERSION=$(node -e 'process.stdout.write(Math.floor(Date.now()/1000).toString())') vite build",
     "preview": "vite preview",
     "lint": "eslint src",
-    "test": "node --experimental-vm-modules --test ../../.github/scripts/legacy-api-compat.test.mjs && node --test ../../.github/scripts/legacy-dependency-security.test.cjs ../../.github/scripts/frontend-audit.test.mjs && node --test ../../.github/scripts/legacy-quality.test.cjs ../../.github/scripts/legacy-build-contract.test.mjs"
+    "test": "node --experimental-vm-modules --test ../../.github/scripts/legacy-api-compat.test.mjs && node --test ../../.github/scripts/legacy-dependency-security.test.cjs ../../.github/scripts/frontend-audit.test.mjs && node --test ../../.github/scripts/legacy-quality.test.cjs ../../.github/scripts/legacy-build-contract.test.mjs && node --test ../../.github/scripts/legacy-ui-boundaries.test.cjs"
   },
   "browserslist": {
     "production": [

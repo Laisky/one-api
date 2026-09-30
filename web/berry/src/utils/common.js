@@ -296,7 +296,7 @@ export function copy(text, name = '') {
         }, () => {
             text = `复制${name}失败，请手动复制：<br /><br />${text}`;
             enqueueSnackbar(<SnackbarHTMLContent htmlContent={text}/>, getSnackbarOptions('COPY'));
-        });
+        }).catch(reportUIError);
     } else {
         const textArea = document.createElement("textarea");
         textArea.value = text;
@@ -312,3 +312,5 @@ export function copy(text, name = '') {
         document.body.removeChild(textArea);
     }
 }
+
+const reportUIError = showError;

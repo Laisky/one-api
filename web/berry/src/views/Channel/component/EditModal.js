@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import { useState, useEffect } from 'react';
 import { CHANNEL_OPTIONS } from 'constants/ChannelConstants';
@@ -260,7 +261,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
 
     setFieldValue('config', { api_format: 'chat_completion' });
     // Load default pricing for the new channel type
-    loadDefaultPricing(typeValue);
+    loadDefaultPricing(typeValue).catch(reportUIError);
   };
 
   const fetchGroups = async () => {
@@ -268,7 +269,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
       let res = await API.get(`/api/group/`);
       setGroupOptions(res.data.data);
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -299,7 +300,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
         })
       );
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -480,31 +481,31 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
         initChannel(data.type);
         setInitialInput(data);
         // Load default pricing for this channel type, but don't override existing model_configs
-        loadDefaultPricing(data.type);
+        loadDefaultPricing(data.type).catch(reportUIError);
       } else {
         showError(message);
       }
     } catch (error) {
-      showError(error.message);
+      showError(error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchGroups().then();
-    fetchModels().then();
+    fetchGroups().then().catch(reportUIError);
+    fetchModels().then().catch(reportUIError);
   }, []);
 
   useEffect(() => {
     setBatchAdd(false);
     if (channelId) {
-      loadChannel().then();
+      loadChannel().then().catch(reportUIError);
     } else {
       initChannel(1);
       setInitialInput({ ...defaultConfig.input, is_edit: false });
       // Load default pricing for new channels
-      loadDefaultPricing(1);
+      loadDefaultPricing(1).catch(reportUIError);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
@@ -560,7 +561,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
             </Box>
           </Box>
         ) : (
-          <Formik initialValues={initialInput} enableReinitialize validationSchema={validationSchema} onSubmit={submit}>
+          <Formik initialValues={initialInput} enableReinitialize validationSchema={validationSchema} onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>
             {({ errors, handleBlur, handleChange, handleSubmit, isSubmitting, touched, values, setFieldValue }) => (
               <form noValidate onSubmit={handleSubmit}>
                 <FormControl fullWidth error={Boolean(touched.type && errors.type)} sx={{ ...theme.typography.otherInput }}>

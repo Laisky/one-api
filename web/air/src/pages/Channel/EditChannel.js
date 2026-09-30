@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { API, isMobile, showError, showInfo, showSuccess, verifyJSON } from '../../helpers';
@@ -323,7 +324,7 @@ const EditChannel = (props) => {
         });
         if (name === 'type') {
             // Load default pricing for the new channel type
-            loadDefaultPricing(value);
+            loadDefaultPricing(value).catch(reportUIError);
             setConfig({ ...defaultConfig });
         }
         //setAutoBan
@@ -401,7 +402,7 @@ const EditChannel = (props) => {
                   setConfig({ ...defaultConfig });
               }
               // Load default pricing for this channel type, but don't override existing model_configs
-              loadDefaultPricing(data.type);
+              loadDefaultPricing(data.type).catch(reportUIError);
               if (data.auto_ban === 0) {
                   setAutoBan(false);
               } else {
@@ -429,7 +430,7 @@ const EditChannel = (props) => {
                 return model.id.startsWith('gpt-3') || model.id.startsWith('text-');
             }).map((model) => model.id));
         } catch (error) {
-            showError(error.message);
+            showError(error);
         }
     };
 
@@ -448,7 +449,7 @@ const EditChannel = (props) => {
                 value: group
             })));
         } catch (error) {
-            showError(error.message);
+            showError(error);
         }
     };
 
@@ -466,15 +467,15 @@ const EditChannel = (props) => {
     }, [originModelOptions, inputs.models]);
 
     useEffect(() => {
-        fetchModels().then();
-        fetchGroups().then();
+        fetchModels().then().catch(reportUIError);
+        fetchGroups().then().catch(reportUIError);
         if (isEdit) {
-            loadChannel().then();
+            loadChannel().then().catch(reportUIError);
         } else {
             setInputs(originInputs);
             setConfig({ ...defaultConfig });
             // Load default pricing for new channels
-            loadDefaultPricing(originInputs.type);
+            loadDefaultPricing(originInputs.type).catch(reportUIError);
         }
     }, [props.editingChannel.uuid, props.editingChannel.id]);
 
@@ -599,7 +600,7 @@ const EditChannel = (props) => {
                 footer={
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <Space>
-                            <Button theme='solid' size={'large'} onClick={submit}>提交</Button>
+                            <Button theme='solid' size={'large'} onClick={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>提交</Button>
                             <Button theme='solid' size={'large'} type={'tertiary'} onClick={handleCancel}>取消</Button>
                         </Space>
                     </div>

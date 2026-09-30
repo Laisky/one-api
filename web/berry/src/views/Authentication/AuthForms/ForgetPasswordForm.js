@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
 import Turnstile from "react-turnstile";
@@ -104,7 +105,7 @@ const ForgetPasswordForm = ({ ...others }) => {
               .max(255)
               .required("Email是必填项"),
           })}
-          onSubmit={submit}
+          onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}
         >
           {({
             errors,

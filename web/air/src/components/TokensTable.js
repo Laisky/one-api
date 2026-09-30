@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { API, copy, showError, showSuccess, timestamp2string } from '../helpers';
 
@@ -56,19 +57,19 @@ const TokensTable = () => {
   const link_menu = [
     {
       node: 'item', key: 'next', name: 'ChatGPT Next Web', onClick: () => {
-        onOpenLink('next');
+        onOpenLink('next').catch(reportUIError);
       }
     },
     { node: 'item', key: 'ama', name: 'AMA 问天', value: 'ama' },
     {
       node: 'item', key: 'next-mj', name: 'ChatGPT Web & Midjourney', value: 'next-mj', onClick: () => {
-        onOpenLink('next-mj');
+        onOpenLink('next-mj').catch(reportUIError);
       }
     },
     { node: 'item', key: 'opencat', name: 'OpenCat', value: 'opencat' },
     {
       node: 'item', key: 'lobechat', name: 'LobeChat', onClick: () => {
-        onOpenLink('lobechat');
+        onOpenLink('lobechat').catch(reportUIError);
       }
     }
   ];
@@ -153,13 +154,13 @@ const TokensTable = () => {
             <Button theme="light" type="tertiary" style={{ marginRight: 1 }}>查看</Button>
           </Popover>
           <Button theme="light" type="secondary" style={{ marginRight: 1 }}
-                  onClick={async (text) => {
+                  onClick={(...uiArgs) => (async (text) => {
                     await copyText('sk-' + record.key);
-                  }}
+                  })(...uiArgs).catch(reportUIError)}
           >复制</Button>
           <SplitButtonGroup style={{ marginRight: 1 }} aria-label="项目操作按钮组">
             <Button theme="light" style={{ color: 'rgba(var(--semi-teal-7), 1)' }} onClick={() => {
-              onOpenLink('next', record.key);
+              onOpenLink('next', record.key).catch(reportUIError);
             }}>聊天</Button>
             <Dropdown trigger="click" position="bottomRight" menu={
               [
@@ -169,7 +170,7 @@ const TokensTable = () => {
                   disabled: !localStorage.getItem('chat_link'),
                   name: 'ChatGPT Next Web',
                   onClick: () => {
-                    onOpenLink('next', record.key);
+                    onOpenLink('next', record.key).catch(reportUIError);
                   }
                 },
                 {
@@ -178,22 +179,22 @@ const TokensTable = () => {
                   disabled: !localStorage.getItem('chat_link2'),
                   name: 'ChatGPT Web & Midjourney',
                   onClick: () => {
-                    onOpenLink('next-mj', record.key);
+                    onOpenLink('next-mj', record.key).catch(reportUIError);
                   }
                 },
                 {
                   node: 'item', key: 'ama', name: 'AMA 问天（BotGem）', onClick: () => {
-                    onOpenLink('ama', record.key);
+                    onOpenLink('ama', record.key).catch(reportUIError);
                   }
                 },
                 {
                   node: 'item', key: 'opencat', name: 'OpenCat', onClick: () => {
-                    onOpenLink('opencat', record.key);
+                    onOpenLink('opencat', record.key).catch(reportUIError);
                   }
                 },
                 {
                   node: 'item', key: 'lobechat', name: 'LobeChat', onClick: () => {
-                    onOpenLink('lobechat');
+                    onOpenLink('lobechat').catch(reportUIError);
                   }
                 }
               ]
@@ -217,22 +218,22 @@ const TokensTable = () => {
           {
             record.status === 1 ?
               <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={
-                async () => {
+                (...uiArgs) => (async () => {
                   manageToken(
                     tokenRef(record),
                     'disable',
                     record
                   ).catch(showError);
-                }
+                })(...uiArgs).catch(reportUIError)
               }>禁用</Button> :
               <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={
-                async () => {
+                (...uiArgs) => (async () => {
                   manageToken(
                     tokenRef(record),
                     'enable',
                     record
                   ).catch(showError);
-                }
+                })(...uiArgs).catch(reportUIError)
               }>启用</Button>
           }
           <Button theme="light" type="tertiary" style={{ marginRight: 1 }} onClick={
@@ -508,7 +509,7 @@ const TokensTable = () => {
     if (page === Math.ceil(tokens.length / pageSize) + 1) {
       // In this case we have to load more data and then append them.
       loadTokens(page - 1).then(r => {
-      });
+      }).catch(reportUIError);
     }
   };
 
@@ -561,7 +562,7 @@ const TokensTable = () => {
           placeholder="令牌名称或 UUID"
           value={searchKeyword}
           loading={searching}
-          onChange={handleKeywordChange}
+          onChange={(...uiArgs) => handleKeywordChange(...uiArgs).catch(reportUIError)}
         />
         {/* <Form.Input
           field="token"
@@ -572,7 +573,7 @@ const TokensTable = () => {
           onChange={handleSearchTokenChange}
         /> */}
         <Button label="查询" type="primary" htmlType="submit" className="btn-margin-right"
-                onClick={searchTokens} style={{ marginRight: 8 }}>查询</Button>
+                onClick={(...uiArgs) => searchTokens(...uiArgs).catch(reportUIError)} style={{ marginRight: 8 }}>查询</Button>
       </Form>
 
       <Table style={{ marginTop: 20 }} columns={columns} dataSource={pageData} pagination={{
@@ -598,7 +599,7 @@ const TokensTable = () => {
         }
       }>添加令牌</Button>
       <Button label="复制所选令牌" type="warning" onClick={
-        async () => {
+        (...uiArgs) => (async () => {
           if (selectedKeys.length === 0) {
             showError('请至少选择一个令牌！');
             return;
@@ -608,7 +609,7 @@ const TokensTable = () => {
             keys += selectedKeys[i].name + '    sk-' + selectedKeys[i].key + '\n';
           }
           await copyText(keys);
-        }
+        })(...uiArgs).catch(reportUIError)
       }>复制所选令牌到剪贴板</Button>
       <Dropdown
         trigger="click"

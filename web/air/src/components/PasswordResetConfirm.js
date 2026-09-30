@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Grid, Header, Image, Segment } from 'semantic-ui-react';
 import { API, copy, showError, showNotice } from '../helpers';
@@ -100,7 +101,7 @@ const PasswordResetConfirm = () => {
               color="green"
               fluid
               size="large"
-              onClick={handleSubmit}
+              onClick={(...uiArgs) => handleSubmit(...uiArgs).catch(reportUIError)}
               loading={loading}
               disabled={disableButton}
             >

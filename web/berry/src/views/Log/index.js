@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import { useState, useEffect } from 'react';
 import { showError, renderQuota } from 'utils/common';
 
@@ -234,7 +235,7 @@ export default function Log() {
                   />
                   <IconButton
                     size="small"
-                    onClick={handleStatRefresh}
+                    onClick={(...uiArgs) => handleStatRefresh(...uiArgs).catch(reportUIError)}
                     disabled={isStatRefreshing}
                     sx={{ ml: 1 }}
                     title="刷新配额数据"
@@ -251,7 +252,7 @@ export default function Log() {
                 <Button
                   size="small"
                   variant="text"
-                  onClick={handleShowStat}
+                  onClick={(...uiArgs) => handleShowStat(...uiArgs).catch(reportUIError)}
                   sx={{ textTransform: 'none', color: 'text.secondary' }}
                 >
                   点击查看
@@ -263,7 +264,7 @@ export default function Log() {
         </Box>
       </Card>
       <Card>
-        <Box component="form" onSubmit={searchLogs} noValidate sx={{marginTop: 2}}>
+        <Box component="form" onSubmit={(...uiArgs) => searchLogs(...uiArgs).catch(reportUIError)} noValidate sx={{marginTop: 2}}>
           <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} userIsAdmin={userIsAdmin} />
         </Box>
         <Toolbar
@@ -281,7 +282,7 @@ export default function Log() {
                 刷新/清除搜索条件
               </Button>
 
-              <Button onClick={searchLogs} startIcon={<IconSearch width={'18px'} />}>
+              <Button onClick={(...uiArgs) => searchLogs(...uiArgs).catch(reportUIError)} startIcon={<IconSearch width={'18px'} />}>
                 搜索
               </Button>
             </ButtonGroup>

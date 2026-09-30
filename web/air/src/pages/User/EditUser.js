@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API, isMobile, showError, showSuccess } from '../../helpers';
@@ -37,7 +38,7 @@ const EditUser = (props) => {
         value: group
       })));
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
   const navigate = useNavigate();
@@ -83,7 +84,7 @@ const EditUser = (props) => {
         showError(message);
       }
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -104,9 +105,9 @@ const EditUser = (props) => {
   };
 
   useEffect(() => {
-    loadUser().then();
+    loadUser().then().catch(reportUIError);
     if (userId) {
-      fetchGroups().then();
+      fetchGroups().then().catch(reportUIError);
     }
   }, [props.editingUser.uuid, props.editingUser.id]);
 
@@ -147,7 +148,7 @@ const EditUser = (props) => {
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Space>
-              <Button theme="solid" size={'large'} onClick={submit}>提交</Button>
+              <Button theme="solid" size={'large'} onClick={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>提交</Button>
               <Button theme="solid" size={'large'} type={'tertiary'} onClick={handleCancel}>取消</Button>
             </Space>
           </div>
@@ -297,7 +298,7 @@ const EditUser = (props) => {
                     <Button
                       theme="solid"
                       type="danger"
-                      onClick={adminDisableTotp}
+                      onClick={(...uiArgs) => adminDisableTotp(...uiArgs).catch(reportUIError)}
                       loading={totpLoading}
                     >
                       管理员禁用 TOTP

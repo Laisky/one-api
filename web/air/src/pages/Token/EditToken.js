@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API, isMobile, showError, showSuccess, timestamp2string } from '../../helpers';
@@ -108,7 +109,7 @@ const EditToken = (props) => {
         () => {
           // console.log(inputs);
         }
-      );
+      ).catch(reportUIError);
     }
     // loadModels();
   }, [isEdit]);
@@ -219,7 +220,7 @@ const EditToken = (props) => {
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Space>
-              <Button theme="solid" size={'large'} onClick={submit}>提交</Button>
+              <Button theme="solid" size={'large'} onClick={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>提交</Button>
               <Button theme="solid" size={'large'} type={'tertiary'} onClick={handleCancel}>取消</Button>
             </Space>
           </div>

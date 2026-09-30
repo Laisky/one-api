@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { API, copy, isAdmin, showError, showSuccess, timestamp2string } from '../helpers';
 
@@ -122,7 +123,7 @@ const LogsTable = () => {
 
           <div>
             <Tag color={colors[parseInt(text) % colors.length]} size="large" onClick={() => {
-              copyText(text); // 假设copyText是用于文本复制的函数
+              copyText(text).catch(reportUIError); // 假设copyText是用于文本复制的函数
             }}> {text} </Tag>
           </div>
 
@@ -361,7 +362,7 @@ const LogsTable = () => {
     if (page === Math.ceil(logs.length / ITEMS_PER_PAGE) + 1) {
       // In this case we have to load more data and then append them.
       loadLogs(page - 1).then(r => {
-      });
+      }).catch(reportUIError);
     }
   };
 
@@ -381,7 +382,7 @@ const LogsTable = () => {
   };
 
   useEffect(() => {
-    refresh().then();
+    refresh().then().catch(reportUIError);
   }, [logType]);
 
   useEffect(() => {
@@ -422,7 +423,7 @@ const LogsTable = () => {
 
             <Form.Section>
               <Button label="查询" type="primary" htmlType="submit" className="btn-margin-right"
-                      onClick={refresh}>查询</Button>
+                      onClick={(...uiArgs) => refresh(...uiArgs).catch(reportUIError)}>查询</Button>
             </Form.Section>
           </>
         </Form>

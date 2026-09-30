@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { API, copy, showError, showSuccess, timestamp2string } from '../helpers';
 
@@ -86,9 +87,9 @@ const RedemptionsTable = () => {
             <Button theme="light" type="tertiary" style={{ marginRight: 1 }}>查看</Button>
           </Popover>
           <Button theme="light" type="secondary" style={{ marginRight: 1 }}
-                  onClick={async (text) => {
+                  onClick={(...uiArgs) => (async (text) => {
                     await copyText(record.key);
-                  }}
+                  })(...uiArgs).catch(reportUIError)}
           >复制</Button>
           <Popconfirm
             title="确定是否要删除此兑换码？"
@@ -100,7 +101,7 @@ const RedemptionsTable = () => {
                 () => {
                   removeRecord(record.key);
                 }
-              );
+              ).catch(reportUIError);
             }}
           >
             <Button theme="light" type="danger" style={{ marginRight: 1 }}>删除</Button>
@@ -108,22 +109,22 @@ const RedemptionsTable = () => {
           {
             record.status === 1 ?
               <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={
-                async () => {
+                (...uiArgs) => (async () => {
                   manageRedemption(
                     record.uuid || record.id,
                     'disable',
                     record
-                  );
-                }
+                  ).catch(reportUIError);
+                })(...uiArgs).catch(reportUIError)
               }>禁用</Button> :
               <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={
-                async () => {
+                (...uiArgs) => (async () => {
                   manageRedemption(
                     record.uuid || record.id,
                     'enable',
                     record
-                  );
-                }
+                  ).catch(reportUIError);
+                })(...uiArgs).catch(reportUIError)
               } disabled={record.status === 3}>启用</Button>
           }
           <Button theme="light" type="tertiary" style={{ marginRight: 1 }} onClick={
@@ -263,7 +264,8 @@ const RedemptionsTable = () => {
       }
       setRedemptions(newRedemptions);
     } else {
-      showError(message);
+      // Rejection prevents success-only callers from deleting a visible row.
+      throw new Error(message || 'The server rejected this operation.');
     }
   };
 
@@ -312,7 +314,7 @@ const RedemptionsTable = () => {
     if (page === Math.ceil(redemptions.length / ITEMS_PER_PAGE) + 1) {
       // In this case we have to load more data and then append them.
       loadRedemptions(page - 1).then(r => {
-      });
+      }).catch(reportUIError);
     }
   };
 
@@ -343,7 +345,7 @@ const RedemptionsTable = () => {
     <>
       <EditRedemption refresh={refresh} editingRedemption={editingRedemption} visiable={showEdit}
                       handleClose={closeEdit}></EditRedemption>
-      <Form onSubmit={searchRedemptions}>
+      <Form onSubmit={(...uiArgs) => searchRedemptions(...uiArgs).catch(reportUIError)}>
         <Form.Input
           label="搜索关键字"
           field="keyword"
@@ -352,7 +354,7 @@ const RedemptionsTable = () => {
           placeholder="关键字(id、名称或 UUID)"
           value={searchKeyword}
           loading={searching}
-          onChange={handleKeywordChange}
+          onChange={(...uiArgs) => handleKeywordChange(...uiArgs).catch(reportUIError)}
         />
       </Form>
 
@@ -379,7 +381,7 @@ const RedemptionsTable = () => {
         }
       }>添加兑换码</Button>
       <Button label="复制所选兑换码" type="warning" onClick={
-        async () => {
+        (...uiArgs) => (async () => {
           if (selectedKeys.length === 0) {
             showError('请至少选择一个兑换码！');
             return;
@@ -389,7 +391,7 @@ const RedemptionsTable = () => {
             keys += selectedKeys[i].name + '    ' + selectedKeys[i].key + '\n';
           }
           await copyText(keys);
-        }
+        })(...uiArgs).catch(reportUIError)
       }>复制所选兑换码到剪贴板</Button>
     </>
   );
