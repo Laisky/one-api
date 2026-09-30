@@ -68,7 +68,10 @@ func geminiSpeechURL(m *meta.Meta, streaming bool) (string, error) {
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.User != nil || parsed.Fragment != "" || parsed.Opaque != "" {
 		return "", errors.New("invalid Gemini speech upstream URL")
 	}
-	query := parsed.Query()
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return "", errors.New("invalid Gemini speech upstream query")
+	}
 	for key := range query {
 		if key != "alt" {
 			return "", errors.New("speech upstream credentials and options must not be placed in URL queries")
@@ -114,6 +117,10 @@ func relayGeminiSpeech(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	defer func() { stopCancellation(); cancel() }()
 	lg := gmw.GetLogger(c)
 	m := meta.GetByContext(c)
+	allowedTargets, err := geminiSpeechTargetPolicy(m)
+	if err != nil {
+		return openai.ErrorWrapper(err, "invalid_speech_channel", http.StatusBadRequest)
+	}
 	var request openai.TextToSpeechRequest
 	if err := common.UnmarshalBodyReusable(c, &request); err != nil {
 		return openai.ErrorWrapper(errors.New("invalid speech JSON"), "invalid_audio_request", http.StatusBadRequest)
@@ -133,6 +140,11 @@ func relayGeminiSpeech(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	target, err := geminiSpeechURL(m, plan.Stream)
 	if err != nil {
 		return openai.ErrorWrapper(err, "invalid_speech_channel", http.StatusBadRequest)
+	}
+	// The allowlist was built only from channel-owned configuration, before
+	// reading this attempt's body. No caller-controlled URL component can widen it.
+	if !allowedTargets.MatchString(target) {
+		return openai.ErrorWrapper(errors.New("speech destination is outside the selected channel policy"), "invalid_speech_channel", http.StatusBadRequest)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(plan.Body))
 	if err != nil {
