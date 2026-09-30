@@ -132,7 +132,7 @@ var (
 	activeProviderGeneration atomic.Uint64
 )
 
-// ProviderInitialized reports whether this process installed real OpenTelemetry
+// ProviderInitialized reports whether this process initialized real OpenTelemetry
 // providers, as opposed to still running on the global no-op provider.
 //
 // Callers use it as a startup precondition, not per record: a false answer
@@ -343,14 +343,23 @@ func buildResource(ctx context.Context) (*sdkresource.Resource, error) {
 	}
 
 	if config.OpenTelemetryEnvironment != "" {
-		attrs = append(attrs, attribute.String("deployment.environment", config.OpenTelemetryEnvironment))
+		attrs = append(attrs,
+			attribute.String("deployment.environment", config.OpenTelemetryEnvironment),
+			attribute.String("deployment.environment.name", config.OpenTelemetryEnvironment),
+		)
 	}
 
 	res, err := sdkresource.New(ctx,
-		sdkresource.WithFromEnv(),
 		sdkresource.WithHost(),
+		// Operator identity overrides container-local hostname detection.
+		sdkresource.WithFromEnv(),
 		sdkresource.WithTelemetrySDK(),
-		sdkresource.WithProcess(),
+		// Do not automatically export argv or process.owner: either can expose
+		// credentials or private account details before the edge WAL persists them.
+		sdkresource.WithProcessPID(),
+		sdkresource.WithProcessRuntimeName(),
+		sdkresource.WithProcessRuntimeVersion(),
+		sdkresource.WithProcessRuntimeDescription(),
 		sdkresource.WithAttributes(attrs...),
 	)
 	// resource.New can return a usable resource together with its error; both are passed on.
