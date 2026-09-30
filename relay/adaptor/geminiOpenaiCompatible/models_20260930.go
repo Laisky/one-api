@@ -43,7 +43,7 @@ func gemini38TTSConfig(outputUsd float64, description string) adaptor.ModelConfi
 		CompletionRatio:  outputUsd / inputUsd,
 		CachedInputRatio: 0.125 * ratio.MilliTokensUsd,
 		Audio: &adaptor.AudioPricingConfig{
-			// Audio completion pricing is relative to audio input in quota.Compute.
+			// Receipt-based audio completion pricing is relative to audio input.
 			// A unit prompt multiplier anchors that calculation to text input for
 			// this text-only input model; it does not advertise audio input.
 			PromptRatio:               1,
@@ -61,7 +61,7 @@ func gemini38TTSConfig(outputUsd float64, description string) adaptor.ModelConfi
 		OutputModalities: []string{"audio"},
 		Description: description + " Generally available in the Gemini Developer API since September 22, 2026. " +
 			"Uses speech_metadata for speaker/style and defaults to WAV for unary output. " +
-			"Catalog metadata only: the Gemini 3.8 TTS request/response protocol is not implemented by this REST adaptor.",
+			"Available through /v1/audio/speech with native Google transport; Vertex requires explicit channel token prices. Not a Live or chat-completion protocol.",
 	}
 }
 

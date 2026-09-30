@@ -39,7 +39,7 @@ func TestGeminiSeptember30TTSCatalog(t *testing.T) {
 			require.EqualValues(t, 25, config.Audio.CompletionTokensPerSecond)
 			require.Contains(t, config.Description, "speech_metadata")
 			require.Contains(t, config.Description, "WAV")
-			require.Contains(t, config.Description, "not implemented by this REST adaptor")
+			require.Contains(t, config.Description, "/v1/audio/speech")
 		})
 	}
 }
