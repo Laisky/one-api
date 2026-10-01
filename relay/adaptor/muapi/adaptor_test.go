@@ -34,7 +34,7 @@ func TestGetRequestURLMapsMuAPIVideoLifecycle(t *testing.T) {
 				Mode:            relaymode.Videos,
 				BaseURL:         "https://api.muapi.ai",
 				ActualModelName: "veo3-fast",
-				RequestURLPath:  "/v1/videos/generations",
+				RequestURLPath:  "/v1/async/videos",
 			},
 			want: "https://api.muapi.ai/api/v1/veo3-fast",
 		},
@@ -44,7 +44,7 @@ func TestGetRequestURLMapsMuAPIVideoLifecycle(t *testing.T) {
 				Mode:            relaymode.Videos,
 				BaseURL:         "https://api.muapi.ai/v1",
 				ActualModelName: "kling-v2.6-pro",
-				RequestURLPath:  "/v1/videos",
+				RequestURLPath:  "/v1/async/videos",
 			},
 			want: "https://api.muapi.ai/api/v1/kling-v2.6-pro",
 		},
@@ -53,7 +53,7 @@ func TestGetRequestURLMapsMuAPIVideoLifecycle(t *testing.T) {
 			meta: &meta.Meta{
 				Mode:           relaymode.Videos,
 				BaseURL:        "https://api.muapi.ai",
-				RequestURLPath: "/v1/videos/job-abc_123",
+				RequestURLPath: "/v1/async/videos/job-abc_123",
 			},
 			want: "https://api.muapi.ai/api/v1/predictions/job-abc_123/result",
 		},
@@ -76,7 +76,18 @@ func TestGetRequestURLRejectsUnsafeModel(t *testing.T) {
 		Mode:            relaymode.Videos,
 		BaseURL:         "https://api.muapi.ai",
 		ActualModelName: "../internal",
-		RequestURLPath:  "/v1/videos",
+		RequestURLPath:  "/v1/async/videos",
+	})
+	require.Error(t, err)
+}
+
+// TestGetRequestURLKeepsSynchronousVideoRoutesUnsupported prevents the MuAPI
+// async job lifecycle from claiming the gateway's existing synchronous API.
+func TestGetRequestURLKeepsSynchronousVideoRoutesUnsupported(t *testing.T) {
+	t.Parallel()
+	_, err := (&Adaptor{}).GetRequestURL(&meta.Meta{
+		Mode: relaymode.Videos, BaseURL: "https://api.muapi.ai",
+		ActualModelName: "veo3-fast", RequestURLPath: "/v1/videos",
 	})
 	require.Error(t, err)
 }
@@ -89,7 +100,7 @@ func TestGetRequestURLAcceptsUnlistedCatalogSlug(t *testing.T) {
 		Mode:            relaymode.Videos,
 		BaseURL:         "https://api.muapi.ai",
 		ActualModelName: "new-video-model-v3",
-		RequestURLPath:  "/v1/videos",
+		RequestURLPath:  "/v1/async/videos",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "https://api.muapi.ai/api/v1/new-video-model-v3", url)
@@ -100,7 +111,7 @@ func TestGetRequestURLAcceptsUnlistedCatalogSlug(t *testing.T) {
 func TestSetupRequestHeaderUsesMuAPIKey(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
-	c := newMuAPITestContext(http.MethodPost, "/v1/videos", `{"model":"veo3-fast","duration":5}`)
+	c := newMuAPITestContext(http.MethodPost, "/v1/async/videos", `{"model":"veo3-fast","duration":5}`)
 	req := httptest.NewRequest(http.MethodPost, "https://api.muapi.ai/api/v1/veo3-fast", nil)
 	metaInfo := &meta.Meta{APIKey: "test-key", IsStream: false}
 
@@ -138,11 +149,11 @@ func TestVideoCreationRedirectsNeverForwardCredentialsOrPaidPayload(t *testing.T
 			client.HTTPClient = source.Client()
 			t.Cleanup(func() { client.HTTPClient = previousClient })
 
-			c := newMuAPITestContext(http.MethodPost, "/v1/videos", `{"duration":5,"prompt":"a lighthouse"}`)
+			c := newMuAPITestContext(http.MethodPost, "/v1/async/videos", `{"duration":5,"prompt":"a lighthouse"}`)
 			c.Set(ctxkey.ContentType, "application/json")
 			response, err := (&Adaptor{}).DoRequest(c, &meta.Meta{
 				Mode: relaymode.Videos, BaseURL: source.URL, APIKey: "secret-key",
-				ActualModelName: "veo3-fast", RequestURLPath: "/v1/videos", ChannelId: 1,
+				ActualModelName: "veo3-fast", RequestURLPath: "/v1/async/videos", ChannelId: 1,
 			}, strings.NewReader(`{"duration":5,"prompt":"a lighthouse"}`))
 			require.Error(t, err)
 			require.Nil(t, response)

@@ -16,8 +16,7 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-// Adaptor implements the MuAPI submit-and-poll video protocol behind the
-// gateway's OpenAI-compatible /v1/videos surface.
+// Adaptor implements MuAPI's submit-and-poll protocol on the explicit async-video API.
 type Adaptor struct {
 	adaptor.DefaultPricingMethods
 }
@@ -42,15 +41,15 @@ func (a *Adaptor) GetRequestURL(metaInfo *meta.Meta) (string, error) {
 	}
 
 	requestPath := stripQuery(metaInfo.RequestURLPath)
-	if requestPath == "/v1/videos" || requestPath == "/v1/videos/generations" {
+	if requestPath == "/v1/async/videos" {
 		modelName := strings.TrimSpace(metaInfo.ActualModelName)
 		if !validMuAPIModelName(modelName) {
 			return "", errors.Errorf("invalid MuAPI model slug %q", modelName)
 		}
 		return muAPICoreBaseURL(metaInfo.BaseURL) + "/" + modelName, nil
 	}
-	if strings.HasPrefix(requestPath, "/v1/videos/") {
-		taskID := strings.TrimPrefix(requestPath, "/v1/videos/")
+	if strings.HasPrefix(requestPath, "/v1/async/videos/") {
+		taskID := strings.TrimPrefix(requestPath, "/v1/async/videos/")
 		if validMuAPITaskID(taskID) {
 			return muAPICoreBaseURL(metaInfo.BaseURL) + "/predictions/" + taskID + "/result", nil
 		}

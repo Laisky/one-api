@@ -91,9 +91,9 @@ func TestMuAPIVideoLifecycle(t *testing.T) {
 	client.HTTPClient = server.Client()
 	t.Cleanup(func() { client.HTTPClient = previousClient })
 
-	c, recorder := muapiVideoContext(t, http.MethodPost, "/v1/videos", `{"model":"alias","prompt":"a lighthouse","duration":5}`, server.URL, balance, fallbackUserID)
+	c, recorder := muapiVideoContext(t, http.MethodPost, "/v1/async/videos", `{"model":"alias","prompt":"a lighthouse","duration":5}`, server.URL, balance, fallbackUserID)
 	require.Nil(t, RelayVideoHelper(c))
-	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, http.StatusAccepted, recorder.Code)
 	require.EqualValues(t, 1, estimates.Load())
 	require.EqualValues(t, 1, creates.Load())
 	require.False(t, badAuth.Load())
@@ -111,7 +111,7 @@ func TestMuAPIVideoLifecycle(t *testing.T) {
 	require.Equal(t, "alias", binding.OriginModel)
 	require.Equal(t, "veo3-fast", binding.ActualModel)
 
-	poll, pollRecorder := muapiVideoContext(t, http.MethodGet, "/v1/videos/muapi-job-1", "", server.URL, balance, fallbackUserID)
+	poll, pollRecorder := muapiVideoContext(t, http.MethodGet, "/v1/async/videos/muapi-job-1", "", server.URL, balance, fallbackUserID)
 	poll.Params = gin.Params{{Key: "video_id", Value: "muapi-job-1"}}
 	middleware.BindAsyncTaskChannel()(poll)
 	require.Equal(t, fallbackChannelID, poll.GetInt(ctxkey.SpecificChannelId))
@@ -122,7 +122,7 @@ func TestMuAPIVideoLifecycle(t *testing.T) {
 	drainCriticalTasks(t)
 	require.Equal(t, balance-200000, reloadUserQuota(t), "polling must not charge generation again")
 
-	wrongUser, deniedRecorder := muapiVideoContext(t, http.MethodGet, "/v1/videos/muapi-job-1", "", server.URL, balance, fallbackUserID+1)
+	wrongUser, deniedRecorder := muapiVideoContext(t, http.MethodGet, "/v1/async/videos/muapi-job-1", "", server.URL, balance, fallbackUserID+1)
 	wrongUser.Params = gin.Params{{Key: "video_id", Value: "muapi-job-1"}}
 	middleware.BindAsyncTaskChannel()(wrongUser)
 	require.Equal(t, http.StatusNotFound, deniedRecorder.Code)
@@ -158,7 +158,7 @@ func TestMuAPIVideoLifecycleFailsClosedBeforeSubmission(t *testing.T) {
 			client.HTTPClient = server.Client()
 			t.Cleanup(func() { client.HTTPClient = previousClient })
 
-			c, _ := muapiVideoContext(t, http.MethodPost, "/v1/videos", `{"model":"alias","prompt":"a lighthouse","duration":5}`, server.URL, test.balance, fallbackUserID)
+			c, _ := muapiVideoContext(t, http.MethodPost, "/v1/async/videos", `{"model":"alias","prompt":"a lighthouse","duration":5}`, server.URL, test.balance, fallbackUserID)
 			apiErr := RelayVideoHelper(c)
 			require.NotNil(t, apiErr)
 			require.Zero(t, creates.Load())
@@ -188,7 +188,7 @@ func TestMuAPIVideoAcceptedDisconnectKeepsChargeAndBinding(t *testing.T) {
 	client.HTTPClient = server.Client()
 	t.Cleanup(func() { client.HTTPClient = previousClient })
 
-	c, _ := muapiVideoContext(t, http.MethodPost, "/v1/videos", `{"model":"alias","prompt":"a lighthouse","duration":5}`, server.URL, balance, fallbackUserID)
+	c, _ := muapiVideoContext(t, http.MethodPost, "/v1/async/videos", `{"model":"alias","prompt":"a lighthouse","duration":5}`, server.URL, balance, fallbackUserID)
 	requestID := c.GetString(ctxkey.RequestId)
 	c.Writer = xaiDisconnectedWriter{c.Writer}
 	apiErr := RelayVideoHelper(c)

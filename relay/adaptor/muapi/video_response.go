@@ -83,11 +83,62 @@ func (a *Adaptor) handleVideoResponse(c *gin.Context, resp *http.Response) (*mod
 	if c.Writer.Header().Get("Content-Type") == "" {
 		c.Header("Content-Type", "application/json")
 	}
-	c.Writer.WriteHeader(resp.StatusCode)
-	if _, err := c.Writer.Write(body); err != nil {
+	responseBody := body
+	statusCode := resp.StatusCode
+	if creating {
+		statusCode = http.StatusAccepted
+		responseBody, err = json.Marshal(map[string]string{"id": payload.RequestID, "status": "queued"})
+	} else {
+		var provider map[string]json.RawMessage
+		if err = json.Unmarshal(body, &provider); err == nil {
+			status := normalizeMuAPIStatus(payload.Status)
+			result := map[string]json.RawMessage{}
+			for key, value := range provider {
+				if key != "status" && key != "request_id" && key != "error" {
+					result[key] = value
+				}
+			}
+			var normalized map[string]any
+			taskID := c.Param("video_id")
+			if taskID == "" && c.Request != nil && c.Request.URL != nil {
+				taskID = strings.TrimPrefix(c.Request.URL.Path, "/v1/async/videos/")
+			}
+			normalized = map[string]any{"id": taskID, "status": status}
+			if len(result) > 0 {
+				normalized["result"] = result
+			}
+			if hasMuAPIError(payload.Error) {
+				normalized["error"] = payload.Error
+			}
+			responseBody, err = json.Marshal(normalized)
+		}
+	}
+	if err != nil {
+		return nil, openai_compatible.ErrorWrapper(errors.Wrap(err, "normalize MuAPI async video response"), "invalid_video_response", http.StatusBadGateway)
+	}
+	c.Writer.WriteHeader(statusCode)
+	if _, err := c.Writer.Write(responseBody); err != nil {
 		return nil, openai_compatible.ErrorWrapper(errors.Wrap(err, "write MuAPI video response"), "write_response_body_failed", http.StatusBadGateway)
 	}
 	return nil, nil
+}
+
+// normalizeMuAPIStatus maps a MuAPI lifecycle value to the public async-job
+// contract. Parameters: status is the provider status. Return value is queued,
+// running, completed, or failed.
+func normalizeMuAPIStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "queued", "pending", "created":
+		return "queued"
+	case "processing", "running", "in_progress":
+		return "running"
+	case "completed", "succeeded", "success":
+		return "completed"
+	case "failed", "error", "cancelled", "canceled":
+		return "failed"
+	default:
+		return "running"
+	}
 }
 
 // hasMuAPIError reports whether an optional error field contains a meaningful

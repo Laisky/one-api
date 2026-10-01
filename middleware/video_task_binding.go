@@ -32,7 +32,7 @@ func BindAsyncTaskChannel() gin.HandlerFunc {
 		}
 
 		path := req.URL.Path
-		if !strings.HasPrefix(path, "/v1/videos/") {
+		if !strings.HasPrefix(path, "/v1/videos/") && !strings.HasPrefix(path, "/v1/async/videos/") {
 			c.Next()
 			return
 		}

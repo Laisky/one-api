@@ -25,7 +25,7 @@ import (
 // TestMuAPIVideoResponseBindsAcceptedTask verifies that a native request_id
 // is persisted through the provider-independent async task contract.
 func TestMuAPIVideoResponseBindsAcceptedTask(t *testing.T) {
-	c, recorder := newMuAPITestContextWithRecorder(http.MethodPost, "/v1/videos", "")
+	c, recorder := newMuAPITestContextWithRecorder(http.MethodPost, "/v1/async/videos", "")
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
@@ -51,7 +51,7 @@ func TestMuAPIVideoResponseBindsAcceptedTask(t *testing.T) {
 	require.Nil(t, apiErr)
 	require.True(t, c.GetBool(adaptor.AsyncVideoAcceptedKey))
 	require.Equal(t, http.StatusAccepted, recorder.Code)
-	require.JSONEq(t, `{"request_id":"job-123","status":"processing"}`, recorder.Body.String())
+	require.JSONEq(t, `{"id":"job-123","status":"queued"}`, recorder.Body.String())
 	binding, err := dbmodel.GetAsyncTaskBindingByTaskID(context.Background(), "job-123")
 	require.NoError(t, err)
 	require.Equal(t, 77, binding.UserID)
@@ -64,7 +64,7 @@ func TestMuAPIVideoResponseBindsAcceptedTask(t *testing.T) {
 // local database failure does not resend the paid upstream creation and that
 // the saved task routing record is recoverable when storage returns.
 func TestMuAPIVideoResponseRetriesOnlyBindingPersistence(t *testing.T) {
-	c, recorder := newMuAPITestContextWithRecorder(http.MethodPost, "/v1/videos", "")
+	c, recorder := newMuAPITestContextWithRecorder(http.MethodPost, "/v1/async/videos", "")
 	meta.Set2Context(c, &meta.Meta{
 		UserId: 77, TokenId: 88, ChannelId: 9, ChannelType: 61,
 		OriginModelName: "veo3-fast", ActualModelName: "veo3-fast",
@@ -96,7 +96,7 @@ func TestMuAPIVideoResponseRetriesOnlyBindingPersistence(t *testing.T) {
 	require.Nil(t, usage)
 	require.Nil(t, apiErr)
 	require.True(t, c.GetBool(adaptor.AsyncVideoAcceptedKey))
-	require.JSONEq(t, `{"request_id":"job-retry","status":"processing"}`, recorder.Body.String())
+	require.JSONEq(t, `{"id":"job-retry","status":"queued"}`, recorder.Body.String())
 
 	require.Eventually(t, func() bool { return failedWrites.Load() >= 4 }, 3*time.Second, 25*time.Millisecond,
 		"initial persistence and all automatic retries should have failed")
@@ -115,7 +115,7 @@ func TestMuAPIVideoResponseRetriesOnlyBindingPersistence(t *testing.T) {
 // in MuAPI's native response shape and do not create another task binding.
 func TestMuAPIVideoResponseForwardsPollingResult(t *testing.T) {
 	t.Parallel()
-	c, recorder := newMuAPITestContextWithRecorder(http.MethodGet, "/v1/videos/job-123", "")
+	c, recorder := newMuAPITestContextWithRecorder(http.MethodGet, "/v1/async/videos/job-123", "")
 	response := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
@@ -126,14 +126,14 @@ func TestMuAPIVideoResponseForwardsPollingResult(t *testing.T) {
 	require.Nil(t, usage)
 	require.Nil(t, apiErr)
 	require.False(t, c.GetBool(adaptor.AsyncVideoAcceptedKey))
-	require.JSONEq(t, `{"status":"completed","outputs":[{"video_url":"https://cdn.example/video.mp4"}]}`, recorder.Body.String())
+	require.JSONEq(t, `{"id":"job-123","status":"completed","result":{"outputs":[{"video_url":"https://cdn.example/video.mp4"}]}}`, recorder.Body.String())
 }
 
 // TestMuAPIVideoResponseForwardsSafeHeadersOnly keeps provider billing data
 // internal while preserving headers useful to the client and transport.
 func TestMuAPIVideoResponseForwardsSafeHeadersOnly(t *testing.T) {
 	t.Parallel()
-	c, recorder := newMuAPITestContextWithRecorder(http.MethodGet, "/v1/videos/job-123", "")
+	c, recorder := newMuAPITestContextWithRecorder(http.MethodGet, "/v1/async/videos/job-123", "")
 	response := &http.Response{
 		StatusCode: http.StatusOK,
 		Header: http.Header{
@@ -180,11 +180,21 @@ func TestHasMuAPIError(t *testing.T) {
 	}
 }
 
+func TestNormalizeMuAPIStatus(t *testing.T) {
+	t.Parallel()
+	for input, want := range map[string]string{
+		"processing": "running", "in_progress": "running", "pending": "queued",
+		"succeeded": "completed", "cancelled": "failed", "unknown-provider-state": "running",
+	} {
+		require.Equal(t, want, normalizeMuAPIStatus(input))
+	}
+}
+
 // TestMuAPIVideoResponseRejectsMissingRequestID prevents billing an accepted
 // creation whose task cannot be polled safely.
 func TestMuAPIVideoResponseRejectsMissingRequestID(t *testing.T) {
 	t.Parallel()
-	c, _ := newMuAPITestContextWithRecorder(http.MethodPost, "/v1/videos", "")
+	c, _ := newMuAPITestContextWithRecorder(http.MethodPost, "/v1/async/videos", "")
 	response := &http.Response{
 		StatusCode: http.StatusAccepted,
 		Body:       io.NopCloser(strings.NewReader(`{"status":"processing"}`)),

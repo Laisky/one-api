@@ -89,6 +89,8 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.GET("/videos/:video_id", controller.Relay)
 	relayV1Router.GET("/videos/:video_id/content", controller.Relay)
 	relayV1Router.DELETE("/videos/:video_id", controller.Relay)
+	relayV1Router.POST("/async/videos", controller.Relay)
+	relayV1Router.GET("/async/videos/:video_id", controller.Relay)
 	relayV1Router.POST("/voice/clones", controller.Relay)
 	relayV1Router.POST("/voice/clone", controller.Relay)
 	relayV1Router.POST("/embeddings", controller.Relay)

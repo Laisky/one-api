@@ -40,7 +40,7 @@ func GetByPath(path string) int {
 		return AudioTranslation
 	case strings.HasPrefix(path, "/v1/images/edits"):
 		return ImagesEdits
-	case strings.HasPrefix(path, "/v1/videos"):
+	case strings.HasPrefix(path, "/v1/videos"), strings.HasPrefix(path, "/v1/async/videos"):
 		return Videos
 	case strings.HasPrefix(path, "/v1/voice/clones"),
 		strings.HasPrefix(path, "/v1/voice/clone"),

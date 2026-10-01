@@ -34,7 +34,7 @@ func newMuAPITestContextWithRecorder(method string, path string, body string) (*
 // model-free body while the gateway billing DTO retains the selected duration.
 func TestPrepareVideoRequestNormalizesAliases(t *testing.T) {
 	t.Parallel()
-	c := newMuAPITestContext(http.MethodPost, "/v1/videos/generations", `{"model":"veo3-fast","prompt":"a lighthouse","seconds":5,"aspect_ratio":"16:9"}`)
+	c := newMuAPITestContext(http.MethodPost, "/v1/async/videos", `{"model":"veo3-fast","prompt":"a lighthouse","seconds":5,"aspect_ratio":"16:9"}`)
 	request := &model.VideoRequest{Model: "veo3-fast", Seconds: float64Ptr(5)}
 
 	inputImages, err := (&Adaptor{}).PrepareVideoRequest(c, request)
@@ -53,7 +53,7 @@ func TestPrepareVideoRequestNormalizesAliases(t *testing.T) {
 // submits an unpriceable request with a provider-selected implicit duration.
 func TestPrepareVideoRequestRejectsMissingDuration(t *testing.T) {
 	t.Parallel()
-	c := newMuAPITestContext(http.MethodPost, "/v1/videos", `{"model":"veo3-fast","prompt":"a lighthouse"}`)
+	c := newMuAPITestContext(http.MethodPost, "/v1/async/videos", `{"model":"veo3-fast","prompt":"a lighthouse"}`)
 	_, err := (&Adaptor{}).PrepareVideoRequest(c, &model.VideoRequest{Model: "veo3-fast"})
 	require.Error(t, err)
 }
@@ -62,7 +62,7 @@ func TestPrepareVideoRequestRejectsMissingDuration(t *testing.T) {
 // job adaptor from being used for listing or content-download routes.
 func TestPrepareVideoRequestRejectsUnsupportedOperation(t *testing.T) {
 	t.Parallel()
-	c := newMuAPITestContext(http.MethodGet, "/v1/videos/job-123/content", "")
+	c := newMuAPITestContext(http.MethodGet, "/v1/async/videos/job-123/content", "")
 	_, err := (&Adaptor{}).PrepareVideoRequest(c, &model.VideoRequest{Model: "veo3-fast"})
 	require.Error(t, err)
 }
@@ -71,7 +71,7 @@ func TestPrepareVideoRequestRejectsUnsupportedOperation(t *testing.T) {
 // in the URL and is not duplicated in MuAPI's model-specific JSON body.
 func TestPrepareMuAPIVideoBodyRemovesMappedModel(t *testing.T) {
 	t.Parallel()
-	c := newMuAPITestContext(http.MethodPost, "/v1/videos", `{"model":"mapped-model","duration":5}`)
+	c := newMuAPITestContext(http.MethodPost, "/v1/async/videos", `{"model":"mapped-model","duration":5}`)
 	reader, err := prepareMuAPIVideoBody(c, strings.NewReader(`{"model":"mapped-model","duration":5}`))
 	require.NoError(t, err)
 	body, err := io.ReadAll(reader)

@@ -112,11 +112,11 @@ func validateMuAPIVideoOperation(c *gin.Context) error {
 		return errors.New("MuAPI video request context is missing")
 	}
 	path := stripQuery(c.Request.URL.Path)
-	if c.Request.Method == http.MethodPost && (path == "/v1/videos" || path == "/v1/videos/generations") {
+	if c.Request.Method == http.MethodPost && path == "/v1/async/videos" {
 		return nil
 	}
-	if c.Request.Method == http.MethodGet && strings.HasPrefix(path, "/v1/videos/") {
-		taskID := strings.TrimPrefix(path, "/v1/videos/")
+	if c.Request.Method == http.MethodGet && strings.HasPrefix(path, "/v1/async/videos/") {
+		taskID := strings.TrimPrefix(path, "/v1/async/videos/")
 		if taskID != "generations" && validMuAPITaskID(taskID) {
 			return nil
 		}
