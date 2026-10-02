@@ -96,9 +96,11 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 		return nil, errors.Wrap(err, "setup request header failed")
 	}
 
+	sanitizedRequestURL := model.SanitizeLogUpstreamEndpoint(fullRequestURL)
+
 	// Prepare tagged logger and propagate to context
 	lg := gmw.GetLogger(c).With(
-		zap.String("url", fullRequestURL),
+		zap.String("url", sanitizedRequestURL),
 		zap.Int("channelId", meta.ChannelId),
 		zap.Int("userId", meta.UserId),
 		zap.String("model", meta.ActualModelName),
@@ -110,7 +112,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	// Log upstream request for billing tracking
 	fields := []zap.Field{
 		zap.String("method", req.Method),
-		zap.String("url", fullRequestURL),
+		zap.String("url", sanitizedRequestURL),
 		zap.Bool("body_truncated", truncated),
 		zap.ByteString("body_preview", preview),
 	}
@@ -134,7 +136,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 		lg.Debug("upstream returned error status",
 			zap.Int("status", resp.StatusCode),
 			zap.String("model", meta.ActualModelName),
-			zap.String("url", fullRequestURL),
+			zap.String("url", sanitizedRequestURL),
 		)
 	}
 

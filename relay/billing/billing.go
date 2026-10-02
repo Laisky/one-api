@@ -188,7 +188,8 @@ type QuotaConsumeDetail struct {
 	// "anthropic"). Derived from apitype.String(meta.APIType).
 	UpstreamAPIFormat string
 	// UpstreamEndpoint is the final URL sent to the upstream provider, captured
-	// from meta.UpstreamRequestURL after the adaptor resolves it.
+	// from meta.UpstreamRequestURL after the adaptor resolves it. The value can
+	// contain provider credentials and must be sanitized before it is persisted.
 	UpstreamEndpoint string
 	// ToolUsageSummary describes built-in tool invocations performed during
 	// the request. When non-nil and non-empty, PostConsumeQuotaDetailed emits
@@ -277,10 +278,13 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 		metadata[model.LogMetadataKeyUpstreamAPIFormat] = detail.UpstreamAPIFormat
 	}
 	if detail.UpstreamEndpoint != "" {
-		if metadata == nil {
-			metadata = model.LogMetadata{}
+		sanitizedEndpoint := model.SanitizeLogUpstreamEndpoint(detail.UpstreamEndpoint)
+		if sanitizedEndpoint != "" {
+			if metadata == nil {
+				metadata = model.LogMetadata{}
+			}
+			metadata[model.LogMetadataKeyUpstreamEndpoint] = sanitizedEndpoint
 		}
-		metadata[model.LogMetadataKeyUpstreamEndpoint] = detail.UpstreamEndpoint
 	}
 	if len(metadata) > 0 {
 		entry.Metadata = metadata

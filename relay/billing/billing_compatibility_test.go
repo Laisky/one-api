@@ -86,6 +86,51 @@ func TestOriginModelNamePreserved(t *testing.T) {
 	}
 }
 
+// TestPostConsumeQuotaDetailedSanitizesUpstreamEndpoint verifies that billing metadata never persists provider URL credentials in user-visible logs.
+func TestPostConsumeQuotaDetailedSanitizesUpstreamEndpoint(t *testing.T) {
+	ctx := context.Background()
+	validTime := time.Unix(1_700_000_000, 0).UTC()
+	logChan := make(chan *modelpkg.Log, 1)
+	originalPostConsume := postConsumeQuotaWithLogFn
+	t.Cleanup(func() {
+		postConsumeQuotaWithLogFn = originalPostConsume
+	})
+	postConsumeQuotaWithLogFn = func(ctx context.Context, tokenId int, quotaDelta int64, totalQuota int64, logEntry *modelpkg.Log, provisionalLogId ...int) {
+		logChan <- logEntry
+	}
+
+	PostConsumeQuotaDetailed(QuotaConsumeDetail{
+		Ctx:                ctx,
+		TokenId:            123,
+		QuotaDelta:         10,
+		TotalQuota:         50,
+		UserId:             1,
+		ChannelId:          5,
+		PromptTokens:       100,
+		CompletionTokens:   50,
+		ModelRatio:         1.0,
+		GroupRatio:         1.0,
+		ModelName:          "gpt-4",
+		TokenName:          "test-token",
+		IsStream:           false,
+		StartTime:          validTime,
+		CompletionRatio:    1.0,
+		CachedPromptTokens: 0,
+		UpstreamEndpoint:   "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/ernie-3.5-8k?access_token=provider-secret",
+	})
+
+	select {
+	case entry := <-logChan:
+		endpoint, ok := entry.Metadata[modelpkg.LogMetadataKeyUpstreamEndpoint].(string)
+		require.True(t, ok)
+		require.Equal(t, "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/ernie-3.5-8k", endpoint)
+		require.NotContains(t, endpoint, "provider-secret")
+		require.NotContains(t, endpoint, "access_token")
+	case <-time.After(time.Second):
+		require.Fail(t, "expected PostConsumeQuotaDetailed to emit a log entry")
+	}
+}
+
 // TestInputValidation tests that both billing functions properly validate inputs
 func TestInputValidation(t *testing.T) {
 	ctx := context.Background()
