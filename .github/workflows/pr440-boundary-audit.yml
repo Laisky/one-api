@@ -1,0 +1,24 @@
+name: PR440 cross-adaptor audit
+on:
+  push:
+    branches: [work/pr440-boundary-audit-20261002t2215]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export committed source only
+        run: |
+          git merge-base --is-ancestor 9a0f052cc60c34628988a239117212eba0076145 cfa6e48bbbcdb3d5f7efc08cfa87967696123048
+          git bundle create "$RUNNER_TEMP/pr440-boundary.bundle" HEAD ^595c035f79ae66903edbc3907f94c98c3a2b54c8
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr440-boundary-source
+          path: ${{ runner.temp }}/pr440-boundary.bundle
+          retention-days: 2
