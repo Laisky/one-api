@@ -18,7 +18,10 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/ctxkey"
+	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 )
@@ -30,13 +33,22 @@ const (
 )
 
 // EstimateVideoPricing asks MuAPI for the exact cost of the normalized request
-// before one-api reserves quota. Parameters: c carries the request body, meta
-// identifies the configured MuAPI host and key, and request supplies duration
+// before one-api reserves quota. Parameters: c carries the request body and
+// selected channel, meta identifies that channel/model, and request supplies duration
 // and resolution billing hints. Return values preserve the provider's exact
 // total USD decimal or an error when MuAPI cannot quote the request.
 func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, request *model.VideoRequest) (*adaptor.VideoPricingConfig, error) {
 	if c == nil || metaInfo == nil || request == nil {
 		return nil, errors.New("MuAPI pricing estimate requires request context and metadata")
+	}
+	// Credentials and destination belong to the distributor's typed channel
+	// snapshot, not string metadata derived from a request context. Validate
+	// identity before network I/O; never fall back to an arbitrary metadata URL.
+	value, exists := c.Get(ctxkey.ChannelModel)
+	channel, ok := value.(*dbmodel.Channel)
+	if !exists || !ok || channel == nil || channel.Type != channeltype.MuAPI ||
+		channel.Id <= 0 || channel.Id != metaInfo.ChannelId || channel.UUID != metaInfo.ChannelUUID {
+		return nil, errors.New("MuAPI pricing requires a matching selected channel")
 	}
 	duration := request.RequestedDurationSeconds()
 	if duration <= 0 || math.IsNaN(duration) || math.IsInf(duration, 0) {
@@ -53,7 +65,7 @@ func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, requ
 
 	ctx, cancel := context.WithTimeout(gmw.Ctx(c), muAPIPricingTimeout)
 	defer cancel()
-	endpoint, err := muAPIEndpointURL(metaInfo.BaseURL, "models", modelName, "estimate-cost")
+	endpoint, err := muAPIEndpointURL(channel.GetBaseURL(), "models", modelName, "estimate-cost")
 	if err != nil {
 		return nil, errors.Wrap(err, "validate MuAPI pricing endpoint")
 	}
@@ -62,8 +74,8 @@ func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, requ
 		return nil, errors.Wrap(err, "create MuAPI pricing request")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if strings.TrimSpace(metaInfo.APIKey) != "" {
-		req.Header.Set("x-api-key", metaInfo.APIKey)
+	if strings.TrimSpace(channel.Key) != "" {
+		req.Header.Set("x-api-key", channel.Key)
 	}
 
 	httpClient := client.HTTPClient

@@ -114,6 +114,7 @@ func exerciseMuAPIURLOperation(t *testing.T, operation, base, segment string) er
 	switch operation {
 	case "quote":
 		c := newMuAPITestContext(http.MethodPost, "/v1/async/videos", `{"duration":5}`)
+		bindMuAPIPricingChannel(c, info)
 		_, err := a.EstimateVideoPricing(c, info, &model.VideoRequest{Duration: float64Ptr(5)})
 		return err
 	case "submit":

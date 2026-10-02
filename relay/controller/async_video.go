@@ -164,7 +164,10 @@ func RelayAsyncVideoHelper(c *gin.Context, syncWait bool) *relaymodel.ErrorWithS
 		if errors.Is(err, dbmodel.ErrAsyncQuota) {
 			status, code = http.StatusForbidden, "insufficient_quota"
 		}
-		writeAsyncVideoError(c, status, code, "The asynchronous task could not be admitted; retry only with the same Idempotency-Key.", record.ID)
+		// ReserveAsyncTask may assign an ID before its transaction rolls back.
+		// Only its successful return proves a durable task (including a lost
+		// COMMIT acknowledgement recovered by the reservation lookup).
+		writeAsyncVideoError(c, status, code, "The asynchronous task could not be admitted; retry only with the same Idempotency-Key.", "")
 		return nil
 	}
 	c.Set(asyncvideo.DurableTaskKey, task.ID)

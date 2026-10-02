@@ -176,6 +176,9 @@ func Relay(c *gin.Context) {
 	PrometheusMonitor.RecordRelayRequest(c, relayMeta, startTime, false, 0, 0, 0)
 
 	retryTimes := max(config.RetryTimes, 0)
+	// Authorization and retry budget are different decisions. Capacity recovery
+	// may increase an allowed budget, but must never undo a safety veto.
+	retryAllowed := true
 	lastDispatchErr := bizErr
 	if adaptor.IsRESTTransportMismatch(bizErr.RawError) {
 		// No provider attempt was made. Reserve the initial dispatch, not an
@@ -229,6 +232,7 @@ func Relay(c *gin.Context) {
 				)...,
 			)
 			retryTimes = 0
+			retryAllowed = false
 		}
 	}
 
@@ -245,7 +249,7 @@ func Relay(c *gin.Context) {
 
 	// For 413 errors, increase retry attempts to exhaust all available channels
 	// to avoid returning 413 to users when other channels might be available
-	if bizErr.StatusCode == http.StatusRequestEntityTooLarge {
+	if bizErr.StatusCode == http.StatusRequestEntityTooLarge && retryAllowed {
 		// Get the total number of channels for this model/group
 		// and try to retry all channels
 		channels, err := dbmodel.GetChannelsFromCache(group, originalModel)
@@ -293,7 +297,7 @@ func Relay(c *gin.Context) {
 	// For 5xx/server transient errors, avoid reusing the same ability first, probe within tier
 	isServerTransient := bizErr.StatusCode >= 500 && bizErr.StatusCode <= 599
 
-	for i := retryTimes; i > 0 && rcontroller.BillingAllowsRetry(c) &&
+	for i := retryTimes; i > 0 && retryAllowed && !videoReplayUnsafe(c) && rcontroller.BillingAllowsRetry(c) &&
 		c.GetInt(ctxkey.SpecificChannelId) == 0 && c.Request.Context().Err() == nil; i-- {
 		var channel *dbmodel.Channel
 		var err error

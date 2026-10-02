@@ -293,3 +293,30 @@ fixtures; validation does not submit a paid MuAPI generation.
 - [MuAPI model catalog](https://api.muapi.ai/api/v1/models)
 - [MuAPI authentication](https://muapi.ai/docs/authentication)
 - [MuAPI pricing](https://muapi.ai/de/docs/pricing)
+
+## Safe operational rollback
+
+Stop new admission before rolling back to a release without the durable worker.
+Disable the MuAPI native capability/channel for new requests, but retain at least
+one worker from this release while already accepted tasks finish polling and
+accounting. Disabling an accepted task's channel does not authorize failover or
+refund. Existing durable task retrieval remains available to authorized owners.
+
+On the primary database, inspect outstanding work with a read-only query:
+
+```sql
+SELECT state, billing_state, COUNT(*) AS tasks
+FROM async_tasks
+WHERE billing_state = 'held'
+   OR evidence_pending = true
+   OR log_recorded = false
+GROUP BY state, billing_state;
+```
+
+Do not remove the last compatible worker while this reports unresolved work.
+Tasks with irretrievably missing provider receipts require provider/operator
+reconciliation; do not make the query empty by deleting rows or manually clearing
+holds. Preserve the primary database, separate log database, task identities,
+financial receipts and routing configuration through rollback and backup restore.
+This is an operational precondition, not a claim that older binaries can resume
+new task records or that a reconciliation administration API is included.

@@ -39,6 +39,7 @@ func TestEstimateVideoPricingUsesMuAPICostEndpoint(t *testing.T) {
 	metaInfo := &meta.Meta{BaseURL: server.URL, APIKey: "test-key", ActualModelName: "veo3-fast"}
 	request := &model.VideoRequest{Model: "veo3-fast", Duration: float64Ptr(5)}
 
+	bindMuAPIPricingChannel(c, metaInfo)
 	pricing, err := (&Adaptor{}).EstimateVideoPricing(c, metaInfo, request)
 	require.NoError(t, err)
 	require.NotNil(t, pricing)
@@ -68,9 +69,9 @@ func TestEstimateVideoPricingDoesNotFollowRedirect(t *testing.T) {
 	t.Cleanup(func() { client.HTTPClient = previousClient })
 
 	c := newMuAPITestContext(http.MethodPost, "/v1/async/videos", `{"duration":5}`)
-	_, err := (&Adaptor{}).EstimateVideoPricing(c, &meta.Meta{
-		BaseURL: source.URL, APIKey: "secret-key", ActualModelName: "veo3-fast",
-	}, &model.VideoRequest{Duration: float64Ptr(5)})
+	info := &meta.Meta{BaseURL: source.URL, APIKey: "secret-key", ActualModelName: "veo3-fast"}
+	bindMuAPIPricingChannel(c, info)
+	_, err := (&Adaptor{}).EstimateVideoPricing(c, info, &model.VideoRequest{Duration: float64Ptr(5)})
 	require.Error(t, err)
 	require.Zero(t, targetRequests.Load(), "redirect target must not receive the credential or request body")
 }
@@ -90,6 +91,8 @@ func TestEstimateVideoPricingRejectsNonUSD(t *testing.T) {
 	t.Cleanup(func() { client.HTTPClient = previousClient })
 
 	c := newMuAPITestContext(http.MethodPost, "/v1/async/videos", `{"duration":5}`)
-	_, err := (&Adaptor{}).EstimateVideoPricing(c, &meta.Meta{BaseURL: server.URL, ActualModelName: "veo3-fast"}, &model.VideoRequest{Duration: float64Ptr(5)})
+	info := &meta.Meta{BaseURL: server.URL, ActualModelName: "veo3-fast"}
+	bindMuAPIPricingChannel(c, info)
+	_, err := (&Adaptor{}).EstimateVideoPricing(c, info, &model.VideoRequest{Duration: float64Ptr(5)})
 	require.Error(t, err)
 }
