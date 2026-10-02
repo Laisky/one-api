@@ -1,0 +1,26 @@
+name: PR440 billing development
+on:
+  push:
+    branches: [work/pr440-billing-audit-20261002]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Export fixed source and ancestry
+        run: |
+          git archive --format=tar 5962c81e531e0cb6a27c39be3173519917490492 | gzip > "$RUNNER_TEMP/pr440-source.tar.gz"
+          git log --format='%H %P %s' -25 5962c81e531e0cb6a27c39be3173519917490492 > "$RUNNER_TEMP/pr440-ancestry.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr440-billing-source
+          path: |
+            ${{ runner.temp }}/pr440-source.tar.gz
+            ${{ runner.temp }}/pr440-ancestry.txt
+          retention-days: 1
