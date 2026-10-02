@@ -1,0 +1,92 @@
+name: Billing endpoint source control
+on:
+  push:
+    branches: [codex/review-442-endpoint-control-20261002]
+permissions:
+  contents: read
+jobs:
+  endpoint-control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Prove test sensitivity and validate restored implementation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import subprocess
+
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'endpoint-control'
+          out.mkdir()
+          source = pathlib.Path('relay/billing/billing.go')
+          test = pathlib.Path('relay/billing/log_endpoint_security_review_test.go')
+          correct_source, improved_test = source.read_bytes(), test.read_bytes()
+          baseline = '0c352566c6704af3228e5cef392e1f8e015cd749'
+          old_test = subprocess.check_output(['git', 'show', baseline + ':' + str(test)])
+          needle = b'if detail.UpstreamEndpoint != "" {'
+          assert correct_source.count(needle) == 1, 'mutation must target exactly one source'
+          name = 'TestReviewBillingSanitizesBothEndpointSources'
+          command = ['go', 'test', '-race', '-count=1', '-timeout=5m', '-json', '-run', '^' + name + '$', './relay/billing']
+
+          def run(label, args, expected):
+              result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+              (out / (label + '.log')).write_text(result.stdout)
+              print(label, 'exit=', result.returncode, flush=True)
+              if result.returncode != expected:
+                  print(result.stdout, flush=True)
+                  raise AssertionError(label + ' unexpected exit code')
+              return result.stdout
+
+          def events(text):
+              return [json.loads(line) for line in text.splitlines() if line.startswith('{')]
+
+          try:
+              source.write_bytes(correct_source.replace(needle, b'if false {', 1))
+              (out / 'mutation.diff').write_bytes(subprocess.check_output(['git', 'diff', '--', str(source)]))
+              test.write_bytes(old_test)
+              old = events(run('old-test-mutant', command, 0))
+              assert any(e.get('Test') == name and e.get('Action') == 'pass' for e in old)
+              test.write_bytes(improved_test)
+              red_text = run('improved-test-mutant', command, 1)
+              red = events(red_text)
+              failed = {e['Test'] for e in red if e.get('Action') == 'fail' and e.get('Test', '').startswith(name + '/')}
+              assert failed == {name + '/direct-only', name + '/direct-overrides-metadata'}, failed
+              assert any(e.get('Test') == name + '/metadata-only' and e.get('Action') == 'pass' for e in red)
+              output = ''.join(e.get('Output', '') for e in red)
+              assert 'Not equal:' in output, 'red control must fail through value assertions'
+              assert not any(word in output for word in ['panic:', 'DATA RACE', '[build failed]', 'test timed out'])
+              print('Confirmed: original test misses the mutant; improved direct-only and precedence assertions detect it.', flush=True)
+          finally:
+              source.write_bytes(correct_source)
+              test.write_bytes(improved_test)
+
+          green_text = run('restored-billing-suite', ['go', 'test', '-race', '-count=3', '-timeout=10m', '-json', './relay/billing'], 0)
+          green = events(green_text)
+          for case in ['metadata-only', 'direct-only', 'direct-overrides-metadata']:
+              assert sum(e.get('Test') == name + '/' + case and e.get('Action') == 'pass' for e in green) == 3
+          run('billing-vet', ['go', 'vet', './relay/billing'], 0)
+          subprocess.run(['git', 'diff', '--exit-code', '--', str(source), str(test)], check=True)
+          passed = {e['Test'] for e in green if e.get('Action') == 'pass' and e.get('Test')}
+          summary = {'validated_commit': '9c5869b2b272dea42b30d486aa9c6d373881ec96', 'baseline': baseline,
+                     'old_test_missed_mutant': True, 'new_test_detected_mutant': sorted(failed),
+                     'race_runs': 3, 'distinct_passing_tests_including_subtests': len(passed), 'vet': 'pass'}
+          (out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+          print(json.dumps(summary, indent=2), flush=True)
+          PY
+      - name: Archive control evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: review-442-endpoint-source-control
+          path: ${{ runner.temp }}/endpoint-control
+          if-no-files-found: error
+          retention-days: 14
