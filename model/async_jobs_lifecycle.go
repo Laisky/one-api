@@ -2,13 +2,13 @@ package model
 
 import (
 	"context"
+	"database/sql"
 	"math"
 	"time"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 const AsyncTaskLease = time.Minute
@@ -130,18 +130,21 @@ func ApplyAsyncTaskUpdate(ctx context.Context, task *AsyncTask, update AsyncTask
 			if update.UpstreamID != "" {
 				// Lock and compare in Go: SQL equality may be case-insensitive or
 				// ignore trailing spaces, but provider task IDs are byte-exact.
-				// SQLite's dialect omits FOR UPDATE; its enclosing transaction and
-				// busy retry still prevent a successful stale read/write pair.
-				var accepted AsyncTask
-				if err := tx.Select("upstream_id").Clauses(clause.Locking{Strength: "UPDATE"}).
-					Where("id = ? AND state = ? AND lease_owner = ? AND lease_until > ? AND billing_state = ?", leaseID, leaseState, leaseOwner, now, AsyncBillingHeld).
-					Take(&accepted).Error; err != nil {
-					if errors.Is(err, gorm.ErrRecordNotFound) {
+				// SQLite serializes writes through the enclosing transaction and
+				// busy retry; the other supported engines use an explicit row lock.
+				query := "SELECT upstream_id FROM async_tasks WHERE id = ? AND state = ? AND lease_owner = ? AND lease_until > ? AND billing_state = ? LIMIT 1"
+				if tx.Dialector.Name() != "sqlite" {
+					query += " FOR UPDATE"
+				}
+				var acceptedID sql.NullString
+				if err := tx.Raw(query, leaseID, leaseState, leaseOwner, now, AsyncBillingHeld).
+					Row().Scan(&acceptedID); err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
 						return ErrAsyncLeaseLost
 					}
 					return errors.Wrap(err, "lock accepted async identity")
 				}
-				if accepted.UpstreamID != "" && accepted.UpstreamID != update.UpstreamID {
+				if acceptedID.String != "" && acceptedID.String != update.UpstreamID {
 					return errors.New("async task observation conflicts with accepted identity")
 				}
 			}
