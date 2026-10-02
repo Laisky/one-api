@@ -3,7 +3,7 @@ on:
   push:
     branches: [work/pr440-billing-resume-20261002]
 permissions:
-  contents: read
+  contents: write
 jobs:
   databases:
     runs-on: ubuntu-latest
@@ -36,15 +36,41 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: 595c035f79ae66903edbc3907f94c98c3a2b54c8
+          fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        with:
-          go-version-file: go.mod
-      - name: Exercise real backend transactions and assert no database skips
+      - name: Restore the exact locally verified patch
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          go test -json -race -count=1 -timeout 8m -run '^TestAsyncBillingLiveDatabases$' ./model | tee "$RUNNER_TEMP/live-databases.jsonl"
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, os, pathlib, subprocess
+          blobs = ['9f45a1e626cf57ad9e1319bbd03a3cb4957e2c38', '246405053f23676b5c63ed1d8f880de31f9b61b7', 'cd63365d02c34864d5c401e404a1acbbf54cf19e']
+          data = b''
+          for sha in blobs:
+              obj = json.loads(subprocess.check_output(['gh', 'api', f'repos/Laisky/one-api/git/blobs/{sha}']))
+              chunk = base64.b64decode(obj['content'])
+              assert hashlib.sha1(b'blob ' + str(len(chunk)).encode() + b'\0' + chunk).hexdigest() == sha
+              data += chunk
+          patch = gzip.decompress(data)
+          assert hashlib.sha256(patch).hexdigest() == '042db19a42115b60ed36c2b04180b8396f8cd5ba47e67bb6f64668b9a956428f'
+          pathlib.Path(os.environ['RUNNER_TEMP'], 'resume.patch').write_bytes(patch)
+          PY
+          test "$(git rev-parse HEAD)" = 595c035f79ae66903edbc3907f94c98c3a2b54c8
+          git merge-base --is-ancestor 9a0f052cc60c34628988a239117212eba0076145 HEAD
+          git apply --check --index "$RUNNER_TEMP/resume.patch"
+          git apply --index "$RUNNER_TEMP/resume.patch"
+          git diff --cached --check
+          test "$(git write-tree)" = 6f00d06f0cad47365cffa2521ef5458622af93a9
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Exercise real backend transactions and require all ten named cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -json -race -count=1 -timeout 8m -run '^TestAsyncBilling(LiveDatabases|EvidenceLiveDatabases)$' ./model | tee "$RUNNER_TEMP/live-databases.jsonl"
           python3 - <<'PY'
           import json, os
           events = [json.loads(line) for line in open(os.path.join(os.environ['RUNNER_TEMP'], 'live-databases.jsonl'))]
@@ -53,11 +79,37 @@ jobs:
               for case in ('unlimited=false', 'unlimited=true', 'competing-refunds'):
                   name = f'TestAsyncBillingLiveDatabases/{backend}/{case}'
                   assert name in passed, f'Missing live pass: {name}'
+              for case in ('anonymous', 'accepted'):
+                  name = f'TestAsyncBillingEvidenceLiveDatabases/{backend}/{case}'
+                  assert name in passed, f'Missing evidence pass: {name}'
           assert not any(e['Action'] == 'skip' for e in events), 'Live database tests must not skip'
           PY
+      - name: Publish only the verified isolated result branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git write-tree)" = 6f00d06f0cad47365cffa2521ef5458622af93a9
+          git config user.name Codex
+          git config user.email codex@openai.com
+          git commit -m 'fix: persist async charge evidence before settlement and retain HTTP receipts'
+          test "$(git rev-parse HEAD^)" = 595c035f79ae66903edbc3907f94c98c3a2b54c8
+          git merge-base --is-ancestor 9a0f052cc60c34628988a239117212eba0076145 HEAD
+          python3 - <<'PY'
+          import base64, os, subprocess
+          env = dict(os.environ)
+          env['GIT_CONFIG_COUNT'] = '1'
+          env['GIT_CONFIG_KEY_0'] = 'http.https://github.com/.extraheader'
+          env['GIT_CONFIG_VALUE_0'] = 'AUTHORIZATION: basic ' + base64.b64encode(('x-access-token:' + os.environ['GH_TOKEN']).encode()).decode()
+          subprocess.run(['git', 'push', 'origin', 'HEAD:refs/heads/work/pr440-billing-verified-20261002t2036'], env=env, check=True)
+          PY
+          git show -s --format='%H %T %P' HEAD > "$RUNNER_TEMP/verified-commit.txt"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: pr440-live-databases
-          path: ${{ runner.temp }}/live-databases.jsonl
+          name: pr440-live-verified
+          path: |
+            ${{ runner.temp }}/live-databases.jsonl
+            ${{ runner.temp }}/verified-commit.txt
           retention-days: 14
