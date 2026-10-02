@@ -47,6 +47,16 @@ func userVisibleModelName(meta *metalib.Meta, fallback string) string {
 	return strings.TrimSpace(fallback)
 }
 
+// adjustPreConsumedQuotaAfterRefund returns the amount that final billing should treat as still pre-consumed.
+// Parameters: preConsumedQuota is the original reserved quota amount, and refunded reports whether that reservation was already returned.
+// Returns: zero when the reservation was refunded, otherwise the original pre-consumed amount.
+func adjustPreConsumedQuotaAfterRefund(preConsumedQuota int64, refunded bool) int64 {
+	if refunded {
+		return 0
+	}
+	return preConsumedQuota
+}
+
 // returnPreConsumedQuotaConservative refunds pre-consumed quota only when the request
 // has not potentially been forwarded upstream.
 //

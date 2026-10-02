@@ -212,7 +212,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		}
 
 		// refund pre-consumed quota immediately before final billing reconciliation
-		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile_mcp")
+		refunded := returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile_mcp")
+		preConsumedQuota = adjustPreConsumedQuotaAfterRefund(preConsumedQuota, refunded)
 
 		if usage != nil {
 			userId := strconv.Itoa(meta.UserId)
@@ -394,7 +395,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	}
 
 	// Refund pre-consumed quota immediately before final billing reconciliation
-	_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile")
+	refunded := returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile")
+	preConsumedQuota = adjustPreConsumedQuotaAfterRefund(preConsumedQuota, refunded)
 
 	if usage != nil {
 		userId := strconv.Itoa(meta.UserId)

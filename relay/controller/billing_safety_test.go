@@ -56,3 +56,18 @@ func TestReturnPreConsumedQuotaConservativeZero(t *testing.T) {
 	refunded := returnPreConsumedQuotaConservative(context.Background(), ctx, 0, 1, "test_zero")
 	require.False(t, refunded)
 }
+
+// TestAdjustPreConsumedQuotaAfterRefund verifies that final billing no longer
+// treats already-refunded quota as still pre-consumed.
+//
+// Parameters:
+//   - t: Go testing handle.
+func TestAdjustPreConsumedQuotaAfterRefund(t *testing.T) {
+	t.Helper()
+
+	reconciled := adjustPreConsumedQuotaAfterRefund(1500, true)
+	require.Equal(t, int64(0), reconciled)
+
+	retained := adjustPreConsumedQuotaAfterRefund(1500, false)
+	require.Equal(t, int64(1500), retained)
+}
