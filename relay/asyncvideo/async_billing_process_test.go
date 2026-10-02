@@ -82,7 +82,7 @@ func TestAsyncBillingProcessChild(t *testing.T) {
 		pause()
 		return
 	}
-	if stage == "before_settlement_commit" || stage == "during_additional_debit" || stage == "outbox_before_ack" {
+	if stage == "before_settlement_commit" || stage == "during_additional_debit" || stage == "outbox_before_ack" || stage == "submit_debit_before_commit" {
 		require.NoError(t, model.DB.Callback().Update().Before("gorm:update").Register("test:crash_boundary", func(tx *gorm.DB) {
 			fields, ok := tx.Statement.Dest.(map[string]any)
 			if !ok {
@@ -91,7 +91,7 @@ func TestAsyncBillingProcessChild(t *testing.T) {
 			if stage == "before_settlement_commit" && tx.Statement.Table == "async_tasks" && fields["state"] == model.AsyncTaskCompleted {
 				pause()
 			}
-			if stage == "during_additional_debit" && tx.Statement.Table == "tokens" {
+			if (stage == "during_additional_debit" || stage == "submit_debit_before_commit") && tx.Statement.Table == "tokens" {
 				pause()
 			}
 			if stage == "outbox_before_ack" && tx.Statement.Table == "async_tasks" && fields["log_recorded"] == true {
@@ -118,11 +118,11 @@ func TestAsyncBillingProcessChild(t *testing.T) {
 }
 
 // TestAsyncBillingSIGKILLRecovery verifies physical balances, task state, request
-// cost and one log after SIGKILL at eight worker/ledger boundaries. An ambiguous
+// cost and one log after SIGKILL at nine worker/ledger boundaries. An ambiguous
 // paid POST stays charged and is never automatically retried; known jobs resume
 // GET polling, collect final cost, and survive split-database acknowledgement loss.
 func TestAsyncBillingSIGKILLRecovery(t *testing.T) {
-	stages := []string{"reserved", "during_submission", "accepted", "during_poll", "before_settlement_commit", "during_additional_debit", "settled", "outbox_before_ack"}
+	stages := []string{"reserved", "during_submission", "accepted", "during_poll", "before_settlement_commit", "during_additional_debit", "settled", "outbox_before_ack", "submit_debit_before_commit"}
 	for _, stage := range stages {
 		t.Run(stage, func(t *testing.T) {
 			dir := t.TempDir()
@@ -147,12 +147,22 @@ func TestAsyncBillingSIGKILLRecovery(t *testing.T) {
 						<-r.Context().Done()
 						return
 					}
+					if stage == "submit_debit_before_commit" {
+						_, _ = io.WriteString(w, `{"request_id":"crash-job","cost":{"amount_usd":0.8}}`)
+						return
+					}
 					_, _ = io.WriteString(w, `{"request_id":"crash-job"}`)
 					return
 				}
 				if polls.Add(1) == 1 && stage == "during_poll" {
 					blocked <- struct{}{}
 					<-r.Context().Done()
+					return
+				}
+				if stage == "submit_debit_before_commit" {
+					// The replacement worker must rely on the pre-crash charge,
+					// not a cost field helpfully repeated by the provider.
+					_, _ = io.WriteString(w, `{"id":"crash-job","status":"completed","outputs":["https://media.example/crash.mp4"]}`)
 					return
 				}
 				_, _ = io.WriteString(w, `{"id":"crash-job","status":"completed","outputs":["https://media.example/crash.mp4"],"cost":{"amount_usd":0.8,"refunded":false}}`)

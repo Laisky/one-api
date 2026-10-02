@@ -79,6 +79,15 @@ func AsyncUpstreamCostQuota(multiplier, cost string) (int64, error) {
 // wallet cannot make the gateway forgive already-incurred cost. Fixed admin
 // tariffs deliberately keep their original customer price. The caller owns tx.
 func collectAsyncTaskCost(tx *gorm.DB, task *AsyncTask, cost string) (bool, error) {
+	if task.ObservedCostUSD != "" {
+		// A later poll can omit the charge. Previously persisted evidence must
+		// still be collected before a successful result is committed.
+		var err error
+		cost, err = maxAsyncObservedCost(task.ObservedCostUSD, cost)
+		if err != nil {
+			return false, err
+		}
+	}
 	if cost == "" || task.CostQuotaPerUSD == "" {
 		return false, nil
 	}

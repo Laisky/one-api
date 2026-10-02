@@ -81,6 +81,35 @@ mocked calls. The prior `TestAsyncTask*` / `TestAsyncVideo*` regressions remain.
 | Retention / lost notifications / disabled channel / spent token replay | Prior async task/router suites | Never prune unresolved debits or use retrieval to create unpaid work. |
 | Real MySQL and PostgreSQL, separate log DB | `TestAsyncBillingLiveDatabases` | Concurrent admission, supplemental debt, token policy, stale outbox and competing refunds use actual backend transactions. Missing DSNs fail when `ONEAPI_REQUIRE_DB_BACKENDS=1`. |
 
+## Recovery follow-up: observed evidence must survive independently
+
+Resumed from `595c035f79ae66903edbc3907f94c98c3a2b54c8`, keeping the earlier
+reproduction and SIGKILL cases. Three additional behavior groups were run red
+before their implementation changes: dropped HTTP cost headers/short bodies,
+redirect receipt loss, and receipt rollback during supplemental collection.
+These are real HTTP/database assertions, not compilation failures. The new
+synchronous-router cases assert wallet/token/channel balances and the physical
+request-cost and log rows after the waiter disconnects.
+
+| Additional scenario | Executable regression | Financial boundary |
+| --- | --- | --- |
+| Header-only cost; body/header disagreement; multiple headers; invalid numbers | `TestAsyncBillingResponseHeadersPreserveCharge` | Preserve the greatest bounded valid decimal; invalid evidence withholds success, never erases another known charge. |
+| Short HTTP, complete JSON with short framing, oversized body | `TestAsyncBillingInterruptedResponseKeepsHeaderCharge` | Preserve received cost headers and usable IDs even when reading the body fails. |
+| Header charges through the shipped synchronous route | `TestAsyncBillingHeaderChargeReachesWallet`: 5 stages | Disconnected waiter cannot avoid supplements/debt; eventual result and every financial surface agree. |
+| HTTP redirect after acceptance | `TestAsyncBillingRedirectKeepsReceiptWithoutReplay` | Never follow or forward keys; preserve the original ID/charge rather than dropping its response. |
+| Mismatched task, header-only/anonymous refund, invalid charge with refund | `TestAsyncBillingHeaderEvidenceIdentityAndRefund` | No cross-task charge/refund; headers alone are not proof of an authorized refund. |
+| Token debit SQL fails after receipt | `TestAsyncBillingSubmitEvidenceSurvivesDebitFailure`: accepted and anonymous | Save ID/maximum cost before financial transaction; after expiry recover the charge without a second POST. |
+| SIGKILL during first-submit supplemental debit | `TestAsyncBillingSIGKILLRecovery/submit_debit_before_commit` | Ninth hard-kill boundary: rolled-back wallet changes recover from durable evidence; later polling deliberately omits cost. |
+| Lower/duplicate evidence, stale lease, conflicting ID | `TestAsyncBillingEvidenceRecovery` | Monotonic bounded evidence, fenced identity, one eventual debit and one log. |
+| Evidence COMMIT succeeded, acknowledgement lost | `TestAsyncBillingEvidenceLostCommitAcknowledgement` | Restart from committed identity/charge; neither speculate a refund nor re-create the job. |
+| Same new evidence transaction on actual SQL engines | `TestAsyncBillingEvidenceLiveDatabases`: MySQL/PostgreSQL × accepted/anonymous | Verify affected-row semantics, lease recovery, supplements and log uniqueness on both backends. |
+
+The evidence transaction is not settlement: it does not publish results, release
+funds, mark completion or pretend a supplemental wallet debit succeeded. Its
+pending flag is cleared only with a committed financial observation. A missing
+provider ID keeps the task explicitly unknown after collecting its known charge;
+there is no GET/POST guess or automatic regeneration.
+
 ## Running and interpreting the evidence
 
 ```sh
@@ -98,7 +127,7 @@ go test -json -race -count=1 -p 2 -timeout 12m \
 # Requires test-only credentials with CREATE/DROP DATABASE privileges.
 # Every live subcase creates unique disposable primary and log databases.
 ONEAPI_REQUIRE_DB_BACKENDS=1 go test -race -count=1 -timeout 8m \
-  -run '^TestAsyncBillingLiveDatabases$' ./model
+  -run '^TestAsyncBilling(LiveDatabases|EvidenceLiveDatabases)$' ./model
 ```
 
 Local SQLite runs cannot qualify the live backend subcases: they explicitly skip

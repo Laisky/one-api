@@ -122,3 +122,65 @@ func TestAsyncBillingSupplementFailureWithholdsResult(t *testing.T) {
 	require.EqualValues(t, -200000, reloadUserQuota(t))
 	require.EqualValues(t, 1, server.creates.Load())
 }
+
+// TestAsyncBillingSubmitEvidenceSurvivesDebitFailure verifies a receipt is not
+// discarded when a later wallet operation fails. Recovery must collect known
+// cost without another paid POST, even when later polling omits all cost fields.
+func TestAsyncBillingSubmitEvidenceSurvivesDebitFailure(t *testing.T) {
+	for _, knownID := range []bool{true, false} {
+		name := "anonymous_charge"
+		if knownID {
+			name = "accepted_receipt"
+		}
+		t.Run(name, func(t *testing.T) {
+			muapiTaskSetup(t, 200000)
+			server := newMuapiTaskServer(t)
+			if knownID {
+				server.submit.Store(`{"request_id":"muapi-job-1","cost":{"amount_usd":0.8}}`)
+			} else {
+				server.submit.Store(`{"cost":{"amount_usd":0.8}}`)
+			}
+			server.poll.Store(`{"id":"muapi-job-1","status":"completed","outputs":["https://media.example/recovered.mp4"]}`)
+			_, task := muapiSubmitTask(t, server, "receipt-debit-failure")
+			require.NoError(t, dbmodel.DB.Callback().Update().Before("gorm:update").Register("test:receipt_debit_outage", func(tx *gorm.DB) {
+				if tx.Statement.Table == "tokens" {
+					tx.AddError(errors.New("token debit database failure"))
+				}
+			}))
+			_, err := asyncvideo.ProcessOne(context.Background(), ResolveAsyncVideoProvider, time.Now())
+			require.Error(t, err)
+			require.NoError(t, dbmodel.DB.Callback().Update().Remove("test:receipt_debit_outage"))
+			saved, err := dbmodel.GetOwnedAsyncTask(context.Background(), task.ID, task.UserID, task.UserUUID)
+			require.NoError(t, err)
+			require.EqualValues(t, 200000, saved.Quota, "failed supplement rolls back wallet operations")
+			require.Zero(t, reloadUserQuota(t))
+			require.Empty(t, saved.ResultJSON)
+			if knownID {
+				require.Equal(t, "muapi-job-1", saved.UpstreamID, "accepted receipt must survive a failed supplement")
+			}
+			// Only shorten the real persisted lease; do not reconstruct the lost receipt
+			// or inject a financial outcome into recovery.
+			require.NoError(t, dbmodel.DB.Model(&dbmodel.AsyncTask{}).Where("id = ?", task.ID).Update("lease_until", 0).Error)
+			worked, err := asyncvideo.ProcessOne(context.Background(), ResolveAsyncVideoProvider, time.Now())
+			require.NoError(t, err)
+			require.True(t, worked, "durable evidence must remain recoverable after lease expiry")
+			saved, err = dbmodel.GetOwnedAsyncTask(context.Background(), task.ID, task.UserID, task.UserUUID)
+			require.NoError(t, err)
+			require.EqualValues(t, 400000, saved.Quota)
+			require.EqualValues(t, -200000, reloadUserQuota(t))
+			require.EqualValues(t, 1, server.creates.Load())
+			if knownID {
+				require.Equal(t, dbmodel.AsyncTaskCompleted, saved.State)
+				require.Equal(t, dbmodel.AsyncBillingSettled, saved.BillingState)
+				require.EqualValues(t, 1, server.polls.Load())
+			} else {
+				require.Equal(t, dbmodel.AsyncTaskUnknown, saved.State)
+				require.Equal(t, dbmodel.AsyncBillingHeld, saved.BillingState)
+				require.Zero(t, server.polls.Load())
+				worked, err = asyncvideo.ProcessOne(context.Background(), ResolveAsyncVideoProvider, time.Now().Add(time.Hour))
+				require.NoError(t, err)
+				require.False(t, worked, "anonymous evidence replay must not spin or regenerate")
+			}
+		})
+	}
+}

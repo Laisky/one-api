@@ -26,13 +26,19 @@ func ClaimAsyncTask(ctx context.Context, now time.Time) (*AsyncTask, error) {
 		return nil, errors.Wrap(err, "find expired submitting leases")
 	}
 	if len(expired) > 0 {
-		if err := db.Model(&AsyncTask{}).Where("id IN ? AND state = ? AND lease_until <= ?", expired, AsyncTaskSubmitting, nowMS).
-			Updates(map[string]any{"state": AsyncTaskUnknown, "error_code": "submission_unknown", "lease_owner": "", "lease_until": int64(0)}).Error; err != nil {
+		// Evidence is committed before accounting. A crash during supplemental
+		// collection must not erase the accepted ID or resubmit the paid POST.
+		if err := db.Model(&AsyncTask{}).Where("id IN ? AND state = ? AND lease_until <= ? AND upstream_id <> ?", expired, AsyncTaskSubmitting, nowMS, "").
+			Updates(map[string]any{"state": AsyncTaskQueued, "error_code": "receipt_recovered", "lease_owner": "", "lease_until": int64(0), "next_poll_at": int64(0)}).Error; err != nil {
+			return nil, errors.Wrap(err, "recover accepted async submissions")
+		}
+		if err := db.Model(&AsyncTask{}).Where("id IN ? AND state = ? AND lease_until <= ? AND (upstream_id = ? OR upstream_id IS NULL)", expired, AsyncTaskSubmitting, nowMS, "").
+			Updates(map[string]any{"state": AsyncTaskUnknown, "error_code": "submission_unknown", "lease_owner": "", "lease_until": int64(0), "next_poll_at": int64(0)}).Error; err != nil {
 			return nil, errors.Wrap(err, "recover uncertain async submissions")
 		}
 	}
 	var tasks []AsyncTask
-	if err := db.Where("state IN ? AND billing_state = ? AND next_poll_at <= ? AND lease_until <= ?", []string{AsyncTaskReserved, AsyncTaskQueued, AsyncTaskRunning, AsyncTaskFailed, AsyncTaskCancelled}, AsyncBillingHeld, nowMS, nowMS).
+	if err := db.Where("(state IN ? OR (state = ? AND evidence_pending = ?)) AND billing_state = ? AND next_poll_at <= ? AND lease_until <= ?", []string{AsyncTaskReserved, AsyncTaskQueued, AsyncTaskRunning, AsyncTaskFailed, AsyncTaskCancelled}, AsyncTaskUnknown, true, AsyncBillingHeld, nowMS, nowMS).
 		Order("next_poll_at ASC").Limit(16).Find(&tasks).Error; err != nil {
 		return nil, errors.Wrap(err, "find due async tasks")
 	}
@@ -103,7 +109,7 @@ func ApplyAsyncTaskUpdate(ctx context.Context, task *AsyncTask, update AsyncTask
 		billingState = AsyncBillingRefunded
 	}
 	values := map[string]any{"state": update.State, "error_code": update.ErrorCode, "lease_owner": "", "lease_until": int64(0),
-		"next_poll_at": update.NextPollAt, "poll_failures": update.PollFailures}
+		"next_poll_at": update.NextPollAt, "poll_failures": update.PollFailures, "evidence_pending": false}
 	if update.UpstreamID != "" {
 		values["upstream_id"] = update.UpstreamID
 		values["request_body"] = ""

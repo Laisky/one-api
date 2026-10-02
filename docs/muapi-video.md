@@ -229,6 +229,29 @@ These surfaces are eventually consistent; the primary task/wallet transaction is
 the immediate financial authority. Cache refresh or log failure never refunds,
 rolls back a committed debit, or replays provider generation.
 
+MuAPI's documented `X-MuAPI-Cost-USD` header is also financial evidence. The
+adapter retains the greater valid charge from the body and bounded header values,
+using exact decimal comparison. A short, malformed or oversized body cannot erase
+an already received header charge. Redirects are not followed: the original
+response remains available for its accepted ID/cost, but never authorizes result
+publication or a refund merely because it includes a redirect or refund header.
+Only a valid matching failed/cancelled body receipt can authorize a refund.
+
+Observed task IDs and maximum USD charges are committed in a fenced evidence
+transaction **before** the financial transaction. The private `observed_cost_usd`,
+`evidence_pending` and `evidence_version` fields distinguish known evidence from
+money that actually committed. A failure during token/user supplemental debit
+therefore cannot erase the provider ID or a known higher invoice. No result or
+financially completed state is exposed by the evidence transaction.
+
+After lease expiry, a submitting task with a durable provider ID resumes GET
+polling, never POST creation. Anonymous pending cost evidence is reconciled without
+calling any provider endpoint, then stops being runnable. Completion collects the
+largest persisted charge even when a later provider poll omits cost or quotes a
+lower amount. Evidence and accounting are both durable only once their respective
+transactions commit; a total database outage before evidence storage still needs
+provider/operator reconciliation, while the original prepaid reservation remains.
+
 Graceful cancellation gives already observed provider receipts a bounded detached
 write inside the joined worker. Hard process termination relies on the database:
 prepaid reservations survive; known tasks resume GET polling; ambiguous submitted

@@ -89,6 +89,12 @@ func ProcessOne(ctx context.Context, resolve Resolver, now time.Time) (bool, err
 		return false, err
 	}
 	update := model.AsyncTaskUpdate{State: task.State, NextPollAt: now.Add(5 * time.Second).UnixMilli()}
+	if task.State == model.AsyncTaskUnknown {
+		// Only outstanding financial evidence makes an anonymous task eligible.
+		// Reconcile its known charge without issuing any provider POST or GET.
+		update.ErrorCode = "submission_unknown"
+		return true, persistObservation(ctx, task, update)
+	}
 	age := now.UnixMilli() - task.CreatedAt
 	if (task.State == model.AsyncTaskSubmitting && age > (5*time.Minute).Milliseconds()) || age > (24*time.Hour).Milliseconds() {
 		if task.State == model.AsyncTaskSubmitting && task.UpstreamID == "" {
@@ -176,5 +182,8 @@ func ProcessOne(ctx context.Context, resolve Resolver, now time.Time) (bool, err
 func persistObservation(ctx context.Context, task *model.AsyncTask, update model.AsyncTaskUpdate) error {
 	durable, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
+	if err := model.RecordAsyncTaskEvidence(durable, task, update); err != nil {
+		return err
+	}
 	return model.ApplyAsyncTaskUpdate(durable, task, update)
 }

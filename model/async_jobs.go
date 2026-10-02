@@ -44,31 +44,36 @@ var ErrAsyncLeaseLost = errors.New("asynchronous task lease is no longer owned")
 // once submission is acknowledged; results and idempotency receipts remain for
 // 30 days after financially settled terminal work. Unknown outcomes are retained.
 type AsyncTask struct {
-	ID               string `gorm:"primaryKey;size:64" json:"-"`
-	DedupKey         string `gorm:"size:64;uniqueIndex;not null" json:"-"`
-	RequestHash      string `gorm:"size:64;not null" json:"-"`
-	UserID           int    `gorm:"index;not null" json:"-"`
-	UserUUID         string `gorm:"size:36" json:"-"`
-	TokenID          int    `json:"-"`
-	TokenUUID        string `gorm:"size:36" json:"-"`
-	TokenUnlimited   bool   `json:"-"`
-	TokenName        string `gorm:"size:191" json:"-"`
-	ChannelID        int    `json:"-"`
-	ChannelUUID      string `gorm:"size:36" json:"-"`
-	ChannelType      int    `json:"-"`
-	BaseURL          string `gorm:"size:2048" json:"-"`
-	OriginModel      string `gorm:"size:128" json:"-"`
-	ActualModel      string `gorm:"size:128" json:"-"`
-	RequestBody      string `gorm:"size:1048576" json:"-"`
-	RequestID        string `gorm:"size:128" json:"-"`
-	TraceID          string `gorm:"size:128" json:"-"`
-	UpstreamID       string `gorm:"size:191" json:"-"`
-	State            string `gorm:"size:32;index:idx_async_jobs_due,priority:1" json:"-"`
-	BillingState     string `gorm:"size:16;index" json:"-"`
-	Quota            int64  `json:"-"`
-	QuotedQuota      int64  `gorm:"not null;default:0" json:"-"`
-	CostQuotaPerUSD  string `gorm:"size:128" json:"-"`
-	UpstreamCostUSD  string `gorm:"size:128" json:"-"`
+	ID              string `gorm:"primaryKey;size:64" json:"-"`
+	DedupKey        string `gorm:"size:64;uniqueIndex;not null" json:"-"`
+	RequestHash     string `gorm:"size:64;not null" json:"-"`
+	UserID          int    `gorm:"index;not null" json:"-"`
+	UserUUID        string `gorm:"size:36" json:"-"`
+	TokenID         int    `json:"-"`
+	TokenUUID       string `gorm:"size:36" json:"-"`
+	TokenUnlimited  bool   `json:"-"`
+	TokenName       string `gorm:"size:191" json:"-"`
+	ChannelID       int    `json:"-"`
+	ChannelUUID     string `gorm:"size:36" json:"-"`
+	ChannelType     int    `json:"-"`
+	BaseURL         string `gorm:"size:2048" json:"-"`
+	OriginModel     string `gorm:"size:128" json:"-"`
+	ActualModel     string `gorm:"size:128" json:"-"`
+	RequestBody     string `gorm:"size:1048576" json:"-"`
+	RequestID       string `gorm:"size:128" json:"-"`
+	TraceID         string `gorm:"size:128" json:"-"`
+	UpstreamID      string `gorm:"size:191" json:"-"`
+	State           string `gorm:"size:32;index:idx_async_jobs_due,priority:1" json:"-"`
+	BillingState    string `gorm:"size:16;index" json:"-"`
+	Quota           int64  `json:"-"`
+	QuotedQuota     int64  `gorm:"not null;default:0" json:"-"`
+	CostQuotaPerUSD string `gorm:"size:128" json:"-"`
+	UpstreamCostUSD string `gorm:"size:128" json:"-"`
+	// Observed evidence survives a later accounting rollback. It is not a
+	// published result, settled debit or authority to repeat a paid POST.
+	ObservedCostUSD  string `gorm:"size:128" json:"-"`
+	EvidencePending  bool   `gorm:"not null;default:false" json:"-"`
+	EvidenceVersion  int64  `gorm:"not null;default:0" json:"-"`
 	BillingRevision  int64  `gorm:"not null;default:0" json:"-"`
 	LogNextAttemptAt int64  `gorm:"not null;default:0;index:idx_async_jobs_log_due,priority:2" json:"-"`
 	LogFailures      int    `gorm:"not null;default:0" json:"-"`

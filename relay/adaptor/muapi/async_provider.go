@@ -5,10 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +20,8 @@ import (
 
 var _ asyncvideo.Provider = (*Adaptor)(nil)
 
+var errMuAPIResultTaskIDMismatch = errors.New("MuAPI result task ID mismatch")
+
 // SubmitVideo submits one normalized request without retries or response writes.
 // A response must positively identify an accepted job or an explicit rejection;
 // network errors and malformed successful responses are unknown, never retryable.
@@ -29,34 +29,33 @@ func (a *Adaptor) SubmitVideo(ctx context.Context, info *meta.Meta, body []byte)
 	if info == nil || !validMuAPIModelName(info.ActualModelName) || !json.Valid(body) || len(body) > dbmodel.MaxAsyncTaskBody {
 		return asyncvideo.Submission{Rejected: true}, errors.New("invalid MuAPI submission")
 	}
-	status, data, err := a.asyncVideoHTTP(ctx, info, http.MethodPost, muAPICoreBaseURL(info.BaseURL)+"/"+info.ActualModelName, body)
-	if err != nil {
-		return asyncvideo.Submission{}, err
-	}
-
-	var response struct {
-		RequestID string          `json:"request_id"`
+	response, transportErr := a.asyncVideoHTTP(ctx, info, http.MethodPost, muAPICoreBaseURL(info.BaseURL)+"/"+info.ActualModelName, body)
+	var envelope struct {
+		RequestID json.RawMessage `json:"request_id"`
 		Cost      json.RawMessage `json:"cost"`
 	}
-	if err := json.Unmarshal(data, &response); err != nil {
-		return asyncvideo.Submission{}, errors.Wrap(err, "decode MuAPI submission receipt")
-	}
+	decodeErr := json.Unmarshal(response.body, &envelope)
 	receipt := asyncvideo.Submission{}
-	if validMuAPITaskID(response.RequestID) {
-		receipt.ID = response.RequestID
+	var id string
+	idErr := json.Unmarshal(envelope.RequestID, &id)
+	if idErr == nil && validMuAPITaskID(id) {
+		receipt.ID = id
 	}
-	cost, costErr := muAPIChargedCost(response.Cost)
-	if costErr != nil {
-		return receipt, costErr // never discard an accepted ID
-	}
-	receipt.CostUSD = cost
+	cost, bodyCostErr := muAPIChargedCost(envelope.Cost)
+	var headerCostErr error
+	receipt.CostUSD, headerCostErr = muAPIMaxChargedCost(cost, response.costHeaders)
 	if receipt.ID == "" {
-		// A directly observed charge still belongs to this paid POST even when
-		// its task identifier is unusable. Preserve it without authorizing replay.
-		return receipt, errors.New("MuAPI submission receipt has no valid task ID")
+		idErr = errors.New("MuAPI submission receipt has no valid task ID")
 	}
-	if status < 200 || status >= 300 {
-		return receipt, errors.Errorf("MuAPI accepted task with HTTP %d", status)
+	var statusErr error
+	if response.status < 200 || response.status >= 300 {
+		statusErr = errors.Errorf("MuAPI submission returned HTTP %d", response.status)
+	}
+	// A received header remains charge evidence even if body reading/decoding
+	// fails. Likewise a complete accepted ID must survive a short HTTP envelope.
+	// No error after dispatch proves that the provider did not create paid work.
+	if err := errors.Join(transportErr, decodeErr, idErr, bodyCostErr, headerCostErr, statusErr); err != nil {
+		return receipt, errors.Wrap(err, "read MuAPI submission receipt")
 	}
 	return receipt, nil
 }
@@ -67,17 +66,25 @@ func (a *Adaptor) PollVideo(ctx context.Context, info *meta.Meta, id string) (as
 	if info == nil || !validMuAPITaskID(id) {
 		return asyncvideo.Observation{}, errors.New("invalid MuAPI polling request")
 	}
-	status, body, err := a.asyncVideoHTTP(ctx, info, http.MethodGet, muAPICoreBaseURL(info.BaseURL)+"/predictions/"+id+"/result", nil)
-	if err != nil {
-		return asyncvideo.Observation{}, err
+	response, transportErr := a.asyncVideoHTTP(ctx, info, http.MethodGet, muAPICoreBaseURL(info.BaseURL)+"/predictions/"+id+"/result", nil)
+	observation, observationErr := normalizeAsyncObservation(response.body, id)
+	if errors.Is(observationErr, errMuAPIResultTaskIDMismatch) {
+		// Explicitly conflicting identity invalidates the whole response's
+		// evidence, including headers: never charge/refund a different task.
+		return asyncvideo.Observation{}, observationErr
 	}
-	observation, observationErr := normalizeAsyncObservation(body, id)
-	if status < 200 || status >= 300 {
-		// A failed HTTP envelope cannot authorize a result or refund. A valid
-		// charge tied to this task still increases its already-reserved debit.
-		return asyncvideo.Observation{CostUSD: observation.CostUSD}, errors.Errorf("MuAPI poll returned HTTP %d", status)
+	charged, headerErr := muAPIMaxChargedCost(observation.CostUSD, response.costHeaders)
+	var statusErr error
+	if response.status < 200 || response.status >= 300 {
+		statusErr = errors.Errorf("MuAPI poll returned HTTP %d", response.status)
 	}
-	return observation, observationErr
+	if err := errors.Join(transportErr, observationErr, headerErr, statusErr); err != nil {
+		// A failed envelope cannot authorize a result or refund. Preserve only
+		// valid upward cost evidence; the worker keeps the task retryable/held.
+		return asyncvideo.Observation{CostUSD: charged}, err
+	}
+	observation.CostUSD = charged
+	return observation, nil
 }
 
 // normalizeAsyncObservation validates the provider's documented ID, status and
@@ -94,7 +101,7 @@ func normalizeAsyncObservation(body []byte, expectedID string) (asyncvideo.Obser
 		return asyncvideo.Observation{}, errors.Wrap(err, "decode MuAPI result")
 	}
 	if (response.ID != "" && response.ID != expectedID) || (response.RequestID != "" && response.RequestID != expectedID) {
-		return asyncvideo.Observation{}, errors.New("MuAPI result task ID mismatch")
+		return asyncvideo.Observation{}, errMuAPIResultTaskIDMismatch
 	}
 	charged, err := muAPIChargedCost(response.Cost)
 	if err != nil {
@@ -152,15 +159,23 @@ func normalizeAsyncObservation(body []byte, expectedID string) (asyncvideo.Obser
 	return observed, nil
 }
 
+// muAPIHTTPResponse retains bounded evidence even when response-body I/O fails.
+// Headers are private provider metadata and are never copied to the client.
+type muAPIHTTPResponse struct {
+	status      int
+	body        []byte
+	costHeaders []string
+}
+
 // asyncVideoHTTP performs one bounded provider operation with redirects disabled.
 // It reuses the shared transport without mutating global clients or forwarding
-// caller headers; a local copy enforces a timeout even when the shared one lacks it.
-func (a *Adaptor) asyncVideoHTTP(ctx context.Context, info *meta.Meta, method, endpoint string, body []byte) (int, []byte, error) {
+// caller headers; already-received cost headers survive short or oversized bodies.
+func (a *Adaptor) asyncVideoHTTP(ctx context.Context, info *meta.Meta, method, endpoint string, body []byte) (muAPIHTTPResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return 0, nil, errors.Wrap(err, "build MuAPI task request")
+		return muAPIHTTPResponse{}, errors.Wrap(err, "build MuAPI task request")
 	}
 	request.Header.Set("x-api-key", info.APIKey)
 	request.Header.Set("Content-Type", "application/json")
@@ -170,20 +185,24 @@ func (a *Adaptor) asyncVideoHTTP(ctx context.Context, info *meta.Meta, method, e
 	}
 	bounded := *source
 	bounded.Timeout = 30 * time.Second
-	bounded.CheckRedirect = a.CheckRedirect
+	// Stop redirects without discarding the original response. Returning an
+	// ordinary error here makes net/http close its body and loses paid receipts.
+	bounded.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
 	response, err := bounded.Do(request)
 	if err != nil {
-		return 0, nil, errors.Wrap(err, "perform MuAPI task request")
+		return muAPIHTTPResponse{}, errors.Wrap(err, "perform MuAPI task request")
 	}
 	defer response.Body.Close()
+	result := muAPIHTTPResponse{status: response.StatusCode, costHeaders: response.Header.Values("X-MuAPI-Cost-USD")}
 	data, err := io.ReadAll(io.LimitReader(response.Body, dbmodel.MaxAsyncTaskBody+1))
-	if err != nil {
-		return 0, nil, errors.Wrap(err, "read MuAPI task response")
-	}
 	if len(data) > dbmodel.MaxAsyncTaskBody {
-		return 0, nil, errors.New("MuAPI task response exceeds size limit")
+		return result, errors.New("MuAPI task response exceeds size limit")
 	}
-	return response.StatusCode, data, nil
+	result.body = data
+	if err != nil {
+		return result, errors.Wrap(err, "read MuAPI task response")
+	}
+	return result, nil
 }
 
 // muAPIChargedCost validates the documented actual wallet charge without binary
@@ -202,15 +221,8 @@ func muAPIChargedCost(raw json.RawMessage) (string, error) {
 	if amount == "" {
 		return "", nil
 	}
-	if len(amount) > 128 {
-		return "", errors.New("MuAPI charged cost exceeds numeric limit")
-	}
 	if _, err := dbmodel.AsyncUpstreamCostQuota("1", amount); err != nil {
 		return "", errors.Wrap(err, "invalid MuAPI charged cost")
-	}
-	number, err := strconv.ParseFloat(amount, 64)
-	if err != nil || math.IsNaN(number) || math.IsInf(number, 0) || number < 0 {
-		return "", errors.New("MuAPI charged cost is invalid")
 	}
 	return amount, nil
 }
