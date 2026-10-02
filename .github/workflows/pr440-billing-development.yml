@@ -4,23 +4,124 @@ on:
     branches: [work/pr440-billing-audit-20261002]
 permissions:
   contents: read
+concurrency:
+  group: pr440-billing-development
+  cancel-in-progress: true
 jobs:
-  export:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      CGO_ENABLED: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: 5962c81e531e0cb6a27c39be3173519917490492
           persist-credentials: false
           fetch-depth: 0
-      - name: Export fixed source and ancestry
+      - name: Fetch and authenticate immutable patch bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git archive --format=tar 5962c81e531e0cb6a27c39be3173519917490492 | gzip > "$RUNNER_TEMP/pr440-source.tar.gz"
-          git log --format='%H %P %s' -25 5962c81e531e0cb6a27c39be3173519917490492 > "$RUNNER_TEMP/pr440-ancestry.txt"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, os, pathlib, urllib.request
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'billing-evidence'
+          root.mkdir()
+          def blob(sha):
+              req = urllib.request.Request('https://api.github.com/repos/Laisky/one-api/git/blobs/' + sha, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(req, timeout=60) as response:
+                  value = json.load(response)
+              data = base64.b64decode(value['content'])
+              assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == sha
+              return data
+          # Repair a known transport transcription before decompression. The exact
+          # uncompressed SHA256 below is mandatory; no unknown bytes are applied.
+          encoded = base64.b64encode(blob('065e4b67f7207f0f03220f3ed6d1f4a731bed1d7')).decode()
+          assert encoded.count('HYUNL5Zk') == 1
+          production = gzip.decompress(base64.b64decode(encoded.replace('HYUNL5Zk', 'HYUNX5Zk')))
+          red = blob('4f4516d8de8726c38c2910d86dced7937013daf3')
+          chunks = ['6ef0399afe92ccb60c84568b89085dfa7c423615', '98d310a6f8ba3dc171517faac7b48404da11aa88', '40a20901a942e379f6d527806e8c38e0de419b4d', '08dbcd3df4eff9ec1e4772283685276cd6b9a99b', 'aeb756bc623d6a4b0d2398babc36eff4b3bacd17', 'ebc3f7a48865b25b76728b54d43267f9b5249b79', '502a0c7a502280de1215eed3f14dc32c05034a61', 'b87032fe905165e0aeca2ddfcba392d7650fdfef', '2a862e8b0e35d4270b42c492790fadf58ed5383e']
+          tests = gzip.decompress(base64.b64decode(b''.join(blob(sha) for sha in chunks)))
+          expected = {'production': '75e49a976f339960110b8b9e748fcab1f35daec5a530efe17313f44eab8cd242', 'red': 'd34be04ccb3e2176fcaec3b55697a2fb34e82d174604c0a331db80d65385ae07', 'tests': 'ea7a5bf695dd1fa963935aa33bea640a1b65b60890842d7bf55194378952fef2'}
+          for name, data in [('production', production), ('red', red), ('tests', tests)]:
+              assert hashlib.sha256(data).hexdigest() == expected[name], name
+              (root / (name + '.patch')).write_bytes(data)
+          (root / 'patch-sha256.json').write_text(json.dumps(expected, indent=2))
+          PY
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          name: pr440-billing-source
-          path: |
-            ${{ runner.temp }}/pr440-source.tar.gz
-            ${{ runner.temp }}/pr440-ancestry.txt
-          retention-days: 1
+          go-version-file: go.mod
+      - name: Reproduce original billing failures before applying fixes
+        run: |
+          git apply "$RUNNER_TEMP/billing-evidence/red.patch"
+          set +e
+          go test -json -count=1 -p 2 -timeout 8m -run '^TestAsyncBilling' ./model ./relay/adaptor/muapi ./relay/controller > "$RUNNER_TEMP/billing-evidence/red.jsonl" 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          python3 - <<'PY'
+          import json, os, pathlib
+          text = (pathlib.Path(os.environ['RUNNER_TEMP']) / 'billing-evidence/red.jsonl').read_text()
+          events = []
+          for line in text.splitlines():
+              try: events.append(json.loads(line))
+              except ValueError: pass
+          failed = {e.get('Test') for e in events if e.get('Action') == 'fail'}
+          expected = {'TestAsyncBillingPoisonOutboxDoesNotBlockLaterReceipts', 'TestAsyncBillingSettlementUsesPersistedFinancialSnapshot', 'TestAsyncBillingHeldTaskHasDurableCost', 'TestAsyncBillingHTTPErrorCannotAuthorizeRefund', 'TestAsyncBillingReceiptSurvivesHTTPError', 'TestAsyncBillingRefundNeedsMatchingReceipt', 'TestAsyncBillingShutdownPreservesReceipt', 'TestAsyncBillingActualProviderChargeCannotExceedDebit'}
+          assert expected <= failed, {'missing_expected_behavior_failures': sorted(expected - failed)}
+          assert '[build failed]' not in text
+          print('Confirmed all eight original behavior failures, not compilation failures.')
+          PY
+      - name: Apply verified fixes and regression matrix
+        run: |
+          git apply "$RUNNER_TEMP/billing-evidence/production.patch"
+          git apply "$RUNNER_TEMP/billing-evidence/tests.patch"
+          git diff --check
+          test -z "$(gofmt -l $(git diff --name-only --diff-filter=AM) $(git ls-files --others --exclude-standard '*.go') | sort -u)"
+      - name: Required live MySQL and PostgreSQL financial verification
+        env:
+          ONEAPI_REQUIRE_DB_BACKENDS: '1'
+        run: |
+          go test -json -race -count=1 -p 2 -timeout 10m -run '^TestAsyncBillingLiveDatabases$' ./model > "$RUNNER_TEMP/billing-evidence/live-databases.jsonl" 2>&1
+          python3 - <<'PY'
+          import json, os, pathlib
+          events = [json.loads(s) for s in (pathlib.Path(os.environ['RUNNER_TEMP']) / 'billing-evidence/live-databases.jsonl').read_text().splitlines() if s.startswith('{')]
+          passed = {e.get('Test') for e in events if e.get('Action') == 'pass'}
+          for backend in ['mysql', 'postgres']:
+              for case in ['unlimited=false', 'unlimited=true', 'competing-refunds']:
+                  assert 'TestAsyncBillingLiveDatabases/' + backend + '/' + case in passed
+          print('All six required real-database financial cases passed.')
+          PY
+      - name: Fault matrix including real process kills and TCP disconnects
+        run: |
+          go test -json -race -count=1 -p 2 -timeout 12m -run '^TestAsyncBilling' ./model ./relay/asyncvideo ./relay/adaptor/muapi ./relay/controller ./router > "$RUNNER_TEMP/billing-evidence/green.jsonl" 2>&1
+      - name: Vet complete repository
+        run: go vet ./...
+      - name: Preserve complete red and green evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr440-billing-validation
+          path: ${{ runner.temp }}/billing-evidence
+          retention-days: 7
