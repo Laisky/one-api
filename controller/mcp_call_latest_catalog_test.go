@@ -36,3 +36,23 @@ func TestExecuteModernMCPToolReusesPreparedCatalog(t *testing.T) {
 	require.Equal(t, 1, fixture.upstreamHits)
 	require.Equal(t, 1, toolQueries, "modern tools/call must reuse one prepared tool-catalog snapshot")
 }
+
+// TestExecuteModernMCPToolRejectsDisabledQualifiedServer verifies that a qualified tool name cannot bypass server status enforcement and returns no result or upstream call.
+func TestExecuteModernMCPToolRejectsDisabledQualifiedServer(t *testing.T) {
+	cleanup, fixture := setupMCPProxyTest(t)
+	defer cleanup()
+
+	err := model.DB.Model(&model.MCPServer{}).
+		Where("id = ?", fixture.server.Id).
+		Update("status", model.MCPServerStatusDisabled).Error
+	require.NoError(t, err)
+
+	c, _ := newMCPCallContext(t, fixture.user.Id, "modern-disabled-qualified-server")
+	result, err := executeModernMCPTool(context.Background(), c, modernMCPCallParams{
+		Name:      "fake-mcp.echo",
+		Arguments: map[string]any{"message": "hello"},
+	})
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Zero(t, fixture.upstreamHits)
+}
