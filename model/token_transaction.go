@@ -130,7 +130,69 @@ func UpdateTokenTransaction(ctx context.Context, transactionID int, updates map[
 	if len(updates) == 0 {
 		return nil
 	}
+	if err := validateTokenTransactionUpdates(updates); err != nil {
+		return errors.Wrap(err, "validate token transaction updates")
+	}
 
+	if err := DB.WithContext(ctx).Model(&TokenTransaction{}).
+		Where("id = ?", transactionID).
+		Updates(updates).Error; err != nil {
+		return errors.Wrapf(err, "failed to update token transaction: id=%d", transactionID)
+	}
+	return nil
+}
+
+// UpdatePendingTokenTransaction applies a partial update only when the transaction is still pending.
+// Parameters:
+//   - ctx: request context.
+//   - transactionID: primary key of the transaction to update.
+//   - updates: columns to update while atomically claiming the pending state.
+//
+// Returns an error if the update fails or if another worker already finalized the transaction.
+func UpdatePendingTokenTransaction(ctx context.Context, transactionID int, updates map[string]any) error {
+	updated, err := TryUpdatePendingTokenTransaction(ctx, transactionID, updates)
+	if err != nil {
+		return errors.Wrap(err, "try update pending token transaction")
+	}
+	if !updated {
+		return errors.Errorf("token transaction %d is not pending", transactionID)
+	}
+	return nil
+}
+
+// TryUpdatePendingTokenTransaction applies a partial update only when the transaction is still pending.
+// Parameters:
+//   - ctx: request context.
+//   - transactionID: primary key of the transaction to update.
+//   - updates: columns to update while atomically claiming the pending state.
+//
+// Returns true when the pending transaction was updated, false when it was already finalized, and an error for validation or database failures.
+func TryUpdatePendingTokenTransaction(ctx context.Context, transactionID int, updates map[string]any) (bool, error) {
+	if transactionID == 0 {
+		return false, errors.Errorf("transaction id cannot be zero")
+	}
+	if len(updates) == 0 {
+		return true, nil
+	}
+	if err := validateTokenTransactionUpdates(updates); err != nil {
+		return false, errors.Wrap(err, "validate token transaction updates")
+	}
+
+	result := DB.WithContext(ctx).Model(&TokenTransaction{}).
+		Where("id = ? AND status = ?", transactionID, TokenTransactionStatusPending).
+		Updates(updates)
+	if result.Error != nil {
+		return false, errors.Wrapf(result.Error, "failed to update pending token transaction: id=%d", transactionID)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// validateTokenTransactionUpdates ensures partial token transaction updates only target approved columns.
+// Parameters:
+//   - updates: columns and values the caller wants to persist.
+//
+// Returns an error when an unsupported column is present.
+func validateTokenTransactionUpdates(updates map[string]any) error {
 	for field := range updates {
 		switch field {
 		case "status", "final_quota", "confirmed_at", "auto_confirmed", "expires_at", "reason", "elapsed_time_ms", "canceled_at":
@@ -140,11 +202,6 @@ func UpdateTokenTransaction(ctx context.Context, transactionID int, updates map[
 		}
 	}
 
-	if err := DB.WithContext(ctx).Model(&TokenTransaction{}).
-		Where("id = ?", transactionID).
-		Updates(updates).Error; err != nil {
-		return errors.Wrapf(err, "failed to update token transaction: id=%d", transactionID)
-	}
 	return nil
 }
 
@@ -168,6 +225,7 @@ func AutoConfirmExpiredTokenTransactions(ctx context.Context, tokenID int, now i
 		return nil, nil
 	}
 
+	confirmed := make([]*TokenTransaction, 0, len(pending))
 	for _, txn := range pending {
 		final := txn.PreQuota
 		confirmedAt := now
@@ -179,17 +237,22 @@ func AutoConfirmExpiredTokenTransactions(ctx context.Context, tokenID int, now i
 			"expires_at":     int64(0),
 		}
 
-		if err = UpdateTokenTransaction(ctx, txn.Id, updates); err != nil {
-			return nil, errors.Wrapf(err, "failed to auto-confirm token transaction: id=%d", txn.Id)
+		updated, updateErr := TryUpdatePendingTokenTransaction(ctx, txn.Id, updates)
+		if updateErr != nil {
+			return nil, errors.Wrapf(updateErr, "failed to auto-confirm token transaction: id=%d", txn.Id)
+		}
+		if !updated {
+			continue
 		}
 
 		txn.Status = TokenTransactionStatusAutoConfirmed
 		txn.AutoConfirmed = true
 		txn.FinalQuota = &final
 		txn.ConfirmedAt = &confirmedAt
+		confirmed = append(confirmed, txn)
 	}
 
-	return pending, nil
+	return confirmed, nil
 }
 
 // GetTokenTransactionsByTokenID retrieves a paginated list of transactions for a specific token.

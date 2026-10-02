@@ -468,14 +468,6 @@ func processPostConsume(ctx context.Context, c *gin.Context, token *model.Token,
 	}
 
 	delta := finalQuota - existingTxn.PreQuota
-	quotaAdjusted := false
-	if delta != 0 {
-		if err = model.PostConsumeTokenQuota(ctx, token.Id, delta); err != nil {
-			return nil, nil, errors.Wrap(err, "post-consume token quota delta")
-		}
-		quotaAdjusted = true
-	}
-
 	confirmedAt := helper.GetTimestamp()
 	updates := map[string]any{
 		"status":         model.TokenTransactionStatusConfirmed,
@@ -490,11 +482,24 @@ func processPostConsume(ctx context.Context, c *gin.Context, token *model.Token,
 		updates["elapsed_time_ms"] = *req.ElapsedTimeMs
 	}
 
-	if err = model.UpdateTokenTransaction(ctx, existingTxn.Id, updates); err != nil {
-		if quotaAdjusted {
-			_ = model.PostConsumeTokenQuota(ctx, token.Id, -delta)
+	if err = model.UpdatePendingTokenTransaction(ctx, existingTxn.Id, updates); err != nil {
+		return nil, nil, errors.Wrap(err, "update pending token transaction for post-consume")
+	}
+
+	if delta != 0 {
+		if err = model.PostConsumeTokenQuota(ctx, token.Id, delta); err != nil {
+			revertUpdates := map[string]any{
+				"status":         model.TokenTransactionStatusPending,
+				"final_quota":    nil,
+				"confirmed_at":   nil,
+				"auto_confirmed": false,
+				"expires_at":     existingTxn.ExpiresAt,
+			}
+			if revertErr := model.UpdateTokenTransaction(ctx, existingTxn.Id, revertUpdates); revertErr != nil {
+				return nil, nil, errors.Wrapf(err, "post-consume token quota delta; also failed to restore pending transaction: %v", revertErr)
+			}
+			return nil, nil, errors.Wrap(err, "post-consume token quota delta")
 		}
-		return nil, nil, errors.Wrap(err, "update token transaction for post-consume")
 	}
 
 	updatedFinal := finalQuota
@@ -552,10 +557,6 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 		return nil, nil, errors.Errorf("transaction %s cannot be canceled because it is %s", transactionID, model.TokenTransactionStatusString(txn.Status))
 	}
 
-	if err = model.PostConsumeTokenQuota(ctx, token.Id, -txn.PreQuota); err != nil {
-		return nil, nil, errors.Wrap(err, "refund reserved token quota on cancel")
-	}
-
 	canceledAt := helper.GetTimestamp()
 	updates := map[string]any{
 		"status":      model.TokenTransactionStatusCanceled,
@@ -564,9 +565,21 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 		"expires_at":  int64(0),
 	}
 
-	if err = model.UpdateTokenTransaction(ctx, txn.Id, updates); err != nil {
-		_ = model.PostConsumeTokenQuota(ctx, token.Id, txn.PreQuota)
-		return nil, nil, errors.Wrap(err, "update token transaction for cancel")
+	if err = model.UpdatePendingTokenTransaction(ctx, txn.Id, updates); err != nil {
+		return nil, nil, errors.Wrap(err, "update pending token transaction for cancel")
+	}
+
+	if err = model.PostConsumeTokenQuota(ctx, token.Id, -txn.PreQuota); err != nil {
+		revertUpdates := map[string]any{
+			"status":      model.TokenTransactionStatusPending,
+			"canceled_at": nil,
+			"final_quota": nil,
+			"expires_at":  txn.ExpiresAt,
+		}
+		if revertErr := model.UpdateTokenTransaction(ctx, txn.Id, revertUpdates); revertErr != nil {
+			return nil, nil, errors.Wrapf(err, "refund reserved token quota on cancel; also failed to restore pending transaction: %v", revertErr)
+		}
+		return nil, nil, errors.Wrap(err, "refund reserved token quota on cancel")
 	}
 
 	zero := int64(0)
