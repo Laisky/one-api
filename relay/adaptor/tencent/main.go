@@ -283,7 +283,7 @@ func ParseConfig(config string) (appId int64, secretId string, secretKey string,
 	appId, err = strconv.ParseInt(parts[0], 10, 64)
 	secretId = parts[1]
 	secretKey = parts[2]
-	return
+	return appId, secretId, secretKey, errors.WithStack(err)
 }
 
 func sha256hex(s string) string {

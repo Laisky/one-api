@@ -462,18 +462,17 @@ func compactReplRunRestores(t *testing.T, tooling compactReplRestore, source str
 		requireLiveShadowMatches(t, db, tooling.dialect, 800, compactUUIDTextFor(800))
 
 		// "Without redoing the migration" is asserted by the state the FIRST cycle reports. A
-		// restore that lost a column, trigger, or index would report expanding; one that lost the
-		// shadows would report backfilling. Reaching validating means neither happened. Ready then
-		// takes one more cycle by design: a freshly started process must observe two clean passes
-		// in its own epoch before it trusts a marker, which is exactly what a restore should face.
+		// restore that lost a column, trigger, or index would report degraded; one that lost the
+		// owned shadows would report degraded with a NULL backlog. A complete restore carries its
+		// objects, its markers, and shadows consistent with its text, so the first cycle is ready:
+		// the external UUID migration is one-time, and a restore of a finished one is finished.
+		// It must not pay a full traversal to find that out.
 		coordinator := newCompactCoordinator(topology)
 		before := readMarkerTimestamp(t, db, compactPrimaryMigrationKey)
 		first := runCompactCycleForTest(t, coordinator)
-		require.Equal(t, compactStateValidating, first.state,
-			"a restored complete database must go straight to validation: %s", first.reason)
+		require.Equal(t, compactStateReady, first.state,
+			"a restored complete database must be ready on its first cycle: %s", first.reason)
 		require.Zero(t, first.updated, "a restored complete database must need no shadow rewrite")
-		require.Equal(t, compactStateReady, driveCompactToReady(t, coordinator).state,
-			"a restored complete database must reach ready with no command")
 		require.Equal(t, before, readMarkerTimestamp(t, db, compactPrimaryMigrationKey),
 			"restore must not rewrite the completion marker's timestamp")
 	})

@@ -143,6 +143,16 @@ func QuietForTests() bool {
 // SetupLogger configures the shared logger to write to stdout and the configured log directory with optional rotation.
 func SetupLogger() {
 	setupLogOnce.Do(func() {
+		// APP_LOG_SINK decides which destinations are attached. "stdout" alone
+		// is the right choice under Kubernetes, where the platform already
+		// collects and rotates container output; it also removes local log
+		// growth as a failure mode entirely, so it needs no log directory.
+		if config.AppLogSink == config.AppLogSinkStdout {
+			applyGinWriters()
+			Logger.Info("log sinks configured", zap.String("app_log_sink", config.AppLogSink))
+			return
+		}
+
 		if strings.TrimSpace(LogDir) == "" {
 			Logger.Info("log directory not configured; file logging disabled")
 			return
@@ -154,12 +164,33 @@ func SetupLogger() {
 		}
 
 		basePath := filepath.Join(LogDir, "oneapi.log")
-		outputPaths := []string{"stdout"}
-		errorPaths := []string{"stderr"}
+		if config.OnlyOneLogFile {
+			setActiveLogFile(basePath)
+		}
+
+		var outputPaths, errorPaths []string
+		if config.AppLogSink != config.AppLogSinkFile {
+			outputPaths = append(outputPaths, "stdout")
+			errorPaths = append(errorPaths, "stderr")
+		}
 
 		rotationEnabled := !config.OnlyOneLogFile
 		rotationInterval := rotationIntervalDaily
 		sinkPath := basePath
+
+		if config.OnlyOneLogFile && config.LogMaxActiveFileSizeBytes() > 0 {
+			// ONLY_ONE_LOG_FILE removes the rotation sink entirely, so the
+			// active-file ceiling has nothing that can act on it. Say so
+			// instead of letting an operator believe a bound is in force: the
+			// only containment left is the bounded emergency policy, which caps
+			// the write rate but cannot shrink the file. Rejecting this
+			// combination outright at startup belongs to common/config; the
+			// logger's job is to make sure it never silently pretends.
+			Logger.Warn("ONLY_ONE_LOG_FILE disables rotation, so LOG_MAX_ACTIVE_FILE_SIZE_MB cannot be enforced by rotating the file",
+				zap.Int("log_max_active_file_size_mb", config.LogMaxActiveFileSizeMB),
+				zap.String("effect", "the disk pressure guard bounds application log output instead; the file itself still grows"),
+				zap.String("fix", "unset ONLY_ONE_LOG_FILE, or unset LOG_MAX_ACTIVE_FILE_SIZE_MB"))
+		}
 
 		if rotationEnabled {
 			parsedInterval, err := parseRotationInterval(config.LogRotationInterval)
@@ -200,6 +231,7 @@ func SetupLogger() {
 
 		fields := []zap.Field{
 			zap.String("log_dir", LogDir),
+			zap.String("app_log_sink", config.AppLogSink),
 			zap.Bool("rotation_enabled", rotationEnabled),
 		}
 		if rotationEnabled {
@@ -283,6 +315,37 @@ func (w *ginZapWriter) Write(p []byte) (int, error) {
 // SetupEnhancedLogger sets up the logger with alertPusher integration.
 func SetupEnhancedLogger(ctx context.Context) {
 	opts := []zap.Option{}
+
+	// The bounded emergency policy is installed FIRST so it ends up INNERMOST:
+	// zap applies WrapCore options in order, each wrapping the previous result.
+	// Sampling must sit above the budget, because sampling decides which lines
+	// the process wants and the budget decides how many of those the disk can
+	// afford. Reversed, the budget would be charged for -- and the suppression
+	// counters would report -- lines sampling was about to discard anyway.
+	opts = append(opts, emergencyOption())
+
+	// The optional OTLP bridge fans out above the emergency budget and below
+	// sampling; common/logger/otlp_sink.go documents why that position is the
+	// only correct one. It is a no-op unless APP_LOG_SINK named the otlp sink.
+	if opt, ok := otlpBridgeOption(); ok {
+		opts = append(opts, opt)
+		Logger.Info("otlp application log bridge enabled",
+			zap.String("min_level", config.AppLogOTLPMinLevel),
+			zap.Int("queue_size", config.AppLogOTLPQueueSize),
+			zap.Int("queue_max_mb", config.AppLogOTLPQueueMaxMB),
+			zap.String("note", "records are dropped and counted until the provider is installed"))
+	}
+
+	// Install log sampling before any other option so every downstream logger
+	// derived from the global one inherits it.
+	if opt, ok := samplingOption(); ok {
+		opts = append(opts, opt)
+		Logger.Info("application log sampling enabled",
+			zap.Int("log_sample_initial", config.LogSampleInitial),
+			zap.Int("log_sample_thereafter", config.LogSampleThereafter),
+			zap.Int("log_sample_tick_ms", config.LogSampleTickMs),
+			zap.String("note", "levels at warn and above are never sampled"))
+	}
 
 	// Setup alert pusher if configured.
 	if config.LogPushAPI != "" {

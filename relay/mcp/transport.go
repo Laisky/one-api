@@ -56,8 +56,17 @@ func readMCPResponseBody(reader io.Reader) ([]byte, error) {
 //   - *mcpJSONRPCEnvelope: the validated response envelope.
 //   - error: a wrapped JSON, version, or response-correlation error.
 func parseMCPResponseEnvelope(body []byte, expectedID string) (*mcpJSONRPCEnvelope, error) {
+	var fields map[string]json.RawMessage
+	if err := DecodeJSON(body, &fields); err != nil {
+		return nil, err
+	}
+	result, hasResult := fields["result"]
+	rpcError, hasError := fields["error"]
+	if hasResult == hasError || (hasResult && (len(bytes.TrimSpace(result)) == 0 || bytes.TrimSpace(result)[0] != '{')) || (hasError && (len(bytes.TrimSpace(rpcError)) == 0 || bytes.TrimSpace(rpcError)[0] != '{')) {
+		return nil, errors.New("MCP response must contain exactly one object result or error")
+	}
 	var envelope mcpJSONRPCEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil {
+	if err := DecodeJSON(body, &envelope); err != nil {
 		return nil, errors.Wrap(err, "decode mcp JSON-RPC response")
 	}
 	if envelope.JSONRPC != "2.0" {

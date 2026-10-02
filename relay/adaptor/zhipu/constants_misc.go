@@ -98,13 +98,22 @@ var imageGenerationModels = map[string]adaptor.ModelConfig{
 		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 0.5 / 7 * 1000},
 		Description:      "CogVideoX: text-and-image-to-video generation model at ¥0.5/call. (legacy id; no live Zhipu model currently uses this id -- current video-generation ids are cogvideox-3 and cogvideox-flash)",
 	},
+	"cogvideox-flash": {
+		Ratio:            0,
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 0},
+		CompletionRatio:  1,
+		CachedInputRatio: 0,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"video"},
+		Description:      "CogVideoX-Flash: free fast text-to-video generator with 4K and 60fps support.",
+	},
 	"cogviewx-flash": {
 		Ratio:            0,
 		CompletionRatio:  1,
 		CachedInputRatio: 0,
 		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"video"},
-		Description:      "CogVideoX-Flash: free fast text-to-video generator with 4K and 60fps support.",
+		Description:      "Legacy misspelled catalog ID; configure model mapping to cogvideox-flash. Not a provider model ID.",
 	},
 	// Vidu Q1: high-quality 5s / 1080P video generation, ¥2.5 per call.
 	// Source: https://docs.bigmodel.cn/cn/guide/models/video-generation/viduq1

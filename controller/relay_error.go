@@ -14,6 +14,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/common/helper"
 	dbmodel "github.com/Laisky/one-api/model"
@@ -35,6 +36,122 @@ func isClientContextCancel(statusCode int, rawErr error) bool {
 		return true
 	}
 	return false
+}
+
+// stacklessErrorField renders err for a log line that is NOT an ERROR: the message
+// only, never the errors/v2 stack.
+//
+// zap.Error would attach an "errorVerbose" dump of the whole call chain, which is
+// reserved for genuine server faults an operator must debug. A caller-caused failure
+// (a rejected request parameter, an exhausted quota, an upstream rate limit) needs the
+// upstream message, not one-api's stack.
+//
+// Parameters:
+//   - err: the raw error to render; nil is allowed.
+//
+// Return values:
+//   - zap.Field: an "error" string field, or zap.Skip() for a nil error, matching
+//     zap.Error(nil)'s behaviour so the key is simply absent.
+func stacklessErrorField(err error) zap.Field {
+	if err == nil {
+		return zap.Skip()
+	}
+	return zap.String("error", err.Error())
+}
+
+// relayFailureKind attributes a failed relay attempt to a fault class.
+//
+// The relay funnel used to derive its log level from a narrow allow-list of one-api
+// generated error codes, so ANY upstream 4xx that one-api did not itself produce -- an
+// unsupported request parameter, for instance -- fell through to ERROR with a full stack
+// trace, paging an operator for a mistake the caller made and can fix. This restores the
+// project-wide rule already implemented by middleware.shouldLogAsWarning: attribution
+// first, then the status class.
+//
+// Parameters:
+//   - e: the normalized relay failure; nil is treated as a server fault.
+//
+// Return values:
+//   - errkind.Kind: the fault attribution; Kind.IsClient() decides WARN vs ERROR.
+func relayFailureKind(e *model.ErrorWithStatusCode) errkind.Kind {
+	if e == nil {
+		return errkind.Server
+	}
+
+	// An attribution recorded where the error was constructed knows more than the
+	// transport does, and wins in BOTH directions.
+	if kind := errkind.Of(e.RawError); kind != errkind.Unknown {
+		return kind
+	}
+
+	switch {
+	case e.StatusCode == http.StatusUnauthorized:
+		return errkind.Unauthorized
+	case e.StatusCode == http.StatusForbidden:
+		return errkind.Forbidden
+	case e.StatusCode == http.StatusNotFound:
+		return errkind.NotFound
+	case e.StatusCode == http.StatusConflict:
+		return errkind.Conflict
+	case e.StatusCode == http.StatusTooManyRequests:
+		return errkind.RateLimited
+	case e.StatusCode >= 400 && e.StatusCode < 500:
+		// Everything else in the 4xx class means the upstream refused the request as
+		// sent: a bad parameter value, an unsupported combination, an oversized body.
+		return errkind.InvalidRequest
+	case e.StatusCode >= 500:
+		// A third-party provider failed: actionable, so still server-attributed.
+		return errkind.Upstream
+	default:
+		return errkind.Unknown
+	}
+}
+
+// countsAgainstChannelHealth reports whether a failed relay attempt is evidence about the
+// CHANNEL's health, and so may feed the failure-rate monitor that auto-disables channels
+// (monitor.Emit, active only under ENABLE_METRIC).
+//
+// A caller's malformed payload says nothing about the channel: every channel would reject
+// it identically. Counting it lets one client's bad parameter disable a healthy channel
+// for everyone -- with the defaults METRIC_QUEUE_SIZE=10 and METRIC_SUCCESS_RATE_THRESHOLD=0.8,
+// ten such requests in a row suffice. Scoping the circuit breaker to provider-side failures
+// is the common practice among gateways: LiteLLM cools a deployment down on 429/401/408/404
+// and 5xx but not on other 4xx, and Kong's passive health checks default to 429/500/503.
+//
+// Deliberately still counted, because they ARE properties of the channel rather than of the
+// caller's payload: upstream 429 (capacity exhausted), 401/403 (this channel's credential
+// rejected), 404 (endpoint/model missing on this channel), 413 (this channel's size limit)
+// and every 5xx.
+//
+// Parameters:
+//   - e: the normalized relay failure; nil counts as no evidence.
+//
+// Return values:
+//   - bool: true when the failure may be attributed to the channel.
+func countsAgainstChannelHealth(e *model.ErrorWithStatusCode) bool {
+	if e == nil {
+		return false
+	}
+
+	// one-api's own faults: a missing ffprobe binary or an adaptor bug is not the
+	// channel's doing.
+	if isInternalInfraError(e.RawError) || isAdaptorInternalError(e) {
+		return false
+	}
+
+	// The caller went away, or one-api itself rejected the caller (quota, token scope):
+	// the channel was never exercised.
+	if isClientContextCancel(e.StatusCode, e.RawError) || isUserOriginatedRelayError(e) {
+		return false
+	}
+
+	// The upstream refused the request as sent. Any other channel would refuse it too.
+	switch e.StatusCode {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		return false
+	}
+
+	return true
 }
 
 // isInternalInfraError reports whether rawErr is an internal infrastructure failure
@@ -374,47 +491,67 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 	lg := gmw.GetLogger(ctx)
 	isUserError := isUserOriginatedRelayError(&params.Err)
 
-	// Downgrade to WARN for client-side cancellations/timeouts, user-originated
-	// errors, and upstream rate limits.
-	if isClientContextCancel(params.Err.StatusCode, params.Err.RawError) {
+	// Level policy: WARN (message only) for anything the caller, their quota, or the
+	// upstream's admission control caused; ERROR (with stack) only for genuine
+	// server-side faults. See relayFailureKind for why the status class decides.
+	failureKind := relayFailureKind(&params.Err)
+	// Whether this failure is evidence about the channel, logged so an operator can see
+	// why a channel's health did or did not move.
+	channelHealthCounted := countsAgainstChannelHealth(&params.Err)
+	emitChannelHealth := func() {
+		if !channelHealthCounted {
+			return
+		}
+		monitor.Emit(params.ChannelId, false)
+	}
+	switch {
+	case isClientContextCancel(params.Err.StatusCode, params.Err.RawError):
 		lg.Warn("relay aborted by client (context canceled/deadline)",
-			appendRelayFailureFields(params, zap.Error(params.Err.RawError))...,
+			appendRelayFailureFields(params, stacklessErrorField(params.Err.RawError))...,
 		)
-	} else if isUserError {
+	case isUserError:
 		lg.Warn("user-originated request error",
-			appendRelayFailureFields(params, zap.Error(params.Err.RawError))...,
+			appendRelayFailureFields(params, stacklessErrorField(params.Err.RawError))...,
 		)
-	} else if params.Err.StatusCode == http.StatusTooManyRequests {
+	case failureKind.IsClient():
 		lg.Warn("relay error",
-			appendRelayFailureFields(params, zap.Error(params.Err.RawError))...,
+			appendRelayFailureFields(params,
+				stacklessErrorField(params.Err.RawError),
+				zap.String("error_kind", failureKind.String()),
+				zap.Bool("channel_health_counted", channelHealthCounted),
+			)...,
 		)
-	} else {
+	default:
 		lg.Error("relay error",
-			appendRelayFailureFields(params, zap.Error(params.Err.RawError))...,
+			appendRelayFailureFields(params,
+				zap.Error(params.Err.RawError),
+				zap.String("error_kind", failureKind.String()),
+				zap.Bool("channel_health_counted", channelHealthCounted),
+			)...,
 		)
 	}
 
 	if isInternalInfraError(params.Err.RawError) {
 		lg.Debug("internal infrastructure failure detected, skipping channel suspension",
-			appendRelayFailureFields(params, zap.Error(params.Err.RawError))...,
+			appendRelayFailureFields(params, stacklessErrorField(params.Err.RawError))...,
 		)
-		monitor.Emit(params.ChannelId, false)
+		emitChannelHealth()
 		return
 	}
 
 	if isAdaptorInternalError(&params.Err) {
 		lg.Info("internal adaptor error, skipping channel suspension",
-			appendRelayFailureFields(params, zap.Error(params.Err.RawError))...,
+			appendRelayFailureFields(params, stacklessErrorField(params.Err.RawError))...,
 		)
-		monitor.Emit(params.ChannelId, false)
+		emitChannelHealth()
 		return
 	}
 
 	if isUserError {
 		lg.Warn("user-originated request error, skipping channel suspension",
-			appendRelayFailureFields(params, zap.Error(params.Err.RawError))...,
+			appendRelayFailureFields(params, stacklessErrorField(params.Err.RawError))...,
 		)
-		monitor.Emit(params.ChannelId, false)
+		emitChannelHealth()
 		return
 	}
 
@@ -423,10 +560,10 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 		// For 400 errors, log but don't disable channel or suspend abilities
 		// These are typically schema validation errors or malformed requests
 		lg.Info("client request error (400) for channel - not disabling channel as this is not a channel issue",
-			appendRelayFailureFields(params, zap.Error(params.Err.RawError))...,
+			appendRelayFailureFields(params, stacklessErrorField(params.Err.RawError))...,
 		)
 		// Still emit failure for monitoring purposes, but don't disable the channel
-		monitor.Emit(params.ChannelId, false)
+		emitChannelHealth()
 		return
 	}
 
@@ -434,7 +571,7 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 		// For 429, we will suspend the specific model for a while
 		lg.Warn("ability suspended due to rate limit (429)",
 			appendRelayFailureFields(params,
-				zap.Error(params.Err.RawError),
+				stacklessErrorField(params.Err.RawError),
 				zap.String("suspension_rationale", "upstream rate limit exceeded; suspending ability to allow cooldown"),
 				zap.Duration("suspension_duration", config.ChannelSuspendSecondsFor429),
 			)...,
@@ -448,20 +585,20 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 				)...,
 			)
 		}
-		monitor.Emit(params.ChannelId, false)
+		emitChannelHealth()
 		return
 	}
 
 	// context cancel or deadline exceeded - likely user aborted or timeout.
 	// Detect via status or RawError classification; avoid suspending/disabling.
 	if params.Err.StatusCode == http.StatusRequestTimeout || (params.Err.RawError != nil && (errors.Is(params.Err.RawError, context.Canceled) || errors.Is(params.Err.RawError, context.DeadlineExceeded))) {
-		monitor.Emit(params.ChannelId, false)
+		emitChannelHealth()
 		return
 	}
 
 	// 413 capacity issues: do not suspend; rely on retry selection to seek larger max_tokens
 	if params.Err.StatusCode == http.StatusRequestEntityTooLarge {
-		monitor.Emit(params.ChannelId, false)
+		emitChannelHealth()
 		return
 	}
 
@@ -471,11 +608,11 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 		if upstreamSuggestsRetry(&params.Err) {
 			lg.Debug("upstream suggests retry for 5xx error, skipping ability suspension",
 				appendRelayFailureFields(params,
-					zap.Error(params.Err.RawError),
+					stacklessErrorField(params.Err.RawError),
 					zap.String("skip_rationale", "upstream error message suggests retry; treating as transient one-off issue"),
 				)...,
 			)
-			monitor.Emit(params.ChannelId, false)
+			emitChannelHealth()
 			return
 		}
 
@@ -494,7 +631,7 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 			)
 		}
 		// Do not immediately auto-disable; transient
-		monitor.Emit(params.ChannelId, false)
+		emitChannelHealth()
 		return
 	}
 
@@ -524,7 +661,7 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 			)
 			monitor.DisableChannel(params.ChannelId, params.ChannelName, params.Err.Message)
 		} else {
-			monitor.Emit(params.ChannelId, false)
+			emitChannelHealth()
 		}
 		return
 	}
@@ -539,7 +676,7 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 		)
 		monitor.DisableChannel(params.ChannelId, params.ChannelName, params.Err.Message)
 	} else {
-		monitor.Emit(params.ChannelId, false)
+		emitChannelHealth()
 	}
 }
 

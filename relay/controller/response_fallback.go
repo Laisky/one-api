@@ -43,7 +43,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	// Resolve gateway state selectors (previous_response_id, conversation,
 	// item_reference) into a fully hydrated effective turn before conversion. This
 	// is a no-op when the feature is disabled or the request carries no state, so
-	// current behavior is preserved exactly. See docs/proposals/20260719-*.md.
+	// current behavior is preserved exactly. See docs/proposals/archive/20260719-*.md.
 	hydrated, stateErr := hydrateResponseAPIRequestForFallback(ctx, meta, responseAPIRequest, responseFallbackTarget(meta))
 	if stateErr != nil {
 		return stateErr
@@ -188,6 +188,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		return bizErr
 	}
 
+	markPreConsumed(c, preConsumedQuota)
+	defer billingAuditSafetyNet(c)
+	c.Set(ctxkey.ProvisionalLogId, recordProvisionalLog(c, meta, chatRequest.Model, preConsumedQuota))
 	requestAdaptor.Init(meta)
 	if registry != nil {
 		c.Set(ctxkey.ResponseRewriteHandler, nil)
@@ -294,6 +297,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
+		// Final settlement now owns this reservation, including its log and cost.
+		// The deferred safety net must not independently settle the old hold.
+		markBillingReconciled(c)
 		runPostBillingWithTimeout(detachForBilling(c), "postBilling", lg, postBillingTimeoutInfo{
 			userID:              meta.UserId,
 			channelID:           meta.ChannelId,
@@ -320,6 +326,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "convert_request_failed")
 		return wrapConvertRequestError(err)
 	}
+	convertedRequest = sanitizeConvertedChatFields(convertedRequest)
 	c.Set(ctxkey.ConvertedRequest, convertedRequest)
 
 	jsonData, err := json.Marshal(convertedRequest)
@@ -358,6 +365,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	}
 	if respErr != nil {
 		if usage == nil {
+			if refundClaudeAdmission(c, respErr, preConsumedQuota, meta.TokenId) {
+				return respErr
+			}
 			scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
 			return respErr
 		}
@@ -455,6 +465,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	quotaId := c.GetInt(ctxkey.Id)
 	requestId := c.GetString(ctxkey.RequestId)
 
+	// Transfer ownership before the asynchronous write can race the deferred
+	// retained-reservation audit and overwrite its final request-cost amount.
+	markBillingReconciled(c)
 	runPostBillingWithTimeout(detachForBilling(c), "postBilling", lg, postBillingTimeoutInfo{
 		userID:              meta.UserId,
 		channelID:           meta.ChannelId,
@@ -474,7 +487,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		}
 	})
 
-	return nil
+	markResponseSettlement(c, usage, respErr)
+	return respErr
 }
 
 // pruneResponseOnlyToolsAfterMCPExpansion removes Response API tool definitions that could not be represented as chat function tools after MCP alias expansion.

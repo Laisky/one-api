@@ -235,6 +235,12 @@ func (n *NoOpRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUse
 // RecordResponseStateEvent implements MetricsRecorder.RecordResponseStateEvent without collecting any data.
 func (n *NoOpRecorder) RecordResponseStateEvent(category, outcome string) {}
 
+// RecordTraceRecord implements TracePipelineRecorder without collecting any data.
+func (n *NoOpRecorder) RecordTraceRecord(outcome string, count int) {}
+
+// UpdateTraceQueueDepth implements TracePipelineRecorder without collecting any data.
+func (n *NoOpRecorder) UpdateTraceQueueDepth(depth, capacity float64) {}
+
 // Initialize with no-op recorder by default
 func init() {
 	SetRecorder(&NoOpRecorder{})
@@ -473,5 +479,165 @@ func (m *MultiRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUs
 func (m *MultiRecorder) RecordResponseStateEvent(category, outcome string) {
 	for _, r := range m.Recorders {
 		r.RecordResponseStateEvent(category, outcome)
+	}
+}
+
+// RecordTraceRecord implements TracePipelineRecorder by forwarding to every
+// child recorder that supports it. A recorder that predates the trace-pipeline
+// metrics is simply skipped rather than failing to compile.
+func (m *MultiRecorder) RecordTraceRecord(outcome string, count int) {
+	for _, r := range m.Recorders {
+		if tr, ok := r.(TracePipelineRecorder); ok {
+			tr.RecordTraceRecord(outcome, count)
+		}
+	}
+}
+
+// UpdateTraceQueueDepth implements TracePipelineRecorder by forwarding to every
+// child recorder that supports it.
+func (m *MultiRecorder) UpdateTraceQueueDepth(depth, capacity float64) {
+	for _, r := range m.Recorders {
+		if tr, ok := r.(TracePipelineRecorder); ok {
+			tr.UpdateTraceQueueDepth(depth, capacity)
+		}
+	}
+}
+
+// UpdateTraceActiveRecorders implements TraceActiveRecorder by forwarding to
+// every child recorder that supports it.
+//
+// Without this method a MultiRecorder -- which is what a deployment running
+// both Prometheus and OTel gets -- would fail the TraceActiveRecorder type
+// assertion in UpdateTraceActive, so oneapi_trace_active_recorders would sit at
+// zero forever while admission was silently working. An optional extension
+// interface only stays optional for CHILD recorders; the fan-out itself has to
+// implement every one of them.
+//
+// Parameters:
+//   - active: number of requests currently holding a trace recorder.
+//   - limit: configured admission limit; 0 means unlimited.
+//
+// Return values: none.
+func (m *MultiRecorder) UpdateTraceActiveRecorders(active, limit float64) {
+	for _, r := range m.Recorders {
+		if tr, ok := r.(TraceActiveRecorder); ok {
+			tr.UpdateTraceActiveRecorders(active, limit)
+		}
+	}
+}
+
+// RecordLogSuppression implements LogPipelineRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - reason: a compile-time constant from log_pipeline.go.
+//   - lines: how many log lines were discarded.
+//   - bytes: how many bytes those lines would have written.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordLogSuppression(reason string, lines int, bytes int64) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogPipelineRecorder); ok {
+			lr.RecordLogSuppression(reason, lines, bytes)
+		}
+	}
+}
+
+// UpdateLogDiskPressure implements LogPipelineRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - active: 1 when the emergency logging policy is engaged, 0 otherwise.
+//
+// Return values: none.
+func (m *MultiRecorder) UpdateLogDiskPressure(active float64) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogPipelineRecorder); ok {
+			lr.UpdateLogDiskPressure(active)
+		}
+	}
+}
+
+// RecordAppLogExportRecords implements LogExportRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - outcome: a compile-time constant from log_export.go.
+//   - count: how many log records the outcome applies to.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordAppLogExportRecords(outcome string, count int) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogExportRecorder); ok {
+			lr.RecordAppLogExportRecords(outcome, count)
+		}
+	}
+}
+
+// UpdateAppLogExportQueue implements LogExportRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - records: log records currently resident in the export pipeline.
+//   - recordLimit: the configured record ceiling.
+//   - bytes: estimated bytes currently resident in the export pipeline.
+//   - byteLimit: the configured byte ceiling.
+//
+// Return values: none.
+func (m *MultiRecorder) UpdateAppLogExportQueue(records, recordLimit, bytes, byteLimit float64) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogExportRecorder); ok {
+			lr.UpdateAppLogExportQueue(records, recordLimit, bytes, byteLimit)
+		}
+	}
+}
+
+// RecordRequestOutcome implements RequestOutcomeRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - outcome: a compile-time constant from operational.go.
+//   - durationMs: the request's total lifetime in milliseconds.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordRequestOutcome(outcome string, durationMs float64) {
+	for _, r := range m.Recorders {
+		if rr, ok := r.(RequestOutcomeRecorder); ok {
+			rr.RecordRequestOutcome(outcome, durationMs)
+		}
+	}
+}
+
+// RecordTimeToFirstToken implements RequestOutcomeRecorder by forwarding to
+// every child recorder that supports it.
+//
+// Parameters:
+//   - outcome: a compile-time constant from operational.go.
+//   - ttftMs: milliseconds from request receipt to first client byte.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordTimeToFirstToken(outcome string, ttftMs float64) {
+	for _, r := range m.Recorders {
+		if rr, ok := r.(RequestOutcomeRecorder); ok {
+			rr.RecordTimeToFirstToken(outcome, ttftMs)
+		}
+	}
+}
+
+// RecordRetentionSweep implements RetentionRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - target: the swept table or file set, from a closed compile-time set.
+//   - result: a compile-time constant from operational.go.
+//   - rows: how many rows or files the sweep removed.
+//   - durationMs: how long the sweep took, in milliseconds.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordRetentionSweep(target, result string, rows float64, durationMs float64) {
+	for _, r := range m.Recorders {
+		if rr, ok := r.(RetentionRecorder); ok {
+			rr.RecordRetentionSweep(target, result, rows, durationMs)
+		}
 	}
 }

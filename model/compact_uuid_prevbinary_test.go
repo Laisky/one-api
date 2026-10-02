@@ -45,10 +45,9 @@ const compactPrevBinaryEnv = "COMPACT_UUID_TEST_PREV_BINARY"
 // compactPrevBinaryPort keeps this artifact off the port the oldest-artifact suite uses.
 const compactPrevBinaryPort = "13997"
 
-// compactPrevSettleFor is how long the artifact runs before it is stopped. It must comfortably
-// exceed its whole startup path — open, AutoMigrate, the custom migrations, its own external-UUID
-// migration, and the root-account write — because a premature kill would make this suite pass by
-// never letting the artifact reach the code under test.
+// compactPrevSettleFor bounds startup and the required concurrent legacy workload.
+// Startup readiness alone must not stop the artifact before AUTO-T04 has observed
+// enough successful operations; neither condition is replaced by a fixed sleep.
 const compactPrevSettleFor = 25 * time.Second
 
 // compactPrevLoadFirstID is the first channels primary key the legacy workload uses. It sits far
@@ -115,6 +114,8 @@ type compactPrevLegacyLoad struct {
 	// finished is closed once the goroutine has returned, which publishes operations and failure
 	// to the test goroutine without a data race.
 	finished chan struct{}
+	// minimumReached publishes the operation floor without racing the mutable count.
+	minimumReached chan struct{}
 	// operations counts acknowledged legacy statements.
 	operations int
 	// failure holds the first statement error or wrong result observed.
@@ -134,11 +135,13 @@ type compactPrevLegacyLoad struct {
 func compactPrevStartLegacyLoad(t *testing.T, db *gorm.DB) *compactPrevLegacyLoad {
 	t.Helper()
 	load := &compactPrevLegacyLoad{
-		stopped:  make(chan struct{}),
-		finished: make(chan struct{}),
+		stopped:        make(chan struct{}),
+		finished:       make(chan struct{}),
+		minimumReached: make(chan struct{}),
 	}
 	go func() {
 		defer close(load.finished)
+		qualified := false
 		for id := compactPrevLoadFirstID; ; id++ {
 			select {
 			case <-load.stopped:
@@ -147,6 +150,10 @@ func compactPrevStartLegacyLoad(t *testing.T, db *gorm.DB) *compactPrevLegacyLoa
 			}
 			if !load.runCycle(db, id) {
 				return
+			}
+			if !qualified && load.operations >= compactPrevRequiredOperations {
+				close(load.minimumReached)
+				qualified = true
 			}
 			// Pacing keeps the workload comfortably above the required 10 requests/second
 			// without turning the assertion into a benchmark of this machine's disk.

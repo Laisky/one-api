@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -168,13 +169,28 @@ func GetMCPToolsByServerID(serverID int) ([]*MCPTool, error) {
 // Return values:
 //   - error: a validation or wrapped transactional database error.
 func UpsertMCPTools(serverID int, serverUUID string, tools []*MCPTool) error {
+	return UpsertMCPToolsWithContext(context.Background(), serverID, serverUUID, tools)
+}
+
+// UpsertMCPToolsWithContext atomically replaces an MCP catalog using ctx for
+// transactional database cancellation.
+//
+// Parameters:
+//   - ctx: lifecycle and deadline scope for the transaction.
+//   - serverID: positive owning server id.
+//   - serverUUID: stable owning UUID.
+//   - tools: complete replacement catalog.
+//
+// Return values:
+//   - error: validation or wrapped transaction failure.
+func UpsertMCPToolsWithContext(ctx context.Context, serverID int, serverUUID string, tools []*MCPTool) error {
 	if serverID <= 0 {
 		return errors.New("server id is invalid")
 	}
 	if DB == nil {
 		return errors.New("database is not initialized")
 	}
-	if err := DB.Transaction(func(tx *gorm.DB) error {
+	if err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("server_id = ?", serverID).Delete(&MCPTool{}).Error; err != nil {
 			return errors.Wrap(err, "clear mcp tools")
 		}

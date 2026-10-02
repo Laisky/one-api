@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import { useState, useEffect } from 'react';
 import { showError, showSuccess } from 'utils/common';
 
@@ -31,21 +32,24 @@ export default function Users() {
   const [editUserId, setEditUserId] = useState('');
 
   const loadUsers = async (startIdx) => {
-    setSearching(true);
-    const res = await API.get(`/api/user/?p=${startIdx}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setUsers(data);
+    try {
+      setSearching(true);
+      const res = await API.get(`/api/user/?p=${startIdx}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (startIdx === 0) {
+          setUsers(data);
+        } else {
+          let newUsers = [...users];
+          newUsers.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
+          setUsers(newUsers);
+        }
       } else {
-        let newUsers = [...users];
-        newUsers.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
-        setUsers(newUsers);
+        showError(message);
       }
-    } else {
-      showError(message);
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const onPaginationChange = (event, activePage) => {
@@ -59,22 +63,25 @@ export default function Users() {
   };
 
   const searchUsers = async (event) => {
-    event.preventDefault();
-    if (searchKeyword === '') {
-      await loadUsers(0);
-      setActivePage(0);
-      return;
+    try {
+      event.preventDefault();
+      if (searchKeyword === '') {
+        await loadUsers(0);
+        setActivePage(0);
+        return;
+      }
+      setSearching(true);
+      const res = await API.get(`/api/user/search?keyword=${searchKeyword}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setUsers(data);
+        setActivePage(0);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(true);
-    const res = await API.get(`/api/user/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setUsers(data);
-      setActivePage(0);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
   };
 
   const handleSearchKeyword = (event) => {
@@ -127,7 +134,7 @@ export default function Users() {
   const handleOkModal = (status) => {
     if (status === true) {
       handleCloseModal();
-      handleRefresh();
+      handleRefresh().catch(reportUIError);
     }
   };
 
@@ -149,7 +156,7 @@ export default function Users() {
         </Button>
       </Stack>
       <Card>
-        <Box component="form" onSubmit={searchUsers} noValidate sx={{marginTop: 2}}>
+        <Box component="form" onSubmit={(...uiArgs) => searchUsers(...uiArgs).catch(reportUIError)} noValidate sx={{marginTop: 2}}>
           <TableToolBar
             filterName={searchKeyword}
             handleFilterName={handleSearchKeyword}
@@ -167,7 +174,7 @@ export default function Users() {
         >
           <Container>
             <ButtonGroup variant="outlined" aria-label="outlined small primary button group" sx={{marginBottom: 2}}>
-              <Button onClick={handleRefresh} startIcon={<IconRefresh width={'18px'} />}>
+              <Button onClick={(...uiArgs) => handleRefresh(...uiArgs).catch(reportUIError)} startIcon={<IconRefresh width={'18px'} />}>
                 刷新
               </Button>
             </ButtonGroup>

@@ -61,9 +61,27 @@ Key principles:
       `/v1/realtime/sessions` surface and to the legacy `openai-beta.realtime-v1`
       subprotocol, which GA clients no longer send.
 
-- `session.update` frames must not contain `session.model`. The relay rejects them with
-  `ws_model_switch_denied` and a 1008 close, because the model is bound at connect time by
-  the `model` query parameter, which the relay rewrites to the channel's actual model name.
+- `session.update` frames are held to the model bound at connect time by the `model`
+  query parameter, which the relay rewrites to the channel's actual model name. The
+  bound model itself is allowed: the server's own `session.created` payload carries
+  `model`, and clients legitimately echo that object back. The channel's user-facing
+  alias is rewritten to the mapped upstream name. Only a *different* model is rejected,
+  with `ws_model_switch_denied` and a 1008 close. Verified upstream on 2026-09-18:
+  OpenAI accepts an unchanged model and silently ignores a changed one, so denying every
+  frame that merely mentions a model only broke conformant clients.
+
+- Transcription sessions (`?intent=transcription`) are forwarded **without** a `model`
+  query parameter. The caller still names a model for routing and billing, but the
+  upstream rejects the handshake with `invalid_model` ("You must not provide a model
+  parameter for transcription sessions"); the transcription model is chosen inside
+  `session.audio.input.transcription` and is what the receipt is billed under.
+
+- End-to-end probe: `API_BASE=... API_TOKEN=... go run ./cmd/test realtime` drives a
+  running server and a real OpenAI channel. Scenarios: `conversation` (session.update
+  echoing the bound model, two text turns, then a match of the persisted consume log
+  against the provider receipts), `audio` (PCM input with transcription enabled, which
+  must settle a second, transcription-model receipt), `model-guard` (a real switch is
+  denied) and `idle` (a connected but unused session is free). It spends real quota.
 
 Note: The OpenAI Realtime API also supports WebRTC and ephemeral tokens. For Phase 1 we only support the WebSocket path and do not issue OpenAI ephemeral tokens from one-api (that would bypass one-api’s logging/billing).
 

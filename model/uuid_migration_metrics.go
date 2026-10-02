@@ -53,7 +53,11 @@ func recordUUIDRows(role uuidDBRole, phase string, target string, updated int, u
 // Return values: none.
 func recordUUIDCatchUpBacklog(topology *databaseTopology, result uuidMigrationResult) {
 	backlog := 0.0
-	if result.updated > 0 || result.budgetExhausted {
+	// Backlog means "a scan still has unexamined candidate rows, or the pass that just
+	// finished actually wrote something". A pass that examined only permanently unresolvable
+	// rows and finished is quiescence, and reporting it as backlog is what hid a
+	// non-converging worker behind a gauge that never dropped to zero.
+	if !result.passComplete || result.passUpdated > 0 {
 		backlog = 1
 	}
 	for _, role := range topology.markerRoles() {

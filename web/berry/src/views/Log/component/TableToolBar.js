@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from "prop-types";
 import { useTheme } from "@mui/material/styles";
 import { useState } from "react";
@@ -25,7 +26,7 @@ import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 import LogType from "../type/LogType";
-require("dayjs/locale/zh-cn");
+import 'dayjs/locale/zh-cn';
 // ----------------------------------------------------------------------
 
 export default function TableToolBar({
@@ -251,7 +252,7 @@ export default function TableToolBar({
               getOptionLabel={(option) => typeof option === 'string' ? option : option.username}
               value={filterName.username}
               onInputChange={(_, newInputValue) => {
-                searchUsers(newInputValue);
+                searchUsers(newInputValue).catch(reportUIError);
                 handleFilterName({
                   target: { name: 'username', value: newInputValue }
                 });

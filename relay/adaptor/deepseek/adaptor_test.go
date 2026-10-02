@@ -172,6 +172,19 @@ func TestConvertClaudeRequestNormalizesThinkingForReplay(t *testing.T) {
 					},
 				},
 			},
+			// The tool result belongs to the replay: DeepSeek rejects an assistant
+			// message whose tool_calls nobody answers, so a tool_use turn only
+			// survives conversion together with its tool_result.
+			{
+				Role: "user",
+				Content: []any{
+					map[string]any{
+						"type":        "tool_result",
+						"tool_use_id": "call_read",
+						"content":     "# README",
+					},
+				},
+			},
 		},
 	}
 
@@ -179,7 +192,8 @@ func TestConvertClaudeRequestNormalizesThinkingForReplay(t *testing.T) {
 	require.NoError(t, err)
 	converted, ok := convertedAny.(*model.GeneralOpenAIRequest)
 	require.True(t, ok)
-	require.Len(t, converted.Messages, 1)
+	require.Len(t, converted.Messages, 2)
+	require.Equal(t, "tool", converted.Messages[1].Role)
 
 	assistant := converted.Messages[0]
 	require.Len(t, assistant.ToolCalls, 1)

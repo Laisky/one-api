@@ -40,7 +40,10 @@ func backfillFKUUIDsForPhase(ctx context.Context, run *uuidMigrationRun, phase u
 // Return values:
 //   - error: wrapped error when the resolver is unknown or a read or write fails.
 func backfillFKUUIDTarget(ctx context.Context, run *uuidMigrationRun, targetDB *gorm.DB, refDB *gorm.DB, target uuidFKTarget) error {
-	if !targetDB.Migrator().HasTable(target.model) || !targetDB.Migrator().HasColumn(target.model, target.uuidColumn) {
+	targetKey := uuidCursorKey{
+		role: target.role, phase: uuidPhaseFK, table: target.table, column: target.uuidColumn,
+	}
+	if !run.targetPresent(targetDB, targetKey, target.model, target.uuidColumn) {
 		return nil
 	}
 	switch target.resolver {
@@ -70,9 +73,17 @@ func backfillIntFKUUIDs(ctx context.Context, run *uuidMigrationRun, targetDB *go
 	fkColumn := quoteIdentifier(targetDB, target.fkColumn)
 
 	for _, missingPredicate := range missingStringPredicates(targetDB, target.uuidColumn) {
-		lastID := 0
+		key := uuidCursorKey{
+			role: target.role, phase: uuidPhaseFK, table: target.table,
+			column: target.uuidColumn, predicate: missingPredicate,
+		}
+		lastID, done := run.scanStart(key)
+		if done {
+			continue
+		}
 		for {
 			if run.budget.spent() {
+				run.stopScan()
 				return nil
 			}
 			rows, err := readFKCandidateRows(ctx, targetDB, target, idColumn, fkColumn, missingPredicate, lastID, run.budget.limit(uuidBackfillBatchSize))
@@ -80,6 +91,7 @@ func backfillIntFKUUIDs(ctx context.Context, run *uuidMigrationRun, targetDB *go
 				return err
 			}
 			if len(rows) == 0 {
+				run.finishScan(key)
 				break
 			}
 			// Advance across every examined row, including permanent orphans, so an
@@ -90,7 +102,10 @@ func backfillIntFKUUIDs(ctx context.Context, run *uuidMigrationRun, targetDB *go
 			if err != nil {
 				return err
 			}
-			run.updated += updated
+			// The cursor records committed progress, never attempted progress; see the
+			// owned-UUID backfill for why an interrupted write must not move it.
+			run.advanceScan(key, lastID)
+			run.recordUpdated(updated)
 			recordUUIDBatch(ctx, run, target.role, uuidPhaseFK, target.table, target.uuidColumn, len(rows), updated, 0)
 			run.budget.consume(len(rows))
 		}
@@ -198,9 +213,17 @@ func backfillTokenNameUUIDs(ctx context.Context, run *uuidMigrationRun, targetDB
 	nameColumn := quoteIdentifier(targetDB, "token_name")
 
 	for _, missingPredicate := range missingStringPredicates(targetDB, target.uuidColumn) {
-		lastID := 0
+		key := uuidCursorKey{
+			role: target.role, phase: uuidPhaseTokenName, table: target.table,
+			column: target.uuidColumn, predicate: missingPredicate,
+		}
+		lastID, done := run.scanStart(key)
+		if done {
+			continue
+		}
 		for {
 			if run.budget.spent() {
+				run.stopScan()
 				return nil
 			}
 			rows := []uuidLogTokenRow{}
@@ -215,6 +238,7 @@ func backfillTokenNameUUIDs(ctx context.Context, run *uuidMigrationRun, targetDB
 				return errors.Wrapf(err, "list missing token uuid rows for %s", target.table)
 			}
 			if len(rows) == 0 {
+				run.finishScan(key)
 				break
 			}
 			// Ambiguous historical token names are examined and skipped, never retried
@@ -244,7 +268,10 @@ func backfillTokenNameUUIDs(ctx context.Context, run *uuidMigrationRun, targetDB
 			if err != nil {
 				return errors.Wrapf(err, "set %s.%s", target.table, target.uuidColumn)
 			}
-			run.updated += updated
+			// The cursor records committed progress, never attempted progress; see the
+			// owned-UUID backfill for why an interrupted write must not move it.
+			run.advanceScan(key, lastID)
+			run.recordUpdated(updated)
 			recordUUIDBatch(ctx, run, target.role, uuidPhaseTokenName, target.table, target.uuidColumn, len(rows), updated, ambiguous)
 			run.budget.consume(len(rows))
 		}

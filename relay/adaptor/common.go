@@ -3,6 +3,7 @@ package adaptor
 import (
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -11,6 +12,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
+	appcommon "github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/identity"
@@ -23,6 +25,12 @@ const (
 	extraRequestHeaderPrefix = "X-"
 	channelAPIKeyPlaceholder = "{{key}}"
 )
+
+// RedirectPolicyAdaptor optionally constrains redirects for one provider without
+// mutating the shared HTTP client. CheckRedirect has net/http.Client semantics.
+type RedirectPolicyAdaptor interface {
+	CheckRedirect(req *http.Request, via []*http.Request) error
+}
 
 // SetupCommonRequestHeader copies shared downstream headers into the upstream
 // request before provider-specific and channel-specific headers are applied.
@@ -97,7 +105,13 @@ func isValidCustomHeaderName(name string) bool {
 	return true
 }
 
+// DoRequestHelper validates REST transport compatibility before preparing and sending an upstream REST request.
+// Parameters: a is the provider, c is the request context, meta carries routing metadata,
+// and requestBody contains the payload. Returns: the response or a wrapped error.
 func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if err := ValidateRESTModelTransport(meta); err != nil {
+		return nil, errors.Wrap(err, "validate model transport")
+	}
 	fullRequestURL, err := a.GetRequestURL(meta)
 	if err != nil {
 		return nil, errors.Wrap(err, "get request url failed")
@@ -147,6 +161,10 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 		return nil, errors.Wrap(err, "apply channel custom headers")
 	}
 
+	// Sanitize diagnostics only: dispatch and metadata still need the original
+	// query values. Sanitize the bound logger as well as each explicit URL field.
+	logRequestURL := appcommon.SanitizeURLForLogging(fullRequestURL)
+
 	// Prepare tagged logger and propagate to context.
 	// The request-scoped logger is already bound with the full user/token/channel
 	// identity (id + uuid + name) by the auth and distributor middlewares, so only
@@ -154,7 +172,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	// implementation name (e.g. "aws", "zhipu"), which is distinct from the
 	// operator-chosen "channel_name" carried by the bound logger.
 	lg := gmw.GetLogger(c).With(
-		zap.String("url", fullRequestURL),
+		zap.String("url", logRequestURL),
 		zap.String("adaptor", a.GetChannelName()),
 		zap.String("model", meta.ActualModelName),
 	)
@@ -164,7 +182,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	// Log upstream request for billing tracking
 	fields := []zap.Field{
 		zap.String("method", req.Method),
-		zap.String("url", fullRequestURL),
+		zap.String("url", logRequestURL),
 		zap.Bool("body_logging_suppressed", true),
 	}
 	if bodySize >= 0 {
@@ -176,7 +194,11 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	tracing.RecordTraceTimestamp(c, model.TimestampRequestForwarded)
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 
-	resp, err := DoRequest(c, req)
+	var redirectPolicy func(*http.Request, []*http.Request) error
+	if provider, ok := a.(RedirectPolicyAdaptor); ok {
+		redirectPolicy = provider.CheckRedirect
+	}
+	resp, err := doRequestWithRedirectPolicy(c, req, redirectPolicy)
 	if err != nil {
 		// Return error without logging - let the calling ErrorWrapper function handle logging
 		// This prevents duplicate logging when ErrorWrapper also logs the error
@@ -189,14 +211,23 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 		lg.Debug("upstream returned error status",
 			zap.Int("status", resp.StatusCode),
 			zap.String("model", meta.ActualModelName),
-			zap.String("url", fullRequestURL),
+			zap.String("url", logRequestURL),
 		)
 	}
 
 	return resp, nil
 }
 
+// DoRequest sends req using the shared client and its existing redirect policy.
+// It returns the upstream response or a wrapped transport error.
 func DoRequest(c *gin.Context, req *http.Request) (*http.Response, error) {
+	return doRequestWithRedirectPolicy(c, req, nil)
+}
+
+// doRequestWithRedirectPolicy optionally overrides redirects on a client copy,
+// retaining its transport, connection pool and timeout. Other providers' shared
+// client configuration remains unchanged, including under concurrent requests.
+func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPolicy func(*http.Request, []*http.Request) error) (*http.Response, error) {
 	// keep logger from context if available
 	httpClient := client.HTTPClient
 	if httpClient == nil {
@@ -206,8 +237,20 @@ func DoRequest(c *gin.Context, req *http.Request) (*http.Response, error) {
 			httpClient = http.DefaultClient
 		}
 	}
+	if redirectPolicy != nil {
+		localClient := *httpClient
+		localClient.CheckRedirect = redirectPolicy
+		httpClient = &localClient
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		// Client.Do returns *url.Error; redact a copy before downstream
+		// wrapping/logging without changing the cause or outbound URL.
+		if urlErr, ok := err.(*url.Error); ok {
+			sanitized := *urlErr
+			sanitized.URL = appcommon.SanitizeURLForLogging(urlErr.URL)
+			err = &sanitized
+		}
 		return nil, errors.Wrap(err, "perform upstream request")
 	}
 	if resp == nil {

@@ -79,7 +79,7 @@ func (c *StreamableHTTPClient) ListToolsLatest(ctx context.Context) ([]ToolDescr
 			return nil, errors.Wrap(err, "mcp modern tools/list")
 		}
 		tools = append(tools, result.Tools...)
-		nextCursor := strings.TrimSpace(result.NextCursor)
+		nextCursor := result.NextCursor
 		if nextCursor == "" {
 			break
 		}
@@ -165,12 +165,15 @@ func (c *StreamableHTTPClient) CallToolLatestWithOptions(ctx context.Context, to
 		params["requestState"] = options.RequestState
 	}
 	var result CallToolResult
-	err = c.doModernRPC(ctx, "tools/call", params, name, parameterHeaders, &result)
+	err = c.doModernRPCWithOptions(ctx, "tools/call", params, name, parameterHeaders, &result, options)
 	if err != nil {
-		if IsModernFallbackCandidate(err) && !hasCallToolRequestOptions(options) {
+		if isSafeToolLegacyFallback(err) && !hasCallToolRequestOptions(options) {
 			return c.CallTool(ctx, name, argumentMap)
 		}
-		return nil, errors.Wrapf(err, "mcp modern tools/call %s", name)
+		return nil, &ToolExecutionUncertainError{Err: errors.Wrapf(err, "mcp modern tools/call %s", name)}
+	}
+	if err := validateMCPToolInputCapabilities(&result, options.Meta); err != nil {
+		return nil, &ToolExecutionUncertainError{Err: err}
 	}
 	return NormalizeCallToolResult(&result), nil
 }
@@ -206,7 +209,21 @@ func (c *StreamableHTTPClient) normalizeAndFilterToolDescriptors(tools []ToolDes
 // Return values:
 //   - bool: true when legacy fallback cannot represent the request.
 func hasCallToolRequestOptions(options CallToolRequestOptions) bool {
-	return options.InputResponses != nil || options.RequestState != ""
+	if options.InputResponses != nil || options.RequestState != "" || options.OnNotification != nil {
+		return true
+	}
+	for key, value := range options.Meta {
+		switch key {
+		case MetaProtocolVersionKey, MetaClientInfoKey:
+			continue
+		case MetaClientCapabilitiesKey:
+			if capabilities, ok := value.(map[string]any); ok && len(capabilities) == 0 {
+				continue
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // legacyInitialized reports whether the client has committed to the legacy session lifecycle.
@@ -237,8 +254,22 @@ func (c *StreamableHTTPClient) legacyInitialized() bool {
 // Return values:
 //   - error: a wrapped transport, size, correlation, protocol, or decoding error.
 func (c *StreamableHTTPClient) doModernRPC(ctx context.Context, method string, params map[string]any, name string, parameterHeaders http.Header, out any) error {
+	return c.doModernRPCWithOptions(ctx, method, params, name, parameterHeaders, out, CallToolRequestOptions{})
+}
+
+// doModernRPCWithOptions sends one stateless request with call-local metadata and progress delivery.
+// The context controls cancellation; out receives a validated result and errors retain protocol details.
+func (c *StreamableHTTPClient) doModernRPCWithOptions(ctx context.Context, method string, params map[string]any, name string, parameterHeaders http.Header, out any, options CallToolRequestOptions) error {
 	if c == nil {
 		return errors.New("mcp client is nil")
+	}
+	if options.Meta != nil {
+		copied := make(map[string]any)
+		for key, value := range params {
+			copied[key] = value
+		}
+		copied["_meta"] = options.Meta
+		params = copied
 	}
 	requestID := random.GetUUID()
 	payload := map[string]any{
@@ -297,21 +328,29 @@ func (c *StreamableHTTPClient) doModernRPC(ctx context.Context, method string, p
 	}
 	defer resp.Body.Close()
 
-	body, err := readMCPResponseBody(resp.Body)
+	var body []byte
+	if strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
+		body, err = readModernMCPEventStream(ctx, resp.Body, requestID, options)
+	} else {
+		body, err = readMCPResponseBody(resp.Body)
+	}
 	if err != nil {
-		return errors.Wrap(err, "read modern mcp response body")
+		return errors.Wrap(err, "read modern mcp response")
 	}
 	c.debugLogResponse(method, resp, body)
 
-	if strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
-		body, err = extractMCPResponseEnvelope(body, requestID)
-		if err != nil {
-			return errors.Wrap(err, "parse modern mcp SSE response")
-		}
-	}
-
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return decodeModernProtocolError(resp.StatusCode, body)
+		protocolErr := decodeModernProtocolError(resp.StatusCode, body)
+		var raw map[string]json.RawMessage
+		if DecodeJSON(body, &raw) == nil && raw["error"] != nil {
+			if _, err := parseMCPResponseEnvelope(body, requestID); err != nil {
+				return err
+			}
+		}
+		if method == "tools/call" && strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
+			return &ToolExecutionUncertainError{Err: protocolErr}
+		}
+		return protocolErr
 	}
 
 	envelope, err := parseMCPResponseEnvelope(body, requestID)
@@ -319,18 +358,25 @@ func (c *StreamableHTTPClient) doModernRPC(ctx context.Context, method string, p
 		return err
 	}
 	if envelope.Error != nil {
-		return &ProtocolError{
+		protocolErr := &ProtocolError{
 			HTTPStatus: resp.StatusCode,
 			Code:       envelope.Error.Code,
 			Message:    envelope.Error.Message,
 			Data:       envelope.Error.Data,
 			Body:       strings.TrimSpace(string(body)),
 		}
+		if method == "tools/call" && strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
+			return &ToolExecutionUncertainError{Err: protocolErr}
+		}
+		return protocolErr
+	}
+	if err := validateModernMCPResult(envelope.Result, method); err != nil {
+		return err
 	}
 	if out == nil {
 		return nil
 	}
-	if err := json.Unmarshal(envelope.Result, out); err != nil {
+	if err := DecodeJSON(envelope.Result, out); err != nil {
 		return errors.Wrap(err, "unmarshal modern mcp result")
 	}
 	return nil
@@ -378,7 +424,7 @@ func normalizeToolArguments(arguments any) (map[string]any, error) {
 		return nil, errors.Wrap(err, "marshal mcp tool arguments")
 	}
 	var object map[string]any
-	if err := json.Unmarshal(encoded, &object); err != nil {
+	if err := DecodeJSON(encoded, &object); err != nil {
 		return nil, errors.Wrap(err, "decode mcp tool arguments object")
 	}
 	if object == nil {

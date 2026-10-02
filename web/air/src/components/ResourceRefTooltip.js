@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React from 'react';
 import { Tooltip } from '@douyinfe/semi-ui';
 import { copy, showError, showSuccess } from '../helpers';
@@ -38,7 +39,7 @@ const ResourceRefTooltip = ({ refId, children, label = 'ID' }) => {
       content={
         <span
           style={{ cursor: 'pointer', wordBreak: 'break-all' }}
-          onClick={handleCopy}
+          onClick={(...uiArgs) => handleCopy(...uiArgs).catch(reportUIError)}
           title="点击复制"
         >
           {label}: {text}

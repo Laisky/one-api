@@ -77,40 +77,6 @@ func ResolveAudioPricing(modelName string, channelConfigs map[string]model.Model
 	return nil, false
 }
 
-// ResolveImagePricing resolves image pricing metadata with three-layer precedence:
-// channel overrides (when they include image pricing), provider defaults, then global pricing.
-// It returns nil when no image metadata is defined in any layer.
-func ResolveImagePricing(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (*adaptor.ImagePricingConfig, bool) {
-	if channelConfigs != nil {
-		if local, ok := channelConfigs[modelName]; ok {
-			cfg := ApplyTimeWindow(convertLocalModelConfig(local), at)
-			if cfg.Image != nil && cfg.Image.HasData() {
-				return cfg.Image.Clone(), true
-			}
-		}
-	}
-
-	if provider != nil {
-		if defaults := provider.GetDefaultModelPricing(); defaults != nil {
-			if cfg, ok := defaults[modelName]; ok {
-				cfg = ApplyTimeWindow(cloneModelConfig(cfg), at)
-				if cfg.Image != nil && cfg.Image.HasData() {
-					return cfg.Image.Clone(), true
-				}
-			}
-		}
-	}
-
-	if cfg, ok := GetGlobalModelConfig(modelName); ok {
-		cfg = ApplyTimeWindow(cfg, at)
-		if cfg.Image != nil && cfg.Image.HasData() {
-			return cfg.Image.Clone(), true
-		}
-	}
-
-	return nil, false
-}
-
 func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 	cfg := adaptor.ModelConfig{
 		Ratio:             local.Ratio,
@@ -140,6 +106,9 @@ func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 			return cfg.Tiers[i].InputTokenThreshold < cfg.Tiers[j].InputTokenThreshold
 		})
 	}
+	if local.PerCall != nil {
+		cfg.PerCall = &adaptor.PerCallPricingConfig{UsdPerThousandCalls: local.PerCall.UsdPerThousandCalls}
+	}
 	if local.Video != nil {
 		cfg.Video = convertLocalVideo(local.Video)
 	}
@@ -164,6 +133,7 @@ func convertLocalVideo(local *model.VideoPricingLocal) *adaptor.VideoPricingConf
 	}
 	cfg := &adaptor.VideoPricingConfig{
 		PerSecondUsd:   local.PerSecondUsd,
+		InputImageUsd:  local.InputImageUsd,
 		BaseResolution: local.BaseResolution,
 	}
 	if len(local.ResolutionMultipliers) > 0 {
@@ -185,6 +155,11 @@ func convertLocalAudio(local *model.AudioPricingLocal) *adaptor.AudioPricingConf
 		PromptTokensPerSecond:     local.PromptTokensPerSecond,
 		CompletionTokensPerSecond: local.CompletionTokensPerSecond,
 		UsdPerSecond:              local.UsdPerSecond,
+		InputUnit:                 local.InputUnit,
+		InputPriceUsd:             local.InputPriceUsd,
+		InputPriceQuantity:        local.InputPriceQuantity,
+		MinimumBillableSeconds:    local.MinimumBillableSeconds,
+		BillingIncrementSeconds:   local.BillingIncrementSeconds,
 	}
 }
 

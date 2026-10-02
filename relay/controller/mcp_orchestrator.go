@@ -464,6 +464,7 @@ func doChatRequestOnce(c *gin.Context, meta *metalib.Meta, adaptorInstance adapt
 	if err != nil {
 		return nil, nil, openai.ErrorWrapper(err, "convert_request_failed", 500)
 	}
+	convertedRequest = sanitizeConvertedChatFields(convertedRequest)
 	jsonData, err := json.Marshal(convertedRequest)
 	if err != nil {
 		return nil, nil, openai.ErrorWrapper(err, "marshal_converted_request_failed", 500)

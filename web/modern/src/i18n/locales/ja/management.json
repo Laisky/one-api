@@ -9,7 +9,8 @@
       "edit": "編集",
       "enable": "有効化",
       "refresh_balance": "{{name}} の残高を更新",
-      "test": "テスト"
+      "test": "テスト",
+      "test_help": "このチャネルの Testing Model 設定に従って、今すぐヘルスチェックを実行します。"
     },
     "columns": {
       "actions": "操作",
@@ -455,6 +456,8 @@
         "error_title": "テストエラー",
         "failed_message": "チャンネルテストに失敗しました。",
         "failed_title": "テスト失敗",
+        "skipped_message": "チャネルテストをスキップしました: {{message}}",
+        "skipped_title": "スキップ",
         "success_message": "チャンネルテストが正常に完了しました。",
         "success_title": "テスト成功"
       },
@@ -583,6 +586,8 @@
       "status_failed_title": "更新に失敗しました",
       "test_failed_message": "不明なエラー",
       "test_failed_title": "チャンネルのテストに失敗しました",
+      "test_skipped_message": "このチャネルはチャット対応のエンドポイントを提供していないため、ヘルスチェックを実行できません。有効なまま維持されました。",
+      "test_skipped_title": "チャネルテストをスキップしました",
       "test_success": "チャンネルのテストに成功しました。",
       "testing_model_failed_message": "テスト用モデルの更新に失敗しました",
       "testing_model_failed_title": "保存に失敗しました",
@@ -603,7 +608,10 @@
       "paused": "一時停止"
     },
     "testing": {
-      "auto": "最安"
+      "auto": "最安",
+      "help": "このチャネルのヘルスチェックに使用するモデルを選びます。\n\nCHEAPEST — チャット系 API（chat completions、response API、Claude messages、Gemini chat）で提供される最も安価なモデルを自動的に使用します。\n\nSKIP — このチャネルをヘルスチェックの対象から完全に除外します。プローブは送信されず、自動的に無効化されることもありません。\n\nテストできるのはチャット形式のモデルのみです。埋め込み、リランク、モデレーション、補完、メディア系のモデルは除外されます。API 形式が不明なモデルも既定で除外されるため、テストしたい場合はここで明示的に選択してください。",
+      "help_label": "テスト用モデルの選択ロジック",
+      "skip": "SKIP（テストしない）"
     },
     "title": "チャンネル",
     "toolbar": {
@@ -615,6 +623,7 @@
       "refresh_balances": "全残高を更新",
       "refresh_balances_mobile": "残高を更新",
       "test_all": "すべてテスト",
+      "test_all_help": "すべてのチャネルをヘルスチェックします。各チャネルはそれぞれの Testing Model 設定（CHEAPEST の場合は最も安価なチャット形式モデル）を使用します。\n\nSKIP が設定されたチャネル、およびプローブ可能なチャット形式モデルを持たないチャネルはスキップされ、失敗として報告されることも自動的に無効化されることもありません。",
       "test_all_mobile": "全チャンネルをテスト"
     },
     "type_unknown": "タイプ {{type}}"

@@ -28,10 +28,21 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-// azureRequiresResponseAPI returns true when Azure supports the model only via the Response API.
+// azureRequiresResponseAPI reports whether an Azure model uses the tool-safe
+// Responses path. It preserves GPT-5 routing and recognizes only the published
+// GPT-6 IDs; arbitrary deployment names must not inherit a model contract.
+// Verified 2026-09-30: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure
 func azureRequiresResponseAPI(modelName string) bool {
 	normalized := normalizedModelName(modelName)
-	return strings.HasPrefix(normalized, "gpt-5")
+	if strings.HasPrefix(normalized, "gpt-5") {
+		return true
+	}
+	switch normalized {
+	case "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol":
+		return true
+	default:
+		return false
+	}
 }
 
 // AzureRequiresResponseAPI reports whether an Azure deployment must be called via the Response API surface.
@@ -206,6 +217,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	lg := gmw.GetLogger(c)
 	if shouldNormalizeToolMessageContentForDeepSeek(metaInfo, request) {
 		normalizeClaudeThinkingForDeepSeek(lg, request)
+		enforceDeepSeekHistoryContract(lg, request)
 		normalizeDeepSeekToolMessageContent(lg, request)
 	}
 
@@ -303,18 +315,22 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 	supportsReasoning := isModelSupportedReasoning(actualModel)
 
 	if supportsReasoning {
-		targetsResponseAPI := meta.Mode == relaymode.ResponseAPI ||
-			(meta.ChannelType == channeltype.OpenAI && !IsModelsOnlySupportedByChatCompletionAPI(actualModel))
-
-		if targetsResponseAPI {
-			request.Temperature = nil
-		} else {
-			temperature := float64(1)
-			request.Temperature = &temperature
-		}
-
-		request.TopP = nil
+		// Sampling depends on the effective effort, not merely on whether the
+		// model is capable of reasoning. Preserve explicit zero values at none.
 		request.ReasoningEffort = normalizeReasoningEffortForModel(actualModel, request.ReasoningEffort)
+		if !modelSupportsSampling(actualModel, request.ReasoningEffort) {
+			targetsResponseAPI := meta.Mode == relaymode.ResponseAPI ||
+				(meta.ChannelType == channeltype.OpenAI && !IsModelsOnlySupportedByChatCompletionAPI(actualModel)) ||
+				(meta.ChannelType == channeltype.Azure && azureRequiresResponseAPI(actualModel))
+
+			if targetsResponseAPI {
+				request.Temperature = nil
+			} else {
+				temperature := float64(1)
+				request.Temperature = &temperature
+			}
+			request.TopP = nil
+		}
 
 		request.Messages = func(raw []model.Message) (filtered []model.Message) {
 			for i := range raw {
@@ -444,6 +460,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	metaInfo := meta.GetByContext(c)
 	if shouldNormalizeToolMessageContentForDeepSeek(metaInfo, openaiRequest) {
 		normalizeClaudeThinkingForDeepSeek(gmw.GetLogger(c), openaiRequest)
+		enforceDeepSeekHistoryContract(gmw.GetLogger(c), openaiRequest)
 		normalizeDeepSeekToolMessageContent(gmw.GetLogger(c), openaiRequest)
 	}
 	if rewrites := toolnamesafe.SanitizeRequestToolNames(c, openaiRequest); rewrites > 0 {

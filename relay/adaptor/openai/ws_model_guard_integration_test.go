@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
@@ -126,9 +127,10 @@ func TestResponseAPIWS_ModelSwitchAttackRejected(t *testing.T) {
 	for {
 		_, msg, err := clientConn.ReadMessage()
 		if err != nil {
-			if c, ok := err.(*websocket.CloseError); ok {
+			var closeErr *websocket.CloseError
+			if errors.As(err, &closeErr) {
 				sawClose = true
-				closeCode = c.Code
+				closeCode = closeErr.Code
 			}
 			break
 		}
@@ -382,8 +384,9 @@ func newRecordingRealtimeUpstream(t *testing.T, received chan<- string) *httptes
 }
 
 // TestRealtimeWS_SessionUpdateModelDenied verifies that a client attempting
-// to mutate `session.model` on a Realtime WS connection is rejected and the
-// upstream never sees the frame.
+// to select a DIFFERENT model through `session.update` is rejected and the
+// upstream never sees the frame. The bound model itself is the documented echo
+// case and is covered by TestRealtimeWS_SessionUpdateBoundModelForwarded.
 func TestRealtimeWS_SessionUpdateModelDenied(t *testing.T) {
 	received := make(chan string, 4)
 	upstream := newRecordingRealtimeUpstream(t, received)
@@ -404,7 +407,7 @@ func TestRealtimeWS_SessionUpdateModelDenied(t *testing.T) {
 	}
 	defer clientConn.Close()
 
-	attack := `{"type":"session.update","session":{"model":"gpt-4o-realtime-preview","instructions":"x"}}`
+	attack := `{"type":"session.update","session":{"model":"gpt-realtime-2","instructions":"x"}}`
 	require.NoError(t, clientConn.WriteMessage(websocket.TextMessage, []byte(attack)))
 
 	clientConn.SetReadDeadline(time.Now().Add(3 * time.Second))

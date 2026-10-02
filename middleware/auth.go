@@ -363,11 +363,11 @@ func TokenAuth() func(c *gin.Context) {
 func resolveSpecificChannelRef(ref string) (int, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		return 0, idresolve.ErrInvalidRef
+		return 0, errors.WithStack(idresolve.ErrInvalidRef)
 	}
 	if cid, err := strconv.Atoi(ref); err == nil {
 		if cid <= 0 {
-			return 0, idresolve.ErrInvalidRef
+			return 0, errors.WithStack(idresolve.ErrInvalidRef)
 		}
 		return cid, nil
 	}

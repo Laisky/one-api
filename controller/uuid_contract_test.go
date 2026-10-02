@@ -714,10 +714,12 @@ func TestTraceAndRequestCostStrictOutResponses(t *testing.T) {
 	router.GET("/api/cost/request/:request_id", GetRequestCost)
 	router.GET("/api/trace/:trace_id", func(c *gin.Context) {
 		gmwSetLoggerForUUIDContract(c)
+		c.Set(ctxkey.Role, model.RoleRootUser)
 		GetTraceByTraceId(c)
 	})
 	router.GET("/api/trace/log/:log_id", func(c *gin.Context) {
 		gmwSetLoggerForUUIDContract(c)
+		c.Set(ctxkey.Role, model.RoleRootUser)
 		GetTraceByLogId(c)
 	})
 

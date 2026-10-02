@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 
 	"github.com/Laisky/errors/v2"
@@ -28,7 +29,7 @@ type ToolDescriptor struct {
 //   - []byte: the encoded MCP tool descriptor.
 //   - error: a wrapped encoding error when a field cannot be represented as JSON.
 func (t ToolDescriptor) MarshalJSON() ([]byte, error) {
-	payload := make(map[string]any, len(t.AdditionalFields)+8)
+	payload := make(map[string]any)
 	for key, value := range t.AdditionalFields {
 		payload[key] = value
 	}
@@ -73,7 +74,7 @@ func (t *ToolDescriptor) UnmarshalJSON(data []byte) error {
 		return errors.New("mcp tool descriptor is nil")
 	}
 	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := DecodeJSON(data, &raw); err != nil {
 		return errors.Wrap(err, "unmarshal mcp tool descriptor")
 	}
 
@@ -120,7 +121,7 @@ func (t *ToolDescriptor) UnmarshalJSON(data []byte) error {
 			continue
 		}
 		var extension any
-		if err := json.Unmarshal(value, &extension); err != nil {
+		if err := DecodeJSON(value, &extension); err != nil {
 			return errors.Wrapf(err, "decode mcp tool extension %s", key)
 		}
 		if decoded.AdditionalFields == nil {
@@ -145,21 +146,29 @@ type ListToolsResult struct {
 
 // CallToolRequestOptions carries MCP 2026-07-28 multi-round-trip retry fields.
 type CallToolRequestOptions struct {
-	InputResponses map[string]any `json:"inputResponses,omitempty"`
-	RequestState   string         `json:"requestState,omitempty"`
+	// Meta belongs only to this call; it is never stored on the shared client.
+	Meta           map[string]any      `json:"_meta,omitempty"`
+	OnNotification NotificationHandler `json:"-"`
+	InputResponses map[string]any      `json:"inputResponses,omitempty"`
+	RequestState   string              `json:"requestState,omitempty"`
 }
+
+// NotificationHandler synchronously consumes one validated, request-correlated progress notification.
+// Returning an error abandons the upstream response stream and prevents tool replay.
+type NotificationHandler func(context.Context, json.RawMessage) error
 
 // CallToolResult represents an MCP tool result while preserving extension fields.
 type CallToolResult struct {
-	ResultType        string
-	Content           any
-	StructuredContent any
-	IsError           bool
-	InputRequests     map[string]any
-	RequestState      string
-	Meta              map[string]any
-	AdditionalFields  map[string]any
-	Raw               json.RawMessage
+	ResultType               string
+	Content                  any
+	StructuredContent        any
+	IsError                  bool
+	InputRequests            map[string]any
+	RequestState             string
+	Meta                     map[string]any
+	AdditionalFields         map[string]any
+	Raw                      json.RawMessage
+	structuredContentPresent bool
 }
 
 // MarshalJSON encodes a CallToolResult with current camelCase field names and preserved extensions.
@@ -170,7 +179,7 @@ type CallToolResult struct {
 //   - []byte: the encoded MCP tool result.
 //   - error: a wrapped encoding error when a field cannot be represented as JSON.
 func (c CallToolResult) MarshalJSON() ([]byte, error) {
-	payload := make(map[string]any, len(c.AdditionalFields)+7)
+	payload := make(map[string]any)
 	for key, value := range c.AdditionalFields {
 		payload[key] = value
 	}
@@ -180,7 +189,7 @@ func (c CallToolResult) MarshalJSON() ([]byte, error) {
 	if c.Content != nil {
 		payload["content"] = c.Content
 	}
-	if c.StructuredContent != nil {
+	if c.StructuredContent != nil || c.structuredContentPresent {
 		payload["structuredContent"] = c.StructuredContent
 	}
 	if c.IsError {
@@ -214,7 +223,7 @@ func (c *CallToolResult) UnmarshalJSON(data []byte) error {
 		return errors.New("mcp tool result is nil")
 	}
 	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := DecodeJSON(data, &raw); err != nil {
 		return errors.Wrap(err, "unmarshal mcp tool result")
 	}
 
@@ -224,17 +233,18 @@ func (c *CallToolResult) UnmarshalJSON(data []byte) error {
 		return errors.Wrap(err, "decode mcp result type")
 	}
 	if encoded, exists := raw["content"]; exists {
-		if err := json.Unmarshal(encoded, &decoded.Content); err != nil {
+		if err := DecodeJSON(encoded, &decoded.Content); err != nil {
 			return errors.Wrap(err, "decode mcp result content")
 		}
 	}
 	if encoded, exists := firstRawMessage(raw, "structuredContent", "structured_content"); exists {
-		if err := json.Unmarshal(encoded, &decoded.StructuredContent); err != nil {
+		decoded.structuredContentPresent = true
+		if err := DecodeJSON(encoded, &decoded.StructuredContent); err != nil {
 			return errors.Wrap(err, "decode mcp structured content")
 		}
 	}
 	if encoded, exists := firstRawMessage(raw, "isError", "is_error"); exists {
-		if err := json.Unmarshal(encoded, &decoded.IsError); err != nil {
+		if err := DecodeJSON(encoded, &decoded.IsError); err != nil {
 			return errors.Wrap(err, "decode mcp result error flag")
 		}
 	}
@@ -244,7 +254,7 @@ func (c *CallToolResult) UnmarshalJSON(data []byte) error {
 		return errors.Wrap(err, "decode mcp input requests")
 	}
 	if encoded, exists := firstRawMessage(raw, "requestState", "request_state"); exists {
-		if err := json.Unmarshal(encoded, &decoded.RequestState); err != nil {
+		if err := DecodeJSON(encoded, &decoded.RequestState); err != nil {
 			return errors.Wrap(err, "decode mcp request state")
 		}
 	}
@@ -265,7 +275,7 @@ func (c *CallToolResult) UnmarshalJSON(data []byte) error {
 			continue
 		}
 		var extension any
-		if err := json.Unmarshal(value, &extension); err != nil {
+		if err := DecodeJSON(value, &extension); err != nil {
 			return errors.Wrapf(err, "decode mcp result extension %s", key)
 		}
 		if decoded.AdditionalFields == nil {
@@ -309,7 +319,7 @@ func decodeOptionalString(raw map[string]json.RawMessage, name string, destinati
 	if !exists {
 		return nil
 	}
-	if err := json.Unmarshal(encoded, destination); err != nil {
+	if err := DecodeJSON(encoded, destination); err != nil {
 		return errors.Wrapf(err, "decode string field %s", name)
 	}
 	return nil
@@ -333,7 +343,7 @@ func decodeOptionalObject(raw map[string]json.RawMessage, names ...string) (map[
 		return nil, errors.Errorf("field %s must be an object", names[0])
 	}
 	var object map[string]any
-	if err := json.Unmarshal(encoded, &object); err != nil {
+	if err := DecodeJSON(encoded, &object); err != nil {
 		return nil, errors.Wrapf(err, "decode object field %s", names[0])
 	}
 	if object == nil {
@@ -377,7 +387,7 @@ func decodeOptionalObjectSlice(raw map[string]json.RawMessage, name string) ([]m
 		return nil, errors.Errorf("field %s must be an array", name)
 	}
 	var values []json.RawMessage
-	if err := json.Unmarshal(encoded, &values); err != nil {
+	if err := DecodeJSON(encoded, &values); err != nil {
 		return nil, errors.Wrapf(err, "decode object array field %s", name)
 	}
 	objects := make([]map[string]any, 0, len(values))
@@ -386,7 +396,7 @@ func decodeOptionalObjectSlice(raw map[string]json.RawMessage, name string) ([]m
 			return nil, errors.Errorf("field %s element %d must be an object", name, index)
 		}
 		var object map[string]any
-		if err := json.Unmarshal(value, &object); err != nil {
+		if err := DecodeJSON(value, &object); err != nil {
 			return nil, errors.Wrapf(err, "decode object array field %s element %d", name, index)
 		}
 		if object == nil {

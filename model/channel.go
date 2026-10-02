@@ -14,7 +14,19 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
+
+// ChannelTestingModelSkip is the sentinel testing_model value that excludes a
+// channel from health checking altogether — the automatic sweep and the list-page
+// Test button both report it as skipped instead of probing it.
+//
+// It is stored in the testing_model column rather than a separate flag because the
+// administrator chooses it from the same per-channel selector as the model names,
+// alongside the auto-select ("cheapest") option. It is deliberately not a legal
+// model name, and it is never sent upstream. The admin UI offers the same literal,
+// so changing it is a breaking wire change.
+const ChannelTestingModelSkip = "__skip__"
 
 const (
 	ChannelStatusUnknown          = 0
@@ -48,8 +60,9 @@ type Channel struct {
 	Config             string  `json:"config"`
 	SystemPrompt       *string `json:"system_prompt" gorm:"type:text"`
 	RateLimit          *int    `json:"ratelimit" gorm:"column:ratelimit;default:0"`
-	// Preferred testing model for this channel (optional)
-	// If empty or nil, the system will auto-select the cheapest supported model at test time.
+	// Preferred testing model for this channel (optional).
+	// If empty or nil, the system auto-selects the cheapest chat-format model at test
+	// time. Set it to ChannelTestingModelSkip to exclude the channel from testing.
 	TestingModel *string `json:"testing_model" gorm:"column:testing_model;type:varchar(255)"`
 	// Channel-specific pricing tables
 	// DEPRECATED: Use ModelConfigs instead. These fields are kept for backward compatibility and migration.
@@ -120,6 +133,20 @@ type ModelConfig struct {
 }
 
 func GetAllChannels(startIdx int, num int, scope string, sortBy string, sortOrder string) ([]*Channel, error) {
+	return GetAllChannelsWithContext(context.Background(), startIdx, num, scope, sortBy, sortOrder)
+}
+
+// GetAllChannelsWithContext returns channels with database cancellation bound
+// to ctx.
+//
+// Parameters:
+//   - ctx: lifecycle and deadline scope for the query.
+//   - startIdx, num, scope, sortBy, sortOrder: pagination and filtering inputs.
+//
+// Return values:
+//   - []*Channel: matching channels.
+//   - error: wrapped query failure.
+func GetAllChannelsWithContext(ctx context.Context, startIdx int, num int, scope string, sortBy string, sortOrder string) ([]*Channel, error) {
 	var channels []*Channel
 	var err error
 
@@ -129,15 +156,15 @@ func GetAllChannels(startIdx int, num int, scope string, sortBy string, sortOrde
 	case "all":
 		if num > 0 {
 			// Apply pagination when num > 0
-			err = DB.Order(orderClause).Limit(num).Offset(startIdx).Find(&channels).Error
+			err = DB.WithContext(ctx).Order(orderClause).Limit(num).Offset(startIdx).Find(&channels).Error
 		} else {
 			// Return all channels when num = 0 (backward compatibility)
-			err = DB.Order(orderClause).Find(&channels).Error
+			err = DB.WithContext(ctx).Order(orderClause).Find(&channels).Error
 		}
 	case "disabled":
-		err = DB.Order(orderClause).Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Find(&channels).Error
+		err = DB.WithContext(ctx).Order(orderClause).Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Find(&channels).Error
 	default:
-		err = DB.Order(orderClause).Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
+		err = DB.WithContext(ctx).Order(orderClause).Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "get all channels")
@@ -182,15 +209,7 @@ func GetEnabledChannelsVersionSignature() (string, error) {
 func SearchChannels(keyword string, sortBy string, sortOrder string) (channels []*Channel, err error) {
 	orderClause := ValidateOrderClause(sortBy, sortOrder, channelSortFields, "id desc")
 
-	db := DB.Omit("key")
-	if scoped, matched := applyUUIDKeyword(db, keyword, "uuid"); matched {
-		// A pasted UUID identifies exactly one channel; the LIKE arm cannot add matches.
-		db = scoped
-	} else {
-		// The internal incremental id is deliberately not searchable; UUID is the
-		// only external identifier for a channel.
-		db = db.Where("name LIKE ?", keyword+"%")
-	}
+	db := applyChannelSearch(DB.Omit("key"), keyword)
 	err = db.Order(orderClause).Find(&channels).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search channels")
@@ -224,6 +243,9 @@ func BatchInsertChannels(channels []Channel) error {
 	for i := range channels {
 		if err := channels[i].NormalizeHiddenModels(); err != nil {
 			return errors.Wrapf(err, "normalize hidden models for channel at index %d", i)
+		}
+		if err := validateJinaChannelConfiguration(&channels[i]); err != nil {
+			return errors.Wrapf(err, "validate channel at batch index %d", i)
 		}
 	}
 
@@ -327,7 +349,8 @@ func (channel *Channel) GetCheapestSupportedModel() string {
 		}
 		// only consider positive ratios; if zero, still consider but at lowest weight
 		if !initialized {
-			cheapestName, cheapestRatio, initialized = name, r, true
+			cheapestName, cheapestRatio = name, r
+			initialized = true
 			continue
 		}
 		if r < cheapestRatio {
@@ -360,6 +383,9 @@ func (channel *Channel) Insert() error {
 		return identity.Tag(
 			errors.Wrapf(err, "failed to normalize hidden models for channel: name=%s, type=%d", channel.Name, channel.Type),
 			channel.Ref())
+	}
+	if err := validateJinaChannelConfiguration(channel); err != nil {
+		return errors.Wrap(err, "validate new channel")
 	}
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(channel).Error; err != nil {
@@ -475,6 +501,11 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 		if err := tx.First(&persisted, "id = ?", persisted.Id).Error; err != nil {
 			return errors.Wrapf(err, "reload channel %d before rebuilding abilities", persisted.Id)
 		}
+		// Validate the effective row, not an incomplete update DTO. A type-only
+		// change or inherited unsafe endpoint must roll back the whole update.
+		if err := validateJinaChannelConfiguration(&persisted); err != nil {
+			return errors.Wrap(err, "validate updated channel")
+		}
 		if err := deleteAbilitiesWithDB(tx, persisted.Id); err != nil {
 			return errors.Wrapf(err, "delete abilities for channel %d during update", persisted.Id)
 		}
@@ -506,7 +537,7 @@ func (channel *Channel) UpdateResponseTime(responseTime int64) {
 // Parameters: ctx carries request logging and responseTime is the measured latency in milliseconds.
 // Returns: none; persistence failures are logged with channel identity.
 func (channel *Channel) UpdateResponseTimeWithContext(ctx context.Context, responseTime int64) {
-	err := DB.Model(channel).Select("response_time", "test_time").Updates(Channel{
+	err := DB.WithContext(ctx).Model(channel).Select("response_time", "test_time").Updates(Channel{
 		TestTime:     helper.GetTimestamp(),
 		ResponseTime: int(responseTime),
 	}).Error
@@ -547,16 +578,21 @@ func (channel *Channel) Delete() error {
 	return nil
 }
 
+// LoadConfig decodes stored channel settings and applies provider-specific URL
+// security policy, including when Config is empty and only BaseURL is present.
 func (channel *Channel) LoadConfig() (ChannelConfig, error) {
 	var cfg ChannelConfig
-	if channel.Config == "" {
-		return cfg, nil
+	if channel.Config != "" {
+		if err := json.Unmarshal([]byte(channel.Config), &cfg); err != nil {
+			return cfg, identity.Tag(
+				errors.Wrapf(err, "unmarshal channel %d config", channel.Id),
+				channel.Ref())
+		}
 	}
-	err := json.Unmarshal([]byte(channel.Config), &cfg)
-	if err != nil {
-		return cfg, identity.Tag(
-			errors.Wrapf(err, "unmarshal channel %d config", channel.Id),
-			channel.Ref())
+	if channel.Type == channeltype.Jina {
+		if err := channeltype.ValidateJinaURLs(channel.GetBaseURL(), cfg.EndpointURLs); err != nil {
+			return cfg, identity.Tag(errors.Wrap(err, "validate Jina channel configuration"), channel.Ref())
+		}
 	}
 	return cfg, nil
 }
@@ -649,8 +685,13 @@ func UpdateChannelUsedQuotaWithContext(ctx context.Context, id int, quota int64)
 	updateChannelUsedQuota(ctx, id, quota)
 }
 
+// updateChannelUsedQuota increments channel usage, retrying only failed SQLite busy writes within ctx.
 func updateChannelUsedQuota(ctx context.Context, id int, quota int64) {
-	err := DB.Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error
+	db := DB
+	err := runWithSQLiteBusyRetryForDB(ctx, db, func() error {
+		return errors.WithStack(db.WithContext(ctx).Model(&Channel{}).Where("id = ?", id).
+			Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error)
+	})
 	if err != nil {
 		logger.FromContext(ctx).Error("failed to update channel used quota - channel statistics may be inaccurate",
 			append(LookupChannelRef(ctx, id).Zap(),
@@ -671,7 +712,7 @@ func DeleteChannelByStatus(status int64) (int64, error) {
 	if result.Error == nil {
 		InvalidateChannelModelCaches(groups...)
 	}
-	return result.RowsAffected, result.Error
+	return result.RowsAffected, errors.WithStack(result.Error)
 }
 
 func DeleteDisabledChannel() (int64, error) {
@@ -685,5 +726,5 @@ func DeleteDisabledChannel() (int64, error) {
 	if result.Error == nil {
 		InvalidateChannelModelCaches(groups...)
 	}
-	return result.RowsAffected, result.Error
+	return result.RowsAffected, errors.WithStack(result.Error)
 }

@@ -22,6 +22,8 @@ import (
 	"github.com/Laisky/one-api/middleware"
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/monitor"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 	rcontroller "github.com/Laisky/one-api/relay/controller"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -30,26 +32,37 @@ import (
 
 // https://platform.openai.com/docs/api-reference/chat
 
-// relayHelperForTest, when non-nil, replaces relayHelper inside Relay so tests can
-// script the upstream outcome of every attempt (initial and retries) without a real
-// adaptor, and observe the exact channel order the retry loop walks.
+// relayHelperForTest, when non-nil, replaces the post-routing adaptor dispatch so
+// tests can script every compatible upstream attempt without a real adaptor and
+// observe the exact channel order the retry loop walks.
 var relayHelperForTest func(c *gin.Context, relayMode int) *model.ErrorWithStatusCode
 
-// invokeRelayHelper dispatches one relay attempt to relayHelper, or to the test
-// hook when one is installed.
+// invokeRelayHelper dispatches one relay attempt through transport validation and
+// provider handling. Parameters: c carries the request and relayMode selects the
+// endpoint family. Returns: a normalized relay error or nil on success.
 func invokeRelayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
-	if relayHelperForTest != nil {
-		return relayHelperForTest(c, relayMode)
-	}
 	return relayHelper(c, relayMode)
 }
 
 func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
+	// A Live-only model has no REST transport on a Google channel, and Google
+	// itself answers such a request with HTTP 400. Deciding that here, per relay
+	// attempt, keeps the selected channel in scope (a third-party REST bridge for
+	// the same ID is still allowed). The typed routing mismatch below is retryable
+	// so selection can exclude this incompatible channel without treating it as
+	// evidence of channel health.
+	if relayMode != relaymode.Realtime {
+		if err := adaptor.ValidateRESTModelTransport(meta.GetByContext(c)); err != nil {
+			return openai.ErrorWrapper(err, "unsupported_model_transport", http.StatusBadRequest)
+		}
+	}
+	if relayHelperForTest != nil {
+		return relayHelperForTest(c, relayMode)
+	}
 	var err *model.ErrorWithStatusCode
 	switch relayMode {
 	case relaymode.Realtime:
 		// For Phase 1, route through text helper which will delegate to adaptor based on meta.Mode
-		// Realtime adaptor code will handle websocket upgrade and upstream pass-through.
 		err = rcontroller.RelayTextHelper(c)
 	case relaymode.ImagesGenerations,
 		relaymode.ImagesEdits:
@@ -80,6 +93,9 @@ func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 	return err
 }
 
+// Relay executes a relay request and any eligible cross-channel retries. It
+// stops retrying when the current attempt's billing state indicates that replay
+// could duplicate a paid upstream request, and writes the final API error.
 func Relay(c *gin.Context) {
 	ctx := relayctx.Detach(c)
 	lg := gmw.GetLogger(c)
@@ -110,7 +126,7 @@ func Relay(c *gin.Context) {
 	requestId := c.GetString(helper.RequestIdKey)
 
 	// Track channel request in flight
-	PrometheusMonitor.RecordChannelRequest(relayMeta, startTime)
+	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
 
 	bizErr := invokeRelayHelper(c, relayMode)
 	if bizErr == nil {
@@ -146,7 +162,14 @@ func Relay(c *gin.Context) {
 	// Record failed relay request metrics
 	PrometheusMonitor.RecordRelayRequest(c, relayMeta, startTime, false, 0, 0, 0)
 
-	retryTimes := config.RetryTimes
+	retryTimes := max(config.RetryTimes, 0)
+	lastDispatchErr := bizErr
+	if adaptor.IsRESTTransportMismatch(bizErr.RawError) {
+		// No provider attempt was made. Reserve the initial dispatch, not an
+		// expanded budget of paid retries proportional to the channel count.
+		retryTimes++
+		lastDispatchErr = nil
+	}
 	retryableClientError, retryableClientReason := classifyRetryableUpstreamClientError(bizErr)
 	if err := shouldRetry(c, bizErr); err != nil {
 		if retryableClientError {
@@ -182,9 +205,12 @@ func Relay(c *gin.Context) {
 				zap.String("error_code", strings.TrimSpace(fmt.Sprint(bizErr.Code))),
 				zap.String("error_message_preview", errorMessagePreview),
 			)
+			// retry_skip_reason already carries the decision text; zap.Error would add
+			// one-api's own errors/v2 stack to a WARN line that reports a routing
+			// decision, not a fault.
 			lg.Warn("relay retry skipped after failure",
 				appendRelayFailureFields(relayLogParams,
-					zap.Error(err),
+					stacklessErrorField(err),
 					zap.Bool("user_originated", isUserSideRetrySkip),
 					zap.String("retry_skip_reason", err.Error()),
 				)...,
@@ -254,7 +280,8 @@ func Relay(c *gin.Context) {
 	// For 5xx/server transient errors, avoid reusing the same ability first, probe within tier
 	isServerTransient := bizErr.StatusCode >= 500 && bizErr.StatusCode <= 599
 
-	for i := retryTimes; i > 0; i-- {
+	for i := retryTimes; i > 0 && rcontroller.BillingAllowsRetry(c) &&
+		c.GetInt(ctxkey.SpecificChannelId) == 0 && c.Request.Context().Err() == nil; i-- {
 		var channel *dbmodel.Channel
 		var err error
 
@@ -348,7 +375,6 @@ func Relay(c *gin.Context) {
 
 		// Debug logging to track which channels are being added to failed list (only when debug is enabled)
 		if config.DebugEnabled {
-			// channelId is the currently bound channel; only the other failed ones need naming.
 			lg.Info("Debug: Added channel to failed channels list",
 				dbmodel.ChannelRefsField("total_failed_channels", getChannelIds(failedChannels)))
 		}
@@ -370,8 +396,31 @@ func Relay(c *gin.Context) {
 			ActualModel:   retryActualModel,
 			RequestURL:    requestURL,
 		})
+		if adaptor.IsRESTTransportMismatch(bizErr.RawError) {
+			// Exclusions make this finite. Local incompatibility consumes neither
+			// a provider call nor its retry slot, wherever it occurs in the pool.
+			i++
+			continue
+		}
+		lastDispatchErr = bizErr
+		if stopErr := shouldRetry(c, bizErr); stopErr != nil {
+			// Apply the existing transient-4xx exception on every real attempt,
+			// but never override cancellation or a terminal provider/client error.
+			if isRetryableUpstreamClientError(bizErr) &&
+				!errors.Is(bizErr.RawError, context.Canceled) &&
+				!errors.Is(bizErr.RawError, context.DeadlineExceeded) {
+				continue
+			}
+			lg.Debug("relay retry stopped after provider failure", zap.String("retry_skip_reason", stopErr.Error()))
+			break
+		}
 	}
 
+	// An exhausted local transport candidate is not evidence that the caller
+	// used an invalid transport when a compatible provider was actually tried.
+	if bizErr != nil && adaptor.IsRESTTransportMismatch(bizErr.RawError) && lastDispatchErr != nil {
+		bizErr = lastDispatchErr
+	}
 	if bizErr != nil {
 		if bizErr.StatusCode == http.StatusTooManyRequests {
 			// Provide more specific messaging for 429 errors after exhausting retries
@@ -386,10 +435,7 @@ func Relay(c *gin.Context) {
 		// *bizErr synchronously at spawn time (see goProcessChannelRelayError), so
 		// rewriting Message here no longer races the error-processing goroutine.
 		bizErr.Error.Message = helper.MessageWithRequestId(bizErr.Error.Message, requestId)
-		c.JSON(bizErr.StatusCode, gin.H{
-			"error": bizErr.Error,
-		})
-		if shouldDebugLog {
+		if writeRelayFinalError(c, bizErr) && shouldDebugLog {
 			rcontroller.LogClientResponse(c, "client error response sent")
 		}
 	}
@@ -428,12 +474,10 @@ func retrySelectionPolicyFor(statusCode int) retrySelectionPolicy {
 //
 // The selector is always asked for the HIGHEST priority tier among the
 // remaining candidates (ignoreFirstPriority=false). Both routing paths recompute
-// the tier boundary AFTER exclusions, so once the failed channels are excluded
-// the "highest remaining tier" is precisely the next tier the operator wants
-// tried. Asking to skip that tier (ignoreFirstPriority=true, as the 429 path
-// used to) double-skips: with A(10) rate limited and excluded, the highest
-// remaining tier is B(5), which was then skipped in favour of C(0), producing
-// A → C → B instead of A → B → C.
+// the tier boundary AFTER exclusions, so the "highest remaining tier" is precisely
+// the next tier the operator wants tried. Asking to skip that tier (ignoreFirstPriority=true,
+// as the 429 path used to) double-skips: with A(10) rate limited and excluded, the highest
+// remaining tier is B(5), which was then skipped in favour of C(0), producing A → C → B.
 //
 // Returns the selected channel, or a wrapped error whose text still carries the
 // selector's "no channels available" / "after exclusions" message so

@@ -232,7 +232,7 @@ func (cfg *PerCallPricingConfig) HasData() bool {
 	if cfg == nil {
 		return false
 	}
-	return cfg.UsdPerThousandCalls != 0
+	return true // A present per-call tariff may intentionally be free.
 }
 
 // Clone returns a copy of the per-call pricing configuration.
@@ -248,6 +248,8 @@ func (cfg *PerCallPricingConfig) Clone() *PerCallPricingConfig {
 // Pricing is expressed as a per-second USD cost that can be adjusted via resolution
 // multipliers relative to the base resolution.
 type VideoPricingConfig struct {
+	// InputImageUsd is the USD fee for each image/frame supplied to video generation.
+	InputImageUsd float64 `json:"input_image_usd,omitempty"`
 	// PerSecondUsd is the USD price per rendered second at the base resolution.
 	PerSecondUsd float64 `json:"per_second_usd,omitempty"`
 	// BaseResolution identifies the resolution treated as multiplier 1. Empty means unspecified.
@@ -262,7 +264,7 @@ func (cfg *VideoPricingConfig) HasData() bool {
 	if cfg == nil {
 		return false
 	}
-	if cfg.PerSecondUsd > 0 {
+	if cfg.PerSecondUsd > 0 || cfg.InputImageUsd > 0 {
 		return true
 	}
 	return len(cfg.ResolutionMultipliers) > 0
@@ -275,6 +277,7 @@ func (cfg *VideoPricingConfig) Clone() *VideoPricingConfig {
 	}
 	clone := &VideoPricingConfig{
 		PerSecondUsd:   cfg.PerSecondUsd,
+		InputImageUsd:  cfg.InputImageUsd,
 		BaseResolution: cfg.BaseResolution,
 	}
 	if len(cfg.ResolutionMultipliers) > 0 {
@@ -382,6 +385,13 @@ type ChannelToolConfig struct {
 // applies when upstream returns audio completions. Per-second fields allow direct
 // billing of duration-based models.
 type AudioPricingConfig struct {
+	InputPriceQuantity float64 `json:"input_price_quantity,omitempty"`
+	// InputUnit makes direct input pricing explicit: characters, utf8_bytes, or seconds.
+	InputUnit               string  `json:"input_unit,omitempty"`
+	InputPriceUsd           float64 `json:"input_price_usd,omitempty"`
+	MinimumBillableSeconds  float64 `json:"minimum_billable_seconds,omitempty"`
+	BillingIncrementSeconds float64 `json:"billing_increment_seconds,omitempty"`
+
 	PromptRatio               float64 `json:"prompt_ratio,omitempty"`
 	CompletionRatio           float64 `json:"completion_ratio,omitempty"`
 	PromptTokensPerSecond     float64 `json:"prompt_tokens_per_second,omitempty"`
@@ -395,7 +405,7 @@ func (cfg *AudioPricingConfig) HasData() bool {
 		return false
 	}
 	return cfg.PromptRatio != 0 || cfg.CompletionRatio != 0 || cfg.PromptTokensPerSecond != 0 ||
-		cfg.CompletionTokensPerSecond != 0 || cfg.UsdPerSecond != 0
+		cfg.CompletionTokensPerSecond != 0 || cfg.UsdPerSecond != 0 || cfg.InputUnit != "" || cfg.InputPriceUsd != 0 || cfg.MinimumBillableSeconds != 0 || cfg.BillingIncrementSeconds != 0
 }
 
 // Clone returns a copy of the audio pricing configuration.

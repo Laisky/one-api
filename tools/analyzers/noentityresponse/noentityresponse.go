@@ -3,7 +3,7 @@
 // model.Log) at the HTTP boundary.
 //
 // It is the compile-time gate (E3) described in
-// docs/proposals/20260714_boundary-response-dtos.md. The external S2 strict-out
+// docs/proposals/archive/20260714_boundary-response-dtos.md. The external S2 strict-out
 // contract (external UUID identifiers only; no internal integer ids; no
 // secrets) used to be enforced by a value-receiver MarshalJSON on each entity —
 // an ambient guarantee that also governed cache/log serialization and produced

@@ -7,6 +7,8 @@ import (
 
 	"github.com/Laisky/zap"
 
+	"github.com/Laisky/errors/v2"
+
 	"github.com/Laisky/one-api/common/logger"
 )
 
@@ -29,7 +31,7 @@ func UpdateGroupRatioByJSONString(jsonStr string) error {
 	groupRatioLock.Lock()
 	defer groupRatioLock.Unlock()
 	GroupRatio = make(map[string]float64)
-	return json.Unmarshal([]byte(jsonStr), &GroupRatio)
+	return errors.WithStack(json.Unmarshal([]byte(jsonStr), &GroupRatio))
 }
 
 func GetGroupRatio(name string) float64 {

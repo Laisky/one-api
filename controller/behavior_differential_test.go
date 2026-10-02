@@ -31,7 +31,7 @@ import (
 )
 
 // This file implements the T17/T18 black-box differential harness described in
-// docs/proposals/20260714_boundary-response-dtos.md. It drives every handler
+// docs/proposals/archive/20260714_boundary-response-dtos.md. It drives every handler
 // site in the proposal's Appendix A (28 sites: User 6, Token 9, Channel 4,
 // Redemption 4, Log 5) plus the documented T18 error cases through the real
 // handlers over httptest, and records (status, canonicalized JSON body) into
@@ -87,7 +87,7 @@ const behaviorDiffDeviationDir = behaviorDiffBaselineDir + "/deviations"
 
 // behaviorDiffKnownDeviations enumerates the cases where post-refactor behavior
 // intentionally differs from the pre-refactor baseline, mapped to the reason on
-// record. See §10.3 of docs/proposals/20260714_boundary-response-dtos.md.
+// record. See §10.3 of docs/proposals/archive/20260714_boundary-response-dtos.md.
 //
 // These are NOT skips. A listed case is still asserted byte-for-byte against its
 // recorded post-refactor expectation, and it is additionally required to still

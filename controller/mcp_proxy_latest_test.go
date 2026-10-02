@@ -234,5 +234,5 @@ func TestMCPProxyLatestRejectsMissingClientCapabilities(t *testing.T) {
 		} `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
-	require.Equal(t, mcpErrInvalidRequest, envelope.Error.Code)
+	require.Equal(t, mcpErrInvalidParams, envelope.Error.Code)
 }

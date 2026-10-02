@@ -9,7 +9,8 @@
       "edit": "Edit",
       "enable": "Enable",
       "refresh_balance": "Refresh balance for {{name}}",
-      "test": "Test"
+      "test": "Test",
+      "test_help": "Health check this channel now, using its Testing Model setting."
     },
     "columns": {
       "actions": "Actions",
@@ -455,6 +456,8 @@
         "error_title": "Test error",
         "failed_message": "Channel test failed.",
         "failed_title": "Test failed",
+        "skipped_message": "Channel test skipped: {{message}}",
+        "skipped_title": "Skipped",
         "success_message": "Channel test completed successfully.",
         "success_title": "Test passed"
       },
@@ -583,6 +586,8 @@
       "status_failed_title": "Update failed",
       "test_failed_message": "Unknown error",
       "test_failed_title": "Channel test failed",
+      "test_skipped_message": "This channel serves no chat-capable endpoint, so it cannot be health checked. It was left enabled.",
+      "test_skipped_title": "Channel test skipped",
       "test_success": "Channel test successful.",
       "testing_model_failed_message": "Failed to update testing model",
       "testing_model_failed_title": "Save failed",
@@ -603,7 +608,10 @@
       "paused": "Paused"
     },
     "testing": {
-      "auto": "CHEAPEST"
+      "auto": "CHEAPEST",
+      "help": "Chooses the model used to health check this channel.\n\nCHEAPEST — automatically use the cheapest model served through a chat API (chat completions, response API, Claude messages, or Gemini chat).\n\nSKIP — exclude this channel from health checks entirely. It is never probed and never auto-disabled.\n\nOnly chat-format models can be tested. Embedding, rerank, moderation, completions and media models are excluded, and so are models whose API format is unknown — pick one here to test it anyway.",
+      "help_label": "How the testing model is chosen",
+      "skip": "SKIP (never test)"
     },
     "title": "Channels",
     "toolbar": {
@@ -615,6 +623,7 @@
       "refresh_balances": "Refresh All Balances",
       "refresh_balances_mobile": "Refresh Balances",
       "test_all": "Test All",
+      "test_all_help": "Health checks every channel, each using its own Testing Model setting (or its cheapest chat-format model when set to CHEAPEST).\n\nChannels set to SKIP, and channels with no chat-format model to probe, are skipped — they are never reported as failed and never auto-disabled.",
       "test_all_mobile": "Test All Channels"
     },
     "type_unknown": "Type {{type}}"

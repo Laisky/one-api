@@ -241,4 +241,6 @@ func disableCompactReads(role uuidDBRole, state compactState, reason string) {
 func resetCompactHealthForTest() {
 	compactHealthGate.primary.Store(nil)
 	compactHealthGate.log.Store(nil)
+	// Queued read-path repairs belong to the test that raised them.
+	drainCompactRowRepairs()
 }
