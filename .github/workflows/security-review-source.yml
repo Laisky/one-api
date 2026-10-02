@@ -1,0 +1,22 @@
+name: Security review source snapshot
+on:
+  pull_request:
+    types: [synchronize]
+    paths: ['.github/workflows/security-review-source.yml']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    if: github.event.pull_request.number == 441
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d7fa5f35ebf3dd6072eace68bd0178196baa0823
+      - name: Export review baseline
+        run: git archive --format=tar.gz --output=review-source.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: security-review-source
+          path: review-source.tar.gz
+          retention-days: 1
