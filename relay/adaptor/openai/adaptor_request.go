@@ -136,7 +136,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 			}
 		}
 
-		if isGitHub {
+		if isGitHub && meta.Mode != relaymode.Proxy {
 			requestPath = openai_compatible.NormalizeGitHubRequestPath(requestPath, meta.Mode)
 		} else if requestPath == "" {
 			requestPath = "/v1/chat/completions"
