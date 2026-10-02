@@ -1,0 +1,175 @@
+name: PR440 verified billing publication
+on:
+  push:
+    branches: [work/pr440-billing-publish-20261002]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      artifact_id: ${{ steps.bundle.outputs.artifact-id }}
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 5962c81e531e0cb6a27c39be3173519917490492
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify successful fault-matrix provenance and exact patch bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, hashlib, io, json, os, pathlib, urllib.request, urllib.parse, zipfile
+          class SafeRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  nxt = super().redirect_request(req, fp, code, msg, headers, newurl)
+                  if nxt is not None and urllib.parse.urlsplit(req.full_url).netloc != urllib.parse.urlsplit(newurl).netloc:
+                      nxt.remove_header('Authorization')
+                  return nxt
+          opener = urllib.request.build_opener(SafeRedirect())
+          def get(path):
+              req = urllib.request.Request('https://api.github.com/repos/Laisky/one-api/' + path, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with opener.open(req, timeout=60) as response: return response.read()
+          run = json.loads(get('actions/runs/37057158660'))
+          assert run['conclusion'] == 'success' and run['head_sha'] == '48913fe6d5fc84e77950941d28147b6aaccc4d82'
+          archive = get('actions/artifacts/11249061557/zip')
+          assert hashlib.sha256(archive).hexdigest() == '2d1c879f18ed7399e597ca1ef6f234609b8a0f46e7fb2e38999caabd69007244'
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'billing-final'
+          root.mkdir()
+          def save(name, data, digest):
+              assert hashlib.sha256(data).hexdigest() == digest, name
+              (root / name).write_bytes(data)
+          with zipfile.ZipFile(io.BytesIO(archive)) as z:
+              for name, digest in [('production', '75e49a976f339960110b8b9e748fcab1f35daec5a530efe17313f44eab8cd242'), ('red', 'd34be04ccb3e2176fcaec3b55697a2fb34e82d174604c0a331db80d65385ae07'), ('tests', 'ea7a5bf695dd1fa963935aa33bea640a1b65b60890842d7bf55194378952fef2')]:
+                  save(name + '.patch', z.read(name + '.patch'), digest)
+          def blob(sha):
+              value = json.loads(get('git/blobs/' + sha))
+              data = base64.b64decode(value['content'])
+              assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == sha
+              return data
+          chunks = ['d80f3d19601c5fa2025ac7466fdc325c93a52a93', '4ba22f4fb8c1de173358f621cd6496032ec0eb1d', '5e625edb088bc5dae3939d737750323b01e11962', 'f96ae7cfd0d22f2f757ab5c76349641df5d89fce', 'fea32075308cf1476f0a5aee1c596015d9431f90']
+          save('docs.patch', gzip.decompress(base64.b64decode(b''.join(blob(sha) for sha in chunks))), 'fc75da5488ac45dda66183a41dd88da3cf57c53bdeccea43f563d8c2e7662f3f')
+          save('poll-followup.patch', blob('61e0fcbb5800733627a64ee03de7fbad3265da3f'), 'b1dff2c0eb347e14ed82f9a1ec9237c257c6683bed327fdb9c2cb7d5622a690f')
+          PY
+          for patch in red production tests docs; do git apply "$RUNNER_TEMP/billing-final/$patch.patch"; done
+          git apply --include='*test.go' "$RUNNER_TEMP/billing-final/poll-followup.patch"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Reproduce additional lost charge evidence before final fix
+        run: |
+          set +e
+          go test -json -count=1 -run '^TestAsyncBillingPollErrorsPreserveKnownCharge$' ./relay/adaptor/muapi > "$RUNNER_TEMP/billing-final/poll-red.jsonl" 2>&1
+          result=$?
+          set -e
+          test "$result" -ne 0
+          python3 - <<'PY'
+          import json, os, pathlib
+          events = [json.loads(s) for s in (pathlib.Path(os.environ['RUNNER_TEMP']) / 'billing-final/poll-red.jsonl').read_text().splitlines() if s.startswith('{')]
+          failed = {e.get('Test') for e in events if e.get('Action') == 'fail'}
+          assert 'TestAsyncBillingPollErrorsPreserveKnownCharge' in failed
+          PY
+          git apply --exclude='*test.go' "$RUNNER_TEMP/billing-final/poll-followup.patch"
+          git add -- model relay router docs
+          git diff --cached --check
+          test -z "$(git diff --cached --name-only -- '*.go' | xargs gofmt -l)"
+      - name: Final race matrix and both required real database engines
+        run: |
+          go test -json -race -count=1 -p 2 -timeout 12m -run '^TestAsyncBilling' ./model ./relay/asyncvideo ./relay/adaptor/muapi ./relay/controller ./router > "$RUNNER_TEMP/billing-final/final-green.jsonl" 2>&1
+          python3 - <<'PY'
+          import json, os, pathlib
+          events = [json.loads(s) for s in (pathlib.Path(os.environ['RUNNER_TEMP']) / 'billing-final/final-green.jsonl').read_text().splitlines() if s.startswith('{')]
+          passed = {e.get('Test') for e in events if e.get('Action') == 'pass'}
+          for backend in ['mysql', 'postgres']:
+              for case in ['unlimited=false', 'unlimited=true', 'competing-refunds']:
+                  assert 'TestAsyncBillingLiveDatabases/' + backend + '/' + case in passed
+          for name in ['TestAsyncBillingSIGKILLRecovery', 'TestAsyncBillingRealSocketDisconnect', 'TestAsyncBillingPollErrorsPreserveKnownCharge']:
+              assert name in passed
+          assert not any(e.get('Action') == 'fail' for e in events)
+          print('Final tree passed required live engines, OS kills, sockets and conservative charge evidence.')
+          PY
+          go vet ./...
+      - name: Preserve verified patches and complete test evidence
+        id: bundle
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr440-billing-final
+          path: ${{ runner.temp }}/billing-final
+          retention-days: 7
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: codex/async-video-task-lifecycle
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Append only the verified change set to the authorized PR branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.verify.outputs.artifact_id }}
+        run: |
+          test "$(git rev-parse HEAD)" = 5962c81e531e0cb6a27c39be3173519917490492
+          git merge-base --is-ancestor 9a0f052cc60c34628988a239117212eba0076145 HEAD
+          python3 - <<'PY'
+          import hashlib, io, os, pathlib, subprocess, urllib.request, urllib.parse, zipfile
+          class SafeRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  nxt = super().redirect_request(req, fp, code, msg, headers, newurl)
+                  if nxt is not None and urllib.parse.urlsplit(req.full_url).netloc != urllib.parse.urlsplit(newurl).netloc:
+                      nxt.remove_header('Authorization')
+                  return nxt
+          opener = urllib.request.build_opener(SafeRedirect())
+          req = urllib.request.Request('https://api.github.com/repos/Laisky/one-api/actions/artifacts/' + os.environ['ARTIFACT_ID'] + '/zip', headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN']})
+          with opener.open(req, timeout=60) as response: archive = response.read()
+          expected = [('red', 'd34be04ccb3e2176fcaec3b55697a2fb34e82d174604c0a331db80d65385ae07'), ('production', '75e49a976f339960110b8b9e748fcab1f35daec5a530efe17313f44eab8cd242'), ('tests', 'ea7a5bf695dd1fa963935aa33bea640a1b65b60890842d7bf55194378952fef2'), ('docs', 'fc75da5488ac45dda66183a41dd88da3cf57c53bdeccea43f563d8c2e7662f3f'), ('poll-followup', 'b1dff2c0eb347e14ed82f9a1ec9237c257c6683bed327fdb9c2cb7d5622a690f')]
+          with zipfile.ZipFile(io.BytesIO(archive)) as z:
+              for name, digest in expected:
+                  data = z.read(name + '.patch')
+                  assert hashlib.sha256(data).hexdigest() == digest, name
+                  subprocess.run(['git', 'apply', '-'], input=data, check=True)
+          PY
+          git add -- model relay router docs
+          git diff --cached --check
+          test -z "$(git diff --cached --name-only -- .github)"
+          git config user.name 'Codex'
+          git config user.email 'codex@openai.com'
+          git commit -m 'fix: preserve async billing across crashes and reconcile actual provider cost'
+          git merge-base --is-ancestor 5962c81e531e0cb6a27c39be3173519917490492 HEAD
+          git merge-base --is-ancestor 9a0f052cc60c34628988a239117212eba0076145 HEAD
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin HEAD:refs/heads/codex/async-video-task-lifecycle
+          git log -1 --format='%H %P %s' >> "$GITHUB_STEP_SUMMARY"
