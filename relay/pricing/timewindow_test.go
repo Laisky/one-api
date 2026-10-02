@@ -141,7 +141,6 @@ func TestApplyTimeWindowNestedPricingMerge(t *testing.T) {
 	at := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
 	cfg := adaptor.ModelConfig{
 		Video: &adaptor.VideoPricingConfig{
-			TotalUsdDecimal:       "0.30",
 			PerSecondUsd:          0.10,
 			BaseResolution:        "720p",
 			ResolutionMultipliers: map[string]float64{"720p": 1, "1080p": 2},
@@ -173,7 +172,6 @@ func TestApplyTimeWindowNestedPricingMerge(t *testing.T) {
 			Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "00:00"}},
 			Overlay: adaptor.ModelConfig{
 				Video: &adaptor.VideoPricingConfig{
-					TotalUsdDecimal:       "0.40",
 					BaseResolution:        "1080p",
 					ResolutionMultipliers: map[string]float64{"4k": 4},
 				},
@@ -201,7 +199,6 @@ func TestApplyTimeWindowNestedPricingMerge(t *testing.T) {
 	}
 
 	merged := ApplyTimeWindow(cfg, at)
-	require.Equal(t, "0.40", merged.Video.TotalUsdDecimal)
 	require.InDelta(t, 0.10, merged.Video.PerSecondUsd, 1e-12)
 	require.Equal(t, "1080p", merged.Video.BaseResolution)
 	require.Equal(t, map[string]float64{"720p": 1, "1080p": 2, "4k": 4}, merged.Video.ResolutionMultipliers)
@@ -221,40 +218,6 @@ func TestApplyTimeWindowNestedPricingMerge(t *testing.T) {
 	require.InDelta(t, 4.0, merged.Embedding.ImageTokenRatio, 1e-12)
 	require.InDelta(t, 5.0, merged.Embedding.AudioTokenRatio, 1e-12)
 	require.InDelta(t, 0.1, merged.PerCall.UsdPerThousandCalls, 1e-12)
-}
-
-// TestMergeVideoTotalPricingReplacesBothRepresentations verifies a time-window overlay cannot combine a new total quote with an inherited stale representation.
-func TestMergeVideoTotalPricingReplacesBothRepresentations(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct {
-		name     string
-		base     *adaptor.VideoPricingConfig
-		overlay  *adaptor.VideoPricingConfig
-		wantUsd  float64
-		wantText string
-	}{
-		{
-			name:     "float overlay clears inherited decimal",
-			base:     &adaptor.VideoPricingConfig{TotalUsd: 0.4, TotalUsdDecimal: "0.40"},
-			overlay:  &adaptor.VideoPricingConfig{TotalUsd: 0.5},
-			wantUsd:  0.5,
-			wantText: "",
-		},
-		{
-			name:     "decimal overlay clears inherited float",
-			base:     &adaptor.VideoPricingConfig{TotalUsd: 0.4},
-			overlay:  &adaptor.VideoPricingConfig{TotalUsdDecimal: "0.50"},
-			wantUsd:  0,
-			wantText: "0.50",
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			merged := mergeVideoPricing(test.base, test.overlay)
-			require.Equal(t, test.wantUsd, merged.TotalUsd)
-			require.Equal(t, test.wantText, merged.TotalUsdDecimal)
-		})
-	}
 }
 
 // TestApplyTimeWindowRatioOnlyMergesEmbedding verifies token billing keeps windowed embedding overlays.

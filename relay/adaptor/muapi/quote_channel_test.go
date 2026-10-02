@@ -74,9 +74,9 @@ func TestMuAPIQuoteRequiresSelectedChannel(t *testing.T) {
 			case "other_key":
 				info.APIKey = "other-fixture-key"
 			}
-			pricing, err := (&Adaptor{}).EstimateVideoPricing(c, info, &model.VideoRequest{Duration: float64Ptr(5)})
+			quote, err := (&Adaptor{}).EstimateVideoCostUSD(c, info, &model.VideoRequest{Duration: float64Ptr(5)})
 			require.Error(t, err)
-			require.Nil(t, pricing)
+			require.Empty(t, quote)
 			require.Zero(t, selectedCalls.Load(), "inconsistent metadata must fail before quoting")
 			require.Zero(t, otherCalls.Load(), "unselected host must never receive a prompt or key")
 			require.NotContains(t, err.Error(), "fixture-channel-key")
@@ -109,9 +109,9 @@ func TestMuAPIQuoteSelectedProxyCompatibility(t *testing.T) {
 			c := newMuAPITestContext(http.MethodPost, "/v1/async/videos", `{"duration":5}`)
 			info := &meta.Meta{BaseURL: server.URL + prefix, APIKey: "fixture-channel-key", ActualModelName: "veo3-fast"}
 			bindMuAPIQuoteTestChannel(c, info)
-			pricing, err := (&Adaptor{}).EstimateVideoPricing(c, info, &model.VideoRequest{Duration: float64Ptr(5)})
+			quote, err := (&Adaptor{}).EstimateVideoCostUSD(c, info, &model.VideoRequest{Duration: float64Ptr(5)})
 			require.NoError(t, err)
-			require.Equal(t, "0.42", pricing.TotalUsdDecimal)
+			require.Equal(t, "0.42", quote)
 			require.EqualValues(t, 1, calls.Load())
 		})
 	}

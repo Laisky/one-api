@@ -13,5 +13,6 @@ func TestMuAPINativeVideoCapabilityIsIsolated(t *testing.T) {
 	endpoints := DefaultEndpointsForChannelType(MuAPI)
 	require.False(t, IsEndpointSupported(relaymode.Videos, endpoints), "native submit/poll must not advertise legacy EndpointVideos")
 	require.Contains(t, endpoints, MuAsyncEndpointVideos, "native capability is explicit")
+	require.Equal(t, Endpoint(-1), EndpointNameToID("async_videos"), "public gateway mode must not be exposed as a selectable channel capability")
 	require.True(t, IsEndpointSupported(relaymode.Videos, DefaultEndpointsForChannelType(OpenAI)), "legacy capability is preserved")
 }

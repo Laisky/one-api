@@ -167,6 +167,7 @@ func RelayAsyncVideoHelper(c *gin.Context, syncWait bool) *relaymodel.ErrorWithS
 		// ReserveAsyncTask may assign an ID before its transaction rolls back.
 		// Only its successful return proves a durable task (including a lost
 		// COMMIT acknowledgement recovered by the reservation lookup).
+		c.Set(asyncvideo.HandledResponseKey, true)
 		writeAsyncVideoError(c, status, code, "The asynchronous task could not be admitted; retry only with the same Idempotency-Key.", "")
 		return nil
 	}

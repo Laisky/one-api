@@ -21,44 +21,9 @@ func setupVideoBindingTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	err = db.AutoMigrate(&dbmodel.AsyncTaskBinding{}, &dbmodel.AsyncTaskBindingRetry{})
+	err = db.AutoMigrate(&dbmodel.AsyncTaskBinding{})
 	require.NoError(t, err)
 	return db
-}
-
-func TestBindAsyncTaskChannelRecoversRetryAfterRestart(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	engine := gin.New()
-	engine.Use(func(c *gin.Context) {
-		gmw.SetLogger(c, logger.Logger)
-		c.Set(ctxkey.Id, 10)
-		c.Next()
-	})
-	testDB := setupVideoBindingTestDB(t)
-	originalDB := dbmodel.DB
-	dbmodel.DB = testDB
-	defer func() { dbmodel.DB = originalDB }()
-	queued := &dbmodel.AsyncTaskBinding{
-		TaskID: "video_recovered", TaskType: "video", UserID: 10, ChannelID: 5, ChannelType: 7,
-		OriginModel: "sora-2", ActualModel: "sora-2", RequestMethod: "POST", RequestPath: "/v1/videos",
-	}
-	require.NoError(t, dbmodel.SaveAsyncTaskBindingRetry(context.Background(), queued))
-	engine.Use(BindAsyncTaskChannel())
-	engine.GET("/v1/videos/:video_id", func(c *gin.Context) {
-		require.Equal(t, 5, c.GetInt(ctxkey.SpecificChannelId))
-		require.Equal(t, "sora-2", c.GetString(ctxkey.RequestModel))
-		c.Status(204)
-	})
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, httptest.NewRequest("GET", "/v1/videos/video_recovered", nil))
-	require.Equal(t, 204, w.Code)
-	recovered, err := dbmodel.GetAsyncTaskBindingByTaskID(context.Background(), "video_recovered")
-	require.NoError(t, err)
-	require.Equal(t, 10, recovered.UserID)
-	require.Equal(t, 5, recovered.ChannelID)
-	var retryCount int64
-	require.NoError(t, testDB.Model(&dbmodel.AsyncTaskBindingRetry{}).Count(&retryCount).Error)
-	require.Zero(t, retryCount)
 }
 
 func TestBindAsyncTaskChannelSetsContext(t *testing.T) {

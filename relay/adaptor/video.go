@@ -18,19 +18,16 @@ type VideoRequestPreparer interface {
 	PrepareVideoRequest(c *gin.Context, request *model.VideoRequest) (int, error)
 }
 
-// VideoPricingEstimator resolves request-specific video pricing before quota admission.
-// Parameters: c carries the normalized request, meta identifies the upstream channel,
-// and request contains the billing fields. Return values are the effective pricing
-// configuration or an error when the provider cannot quote the request safely.
-type VideoPricingEstimator interface {
-	EstimateVideoPricing(c *gin.Context, meta *meta.Meta, request *model.VideoRequest) (*VideoPricingConfig, error)
+// VideoCostEstimator returns an exact whole-request USD quote for a normalized
+// video request. The durable async controller owns quota conversion and billing;
+// static VideoPricingConfig remains a static tariff type.
+type VideoCostEstimator interface {
+	EstimateVideoCostUSD(c *gin.Context, meta *meta.Meta, request *model.VideoRequest) (string, error)
 }
 
-// DynamicVideoPricingAdaptor marks advertised video models whose request cost
-// must be quoted by the provider before quota admission. Implementations must
-// return true only for model identifiers they can price dynamically; callers
-// must fail closed when the quote is unavailable.
+// DynamicVideoPricingAdaptor identifies advertised video models whose price must
+// be quoted per request rather than resolved from the static pricing catalog.
 type DynamicVideoPricingAdaptor interface {
-	VideoPricingEstimator
+	VideoCostEstimator
 	SupportsDynamicVideoPricing(modelName string) bool
 }

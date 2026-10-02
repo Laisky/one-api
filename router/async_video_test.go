@@ -62,7 +62,7 @@ func TestAsyncVideoShippedRouterCompatibility(t *testing.T) {
 		config.SetLogConsumeEnabled(oldLogging)
 		_ = sqlDB.Close()
 	})
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}, &model.AsyncTask{}, &model.AsyncTaskBinding{}, &model.AsyncTaskBindingRetry{}, &model.AsyncTaskLogReceipt{}, &model.UserRequestCost{}, &model.QuotaRefund{}, &model.Log{}, &model.Trace{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}, &model.AsyncTask{}, &model.AsyncTaskBinding{}, &model.AsyncTaskLogReceipt{}, &model.UserRequestCost{}, &model.QuotaRefund{}, &model.Log{}, &model.Trace{}))
 	var nativeCreates, syncCreates atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

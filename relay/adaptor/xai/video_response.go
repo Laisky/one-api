@@ -60,11 +60,7 @@ func (a *Adaptor) handleVideoResponse(c *gin.Context, resp *http.Response) (*mod
 			return nil, openai_compatible.ErrorWrapper(errors.Wrap(err, "encode xAI task binding"), "invalid_video_response", http.StatusInternalServerError)
 		}
 		c.Set(adaptor.AsyncVideoAcceptedKey, true)
-		if err := asyncvideo.PersistTask(c, bindingBody); err != nil {
-			if logger := gmw.GetLogger(c); logger != nil {
-				logger.Warn("xAI async video task binding persistence failed", zap.Error(err), zap.String("task_id", payload.RequestID))
-			}
-		}
+		asyncvideo.PersistTask(c, bindingBody)
 	} else if payload.Status == "" {
 		return nil, openai_compatible.ErrorWrapper(errors.New("xAI video polling response has no status"), "invalid_video_response", http.StatusBadGateway)
 	}

@@ -31,37 +31,29 @@ func asyncVideoQuotedQuota(c *gin.Context, info *meta.Meta, request *relaymodel.
 		quota, err := decimalQuotaRate(1000, cfg.PerCall.UsdPerThousandCalls, billingratio.QuotaPerUsd, group)
 		return quota, "", err
 	}
-	var rate *adaptor.VideoPricingConfig
-	factor := ""
 	if configured && cfg.Video != nil && cfg.Video.HasData() {
-		rate = cfg.Video
+		rate := cfg.Video
+		quota, err := videoQuota(rate.PerSecondUsd, rate.EffectiveMultiplier(request.RequestedResolution()), request.RequestedDurationSeconds(), rate.InputImageUsd, images, group)
+		return quota, "", err
 	}
-	if rate == nil {
-		estimator, ok := ad.(adaptor.VideoPricingEstimator)
-		if !ok {
-			return 0, "", errors.New("async video requires a price override or quote estimator")
-		}
-		var err error
-		rate, err = estimator.EstimateVideoPricing(c, info, request)
-		if err != nil {
-			return 0, "", errors.Wrap(err, "quote async video")
-		}
-		factor, err = model.AsyncCostMultiplier(billingratio.QuotaPerUsd, group)
-		if err != nil {
-			return 0, "", err
-		}
+	estimator, ok := ad.(adaptor.VideoCostEstimator)
+	if !ok {
+		return 0, "", errors.New("async video requires a price override or quote estimator")
 	}
-	if rate == nil {
-		return 0, "", errors.New("async video quote is missing")
+	quote, err := estimator.EstimateVideoCostUSD(c, info, request)
+	if err != nil {
+		return 0, "", errors.Wrap(err, "quote async video")
 	}
-	if rate.TotalUsdDecimal != "" {
-		quota, err := videoQuotaFromTotalDecimal(rate.TotalUsdDecimal, group)
-		return quota, factor, err
+	// Validate a positive bounded provider amount independently of the group
+	// multiplier: an explicitly free group may still map it to zero quota.
+	positive, err := model.AsyncUpstreamCostQuota("1", quote)
+	if err != nil || positive <= 0 {
+		return 0, "", errors.New("async video quote is missing or invalid")
 	}
-	if rate.TotalUsd > 0 {
-		quota, err := videoQuotaFromTotal(rate.TotalUsd, group)
-		return quota, factor, err
+	factor, err := model.AsyncCostMultiplier(billingratio.QuotaPerUsd, group)
+	if err != nil {
+		return 0, "", err
 	}
-	quota, err := videoQuota(rate.PerSecondUsd, rate.EffectiveMultiplier(request.RequestedResolution()), request.RequestedDurationSeconds(), rate.InputImageUsd, images, group)
+	quota, err := model.AsyncUpstreamCostQuota(factor, quote)
 	return quota, factor, err
 }

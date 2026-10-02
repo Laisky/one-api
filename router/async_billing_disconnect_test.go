@@ -61,7 +61,7 @@ func disconnectBillingRouter(t *testing.T, base string) (*gin.Engine, string, in
 		config.SetLogConsumeEnabled(oldLogging)
 		require.NoError(t, conn.Close())
 	})
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}, &model.AsyncTask{}, &model.AsyncTaskBinding{}, &model.AsyncTaskBindingRetry{}, &model.AsyncTaskLogReceipt{}, &model.UserRequestCost{}, &model.QuotaRefund{}, &model.Log{}, &model.Trace{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}, &model.AsyncTask{}, &model.AsyncTaskBinding{}, &model.AsyncTaskLogReceipt{}, &model.UserRequestCost{}, &model.QuotaRefund{}, &model.Log{}, &model.Trace{}))
 	user := &model.User{Id: 919191, UUID: uuid.NewString(), Username: "disconnect-owner", Status: model.UserStatusEnabled, Quota: 200000, Group: "default"}
 	key := strings.ReplaceAll(uuid.NewString(), "-", "")
 	token := &model.Token{Id: 919192, UUID: uuid.NewString(), UserId: user.Id, Key: key, Status: model.TokenStatusEnabled, RemainQuota: 200000, ExpiredTime: -1}

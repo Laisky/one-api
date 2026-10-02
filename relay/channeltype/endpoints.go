@@ -30,7 +30,6 @@ const (
 	EndpointVideos             Endpoint = Endpoint(relaymode.Videos)
 	EndpointOCR                Endpoint = Endpoint(relaymode.OCR)
 	EndpointSystemOne          Endpoint = Endpoint(relaymode.SystemOne)
-	EndpointAsyncVideos        Endpoint = Endpoint(relaymode.AsyncVideos)
 	MuAsyncEndpointVideos      Endpoint = Endpoint(relaymode.MuAsyncVideos)
 )
 
@@ -60,7 +59,6 @@ func AllEndpoints() []EndpointInfo {
 		{ID: EndpointClaudeMessages, Name: "claude_messages", Description: "Claude Messages API", Path: "/v1/messages"},
 		{ID: EndpointRealtime, Name: "realtime", Description: "Realtime API (WebSocket)", Path: "/v1/realtime"},
 		{ID: EndpointVideos, Name: "videos", Description: "Video Generation API", Path: "/v1/videos"},
-		{ID: EndpointAsyncVideos, Name: "async_videos", Description: "Durable asynchronous video API", Path: "/v1/async/videos"},
 		{ID: MuAsyncEndpointVideos, Name: "mu_async_videos", Description: "MuAPI native asynchronous video (includes synchronous bridge)", Path: "/v1/async/videos"},
 		{ID: EndpointOCR, Name: "ocr", Description: "OCR / Layout Parsing API", Path: "/api/paas/v4/layout_parsing"},
 		{ID: EndpointSystemOne, Name: "systemone", Description: "TypeSafe System One Evaluation API", Path: "/v1/systemone"},

@@ -134,7 +134,7 @@ func (a *Adaptor) CheckRedirect(_ *http.Request, _ []*http.Request) error {
 }
 
 // GetDefaultModelPricing returns no frozen tariff table. MuAPI pricing is
-// model- and request-dependent; video requests use EstimateVideoPricing before
+// model- and request-dependent; video requests use EstimateVideoCostUSD before
 // quota admission, and channel overrides remain available for operators.
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{}

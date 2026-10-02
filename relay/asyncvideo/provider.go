@@ -46,3 +46,8 @@ type Observation struct {
 // DurableTaskKey marks an HTTP request already represented by a durable task.
 // No automatic relay retry may create another job after this boundary.
 const DurableTaskKey = "relay.durable_async_task"
+
+// HandledResponseKey marks an async response already written locally without a
+// durable task (for example, admission rejection). Relay must record the actual
+// HTTP outcome without entering cross-channel retry or counting it as success.
+const HandledResponseKey = "relay.async_video_handled_response"

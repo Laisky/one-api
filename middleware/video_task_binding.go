@@ -12,7 +12,6 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/relay/asyncvideo"
 )
 
 // BindAsyncTaskChannel resolves asynchronous task metadata (e.g., video jobs) before channel distribution.
@@ -32,7 +31,7 @@ func BindAsyncTaskChannel() gin.HandlerFunc {
 		}
 
 		path := req.URL.Path
-		if !strings.HasPrefix(path, "/v1/videos/") && !strings.HasPrefix(path, "/v1/async/videos/") {
+		if !strings.HasPrefix(path, "/v1/videos/") {
 			c.Next()
 			return
 		}
@@ -46,10 +45,6 @@ func BindAsyncTaskChannel() gin.HandlerFunc {
 		}
 
 		lg := gmw.GetLogger(c)
-		if _, retryErr := asyncvideo.RetryPendingTaskBinding(gmw.Ctx(c), videoID, c.GetInt(ctxkey.Id)); retryErr != nil {
-			AbortWithError(c, http.StatusInternalServerError, errors.Wrap(retryErr, "recover video task binding"))
-			return
-		}
 		binding, err := model.GetAsyncTaskBindingByTaskID(gmw.Ctx(c), videoID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {

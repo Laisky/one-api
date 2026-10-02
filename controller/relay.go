@@ -139,7 +139,7 @@ func Relay(c *gin.Context) {
 
 	bizErr := invokeRelayHelper(c, relayMode)
 	if bizErr == nil {
-		if c.GetString(asyncvideo.DurableTaskKey) != "" {
+		if c.GetString(asyncvideo.DurableTaskKey) != "" || c.GetBool(asyncvideo.HandledResponseKey) {
 			PrometheusMonitor.RecordRelayRequest(c, relayMeta, startTime, c.Writer.Status() < 400, 0, 0, 0)
 			return
 		}

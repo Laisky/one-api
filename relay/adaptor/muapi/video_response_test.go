@@ -3,13 +3,10 @@ package muapi
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -17,7 +14,6 @@ import (
 
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
-	"github.com/Laisky/one-api/relay/asyncvideo"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
@@ -32,7 +28,7 @@ func TestMuAPIVideoResponseBindsAcceptedTask(t *testing.T) {
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	require.NoError(t, db.AutoMigrate(&dbmodel.AsyncTaskBinding{}, &dbmodel.AsyncTaskBindingRetry{}))
+	require.NoError(t, db.AutoMigrate(&dbmodel.AsyncTaskBinding{}))
 	previousDB := dbmodel.DB
 	dbmodel.DB = db
 	t.Cleanup(func() { dbmodel.DB = previousDB })
@@ -58,57 +54,6 @@ func TestMuAPIVideoResponseBindsAcceptedTask(t *testing.T) {
 	require.Equal(t, 9, binding.ChannelID)
 	require.Equal(t, 61, binding.ChannelType)
 	require.Equal(t, "veo3-fast", binding.ActualModel)
-}
-
-// TestMuAPIVideoResponseRetriesOnlyBindingPersistence verifies a temporary
-// local database failure does not resend the paid upstream creation and that
-// the saved task routing record is recoverable when storage returns.
-func TestMuAPIVideoResponseRetriesOnlyBindingPersistence(t *testing.T) {
-	c, recorder := newMuAPITestContextWithRecorder(http.MethodPost, "/v1/async/videos", "")
-	meta.Set2Context(c, &meta.Meta{
-		UserId: 77, TokenId: 88, ChannelId: 9, ChannelType: 61,
-		OriginModelName: "veo3-fast", ActualModelName: "veo3-fast",
-	})
-
-	recoveryDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	recoverySQL, err := recoveryDB.DB()
-	require.NoError(t, err)
-	recoverySQL.SetMaxOpenConns(1)
-	t.Cleanup(func() { _ = recoverySQL.Close() })
-	require.NoError(t, recoveryDB.AutoMigrate(&dbmodel.AsyncTaskBinding{}, &dbmodel.AsyncTaskBindingRetry{}))
-	var failedWrites atomic.Int32
-	require.NoError(t, recoveryDB.Callback().Create().Before("gorm:create").Register("test:transient_async_task_binding_write", func(tx *gorm.DB) {
-		if tx.Statement.Table == "async_task_bindings" && failedWrites.Add(1) <= 4 {
-			tx.AddError(errors.New("simulated temporary database write failure"))
-		}
-	}))
-
-	previousDB := dbmodel.DB
-	dbmodel.DB = recoveryDB
-	t.Cleanup(func() { dbmodel.DB = previousDB })
-	response := &http.Response{
-		StatusCode: http.StatusAccepted,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(strings.NewReader(`{"request_id":"job-retry","status":"processing"}`)),
-	}
-	usage, apiErr := (&Adaptor{}).DoResponse(c, response, &meta.Meta{Mode: relaymode.MuAsyncVideos})
-	require.Nil(t, usage)
-	require.Nil(t, apiErr)
-	require.True(t, c.GetBool(adaptor.AsyncVideoAcceptedKey))
-	require.JSONEq(t, `{"id":"job-retry","status":"queued"}`, recorder.Body.String())
-
-	require.Eventually(t, func() bool { return failedWrites.Load() >= 4 }, 3*time.Second, 25*time.Millisecond,
-		"initial persistence and all automatic retries should have failed")
-	_, err = dbmodel.GetAsyncTaskBindingByTaskID(context.Background(), "job-retry")
-	require.Error(t, err)
-	recovered, err := asyncvideo.RetryPendingTaskBinding(context.Background(), "job-retry", 77)
-	require.True(t, recovered)
-	require.NoError(t, err)
-	binding, err := dbmodel.GetAsyncTaskBindingByTaskID(context.Background(), "job-retry")
-	require.NoError(t, err)
-	require.Equal(t, 9, binding.ChannelID)
-	require.Equal(t, 77, binding.UserID)
 }
 
 // TestMuAPIVideoResponseForwardsPollingResult verifies completed results stay

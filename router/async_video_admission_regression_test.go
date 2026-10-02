@@ -8,13 +8,36 @@ import (
 
 	"encoding/json"
 	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/metrics"
 	"github.com/Laisky/one-api/model"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
+	"time"
 )
+
+// asyncAdmissionMetrics captures relay outcomes while inheriting no-op behavior
+// for unrelated metric calls made by the shipped middleware stack.
+type asyncAdmissionMetrics struct {
+	metrics.NoOpRecorder
+	mu       sync.Mutex
+	outcomes []bool
+}
+
+func (m *asyncAdmissionMetrics) RecordRelayRequest(_ time.Time, _ int, _, _, _, _, _, _, _ string, success bool, _, _ int, _ float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.outcomes = append(m.outcomes, success)
+}
+
+func (m *asyncAdmissionMetrics) snapshot() []bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]bool(nil), m.outcomes...)
+}
 
 // TestAsyncVideoRejectedAdmissionHasNoPhantomTask drives shipped authentication,
 // pricing and reservation. Rejected requests cannot advertise rolled-back tasks.
@@ -22,6 +45,10 @@ func TestAsyncVideoRejectedAdmissionHasNoPhantomTask(t *testing.T) {
 	for _, path := range []string{"/v1/async/videos", "/v1/videos/generations"} {
 		for _, fault := range []string{"owner_quota", "token_quota", "task_insert"} {
 			t.Run(path+"/"+fault, func(t *testing.T) {
+				oldRecorder := metrics.Recorder()
+				metricCapture := &asyncAdmissionMetrics{}
+				metrics.SetRecorder(metricCapture)
+				t.Cleanup(func() { metrics.SetRecorder(oldRecorder) })
 				var quotes, generations atomic.Int32
 				provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					_, _ = io.Copy(io.Discard, r.Body)
@@ -83,6 +110,7 @@ func TestAsyncVideoRejectedAdmissionHasNoPhantomTask(t *testing.T) {
 				require.Zero(t, token.UsedQuota)
 				require.EqualValues(t, 2, quotes.Load())
 				require.Zero(t, generations.Load(), "unpaid work must not be dispatched")
+				require.Equal(t, []bool{false, false}, metricCapture.snapshot(), "locally handled admission errors must not be reported as relay success")
 			})
 		}
 	}
