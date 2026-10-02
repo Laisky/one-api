@@ -30,14 +30,16 @@ import (
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
-	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // RelayVideoHelper handles OpenAI /v1/videos requests, performing quota accounting
 // based on per-second pricing while proxying the raw payload to the upstream channel.
 func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if c.Request.Method != http.MethodPost {
-		return RelayProxyHelper(c, relaymode.Videos)
+		// Task ownership and channel binding are checked by BindAsyncTaskChannel
+		// on the video routes. Retrieval/deletion does not create another paid job;
+		// it must not be confused with the public arbitrary-target proxy endpoint.
+		return relayUnmeteredRequest(c)
 	}
 
 	ctx := gmw.Ctx(c)
