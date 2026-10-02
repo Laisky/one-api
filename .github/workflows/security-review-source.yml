@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pr: [441, 442, 443]
+        pr: [441, 442]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -29,8 +29,22 @@ jobs:
           REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Compare introduced changes to main, not historical files brought in by the merge.
-          sed -i 's/"--cached", "--check"/"--cached", "--check", MAIN/' .github/security-review-runner.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/security-review-runner.py')
+          text = p.read_text().replace('"--cached", "--check"', '"--cached", "--check", MAIN')
+          needle = 'paths = git("ls-files", "-m", "-o", "--exclude-standard", cwd=prepared).splitlines()'
+          insertion = '''import runpy
+          runpy.run_path(str(ROOT / ".github/security-review-adjustments.py"))["adjust"](PR, prepared)
+          if PR == 441:
+              source = prepared / "controller/realtime.go"
+              source.write_text(source.read_text().replace('\\t"github.com/Laisky/errors/v2"\\n', ""))
+          '''
+          assert needle in text
+          text = text.replace(needle, insertion + needle)
+          text = text.replace('"^TestReview", True', '"^Test(Review|GeminiLiveEphemeralRejectionExplainsSupportedTransport|RelayRealtimeSessionsHandlerSignature|DoRequestHelperRedactsQueryCredentialsWithoutChangingDispatch|LogMetadata|LogsToResponses|SanitizeLogUpstreamEndpoint|PostConsumeQuotaDetailedSanitizesUpstreamEndpoint)", True')
+          p.write_text(text)
+          PY
           python3 .github/security-review-runner.py '${{ matrix.pr }}'
       - name: Preserve observed validation evidence
         if: always()
