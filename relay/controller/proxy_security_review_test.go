@@ -68,15 +68,18 @@ func TestReviewProxyRejectsPaidChannels(t *testing.T) {
 				TokenId: fallbackTokenID, TokenName: "fallback-token", ActualModelName: "gpt-4o", StartTime: time.Now(),
 				Config: model.ChannelConfig{APIVersion: "2025-04-01-preview"}}
 			meta.Set2Context(c, m)
-			before := hits.Load()
-			err := RelayProxyHelper(c, relaymode.Proxy)
-			drainCriticalTasks(t)
-			require.Equal(t, before, hits.Load(), "paid upstream must not be reached via zero-quota proxy")
-			require.NotNil(t, err)
-			require.Equal(t, http.StatusForbidden, err.StatusCode)
-			require.Equal(t, "proxy_channel_required", err.Code)
-			require.False(t, c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded))
-			require.Equal(t, balance, reloadUserQuota(t), "rejected requests must not charge users")
+			for _, requestedMode := range []int{relaymode.Proxy, relaymode.Videos, relaymode.ChatCompletions} {
+				m.Mode = requestedMode
+				before := hits.Load()
+				err := RelayProxyHelper(c, requestedMode)
+				drainCriticalTasks(t)
+				require.Equal(t, before, hits.Load(), "paid upstream must not be reached via zero-quota proxy")
+				require.NotNil(t, err)
+				require.Equal(t, http.StatusForbidden, err.StatusCode)
+				require.Equal(t, "proxy_channel_required", err.Code)
+				require.False(t, c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded))
+				require.Equal(t, balance, reloadUserQuota(t), "rejected requests must not charge users")
+			}
 		})
 	}
 }

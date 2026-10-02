@@ -25,7 +25,7 @@ import (
 )
 
 // RelayProxyHelper is a helper function to proxy the request to the upstream service
-func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatusCode {
+func RelayProxyHelper(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
 	meta := metalib.GetByContext(c)
 	// Zero-quota forwarding is an explicit operator choice for Proxy channels,
 	// never a property an API caller may select for an ordinary paid channel.
@@ -34,6 +34,15 @@ func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		return openai.ErrorWrapper(errors.New("unmetered proxy relay requires an explicitly configured Proxy channel"),
 			"proxy_channel_required", http.StatusForbidden)
 	}
+	return relayUnmeteredRequest(c)
+}
+
+// relayUnmeteredRequest forwards an operation whose charging policy was already
+// selected by its controller. Only the guarded explicit-proxy entrypoint and
+// authenticated video retrieval/deletion routes may call it; model generation
+// must continue through its normal admission and settlement controller.
+func relayUnmeteredRequest(c *gin.Context) *relaymodel.ErrorWithStatusCode {
+	meta := metalib.GetByContext(c)
 	if err := logClientRequestPayload(c, "proxy"); err != nil {
 		return openai.ErrorWrapper(err, "invalid_proxy_request", http.StatusBadRequest)
 	}
