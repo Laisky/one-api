@@ -5,20 +5,190 @@ on:
 permissions:
   contents: read
 jobs:
-  source:
+  prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: e33616889fce2e0116f8df1372de02887459f77e
           fetch-depth: 0
           persist-credentials: false
-      - name: Export committed review source delta
+      - name: Restore the exact locally tested patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          git merge-base --is-ancestor 595c035f79ae66903edbc3907f94c98c3a2b54c8 HEAD
-          git bundle create "$RUNNER_TEMP/pr440-review.bundle" HEAD ^595c035f79ae66903edbc3907f94c98c3a2b54c8
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, os, pathlib, subprocess
+          data = b''
+          for sha in ['288f3afd6e3a5accc907a01af62315ec35e70b53', '02aaee836d22d487dc4667609f05a25399c7dfd0', 'a12e488ba2d7432ed18f48ac7cef268c82b2f686']:
+              obj = json.loads(subprocess.check_output(['gh', 'api', f'repos/Laisky/one-api/git/blobs/{sha}']))
+              chunk = base64.b64decode(obj['content'])
+              assert hashlib.sha1(b'blob ' + str(len(chunk)).encode() + b'\0' + chunk).hexdigest() == sha
+              data += chunk
+          patch = gzip.decompress(data)
+          assert hashlib.sha256(patch).hexdigest() == '3ae89629bb448fdc44048d94413314f6638f2dd9923352806a5d0d7b3c0b082d'
+          pathlib.Path(os.environ['RUNNER_TEMP'], 'review.patch').write_bytes(patch)
+          PY
+          test "$(git rev-parse HEAD)" = e33616889fce2e0116f8df1372de02887459f77e
+          git merge-base --is-ancestor 9a0f052cc60c34628988a239117212eba0076145 HEAD
+          git apply --check --index "$RUNNER_TEMP/review.patch"
+          git apply --index "$RUNNER_TEMP/review.patch"
+          git diff --cached --check
+          test "$(git write-tree)" = 92e1860a1bab5cdec10581ae6e2b98260dcc2f6a
+      - name: Create only an isolated candidate commit, not the PR or main
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name Codex
+          git config user.email codex@openai.com
+          git commit -m 'fix: isolate async log retries and validate MuAPI request URLs'
+          test "$(git rev-parse HEAD^)" = e33616889fce2e0116f8df1372de02887459f77e
+          test "$(git rev-parse HEAD^{tree})" = 92e1860a1bab5cdec10581ae6e2b98260dcc2f6a
+          python3 - <<'PY'
+          import base64, os, subprocess
+          env = dict(os.environ)
+          env['GIT_CONFIG_COUNT'] = '1'
+          env['GIT_CONFIG_KEY_0'] = 'http.https://github.com/.extraheader'
+          env['GIT_CONFIG_VALUE_0'] = 'AUTHORIZATION: basic ' + base64.b64encode(('x-access-token:' + os.environ['GH_TOKEN']).encode()).decode()
+          subprocess.run(['git', 'push', 'origin', 'HEAD:refs/heads/work/pr440-review-candidate-20261002t2120'], env=env, check=True)
+          PY
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  databases:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          name: pr440-review-source
-          path: ${{ runner.temp }}/pr440-review.bundle
-          retention-days: 2
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Require all twelve live billing and acknowledgement cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^{tree})" = 92e1860a1bab5cdec10581ae6e2b98260dcc2f6a
+          go test -json -race -count=1 -timeout 8m -run '^TestAsyncBilling(LiveDatabases|EvidenceLiveDatabases|AckBackoffLiveDatabases)$' ./model | tee "$RUNNER_TEMP/live-databases.jsonl"
+          python3 - <<'PY'
+          import json, os
+          events = [json.loads(line) for line in open(os.path.join(os.environ['RUNNER_TEMP'], 'live-databases.jsonl'))]
+          passed = {e.get('Test') for e in events if e['Action'] == 'pass'}
+          expected = []
+          for backend in ('mysql', 'postgres'):
+              expected += [f'TestAsyncBillingLiveDatabases/{backend}/{case}' for case in ('unlimited=false', 'unlimited=true', 'competing-refunds')]
+              expected += [f'TestAsyncBillingEvidenceLiveDatabases/{backend}/{case}' for case in ('anonymous', 'accepted')]
+              expected += [f'TestAsyncBillingAckBackoffLiveDatabases/{backend}']
+          assert len(expected) == 12
+          assert set(expected) <= passed, f'Missing live passes: {set(expected) - passed}'
+          assert not any(e['Action'] == 'skip' for e in events), 'Live database tests must not skip'
+          PY
+          git show -s --format='%H %T %P' HEAD > "$RUNNER_TEMP/verified-tree.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: pr440-review-live-databases
+          path: |
+            ${{ runner.temp }}/live-databases.jsonl
+            ${{ runner.temp }}/verified-tree.txt
+          retention-days: 14
+
+  codeql:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.version == 'candidate' && needs.prepare.outputs.sha || 'e33616889fce2e0116f8df1372de02887459f77e' }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        with:
+          languages: go
+          build-mode: manual
+          queries: security-extended
+      - name: Build all production packages under CodeQL tracing
+        run: go build ./...
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        with:
+          output: ${{ runner.temp }}/sarif
+          upload: never
+          upload-database: false
+          category: pr440-isolated-${{ matrix.version }}
+      - name: Record unsuppressed request-forgery comparison
+        env:
+          VERSION: ${{ matrix.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess, urllib.parse
+          root = pathlib.Path(os.environ['RUNNER_TEMP'], 'sarif')
+          files = list(root.glob('*.sarif'))
+          assert files, 'CodeQL must produce actual SARIF results'
+          matching, all_rules = [], []
+          for file in files:
+              for run in json.loads(file.read_text()).get('runs', []):
+                  for result in run.get('results', []):
+                      all_rules.append(result.get('ruleId'))
+                      paths = [urllib.parse.unquote(loc.get('physicalLocation', {}).get('artifactLocation', {}).get('uri', '')) for loc in result.get('locations', [])]
+                      if result.get('ruleId') == 'go/request-forgery' and any('relay/adaptor/muapi/' in path for path in paths):
+                          matching.append({'rule': result['ruleId'], 'paths': paths, 'message': result.get('message')})
+          summary = {'version': os.environ['VERSION'], 'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(), 'tree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(), 'muapi_request_forgery': matching, 'all_result_rules': all_rules}
+          pathlib.Path(os.environ['RUNNER_TEMP'], 'codeql-summary.json').write_text(json.dumps(summary, indent=2))
+          print(json.dumps(summary, indent=2))
+          if os.environ['VERSION'] == 'candidate':
+              assert summary['tree'] == '92e1860a1bab5cdec10581ae6e2b98260dcc2f6a'
+              assert not matching, 'MuAPI request-forgery findings must be fixed, not suppressed'
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: pr440-codeql-${{ matrix.version }}
+          path: |
+            ${{ runner.temp }}/sarif
+            ${{ runner.temp }}/codeql-summary.json
+          retention-days: 14
