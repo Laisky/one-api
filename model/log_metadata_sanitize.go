@@ -1,22 +1,36 @@
 package model
 
 import (
+	"maps"
 	"net/url"
 	"strings"
 )
 
-// SanitizeLogUpstreamEndpoint removes URL components that may contain provider credentials from an upstream endpoint before it is stored in user-visible log metadata. It accepts the raw adaptor-resolved endpoint and returns a copy without user info, query parameters, or fragments.
+// SanitizeLogUpstreamEndpoint removes credentials from an upstream diagnostic
+// URL without modifying the actual request. Parameters: endpoint is untrusted
+// URL text. Returns: a query-, fragment-, and userinfo-free HTTP(S)/WS(S) URL or
+// root-relative path; malformed and opaque inputs fail closed to an empty value.
 func SanitizeLogUpstreamEndpoint(endpoint string) string {
 	endpoint = strings.TrimSpace(endpoint)
 	if endpoint == "" {
 		return ""
 	}
-
 	parsed, err := url.Parse(endpoint)
-	if err != nil {
-		return sanitizeRawLogUpstreamEndpoint(endpoint)
+	if err != nil || parsed.Opaque != "" {
+		return ""
 	}
-
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https", "ws", "wss":
+		if parsed.Host == "" {
+			return ""
+		}
+	case "":
+		if parsed.Host == "" && !strings.HasPrefix(parsed.Path, "/") {
+			return ""
+		}
+	default:
+		return ""
+	}
 	parsed.User = nil
 	parsed.RawQuery = ""
 	parsed.ForceQuery = false
@@ -25,27 +39,34 @@ func SanitizeLogUpstreamEndpoint(endpoint string) string {
 	return parsed.String()
 }
 
-// sanitizeRawLogUpstreamEndpoint strips credential-bearing URL suffixes from endpoints that cannot be parsed as standard URLs. It accepts a raw endpoint string and returns a conservative fallback without query strings, fragments, or user info.
-func sanitizeRawLogUpstreamEndpoint(endpoint string) string {
-	if cutAt := strings.IndexAny(endpoint, "?#"); cutAt >= 0 {
-		endpoint = endpoint[:cutAt]
+// SanitizeLogMetadata sanitizes upstream URL metadata for persistence and direct
+// JSON serialization. Parameters: metadata is caller-owned. Returns: the original
+// map when no endpoint exists, otherwise a shallow copy with a sanitized endpoint.
+// Non-string endpoints are removed rather than serializing arbitrary objects.
+func SanitizeLogMetadata(metadata LogMetadata) LogMetadata {
+	endpoint, exists := metadata[LogMetadataKeyUpstreamEndpoint]
+	if !exists {
+		return metadata
 	}
+	clean := maps.Clone(metadata)
+	delete(clean, LogMetadataKeyUpstreamEndpoint)
+	if raw, ok := endpoint.(string); ok {
+		if endpoint := SanitizeLogUpstreamEndpoint(raw); endpoint != "" {
+			clean[LogMetadataKeyUpstreamEndpoint] = endpoint
+		}
+	}
+	return clean
+}
 
-	schemeSep := strings.Index(endpoint, "://")
-	if schemeSep < 0 {
-		return endpoint
+// publicLogMetadata omits operator-owned upstream URLs from every external log
+// DTO, including historical records. Parameters: metadata is caller-owned.
+// Returns: the original map if no endpoint exists, otherwise a shallow copy.
+// Keeping this at the DTO boundary also protects cursor, token, and export APIs.
+func publicLogMetadata(metadata LogMetadata) map[string]any {
+	if _, exists := metadata[LogMetadataKeyUpstreamEndpoint]; !exists {
+		return metadata
 	}
-
-	authorityStart := schemeSep + len("://")
-	remainder := endpoint[authorityStart:]
-	authorityEnd := strings.IndexByte(remainder, '/')
-	if authorityEnd < 0 {
-		authorityEnd = len(remainder)
-	}
-	authority := remainder[:authorityEnd]
-	if at := strings.LastIndexByte(authority, '@'); at >= 0 {
-		endpoint = endpoint[:authorityStart] + authority[at+1:] + remainder[authorityEnd:]
-	}
-
-	return endpoint
+	clean := maps.Clone(metadata)
+	delete(clean, LogMetadataKeyUpstreamEndpoint)
+	return clean
 }

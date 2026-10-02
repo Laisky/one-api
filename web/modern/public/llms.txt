@@ -1,0 +1,82 @@
+# Laisky One API
+
+> Agent-friendly AI gateway at oneapi.laisky.com for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, multi-provider routing, billing, and observability.
+
+## Product Overview
+
+Laisky One API accepts several AI API formats and routes them to configured upstream providers. It is useful when an agent or application needs one operational control plane for model routing, quota, billing, logs, and API-format conversion.
+
+- OpenAI Chat Completions: `POST https://oneapi.laisky.com/v1/chat/completions`
+- OpenAI Responses: `POST https://oneapi.laisky.com/v1/responses`
+- Claude Messages: `POST https://oneapi.laisky.com/v1/messages`
+- MCP Streamable HTTP proxy: `POST https://oneapi.laisky.com/mcp`
+- Models: `GET https://oneapi.laisky.com/v1/models`
+- Public model display: `GET https://oneapi.laisky.com/api/models/display`
+- Public MCP tool display: `GET https://oneapi.laisky.com/api/tools/display`
+
+## Use Cases
+
+- Route an OpenAI-compatible client to multiple upstream model providers.
+- Convert requests among Chat Completions, Responses, and Claude Messages shapes when a configured adapter supports the target format.
+- Expose configured MCP tools behind authenticated relay API keys.
+- Inspect model availability, token usage, billing, logs, and operational status.
+- Test parser integrations with the free no-key sandbox before using real provider calls.
+
+## Constraints
+
+- Production inference and MCP relay calls require `Authorization: Bearer <relay-api-key>`.
+- The free sandbox returns static mock responses and never calls upstream model providers.
+- Management endpoints use web-session or management-token authentication and are not relay inference keys.
+- Relay API keys are secrets and must not be placed in URLs, prompts, screenshots, browser logs, or public tickets.
+
+## Agent Guidance
+
+- Use `Authorization: Bearer <relay-api-key>` for `/v1/*` inference endpoints and `/mcp`.
+- Use JSON request bodies unless an endpoint explicitly documents multipart upload.
+- Prefer `/v1/chat/completions`, `/v1/responses`, or `/v1/messages` according to the client format you already have; One API handles compatible conversion and routing.
+- Set `stream: true` when you need incremental text or tool output.
+- Treat relay API keys as secrets. Never expose keys in browser logs, URLs, screenshots, or prompts.
+- For management endpoints under `/api`, use the web session or the user management access token. Do not confuse that token with relay API keys used for inference.
+- Check `/openapi.json` for machine-readable endpoint summaries and request schemas.
+- Check `/pricing.md` for quota and billing semantics.
+
+## Documentation
+
+- [Overview](https://oneapi.laisky.com/index.md)
+- [API reference](https://oneapi.laisky.com/api.md)
+- [Authentication](https://oneapi.laisky.com/auth.md)
+- [Pricing and quota](https://oneapi.laisky.com/pricing.md)
+- [OpenAPI](https://oneapi.laisky.com/openapi.json)
+- [OpenAPI markdown fallback](https://oneapi.laisky.com/openapi.json.md)
+- [API catalog](https://oneapi.laisky.com/.well-known/api-catalog)
+- [Agentic resource catalog](https://oneapi.laisky.com/.well-known/ai-catalog.json)
+- [Agent card](https://oneapi.laisky.com/.well-known/agent-card.json)
+- [Agent skills index](https://oneapi.laisky.com/.well-known/agent-skills/index.json)
+- [MCP manifest](https://oneapi.laisky.com/.well-known/mcp/manifest.json)
+- [Public MCP discovery endpoint](https://oneapi.laisky.com/.well-known/mcp)
+- [MCP server card](https://oneapi.laisky.com/.well-known/mcp/server-card.json)
+- [MCP Apps public discovery view](https://oneapi.laisky.com/mcp-apps/public-discovery.html)
+- [Agent ask endpoint](https://oneapi.laisky.com/ask)
+- [Free sandbox](https://oneapi.laisky.com/sandbox)
+- [Laisky developer resources](https://oneapi.laisky.com/developer-resources)
+- [Documentation llms.txt](https://oneapi.laisky.com/docs/llms.txt)
+- [API llms.txt](https://oneapi.laisky.com/api/llms.txt)
+- [Developer llms.txt](https://oneapi.laisky.com/developers/llms.txt)
+
+## When To Use This
+
+Use Laisky One API when an agent already speaks OpenAI Chat Completions, OpenAI Responses, Claude Messages, or MCP and needs one gateway for routing, quota, billing, logs, and model/provider selection. Do not use it as a public unauthenticated model endpoint; relay calls require a bearer relay API key.
+
+Use the free sandbox when an agent needs no-key mock responses for parser and integration tests:
+
+- `POST https://oneapi.laisky.com/sandbox/v1/chat/completions`
+- `POST https://oneapi.laisky.com/sandbox/v1/responses`
+- `POST https://oneapi.laisky.com/sandbox/v1/messages`
+
+## Supported Task Types
+
+- Convert and relay Chat Completions, Responses, and Claude Messages payloads.
+- List available models and model metadata.
+- Execute MCP tools through configured upstream MCP servers.
+- Inspect token usage, quota, logs, and billing through authenticated management endpoints.
+- Route audio, image, video, embeddings, rerank, OCR, moderation, and realtime requests when channels are configured.

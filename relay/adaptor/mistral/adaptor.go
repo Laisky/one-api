@@ -82,12 +82,7 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 }
 
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
-	// Mistral is OpenAI-compatible, so we can pass the request through with minimal changes
-	// Remove reasoning_effort as Mistral doesn't support it
-	if request.ReasoningEffort != nil {
-		request.ReasoningEffort = nil
-	}
-	return request, nil
+	return reasoningRequest(request)
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {
@@ -95,8 +90,15 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
-	// Use the shared OpenAI-compatible Claude Messages conversion
-	return openai_compatible.ConvertClaudeRequest(c, request)
+	converted, err := openai_compatible.ConvertClaudeRequest(c, request)
+	if err != nil {
+		return nil, err
+	}
+	general, ok := converted.(*model.GeneralOpenAIRequest)
+	if !ok {
+		return nil, errors.New("unexpected Mistral Claude conversion type")
+	}
+	return reasoningRequest(general)
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
@@ -109,6 +111,13 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 		err, usage = openai_compatible.EmbeddingHandler(c, resp)
 		return usage, err
 	}
+
+	if resp == nil || resp.Body == nil {
+		return nil, openai_compatible.ErrorWrapper(errors.New("Mistral response body is nil"), "invalid_upstream_response", http.StatusBadGateway)
+	}
+	resp.Body = newThinkingBody(resp.Body, meta.IsStream)
+	resp.ContentLength = -1
+	resp.Header.Del("Content-Length")
 
 	return openai_compatible.HandleClaudeMessagesResponse(c, resp, meta, func(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 		if meta.IsStream {

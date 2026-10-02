@@ -15,7 +15,7 @@ import (
 )
 
 // TestStreamHandler_ClientContextCanceledReturnsUsage verifies Anthropic streaming keeps
-// backward-compatible return values when the downstream client disconnects before data arrives.
+// an explicit error and unknown-cost receipt when the client disconnects before data arrives.
 // Parameters:
 //   - t: the test context.
 //
@@ -44,11 +44,12 @@ func TestStreamHandler_ClientContextCanceledReturnsUsage(t *testing.T) {
 	}
 
 	errResp, usage := StreamHandler(c, resp)
-	require.Nil(t, errResp)
+	require.NotNil(t, errResp)
 	require.NotNil(t, usage)
 	require.Equal(t, 0, usage.PromptTokens)
 	require.Equal(t, 0, usage.CompletionTokens)
-	require.Contains(t, recorder.Body.String(), "[DONE]")
+	require.NotContains(t, recorder.Body.String(), "[DONE]")
+	require.NotEmpty(t, usage.BillingEstimateReason)
 }
 
 // TestClaudeNativeStreamHandler_OversizedDataLineForwarded verifies large native data lines stream correctly.
@@ -62,15 +63,7 @@ func TestClaudeNativeStreamHandler_OversizedDataLineForwarded(t *testing.T) {
 	gmw.SetLogger(c, glog.Shared.Named("anthropic-stream-test"))
 
 	largeText := strings.Repeat("z", 128*1024)
-	sse := "event: message_start\n" +
-		"data: {\"type\":\"message_start\",\"usage\":{\"input_tokens\":3,\"cache_read_input_tokens\":1}}\n" +
-		"\n" +
-		"event: content_block_delta\n" +
-		"data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"" + largeText + "\"}}\n" +
-		"\n" +
-		"event: message_delta\n" +
-		"data: {\"type\":\"message_delta\",\"usage\":{\"input_tokens\":3,\"output_tokens\":4}}\n" +
-		"\n"
+	sse := nativeFramedFixture(t, largeText, true)
 
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
@@ -81,10 +74,10 @@ func TestClaudeNativeStreamHandler_OversizedDataLineForwarded(t *testing.T) {
 	errResp, usage := ClaudeNativeStreamHandler(c, resp)
 	require.Nil(t, errResp)
 	require.NotNil(t, usage)
-	require.Equal(t, 3, usage.PromptTokens)
-	require.Equal(t, 4, usage.CompletionTokens)
+	require.Equal(t, 21, usage.PromptTokens)
+	require.Equal(t, 50, usage.CompletionTokens)
 	require.NotNil(t, usage.PromptTokensDetails)
-	require.Equal(t, 1, usage.PromptTokensDetails.CachedTokens)
+	require.Equal(t, 1000, usage.PromptTokensDetails.CachedTokens)
 
 	body := recorder.Body.String()
 	require.Contains(t, body, largeText[:1024])
@@ -112,7 +105,9 @@ func TestStreamHandler_OversizedConvertedChunk(t *testing.T) {
 		`data: {"type":"message_start","message":{"id":"msg_big","type":"message","role":"assistant","model":"claude-sonnet-4-5","usage":{"input_tokens":7,"output_tokens":0}}}`,
 		`data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
 		`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"` + largeText + `"}}`,
+		`data: {"type":"content_block_stop","index":0}`,
 		`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":9}}`,
+		`data: {"type":"message_stop"}`,
 	}, "\n\n") + "\n\n"
 
 	resp := &http.Response{

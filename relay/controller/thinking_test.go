@@ -19,6 +19,44 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
+// TestIsReasoningEffortAllowedExtendedGPT5Efforts locks in the query-parameter
+// effort validator's support for the extended GPT-5 ladder (xhigh since 5.4,
+// max since 5.6) while keeping other providers on {low,medium,high} and
+// medium-only models on medium.
+func TestIsReasoningEffortAllowedExtendedGPT5Efforts(t *testing.T) {
+	cases := []struct {
+		model  string
+		effort string
+		want   bool
+	}{
+		// GPT-5.6 accepts the full extended ladder including the new "max".
+		{"gpt-5.6", "max", true},
+		{"gpt-5.6-sol", "max", true},
+		{"gpt-5.6-terra", "xhigh", true},
+		{"gpt-5.6", "high", true},
+		{"gpt-5.6", "bogus", false},
+		// Other GPT-5 (non-chat) accept xhigh/max at this layer; the openai
+		// adaptor coerces values a specific model does not support downstream.
+		{"gpt-5", "xhigh", true},
+		{"gpt-5.4", "max", true},
+		// GPT-5 chat aliases stay medium-tier: no xhigh/max here.
+		{"gpt-5-chat-latest", "max", false},
+		{"gpt-5.1-chat-latest", "xhigh", false}, // medium-only
+		{"gpt-5.1-chat-latest", "medium", true},
+		// Non-OpenAI reasoning models keep the {low,medium,high} contract.
+		{"grok-4", "max", false},
+		{"grok-4", "high", true},
+		{"deepseek-reasoner", "xhigh", false},
+		// o-series is medium-only.
+		{"o3", "high", false},
+		{"o3", "medium", true},
+	}
+	for _, c := range cases {
+		got := isReasoningEffortAllowed(c.model, c.effort)
+		require.Equalf(t, c.want, got, "isReasoningEffortAllowed(%q, %q)", c.model, c.effort)
+	}
+}
+
 func TestApplyThinkingQueryToChatRequestSetsReasoningEffort(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()
@@ -28,6 +66,25 @@ func TestApplyThinkingQueryToChatRequestSetsReasoningEffort(t *testing.T) {
 
 	meta := &metalib.Meta{ActualModelName: "gpt-5", APIType: apitype.OpenAI, ChannelType: channeltype.OpenAI}
 	payload := &relaymodel.GeneralOpenAIRequest{Model: "gpt-5"}
+
+	applyThinkingQueryToChatRequest(c, payload, meta)
+
+	require.NotNil(t, payload.ReasoningEffort)
+	require.Equal(t, "high", *payload.ReasoningEffort)
+}
+
+// TestApplyThinkingQueryToDeepSeekV4SetsReasoningEffort verifies V4 models are
+// included in the query-driven reasoning injection path.
+// Parameters: t is the testing handle used for assertions and test lifecycle control.
+// Returns: nothing; the test fails through t when the V4 effort is omitted.
+func TestApplyThinkingQueryToDeepSeekV4SetsReasoningEffort(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=true", nil)
+
+	meta := &metalib.Meta{ActualModelName: "deepseek-v4-flash-vision-exp", APIType: apitype.OpenAI, ChannelType: channeltype.DeepSeek}
+	payload := &relaymodel.GeneralOpenAIRequest{Model: meta.ActualModelName}
 
 	applyThinkingQueryToChatRequest(c, payload, meta)
 

@@ -25,6 +25,11 @@ const (
 	Videos
 	// OCR handles document OCR / layout parsing endpoints (e.g., /v1/layout_parsing)
 	OCR
+	// VoiceClone handles voice cloning / timbre replication endpoints
+	// (e.g., /v1/voice/clones, Zhipu /api/paas/v4/voice/clone).
+	VoiceClone
+	// SystemOne handles TypeSafe's native typed evaluation API.
+	SystemOne
 )
 
 func String(mode int) string {
@@ -63,6 +68,10 @@ func String(mode int) string {
 		return "video"
 	case OCR:
 		return "ocr"
+	case VoiceClone:
+		return "voice_clone"
+	case SystemOne:
+		return "systemone"
 	default:
 		return "unknown"
 	}

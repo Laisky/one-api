@@ -139,6 +139,47 @@ func (a *Adaptor) GetChannelName() string {
 	return "google palm"
 }
 
+// GetDefaultModelPricing returns the pricing table this channel advertises.
+//
+// Without this override the embedded DefaultPricingMethods answered 2.5 USD/1M,
+// ignoring the rate recorded in constants.go.
+//
+// Return values:
+//   - map[string]adaptor.ModelConfig: the audited pricing keyed by model id.
+func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
+	return ModelRatios
+}
+
+// GetModelRatio returns the input ratio for modelName, falling back to the
+// framework default only for models this channel does not publish.
+//
+// Parameters:
+//   - modelName: the requested model id.
+//
+// Return values:
+//   - float64: quota per input token.
+func (a *Adaptor) GetModelRatio(modelName string) float64 {
+	if price, exists := ModelRatios[modelName]; exists {
+		return price.Ratio
+	}
+	return a.DefaultPricingMethods.GetModelRatio(modelName)
+}
+
+// GetCompletionRatio returns the output multiplier for modelName, falling back to
+// the framework default only for models this channel does not publish.
+//
+// Parameters:
+//   - modelName: the requested model id.
+//
+// Return values:
+//   - float64: output-to-input price multiplier.
+func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
+	if price, exists := ModelRatios[modelName]; exists {
+		return price.CompletionRatio
+	}
+	return a.DefaultPricingMethods.GetCompletionRatio(modelName)
+}
+
 // DefaultToolingConfig returns PaLM tooling defaults (tool pricing not published as of 2025-11-12).
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return PalmToolingDefaults

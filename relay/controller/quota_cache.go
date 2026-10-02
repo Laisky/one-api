@@ -40,8 +40,21 @@ func syncUserQuotaCacheAfterPreConsume(ctx context.Context, userID int, quota in
 	}
 	if err := model.CacheDecreaseUserQuota(ctx, userID, quota); err != nil {
 		gmw.GetLogger(ctx).Warn("failed to sync user quota cache after pre-consume",
-			zap.Int("user_id", userID),
 			zap.Int64("quota", quota),
+			zap.String("source", source),
+			zap.Error(err),
+		)
+	}
+}
+
+// syncUserQuotaCacheAfterRefund best-effort refreshes cached user quota after a
+// pre-consumed quota refund has been written to the database.
+func syncUserQuotaCacheAfterRefund(ctx context.Context, userID int, source string) {
+	if userID <= 0 {
+		return
+	}
+	if err := model.CacheUpdateUserQuota(ctx, userID); err != nil {
+		gmw.GetLogger(ctx).Warn("failed to sync user quota cache after refund",
 			zap.String("source", source),
 			zap.Error(err),
 		)

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/one-api/common/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -27,6 +29,11 @@ func setupVideoBindingTestDB(t *testing.T) *gorm.DB {
 func TestBindAsyncTaskChannelSetsContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
+	engine.Use(func(c *gin.Context) {
+		gmw.SetLogger(c, logger.Logger)
+		c.Set(ctxkey.Id, 10)
+		c.Next()
+	})
 
 	testDB := setupVideoBindingTestDB(t)
 	originalDB := dbmodel.DB
@@ -69,6 +76,11 @@ func TestBindAsyncTaskChannelSetsContext(t *testing.T) {
 func TestBindAsyncTaskChannelNoRecord(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
+	engine.Use(func(c *gin.Context) {
+		gmw.SetLogger(c, logger.Logger)
+		c.Set(ctxkey.Id, 10)
+		c.Next()
+	})
 
 	testDB := setupVideoBindingTestDB(t)
 	originalDB := dbmodel.DB
@@ -85,5 +97,5 @@ func TestBindAsyncTaskChannelNoRecord(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/videos/unknown", nil).WithContext(context.Background())
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
-	require.Equal(t, 200, w.Code)
+	require.Equal(t, 404, w.Code)
 }

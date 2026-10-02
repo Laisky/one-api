@@ -6,6 +6,10 @@
 #
 # Requires: ONEAPI_BASE_URL and ONEAPI_ADMIN_TOKEN in env.
 # See docs/skills/admin/SKILL.md for full context.
+#
+# Identifier contract: the management API is UUID-only in both directions.
+# Every <uuid> argument below is the string `uuid` field returned by the API
+# (channels, users, tokens). Integer ids are never exposed and never accepted.
 
 set -euo pipefail
 HERE=$(dirname -- "${BASH_SOURCE[0]}")
@@ -65,15 +69,17 @@ oneapi channel <action> [args]
 Actions:
   list [--enabled-only]              List channels (paginated)
   search <keyword>                   Search channels by name/model
-  get <id>                           Show a single channel
-  test <id> [--model <name>]         Test one channel; returns time + error
+  get <uuid>                         Show a single channel
+  test <uuid> [--model <name>]       Test one channel; returns time + error
   test-all [--scope <all|enabled>]   Async: test all (enabled by default)
-  balance [<id>]                     Refresh balance(s)
-  disable <id>                       Set status=2 (admin kill-switch)
-  enable <id>                        Set status=1 (must be tested first)
-  delete <id>                        Hard-delete a channel (destructive)
-  pricing get <id>                   Show channel pricing JSON
-  pricing set <id> <file>            Replace pricing from JSON file
+  balance [<uuid>]                   Refresh balance(s)
+  disable <uuid>                     Set status=2 (admin kill-switch)
+  enable <uuid>                      Set status=1 (must be tested first)
+  delete <uuid>                      Hard-delete a channel (destructive)
+  pricing get <uuid>                 Show channel pricing JSON
+  pricing set <uuid> <file>          Replace pricing from JSON file
+
+<uuid> is the channel's `uuid` string (from `list` / `search`), not a number.
 EOF
 }
 
@@ -86,25 +92,25 @@ cmd_channel() {
       local filter=''
       for arg in "$@"; do [[ "$arg" == --enabled-only ]] && filter='| select(.status == 1)'; done
       oneapi_paginate /api/channel/ \
-        | jq -c "${filter:+$filter |} {id, name, type, status, group, priority, weight, balance, response_time}"
+        | jq -c "${filter:+$filter |} {uuid, name, type, status, group, priority, weight, balance, response_time}"
       ;;
     search)
       (( $# >= 1 )) || die "keyword required"
       oneapi_get "/api/channel/search?keyword=$(jq -rn --arg v "$1" '$v|@uri')" \
-        | jq '.data[] | {id, name, type, status, group, priority}'
+        | jq '.data[] | {uuid, name, type, status, group, priority}'
       ;;
     get)
-      (( $# >= 1 )) || die "id required"
+      (( $# >= 1 )) || die "channel uuid required"
       oneapi_get "/api/channel/$1" | jq '.data'
       ;;
     test)
-      (( $# >= 1 )) || die "id required"
-      local id="$1"; shift
+      (( $# >= 1 )) || die "channel uuid required"
+      local uuid="$1"; shift
       local qs=''
       if (( $# >= 2 )) && [[ "$1" == --model ]]; then
         qs="?model=$(jq -rn --arg v "$2" '$v|@uri')"; shift 2
       fi
-      oneapi_get "/api/channel/test/$id$qs" | jq '{success, message, time, modelName}'
+      oneapi_get "/api/channel/test/$uuid$qs" | jq '{success, message, time, modelName}'
       ;;
     test-all)
       local scope=enabled
@@ -121,30 +127,30 @@ cmd_channel() {
       fi
       ;;
     disable)
-      (( $# >= 1 )) || die "id required"
-      local body; body=$(jq -nc --argjson id "$1" '{id: $id, status: 2}')
+      (( $# >= 1 )) || die "channel uuid required"
+      local body; body=$(jq -nc --arg uuid "$1" '{uuid: $uuid, status: 2}')
       oneapi_put /api/channel/ "$body" | jq '{success, message}'
       ;;
     enable)
-      (( $# >= 1 )) || die "id required"
+      (( $# >= 1 )) || die "channel uuid required"
       oneapi_confirm "re-enable channel $1? (was it tested?)" || { echo "aborted"; return 1; }
-      local body; body=$(jq -nc --argjson id "$1" '{id: $id, status: 1}')
+      local body; body=$(jq -nc --arg uuid "$1" '{uuid: $uuid, status: 1}')
       oneapi_put /api/channel/ "$body" | jq '{success, message}'
       ;;
     delete)
-      (( $# >= 1 )) || die "id required"
+      (( $# >= 1 )) || die "channel uuid required"
       oneapi_confirm "DELETE channel $1 irreversibly?" || { echo "aborted"; return 1; }
       oneapi_delete "/api/channel/$1" | jq '{success, message}'
       ;;
     pricing)
       (( $# >= 2 )) || { cmd_channel_help; die "pricing needs sub-action"; }
-      local sub="$1" id="$2"; shift 2
+      local sub="$1" uuid="$2"; shift 2
       case "$sub" in
-        get) oneapi_get "/api/channel/pricing/$id" | jq '.data' ;;
+        get) oneapi_get "/api/channel/pricing/$uuid" | jq '.data' ;;
         set)
           (( $# >= 1 )) || die "pricing set needs a JSON file"
           [[ -r "$1" ]] || die "cannot read $1"
-          oneapi_put "/api/channel/pricing/$id" "$(cat "$1")" | jq '{success, message}'
+          oneapi_put "/api/channel/pricing/$uuid" "$(cat "$1")" | jq '{success, message}'
           ;;
         *) die "unknown pricing sub-action: $sub" ;;
       esac
@@ -161,16 +167,20 @@ oneapi user <action> [args]
 
 Actions:
   list                            List users (paginated)
-  get --id <N> | --keyword <str>  Show a user
-  search <keyword>                Search users
+  get --uuid <uuid> | --keyword <str>
+                                  Show a user (--id is accepted as an alias
+                                  of --uuid; the value is always a uuid)
+  search <keyword>                Search users (keyword may be a pasted uuid)
   disable <username>              Disable a user (bulk action)
   enable <username>               Enable a user
   promote <username>              Promote to admin (ROOT-ONLY)
   demote <username>               Demote from admin
   delete-user <username>          Soft-delete via manage endpoint
-  grant-quota <user_id> <units>   ADD quota via /api/topup (confirms first)
-  set-group <user_id> <group>     Change a user's billing group
-  set-quota <user_id> <units>     OVERWRITE quota (use grant-quota to add)
+  grant-quota <user_uuid> <units> ADD quota via /api/topup (confirms first)
+  set-group <user_uuid> <group>   Change a user's billing group
+  set-quota <user_uuid> <units>   OVERWRITE quota (use grant-quota to add)
+
+<user_uuid> is the user's `uuid` string (from `list` / `search`), not a number.
 EOF
 }
 
@@ -181,28 +191,28 @@ cmd_user() {
     -h|--help) cmd_user_help ;;
     list)
       oneapi_paginate /api/user/ \
-        | jq -c '{id, username, role, status, group, quota, used_quota, request_count}'
+        | jq -c '{uuid, username, role, status, group, quota, used_quota, request_count}'
       ;;
     search)
       (( $# >= 1 )) || die "keyword required"
       oneapi_get "/api/user/search?keyword=$(jq -rn --arg v "$1" '$v|@uri')" \
-        | jq '.data[] | {id, username, email, role, status, group, quota, used_quota}'
+        | jq '.data[] | {uuid, username, email, role, status, group, quota, used_quota}'
       ;;
     get)
-      local id='' kw=''
+      local uuid='' kw=''
       while (( $# > 0 )); do
         case "$1" in
-          --id) id="$2"; shift 2 ;;
+          --uuid|--id) uuid="$2"; shift 2 ;;
           --keyword) kw="$2"; shift 2 ;;
           *) die "unknown flag $1" ;;
         esac
       done
-      if [[ -n "$id" ]]; then
-        oneapi_get "/api/user/$id" | jq '.data'
+      if [[ -n "$uuid" ]]; then
+        oneapi_get "/api/user/$uuid" | jq '.data'
       elif [[ -n "$kw" ]]; then
         oneapi_get "/api/user/search?keyword=$(jq -rn --arg v "$kw" '$v|@uri')" | jq '.data'
       else
-        die "pass --id or --keyword"
+        die "pass --uuid or --keyword"
       fi
       ;;
     disable|enable|promote|demote|delete-user)
@@ -216,21 +226,21 @@ cmd_user() {
       oneapi_post /api/user/manage "$body" | jq '{success, message}'
       ;;
     grant-quota)
-      (( $# >= 2 )) || die "user_id and units required"
-      local uid="$1" units="$2"
-      oneapi_confirm "grant $units quota units to user $uid via /api/topup?" || { echo "aborted"; return 1; }
-      local body; body=$(jq -nc --argjson id "$uid" --argjson q "$units" '{user_id: $id, quota: $q, remark: "oneapi-cli grant-quota"}')
+      (( $# >= 2 )) || die "user uuid and units required"
+      local uuid="$1" units="$2"
+      oneapi_confirm "grant $units quota units to user $uuid via /api/topup?" || { echo "aborted"; return 1; }
+      local body; body=$(jq -nc --arg uuid "$uuid" --argjson q "$units" '{user_uuid: $uuid, quota: $q, remark: "oneapi-cli grant-quota"}')
       oneapi_post /api/topup "$body" | jq '{success, message}'
       ;;
     set-group)
-      (( $# >= 2 )) || die "user_id and group required"
-      local body; body=$(jq -nc --argjson id "$1" --arg g "$2" '{id: $id, group: $g}')
+      (( $# >= 2 )) || die "user uuid and group required"
+      local body; body=$(jq -nc --arg uuid "$1" --arg g "$2" '{uuid: $uuid, group: $g}')
       oneapi_put /api/user/ "$body" | jq '{success, message}'
       ;;
     set-quota)
-      (( $# >= 2 )) || die "user_id and units required"
+      (( $# >= 2 )) || die "user uuid and units required"
       oneapi_confirm "OVERWRITE user $1 quota to $2 (not additive)?" || { echo "aborted"; return 1; }
-      local body; body=$(jq -nc --argjson id "$1" --argjson q "$2" '{id: $id, quota: $q}')
+      local body; body=$(jq -nc --arg uuid "$1" --argjson q "$2" '{uuid: $uuid, quota: $q}')
       oneapi_put /api/user/ "$body" | jq '{success, message}'
       ;;
     *) cmd_user_help; die "unknown action: $action" ;;
@@ -244,16 +254,18 @@ cmd_token_help() {
 oneapi token <action> [args]
 
 Admin actions (read-only, cross-user):
-  admin-list [--user-id <N>]     List tokens across users
-  admin-search <keyword>         Search tokens by name
-  admin-get <id>                 Get one token (any owner)
+  admin-list [--user-id <uuid>]  List tokens across users (omit flag = all users)
+  admin-search <keyword>         Search tokens by name (or a pasted uuid)
+  admin-get <uuid>               Get one token (any owner)
 
 Self actions (operate on your own tokens):
   list                           List my tokens
-  get <id>                       Get one of my tokens
+  get <uuid>                     Get one of my tokens
   create <name> [quota] [expiry-unix-seconds]
-                                 Create a token under my user id
-  disable <id>                   Set status=2 on one of my tokens
+                                 Create a token under my user
+  disable <uuid>                 Set status=2 on one of my tokens
+
+<uuid> is the token's `uuid` string; --user-id takes the owning user's `uuid`.
 EOF
 }
 
@@ -263,28 +275,32 @@ cmd_token() {
   case "$action" in
     -h|--help) cmd_token_help ;;
     admin-list)
-      local uid=0
+      # user_id is the owning user's uuid; only append the filter when given
+      # (an empty/omitted filter means "all users" — never send 0).
+      local uid=''
       while (( $# > 0 )); do
         case "$1" in --user-id) uid="$2"; shift 2 ;; *) die "unknown flag $1" ;; esac
       done
-      oneapi_paginate "/api/admin/tokens/" "user_id=$uid" \
-        | jq -c '{id, user_id, name, status, unlimited_quota, remain_quota, used_quota, expired_time}'
+      local extra=''
+      [[ -n "$uid" ]] && extra="user_id=$(jq -rn --arg v "$uid" '$v|@uri')"
+      oneapi_paginate "/api/admin/tokens/" "$extra" \
+        | jq -c '{uuid, user_uuid, name, status, unlimited_quota, remain_quota, used_quota, expired_time}'
       ;;
     admin-search)
       (( $# >= 1 )) || die "keyword required"
       oneapi_get "/api/admin/tokens/search?keyword=$(jq -rn --arg v "$1" '$v|@uri')" \
-        | jq '.data[] | {id, user_id, name, status}'
+        | jq '.data[] | {uuid, user_uuid, name, status}'
       ;;
     admin-get)
-      (( $# >= 1 )) || die "id required"
+      (( $# >= 1 )) || die "token uuid required"
       oneapi_get "/api/admin/tokens/$1" | jq '.data'
       ;;
     list)
       oneapi_paginate /api/token/ \
-        | jq -c '{id, name, status, remain_quota, used_quota, expired_time}'
+        | jq -c '{uuid, name, status, remain_quota, used_quota, expired_time}'
       ;;
     get)
-      (( $# >= 1 )) || die "id required"
+      (( $# >= 1 )) || die "token uuid required"
       oneapi_get "/api/token/$1" | jq '.data'
       ;;
     create)
@@ -293,11 +309,11 @@ cmd_token() {
       local body
       body=$(jq -nc --arg n "$name" --argjson q "$quota" --argjson e "$expiry" \
         '{name: $n, remain_quota: $q, unlimited_quota: false, expired_time: $e}')
-      oneapi_post /api/token/ "$body" | jq '{success, message, id: .data.id, key: .data.key}'
+      oneapi_post /api/token/ "$body" | jq '{success, message, uuid: .data.uuid, key: .data.key}'
       ;;
     disable)
-      (( $# >= 1 )) || die "id required"
-      local body; body=$(jq -nc --argjson id "$1" '{id: $id, status: 2}')
+      (( $# >= 1 )) || die "token uuid required"
+      local body; body=$(jq -nc --arg uuid "$1" '{uuid: $uuid, status: 2}')
       oneapi_put "/api/token/?status_only=1" "$body" | jq '{success, message}'
       ;;
     *) cmd_token_help; die "unknown action: $action" ;;
@@ -363,9 +379,10 @@ cmd_log_help() {
 oneapi log <action> [args]
 
 Actions:
-  list [--username U] [--token-name T] [--model M] [--channel N]
+  list [--username U] [--token-name T] [--model M] [--channel <channel-uuid>]
        [--from <unix-seconds>] [--to <unix-seconds>] [--type 1|2|3|4] [--size 100]
        List admin logs. All flags optional. Defaults: last 1h, type=2 (consume).
+       --channel takes the channel's uuid string.
   tail [--username U] [--size 20]        Last N consume rows, sorted desc by time.
   stat                                   Aggregate system stats.
   top-users [--hours 24]                 Top 10 users by quota in the window.
@@ -406,7 +423,7 @@ cmd_log() {
       [[ -n "$model"      ]] && args+=(--data-urlencode "model_name=$model")
       [[ -n "$channel"    ]] && args+=(--data-urlencode "channel=$channel")
       oneapi_request GET /api/log/ "${args[@]}" -G \
-        | jq '.data[] | {created_at, username, token_name, model_name, channel_id, in: .prompt_tokens, out: .completion_tokens, quota, content}'
+        | jq '.data[] | {created_at, username, token_name, model_name, channel_uuid, channel_name, in: .prompt_tokens, out: .completion_tokens, quota, content}'
       ;;
     stat) oneapi_get /api/log/stat | jq '.data' ;;
     top-users)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -85,9 +84,7 @@ func getOidcUserInfoByCode(code string) (*OidcUser, error) {
 func OidcAuth(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	session := sessions.Default(c)
-	state := c.Query("state")
-	if state == "" || session.Get("oauth_state") == nil || state != session.Get("oauth_state").(string) {
-		helper.RespondErrorWithStatus(c, http.StatusForbidden, errors.New("state is empty or not same"))
+	if !validateOAuthState(c, "oidc") {
 		return
 	}
 	username := session.Get("username")
@@ -120,7 +117,7 @@ func OidcAuth(c *gin.Context) {
 			if oidcUser.PreferredUsername != "" {
 				user.Username = oidcUser.PreferredUsername
 			} else {
-				user.Username = "oidc_" + strconv.Itoa(model.GetMaxUserId()+1)
+				user.Username = defaultOAuthUsername("oidc")
 			}
 			if oidcUser.Name != "" {
 				user.DisplayName = oidcUser.Name
@@ -129,6 +126,10 @@ func OidcAuth(c *gin.Context) {
 			}
 			err := user.Insert(ctx, 0)
 			if err != nil {
+				if controller.IsUsernameAlreadyTakenError(err) {
+					controller.RespondUsernameAlreadyExists(c)
+					return
+				}
 				helper.RespondError(c, err)
 				return
 			}

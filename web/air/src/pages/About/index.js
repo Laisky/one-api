@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { Header, Segment, Button } from 'semantic-ui-react';
 import { API, showError } from '../../helpers';
@@ -27,7 +28,7 @@ const About = () => {
   };
 
   useEffect(() => {
-    displayAbout().then();
+    displayAbout().then().catch(reportUIError);
   }, []);
 
   return (

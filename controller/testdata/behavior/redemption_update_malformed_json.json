@@ -1,0 +1,9 @@
+{
+  "case": "redemption/update_malformed_json",
+  "site": "R4 UpdateRedemption (error)",
+  "status": 200,
+  "body": {
+    "message": "unexpected EOF",
+    "success": false
+  }
+}

@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import { useState } from 'react';
 
@@ -18,11 +19,13 @@ import {
 
 import Label from 'ui-component/Label';
 import TableSwitch from 'ui-component/Switch';
+import ResourceRefTooltip from 'ui-component/ResourceRefTooltip';
 import { timestamp2string, renderQuota, copy } from 'utils/common';
 
 import { IconDotsVertical, IconEdit, IconTrash } from '@tabler/icons-react';
 
 export default function RedemptionTableRow({ item, manageRedemption, handleOpenModal, setModalRedemptionId }) {
+  const ref = item.uuid || item.id;
   const [open, setOpen] = useState(null);
   const [openDelete, setOpenDelete] = useState(false);
   const [statusSwitch, setStatusSwitch] = useState(item.status);
@@ -46,7 +49,7 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
 
   const handleStatus = async () => {
     const switchVlue = statusSwitch === 1 ? 2 : 1;
-    const { success } = await manageRedemption(item.id, 'status', switchVlue);
+    const { success } = await manageRedemption(ref, 'status', switchVlue);
     if (success) {
       setStatusSwitch(switchVlue);
     }
@@ -54,15 +57,15 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
 
   const handleDelete = async () => {
     handleCloseMenu();
-    await manageRedemption(item.id, 'delete', '');
+    await manageRedemption(ref, 'delete', '');
   };
 
   return (
     <>
-      <TableRow tabIndex={item.id}>
-        <TableCell>{item.id}</TableCell>
-
-        <TableCell>{item.name}</TableCell>
+      <TableRow tabIndex={ref}>
+        <TableCell>
+          <ResourceRefTooltip refId={ref}>{item.name}</ResourceRefTooltip>
+        </TableCell>
 
         <TableCell>
           {item.status !== 1 && item.status !== 2 ? (
@@ -70,7 +73,7 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
               {item.status === 3 ? '已使用' : '未知'}
             </Label>
           ) : (
-            <TableSwitch id={`switch-${item.id}`} checked={statusSwitch === 1} onChange={handleStatus} />
+            <TableSwitch id={`switch-${ref}`} checked={statusSwitch === 1} onChange={(...uiArgs) => handleStatus(...uiArgs).catch(reportUIError)} />
           )}
         </TableCell>
 
@@ -110,7 +113,7 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
           onClick={() => {
             handleCloseMenu();
             handleOpenModal();
-            setModalRedemptionId(item.id);
+            setModalRedemptionId(ref);
           }}
         >
           <IconEdit style={{ marginRight: '16px' }} />
@@ -129,7 +132,7 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDeleteClose}>关闭</Button>
-          <Button onClick={handleDelete} sx={{ color: 'error.main' }} autoFocus>
+          <Button onClick={(...uiArgs) => handleDelete(...uiArgs).catch(reportUIError)} sx={{ color: 'error.main' }} autoFocus>
             删除
           </Button>
         </DialogActions>

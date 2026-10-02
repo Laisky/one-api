@@ -117,3 +117,44 @@ func TestGenerateRedemption_PopulatedReturnsKeys(t *testing.T) {
 	require.True(t, payload.Success)
 	require.Len(t, payload.Data, 2)
 }
+
+// TestAddRedemptionIgnoresClientUUIDFields verifies bind-safety for redemption creation.
+func TestAddRedemptionIgnoresClientUUIDFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cleanup := setupRedemptionTestEnvironment(t)
+	t.Cleanup(cleanup)
+
+	clientUUID := "018f0000-0000-7000-8000-00000000feed"
+	userUUID := "018f0000-0000-7000-8000-000000000001"
+	body, err := json.Marshal(map[string]any{
+		"uuid":      clientUUID,
+		"user_uuid": clientUUID,
+		"name":      "safe",
+		"count":     1,
+		"quota":     100,
+	})
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/redemption", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(ctxkey.Id, 1)
+	c.Set(ctxkey.UserUUID, userUUID)
+
+	AddRedemption(c)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var payload struct {
+		Success bool `json:"success"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+
+	var redemption model.Redemption
+	require.NoError(t, model.DB.First(&redemption).Error)
+	require.NotEqual(t, clientUUID, redemption.UUID)
+	require.NotEmpty(t, redemption.UUID)
+	require.NotNil(t, redemption.UserUUID)
+	require.Equal(t, userUUID, *redemption.UserUUID)
+}

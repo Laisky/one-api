@@ -5,12 +5,17 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+	"unicode/utf8"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/metrics"
+	"github.com/Laisky/one-api/common/utils"
 )
 
 // MetricsAuth protects the /metrics endpoint with a dedicated Bearer token.
@@ -57,22 +62,121 @@ func PrometheusMiddleware() gin.HandlerFunc {
 
 		// Normalize path to avoid high cardinality
 		normalizedPath := normalizePath(path)
+		if !utf8.ValidString(path) {
+			// URL.Path is percent-decoded, so "/%c0" arrives as the raw byte
+			// 0xC0. Such values are not valid label values (see
+			// metrics.SanitizeLabelValue); log the sanitized form only.
+			gmw.GetLogger(c).Debug("request path is not valid UTF-8, sanitized for metrics labels",
+				zap.String("path", normalizedPath))
+		}
+		normalizedPath = pathLabels.bound(c, normalizedPath)
 
 		// Track active requests
-		metrics.GlobalRecorder.RecordHTTPActiveRequest(normalizedPath, method, 1)
-		defer metrics.GlobalRecorder.RecordHTTPActiveRequest(normalizedPath, method, -1)
+		metrics.Recorder().RecordHTTPActiveRequest(normalizedPath, method, 1)
+		defer metrics.Recorder().RecordHTTPActiveRequest(normalizedPath, method, -1)
 
 		// Continue processing the request
 		c.Next()
 
 		// Record metrics after request completion
 		statusCode := strconv.Itoa(c.Writer.Status())
-		metrics.GlobalRecorder.RecordHTTPRequest(start, normalizedPath, method, statusCode)
+		metrics.Recorder().RecordHTTPRequest(start, normalizedPath, method, statusCode)
 	}
 }
 
-// normalizePath normalizes request paths to reduce metric cardinality
+// maxPathLabelBytes caps the byte length of a path label value; longer paths
+// are truncated on a rune boundary and suffixed with "...".
+const maxPathLabelBytes = 100
+
+// defaultMaxDistinctPathLabels bounds how many distinct normalized paths may
+// become metric label values over the lifetime of the process when
+// METRICS_MAX_PATH_LABELS is unset or non-positive.
+//
+// Why: every distinct path label creates permanent time series (a histogram
+// alone is buckets+2 series per path/method/status) in both the Prometheus
+// registry and the cumulative OpenTelemetry aggregators, and vulnerability
+// scanners probe thousands of distinct paths (/.env, /backup/.aws/credentials,
+// ...). Legitimate traffic uses a few hundred distinct normalized paths at most
+// (API routes with ids collapsed, /v1 relay routes collapsed, frontend assets),
+// so this cap only engages under abuse.
+const defaultMaxDistinctPathLabels = 1000
+
+// overflowPathLabel is the path label used once the distinct path cap has been
+// reached. It mirrors the existing "/v1/other" placeholder.
+const overflowPathLabel = "/other"
+
+// effectivePathLabelLimit resolves the configured METRICS_MAX_PATH_LABELS value,
+// falling back to defaultMaxDistinctPathLabels for non-positive input.
+// Parameters: configured is config.MetricsMaxPathLabels. Return value: the cap.
+func effectivePathLabelLimit(configured int) int {
+	if configured <= 0 {
+		return defaultMaxDistinctPathLabels
+	}
+	return configured
+}
+
+// pathLabelSet tracks the distinct path labels emitted so far and folds any
+// new path beyond its limit into overflowPathLabel.
+type pathLabelSet struct {
+	mu       sync.RWMutex
+	seen     map[string]struct{}
+	limit    int
+	warnOnce sync.Once
+}
+
+// pathLabels is the process-wide path label set used by PrometheusMiddleware.
+var pathLabels = newPathLabelSet(effectivePathLabelLimit(config.MetricsMaxPathLabels))
+
+// newPathLabelSet creates a pathLabelSet that admits at most limit distinct
+// labels.
+func newPathLabelSet(limit int) *pathLabelSet {
+	return &pathLabelSet{
+		seen:  make(map[string]struct{}, 64),
+		limit: limit,
+	}
+}
+
+// bound returns the label to record for a normalized path: the path itself
+// while the set still has room (or the path was already admitted), otherwise
+// overflowPathLabel. The first overflow is logged once at WARN because it
+// means the metric series set is being folded and operators may want to look
+// at what is hitting the server.
+func (s *pathLabelSet) bound(c *gin.Context, normalizedPath string) string {
+	s.mu.RLock()
+	_, admitted := s.seen[normalizedPath]
+	s.mu.RUnlock()
+	if admitted {
+		return normalizedPath
+	}
+
+	s.mu.Lock()
+	if _, admitted = s.seen[normalizedPath]; admitted {
+		s.mu.Unlock()
+		return normalizedPath
+	}
+	if len(s.seen) < s.limit {
+		s.seen[normalizedPath] = struct{}{}
+		s.mu.Unlock()
+		return normalizedPath
+	}
+	s.mu.Unlock()
+
+	s.warnOnce.Do(func() {
+		gmw.GetLogger(c).Warn("distinct HTTP metrics path labels reached the cap, further new paths are bucketed",
+			zap.Int("cap", s.limit),
+			zap.String("bucket", overflowPathLabel),
+			zap.String("path", normalizedPath))
+	})
+	return overflowPathLabel
+}
+
+// normalizePath normalizes request paths to reduce metric cardinality and
+// guarantees the result is valid UTF-8, which Prometheus label values and OTLP
+// string attributes both require.
 func normalizePath(path string) string {
+	// URL.Path is percent-decoded and may carry arbitrary bytes ("/%c0").
+	path = metrics.SanitizeLabelValue(path)
+
 	// Handle common patterns to avoid high cardinality
 
 	// Replace UUIDs and IDs with placeholders
@@ -123,8 +227,8 @@ func normalizePath(path string) string {
 	}
 
 	// Limit path length to prevent extremely long paths
-	if len(path) > 100 {
-		return path[:100] + "..."
+	if len(path) > maxPathLabelBytes {
+		return utils.TruncateUTF8(path, maxPathLabelBytes) + "..."
 	}
 
 	return path

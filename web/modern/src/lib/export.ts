@@ -90,7 +90,12 @@ export async function fetchAllPaginatedResults<T>(
     return firstPageRecords;
   }
 
-  const totalPages = Math.ceil(firstPage.total / batchSize);
+  // Page count must be derived from the page size the SERVER actually applied,
+  // not the one requested. List endpoints clamp `size` to MAX_ITEMS_PER_PAGE
+  // (100 by default), so computing pages from the requested 1000 asked for a
+  // tenth of the pages and silently exported a tenth of the rows.
+  const effectiveBatchSize = firstPageRecords.length > 0 ? firstPageRecords.length : batchSize;
+  const totalPages = Math.ceil(firstPage.total / effectiveBatchSize);
   if (totalPages <= 1) {
     return firstPageRecords;
   }

@@ -18,10 +18,10 @@ import (
 func TestPostConsumeQuotaWithLog_CanceledContext(t *testing.T) {
 	// Setup mock metrics recorder to capture billing events
 	mockRecorder := &MockMetricsRecorder{}
-	originalRecorder := metrics.GlobalRecorder
-	metrics.GlobalRecorder = mockRecorder
+	originalRecorder := metrics.Recorder()
+	metrics.SetRecorder(mockRecorder)
 	defer func() {
-		metrics.GlobalRecorder = originalRecorder
+		metrics.SetRecorder(originalRecorder)
 	}()
 
 	// Create a context that is already canceled (simulates gin request context
@@ -51,10 +51,10 @@ func TestPostConsumeQuotaWithLog_CanceledContext(t *testing.T) {
 // operations complete successfully even when the parent context deadline is exceeded.
 func TestPostConsumeQuotaWithLog_DeadlineExceededContext(t *testing.T) {
 	mockRecorder := &MockMetricsRecorder{}
-	originalRecorder := metrics.GlobalRecorder
-	metrics.GlobalRecorder = mockRecorder
+	originalRecorder := metrics.Recorder()
+	metrics.SetRecorder(mockRecorder)
 	defer func() {
-		metrics.GlobalRecorder = originalRecorder
+		metrics.SetRecorder(originalRecorder)
 	}()
 
 	// Create a context that already exceeded its deadline
@@ -80,10 +80,10 @@ func TestPostConsumeQuotaWithLog_DeadlineExceededContext(t *testing.T) {
 // also handles canceled contexts gracefully.
 func TestPostConsumeQuotaDetailed_CanceledContext(t *testing.T) {
 	mockRecorder := &MockMetricsRecorder{}
-	originalRecorder := metrics.GlobalRecorder
-	metrics.GlobalRecorder = mockRecorder
+	originalRecorder := metrics.Recorder()
+	metrics.SetRecorder(mockRecorder)
 	defer func() {
-		metrics.GlobalRecorder = originalRecorder
+		metrics.SetRecorder(originalRecorder)
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -121,10 +121,10 @@ func TestBillingOpsTimeoutConstant(t *testing.T) {
 // TestPostConsumeQuotaWithLog_NilContext verifies that nil context is handled.
 func TestPostConsumeQuotaWithLog_NilContext(t *testing.T) {
 	mockRecorder := &MockMetricsRecorder{}
-	originalRecorder := metrics.GlobalRecorder
-	metrics.GlobalRecorder = mockRecorder
+	originalRecorder := metrics.Recorder()
+	metrics.SetRecorder(mockRecorder)
 	defer func() {
-		metrics.GlobalRecorder = originalRecorder
+		metrics.SetRecorder(originalRecorder)
 	}()
 
 	// Nil context should be handled gracefully (early return with error log)
@@ -155,10 +155,10 @@ func TestReturnPreConsumedQuota_CanceledContext(t *testing.T) {
 // contexts correctly — this is the exact scenario from the bug report.
 func TestPostConsumeQuotaWithLog_WithProvisionalLogId_CanceledContext(t *testing.T) {
 	mockRecorder := &MockMetricsRecorder{}
-	originalRecorder := metrics.GlobalRecorder
-	metrics.GlobalRecorder = mockRecorder
+	originalRecorder := metrics.Recorder()
+	metrics.SetRecorder(mockRecorder)
 	defer func() {
-		metrics.GlobalRecorder = originalRecorder
+		metrics.SetRecorder(originalRecorder)
 	}()
 
 	// Simulate the exact bug scenario: context canceled after HTTP response sent,

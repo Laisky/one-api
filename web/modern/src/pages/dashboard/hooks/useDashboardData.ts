@@ -150,7 +150,7 @@ export const useDashboardData = () => {
           userLogs.map((row: any) => ({
             day: row.Day,
             username: row.Username,
-            user_id: Number(row.UserId ?? 0),
+            user_id: String(row.user_uuid || row.UserUUID || row.UserId || ''),
             request_count: Number(row.RequestCount ?? 0),
             quota: Number(row.Quota ?? 0),
             prompt_tokens: Number(row.PromptTokens ?? 0),
@@ -165,7 +165,7 @@ export const useDashboardData = () => {
             day: row.Day,
             username: row.Username,
             token_name: row.TokenName,
-            user_id: Number(row.UserId ?? 0),
+            user_id: String(row.user_uuid || row.UserUUID || row.UserId || ''),
             request_count: Number(row.RequestCount ?? 0),
             quota: Number(row.Quota ?? 0),
             prompt_tokens: Number(row.PromptTokens ?? 0),
@@ -187,7 +187,7 @@ export const useDashboardData = () => {
           toolUserLogs.map((row: any) => ({
             day: row.Day,
             username: row.Username,
-            user_id: Number(row.UserId ?? 0),
+            user_id: String(row.user_uuid || row.UserUUID || row.UserId || ''),
             request_count: Number(row.RequestCount ?? 0),
             quota: Number(row.Quota ?? 0),
           }))
@@ -197,7 +197,7 @@ export const useDashboardData = () => {
             day: row.Day,
             username: row.Username,
             token_name: row.TokenName,
-            user_id: Number(row.UserId ?? 0),
+            user_id: String(row.user_uuid || row.UserUUID || row.UserId || ''),
             request_count: Number(row.RequestCount ?? 0),
             quota: Number(row.Quota ?? 0),
           }))

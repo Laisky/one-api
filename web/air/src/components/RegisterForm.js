@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Grid, Header, Image, Message, Segment } from 'semantic-ui-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -59,22 +60,29 @@ const RegisterForm = () => {
         return;
       }
       setLoading(true);
-      if (!affCode) {
-        affCode = localStorage.getItem('aff');
+      try {
+        if (!affCode) {
+          affCode = localStorage.getItem('aff');
+        }
+        inputs.aff_code = affCode;
+        const res = await API.post(
+          `/api/user/register?turnstile=${turnstileToken}`,
+          inputs
+        );
+        // The shared axios interceptor surfaces errors and resolves to undefined; bail out
+        // here so a failed request can't throw before the loading flag is cleared, which
+        // would otherwise lock the register and get-code buttons until a page reload.
+        if (!res) return;
+        const { success, message } = res.data;
+        if (success) {
+          navigate('/login');
+          showSuccess('注册成功！');
+        } else {
+          showError(message);
+        }
+      } finally {
+        setLoading(false);
       }
-      inputs.aff_code = affCode;
-      const res = await API.post(
-        `/api/user/register?turnstile=${turnstileToken}`,
-        inputs
-      );
-      const { success, message } = res.data;
-      if (success) {
-        navigate('/login');
-        showSuccess('注册成功！');
-      } else {
-        showError(message);
-      }
-      setLoading(false);
     }
   }
 
@@ -85,16 +93,20 @@ const RegisterForm = () => {
       return;
     }
     setLoading(true);
-    const res = await API.get(
-      `/api/verification?email=${inputs.email}&turnstile=${turnstileToken}`
-    );
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess('验证码发送成功，请检查你的邮箱！');
-    } else {
-      showError(message);
+    try {
+      const res = await API.get(
+        `/api/verification?email=${inputs.email}&turnstile=${turnstileToken}`
+      );
+      if (!res) return;
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess('验证码发送成功，请检查你的邮箱！');
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -142,7 +154,7 @@ const RegisterForm = () => {
                   name="email"
                   type="email"
                   action={
-                    <Button onClick={sendVerificationCode} disabled={loading}>
+                    <Button onClick={(...uiArgs) => sendVerificationCode(...uiArgs).catch(reportUIError)} disabled={loading}>
                       获取验证码
                     </Button>
                   }
@@ -173,7 +185,7 @@ const RegisterForm = () => {
               color="green"
               fluid
               size="large"
-              onClick={handleSubmit}
+              onClick={(...uiArgs) => handleSubmit(...uiArgs).catch(reportUIError)}
               loading={loading}
             >
               注册

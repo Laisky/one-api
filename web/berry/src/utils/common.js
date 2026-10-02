@@ -27,10 +27,19 @@ export function getSnackbarOptions(variant) {
     return options;
 }
 
+// Interceptor and caller handling must not notify twice for the same failure.
+const notifiedErrors = new WeakSet();
+
+/** showError reports failures once without logging request credentials. */
 export function showError(error) {
-    if (error.message) {
+    if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') return;
+    if (error && typeof error === 'object') {
+        if (notifiedErrors.has(error)) return;
+        notifiedErrors.add(error);
+    }
+    if (error?.message) {
         if (error.name === 'AxiosError') {
-            switch (error.response.status) {
+            switch (error.response?.status) {
                 case 429:
                     enqueueSnackbar('错误：请求次数过多，请稍后再试！', getSnackbarOptions('ERROR'));
                     break;
@@ -45,6 +54,7 @@ export function showError(error) {
             }
             return;
         }
+        enqueueSnackbar('错误：' + error.message, getSnackbarOptions('ERROR'));
     } else {
         enqueueSnackbar('错误：' + error, getSnackbarOptions('ERROR'));
     }
@@ -286,7 +296,7 @@ export function copy(text, name = '') {
         }, () => {
             text = `复制${name}失败，请手动复制：<br /><br />${text}`;
             enqueueSnackbar(<SnackbarHTMLContent htmlContent={text}/>, getSnackbarOptions('COPY'));
-        });
+        }).catch(reportUIError);
     } else {
         const textArea = document.createElement("textarea");
         textArea.value = text;
@@ -302,3 +312,5 @@ export function copy(text, name = '') {
         document.body.removeChild(textArea);
     }
 }
+
+const reportUIError = showError;

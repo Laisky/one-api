@@ -35,7 +35,7 @@ func TestShouldRetry_ClientAndAuthMatrix(t *testing.T) {
 			t.Parallel()
 			c, _ := gin.CreateTestContext(nil)
 			c.Set(ctxkey.SpecificChannelId, 0)
-			err := shouldRetry(c, tc.status, nil)
+			err := shouldRetry(c, &model.ErrorWithStatusCode{StatusCode: tc.status})
 			if tc.expectRetry {
 				assert.NoError(t, err)
 			} else {
@@ -47,7 +47,7 @@ func TestShouldRetry_ClientAndAuthMatrix(t *testing.T) {
 	// When specific channel is pinned, never retry regardless of status
 	c, _ := gin.CreateTestContext(nil)
 	c.Set(ctxkey.SpecificChannelId, 42)
-	assert.Error(t, shouldRetry(c, http.StatusTooManyRequests, nil))
+	assert.Error(t, shouldRetry(c, &model.ErrorWithStatusCode{StatusCode: http.StatusTooManyRequests}))
 }
 
 func TestClassifyAuthLike(t *testing.T) {

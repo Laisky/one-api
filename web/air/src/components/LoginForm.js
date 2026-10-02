@@ -1,7 +1,8 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserContext } from '../context/User';
-import { API, getLogo, showError, showInfo, showSuccess } from '../helpers';
+import { API, getLogo, normalizeUser, showError, showInfo, showSuccess } from '../helpers';
 import { onGitHubOAuthClicked } from './utils';
 import Turnstile from 'react-turnstile';
 import { Button, Card, Divider, Form, Icon, Layout, Modal } from '@douyinfe/semi-ui';
@@ -22,7 +23,6 @@ const LoginForm = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [submitted, setSubmitted] = useState(false);
   const [totpRequired, setTotpRequired] = useState(false);
-  const [userId, setUserId] = useState(null);
   const { username, password, totp_code } = inputs;
   const [userState, userDispatch] = useContext(UserContext);
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
@@ -63,8 +63,9 @@ const LoginForm = () => {
     );
     const { success, message, data } = res.data;
     if (success) {
-      userDispatch({ type: 'login', payload: data });
-      localStorage.setItem('user', JSON.stringify(data));
+      const user = normalizeUser(data);
+      userDispatch({ type: 'login', payload: user });
+      localStorage.setItem('user', JSON.stringify(user));
       navigate('/');
       showSuccess('登录成功！');
       setShowWeChatLoginModal(false);
@@ -98,8 +99,9 @@ const LoginForm = () => {
       const { success, message, data } = res.data;
 
       if (success) {
-        userDispatch({ type: 'login', payload: data });
-        localStorage.setItem('user', JSON.stringify(data));
+        const user = normalizeUser(data);
+        userDispatch({ type: 'login', payload: user });
+        localStorage.setItem('user', JSON.stringify(user));
         showSuccess('登录成功！');
         if (username === 'root' && password === '123456') {
           Modal.error({ title: '您正在使用默认密码！', content: '请立刻修改默认密码！', centered: true });
@@ -109,7 +111,6 @@ const LoginForm = () => {
         // Check if TOTP is required
         if (message === 'totp_required' && data && data.totp_required) {
           setTotpRequired(true);
-          setUserId(data.user_id);
           showError('请输入您的TOTP验证码');
         } else {
           showError(message);
@@ -132,8 +133,9 @@ const LoginForm = () => {
     const res = await API.get(`/api/oauth/telegram/login`, { params });
     const { success, message, data } = res.data;
     if (success) {
-      userDispatch({ type: 'login', payload: data });
-      localStorage.setItem('user', JSON.stringify(data));
+      const user = normalizeUser(data);
+      userDispatch({ type: 'login', payload: user });
+      localStorage.setItem('user', JSON.stringify(user));
       showSuccess('登录成功！');
       navigate('/');
     } else {
@@ -183,7 +185,7 @@ const LoginForm = () => {
                   )}
 
                   <Button theme="solid" style={{ width: '100%' }} type={'primary'} size="large"
-                          htmlType={'submit'} onClick={handleSubmit}
+                          htmlType={'submit'} onClick={(...uiArgs) => handleSubmit(...uiArgs).catch(reportUIError)}
                           disabled={totpRequired && (!totp_code || totp_code.length !== 6)}>
                     {totpRequired ? '验证TOTP' : '登录'}
                   </Button>

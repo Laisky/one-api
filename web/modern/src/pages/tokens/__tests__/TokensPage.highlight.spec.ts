@@ -3,6 +3,7 @@ import { shouldHighlightTokenQuota, type Token } from '../TokensPage.impl';
 
 const makeToken = (overrides: Partial<Token> = {}): Token => ({
   id: 1,
+  uuid: '018f0000-0000-7000-8000-000000000001',
   name: 'Test token',
   key: 'sk-test',
   status: 1,

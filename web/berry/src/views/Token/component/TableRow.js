@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import { useState } from 'react';
 import { useSelector } from 'react-redux';
@@ -20,6 +21,7 @@ import {
 } from '@mui/material';
 
 import TableSwitch from 'ui-component/Switch';
+import ResourceRefTooltip from 'ui-component/ResourceRefTooltip';
 import { renderQuota, timestamp2string, copy } from 'utils/common';
 
 import { IconDotsVertical, IconEdit, IconTrash, IconCaretDownFilled } from '@tabler/icons-react';
@@ -54,6 +56,7 @@ function createMenu(menuItems) {
 }
 
 export default function TokensTableRow({ item, manageToken, handleOpenModal, setModalTokenId }) {
+  const ref = item.uuid || item.id;
   const [open, setOpen] = useState(null);
   const [menuItems, setMenuItems] = useState(null);
   const [openDelete, setOpenDelete] = useState(false);
@@ -89,7 +92,7 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
 
   const handleStatus = async () => {
     const switchVlue = statusSwitch === 1 ? 2 : 1;
-    const { success } = await manageToken(item.id, 'status', switchVlue);
+    const { success } = await manageToken(ref, 'status', switchVlue);
     if (success) {
       setStatusSwitch(switchVlue);
     }
@@ -97,7 +100,7 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
 
   const handleDelete = async () => {
     handleCloseMenu();
-    await manageToken(item.id, 'delete', '');
+    await manageToken(ref, 'delete', '');
   };
 
   const actionItems = createMenu([
@@ -107,7 +110,7 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
       onClick: () => {
         handleCloseMenu();
         handleOpenModal();
-        setModalTokenId(item.id);
+        setModalTokenId(ref);
       },
       color: undefined
     },
@@ -167,8 +170,10 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
 
   return (
     <>
-      <TableRow tabIndex={item.id}>
-        <TableCell>{item.name}</TableCell>
+      <TableRow tabIndex={0}>
+        <TableCell>
+          <ResourceRefTooltip refId={ref}>{item.name}</ResourceRefTooltip>
+        </TableCell>
 
         <TableCell>
           <Tooltip
@@ -189,9 +194,9 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
             placement="top"
           >
             <TableSwitch
-              id={`switch-${item.id}`}
+              id={`switch-${ref}`}
               checked={statusSwitch === 1}
-              onChange={handleStatus}
+              onChange={(...uiArgs) => handleStatus(...uiArgs).catch(reportUIError)}
               // disabled={statusSwitch !== 1 && statusSwitch !== 2}
             />
           </Tooltip>
@@ -254,7 +259,7 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDeleteClose}>关闭</Button>
-          <Button onClick={handleDelete} sx={{ color: 'error.main' }} autoFocus>
+          <Button onClick={(...uiArgs) => handleDelete(...uiArgs).catch(reportUIError)} sx={{ color: 'error.main' }} autoFocus>
             删除
           </Button>
         </DialogActions>

@@ -70,3 +70,29 @@ describe('isRealtime detection', () => {
     expect(getModelCapabilities('gpt-4o-realtime-preview').supportsVision).toBe(true);
   });
 });
+
+describe('Kimi K3 capabilities', () => {
+  it('offers reasoning effort and hides the pinned sampling knobs', () => {
+    const capabilities = getModelCapabilities('kimi-k3');
+    expect(capabilities.supportsReasoningEffort).toBe(true);
+    // K3 always thinks, so there is no on/off toggle to expose.
+    expect(capabilities.supportsThinking).toBe(false);
+    // Pinned upstream: showing these would promise control the model refuses.
+    expect(capabilities.supportsTopP).toBe(false);
+    expect(capabilities.supportsFrequencyPenalty).toBe(false);
+    expect(capabilities.supportsPresencePenalty).toBe(false);
+    expect(capabilities.supportsVision).toBe(true);
+    expect(capabilities.supportsTools).toBe(true);
+  });
+
+  it('applies the same handling to provider-prefixed K3 ids', () => {
+    expect(getModelCapabilities('moonshotai/kimi-k3').supportsReasoningEffort).toBe(true);
+    expect(getModelCapabilities('moonshotai/Kimi-K3').supportsReasoningEffort).toBe(true);
+    expect(getModelCapabilities('kimi/kimi-k3').supportsReasoningEffort).toBe(true);
+  });
+
+  it('leaves earlier Kimi generations unchanged', () => {
+    expect(getModelCapabilities('kimi-k2.6').supportsReasoningEffort).toBe(false);
+    expect(getModelCapabilities('moonshotai/kimi-k2.6').supportsReasoningEffort).toBe(false);
+  });
+});

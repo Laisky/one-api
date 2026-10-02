@@ -3,6 +3,7 @@ package model
 import (
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common/metrics"
@@ -65,7 +66,7 @@ func (p *PrometheusDBHook) afterCallback(operation string) func(*gorm.DB) {
 		success := db.Error == nil
 
 		// Record metrics
-		metrics.GlobalRecorder.RecordDBQuery(startTime, operation, tableName, success)
+		metrics.Recorder().RecordDBQuery(startTime, operation, tableName, success)
 	}
 }
 
@@ -75,16 +76,38 @@ func UpdateDBConnectionMetrics() {
 		sqlDB, err := DB.DB()
 		if err == nil {
 			stats := sqlDB.Stats()
-			metrics.GlobalRecorder.UpdateDBConnectionMetrics(stats.InUse, stats.Idle)
+			metrics.Recorder().UpdateDBConnectionMetrics(stats.InUse, stats.Idle)
 		}
 	}
 }
 
-// InitPrometheusDBMonitoring initializes database monitoring
+// InitPrometheusDBMonitoring attaches the database metrics hook to the primary
+// handle. It is idempotent and normally a no-op: initPrimaryDatabase registers
+// the hook right after the handle is opened, before any migration or background
+// worker can issue a query through it.
+//
+// Why: gorm callback registration mutates the shared callback chain without
+// locking, so registering the hook after InitDB has started workers (UUID
+// catch-up, option/channel sync) is a data race with every query they run.
+// Parameters: none. Return value: wrapped error when registration fails.
 func InitPrometheusDBMonitoring() error {
-	if DB != nil {
-		hook := &PrometheusDBHook{}
-		return DB.Use(hook)
+	if DB == nil {
+		return nil
+	}
+	return registerDBMetricsHook(DB)
+}
+
+// registerDBMetricsHook registers PrometheusDBHook on db unless it is already
+// present. It must run before any other goroutine can use db.
+// Parameters: db is the handle to instrument. Return value: wrapped error when
+// gorm rejects the plugin.
+func registerDBMetricsHook(db *gorm.DB) error {
+	hook := &PrometheusDBHook{}
+	if _, registered := db.Config.Plugins[hook.Name()]; registered {
+		return nil
+	}
+	if err := db.Use(hook); err != nil {
+		return errors.Wrap(err, "register database metrics hook")
 	}
 	return nil
 }
