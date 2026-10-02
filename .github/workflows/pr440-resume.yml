@@ -5,20 +5,59 @@ on:
 permissions:
   contents: read
 jobs:
-  source:
+  databases:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      CGO_ENABLED: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          fetch-depth: 0
+          ref: 595c035f79ae66903edbc3907f94c98c3a2b54c8
           persist-credentials: false
-      - name: Export committed source and history only
-        run: |
-          git merge-base --is-ancestor 9a0f052cc60c34628988a239117212eba0076145 595c035f79ae66903edbc3907f94c98c3a2b54c8
-          git bundle create "$RUNNER_TEMP/pr440.bundle" HEAD refs/remotes/origin/main
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          name: pr440-resume-source
-          path: ${{ runner.temp }}/pr440.bundle
-          retention-days: 2
+          go-version-file: go.mod
+      - name: Exercise real backend transactions and assert no database skips
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -json -race -count=1 -timeout 8m -run '^TestAsyncBillingLiveDatabases$' ./model | tee "$RUNNER_TEMP/live-databases.jsonl"
+          python3 - <<'PY'
+          import json, os
+          events = [json.loads(line) for line in open(os.path.join(os.environ['RUNNER_TEMP'], 'live-databases.jsonl'))]
+          passed = {e.get('Test') for e in events if e['Action'] == 'pass'}
+          for backend in ('mysql', 'postgres'):
+              for case in ('unlimited=false', 'unlimited=true', 'competing-refunds'):
+                  name = f'TestAsyncBillingLiveDatabases/{backend}/{case}'
+                  assert name in passed, f'Missing live pass: {name}'
+          assert not any(e['Action'] == 'skip' for e in events), 'Live database tests must not skip'
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: pr440-live-databases
+          path: ${{ runner.temp }}/live-databases.jsonl
+          retention-days: 14
