@@ -16,16 +16,22 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Export tracked source for isolated review
-        run: git archive --format=tar HEAD | gzip > "$RUNNER_TEMP/one-api-source.tar.gz"
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: async-video-source
-          path: ${{ runner.temp }}/one-api-source.tar.gz
-          retention-days: 1
       - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: go.mod
+      - name: Download declared public module sources
+        run: go mod download
+      - name: Export only Go toolchain and module sources
+        run: |
+          mkdir -p "$RUNNER_TEMP/offline-go"
+          tar -czf "$RUNNER_TEMP/offline-go/toolchain.tar.gz" -C "$(go env GOROOT)" .
+          tar -czf "$RUNNER_TEMP/offline-go/modules.tar.gz" -C "$(go env GOMODCACHE)" .
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: async-video-offline-go
+          path: ${{ runner.temp }}/offline-go/*.tar.gz
+          retention-days: 1
+          compression-level: 0
       - name: Reproduce native routing and paid replay bugs
         run: |
           set -o pipefail
