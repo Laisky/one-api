@@ -285,7 +285,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	// transport headers intact for another channel's mapping and audio metering.
 	req, err := http.NewRequestWithContext(ctx, c.Request.Method, fullRequestURL, bytes.NewReader(wireBody))
 	if err != nil {
-		return openai.ErrorWrapper(err, "new_request_failed", http.StatusInternalServerError)
+		return openai.ErrorWrapper(adaptor.SanitizeRequestURLError(err), "new_request_failed", http.StatusInternalServerError)
 	}
 
 	if (relayMode == relaymode.AudioTranscription || relayMode == relaymode.AudioSpeech) && channelType == channeltype.Azure {
@@ -305,7 +305,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	logAudioRequestParameters(c, relayMode, audioModel, &ttsRequest)
 	// Log upstream request for billing tracking
 	lg.Info("sending audio request to upstream channel",
-		zap.String("url", fullRequestURL),
+		zap.String("url", model.SanitizeLogUpstreamEndpoint(fullRequestURL)),
 		zap.String("model", audioModel),
 		zap.Int("relay_mode", relayMode))
 
@@ -313,7 +313,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	resp, err := client.HTTPClient.Do(req)
 	if err != nil {
 		// Let ErrorWrapper handle the logging to avoid duplicate logging
-		return openai.ErrorWrapper(errors.Wrapf(err, "upstream audio request failed for channel %d", channelId), "do_request_failed", http.StatusInternalServerError)
+		return openai.ErrorWrapper(errors.Wrapf(adaptor.SanitizeRequestURLError(err), "upstream audio request failed for channel %d", channelId), "do_request_failed", http.StatusInternalServerError)
 	}
 
 	defer func() {

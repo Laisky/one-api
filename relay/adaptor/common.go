@@ -146,7 +146,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	req, err := gutils.NewReusableRequest(gmw.Ctx(c),
 		c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
-		return nil, errors.Wrap(sanitizeRequestURLError(err), "new request failed")
+		return nil, errors.Wrap(SanitizeRequestURLError(err), "new request failed")
 	}
 
 	req.Header.Set("Content-Type", c.GetString(ctxkey.ContentType))
@@ -242,7 +242,7 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(sanitizeRequestURLError(err), "perform upstream request")
+		return nil, errors.Wrap(SanitizeRequestURLError(err), "perform upstream request")
 	}
 	if resp == nil {
 		return nil, errors.New("resp is nil")

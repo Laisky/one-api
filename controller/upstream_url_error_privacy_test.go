@@ -87,7 +87,8 @@ func TestUpstreamTransportFailureURLPrivacy(t *testing.T) {
 			} {
 				t.Run(path+"/"+query.name+"/"+failure.name, func(t *testing.T) {
 					requestURL := "https://upstream.invalid/v1/rerank?" + query.raw
-					wantURL := "https://upstream.invalid/v1/rerank?" + query.safe
+					// Diagnostic URLs now drop every query parameter; dispatch remains exact.
+					wantURL := "https://upstream.invalid/v1/rerank"
 					var logs bytes.Buffer
 					core := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), zapcore.AddSync(&logs), zapcore.DebugLevel)
 					lg, err := glog.NewWithName("transport-url-privacy", glog.LevelDebug,
