@@ -1,0 +1,39 @@
+name: Async video development verification
+on:
+  push:
+    branches: [codex/async-video-task-lifecycle]
+permissions:
+  contents: read
+concurrency:
+  group: async-video-development
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Export tracked source for isolated review
+        run: git archive --format=tar HEAD | gzip > "$RUNNER_TEMP/one-api-source.tar.gz"
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: async-video-source
+          path: ${{ runner.temp }}/one-api-source.tar.gz
+          retention-days: 1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Reproduce native routing and paid replay bugs
+        run: |
+          set -o pipefail
+          go test -count=1 -p 1 -run 'TestAsyncVideoSubmissionRetryBoundary|TestMuAPINativeVideoCapabilityIsIsolated' ./controller ./relay/channeltype 2>&1 | tee "$RUNNER_TEMP/async-video-reproduction.log"
+      - name: Preserve test evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: async-video-reproduction
+          path: ${{ runner.temp }}/async-video-reproduction.log
+          retention-days: 7
