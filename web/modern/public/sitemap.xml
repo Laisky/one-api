@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://oneapi.laisky.com/</loc></url>
+  <url><loc>https://oneapi.laisky.com/models</loc></url>
+  <url><loc>https://oneapi.laisky.com/tools</loc></url>
+  <url><loc>https://oneapi.laisky.com/status</loc></url>
+  <url><loc>https://oneapi.laisky.com/llms.txt</loc></url>
+  <url><loc>https://oneapi.laisky.com/agents.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/openapi.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/api.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/auth.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/pricing.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/openapi.json.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/docs/llms.txt</loc></url>
+  <url><loc>https://oneapi.laisky.com/api/llms.txt</loc></url>
+  <url><loc>https://oneapi.laisky.com/developers/llms.txt</loc></url>
+  <url><loc>https://oneapi.laisky.com/.well-known/ai-catalog.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/.well-known/api-catalog.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/.well-known/agent-card.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/.well-known/agent-skills/index.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/.well-known/mcp/manifest.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/.well-known/mcp/server-card.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/mcp-apps/public-discovery.html</loc></url>
+  <url><loc>https://oneapi.laisky.com/schemamap.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/sandbox</loc></url>
+  <url><loc>https://oneapi.laisky.com/sandbox.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/developer-resources</loc></url>
+  <url><loc>https://oneapi.laisky.com/developer-resources.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/laisky-developer-resources</loc></url>
+  <url><loc>https://oneapi.laisky.com/laisky-developer-resources.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/ask</loc></url>
+</urlset>

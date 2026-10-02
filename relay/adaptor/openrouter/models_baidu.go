@@ -1,0 +1,91 @@
+package openrouter
+
+import "github.com/Laisky/one-api/relay/adaptor"
+
+// baiduModels returns the baidu model defaults for openrouter.
+// It takes no arguments and returns independently owned, directly editable Go configurations.
+func baiduModels() map[string]adaptor.ModelConfig {
+	return map[string]adaptor.ModelConfig{
+		"baidu/cobuddy:free": {
+			Ratio:                       0,
+			CompletionRatio:             1,
+			ContextLength:               131072,
+			MaxOutputTokens:             65536,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "reasoning"},
+			SupportedSamplingParameters: []string{"stop", "max_tokens"},
+			Description:                 "CoBuddy is a code generation model from Baidu, optimized for coding tasks and AI Agent workflows. It features high inference throughput and low end-to-end latency, with native support for tool use. [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
+		},
+		"baidu/ernie-4.5-21b-a3b": {
+			Ratio:                       nativeRate(0.07),
+			CompletionRatio:             4,
+			ContextLength:               120000,
+			MaxOutputTokens:             8000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens"},
+			HuggingFaceID:               "baidu/ERNIE-4.5-21B-A3B-PT",
+			Description:                 "A sophisticated text-based Mixture-of-Experts (MoE) model featuring 21B total parameters with 3B activated per token, delivering exceptional multimodal understanding and generation through heterogeneous MoE structures and modality-isolated routing. Supporting an... [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
+		},
+		"baidu/ernie-4.5-21b-a3b-thinking": {
+			Ratio:                       nativeRate(0.07),
+			CompletionRatio:             4,
+			ContextLength:               131072,
+			MaxOutputTokens:             65536,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens"},
+			HuggingFaceID:               "baidu/ERNIE-4.5-21B-A3B-Thinking",
+			Description:                 "ERNIE-4.5-21B-A3B-Thinking is Baidu's upgraded lightweight MoE model, refined to boost reasoning depth and quality for top-tier performance in logical puzzles, math, science, coding, text generation, and expert-level academic benchmarks. [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
+		},
+		"baidu/ernie-4.5-300b-a47b": {
+			Ratio:                       nativeRate(0.28),
+			CompletionRatio:             3.9285714285714284,
+			ContextLength:               123000,
+			MaxOutputTokens:             12000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens"},
+			HuggingFaceID:               "baidu/ERNIE-4.5-300B-A47B-PT",
+			Description:                 "ERNIE-4.5-300B-A47B is a 300B parameter Mixture-of-Experts (MoE) language model developed by Baidu as part of the ERNIE 4.5 series. It activates 47B parameters per token and supports text generation in... [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
+		},
+		"baidu/ernie-4.5-vl-28b-a3b": {
+			Ratio:                       nativeRate(0.14),
+			CompletionRatio:             4,
+			ContextLength:               30000,
+			MaxOutputTokens:             8000,
+			InputModalities:             []string{"text", "image"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens"},
+			HuggingFaceID:               "baidu/ERNIE-4.5-VL-28B-A3B-PT",
+			Description:                 "A powerful multimodal Mixture-of-Experts chat model featuring 28B total parameters with 3B activated per token, delivering exceptional text and vision understanding through its innovative heterogeneous MoE structure with modality-isolated routing.... [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
+		},
+		"baidu/ernie-4.5-vl-424b-a47b": {
+			Ratio:                       nativeRate(0.42),
+			CompletionRatio:             2.9761904761904763,
+			ContextLength:               123000,
+			MaxOutputTokens:             16000,
+			InputModalities:             []string{"image", "text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "presence_penalty", "reasoning", "repetition_penalty", "seed", "stop", "temperature", "top_k", "top_p"},
+			HuggingFaceID:               "baidu/ERNIE-4.5-VL-424B-A47B-PT",
+			Description:                 "baidu/ernie-4.5-vl-424b-a47b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"baidu/qianfan-ocr-fast": {
+			Ratio:                       nativeRate(0.68),
+			CompletionRatio:             4.13235294117647,
+			ContextLength:               65536,
+			MaxOutputTokens:             28672,
+			InputModalities:             []string{"image", "text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens"},
+			Description:                 "Qianfan-OCR-Fast is a domain-specific multimodal large model purpose-built for OCR. By leveraging specialized OCR training data while preserving versatile multimodal intelligence, it provides a powerful performance upgrade over Qianfan-OCR. [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
+		},
+	}
+}

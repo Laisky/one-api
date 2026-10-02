@@ -2,6 +2,10 @@
   "tools": {
     "clear_filters": "Limpiar filtros",
     "description": "Explora las herramientas sincronizadas desde servidores MCP, agrupadas por servidor con detalles de precios y esquema.",
+    "filters": {
+      "description": "Busca por nombre de herramienta, descripción o servidor.",
+      "title": "Filtrar herramientas"
+    },
     "found": "Se encontraron {{count}} herramientas en {{servers}} servidores",
     "labels": {
       "free": "Gratis",

@@ -3,12 +3,10 @@ package openai
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/Laisky/zap"
 
 	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
-	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 )
@@ -25,25 +23,7 @@ type deepSeekThinkingNormalizeLogger interface {
 // shouldNormalizeToolMessageContentForDeepSeek reports whether tool message content should
 // be normalized to string for DeepSeek-compatible upstreams.
 func shouldNormalizeToolMessageContentForDeepSeek(metaInfo *meta.Meta, request *model.GeneralOpenAIRequest) bool {
-	if metaInfo != nil {
-		if metaInfo.ChannelType == channeltype.DeepSeek {
-			return true
-		}
-		if strings.Contains(strings.ToLower(strings.TrimSpace(metaInfo.BaseURL)), "deepseek") {
-			return true
-		}
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(metaInfo.ActualModelName)), "deepseek-") {
-			return true
-		}
-	}
-
-	if request != nil {
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(request.Model)), "deepseek-") {
-			return true
-		}
-	}
-
-	return false
+	return deepseekcompat.UsesDeepSeekAPIContract(metaInfo)
 }
 
 // normalizeDeepSeekToolMessageContent converts non-string tool message content into strings.
@@ -103,6 +83,30 @@ func normalizeDeepSeekToolMessageContent(lg deepSeekToolNormalizeLogger, request
 			zap.Int("normalized_count", normalizedCount),
 		)
 	}
+}
+
+// enforceDeepSeekHistoryContract repairs replayed history that DeepSeek would reject
+// outright: tool calls nobody answered and an in-flight assistant turn whose thinking
+// was not replayed. See deepseekcompat.EnforceHistoryContract for the verified rules.
+// Parameters: lg receives a debug summary and may be nil; request is mutated in place.
+// Returns: nothing.
+func enforceDeepSeekHistoryContract(lg deepSeekThinkingNormalizeLogger, request *model.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+
+	repaired, stats := deepseekcompat.EnforceHistoryContract(request.Messages)
+	request.Messages = repaired
+	if !stats.Changed() || lg == nil {
+		return
+	}
+
+	lg.Debug("repaired deepseek history for provider validation",
+		zap.String("model", request.Model),
+		zap.Int("unanswered_tool_calls_dropped", stats.UnansweredToolCallsDropped),
+		zap.Int("assistant_messages_dropped", stats.AssistantMessagesDropped),
+		zap.Int("reasoning_placeholders_added", stats.ReasoningPlaceholdersAdded),
+	)
 }
 
 // normalizeClaudeThinkingForDeepSeek coerces Claude thinking payloads into DeepSeek-compatible values.

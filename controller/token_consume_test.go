@@ -70,6 +70,7 @@ func setupConsumeTokenTest(t *testing.T) (cleanup func(), user *model.User, toke
 	token = &model.Token{
 		Id:           1,
 		UserId:       user.Id,
+		UserUUID:     &user.UUID,
 		Key:          strings.Repeat("a", 48),
 		Status:       model.TokenStatusEnabled,
 		Name:         "test-token",
@@ -129,6 +130,13 @@ func TestConsumeTokenPreAndPostFlow(t *testing.T) {
 
 	txnResp := preResp["transaction"].(map[string]any)
 	require.Equal(t, "pending", txnResp["status"])
+	require.NotContains(t, txnResp, "id")
+	require.NotContains(t, txnResp, "token_id")
+	require.NotContains(t, txnResp, "user_id")
+	require.NotContains(t, txnResp, "log_id")
+	require.NotEmpty(t, txnResp["uuid"])
+	require.Equal(t, token.UUID, txnResp["token_uuid"])
+	require.Equal(t, user.UUID, txnResp["user_uuid"])
 	transactionID := txnResp["transaction_id"].(string)
 	require.NotEmpty(t, transactionID)
 
@@ -136,6 +144,10 @@ func TestConsumeTokenPreAndPostFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.TokenTransactionStatusPending, txn.Status)
 	require.Nil(t, txn.FinalQuota)
+	require.NotNil(t, txn.TokenUUID)
+	require.Equal(t, token.UUID, *txn.TokenUUID)
+	require.NotNil(t, txn.UserUUID)
+	require.Equal(t, user.UUID, *txn.UserUUID)
 
 	refreshedUser, err := model.GetUserById(user.Id, true)
 	require.NoError(t, err)
@@ -223,6 +235,38 @@ func TestConsumeTokenCancelFlow(t *testing.T) {
 		require.Contains(t, logEntry.Content, "canceled")
 		require.Equal(t, model.LogTypeTool, logEntry.Type)
 	}
+}
+
+// TestGetTokenTransactionsOmitsIntegerIdentifiers verifies transaction history strict-out serialization.
+func TestGetTokenTransactionsOmitsIntegerIdentifiers(t *testing.T) {
+	cleanup, user, token := setupConsumeTokenTest(t)
+	defer cleanup()
+
+	body := `{"phase":"pre","add_used_quota":25,"add_reason":"history","timeout_seconds":30}`
+	c, recorder := newConsumeTokenContext(t, http.MethodPost, body, user.Id, token.Id, "req-history")
+	ConsumeToken(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	c, recorder = newConsumeTokenContext(t, http.MethodGet, "", user.Id, token.Id, "")
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/token/transactions?p=0&size=10", nil)
+	GetTokenTransactions(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.True(t, resp["success"].(bool))
+	rows := resp["data"].([]any)
+	require.Len(t, rows, 1)
+
+	transaction := rows[0].(map[string]any)
+	require.NotContains(t, transaction, "id")
+	require.NotContains(t, transaction, "token_id")
+	require.NotContains(t, transaction, "user_id")
+	require.NotContains(t, transaction, "log_id")
+	require.NotEmpty(t, transaction["uuid"])
+	require.Equal(t, token.UUID, transaction["token_uuid"])
+	require.Equal(t, user.UUID, transaction["user_uuid"])
+	require.NotEmpty(t, transaction["log_uuid"])
 }
 
 func TestConsumeTokenAutoConfirmTimeout(t *testing.T) {

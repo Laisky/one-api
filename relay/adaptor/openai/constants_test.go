@@ -36,6 +36,20 @@ func TestOpenAIToolingDefaultsWebSearchPricing(t *testing.T) {
 	}, keys, "expected pricing map to enumerate all OpenAI built-in tools")
 }
 
+// TestOpenAISearchAPIModelPricing verifies the current Chat Completions search
+// model is present and priced separately from the per-call web-search tool cost.
+func TestOpenAISearchAPIModelPricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gpt-5-search-api"]
+	require.True(t, ok, "gpt-5-search-api missing from pricing map")
+	require.InDelta(t, 1.25*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 10.0/1.25, cfg.CompletionRatio, 1e-12)
+	require.InDelta(t, 0.125*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.EqualValues(t, 200000, cfg.ContextLength)
+	require.Contains(t, cfg.SupportedFeatures, "web_search")
+}
+
 func TestRealtimeModelsIncludeCurrentStableIDs(t *testing.T) {
 	t.Parallel()
 

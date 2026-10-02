@@ -188,6 +188,21 @@ type rotationWriter struct {
 	windowStart   time.Time
 	nextCutover   time.Time
 	now           func() time.Time
+
+	// activeSize tracks the bytes in the file currently held open. It is
+	// maintained by the writer itself rather than by stat'ing on every write:
+	// the writer is the only producer, so an in-process counter is both exact
+	// and free, while a syscall per log line is neither.
+	activeSize int64
+
+	// maxActiveBytes is the ceiling that triggers a size rotation; zero
+	// disables size rotation entirely and restores the pre-W0.2 behavior of a
+	// purely time-window writer.
+	maxActiveBytes int64
+
+	// sequence is the highest size-rotation suffix already used inside the
+	// current time window, so a restart never overwrites a rotated file.
+	sequence int
 }
 
 func newRotationWriter(path string, interval rotationInterval, retentionDays int) (*rotationWriter, error) {
@@ -216,15 +231,25 @@ func newRotationWriter(path string, interval rotationInterval, retentionDays int
 	sanitized := sanitizeLoggerComponent(name)
 
 	return &rotationWriter{
-		baseDir:       baseDir,
-		loggerName:    sanitized,
-		extension:     ext,
-		interval:      interval,
-		retentionDays: retentionDays,
-		now:           rotationNow,
+		baseDir:        baseDir,
+		loggerName:     sanitized,
+		extension:      ext,
+		interval:       interval,
+		retentionDays:  retentionDays,
+		now:            rotationNow,
+		maxActiveBytes: activeFileCeilingBytes(),
 	}, nil
 }
 
+// Write implements io.Writer, rotating on the time window and on the active
+// file size before appending.
+//
+// Parameters:
+//   - p: the encoded log entry.
+//
+// Return values:
+//   - int: bytes written to the active file.
+//   - error: wrapped failure from preparing, rotating, or writing the file.
 func (w *rotationWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -234,7 +259,12 @@ func (w *rotationWriter) Write(p []byte) (int, error) {
 		return 0, errors.Wrap(err, "prepare log file")
 	}
 
+	if err := w.ensureSizeHeadroom(len(p)); err != nil {
+		return 0, errors.Wrap(err, "enforce active log file size ceiling")
+	}
+
 	written, err := w.file.Write(p)
+	w.activeSize += int64(written)
 	if err != nil {
 		return written, errors.Wrap(err, "write log file")
 	}
@@ -270,14 +300,17 @@ func (w *rotationWriter) Close() error {
 	}
 
 	w.file = nil
+	closingPath := w.activePath
 	w.activePath = ""
+	w.activeSize = 0
+	clearActiveLogFile(closingPath)
 	return nil
 }
 
 func (w *rotationWriter) ensureFile(ts time.Time) error {
 	if w.file == nil {
 		start, next := w.interval.windowBounds(ts)
-		if err := w.openNewFile(start, next); err != nil {
+		if err := w.openNewFile(start, next, true); err != nil {
 			return errors.Wrap(err, "open new log file")
 		}
 		return errors.Wrap(w.purgeExpired(start), "purge expired log files")
@@ -291,7 +324,7 @@ func (w *rotationWriter) ensureFile(ts time.Time) error {
 	return w.rotate(start, next)
 }
 
-func (w *rotationWriter) openNewFile(start, next time.Time) error {
+func (w *rotationWriter) openNewFile(start, next time.Time, discoverSequence bool) error {
 	if err := ensureDir(w.baseDir); err != nil {
 		return errors.Wrap(err, "ensure log directory")
 	}
@@ -302,10 +335,26 @@ func (w *rotationWriter) openNewFile(start, next time.Time) error {
 		return errors.Wrap(err, "open log file")
 	}
 
+	info, statErr := handle.Stat()
+	if statErr != nil {
+		if closeErr := handle.Close(); closeErr != nil {
+			return errors.Wrapf(statErr, "stat log file (and close failed: %v)", closeErr)
+		}
+		return errors.Wrap(statErr, "stat log file")
+	}
+
 	w.file = handle
 	w.windowStart = start
 	w.nextCutover = next
 	w.activePath = path
+	// O_APPEND reopens an existing file, so the counter starts from what is
+	// already on disk. Without this a restart would believe the file is empty
+	// and let it grow to the ceiling a second time.
+	w.activeSize = info.Size()
+	if discoverSequence {
+		w.sequence = w.highestSequence(start)
+	}
+	setActiveLogFile(path)
 	return nil
 }
 
@@ -328,7 +377,7 @@ func (w *rotationWriter) rotate(start, next time.Time) error {
 		w.activePath = ""
 	}
 
-	if err := w.openNewFile(start, next); err != nil {
+	if err := w.openNewFile(start, next, true); err != nil {
 		return errors.Wrap(err, "open new log file during rotation")
 	}
 
@@ -384,7 +433,25 @@ func (w *rotationWriter) purgeExpired(currentStart time.Time) error {
 // either the hourly (YYYYMMDDHH) or daily (YYYYMMDD) layout. Accepting both
 // lets retention clean up files written under the daily-only layout shipped
 // before hourly rotation produced distinct filenames.
+//
+// A trailing "-NNNN" size-rotation sequence is stripped first. Without that,
+// every file produced by a size rotation would parse as garbage and be skipped
+// by retention, which would turn the new W0.2 rotation into an unbounded leak
+// of rotated files.
+//
+// Parameters:
+//   - component: the filename between the logger-name prefix and the extension.
+//
+// Return values:
+//   - time.Time: the window start the file belongs to, in UTC.
+//   - bool: whether the component named a rotation window at all.
 func parseRotationStamp(component string) (time.Time, bool) {
+	if idx := strings.LastIndex(component, "-"); idx > 0 {
+		if suffix := component[idx+1:]; suffix != "" && isAllDigits(suffix) {
+			component = component[:idx]
+		}
+	}
+
 	switch len(component) {
 	case len(rotationFilenameHourlyLayout):
 		ts, err := time.ParseInLocation(rotationFilenameHourlyLayout, component, time.UTC)

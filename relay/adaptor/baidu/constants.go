@@ -67,7 +67,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieChatFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE 4.0 8K: closed-weight flagship chat model on the Qianfan v1 API.",
+		Description:                 "Baidu ERNIE 4.0 8K: closed-weight flagship chat model on the Qianfan v1 API. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
 	},
 
 	// ERNIE 3.5 Models
@@ -80,7 +80,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieChatFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE 3.5 8K: closed-weight general-purpose chat model on the Qianfan v1 API.",
+		Description:                 "Baidu ERNIE 3.5 8K: closed-weight general-purpose chat model on the Qianfan v1 API. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
 	},
 	"ERNIE-3.5-8K-0205": {
 		Ratio:                       1.2 * ratio.MilliTokensRmb,
@@ -102,7 +102,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieChatFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE 3.5 8K (2023-12-22 snapshot): pinned closed-weight chat model.",
+		Description:                 "Baidu ERNIE 3.5 8K (2023-12-22 snapshot): pinned closed-weight chat model. Deprecated: retired 2024-05-30 (registered 2024-05-08), replacement ERNIE-3.5-8K (itself now also retiring 2026-06-30).",
 	},
 	"ERNIE-Bot-8K": {
 		Ratio:                       1.2 * ratio.MilliTokensRmb,
@@ -124,7 +124,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieChatFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE 3.5 4K (2024-02-05 snapshot): short-context closed-weight chat model.",
+		Description:                 "Baidu ERNIE 3.5 4K (2024-02-05 snapshot): short-context closed-weight chat model. Deprecated: retired 2024-05-30 (registered 2024-05-08), replacement ERNIE-3.5-8K.",
 	},
 
 	// ERNIE Speed Models

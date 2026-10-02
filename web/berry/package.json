@@ -7,58 +7,48 @@
   "dependencies": {
     "@emotion/cache": "^11.9.3",
     "@emotion/react": "^11.9.3",
-    "@emotion/styled": "^11.9.3",
-    "@mui/icons-material": "^5.8.4",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^5.18.0",
     "@mui/lab": "^5.0.0-alpha.88",
-    "@mui/material": "^5.8.6",
-    "@mui/system": "^5.8.6",
-    "@mui/utils": "^5.8.6",
-    "@mui/x-date-pickers": "^6.18.5",
-    "@tabler/icons-react": "^2.44.0",
-    "@types/qrcode": "^1.5.5",
+    "@mui/material": "^5.18.0",
+    "@mui/system": "^5.18.0",
+    "@mui/utils": "^5.17.1",
+    "@mui/x-date-pickers": "^6.20.2",
+    "@tabler/icons-react": "^2.47.0",
+    "@types/qrcode": "^1.5.6",
     "apexcharts": "3.35.3",
-    "axios": "^0.27.2",
-    "dayjs": "^1.11.10",
-    "formik": "^2.2.9",
-    "framer-motion": "^6.3.16",
+    "axios": "^1.20.0",
+    "dayjs": "^1.11.23",
+    "formik": "^2.4.9",
+    "framer-motion": "^6.5.1",
     "history": "^5.3.0",
-    "marked": "^4.1.1",
-    "material-ui-popup-state": "^4.0.1",
+    "marked": "^4.3.0",
+    "material-ui-popup-state": "^4.1.0",
     "notistack": "^3.0.1",
     "prop-types": "^15.8.1",
     "qrcode": "^1.5.4",
-    "react": "^18.2.0",
+    "react": "^18.3.1",
     "react-apexcharts": "1.4.0",
     "react-device-detect": "^2.2.2",
-    "react-dom": "^18.2.0",
+    "react-dom": "^18.3.1",
     "react-perfect-scrollbar": "^1.5.8",
-    "react-redux": "^8.0.2",
-    "react-router": "6.3.0",
-    "react-router-dom": "6.3.0",
-    "react-scripts": "^5.0.1",
-    "react-turnstile": "^1.1.2",
-    "redux": "^4.2.0",
+    "react-redux": "^8.1.3",
+    "react-router": "7.18.4",
+    "react-router-dom": "7.18.4",
+    "react-turnstile": "^1.1.5",
+    "redux": "^4.2.1",
     "yup": "^0.32.11"
   },
   "scripts": {
-    "start": "FAST_REFRESH=true react-scripts start",
-    "dev": "FAST_REFRESH=true GENERATE_SOURCEMAP=true react-scripts start",
-    "dev:backend": "FAST_REFRESH=true GENERATE_SOURCEMAP=true REACT_APP_VERSION=$(node -e 'process.stdout.write(Math.floor(Date.now()/1000).toString())') PORT=3003 react-scripts start",
-    "build": "react-scripts build && rm -rf ../build/berry && mv -f build ../build/berry",
-    "build:dev": "GENERATE_SOURCEMAP=true react-scripts build && rm -rf ../build/berry && mv -f build ../build/berry",
-    "build:prod": "DISABLE_ESLINT_PLUGIN='true' REACT_APP_VERSION=$(node -e 'process.stdout.write(Math.floor(Date.now()/1000).toString())') react-scripts build && rm -rf ../build/berry && mv -f build ../build/berry",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app"
-    ]
-  },
-  "babel": {
-    "presets": [
-      "@babel/preset-react"
-    ]
+    "start": "vite",
+    "dev": "vite",
+    "dev:backend": "REACT_APP_VERSION=$(node -e 'process.stdout.write(Math.floor(Date.now()/1000).toString())') vite",
+    "build": "yarn lint && vite build",
+    "build:dev": "yarn lint && vite build --mode development",
+    "build:prod": "yarn lint && REACT_APP_VERSION=$(node -e 'process.stdout.write(Math.floor(Date.now()/1000).toString())') vite build",
+    "preview": "vite preview",
+    "lint": "eslint src",
+    "test": "node --experimental-vm-modules --test ../../.github/scripts/legacy-api-compat.test.mjs && node --test ../../.github/scripts/legacy-dependency-security.test.cjs ../../.github/scripts/frontend-audit.test.mjs && node --test ../../.github/scripts/legacy-quality.test.cjs ../../.github/scripts/legacy-build-contract.test.mjs && node --test ../../.github/scripts/legacy-ui-boundaries.test.cjs"
   },
   "browserslist": {
     "production": [
@@ -72,19 +62,14 @@
     ]
   },
   "devDependencies": {
-    "@babel/core": "^7.21.4",
-    "@babel/eslint-parser": "^7.21.3",
-    "eslint": "^8.38.0",
-    "eslint-config-prettier": "^8.8.0",
-    "eslint-config-react-app": "^7.0.1",
-    "eslint-plugin-flowtype": "^8.0.3",
-    "eslint-plugin-import": "^2.27.5",
-    "eslint-plugin-jsx-a11y": "^6.7.1",
-    "eslint-plugin-prettier": "^4.2.1",
-    "eslint-plugin-react": "^7.32.2",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "immutable": "^4.3.0",
-    "prettier": "^2.8.7",
-    "sass": "^1.53.0"
+    "vite": "^8.3.1",
+    "@vitejs/plugin-react": "^6.1.1",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.9.9",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vite-plugin-svgr": "^5.2.0",
+    "sass": "^1.105.1"
   }
 }

@@ -1,0 +1,26 @@
+{
+  "case": "token/update",
+  "site": "T6 UpdateToken",
+  "status": 200,
+  "body": {
+    "data": {
+      "accessed_time": 1720000002,
+      "created_at": 1730000000111,
+      "created_time": 1720000001,
+      "expired_time": -1,
+      "key": "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "models": "gpt-4o",
+      "name": "behaviordiff-token-renamed",
+      "remain_quota": 123456,
+      "status": 1,
+      "subnet": "192.168.0.0/24",
+      "unlimited_quota": false,
+      "updated_at": "<ts-milli>",
+      "used_quota": 850005,
+      "user_uuid": "<user-uuid>",
+      "uuid": "<token-uuid>"
+    },
+    "message": "",
+    "success": true
+  }
+}

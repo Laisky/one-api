@@ -56,6 +56,18 @@ func String(apiType int) string {
 		return "copilot"
 	case Fireworks:
 		return "fireworks"
+	case NVIDIA:
+		return "nvidia"
+	case Cerebras:
+		return "cerebras"
+	case Azure:
+		return "azure"
+	case DeepInfra:
+		return "deepinfra"
+	case Zai:
+		return "zai"
+	case TypeSafe:
+		return "typesafe"
 	default:
 		return ""
 	}

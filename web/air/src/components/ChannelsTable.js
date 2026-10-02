@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { API, isMobile, shouldShowPrompt, showError, showInfo, showSuccess, timestamp2string } from '../helpers';
 
@@ -19,6 +20,7 @@ import {
 } from '@douyinfe/semi-ui';
 import EditChannel from '../pages/Channel/EditChannel';
 import PricingModal from './PricingModal';
+import ResourceRefTooltip from './ResourceRefTooltip';
 import { IconTreeTriangleDown } from '@douyinfe/semi-icons';
 
 function renderTimestamp(timestamp) {
@@ -30,6 +32,8 @@ function renderTimestamp(timestamp) {
 }
 
 let type2label = undefined;
+
+const channelRef = (channel) => channel?.uuid || channel?.id || '';
 
 function renderType(type) {
   if (!type2label) {
@@ -50,12 +54,11 @@ const ChannelsTable = () => {
     //     className: 'checkbox',
     // },
     {
-      title: 'ID',
-      dataIndex: 'id'
-    },
-    {
       title: '名称',
-      dataIndex: 'name'
+      dataIndex: 'name',
+      render: (text, record) => (
+        <ResourceRefTooltip refId={channelRef(record)}>{text}</ResourceRefTooltip>
+      )
     },
     // {
     //   title: '分组',
@@ -119,7 +122,7 @@ const ChannelsTable = () => {
               </Tooltip>
               <Tooltip content={'剩余额度' + record.balance + '，点击更新'}>
                 <Tag color="white" type="ghost" size="large" onClick={() => {
-                  updateChannelBalance(record);
+                  updateChannelBalance(record).catch(reportUIError);
                 }}>${renderNumberWithPoint(record.balance)}</Tag>
               </Tooltip>
             </Space>
@@ -137,7 +140,7 @@ const ChannelsTable = () => {
               style={{ width: 70 }}
               name="priority"
               onBlur={e => {
-                manageChannel(record.id, 'priority', record, e.target.value);
+                manageChannel(channelRef(record), 'priority', record, e.target.value).catch(reportUIError);
               }}
               keepFocus={true}
               innerButtons
@@ -148,27 +151,6 @@ const ChannelsTable = () => {
         );
       }
     },
-    // {
-    //   title: '权重',
-    //   dataIndex: 'weight',
-    //   render: (text, record, index) => {
-    //     return (
-    //       <div>
-    //         <InputNumber
-    //           style={{ width: 70 }}
-    //           name="weight"
-    //           onBlur={e => {
-    //             manageChannel(record.id, 'weight', record, e.target.value);
-    //           }}
-    //           keepFocus={true}
-    //           innerButtons
-    //           defaultValue={record.weight}
-    //           min={0}
-    //         />
-    //       </div>
-    //     );
-    //   }
-    // },
     {
       title: '',
       dataIndex: 'operate',
@@ -183,18 +165,18 @@ const ChannelsTable = () => {
               <Button style={{ padding: '8px 4px' }} type="primary" icon={<IconTreeTriangleDown />}></Button>
             </Dropdown>
           </SplitButtonGroup> */}
-          <Button theme='light' type='primary' style={{ marginRight: 1 }} onClick={() => testChannel(record)}>测试</Button>
+          <Button theme='light' type='primary' style={{ marginRight: 1 }} onClick={() => testChannel(record).catch(reportUIError)}>测试</Button>
           <Popconfirm
             title="确定是否要删除此渠道？"
             content="此修改将不可逆"
             okType={'danger'}
             position={'left'}
             onConfirm={() => {
-              manageChannel(record.id, 'delete', record).then(
+              manageChannel(channelRef(record), 'delete', record).then(
                 () => {
-                  removeRecord(record.id);
+                  removeRecord(channelRef(record));
                 }
-              );
+              ).catch(reportUIError);
             }}
           >
             <Button theme="light" type="danger" style={{ marginRight: 1 }}>删除</Button>
@@ -202,22 +184,22 @@ const ChannelsTable = () => {
           {
             record.status === 1 ?
               <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={
-                async () => {
+                (...uiArgs) => (async () => {
                   manageChannel(
-                    record.id,
+                    channelRef(record),
                     'disable',
                     record
-                  );
-                }
+                  ).catch(reportUIError);
+                })(...uiArgs).catch(reportUIError)
               }>禁用</Button> :
               <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={
-                async () => {
+                (...uiArgs) => (async () => {
                   manageChannel(
-                    record.id,
+                    channelRef(record),
                     'enable',
                     record
-                  );
-                }
+                  ).catch(reportUIError);
+                })(...uiArgs).catch(reportUIError)
               }>启用</Button>
           }
           <Button theme="light" type="tertiary" style={{ marginRight: 1 }} onClick={
@@ -259,7 +241,7 @@ const ChannelsTable = () => {
   const removeRecord = id => {
     let newDataSource = [...channels];
     if (id != null) {
-      let idx = newDataSource.findIndex(data => data.id === id);
+      let idx = newDataSource.findIndex(data => channelRef(data) === id || data.id === id);
 
       if (idx > -1) {
         newDataSource.splice(idx, 1);
@@ -271,10 +253,17 @@ const ChannelsTable = () => {
   const setChannelFormat = (list, totalCount = 0) => {
     const formatted = Array.isArray(list) ? [...list] : [];
     for (let i = 0; i < formatted.length; i++) {
-      formatted[i].key = '' + formatted[i].id;
+      formatted[i].key = '' + channelRef(formatted[i]);
       const testModels = [];
       const modelStr = formatted[i].models || '';
-      modelStr.split(',').forEach((item) => {
+      const hasServerTestModels = Array.isArray(formatted[i].test_models) &&
+        formatted[i].test_models.every((item) => typeof item === 'string');
+      const sourceModels = hasServerTestModels ? formatted[i].test_models : modelStr.split(',');
+      sourceModels.forEach((item) => {
+        if (!item) {
+          return;
+        }
+        item = item.trim();
         if (!item) {
           return;
         }
@@ -282,7 +271,7 @@ const ChannelsTable = () => {
           node: 'item',
           name: item,
           onClick: () => {
-            testChannel(formatted[i], item);
+            testChannel(formatted[i], item).catch(reportUIError);
           }
         });
       });
@@ -294,28 +283,31 @@ const ChannelsTable = () => {
   };
 
   const loadChannels = async (startIdx, currentPageSize, sortByIdAsc) => {
-    setLoading(true);
     try {
-      const sortParams = sortByIdAsc ? '&sort=id&order=asc' : '&sort=id&order=desc';
-      const res = await API.get(`/api/channel/?p=${startIdx}&size=${currentPageSize}${sortParams}`);
-      const { success, message, data, total } = res.data;
-      if (success) {
-        const totalCount = typeof total === 'number' ? total : (Array.isArray(data) ? data.length : 0);
-        if (startIdx === 0) {
-          setChannelFormat(data, totalCount);
+      setLoading(true);
+      try {
+        const sortParams = sortByIdAsc ? '&sort=id&order=asc' : '&sort=id&order=desc';
+        const res = await API.get(`/api/channel/?p=${startIdx}&size=${currentPageSize}${sortParams}`);
+        const { success, message, data, total } = res.data;
+        if (success) {
+          const totalCount = typeof total === 'number' ? total : (Array.isArray(data) ? data.length : 0);
+          if (startIdx === 0) {
+            setChannelFormat(data, totalCount);
+          } else {
+            const pageData = Array.isArray(data) ? data : [];
+            const newChannels = [...channels];
+            newChannels.splice(startIdx * currentPageSize, pageData.length, ...pageData);
+            setChannelFormat(newChannels, totalCount);
+          }
         } else {
-          const pageData = Array.isArray(data) ? data : [];
-          const newChannels = [...channels];
-          newChannels.splice(startIdx * currentPageSize, pageData.length, ...pageData);
-          setChannelFormat(newChannels, totalCount);
+          showError(message);
         }
-      } else {
-        showError(message);
+      } catch (err) {
+        showError(err?.message || err);
       }
-    } catch (err) {
-      showError(err?.message || err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const refresh = async () => {
@@ -333,11 +325,11 @@ const ChannelsTable = () => {
       .catch((reason) => {
         showError(reason);
       });
-    fetchGroups().then();
+    fetchGroups().then().catch(reportUIError);
   }, []);
 
   const manageChannel = async (id, action, record, value) => {
-    let data = { id };
+    let data = typeof id === 'string' ? { uuid: id } : { id };
     let res;
     switch (action) {
       case 'delete':
@@ -362,7 +354,7 @@ const ChannelsTable = () => {
         }
         data.name = record?.name;
         if (!data.name) {
-          const found = channels.find((item) => item.id === id);
+          const found = channels.find((item) => channelRef(item) === id || item.id === id);
           data.name = found?.name;
         }
         if (!data.name) {
@@ -381,7 +373,7 @@ const ChannelsTable = () => {
         }
         data.name = record?.name;
         if (!data.name) {
-          const found = channels.find((item) => item.id === id);
+          const found = channels.find((item) => channelRef(item) === id || item.id === id);
           data.name = found?.name;
         }
         if (!data.name) {
@@ -414,7 +406,8 @@ const ChannelsTable = () => {
       }
       setChannels(newChannels);
     } else {
-      showError(message);
+      // Rejection prevents success-only callers from deleting a visible row.
+      throw new Error(message || 'The server rejected this operation.');
     }
   };
 
@@ -460,35 +453,46 @@ const ChannelsTable = () => {
   };
 
   const searchChannels = async (searchKeyword, searchGroup, searchModel) => {
-    if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
-      // if keyword is blank, load files instead.
-      await loadChannels(0, pageSize, idSort);
-      setActivePage(1);
-      return;
-    }
-    setSearching(true);
     try {
-      const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
-      const { success, message, data } = res.data;
-      if (success) {
-        setChannelFormat(data, Array.isArray(data) ? data.length : 0);
+      if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
+        // if keyword is blank, load files instead.
+        await loadChannels(0, pageSize, idSort);
         setActivePage(1);
-      } else {
-        showError(message);
+        return;
       }
-    } catch (err) {
-      showError(err?.message || err);
+      setSearching(true);
+      try {
+        const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
+        const { success, message, data } = res.data;
+        if (success) {
+          setChannelFormat(data, Array.isArray(data) ? data.length : 0);
+          setActivePage(1);
+        } else {
+          showError(message);
+        }
+      } catch (err) {
+        showError(err?.message || err);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const testChannel = async (record, model) => {
-    const res = await API.get(`/api/channel/test/${record.id}?model=${model}`);
-    const { success, message, time } = res.data;
+    // An absent model must send no query parameter at all: `?model=undefined`
+    // reaches the backend as an explicitly requested model named "undefined",
+    // which it rejects as unsupported. Omitting it lets the server apply the
+    // channel's own testing-model setting.
+    const query = model ? `?model=${encodeURIComponent(model)}` : '';
+    const res = await API.get(`/api/channel/test/${channelRef(record)}${query}`);
+    const { success, message, time, skipped } = res.data;
     if (success) {
       record.response_time = time * 1000;
       record.test_time = Date.now() / 1000;
       showInfo(`渠道 ${record.name} 测试成功，耗时 ${time.toFixed(2)} 秒。`);
+    } else if (skipped) {
+      // 该渠道没有可用于对话的接口，无法进行健康检查，这不是故障。
+      showInfo(`已跳过渠道 ${record.name} 的测试：${message}`);
     } else {
       showError(message);
     }
@@ -516,7 +520,7 @@ const ChannelsTable = () => {
   };
 
   const updateChannelBalance = async (record) => {
-    const res = await API.get(`/api/channel/update_balance/${record.id}/`);
+    const res = await API.get(`/api/channel/update_balance/${channelRef(record)}/`);
     const { success, message, balance } = res.data;
     if (success) {
       record.balance = balance;
@@ -540,24 +544,27 @@ const ChannelsTable = () => {
   };
 
   const batchDeleteChannels = async () => {
-    if (selectedChannels.length === 0) {
-      showError('请先选择要删除的渠道！');
-      return;
+    try {
+      if (selectedChannels.length === 0) {
+        showError('请先选择要删除的渠道！');
+        return;
+      }
+      setLoading(true);
+      let ids = [];
+      selectedChannels.forEach((channel) => {
+        ids.push(channelRef(channel));
+      });
+      const res = await API.post(`/api/channel/batch`, { ids: ids });
+      const { success, message, data } = res.data;
+      if (success) {
+        showSuccess(`已删除 ${data} 个渠道！`);
+        await refresh();
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(true);
-    let ids = [];
-    selectedChannels.forEach((channel) => {
-      ids.push(channel.id);
-    });
-    const res = await API.post(`/api/channel/batch`, { ids: ids });
-    const { success, message, data } = res.data;
-    if (success) {
-      showSuccess(`已删除 ${data} 个渠道！`);
-      await refresh();
-    } else {
-      showError(message);
-    }
-    setLoading(false);
   };
 
   const fixChannelsAbilities = async () => {
@@ -578,7 +585,7 @@ const ChannelsTable = () => {
     if (page === Math.ceil(channels.length / pageSize) + 1) {
       // In this case we have to load more data and then append them.
       loadChannels(page - 1, pageSize, idSort).then(r => {
-      });
+      }).catch(reportUIError);
     }
   };
 
@@ -603,7 +610,7 @@ const ChannelsTable = () => {
         value: group
       })));
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -639,14 +646,14 @@ const ChannelsTable = () => {
       <EditChannel refresh={refresh} visible={showEdit} handleClose={closeEdit} editingChannel={editingChannel} />
       <div style={{ display: "flex", placeItems: "center", justifyContent: "space-between" }}>
         <Form onSubmit={() => {
-          searchChannels(searchKeyword, searchGroup, searchModel);
+          searchChannels(searchKeyword, searchGroup, searchModel).catch(reportUIError);
         }} labelPosition="left">
           <div style={{ display: 'flex' }}>
             <Space>
               <Form.Input
                 field="search_keyword"
                 label="搜索"
-                placeholder="ID，名称和密钥 ..."
+                placeholder="ID，UUID，名称和密钥 ..."
                 value={searchKeyword}
                 loading={searching}
                 onChange={(v) => {
@@ -691,7 +698,7 @@ const ChannelsTable = () => {
             <Popconfirm
               title="确定？"
               okType={'warning'}
-              onConfirm={() => { testChannels("all") }}
+              onConfirm={() => { testChannels("all").catch(reportUIError) }}
               position={isMobile() ? 'top' : 'left'}
             >
               <Button theme="light" type="warning" style={{ marginRight: 8 }}>测试所有渠道</Button>
@@ -699,7 +706,7 @@ const ChannelsTable = () => {
             <Popconfirm
               title="确定？"
               okType={'warning'}
-              onConfirm={() => { testChannels("disabled") }}
+              onConfirm={() => { testChannels("disabled").catch(reportUIError) }}
               position={isMobile() ? 'top' : 'left'}
             >
               <Button theme="light" type="warning" style={{ marginRight: 8 }}>测试禁用渠道</Button>
@@ -721,7 +728,7 @@ const ChannelsTable = () => {
               <Button theme="light" type="danger" style={{ marginRight: 8 }}>删除禁用渠道</Button>
             </Popconfirm>
 
-            <Button theme="light" type="primary" style={{ marginRight: 8 }} onClick={refresh}>刷新</Button>
+            <Button theme="light" type="primary" style={{ marginRight: 8 }} onClick={(...uiArgs) => refresh(...uiArgs).catch(reportUIError)}>刷新</Button>
           </Space>
           {/*<div style={{width: '100%', pointerEvents: 'none', position: 'absolute'}}>*/}
 
@@ -780,7 +787,7 @@ const ChannelsTable = () => {
         showSizeChanger: true,
         formatPageText: (page) => '',
         onPageSizeChange: (size) => {
-          handlePageSizeChange(size).then();
+          handlePageSizeChange(size).then().catch(reportUIError);
         },
         onPageChange: handlePageChange
       }} loading={loading} onRow={handleRow} rowSelection={
@@ -795,7 +802,7 @@ const ChannelsTable = () => {
       <PricingModal
         visible={pricingModalVisible}
         onClose={closePricingModal}
-        channelId={selectedChannel?.id}
+        channelId={channelRef(selectedChannel)}
         channelName={selectedChannel?.name}
         channelType={selectedChannel?.type}
       />

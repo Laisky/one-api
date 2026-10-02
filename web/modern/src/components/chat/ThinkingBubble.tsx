@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface ThinkingBubbleProps {
   content: string | null;
@@ -11,6 +12,8 @@ export interface ThinkingBubbleProps {
 }
 
 export const ThinkingBubble: React.FC<ThinkingBubbleProps> = ({ content, isExpanded, onToggle, isStreaming }) => {
+  const { t } = useTranslation();
+
   if (!content || !content.trim()) return null;
 
   return (
@@ -36,18 +39,18 @@ export const ThinkingBubble: React.FC<ThinkingBubbleProps> = ({ content, isExpan
 
             <span className="font-medium text-sm text-foreground flex items-center gap-2">
               <Brain className="h-4 w-4" />
-              {isStreaming ? 'Reasoning...' : 'Reasoning Process'}
+              {isStreaming ? t('playground.reasoning.streaming') : t('playground.reasoning.title')}
             </span>
 
             {!isStreaming && (
               <Badge variant="outline" className="text-xs border-border text-muted-foreground">
-                {content?.length || 0} chars
+                {t('playground.reasoning.chars', { count: content?.length || 0 })}
               </Badge>
             )}
           </div>
 
           <div className="flex items-center gap-2">
-            {isStreaming && <div className="text-xs text-muted-foreground animate-pulse">Processing...</div>}
+            {isStreaming && <div className="text-xs text-muted-foreground animate-pulse">{t('playground.reasoning.processing')}</div>}
             {isExpanded ? (
               <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-hover:scale-110" />
             ) : (

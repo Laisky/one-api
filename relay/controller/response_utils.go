@@ -14,10 +14,12 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/state"
 )
 
 // getChannelRatios gets channel model and completion ratios from unified ModelConfigs
@@ -25,16 +27,23 @@ func getChannelRatios(c *gin.Context) (map[string]float64, map[string]float64) {
 	channel := c.MustGet(ctxkey.ChannelModel).(*model.Channel)
 
 	// Only use unified ModelConfigs after migration
-	modelRatios := channel.GetModelRatioFromConfigs()
-	completionRatios := channel.GetCompletionRatioFromConfigs()
+	ctx := gmw.Ctx(c)
+	modelRatios := channel.GetModelRatioFromConfigsWithContext(ctx)
+	completionRatios := channel.GetCompletionRatioFromConfigsWithContext(ctx)
 
 	return modelRatios, completionRatios
 }
 
 func getChannelModelConfigs(c *gin.Context) map[string]model.ModelConfigLocal {
 	channel := c.MustGet(ctxkey.ChannelModel).(*model.Channel)
-	return channel.GetModelPriceConfigs()
+	return channel.GetModelPriceConfigsWithContext(gmw.Ctx(c))
 }
+
+// errStateSelectorsMutuallyExclusive marks the dual-selector validation failure
+// (both conversation and previous_response_id supplied) so RelayResponseAPIHelper
+// can map it to the stable invalid_state_selector code (Section 6, E01). Its
+// message is preserved so message-based assertions keep working.
+var errStateSelectorsMutuallyExclusive = errors.New("conversation and previous_response_id are mutually exclusive")
 
 // getAndValidateResponseAPIRequest gets and validates Response API request
 func getAndValidateResponseAPIRequest(c *gin.Context) (*openai.ResponseAPIRequest, error) {
@@ -49,15 +58,34 @@ func getAndValidateResponseAPIRequest(c *gin.Context) (*openai.ResponseAPIReques
 		return nil, errors.New("model is required")
 	}
 
-	// Either input or prompt is required, but not both
 	hasInput := len(responseAPIRequest.Input) > 0
 	hasPrompt := responseAPIRequest.Prompt != nil
-
-	if !hasInput && !hasPrompt {
-		return nil, errors.New("either input or prompt is required")
-	}
 	if hasInput && hasPrompt {
 		return nil, errors.New("input and prompt are mutually exclusive - provide only one")
+	}
+
+	if state.Enabled() {
+		// With the gateway state layer active, a state selector can supply the
+		// prior context, so input/prompt becomes optional (A03/B09). The two
+		// selectors are mutually exclusive per the Responses contract (R3/B08).
+		hasPrev := responseAPIRequest.PreviousResponseId != nil &&
+			strings.TrimSpace(*responseAPIRequest.PreviousResponseId) != ""
+		hasConv := responseAPIRequest.Conversation.ConversationID() != ""
+		if hasPrev && hasConv {
+			// Surface a sentinel so the caller returns the documented
+			// invalid_state_selector error code rather than the generic
+			// invalid_response_api_request (Section 6, rows A01/E01).
+			return nil, errors.WithStack(errStateSelectorsMutuallyExclusive)
+		}
+		if !hasInput && !hasPrompt && !hasPrev && !hasConv {
+			return nil, errors.New("either input, prompt, or a state selector is required")
+		}
+		return responseAPIRequest, nil
+	}
+
+	// Feature disabled: preserve current behavior exactly (row O01).
+	if !hasInput && !hasPrompt {
+		return nil, errors.New("either input or prompt is required")
 	}
 
 	return responseAPIRequest, nil
@@ -160,11 +188,11 @@ func countResponseAPIInputMapTokens(ctx context.Context, itemMap map[string]any,
 				total += countResponseAPIValueTokens(ctx, args, model)
 			}
 			return total
-		case "function_call_output":
+		case "function_call_output", "custom_tool_call_output":
 			if output, ok := itemMap["output"]; ok {
-				total += countResponseAPIValueTokens(ctx, output, model)
+				total += countResponseAPIEmbeddedContentTokens(ctx, output, model)
 			} else if content, ok := itemMap["content"]; ok {
-				total += countResponseAPIValueTokens(ctx, content, model)
+				total += countResponseAPIEmbeddedContentTokens(ctx, content, model)
 			}
 			return total
 		}
@@ -185,6 +213,25 @@ func countResponseAPIInputMapTokens(ctx context.Context, itemMap map[string]any,
 
 	total += countResponseAPIValueTokens(ctx, itemMap, model)
 	return total
+}
+
+// countResponseAPIEmbeddedContentTokens counts tool-output values while
+// recognizing nested Responses content parts such as file-backed images.
+// Parameters: ctx is the request context; value is the tool output; model is the target model name.
+// Returns: the estimated token count for text and structured content in value.
+func countResponseAPIEmbeddedContentTokens(ctx context.Context, value any, model string) int {
+	switch v := value.(type) {
+	case []any:
+		return countResponseAPIContentTokens(ctx, v, model)
+	case map[string]any:
+		if content, ok := v["content"]; ok {
+			return countResponseAPIEmbeddedContentTokens(ctx, content, model)
+		}
+		if typeStr, ok := v["type"].(string); ok {
+			return countResponseAPIContentPartTokens(ctx, v, typeStr, model)
+		}
+	}
+	return countResponseAPIValueTokens(ctx, value, model)
 }
 
 // countResponseAPIContentTokens counts tokens for a Response API content field.
@@ -223,6 +270,15 @@ func countResponseAPIContentPartTokens(ctx context.Context, partMap map[string]a
 	case "input_image":
 		url, _ := partMap["image_url"].(string)
 		detail, _ := partMap["detail"].(string)
+		if url == "" && deepseekcompat.IsFlashVisionModel(model) {
+			fileID, _ := partMap["file_id"].(string)
+			fileData, _ := partMap["file_data"].(string)
+			if strings.TrimSpace(fileID) != "" || strings.TrimSpace(fileData) != "" {
+				// CountImageTokens uses DeepSeek's fixed upper bound and does not
+				// inspect the sentinel because the model is handled specially.
+				url = "deepseek-file-input"
+			}
+		}
 		return countResponseAPIImageTokens(ctx, url, detail, model)
 	case "input_audio":
 		if inputAudio, ok := partMap["input_audio"].(map[string]any); ok {
@@ -385,8 +441,8 @@ func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 		return false
 	}
 
-	if isDeepSeekModel(meta.ActualModelName) || isDeepSeekModel(meta.OriginModelName) {
-		return false
+	if hasDeepSeekModel(meta) && isDeepSeekUpstream(meta) {
+		return supportsDeepSeekNativeResponseAPI(meta)
 	}
 
 	switch meta.ChannelType {
@@ -408,16 +464,69 @@ func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 	}
 }
 
-// isDeepSeekModel checks if the model is a DeepSeek model
-func isDeepSeekModel(modelName string) bool {
-	normalized := strings.TrimSpace(strings.ToLower(modelName))
-	if normalized == "" {
+// supportsDeepSeekNativeResponseAPI reports whether the request targets a model
+// served by DeepSeek's native, stateless Responses endpoint. DeepSeek exposes
+// that endpoint for the current Flash and Pro API names and Flash aliases.
+func supportsDeepSeekNativeResponseAPI(meta *metalib.Meta) bool {
+	if meta == nil || !isDeepSeekUpstream(meta) {
 		return false
 	}
-	return strings.HasPrefix(normalized, "deepseek")
+
+	modelName := strings.TrimSpace(strings.ToLower(meta.ActualModelName))
+	if modelName == "" {
+		modelName = strings.TrimSpace(strings.ToLower(meta.OriginModelName))
+	}
+
+	// https://api-docs.deepseek.com/guides/responses_api/
+	return deepseekcompat.IsFlashVisionModel(modelName) || modelName == "deepseek-v4-pro"
 }
 
-// isReasoningModel checks if the model is a reasoning model
+// isDeepSeekModel checks if the model is a DeepSeek model
+func isDeepSeekModel(modelName string) bool {
+	return deepseekcompat.IsDeepSeekModel(modelName)
+}
+
+// isDeepSeekUpstream reports whether the channel uses DeepSeek's own API
+// contract, as opposed to a third-party host (NVIDIA, Novita, SiliconFlow,
+// Together, ...) that merely serves DeepSeek open-weight checkpoints.
+//
+// DeepSeek-specific request handling (structured-output downgrade,
+// reasoning_effort stripping) and adaptor/pricing selection are properties of
+// DeepSeek's API contract, not of the model weights.
+func isDeepSeekUpstream(meta *metalib.Meta) bool {
+	return deepseekcompat.UsesDeepSeekAPIContract(meta)
+}
+
+// hasDeepSeekModel reports whether the request model belongs to the DeepSeek family.
+func hasDeepSeekModel(meta *metalib.Meta) bool {
+	if meta == nil {
+		return false
+	}
+	return isDeepSeekModel(meta.ActualModelName) || isDeepSeekModel(meta.OriginModelName)
+}
+
+// shouldRouteResponseFallbackThroughDeepSeek reports whether a Response API ->
+// Chat Completion fallback request must be handled by the DeepSeek adaptor so
+// DeepSeek's request-conversion quirks apply. This is true only when the model
+// is a DeepSeek model AND the channel's upstream is actually DeepSeek's API.
+//
+// Overriding meta.APIType drives BOTH request routing and pricing
+// (resolvePricingAdaptor keys off meta.APIType), so a model-name match alone
+// would mis-route and mis-bill third-party hosts — e.g. NVIDIA's free
+// deepseek-ai/* models would be billed at the default rate instead of free.
+func shouldRouteResponseFallbackThroughDeepSeek(meta *metalib.Meta) bool {
+	if meta == nil {
+		return false
+	}
+	if !hasDeepSeekModel(meta) {
+		return false
+	}
+	return isDeepSeekUpstream(meta)
+}
+
+// isReasoningModel identifies models requiring OpenAI-style sampling removal.
+// DeepSeek accepts top_p in thinking mode and temperature in non-thinking mode,
+// so its canonical names and aliases must leave sampling controls to upstream.
 func isReasoningModel(modelName string) bool {
 	if modelName == "" {
 		return false
