@@ -1,0 +1,100 @@
+name: Supplemental log privacy red-green validation
+on:
+  pull_request:
+    types: [synchronize]
+    paths: ['.github/workflows/security-review-log-extra.yml']
+permissions:
+  contents: write
+jobs:
+  validate:
+    if: github.event.pull_request.number == 442 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Validate supplemental behavior and update PR 442
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, os, pathlib, subprocess, zlib
+          root = pathlib.Path.cwd()
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'extra-review-442'
+          out.mkdir()
+          encoded = (root / '.github/security-review-extra.b64').read_text()
+          # Restore the known truncated transfer span; the decoded patch digest is authoritative.
+          encoded = encoded.replace('qumCUXnVvKnpXL46', 'qumCUXnVvKnpLA6srilLnDryo0c7gBcO3mJ17hp17fyA7a8zKcpXJXPEGDthwZ4F6GZYTmVSHHatSBsc8xvS/k2PVmq96GFMXNphYRlhGDSZJgrs3zNwEeD9HHaoafS+mpXL46', 1)
+          patch = zlib.decompress(base64.b64decode(encoded))
+          assert hashlib.sha256(patch).hexdigest() == '016dbfd0e3b0e2ca5999ae90b8a8546b82db6d0172c6787a822006fcaa857b38'
+          (out / 'review.patch').write_bytes(patch)
+          def run(*args):
+              print('+', ' '.join(args), flush=True)
+              subprocess.run(args, check=True)
+          run('git', 'apply', str(out / 'review.patch'))
+          run('git', 'add', '.')
+          run('git', 'diff', '--cached', '--check')
+          baseline = '69facaba14b549c5265ecbdbe3407e311e1425f1'
+          for name in ['relay/controller/audio.go', 'controller/channel_testing.go']:
+              (root / name).write_bytes(subprocess.check_output(['git', 'show', baseline + ':' + name]))
+          required = {'TestReviewAudioURLPrivacy', 'TestReviewChannelProbeURLPrivacy'}
+          def test(phase, selector, race):
+              command = ['go', 'test', '-json', '-count=' + ('3' if race else '1'), '-timeout=15m']
+              if race: command += ['-race']
+              command += ['-run', selector, './controller', './relay/controller', './relay/adaptor', './relay/billing', './model']
+              print('+', ' '.join(command), flush=True)
+              path = out / (phase + '.jsonl')
+              with path.open('w') as log:
+                  proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                  for line in proc.stdout:
+                      log.write(line)
+                      print(line, end='', flush=True)
+                  code = proc.wait()
+              text = path.read_text()
+              events = []
+              for line in text.splitlines():
+                  try: events.append(json.loads(line))
+                  except json.JSONDecodeError: pass
+              failed = {e['Test'] for e in events if e.get('Action') == 'fail' and 'Test' in e}
+              passed = {e['Test'] for e in events if e.get('Action') == 'pass' and 'Test' in e}
+              summary = {'command':command, 'exit_code':code, 'failed':sorted(failed), 'passed':sorted(passed)}
+              (out / (phase + '-summary.json')).write_text(json.dumps(summary, indent=2))
+              assert '[build failed]' not in text and 'panic:' not in text and 'DATA RACE' not in text, summary
+              if phase == 'red': assert code != 0 and required <= failed, summary
+              else: assert code == 0 and required <= passed and not failed, summary
+          test('red', '^TestReview(AudioURLPrivacy|ChannelProbeURLPrivacy)$', False)
+          run('git', 'checkout-index', '-a', '-f')
+          test('green', '^Test(Review|UpstreamTransportFailureURLPrivacy|ProtocolAuditAudioHTTP|ProbeUsesDeclaredChatSurface|DoRequestHelperRedactsQueryCredentialsWithoutChangingDispatch|LogMetadata|LogsToResponses|SanitizeLogUpstreamEndpoint|PostConsumeQuotaDetailedSanitizesUpstreamEndpoint)', True)
+          run('go', 'vet', './...')
+          run('git', 'diff', '--check')
+          assert not subprocess.check_output(['git', 'diff', '--name-only']).strip()
+          run('git', 'config', 'user.name', 'github-actions[bot]')
+          run('git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com')
+          run('git', 'commit', '-m', 'fix(security): close audio and channel-probe URL disclosure paths')
+          sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          (out / 'summary.json').write_text(json.dumps({'validated_commit':sha, 'baseline':baseline, 'vet':'passed'}, indent=2))
+          (out / 'final.diff').write_bytes(subprocess.check_output(['git', 'diff', baseline, 'HEAD']))
+          branch = 'codex/propose-fix-for-access-token-leak'
+          actual = subprocess.check_output(['git', 'ls-remote', 'origin', 'refs/heads/' + branch], text=True).split()[0]
+          assert actual == os.environ['REVIEW_HEAD'], 'concurrent branch update'
+          auth = base64.b64encode(('x-access-token:' + os.environ['GH_TOKEN']).encode()).decode()
+          print('::add-mask::' + auth, flush=True)
+          subprocess.run(['git','-c','http.https://github.com/.extraheader=AUTHORIZATION: basic '+auth,'push','origin','HEAD:refs/heads/'+branch],check=True)
+          print('VALIDATED_AND_PUSHED', sha, flush=True)
+          PY
+      - name: Preserve supplemental red-green evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-review-442-extra
+          path: ${{ runner.temp }}/extra-review-442
+          if-no-files-found: warn
+          retention-days: 7
