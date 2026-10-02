@@ -1,22 +1,39 @@
-name: Security review source snapshot
+name: Security review red-green validation
 on:
   pull_request:
     types: [synchronize]
     paths: ['.github/workflows/security-review-source.yml']
 permissions:
-  contents: read
+  contents: write
 jobs:
-  snapshot:
-    if: github.event.pull_request.number == 441
+  validate:
+    if: github.event.pull_request.number == 441 && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: [441, 442, 443]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: d7fa5f35ebf3dd6072eace68bd0178196baa0823
-      - name: Export review baseline
-        run: git archive --format=tar.gz --output=review-source.tar.gz HEAD
-      - uses: actions/upload-artifact@v4
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v7
         with:
-          name: security-review-source
-          path: review-source.tar.gz
-          retention-days: 1
+          go-version-file: go.mod
+          cache: true
+      - name: Reproduce, fix, verify and update only the selected PR
+        env:
+          REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/security-review-runner.py '${{ matrix.pr }}'
+      - name: Preserve observed validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-review-${{ matrix.pr }}
+          path: ${{ runner.temp }}/security-review-${{ matrix.pr }}
+          if-no-files-found: warn
+          retention-days: 7
