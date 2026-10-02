@@ -1,0 +1,42 @@
+name: PR review source snapshot
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    if: github.event.pull_request.number == 445
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Capture the exact reviewed revisions without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review-sources
+          while read -r name sha; do
+            git fetch --no-tags origin "$sha"
+            git archive --format=tar.gz --prefix="$name/" "$sha" > "review-sources/$name.tar.gz"
+          done <<'REVISIONS'
+          main 567b7b910065e4b7f63843ed470fc6005f5ac519
+          pr444 5f7249d40f95ba152331a1b897f52c8edef96ece
+          pr445 bdf9da5e2d188bed14b508d349f2c35d40879156
+          pr446 3941a6e2e2f37fcd0a0b07ab2b9962a13584932d
+          pr447 3023df9f06ea18f0f7ac0c7f41f1d91bbb485ccc
+          pr448 af5fd8eee5d6503239fb98fe3cdea8d1a6c00f09
+          pr449 269eab4dfdf8bd6fefd563f9c682f57504b4ddc2
+          REVISIONS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pinned-pr-review-sources
+          path: review-sources/*.tar.gz
+          retention-days: 1
+          if-no-files-found: error
