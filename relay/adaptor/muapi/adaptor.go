@@ -36,7 +36,7 @@ func (a *Adaptor) GetRequestURL(metaInfo *meta.Meta) (string, error) {
 	if metaInfo == nil {
 		return "", errors.New("MuAPI request metadata is nil")
 	}
-	if metaInfo.Mode != relaymode.Videos {
+	if metaInfo.Mode != relaymode.AsyncVideos && metaInfo.Mode != relaymode.MuAsyncVideos {
 		return "", errors.Errorf("MuAPI supports video generation only, got relay mode %d", metaInfo.Mode)
 	}
 
@@ -82,7 +82,7 @@ func (a *Adaptor) ConvertImageRequest(_ *gin.Context, _ *model.ImageRequest) (an
 // DoRequest validates the MuAPI video operation and dispatches it through the
 // shared REST helper. It returns the upstream response or a wrapped error.
 func (a *Adaptor) DoRequest(c *gin.Context, metaInfo *meta.Meta, requestBody io.Reader) (*http.Response, error) {
-	if metaInfo == nil || metaInfo.Mode != relaymode.Videos {
+	if metaInfo == nil || metaInfo.Mode != relaymode.AsyncVideos && metaInfo.Mode != relaymode.MuAsyncVideos {
 		return nil, errors.New("MuAPI adaptor received a non-video request")
 	}
 	if err := validateMuAPIVideoOperation(c); err != nil {
@@ -101,7 +101,7 @@ func (a *Adaptor) DoRequest(c *gin.Context, metaInfo *meta.Meta, requestBody io.
 // DoResponse validates and forwards MuAPI's native asynchronous response while
 // persisting accepted task ids for authenticated follow-up polling.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, metaInfo *meta.Meta) (*model.Usage, *model.ErrorWithStatusCode) {
-	if metaInfo == nil || metaInfo.Mode != relaymode.Videos {
+	if metaInfo == nil || metaInfo.Mode != relaymode.AsyncVideos && metaInfo.Mode != relaymode.MuAsyncVideos {
 		return nil, openai.ErrorWrapper(errors.New("MuAPI adaptor received a non-video response"), "invalid_api_type", http.StatusBadRequest)
 	}
 	return a.handleVideoResponse(c, resp)

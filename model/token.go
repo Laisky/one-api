@@ -174,6 +174,18 @@ func SearchAllTokensForAdmin(keyword string, startIdx int, num int, sortBy strin
 }
 
 func ValidateUserToken(ctx context.Context, key string) (token *Token, err error) {
+	return validateUserToken(ctx, key, true)
+}
+
+// ValidateUserTokenForTask authenticates retrieval/reattachment of prepaid work.
+// It never admits new work: expired, disabled and unknown tokens still fail;
+// only the balance check is skipped. Creation must independently reserve quota.
+func ValidateUserTokenForTask(ctx context.Context, key string) (*Token, error) {
+	return validateUserToken(ctx, key, false)
+}
+
+// validateUserToken shares credential checks, with optional quota admission.
+func validateUserToken(ctx context.Context, key string, requireQuota bool) (token *Token, err error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -201,6 +213,9 @@ func ValidateUserToken(ctx context.Context, key string) (token *Token, err error
 
 	switch token.Status {
 	case TokenStatusExhausted:
+		if !requireQuota {
+			break
+		}
 		// Specifically about funds.
 		return nil, errkind.Quota(identity.Tag(
 			errors.Errorf("API Key %s (#%d) quota has been exhausted", token.Name, token.Id),
@@ -211,7 +226,7 @@ func ValidateUserToken(ctx context.Context, key string) (token *Token, err error
 			token.Ref(), token.OwnerRef()))
 	}
 
-	if token.Status != TokenStatusEnabled {
+	if token.Status != TokenStatusEnabled && (requireQuota || token.Status != TokenStatusExhausted) {
 		// A valid credential that the operator or the owner has disabled.
 		return nil, errkind.ForbiddenErr(identity.Tag(
 			errors.Errorf("token %s (#%d) status is not available (status: %d)", token.Name, token.Id, token.Status),
@@ -237,7 +252,7 @@ func ValidateUserToken(ctx context.Context, key string) (token *Token, err error
 			errors.Errorf("token %s (#%d) has expired at timestamp %d", token.Name, token.Id, token.ExpiredTime),
 			token.Ref(), token.OwnerRef()))
 	}
-	if !token.UnlimitedQuota && token.RemainQuota <= 0 {
+	if requireQuota && !token.UnlimitedQuota && token.RemainQuota <= 0 {
 		if !common.IsRedisEnabled() {
 			// in this case, we can make sure the token is exhausted
 			token.Status = TokenStatusExhausted

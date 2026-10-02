@@ -323,7 +323,7 @@ export const CHANNEL_TYPES: ChannelType[] = [
     value: 61,
     color: 'purple',
     description:
-      'MuAPI unified video generation: route any catalog model slug through submit-and-poll /v1/videos; request-specific pricing is quoted before quota admission.',
+      'MuAPI unified video generation: route any catalog model slug through durable /v1/async/videos or synchronous /v1/videos/generations (mu_async_videos capability); request-specific pricing is quoted before quota admission.',
   },
   {
     key: 42,

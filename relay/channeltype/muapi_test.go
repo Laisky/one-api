@@ -19,5 +19,5 @@ func TestMuAPIRegistration(t *testing.T) {
 	require.Equal(t, "muapi", IdToName(MuAPI))
 	require.Equal(t, "https://api.muapi.ai", GetChannelBaseURLConfig(MuAPI).URL)
 	require.True(t, GetChannelBaseURLConfig(MuAPI).Editable)
-	require.Equal(t, []Endpoint{EndpointVideos}, DefaultEndpointsForChannelType(MuAPI))
+	require.Equal(t, []Endpoint{MuAsyncEndpointVideos}, DefaultEndpointsForChannelType(MuAPI))
 }

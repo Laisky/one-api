@@ -24,6 +24,8 @@ import (
 	"github.com/Laisky/one-api/monitor"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/asyncvideo"
+	"github.com/Laisky/one-api/relay/channeltype"
 	rcontroller "github.com/Laisky/one-api/relay/controller"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -81,8 +83,15 @@ func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 		err = rcontroller.RelayClaudeMessagesHelper(c)
 	case relaymode.Rerank:
 		err = rcontroller.RelayRerankHelper(c)
+	case relaymode.AsyncVideos:
+		err = rcontroller.RelayAsyncVideoHelper(c, false)
 	case relaymode.Videos:
-		err = rcontroller.RelayVideoHelper(c)
+		_, durable := channeltype.NativeAsyncVideoEndpoint(c.GetInt(ctxkey.Channel))
+		if durable && c.Request.Method == http.MethodPost && c.Request.URL.Path == "/v1/videos/generations" {
+			err = rcontroller.RelayAsyncVideoHelper(c, true)
+		} else {
+			err = rcontroller.RelayVideoHelper(c)
+		}
 	case relaymode.OCR:
 		err = rcontroller.RelayOCRHelper(c)
 	case relaymode.VoiceClone:
@@ -130,6 +139,10 @@ func Relay(c *gin.Context) {
 
 	bizErr := invokeRelayHelper(c, relayMode)
 	if bizErr == nil {
+		if c.GetString(asyncvideo.DurableTaskKey) != "" {
+			PrometheusMonitor.RecordRelayRequest(c, relayMeta, startTime, c.Writer.Status() < 400, 0, 0, 0)
+			return
+		}
 		monitor.Emit(channelId, true)
 
 		// Record successful relay request metrics
@@ -172,7 +185,7 @@ func Relay(c *gin.Context) {
 	}
 	retryableClientError, retryableClientReason := classifyRetryableUpstreamClientError(bizErr)
 	if err := shouldRetry(c, bizErr); err != nil {
-		if retryableClientError {
+		if retryableClientError && !videoReplayUnsafe(c) {
 			lg.Debug("retryable upstream client error detected; keeping retry logic enabled",
 				zap.Int("status_code", bizErr.StatusCode),
 				zap.String("error_type", string(bizErr.Type)),
@@ -331,6 +344,12 @@ func Relay(c *gin.Context) {
 			break
 		}
 
+		if !middleware.ChannelSupportsEndpointForRequest(c, channel, relayMode) {
+			failedChannels[channel.Id] = true
+			// Excluding an incompatible channel does not consume a paid retry attempt.
+			i++
+			continue
+		}
 		// channel is a DIFFERENT channel than the one bound onto lg, so name it
 		// explicitly under its own key instead of shadowing the bound channel_id.
 		lg.Info("using channel to retry",
@@ -406,7 +425,7 @@ func Relay(c *gin.Context) {
 		if stopErr := shouldRetry(c, bizErr); stopErr != nil {
 			// Apply the existing transient-4xx exception on every real attempt,
 			// but never override cancellation or a terminal provider/client error.
-			if isRetryableUpstreamClientError(bizErr) &&
+			if isRetryableUpstreamClientError(bizErr) && !videoReplayUnsafe(c) &&
 				!errors.Is(bizErr.RawError, context.Canceled) &&
 				!errors.Is(bizErr.RawError, context.DeadlineExceeded) {
 				continue

@@ -46,7 +46,7 @@ func TestMuAPIVideoResponseBindsAcceptedTask(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(`{"request_id":"job-123","status":"processing"}`)),
 	}
 
-	usage, apiErr := (&Adaptor{}).DoResponse(c, response, &meta.Meta{Mode: relaymode.Videos})
+	usage, apiErr := (&Adaptor{}).DoResponse(c, response, &meta.Meta{Mode: relaymode.MuAsyncVideos})
 	require.Nil(t, usage)
 	require.Nil(t, apiErr)
 	require.True(t, c.GetBool(adaptor.AsyncVideoAcceptedKey))
@@ -92,7 +92,7 @@ func TestMuAPIVideoResponseRetriesOnlyBindingPersistence(t *testing.T) {
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(`{"request_id":"job-retry","status":"processing"}`)),
 	}
-	usage, apiErr := (&Adaptor{}).DoResponse(c, response, &meta.Meta{Mode: relaymode.Videos})
+	usage, apiErr := (&Adaptor{}).DoResponse(c, response, &meta.Meta{Mode: relaymode.MuAsyncVideos})
 	require.Nil(t, usage)
 	require.Nil(t, apiErr)
 	require.True(t, c.GetBool(adaptor.AsyncVideoAcceptedKey))
@@ -122,7 +122,7 @@ func TestMuAPIVideoResponseForwardsPollingResult(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(`{"status":"completed","outputs":[{"video_url":"https://cdn.example/video.mp4"}]}`)),
 	}
 
-	usage, apiErr := (&Adaptor{}).DoResponse(c, response, &meta.Meta{Mode: relaymode.Videos})
+	usage, apiErr := (&Adaptor{}).DoResponse(c, response, &meta.Meta{Mode: relaymode.MuAsyncVideos})
 	require.Nil(t, usage)
 	require.Nil(t, apiErr)
 	require.False(t, c.GetBool(adaptor.AsyncVideoAcceptedKey))
@@ -146,7 +146,7 @@ func TestMuAPIVideoResponseForwardsSafeHeadersOnly(t *testing.T) {
 		Body: io.NopCloser(strings.NewReader(`{"status":"completed"}`)),
 	}
 
-	usage, apiErr := (&Adaptor{}).DoResponse(c, response, &meta.Meta{Mode: relaymode.Videos})
+	usage, apiErr := (&Adaptor{}).DoResponse(c, response, &meta.Meta{Mode: relaymode.MuAsyncVideos})
 	require.Nil(t, usage)
 	require.Nil(t, apiErr)
 	require.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
@@ -200,7 +200,7 @@ func TestMuAPIVideoResponseRejectsMissingRequestID(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(`{"status":"processing"}`)),
 	}
 
-	_, apiErr := (&Adaptor{}).DoResponse(c, response, &meta.Meta{Mode: relaymode.Videos})
+	_, apiErr := (&Adaptor{}).DoResponse(c, response, &meta.Meta{Mode: relaymode.MuAsyncVideos})
 	require.NotNil(t, apiErr)
 	require.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
 	require.False(t, c.GetBool(adaptor.AsyncVideoAcceptedKey))

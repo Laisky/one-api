@@ -160,7 +160,7 @@ func runRelayRetryScenarioForRequest(t *testing.T, initial *dbmodel.Channel, req
 	relayHelperForTest = func(c *gin.Context, _ int) *model.ErrorWithStatusCode {
 		id := c.GetInt(ctxkey.ChannelId)
 		order = append(order, id)
-		if c.Request.Method == http.MethodPost && (c.Request.URL.Path == "/v1/videos" || c.Request.URL.Path == "/v1/videos/generations") {
+		if c.Request.Method == http.MethodPost && (c.Request.URL.Path == "/v1/videos" || c.Request.URL.Path == "/v1/videos/generations" || c.Request.URL.Path == "/v1/async/videos") {
 			// The scripted adaptor represents a dispatched paid creation. If its
 			// response fails, Relay must not invoke the helper for another channel.
 			c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)

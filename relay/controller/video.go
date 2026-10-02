@@ -25,6 +25,7 @@ import (
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/asyncvideo"
 	"github.com/Laisky/one-api/relay/billing"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 	metalib "github.com/Laisky/one-api/relay/meta"
@@ -74,6 +75,9 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
 	}
 	ad.Init(meta)
+	if _, durable := ad.(asyncvideo.Provider); durable {
+		return openai.ErrorWrapper(errors.New("native async video requires the durable task controller"), "unsupported_video_protocol", http.StatusBadRequest)
+	}
 
 	inputImages := 0
 	if preparer, ok := ad.(adaptor.VideoRequestPreparer); ok {

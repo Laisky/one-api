@@ -23,7 +23,7 @@ func TestMuAPIRegistration(t *testing.T) {
 	require.Equal(t, "muapi", apitype.String(apitype.MuAPI))
 	require.Len(t, channeltype.ChannelBaseURLConfigs, channeltype.Dummy)
 	require.Equal(t, "https://api.muapi.ai", channeltype.ChannelBaseURLs[channeltype.MuAPI])
-	require.Equal(t, []string{"videos"}, channeltype.DefaultEndpointNamesForChannelType(channeltype.MuAPI))
+	require.Equal(t, []string{"mu_async_videos"}, channeltype.DefaultEndpointNamesForChannelType(channeltype.MuAPI))
 	require.Equal(t, relaymode.Videos, relaymode.GetByPath("/v1/videos"))
 	require.NotContains(t, channeltype.DefaultEndpointsForChannelType(channeltype.MuAPI), channeltype.EndpointImagesGenerations)
 }

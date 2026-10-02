@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/asyncvideo"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -20,13 +21,11 @@ import (
 // user-originated classification drive the retry decision.
 // Returns: nil when a retry may help, otherwise an error explaining the skip.
 func shouldRetry(c *gin.Context, bizErr *model.ErrorWithStatusCode) error {
+	if videoReplayUnsafe(c) {
+		return errors.New("video task is durable or may already be accepted; automatic replay is unsafe")
+	}
 	if bizErr == nil {
 		return nil
-	}
-	if c.Request != nil && c.Request.Method == http.MethodPost &&
-		(c.Request.URL.Path == "/v1/videos" || c.Request.URL.Path == "/v1/videos/generations") &&
-		c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) {
-		return errors.New("video creation may already have created a paid job; automatic replay is unsafe")
 	}
 	if c.GetBool(adaptor.ImageReceiptAcceptedKey) || c.GetBool(adaptor.AudioReceiptAcceptedKey) {
 		return errors.New("upstream work is already accepted; replay after downstream failure is unsafe")
@@ -151,4 +150,24 @@ func classifyRetryableUpstreamClientError(relayErr *model.ErrorWithStatusCode) (
 	}
 
 	return false, ""
+}
+
+// videoReplayUnsafe is an authoritative veto, including when a provider labels
+// an error as a normally retryable 4xx. Local reservations are irreversible too.
+func videoReplayUnsafe(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	if c.GetString(asyncvideo.DurableTaskKey) != "" || c.GetBool(adaptor.AsyncVideoAcceptedKey) {
+		return true
+	}
+	if c.Request == nil || c.Request.URL == nil || c.Request.Method != http.MethodPost || !c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) {
+		return false
+	}
+	switch c.Request.URL.Path {
+	case "/v1/videos", "/v1/videos/generations", "/v1/async/videos":
+		return true
+	default:
+		return false
+	}
 }

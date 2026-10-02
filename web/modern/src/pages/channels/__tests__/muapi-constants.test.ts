@@ -20,6 +20,9 @@ describe('MuAPI channel metadata', () => {
     expect(channels[0].text).toBe('MuAPI');
     expect(channels[0].description).toContain('any catalog model slug');
     expect(channels[0].description).toContain('request-specific pricing');
+    expect(channels[0].description).toContain('/v1/async/videos');
+    expect(channels[0].description).toContain('/v1/videos/generations');
+    expect(channels[0].description).toContain('mu_async_videos');
     expect(CHANNEL_TYPE_LABELS[61].name).toBe('MuAPI');
     expect(CHANNEL_TYPE_LABELS[60].name).toBe('TypeSafe');
   });

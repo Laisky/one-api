@@ -1,21 +1,17 @@
 package channeltype
 
 import (
- "testing"
- "github.com/Laisky/one-api/relay/relaymode"
+	"testing"
+
+	"github.com/Laisky/one-api/relay/relaymode"
+	"github.com/stretchr/testify/require"
 )
 
-// Native capability must not claim legacy wire compatibility. The synchronous
-// bridge is a separate, explicit routing decision, never a default alias.
+// TestMuAPINativeVideoCapabilityIsIsolated verifies native capability never
+// claims legacy wire compatibility. The synchronous bridge is explicit.
 func TestMuAPINativeVideoCapabilityIsIsolated(t *testing.T) {
- endpoints := DefaultEndpointsForChannelType(MuAPI)
- if IsEndpointSupported(relaymode.Videos, endpoints) {
-  t.Fatal("MuAPI native submit/poll must not advertise legacy EndpointVideos")
- }
- if len(endpoints) == 0 {
-  t.Fatal("MuAPI must retain an explicit native video capability")
- }
- if !IsEndpointSupported(relaymode.Videos, DefaultEndpointsForChannelType(OpenAI)) {
-  t.Fatal("legacy OpenAI video capability changed")
- }
+	endpoints := DefaultEndpointsForChannelType(MuAPI)
+	require.False(t, IsEndpointSupported(relaymode.Videos, endpoints), "native submit/poll must not advertise legacy EndpointVideos")
+	require.Contains(t, endpoints, MuAsyncEndpointVideos, "native capability is explicit")
+	require.True(t, IsEndpointSupported(relaymode.Videos, DefaultEndpointsForChannelType(OpenAI)), "legacy capability is preserved")
 }

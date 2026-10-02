@@ -30,6 +30,10 @@ const (
 	VoiceClone
 	// SystemOne handles TypeSafe's native typed evaluation API.
 	SystemOne
+	// AsyncVideos is the provider-independent durable submit/poll API.
+	AsyncVideos
+	// MuAsyncVideos is MuAPI's native submit/poll capability, not legacy Videos.
+	MuAsyncVideos
 )
 
 func String(mode int) string {
@@ -72,6 +76,10 @@ func String(mode int) string {
 		return "voice_clone"
 	case SystemOne:
 		return "systemone"
+	case AsyncVideos:
+		return "async_videos"
+	case MuAsyncVideos:
+		return "mu_async_videos"
 	default:
 		return "unknown"
 	}
