@@ -55,7 +55,6 @@ func runURLDiagnosticScenario(t *testing.T, tc urlDiagnosticScenario, response u
 	requestURL, logURL := server.URL+"/v1/rerank", server.URL+"/v1/rerank"
 	if tc.query != "" {
 		requestURL += "?" + tc.query
-		logURL += "?" + tc.wantQuery
 	}
 	core, observed := observer.New(zapcore.DebugLevel)
 	lg, err := glog.NewWithName("url-diagnostics-test", glog.LevelDebug,

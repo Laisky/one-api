@@ -3,7 +3,6 @@ package adaptor
 import (
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -12,7 +11,6 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	appcommon "github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/identity"
@@ -148,7 +146,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	req, err := gutils.NewReusableRequest(gmw.Ctx(c),
 		c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
-		return nil, errors.Wrap(err, "new request failed")
+		return nil, errors.Wrap(SanitizeRequestURLError(err), "new request failed")
 	}
 
 	req.Header.Set("Content-Type", c.GetString(ctxkey.ContentType))
@@ -163,7 +161,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 
 	// Sanitize diagnostics only: dispatch and metadata still need the original
 	// query values. Sanitize the bound logger as well as each explicit URL field.
-	logRequestURL := appcommon.SanitizeURLForLogging(fullRequestURL)
+	logRequestURL := model.SanitizeLogUpstreamEndpoint(fullRequestURL)
 
 	// Prepare tagged logger and propagate to context.
 	// The request-scoped logger is already bound with the full user/token/channel
@@ -244,14 +242,7 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		// Client.Do returns *url.Error; redact a copy before downstream
-		// wrapping/logging without changing the cause or outbound URL.
-		if urlErr, ok := err.(*url.Error); ok {
-			sanitized := *urlErr
-			sanitized.URL = appcommon.SanitizeURLForLogging(urlErr.URL)
-			err = &sanitized
-		}
-		return nil, errors.Wrap(err, "perform upstream request")
+		return nil, errors.Wrap(SanitizeRequestURLError(err), "perform upstream request")
 	}
 	if resp == nil {
 		return nil, errors.New("resp is nil")

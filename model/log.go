@@ -179,7 +179,7 @@ func (m LogMetadata) MarshalJSON() ([]byte, error) {
 	if m == nil {
 		return []byte("{}"), nil
 	}
-	payload, err := json.Marshal(map[string]any(m))
+	payload, err := json.Marshal(map[string]any(SanitizeLogMetadata(m)))
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal log metadata")
 	}
@@ -192,7 +192,7 @@ func (m LogMetadata) Value() (driver.Value, error) {
 		return nil, nil
 	}
 
-	payload, err := json.Marshal(map[string]any(m))
+	payload, err := json.Marshal(map[string]any(SanitizeLogMetadata(m)))
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal log metadata")
 	}

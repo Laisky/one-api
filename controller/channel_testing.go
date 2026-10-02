@@ -147,7 +147,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	// initial context for debugging
 	lg.Debug("channel test: initial model context",
 		zap.Int("channel_type", channel.Type),
-		zap.String("base_url", channel.GetBaseURL()),
+		zap.String("base_url", model.SanitizeLogUpstreamEndpoint(channel.GetBaseURL())),
 		zap.String("requested_model", requestedModel),
 		zap.String("stored_models", channel.Models),
 	)
@@ -247,7 +247,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 		lg.Debug("prepare test request",
 			zap.String("actual_model", meta.ActualModelName),
 			zap.Int("channel_type", channel.Type),
-			zap.String("upstream_url", fullURL),
+			zap.String("upstream_url", model.SanitizeLogUpstreamEndpoint(fullURL)),
 			zap.ByteString("test_request", jsonData))
 	} else {
 		// Return early if URL cannot be built (e.g., missing deployment for Azure)
