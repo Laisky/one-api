@@ -16,12 +16,12 @@ jobs:
       - name: Verify audited ancestry and export exact trees
         run: |
           set -euo pipefail
-          git merge-base --is-ancestor d7fa5f35ebf3dd6072eace68bd0178196baa0823 cfa6e48bbbcdb3d5f7efc08cfa87967696123048
+          git merge-base --is-ancestor b1a2273ef41d4375ffe7bc5f18888ce11356285c cfa6e48bbbcdb3d5f7efc08cfa87967696123048
           mkdir -p "$RUNNER_TEMP/audit"
-          git archive --format=tar.gz --output="$RUNNER_TEMP/audit/base.tar.gz" d7fa5f35ebf3dd6072eace68bd0178196baa0823
+          git archive --format=tar.gz --output="$RUNNER_TEMP/audit/base.tar.gz" b1a2273ef41d4375ffe7bc5f18888ce11356285c
           git archive --format=tar.gz --output="$RUNNER_TEMP/audit/head.tar.gz" cfa6e48bbbcdb3d5f7efc08cfa87967696123048
-          git diff --binary d7fa5f35ebf3dd6072eace68bd0178196baa0823 cfa6e48bbbcdb3d5f7efc08cfa87967696123048 > "$RUNNER_TEMP/audit/pr.diff"
-          printf '%s\n' d7fa5f35ebf3dd6072eace68bd0178196baa0823 > "$RUNNER_TEMP/audit/base.sha"
+          git diff --binary b1a2273ef41d4375ffe7bc5f18888ce11356285c cfa6e48bbbcdb3d5f7efc08cfa87967696123048 > "$RUNNER_TEMP/audit/pr.diff"
+          printf '%s\n' b1a2273ef41d4375ffe7bc5f18888ce11356285c > "$RUNNER_TEMP/audit/base.sha"
           printf '%s\n' cfa6e48bbbcdb3d5f7efc08cfa87967696123048 > "$RUNNER_TEMP/audit/head.sha"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
