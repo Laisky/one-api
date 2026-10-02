@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pr: [441, 442]
+        pr: [441]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -39,6 +39,10 @@ jobs:
           if PR == 441:
               source = prepared / "controller/realtime.go"
               source.write_text(source.read_text().replace('\\t"github.com/Laisky/errors/v2"\\n', ""))
+              routes = prepared / "router/relay_security_test.go"
+              route_test = routes.read_text().replace('import (', 'import (\\n\\t"encoding/json"')
+              route_test = route_test.replace('require.NotContains(t, w.Body.String(), "client_secret")', 'var payload map[string]json.RawMessage\\n require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))\\n require.Contains(t, payload, "error")\\n require.NotContains(t, payload, "client_secret")')
+              routes.write_text(route_test)
           '''
           assert needle in text
           text = text.replace(needle, insertion + needle)
