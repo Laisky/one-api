@@ -98,6 +98,10 @@ func TestRelayResponseAPIHelper_FallbackAzure(t *testing.T) {
 	config.SetLogConsumeEnabled(false)
 	t.Cleanup(func() { config.SetLogConsumeEnabled(prevLogConsume) })
 
+	initialQuota := int64(600)
+	err := model.DB.Model(&model.User{}).Where("id = ?", fallbackUserID).Update("quota", initialQuota).Error
+	require.NoError(t, err, "failed to lower user quota for pre-consume coverage")
+
 	upstreamCalled := false
 	var upstreamPath string
 	var upstreamBody []byte
@@ -172,7 +176,7 @@ func TestRelayResponseAPIHelper_FallbackAzure(t *testing.T) {
 	require.Contains(t, upstreamPath, "api-version=", "expected api-version query parameter in upstream path")
 
 	var fallbackResp openai.ResponseAPIResponse
-	err := json.Unmarshal(recorder.Body.Bytes(), &fallbackResp)
+	err = json.Unmarshal(recorder.Body.Bytes(), &fallbackResp)
 	require.NoError(t, err, "failed to unmarshal fallback response body")
 	require.Equal(t, "completed", fallbackResp.Status, "expected response status completed")
 	require.Len(t, fallbackResp.Output, 1, "expected single output item")
@@ -194,6 +198,14 @@ func TestRelayResponseAPIHelper_FallbackAzure(t *testing.T) {
 	require.Equal(t, "You are helpful.", chatReq.Messages[0].StringContent(), "system message not preserved")
 	require.Equal(t, "user", chatReq.Messages[1].Role, "expected user role")
 	require.Equal(t, "Hello via response API", chatReq.Messages[1].StringContent(), "user message not preserved")
+
+	drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, graceful.Drain(drainCtx), "failed to drain post-billing task")
+
+	remainingQuota, err := model.GetUserQuota(fallbackUserID)
+	require.NoError(t, err, "failed to read user quota after fallback billing")
+	require.LessOrEqual(t, remainingQuota, initialQuota, "fallback billing must not increase user quota after successful response")
 }
 
 func TestRelayResponseAPIHelper_FallbackSearchPreviewModel(t *testing.T) {
