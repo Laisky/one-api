@@ -28,7 +28,10 @@ jobs:
         env:
           REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 .github/security-review-runner.py '${{ matrix.pr }}'
+        run: |
+          # Compare introduced changes to main, not historical files brought in by the merge.
+          sed -i 's/"--cached", "--check"/"--cached", "--check", MAIN/' .github/security-review-runner.py
+          python3 .github/security-review-runner.py '${{ matrix.pr }}'
       - name: Preserve observed validation evidence
         if: always()
         uses: actions/upload-artifact@v4
