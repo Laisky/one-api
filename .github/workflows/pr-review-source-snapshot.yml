@@ -11,32 +11,29 @@ jobs:
   snapshot:
     if: github.event.pull_request.number == 445
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          fetch-depth: 0
+          ref: 567b7b910065e4b7f63843ed470fc6005f5ac519
           persist-credentials: false
-      - name: Capture the exact reviewed revisions without credentials
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Prepare verified public dependencies and toolchain
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p review-sources
-          while read -r name sha; do
-            git fetch --no-tags origin "$sha"
-            git archive --format=tar.gz --prefix="$name/" "$sha" > "review-sources/$name.tar.gz"
-          done <<'REVISIONS'
-          main 567b7b910065e4b7f63843ed470fc6005f5ac519
-          pr444 5f7249d40f95ba152331a1b897f52c8edef96ece
-          pr445 bdf9da5e2d188bed14b508d349f2c35d40879156
-          pr446 3941a6e2e2f37fcd0a0b07ab2b9962a13584932d
-          pr447 3023df9f06ea18f0f7ac0c7f41f1d91bbb485ccc
-          pr448 af5fd8eee5d6503239fb98fe3cdea8d1a6c00f09
-          pr449 269eab4dfdf8bd6fefd563f9c682f57504b4ddc2
-          REVISIONS
-      - uses: actions/upload-artifact@v4
+          go mod download
+          go mod verify
+          mkdir -p "$RUNNER_TEMP/offline-go"
+          tar -C "$(dirname "$(go env GOROOT)")" -czf "$RUNNER_TEMP/offline-go/toolchain.tar.gz" "$(basename "$(go env GOROOT)")"
+          tar -C "$(go env GOMODCACHE)" --exclude=cache/vcs -czf "$RUNNER_TEMP/offline-go/modules.tar.gz" .
+          sha256sum "$RUNNER_TEMP/offline-go/"*.tar.gz > "$RUNNER_TEMP/offline-go/SHA256SUMS"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pinned-pr-review-sources
-          path: review-sources/*.tar.gz
+          name: pinned-offline-go-review-environment
+          path: ${{ runner.temp }}/offline-go
           retention-days: 1
           if-no-files-found: error
+          compression-level: 0
