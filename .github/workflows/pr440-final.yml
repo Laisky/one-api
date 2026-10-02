@@ -1,0 +1,24 @@
+name: PR440 final review validation
+on:
+  push:
+    branches: [work/pr440-final-20261002t2140]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export incremental committed history
+        run: |
+          git merge-base --is-ancestor 595c035f79ae66903edbc3907f94c98c3a2b54c8 HEAD
+          git bundle create "$RUNNER_TEMP/pr440-final.bundle" HEAD ^595c035f79ae66903edbc3907f94c98c3a2b54c8
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr440-final-source
+          path: ${{ runner.temp }}/pr440-final.bundle
+          retention-days: 2
