@@ -1,0 +1,123 @@
+name: Proxy boundary and settled video compatibility
+on:
+  pull_request:
+    types: [synchronize]
+    paths: ['.github/workflows/security-review-video-compat.yml']
+permissions:
+  contents: write
+jobs:
+  validate:
+    if: github.event.pull_request.number == 443 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Reproduce the video regression and verify the separated entrypoints
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib, subprocess
+          root = pathlib.Path.cwd()
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'video-compat-review-443'
+          out.mkdir()
+          def run(*args):
+              print('+', ' '.join(args), flush=True)
+              subprocess.run(args, check=True)
+          def replace(path, old, new):
+              p = root / path
+              text = p.read_text()
+              assert text.count(old) == 1, (path, old)
+              p.write_text(text.replace(old, new, 1))
+          required = {'TestProtocolAuditZhipuVideoLedger', 'TestXAIVideoBillingHTTP'}
+          def test(phase, selector, race):
+              cmd = ['go', 'test', '-json', '-count=' + ('3' if race else '1'), '-timeout=15m']
+              if race: cmd += ['-race']
+              cmd += ['-run', selector, './relay/controller', './relay/adaptor/openai', './middleware']
+              print('+', ' '.join(cmd), flush=True)
+              path = out / (phase + '.jsonl')
+              with path.open('w') as log:
+                  proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                  for line in proc.stdout:
+                      print(line, end='', flush=True)
+                      log.write(line)
+                  code = proc.wait()
+              text = path.read_text()
+              events = []
+              for line in text.splitlines():
+                  try: events.append(json.loads(line))
+                  except json.JSONDecodeError: pass
+              failed = {e['Test'] for e in events if e.get('Action') == 'fail' and 'Test' in e}
+              passed = {e['Test'] for e in events if e.get('Action') == 'pass' and 'Test' in e}
+              result = {'command':cmd, 'exit_code':code, 'failed':sorted(failed), 'passed':sorted(passed)}
+              (out / (phase + '-summary.json')).write_text(json.dumps(result, indent=2))
+              assert '[build failed]' not in text and 'panic:' not in text and 'DATA RACE' not in text, result
+              if phase == 'red': assert code != 0 and required <= failed, result
+              else: assert code == 0 and required <= passed and not failed, result
+          # Reproduce the newly introduced compatibility regression before any production changes.
+          test('red', '^Test(ProtocolAuditZhipuVideoLedger|XAIVideoBillingHTTP)$', False)
+          replace('relay/controller/proxy.go',
+                  'func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatusCode {',
+                  'func RelayProxyHelper(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {')
+          replace('relay/controller/proxy.go',
+                  '\tif err := logClientRequestPayload(c, "proxy"); err != nil {',
+                  '\treturn relayUnmeteredRequest(c)\n}\n\n'
+                  '// relayUnmeteredRequest forwards an operation whose charging policy was already\n'
+                  '// selected by its controller. Only the guarded explicit-proxy entrypoint and\n'
+                  '// authenticated video retrieval/deletion routes may call it; model generation\n'
+                  '// must continue through its normal admission and settlement controller.\n'
+                  'func relayUnmeteredRequest(c *gin.Context) *relaymodel.ErrorWithStatusCode {\n'
+                  '\tmeta := metalib.GetByContext(c)\n'
+                  '\tif err := logClientRequestPayload(c, "proxy"); err != nil {')
+          replace('relay/controller/video.go',
+                  '\t\treturn RelayProxyHelper(c, relaymode.Videos)',
+                  '\t\t// Task ownership and channel binding are checked by BindAsyncTaskChannel\n'
+                  '\t\t// on the video routes. Retrieval/deletion does not create another paid job;\n'
+                  '\t\t// it must not be confused with the public arbitrary-target proxy endpoint.\n'
+                  '\t\treturn relayUnmeteredRequest(c)')
+          replace('relay/controller/video.go', '\t"github.com/Laisky/one-api/relay/relaymode"\n', '')
+          # Neither the argument nor metadata's mode is an authorization bypass for public proxy calls.
+          replace('relay/controller/proxy_security_review_test.go',
+                  '\t\t\tbefore := hits.Load()\n\t\t\terr := RelayProxyHelper(c, relaymode.Proxy)',
+                  '\t\t\tfor _, requestedMode := range []int{relaymode.Proxy, relaymode.Videos, relaymode.ChatCompletions} {\n'
+                  '\t\t\t\tm.Mode = requestedMode\n'
+                  '\t\t\t\tbefore := hits.Load()\n\t\t\t\terr := RelayProxyHelper(c, requestedMode)')
+          replace('relay/controller/proxy_security_review_test.go',
+                  '\t\t\trequire.Equal(t, balance, reloadUserQuota(t), "rejected requests must not charge users")',
+                  '\t\t\trequire.Equal(t, balance, reloadUserQuota(t), "rejected requests must not charge users")\n\t\t\t}')
+          run('gofmt', '-w', 'relay/controller/proxy.go', 'relay/controller/video.go', 'relay/controller/proxy_security_review_test.go')
+          test('green', '^Test(Review|ProtocolAuditZhipuVideoLedger|XAIVideo|BindAsyncTaskChannel|GetRequestURLForOpenAICompatible)', True)
+          run('go', 'vet', './...')
+          run('git', 'diff', '--check')
+          run('git', 'config', 'user.name', 'github-actions[bot]')
+          run('git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com')
+          run('git', 'add', 'relay/controller/proxy.go', 'relay/controller/video.go', 'relay/controller/proxy_security_review_test.go')
+          run('git', 'commit', '-m', 'fix(proxy): preserve settled video operations behind their authenticated entrypoint')
+          sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          (out / 'summary.json').write_text(json.dumps({'validated_commit':sha, 'baseline':'f79ab41f5ae9780f35e27d3cc00e45f24693faf2', 'vet':'passed'}, indent=2))
+          (out / 'final.diff').write_bytes(subprocess.check_output(['git', 'diff', 'f79ab41f5ae9780f35e27d3cc00e45f24693faf2', 'HEAD']))
+          branch = 'codex/propose-fix-for-github-models-quota-bypass'
+          actual = subprocess.check_output(['git', 'ls-remote', 'origin', 'refs/heads/'+branch], text=True).split()[0]
+          assert actual == os.environ['REVIEW_HEAD'], 'concurrent branch update'
+          auth = base64.b64encode(('x-access-token:'+os.environ['GH_TOKEN']).encode()).decode()
+          print('::add-mask::'+auth, flush=True)
+          subprocess.run(['git','-c','http.https://github.com/.extraheader=AUTHORIZATION: basic '+auth,'push','origin','HEAD:refs/heads/'+branch],check=True)
+          print('VALIDATED_AND_PUSHED', sha, flush=True)
+          PY
+      - name: Preserve observed compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-review-443-video-compat
+          path: ${{ runner.temp }}/video-compat-review-443
+          if-no-files-found: warn
+          retention-days: 7
