@@ -61,6 +61,10 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
+      - name: Install physical media test dependency
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg
       - name: Static validation
         run: go vet ./...
       - name: Full relevant behavior regressions
