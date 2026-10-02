@@ -29,7 +29,12 @@ func (a *Adaptor) SubmitVideo(ctx context.Context, info *meta.Meta, body []byte)
 	if info == nil || !validMuAPIModelName(info.ActualModelName) || !json.Valid(body) || len(body) > dbmodel.MaxAsyncTaskBody {
 		return asyncvideo.Submission{Rejected: true}, errors.New("invalid MuAPI submission")
 	}
-	response, transportErr := a.asyncVideoHTTP(ctx, info, http.MethodPost, muAPICoreBaseURL(info.BaseURL)+"/"+info.ActualModelName, body)
+	endpoint, err := muAPIEndpointURL(info.BaseURL, info.ActualModelName)
+	if err != nil {
+		// Local URL validation is provably pre-dispatch, unlike an HTTP error.
+		return asyncvideo.Submission{Rejected: true}, errors.Wrap(err, "validate MuAPI submission endpoint")
+	}
+	response, transportErr := a.asyncVideoHTTP(ctx, info, http.MethodPost, endpoint, body)
 	var envelope struct {
 		RequestID json.RawMessage `json:"request_id"`
 		Cost      json.RawMessage `json:"cost"`
@@ -66,7 +71,11 @@ func (a *Adaptor) PollVideo(ctx context.Context, info *meta.Meta, id string) (as
 	if info == nil || !validMuAPITaskID(id) {
 		return asyncvideo.Observation{}, errors.New("invalid MuAPI polling request")
 	}
-	response, transportErr := a.asyncVideoHTTP(ctx, info, http.MethodGet, muAPICoreBaseURL(info.BaseURL)+"/predictions/"+id+"/result", nil)
+	endpoint, err := muAPIEndpointURL(info.BaseURL, "predictions", id, "result")
+	if err != nil {
+		return asyncvideo.Observation{}, errors.Wrap(err, "validate MuAPI polling endpoint")
+	}
+	response, transportErr := a.asyncVideoHTTP(ctx, info, http.MethodGet, endpoint, nil)
 	observation, observationErr := normalizeAsyncObservation(response.body, id)
 	if errors.Is(observationErr, errMuAPIResultTaskIDMismatch) {
 		// Explicitly conflicting identity invalidates the whole response's

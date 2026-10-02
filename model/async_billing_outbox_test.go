@@ -48,11 +48,17 @@ func TestAsyncBillingPoisonOutboxDoesNotBlockLaterReceipts(t *testing.T) {
 				}))
 				defer DB.Callback().Update().Remove("billing_poison")
 			}
+			beforeFlush := time.Now().UTC()
 			err := FlushAsyncTaskLogs(context.Background())
 			require.Error(t, err)
 			var saved AsyncTask
 			require.NoError(t, DB.Where("id = ?", second.ID).Take(&saved).Error)
 			require.True(t, saved.LogRecorded, "a broken older %s must not starve a financially settled task", stage)
+			var failed AsyncTask
+			require.NoError(t, DB.Where("id = ?", first.ID).Take(&failed).Error)
+			require.False(t, failed.LogRecorded)
+			require.Equal(t, 1, failed.LogFailures, "the failed receipt must count its own attempt")
+			require.Greater(t, failed.LogNextAttemptAt, beforeFlush.UnixMilli(), "a failed %s must back off, not occupy every batch", stage)
 		})
 	}
 }

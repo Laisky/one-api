@@ -46,12 +46,12 @@ func (a *Adaptor) GetRequestURL(metaInfo *meta.Meta) (string, error) {
 		if !validMuAPIModelName(modelName) {
 			return "", errors.Errorf("invalid MuAPI model slug %q", modelName)
 		}
-		return muAPICoreBaseURL(metaInfo.BaseURL) + "/" + modelName, nil
+		return muAPIEndpointURL(metaInfo.BaseURL, modelName)
 	}
 	if strings.HasPrefix(requestPath, "/v1/async/videos/") {
 		taskID := strings.TrimPrefix(requestPath, "/v1/async/videos/")
 		if validMuAPITaskID(taskID) {
-			return muAPICoreBaseURL(metaInfo.BaseURL) + "/predictions/" + taskID + "/result", nil
+			return muAPIEndpointURL(metaInfo.BaseURL, "predictions", taskID, "result")
 		}
 	}
 	return "", errors.New("MuAPI supports video creation and task polling only")

@@ -39,9 +39,14 @@ func FlushAsyncTaskLogs(ctx context.Context) error {
 		if err == nil && config.IsLogConsumeEnabled() {
 			err = writeAsyncTaskLog(ctx, task)
 		}
-		current := DB.WithContext(ctx).Model(&AsyncTask{}).Where("id = ? AND billing_revision = ? AND billing_state = ? AND quota = ?", task.ID, task.BillingRevision, task.BillingState, task.Quota)
+		// A failed finisher retains its Error on the initialized GORM query.
+		// Rebuild for each write so an acknowledgement failure cannot prevent
+		// its independent backoff SQL from running with the same revision fence.
+		current := func() *gorm.DB {
+			return DB.WithContext(ctx).Model(&AsyncTask{}).Where("id = ? AND billing_revision = ? AND billing_state = ? AND quota = ?", task.ID, task.BillingRevision, task.BillingState, task.Quota)
+		}
 		if err == nil {
-			err = current.Updates(map[string]any{"log_recorded": true, "log_failures": 0, "log_next_attempt_at": int64(0)}).Error
+			err = current().Updates(map[string]any{"log_recorded": true, "log_failures": 0, "log_next_attempt_at": int64(0)}).Error
 		}
 		if err == nil {
 			continue
@@ -51,7 +56,7 @@ func FlushAsyncTaskLogs(ctx context.Context) error {
 		}
 		failures := min(task.LogFailures+1, 8)
 		next := now.Add(time.Duration(min(300, 1<<failures)) * time.Second).UnixMilli()
-		if backoffErr := current.Updates(map[string]any{"log_failures": failures, "log_next_attempt_at": next}).Error; backoffErr != nil {
+		if backoffErr := current().Updates(map[string]any{"log_failures": failures, "log_next_attempt_at": next}).Error; backoffErr != nil {
 			firstErr = errors.Wrap(errors.Join(firstErr, backoffErr), "persist async receipt backoff")
 		}
 	}

@@ -172,51 +172,13 @@ func stripQuery(path string) string {
 	return path
 }
 
-// validMuAPIModelName validates a model slug before it becomes a URL path.
+// validMuAPIModelName validates a bounded model slug used as one URL segment.
 func validMuAPIModelName(name string) bool {
-	if name == "" || len(name) > maxMuAPIModelNameLength {
-		return false
-	}
-	for _, r := range name {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
-			continue
-		}
-		return false
-	}
-	return true
+	return len(name) <= maxMuAPIModelNameLength && validMuAPITaskID(name)
 }
 
-// validMuAPITaskID validates the opaque task id before it becomes a URL path.
+// validMuAPITaskID validates a bounded opaque identifier used as one URL segment.
+// Dot-only segments are not identifiers: upstream proxies may canonicalize them.
 func validMuAPITaskID(id string) bool {
-	if id == "" || len(id) > maxMuAPITaskIDLength {
-		return false
-	}
-	for _, r := range id {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-// muAPIRootBaseURL normalizes the configured MuAPI host by removing optional
-// /v1 or /api/v1 suffixes so both documented base-URL forms remain usable.
-func muAPIRootBaseURL(base string) string {
-	root := strings.TrimRight(strings.TrimSpace(base), "/")
-	if root == "" {
-		root = "https://api.muapi.ai"
-	}
-	for _, suffix := range []string{"/api/v1", "/v1"} {
-		if strings.HasSuffix(strings.ToLower(root), suffix) {
-			root = strings.TrimRight(root[:len(root)-len(suffix)], "/")
-			break
-		}
-	}
-	return root
-}
-
-// muAPICoreBaseURL returns the unified MuAPI submit-and-poll API base.
-func muAPICoreBaseURL(base string) string {
-	return muAPIRootBaseURL(base) + "/api/v1"
+	return len(id) <= maxMuAPITaskIDLength && id != "." && id != ".." && muAPIIdentifierPattern.MatchString(id)
 }

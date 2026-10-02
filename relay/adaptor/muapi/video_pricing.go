@@ -53,7 +53,10 @@ func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, requ
 
 	ctx, cancel := context.WithTimeout(gmw.Ctx(c), muAPIPricingTimeout)
 	defer cancel()
-	endpoint := muAPICoreBaseURL(metaInfo.BaseURL) + "/models/" + modelName + "/estimate-cost"
+	endpoint, err := muAPIEndpointURL(metaInfo.BaseURL, "models", modelName, "estimate-cost")
+	if err != nil {
+		return nil, errors.Wrap(err, "validate MuAPI pricing endpoint")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, errors.Wrap(err, "create MuAPI pricing request")

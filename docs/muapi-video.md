@@ -21,6 +21,14 @@ above. Disabling the native capability disables new task admission, including
 through the synchronous bridge. First selection and retry selection use the same
 capability checks.
 
+The base URL is an administrator-owned HTTP(S) origin, optionally including a
+literal proxy prefix and a `/v1` or `/api/v1` suffix. Query strings, fragments,
+embedded user credentials, encoded path separators and dot-relative prefixes
+are rejected before network I/O. Model and task IDs must be bounded literal path
+segments; `.` and `..` are not accepted. Normal dotted/versioned model slugs and
+configured private proxy origins remain supported. Only trusted administrators
+should configure a provider origin: it determines where the provider API key goes.
+
 The public `async_videos` capability and MuAPI's native `mu_async_videos`
 capability have distinct IDs. New relay-mode IDs are appended; existing IDs are
 not renumbered. MuAPI is the first implementation of the shared
