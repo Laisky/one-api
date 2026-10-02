@@ -44,38 +44,44 @@ var ErrAsyncLeaseLost = errors.New("asynchronous task lease is no longer owned")
 // once submission is acknowledged; results and idempotency receipts remain for
 // 30 days after financially settled terminal work. Unknown outcomes are retained.
 type AsyncTask struct {
-	ID             string `gorm:"primaryKey;size:64" json:"-"`
-	DedupKey       string `gorm:"size:64;uniqueIndex;not null" json:"-"`
-	RequestHash    string `gorm:"size:64;not null" json:"-"`
-	UserID         int    `gorm:"index;not null" json:"-"`
-	UserUUID       string `gorm:"size:36" json:"-"`
-	TokenID        int    `json:"-"`
-	TokenUUID      string `gorm:"size:36" json:"-"`
-	TokenUnlimited bool   `json:"-"`
-	TokenName      string `gorm:"size:191" json:"-"`
-	ChannelID      int    `json:"-"`
-	ChannelUUID    string `gorm:"size:36" json:"-"`
-	ChannelType    int    `json:"-"`
-	BaseURL        string `gorm:"size:2048" json:"-"`
-	OriginModel    string `gorm:"size:128" json:"-"`
-	ActualModel    string `gorm:"size:128" json:"-"`
-	RequestBody    string `gorm:"size:1048576" json:"-"`
-	RequestID      string `gorm:"size:128" json:"-"`
-	TraceID        string `gorm:"size:128" json:"-"`
-	UpstreamID     string `gorm:"size:191" json:"-"`
-	State          string `gorm:"size:32;index:idx_async_jobs_due,priority:1" json:"-"`
-	BillingState   string `gorm:"size:16;index" json:"-"`
-	Quota          int64  `json:"-"`
-	ResultJSON     string `gorm:"size:1048576" json:"-"`
-	ErrorCode      string `gorm:"size:64" json:"-"`
-	LeaseOwner     string `gorm:"size:64" json:"-"`
-	LeaseUntil     int64  `gorm:"index" json:"-"`
-	NextPollAt     int64  `gorm:"index:idx_async_jobs_due,priority:2" json:"-"`
-	PollFailures   int    `json:"-"`
-	LogRecorded    bool   `gorm:"index:idx_async_jobs_log,priority:1" json:"-"`
-	CreatedAt      int64  `gorm:"autoCreateTime:milli" json:"-"`
-	UpdatedAt      int64  `gorm:"autoUpdateTime:milli;index:idx_async_jobs_log,priority:2" json:"-"`
-	CompletedAt    int64  `gorm:"index" json:"-"`
+	ID               string `gorm:"primaryKey;size:64" json:"-"`
+	DedupKey         string `gorm:"size:64;uniqueIndex;not null" json:"-"`
+	RequestHash      string `gorm:"size:64;not null" json:"-"`
+	UserID           int    `gorm:"index;not null" json:"-"`
+	UserUUID         string `gorm:"size:36" json:"-"`
+	TokenID          int    `json:"-"`
+	TokenUUID        string `gorm:"size:36" json:"-"`
+	TokenUnlimited   bool   `json:"-"`
+	TokenName        string `gorm:"size:191" json:"-"`
+	ChannelID        int    `json:"-"`
+	ChannelUUID      string `gorm:"size:36" json:"-"`
+	ChannelType      int    `json:"-"`
+	BaseURL          string `gorm:"size:2048" json:"-"`
+	OriginModel      string `gorm:"size:128" json:"-"`
+	ActualModel      string `gorm:"size:128" json:"-"`
+	RequestBody      string `gorm:"size:1048576" json:"-"`
+	RequestID        string `gorm:"size:128" json:"-"`
+	TraceID          string `gorm:"size:128" json:"-"`
+	UpstreamID       string `gorm:"size:191" json:"-"`
+	State            string `gorm:"size:32;index:idx_async_jobs_due,priority:1" json:"-"`
+	BillingState     string `gorm:"size:16;index" json:"-"`
+	Quota            int64  `json:"-"`
+	QuotedQuota      int64  `gorm:"not null;default:0" json:"-"`
+	CostQuotaPerUSD  string `gorm:"size:128" json:"-"`
+	UpstreamCostUSD  string `gorm:"size:128" json:"-"`
+	BillingRevision  int64  `gorm:"not null;default:0" json:"-"`
+	LogNextAttemptAt int64  `gorm:"not null;default:0;index:idx_async_jobs_log_due,priority:2" json:"-"`
+	LogFailures      int    `gorm:"not null;default:0" json:"-"`
+	ResultJSON       string `gorm:"size:1048576" json:"-"`
+	ErrorCode        string `gorm:"size:64" json:"-"`
+	LeaseOwner       string `gorm:"size:64" json:"-"`
+	LeaseUntil       int64  `gorm:"index" json:"-"`
+	NextPollAt       int64  `gorm:"index:idx_async_jobs_due,priority:2" json:"-"`
+	PollFailures     int    `json:"-"`
+	LogRecorded      bool   `gorm:"index:idx_async_jobs_log,priority:1;index:idx_async_jobs_log_due,priority:1" json:"-"`
+	CreatedAt        int64  `gorm:"autoCreateTime:milli" json:"-"`
+	UpdatedAt        int64  `gorm:"autoUpdateTime:milli;index:idx_async_jobs_log,priority:2" json:"-"`
+	CompletedAt      int64  `gorm:"index" json:"-"`
 }
 
 // NewAsyncTaskID returns a random opaque gateway ID, not a provider task ID.
@@ -152,7 +158,19 @@ func ReserveAsyncTask(ctx context.Context, task *AsyncTask) (*AsyncTask, bool, e
 	if existing, err := FindAsyncTaskByDedup(ctx, task.DedupKey, task.RequestHash, task.UserID, task.UserUUID); err != nil || existing != nil {
 		return existing, false, err
 	}
-	task.ID = NewAsyncTaskID()
+	// Reconstruct all server-owned lifecycle fields. Callers may pass an old
+	// reservation snapshot, but cannot smuggle settled state, leases or receipts.
+	*task = AsyncTask{ID: NewAsyncTaskID(), DedupKey: task.DedupKey, RequestHash: task.RequestHash,
+		UserID: task.UserID, UserUUID: task.UserUUID, TokenID: task.TokenID, TokenUUID: task.TokenUUID,
+		ChannelID: task.ChannelID, ChannelUUID: task.ChannelUUID, ChannelType: task.ChannelType,
+		BaseURL: task.BaseURL, OriginModel: task.OriginModel, ActualModel: task.ActualModel,
+		RequestBody: task.RequestBody, RequestID: task.RequestID, TraceID: task.TraceID,
+		Quota: task.Quota, QuotedQuota: task.Quota, CostQuotaPerUSD: task.CostQuotaPerUSD, BillingRevision: 1}
+	if task.CostQuotaPerUSD != "" {
+		if _, err := AsyncUpstreamCostQuota(task.CostQuotaPerUSD, "0"); err != nil {
+			return nil, false, errors.Wrap(err, "invalid async pricing snapshot")
+		}
+	}
 	task.State, task.BillingState = AsyncTaskReserved, AsyncBillingHeld
 	task.CreatedAt = time.Now().UTC().UnixMilli()
 	task.UpdatedAt, task.NextPollAt = task.CreatedAt, task.CreatedAt

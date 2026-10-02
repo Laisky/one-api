@@ -161,25 +161,42 @@ Validate and quote
 
 MuAPI's request-specific `estimate-cost` is obtained before admission. Missing or
 invalid positive provider quotes fail closed; explicit administrator pricing
-settings remain authoritative. The reservation stores the calculated quota so
-restarts and price edits cannot reprice accepted work. The worker refuses to
+settings remain authoritative. The reservation stores the quoted quota and an
+immutable quota/USD + group-ratio conversion snapshot. For dynamic provider
+pricing, documented `cost.amount_usd` from submission/polling raises the debit to
+at least the actual charge, rounded upward to whole quota units. Later lower or
+stale cost observations do not reduce an existing debit. Restart or later group
+price edits cannot change the captured conversion. Explicit administrator fixed
+per-call/video tariffs keep their configured customer price rather than adopting
+the provider's wallet price. The worker refuses to
 start reserved work older than five minutes, releasing its reservation because
 no provider submission was attempted. This is a gateway queue-age limit, not a
 claim that an upstream quote is a guaranteed final invoice.
 
 Full quota is reserved transactionally even for accounts with a large balance;
 parallel admission cannot rely on an advisory quota cache. Successful completion
-settles that reservation rather than debiting it again. Explicit submission
-rejection or confirmed `cost.refunded: true` on a failed/cancelled MuAPI job
-releases it exactly once. A failed poll, a lost acknowledgement, or an HTTP wait
-timeout is not evidence of an upstream refund.
+settles that reservation rather than debiting it again. A higher observed dynamic
+charge is collected transactionally before a successful result becomes visible.
+If the wallet is already exhausted, the supplement becomes explicit negative
+balance/debt; it is not silently forgiven. Numeric errors or overflow retain the
+hold and withhold success instead of publishing an unaccounted result.
+
+Only a provably pre-dispatch local rejection, or an explicit
+`cost.refunded: true` with a matching task ID on a failed/cancelled MuAPI job,
+releases funds exactly once. Once an HTTP submission is dispatched, **no HTTP
+status alone (including 400/401/402/403/404/413/422/429)** proves that the provider
+did not create paid work. A usable accepted ID is preserved even on non-2xx
+responses. A known submit charge is preserved even if the task ID is missing.
+A failed poll, lost acknowledgement, disconnected socket or HTTP wait timeout is
+not evidence of an upstream refund.
 
 The worker pool has bounded concurrency, per-operation deadlines, and fenced
 leases. It resumes safe polling after restart, including when an accepted task's
 channel is disabled. It reloads credentials rather than copying API keys into
 task rows, and fences changes to channel UUID, type, and base URL. Missing or
-changed routing for accepted work requires reconciliation, never failover to a
-different provider account. Credential rotation must preserve access to the
+changed routing for accepted work retains its debit and retries resolution with
+bounded backoff, never failing over to a different provider account. If it remains
+unresolved at the task-age limit, it requires operator reconciliation. Credential rotation must preserve access to the
 original provider account; the gateway cannot independently infer account
 identity from a new key.
 
@@ -199,11 +216,25 @@ operator reconciliation against the provider's records. This PR does not add an
 operator reconciliation UI/API. Do not manually retry submission or issue a
 refund without confirming the provider outcome.
 
-Terminal usage logs use a unique task receipt in the **same LOG_DB transaction**
-as the consume log. This prevents duplicate logs when the primary database and
-log database are separate and the process dies between log delivery and outbox
-acknowledgement. The existing request-cost surface is updated from the durable
-financial receipt. Cache refresh failures never roll back or replay accounting.
+Held, unknown and terminal tasks all produce nonzero financial records unless a
+refund has actually committed. The outbox updates the **same** consume-log row as
+its task moves from held to settled/refunded; it does not sum a hold and final
+charge as two purchases. Financial revisions fence delayed workers so stale hold
+records cannot overwrite a later supplement or refund. Log delivery and its
+receipt share one LOG_DB transaction; the primary acknowledgement is separate
+and repeat-safe. Each failed outbox item has independent backoff, so one bad row
+or an entire 32-row poison batch cannot indefinitely starve later receipts.
+The request-cost surface mirrors the locked current task, not a stale snapshot.
+These surfaces are eventually consistent; the primary task/wallet transaction is
+the immediate financial authority. Cache refresh or log failure never refunds,
+rolls back a committed debit, or replays provider generation.
+
+Graceful cancellation gives already observed provider receipts a bounded detached
+write inside the joined worker. Hard process termination relies on the database:
+prepaid reservations survive; known tasks resume GET polling; ambiguous submitted
+work retains its debit and is not re-created. See the
+[billing fault matrix](research/20261002_async_video_billing_fault_matrix.md) for
+actual socket, SIGKILL, lost-COMMIT and concurrent-accounting tests.
 
 ## Runtime settings and validation
 

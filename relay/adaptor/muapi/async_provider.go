@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,21 +33,32 @@ func (a *Adaptor) SubmitVideo(ctx context.Context, info *meta.Meta, body []byte)
 	if err != nil {
 		return asyncvideo.Submission{}, err
 	}
-	if status < 200 || status >= 300 {
-		// 408/409/5xx and redirects cannot prove no paid job was created.
-		rejected := status >= 400 && status < 500 && status != 408 && status != 409
-		return asyncvideo.Submission{Rejected: rejected}, errors.Errorf("MuAPI submission returned HTTP %d", status)
-	}
+
 	var response struct {
-		RequestID string `json:"request_id"`
+		RequestID string          `json:"request_id"`
+		Cost      json.RawMessage `json:"cost"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return asyncvideo.Submission{}, errors.Wrap(err, "decode MuAPI submission receipt")
 	}
-	if !validMuAPITaskID(response.RequestID) {
-		return asyncvideo.Submission{}, errors.New("MuAPI submission receipt has no valid task ID")
+	receipt := asyncvideo.Submission{}
+	if validMuAPITaskID(response.RequestID) {
+		receipt.ID = response.RequestID
 	}
-	return asyncvideo.Submission{ID: response.RequestID}, nil
+	cost, costErr := muAPIChargedCost(response.Cost)
+	if costErr != nil {
+		return receipt, costErr // never discard an accepted ID
+	}
+	receipt.CostUSD = cost
+	if receipt.ID == "" {
+		// A directly observed charge still belongs to this paid POST even when
+		// its task identifier is unusable. Preserve it without authorizing replay.
+		return receipt, errors.New("MuAPI submission receipt has no valid task ID")
+	}
+	if status < 200 || status >= 300 {
+		return receipt, errors.Errorf("MuAPI accepted task with HTTP %d", status)
+	}
+	return receipt, nil
 }
 
 // PollVideo maps the documented result schema to one-api's public result. A
@@ -58,23 +71,24 @@ func (a *Adaptor) PollVideo(ctx context.Context, info *meta.Meta, id string) (as
 	if err != nil {
 		return asyncvideo.Observation{}, err
 	}
+	observation, observationErr := normalizeAsyncObservation(body, id)
 	if status < 200 || status >= 300 {
-		return asyncvideo.Observation{}, errors.Errorf("MuAPI poll returned HTTP %d", status)
+		// A failed HTTP envelope cannot authorize a result or refund. A valid
+		// charge tied to this task still increases its already-reserved debit.
+		return asyncvideo.Observation{CostUSD: observation.CostUSD}, errors.Errorf("MuAPI poll returned HTTP %d", status)
 	}
-	return normalizeAsyncObservation(body, id)
+	return observation, observationErr
 }
 
 // normalizeAsyncObservation validates the provider's documented ID, status and
 // outputs. Only an explicit refund flag authorizes releasing held quota.
 func normalizeAsyncObservation(body []byte, expectedID string) (asyncvideo.Observation, error) {
 	var response struct {
-		ID        string   `json:"id"`
-		RequestID string   `json:"request_id"`
-		Status    string   `json:"status"`
-		Outputs   []string `json:"outputs"`
-		Cost      struct {
-			Refunded bool `json:"refunded"`
-		} `json:"cost"`
+		ID        string          `json:"id"`
+		RequestID string          `json:"request_id"`
+		Status    json.RawMessage `json:"status"`
+		Outputs   json.RawMessage `json:"outputs"`
+		Cost      json.RawMessage `json:"cost"`
 	}
 	if err := json.Unmarshal(body, &response); err != nil {
 		return asyncvideo.Observation{}, errors.Wrap(err, "decode MuAPI result")
@@ -82,22 +96,46 @@ func normalizeAsyncObservation(body []byte, expectedID string) (asyncvideo.Obser
 	if (response.ID != "" && response.ID != expectedID) || (response.RequestID != "" && response.RequestID != expectedID) {
 		return asyncvideo.Observation{}, errors.New("MuAPI result task ID mismatch")
 	}
-	observed := asyncvideo.Observation{Refunded: response.Cost.Refunded}
-	switch strings.ToLower(strings.TrimSpace(response.Status)) {
+	charged, err := muAPIChargedCost(response.Cost)
+	if err != nil {
+		return asyncvideo.Observation{}, err
+	}
+	observed := asyncvideo.Observation{CostUSD: charged}
+	var cost struct {
+		Refunded bool `json:"refunded"`
+	}
+	if len(response.Cost) != 0 {
+		if err := json.Unmarshal(response.Cost, &cost); err != nil {
+			return observed, errors.Wrap(err, "decode MuAPI refund receipt")
+		}
+	}
+	if cost.Refunded && response.ID != expectedID && response.RequestID != expectedID {
+		return asyncvideo.Observation{}, errors.New("MuAPI refund requires a matching task ID")
+	}
+	observed.Refunded = cost.Refunded
+	var status string
+	if err := json.Unmarshal(response.Status, &status); err != nil {
+		return observed, errors.Wrap(err, "decode MuAPI task status")
+	}
+	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "queued", "pending":
 		observed.State = dbmodel.AsyncTaskQueued
 	case "processing", "running":
 		observed.State = dbmodel.AsyncTaskRunning
 	case "completed", "succeeded", "success":
 		observed.State = dbmodel.AsyncTaskCompleted
-		if len(response.Outputs) == 0 || len(response.Outputs) > 32 {
-			return asyncvideo.Observation{}, errors.New("MuAPI completed result has no valid outputs")
+		var outputs []string
+		if err := json.Unmarshal(response.Outputs, &outputs); err != nil {
+			return observed, errors.Wrap(err, "decode MuAPI output URLs")
 		}
-		observed.Result = &asyncvideo.Result{Videos: make([]asyncvideo.Video, 0, len(response.Outputs))}
-		for _, output := range response.Outputs {
+		if len(outputs) == 0 || len(outputs) > 32 {
+			return observed, errors.New("MuAPI completed result has no valid outputs")
+		}
+		observed.Result = &asyncvideo.Result{Videos: make([]asyncvideo.Video, 0, len(outputs))}
+		for _, output := range outputs {
 			parsed, err := url.Parse(output)
 			if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.User != nil || len(output) > 8192 {
-				return asyncvideo.Observation{}, errors.New("MuAPI output URL is invalid")
+				return observed, errors.New("MuAPI output URL is invalid")
 			}
 			observed.Result.Videos = append(observed.Result.Videos, asyncvideo.Video{URL: output})
 		}
@@ -106,10 +144,10 @@ func normalizeAsyncObservation(body []byte, expectedID string) (asyncvideo.Obser
 	case "cancelled", "canceled":
 		observed.State = dbmodel.AsyncTaskCancelled
 	default:
-		return asyncvideo.Observation{}, errors.New("MuAPI returned an unknown task status")
+		return observed, errors.New("MuAPI returned an unknown task status")
 	}
 	if observed.Refunded && observed.State != dbmodel.AsyncTaskFailed && observed.State != dbmodel.AsyncTaskCancelled {
-		return asyncvideo.Observation{}, errors.New("MuAPI refund flag conflicts with task status")
+		return observed, errors.New("MuAPI refund flag conflicts with task status")
 	}
 	return observed, nil
 }
@@ -146,4 +184,33 @@ func (a *Adaptor) asyncVideoHTTP(ctx context.Context, info *meta.Meta, method, e
 		return 0, nil, errors.New("MuAPI task response exceeds size limit")
 	}
 	return response.StatusCode, data, nil
+}
+
+// muAPIChargedCost validates the documented actual wallet charge without binary
+// floating-point rounding. Missing cost is allowed; invalid cost never refunds.
+func muAPIChargedCost(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", nil
+	}
+	var cost struct {
+		Amount json.Number `json:"amount_usd"`
+	}
+	if err := json.Unmarshal(raw, &cost); err != nil {
+		return "", errors.Wrap(err, "decode MuAPI charged cost")
+	}
+	amount := cost.Amount.String()
+	if amount == "" {
+		return "", nil
+	}
+	if len(amount) > 128 {
+		return "", errors.New("MuAPI charged cost exceeds numeric limit")
+	}
+	if _, err := dbmodel.AsyncUpstreamCostQuota("1", amount); err != nil {
+		return "", errors.Wrap(err, "invalid MuAPI charged cost")
+	}
+	number, err := strconv.ParseFloat(amount, 64)
+	if err != nil || math.IsNaN(number) || math.IsInf(number, 0) || number < 0 {
+		return "", errors.New("MuAPI charged cost is invalid")
+	}
+	return amount, nil
 }

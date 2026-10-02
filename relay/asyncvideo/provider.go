@@ -19,6 +19,7 @@ type Provider interface {
 type Submission struct {
 	ID       string
 	Rejected bool
+	CostUSD  string
 }
 
 // Video is one generated output. Provider metadata, cost and credentials are
@@ -39,6 +40,7 @@ type Observation struct {
 	State    string
 	Result   *Result
 	Refunded bool
+	CostUSD  string
 }
 
 // DurableTaskKey marks an HTTP request already represented by a durable task.

@@ -138,7 +138,7 @@ func RelayAsyncVideoHelper(c *gin.Context, syncWait bool) *relaymodel.ErrorWithS
 			return openai.ErrorWrapper(err, "invalid_async_video_request", http.StatusBadRequest)
 		}
 	}
-	quota, err := asyncVideoQuotedQuota(c, info, video, images)
+	quota, costFactor, err := asyncVideoQuotedQuota(c, info, video, images)
 	if err != nil {
 		return openai.ErrorWrapper(err, "video_pricing_unavailable", http.StatusBadGateway)
 	}
@@ -149,7 +149,7 @@ func RelayAsyncVideoHelper(c *gin.Context, syncWait bool) *relaymodel.ErrorWithS
 	record := &dbmodel.AsyncTask{DedupKey: key, RequestHash: hash, UserID: info.UserId, UserUUID: info.UserUUID,
 		TokenID: info.TokenId, TokenUUID: info.TokenUUID, ChannelID: info.ChannelId, ChannelUUID: info.ChannelUUID,
 		ChannelType: info.ChannelType, BaseURL: info.BaseURL, OriginModel: info.OriginModelName, ActualModel: info.ActualModelName,
-		RequestBody: string(body), RequestID: c.GetString(ctxkey.RequestId), Quota: quota}
+		RequestBody: string(body), RequestID: c.GetString(ctxkey.RequestId), Quota: quota, CostQuotaPerUSD: costFactor}
 	if traceID, traceErr := gmw.TraceID(c); traceErr == nil {
 		record.TraceID = traceID.String()
 	}

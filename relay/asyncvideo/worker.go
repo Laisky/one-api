@@ -96,7 +96,7 @@ func ProcessOne(ctx context.Context, resolve Resolver, now time.Time) (bool, err
 		} else {
 			update.State, update.ErrorCode = model.AsyncTaskReconciliation, "task_reconciliation_required"
 		}
-		return true, model.ApplyAsyncTaskUpdate(ctx, task, update)
+		return true, persistObservation(ctx, task, update)
 	}
 	provider, info, resolveErr := resolve(ctx, task)
 	if resolveErr != nil || provider == nil || info == nil {
@@ -104,13 +104,17 @@ func ProcessOne(ctx context.Context, resolve Resolver, now time.Time) (bool, err
 		if task.State == model.AsyncTaskSubmitting {
 			update.State, update.Refund = model.AsyncTaskFailed, true
 		} else {
-			update.State = model.AsyncTaskReconciliation
+			// A database/credential lookup failure is not a permanent provider
+			// outcome. Retry resolution before safe GET polling after recovery.
+			update.PollFailures = min(task.PollFailures+1, 8)
+			update.NextPollAt = now.Add(time.Duration(min(300, 5<<update.PollFailures)) * time.Second).UnixMilli()
 		}
 		update.ErrorCode = "task_channel_unavailable"
-		return true, model.ApplyAsyncTaskUpdate(ctx, task, update)
+		return true, persistObservation(ctx, task, update)
 	}
 	if task.State == model.AsyncTaskSubmitting {
 		receipt, submitErr := provider.SubmitVideo(ctx, info, []byte(task.RequestBody))
+		update.CostUSD = receipt.CostUSD
 		switch {
 		case receipt.ID != "":
 			update.State, update.UpstreamID = model.AsyncTaskQueued, receipt.ID
@@ -126,6 +130,9 @@ func ProcessOne(ctx context.Context, resolve Resolver, now time.Time) (bool, err
 		}
 	} else {
 		observation, pollErr := provider.PollVideo(ctx, info, task.UpstreamID)
+		// Financial evidence survives malformed output/status. It may increase
+		// a debit, but it can never authorize a refund on an invalid observation.
+		update.CostUSD = observation.CostUSD
 		if pollErr == nil {
 			pollErr = ValidateObservation(task.State, observation)
 		}
@@ -137,6 +144,7 @@ func ProcessOne(ctx context.Context, resolve Resolver, now time.Time) (bool, err
 			update.NextPollAt = now.Add(time.Duration(min(300, 5<<update.PollFailures)) * time.Second).UnixMilli()
 		} else {
 			update.State, update.Refund = observation.State, observation.Refunded
+			update.CostUSD = observation.CostUSD
 			// A stale provider replica must not regress a running/failed job to queued.
 			if update.State == model.AsyncTaskQueued && task.State != model.AsyncTaskQueued {
 				update.State = task.State
@@ -153,11 +161,20 @@ func ProcessOne(ctx context.Context, resolve Resolver, now time.Time) (bool, err
 			}
 		}
 	}
-	if err := model.ApplyAsyncTaskUpdate(ctx, task, update); err != nil {
+	if err := persistObservation(ctx, task, update); err != nil {
 		// A provider ID is safe diagnostic metadata and is critical when DB failed
 		// after upstream acceptance. No in-memory success is advertised as durable.
 		logger.FromContext(ctx).Warn("async video observation persistence failed", zap.String("task_id", task.ID), zap.String("upstream_task_id", update.UpstreamID))
 		return true, errors.Wrap(err, "persist async video worker outcome")
 	}
 	return true, nil
+}
+
+// persistObservation gives already-observed provider work a bounded durable write
+// even when shutdown cancels I/O. This call remains inside the joined worker;
+// it never starts an untracked goroutine or extends the provider operation.
+func persistObservation(ctx context.Context, task *model.AsyncTask, update model.AsyncTaskUpdate) error {
+	durable, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	return model.ApplyAsyncTaskUpdate(durable, task, update)
 }

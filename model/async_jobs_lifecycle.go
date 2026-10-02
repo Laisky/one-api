@@ -66,6 +66,7 @@ type AsyncTaskUpdate struct {
 	Refund       bool
 	NextPollAt   int64
 	PollFailures int
+	CostUSD      string
 }
 
 // ApplyAsyncTaskUpdate persists a fenced observation and atomically closes the
@@ -92,6 +93,7 @@ func ApplyAsyncTaskUpdate(ctx context.Context, task *AsyncTask, update AsyncTask
 	if (task.State == AsyncTaskFailed || task.State == AsyncTaskCancelled) && update.State != task.State && update.State != AsyncTaskReconciliation {
 		return errors.New("terminal async task cannot change outcome")
 	}
+	leaseID, leaseState, leaseOwner := task.ID, task.State, task.LeaseOwner
 	now := time.Now().UTC().UnixMilli()
 	closed := update.State == AsyncTaskCompleted || update.Refund
 	billingState := AsyncBillingHeld
@@ -115,16 +117,36 @@ func ApplyAsyncTaskUpdate(ctx context.Context, task *AsyncTask, update AsyncTask
 		values["request_body"] = ""
 	}
 	var token Token
+	costChanged := false
 	err := runWithSQLiteBusyRetryForDB(ctx, DB, func() error {
 		return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			result := tx.Model(&AsyncTask{}).Where("id = ? AND state = ? AND lease_owner = ? AND lease_until > ? AND billing_state = ?", task.ID, task.State, task.LeaseOwner, now, AsyncBillingHeld).Updates(values)
+			result := tx.Model(&AsyncTask{}).Where("id = ? AND state = ? AND lease_owner = ? AND lease_until > ? AND billing_state = ?", leaseID, leaseState, leaseOwner, now, AsyncBillingHeld).Updates(values)
 			if result.Error != nil {
 				return errors.Wrap(result.Error, "persist async task observation")
 			}
 			if result.RowsAffected != 1 {
 				return ErrAsyncLeaseLost
 			}
-			if !closed {
+			var persisted AsyncTask
+			if err := tx.Where("id = ?", task.ID).Take(&persisted).Error; err != nil {
+				return errors.Wrap(err, "read locked async financial receipt")
+			}
+			// The persisted row, not a mutable worker argument, owns all money.
+			task = &persisted
+			changedCost, err := collectAsyncTaskCost(tx, task, update.CostUSD)
+			if err != nil {
+				return err
+			}
+			costChanged = changedCost
+			if closed || changedCost {
+				if err := tx.Model(&AsyncTask{}).Where("id = ?", task.ID).Updates(map[string]any{
+					"billing_revision": gorm.Expr("billing_revision + 1"), "log_recorded": false,
+					"log_next_attempt_at": int64(0), "log_failures": 0,
+				}).Error; err != nil {
+					return errors.Wrap(err, "schedule async financial receipt")
+				}
+			}
+			if !closed && !changedCost {
 				return nil
 			}
 			// Select owners in the same transaction. Never credit a different account
@@ -142,6 +164,9 @@ func ApplyAsyncTaskUpdate(ctx context.Context, task *AsyncTask, update AsyncTask
 				token = Token{UserId: task.UserID}
 			}
 			token.UnlimitedQuota = task.TokenUnlimited
+			if !closed {
+				return nil
+			}
 			if update.Refund && task.Quota > 0 {
 				if err := adjustAsyncTaskQuota(tx, task, -task.Quota, false); err != nil {
 					return errors.Wrap(err, "refund async task reservation")
@@ -158,9 +183,19 @@ func ApplyAsyncTaskUpdate(ctx context.Context, task *AsyncTask, update AsyncTask
 				}
 				// Channel removal must not prevent owner settlement. Fence ID reuse; a
 				// removed channel's historical cost is still in the durable task receipt.
-				if err := tx.Model(&Channel{}).Where("id = ? AND uuid = ? AND used_quota <= ?", task.ChannelID, task.ChannelUUID, int64(math.MaxInt64)-task.Quota).
-					Update("used_quota", gorm.Expr("used_quota + ?", task.Quota)).Error; err != nil {
-					return errors.Wrap(err, "record async task channel usage")
+				channelWrite := tx.Model(&Channel{}).Where("id = ? AND uuid = ? AND used_quota <= ?", task.ChannelID, task.ChannelUUID, int64(math.MaxInt64)-task.Quota).
+					Update("used_quota", gorm.Expr("used_quota + ?", task.Quota))
+				if channelWrite.Error != nil {
+					return errors.Wrap(channelWrite.Error, "record async task channel usage")
+				}
+				if channelWrite.RowsAffected == 0 && task.Quota > 0 {
+					var present int64
+					if err := tx.Model(&Channel{}).Where("id = ? AND uuid = ?", task.ChannelID, task.ChannelUUID).Count(&present).Error; err != nil {
+						return errors.Wrap(err, "check async channel usage overflow")
+					}
+					if present != 0 {
+						return errors.New("async task channel usage overflow")
+					}
 				}
 			}
 			return nil
@@ -169,7 +204,7 @@ func ApplyAsyncTaskUpdate(ctx context.Context, task *AsyncTask, update AsyncTask
 	if err != nil {
 		return errors.Wrap(err, "commit async task observation")
 	}
-	if closed {
+	if closed || costChanged {
 		refreshAsyncTaskQuotaCache(ctx, &token)
 	}
 	return nil

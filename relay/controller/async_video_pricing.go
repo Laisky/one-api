@@ -17,7 +17,7 @@ import (
 // asyncVideoQuotedQuota reuses existing channel/provider pricing resolution and
 // decimal quota helpers. Explicit administrator per-call/video overrides win;
 // otherwise the adapter must supply a positive request-specific quote.
-func asyncVideoQuotedQuota(c *gin.Context, info *meta.Meta, request *relaymodel.VideoRequest, images int) (int64, error) {
+func asyncVideoQuotedQuota(c *gin.Context, info *meta.Meta, request *relaymodel.VideoRequest, images int) (int64, string, error) {
 	var overrides map[string]model.ModelConfigLocal
 	if value, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := value.(*model.Channel); ok {
@@ -28,31 +28,40 @@ func asyncVideoQuotedQuota(c *gin.Context, info *meta.Meta, request *relaymodel.
 	cfg, configured := pricing.ResolveModelConfig(info.ActualModelName, overrides, ad, info.StartTime)
 	group := c.GetFloat64(ctxkey.ChannelRatio)
 	if configured && cfg.PerCall != nil {
-		return decimalQuotaRate(1000, cfg.PerCall.UsdPerThousandCalls, billingratio.QuotaPerUsd, group)
+		quota, err := decimalQuotaRate(1000, cfg.PerCall.UsdPerThousandCalls, billingratio.QuotaPerUsd, group)
+		return quota, "", err
 	}
 	var rate *adaptor.VideoPricingConfig
+	factor := ""
 	if configured && cfg.Video != nil && cfg.Video.HasData() {
 		rate = cfg.Video
 	}
 	if rate == nil {
 		estimator, ok := ad.(adaptor.VideoPricingEstimator)
 		if !ok {
-			return 0, errors.New("async video requires a price override or quote estimator")
+			return 0, "", errors.New("async video requires a price override or quote estimator")
 		}
 		var err error
 		rate, err = estimator.EstimateVideoPricing(c, info, request)
 		if err != nil {
-			return 0, errors.Wrap(err, "quote async video")
+			return 0, "", errors.Wrap(err, "quote async video")
+		}
+		factor, err = model.AsyncCostMultiplier(billingratio.QuotaPerUsd, group)
+		if err != nil {
+			return 0, "", err
 		}
 	}
 	if rate == nil {
-		return 0, errors.New("async video quote is missing")
+		return 0, "", errors.New("async video quote is missing")
 	}
 	if rate.TotalUsdDecimal != "" {
-		return videoQuotaFromTotalDecimal(rate.TotalUsdDecimal, group)
+		quota, err := videoQuotaFromTotalDecimal(rate.TotalUsdDecimal, group)
+		return quota, factor, err
 	}
 	if rate.TotalUsd > 0 {
-		return videoQuotaFromTotal(rate.TotalUsd, group)
+		quota, err := videoQuotaFromTotal(rate.TotalUsd, group)
+		return quota, factor, err
 	}
-	return videoQuota(rate.PerSecondUsd, rate.EffectiveMultiplier(request.RequestedResolution()), request.RequestedDurationSeconds(), rate.InputImageUsd, images, group)
+	quota, err := videoQuota(rate.PerSecondUsd, rate.EffectiveMultiplier(request.RequestedResolution()), request.RequestedDurationSeconds(), rate.InputImageUsd, images, group)
+	return quota, factor, err
 }

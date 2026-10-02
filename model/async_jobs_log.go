@@ -10,109 +10,158 @@ import (
 	"github.com/Laisky/one-api/common/config"
 )
 
-// AsyncTaskLogReceipt is the idempotency key for the log outbox. It lives in
-// LOG_DB, in the SAME transaction as Log, including split-database deployments.
-// Log.UUID is not unique and must never be used as an exactly-once constraint.
+// AsyncTaskLogReceipt serializes versioned log delivery inside LOG_DB. One task
+// owns one log row, updated from held to settled/refunded, never duplicate charges.
+// Revision fencing prevents a delayed hold writer from overwriting a final bill.
 type AsyncTaskLogReceipt struct {
 	TaskID    string `gorm:"primaryKey;size:64"`
+	Revision  int64  `gorm:"not null;default:0"`
+	LogID     int    `gorm:"not null;default:0"`
 	CreatedAt int64  `gorm:"autoCreateTime:milli;index"`
 }
 
-// FlushAsyncTaskLogs delivers a bounded batch of terminal financial receipts.
-// The main task is acknowledged only after the log transaction commits; a crash
-// between databases replays the receipt, not the charge and not a duplicate log.
+// FlushAsyncTaskLogs delivers up to 32 due financial receipts, including held
+// funds. Independent per-row backoff prevents poison records from blocking the
+// batch or occupying every slot forever. Returned errors preserve retry evidence.
 func FlushAsyncTaskLogs(ctx context.Context) error {
-	if DB == nil || LOG_DB == nil {
+	if DB == nil || (config.IsLogConsumeEnabled() && LOG_DB == nil) {
 		return errors.New("async task log databases unavailable")
 	}
 	var tasks []AsyncTask
-	if err := DB.WithContext(ctx).Where("log_recorded = ? AND billing_state IN ?", false, []string{AsyncBillingSettled, AsyncBillingRefunded}).Order("updated_at ASC").Limit(32).Find(&tasks).Error; err != nil {
+	now := time.Now().UTC()
+	if err := DB.WithContext(ctx).Where("log_recorded = ? AND log_next_attempt_at <= ?", false, now.UnixMilli()).Order("log_next_attempt_at ASC, updated_at ASC").Limit(32).Find(&tasks).Error; err != nil {
 		return errors.Wrap(err, "load async task log outbox")
 	}
+	var firstErr error
 	for i := range tasks {
 		task := &tasks[i]
-		if err := writeAsyncTaskRequestCost(ctx, task); err != nil {
-			return err
+		err := writeAsyncTaskRequestCost(ctx, task)
+		if err == nil && config.IsLogConsumeEnabled() {
+			err = writeAsyncTaskLog(ctx, task)
 		}
-		if config.IsLogConsumeEnabled() {
-			if err := writeAsyncTaskLog(ctx, task); err != nil {
-				return err
-			}
+		current := DB.WithContext(ctx).Model(&AsyncTask{}).Where("id = ? AND billing_revision = ? AND billing_state = ? AND quota = ?", task.ID, task.BillingRevision, task.BillingState, task.Quota)
+		if err == nil {
+			err = current.Updates(map[string]any{"log_recorded": true, "log_failures": 0, "log_next_attempt_at": int64(0)}).Error
 		}
-		if err := DB.WithContext(ctx).Model(&AsyncTask{}).Where("id = ? AND billing_state = ?", task.ID, task.BillingState).Update("log_recorded", true).Error; err != nil {
-			return errors.Wrap(err, "acknowledge async task log")
+		if err == nil {
+			continue
+		}
+		if firstErr == nil {
+			firstErr = errors.Wrapf(err, "deliver async financial receipt %s", task.ID)
+		}
+		failures := min(task.LogFailures+1, 8)
+		next := now.Add(time.Duration(min(300, 1<<failures)) * time.Second).UnixMilli()
+		if backoffErr := current.Updates(map[string]any{"log_failures": failures, "log_next_attempt_at": next}).Error; backoffErr != nil {
+			firstErr = errors.Wrap(errors.Join(firstErr, backoffErr), "persist async receipt backoff")
 		}
 	}
-	// Receipt cleanup separately checks that the primary task is absent.
-	return nil
+	return firstErr
 }
 
-// writeAsyncTaskLog inserts a unique outbox receipt and its public usage log in
-// one LOG_DB transaction. A duplicate commit acknowledgement is treated as success.
+// asyncTaskFinancialQuota returns the total already removed from the wallet.
+// Uncertain/held work is NOT a zero-cost failure; only a committed refund is zero.
+func asyncTaskFinancialQuota(task *AsyncTask) int64 {
+	if task.BillingState == AsyncBillingRefunded {
+		return 0
+	}
+	return task.Quota
+}
+
+// writeAsyncTaskLog atomically fences a newer financial revision and writes its
+// single log row. Lost commits and stale/concurrent writers are repeat-safe.
 func writeAsyncTaskLog(ctx context.Context, task *AsyncTask) error {
 	db := LOG_DB.WithContext(ctx)
-	var existing AsyncTaskLogReceipt
-	err := db.Where("task_id = ?", task.ID).Take(&existing).Error
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return errors.Wrap(err, "find async task log receipt")
-	}
-	err = db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&AsyncTaskLogReceipt{TaskID: task.ID}).Error; err != nil {
-			return errors.Wrap(err, "create async task log receipt")
-		}
-		quota := int64(0)
-		if task.BillingState == AsyncBillingSettled {
-			quota = task.Quota
-		}
-		entry := &Log{UserId: task.UserID, UserUUID: StringPtrIfNotEmpty(task.UserUUID),
-			ChannelId: task.ChannelID, ChannelUUID: StringPtrIfNotEmpty(task.ChannelUUID),
-			TokenName: task.TokenName, TokenUUID: StringPtrIfNotEmpty(task.TokenUUID),
-			Type: LogTypeConsume, CreatedAt: time.Now().UTC().Unix(), ModelName: task.OriginModel, OriginModelName: task.OriginModel,
-			Quota: int(quota), RequestId: task.RequestID, TraceId: task.TraceID,
-			Content: "async video " + task.BillingState, ElapsedTime: task.CompletedAt - task.CreatedAt,
-			Metadata: LogMetadata{"async_task_id": task.ID, "task_status": task.State, "billing_status": task.BillingState}}
-		return errors.Wrap(tx.Create(entry).Error, "write async task consume log")
+	err := runWithSQLiteBusyRetryForDB(ctx, LOG_DB, func() error {
+		return db.Transaction(func(tx *gorm.DB) error {
+			var receipt AsyncTaskLogReceipt
+			lookup := tx.Where("task_id = ?", task.ID).Take(&receipt).Error
+			switch {
+			case errors.Is(lookup, gorm.ErrRecordNotFound):
+				receipt = AsyncTaskLogReceipt{TaskID: task.ID, Revision: task.BillingRevision}
+				if err := tx.Create(&receipt).Error; err != nil {
+					return errors.Wrap(err, "create async log receipt")
+				}
+			case lookup != nil:
+				return errors.Wrap(lookup, "read async log receipt")
+			case receipt.Revision >= task.BillingRevision:
+				return nil
+			default:
+				result := tx.Model(&AsyncTaskLogReceipt{}).Where("task_id = ? AND revision = ?", task.ID, receipt.Revision).Update("revision", task.BillingRevision)
+				if result.Error != nil {
+					return errors.Wrap(result.Error, "fence async log revision")
+				}
+				if result.RowsAffected == 0 {
+					return nil
+				}
+			}
+			entry := &Log{UserId: task.UserID, UserUUID: StringPtrIfNotEmpty(task.UserUUID),
+				ChannelId: task.ChannelID, ChannelUUID: StringPtrIfNotEmpty(task.ChannelUUID),
+				TokenName: task.TokenName, TokenUUID: StringPtrIfNotEmpty(task.TokenUUID),
+				Type: LogTypeConsume, CreatedAt: task.CreatedAt / 1000, ModelName: task.OriginModel, OriginModelName: task.OriginModel,
+				Quota: int(asyncTaskFinancialQuota(task)), RequestId: task.RequestID, TraceId: task.TraceID,
+				Content: "async video " + task.BillingState, ElapsedTime: max(int64(0), task.CompletedAt-task.CreatedAt),
+				Metadata: LogMetadata{"async_task_id": task.ID, "task_status": task.State, "billing_status": task.BillingState}}
+			if receipt.LogID > 0 {
+				// A retention sweep may have removed an old held log; recreate it only if
+				// absent. The primary financial receipt remains authoritative throughout.
+				var existing Log
+				lookup := tx.Where("id = ?", receipt.LogID).Take(&existing).Error
+				if lookup == nil {
+					result := tx.Model(&existing).Updates(map[string]any{"quota": entry.Quota, "content": entry.Content, "elapsed_time": entry.ElapsedTime, "metadata": entry.Metadata})
+					return errors.Wrap(result.Error, "update async consume log")
+				}
+				if !errors.Is(lookup, gorm.ErrRecordNotFound) {
+					return errors.Wrap(lookup, "read async consume log")
+				}
+			}
+			if err := tx.Create(entry).Error; err != nil {
+				return errors.Wrap(err, "write async consume log")
+			}
+			return errors.Wrap(tx.Model(&AsyncTaskLogReceipt{}).Where("task_id = ?", task.ID).Update("log_id", entry.Id).Error, "link async consume log")
+		})
 	})
 	if err != nil {
-		if lookup := db.Where("task_id = ?", task.ID).Take(&existing).Error; lookup == nil {
+		var existing AsyncTaskLogReceipt
+		if lookup := db.Where("task_id = ?", task.ID).Take(&existing).Error; lookup == nil && existing.Revision >= task.BillingRevision {
 			return nil
 		}
-		return errors.Wrap(err, "commit async task log receipt")
+		return errors.Wrap(err, "commit async log receipt")
 	}
 	return nil
 }
 
-// writeAsyncTaskRequestCost mirrors the settled receipt into the existing request
-// cost surface. The original request ID is server-generated. Owner fencing avoids
-// overwriting another user's receipt when an integration reuses an identifier.
+// writeAsyncTaskRequestCost locks the original task while mirroring its CURRENT
+// financial state into the existing cost surface. Old outbox snapshots can never
+// overwrite a newer refund/charge. This lock is released before contacting LOG_DB.
 func writeAsyncTaskRequestCost(ctx context.Context, task *AsyncTask) error {
 	if task.RequestID == "" || len(task.RequestID) > RequestIDMaxLen {
 		return nil
 	}
-	quota := int64(0)
-	if task.BillingState == AsyncBillingSettled {
-		quota = task.Quota
-	}
-	db := DB.WithContext(ctx)
-	var existing UserRequestCost
-	lookup := db.Where("request_id = ?", task.RequestID).Take(&existing).Error
-	if errors.Is(lookup, gorm.ErrRecordNotFound) {
-		entry := &UserRequestCost{UserID: task.UserID, UserUUID: StringPtrIfNotEmpty(task.UserUUID), RequestID: task.RequestID, Quota: quota, CreatedTime: time.Now().UTC().Unix()}
-		if err := db.Create(entry).Error; err == nil {
-			return nil
-		}
-		lookup = db.Where("request_id = ?", task.RequestID).Take(&existing).Error
-	}
-	if lookup != nil {
-		return errors.Wrap(lookup, "load async request cost")
-	}
-	if existing.UserID != task.UserID || (existing.UserUUID != nil && *existing.UserUUID != task.UserUUID) {
-		return errors.New("async request cost owner mismatch")
-	}
-	return errors.Wrap(db.Model(&UserRequestCost{}).Where("id = ? AND user_id = ?", existing.Id, task.UserID).Update("quota", quota).Error, "update async request cost")
+	return runWithSQLiteBusyRetryForDB(ctx, DB, func() error {
+		return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			// An UPDATE also locks the matched row on MySQL when its value is unchanged.
+			if err := tx.Model(&AsyncTask{}).Where("id = ?", task.ID).UpdateColumn("billing_revision", gorm.Expr("billing_revision")).Error; err != nil {
+				return errors.Wrap(err, "lock async cost receipt")
+			}
+			var current AsyncTask
+			if err := tx.Where("id = ?", task.ID).Take(&current).Error; err != nil {
+				return errors.Wrap(err, "read current async cost receipt")
+			}
+			var existing UserRequestCost
+			lookup := tx.Where("request_id = ?", current.RequestID).Take(&existing).Error
+			if errors.Is(lookup, gorm.ErrRecordNotFound) {
+				entry := &UserRequestCost{UserID: current.UserID, UserUUID: StringPtrIfNotEmpty(current.UserUUID), RequestID: current.RequestID, Quota: asyncTaskFinancialQuota(&current), CreatedTime: current.CreatedAt / 1000}
+				return errors.Wrap(tx.Create(entry).Error, "create async request cost")
+			}
+			if lookup != nil {
+				return errors.Wrap(lookup, "load async request cost")
+			}
+			if existing.UserID != current.UserID || (existing.UserUUID != nil && *existing.UserUUID != current.UserUUID) {
+				return errors.New("async request cost owner mismatch")
+			}
+			return errors.Wrap(tx.Model(&UserRequestCost{}).Where("id = ? AND user_id = ?", existing.Id, current.UserID).Update("quota", asyncTaskFinancialQuota(&current)).Error, "update async request cost")
+		})
+	})
 }
 
 // CleanAsyncTaskLogReceipts deletes only bounded, old receipts whose original
