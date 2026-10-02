@@ -288,6 +288,22 @@ func ListEnabledMCPServers() ([]*MCPServer, error) {
 	return servers, nil
 }
 
+// ListConfiguredMCPServersForToolResolution returns the finite configured server set in database order.
+//
+// Return values:
+//   - []*MCPServer: all configured servers with secrets decrypted.
+//   - error: a wrapped database or secret-decryption error.
+func ListConfiguredMCPServersForToolResolution() ([]*MCPServer, error) {
+	var servers []*MCPServer
+	if err := DB.Find(&servers).Error; err != nil {
+		return nil, errors.Wrap(err, "list configured mcp servers for tool resolution")
+	}
+	if err := decryptMCPServerSecrets(servers); err != nil {
+		return nil, errors.Wrap(err, "decrypt configured mcp server secrets for tool resolution")
+	}
+	return servers, nil
+}
+
 // encryptMCPServerSecret encrypts the API key before persisting.
 func encryptMCPServerSecret(server *MCPServer) error {
 	if server == nil {

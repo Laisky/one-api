@@ -81,8 +81,18 @@ func prepareModernMCPToolCall(c *gin.Context, params modernMCPCallParams) (*mode
 	if err != nil {
 		return nil, errors.Wrap(err, "get user from context")
 	}
+	if err := validateMCPToolName(params.Name); err != nil {
+		return nil, errors.Wrap(err, "validate mcp tool name")
+	}
 
-	serverLabel, toolName := resolveQualifiedToolName(params.Name)
+	servers, err := model.ListConfiguredMCPServersForToolResolution()
+	if err != nil {
+		return nil, errors.Wrap(err, "list configured mcp servers")
+	}
+	serverLabel, toolName, err := resolveQualifiedToolName(params.Name, servers)
+	if err != nil {
+		return nil, errors.Wrap(err, "resolve qualified mcp tool name")
+	}
 	if toolName == "" {
 		toolName = strings.TrimSpace(params.Name)
 	}
@@ -90,9 +100,9 @@ func prepareModernMCPToolCall(c *gin.Context, params modernMCPCallParams) (*mode
 		return nil, errors.WithStack(errors.New("tool name is required"))
 	}
 
-	servers, serverByID, err := loadMCPCallServers(serverLabel)
+	servers, serverByID, err := loadMCPCallServers(serverLabel, servers)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "select mcp call servers")
 	}
 	toolsByServer, err := loadMCPToolsByServer(servers)
 	if err != nil {

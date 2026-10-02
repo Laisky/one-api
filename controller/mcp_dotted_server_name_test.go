@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -43,27 +44,49 @@ func TestDottedServerNameToolsAreCallable(t *testing.T) {
 	}).Error)
 
 	t.Run("resolution prefers the longest matching server name", func(t *testing.T) {
-		serverLabel, toolName := resolveQualifiedToolName("github.com.search_repos")
+		serverLabel, toolName, err := resolveQualifiedToolName("github.com.search_repos", []*model.MCPServer{
+			{Name: "github"},
+			dotted,
+		})
+		require.NoError(t, err)
 		require.Equal(t, "github.com", serverLabel)
 		require.Equal(t, "search_repos", toolName)
 	})
 
 	t.Run("a server name without dots still resolves", func(t *testing.T) {
-		serverLabel, toolName := resolveQualifiedToolName("fake-mcp.echo")
+		serverLabel, toolName, err := resolveQualifiedToolName("fake-mcp.echo", []*model.MCPServer{{Name: "fake-mcp"}})
+		require.NoError(t, err)
 		require.Equal(t, "fake-mcp", serverLabel)
 		require.Equal(t, "echo", toolName)
 	})
 
 	t.Run("an unknown qualifier keeps the previous behaviour", func(t *testing.T) {
-		serverLabel, toolName := resolveQualifiedToolName("nosuch.tool")
+		serverLabel, toolName, err := resolveQualifiedToolName("nosuch.tool", nil)
+		require.NoError(t, err)
 		require.Equal(t, "nosuch", serverLabel)
 		require.Equal(t, "tool", toolName)
 	})
 
 	t.Run("an unqualified name has no server label", func(t *testing.T) {
-		serverLabel, toolName := resolveQualifiedToolName("echo")
+		serverLabel, toolName, err := resolveQualifiedToolName("echo", nil)
+		require.NoError(t, err)
 		require.Empty(t, serverLabel)
 		require.Equal(t, "echo", toolName)
+	})
+
+	t.Run("an oversized name is rejected before resolution", func(t *testing.T) {
+		serverLabel, toolName, err := resolveQualifiedToolName(strings.Repeat(".", maxMCPToolNameBytes+1), []*model.MCPServer{dotted})
+		require.Error(t, err)
+		require.Empty(t, serverLabel)
+		require.Empty(t, toolName)
+	})
+
+	t.Run("a name at the byte limit remains valid", func(t *testing.T) {
+		name := strings.Repeat("a", maxMCPToolNameBytes)
+		serverLabel, toolName, err := resolveQualifiedToolName(name, []*model.MCPServer{dotted})
+		require.NoError(t, err)
+		require.Empty(t, serverLabel)
+		require.Equal(t, name, toolName)
 	})
 
 	t.Run("the dotted server's tool actually executes", func(t *testing.T) {
