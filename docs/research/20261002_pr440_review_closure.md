@@ -78,3 +78,35 @@ The ordinary full-repository CI must also qualify the final published head.
 No paid provider job is submitted. Earlier billing ambiguity and database
 durability limitations continue to apply; this change does not release holds,
 forgive debt, resubmit paid work, or alter provider-side exactly-once semantics.
+
+
+## Pricing origin consistency follow-up
+
+The first URL hardening commit (`114e04c`) still produced one MuAPI
+`go/request-forgery` result in the actual unsuppressed CodeQL SARIF. Both paths
+started at the generic request-context `BaseURL` reads in `relay/meta/relay_meta.go`.
+The typed selected channel already attached by distribution was not the authority
+used by the quote's HTTP destination.
+
+Pricing now obtains the URL and credential from the selected `model.Channel`,
+checks ID/UUID/type against the relay metadata, and rejects route/credential
+mismatches before network I/O or task admission. Route comparison preserves the
+same proxy/account fence used by persisted-task recovery; secret comparison is
+constant-time. The model remains a bounded, validated single path segment. This
+adds no database read and does not alter ordinary task billing or worker routing.
+It is an internal consistency hardening, not proof that a remote user could
+arbitrarily replace middleware-owned context.
+
+`TestMuAPIQuoteRequiresSelectedChannel` covers missing/wrong/nil channels, invalid
+or mismatching identity/type, a different local origin, a different account path,
+and mismatching credentials. `TestMuAPIQuoteSelectedProxyCompatibility` keeps
+four valid base/proxy forms. `TestMuAPIQuoteChannelMismatchCannotReserveWork`
+exercises both public admission-controller modes, checking no quote/generation
+HTTP calls, no task and unchanged physical owner/token balances. These tests ran
+against unchanged production code at `114e04c`: 13 failing leaf cases and four
+passing compatibility controls, with compilation successful. The same cases pass
+after the origin-consistency fix. No CodeQL suppression or test weakening is used.
+
+The CodeQL result for the final origin-bound tree must be checked separately from
+the earlier candidate's failed result; a successful build alone is not evidence
+that this warning disappeared.

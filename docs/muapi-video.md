@@ -293,3 +293,13 @@ fixtures; validation does not submit a paid MuAPI generation.
 - [MuAPI model catalog](https://api.muapi.ai/api/v1/models)
 - [MuAPI authentication](https://muapi.ai/docs/authentication)
 - [MuAPI pricing](https://muapi.ai/de/docs/pricing)
+
+
+### Quote routing consistency
+
+The request-specific quote uses the server-selected channel's configured endpoint
+and key. Inconsistent channel ID, UUID, type, account/proxy path, or credentials
+in relay metadata are rejected before quoting or reserving a paid task. Custom
+administrator-configured proxies remain supported; caller-supplied model names
+cannot select the destination authority. This gate reuses the selected channel
+snapshot, without an additional database query.

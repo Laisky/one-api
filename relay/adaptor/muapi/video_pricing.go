@@ -30,8 +30,8 @@ const (
 )
 
 // EstimateVideoPricing asks MuAPI for the exact cost of the normalized request
-// before one-api reserves quota. Parameters: c carries the request body, meta
-// identifies the configured MuAPI host and key, and request supplies duration
+// before one-api reserves quota. Parameters: c carries the body and trusted
+// selected channel, meta must agree with that channel, and request supplies duration
 // and resolution billing hints. Return values preserve the provider's exact
 // total USD decimal or an error when MuAPI cannot quote the request.
 func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, request *model.VideoRequest) (*adaptor.VideoPricingConfig, error) {
@@ -53,7 +53,7 @@ func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, requ
 
 	ctx, cancel := context.WithTimeout(gmw.Ctx(c), muAPIPricingTimeout)
 	defer cancel()
-	endpoint, err := muAPIEndpointURL(metaInfo.BaseURL, "models", modelName, "estimate-cost")
+	endpoint, apiKey, err := muAPIQuoteDestination(c, metaInfo, modelName)
 	if err != nil {
 		return nil, errors.Wrap(err, "validate MuAPI pricing endpoint")
 	}
@@ -62,8 +62,8 @@ func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, requ
 		return nil, errors.Wrap(err, "create MuAPI pricing request")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if strings.TrimSpace(metaInfo.APIKey) != "" {
-		req.Header.Set("x-api-key", metaInfo.APIKey)
+	if strings.TrimSpace(apiKey) != "" {
+		req.Header.Set("x-api-key", apiKey)
 	}
 
 	httpClient := client.HTTPClient
