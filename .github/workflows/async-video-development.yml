@@ -9,7 +9,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.event.head_commit.message == 'ci: publish verified async-video changes without rewriting contributor history'
+    if: >-
+      github.event.head_commit.message == 'ci: publish verified async-video changes without rewriting contributor history'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
