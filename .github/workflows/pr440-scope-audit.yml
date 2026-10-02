@@ -1,0 +1,102 @@
+name: PR440 scope audit candidate
+on:
+  push:
+    branches: [work/pr440-scope-audit-candidate-20261002]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 65269523add403b25c5e00cf501eb9eac8f13d9a
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Restore exact audited scope-reduction patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, os, pathlib, subprocess
+          shas=['02150551911664abee5fa355b4b190f159d1b7e0','63ad683b2ec42bdaf0fa7453f2718a33000ce6d5']
+          text=b''
+          for sha in shas:
+              obj=json.loads(subprocess.check_output(['gh','api',f'repos/Laisky/one-api/git/blobs/{sha}']))
+              text += base64.b64decode(obj['content']).replace(b'\n',b'')
+          patch=gzip.decompress(base64.b64decode(text))
+          assert hashlib.sha256(patch).hexdigest() == '228c4888998ef76ab95fa1c44b06dc17846c59d839691b8c5328a47cba309f7a'
+          pathlib.Path(os.environ['RUNNER_TEMP'],'scope.patch').write_bytes(patch)
+          PY
+          git apply --check "$RUNNER_TEMP/scope.patch"
+          git apply "$RUNNER_TEMP/scope.patch"
+          git diff --check
+          test -z "$(gofmt -l controller/relay.go main.go middleware/video_task_binding.go model/async_task.go model/main.go relay/adaptor/interface.go relay/adaptor/video.go relay/asyncvideo/binding.go relay/asyncvideo/provider.go relay/channeltype/endpoints.go relay/controller/async_video.go relay/controller/async_video_pricing.go relay/controller/video.go relay/controller/video_quota.go relay/pricing/timewindow.go router/async_video_admission_regression_test.go relay/adaptor/muapi/*.go)"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Static validation
+        run: go vet ./...
+      - name: Full relevant behavior regressions
+        run: |
+          go test -count=1 -p 2 -timeout 15m             ./relay/adaptor/muapi ./relay/adaptor/openai ./relay/adaptor/xai             ./relay/asyncvideo ./relay/channeltype ./relay/relaymode ./relay/pricing             ./relay ./middleware ./controller ./relay/controller ./router ./test
+      - name: Race-enabled async and legacy video regressions
+        run: |
+          go test -race -count=1 -p 2 -timeout 18m             -run 'TestAsync|TestMuAPI|TestVideo|TestXAIVideo|TestEstimate|TestAdaptor'             ./model ./relay/adaptor/muapi ./relay/adaptor/openai ./relay/adaptor/xai             ./relay/asyncvideo ./relay/channeltype ./relay/relaymode ./relay/pricing             ./relay ./middleware ./controller ./relay/controller ./router ./test
+      - name: Require live MySQL and PostgreSQL billing cases
+        run: |
+          set -euo pipefail
+          go test -json -race -count=1 -timeout 10m             -run '^TestAsyncBilling(LiveDatabases|EvidenceLiveDatabases|AckBackoffLiveDatabases)$' ./model             | tee "$RUNNER_TEMP/live.jsonl"
+          python3 - <<'PY'
+          import json, os
+          events=[json.loads(x) for x in open(os.path.join(os.environ['RUNNER_TEMP'],'live.jsonl'))]
+          assert not any(e.get('Action')=='skip' for e in events), 'live database qualification cannot skip'
+          passed={e.get('Test') for e in events if e.get('Action')=='pass'}
+          for backend in ('mysql','postgres'):
+              assert any(name and name.startswith('TestAsyncBilling') and f'/{backend}/' in name for name in passed), backend
+          PY
+      - name: Commit and publish verified candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name Codex
+          git config user.email codex@openai.com
+          git add -A
+          git commit -m 'refactor: narrow async video changes to durable gateway contract'
+          test "$(git rev-parse HEAD^)" = 65269523add403b25c5e00cf501eb9eac8f13d9a
+          python3 - <<'PY'
+          import base64, os, subprocess
+          env=dict(os.environ)
+          env['GIT_CONFIG_COUNT']='1'
+          env['GIT_CONFIG_KEY_0']='http.https://github.com/.extraheader'
+          env['GIT_CONFIG_VALUE_0']='AUTHORIZATION: basic '+base64.b64encode(('x-access-token:'+os.environ['GH_TOKEN']).encode()).decode()
+          subprocess.run(['git','push','origin','HEAD:refs/heads/work/pr440-scope-audit-verified-20261002'],env=env,check=True)
+          PY
+          git show -s --format='%H %T %P' HEAD
