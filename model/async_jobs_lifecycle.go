@@ -8,6 +8,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const AsyncTaskLease = time.Minute
@@ -126,6 +127,24 @@ func ApplyAsyncTaskUpdate(ctx context.Context, task *AsyncTask, update AsyncTask
 	costChanged := false
 	err := runWithSQLiteBusyRetryForDB(ctx, DB, func() error {
 		return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if update.UpstreamID != "" {
+				// Lock and compare in Go: SQL equality may be case-insensitive or
+				// ignore trailing spaces, but provider task IDs are byte-exact.
+				// SQLite's dialect omits FOR UPDATE; its enclosing transaction and
+				// busy retry still prevent a successful stale read/write pair.
+				var accepted AsyncTask
+				if err := tx.Select("upstream_id").Clauses(clause.Locking{Strength: "UPDATE"}).
+					Where("id = ? AND state = ? AND lease_owner = ? AND lease_until > ? AND billing_state = ?", leaseID, leaseState, leaseOwner, now, AsyncBillingHeld).
+					Take(&accepted).Error; err != nil {
+					if errors.Is(err, gorm.ErrRecordNotFound) {
+						return ErrAsyncLeaseLost
+					}
+					return errors.Wrap(err, "lock accepted async identity")
+				}
+				if accepted.UpstreamID != "" && accepted.UpstreamID != update.UpstreamID {
+					return errors.New("async task observation conflicts with accepted identity")
+				}
+			}
 			result := tx.Model(&AsyncTask{}).Where("id = ? AND state = ? AND lease_owner = ? AND lease_until > ? AND billing_state = ?", leaseID, leaseState, leaseOwner, now, AsyncBillingHeld).Updates(values)
 			if result.Error != nil {
 				return errors.Wrap(result.Error, "persist async task observation")
