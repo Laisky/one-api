@@ -11,29 +11,22 @@ jobs:
   snapshot:
     if: github.event.pull_request.number == 445
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: 567b7b910065e4b7f63843ed470fc6005f5ac519
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        with:
-          go-version-file: go.mod
-      - name: Prepare verified public dependencies and toolchain
+      - name: Download public tokenizer dictionaries
         shell: bash
         run: |
           set -euo pipefail
-          go mod download
-          go mod verify
-          mkdir -p "$RUNNER_TEMP/offline-go"
-          tar -C "$(dirname "$(go env GOROOT)")" -czf "$RUNNER_TEMP/offline-go/toolchain.tar.gz" "$(basename "$(go env GOROOT)")"
-          tar -C "$(go env GOMODCACHE)" --exclude=cache/vcs -czf "$RUNNER_TEMP/offline-go/modules.tar.gz" .
-          sha256sum "$RUNNER_TEMP/offline-go/"*.tar.gz > "$RUNNER_TEMP/offline-go/SHA256SUMS"
+          mkdir -p "$RUNNER_TEMP/tiktoken-cache"
+          for name in cl100k_base o200k_base p50k_base r50k_base; do
+            url="https://openaipublic.blob.core.windows.net/encodings/$name.tiktoken"
+            key=$(printf '%s' "$url" | sha1sum | cut -d' ' -f1)
+            curl --fail --silent --show-error --location --retry 2 "$url" -o "$RUNNER_TEMP/tiktoken-cache/$key"
+          done
+          (cd "$RUNNER_TEMP/tiktoken-cache" && sha256sum *)
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pinned-offline-go-review-environment
-          path: ${{ runner.temp }}/offline-go
+          name: public-tokenizer-review-fixtures
+          path: ${{ runner.temp }}/tiktoken-cache
           retention-days: 1
           if-no-files-found: error
-          compression-level: 0
