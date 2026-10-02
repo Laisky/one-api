@@ -1,28 +1,32 @@
 # Proxy relay billing boundary
 
-The `/v1/oneapi/proxy/:channelid/*target` route is intentionally unmetered. It must only forward through an explicitly configured `Proxy` channel with the `Proxy` adaptor API type. A paid provider channel must never enter this path, even when its URL builder currently produces an upstream 404.
+The `/v1/oneapi/proxy/:channelid/*target` route is intentionally unmetered. It must only forward through an explicitly configured `Proxy` channel with the `Proxy` adaptor API type. A paid provider channel must never enter this public arbitrary-target path, even when its URL builder currently produces an upstream 404.
 
-`RelayProxyHelper` rejects any other channel/API-type combination with `403 proxy_channel_required` before reading the body, constructing an upstream request, forwarding credentials, or recording a zero-cost consumption log. Ordinary metered completion routes are unchanged. Operators who intentionally provide an unmetered proxy must configure a dedicated Proxy channel; it is not a substitute for metered model routing.
+`RelayProxyHelper` rejects any other channel/API-type combination with `403 proxy_channel_required` before reading the body, constructing an upstream request, forwarding credentials, or recording zero-cost consumption. Neither its mode argument nor the metadata mode can waive this boundary. GitHub Models path normalization is separately disabled in Proxy mode as defense in depth.
 
-GitHub Models path normalization is also disabled in Proxy mode. This is defense in depth, not the accounting authorization boundary.
+## Settled video operations are a different entrypoint
 
-## Behavioral regression coverage
+Video creation remains in `RelayVideoHelper` and its existing quota admission/settlement logic. Subsequent retrieval/deletion does not create another paid task. These video routes retain the existing `BindAsyncTaskChannel` ownership/model/channel checks and call the private forwarding implementation directly, rather than entering the public arbitrary-target proxy controller.
 
-`TestReviewProxyRejectsPaidChannels` exercises the actual controller against a local HTTP upstream and a SQLite accounting fixture. It covers OpenAI-compatible, OpenAI, Azure, GitHub Models, and mismatched channel/API types. Rejections must produce zero upstream requests and leave the user balance unchanged.
+The first guard placement also blocked these legitimate video reads because they reused `RelayProxyHelper`. The full repository CI exposed this compatibility regression. The fix separates the controller entrypoints; it does **not** add a mode-based exception to the public proxy guard. Existing prices, creation accounting, authenticated task ownership, and no-double-charge polling behavior remain unchanged.
 
-`TestReviewProxyPreservesExplicitProxyChannel` is the positive control: an intentionally configured Proxy channel still forwards the path, query, body, and credential header, with the established zero-quota behavior.
+## Behavioral regression evidence
 
-`TestReviewGitHubProxyURLDoesNotNormalize` protects proxy path/query construction independently of the controller guard.
+All controls use local HTTP upstreams and SQLite accounting, not live providers.
 
-## Observed red/green evidence
+`TestReviewProxyRejectsPaidChannels` covers OpenAI-compatible, OpenAI, Azure, GitHub Models, and mismatched channel/API types. Each combination must produce zero upstream requests and leave the user balance unchanged. It now repeats the check with Proxy, Videos, and ChatCompletions mode arguments and metadata, so a forged mode cannot bypass the public boundary.
 
-On 2026-10-02, the new rejection test failed all six negative cases when only the controller guard was restored to the pre-fix implementation. The existing GitHub URL-normalization fix remained present in this control. Restoring the guard made the suite pass three consecutive runs under the race detector. `go vet ./...` also passed.
+`TestReviewProxyPreservesExplicitProxyChannel` confirms that a deliberately configured Proxy channel still forwards path, query, body, and credentials with established zero-quota behavior. `TestReviewGitHubProxyURLDoesNotNormalize` protects URL construction independently.
 
-The experiment used baseline `d7fa5f35ebf3dd6072eace68bd0178196baa0823`; its validated revision is `fbd39278fd7ae5f1897b2552f22c33241f8a2a61`. Logs and summaries are attached to [validation run 37054260780](https://github.com/Laisky/one-api/actions/runs/37054260780), artifact `security-review-443` (subject to artifact retention).
+On 2026-10-02, restoring only the old public proxy controller made all six original rejection cases fail while retaining the original GitHub URL fix. Restoring the guard made three race-enabled runs pass; `go vet ./...` passed. Evidence: [run 37054260780](https://github.com/Laisky/one-api/actions/runs/37054260780), artifact `security-review-443`; code `fbd39278fd7ae5f1897b2552f22c33241f8a2a61`.
+
+The subsequent compatibility control reproduced 29 failing Zhipu/XAI video subcases against the overly broad initial guard. After entrypoint separation, the extended suite passed **12 top-level tests and their subtests, three consecutive race-enabled runs**, including creation/polling ledgers, accepted disconnects, admission rejection, owner/model authorization, and all proxy controls. `go vet ./...` passed. Evidence: [run 37056990511](https://github.com/Laisky/one-api/actions/runs/37056990511), artifact `security-review-443-video-compat`; code `6b1ffd7bc4cbf21ef3601c29b545464c88a7f67c`.
 
 ```sh
-go test -race -count=3 -timeout=10m -run '^TestReview' ./relay/controller ./relay/adaptor/openai
+go test -race -count=3 -timeout=15m \
+  -run '^Test(Review|ProtocolAuditZhipuVideoLedger|XAIVideo|BindAsyncTaskChannel|GetRequestURLForOpenAICompatible)' \
+  ./relay/controller ./relay/adaptor/openai ./middleware
 go vet ./...
 ```
 
-These are local-upstream behavioral tests, not requests to a live provider. They prove that the gateway's unmetered controller must enforce its own channel boundary; they do not depend on a provider accepting a particular malformed proxy URL.
+Artifacts are subject to retention. Temporary validation workflows are removed from the final tree; permanent tests run under the existing repository CI. Intentionally unmetered services must use a dedicated Proxy channel, not a paid model channel accessed through the arbitrary-target proxy URL.
