@@ -231,10 +231,11 @@ func enforceRealtimeSessionsBodyModel(body []byte, meta *rmeta.Meta) ([]byte, *r
 
 // enforceRealtimeSessionUpdate inspects one client-to-upstream WebSocket frame
 // for the `/v1/realtime` API and holds the session to the model bound at the
-// handshake. A `session.update` that carries the bound model is the documented
-// client pattern — the server's own `session.created` payload contains `model`,
-// and clients echo that object back — so it is forwarded; the user-facing alias
-// is rewritten to the mapped upstream name; only a different model is denied.
+// handshake. For regular sessions it checks `session.update` at
+// `session.model`; for transcription sessions it checks
+// `transcription_session.update` at `input_audio_transcription.model`. A frame
+// that carries the bound model is forwarded, the user-facing alias is rewritten
+// to the mapped upstream name, and a different model is denied.
 //
 // Rejecting every `session.update` that merely mentions a model closed
 // conformant sessions with a policy violation (verified against the live API on
@@ -260,12 +261,16 @@ func enforceRealtimeSessionUpdate(frame []byte, boundModel, originModel string) 
 		return frame, nil
 	}
 
-	if raw["type"] != "session.update" {
+	var session map[string]any
+	switch raw["type"] {
+	case "session.update":
+		session, _ = raw["session"].(map[string]any)
+	case "transcription_session.update":
+		session, _ = raw["input_audio_transcription"].(map[string]any)
+	default:
 		return frame, nil
 	}
-
-	session, ok := raw["session"].(map[string]any)
-	if !ok {
+	if session == nil {
 		return frame, nil
 	}
 
@@ -277,14 +282,14 @@ func enforceRealtimeSessionUpdate(frame []byte, boundModel, originModel string) 
 	requested, ok := value.(string)
 	if !ok {
 		return frame, errors.Wrapf(ErrModelSwitchDenied,
-			"realtime session.update model must be a string, bound model is %q", boundModel)
+			"realtime session model must be a string, bound model is %q", boundModel)
 	}
 	if requested == boundModel {
 		return frame, nil
 	}
 	if originModel == "" || requested != originModel {
 		return frame, errors.Wrapf(ErrModelSwitchDenied,
-			"realtime session.update cannot change session model from %q to %q", boundModel, requested)
+			"realtime session cannot change model from %q to %q", boundModel, requested)
 	}
 
 	// The caller used its own alias; forward the mapped upstream name so the

@@ -284,3 +284,55 @@ func TestEnforceRealtimeSessionUpdate_NoSessionFieldPassThrough(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, in, out)
 }
+
+// TestEnforceRealtimeSessionUpdate_TranscriptionModelEnforced verifies that
+// transcription update frames cannot select a model other than the one bound
+// during admission, while preserving mapped model aliases.
+func TestEnforceRealtimeSessionUpdate_TranscriptionModelEnforced(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		model     any
+		origin    string
+		wantModel string
+		wantError bool
+	}{
+		{name: "bound model allowed", model: "gpt-4o-mini-transcribe", wantModel: "gpt-4o-mini-transcribe"},
+		{name: "origin alias rewritten", model: "transcription-alias", origin: "transcription-alias", wantModel: "gpt-4o-mini-transcribe"},
+		{name: "different model denied", model: "gpt-4o-transcribe", wantError: true},
+		{name: "non-string model denied", model: map[string]any{"name": "gpt-4o-mini-transcribe"}, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			frame, err := json.Marshal(map[string]any{
+				"type": "transcription_session.update",
+				"input_audio_transcription": map[string]any{
+					"model":  tc.model,
+					"prompt": "technical terms",
+				},
+			})
+			require.NoError(t, err)
+
+			out, guardErr := enforceRealtimeSessionUpdate(frame, "gpt-4o-mini-transcribe", tc.origin)
+			if tc.wantError {
+				require.Error(t, guardErr)
+				require.True(t, errors.Is(guardErr, ErrModelSwitchDenied))
+				require.Equal(t, frame, out)
+				return
+			}
+
+			require.NoError(t, guardErr)
+			var decoded struct {
+				InputAudioTranscription struct {
+					Model  string `json:"model"`
+					Prompt string `json:"prompt"`
+				} `json:"input_audio_transcription"`
+			}
+			require.NoError(t, json.Unmarshal(out, &decoded))
+			require.Equal(t, tc.wantModel, decoded.InputAudioTranscription.Model)
+			require.Equal(t, "technical terms", decoded.InputAudioTranscription.Prompt)
+		})
+	}
+}
