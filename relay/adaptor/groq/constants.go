@@ -233,8 +233,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:               "Alibaba Qwen3.6-27B multimodal model (text + image input) with switchable thinking/non-thinking modes via reasoning_effort.",
 	},
 	"minimaxai/minimax-m2.7": {
-		Ratio:                       0,
-		CompletionRatio:             1,
+		// Groq does not publish this enterprise model's tariff. Use the public
+		// MiniMax M2.7 token price as a safe default instead of disabling billing.
+		Ratio:                       0.30 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.20 / 0.30,
 		ContextLength:               196608,
 		MaxOutputTokens:             131072,
 		InputModalities:             groqTextOnlyModalities,
@@ -267,8 +269,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:      "Canopy Labs Orpheus v1 English text-to-speech (Llama-3.2-3B backbone) with bracketed vocal direction tags.",
 	},
 	"groq/compound": {
-		Ratio:                       0,
-		CompletionRatio:             1,
+		Ratio:                       0.15 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.60 / 0.15,
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
 		InputModalities:             groqTextOnlyModalities,
@@ -278,8 +280,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Groq Compound agentic system with built-in web search, visit-website, code execution, and Wolfram Alpha tools. Usage is billed from the underlying models and is not represented by a standalone token rate.",
 	},
 	"groq/compound-mini": {
-		Ratio:                       0,
-		CompletionRatio:             1,
+		Ratio:                       0.11 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.34 / 0.11,
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
 		InputModalities:             groqTextOnlyModalities,
@@ -293,9 +295,17 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility.
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// GroqToolingDefaults records no fixed tool tariff because the current Groq
-// documentation lists the available Compound tools but does not publish a
-// standalone per-call price; Compound usage is reported by underlying models.
-// Sources: https://console.groq.com/docs/compound and
-// https://console.groq.com/docs/compound/built-in-tools
-var GroqToolingDefaults = adaptor.ChannelToolConfig{}
+// GroqToolingDefaults enumerates Groq's Compound and GPT-OSS built-in tool pricing.
+// Source: https://groq.com/pricing/
+var GroqToolingDefaults = adaptor.ChannelToolConfig{
+	Pricing: map[string]adaptor.ToolPricingConfig{
+		"basic_search":          {UsdPerCall: 0.005},
+		"advanced_search":       {UsdPerCall: 0.008},
+		"visit_website":         {UsdPerCall: 0.001},
+		"code_execution":        {UsdPerCall: 0.18},
+		"browser_automation":    {UsdPerCall: 0.08},
+		"browser_search_basic":  {UsdPerCall: 0.005},
+		"browser_search_visit":  {UsdPerCall: 0.001},
+		"code_execution_python": {UsdPerCall: 0.18},
+	},
+}

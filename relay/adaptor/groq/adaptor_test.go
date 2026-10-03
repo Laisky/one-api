@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -132,12 +133,20 @@ func TestCurrentGroqModelMetadata(t *testing.T) {
 	require.True(t, ok)
 	require.EqualValues(t, 196_608, minimax.ContextLength)
 	require.EqualValues(t, 131_072, minimax.MaxOutputTokens)
-	require.Zero(t, minimax.Ratio, "contact-sales models must not use a guessed token price")
+	require.Equal(t, 0.30*ratio.MilliTokensUsd, minimax.Ratio)
+	require.Equal(t, 1.20/0.30, minimax.CompletionRatio)
 
 	compound, ok := ModelRatios["groq/compound"]
 	require.True(t, ok)
-	require.Zero(t, compound.Ratio, "Compound has no standalone token tariff")
+	require.Equal(t, 0.15*ratio.MilliTokensUsd, compound.Ratio)
+	require.Equal(t, 0.60/0.15, compound.CompletionRatio)
 	require.NotContains(t, compound.SupportedFeatures, "reasoning")
+
+	compoundMini, ok := ModelRatios["groq/compound-mini"]
+	require.True(t, ok)
+	require.Equal(t, 0.11*ratio.MilliTokensUsd, compoundMini.Ratio)
+	require.Equal(t, 0.34/0.11, compoundMini.CompletionRatio)
+	require.NotEmpty(t, GroqToolingDefaults.Pricing)
 }
 
 func TestConvertRequest_RejectsMultimodalForGPTOSS(t *testing.T) {
