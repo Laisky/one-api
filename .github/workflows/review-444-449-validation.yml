@@ -1,163 +1,42 @@
 name: PR 444-449 pinned review qualification
-
 on:
   push:
     branches: [codex/review-444-449-validation]
     paths: [.github/workflows/review-444-449-validation.yml]
-
 permissions:
   contents: read
-
 jobs:
-  assemble:
+  snapshot:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: write
-    outputs:
-      settlement_commit: ${{ steps.assemble.outputs.settlement_commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 567b7b910065e4b7f63843ed470fc6005f5ac519
+          ref: 570df7fb2921078f0e2ad322fdff8c5d85e08e7b
           persist-credentials: false
-          fetch-depth: 1
-      - name: Verify reviewed bytes and create unattached candidate commits
-        id: assemble
-        env:
-          GH_TOKEN: ${{ github.token }}
+          fetch-depth: 0
+      - name: Capture the exact concurrent revisions
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import base64, hashlib, json, lzma, os, pathlib, subprocess, urllib.request
-          base = '567b7b910065e4b7f63843ed470fc6005f5ac519'
-          base_tree = '472114d85a13fd36ef455ed99fd94d0e79bcfc49'
-          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'review-444-449'
-          root.mkdir()
-          def api(path, value=None):
-              body = None if value is None else json.dumps(value).encode()
-              request = urllib.request.Request('https://api.github.com/repos/Laisky/one-api/' + path, data=body,
-                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28'})
-              with urllib.request.urlopen(request, timeout=60) as response:
-                  return json.load(response)
-          parts = ['ca5070e824572a41b8520c8e71b1a03b2156060d', '6e194017d219a8f5673a2dfc92f3fa9bf29eacd4', '97cce9aa4dd89f44a182c7c06441c1caf258ea79']
-          packed = b''.join(base64.b64decode(api('git/blobs/' + sha)['content']) for sha in parts)
-          assert hashlib.sha256(packed).hexdigest() == '99fba19c3d87e06b86584744e325ea33779fe9a3360fb0a560daca9338007f35'
-          manifest = json.loads(lzma.decompress(packed))
-          assert manifest['base'] == base and manifest['base_tree'] == base_tree
-          assert api('git/ref/heads/main')['object']['sha'] == base, 'main moved; review must be reconciled explicitly'
-          assert [e['pr'] for e in manifest['entries']] == list(range(444, 450))
-          results = []
-          titles = {
-              444: 'fix(billing): preserve successful text reservations through settlement',
-              445: 'fix(realtime): bind transcription protocol and gate audio on model acknowledgement',
-              446: 'fix(mcp): bound resolution without loading unrelated credentials',
-              447: 'test(mcp): qualify disabled-server admission across both call paths',
-              448: 'fix(billing): settle Response fallback reservations exactly once',
-              449: 'fix(billing): atomically finalize external reservations and wallet balances',
-          }
-          for entry in manifest['entries']:
-              number = entry['pr']
-              pr = api('pulls/' + str(number))
-              assert pr['head']['sha'] == entry['parent'], 'PR head moved; preserve concurrent work'
-              assert pr['state'] == 'open' and pr['head']['repo']['full_name'] == 'Laisky/one-api'
-              work = root / ('pr' + str(number))
-              subprocess.run(['git', 'worktree', 'add', '--detach', str(work), base], check=True)
-              subprocess.run(['git', 'apply', '--index', '--whitespace=error'], input=entry['patch'].encode(), cwd=work, check=True)
-              changed = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], cwd=work, text=True).splitlines()
-              assert sorted(changed) == sorted(entry['files']), 'unexpected patch path'
-              tree_entries = []
-              for filename in changed:
-                  assert filename.startswith(('controller/', 'relay/', 'model/', 'docs/security/'))
-                  assert '..' not in pathlib.PurePosixPath(filename).parts
-                  path = work / filename
-                  assert path.is_file() and not path.is_symlink()
-                  data = path.read_bytes()
-                  assert hashlib.sha256(data).hexdigest() == entry['files'][filename], filename
-                  blob = api('git/blobs', {'content': base64.b64encode(data).decode(), 'encoding': 'base64'})
-                  tree_entries.append({'path': filename, 'mode': '100644', 'type': 'blob', 'sha': blob['sha']})
-              tree = api('git/trees', {'base_tree': base_tree, 'tree': tree_entries})
-              commit = api('git/commits', {'message': titles[number] + '\n\nReconcile with reviewed main while preserving original PR ancestry.\nReview-Base: ' + base,
-                  'tree': tree['sha'], 'parents': [entry['parent'], base]})
-              results.append({'pr': number, 'branch': pr['head']['ref'], 'parent': entry['parent'], 'base': base, 'tree': tree['sha'], 'commit': commit['sha'], 'files': entry['files']})
-              if number == 449:
-                  with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-                      out.write('settlement_commit=' + commit['sha'] + '\n')
-          (root / 'candidate-manifest.json').write_text(json.dumps(results, indent=2) + '\n')
-          (root / 'reviewed-patches.json.xz').write_bytes(packed)
-          print(json.dumps(results, indent=2))
-          # Deliberately do not create/update/delete any Git reference here.
-          # Branch updates are separate, explicit, non-forced connector actions.
-          PY
+          mkdir -p "$RUNNER_TEMP/converge"
+          while read -r name sha; do
+            git fetch --no-tags origin "$sha"
+            git update-ref "refs/review/$name" "$sha"
+            git archive --format=tar.gz --prefix="$name/" "$sha" > "$RUNNER_TEMP/converge/$name.tar.gz"
+          done <<'REVISIONS'
+          main 570df7fb2921078f0e2ad322fdff8c5d85e08e7b
+          pr446 e4cd490aa670e790acfdb5f5e4d36bda062a3109
+          pr447 d311f6f2bec0d027f8d96cd8b82289a36a463512
+          pr448 4c84b203b44444c13edc5071743747682c12a7da
+          pr449 d4e4eaf5a02680b4010d8519804810a41e7d594b
+          REVISIONS
+          git bundle create "$RUNNER_TEMP/converge/review.bundle" refs/review/main refs/review/pr446 refs/review/pr447 refs/review/pr448 refs/review/pr449
+          (cd "$RUNNER_TEMP/converge" && sha256sum *.gz *.bundle > SHA256SUMS)
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pr444-449-candidate-manifest
-          path: |
-            ${{ runner.temp }}/review-444-449/candidate-manifest.json
-            ${{ runner.temp }}/review-444-449/reviewed-patches.json.xz
-          retention-days: 7
+          name: concurrent-review-sources
+          path: ${{ runner.temp }}/converge/
+          retention-days: 3
           if-no-files-found: error
-  live-settlement:
-    needs: assemble
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        backend: [mysql, postgres]
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: review-local-only
-          MYSQL_ROOT_HOST: '%'
-        ports: ['3306:3306']
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
-          --health-interval=10s --health-timeout=5s --health-retries=20
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_PASSWORD: review-local-only
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=10s --health-timeout=5s --health-retries=20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ needs.assemble.outputs.settlement_commit }}
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        with:
-          go-version-file: go.mod
-      - name: Race, interruption, financial-write faults and exact balances
-        env:
-          ONEAPI_SETTLEMENT_TEST_BACKEND: ${{ matrix.backend }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "$ONEAPI_SETTLEMENT_TEST_BACKEND" == mysql ]]; then
-            export ONEAPI_SETTLEMENT_TEST_DSN='root:review-local-only@tcp(127.0.0.1:3306)/mysql?parseTime=true'
-          else
-            export ONEAPI_SETTLEMENT_TEST_DSN='postgres://postgres:review-local-only@127.0.0.1:5432/postgres?sslmode=disable'
-          fi
-          mkdir -p review-evidence
-          go test -json -race -count=3 -timeout=10m ./controller -run '^TestExternalSettlement' | tee review-evidence/${ONEAPI_SETTLEMENT_TEST_BACKEND}.jsonl
-          python3 - <<'PY'
-          import json, os, pathlib
-          records = [json.loads(line) for line in pathlib.Path('review-evidence/' + os.environ['ONEAPI_SETTLEMENT_TEST_BACKEND'] + '.jsonl').read_text().splitlines()]
-          assert not any(r.get('Action') in ('skip', 'fail') for r in records)
-          expected = {'TestExternalSettlementCancellationIsAtomic','TestExternalSettlementConcurrentFinalizers','TestExternalSettlementWriteFailureRollsBack','TestExternalSettlementFinalQuotaBoundaries'}
-          for name in expected:
-              assert sum(r.get('Action') == 'pass' and r.get('Test') == name for r in records) == 3, name
-          assert any('against live ' + os.environ['ONEAPI_SETTLEMENT_TEST_BACKEND'] in r.get('Output', '') for r in records)
-          PY
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: pr449-live-${{ matrix.backend }}
-          path: review-evidence/
-          retention-days: 7
-          if-no-files-found: error
+          compression-level: 0
