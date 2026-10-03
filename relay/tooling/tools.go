@@ -295,6 +295,12 @@ func NormalizeBuiltinType(toolType string) string {
 		return "web_search"
 	case "tool_search_tool_regex", "tool_search_tool_bm25":
 		return "web_search"
+	case "code_interpreter", "code_execution":
+		return "code_interpreter"
+	case "file_search", "attachment_search", "collections_search":
+		return "file_search"
+	case "computer_use", "computer-use", "computer_use_preview", "computer-use-preview":
+		return "computer_use"
 	}
 
 	if strings.HasPrefix(normalized, "tool_search_tool_regex_") || strings.HasPrefix(normalized, "tool_search_tool_bm25_") {
@@ -302,6 +308,19 @@ func NormalizeBuiltinType(toolType string) string {
 	}
 
 	return ""
+}
+
+// ValidateNativeResponseBuiltinBillingSupport rejects native Responses API tools that cannot be metered from upstream usage.
+func ValidateNativeResponseBuiltinBillingSupport(requested map[string]struct{}) error {
+	for name := range requested {
+		switch name {
+		case "web_search":
+			continue
+		default:
+			return errors.Errorf("tool %s is not supported for native Responses API forwarding because invocation billing is unavailable", name)
+		}
+	}
+	return nil
 }
 
 // ValidateResponseBuiltinTools verifies built-in tool usage on Response API requests prior to fallback conversions.

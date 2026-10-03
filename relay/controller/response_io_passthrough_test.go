@@ -105,3 +105,55 @@ func TestNormalizeResponseAPIRawBodyThinkingBudgetViaExtraBody(t *testing.T) {
 	require.Equal(t, true, root["enable_thinking"])
 	require.Equal(t, float64(4096), root["thinking_budget"])
 }
+
+func TestNormalizeResponseAPIRawBodyStripsUnknownRootFields(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`{
+	  "model": "gpt-4o",
+	  "input": "hello",
+	  "max_tool_calls": 100,
+	  "vendor_extra": true
+	}`)
+
+	var req openai.ResponseAPIRequest
+	require.NoError(t, json.Unmarshal(raw, &req))
+
+	patched, _, changed, err := normalizeResponseAPIRawBody(raw, &req, channeltype.OpenAI)
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	var root map[string]any
+	require.NoError(t, json.Unmarshal(patched, &root))
+	require.NotContains(t, root, "max_tool_calls")
+	require.NotContains(t, root, "vendor_extra")
+	require.Equal(t, "gpt-4o", root["model"])
+}
+
+func TestNormalizeResponseAPIRawBodyStripsUnknownToolFields(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`{
+	  "model": "gpt-4o",
+	  "input": "hello",
+	  "tools": [{
+	    "type": "code_interpreter",
+	    "container": {"type": "auto"},
+	    "vendor_extra": true
+	  }]
+	}`)
+
+	var req openai.ResponseAPIRequest
+	require.NoError(t, json.Unmarshal(raw, &req))
+
+	patched, _, changed, err := normalizeResponseAPIRawBody(raw, &req, channeltype.OpenAI)
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	var root struct {
+		Tools []map[string]any `json:"tools"`
+	}
+	require.NoError(t, json.Unmarshal(patched, &root))
+	require.Len(t, root.Tools, 1)
+	require.Equal(t, "code_interpreter", root.Tools[0]["type"])
+	require.NotContains(t, root.Tools[0], "container")
+	require.NotContains(t, root.Tools[0], "vendor_extra")
+}

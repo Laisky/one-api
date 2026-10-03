@@ -116,6 +116,9 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if err := tooling.ValidateRequestedBuiltins(responseAPIRequest.Model, meta, channelRecord, requestAdaptor, requestedBuiltins); err != nil {
 		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
 	}
+	if err := tooling.ValidateNativeResponseBuiltinBillingSupport(requestedBuiltins); err != nil {
+		return openai.ErrorWrapper(err, "tool_billing_not_supported", http.StatusBadRequest)
+	}
 
 	// get channel model ratio
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)

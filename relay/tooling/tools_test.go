@@ -506,6 +506,11 @@ func TestNormalizeBuiltinType_ToolSearchAliases(t *testing.T) {
 		{name: "dash alias", input: "web-search", expect: "web_search"},
 		{name: "regex tool search", input: "tool_search_tool_regex_20251119", expect: "web_search"},
 		{name: "bm25 tool search", input: "tool_search_tool_bm25_20251119", expect: "web_search"},
+		{name: "code interpreter", input: "code_interpreter", expect: "code_interpreter"},
+		{name: "code execution alias", input: "code_execution", expect: "code_interpreter"},
+		{name: "file search", input: "file_search", expect: "file_search"},
+		{name: "collections search alias", input: "collections_search", expect: "file_search"},
+		{name: "computer use", input: "computer-use-preview", expect: "computer_use"},
 		{name: "unknown stays empty", input: "tool_search_custom", expect: ""},
 	}
 
@@ -549,4 +554,13 @@ func TestApplyBuiltinToolCharges_ToolSearchCountsCanonicalized(t *testing.T) {
 	summary := summaryAny.(*model.ToolUsageSummary)
 	require.Equal(t, 2, summary.Counts["web_search"])
 	require.Equal(t, expectedPerCall*2, summary.CostByTool["web_search"])
+}
+
+func TestValidateNativeResponseBuiltinBillingSupport(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, ValidateNativeResponseBuiltinBillingSupport(map[string]struct{}{"web_search": {}}))
+
+	err := ValidateNativeResponseBuiltinBillingSupport(map[string]struct{}{"code_interpreter": {}})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "code_interpreter")
 }

@@ -129,6 +129,50 @@ func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRe
 	return bytes.NewReader(patched), nil
 }
 
+// allowedResponseAPIRootKeys enumerates modeled Responses API root fields that may be forwarded upstream.
+var allowedResponseAPIRootKeys = map[string]struct{}{
+	"background":           {},
+	"include":              {},
+	"input":                {},
+	"instructions":         {},
+	"max_output_tokens":    {},
+	"metadata":             {},
+	"model":                {},
+	"parallel_tool_calls":  {},
+	"previous_response_id": {},
+	"prompt":               {},
+	"reasoning":            {},
+	"service_tier":         {},
+	"store":                {},
+	"stream":               {},
+	"temperature":          {},
+	"text":                 {},
+	"tool_choice":          {},
+	"tools":                {},
+	"top_p":                {},
+	"truncation":           {},
+	"user":                 {},
+}
+
+// removeUnknownResponseAPIRootFields removes unmodeled Responses API root fields while preserving allowlisted passthrough keys.
+func removeUnknownResponseAPIRootFields(root map[string]json.RawMessage) bool {
+	changed := false
+	for key := range root {
+		if key == "extra_body" {
+			continue
+		}
+		if _, ok := allowedResponseAPIRootKeys[key]; ok {
+			continue
+		}
+		if isAllowedExtraBodyKey(key) {
+			continue
+		}
+		delete(root, key)
+		changed = true
+	}
+	return changed
+}
+
 // normalizeResponseAPIRawBody normalizes the raw request body for Response API requests
 func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequest, channelType int) ([]byte, openai.ResponseAPIInputContentNormalizationStats, bool, error) {
 	var stats openai.ResponseAPIInputContentNormalizationStats
@@ -153,7 +197,7 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		return patched, stats, true, nil
 	}
 
-	changed := false
+	changed := removeUnknownResponseAPIRootFields(root)
 
 	if request.Model != "" {
 		modelBytes, err := json.Marshal(request.Model)
