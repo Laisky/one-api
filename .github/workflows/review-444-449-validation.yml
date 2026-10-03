@@ -8,7 +8,7 @@ permissions:
 jobs:
   assemble:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     permissions:
       contents: write
       pull-requests: read
@@ -17,13 +17,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 570df7fb2921078f0e2ad322fdff8c5d85e08e7b
+          ref: cf51018628043b3d39fb7175e3ea379b356af9ef
           persist-credentials: false
           fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
-      - name: Reconstruct verified supplements without replacing concurrent work
+      - name: Merge fixed revisions, qualify regressions, and prepare immutable commits
         id: assemble
         env:
           GH_TOKEN: ${{ github.token }}
@@ -35,10 +35,11 @@ jobs:
           python3 - <<'PY'
           import base64, hashlib, json, lzma, os, pathlib, shutil, subprocess, urllib.request
           old = '567b7b910065e4b7f63843ed470fc6005f5ac519'
-          main = '570df7fb2921078f0e2ad322fdff8c5d85e08e7b'
-          main_tree = 'c2e7ddcadc843caa228534853dcddaa8d8bfbd34'
+          main = 'cf51018628043b3d39fb7175e3ea379b356af9ef'
+          main_tree = 'f14fa6d5b6ffce9166dcc6e1a5727da203e7b256'
           root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'qualified'
-          root.mkdir()
+          evidence = root / 'evidence'
+          evidence.mkdir(parents=True)
           def api(path, value=None):
               request = urllib.request.Request('https://api.github.com/repos/Laisky/one-api/' + path,
                   data=None if value is None else json.dumps(value).encode(),
@@ -51,28 +52,36 @@ jobs:
           packed = b''.join(base64.b64decode(api('git/blobs/' + sha)['content']) for sha in parts)
           assert hashlib.sha256(packed).hexdigest() == '99fba19c3d87e06b86584744e325ea33779fe9a3360fb0a560daca9338007f35'
           reviewed = {e['pr']: e for e in json.loads(lzma.decompress(packed))['entries']}
-          assert api('git/ref/heads/main')['object']['sha'] == main, 'main advanced; explicit convergence required'
-          results = []
-          revisions = [
-              (446, 'e4cd490aa670e790acfdb5f5e4d36bda062a3109', '3109603f6cdc67f18fd0479decf1ddde1452b0fa'),
-              (449, 'd4e4eaf5a02680b4010d8519804810a41e7d594b', 'e1dba7befb3d1875d45c1e750ba9da4ee4a7b645'),
-          ]
-          for number, parent, expected_tree in revisions:
-              pr = api('pulls/' + str(number))
-              assert pr['state'] == 'open' and pr['head']['sha'] == parent, 'PR advanced; preserve concurrent changes'
+          sources = {}
+          for number in [446, 449]:
               source = root / ('source' + str(number))
               git(['worktree', 'add', '--detach', str(source), old])
               git(['apply', '--index', '--whitespace=error'], source, reviewed[number]['patch'].encode())
               for filename, digest in reviewed[number]['files'].items():
                   assert hashlib.sha256((source / filename).read_bytes()).hexdigest() == digest
+              sources[number] = source
+          # Qualification is pinned to the recorded merge of #440 and #444-446.
+          # Later main changes cannot alter this snapshot. PR heads are checked both
+          # here and again before publication by explicit non-forced connector calls.
+          revisions = [
+              (447, '7809d4a0ec7444eb30a1791d58871b56371868b3', '^Test(MCPDisabled|MCPResolution|MCPToolNameByteLimit|DottedServerName)'),
+              (448, 'ea60e69ffb974b9a9aca29597c87d6a1b136b047', '^Test(SuccessfulTextRelay|SuccessfulResponseRelay|RelayResponseAPIHelper_FallbackAzure)'),
+              (449, 'd4e4eaf5a02680b4010d8519804810a41e7d594b', '^Test(ExternalSettlement|ExternalFinalization)'),
+          ]
+          results = []
+          for number, parent, pattern in revisions:
+              pr = api('pulls/' + str(number))
+              assert pr['state'] == 'open' and pr['head']['sha'] == parent, 'PR advanced; preserve concurrent changes'
               git(['fetch', '--no-tags', 'origin', parent])
               work = root / ('pr' + str(number))
               git(['worktree', 'add', '--detach', str(work), parent])
-              git(['merge', '--no-commit', '--no-ff', main], work)
-              if number == 446:
+              subprocess.run(['git','merge','--no-commit','--no-ff',main], cwd=work, check=True)
+              assert not git(['diff','--name-only','--diff-filter=U'], work).strip()
+              formats = []
+              if number == 447:
                   target = work / 'controller/mcp_resolution_admission_test.go'
                   assert not target.exists()
-                  target.write_text((source / 'controller/mcp_resolution_security_test.go').read_text().replace('TestMCPResolutionBoundsDatabaseWork', 'TestMCPResolutionAdmissionReadBudget'))
+                  target.write_text((sources[446] / 'controller/mcp_resolution_security_test.go').read_text().replace('TestMCPResolutionBoundsDatabaseWork','TestMCPResolutionAdmissionReadBudget'))
                   p = work / 'controller/mcp_proxy.go'
                   s = p.read_text()
                   needle = 'logger := gmw.GetLogger(c)\n\tuser, err := getUserFromContext(c)'
@@ -97,46 +106,62 @@ jobs:
                   needle = 'func prepareModernMCPToolCall(c *gin.Context, params modernMCPCallParams) (*modernMCPToolCallPlan, error) {\n'
                   assert s.count(needle) == 1
                   p.write_text(s.replace(needle, needle + '\tif err := validateMCPToolName(params.Name); err != nil {\n\t\treturn nil, errors.Wrap(err, "validate mcp tool name")\n\t}\n', 1))
-                  formats = ['controller/mcp_resolution_admission_test.go', 'controller/mcp_proxy.go', 'controller/mcp_call_latest.go']
-              else:
+                  formats = ['controller/mcp_resolution_admission_test.go','controller/mcp_proxy.go','controller/mcp_call_latest.go']
+              elif number == 449:
                   copies = ['token_settlement_atomic_test.go','token_settlement_backend_test.go','token_settlement_fault_test.go','behavior_differential_test.go','testdata/behavior/deviations/token_consume_single.json']
+                  # The historical differential file must still match the reviewed baseline.
+                  assert git(['show',main+':controller/behavior_differential_test.go']) == git(['show',old+':controller/behavior_differential_test.go'])
                   for filename in copies:
                       target = work / 'controller' / filename
                       if filename != 'behavior_differential_test.go':
                           assert not target.exists()
                       target.parent.mkdir(parents=True, exist_ok=True)
-                      shutil.copyfile(source / 'controller' / filename, target)
+                      shutil.copyfile(sources[449] / 'controller' / filename, target)
                   p = work / 'controller/token_settlement_fault_test.go'
-                  p.write_text(p.read_text().replace('"github.com/Laisky/one-api/model"', '"github.com/Laisky/one-api/model"\n"github.com/Laisky/one-api/common/helper"').replace('Quota: quota', 'FinalQuota: quota, At: helper.GetTimestamp()'))
+                  p.write_text(p.read_text().replace('"github.com/Laisky/one-api/model"','"github.com/Laisky/one-api/model"\n"github.com/Laisky/one-api/common/helper"').replace('Quota: quota','FinalQuota: quota, At: helper.GetTimestamp()'))
                   formats = ['controller/' + f for f in copies if f.endswith('.go') and f != 'behavior_differential_test.go']
-              subprocess.run(['gofmt', '-w'] + formats, cwd=work, check=True)
-              git(['add', 'controller'], work)
+              if formats:
+                  subprocess.run(['gofmt','-w'] + formats, cwd=work, check=True)
+              git(['add','controller','relay','model'], work)
+              git(['diff','--cached','--check'], work)
+              package = './relay/controller' if number == 448 else './controller'
+              log = evidence / ('pr' + str(number) + '-race.jsonl')
+              with log.open('w') as out:
+                  result = subprocess.run(['go','test','-json','-race','-count=3','-timeout=10m','-run',pattern,package], cwd=work, stdout=out, stderr=subprocess.STDOUT)
+              (evidence / ('pr'+str(number)+'-race.exit')).write_text(str(result.returncode))
+              result.check_returncode()
+              events = [json.loads(line) for line in log.read_text().splitlines() if line.startswith('{')]
+              assert not any(e.get('Action') in ('fail','skip') for e in events)
+              if number == 449:
+                  with (evidence / 'expiry-contract.jsonl').open('w') as out:
+                      subprocess.run(['go','test','-json','-race','-count=3','-timeout=3m','-run','^TestBehaviorDifferential$/^token$/^consume_single$','./controller'], cwd=work, stdout=out, stderr=subprocess.STDOUT, check=True)
               tree = git(['write-tree'], work).decode().strip()
-              assert tree == expected_tree, ('candidate differs from the locally tested complete tree', number, tree)
-              filenames = git(['diff', '--cached', '--name-only', main], work).decode().splitlines()
               entries = []
-              for filename in filenames:
-                  assert filename.startswith(('controller/', 'model/')) and '..' not in pathlib.PurePosixPath(filename).parts
+              for filename in git(['diff','--cached','--name-only',main],work).decode().splitlines():
+                  assert filename.startswith(('controller/','relay/','model/')) and '..' not in pathlib.PurePosixPath(filename).parts
                   p = work / filename
                   assert p.is_file() and not p.is_symlink()
-                  blob = api('git/blobs', {'content': base64.b64encode(p.read_bytes()).decode(), 'encoding': 'base64'})
-                  entries.append({'path': filename, 'mode': '100644', 'type': 'blob', 'sha': blob['sha']})
-              tree_result = api('git/trees', {'base_tree': main_tree, 'tree': entries})
-              assert tree_result['sha'] == expected_tree
-              message = ('fix(mcp): reject oversized calls before any database read' if number == 446 else 'test(billing): qualify atomic settlement faults and committed expiry contract')
-              commit = api('git/commits', {'message': message + '\n\nPreserve concurrent PR revisions and merged #444/#445 history.\nReviewed main: ' + main, 'tree': expected_tree, 'parents': [parent, main]})
-              results.append({'pr': number, 'branch': pr['head']['ref'], 'parent': parent, 'main': main, 'tree': expected_tree, 'commit': commit['sha']})
+                  blob = api('git/blobs',{'content':base64.b64encode(p.read_bytes()).decode(),'encoding':'base64'})
+                  entries.append({'path':filename,'mode':'100644','type':'blob','sha':blob['sha']})
+              remote_tree = api('git/trees',{'base_tree':main_tree,'tree':entries})
+              assert remote_tree['sha'] == tree
+              message = {447:'fix(mcp): converge bounded name and disabled-server admission',448:'Merge current main into Responses reservation reconciliation',449:'test(billing): qualify settlement rollback and committed expiry contract'}[number]
+              commit = api('git/commits',{'message':message+'\n\nPreserve all concurrent revisions.\nQualified main: '+main,'tree':tree,'parents':[parent,main]})
+              results.append({'pr':number,'branch':pr['head']['ref'],'parent':parent,'main':main,'tree':tree,'commit':commit['sha']})
+              (root/'candidate-manifest.json').write_text(json.dumps(results,indent=2)+'\n')
               if number == 449:
-                  with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-                      output.write('settlement_commit=' + commit['sha'] + '\n')
-          (root / 'candidate-manifest.json').write_text(json.dumps(results, indent=2) + '\n')
-          print(json.dumps(results, indent=2))
-          # No reference is moved here. Publication uses explicit non-forced connector updates.
+                  with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+                      out.write('settlement_commit='+commit['sha']+'\n')
+              print(json.dumps(results[-1]))
+          # No reference is moved by this workflow.
           PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
         with:
           name: converged-review-candidates
-          path: ${{ runner.temp }}/qualified/candidate-manifest.json
+          path: |
+            ${{ runner.temp }}/qualified/candidate-manifest.json
+            ${{ runner.temp }}/qualified/evidence/
           retention-days: 7
           if-no-files-found: error
   live-settlement:
@@ -188,12 +213,11 @@ jobs:
           go test -json -race -count=3 -timeout=10m ./controller -run '^TestExternalSettlement' | tee review-evidence/${ONEAPI_SETTLEMENT_TEST_BACKEND}.jsonl
           python3 - <<'PY'
           import json, os, pathlib
-          records = [json.loads(line) for line in pathlib.Path('review-evidence/' + os.environ['ONEAPI_SETTLEMENT_TEST_BACKEND'] + '.jsonl').read_text().splitlines()]
-          assert not any(r.get('Action') in ('skip', 'fail') for r in records)
-          names = ['TestExternalSettlementCancellationIsAtomic','TestExternalSettlementConcurrentFinalizers','TestExternalSettlementWriteFailureRollsBack','TestExternalSettlementFinalQuotaBoundaries']
-          for name in names:
+          records = [json.loads(line) for line in pathlib.Path('review-evidence/'+os.environ['ONEAPI_SETTLEMENT_TEST_BACKEND']+'.jsonl').read_text().splitlines()]
+          assert not any(r.get('Action') in ('skip','fail') for r in records)
+          for name in ['TestExternalSettlementCancellationIsAtomic','TestExternalSettlementConcurrentFinalizers','TestExternalSettlementWriteFailureRollsBack','TestExternalSettlementFinalQuotaBoundaries']:
               assert sum(r.get('Action') == 'pass' and r.get('Test') == name for r in records) == 3, name
-          assert any('against live ' + os.environ['ONEAPI_SETTLEMENT_TEST_BACKEND'] in r.get('Output', '') for r in records)
+          assert any('against live '+os.environ['ONEAPI_SETTLEMENT_TEST_BACKEND'] in r.get('Output','') for r in records)
           PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
