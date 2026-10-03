@@ -21,6 +21,7 @@ The Prometheus monitoring system provides detailed metrics about:
 
 - `ENABLE_PROMETHEUS_METRICS`: Enable/disable Prometheus metrics collection (default: `true`)
 - `METRICS_TOKEN`: Bearer token required to access the `/metrics` endpoint. When not set, the endpoint returns 403. (default: empty)
+- `METRICS_MAX_PATH_LABELS`: Maximum number of distinct normalized request paths recorded as `path` label values per process; further paths are counted under `/other`. Non-positive values fall back to the default. (default: `1000`)
 - `ENABLE_METRIC`: Enable/disable the existing channel monitoring system (default: `false`)
 
 ### Metrics Endpoint
@@ -65,6 +66,8 @@ scrape_configs:
 
 Labels: `path`, `method`, `status_code`
 
+The `path` label is normalized to bound cardinality: numeric ids, UUIDs and tokens under `/api/` become `:id`, `:uuid` and `:token`; relay routes collapse to their family (`/v1/chat/completions`, `/v1/images/:action`, `/v1/other`, ...); paths longer than 100 bytes are truncated on a UTF-8 boundary; any byte sequence that is not valid UTF-8 (for example a percent-encoded `%c0`) is replaced by U+FFFD; and once `METRICS_MAX_PATH_LABELS` distinct paths have been seen, every new path is recorded as `/other` (vulnerability scanners probe thousands of distinct paths).
+
 ### API Relay Metrics
 
 - `one_api_relay_request_duration_seconds`: Histogram of API relay request durations
@@ -72,7 +75,9 @@ Labels: `path`, `method`, `status_code`
 - `one_api_relay_tokens_total`: Counter of total tokens used
 - `one_api_relay_quota_used_total`: Counter of total quota used
 
-Labels: `channel_id`, `channel_type`, `model`, `user_id`, `success`, `token_type`
+Labels: `channel_id`, `channel_type`, `model`, `group`, `api_format`, `api_type`, `success`, `token_type`
+
+> Note: `user_id` and `token_id` are intentionally omitted from relay metrics to avoid unbounded label cardinality (one series per user/token combination grows memory without bound). The per-user `one_api_user_*` metrics below are broken down by `group` only (also no `user_id`/`username`); for per-user detail, query the request logs and billing tables in the database.
 
 ### Channel Metrics
 
@@ -86,12 +91,15 @@ Labels: `channel_id`, `channel_name`, `channel_type`
 
 ### User Metrics
 
-- `one_api_user_requests_total`: Counter of total requests by user
-- `one_api_user_quota_used_total`: Counter of total quota used by user
-- `one_api_user_tokens_total`: Counter of total tokens used by user
-- `one_api_user_balance`: Gauge of user balance/quota remaining
+- `one_api_user_requests_total`: Counter of total requests by user group
+- `one_api_user_quota_used_total`: Counter of total quota used by user group
+- `one_api_user_tokens_total`: Counter of total tokens used by user group
 
-Labels: `user_id`, `username`, `group`, `token_type`
+Labels: `group` (and `token_type` on `one_api_user_tokens_total`)
+
+> Note: `user_id` and `username` are intentionally omitted from these metrics to avoid unbounded label cardinality (one permanent time series per user grows memory without bound). Per-user breakdowns are available from the request logs and billing tables in the database.
+>
+> `one_api_user_balance` is no longer populated: once `user_id`/`username` are dropped, a per-group balance gauge would be last-write-wins across all users in the group and therefore misleading. Per-user balance lives in the database, and site-wide quota is covered by the `one_api_site_*` gauges.
 
 ### Database Metrics
 
@@ -112,10 +120,10 @@ Labels: `command`, `success`
 
 ### Rate Limiting Metrics
 
-- `one_api_rate_limit_hits_total`: Counter of rate limit hits
-- `one_api_rate_limit_remaining`: Gauge of remaining rate limit tokens
+- `one_api_rate_limit_hits_total`: Counter of responses rejected with HTTP 429
+- `one_api_rate_limit_remaining`: Reserved; not populated. It was previously fed from the client-supplied `X-RateLimit-Remaining` request header, which is untrusted input, so the series is no longer written.
 
-Labels: `type`, `identifier`
+Labels: `limit_type` (which limiter rejected the request: `web`, `api`, `critical`, `download`, `upload`, `relay`, `conversations`, `channel`, `low_balance`; `other` for a 429 not produced by a limiter, e.g. an upstream provider's 429 relayed to the client), `identifier` (what the limiter keys on: `ip`, `token`, `user`; `none` for `other`). Neither label carries a client IP, token or user id: those values are unbounded and would create one time series per caller.
 
 ### Model Usage Metrics
 
@@ -159,11 +167,13 @@ histogram_quantile(0.95, rate(one_api_http_request_duration_seconds_bucket[5m]))
 one_api_channel_success_rate
 ```
 
-#### Top Users by Quota Usage
+#### Top Groups by Quota Usage
 
 ```promql
-topk(10, rate(one_api_user_quota_used_total[1h]))
+topk(10, sum(rate(one_api_user_quota_used_total[1h])) by (group))
 ```
+
+(Per-user quota breakdowns are no longer available as a metric; query the request logs / billing tables in the database instead.)
 
 #### Database Query Performance
 

@@ -18,12 +18,26 @@ func sanitizeClaudeMessagesRequest(request *ClaudeMessagesRequest) {
 	if request == nil {
 		return
 	}
-	anthropic.NormalizeModelCompatibility(request.Model, &request.Temperature, &request.TopP, &request.TopK, &request.Thinking)
+	name := request.Model
+	if request.CompatibilityModel != "" {
+		name = request.CompatibilityModel
+	}
+	anthropic.NormalizeModelCompatibility(name, &request.Temperature, &request.TopP, &request.TopK, &request.Thinking)
 }
 
 // applyClaudeRequestRewriteFields rewrites sanitized top-level Claude request fields in obj.
 // It updates only the top-level fields that one-api intentionally normalizes and returns any rewrite error.
 func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *ClaudeMessagesRequest) error {
+	if obj == nil {
+		return errors.New("validation failed: Claude request must be an object")
+	}
+	name := request.Model
+	if request.CompatibilityModel != "" {
+		name = request.CompatibilityModel
+	}
+	if err := anthropic.NormalizeSonnet55Controls(name, obj); err != nil {
+		return err
+	}
 	if request.Model != "" {
 		modelBytes, merr := json.Marshal(request.Model)
 		if merr != nil {
@@ -43,10 +57,13 @@ func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *Cl
 		delete(obj, "top_k")
 	}
 
-	if anthropic.IsClaudeOpus47Model(request.Model) {
-		rewrittenThinking, changed, err := rewriteClaudeOpus47Thinking(obj["thinking"])
+	if anthropic.IsClaudeAdaptiveThinkingModel(name) && !anthropic.IsClaudeSonnet55(name) {
+		if name == "claude-sonnet-5" && request.Thinking != nil && request.Thinking.Type == "disabled" {
+			return nil
+		}
+		rewrittenThinking, changed, err := rewriteClaudeAdaptiveThinking(obj["thinking"])
 		if err != nil {
-			return errors.Wrap(err, "rewrite Claude Opus 4.7 thinking")
+			return errors.Wrap(err, "rewrite Claude adaptive thinking")
 		}
 		if changed {
 			if len(rewrittenThinking) == 0 {
@@ -60,9 +77,10 @@ func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *Cl
 	return nil
 }
 
-// rewriteClaudeOpus47Thinking normalizes a raw thinking object for Claude Opus 4.7.
+// rewriteClaudeAdaptiveThinking normalizes a raw thinking object for Claude models on the
+// adaptive-thinking-only profile (Opus 4.7/4.8, Sonnet 5, ...).
 // It preserves valid adaptive settings where possible, rewrites legacy manual thinking to adaptive, and returns whether the raw field changed.
-func rewriteClaudeOpus47Thinking(rawThinking json.RawMessage) (json.RawMessage, bool, error) {
+func rewriteClaudeAdaptiveThinking(rawThinking json.RawMessage) (json.RawMessage, bool, error) {
 	if len(rawThinking) == 0 {
 		return nil, false, nil
 	}
@@ -74,6 +92,11 @@ func rewriteClaudeOpus47Thinking(rawThinking json.RawMessage) (json.RawMessage, 
 			return nil, false, errors.Wrap(merr, "marshal adaptive thinking")
 		}
 		return json.RawMessage(rewritten), true, nil
+	}
+	if obj == nil {
+		// JSON null represents an absent optional thinking configuration. Preserve it
+		// rather than synthesizing adaptive thinking or assigning into a nil map.
+		return rawThinking, false, nil
 	}
 
 	var thinkingType string
@@ -87,15 +110,16 @@ func rewriteClaudeOpus47Thinking(rawThinking json.RawMessage) (json.RawMessage, 
 		if _, ok := obj["budget_tokens"]; !ok {
 			return rawThinking, false, nil
 		}
-		delete(obj, "budget_tokens")
-		rewritten, err := encodeClaudeRawJSONObject(obj)
-		if err != nil {
-			return nil, false, errors.Wrap(err, "marshal adaptive thinking")
-		}
-		return json.RawMessage(rewritten), true, nil
 	}
 
-	rewritten, err := json.Marshal(map[string]string{"type": "adaptive"})
+	adaptiveType, err := json.Marshal("adaptive")
+	if err != nil {
+		return nil, false, errors.Wrap(err, "marshal adaptive thinking type")
+	}
+	obj["type"] = json.RawMessage(adaptiveType)
+	delete(obj, "budget_tokens")
+
+	rewritten, err := encodeClaudeRawJSONObject(obj)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "marshal adaptive thinking")
 	}
@@ -114,7 +138,7 @@ func rewriteClaudeOpus47Thinking(rawThinking json.RawMessage) (json.RawMessage, 
 //   - Key reordering within nested objects
 //
 // By using json.RawMessage, only the top-level fields we explicitly modify (model,
-// extra_body, temperature, top_p, top_k, and Opus 4.7 thinking) are re-encoded;
+// extra_body, temperature, top_p, top_k, and adaptive-thinking normalization) are re-encoded;
 // all other fields pass through byte-for-byte.
 func rewriteClaudeRequestBody(raw []byte, request *ClaudeMessagesRequest) ([]byte, error) {
 	if len(raw) == 0 || request == nil {
@@ -380,8 +404,9 @@ func stripClaudeThinkingFromAssistantHistory(raw []byte) ([]byte, claudeSignatur
 	return encodedRequest, stats, nil
 }
 
-// stripClaudeUnsignedThinkingFromAssistantMessage removes assistant thinking blocks that cannot be replayed because they lack signatures.
-// stripClaudeUnsignedThinkingFromAssistantMessage returns the rewritten message, removal stats, whether the message should be kept, and any error.
+// stripClaudeUnsignedThinkingFromAssistantMessage removes visible assistant thinking blocks that cannot be replayed because they lack signatures.
+// Redacted thinking blocks carry opaque data instead of a signature and must be replayed unchanged.
+// The function returns the rewritten message, removal stats, whether the message should be kept, and any error.
 func stripClaudeUnsignedThinkingFromAssistantMessage(messageRaw json.RawMessage, messageIndex int) ([]byte, claudeUnsignedThinkingStats, bool, error) {
 	var stats claudeUnsignedThinkingStats
 	var message map[string]json.RawMessage
@@ -424,7 +449,9 @@ func stripClaudeUnsignedThinkingFromAssistantMessage(messageRaw json.RawMessage,
 		}
 
 		normalizedType := strings.ToLower(strings.TrimSpace(blockType))
-		if normalizedType != "thinking" && normalizedType != "redacted_thinking" {
+		if normalizedType != "thinking" {
+			// redacted_thinking has an opaque data field and no signature field.
+			// Preserve it, along with unknown future block types, byte-for-byte.
 			keptBlocks = append(keptBlocks, blockRaw)
 			continue
 		}
@@ -550,8 +577,13 @@ func getAndValidateClaudeMessagesRequest(c *gin.Context) (*ClaudeMessagesRequest
 		if message.Role == "" {
 			return nil, errors.Errorf("message[%d].role is required", i)
 		}
-		if message.Role != "user" && message.Role != "assistant" {
-			return nil, errors.Errorf("message[%d].role must be 'user' or 'assistant'", i)
+		// Claude Code v2.1.154+ (e.g. "adaptive thinking") may inject role:"system"
+		// messages inside the messages array (issue #350). Tolerate them here; the
+		// downstream conversion folds mid-array system content into an adjacent
+		// turn for rebuilt upstreams, while direct HTTP passthrough forwards the
+		// raw body unchanged.
+		if message.Role != "user" && message.Role != "assistant" && message.Role != "system" {
+			return nil, errors.Errorf("message[%d].role must be 'user', 'assistant', or 'system'", i)
 		}
 		if message.Content == nil {
 			return nil, errors.Errorf("message[%d].content is required", i)

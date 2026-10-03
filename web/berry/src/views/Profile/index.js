@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import { useState, useEffect } from 'react';
 import UserCard from 'ui-component/cards/UserCard';
 import {
@@ -27,8 +28,8 @@ import WechatModal from 'views/Authentication/AuthForms/WechatModal';
 import { useSelector } from 'react-redux';
 import EmailModal from './component/EmailModal';
 import Turnstile from 'react-turnstile';
-import { ReactComponent as Lark } from 'assets/images/icons/lark.svg';
-import { ReactComponent as OIDC } from 'assets/images/icons/oidc.svg';
+import Lark from 'assets/images/icons/lark.svg?react';
+import OIDC from 'assets/images/icons/oidc.svg?react';
 
 const validationSchema = Yup.object().shape({
   username: Yup.string().required('用户名 不能为空').min(3, '用户名 不能小于 3 个字符'),
@@ -110,7 +111,7 @@ export default function Profile() {
         showError(message);
       }
     } catch (err) {
-      showError(err.message);
+      showError(err);
     }
   };
 
@@ -121,7 +122,7 @@ export default function Profile() {
         setTurnstileSiteKey(status.turnstile_site_key);
       }
     }
-    loadUser().then();
+    loadUser().then().catch(reportUIError);
   }, [status]);
 
   function getOidcId(){
@@ -200,7 +201,7 @@ export default function Profile() {
                   </FormControl>
                 </Grid>
                 <Grid xs={12}>
-                  <Button variant="contained" color="primary" onClick={submit}>
+                  <Button variant="contained" color="primary" onClick={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>
                     提交
                   </Button>
                 </Grid>
@@ -272,7 +273,7 @@ export default function Profile() {
                   </Grid>
                 )}
                 <Grid xs={12}>
-                  <Button variant="contained" onClick={generateAccessToken}>
+                  <Button variant="contained" onClick={(...uiArgs) => generateAccessToken(...uiArgs).catch(reportUIError)}>
                     {inputs.access_token ? '重置访问令牌' : '生成访问令牌'}
                   </Button>
                 </Grid>
@@ -303,9 +304,9 @@ export default function Profile() {
           <Button onClick={() => setShowAccountDeleteModal(false)}>取消</Button>
           <Button
             sx={{ color: 'error.main' }}
-            onClick={async () => {
+            onClick={(...uiArgs) => (async () => {
               setShowAccountDeleteModal(false);
-            }}
+            })(...uiArgs).catch(reportUIError)}
           >
             确定
           </Button>

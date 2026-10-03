@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { Card, Input, Table, Typography, Spin, Empty, Collapsible, Tag, Select, Row, Col, Button } from '@douyinfe/semi-ui';
 import { API, showError } from '../../helpers';
@@ -34,7 +35,7 @@ const Models = () => {
   };
 
   useEffect(() => {
-    fetchModelsData();
+    fetchModelsData().catch(reportUIError);
   }, []);
 
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { useCallback, useEffect, useState } from 'react';
 import SubCard from 'ui-component/cards/SubCard';
 import {
@@ -55,23 +56,30 @@ const OtherSetting = () => {
   }, []);
 
   useEffect(() => {
-    getOptions().then();
+    getOptions().then().catch(reportUIError);
   }, [getOptions]);
 
   const updateOption = async (key, value) => {
     setLoading(true);
-    const res = await API.put('/api/option/', {
-      key,
-      value
-    });
-    const { success, message } = res.data;
-    if (success) {
-      setInputs((inputs) => ({ ...inputs, [key]: value }));
-      showSuccess('保存成功');
-    } else {
-      showError(message);
+    try {
+      const res = await API.put('/api/option/', {
+        key,
+        value
+      });
+      // The shared axios interceptor resolves to undefined on error; bail out before
+      // reading res.data so a failed request can't throw and leave `loading` stuck true,
+      // which would keep every settings button disabled until a page reload.
+      if (!res) return;
+      const { success, message } = res.data;
+      if (success) {
+        setInputs((inputs) => ({ ...inputs, [key]: value }));
+        showSuccess('保存成功');
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleInputChange = async (event) => {
@@ -140,7 +148,7 @@ const OtherSetting = () => {
         <SubCard title="通用设置">
           <Grid container spacing={{ xs: 3, sm: 2, md: 4 }}>
             <Grid xs={12}>
-              <Button variant="contained" onClick={checkUpdate}>
+              <Button variant="contained" onClick={(...uiArgs) => checkUpdate(...uiArgs).catch(reportUIError)}>
                 检查更新
               </Button>
             </Grid>
@@ -153,14 +161,14 @@ const OtherSetting = () => {
                   label="公告"
                   value={inputs.Notice}
                   name="Notice"
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   minRows={10}
                   placeholder="在此输入新的公告内容，支持 Markdown & HTML 代码"
                 />
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitNotice}>
+              <Button variant="contained" onClick={(...uiArgs) => submitNotice(...uiArgs).catch(reportUIError)}>
                 保存公告
               </Button>
             </Grid>
@@ -175,7 +183,7 @@ const OtherSetting = () => {
                   id="SystemName"
                   name="SystemName"
                   value={inputs.SystemName || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="系统名称"
                   placeholder="在此输入系统名称"
                   disabled={loading}
@@ -183,7 +191,7 @@ const OtherSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitSystemName}>
+              <Button variant="contained" onClick={(...uiArgs) => submitSystemName(...uiArgs).catch(reportUIError)}>
                 设置系统名称
               </Button>
             </Grid>
@@ -194,7 +202,7 @@ const OtherSetting = () => {
                     id="Theme"
                     name="Theme"
                     value={inputs.Theme || ''}
-                    onChange={handleInputChange}
+                    onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                     label="主题名称"
                     placeholder="请输入主题名称"
                     disabled={loading}
@@ -202,7 +210,7 @@ const OtherSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitTheme}>
+              <Button variant="contained" onClick={(...uiArgs) => submitTheme(...uiArgs).catch(reportUIError)}>
                 设置主题（重启生效）
               </Button>
             </Grid>
@@ -213,7 +221,7 @@ const OtherSetting = () => {
                   id="Logo"
                   name="Logo"
                   value={inputs.Logo || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="Logo 图片地址"
                   placeholder="在此输入Logo 图片地址"
                   disabled={loading}
@@ -221,7 +229,7 @@ const OtherSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitLogo}>
+              <Button variant="contained" onClick={(...uiArgs) => submitLogo(...uiArgs).catch(reportUIError)}>
                 设置 Logo
               </Button>
             </Grid>
@@ -234,14 +242,14 @@ const OtherSetting = () => {
                   label="首页内容"
                   value={inputs.HomePageContent}
                   name="HomePageContent"
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   minRows={10}
                   placeholder="在此输入首页内容，支持 Markdown & HTML 代码，设置后首页的状态信息将不再显示。如果输入的是一个链接，则会使用该链接作为 iframe 的 src 属性，这允许你设置任意网页作为首页。"
                 />
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={() => submitOption('HomePageContent')}>
+              <Button variant="contained" onClick={() => submitOption('HomePageContent').catch(reportUIError)}>
                 保存首页内容
               </Button>
             </Grid>
@@ -254,14 +262,14 @@ const OtherSetting = () => {
                   label="关于"
                   value={inputs.About}
                   name="About"
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   minRows={10}
                   placeholder="在此输入新的关于内容，支持 Markdown & HTML 代码。如果输入的是一个链接，则会使用该链接作为 iframe 的 src 属性，这允许你设置任意网页作为关于页面。"
                 />
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitAbout}>
+              <Button variant="contained" onClick={(...uiArgs) => submitAbout(...uiArgs).catch(reportUIError)}>
                 保存关于
               </Button>
             </Grid>
@@ -279,14 +287,14 @@ const OtherSetting = () => {
                   label="页脚"
                   value={inputs.Footer}
                   name="Footer"
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   minRows={10}
                   placeholder="在此输入新的页脚，留空则使用默认页脚，支持 HTML 代码"
                 />
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitFooter}>
+              <Button variant="contained" onClick={(...uiArgs) => submitFooter(...uiArgs).catch(reportUIError)}>
                 设置页脚
               </Button>
             </Grid>
@@ -305,10 +313,10 @@ const OtherSetting = () => {
         <DialogActions>
           <Button onClick={() => setShowUpdateModal(false)}>关闭</Button>
           <Button
-            onClick={async () => {
+            onClick={(...uiArgs) => (async () => {
               setShowUpdateModal(false);
               openGitHubRelease();
-            }}
+            })(...uiArgs).catch(reportUIError)}
           >
             去GitHub查看
           </Button>

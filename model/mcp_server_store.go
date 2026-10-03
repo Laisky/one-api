@@ -1,12 +1,16 @@
 package model
 
 import (
+	"context"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
+	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/errkind"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 )
 
@@ -20,9 +24,51 @@ var MCPServerSortFields = map[string]string{
 	"updated_at": "updated_at",
 }
 
-// ListMCPServers returns MCP servers with pagination and sorting applied.
-func ListMCPServers(offset int, limit int, sortBy string, sortOrder string) ([]*MCPServer, error) {
-	query := DB.Model(&MCPServer{})
+// applyMCPServerKeyword narrows an MCP server query by a search keyword.
+//
+// A pasted UUID matches the server's uuid by equality. Any other keyword falls back to a
+// case-insensitive substring match over the same fields the list page used to filter
+// client-side (name, base_url, protocol, auth_type), so moving the filter server-side
+// does not lose behaviour. An empty keyword leaves the query untouched.
+//
+// Parameters:
+//   - query: query to narrow; never mutated, GORM returns a new statement.
+//   - keyword: raw search keyword supplied by the request.
+//
+// Return values:
+//   - *gorm.DB: narrowed query, or query unchanged when the keyword is empty.
+func applyMCPServerKeyword(query *gorm.DB, keyword string) *gorm.DB {
+	trimmed := strings.TrimSpace(keyword)
+	if trimmed == "" {
+		return query
+	}
+	if scoped, matched := applyUUIDKeyword(query, trimmed, "uuid"); matched {
+		return scoped
+	}
+	// LOWER() on both sides keeps the match case-insensitive on PostgreSQL and on
+	// binary-collation MySQL/SQLite columns alike, mirroring the previous
+	// JavaScript toLowerCase().includes() filter.
+	pattern := "%" + strings.ToLower(trimmed) + "%"
+	return query.Where(
+		"(LOWER(name) LIKE ? or LOWER(base_url) LIKE ? or LOWER(protocol) LIKE ? or LOWER(auth_type) LIKE ?)",
+		pattern, pattern, pattern, pattern)
+}
+
+// ListMCPServers returns MCP servers with pagination, keyword filtering, and sorting applied.
+//
+// Parameters:
+//   - keyword: optional search keyword; a UUID matches the server uuid exactly, anything
+//     else substring-matches name/base_url/protocol/auth_type. Empty means no filter.
+//   - offset: pagination offset.
+//   - limit: page size; non-positive means unlimited.
+//   - sortBy: whitelisted sort column.
+//   - sortOrder: "asc" or "desc".
+//
+// Return values:
+//   - []*MCPServer: matching servers with secrets decrypted.
+//   - error: wrapped database error when the query fails.
+func ListMCPServers(keyword string, offset int, limit int, sortBy string, sortOrder string) ([]*MCPServer, error) {
+	query := applyMCPServerKeyword(DB.Model(&MCPServer{}), keyword)
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
@@ -43,10 +89,20 @@ func ListMCPServers(offset int, limit int, sortBy string, sortOrder string) ([]*
 	return servers, nil
 }
 
-// CountMCPServers returns the total number of MCP servers.
-func CountMCPServers() (int64, error) {
+// CountMCPServers returns the number of MCP servers matching a search keyword.
+//
+// It applies exactly the same keyword filter as ListMCPServers so the reported total
+// always agrees with the rows a client can page through.
+//
+// Parameters:
+//   - keyword: optional search keyword; empty means count every server.
+//
+// Return values:
+//   - int64: number of matching servers.
+//   - error: wrapped database error when the query fails.
+func CountMCPServers(keyword string) (int64, error) {
 	var count int64
-	if err := DB.Model(&MCPServer{}).Count(&count).Error; err != nil {
+	if err := applyMCPServerKeyword(DB.Model(&MCPServer{}), keyword).Count(&count).Error; err != nil {
 		return 0, errors.Wrap(err, "count mcp servers")
 	}
 	return count, nil
@@ -55,10 +111,14 @@ func CountMCPServers() (int64, error) {
 // GetMCPServerByID fetches a MCP server by identifier.
 func GetMCPServerByID(id int) (*MCPServer, error) {
 	if id <= 0 {
-		return nil, errors.New("mcp server id is invalid")
+		return nil, errkind.InvalidRequestErr(errors.New("mcp server id is invalid"))
 	}
 	server := MCPServer{Id: id}
 	if err := DB.First(&server, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// The id is supplied by the caller, so an absent row is a bad reference.
+			return nil, errkind.NotFoundErr(errors.Wrap(err, "get mcp server"))
+		}
 		return nil, errors.Wrap(err, "get mcp server")
 	}
 	if err := decryptMCPServerSecret(&server); err != nil {
@@ -86,11 +146,18 @@ func CreateMCPServer(server *MCPServer) error {
 
 // UpdateMCPServer updates an existing MCP server record.
 func UpdateMCPServer(server *MCPServer) error {
+	return UpdateMCPServerWithContext(context.Background(), server)
+}
+
+// UpdateMCPServerWithContext updates an MCP server and binds safe field-clearing diagnostics to ctx.
+// Parameters: ctx carries request logging and server is the MCP server to persist.
+// Returns: a wrapped persistence or validation error.
+func UpdateMCPServerWithContext(ctx context.Context, server *MCPServer) error {
 	if server == nil {
 		return errors.New("mcp server is nil")
 	}
 	if server.Id <= 0 {
-		return errors.New("mcp server id is invalid")
+		return errkind.InvalidRequestErr(errors.New("mcp server id is invalid"))
 	}
 	if err := server.NormalizeAndValidate(); err != nil {
 		return errors.Wrap(err, "normalize and validate mcp server")
@@ -98,7 +165,7 @@ func UpdateMCPServer(server *MCPServer) error {
 	if err := encryptMCPServerSecret(server); err != nil {
 		return errors.Wrap(err, "encrypt mcp server secret")
 	}
-	if err := DB.Model(server).Updates(server).Error; err != nil {
+	if err := DB.WithContext(ctx).Model(server).Omit("uuid").Updates(server).Error; err != nil {
 		return errors.Wrap(err, "update mcp server")
 	}
 	// GORM's struct-based Updates silently skips zero-value fields (empty
@@ -140,14 +207,15 @@ func UpdateMCPServer(server *MCPServer) error {
 			}
 		}
 		if len(forcedUpdates) > 0 {
-			if err := DB.Model(&MCPServer{}).Where("id = ?", server.Id).Updates(forcedUpdates).Error; err != nil {
-				return errors.Wrapf(err, "update provided fields for mcp server id=%d", server.Id)
+			if err := DB.WithContext(ctx).Model(&MCPServer{}).Where("id = ?", server.Id).Updates(forcedUpdates).Error; err != nil {
+				return identity.Tag(
+					errors.Wrapf(err, "update provided fields for mcp server id=%d", server.Id),
+					server.Ref())
 			}
-			if len(cleared) > 0 && logger.Logger != nil {
+			if len(cleared) > 0 {
 				// Field NAMES only, never values (api_key, headers may contain secrets).
-				logger.Logger.Debug("mcp server update cleared fields",
-					zap.Int("mcp_server_id", server.Id),
-					zap.Strings("cleared_fields", cleared))
+				logger.FromContext(ctx).Debug("mcp server update cleared fields",
+					append(server.Ref().Zap(), zap.Strings("cleared_fields", cleared))...)
 			}
 		}
 	}
@@ -180,7 +248,7 @@ func isZeroForUpdate(v any) bool {
 // DeleteMCPServer deletes a MCP server record by id.
 func DeleteMCPServer(id int) error {
 	if id <= 0 {
-		return errors.New("mcp server id is invalid")
+		return errkind.InvalidRequestErr(errors.New("mcp server id is invalid"))
 	}
 	if err := DB.Delete(&MCPServer{}, id).Error; err != nil {
 		return errors.Wrap(err, "delete mcp server")
@@ -192,10 +260,14 @@ func DeleteMCPServer(id int) error {
 func GetMCPServerByName(name string) (*MCPServer, error) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
-		return nil, errors.New("mcp server name is required")
+		return nil, errkind.InvalidRequestErr(errors.New("mcp server name is required"))
 	}
 	server := MCPServer{}
 	if err := DB.First(&server, "name = ?", trimmed).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// The name is supplied by the caller, so an absent row is a bad reference.
+			return nil, errkind.NotFoundErr(errors.Wrap(err, "get mcp server by name"))
+		}
 		return nil, errors.Wrap(err, "get mcp server by name")
 	}
 	if err := decryptMCPServerSecret(&server); err != nil {
@@ -206,8 +278,21 @@ func GetMCPServerByName(name string) (*MCPServer, error) {
 
 // ListEnabledMCPServers returns enabled MCP servers.
 func ListEnabledMCPServers() ([]*MCPServer, error) {
+	return ListEnabledMCPServersWithContext(context.Background())
+}
+
+// ListEnabledMCPServersWithContext returns enabled MCP servers using ctx for
+// database cancellation.
+//
+// Parameters:
+//   - ctx: lifecycle and deadline scope for the query.
+//
+// Return values:
+//   - []*MCPServer: enabled servers with decrypted secrets.
+//   - error: wrapped query or decryption failure.
+func ListEnabledMCPServersWithContext(ctx context.Context) ([]*MCPServer, error) {
 	var servers []*MCPServer
-	if err := DB.Where("status = ?", MCPServerStatusEnabled).Find(&servers).Error; err != nil {
+	if err := DB.WithContext(ctx).Where("status = ?", MCPServerStatusEnabled).Find(&servers).Error; err != nil {
 		return nil, errors.Wrap(err, "list enabled mcp servers")
 	}
 	if err := decryptMCPServerSecrets(servers); err != nil {

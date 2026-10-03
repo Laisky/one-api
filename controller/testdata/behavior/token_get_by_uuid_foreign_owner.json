@@ -1,0 +1,9 @@
+{
+  "case": "token/get_by_uuid_foreign_owner",
+  "site": "T3 GetToken (error)",
+  "status": 200,
+  "body": {
+    "message": "failed to get token by id=2 and userId=2: record not found",
+    "success": false
+  }
+}

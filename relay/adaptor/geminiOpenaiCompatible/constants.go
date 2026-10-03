@@ -31,7 +31,7 @@ const (
 	gemini31FlashImage512Price = 0.045
 	gemini31FlashImage1KPrice  = 0.067
 	gemini31FlashImage2KPrice  = 0.101
-	gemini31FlashImage4KPrice  = 0.15
+	gemini31FlashImage4KPrice  = 0.151 // 4K (2520 tokens) = $0.151/image per Google pricing footnote
 
 	geminiEmbedding001TextPrice              = 0.15
 	geminiEmbedding2PreviewTextPrice         = 0.20
@@ -91,7 +91,7 @@ var (
 	gemini25ProPricing = adaptor.ModelConfig{
 		Ratio:            1.25 * ratio.MilliTokensUsd,
 		CompletionRatio:  10.0 / 1.25,
-		CachedInputRatio: 0.13 * ratio.MilliTokensUsd,
+		CachedInputRatio: 0.125 * ratio.MilliTokensUsd,
 		Tiers: []adaptor.ModelRatioTier{
 			{
 				Ratio:               2.5 * ratio.MilliTokensUsd,
@@ -135,6 +135,20 @@ var (
 		Ratio:            1.50 * ratio.MilliTokensUsd,
 		CompletionRatio:  9.00 / 1.50,
 		CachedInputRatio: 0.15 * ratio.MilliTokensUsd,
+	}
+	// gemini36FlashPricing reflects Google Cloud Agent Platform standard pricing:
+	// $1.50 input / $7.50 output / $0.15 cached, with unified text/image/video/audio input.
+	gemini36FlashPricing = adaptor.ModelConfig{
+		Ratio:            1.50 * ratio.MilliTokensUsd,
+		CompletionRatio:  7.50 / 1.50,
+		CachedInputRatio: 0.15 * ratio.MilliTokensUsd,
+	}
+	// gemini35FlashLitePricing reflects Google Cloud Agent Platform standard pricing:
+	// $0.30 input / $2.50 output / $0.03 cached, with unified text/image/video/audio input.
+	gemini35FlashLitePricing = adaptor.ModelConfig{
+		Ratio:            0.30 * ratio.MilliTokensUsd,
+		CompletionRatio:  2.50 / 0.30,
+		CachedInputRatio: 0.03 * ratio.MilliTokensUsd,
 	}
 	gemini31FlashLivePreviewPricing = adaptor.ModelConfig{
 		Ratio:           0.75 * ratio.MilliTokensUsd,
@@ -190,7 +204,8 @@ var (
 
 // ModelRatios contains all supported models and their pricing ratios
 // Model list is derived from the keys of this map, eliminating redundancy
-// Based on Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+// Based on Google Cloud Agent Platform pricing:
+// https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing
 //
 // ⚠️ Note: should also check relay/adaptor/vertexai/adaptor.go:IsRequireGlobalEndpoint
 var ModelRatios = map[string]adaptor.ModelConfig{
@@ -243,7 +258,31 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio: 3.00 / 0.50,
 		Image:           gemini31FlashImageConfig(),
 	},
+	// GA alias for gemini-3.1-flash-image (same pricing as preview).
+	"gemini-3.1-flash-image": {
+		Ratio:           0.50 * ratio.MilliTokensUsd,
+		CompletionRatio: 3.00 / 0.50,
+		Image:           gemini31FlashImageConfig(),
+	},
+	// gemini-3.1-flash-lite-image bills text input $0.25 / text output $1.50 (CompletionRatio 6)
+	// with native image output at a single flat $0.0336 per 1024x1024 render ($30/1M output tokens).
+	// Unlike gemini-3.1-flash-image it does NOT expose 512/2K/4K image-size tiers.
+	"gemini-3.1-flash-lite-image": {
+		Ratio:           0.25 * ratio.MilliTokensUsd,
+		CompletionRatio: 1.50 / 0.25,
+		Image:           geminiImageConfig(0.0336),
+	},
 	"gemini-3.1-flash-live-preview": gemini31FlashLivePreviewPricing,
+	// Gemini 3.5 Live Translate preview: low-latency audio-to-audio real-time speech translation.
+	// Source: https://ai.google.dev/gemini-api/docs/pricing — $3.50 input / $21.00 output per 1M tokens.
+	"gemini-3.5-live-translate-preview": {
+		Ratio:           3.50 * ratio.MilliTokensUsd,
+		CompletionRatio: 21.0 / 3.50,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:     1,
+			CompletionRatio: 1,
+		},
+	},
 	// Gemini 3.1 Flash-Lite reached GA per https://ai.google.dev/gemini-api/docs/models;
 	// preview snapshot retained for backward compatibility.
 	"gemini-3.1-flash-lite":         gemini31FlashLitePricing,
@@ -275,7 +314,38 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// It is Google's most intelligent Flash tier with 1M context, dynamic thinking by default,
 	// and unified input pricing across text/image/audio/video modalities.
 	"gemini-3.5-flash": gemini35FlashPricing,
+	// Google Cloud Agent Platform pricing lists Gemini 3.6 Flash as the newer Flash tier.
+	// Source: https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing
+	"gemini-3.6-flash": gemini36FlashPricing,
+	// Google Cloud Agent Platform pricing lists Gemini 3.5 Flash-Lite as a mid-tier Lite model.
+	// Source: https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing
+	"gemini-3.5-flash-lite": gemini35FlashLitePricing,
+	// gemini-omni-flash-preview is Google's unified any-to-any Flash tier: it accepts
+	// text/image/video/audio input and can emit native video output. Text billing is
+	// $1.50 input / $9.00 output (CompletionRatio 6). Upstream also bills native video
+	// output at $17.50/1M output tokens, but ModelConfig has no per-modality output-token
+	// ratio (only a per-second Video config, which does not fit token-based video output),
+	// so all output tokens are billed at the $9.00/1M text rate via CompletionRatio.
+	"gemini-omni-flash-preview": {
+		Ratio:           1.50 * ratio.MilliTokensUsd,
+		CompletionRatio: 9.00 / 1.50,
+	},
 	"gemini-3-pro-image-preview": {
+		Ratio:            2.0 * ratio.MilliTokensUsd,
+		CompletionRatio:  12.0 / 2.0,
+		CachedInputRatio: 0.20 * ratio.MilliTokensUsd,
+		Image:            gemini3ProImageConfig(),
+		Tiers: []adaptor.ModelRatioTier{
+			{
+				Ratio:               4.0 * ratio.MilliTokensUsd,
+				CompletionRatio:     18.0 / 4.0,
+				CachedInputRatio:    0.40 * ratio.MilliTokensUsd,
+				InputTokenThreshold: 200001,
+			},
+		},
+	},
+	// GA alias for gemini-3-pro-image (same pricing as preview).
+	"gemini-3-pro-image": {
 		Ratio:            2.0 * ratio.MilliTokensUsd,
 		CompletionRatio:  12.0 / 2.0,
 		CachedInputRatio: 0.20 * ratio.MilliTokensUsd,
@@ -331,20 +401,22 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// Gemini 2.0 Flash Models
 	"gemini-2.0-flash": {
-		Ratio:           0.15 * ratio.MilliTokensUsd,
-		CompletionRatio: 0.60 / 0.15,
+		Ratio:            0.15 * ratio.MilliTokensUsd,
+		CompletionRatio:  0.60 / 0.15,
+		CachedInputRatio: 0.0375 * ratio.MilliTokensUsd,
 		Audio: &adaptor.AudioPricingConfig{
 			PromptRatio:     1.00 / 0.15,
-			CompletionRatio: 0.15 / 1.00,
+			CompletionRatio: 0.30 / 1.00,
 		},
 	},
 	"gemini-2.0-flash-image": {
-		Ratio:           0.15 * ratio.MilliTokensUsd,
-		CompletionRatio: 0.60 / 0.15,
-		Image:           geminiImageConfig(0.039),
+		Ratio:            0.15 * ratio.MilliTokensUsd,
+		CompletionRatio:  0.60 / 0.15,
+		CachedInputRatio: 0.0375 * ratio.MilliTokensUsd,
+		Image:            geminiImageConfig(0.039),
 		Audio: &adaptor.AudioPricingConfig{
 			PromptRatio:     1.00 / 0.15,
-			CompletionRatio: 0.15 / 1.00,
+			CompletionRatio: 0.30 / 1.00,
 		},
 	},
 	"gemini-2.0-flash-lite": {Ratio: 0.075 * ratio.MilliTokensUsd, CompletionRatio: 0.30 / 0.075},
@@ -353,10 +425,20 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-const geminiWebSearchUsdPerCall = 35.0 / 1000.0
+const (
+	// geminiWebSearchUsdPerCall is the grounded web search price for Gemini 2.5 models: $35/1K queries.
+	// Sources verified 2026-06-13:
+	//   - https://ai.google.dev/gemini-api/docs/models
+	//   - https://ai.google.dev/gemini-api/docs/pricing
+	geminiWebSearchUsdPerCall = 35.0 / 1000.0
+	// gemini3xWebSearchUsdPerCall is the grounded web search price for Gemini 3.x models: $14/1K queries.
+	gemini3xWebSearchUsdPerCall = 14.0 / 1000.0
+)
 
 // geminiWebSearchModels enumerates Gemini models with grounded web search pricing in Google documentation.
-// Source: https://ai.google.dev/gemini-api/docs/pricing (retrieved via https://r.jina.ai/https://ai.google.dev/gemini-api/docs/pricing)
+// Sources:
+//   - https://ai.google.dev/gemini-api/docs/pricing
+//   - https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing
 var geminiWebSearchModels = map[string]struct{}{
 	"gemini-3.1-pro-preview":                  {},
 	"gemini-3.1-pro-preview-customtools":      {},
@@ -366,6 +448,8 @@ var geminiWebSearchModels = map[string]struct{}{
 	"gemini-3-pro-preview":                    {},
 	"gemini-3-flash-preview":                  {},
 	"gemini-3.5-flash":                        {},
+	"gemini-3.6-flash":                        {},
+	"gemini-3.5-flash-lite":                   {},
 	"gemini-2.5-pro":                          {},
 	"gemini-2.5-pro-preview":                  {},
 	"gemini-2.5-computer-use-preview":         {},
@@ -381,23 +465,35 @@ var geminiWebSearchModels = map[string]struct{}{
 	"gemini-robotics-er-1.6-preview":          {},
 }
 
-var geminiToolingDefaults = buildGeminiToolingDefaults()
+var (
+	geminiToolingDefaults   = buildGeminiToolingDefaults(geminiWebSearchUsdPerCall)
+	gemini3xToolingDefaults = buildGeminiToolingDefaults(gemini3xWebSearchUsdPerCall)
+)
 
 // buildGeminiToolingDefaults attaches channel-level web search pricing derived from Google documentation.
-func buildGeminiToolingDefaults() adaptor.ChannelToolConfig {
+func buildGeminiToolingDefaults(webSearchUsdPerCall float64) adaptor.ChannelToolConfig {
 	if len(geminiWebSearchModels) == 0 {
 		return adaptor.ChannelToolConfig{}
 	}
 	return adaptor.ChannelToolConfig{
 		Pricing: map[string]adaptor.ToolPricingConfig{
-			"web_search": {UsdPerCall: geminiWebSearchUsdPerCall},
+			"web_search": {UsdPerCall: webSearchUsdPerCall},
 		},
 	}
 }
 
-// GeminiToolingDefaults exposes the precomputed tooling defaults so callers
+// GeminiToolingDefaults exposes the precomputed tooling defaults (Gemini 2.5 pricing) so callers
 // can reuse them without rebuilding the configuration repeatedly.
 func GeminiToolingDefaults() adaptor.ChannelToolConfig {
+	return geminiToolingDefaults
+}
+
+// GeminiToolingDefaultsForModel returns the tooling defaults for the given model,
+// selecting $14/1K queries for Gemini 3.x models and $35/1K queries for 2.5 and earlier.
+func GeminiToolingDefaultsForModel(model string) adaptor.ChannelToolConfig {
+	if GeminiVersionAtLeast(model, 3.0) {
+		return gemini3xToolingDefaults
+	}
 	return geminiToolingDefaults
 }
 

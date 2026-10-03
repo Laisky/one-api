@@ -22,7 +22,8 @@ func CallWithFallback(ctx context.Context, candidates []ToolCandidate, call func
 			return candidate, result, nil
 		}
 		lastErr = err
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		var uncertain *ToolExecutionUncertainError
+		if errors.As(err, &uncertain) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			break
 		}
 	}

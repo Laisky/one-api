@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Button, Input, Select, Table, Typography, Space, Divider, Banner } from '@douyinfe/semi-ui';
 import { API, showError, showSuccess } from '../helpers';
@@ -17,8 +18,8 @@ const PricingModal = ({ visible, onClose, channelId, channelName, channelType })
 
   useEffect(() => {
     if (visible && channelId) {
-      loadPricing();
-      loadSupportedModels();
+      loadPricing().catch(reportUIError);
+      loadSupportedModels().catch(reportUIError);
     }
   }, [visible, channelId]);
 
@@ -230,7 +231,7 @@ const PricingModal = ({ visible, onClose, channelId, channelName, channelType })
           <Button onClick={onClose} disabled={loading}>
             <IconClose /> Cancel
           </Button>
-          <Button theme="solid" type="primary" onClick={savePricing} loading={loading}>
+          <Button theme="solid" type="primary" onClick={(...uiArgs) => savePricing(...uiArgs).catch(reportUIError)} loading={loading}>
             <IconSave /> Save Pricing
           </Button>
         </Space>

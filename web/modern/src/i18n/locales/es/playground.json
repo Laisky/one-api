@@ -6,11 +6,54 @@
   },
   "playground": {
     "actions": {
+      "assistant_message_options": "Opciones del mensaje del asistente",
       "copy": "Copiar",
+      "copy_message": "Copiar mensaje",
+      "copy_response": "Copiar respuesta",
       "delete": "Eliminar",
+      "delete_message": "Eliminar mensaje",
+      "delete_response": "Eliminar respuesta",
       "edit": "Editar",
+      "edit_message": "Editar mensaje",
+      "edit_response": "Editar respuesta",
       "message_options": "Opciones del mensaje",
-      "retry": "Reintentar"
+      "regenerate_response": "Regenerar respuesta",
+      "retry": "Reintentar",
+      "user_message_options": "Opciones del mensaje del usuario"
+    },
+    "attachments": {
+      "add_images": "Agregar imágenes",
+      "attach_images": "Adjuntar imágenes",
+      "attached_image_alt": "Imagen adjunta",
+      "count": "{{count}}/{{max}} imágenes",
+      "delete_image": "Eliminar imagen",
+      "finalizing": "Finalizando...",
+      "info": "Compatible con: JPG, PNG, GIF, WebP - Máx. 5 MB por imagen - Hasta {{max}} imágenes",
+      "notifications": {
+        "all_processing_failed_message": "No se puede procesar {{file}}. Prueba con otra imagen o contacta con soporte.",
+        "all_processing_failed_title": "Todos los métodos de procesamiento fallaron",
+        "image_processing_failed_message": "No se pudo procesar {{file}}: {{message}}",
+        "image_processing_failed_title": "Error al procesar la imagen",
+        "mobile_processing_failed_message": "No se pudo procesar {{file}} en móvil: {{message}}",
+        "mobile_processing_failed_title": "Error de procesamiento móvil"
+      },
+      "optimizing": "Optimizando {{progress}}%",
+      "processing": "Procesando {{progress}}%",
+      "remove_image": "Quitar imagen",
+      "validation": {
+        "dismiss_error": "Descartar error",
+        "extension_unsupported": "La extensión del archivo no es compatible. Formatos compatibles: {{formats}}",
+        "file_type_unsupported": "El tipo de archivo \"{{type}}\" no es compatible. Selecciona un archivo de imagen.",
+        "limit_exceeded": "Se permite un máximo de {{max}} imágenes. Quita algunas imágenes antes de agregar más.",
+        "limit_skipped": "Se permite un máximo de {{max}} imágenes. Este archivo se omitió.",
+        "multiple_errors": "{{count}} errores de validación de archivo:",
+        "processing_error": "Ocurrió un error al procesar las imágenes. Inténtalo de nuevo.",
+        "single_error": "Error de validación de archivo:",
+        "size_exceeded": "El tamaño del archivo ({{size}} MB) supera el límite de 5 MB. Comprime o redimensiona la imagen.",
+        "tip": "Consejo: puedes descartar estos errores con el botón de cierre de cada tarjeta.",
+        "unknown_error": "Error desconocido",
+        "unknown_type": "desconocido"
+      }
     },
     "chat": {
       "clear": "Limpiar",
@@ -47,10 +90,13 @@
       "title": "Eliminar mensaje {{role}}"
     },
     "edit": {
+      "attachment_alt": "Adjunto {{index}}",
       "attachments_hint": "Puedes eliminar archivos adjuntos individuales haciendo clic en el botón × que aparece al pasar el cursor.",
       "attachments_label": "Archivos adjuntos ({{count}})",
       "cancel": "Cancelar",
       "content_label": "Contenido del mensaje {{role}}",
+      "content_placeholder": "Escribe el contenido del mensaje de {{role}}...",
+      "delete_attachment": "Eliminar adjunto",
       "description": "Modifica el contenido del mensaje. Usa \u003c1\u003eCtrl+Enter\u003c/1\u003e para guardar o \u003c3\u003eEsc\u003c/3\u003e para cancelar.",
       "save": "Guardar cambios",
       "shortcuts": {
@@ -143,8 +189,10 @@
         "options": {
           "high": "Alto",
           "low": "Bajo",
+          "max": "Máximo",
           "medium": "Medio",
-          "none": "Ninguno"
+          "none": "Ninguno",
+          "xhigh": "Muy alto"
         }
       },
       "show_reasoning": {
@@ -177,7 +225,8 @@
         "no_enabled": "No se encontraron tokens habilitados.",
         "no_tokens": "No hay tokens disponibles",
         "select_placeholder": "Selecciona un token",
-        "unlimited": "Ilimitado"
+        "unlimited": "Ilimitado",
+        "unnamed": "Token {{ref}}"
       },
       "top_k": {
         "description": "Muestreo Top-K: limita las opciones a los K tokens más probables",
@@ -230,6 +279,12 @@
       "usage": "Uso",
       "user": "Tú",
       "voice": "Voz"
+    },
+    "reasoning": {
+      "chars": "{{count}} caracteres",
+      "processing": "Procesando...",
+      "streaming": "Razonando...",
+      "title": "Proceso de razonamiento"
     },
     "roles": {
       "assistant": "Asistente",

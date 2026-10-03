@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API, isMobile, showError, showSuccess, timestamp2string } from '../../helpers';
@@ -19,6 +20,7 @@ import Title from '@douyinfe/semi-ui/lib/es/typography/title';
 import { Divider } from 'semantic-ui-react';
 
 const EditToken = (props) => {
+  const tokenRef = props.editingToken.uuid || props.editingToken.id;
   const [isEdit, setIsEdit] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const originInputs = {
@@ -74,27 +76,30 @@ const EditToken = (props) => {
   // };
 
   const loadToken = async () => {
-    setLoading(true);
-    let res = await API.get(`/api/token/${props.editingToken.id}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (data.expired_time !== -1) {
-        data.expired_time = timestamp2string(data.expired_time);
+    try {
+      setLoading(true);
+      let res = await API.get(`/api/token/${tokenRef}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (data.expired_time !== -1) {
+          data.expired_time = timestamp2string(data.expired_time);
+        }
+        // if (data.model_limits !== '') {
+        //   data.model_limits = data.model_limits.split(',');
+        // } else {
+        //   data.model_limits = [];
+        // }
+        setInputs(data);
+      } else {
+        showError(message);
       }
-      // if (data.model_limits !== '') {
-      //   data.model_limits = data.model_limits.split(',');
-      // } else {
-      //   data.model_limits = [];
-      // }
-      setInputs(data);
-    } else {
-      showError(message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
   useEffect(() => {
-    setIsEdit(props.editingToken.id !== undefined);
-  }, [props.editingToken.id]);
+    setIsEdit(props.editingToken.id !== undefined || props.editingToken.uuid !== undefined);
+  }, [props.editingToken.id, props.editingToken.uuid]);
 
   useEffect(() => {
     if (!isEdit) {
@@ -104,7 +109,7 @@ const EditToken = (props) => {
         () => {
           // console.log(inputs);
         }
-      );
+      ).catch(reportUIError);
     }
     // loadModels();
   }, [isEdit]);
@@ -132,71 +137,75 @@ const EditToken = (props) => {
   };
 
   const submit = async () => {
-    setLoading(true);
-    if (isEdit) {
-      // 编辑令牌的逻辑保持不变
-      let localInputs = { ...inputs };
-      localInputs.remain_quota = parseInt(localInputs.remain_quota);
-      if (localInputs.expired_time !== -1) {
-        let time = Date.parse(localInputs.expired_time);
-        if (isNaN(time)) {
-          showError('过期时间格式错误！');
-          setLoading(false);
-          return;
-        }
-        localInputs.expired_time = Math.ceil(time / 1000);
-      }
-      // localInputs.model_limits = localInputs.model_limits.join(',');
-      let res = await API.put(`/api/token/`, { ...localInputs, id: parseInt(props.editingToken.id) });
-      const { success, message } = res.data;
-      if (success) {
-        showSuccess('令牌更新成功！');
-        props.refresh();
-        props.handleClose();
-      } else {
-        showError(message);
-      }
-    } else {
-      // 处理新增多个令牌的情况
-      let successCount = 0; // 记录成功创建的令牌数量
-      for (let i = 0; i < tokenCount; i++) {
+    try {
+      setLoading(true);
+      if (isEdit) {
+        // 编辑令牌的逻辑保持不变
         let localInputs = { ...inputs };
-        if (i !== 0) {
-          // 如果用户想要创建多个令牌，则给每个令牌一个序号后缀
-          localInputs.name = `${inputs.name}-${generateRandomSuffix()}`;
-        }
         localInputs.remain_quota = parseInt(localInputs.remain_quota);
-
         if (localInputs.expired_time !== -1) {
           let time = Date.parse(localInputs.expired_time);
           if (isNaN(time)) {
             showError('过期时间格式错误！');
             setLoading(false);
-            break;
+            return;
           }
           localInputs.expired_time = Math.ceil(time / 1000);
         }
         // localInputs.model_limits = localInputs.model_limits.join(',');
-        let res = await API.post(`/api/token/`, localInputs);
+        let res = await API.put(`/api/token/`, { ...localInputs, uuid: tokenRef });
         const { success, message } = res.data;
-
         if (success) {
-          successCount++;
+          showSuccess('令牌更新成功！');
+          props.refresh();
+          props.handleClose();
         } else {
           showError(message);
-          break; // 如果创建失败，终止循环
+        }
+      } else {
+        // 处理新增多个令牌的情况
+        let successCount = 0; // 记录成功创建的令牌数量
+        for (let i = 0; i < tokenCount; i++) {
+          let localInputs = { ...inputs };
+          if (i !== 0) {
+            // 如果用户想要创建多个令牌，则给每个令牌一个序号后缀
+            localInputs.name = `${inputs.name}-${generateRandomSuffix()}`;
+          }
+          localInputs.remain_quota = parseInt(localInputs.remain_quota);
+
+          if (localInputs.expired_time !== -1) {
+            let time = Date.parse(localInputs.expired_time);
+            if (isNaN(time)) {
+              showError('过期时间格式错误！');
+              setLoading(false);
+              break;
+            }
+            localInputs.expired_time = Math.ceil(time / 1000);
+          }
+          // localInputs.model_limits = localInputs.model_limits.join(',');
+          let res = await API.post(`/api/token/`, localInputs);
+          const { success, message } = res.data;
+
+          if (success) {
+            successCount++;
+          } else {
+            showError(message);
+            break; // 如果创建失败，终止循环
+          }
+        }
+
+        if (successCount > 0) {
+          showSuccess(`${successCount}个令牌创建成功，请在列表页面点击复制获取令牌！`);
+          props.refresh();
+          props.handleClose();
         }
       }
-
-      if (successCount > 0) {
-        showSuccess(`${successCount}个令牌创建成功，请在列表页面点击复制获取令牌！`);
-        props.refresh();
-        props.handleClose();
-      }
+      setLoading(false);
+      setInputs(originInputs); // 重置表单
+      setTokenCount(1); // 重置数量为默认值
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    setInputs(originInputs); // 重置表单
-    setTokenCount(1); // 重置数量为默认值
   };
 
 
@@ -211,7 +220,7 @@ const EditToken = (props) => {
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Space>
-              <Button theme="solid" size={'large'} onClick={submit}>提交</Button>
+              <Button theme="solid" size={'large'} onClick={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>提交</Button>
               <Button theme="solid" size={'large'} type={'tertiary'} onClick={handleCancel}>取消</Button>
             </Space>
           </div>

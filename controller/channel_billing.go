@@ -14,6 +14,7 @@ import (
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/monitor"
@@ -379,7 +380,7 @@ func updateChannelBalance(channel *model.Channel) (float64, error) {
 
 // UpdateChannelBalance refreshes the balance information for the specified channel and returns the result.
 func UpdateChannelBalance(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -391,7 +392,9 @@ func UpdateChannelBalance(c *gin.Context) {
 	}
 	balance, err := updateChannelBalance(channel)
 	if err != nil {
-		helper.RespondError(c, err)
+		// The channel is not the request's own channel (admin endpoint), so carry
+		// its identity on the error; Tag is transparent to Error()/errors.Is.
+		helper.RespondError(c, identity.Tag(err, channel.Ref()))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

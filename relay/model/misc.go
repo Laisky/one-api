@@ -1,7 +1,14 @@
 package model
 
+import "github.com/Laisky/one-api/relay/realtime"
+
 // Usage is the token usage information returned by OpenAI API.
 type Usage struct {
+	// BillingEstimateReason is server-only evidence that usage was conservatively
+	// estimated rather than measured. Clients cannot supply it through JSON.
+	BillingEstimateReason string `json:"-"`
+	// Realtime is server-only accounting evidence; clients cannot inject it via JSON.
+	Realtime *realtime.Ledger `json:"-"`
 	// Omitting this field using 'omitempty' is crucial to avoid returning zero values
 	// when conversion mechanisms are not employed, particularly in scenarios like image generation.
 	//
@@ -9,6 +16,17 @@ type Usage struct {
 	PromptTokens     int `json:"prompt_tokens,omitempty"`
 	CompletionTokens int `json:"completion_tokens,omitempty"`
 	TotalTokens      int `json:"total_tokens,omitempty"`
+	// CachedTokens captures a TOP-LEVEL cached-token count reported by some
+	// providers (e.g. StepFun) directly under usage rather than nested inside
+	// prompt_tokens_details. OpenAI and most providers omit this and instead
+	// populate PromptTokensDetails.CachedTokens. Use NormalizeCachedTokens to
+	// promote this value into the nested field so downstream billing only has
+	// to read one location.
+	CachedTokens int `json:"cached_tokens,omitempty"`
+	// PromptCacheHitTokens and PromptCacheMissTokens capture DeepSeek's
+	// provider-specific prompt-cache usage fields before normalization.
+	PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens,omitempty"`
+	PromptCacheMissTokens int `json:"prompt_cache_miss_tokens,omitempty"`
 	// PromptTokensDetails may be empty for some models
 	PromptTokensDetails *UsagePromptTokensDetails `json:"prompt_tokens_details,omitempty"`
 	// CompletionTokensDetails may be empty for some models
@@ -25,8 +43,53 @@ type Usage struct {
 	// Cache write token details (Anthropic Claude prompt caching)
 	// These fields capture how many input tokens were charged as cache creation writes.
 	// They are optional and only set when providers return such details.
+	CacheWriteTokens   int `json:"cache_write_tokens,omitempty"`
 	CacheWrite5mTokens int `json:"cache_write_5m_tokens,omitempty"`
 	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
+}
+
+// NormalizeCachedTokens promotes top-level and DeepSeek provider-specific cache-hit
+// counts into PromptTokensDetails.CachedTokens, the single location quota billing reads.
+//
+// It is a no-op when neither source has a cache-hit count, and it never overwrites
+// a nested count that an upstream provider already populated (such providers are
+// authoritative). After promotion, provider-specific fields are cleared so
+// OpenAI-shaped responses expose only the standard prompt_tokens_details.cached_tokens field.
+func (u *Usage) NormalizeCachedTokens() {
+	if u == nil {
+		return
+	}
+
+	cachedTokens := u.CachedTokens
+	if u.PromptCacheHitTokens > 0 {
+		if cachedTokens == 0 {
+			cachedTokens = u.PromptCacheHitTokens
+		}
+		u.PromptCacheHitTokens = 0
+	}
+	u.PromptCacheMissTokens = 0
+	if cachedTokens <= 0 {
+		return
+	}
+	if u.PromptTokensDetails == nil {
+		u.PromptTokensDetails = &UsagePromptTokensDetails{}
+	}
+	if u.PromptTokensDetails.CachedTokens == 0 {
+		u.PromptTokensDetails.CachedTokens = cachedTokens
+	}
+	u.CachedTokens = 0
+}
+
+// NormalizeCacheWriteTokens promotes OpenAI's top-level cache_write_tokens
+// usage field into the relay's generic cache-write bucket used for quota
+// billing.
+func (u *Usage) NormalizeCacheWriteTokens() {
+	if u == nil || u.CacheWriteTokens <= 0 {
+		return
+	}
+
+	u.CacheWrite5mTokens += u.CacheWriteTokens
+	u.CacheWriteTokens = 0
 }
 
 // ErrorType enumerates the standardized error categories we expose to clients.
@@ -62,7 +125,7 @@ const (
 	ErrorTypeTest ErrorType = "test_error"
 	// ErrorTypeAli represents errors emitted by Aliyun DashScope endpoints.
 	ErrorTypeAli ErrorType = "ali_error"
-	// ErrorTypeBaidu represents errors emitted by Baidu Wenxin endpoints.
+	// ErrorTypeBaidu represents errors returned by Baidu Wenxin endpoints.
 	ErrorTypeBaidu ErrorType = "baidu_error"
 	// ErrorTypeZhipu represents errors returned by Zhipu/ChatGLM providers.
 	ErrorTypeZhipu ErrorType = "zhipu_error"
@@ -89,8 +152,9 @@ type ErrorWithStatusCode struct {
 
 // UsagePromptTokensDetails contains details about the prompt tokens used in a request.
 type UsagePromptTokensDetails struct {
-	CachedTokens int `json:"cached_tokens"`
-	AudioTokens  int `json:"audio_tokens"`
+	CachedTokensDetails *UsageCachedTokensDetails `json:"cached_tokens_details,omitempty"`
+	CachedTokens        int                       `json:"cached_tokens"`
+	AudioTokens         int                       `json:"audio_tokens"`
 	// TextTokens could be zero for pure text chats
 	TextTokens     int     `json:"text_tokens"`
 	ImageTokens    int     `json:"image_tokens"`

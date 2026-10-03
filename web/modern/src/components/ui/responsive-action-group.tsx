@@ -9,6 +9,7 @@ type ResponsiveActionGroupProps = {
 
 const MOBILE_CHILD_CLASSNAMES = 'max-sm:w-full max-sm:flex-1 max-sm:touch-target max-sm:justify-center max-sm:whitespace-normal';
 
+/** ResponsiveActionGroup preserves its buttons and exposes a styling hook for compact mobile table action panels. */
 export function ResponsiveActionGroup({ children, className, justify = 'start' }: ResponsiveActionGroupProps) {
   const justifyClass = {
     start: 'justify-start',
@@ -18,11 +19,9 @@ export function ResponsiveActionGroup({ children, className, justify = 'start' }
   }[justify];
 
   return (
-    <div className={cn('flex flex-wrap gap-2', justifyClass, 'max-sm:flex-col max-sm:w-full max-sm:space-y-2', className)}>
+    <div className={cn('responsive-action-group flex flex-wrap gap-2', justifyClass, 'max-sm:flex-col max-sm:w-full max-sm:space-y-2', className)}>
       {Children.map(children, (child, index) => {
-        if (child === null || child === undefined || typeof child === 'boolean') {
-          return null;
-        }
+        if (child === null || child === undefined || typeof child === 'boolean') return null;
         if (!isValidElement<{ className?: string }>(child)) {
           return (
             <div key={index} className={cn('max-sm:w-full', 'flex items-stretch justify-center')}>
@@ -30,12 +29,8 @@ export function ResponsiveActionGroup({ children, className, justify = 'start' }
             </div>
           );
         }
-
         const mergedClassName = cn(MOBILE_CHILD_CLASSNAMES, child.props.className);
-        const cloned = cloneElement(child as ReactElement<{ className?: string }>, {
-          className: mergedClassName,
-        });
-
+        const cloned = cloneElement(child as ReactElement<{ className?: string }>, { className: mergedClassName });
         return (
           <div key={child.key ?? index} className={cn('flex items-stretch', 'max-sm:w-full')}>
             {cloned}

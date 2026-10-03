@@ -60,3 +60,38 @@ func TestAppendCacheWriteTokensMetadata(t *testing.T) {
 	require.Equal(t, 10, tokens[LogMetadataKeyCacheWrite5m])
 	require.Equal(t, 5, tokens[LogMetadataKeyCacheWrite1h])
 }
+
+// TestSanitizeLogUpstreamEndpoint verifies that user-visible upstream endpoint metadata cannot contain URL credentials.
+func TestSanitizeLogUpstreamEndpoint(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		endpoint string
+		expect   string
+	}{
+		{
+			name:     "removes baidu access token query",
+			endpoint: "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/ernie-3.5-8k?access_token=provider-secret",
+			expect:   "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/ernie-3.5-8k",
+		},
+		{
+			name:     "removes user info query and fragment",
+			endpoint: "https://user:password@example.com/v1/chat/completions?api_key=secret#token-fragment",
+			expect:   "https://example.com/v1/chat/completions",
+		},
+		{
+			name:     "keeps non-url paths without query strings",
+			endpoint: "/v1/chat/completions?token=secret",
+			expect:   "/v1/chat/completions",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tc.expect, SanitizeLogUpstreamEndpoint(tc.endpoint))
+		})
+	}
+}

@@ -1,0 +1,9 @@
+{
+  "case": "token/add_malformed_json",
+  "site": "T4 AddToken (error)",
+  "status": 200,
+  "body": {
+    "message": "unexpected EOF",
+    "success": false
+  }
+}

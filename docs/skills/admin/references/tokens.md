@@ -13,8 +13,8 @@ Schema: [model/token.go:27](../../../../model/token.go#L27).
 
 | Field             | Type     | Notes                                                     |
 |-------------------|----------|-----------------------------------------------------------|
-| `id`              | int      |                                                           |
-| `user_id`         | int      | Owning user                                               |
+| `uuid`            | string   | External identifier; use it in `/api/token/:uuid`, `/api/admin/tokens/:uuid` and `PUT` bodies. No integer `id` is exposed |
+| `user_uuid`       | *string  | Owning user's `uuid`                                       |
 | `key`             | string   | The actual bearer credential. Stored without prefix; returned with configured prefix (default `sk-`) |
 | `status`          | int      | `1=enabled`, `2=disabled`, `3=expired`, `4=exhausted`     |
 | `name`            | string   | ≤ 30 chars, user-chosen label                             |
@@ -30,32 +30,36 @@ Schema: [model/token.go:27](../../../../model/token.go#L27).
 
 | Method | Path                            | Purpose                                        |
 |--------|---------------------------------|------------------------------------------------|
-| GET    | `/api/admin/tokens/`            | List any user's tokens (optional `user_id` filter) |
-| GET    | `/api/admin/tokens/search`      | Keyword search across all tokens                |
-| GET    | `/api/admin/tokens/:id`         | Single token by id regardless of owner          |
+| GET    | `/api/admin/tokens/`            | List any user's tokens (optional `user_id=<user-uuid>` filter) |
+| GET    | `/api/admin/tokens/search`      | Keyword search across all tokens (name, or a pasted token/user uuid) |
+| GET    | `/api/admin/tokens/:uuid`       | Single token by uuid regardless of owner        |
 
 ### List tokens for a specific user (admin)
 
+`user_id` is the **owning user's `uuid`** (the param name is historical). Resolved by `resolveOptionalUserRef` ([controller/token.go](../../../../controller/token.go) `AdminGetAllTokens`).
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/admin/tokens/?user_id=17&p=0&size=50" \
-  | jq '{total, items: (.data | map({id, user_id, name, status, remain_quota, used_quota, expired_time}))}'
+  --data-urlencode "user_id=$USER_UUID" \
+  --data-urlencode "p=0" --data-urlencode "size=50" \
+  -G "$ONEAPI_BASE_URL/api/admin/tokens/" \
+  | jq '{total, items: (.data | map({uuid, user_uuid, name, status, remain_quota, used_quota, expired_time}))}'
 ```
-Omit `user_id` (or set to `0`) to list across all users.
+**Omit `user_id` entirely** to list across all users. Do not send `user_id=0` — it is not a uuid and is rejected. Sort keys ([model/token.go](../../../../model/token.go) `tokenSortFields`): `uuid`, `name`, `status`, `expired_time`, `remain_quota`, `used_quota`, `created_at`, `updated_at` (`id` accepted but opaque — prefer `created_at`).
 
 ### Search tokens by name (admin)
 
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   "$ONEAPI_BASE_URL/api/admin/tokens/search?keyword=prod" \
-  | jq '.data[] | {id, user_id, name, status}'
+  | jq '.data[] | {uuid, user_uuid, name, status}'
 ```
+A keyword that parses as a UUID matches `uuid` **or** `user_uuid` exactly ([model/token.go](../../../../model/token.go) `applyUUIDKeyword`), so pasting a user's uuid returns that user's tokens.
 
-### Fetch one token by id (admin)
+### Fetch one token by uuid (admin)
 
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/admin/tokens/4823" \
+  "$ONEAPI_BASE_URL/api/admin/tokens/$TOKEN_UUID" \
   | jq '.data'
 ```
 
@@ -67,10 +71,10 @@ Under `middleware.UserAuth()` — any authenticated user, including admin, using
 |--------|-------------------------|------------------------------------|
 | GET    | `/api/token/`           | List my tokens (paginated)          |
 | GET    | `/api/token/search`     | Keyword search my tokens            |
-| GET    | `/api/token/:id`        | Fetch one of my tokens              |
+| GET    | `/api/token/:uuid`      | Fetch one of my tokens              |
 | POST   | `/api/token/`           | Create a token for myself           |
-| PUT    | `/api/token/`           | Update one of my tokens             |
-| DELETE | `/api/token/:id`        | Delete one of my tokens             |
+| PUT    | `/api/token/`           | Update one of my tokens (`uuid` in body) |
+| DELETE | `/api/token/:uuid`      | Delete one of my tokens             |
 
 ### Create a token (your own)
 
@@ -85,16 +89,16 @@ jq -nc '{
 }' | curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
       -H "Content-Type: application/json" \
       -X POST -d @- "$ONEAPI_BASE_URL/api/token/" \
-  | jq '{success, message, key: .data.key, id: .data.id}'
+  | jq '{success, message, key: .data.key, uuid: .data.uuid}'
 ```
 
-The returned `data.key` is the actual credential — capture it now, it's re-fetchable but the one-time generation flow in the UI doesn't show it after creation.
+`data` is the created token in response shape — capture `data.uuid` for later `PUT`/`DELETE` calls. The returned `data.key` is the actual credential — capture it now, it's re-fetchable but the one-time generation flow in the UI doesn't show it after creation.
 
 ### Update a token (status-only flag)
 
-`PUT /api/token/?status_only=1` updates just `status` without re-validating the other fields:
+`PUT /api/token/?status_only=1` updates just `status` without re-validating the other fields. The body must carry the token's `uuid` ([controller/token.go](../../../../controller/token.go) `UpdateToken` → `preferUUIDRef`):
 ```bash
-jq -nc '{id: 123, status: 2}' \
+jq -nc --arg uuid "$TOKEN_UUID" '{uuid: $uuid, status: 2}' \
   | curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
       -H "Content-Type: application/json" \
       -X PUT -d @- "$ONEAPI_BASE_URL/api/token/?status_only=1"
@@ -118,15 +122,16 @@ Use from external billing integrations, not admin flows.
 Now that admin read endpoints exist, the standard flow for "user X's tokens are misbehaving" is:
 
 ```bash
-# 1. Resolve user to id
-UID=$(curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
+# 1. Resolve user to uuid (select by exact username — search is a substring match)
+USER_UUID=$(curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   "$ONEAPI_BASE_URL/api/user/search?keyword=alice" \
-  | jq -r '.data[0].id')
+  | jq -r '.data[] | select(.username == "alice") | .uuid')
 
-# 2. List their tokens
+# 2. List their tokens (user_id = the user's uuid)
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/admin/tokens/?user_id=$UID&size=100" \
-  | jq '.data[] | {id, name, status, remain_quota, used_quota, subnet, models, expired_time}'
+  --data-urlencode "user_id=$USER_UUID" --data-urlencode "size=100" \
+  -G "$ONEAPI_BASE_URL/api/admin/tokens/" \
+  | jq '.data[] | {uuid, name, status, remain_quota, used_quota, subnet, models, expired_time}'
 
 # 3. Cross-reference with logs (filter by token_name found above)
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
@@ -143,12 +148,13 @@ Options in order of reversibility:
 
 1. **Disable the user** (`POST /api/user/manage {action:"disable"}`) — all their tokens stop working. Reversible.
 2. **Have the user disable their own token** — route the admin request through support.
-3. **Delete the user** (`DELETE /api/user/:id`) — soft-delete, still reversible by DB restore, but not via API.
+3. **Delete the user** (`DELETE /api/user/:uuid`) — soft-delete, still reversible by DB restore, but not via API.
 
 Admins cannot directly toggle another user's token status via the API. That's intentional: tokens are the user's credential.
 
 ## Pitfalls
 
+- **No integer ids.** Token rows expose `uuid` and `user_uuid` only. `{id: 123, status: 2}` fails with `resource uuid is required`; `?user_id=0` is rejected — omit the filter instead.
 - **The prefix displayed (`sk-...`) is configurable** via `TokenPrefix` option. The stored `key` field in the DB has no prefix. When parsing logs, strip the prefix before comparing.
 - **`remain_quota` with `unlimited_quota=true` is meaningless** — the check short-circuits. Don't present `remain_quota` for unlimited tokens.
 - **`status=3` (expired) and `status=4` (exhausted) are set by the server, not by admins.** Re-enabling (`status=1`) without fixing the underlying cause (extend `expired_time`, top up `remain_quota`) silently flips back on the next request.

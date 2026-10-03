@@ -1,4 +1,5 @@
-@import 'fonts.scss';
+@use 'fonts';
+@use 'themes-vars.module' as *;
 
 /* ==============================|| BERRY TEMPLATE MOBILE-FIRST RESPONSIVE DESIGN ||============================== */
 
@@ -30,10 +31,10 @@
 }
 
 // color variants
-@import 'themes-vars.module.scss';
+
 
 // third-party
-@import '~react-perfect-scrollbar/dist/css/styles.css';
+@import 'react-perfect-scrollbar/dist/css/styles.css';
 
 // ==============================|| LIGHT BOX ||============================== //
 .fullscreen .react-images__blanket {
@@ -173,4 +174,8 @@
   75% {
     transform: translateX(10px);
   }
+}
+
+.resource-name-with-id {
+  cursor: help;
 }

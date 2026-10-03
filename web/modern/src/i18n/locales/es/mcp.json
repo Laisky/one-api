@@ -9,6 +9,8 @@
         "sync_in_progress": "Sincronizando...",
         "update": "Actualizar servidor"
       },
+      "description_add": "Agrega un nuevo servidor MCP y configura cómo se exponen sus herramientas.",
+      "description_edit": "Actualiza este servidor MCP y la configuración de herramientas expuestas.",
       "fields": {
         "api_key": "Clave API",
         "auth_type": "Tipo de autenticación",
@@ -81,6 +83,7 @@
         "actions": "Acciones",
         "auth_type": "Autenticación",
         "base_url": "URL base",
+        "id": "ID",
         "last_sync": "Última sincronización",
         "name": "Nombre",
         "priority": "Prioridad",
@@ -92,7 +95,7 @@
       "labels": {
         "never": "Nunca"
       },
-      "search_placeholder": "Buscar servidores MCP...",
+      "search_placeholder": "Buscar servidores MCP por nombre, URL o UUID...",
       "subtitle": "Administrar el registro de servidores MCP y la sincronización de herramientas",
       "title": "Servidores MCP"
     },

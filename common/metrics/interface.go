@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"sync/atomic"
 	"time"
 )
 
@@ -48,13 +49,80 @@ type MetricsRecorder interface {
 	RecordBillingError(errorType, operation string, userId int, channelId int, modelName string)
 	UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64)
 
+	// External UUID backfill metrics
+	//
+	// IMPORTANT: every label argument below (role, phase, target, mode, result)
+	// MUST come from a compile-time registry constant. Never pass an ID, UUID,
+	// DSN, error message, table row value, or any other unbounded value: these
+	// arguments become metric labels, and an unbounded label explodes time
+	// series cardinality.
+	RecordUUIDBackfillRows(role, phase, target, result string, count int)
+	UpdateUUIDBackfillBacklog(role, target string, backlog float64)
+	RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration)
+	RecordUUIDBackfillFinalizer(role, result string)
+
+	// Compact UUID storage metrics
+	//
+	// IMPORTANT: every label argument below (role, state, target, kind, action,
+	// result, reason, operation) MUST come from a compile-time registry
+	// constant. Never pass an ID, UUID, DSN, credential, row content,
+	// fingerprint, or error message: these arguments become metric labels, and
+	// an unbounded label explodes time series cardinality.
+	UpdateCompactUUIDState(role, state string, active bool)
+	UpdateCompactUUIDBacklog(role, target, kind string, rows float64)
+	RecordCompactUUIDAction(role, action, result string)
+	RecordCompactUUIDLookupFallback(role, reason string)
+	UpdateCompactUUIDLastProgress(role string, unixTime float64)
+	RecordCompactUUIDDuration(role, operation string, duration time.Duration)
+
+	// Gateway response-state metrics
+	//
+	// IMPORTANT: both label arguments (category, outcome) MUST come from a
+	// compile-time registry constant (see response_state.go). Never pass a
+	// gateway response/conversation id, prompt, model, error message, or any
+	// other unbounded value: these become metric labels and an unbounded label
+	// explodes time series cardinality.
+	RecordResponseStateEvent(category, outcome string)
+
 	// System metrics
 	InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time)
 	UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int)
 }
 
-// GlobalRecorder holds the active metrics recorder implementation.
-var GlobalRecorder MetricsRecorder
+// globalRecorder holds the active metrics recorder implementation.
+//
+// It is an atomic.Value rather than a plain variable because it is read from
+// every request goroutine and from long-lived background workers (the UUID
+// migration coordinator among them) while it can still be written: monitor.Init
+// installs the real recorder after those workers may already be running, and
+// tests swap it per-case. As a bare var that is a data race, and -race caught it
+// as one between model.uuidMetricsRecorder and a test installing a recorder.
+//
+// A recorderBox wrapper keeps the stored dynamic type constant; storing differing
+// concrete types directly in an atomic.Value panics.
+var globalRecorder atomic.Value
+
+// recorderBox pins one concrete type for atomic.Value storage.
+type recorderBox struct{ recorder MetricsRecorder }
+
+// Recorder returns the active metrics recorder, never nil.
+//
+// Return values:
+//   - MetricsRecorder: the installed recorder, or a no-op when none is installed.
+func Recorder() MetricsRecorder {
+	if box, ok := globalRecorder.Load().(recorderBox); ok && box.recorder != nil {
+		return box.recorder
+	}
+	return &NoOpRecorder{}
+}
+
+// SetRecorder installs the process-wide metrics recorder.
+//
+// Parameters:
+//   - recorder: the recorder to install; nil restores the no-op behavior.
+func SetRecorder(recorder MetricsRecorder) {
+	globalRecorder.Store(recorderBox{recorder: recorder})
+}
 
 // NoOpRecorder is a no-operation implementation for when metrics are disabled
 type NoOpRecorder struct{}
@@ -127,6 +195,36 @@ func (n *NoOpRecorder) RecordBillingError(errorType, operation string, userId in
 func (n *NoOpRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
 }
 
+// RecordUUIDBackfillRows implements MetricsRecorder.RecordUUIDBackfillRows without collecting any data.
+func (n *NoOpRecorder) RecordUUIDBackfillRows(role, phase, target, result string, count int) {}
+
+// UpdateUUIDBackfillBacklog implements MetricsRecorder.UpdateUUIDBackfillBacklog without collecting any data.
+func (n *NoOpRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {}
+
+// RecordUUIDBackfillCycle implements MetricsRecorder.RecordUUIDBackfillCycle without collecting any data.
+func (n *NoOpRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {}
+
+// RecordUUIDBackfillFinalizer implements MetricsRecorder.RecordUUIDBackfillFinalizer without collecting any data.
+func (n *NoOpRecorder) RecordUUIDBackfillFinalizer(role, result string) {}
+
+// UpdateCompactUUIDState implements MetricsRecorder.UpdateCompactUUIDState without collecting any data.
+func (n *NoOpRecorder) UpdateCompactUUIDState(role, state string, active bool) {}
+
+// UpdateCompactUUIDBacklog implements MetricsRecorder.UpdateCompactUUIDBacklog without collecting any data.
+func (n *NoOpRecorder) UpdateCompactUUIDBacklog(role, target, kind string, rows float64) {}
+
+// RecordCompactUUIDAction implements MetricsRecorder.RecordCompactUUIDAction without collecting any data.
+func (n *NoOpRecorder) RecordCompactUUIDAction(role, action, result string) {}
+
+// RecordCompactUUIDLookupFallback implements MetricsRecorder.RecordCompactUUIDLookupFallback without collecting any data.
+func (n *NoOpRecorder) RecordCompactUUIDLookupFallback(role, reason string) {}
+
+// UpdateCompactUUIDLastProgress implements MetricsRecorder.UpdateCompactUUIDLastProgress without collecting any data.
+func (n *NoOpRecorder) UpdateCompactUUIDLastProgress(role string, unixTime float64) {}
+
+// RecordCompactUUIDDuration implements MetricsRecorder.RecordCompactUUIDDuration without collecting any data.
+func (n *NoOpRecorder) RecordCompactUUIDDuration(role, operation string, duration time.Duration) {}
+
 // InitSystemMetrics implements MetricsRecorder.InitSystemMetrics without collecting any data.
 func (n *NoOpRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {}
 
@@ -134,9 +232,18 @@ func (n *NoOpRecorder) InitSystemMetrics(version, buildTime, goVersion string, s
 func (n *NoOpRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {
 }
 
+// RecordResponseStateEvent implements MetricsRecorder.RecordResponseStateEvent without collecting any data.
+func (n *NoOpRecorder) RecordResponseStateEvent(category, outcome string) {}
+
+// RecordTraceRecord implements TracePipelineRecorder without collecting any data.
+func (n *NoOpRecorder) RecordTraceRecord(outcome string, count int) {}
+
+// UpdateTraceQueueDepth implements TracePipelineRecorder without collecting any data.
+func (n *NoOpRecorder) UpdateTraceQueueDepth(depth, capacity float64) {}
+
 // Initialize with no-op recorder by default
 func init() {
-	GlobalRecorder = &NoOpRecorder{}
+	SetRecorder(&NoOpRecorder{})
 }
 
 // MultiRecorder wraps multiple MetricsRecorder implementations
@@ -284,6 +391,76 @@ func (m *MultiRecorder) UpdateBillingStats(totalBillingOperations, successfulBil
 	}
 }
 
+// RecordUUIDBackfillRows implements MetricsRecorder.RecordUUIDBackfillRows
+func (m *MultiRecorder) RecordUUIDBackfillRows(role, phase, target, result string, count int) {
+	for _, r := range m.Recorders {
+		r.RecordUUIDBackfillRows(role, phase, target, result, count)
+	}
+}
+
+// UpdateUUIDBackfillBacklog implements MetricsRecorder.UpdateUUIDBackfillBacklog
+func (m *MultiRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {
+	for _, r := range m.Recorders {
+		r.UpdateUUIDBackfillBacklog(role, target, backlog)
+	}
+}
+
+// RecordUUIDBackfillCycle implements MetricsRecorder.RecordUUIDBackfillCycle
+func (m *MultiRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
+	for _, r := range m.Recorders {
+		r.RecordUUIDBackfillCycle(role, mode, result, duration)
+	}
+}
+
+// RecordUUIDBackfillFinalizer implements MetricsRecorder.RecordUUIDBackfillFinalizer
+func (m *MultiRecorder) RecordUUIDBackfillFinalizer(role, result string) {
+	for _, r := range m.Recorders {
+		r.RecordUUIDBackfillFinalizer(role, result)
+	}
+}
+
+// UpdateCompactUUIDState implements MetricsRecorder.UpdateCompactUUIDState
+func (m *MultiRecorder) UpdateCompactUUIDState(role, state string, active bool) {
+	for _, r := range m.Recorders {
+		r.UpdateCompactUUIDState(role, state, active)
+	}
+}
+
+// UpdateCompactUUIDBacklog implements MetricsRecorder.UpdateCompactUUIDBacklog
+func (m *MultiRecorder) UpdateCompactUUIDBacklog(role, target, kind string, rows float64) {
+	for _, r := range m.Recorders {
+		r.UpdateCompactUUIDBacklog(role, target, kind, rows)
+	}
+}
+
+// RecordCompactUUIDAction implements MetricsRecorder.RecordCompactUUIDAction
+func (m *MultiRecorder) RecordCompactUUIDAction(role, action, result string) {
+	for _, r := range m.Recorders {
+		r.RecordCompactUUIDAction(role, action, result)
+	}
+}
+
+// RecordCompactUUIDLookupFallback implements MetricsRecorder.RecordCompactUUIDLookupFallback
+func (m *MultiRecorder) RecordCompactUUIDLookupFallback(role, reason string) {
+	for _, r := range m.Recorders {
+		r.RecordCompactUUIDLookupFallback(role, reason)
+	}
+}
+
+// UpdateCompactUUIDLastProgress implements MetricsRecorder.UpdateCompactUUIDLastProgress
+func (m *MultiRecorder) UpdateCompactUUIDLastProgress(role string, unixTime float64) {
+	for _, r := range m.Recorders {
+		r.UpdateCompactUUIDLastProgress(role, unixTime)
+	}
+}
+
+// RecordCompactUUIDDuration implements MetricsRecorder.RecordCompactUUIDDuration
+func (m *MultiRecorder) RecordCompactUUIDDuration(role, operation string, duration time.Duration) {
+	for _, r := range m.Recorders {
+		r.RecordCompactUUIDDuration(role, operation, duration)
+	}
+}
+
 // InitSystemMetrics implements MetricsRecorder.InitSystemMetrics
 func (m *MultiRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {
 	for _, r := range m.Recorders {
@@ -295,5 +472,172 @@ func (m *MultiRecorder) InitSystemMetrics(version, buildTime, goVersion string, 
 func (m *MultiRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {
 	for _, r := range m.Recorders {
 		r.UpdateSiteWideStats(totalQuota, usedQuota, totalUsers, activeUsers)
+	}
+}
+
+// RecordResponseStateEvent implements MetricsRecorder.RecordResponseStateEvent
+func (m *MultiRecorder) RecordResponseStateEvent(category, outcome string) {
+	for _, r := range m.Recorders {
+		r.RecordResponseStateEvent(category, outcome)
+	}
+}
+
+// RecordTraceRecord implements TracePipelineRecorder by forwarding to every
+// child recorder that supports it. A recorder that predates the trace-pipeline
+// metrics is simply skipped rather than failing to compile.
+func (m *MultiRecorder) RecordTraceRecord(outcome string, count int) {
+	for _, r := range m.Recorders {
+		if tr, ok := r.(TracePipelineRecorder); ok {
+			tr.RecordTraceRecord(outcome, count)
+		}
+	}
+}
+
+// UpdateTraceQueueDepth implements TracePipelineRecorder by forwarding to every
+// child recorder that supports it.
+func (m *MultiRecorder) UpdateTraceQueueDepth(depth, capacity float64) {
+	for _, r := range m.Recorders {
+		if tr, ok := r.(TracePipelineRecorder); ok {
+			tr.UpdateTraceQueueDepth(depth, capacity)
+		}
+	}
+}
+
+// UpdateTraceActiveRecorders implements TraceActiveRecorder by forwarding to
+// every child recorder that supports it.
+//
+// Without this method a MultiRecorder -- which is what a deployment running
+// both Prometheus and OTel gets -- would fail the TraceActiveRecorder type
+// assertion in UpdateTraceActive, so oneapi_trace_active_recorders would sit at
+// zero forever while admission was silently working. An optional extension
+// interface only stays optional for CHILD recorders; the fan-out itself has to
+// implement every one of them.
+//
+// Parameters:
+//   - active: number of requests currently holding a trace recorder.
+//   - limit: configured admission limit; 0 means unlimited.
+//
+// Return values: none.
+func (m *MultiRecorder) UpdateTraceActiveRecorders(active, limit float64) {
+	for _, r := range m.Recorders {
+		if tr, ok := r.(TraceActiveRecorder); ok {
+			tr.UpdateTraceActiveRecorders(active, limit)
+		}
+	}
+}
+
+// RecordLogSuppression implements LogPipelineRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - reason: a compile-time constant from log_pipeline.go.
+//   - lines: how many log lines were discarded.
+//   - bytes: how many bytes those lines would have written.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordLogSuppression(reason string, lines int, bytes int64) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogPipelineRecorder); ok {
+			lr.RecordLogSuppression(reason, lines, bytes)
+		}
+	}
+}
+
+// UpdateLogDiskPressure implements LogPipelineRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - active: 1 when the emergency logging policy is engaged, 0 otherwise.
+//
+// Return values: none.
+func (m *MultiRecorder) UpdateLogDiskPressure(active float64) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogPipelineRecorder); ok {
+			lr.UpdateLogDiskPressure(active)
+		}
+	}
+}
+
+// RecordAppLogExportRecords implements LogExportRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - outcome: a compile-time constant from log_export.go.
+//   - count: how many log records the outcome applies to.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordAppLogExportRecords(outcome string, count int) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogExportRecorder); ok {
+			lr.RecordAppLogExportRecords(outcome, count)
+		}
+	}
+}
+
+// UpdateAppLogExportQueue implements LogExportRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - records: log records currently resident in the export pipeline.
+//   - recordLimit: the configured record ceiling.
+//   - bytes: estimated bytes currently resident in the export pipeline.
+//   - byteLimit: the configured byte ceiling.
+//
+// Return values: none.
+func (m *MultiRecorder) UpdateAppLogExportQueue(records, recordLimit, bytes, byteLimit float64) {
+	for _, r := range m.Recorders {
+		if lr, ok := r.(LogExportRecorder); ok {
+			lr.UpdateAppLogExportQueue(records, recordLimit, bytes, byteLimit)
+		}
+	}
+}
+
+// RecordRequestOutcome implements RequestOutcomeRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - outcome: a compile-time constant from operational.go.
+//   - durationMs: the request's total lifetime in milliseconds.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordRequestOutcome(outcome string, durationMs float64) {
+	for _, r := range m.Recorders {
+		if rr, ok := r.(RequestOutcomeRecorder); ok {
+			rr.RecordRequestOutcome(outcome, durationMs)
+		}
+	}
+}
+
+// RecordTimeToFirstToken implements RequestOutcomeRecorder by forwarding to
+// every child recorder that supports it.
+//
+// Parameters:
+//   - outcome: a compile-time constant from operational.go.
+//   - ttftMs: milliseconds from request receipt to first client byte.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordTimeToFirstToken(outcome string, ttftMs float64) {
+	for _, r := range m.Recorders {
+		if rr, ok := r.(RequestOutcomeRecorder); ok {
+			rr.RecordTimeToFirstToken(outcome, ttftMs)
+		}
+	}
+}
+
+// RecordRetentionSweep implements RetentionRecorder by forwarding to every
+// child recorder that supports it.
+//
+// Parameters:
+//   - target: the swept table or file set, from a closed compile-time set.
+//   - result: a compile-time constant from operational.go.
+//   - rows: how many rows or files the sweep removed.
+//   - durationMs: how long the sweep took, in milliseconds.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordRetentionSweep(target, result string, rows float64, durationMs float64) {
+	for _, r := range m.Recorders {
+		if rr, ok := r.(RetentionRecorder); ok {
+			rr.RecordRetentionSweep(target, result, rows, durationMs)
+		}
 	}
 }

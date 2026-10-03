@@ -1,0 +1,25 @@
+{
+  "case": "redemption/get_all",
+  "site": "R1 GetAllRedemptions",
+  "status": 200,
+  "body": {
+    "data": [
+      {
+        "count": 0,
+        "created_at": 1730000000111,
+        "created_time": 1720000001,
+        "key": "behaviordiff-redemption-key",
+        "name": "behaviordiff-redeem",
+        "quota": 970007,
+        "redeemed_time": 1720000004,
+        "status": 1,
+        "updated_at": 1730000000222,
+        "user_uuid": "<user-uuid>",
+        "uuid": "<redemption-uuid>"
+      }
+    ],
+    "message": "",
+    "success": true,
+    "total": 1
+  }
+}

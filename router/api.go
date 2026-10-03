@@ -29,6 +29,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/user/get-by-token", middleware.TokenAuth(), controller.GetSelfByToken)
 		apiRouter.GET("/available_models", middleware.TokenAuth(), controller.GetAvailableModelsByToken)
 		apiRouter.POST("/user/reset", middleware.CriticalRateLimit(), controller.ResetPassword)
+		apiRouter.POST("/payment/stripe/webhook", controller.StripeWebhook)
 		apiRouter.GET("/oauth/github", middleware.CriticalRateLimit(), auth.GitHubOAuth)
 		apiRouter.GET("/oauth/oidc", middleware.CriticalRateLimit(), auth.OidcAuth)
 		apiRouter.GET("/oauth/lark", middleware.CriticalRateLimit(), auth.LarkOAuth)
@@ -57,6 +58,9 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/token", controller.GenerateAccessToken)
 				selfRoute.GET("/aff", controller.GetAffCode)
 				selfRoute.POST("/topup", controller.TopUp)
+				selfRoute.POST("/topup/stripe", controller.CreateStripeCheckout)
+				selfRoute.GET("/topup/stripe/orders", controller.ListStripePaymentOrders)
+				selfRoute.GET("/topup/stripe/orders/:session_id", controller.GetStripePaymentOrder)
 				selfRoute.GET("/available_models", controller.GetUserAvailableModels)
 				selfRoute.GET("/totp/status", controller.GetTotpStatus)
 				selfRoute.GET("/totp/setup", controller.SetupTotp)
@@ -81,6 +85,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/manage", controller.ManageUser)
 				adminRoute.PUT("/", controller.UpdateUser)
 				adminRoute.DELETE("/:id", controller.DeleteUser)
+				adminRoute.GET("/totp/status/:id", controller.AdminGetUserTotpStatus)
 				adminRoute.POST("/totp/disable/:id", controller.AdminDisableUserTotp)
 			}
 		}
@@ -106,6 +111,10 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/default-pricing", controller.GetChannelDefaultPricing)
 			channelRoute.POST("/", controller.AddChannel)
 			channelRoute.POST("/:id/duplicate", controller.DuplicateChannel)
+			channelRoute.POST("/:id/reset_models", controller.ResetChannelModels)
+			channelRoute.POST("/reset_models", controller.ResetSelectedChannelModels)
+			channelRoute.POST("/selection", controller.ResolveChannelSelection)
+			channelRoute.POST("/delete_selected_disabled", controller.DeleteSelectedDisabledChannels)
 			channelRoute.PUT("/", controller.UpdateChannel)
 			channelRoute.PUT("/pricing/:id", controller.UpdateChannelPricing)
 			channelRoute.DELETE("/disabled", controller.DeleteDisabledChannel)
@@ -160,12 +169,18 @@ func SetApiRouter(router *gin.Engine) {
 			redemptionRoute.DELETE("/:id", controller.DeleteRedemption)
 		}
 		logRoute := apiRouter.Group("/log")
+		logRoute.POST("/selection", middleware.UserAuth(), controller.ResolveLogSelection)
+		logRoute.POST("/delete_selected", middleware.AdminAuth(), controller.DeleteSelectedLogs)
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
 		logRoute.DELETE("/", middleware.AdminAuth(), controller.DeleteHistoryLogs)
 		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
+		// Additive keyset routes. They are siblings of the offset routes above,
+		// never a mode of them, so the legacy response envelope stays frozen.
+		logRoute.GET("/cursor", middleware.AdminAuth(), controller.GetAllLogsCursor)
+		logRoute.GET("/self/cursor", middleware.UserAuth(), controller.GetUserLogsCursor)
 		logRoute.GET("/self/search", middleware.UserAuth(), controller.SearchUserLogs)
 
 		// Tracing routes

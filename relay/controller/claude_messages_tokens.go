@@ -9,6 +9,7 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 
+	"github.com/Laisky/one-api/relay/adaptor/common/claudevision"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
@@ -27,6 +28,9 @@ const fastTokenEstimateThreshold = 1 * 1024 * 1024 // 1MB
 func estimateClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest, bodySize int) int {
 	if bodySize > fastTokenEstimateThreshold {
 		estimated := bodySize / 4
+		if claudevision.IsSonnet55(claudeReservationModel(request)) {
+			estimated += countClaudeNativeImageAllowance(request)
+		}
 		gmw.GetLogger(ctx).Debug("using fast byte-based token estimation for large body",
 			zap.Int("body_size", bodySize),
 			zap.Int("estimated_tokens", estimated),
@@ -45,7 +49,8 @@ func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesR
 	openaiRequest := convertClaudeToOpenAIForTokenCounting(request)
 
 	// Use OpenAI token counter for accurate tokenization
-	promptTokens := openai.CountTokenMessages(ctx, openaiRequest.Messages, request.Model)
+	modelName := claudeReservationModel(request)
+	promptTokens := openai.CountTokenMessages(ctx, openaiRequest.Messages, modelName)
 
 	// Add tokens for tools if present
 	if len(request.Tools) > 0 {
@@ -53,6 +58,18 @@ func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesR
 	}
 
 	fileImageTokens := countClaudeFileImageTokens(request)
+	if claudevision.IsSonnet55(modelName) {
+		// Converted URL images were already counted above; add only missing native blocks.
+		convertedImages := 0
+		for _, message := range openaiRequest.Messages {
+			for _, part := range message.ParseContent() {
+				if part.Type == relaymodel.ContentTypeImageURL {
+					convertedImages++
+				}
+			}
+		}
+		fileImageTokens = max(0, countClaudeNativeImageAllowance(request)-convertedImages*claudevision.Sonnet55MaxImageTokens)
+	}
 	if fileImageTokens > 0 {
 		promptTokens += fileImageTokens
 	}
