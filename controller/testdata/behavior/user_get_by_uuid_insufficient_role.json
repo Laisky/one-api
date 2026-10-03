@@ -1,0 +1,9 @@
+{
+  "case": "user/get_by_uuid_insufficient_role",
+  "site": "U4 GetUser (error)",
+  "status": 200,
+  "body": {
+    "message": "No permission to get information of users at the same level or higher",
+    "success": false
+  }
+}

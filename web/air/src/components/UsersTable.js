@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { API, showError, showSuccess } from '../helpers';
 import { Button, Form, Popconfirm, Space, Table, Tag, Tooltip, Dropdown } from '@douyinfe/semi-ui';
@@ -5,6 +6,9 @@ import { ITEMS_PER_PAGE } from '../constants';
 import { renderGroup, renderNumber, renderQuota } from '../helpers/render';
 import AddUser from '../pages/User/AddUser';
 import EditUser from '../pages/User/EditUser';
+import ResourceRefTooltip from './ResourceRefTooltip';
+
+const userRef = (user) => user?.uuid || user?.id || '';
 
 function renderRole(role) {
   switch (role) {
@@ -21,9 +25,9 @@ function renderRole(role) {
 
 const UsersTable = () => {
   const columns = [{
-    title: 'ID', dataIndex: 'id'
-  }, {
-    title: '用户名', dataIndex: 'username'
+    title: '用户名', dataIndex: 'username', render: (text, record) => (
+      <ResourceRefTooltip refId={userRef(record)}>{text}</ResourceRefTooltip>
+    )
   }, {
     title: '分组', dataIndex: 'group', render: (text, record, index) => {
       return (<div>
@@ -47,24 +51,6 @@ const UsersTable = () => {
       </div>);
     }
   },
-  // {
-  //   title: '邀请信息', dataIndex: 'invite', render: (text, record, index) => {
-  //     return (<div>
-  //       <Space spacing={1}>
-  //         <Tooltip content={'邀请人数'}>
-  //           <Tag color="white" size="large">{renderNumber(record.aff_count)}</Tag>
-  //         </Tooltip>
-  //         <Tooltip content={'邀请总收益'}>
-  //           <Tag color="white" size="large">{renderQuota(record.aff_history_quota)}</Tag>
-  //         </Tooltip>
-  //         <Tooltip content={'邀请人ID'}>
-  //           {record.inviter_id === 0 ? <Tag color="white" size="large">无</Tag> :
-  //             <Tag color="white" size="large">{record.inviter_id}</Tag>}
-  //         </Tooltip>
-  //       </Space>
-  //     </div>);
-  //   }
-  // },
   {
     title: '角色', dataIndex: 'role', render: (text, record, index) => {
       return (<div>
@@ -86,7 +72,7 @@ const UsersTable = () => {
           title="确定？"
           okType={'warning'}
           onConfirm={() => {
-            manageUser(record.username, 'promote', record);
+            manageUser(record.username, 'promote', record).catch(reportUIError);
           }}
         >
           <Button theme="light" type="warning" style={{ marginRight: 1 }}>提升</Button>
@@ -95,18 +81,18 @@ const UsersTable = () => {
           title="确定？"
           okType={'warning'}
           onConfirm={() => {
-            manageUser(record.username, 'demote', record);
+            manageUser(record.username, 'demote', record).catch(reportUIError);
           }}
         >
           <Button theme="light" type="secondary" style={{ marginRight: 1 }}>降级</Button>
         </Popconfirm>
         {record.status === 1 ?
-          <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={async () => {
-            manageUser(record.username, 'disable', record);
-          }}>禁用</Button> :
-          <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={async () => {
-            manageUser(record.username, 'enable', record);
-          }} disabled={record.status === 3}>启用</Button>}
+          <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={(...uiArgs) => (async () => {
+            manageUser(record.username, 'disable', record).catch(reportUIError);
+          })(...uiArgs).catch(reportUIError)}>禁用</Button> :
+          <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={(...uiArgs) => (async () => {
+            manageUser(record.username, 'enable', record).catch(reportUIError);
+          })(...uiArgs).catch(reportUIError)} disabled={record.status === 3}>启用</Button>}
         <Button theme="light" type="tertiary" style={{ marginRight: 1 }} onClick={() => {
           setEditingUser(record);
           setShowEditUser(true);
@@ -119,8 +105,8 @@ const UsersTable = () => {
         position={'left'}
         onConfirm={() => {
           manageUser(record.username, 'delete', record).then(() => {
-            removeRecord(record.id);
-          });
+            removeRecord(userRef(record));
+          }).catch(reportUIError);
         }}
       >
         <Button theme="light" type="danger" style={{ marginRight: 1 }}>删除</Button>
@@ -137,7 +123,7 @@ const UsersTable = () => {
   const [showAddUser, setShowAddUser] = useState(false);
   const [showEditUser, setShowEditUser] = useState(false);
   const [editingUser, setEditingUser] = useState({
-    id: undefined
+    uuid: undefined
   });
   const [orderBy, setOrderBy] = useState('');
   const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -154,7 +140,7 @@ const UsersTable = () => {
     console.log(key);
     let newDataSource = [...users];
     if (key != null) {
-      let idx = newDataSource.findIndex(data => data.id === key);
+      let idx = newDataSource.findIndex(data => userRef(data) === key);
 
       if (idx > -1) {
         newDataSource.splice(idx, 1);
@@ -217,7 +203,8 @@ const UsersTable = () => {
       }
       setUsers(newUsers);
     } else {
-      showError(message);
+      // Rejection prevents success-only callers from deleting a visible row.
+      throw new Error(message || 'The server rejected this operation.');
     }
   };
 
@@ -237,23 +224,26 @@ const UsersTable = () => {
   };
 
   const searchUsers = async () => {
-    if (searchKeyword === '') {
-      // if keyword is blank, load files instead.
-      await loadUsers(0);
-      setActivePage(1);
-      setOrderBy('');
-      return;
+    try {
+      if (searchKeyword === '') {
+        // if keyword is blank, load files instead.
+        await loadUsers(0);
+        setActivePage(1);
+        setOrderBy('');
+        return;
+      }
+      setSearching(true);
+      const res = await API.get(`/api/user/search?keyword=${searchKeyword}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setUsers(data);
+        setActivePage(1);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(true);
-    const res = await API.get(`/api/user/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setUsers(data);
-      setActivePage(1);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
   };
 
   const handleKeywordChange = async (value) => {
@@ -267,7 +257,7 @@ const UsersTable = () => {
     sortedUsers.sort((a, b) => {
       return ('' + a[key]).localeCompare(b[key]);
     });
-    if (sortedUsers[0].id === users[0].id) {
+    if (userRef(sortedUsers[0]) === userRef(users[0])) {
       sortedUsers.reverse();
     }
     setUsers(sortedUsers);
@@ -279,7 +269,7 @@ const UsersTable = () => {
     if (page === Math.ceil(users.length / ITEMS_PER_PAGE) + 1) {
       // In this case we have to load more data and then append them.
       loadUsers(page - 1).then(r => {
-      });
+      }).catch(reportUIError);
     }
   };
 
@@ -292,7 +282,7 @@ const UsersTable = () => {
   const closeEditUser = () => {
     setShowEditUser(false);
     setEditingUser({
-      id: undefined
+      uuid: undefined
     });
   };
 
@@ -328,16 +318,16 @@ const UsersTable = () => {
       <AddUser refresh={refresh} visible={showAddUser} handleClose={closeAddUser}></AddUser>
       <EditUser refresh={refresh} visible={showEditUser} handleClose={closeEditUser}
         editingUser={editingUser}></EditUser>
-      <Form onSubmit={searchUsers}>
+      <Form onSubmit={(...uiArgs) => searchUsers(...uiArgs).catch(reportUIError)}>
         <Form.Input
           label="搜索关键字"
           icon="search"
           field="keyword"
           iconPosition="left"
-          placeholder="搜索用户的 ID，用户名，显示名称，以及邮箱地址 ..."
+          placeholder="搜索用户的 ID，UUID，用户名，显示名称，以及邮箱地址 ..."
           value={searchKeyword}
           loading={searching}
-          onChange={value => handleKeywordChange(value)}
+          onChange={value => handleKeywordChange(value).catch(reportUIError)}
         />
       </Form>
 

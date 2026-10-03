@@ -1,10 +1,12 @@
 package openai
 
 import (
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/ai360"
 	"github.com/Laisky/one-api/relay/adaptor/alibailian"
 	"github.com/Laisky/one-api/relay/adaptor/baichuan"
 	"github.com/Laisky/one-api/relay/adaptor/baiduv2"
+	"github.com/Laisky/one-api/relay/adaptor/deepseek"
 	"github.com/Laisky/one-api/relay/adaptor/doubao"
 	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 	"github.com/Laisky/one-api/relay/adaptor/groq"
@@ -42,6 +44,72 @@ var CompatibleChannels = []int{
 	channeltype.XunfeiV2,
 }
 
+// GetCompatibleChannelPricing returns the default pricing table for an
+// OpenAI-compatible channel type.
+//
+// The OpenAI adaptor serves every channel in CompatibleChannels, so its pricing
+// methods must answer for the channel actually in use rather than for OpenAI.
+// Before this existed, a Doubao/MiniMax/BaiduV2/... channel resolved no price at
+// all and fell through to DefaultPricingMethods' 2.5 USD/1M — e.g. Doubao-pro-32k
+// billed ~8750x its published rate. Keep the cases here in lockstep with
+// GetCompatibleChannelMeta; TestCompatibleChannelPricingCoversAdvertisedModels
+// fails if the two drift apart.
+//
+// Parameters:
+//   - channelType: the channel type from relay/channeltype.
+//
+// Return values:
+//   - map[string]adaptor.ModelConfig: pricing for that channel, or OpenAI's table
+//     for channel types that are plain OpenAI.
+func GetCompatibleChannelPricing(channelType int) map[string]adaptor.ModelConfig {
+	switch channelType {
+	case channeltype.Azure:
+		return ModelRatios
+	case channeltype.AI360:
+		return ai360.ModelRatios
+	case channeltype.Moonshot:
+		return moonshot.ModelRatios
+	case channeltype.Baichuan:
+		return baichuan.ModelRatios
+	case channeltype.Minimax:
+		return minimax.ModelRatios
+	case channeltype.Mistral:
+		return mistral.ModelRatios
+	case channeltype.Groq:
+		return groq.ModelRatios
+	case channeltype.LingYiWanWu:
+		return lingyiwanwu.ModelRatios
+	case channeltype.StepFun:
+		return stepfun.ModelRatios
+	case channeltype.DeepSeek:
+		deepseekAdaptor := &deepseek.Adaptor{}
+		return deepseekAdaptor.GetDefaultModelPricing()
+	case channeltype.TogetherAI:
+		return togetherai.ModelRatios
+	case channeltype.Doubao:
+		return doubao.ModelRatios
+	case channeltype.Novita:
+		return novita.ModelRatios
+	case channeltype.SiliconFlow:
+		return siliconflow.ModelRatios
+	case channeltype.XAI:
+		return xai.ModelRatios
+	case channeltype.BaiduV2:
+		return baiduv2.ModelRatios
+	case channeltype.XunfeiV2:
+		return xunfeiv2.ModelRatios
+	case channeltype.OpenRouter:
+		openrouterAdaptor := &openrouter.Adaptor{}
+		return openrouterAdaptor.GetDefaultModelPricing()
+	case channeltype.AliBailian:
+		return alibailian.ModelRatios
+	case channeltype.GeminiOpenAICompatible:
+		return geminiOpenaiCompatible.ModelRatios
+	default:
+		return ModelRatios
+	}
+}
+
 func GetCompatibleChannelMeta(channelType int) (string, []string) {
 	switch channelType {
 	case channeltype.Azure:
@@ -63,7 +131,8 @@ func GetCompatibleChannelMeta(channelType int) (string, []string) {
 	case channeltype.StepFun:
 		return "stepfun", stepfun.ModelList
 	case channeltype.DeepSeek:
-		return "deepseek", []string{"deepseek-chat", "deepseek-reasoner"}
+		deepseekAdaptor := &deepseek.Adaptor{}
+		return "deepseek", deepseekAdaptor.GetModelList()
 	case channeltype.TogetherAI:
 		return "together.ai", togetherai.ModelList
 	case channeltype.Doubao:

@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import { useState, useEffect } from 'react';
 import { showError, showSuccess, showInfo, loadChannelModels } from 'utils/common';
 
@@ -24,6 +25,9 @@ import PricingModal from './component/PricingModal';
 
 // ----------------------------------------------------------------------
 // CHANNEL_OPTIONS,
+const refPayload = (ref) => (typeof ref === 'string' ? { uuid: ref } : { id: ref });
+const itemRef = (item) => item?.uuid || item?.id;
+
 export default function ChannelPage() {
   const [channels, setChannels] = useState([]);
   const [totalChannels, setTotalChannels] = useState(0);
@@ -33,36 +37,39 @@ export default function ChannelPage() {
   const theme = useTheme();
   const matchUpMd = useMediaQuery(theme.breakpoints.up('sm'));
   const [openModal, setOpenModal] = useState(false);
-  const [editChannelId, setEditChannelId] = useState(0);
+  const [editChannelId, setEditChannelId] = useState('');
   const [openPricingModal, setOpenPricingModal] = useState(false);
   const [pricingChannelId, setPricingChannelId] = useState(0);
   const [pricingChannelName, setPricingChannelName] = useState('');
   const [pricingChannelType, setPricingChannelType] = useState(0);
 
   const loadChannels = async (startIdx) => {
-    setSearching(true);
     try {
-      const res = await API.get(`/api/channel/?p=${startIdx}&size=${ITEMS_PER_PAGE}`);
-      const { success, message, data, total } = res.data;
-      if (success) {
-        const resolvedTotal = typeof total === 'number' ? total : (Array.isArray(data) ? data.length : 0);
-        setTotalChannels(resolvedTotal);
-        setChannels((prev) => {
-          if (startIdx === 0) {
-            return Array.isArray(data) ? data : [];
-          }
-          const next = Array.isArray(prev) ? [...prev] : [];
-          const pageData = Array.isArray(data) ? data : [];
-          next.splice(startIdx * ITEMS_PER_PAGE, pageData.length, ...pageData);
-          return next;
-        });
-      } else {
-        showError(message);
+      setSearching(true);
+      try {
+        const res = await API.get(`/api/channel/?p=${startIdx}&size=${ITEMS_PER_PAGE}`);
+        const { success, message, data, total } = res.data;
+        if (success) {
+          const resolvedTotal = typeof total === 'number' ? total : (Array.isArray(data) ? data.length : 0);
+          setTotalChannels(resolvedTotal);
+          setChannels((prev) => {
+            if (startIdx === 0) {
+              return Array.isArray(data) ? data : [];
+            }
+            const next = Array.isArray(prev) ? [...prev] : [];
+            const pageData = Array.isArray(data) ? data : [];
+            next.splice(startIdx * ITEMS_PER_PAGE, pageData.length, ...pageData);
+            return next;
+          });
+        } else {
+          showError(message);
+        }
+      } catch (err) {
+        showError(err?.message || err);
       }
-    } catch (err) {
-      showError(err?.message || err);
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const onPaginationChange = (event, activePage) => {
@@ -77,27 +84,30 @@ export default function ChannelPage() {
   };
 
   const searchChannels = async (event) => {
-    event.preventDefault();
-    if (searchKeyword === '') {
-      await loadChannels(0);
-      setActivePage(0);
-      return;
-    }
-    setSearching(true);
     try {
-      const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
-      const { success, message, data } = res.data;
-      if (success) {
-        setChannels(Array.isArray(data) ? data : []);
-        setTotalChannels(Array.isArray(data) ? data.length : 0);
+      event.preventDefault();
+      if (searchKeyword === '') {
+        await loadChannels(0);
         setActivePage(0);
-      } else {
-        showError(message);
+        return;
       }
-    } catch (err) {
-      showError(err?.message || err);
+      setSearching(true);
+      try {
+        const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
+        const { success, message, data } = res.data;
+        if (success) {
+          setChannels(Array.isArray(data) ? data : []);
+          setTotalChannels(Array.isArray(data) ? data.length : 0);
+          setActivePage(0);
+        } else {
+          showError(message);
+        }
+      } catch (err) {
+        showError(err?.message || err);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const handleSearchKeyword = (event) => {
@@ -106,7 +116,7 @@ export default function ChannelPage() {
 
   const manageChannel = async (id, action, value) => {
     const url = '/api/channel/';
-    let data = { id };
+    let data = refPayload(id);
     let res;
     switch (action) {
       case 'delete':
@@ -128,7 +138,7 @@ export default function ChannelPage() {
             showError('优先级必须是数字');
             return;
           }
-          const channel = channels.find((item) => item.id === id);
+          const channel = channels.find((item) => itemRef(item) === id || item.id === id);
           if (!channel) {
             showError('未找到对应的渠道，稍后重试');
             return;
@@ -147,13 +157,20 @@ export default function ChannelPage() {
         showError(`未知操作类型: ${action}`);
         return;
     }
-    const { success, message, data: responseData } = res.data;
+    const { success, message, data: responseData, skipped } = res.data;
+    if (!success && skipped) {
+      // 该渠道没有可用于对话的接口，无法进行健康检查，这不是故障。
+      showInfo(`已跳过该渠道的测试：${message}`);
+      return res.data;
+    }
     if (success) {
       showSuccess('操作成功完成！');
       if (action === 'delete') {
         await handleRefresh();
       } else if (action === 'priority') {
-        setChannels((prev) => prev.map((item) => (item.id === id ? { ...item, priority: responseData?.priority ?? item.priority } : item)));
+        setChannels((prev) =>
+          prev.map((item) => (itemRef(item) === id || item.id === id ? { ...item, priority: responseData?.priority ?? item.priority } : item))
+        );
       }
     } else {
       showError(message);
@@ -192,15 +209,18 @@ export default function ChannelPage() {
 
   // 处理更新所有启用渠道余额
   const updateAllChannelsBalance = async () => {
-    setSearching(true);
-    const res = await API.get(`/api/channel/update_balance`);
-    const { success, message } = res.data;
-    if (success) {
-      showInfo('已更新完毕所有已启用渠道余额！');
-    } else {
-      showError(message);
+    try {
+      setSearching(true);
+      const res = await API.get(`/api/channel/update_balance`);
+      const { success, message } = res.data;
+      if (success) {
+        showInfo('已更新完毕所有已启用渠道余额！');
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const handleOpenModal = (channelId) => {
@@ -210,13 +230,13 @@ export default function ChannelPage() {
 
   const handleCloseModal = () => {
     setOpenModal(false);
-    setEditChannelId(0);
+    setEditChannelId('');
   };
 
   const handleOkModal = (status) => {
     if (status === true) {
       handleCloseModal();
-      handleRefresh();
+      handleRefresh().catch(reportUIError);
     }
   };
 
@@ -240,20 +260,20 @@ export default function ChannelPage() {
       .catch((reason) => {
         showError(reason);
       });
-    loadChannelModels().then();
+    loadChannelModels().then().catch(reportUIError);
   }, []);
 
   return (
     <>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2.5}>
         <Typography variant="h4">渠道</Typography>
-        <Button variant="contained" color="primary" startIcon={<IconPlus />} onClick={() => handleOpenModal(0)}>
+        <Button variant="contained" color="primary" startIcon={<IconPlus />} onClick={() => handleOpenModal('')}>
           新建渠道
         </Button>
       </Stack>
       <Card>
-        <Box component="form" onSubmit={searchChannels} noValidate sx={{ marginTop: 2 }}>
-          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索渠道的 ID，名称和密钥 ...'} />
+        <Box component="form" onSubmit={(...uiArgs) => searchChannels(...uiArgs).catch(reportUIError)} noValidate sx={{ marginTop: 2 }}>
+          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索渠道的 ID，UUID，名称和密钥 ...'} />
         </Box>
         <Toolbar
           sx={{
@@ -267,16 +287,16 @@ export default function ChannelPage() {
           <Container>
             {matchUpMd ? (
               <ButtonGroup variant="outlined" aria-label="outlined small primary button group" sx={{ marginBottom: 2 }}>
-                <Button onClick={handleRefresh} startIcon={<IconRefresh width={'18px'} />}>
+                <Button onClick={(...uiArgs) => handleRefresh(...uiArgs).catch(reportUIError)} startIcon={<IconRefresh width={'18px'} />}>
                   刷新
                 </Button>
-                <Button onClick={testAllChannels} startIcon={<IconBrandSpeedtest width={'18px'} />}>
+                <Button onClick={(...uiArgs) => testAllChannels(...uiArgs).catch(reportUIError)} startIcon={<IconBrandSpeedtest width={'18px'} />}>
                   测试启用渠道
                 </Button>
                 {/*<Button onClick={updateAllChannelsBalance} startIcon={<IconCoinYuan width={'18px'} />}>*/}
                 {/*  更新启用余额*/}
                 {/*</Button>*/}
-                <Button onClick={deleteAllDisabledChannels} startIcon={<IconHttpDelete width={'18px'} />}>
+                <Button onClick={(...uiArgs) => deleteAllDisabledChannels(...uiArgs).catch(reportUIError)} startIcon={<IconHttpDelete width={'18px'} />}>
                   删除禁用渠道
                 </Button>
               </ButtonGroup>
@@ -288,16 +308,16 @@ export default function ChannelPage() {
                 justifyContent="space-around"
                 alignItems="center"
               >
-                <IconButton onClick={handleRefresh} size="large">
+                <IconButton onClick={(...uiArgs) => handleRefresh(...uiArgs).catch(reportUIError)} size="large">
                   <IconRefresh />
                 </IconButton>
-                <IconButton onClick={testAllChannels} size="large">
+                <IconButton onClick={(...uiArgs) => testAllChannels(...uiArgs).catch(reportUIError)} size="large">
                   <IconBrandSpeedtest />
                 </IconButton>
-                <IconButton onClick={updateAllChannelsBalance} size="large">
+                <IconButton onClick={(...uiArgs) => updateAllChannelsBalance(...uiArgs).catch(reportUIError)} size="large">
                   <IconCoinYuan />
                 </IconButton>
-                <IconButton onClick={deleteAllDisabledChannels} size="large">
+                <IconButton onClick={(...uiArgs) => deleteAllDisabledChannels(...uiArgs).catch(reportUIError)} size="large">
                   <IconHttpDelete />
                 </IconButton>
               </Stack>
@@ -314,7 +334,7 @@ export default function ChannelPage() {
                   <ChannelTableRow
                     item={row}
                     manageChannel={manageChannel}
-                    key={row.id}
+                    key={itemRef(row)}
                     handleOpenModal={handleOpenModal}
                     setModalChannelId={setEditChannelId}
                     handleOpenPricingModal={handleOpenPricingModal}

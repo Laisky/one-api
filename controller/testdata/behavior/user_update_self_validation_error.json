@@ -1,0 +1,9 @@
+{
+  "case": "user/update_self_validation_error",
+  "site": "UpdateSelf (request DTO, error)",
+  "status": 200,
+  "body": {
+    "message": "Input is illegal Key: 'User.DisplayName' Error:Field validation for 'DisplayName' failed on the 'max' tag",
+    "success": false
+  }
+}

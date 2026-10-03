@@ -8,6 +8,8 @@ import (
 
 	"github.com/Laisky/zap"
 
+	"github.com/Laisky/errors/v2"
+
 	"github.com/Laisky/one-api/common/logger"
 )
 
@@ -60,7 +62,7 @@ func Drain(ctx context.Context) error {
 			// Timeout: report remaining tasks/requests and return
 			logger.Logger.Error("graceful drain timeout",
 				zap.Int64("in_flight_requests", atomic.LoadInt64(&inFlightRequests)))
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		case <-done:
 			// All critical tasks finished; check in-flight requests (should be 0 after http.Server.Shutdown)
 			if n := atomic.LoadInt64(&inFlightRequests); n != 0 {
@@ -69,7 +71,7 @@ func Drain(ctx context.Context) error {
 					select {
 					case <-ctx.Done():
 						logger.Logger.Error("graceful drain timeout (requests not zero)", zap.Int64("in_flight_requests", n))
-						return ctx.Err()
+						return errors.WithStack(ctx.Err())
 					case <-ticker.C:
 						n = atomic.LoadInt64(&inFlightRequests)
 						if n == 0 {

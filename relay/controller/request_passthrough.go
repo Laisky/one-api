@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 )
 
 var allowedExtraBodyKeys = map[string]struct{}{
@@ -53,11 +55,12 @@ var allowedExtraBodyKeys = map[string]struct{}{
 
 // passthroughMergeStats captures non-sensitive diagnostics for controlled passthrough merges.
 type passthroughMergeStats struct {
-	UnknownPreserved     int
-	AllowedRootPreserved int
-	ExtraBodyMerged      int
-	ExtraBodySkipped     int
-	ExtraBodyRejected    int
+	UnknownPreserved             int
+	AllowedRootPreserved         int
+	ExtraBodyMerged              int
+	ExtraBodySkipped             int
+	ExtraBodyRejected            int
+	UnsupportedParametersRemoved int
 }
 
 // mergeControlledPassthroughJSON merges allowlisted passthrough fields from the
@@ -80,6 +83,14 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 		originalMap = map[string]json.RawMessage{}
 	}
 
+	var filteredFields map[string]struct{}
+	if allowUnknown {
+		filteredFields = collectFilteredChatFields(originalMap, updatedMap)
+	}
+
+	// Capture typed defaults before removing the transport-only extra_body key.
+	combinedExtraBody, rejected := collectCombinedExtraBody(originalMap, updatedMap)
+	stats.ExtraBodyRejected += rejected
 	changed := false
 	if _, ok := updatedMap["extra_body"]; ok {
 		delete(updatedMap, "extra_body")
@@ -88,7 +99,8 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 
 	if allowUnknown {
 		for key, value := range originalMap {
-			if key == "extra_body" || isAllowedExtraBodyKey(key) {
+			_, filtered := filteredFields[key]
+			if key == "extra_body" || isAllowedExtraBodyKey(key) || filtered {
 				continue
 			}
 			if _, exists := updatedMap[key]; exists {
@@ -101,7 +113,8 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 	}
 
 	for key, value := range originalMap {
-		if !isAllowedExtraBodyKey(key) {
+		_, filtered := filteredFields[key]
+		if !isAllowedExtraBodyKey(key) || filtered {
 			continue
 		}
 		if _, exists := updatedMap[key]; exists {
@@ -112,19 +125,39 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 		changed = true
 	}
 
-	combinedExtraBody, rejected := collectCombinedExtraBody(originalMap, updatedMap)
-	stats.ExtraBodyRejected += rejected
 	for key, value := range combinedExtraBody {
+		// An extension must not resurrect an explicit protocol field that the
+		// converter deliberately removed from this chat payload.
+		if _, filtered := filteredFields[key]; filtered {
+			stats.ExtraBodySkipped++
+			continue
+		}
 		if !isAllowedExtraBodyKey(key) {
 			stats.ExtraBodyRejected++
 			continue
 		}
-		if _, exists := updatedMap[key]; exists {
+		if existing, exists := updatedMap[key]; exists {
+			if key == "chat_template_kwargs" {
+				if merged, added := mergeChatTemplateDefaults(existing, value); added {
+					updatedMap[key] = merged
+					stats.ExtraBodyMerged++
+					changed = true
+					continue
+				}
+			}
 			stats.ExtraBodySkipped++
 			continue
 		}
 		updatedMap[key] = value
 		stats.ExtraBodyMerged++
+		changed = true
+	}
+
+	// This is the final wire object, after model mapping, conversion and raw
+	// extension merging. Filtering earlier alone lets passthrough resurrect
+	// parameters that the actual upstream model rejects.
+	if removed := openai.NormalizeModelRequestParameters(updatedMap); len(removed) > 0 {
+		stats.UnsupportedParametersRemoved = len(removed)
 		changed = true
 	}
 
@@ -146,7 +179,8 @@ func hasPassthroughDiagnostics(stats passthroughMergeStats) bool {
 		stats.AllowedRootPreserved > 0 ||
 		stats.ExtraBodyMerged > 0 ||
 		stats.ExtraBodySkipped > 0 ||
-		stats.ExtraBodyRejected > 0
+		stats.ExtraBodyRejected > 0 ||
+		stats.UnsupportedParametersRemoved > 0
 }
 
 // collectCombinedExtraBody merges raw and typed extra_body maps, prioritizing raw
@@ -154,16 +188,28 @@ func hasPassthroughDiagnostics(stats passthroughMergeStats) bool {
 func collectCombinedExtraBody(originalMap, updatedMap map[string]json.RawMessage) (map[string]json.RawMessage, int) {
 	combined := map[string]json.RawMessage{}
 	rejected := 0
+	invalidObjectReported := false
 
-	for _, source := range []map[string]json.RawMessage{originalMap, updatedMap} {
+	for index, source := range []map[string]json.RawMessage{originalMap, updatedMap} {
 		rawExtra, ok := source["extra_body"]
 		if !ok || len(rawExtra) == 0 {
 			continue
 		}
 
+		// The raw and typed payload may retain the same malformed transport
+		// field. Diagnose it once, while still merging genuinely new defaults.
+		if index > 0 && bytes.Equal(bytes.TrimSpace(rawExtra), bytes.TrimSpace(originalMap["extra_body"])) {
+			continue
+		}
+
 		extraBody, ok := decodeRawMessageMap(rawExtra)
 		if !ok {
-			rejected++
+			// Original and converted forms represent one rejected field, even
+			// when a converter changed its malformed value.
+			if !invalidObjectReported {
+				rejected++
+				invalidObjectReported = true
+			}
 			continue
 		}
 
@@ -173,7 +219,12 @@ func collectCombinedExtraBody(originalMap, updatedMap map[string]json.RawMessage
 				rejected++
 				continue
 			}
-			if _, exists := combined[normalizedKey]; exists {
+			if existing, exists := combined[normalizedKey]; exists {
+				if normalizedKey == "chat_template_kwargs" {
+					if merged, added := mergeChatTemplateDefaults(existing, value); added {
+						combined[normalizedKey] = merged
+					}
+				}
 				continue
 			}
 			combined[normalizedKey] = value

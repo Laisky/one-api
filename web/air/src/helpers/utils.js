@@ -72,11 +72,19 @@ if (isMobile()) {
   // showNoticeOptions.transition = 'flip';
 }
 
+// Interceptor and caller handling must not notify twice for the same failure.
+const notifiedErrors = new WeakSet();
+
+/** showError reports failures once without logging request credentials. */
 export function showError(error) {
-  console.error(error);
-  if (error.message) {
+    if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') return;
+    if (error && typeof error === 'object') {
+        if (notifiedErrors.has(error)) return;
+        notifiedErrors.add(error);
+    }
+  if (error?.message) {
     if (error.name === 'AxiosError') {
-      switch (error.response.status) {
+      switch (error.response?.status) {
         case 401:
           // Clear persisted auth state so a stale `user` in localStorage doesn't
           // re-trigger authenticated probes on the next page load.

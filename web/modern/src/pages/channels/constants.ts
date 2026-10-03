@@ -61,7 +61,8 @@ export const CHANNEL_TYPES: ChannelType[] = [
     text: 'Azure',
     value: 3,
     color: 'olive',
-    description: 'Azure OpenAI deployments; requires resource endpoint and API version.',
+    description:
+      'Azure OpenAI deployments, plus Azure AI Foundry Claude models (claude-* auto-route to the native /anthropic Messages API); set the base URL to your resource endpoint.',
   },
   {
     key: 11,
@@ -271,6 +272,52 @@ export const CHANNEL_TYPES: ChannelType[] = [
     description: 'Fireworks AI serverless inference; native chat, Responses, embeddings, and Anthropic Messages surfaces under one key.',
   },
   {
+    key: 55,
+    text: 'NVIDIA',
+    value: 55,
+    color: 'green',
+    description: 'NVIDIA API Catalog (build.nvidia.com); OpenAI-compatible chat for Nemotron and hosted open models.',
+  },
+  {
+    key: 56,
+    text: 'Cerebras',
+    value: 56,
+    color: 'orange',
+    description: 'Cerebras Inference (api.cerebras.ai); ultra-fast OpenAI-compatible chat on wafer-scale hardware (gpt-oss-120b, GLM-4.7).',
+  },
+  {
+    key: 57,
+    text: 'DeepInfra',
+    value: 57,
+    color: 'purple',
+    description:
+      'DeepInfra serverless inference; OpenAI-compatible chat, completions, embeddings, images, and audio, plus rerank and native Anthropic Messages.',
+  },
+  {
+    key: 58,
+    text: 'Z.ai',
+    value: 58,
+    color: 'teal',
+    description:
+      'Z.ai international GLM platform (api.z.ai). Same models as Zhipu but a separate account, key, and flat USD pricing. Serves chat, vision, image, video, ASR, and OCR; no embeddings, rerank, TTS, or realtime.',
+  },
+  {
+    key: 59,
+    text: 'Jina AI',
+    value: 59,
+    color: 'purple',
+    description:
+      'Jina Search Foundation API: text and multimodal embeddings, rerank, and jina-ocr-v1 chat. Responses and Claude Messages use chat conversion; no image generation.',
+  },
+  {
+    key: 60,
+    text: 'TypeSafe',
+    value: 60,
+    color: 'teal',
+    description:
+      'TypeSafe System One evaluation (noul, choice, score) via /v1/systemone; input-token pricing and free output. Not a chat or streaming API.',
+  },
+  {
     key: 42,
     text: 'VertexAI',
     value: 42,
@@ -391,6 +438,35 @@ export const CHANNEL_TYPES: ChannelType[] = [
   },
 ];
 
+/**
+ * Legacy channel types that are no longer offered in the create/edit dropdown but
+ * may still exist on stored channels. Type 8 ("Custom") is auto-migrated to
+ * OpenAICompatible at runtime (see relay/channeltype/define.go + the channel
+ * migration), so it is display-only here to keep the channel table from falling
+ * back to a raw "Type N" label.
+ */
+export const LEGACY_CHANNEL_TYPES: ChannelType[] = [
+  {
+    key: 8,
+    text: 'Custom',
+    value: 8,
+    color: 'pink',
+    description: 'Legacy custom OpenAI-compatible channel; auto-migrated to OpenAI Compatible.',
+  },
+];
+
+/**
+ * Complete channel-type -> display metadata map (creatable types plus legacy
+ * display-only types). Derive every type -> label/color lookup from this single
+ * source so the channel list never drifts out of sync with relay/channeltype/define.go.
+ */
+export const CHANNEL_TYPE_LABELS: Record<number, { name: string; color?: string }> = [...CHANNEL_TYPES, ...LEGACY_CHANNEL_TYPES].reduce<
+  Record<number, { name: string; color?: string }>
+>((acc, def) => {
+  acc[def.value] = { name: def.text, color: def.color };
+  return acc;
+}, {});
+
 export const CHANNEL_TYPES_WITH_DEDICATED_BASE_URL = new Set<number>([3, 50, 52]);
 export const CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD = new Set<number>([18, 23, 33, 34, 42]);
 
@@ -424,6 +500,11 @@ export const MODEL_CONFIGS_EXAMPLE = {
     ratio: 0.03,
     completion_ratio: 2.0,
     max_tokens: 128000,
+  },
+  'deepseek-v4-flash': {
+    ratio: 0.00000014,
+    completion_ratio: 2.0,
+    cached_input_ratio: 0.0000000028,
   },
 } satisfies Record<string, Record<string, unknown>>;
 

@@ -1,0 +1,228 @@
+{
+  "scope": "Two instrumented processes; per-process intervals only, not packet timing, causal latency or an unprofiled comparison.",
+  "absolute_cross_process_comparison": false,
+  "gateway_adjacent_pairs": 11842,
+  "matched_adjacent_pairs": 11836,
+  "unmatched_trace_boundary_pairs": 6,
+  "matched_requests": 12,
+  "client_frame_markers": 11892,
+  "client_excluded_runtime_ranges": {
+    "active_at_trace_start": 2,
+    "unmatched_range_ends": 2,
+    "unfinished_range_begins": 0
+  },
+  "client_alignment_excluded_pairs": 2,
+  "stalls_above_10ms": 56,
+  "usable_stalls": {
+    "pairs": 55,
+    "client_runnable_at_least_80pct": 1,
+    "client_waiting_at_least_80pct": 52,
+    "client_network_waiting_at_least_80pct": 52,
+    "gateway_runnable_at_least_80pct": 51
+  },
+  "client_gap_exceeds_gateway_gap_by_5ms": {
+    "pairs": 18,
+    "client_runnable_at_least_80pct": 1,
+    "client_waiting_at_least_80pct": 15,
+    "client_network_waiting_at_least_80pct": 15,
+    "gateway_runnable_at_least_80pct": 14
+  },
+  "client_gap_ms": {
+    "count": 11836,
+    "p50": 0.013075,
+    "p95": 3.510913,
+    "max": 29.598908,
+    "min": 0.002393
+  },
+  "decoder_selection": {
+    "gateway": {
+      "mode": "two-pass selected goroutines",
+      "selected_goroutines": [
+        928,
+        966,
+        974,
+        977,
+        982,
+        990
+      ],
+      "marker_count": 35694,
+      "records_sha256": "38e2181a85300a87694cbb127a81cb8b91174ae1eb755f7e307498930356423d",
+      "marker_records_sha256": "0d96277362b9e98963f2f60cfaa029d4c838e7695573d003a4245b7ab108f971",
+      "trace_sha256": "b8ada0377706a1e01c93247553f1fe5b7975b5008498a1511d5884f6962c1c25",
+      "tool_sha256": "f218734ed91f7e412b8c2c378b620609c2a5eb8745fea501071b272f4e4c9e03",
+      "boundary": "Full captured histories for the marker-selected goroutines, not all runtime goroutines."
+    },
+    "client": {
+      "mode": "two-pass selected goroutines",
+      "selected_goroutines": [
+        25,
+        26,
+        32,
+        33,
+        51,
+        53
+      ],
+      "marker_count": 11892,
+      "records_sha256": "936ae2124fd07061da5adf577aaa3d175712e2517c25e4f99c2ebff4b28d486c",
+      "marker_records_sha256": "ab08dfb701d3a4c6fb23fa6d350fb3a97bdeda4475921d05a3be9b3bcc1b59d4",
+      "trace_sha256": "fa2397e19d328fbec724f834841c6e673bed7b0298710ab01935ee5f2c62aad6",
+      "tool_sha256": "f218734ed91f7e412b8c2c378b620609c2a5eb8745fea501071b272f4e4c9e03",
+      "boundary": "Full captured histories for the marker-selected goroutines, not all runtime goroutines."
+    }
+  },
+  "clock_domain": {
+    "clock": "CLOCK_MONOTONIC",
+    "boot_id": "d6aa8b93-cf55-454e-8869-bda969d57767",
+    "time_namespaces": {
+      "observer": null,
+      "gateway": null,
+      "mock": null,
+      "driver": null
+    },
+    "absolute_cross_process_verified": false,
+    "comparison_scope": "within-process intervals only; constant epoch offsets cancel"
+  },
+  "raw_checks": {
+    "request_samples": 8192,
+    "recorded_window_reproduced": true,
+    "nominal_window_qualified": true,
+    "nominal_coverage_seconds": 59.000027562000014,
+    "nominal_gateway_cores_mean": 2.5255920405022394,
+    "qualification_and_positive_usage_checked": true,
+    "financial_ledger_audit": false
+  },
+  "inputs": {
+    "summary.json": "468b075e79a95fb0a0ebb2f8b54af841100e432d841e1b23e707d077ab24a12b",
+    "requests.json": "29f3e4085d295cb8362155c42834d53a398656e873874505b3367f82432ab9c3",
+    "events.jsonl": "38e2181a85300a87694cbb127a81cb8b91174ae1eb755f7e307498930356423d",
+    "client-events.jsonl": "936ae2124fd07061da5adf577aaa3d175712e2517c25e4f99c2ebff4b28d486c",
+    "runtime.trace": "b8ada0377706a1e01c93247553f1fe5b7975b5008498a1511d5884f6962c1c25",
+    "client.trace": "fa2397e19d328fbec724f834841c6e673bed7b0298710ab01935ee5f2c62aad6",
+    "samples.jsonl": "a5e9cfbdaa0d868719b7b17c2504a4edb7844e281137cde6e15ee841fa066c7d"
+  },
+  "schema_version": 1,
+  "public_parent": "327808f1de2ded4bba951d23671e14346b891ef8",
+  "published": true,
+  "capture_configuration": {
+    "binary": "/mnt/data/pr427-client-control/bin/observed-gateway",
+    "driver": "/mnt/data/pr427-client-control/bin/observed-driver",
+    "token_cache": "/mnt/data/pr427-client-control/runtime/token-cache",
+    "output": "/mnt/data/pr427-client-control/capture",
+    "mode": "trace",
+    "gateway_procs": 3,
+    "auxiliary_procs": 2,
+    "concurrency": 32,
+    "requests": 8192,
+    "chunks": 1024,
+    "chunk_bytes": 128,
+    "pace_ms": 0,
+    "warmup": 30,
+    "seconds": 60,
+    "deadline": 600,
+    "client_trace": true,
+    "trace_seconds": 5,
+    "trace_offset": 15,
+    "rate": 0,
+    "debug_logs": false
+  },
+  "allowance": {
+    "effective_cores": 4.0,
+    "affinity": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "visible_limits": [
+      {
+        "path": "/sys/fs/cgroup/cpu.max",
+        "raw": "400000 100000",
+        "cores": 4.0
+      }
+    ],
+    "boundary": "Only namespace-visible cgroup ancestors can be inspected.",
+    "stat_path": "/sys/fs/cgroup/cpu.stat",
+    "memory_limit": "4294967296"
+  },
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+  "gateway_binary_sha256": "6921f3b1fd91041e830b977e948970ddab5c4d7b87a58d3d13b34959cc4d1f85",
+  "driver_binary_sha256": "a328e3968a794711978fef63c4fa48d564fc7a9482ffe3106a021fba5e100c68",
+  "gateway_capture": {
+    "file": "runtime.trace",
+    "bytes": 18998780,
+    "sha256": "b8ada0377706a1e01c93247553f1fe5b7975b5008498a1511d5884f6962c1c25",
+    "wall_seconds": 5.108808218000036,
+    "maximum_bytes": 134217728,
+    "started_elapsed": 46.00502165399996,
+    "finished_elapsed": 51.113829872
+  },
+  "client_capture": {
+    "file": "client.trace",
+    "bytes": 9775036,
+    "sha256": "fa2397e19d328fbec724f834841c6e673bed7b0298710ab01935ee5f2c62aad6",
+    "wall_seconds": 5.024229362000028,
+    "maximum_bytes": 134217728,
+    "process_role": "driver",
+    "pid": 18664,
+    "requested_seconds": 5,
+    "started_elapsed": 46.01160874099992,
+    "finished_elapsed": 51.035838102999946
+  },
+  "usage": {
+    "requests": 8192,
+    "used_quota": 40280064
+  },
+  "sustained_window": {
+    "rule_version": 2,
+    "qualified": true,
+    "cpu_only_qualified": true,
+    "failure_reasons": [],
+    "coverage_seconds": 59.998798115,
+    "fraction_at_or_above_target": 1.0,
+    "high_load_duration_seconds": 59.998798115,
+    "sample_fraction_at_or_above_target": 1.0,
+    "fraction_basis": "elapsed duration",
+    "target_machine_utilization": 0.5,
+    "required_fraction": 0.8,
+    "gateway_cores_mean": 2.52788397043043,
+    "half_window_gateway_cores": [
+      2.526099956764844,
+      2.5299278915590375
+    ],
+    "relative_cpu_drift": 0.0015153536517595878,
+    "half_window_coverage_seconds": [
+      29.998812912000062,
+      29.000826563000032
+    ],
+    "half_window_upstream_rps": [
+      69.70275811025718,
+      71.44623948903265
+    ],
+    "upstream_rate_drift": 0.025013090242678837,
+    "maximum_upstream_rate_drift": 0.15,
+    "upstream_active_peak": 4,
+    "progress_note": "Upstream completions and durable statistics are proxies, not client completion timestamps. An interval crossing the half-window boundary is excluded from half-rate calculations."
+  },
+  "no_new_runtime_optimization": true,
+  "integration_public_parent": "a57e34809322ce382ebc87f5abbe353e8b88b5bd",
+  "capture_public_parent": "327808f1de2ded4bba951d23671e14346b891ef8",
+  "reconciled_tests": {
+    "profile": 42,
+    "client_procs": 5,
+    "correlation": 34
+  },
+  "post_capture_reconciliation": true,
+  "tooling_publication_commit": "fcd6fb6b25a3263a398eff116a9eff1fef4a3614",
+  "post_integration_tests": {
+    "profile": 42,
+    "client_procs": 5,
+    "window_replay": 6,
+    "correlation_including_cohort": 40,
+    "total_python": 93,
+    "explicit_probe_race_repetitions": 3,
+    "new_gateway_build_or_load": false
+  },
+  "historical_capture_relabelled": false
+}

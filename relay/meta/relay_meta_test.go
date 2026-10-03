@@ -11,7 +11,52 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
+
+// TestIsClaudeModelName verifies case/space-insensitive Claude-family detection.
+func TestIsClaudeModelName(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IsClaudeModelName("claude-sonnet-5"))
+	require.True(t, IsClaudeModelName("Claude-Opus-4-8"))
+	require.True(t, IsClaudeModelName("  claude-haiku-4-5  "))
+	require.False(t, IsClaudeModelName("gpt-4o-mini"))
+	require.False(t, IsClaudeModelName(""))
+}
+
+// TestAzureTargetsAnthropic verifies that Claude models are detected only on the
+// Azure channel (so the Azure adaptor routes them to the Anthropic surface),
+// keyed off either the requested or the mapped model name, and never on other
+// channels.
+func TestAzureTargetsAnthropic(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		channelType int
+		origin      string
+		actual      string
+		want        bool
+	}{
+		{"azure claude by requested model", channeltype.Azure, "claude-sonnet-5", "my-deploy", true},
+		{"azure claude by mapped model", channeltype.Azure, "", "claude-sonnet-5", true},
+		{"azure gpt", channeltype.Azure, "gpt-4o-mini", "gpt-4o-mini", false},
+		{"azure empty", channeltype.Azure, "", "", false},
+		{"non-azure claude channel stays false", channeltype.OpenAI, "claude-sonnet-5", "claude-sonnet-5", false},
+		{"native anthropic channel stays false", channeltype.Anthropic, "claude-sonnet-5", "claude-sonnet-5", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &Meta{ChannelType: tc.channelType, OriginModelName: tc.origin, ActualModelName: tc.actual}
+			require.Equal(t, tc.want, m.AzureTargetsAnthropic())
+		})
+	}
+
+	var nilMeta *Meta
+	require.False(t, nilMeta.AzureTargetsAnthropic())
+}
 
 func TestGetByContext_ChannelRetry(t *testing.T) {
 	t.Parallel()

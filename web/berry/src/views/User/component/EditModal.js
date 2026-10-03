@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import * as Yup from 'yup';
 import { Formik } from 'formik';
@@ -70,27 +71,31 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
   const [totpLoading, setTotpLoading] = useState(false);
 
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
-    setSubmitting(true);
+    try {
+      setSubmitting(true);
 
-    let res;
-    if (values.is_edit) {
-      res = await API.put(`/api/user/`, { ...values, id: parseInt(userId) });
-    } else {
-      res = await API.post(`/api/user/`, values);
-    }
-    const { success, message } = res.data;
-    if (success) {
+      let res;
       if (values.is_edit) {
-        showSuccess('用户更新成功！');
+        res = await API.put(`/api/user/`, { ...values, uuid: userId });
       } else {
-        showSuccess('用户创建成功！');
+        res = await API.post(`/api/user/`, values);
       }
+      const { success, message } = res.data;
+      if (success) {
+        if (values.is_edit) {
+          showSuccess('用户更新成功！');
+        } else {
+          showSuccess('用户创建成功！');
+        }
+        setSubmitting(false);
+        setStatus({ success: true });
+        onOk(true);
+      } else {
+        showError(message);
+        setErrors({ submit: message });
+      }
+    } finally {
       setSubmitting(false);
-      setStatus({ success: true });
-      onOk(true);
-    } else {
-      showError(message);
-      setErrors({ submit: message });
     }
   };
 
@@ -110,15 +115,26 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
     if (success) {
       data.is_edit = true;
       setInputs(data);
-      // Set TOTP status from user data
-      setTotpEnabled(data.totp_secret && data.totp_secret !== '');
+      // totp_secret is never serialized in API responses; query the dedicated status endpoint
+      await loadTotpStatus();
     } else {
       showError(message);
     }
     } catch (error) {
-      showError(error.message);
+      showError(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTotpStatus = async () => {
+    try {
+      const res = await API.get(`/api/user/totp/status/${userId}`);
+      const { success, data } = res.data;
+      setTotpEnabled(Boolean(success && data && data.totp_enabled));
+    } catch (error) {
+      // Non-fatal: leave the TOTP control hidden when status cannot be determined
+      setTotpEnabled(false);
     }
   };
 
@@ -127,7 +143,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
       let res = await API.get(`/api/group/`);
       setGroupOptions(res.data.data);
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -148,9 +164,9 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
   };
 
   useEffect(() => {
-    fetchGroups().then();
+    fetchGroups().then().catch(reportUIError);
     if (userId) {
-      loadUser().then();
+      loadUser().then().catch(reportUIError);
     } else {
       setInputs(originInputs);
     }
@@ -189,7 +205,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
             </Box>
           </Box>
         ) : (
-          <Formik initialValues={inputs} enableReinitialize validationSchema={validationSchema} onSubmit={submit}>
+          <Formik initialValues={inputs} enableReinitialize validationSchema={validationSchema} onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>
             {({ errors, handleBlur, handleChange, handleSubmit, touched, values, isSubmitting }) => (
             <form noValidate onSubmit={handleSubmit}>
               <FormControl fullWidth error={Boolean(touched.username && errors.username)} sx={{ ...theme.typography.otherInput }}>
@@ -344,7 +360,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                       <Button
                         variant="contained"
                         color="error"
-                        onClick={adminDisableTotp}
+                        onClick={(...uiArgs) => adminDisableTotp(...uiArgs).catch(reportUIError)}
                         disabled={totpLoading}
                       >
                         {totpLoading ? '处理中...' : '管理员禁用 TOTP'}
@@ -388,7 +404,7 @@ export default EditModal;
 
 EditModal.propTypes = {
   open: PropTypes.bool,
-  userId: PropTypes.number,
+  userId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   onCancel: PropTypes.func,
   onOk: PropTypes.func
 };

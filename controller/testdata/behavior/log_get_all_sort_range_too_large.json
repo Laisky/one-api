@@ -1,0 +1,9 @@
+{
+  "case": "log/get_all_sort_range_too_large",
+  "site": "L1 GetAllLogs (error)",
+  "status": 200,
+  "body": {
+    "message": "Date range for sorting cannot exceed 30 days",
+    "success": false
+  }
+}

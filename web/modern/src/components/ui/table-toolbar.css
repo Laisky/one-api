@@ -1,0 +1,125 @@
+/* Container queries respond to the table's available width, including sidebars,
+   browser zoom, and embedded tables, rather than guessing from the viewport. */
+.table-toolbar {
+  container: table-toolbar / inline-size;
+  min-width: 0;
+}
+
+.table-toolbar__layout {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.table-toolbar__selection {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 16rem;
+}
+
+.table-toolbar__search {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.table-toolbar__search-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.table-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.table-toolbar__actions:empty {
+  display: none;
+}
+
+.table-toolbar-control {
+  min-height: 2.25rem;
+  flex-shrink: 0;
+}
+
+.table-toolbar__search-field > button {
+  min-width: 0;
+  width: 100%;
+}
+
+.table-toolbar-menu {
+  max-width: calc(100vw - 2rem);
+}
+
+.table-toolbar-menu__item {
+  min-height: 2.25rem;
+  gap: 0.5rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.table-toolbar-menu__item--destructive,
+.table-toolbar-menu__item--destructive:focus {
+  color: hsl(var(--destructive));
+}
+
+@container table-toolbar (max-width: 40rem) {
+  .table-toolbar__layout {
+    flex-wrap: wrap;
+  }
+
+  .table-toolbar__search {
+    flex-basis: 100%;
+    order: -1;
+  }
+
+  .table-toolbar__selection {
+    flex: 1 1 0;
+    max-width: none;
+  }
+
+  .table-toolbar-control {
+    min-height: 2.75rem;
+  }
+
+  .table-toolbar-control[aria-label] {
+    min-width: 2.75rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .table-toolbar-control {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+
+  .table-toolbar-menu__item {
+    min-height: 2.75rem;
+  }
+}
+
+.table-toolbar__action-overflow {
+  display: none;
+}
+
+@container table-toolbar (max-width: 28rem) {
+  .table-toolbar__action-label,
+  .table-toolbar__action-caret {
+    display: none;
+  }
+
+  .table-toolbar__action-overflow {
+    display: block;
+  }
+
+  .table-toolbar__batch-trigger {
+    width: 2.75rem;
+    padding-inline: 0;
+  }
+}

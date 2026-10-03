@@ -195,6 +195,67 @@ func TestValidateOpenTelemetryConfig(t *testing.T) {
 	}
 }
 
+// TestValidateTraceSinkOpenTelemetryConfig verifies OTLP trace delivery cannot
+// be configured without an initialized OpenTelemetry provider.
+func TestValidateTraceSinkOpenTelemetryConfig(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		sinks   []string
+		enabled bool
+		wantErr bool
+	}{
+		{"database sink does not require OpenTelemetry", []string{TraceSinkDB}, false, false},
+		{"OTLP-only sink requires OpenTelemetry", []string{TraceSinkOTLP}, false, true},
+		{"OTLP fan-out requires OpenTelemetry", []string{TraceSinkDB, TraceSinkOTLP}, false, true},
+		{"OTLP sink accepts enabled provider", []string{TraceSinkOTLP}, true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateTraceSinkOpenTelemetryConfig(tt.sinks, tt.enabled)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestValidateSyncTraceConfiguration verifies sync tracing rejects settings
+// that would bypass the configured sink or completion-time sampler.
+func TestValidateSyncTraceConfiguration(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		writeMode  string
+		sinks      []string
+		sampleRate float64
+		wantErr    bool
+	}{
+		{"batched accepts sampling and fan-out", TraceWriteModeBatched, []string{TraceSinkDB, TraceSinkOTLP}, 0.05, false},
+		{"sync database keeps legacy behavior", TraceWriteModeSync, []string{TraceSinkDB}, 1, false},
+		{"sync none is explicitly inert", TraceWriteModeSync, []string{TraceSinkNone}, 1, false},
+		{"sync rejects sampling", TraceWriteModeSync, []string{TraceSinkDB}, 0.5, true},
+		{"sync rejects OTLP", TraceWriteModeSync, []string{TraceSinkOTLP}, 1, true},
+		{"sync rejects fan-out", TraceWriteModeSync, []string{TraceSinkDB, TraceSinkOTLP}, 1, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateSyncTraceConfiguration(tt.writeMode, tt.sinks, tt.sampleRate)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestValidatePositiveInt(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

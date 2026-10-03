@@ -15,7 +15,8 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
 interface Token {
-  id: number;
+  uuid?: string;
+  id?: number;
   name: string;
   key: string;
   status: number;
@@ -374,9 +375,9 @@ export function ParametersPanel({
               </SelectTrigger>
               <SelectContent>
                 {tokens.map((token) => (
-                  <SelectItem key={token.id} value={token.key}>
+                  <SelectItem key={token.uuid ?? token.key} value={token.key}>
                     <div className="flex items-center justify-between w-full">
-                      <span>{token.name || `Token ${token.id}`}</span>
+                      <span>{token.name || t('playground.parameters.token.unnamed', { ref: String(token.uuid ?? token.key ?? '').slice(0, 8) })}</span>
                       <Badge variant="outline" className="ml-2 text-xs">
                         {token.unlimited_quota ? t('playground.parameters.token.unlimited') : `${Math.floor(token.remain_quota / 1000)}K`}
                       </Badge>
@@ -680,6 +681,8 @@ export function ParametersPanel({
                     <SelectItem value="low">{t('playground.parameters.reasoning_effort.options.low')}</SelectItem>
                     <SelectItem value="medium">{t('playground.parameters.reasoning_effort.options.medium')}</SelectItem>
                     <SelectItem value="high">{t('playground.parameters.reasoning_effort.options.high')}</SelectItem>
+                    <SelectItem value="xhigh">{t('playground.parameters.reasoning_effort.options.xhigh')}</SelectItem>
+                    <SelectItem value="max">{t('playground.parameters.reasoning_effort.options.max')}</SelectItem>
                   </SelectContent>
                 </Select>
                 <div className="text-xs text-muted-foreground">{t('playground.parameters.reasoning_effort.description')}</div>

@@ -1,0 +1,31 @@
+{
+  "case": "user/login_success",
+  "site": "U1 SetupLogin",
+  "status": 200,
+  "body": {
+    "data": {
+      "aff_code": "",
+      "created_at": 0,
+      "display_name": "Behavior Diff User",
+      "email": "",
+      "github_id": "",
+      "group": "",
+      "inviter_uuid": null,
+      "lark_id": "",
+      "mcp_tool_blacklist": [],
+      "metadata": {},
+      "oidc_id": "",
+      "quota": 0,
+      "request_count": 0,
+      "role": 1,
+      "status": 1,
+      "updated_at": 0,
+      "used_quota": 0,
+      "username": "behaviordiff-user",
+      "uuid": "<user-uuid>",
+      "wechat_id": ""
+    },
+    "message": "",
+    "success": true
+  }
+}

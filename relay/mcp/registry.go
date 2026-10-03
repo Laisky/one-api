@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -124,7 +125,9 @@ func BuildToolCandidates(servers []*model.MCPServer, toolsByServer map[int][]*mo
 		}
 		resolved, err := ResolveTools(server, tools, channelBlacklist, userBlacklist, allowedTools)
 		if err != nil {
-			return nil, errors.Wrapf(err, "resolve tools for server %d", server.Id)
+			return nil, identity.Tag(
+				errors.Wrapf(err, "resolve tools for server %d", server.Id),
+				server.Ref())
 		}
 		for _, entry := range resolved {
 			if !entry.Policy.Allowed || entry.Tool == nil {
@@ -196,7 +199,7 @@ func SignatureFromJSON(raw string) (string, error) {
 		return "", nil
 	}
 	var parsed any
-	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+	if err := DecodeJSON([]byte(trimmed), &parsed); err != nil {
 		return "", errors.Wrap(err, "parse tool signature json")
 	}
 	if parsed == nil {
@@ -225,7 +228,7 @@ func writeCanonicalJSON(buf *bytes.Buffer, value any) error {
 	}
 	if raw, ok := value.(json.RawMessage); ok {
 		var parsed any
-		if err := json.Unmarshal(raw, &parsed); err != nil {
+		if err := DecodeJSON(raw, &parsed); err != nil {
 			return errors.Wrap(err, "parse raw json")
 		}
 		return writeCanonicalJSON(buf, parsed)
