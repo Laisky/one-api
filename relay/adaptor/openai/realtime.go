@@ -260,7 +260,7 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	}
 	defer func() { _ = upstreamConn.Close() }()
 
-	return nil, meteredRealtimePump(clientConn, upstreamConn, lg, meta.ActualModelName, meta.OriginModelName, isRealtimeTranscriptionIntent(c.Request.URL.Query()))
+	return nil, meteredRealtimePump(clientConn, upstreamConn, lg, meta.ActualModelName, meta.OriginModelName)
 }
 
 // RealtimeBidirectionalPump relays frames between the client and upstream
@@ -287,7 +287,7 @@ func RealtimeBidirectionalPump(clientConn, upstreamConn *websocket.Conn, guardCl
 	countedResponseIDs := map[string]struct{}{}
 	go func() { errc <- copyWSUpstreamToClient(upstreamConn, clientConn, usage, countedResponseIDs) }()
 	go func() {
-		errc <- copyRealtimeClientToUpstream(clientConn, upstreamConn, guardClientModel, boundModel, originModel, false)
+		errc <- copyRealtimeClientToUpstream(clientConn, upstreamConn, guardClientModel, boundModel, originModel)
 	}()
 
 	// Wait for one direction to finish, then close both connections
@@ -320,15 +320,14 @@ func RealtimeBidirectionalPump(clientConn, upstreamConn *websocket.Conn, guardCl
 // Parameters:
 //   - src: client WebSocket connection (reader).
 //   - dst: upstream realtime WebSocket connection (writer).
-//   - guardClientModel: when true, enforce the model binding on JSON frames.
-//   - transcription: the immutable transcription intent from the handshake.
+//   - guardClientModel: when true, hold session.update to the bound model.
 //   - boundModel: mapped upstream model bound at the handshake.
 //   - originModel: the user-facing alias the caller requested, if different.
 //
 // Returns:
 //   - error: nil on clean close; ErrModelSwitchDenied (wrapped) when a client
 //     attempts to mutate `session.model`; other errors propagate I/O failures.
-func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel bool, boundModel, originModel string, transcription bool) error {
+func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel bool, boundModel, originModel string) error {
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {
@@ -344,8 +343,8 @@ func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel boo
 			return errors.WithStack(err)
 		}
 
-		if guardClientModel && (mt == websocket.TextMessage || mt == websocket.BinaryMessage) {
-			forward, guardErr := enforceRealtimeSessionUpdate(msg, boundModel, originModel, transcription)
+		if guardClientModel && mt == websocket.TextMessage {
+			forward, guardErr := enforceRealtimeSessionUpdate(msg, boundModel, originModel)
 			if guardErr != nil {
 				errEvent := buildModelSwitchErrorEvent(guardErr.Error())
 				_ = src.WriteMessage(websocket.TextMessage, errEvent)

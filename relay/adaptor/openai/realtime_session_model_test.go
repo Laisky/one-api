@@ -61,7 +61,7 @@ func TestEnforceRealtimeSessionUpdateBoundModel(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			out, err := enforceRealtimeSessionUpdate([]byte(tc.frame), tc.bound, tc.origin, false)
+			out, err := enforceRealtimeSessionUpdate([]byte(tc.frame), tc.bound, tc.origin)
 			if tc.denied {
 				require.Error(t, err)
 				require.True(t, errors.Is(err, ErrModelSwitchDenied))

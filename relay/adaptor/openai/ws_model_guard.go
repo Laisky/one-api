@@ -228,3 +228,71 @@ func enforceRealtimeSessionsBodyModel(body []byte, meta *rmeta.Meta) ([]byte, *r
 		}
 	}
 }
+
+// enforceRealtimeSessionUpdate inspects one client-to-upstream WebSocket frame
+// for the `/v1/realtime` API and holds the session to the model bound at the
+// handshake. A `session.update` that carries the bound model is the documented
+// client pattern — the server's own `session.created` payload contains `model`,
+// and clients echo that object back — so it is forwarded; the user-facing alias
+// is rewritten to the mapped upstream name; only a different model is denied.
+//
+// Rejecting every `session.update` that merely mentions a model closed
+// conformant sessions with a policy violation (verified against the live API on
+// 2026-09-18, where OpenAI accepts the unchanged model and silently ignores a
+// changed one, keeping the handshake model either way).
+//
+// Parameters:
+//   - frame: raw text frame bytes received from the client.
+//   - boundModel: the mapped upstream model bound by the handshake; an empty
+//     value means the proxy could not resolve one and enforcement is skipped.
+//   - originModel: the user-facing alias the caller requested, if different.
+//
+// Returns:
+//   - the frame to forward, rewritten only when an alias was normalized.
+//   - error: ErrModelSwitchDenied (wrapped) when the frame selects another model.
+func enforceRealtimeSessionUpdate(frame []byte, boundModel, originModel string) ([]byte, error) {
+	if len(frame) == 0 || boundModel == "" {
+		return frame, nil
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(frame, &raw); err != nil {
+		return frame, nil
+	}
+
+	if raw["type"] != "session.update" {
+		return frame, nil
+	}
+
+	session, ok := raw["session"].(map[string]any)
+	if !ok {
+		return frame, nil
+	}
+
+	value, hasModel := session["model"]
+	if !hasModel || value == nil {
+		return frame, nil
+	}
+
+	requested, ok := value.(string)
+	if !ok {
+		return frame, errors.Wrapf(ErrModelSwitchDenied,
+			"realtime session.update model must be a string, bound model is %q", boundModel)
+	}
+	if requested == boundModel {
+		return frame, nil
+	}
+	if originModel == "" || requested != originModel {
+		return frame, errors.Wrapf(ErrModelSwitchDenied,
+			"realtime session.update cannot change session model from %q to %q", boundModel, requested)
+	}
+
+	// The caller used its own alias; forward the mapped upstream name so the
+	// session it observes cannot disagree with the model this request bills.
+	session["model"] = boundModel
+	rewritten, err := json.Marshal(raw)
+	if err != nil {
+		return frame, errors.Wrap(err, "re-encode realtime session.update")
+	}
+	return rewritten, nil
+}
