@@ -48,7 +48,7 @@ func TestSystematicResponseThinkingWire(t *testing.T) {
 		name, model, raw, query, expected string
 		channel                           int
 	}{
-		{"grok_extended", "grok-4.7", `{"model":"alias","input":"test","opaque":9007199254740993}`, "thinking=true&reasoning_effort=xhigh", `{"effort":"xhigh"}`, channeltype.XAI},
+		{"grok_extended", "grok-4.7", `{"model":"alias","input":"test","opaque":9007199254740993,"chat_template_kwargs":{"counter":9007199254740993}}`, "thinking=true&reasoning_effort=xhigh", `{"effort":"xhigh"}`, channeltype.XAI},
 		{"body_wins", "grok-4.7", `{"model":"alias","input":"test","reasoning":{"effort":"low"}}`, "thinking=true&reasoning_effort=xhigh", `{"effort":"low"}`, channeltype.XAI},
 		{"qwen_disable", "Qwen/Qwen3.5-35B-A3B", `{"model":"alias","input":"test"}`, "thinking=false", `{"enable_thinking":false}`, channeltype.OpenAICompatible},
 		{"qwen_enable", "Qwen/Qwen3.5-35B-A3B", `{"model":"alias","input":"test"}`, "thinking=true", `{"enable_thinking":true}`, channeltype.OpenAICompatible},
@@ -74,7 +74,8 @@ func TestSystematicResponseThinkingWire(t *testing.T) {
 			require.JSONEq(t, tc.expected, string(root[key]))
 			require.NotContains(t, root, "extra_body")
 			if tc.name == "grok_extended" {
-				require.Equal(t, "9007199254740993", string(root["opaque"]))
+				require.NotContains(t, root, "opaque", "unreviewed root fields must not reach upstream")
+				require.Equal(t, `{"counter":9007199254740993}`, string(root["chat_template_kwargs"]))
 			}
 			again, _, changed, err := normalizeResponseAPIRawBody(body, &req, tc.channel)
 			require.NoError(t, err)

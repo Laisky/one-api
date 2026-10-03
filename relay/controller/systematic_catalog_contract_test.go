@@ -86,15 +86,15 @@ func TestSystematicPricingAdaptorFallback(t *testing.T) {
 }
 
 // TestSystematicResponseReasoningWire verifies that normalized known fields reach
-// upstream while unknown nested provider fields survive. It takes a test handle
-// and returns no value; failures describe the wire contract that was violated.
+// upstream while admitted nested provider fields retain precision and unreviewed
+// roots are removed. It takes a test handle and reports wire contract violations.
 func TestSystematicResponseReasoningWire(t *testing.T) {
 	for _, channel := range []int{channeltype.OpenAI, channeltype.Azure, channeltype.XAI, channeltype.OpenAICompatible} {
 		for _, tc := range []struct {
 			name, raw string
 			effort    *string
 		}{
-			{"insert", `{"model":"grok-4.7","input":"hello","vendor_root":{"counter":9007199254740993}}`, stringPtr("xhigh")},
+			{"insert", `{"model":"grok-4.7","input":"hello","vendor_root":{"counter":9007199254740993},"chat_template_kwargs":{"counter":9007199254740993}}`, stringPtr("xhigh")},
 			{"replace", `{"model":"grok-4.7","input":"hello","reasoning":{"effort":"low","vendor_option":{"counter":9007199254740993}}}`, stringPtr("high")},
 			{"delete_known", `{"model":"grok-4.7","input":"hello","reasoning":{"effort":"none","vendor_option":{"counter":9007199254740993}}}`, nil},
 		} {
@@ -116,7 +116,8 @@ func TestSystematicResponseReasoningWire(t *testing.T) {
 					require.JSONEq(t, fmt.Sprintf("%q", *tc.effort), string(reasoning["effort"]))
 				}
 				if tc.name == "insert" {
-					require.Contains(t, string(root["vendor_root"]), "9007199254740993")
+					require.NotContains(t, root, "vendor_root")
+					require.Equal(t, `{"counter":9007199254740993}`, string(root["chat_template_kwargs"]))
 				} else {
 					require.Contains(t, string(reasoning["vendor_option"]), "9007199254740993")
 				}

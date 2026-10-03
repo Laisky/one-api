@@ -35,7 +35,9 @@ func nativeResponseRootAllowed(key string) bool {
 		"background", "conversation", "include", "instructions", "max_output_tokens",
 		"metadata", "parallel_tool_calls", "previous_response_id", "prompt",
 		"reasoning", "service_tier", "store", "stream", "temperature", "text",
-		"tool_choice", "tools", "top_p", "truncation", "user":
+		"tool_choice", "tools", "top_p", "top_logprobs", "truncation", "user":
+		// top_logprobs is a documented Responses field, handled by the final
+		// model-parameter policy even though it is not represented in the DTO.
 		return true
 	default:
 		return isAllowedExtraBodyKey(key)
