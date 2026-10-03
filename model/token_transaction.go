@@ -196,31 +196,23 @@ func AutoConfirmExpiredTokenTransactions(ctx context.Context, tokenID int, now i
 		return nil, nil
 	}
 
+	confirmed := make([]*TokenTransaction, 0, len(pending))
 	for _, txn := range pending {
-		final := txn.PreQuota
-		confirmedAt := now
-		updates := map[string]any{
-			"status":         TokenTransactionStatusAutoConfirmed,
-			"final_quota":    final,
-			"confirmed_at":   confirmedAt,
-			"auto_confirmed": true,
-			"expires_at":     int64(0),
+		updated, finalizeErr := FinalizePendingTokenTransaction(ctx, tokenID, txn.Id, TokenTransactionFinalization{
+			Status: TokenTransactionStatusAutoConfirmed,
+			At:     now,
+		})
+		if errors.Is(finalizeErr, ErrTokenTransactionNotPending) {
+			continue
 		}
-
-		if err = UpdateTokenTransaction(ctx, txn.Id, updates); err != nil {
+		if finalizeErr != nil {
 			tokenRef, ownerRef := txn.refs()
-			return nil, identity.Tag(
-				errors.Wrapf(err, "failed to auto-confirm token transaction: id=%d", txn.Id),
-				tokenRef, ownerRef)
+			return nil, identity.Tag(errors.Wrapf(finalizeErr, "auto-confirm token transaction: id=%d", txn.Id), tokenRef, ownerRef)
 		}
-
-		txn.Status = TokenTransactionStatusAutoConfirmed
-		txn.AutoConfirmed = true
-		txn.FinalQuota = &final
-		txn.ConfirmedAt = &confirmedAt
+		confirmed = append(confirmed, updated)
 	}
 
-	return pending, nil
+	return confirmed, nil
 }
 
 // GetTokenTransactionsByTokenID retrieves a paginated list of transactions for a specific token.

@@ -244,7 +244,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			return openai.ErrorWrapper(renderErr, "response_rewrite_failed", http.StatusInternalServerError)
 		}
 
-		// Preserve the reservation for the single final delta settlement below.
+		// refund pre-consumed quota immediately before final billing reconciliation
+		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile_mcp")
 
 		if usage != nil {
 			userId := strconv.Itoa(meta.UserId)
@@ -410,7 +411,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		}
 	}
 
-	// Preserve the reservation for the single final delta settlement below.
+	// Refund pre-consumed quota immediately before final billing reconciliation
+	_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile")
 
 	if usage != nil {
 		userId := strconv.Itoa(meta.UserId)
