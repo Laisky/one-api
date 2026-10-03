@@ -22,6 +22,14 @@ func RecordAsyncTaskEvidence(ctx context.Context, task *AsyncTask, update AsyncT
 		return errors.New("invalid async task evidence")
 	}
 	if _, err := maxAsyncObservedCost("", update.CostUSD); err != nil {
+		// A malformed amount cannot discard an independently valid receipt.
+		// Preserve identity without publishing output, refunding or settling;
+		// return the amount error so accounting remains visibly unresolved.
+		if update.UpstreamID != "" {
+			if identityErr := RecordAsyncTaskEvidence(ctx, task, AsyncTaskUpdate{UpstreamID: update.UpstreamID}); identityErr != nil {
+				return errors.Wrap(errors.Join(err, identityErr), "preserve async identity after invalid cost")
+			}
+		}
 		return err
 	}
 	return runWithSQLiteBusyRetryForDB(ctx, DB, func() error {

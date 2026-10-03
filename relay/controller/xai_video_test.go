@@ -46,7 +46,7 @@ func xaiVideoSetup(t *testing.T, balance int64, unlimited bool) {
 	config.BatchUpdateEnabled = false
 	t.Cleanup(func() { config.BatchUpdateEnabled = previousBatch })
 	config.SetLogConsumeEnabled(true)
-	require.NoError(t, model.DB.AutoMigrate(&model.AsyncTaskBinding{}, &model.AsyncTaskBindingRetry{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.AsyncTaskBinding{}))
 	require.NoError(t, model.LOG_DB.AutoMigrate(&model.Log{}))
 	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", fallbackTokenID).Updates(map[string]any{"remain_quota": balance, "used_quota": 0, "unlimited_quota": unlimited}).Error)
 	t.Cleanup(func() { drainCriticalTasks(t) })

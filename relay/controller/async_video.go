@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -56,23 +57,33 @@ func ReplayAsyncVideoTask(c *gin.Context) {
 		c.Next()
 		return
 	}
-	key, hash, err := asyncVideoRequestIdentity(c)
-	if err != nil {
-		writeAsyncVideoError(c, http.StatusBadRequest, "invalid_async_video_request", "Invalid asynchronous video request.", "")
+	rawKey := c.GetHeader("Idempotency-Key")
+	if len(rawKey) > 256 || strings.TrimSpace(rawKey) != rawKey {
+		writeAsyncVideoError(c, http.StatusBadRequest, "invalid_async_video_request", "Invalid Idempotency-Key.", "")
 		c.Abort()
 		return
 	}
-	task, err := dbmodel.FindAsyncTaskByDedup(gmw.Ctx(c), key, hash, c.GetInt(ctxkey.Id), c.GetString(ctxkey.UserUUID))
+	key := dbmodel.AsyncTaskDedupKey(c.GetInt(ctxkey.Id), c.GetString(ctxkey.UserUUID), rawKey)
+	task, err := dbmodel.LookupOwnedAsyncTaskReceipt(gmw.Ctx(c), key, c.GetInt(ctxkey.Id), c.GetString(ctxkey.UserUUID))
 	if err != nil {
-		status, code := http.StatusServiceUnavailable, "async_task_store_unavailable"
-		if errors.Is(err, dbmodel.ErrAsyncIdempotencyConflict) {
-			status, code = http.StatusConflict, "idempotency_conflict"
-		}
-		writeAsyncVideoError(c, status, code, "Cannot reattach this asynchronous task.", "")
+		writeAsyncVideoError(c, http.StatusServiceUnavailable, "async_task_store_unavailable", "Cannot reattach this asynchronous task.", "")
 		c.Abort()
 		return
 	}
 	if task != nil {
+		// Only an existing durable receipt owns the JSON/hash contract. A new
+		// traditional video request must retain its original payload semantics.
+		_, hash, err := asyncVideoRequestIdentity(c)
+		if err != nil {
+			writeAsyncVideoError(c, http.StatusBadRequest, "invalid_async_video_request", "Invalid asynchronous video request.", "")
+			c.Abort()
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(task.RequestHash), []byte(hash)) != 1 {
+			writeAsyncVideoError(c, http.StatusConflict, "idempotency_conflict", "Cannot reattach this asynchronous task.", "")
+			c.Abort()
+			return
+		}
 		if !asyncVideoTaskAllowed(c, task) {
 			writeAsyncVideoError(c, http.StatusForbidden, "model_not_allowed", "Token does not allow this task model.", "")
 			c.Abort()
@@ -230,7 +241,7 @@ func publicAsyncVideoTask(task *dbmodel.AsyncTask) (asyncVideoTaskResponse, erro
 		status = dbmodel.AsyncTaskQueued
 	}
 	response := asyncVideoTaskResponse{ID: task.ID, Object: "video.task", Model: task.OriginModel, Status: status, CreatedAt: task.CreatedAt / 1000, BillingStatus: task.BillingState}
-	if task.ResultJSON != "" {
+	if task.State == dbmodel.AsyncTaskCompleted && task.BillingState == dbmodel.AsyncBillingSettled && task.ResultJSON != "" {
 		response.Result = &asyncvideo.Result{}
 		if err := json.Unmarshal([]byte(task.ResultJSON), response.Result); err != nil {
 			return response, errors.Wrap(err, "decode stored video result")

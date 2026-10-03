@@ -113,17 +113,6 @@ func main() {
 	if err := model.InitDatabases(ctx); err != nil {
 		logger.Logger.Fatal("database bootstrap error", zap.Error(err))
 	}
-	for batch := 0; batch < 10; batch++ {
-		recovered, recoverErr := asyncvideo.ReplayPendingTaskBindings(ctx, 100)
-		if recoverErr != nil {
-			logger.Logger.Warn("async task binding retry replay incomplete", zap.Error(recoverErr))
-			break
-		}
-		if recovered == 0 {
-			break
-		}
-		logger.Logger.Info("replayed async task binding retries", zap.Int("count", recovered))
-	}
 	model.StartTraceRetentionCleaner(workerCtx, config.TraceRetentionDays)
 
 	// Trace sinks own the asynchronous batched writer, so they must start after

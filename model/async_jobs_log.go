@@ -14,10 +14,11 @@ import (
 // owns one log row, updated from held to settled/refunded, never duplicate charges.
 // Revision fencing prevents a delayed hold writer from overwriting a final bill.
 type AsyncTaskLogReceipt struct {
-	TaskID    string `gorm:"primaryKey;size:64"`
-	Revision  int64  `gorm:"not null;default:0"`
-	LogID     int    `gorm:"not null;default:0"`
-	CreatedAt int64  `gorm:"autoCreateTime:milli;index"`
+	TaskID      string `gorm:"primaryKey;size:64"`
+	Revision    int64  `gorm:"not null;default:0"`
+	LogID       int    `gorm:"not null;default:0"`
+	CreatedAt   int64  `gorm:"autoCreateTime:milli;index:idx_async_receipt_cleanup,priority:2"`
+	NextCheckAt int64  `gorm:"not null;default:0;index:idx_async_receipt_cleanup,priority:1"`
 }
 
 // FlushAsyncTaskLogs delivers up to 32 due financial receipts, including held
@@ -177,7 +178,7 @@ func CleanAsyncTaskLogReceipts(ctx context.Context, now time.Time) error {
 		return errors.New("async task log databases unavailable")
 	}
 	var receipts []AsyncTaskLogReceipt
-	if err := LOG_DB.WithContext(ctx).Where("created_at < ?", now.Add(-31*24*time.Hour).UnixMilli()).Order("created_at ASC").Limit(100).Find(&receipts).Error; err != nil {
+	if err := LOG_DB.WithContext(ctx).Where("created_at < ? AND next_check_at <= ?", now.Add(-31*24*time.Hour).UnixMilli(), now.UnixMilli()).Order("next_check_at ASC, created_at ASC").Limit(100).Find(&receipts).Error; err != nil {
 		return errors.Wrap(err, "find expired async log receipts")
 	}
 	for _, receipt := range receipts {
@@ -188,6 +189,13 @@ func CleanAsyncTaskLogReceipts(ctx context.Context, now time.Time) error {
 		if count == 0 {
 			if err := LOG_DB.WithContext(ctx).Where("task_id = ?", receipt.TaskID).Delete(&AsyncTaskLogReceipt{}).Error; err != nil {
 				return errors.Wrap(err, "prune async log receipt")
+			}
+		} else {
+			// Held/unknown tasks may survive indefinitely. Defer their next
+			// existence check so a full live prefix cannot starve later orphans.
+			if err := LOG_DB.WithContext(ctx).Model(&AsyncTaskLogReceipt{}).Where("task_id = ?", receipt.TaskID).
+				Update("next_check_at", now.Add(time.Hour).UnixMilli()).Error; err != nil {
+				return errors.Wrap(err, "defer live async receipt cleanup")
 			}
 		}
 	}

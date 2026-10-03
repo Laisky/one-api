@@ -155,7 +155,7 @@ func ProcessOne(ctx context.Context, resolve Resolver, now time.Time) (bool, err
 			if update.State == model.AsyncTaskQueued && task.State != model.AsyncTaskQueued {
 				update.State = task.State
 			}
-			if observation.Result != nil {
+			if update.State == model.AsyncTaskCompleted && observation.Result != nil {
 				data, marshalErr := json.Marshal(observation.Result)
 				if marshalErr != nil {
 					return true, errors.Wrap(marshalErr, "encode async video result")

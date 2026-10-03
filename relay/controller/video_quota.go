@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/one-api/model"
 
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 )
@@ -40,20 +41,18 @@ func videoQuota(perSecond, multiplier, duration, perImage float64, images int, g
 
 // videoQuotaFromTotalDecimal converts one exact provider USD quote directly to quota. Parameters are the original decimal quote and the channel group multiplier. It returns the rounded-up quota charge or a validation error.
 func videoQuotaFromTotalDecimal(totalUsd string, group float64) (int64, error) {
-	if math.IsNaN(group) || math.IsInf(group, 0) || group < 0 {
-		return 0, errors.New("video prices and group ratio must be finite and nonnegative")
+	// Validate bounded decimal syntax before allocating arbitrary-precision
+	// integers. Rat.SetString alone also accepts fractions and huge exponents.
+	cost := strings.TrimSpace(totalUsd)
+	positive, err := model.AsyncUpstreamCostQuota("1", cost)
+	if err != nil || positive <= 0 {
+		return 0, errors.New("invalid bounded decimal video quote")
 	}
-	total, ok := new(big.Rat).SetString(strings.TrimSpace(totalUsd))
-	if !ok || total.Sign() <= 0 {
-		return 0, errors.New("invalid exact video quote")
+	factor, err := model.AsyncCostMultiplier(billingratio.QuotaPerUsd, group)
+	if err != nil {
+		return 0, errors.Wrap(err, "invalid video group multiplier")
 	}
-	groupRate, ok := new(big.Rat).SetString(strconv.FormatFloat(group, 'f', -1, 64))
-	if !ok {
-		return 0, errors.New("invalid decimal video group ratio")
-	}
-	cost := new(big.Rat).Mul(total, groupRate)
-	cost.Mul(cost, big.NewRat(billingratio.QuotaPerUsd, 1))
-	return quotaFromUsd(cost)
+	return model.AsyncUpstreamCostQuota(factor, cost)
 }
 
 // quotaFromUsd rounds a rational USD cost up to the next quota unit. The parameter is a nonnegative rational USD amount already multiplied by the quota rate. It returns the int64 quota charge or an overflow error.

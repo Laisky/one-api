@@ -330,3 +330,25 @@ holds. Preserve the primary database, separate log database, task identities,
 financial receipts and routing configuration through rollback and backup restore.
 This is an operational precondition, not a claim that older binaries can resume
 new task records or that a reconciliation administration API is included.
+
+
+## Scope after the non-adaptor audit
+
+The durable bridge uses `async_tasks` exclusively. Legacy OpenAI/xAI task binding
+behavior remains unchanged from the merge base: this feature does not introduce
+a second legacy binding retry table, global pending map or detached per-request
+retry goroutines. Earlier development revisions included that optional mechanism;
+preserve and inspect any existing `async_task_binding_retries` rows before an
+experimental deployment switches revisions. This release does not drop that
+unused table or silently migrate its contents into the financial task ledger.
+
+An `Idempotency-Key` on a traditional synchronous video request does not impose
+the durable JSON/1-MiB schema unless it actually reattaches an existing durable
+task. New native async admissions continue to enforce that schema and full quota
+reservation. Running previews are not published as final results; output requires
+both a completed task and committed settlement. A malformed cost cannot discard
+an independently valid accepted task ID. Old unresolved log receipts are retained
+without blocking cleanup of later orphan receipts.
+
+See `docs/research/20261002_pr440_nonadaptor_audit.md` for every cross-cutting file,
+its necessity, retained boundaries, removed scope and regression mapping.

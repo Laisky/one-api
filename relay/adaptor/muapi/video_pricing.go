@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"math"
-	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/client"
+	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -109,8 +109,8 @@ func (a *Adaptor) EstimateVideoPricing(c *gin.Context, metaInfo *meta.Meta, requ
 		return nil, errors.Errorf("MuAPI pricing response uses unsupported currency %q", estimate.Currency)
 	}
 	quotedCost := strings.TrimSpace(estimate.Cost.String())
-	quotedRational, ok := new(big.Rat).SetString(quotedCost)
-	if !ok || quotedRational.Sign() <= 0 {
+	quotedQuota, quoteErr := dbmodel.AsyncUpstreamCostQuota("1", quotedCost)
+	if quoteErr != nil || quotedQuota <= 0 {
 		return nil, errors.New("MuAPI pricing response did not contain a positive USD cost")
 	}
 	costFloat, err := strconv.ParseFloat(quotedCost, 64)

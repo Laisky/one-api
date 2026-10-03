@@ -127,9 +127,10 @@ func AsyncTaskRequestHash(body []byte) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-// FindAsyncTaskByDedup returns an owner-scoped existing task, nil when absent,
-// or a conflict for a key reused with different inputs. UUID fences ID reuse.
-func FindAsyncTaskByDedup(ctx context.Context, key, hash string, userID int, userUUID string) (*AsyncTask, error) {
+// LookupOwnedAsyncTaskReceipt finds an existing receipt before inspecting the
+// request body. This preserves legacy form/large-body requests when no durable
+// receipt exists, while fencing lookup by both owner ID and immutable UUID.
+func LookupOwnedAsyncTaskReceipt(ctx context.Context, key string, userID int, userUUID string) (*AsyncTask, error) {
 	if DB == nil {
 		return nil, errors.New("async task database unavailable")
 	}
@@ -141,10 +142,20 @@ func FindAsyncTaskByDedup(ctx context.Context, key, hash string, userID int, use
 	if err != nil {
 		return nil, errors.Wrap(err, "find async task receipt")
 	}
+	return &task, nil
+}
+
+// FindAsyncTaskByDedup returns an owner-scoped existing task, nil when absent,
+// or a conflict for a key reused with different inputs. UUID fences ID reuse.
+func FindAsyncTaskByDedup(ctx context.Context, key, hash string, userID int, userUUID string) (*AsyncTask, error) {
+	task, err := LookupOwnedAsyncTaskReceipt(ctx, key, userID, userUUID)
+	if err != nil || task == nil {
+		return task, err
+	}
 	if subtle.ConstantTimeCompare([]byte(task.RequestHash), []byte(hash)) != 1 {
 		return nil, ErrAsyncIdempotencyConflict
 	}
-	return &task, nil
+	return task, nil
 }
 
 // ReserveAsyncTask atomically records the input and reserves the FULL quoted
