@@ -2,9 +2,13 @@ package model
 
 import (
 	"context"
+	"time"
+
 	"github.com/Laisky/errors/v2"
 	"gorm.io/gorm"
 )
+
+const tokenTransactionCacheInvalidationTimeout = 5 * time.Second
 
 // ErrTokenTransactionNotPending identifies a lost finalization race or a stale
 // transaction reference. It never authorizes a second quota movement.
@@ -26,7 +30,8 @@ type TokenTransactionFinalization struct {
 // ctx controls cancellation, tokenID scopes ownership, transactionID is the
 // internal ledger key, and final selects one terminal transition. It returns
 // the committed record or an error with every financial mutation rolled back.
-// Cache invalidation happens only after commit, never inside a retry attempt.
+// Cache invalidation happens only after commit, never inside a retry attempt,
+// and uses a bounded context independent of request cancellation.
 func FinalizePendingTokenTransaction(ctx context.Context, tokenID, transactionID int, final TokenTransactionFinalization) (*TokenTransaction, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -105,7 +110,9 @@ func FinalizePendingTokenTransaction(ctx context.Context, tokenID, transactionID
 		return nil, errors.Wrapf(err, "finalize pending token transaction: id=%d", transactionID)
 	}
 	if tokenKey != "" {
-		clearTokenCache(ctx, tokenKey)
+		cacheCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), tokenTransactionCacheInvalidationTimeout)
+		defer cancel()
+		clearTokenCache(cacheCtx, tokenKey)
 	}
 	return committed, nil
 }
