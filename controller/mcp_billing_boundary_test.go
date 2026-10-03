@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
@@ -61,7 +62,12 @@ func TestMCPBillingBoundaryAdmission(t *testing.T) {
 				case "missing_token":
 					c.Set(ctxkey.TokenId, 0)
 				case "wrong_owner":
-					require.NoError(t, model.DB.Create(&model.User{Id: 943, Username: "other-mcp-owner", Quota: 1000, Status: model.UserStatusEnabled}).Error)
+					// Both fields have unique indexes. Empty duplicates fail fixture
+					// creation before the ownership boundary can actually be tested.
+					require.NoError(t, model.DB.Create(&model.User{
+						Id: 943, Username: "other-mcp-owner", Quota: 1000, Status: model.UserStatusEnabled,
+						AccessToken: "other-mcp-management-token", AffCode: "other-mcp-affiliate",
+					}).Error)
 					require.NoError(t, model.DB.Model(token).Update("user_id", 943).Error)
 				}
 				result, err := invokeMCPBillingBoundary(context.Background(), c, modern)
@@ -75,14 +81,19 @@ func TestMCPBillingBoundaryAdmission(t *testing.T) {
 				require.Equal(t, userQuota, user.Quota)
 				require.Equal(t, tokenQuota, stored.RemainQuota)
 				require.Zero(t, stored.UsedQuota)
+				if state == "wrong_owner" {
+					owner, err := model.GetUserById(943, true)
+					require.NoError(t, err)
+					require.Equal(t, int64(1000), owner.Quota, "mismatched owner must not be charged either")
+				}
 			})
 		}
 	}
 }
 
 // TestMCPBillingBoundaryLifecycle observes persistent balances at the real HTTP
-// side-effect boundary. A client disconnect after admission must not cancel
-// paid execution or turn successful upstream work into an automatic refund.
+// side-effect boundary. Client cancellation cannot refund successful paid work;
+// HTTP 500 after dispatch is uncertain execution, not proof that work was free.
 func TestMCPBillingBoundaryLifecycle(t *testing.T) {
 	for _, modern := range []bool{false, true} {
 		protocol := "legacy"
@@ -125,9 +136,12 @@ func TestMCPBillingBoundaryLifecycle(t *testing.T) {
 				_, callErr := invokeMCPBillingBoundary(ctx, c, modern)
 				if outcome == "transport_error" {
 					require.Error(t, callErr)
+					var uncertain *mcp.ToolExecutionUncertainError
+					require.True(t, errors.As(callErr, &uncertain), "a dispatched HTTP 500 must preserve no-replay classification")
 				} else {
 					require.NoError(t, callErr)
 				}
+				require.Equal(t, 1, fx.upstreamHits, "one logical call must not replay an uncertain side effect")
 				select {
 				case atDispatch := <-observed:
 					require.NoError(t, atDispatch.err)
@@ -140,13 +154,24 @@ func TestMCPBillingBoundaryLifecycle(t *testing.T) {
 				require.NoError(t, err)
 				stored, err := model.GetTokenById(token.Id)
 				require.NoError(t, err)
-				remaining, used := int64(1000), int64(0)
-				if outcome == "success" || outcome == "canceled" {
-					remaining, used = 925, 75
+				remaining, used := int64(925), int64(75)
+				if outcome == "tool_error" {
+					remaining, used = 1000, 0
 				}
-				require.Equal(t, remaining, user.Quota, "must not double-debit or lose a refund")
+				require.Equal(t, remaining, user.Quota, "must neither double-debit nor refund uncertain execution")
 				require.Equal(t, remaining, stored.RemainQuota)
 				require.Equal(t, used, stored.UsedQuota)
+				var logs []model.Log
+				require.NoError(t, model.LOG_DB.Where("request_id = ?", "lifecycle-"+outcome).Find(&logs).Error)
+				if outcome == "tool_error" {
+					require.Empty(t, logs)
+				} else {
+					require.Len(t, logs, 1)
+					require.Equal(t, 75, logs[0].Quota)
+					if outcome == "transport_error" {
+						require.Contains(t, logs[0].Content, "reconciliation required")
+					}
+				}
 			})
 		}
 	}
