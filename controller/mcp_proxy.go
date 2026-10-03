@@ -180,6 +180,9 @@ func listMCPToolsForUser(ctx context.Context, c *gin.Context) ([]mcp.ToolDescrip
 //   - error: a wrapped authentication, catalog, routing, execution, or billing error.
 func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParams) (*mcp.CallToolResult, error) {
 	logger := gmw.GetLogger(c)
+	if err := validateMCPToolName(params.Name); err != nil {
+		return nil, errors.Wrap(err, "validate mcp tool name")
+	}
 	user, err := getUserFromContext(c)
 	if err != nil {
 		return nil, errors.Wrap(err, "get user from context")
@@ -276,6 +279,9 @@ func loadMCPCallServers(serverLabel string) ([]*model.MCPServer, map[int]*model.
 		server, err := model.GetMCPServerByName(serverLabel)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "get mcp server by name %q", serverLabel)
+		}
+		if server.Status != model.MCPServerStatusEnabled {
+			return nil, nil, errors.Errorf("mcp server %q is disabled", serverLabel)
 		}
 		serverByID[server.Id] = server
 		return []*model.MCPServer{server}, serverByID, nil
@@ -468,13 +474,22 @@ func splitToolName(value string) (string, string) {
 
 const maxMCPToolNameBytes = 1024
 
+// validateMCPToolName bounds the raw caller-controlled name before any database
+// work or whitespace normalization. It returns a wrapped error for oversized input.
+func validateMCPToolName(value string) error {
+	if len(value) > maxMCPToolNameBytes {
+		return errors.Errorf("tool name exceeds maximum length of %d bytes", maxMCPToolNameBytes)
+	}
+	return nil
+}
+
 // resolveQualifiedToolName resolves a bounded raw wire name using configured names
 // only. Disabled names participate to prevent shorter-prefix fallback. ctx bounds
 // the lookup. It returns a server label, exact tool name, and any validation or DB
 // error; credentials and policies are loaded only for selected candidates later.
 func resolveQualifiedToolName(ctx context.Context, value string) (string, string, error) {
-	if len(value) > maxMCPToolNameBytes {
-		return "", "", errors.Errorf("tool name exceeds maximum length of %d bytes", maxMCPToolNameBytes)
+	if err := validateMCPToolName(value); err != nil {
+		return "", "", err
 	}
 	value = strings.TrimSpace(value)
 	if !strings.Contains(value, ".") {
