@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	store "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/meta"
@@ -23,10 +24,18 @@ import (
 // models cannot perform upstream work. A configured tariff is a positive control,
 // and model mapping cannot borrow the customer's alias price for another model.
 func TestGroqPricingPreflightDispatch(t *testing.T) {
+	// These serial transport tests intentionally have no tracing database.
+	// Disable only the optional trace sink, not pricing, HTTP, or forwarding.
+	// Restore the package global before parallel tests resume.
+	previousSinks := config.TraceSinks
+	config.TraceSinks = []string{config.TraceSinkNone}
+	t.Cleanup(func() { config.TraceSinks = previousSinks })
+
+	const receipt = `{"usage":{"prompt_tokens":73,"completion_tokens":19}}`
 	for _, name := range []string{"minimaxai/minimax-m2.7", "groq/compound", "groq/compound-mini"} {
 		for _, tc := range []struct {
 			name, config string
-			configured bool
+			configured   bool
 		}{
 			{"missing", "", false},
 			{"zero", fmt.Sprintf(`{%q:{"ratio":0,"completion_ratio":2}}`, name), false},
@@ -40,7 +49,7 @@ func TestGroqPricingPreflightDispatch(t *testing.T) {
 					calls.Add(1)
 					_, _ = io.Copy(io.Discard, r.Body)
 					w.Header().Set("Content-Type", "application/json")
-					_, _ = io.WriteString(w, `{"usage":{"prompt_tokens":73,"completion_tokens":19}}`)
+					_, _ = io.WriteString(w, receipt)
 				}))
 				defer server.Close()
 				c, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -48,8 +57,8 @@ func TestGroqPricingPreflightDispatch(t *testing.T) {
 				c.Request.Header.Set("Content-Type", "application/json")
 				c.Set(ctxkey.ContentType, "application/json")
 				if tc.config != "" {
-					config := tc.config
-					c.Set(ctxkey.ChannelModel, &store.Channel{ModelConfigs: &config})
+					modelConfig := tc.config
+					c.Set(ctxkey.ChannelModel, &store.Channel{ModelConfigs: &modelConfig})
 				}
 				m := &meta.Meta{Mode: relaymode.ChatCompletions, OriginModelName: "customer-alias", ActualModelName: name, BaseURL: server.URL, RequestURLPath: "/v1/chat/completions", StartTime: time.Unix(1791000000, 0)}
 				m.Config.EndpointURLs = map[string]string{"chat_completions": server.URL}
@@ -61,10 +70,21 @@ func TestGroqPricingPreflightDispatch(t *testing.T) {
 				}
 				if tc.configured && name == "minimaxai/minimax-m2.7" {
 					require.NoError(t, err)
+					require.NotNil(t, resp)
+					require.Equal(t, http.StatusOK, resp.StatusCode)
+					body, readErr := io.ReadAll(resp.Body)
+					require.NoError(t, readErr)
+					require.JSONEq(t, receipt, string(body))
 					require.EqualValues(t, 1, calls.Load())
+					require.True(t, c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded))
 					return
 				}
-				require.Error(t, err)
+				require.ErrorContains(t, err, "validate request pricing")
+				if name == "minimaxai/minimax-m2.7" {
+					require.ErrorContains(t, err, "requires explicit positive input and output pricing")
+				} else {
+					require.ErrorContains(t, err, "is retired")
+				}
 				require.Nil(t, resp)
 				require.Zero(t, calls.Load(), "rejection must precede all upstream work")
 				require.False(t, c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded))
