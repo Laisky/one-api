@@ -1,0 +1,51 @@
+name: Stage PR449 expiry fix
+on:
+  push:
+    branches: [codex/pr449-expiry-followup-stage]
+permissions:
+  contents: write
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Apply the locally reproduced and tested eight-line change
+        env:
+          GIT_AUTHOR_NAME: Laisky
+          GIT_AUTHOR_EMAIL: github@laisky.com
+          GIT_COMMITTER_NAME: Laisky
+          GIT_COMMITTER_EMAIL: github@laisky.com
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          p = Path('controller/token.go')
+          def blob(path):
+              return subprocess.check_output(['git', 'hash-object', str(path)], text=True).strip()
+          if blob(p) != 'cdd6a8b43d4eaf7f033b9bb2852409d5b4ef81ca':
+              raise RuntimeError('Unexpected production source; reconcile concurrent changes')
+          s = p.read_text()
+          for name in ('existingTxn', 'txn'):
+              old = f'\t{name}, err = model.FinalizePendingTokenTransaction(ctx, token.Id, {name}.Id, model.TokenTransactionFinalization{{'
+              if s.count(old) != 1:
+                  raise RuntimeError('Unexpected finalizer call count')
+              s = s.replace(old, f'\treservationExpiresAt := {name}.ExpiresAt\n' + old)
+              ret = f'\treturn {name}, updatedToken, nil\n}}'
+              if s.count(ret) != 1:
+                  raise RuntimeError('Unexpected return count')
+              s = s.replace(ret, '\t// Preserve the historical response deadline without reopening the persisted\n\t// terminal transaction, whose expires_at stays zero after atomic finalization.\n' + f'\t{name}.ExpiresAt = reservationExpiresAt\n' + ret)
+          p.write_text(s)
+          if blob(p) != 'eb775b83076e699b58e9c7fa6188ac85309dbf55':
+              raise RuntimeError('Production bytes differ from locally tested source')
+          PY
+          git diff --check
+          test "$(git diff --name-only)" = controller/token.go
+          git add controller/token.go
+          git rm .github/workflows/stage-pr449-expiry.yml
+          git commit -m 'fix(billing): preserve response expiry after atomic finalization'
+          echo "VERIFIED_TREE=$(git rev-parse HEAD^{tree})"
+          echo "STAGED_COMMIT=$(git rev-parse HEAD)"
+          git push origin HEAD:refs/heads/codex/pr449-expiry-followup-stage
