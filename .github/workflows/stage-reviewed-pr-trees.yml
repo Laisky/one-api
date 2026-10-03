@@ -58,8 +58,7 @@ jobs:
               with urllib.request.urlopen(request, timeout=30) as response:
                   item = json.load(response)
               raw = base64.b64decode(item['content'])
-              actual = hashlib.sha1(f'blob {len(raw)}\0'.encode() + raw).hexdigest()
-              if actual != sha:
+              if hashlib.sha1(f'blob {len(raw)}\0'.encode() + raw).hexdigest() != sha:
                   raise RuntimeError('Transfer blob checksum mismatch')
               pieces.append(raw)
           compressed = b''.join(pieces)
@@ -73,19 +72,20 @@ jobs:
           for item in payload['prs']:
               current = git('ls-remote', 'origin', 'refs/heads/' + item['branch']).split()[0]
               if current != item['expected_head']:
-                  raise RuntimeError(f"PR {item['number']} moved; preserve and reconcile concurrent work")
+                  raise RuntimeError(f"PR {item['number']} moved; reconcile concurrent work")
 
           parent = git('rev-parse', 'HEAD')
           manifest = {'base': base, 'base_tree': base_tree, 'prs': []}
           for item in payload['prs']:
-              git('checkout', '--detach', base)
+              # Discard only the previous staged patch in this disposable runner.
+              git('reset', '--hard', base)
               git('apply', '--index', '--whitespace=error', '-', data=item['patch'].encode())
               git('diff', '--cached', '--check')
               paths = git('diff', '--cached', '--name-only').splitlines()
               if paths != sorted(item['paths']):
-                  raise RuntimeError('Patch modified paths outside the reviewed scope')
+                  raise RuntimeError(f"PR {item['number']} changed unexpected paths: {paths}")
               tree = git('write-tree')
-              # Preserve the original tracked web assets, omitted by the local archive import.
+              # Keep the original tracked web assets omitted by the local archive import.
               # No patch touches web; every other subtree matches the tested revision.
               if tree != canonical[item['number']]:
                   raise RuntimeError(f"Unexpected final tree for PR {item['number']}: {tree}")
@@ -94,8 +94,7 @@ jobs:
               manifest['prs'].append({k: item[k] for k in ('number', 'branch', 'expected_head')})
               manifest['prs'][-1].update(tree=tree, staged_commit=parent)
 
-          # The staging branch is the only ref this workflow can update. Remove its
-          # temporary workflow at the tip while retaining all validated git objects.
+          # Push only this staging ref. Its final tree removes the temporary workflow.
           cleanup = git('commit-tree', base_tree, '-p', parent,
                         '-m', 'chore(review): remove temporary tree-transfer workflow')
           git('push', 'origin', cleanup + ':refs/heads/' + stage)
