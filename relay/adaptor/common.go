@@ -107,6 +107,11 @@ func isValidCustomHeaderName(name string) bool {
 // Parameters: a is the provider, c is the request context, meta carries routing metadata,
 // and requestBody contains the payload. Returns: the response or a wrapped error.
 func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if validator, ok := a.(RequestPricingValidator); ok {
+		if err := validator.ValidateRequestPricing(c, meta); err != nil {
+			return nil, errors.Wrap(err, "validate request pricing")
+		}
+	}
 	if err := ValidateRESTModelTransport(meta); err != nil {
 		return nil, errors.Wrap(err, "validate model transport")
 	}
