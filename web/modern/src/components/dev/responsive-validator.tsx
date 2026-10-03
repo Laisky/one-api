@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { CheckCircle, XCircle, AlertTriangle, Eye, Target, Smartphone } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ValidationRule {
   id: string;
@@ -24,6 +25,7 @@ interface ValidationResult {
 }
 
 export function ResponsiveValidator() {
+  const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [results, setResults] = useState<ValidationResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -198,13 +200,15 @@ export function ResponsiveValidator() {
         newResults.push({
           rule,
           passed,
-          message: passed ? 'Passed' : 'Failed validation',
+          message: passed ? t('dev.validation.passed', 'Passed') : t('dev.validation.failed_validation', 'Failed validation'),
         });
       } catch (error) {
         newResults.push({
           rule,
           passed: false,
-          message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          message: t('dev.validation.error', 'Error: {{message}}', {
+            message: error instanceof Error ? error.message : t('dev.validation.unknown_error', 'Unknown error'),
+          }),
         });
       }
 
@@ -277,7 +281,7 @@ export function ResponsiveValidator() {
     return (
       <Button variant="outline" size="sm" onClick={() => setIsVisible(true)} className="fixed bottom-4 left-4 z-50 gap-2">
         <Target className="h-4 w-4" />
-        Validate
+        {t('dev.validation.validate', 'Validate')}
       </Button>
     );
   }
@@ -291,11 +295,11 @@ export function ResponsiveValidator() {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
-              Responsive Validation
+              {t('dev.validation.title', 'Responsive Validation')}
             </CardTitle>
             <div className="flex items-center gap-2">
               <Button onClick={runValidation} disabled={isRunning} size="sm">
-                {isRunning ? 'Running...' : 'Run Tests'}
+                {isRunning ? t('dev.validation.running', 'Running...') : t('dev.validation.run_tests', 'Run Tests')}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setIsVisible(false)}>
                 ×
@@ -306,16 +310,18 @@ export function ResponsiveValidator() {
           {isRunning && (
             <div className="space-y-2">
               <Progress value={progress} className="w-full" />
-              <p className="text-sm text-muted-foreground">Running validation tests... {Math.round(progress)}%</p>
+              <p className="text-sm text-muted-foreground">
+                {t('dev.validation.running_tests', 'Running validation tests... {{progress}}%', { progress: Math.round(progress) })}
+              </p>
             </div>
           )}
 
           {results.length > 0 && !isRunning && (
             <div className="flex items-center gap-4 text-sm">
-              <span>Total: {stats.total}</span>
-              <span className="text-green-600">Passed: {stats.passed}</span>
-              <span className="text-red-600">Errors: {stats.errors}</span>
-              <span className="text-yellow-600">Warnings: {stats.warnings}</span>
+              <span>{t('dev.validation.total', 'Total: {{count}}', { count: stats.total })}</span>
+              <span className="text-green-600">{t('dev.validation.passed_count', 'Passed: {{count}}', { count: stats.passed })}</span>
+              <span className="text-red-600">{t('dev.validation.errors_count', 'Errors: {{count}}', { count: stats.errors })}</span>
+              <span className="text-yellow-600">{t('dev.validation.warnings_count', 'Warnings: {{count}}', { count: stats.warnings })}</span>
             </div>
           )}
         </CardHeader>

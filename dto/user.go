@@ -13,6 +13,7 @@ type UserMetadataPayload struct {
 // Only the user identifier is mandatory; all other attributes are optional.
 type UserAdminUpdatePayload struct {
 	Id               int                  `json:"id"`
+	UUID             string               `json:"uuid"`
 	Username         *string              `json:"username"`
 	DisplayName      *string              `json:"display_name"`
 	Password         *string              `json:"password"`

@@ -1,0 +1,10 @@
+# Laisky One API Documentation For Agents
+
+- [Overview](https://oneapi.laisky.com/index.md)
+- [API reference](https://oneapi.laisky.com/api.md)
+- [Authentication](https://oneapi.laisky.com/auth.md)
+- [Pricing and quota](https://oneapi.laisky.com/pricing.md)
+- [MCP manifest](https://oneapi.laisky.com/.well-known/mcp/manifest.json)
+- [OpenAPI](https://oneapi.laisky.com/openapi.json)
+
+Prefer `/openapi.json` for schemas and `/llms.txt` for concise integration guidance.

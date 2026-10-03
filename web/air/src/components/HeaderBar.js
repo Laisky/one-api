@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/User';
@@ -183,7 +184,7 @@ const HeaderBar = () => {
                       position="bottomRight"
                       render={
                         <Dropdown.Menu>
-                          <Dropdown.Item onClick={logout}>退出</Dropdown.Item>
+                          <Dropdown.Item onClick={(...uiArgs) => logout(...uiArgs).catch(reportUIError)}>退出</Dropdown.Item>
                         </Dropdown.Menu>
                       }
                     >

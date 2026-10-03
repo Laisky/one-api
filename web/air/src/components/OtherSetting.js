@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Divider, Form, Grid, Header, Message, Modal } from 'semantic-ui-react';
 import { API, showError, showSuccess } from '../helpers';
@@ -40,22 +41,29 @@ const OtherSetting = () => {
   }, []);
 
   useEffect(() => {
-    getOptions().then();
+    getOptions().then().catch(reportUIError);
   }, [getOptions]);
 
   const updateOption = async (key, value) => {
     setLoading(true);
-    const res = await API.put('/api/option/', {
-      key,
-      value
-    });
-    const { success, message } = res.data;
-    if (success) {
-      setInputs((inputs) => ({ ...inputs, [key]: value }));
-    } else {
-      showError(message);
+    try {
+      const res = await API.put('/api/option/', {
+        key,
+        value
+      });
+      // The shared axios interceptor resolves to undefined on error; bail out before
+      // reading res.data so a failed request can't throw and leave the <Form loading>
+      // overlay stuck, which would lock every control in the form until a page reload.
+      if (!res) return;
+      const { success, message } = res.data;
+      if (success) {
+        setInputs((inputs) => ({ ...inputs, [key]: value }));
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleInputChange = async (e, { name, value }) => {
@@ -125,18 +133,18 @@ const OtherSetting = () => {
       <Grid.Column>
         <Form loading={loading}>
           <Header as='h3'>通用设置</Header>
-          <Form.Button onClick={checkUpdate}>检查更新</Form.Button>
+          <Form.Button onClick={(...uiArgs) => checkUpdate(...uiArgs).catch(reportUIError)}>检查更新</Form.Button>
           <Form.Group widths='equal'>
             <Form.TextArea
               label='公告'
               placeholder='在此输入新的公告内容，支持 Markdown & HTML 代码'
               value={inputs.Notice}
               name='Notice'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               style={{ minHeight: 150, fontFamily: 'JetBrains Mono, Consolas' }}
             />
           </Form.Group>
-          <Form.Button onClick={submitNotice}>保存公告</Form.Button>
+          <Form.Button onClick={(...uiArgs) => submitNotice(...uiArgs).catch(reportUIError)}>保存公告</Form.Button>
           <Divider />
           <Header as='h3'>个性化设置</Header>
           <Form.Group widths='equal'>
@@ -145,10 +153,10 @@ const OtherSetting = () => {
               placeholder='在此输入系统名称'
               value={inputs.SystemName}
               name='SystemName'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
           </Form.Group>
-          <Form.Button onClick={submitSystemName}>设置系统名称</Form.Button>
+          <Form.Button onClick={(...uiArgs) => submitSystemName(...uiArgs).catch(reportUIError)}>设置系统名称</Form.Button>
           <Form.Group widths='equal'>
             <Form.Input
               label={<label>主题名称（<Link
@@ -156,10 +164,10 @@ const OtherSetting = () => {
               placeholder='请输入主题名称'
               value={inputs.Theme}
               name='Theme'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
           </Form.Group>
-          <Form.Button onClick={submitTheme}>设置主题（重启生效）</Form.Button>
+          <Form.Button onClick={(...uiArgs) => submitTheme(...uiArgs).catch(reportUIError)}>设置主题（重启生效）</Form.Button>
           <Form.Group widths='equal'>
             <Form.Input
               label='Logo 图片地址'
@@ -167,32 +175,32 @@ const OtherSetting = () => {
               value={inputs.Logo}
               name='Logo'
               type='url'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
           </Form.Group>
-          <Form.Button onClick={submitLogo}>设置 Logo</Form.Button>
+          <Form.Button onClick={(...uiArgs) => submitLogo(...uiArgs).catch(reportUIError)}>设置 Logo</Form.Button>
           <Form.Group widths='equal'>
             <Form.TextArea
               label='首页内容'
               placeholder='在此输入首页内容，支持 Markdown & HTML 代码，设置后首页的状态信息将不再显示。如果输入的是一个链接，则会使用该链接作为 iframe 的 src 属性，这允许你设置任意网页作为首页。'
               value={inputs.HomePageContent}
               name='HomePageContent'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               style={{ minHeight: 150, fontFamily: 'JetBrains Mono, Consolas' }}
             />
           </Form.Group>
-          <Form.Button onClick={() => submitOption('HomePageContent')}>保存首页内容</Form.Button>
+          <Form.Button onClick={() => submitOption('HomePageContent').catch(reportUIError)}>保存首页内容</Form.Button>
           <Form.Group widths='equal'>
             <Form.TextArea
               label='关于'
               placeholder='在此输入新的关于内容，支持 Markdown & HTML 代码。如果输入的是一个链接，则会使用该链接作为 iframe 的 src 属性，这允许你设置任意网页作为关于页面。'
               value={inputs.About}
               name='About'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               style={{ minHeight: 150, fontFamily: 'JetBrains Mono, Consolas' }}
             />
           </Form.Group>
-          <Form.Button onClick={submitAbout}>保存关于</Form.Button>
+          <Form.Button onClick={(...uiArgs) => submitAbout(...uiArgs).catch(reportUIError)}>保存关于</Form.Button>
           <Message>移除 One API
             的版权标识必须首先获得授权，项目维护需要花费大量精力，如果本项目对你有意义，请主动支持本项目。</Message>
           <Form.Group widths='equal'>
@@ -201,10 +209,10 @@ const OtherSetting = () => {
               placeholder='在此输入新的页脚，留空则使用默认页脚，支持 HTML 代码'
               value={inputs.Footer}
               name='Footer'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
           </Form.Group>
-          <Form.Button onClick={submitFooter}>设置页脚</Form.Button>
+          <Form.Button onClick={(...uiArgs) => submitFooter(...uiArgs).catch(reportUIError)}>设置页脚</Form.Button>
         </Form>
       </Grid.Column>
       <Modal

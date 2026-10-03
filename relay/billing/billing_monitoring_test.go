@@ -100,6 +100,20 @@ func (m *MockMetricsRecorder) RecordModelUsage(modelName, channelType string, la
 }
 func (m *MockMetricsRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
 }
+func (m *MockMetricsRecorder) RecordUUIDBackfillRows(role, phase, target, result string, count int) {
+}
+func (m *MockMetricsRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {}
+func (m *MockMetricsRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
+}
+func (m *MockMetricsRecorder) RecordUUIDBackfillFinalizer(role, result string)                  {}
+func (m *MockMetricsRecorder) UpdateCompactUUIDState(role, state string, active bool)           {}
+func (m *MockMetricsRecorder) UpdateCompactUUIDBacklog(role, target, kind string, rows float64) {}
+func (m *MockMetricsRecorder) RecordCompactUUIDAction(role, action, result string)              {}
+func (m *MockMetricsRecorder) RecordCompactUUIDLookupFallback(role, reason string)              {}
+func (m *MockMetricsRecorder) UpdateCompactUUIDLastProgress(role string, unixTime float64)      {}
+func (m *MockMetricsRecorder) RecordCompactUUIDDuration(role, operation string, duration time.Duration) {
+}
+func (m *MockMetricsRecorder) RecordResponseStateEvent(category, outcome string) {}
 func (m *MockMetricsRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {
 }
 func (m *MockMetricsRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {
@@ -108,10 +122,10 @@ func (m *MockMetricsRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, t
 func TestBillingMonitoring(t *testing.T) {
 	// Setup mock metrics recorder
 	mockRecorder := &MockMetricsRecorder{}
-	originalRecorder := metrics.GlobalRecorder
-	metrics.GlobalRecorder = mockRecorder
+	originalRecorder := metrics.Recorder()
+	metrics.SetRecorder(mockRecorder)
 	defer func() {
-		metrics.GlobalRecorder = originalRecorder
+		metrics.SetRecorder(originalRecorder)
 	}()
 
 	// Test direct metrics recording (without database operations)
@@ -122,7 +136,7 @@ func TestBillingMonitoring(t *testing.T) {
 	quotaAmount := 1000.0
 
 	// Record a successful billing operation
-	metrics.GlobalRecorder.RecordBillingOperation(startTime, "post_consume_detailed", true, userId, channelId, modelName, quotaAmount)
+	metrics.Recorder().RecordBillingOperation(startTime, "post_consume_detailed", true, userId, channelId, modelName, quotaAmount)
 
 	// Verify billing operation was recorded
 	require.Len(t, mockRecorder.BillingOperations, 1, "Expected 1 billing operation record")
@@ -139,10 +153,10 @@ func TestBillingMonitoring(t *testing.T) {
 func TestBillingErrorMonitoring(t *testing.T) {
 	// Setup mock metrics recorder
 	mockRecorder := &MockMetricsRecorder{}
-	originalRecorder := metrics.GlobalRecorder
-	metrics.GlobalRecorder = mockRecorder
+	originalRecorder := metrics.Recorder()
+	metrics.SetRecorder(mockRecorder)
 	defer func() {
-		metrics.GlobalRecorder = originalRecorder
+		metrics.SetRecorder(originalRecorder)
 	}()
 
 	// Test direct error recording
@@ -150,7 +164,7 @@ func TestBillingErrorMonitoring(t *testing.T) {
 	channelId := 456
 	modelName := "gpt-4.1"
 
-	metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_detailed", userId, channelId, modelName)
+	metrics.Recorder().RecordBillingError("validation_error", "post_consume_detailed", userId, channelId, modelName)
 
 	// Verify billing error was recorded
 	require.Len(t, mockRecorder.BillingErrors, 1, "Expected 1 billing error record")
@@ -166,10 +180,10 @@ func TestBillingErrorMonitoring(t *testing.T) {
 func TestBillingTimeoutMonitoring(t *testing.T) {
 	// Setup mock metrics recorder
 	mockRecorder := &MockMetricsRecorder{}
-	originalRecorder := metrics.GlobalRecorder
-	metrics.GlobalRecorder = mockRecorder
+	originalRecorder := metrics.Recorder()
+	metrics.SetRecorder(mockRecorder)
 	defer func() {
-		metrics.GlobalRecorder = originalRecorder
+		metrics.SetRecorder(originalRecorder)
 	}()
 
 	// Test billing timeout recording
@@ -179,7 +193,7 @@ func TestBillingTimeoutMonitoring(t *testing.T) {
 	estimatedQuota := 1500.0
 	elapsedTime := 35 * time.Second
 
-	metrics.GlobalRecorder.RecordBillingTimeout(userId, channelId, modelName, estimatedQuota, elapsedTime)
+	metrics.Recorder().RecordBillingTimeout(userId, channelId, modelName, estimatedQuota, elapsedTime)
 
 	// Verify billing timeout was recorded
 	require.Len(t, mockRecorder.BillingTimeouts, 1, "Expected 1 billing timeout record")

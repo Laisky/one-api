@@ -1,7 +1,8 @@
 import type { Message } from '@/lib/utils';
 
 export interface Token {
-  id: number;
+  uuid?: string;
+  id?: number;
   name: string;
   key: string;
   status: number;

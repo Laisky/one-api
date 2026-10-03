@@ -54,7 +54,7 @@ interface ChatInterfaceProps {
   // Message actions
   onCopyMessage?: (messageIndex: number, content: string) => void;
   onRegenerateMessage?: (messageIndex: number) => void;
-  onEditMessage?: (messageIndex: number, newContent: string) => void;
+  onEditMessage?: (messageIndex: number, newContent: string | any[]) => void;
   onDeleteMessage?: (messageIndex: number) => void;
 
   // Event log

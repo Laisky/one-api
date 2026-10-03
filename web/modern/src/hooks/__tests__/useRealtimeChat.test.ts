@@ -78,7 +78,7 @@ function makeProps(overrides: Partial<UseRealtimeChatProps> = {}) {
       messagesRef.current = updater;
     }
   });
-  const addEvent = vi.fn<[AddEventInput], void>();
+  const addEvent = vi.fn<(entry: AddEventInput) => void>();
   const props: UseRealtimeChatProps = {
     selectedToken: 'tok-test',
     selectedModel: 'gpt-4o-realtime-preview',

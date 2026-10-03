@@ -68,7 +68,9 @@ func TestRealtimeSessionsHandler_ProxiesRequest(t *testing.T) {
 	// Verify the request was proxied correctly
 	require.Equal(t, "Bearer sk-upstream-test-key", capturedAuth)
 	require.Equal(t, "application/json", capturedContentType)
-	require.Equal(t, "realtime=v1", capturedBeta)
+	// The Realtime beta interface was removed upstream on 2026-05-12, and the GA
+	// migration guide says to drop this header. The proxy must not invent one.
+	require.Empty(t, capturedBeta)
 	require.JSONEq(t, reqBody, string(capturedBody))
 
 	// Verify the response was forwarded

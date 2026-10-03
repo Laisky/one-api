@@ -228,6 +228,61 @@ func TestGetModelsDisplay_AnonymousFiltersHiddenModels(t *testing.T) {
 	require.Contains(t, info.Models, "public-alias")
 }
 
+// TestGetModelsDisplay_TimeWindows verifies display payloads include pricing windows and the active window.
+func TestGetModelsDisplay_TimeWindows(t *testing.T) {
+	setupModelsDisplayTestEnv(t)
+	gin.SetMode(gin.TestMode)
+	modelConfigs := `{
+		"window-model": {
+			"ratio": 1,
+			"completion_ratio": 2,
+			"time_windows": [
+				{
+					"name": "always",
+					"timezone": "UTC",
+					"ranges": [{"start": "00:00", "end": "00:00"}],
+					"overlay": {"ratio": 0.5}
+				}
+			]
+		}
+	}`
+	channel := &model.Channel{
+		Name:         "Window Channel",
+		Type:         channeltype.OpenAI,
+		Status:       model.ChannelStatusEnabled,
+		Models:       "window-model",
+		Group:        "public",
+		ModelConfigs: &modelConfigs,
+	}
+	require.NoError(t, model.DB.Create(channel).Error)
+
+	router := gin.New()
+	router.GET("/api/models/display", func(c *gin.Context) {
+		GetModelsDisplay(c)
+	})
+
+	req := httptest.NewRequest("GET", "/api/models/display", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp ModelsDisplayResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+
+	key := fmt.Sprintf("%s:%s", channeltype.IdToName(channel.Type), channel.Name)
+	info, ok := resp.Data[key]
+	require.True(t, ok, "expected channel %s in response", key)
+	display := info.Models["window-model"]
+	require.Len(t, display.TimeWindows, 1)
+	require.Equal(t, "always", display.TimeWindows[0].Name)
+	require.Equal(t, "UTC", display.TimeWindows[0].TimeZone)
+	require.Equal(t, "always", display.ActiveTimeWindow)
+	require.InDelta(t, 1, display.TimeWindows[0].Overlay.InputPrice, 1e-6)
+	require.InDelta(t, 2, display.TimeWindows[0].Overlay.OutputPrice, 1e-6)
+}
+
 // TestGetModelsDisplay_GptImageShowsTokenPrice verifies image models that bill prompt tokens expose input pricing.
 func TestGetModelsDisplay_GptImageShowsTokenPrice(t *testing.T) {
 	setupModelsDisplayTestEnv(t)

@@ -1,0 +1,9 @@
+{
+  "case": "user/create_role_too_high",
+  "site": "CreateUser (request DTO, error)",
+  "status": 200,
+  "body": {
+    "message": "Unable to create users with permissions greater than or equal to your own",
+    "success": false
+  }
+}

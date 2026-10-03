@@ -16,6 +16,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/random"
 	"github.com/Laisky/one-api/dto"
@@ -56,15 +57,24 @@ func CacheGetTokenByKey(ctx context.Context, key string) (*Token, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "get token by key %s", key)
 		}
-		// Marshal without custom Token.MarshalJSON to keep raw key in cache
-		type plainToken Token
-		jsonBytes, err := json.Marshal(plainToken(token))
+		// Cache the raw token row. With Token.MarshalJSON retired, the default
+		// serialization already keeps the raw stored key (the response-time
+		// prefix now lives in Token.ToResponse, not in json.Marshal) and carries
+		// the internal id, which is exactly what the cache needs. (This file is
+		// allowlisted in the noentityresponse analyzer: marshaling the raw entity
+		// for the internal cache is intentional here.)
+		jsonBytes, err := json.Marshal(token)
 		if err != nil {
-			return nil, errors.Wrapf(err, "marshal token %d for cache", token.Id)
+			return nil, identity.Tag(
+				errors.Wrapf(err, "marshal token %d for cache", token.Id),
+				token.Ref(), token.OwnerRef())
 		}
 		err = common.RedisSet(ctx, fmt.Sprintf("token:%s", key), string(jsonBytes), time.Duration(TokenCacheSeconds)*time.Second)
 		if err != nil {
-			lg.Warn("Redis set token failed, continuing without cache", zap.String("key", key), zap.Error(err))
+			// The raw token key is a credential and must never reach the log; the
+			// token reference (id + uuid + name) is what an operator can act on.
+			lg.Warn("Redis set token failed, continuing without cache",
+				append(token.Ref().Zap(), zap.Error(err))...)
 		}
 		return &token, nil
 	}
@@ -100,13 +110,22 @@ func CacheGetUserById(ctx context.Context, id int) (*User, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "get user %d from database", id)
 	}
+	// The Redis object cache must persist the internal Id — otherwise a later
+	// cache hit reconstructs a User with Id == 0 (issue #353), which propagates
+	// into ctxkey.Id and surfaces as a 500 "user id is empty". With User.MarshalJSON
+	// retired, json.Marshal(user) is now honest by default: it carries the Id (the
+	// #353 fix) and, because Password/AccessToken/TotpSecret/VerificationCode are
+	// json:"-", it cannot emit secrets — so the old plainUser alias and the manual
+	// scrub are no longer needed. (This file is allowlisted in the noentityresponse
+	// analyzer: marshaling the raw entity for the internal cache is intentional.)
 	payload, err := json.Marshal(user)
 	if err != nil {
-		lg.Warn("failed to marshal user for cache", zap.Int("user_id", id), zap.Error(err))
+		lg.Warn("failed to marshal user for cache", append(user.Ref().Zap(), zap.Error(err))...)
 		return user, nil
 	}
 	if setErr := common.RedisSet(ctx, cacheKey, string(payload), time.Duration(UserId2UserCacheSeconds)*time.Second); setErr != nil {
-		lg.Warn("Redis set user object failed, continuing without cache", zap.Int("user_id", id), zap.Error(setErr))
+		lg.Warn("Redis set user object failed, continuing without cache",
+			append(user.Ref().Zap(), zap.Error(setErr))...)
 	}
 	return user, nil
 }
@@ -148,7 +167,8 @@ func CacheGetUsername(ctx context.Context, id int) string {
 			return username
 		}
 		if setErr := common.RedisSet(ctx, fmt.Sprintf("user_username:%d", id), username, time.Duration(UserId2UsernameCacheSeconds)*time.Second); setErr != nil {
-			lg.Warn("Redis set username failed, continuing without cache", zap.Int("user_id", id), zap.Error(setErr))
+			lg.Warn("Redis set username failed, continuing without cache",
+				append(identity.NewUserRef(id, "", username).Zap(), zap.Error(setErr))...)
 		}
 	}
 	return username
@@ -187,11 +207,20 @@ func CacheGetUserQuota(ctx context.Context, id int) (quota int64, err error) {
 	return quota, nil
 }
 
+// CacheUpdateUserQuota refreshes a positive user's Redis-cached balance from the
+// database when Redis is enabled. It returns an error for an invalid identity or
+// a failed database or cache operation.
 func CacheUpdateUserQuota(ctx context.Context, id int) error {
+	if id <= 0 {
+		return errors.Errorf("invalid user ID for quota refresh: %d", id)
+	}
 	if !common.IsRedisEnabled() {
 		return nil
 	}
-	quota, err := GetUserQuota(id)
+	var quota int64
+	// Keep the database read on the same bounded context as Redis. In
+	// particular, refund recovery must stop before shutdown closes its pool.
+	err := DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Select("quota").Find(&quota).Error
 	if err != nil {
 		return errors.Wrapf(err, "get database quota for user %d", id)
 	}
@@ -270,7 +299,7 @@ func CacheGetGroupModelsV2(ctx context.Context, group string) (models []dto.Enab
 	if !common.IsRedisEnabled() {
 		return GetGroupModelsV2(ctx, group)
 	}
-	modelsStr, err := common.RedisGet(ctx, fmt.Sprintf("group_models_v2:%s", group))
+	modelsStr, err := common.RedisGet(ctx, fmt.Sprintf("group_models_v3:%s", group))
 	if err != nil {
 		lg.Debug("Redis cache miss for group models, falling back to database", zap.String("group", group), zap.Error(err))
 	} else {
@@ -292,7 +321,11 @@ func CacheGetGroupModelsV2(ctx context.Context, group string) (models []dto.Enab
 		return models, nil
 	}
 
-	err = common.RedisSet(ctx, fmt.Sprintf("group_models_v2:%s", group), string(cachePayload),
+	// v3: the payload gained EnabledAbility.Priority. Reusing the v2 key would let
+	// a rolling deploy read pre-upgrade JSON whose rows all unmarshal as priority
+	// 0, silently collapsing the owner ranking to lowest-channel-id until the key
+	// expires. Bumping the key is the same fix the v1 -> v2 payload change used.
+	err = common.RedisSet(ctx, fmt.Sprintf("group_models_v3:%s", group), string(cachePayload),
 		time.Duration(GroupModelsCacheSeconds)*time.Second)
 	if err != nil {
 		lg.Warn("Redis set group models failed, continuing without cache", zap.String("group", group), zap.Error(err))
@@ -302,18 +335,41 @@ func CacheGetGroupModelsV2(ctx context.Context, group string) (models []dto.Enab
 }
 
 var group2model2channels map[string]map[string][]*Channel
+
+// channelId2channel is the id -> channel snapshot rebuilt by InitChannelCache.
+// Guarded by channelSyncLock. It makes channel log enrichment free for code that
+// holds only an integer channel id. It contains ENABLED channels only.
+var channelId2channel map[int]*Channel
 var channelSyncLock sync.RWMutex
 
 func InitChannelCache() {
+	if err := InitChannelCacheContext(context.Background()); err != nil {
+		logger.Logger.Error("failed to sync channels from database", zap.Error(err))
+	}
+}
+
+// InitChannelCacheContext rebuilds the channel cache with database cancellation
+// bound to ctx.
+//
+// Parameters:
+//   - ctx: lifecycle and deadline scope for cache queries.
+//
+// Return values:
+//   - error: wrapped query failure.
+func InitChannelCacheContext(ctx context.Context) error {
 	newChannelId2channel := make(map[int]*Channel)
 	var channels []*Channel
-	DB.Where("status = ?", ChannelStatusEnabled).Find(&channels)
+	if err := DB.WithContext(ctx).Where("status = ?", ChannelStatusEnabled).Find(&channels).Error; err != nil {
+		return errors.Wrap(err, "list enabled channels for cache")
+	}
 	for _, channel := range channels {
 		newChannelId2channel[channel.Id] = channel
 	}
 
 	var allAbilities []*Ability
-	DB.Find(&allAbilities) // Fetch all abilities
+	if err := DB.WithContext(ctx).Find(&allAbilities).Error; err != nil {
+		return errors.Wrap(err, "list abilities for cache")
+	}
 
 	// Filter abilities: must be enabled and not currently suspended
 	// And create a quick lookup map for valid abilities
@@ -370,15 +426,75 @@ func InitChannelCache() {
 
 	channelSyncLock.Lock()
 	group2model2channels = newGroup2model2channels
+	channelId2channel = newChannelId2channel
 	channelSyncLock.Unlock()
 	logger.Logger.Info("channels synced from database, considering suspensions")
+	return nil
 }
 
+// cachedChannelById returns the cached channel row, or nil when the in-memory
+// snapshot has not been built yet or the channel is disabled/unknown. It never
+// queries the database, so it is safe to call from a logging path.
+//
+// Parameters:
+//   - id: channel primary key.
+//
+// Return values:
+//   - *Channel: the cached row, or nil when unavailable.
+func cachedChannelById(id int) *Channel {
+	if id <= 0 {
+		return nil
+	}
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+	if channelId2channel == nil {
+		return nil
+	}
+	return channelId2channel[id]
+}
+
+// SyncChannelCache preserves the historical frequency-only worker API.
+//
+// Parameters:
+//   - frequency: seconds between rebuilds; values <= 0 disable the loop.
+//
+// Return values: none.
 func SyncChannelCache(frequency int) {
+	SyncChannelCacheContext(context.Background(), frequency)
+}
+
+// SyncChannelCacheContext periodically rebuilds the in-memory channel cache
+// from the database until ctx is cancelled.
+//
+// It is a database producer, so it takes the caller's lifecycle context: an
+// unstoppable loop keeps querying during shutdown and after CloseDB. It is not
+// joined -- a missed rebuild has no durable consequence -- so a shutdown does
+// not wait for it, unlike the retention cleaners.
+//
+// Parameters:
+//   - ctx: lifecycle scope; cancellation ends the loop at the next tick.
+//   - frequency: seconds between rebuilds; values <= 0 disable the loop.
+//
+// Return values: none.
+func SyncChannelCacheContext(ctx context.Context, frequency int) {
+	if frequency <= 0 {
+		logger.Logger.Info("channel cache sync disabled", zap.Int("sync_frequency", frequency))
+		return
+	}
+
+	ticker := time.NewTicker(time.Duration(frequency) * time.Second)
+	defer ticker.Stop()
 	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
-		logger.Logger.Info("syncing channels from database")
-		InitChannelCache()
+		select {
+		case <-ctx.Done():
+			logger.Logger.Info("channel cache sync stopped", zap.Error(ctx.Err()))
+			return
+		case <-ticker.C:
+			logger.Logger.Info("syncing channels from database")
+			if err := InitChannelCacheContext(ctx); err != nil {
+				logger.Logger.Warn("channel cache sync failed", zap.Error(err))
+			}
+		}
 	}
 }
 
@@ -401,9 +517,19 @@ func GetChannelsFromCache(group string, model string) ([]*Channel, error) {
 }
 
 func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority bool) (*Channel, error) {
+	return CacheGetRandomSatisfiedChannelWithContext(context.Background(), group, model, ignoreFirstPriority)
+}
+
+// CacheGetRandomSatisfiedChannelWithContext selects a channel from the memory
+// cache while preserving the request logger in ctx. Parameters: ctx carries the
+// request-scoped logger, group and model identify the routing pool, and
+// ignoreFirstPriority controls tier selection. Returns: the selected channel or
+// a wrapped routing error.
+func CacheGetRandomSatisfiedChannelWithContext(ctx context.Context, group string, model string, ignoreFirstPriority bool) (*Channel, error) {
 	if !config.MemoryCacheEnabled {
 		return GetRandomSatisfiedChannel(group, model, ignoreFirstPriority)
 	}
+	lg := logger.FromContext(ctx)
 	channelSyncLock.RLock()
 	// It is important to make a copy if we are going to modify or iterate outside lock,
 	// or ensure operations are safe. Here, we are just reading.
@@ -476,37 +602,37 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 		}
 	}
 
-	var idx int
+	var channel *Channel
 	if ignoreFirstPriority && endIdx < len(candidateChannels) {
-		idx = random.RandRange(endIdx, len(candidateChannels))
+		channel = pickWeightedChannel(candidateChannels[endIdx:])
+		if channel == nil {
+			channel = candidateChannels[random.RandRange(endIdx, len(candidateChannels))]
+		}
 	} else {
-		idx = rand.Intn(endIdx)
-		if ignoreFirstPriority {
-			// All channels have the same highest priority, or only one priority level exists.
-			// If ignoreFirstPriority is true, and we only have one priority level,
-			// it means we cannot satisfy "ignoreFirstPriority".
-			// This case might indicate no lower-priority channels exist.
-			// Depending on desired behavior, could return error or pick from existing.
-			// For now, let's assume it means "pick any if only one priority level".
-			// If truly no other channel to pick, the random selection will pick from current set.
-			// This part of logic might need refinement based on precise meaning of ignoreFirstPriority
-			// when only one priority tier exists.
-			// The original code implies if endIdx == len(channels), it picks from 0 to endIdx-1.
-			// If endIdx < len(channels), it picks from endIdx to len(channels)-1.
-			// So if ignoreFirstPriority is true and all are same priority, it will still pick from them.
-			// This seems okay.
+		channel = pickWeightedChannel(candidateChannels[:endIdx])
+		if channel == nil {
+			channel = candidateChannels[rand.Intn(endIdx)]
 		}
 	}
-	channel := candidateChannels[idx]
-	logger.Logger.Info("select channel in cache", zap.String("channel_name", channel.Name), zap.Int("channel_id", channel.Id))
+	lg.Info("select channel in cache", channel.Ref().Zap()...)
 	return channel, nil
 }
 
 // CacheGetRandomSatisfiedChannelExcluding gets a random satisfied channel while excluding specified channel IDs
 func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstPriority bool, excludeChannelIds map[int]bool, tryLargerMaxTokens bool) (*Channel, error) {
+	return CacheGetRandomSatisfiedChannelExcludingWithContext(context.Background(), group, model, ignoreFirstPriority, excludeChannelIds, tryLargerMaxTokens)
+}
+
+// CacheGetRandomSatisfiedChannelExcludingWithContext selects a channel while
+// preserving request correlation in ctx. Parameters: ctx carries the logger,
+// group and model identify the routing pool, ignoreFirstPriority selects a tier,
+// excludeChannelIds contains failed channels, and tryLargerMaxTokens enables the
+// 413 recovery policy. Returns: the selected channel or a wrapped routing error.
+func CacheGetRandomSatisfiedChannelExcludingWithContext(ctx context.Context, group string, model string, ignoreFirstPriority bool, excludeChannelIds map[int]bool, tryLargerMaxTokens bool) (*Channel, error) {
 	if !config.MemoryCacheEnabled {
 		return GetRandomSatisfiedChannelExcluding(group, model, ignoreFirstPriority, excludeChannelIds)
 	}
+	lg := logger.FromContext(ctx)
 	channelSyncLock.RLock()
 	channelsFromCache := group2model2channels[group][model]
 
@@ -572,11 +698,29 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 
 		// If there are lower priority channels available, select from them
 		if endIdx < len(candidateChannels) {
-			idx := random.RandRange(endIdx, len(candidateChannels))
-			channel := candidateChannels[idx]
-			logger.Logger.Info("select channel in cache", zap.String("channel_name", channel.Name), zap.Int("channel_id", channel.Id))
+			channel := pickWeightedChannel(candidateChannels[endIdx:])
+			if channel == nil {
+				channel = candidateChannels[random.RandRange(endIdx, len(candidateChannels))]
+			}
+			// Tier diagnostics: which tier was skipped and what remained. This is
+			// what makes an unexpected retry order explainable from the logs.
+			lg.Debug("channel tier selection in cache",
+				zap.Bool("ignore_first_priority", true),
+				zap.Int("excluded_channels", len(excludeChannelIds)),
+				zap.Int64("skipped_tier_priority", firstChannel.GetPriority()),
+				zap.Int("skipped_tier_size", endIdx),
+				zap.Int("lower_tier_candidates", len(candidateChannels)-endIdx),
+				zap.Int64("selected_priority", channel.GetPriority()),
+			)
+			lg.Info("select channel in cache", channel.Ref().Zap()...)
 			return channel, nil
 		} else {
+			lg.Debug("channel tier selection in cache: no lower tier after exclusions",
+				zap.Bool("ignore_first_priority", true),
+				zap.Int("excluded_channels", len(excludeChannelIds)),
+				zap.Int64("only_tier_priority", firstChannel.GetPriority()),
+				zap.Int("only_tier_size", len(candidateChannels)),
+			)
 			// No lower priority channels available, return error to indicate we should try a different approach
 			return nil, errors.New("no lower priority channels available after excluding failed channels")
 		}
@@ -608,9 +752,43 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 			return nil, errors.New("no channels with maximum priority available")
 		}
 
-		idx := rand.Intn(len(maxPriorityChannels))
-		channel := maxPriorityChannels[idx]
-		logger.Logger.Info("select channel in cache", zap.String("channel_name", channel.Name), zap.Int("channel_id", channel.Id))
+		channel := pickWeightedChannel(maxPriorityChannels)
+		if channel == nil {
+			channel = maxPriorityChannels[rand.Intn(len(maxPriorityChannels))]
+		}
+		// Tier diagnostics: the highest tier is recomputed AFTER exclusions, so on
+		// a retry this is the next tier down from the channels that already failed.
+		lg.Debug("channel tier selection in cache",
+			zap.Bool("ignore_first_priority", false),
+			zap.Int("excluded_channels", len(excludeChannelIds)),
+			zap.Int64("selected_tier_priority", maxPriority),
+			zap.Int("selected_tier_size", len(maxPriorityChannels)),
+			zap.Int("remaining_candidates", len(candidateChannels)),
+		)
+		lg.Info("select channel in cache", channel.Ref().Zap()...)
 		return channel, nil
 	}
+}
+
+// pickWeightedChannel selects a channel using weighted random over the channels'
+// weights (channels.weight is the single source of truth for weight). When all
+// weights are zero (or the slice is empty) it returns nil so the caller can fall
+// back to uniform random. Both routing paths — this cache path and the DB path's
+// getRandomSatisfiedChannel — feed their candidate channels through this helper, so
+// they weight identically.
+func pickWeightedChannel(channels []*Channel) *Channel {
+	if len(channels) == 0 {
+		return nil
+	}
+
+	weights := make([]uint, len(channels))
+	for i, ch := range channels {
+		weights[i] = ch.GetWeight()
+	}
+
+	idx := weightedIndex(weights, rand.Int63n)
+	if idx < 0 {
+		return nil // signal caller to use uniform random
+	}
+	return channels[idx]
 }

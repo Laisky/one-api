@@ -10,11 +10,11 @@ export type BaseMetricRow = {
 };
 
 export type ModelRow = BaseMetricRow & { model_name: string };
-export type UserRow = BaseMetricRow & { username: string; user_id: number };
+export type UserRow = BaseMetricRow & { username: string; user_id: string };
 export type TokenRow = BaseMetricRow & {
   token_name: string;
   username: string;
-  user_id: number;
+  user_id: string;
 };
 
 export type ToolMetricRow = {
@@ -24,11 +24,11 @@ export type ToolMetricRow = {
 };
 
 export type ToolRow = ToolMetricRow & { tool_name: string };
-export type ToolUserRow = ToolMetricRow & { username: string; user_id: number };
+export type ToolUserRow = ToolMetricRow & { username: string; user_id: string };
 export type ToolTokenRow = ToolMetricRow & {
   token_name: string;
   username: string;
-  user_id: number;
+  user_id: string;
 };
 
 export type DashboardData = {
@@ -41,7 +41,8 @@ export type DashboardData = {
 };
 
 export type UserOption = {
-  id: number;
+  id?: string | number;
+  uuid?: string;
   username: string;
   display_name: string;
 };
