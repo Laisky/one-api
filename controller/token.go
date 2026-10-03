@@ -489,6 +489,7 @@ func processPostConsume(ctx context.Context, c *gin.Context, token *model.Token,
 		return nil, nil, errors.Wrap(err, "convert final_used_quota to int64")
 	}
 
+	reservationExpiresAt := existingTxn.ExpiresAt
 	existingTxn, err = model.FinalizePendingTokenTransaction(ctx, token.Id, existingTxn.Id, model.TokenTransactionFinalization{
 		Status:        model.TokenTransactionStatusConfirmed,
 		FinalQuota:    finalQuota,
@@ -522,6 +523,9 @@ func processPostConsume(ctx context.Context, c *gin.Context, token *model.Token,
 		return nil, nil, errors.Wrap(err, "get token by ids after post-consume")
 	}
 
+	// Preserve the historical response deadline without reopening the persisted
+	// terminal transaction, whose expires_at stays zero after atomic finalization.
+	existingTxn.ExpiresAt = reservationExpiresAt
 	return existingTxn, updatedToken, nil
 }
 
@@ -544,6 +548,7 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 		return nil, nil, errors.Errorf("transaction %s cannot be canceled because it is %s", transactionID, model.TokenTransactionStatusString(txn.Status))
 	}
 
+	reservationExpiresAt := txn.ExpiresAt
 	txn, err = model.FinalizePendingTokenTransaction(ctx, token.Id, txn.Id, model.TokenTransactionFinalization{
 		Status: model.TokenTransactionStatusCanceled,
 		At:     helper.GetTimestamp(),
@@ -573,6 +578,9 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 		return nil, nil, errors.Wrap(err, "get token by ids after cancel")
 	}
 
+	// Preserve the historical response deadline without reopening the persisted
+	// terminal transaction, whose expires_at stays zero after atomic finalization.
+	txn.ExpiresAt = reservationExpiresAt
 	return txn, updatedToken, nil
 }
 
