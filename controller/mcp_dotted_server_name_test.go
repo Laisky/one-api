@@ -43,29 +43,25 @@ func TestDottedServerNameToolsAreCallable(t *testing.T) {
 	}).Error)
 
 	t.Run("resolution prefers the longest matching server name", func(t *testing.T) {
-		serverLabel, toolName, err := resolveQualifiedToolName(context.Background(), "github.com.search_repos")
-		require.NoError(t, err)
+		serverLabel, toolName := resolveQualifiedToolName("github.com.search_repos")
 		require.Equal(t, "github.com", serverLabel)
 		require.Equal(t, "search_repos", toolName)
 	})
 
 	t.Run("a server name without dots still resolves", func(t *testing.T) {
-		serverLabel, toolName, err := resolveQualifiedToolName(context.Background(), "fake-mcp.echo")
-		require.NoError(t, err)
+		serverLabel, toolName := resolveQualifiedToolName("fake-mcp.echo")
 		require.Equal(t, "fake-mcp", serverLabel)
 		require.Equal(t, "echo", toolName)
 	})
 
 	t.Run("an unknown qualifier keeps the previous behaviour", func(t *testing.T) {
-		serverLabel, toolName, err := resolveQualifiedToolName(context.Background(), "nosuch.tool")
-		require.NoError(t, err)
+		serverLabel, toolName := resolveQualifiedToolName("nosuch.tool")
 		require.Equal(t, "nosuch", serverLabel)
 		require.Equal(t, "tool", toolName)
 	})
 
 	t.Run("an unqualified name has no server label", func(t *testing.T) {
-		serverLabel, toolName, err := resolveQualifiedToolName(context.Background(), "echo")
-		require.NoError(t, err)
+		serverLabel, toolName := resolveQualifiedToolName("echo")
 		require.Empty(t, serverLabel)
 		require.Equal(t, "echo", toolName)
 	})
