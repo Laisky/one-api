@@ -4,6 +4,7 @@ import { ConfirmDetailsList } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { MobileTableSort } from '@/components/ui/mobile-table';
 import { NameWithId } from '@/components/shared/NameWithId';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
@@ -77,6 +78,8 @@ export function UsersPage() {
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [appliedKeyword, setAppliedKeyword] = useState('');
+  const loadSequence = useRef(0);
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('');
@@ -125,29 +128,28 @@ export function UsersPage() {
   );
 
   /** load accepts a zero-based page and size, loads that user page, and returns when state is updated. */
-  const load = async (p = 0, size = pageSize) => {
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword) => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/user/?p=${p}&size=${size}`;
+      let url = keyword ? `/api/user/search?keyword=${encodeURIComponent(keyword)}&p=${p}&size=${size}` : `/api/user/?p=${p}&size=${size}`;
       if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
       const res = await api.get(url);
-      const { success, data, total } = res.data;
-      if (success) {
-        setData(data);
-        setTotal(total || data.length);
-        setPageIndex(p);
-        setPageSize(size);
-      }
+      if (sequence !== loadSequence.current) return;
+      if (!res.data?.success) throw new Error(res.data?.message || t('table_selection.failed'));
+      const rows: UserRow[] = res.data.data || [];
+      setData(keyword ? rows.slice(p * size, (p + 1) * size) : rows);
+      setTotal(keyword ? rows.length : (res.data.total ?? rows.length));
+      setPageIndex(p);
+      setPageSize(size);
+      setAppliedKeyword(keyword);
     } catch (error) {
-      const message = (error as any)?.response?.data?.message || tr('notifications.load_failed_message', 'Failed to load users.');
-      notify({
-        type: 'error',
-        title: tr('notifications.load_failed_title', 'Access denied'),
-        message,
-      });
+      if (sequence !== loadSequence.current) return;
+      setData([]);
+      setTotal(0);
+      notify({ type: 'error', message: (error as Error)?.message || t('table_selection.failed') });
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   };
 
@@ -213,31 +215,7 @@ export function UsersPage() {
   }, [sortBy, sortOrder]);
 
   /** search reads the current search state, updates matching users, and returns when the request completes. */
-  const search = async () => {
-    setLoading(true);
-    try {
-      if (!searchKeyword.trim()) return load(0, pageSize);
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/user/search?keyword=${encodeURIComponent(searchKeyword)}`;
-      if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-      url += `&size=${pageSize}`;
-      const res = await api.get(url);
-      const { success, data } = res.data;
-      if (success) {
-        setData(data);
-        setPageIndex(0);
-      }
-    } catch (error) {
-      const message = (error as any)?.response?.data?.message || tr('notifications.search_failed_message', 'Search failed.');
-      notify({
-        type: 'error',
-        title: tr('notifications.search_failed_title', 'Search failed'),
-        message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const search = () => load(0, pageSize, searchKeyword.trim());
 
   const columns: ColumnDef<UserRow>[] = [
     {
@@ -498,6 +476,12 @@ export function UsersPage() {
     }
   };
 
+  /** changeSort updates the existing server sort state; the effect remains the only reload owner. */
+  const changeSort = (key: string, order: 'asc' | 'desc') => {
+    setSortBy(key);
+    setSortOrder(order);
+  };
+
   const toolbarActions = (
     <div className={cn('flex gap-2', isMobile ? 'flex-col w-full' : 'items-center')}>
       <Button
@@ -507,31 +491,48 @@ export function UsersPage() {
       >
         {tr('toolbar.add_user', 'Add User')}
       </Button>
-      <div className="flex gap-2 w-full">
-        <select
-          className={cn('h-9 border rounded-md px-3 py-2 text-sm flex-1', isMobile ? '' : 'min-w-[120px]')}
-          value={sortBy}
-          onChange={(e) => {
-            setSortBy(e.target.value);
-            setSortOrder('desc');
-          }}
-        >
-          <option value="">{tr('toolbar.sort.default', 'Default')}</option>
-          <option value="quota">{tr('toolbar.sort.quota', 'Remaining Quota')}</option>
-          <option value="used_quota">{tr('toolbar.sort.used_quota', 'Used Quota')}</option>
-          <option value="username">{tr('toolbar.sort.username', 'Username')}</option>
-          <option value="id">{tr('toolbar.sort.id', 'ID')}</option>
-          <option value="created_at">{tr('toolbar.sort.register_time', 'Register Time')}</option>
-        </select>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
-          className={cn('h-9 px-3', isMobile ? 'flex-shrink-0' : '')}
-        >
-          {sortOrder === 'asc' ? tr('toolbar.sort_order.asc', 'ASC') : tr('toolbar.sort_order.desc', 'DESC')}
-        </Button>
-      </div>
+      {isMobile ? (
+        <MobileTableSort
+          options={[
+            { value: 'quota', label: tr('toolbar.sort.quota', 'Remaining Quota') },
+            { value: 'used_quota', label: tr('toolbar.sort.used_quota', 'Used Quota') },
+            { value: 'username', label: tr('toolbar.sort.username', 'Username') },
+            { value: 'id', label: tr('toolbar.sort.id', 'ID') },
+            { value: 'created_at', label: tr('toolbar.sort.register_time', 'Register Time') },
+          ]}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSortChange={changeSort}
+          loading={loading}
+          defaultOrder="desc"
+        />
+      ) : (
+        <div className="flex gap-2 w-full">
+          <select
+            className="h-9 border rounded-md px-3 py-2 text-sm flex-1 min-w-[120px]"
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value);
+              setSortOrder('desc');
+            }}
+          >
+            <option value="">{tr('toolbar.sort.default', 'Default')}</option>
+            <option value="quota">{tr('toolbar.sort.quota', 'Remaining Quota')}</option>
+            <option value="used_quota">{tr('toolbar.sort.used_quota', 'Used Quota')}</option>
+            <option value="username">{tr('toolbar.sort.username', 'Username')}</option>
+            <option value="id">{tr('toolbar.sort.id', 'ID')}</option>
+            <option value="created_at">{tr('toolbar.sort.register_time', 'Register Time')}</option>
+          </select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
+            className="h-9 px-3"
+          >
+            {sortOrder === 'asc' ? tr('toolbar.sort_order.asc', 'ASC') : tr('toolbar.sort_order.desc', 'DESC')}
+          </Button>
+        </div>
+      )}
     </div>
   );
 
@@ -556,6 +557,8 @@ export function UsersPage() {
       <Card className="border-0 md:border shadow-none md:shadow-sm">
         <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
           <EnhancedDataTable
+            selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
+            selectionDisabled={searchKeyword.trim() !== appliedKeyword}
             columns={columns}
             data={data}
             floatingRowActions={(row) => (
@@ -609,11 +612,9 @@ export function UsersPage() {
             onPageSizeChange={handlePageSizeChange}
             sortBy={sortBy}
             sortOrder={sortOrder}
-            onSortChange={(newSortBy, newSortOrder) => {
-              setSortBy(newSortBy);
-              setSortOrder(newSortOrder);
-              // Let useEffect handle the reload to avoid double requests
-            }}
+            // The page's mobile control includes ID sorting, which is not a
+            // data column. Keep that full contract without a second selector.
+            onSortChange={isMobile ? undefined : changeSort}
             searchValue={searchKeyword}
             searchOptions={searchOptions}
             searchLoading={searchLoading}

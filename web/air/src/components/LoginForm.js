@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserContext } from '../context/User';
@@ -184,7 +185,7 @@ const LoginForm = () => {
                   )}
 
                   <Button theme="solid" style={{ width: '100%' }} type={'primary'} size="large"
-                          htmlType={'submit'} onClick={handleSubmit}
+                          htmlType={'submit'} onClick={(...uiArgs) => handleSubmit(...uiArgs).catch(reportUIError)}
                           disabled={totpRequired && (!totp_code || totp_code.length !== 6)}>
                     {totpRequired ? '验证TOTP' : '登录'}
                   </Button>

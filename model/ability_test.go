@@ -27,6 +27,29 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+// TestCountAvailableChannelsCountsDistinctEnabledAbilities verifies that retry
+// budget expansion counts each routable channel once and ignores a suspended or
+// unrelated ability. Parameters: t is the test handle. Returns: none.
+func TestCountAvailableChannelsCountsDistinctEnabledAbilities(t *testing.T) {
+	testDB := setupTestDB(t)
+	originalDB := DB
+	DB = testDB
+	t.Cleanup(func() { DB = originalDB })
+
+	future := time.Now().UTC().Add(time.Minute)
+	require.NoError(t, testDB.Create(&[]Ability{
+		{Group: "default", Model: "target", ChannelId: 1, Enabled: true},
+		{Group: "default", Model: "target", ChannelId: 2, Enabled: true, SuspendUntil: &future},
+		{Group: "default", Model: "other", ChannelId: 3, Enabled: true},
+		{Group: "other", Model: "target", ChannelId: 4, Enabled: true},
+		{Group: "default", Model: "target", ChannelId: 5, Enabled: false},
+	}).Error)
+
+	count, err := CountAvailableChannels(context.Background(), "default", "target")
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+}
+
 func TestGetRandomSatisfiedChannelExcluding_PriorityLogic(t *testing.T) {
 	// Setup test database
 	testDB := setupTestDB(t)

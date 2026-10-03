@@ -230,7 +230,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// --- Doubao Pro (legacy, retained for backward compatibility) ---
 	"Doubao-pro-256k": {
-		Ratio:                       0.005 * ratio.MilliTokensRmb,
+		Ratio:                       5 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               256000,
 		MaxOutputTokens:             4096,
@@ -241,7 +241,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "ByteDance Doubao Pro 256K legacy long-context chat model.",
 	},
 	"Doubao-pro-128k": {
-		Ratio:                       0.005 * ratio.MilliTokensRmb,
+		Ratio:                       5 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               128000,
 		MaxOutputTokens:             4096,
@@ -252,8 +252,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "ByteDance Doubao Pro 128k legacy chat model with tool calling and JSON mode.",
 	},
 	"Doubao-pro-32k": {
-		Ratio:                       0.002 * ratio.MilliTokensRmb,
-		CompletionRatio:             1,
+		Ratio:                       0.8 * ratio.MilliTokensRmb,
+		CompletionRatio:             2.00 / 0.80,
 		ContextLength:               32000,
 		MaxOutputTokens:             4096,
 		InputModalities:             doubaoTextInputs,
@@ -261,9 +261,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           doubaoChatFeatures,
 		SupportedSamplingParameters: doubaoSamplingParams,
 		Description:                 "ByteDance Doubao Pro 32k legacy chat model.",
-	},
+	}, // CNY 0.80 in / 2.00 out per 1M (batch tier, 火山方舟 2026-08-28; withdrawn from online inference)
 	"Doubao-pro-4k": {
-		Ratio:                       0.0008 * ratio.MilliTokensRmb,
+		Ratio:                       0.8 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               4096,
 		MaxOutputTokens:             4096,
@@ -276,7 +276,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// --- Doubao Lite (legacy) ---
 	"Doubao-lite-128k": {
-		Ratio:                       0.0008 * ratio.MilliTokensRmb,
+		Ratio:                       0.8 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               128000,
 		MaxOutputTokens:             4096,
@@ -287,7 +287,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "ByteDance Doubao Lite 128k legacy cost-optimized chat model.",
 	},
 	"Doubao-lite-32k": {
-		Ratio:                       0.0006 * ratio.MilliTokensRmb,
+		Ratio:                       0.6 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               32000,
 		MaxOutputTokens:             4096,
@@ -298,7 +298,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "ByteDance Doubao Lite 32k legacy cost-optimized chat model.",
 	},
 	"Doubao-lite-4k": {
-		Ratio:                       0.0003 * ratio.MilliTokensRmb,
+		Ratio:                       0.3 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               4096,
 		MaxOutputTokens:             4096,
@@ -311,13 +311,13 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// --- Embedding Models ---
 	"Doubao-embedding": {
-		Ratio:            0.0002 * ratio.MilliTokensRmb,
+		Ratio:            0.5 * ratio.MilliTokensRmb,
 		CompletionRatio:  1,
 		ContextLength:    4096,
 		InputModalities:  doubaoTextInputs,
 		OutputModalities: doubaoTextOutputs,
 		Description:      "ByteDance Doubao text embedding model. [Legacy/likely retired: absent from the direct-API vector-model pricing table and model list as of 2026-07; only doubao-embedding-vision remains listed there. The sole surviving reference is a Knowledge-Base bundled line item at a different price/billing path. Pricing retained as last-known value pending vendor confirmation.]",
-	},
+	}, // CNY 0.5 per 1M (survives only as a 知识库 line item, 火山方舟 2026-08-28)
 	"doubao-embedding-vision": {
 		Ratio:            0.7 * ratio.MilliTokensRmb,
 		CompletionRatio:  1,

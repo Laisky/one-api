@@ -296,3 +296,53 @@ func writeMCPTestText(t *testing.T, writer http.ResponseWriter, value string) {
 	_, err := fmt.Fprint(writer, value)
 	require.NoError(t, err)
 }
+
+// TestUnsupportedProtocolVersionHonoursAdvertisedVersions pins that a modern
+// server which only speaks a legacy revision is still usable.
+//
+// The 2026-07-28 binding says that on a recognized modern error the client should
+// "retry using the advertised `supported` versions ... rather than falling back".
+// -32022 carries data.supported for exactly that purpose, but the list was parsed
+// into ProtocolError.Data and then thrown away: IsRecognizedModernError returned
+// true, IsModernFallbackCandidate returned false, and the client refused to talk
+// to a server it fully supports through Initialize. A very likely transitional
+// posture — 2026 header validation, 2025-11-25 as the only supported revision —
+// was therefore unreachable.
+func TestUnsupportedProtocolVersionHonoursAdvertisedVersions(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		data         any
+		wantFallback bool
+	}{
+		{
+			name:         "advertises a legacy version we speak",
+			data:         map[string]any{"supported": []any{LegacyProtocolVersion}},
+			wantFallback: true,
+		},
+		{
+			name:         "advertises the older legacy fallback",
+			data:         map[string]any{"supported": []any{LegacyProtocolVersionFallback}},
+			wantFallback: true,
+		},
+		{
+			name:         "advertises only versions we cannot speak",
+			data:         map[string]any{"supported": []any{"1999-01-01"}},
+			wantFallback: false,
+		},
+		{
+			name:         "advertises nothing",
+			data:         nil,
+			wantFallback: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := &ProtocolError{
+				HTTPStatus: http.StatusBadRequest,
+				Code:       ErrorCodeUnsupportedProtocolVersion,
+				Message:    "unsupported protocol version",
+				Data:       tc.data,
+			}
+			require.Equal(t, tc.wantFallback, IsModernFallbackCandidate(err))
+		})
+	}
+}

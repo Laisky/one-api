@@ -76,8 +76,8 @@ type GeneralOpenAIRequest struct {
 	// The binding is the union of effort vocabularies across providers; per-model
 	// validation narrows it downstream (e.g. Qwen uses "default", the GPT-5.6
 	// family adds "xhigh"/"max", grok/gemini use "none", and GPT-5 advertises
-	// the legacy "minimal" alias).
-	ReasoningEffort *string `json:"reasoning_effort,omitempty" binding:"omitempty,oneof=none default minimal low medium high xhigh max"`
+	// the legacy "minimal" alias; DeepSeek accepts "ultra").
+	ReasoningEffort *string `json:"reasoning_effort,omitempty" binding:"omitempty,oneof=none default minimal low medium high xhigh max ultra"`
 	// Verbosity hints the model to be more or less expansive in its replies (GPT-5 series).
 	// Supported values: low, medium, high
 	Verbosity *string `json:"verbosity,omitempty" binding:"omitempty,oneof=low medium high"`
@@ -128,7 +128,8 @@ type GeneralOpenAIRequest struct {
 	// -------------------------------------
 	// Anthropic
 	// -------------------------------------
-	Thinking *Thinking `json:"thinking,omitempty"`
+	Thinking     *Thinking       `json:"thinking,omitempty"`
+	OutputConfig json.RawMessage `json:"output_config,omitempty"`
 	// -------------------------------------
 	// Response API
 	// -------------------------------------
@@ -138,8 +139,8 @@ type GeneralOpenAIRequest struct {
 type OpenAIResponseReasoning struct {
 	// Effort defines the reasoning effort level. The binding is the union across
 	// providers; per-model validation narrows it downstream (Qwen uses
-	// "default", while the GPT-5.6 family adds "xhigh"/"max").
-	Effort *string `json:"effort,omitempty" binding:"omitempty,oneof=none default minimal low medium high xhigh max"`
+	// "default", the GPT-5.6 family adds "xhigh"/"max", and DeepSeek accepts "ultra").
+	Effort *string `json:"effort,omitempty" binding:"omitempty,oneof=none default minimal low medium high xhigh max ultra"`
 	// Summary defines whether to include a summary of the reasoning
 	Summary *string `json:"summary,omitempty" binding:"omitempty,oneof=auto concise detailed"`
 }
@@ -185,9 +186,18 @@ type UserLocationApproximate struct {
 }
 
 // https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#implementing-extended-thinking
+// ThinkingBlockBinding controls how Anthropic handles replayed thinking blocks
+// whose conversation prefix no longer matches the prefix they were generated from.
+type ThinkingBlockBinding struct {
+	PrefixMismatchBehavior string `json:"prefix_mismatch_behavior,omitempty" binding:"omitempty,oneof=error drop_block"`
+}
+
 type Thinking struct {
-	Type         string `json:"type"`
-	BudgetTokens *int   `json:"budget_tokens,omitempty" binding:"omitempty,min=1024"`
+	// ExtraFields retains provider-specific controls without losing unknown JSON values.
+	ExtraFields  map[string]json.RawMessage `json:"-"`
+	Type         string                     `json:"type"`
+	BudgetTokens *int                       `json:"budget_tokens,omitempty" binding:"omitempty,min=1024"`
+	BlockBinding *ThinkingBlockBinding      `json:"block_binding,omitempty"`
 }
 
 // IntPtr is a helper to create a pointer to an int value.
@@ -233,7 +243,9 @@ type OpenaiImageEditRequest struct {
 // ClaudeRequest represents a Claude Messages API request
 // This is a flexible structure that can handle both simple and complex content
 type ClaudeRequest struct {
-	Model string `json:"model" binding:"required"`
+	CompatibilityModel string          `json:"-"`
+	OutputConfig       json.RawMessage `json:"output_config,omitempty"`
+	Model              string          `json:"model" binding:"required"`
 	// ExtraBody stores allowlisted provider-specific parameters that should be
 	// merged into the upstream root payload after Claude-to-OpenAI conversion.
 	ExtraBody     map[string]any  `json:"extra_body,omitempty"`

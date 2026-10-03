@@ -3,7 +3,7 @@
   "site": "T4 AddToken (error)",
   "status": 200,
   "body": {
-    "message": "json: cannot unmarshal string into Go struct field Token.remain_quota of type int64",
+    "message": "json: cannot unmarshal string into Go struct field remain_quota of type int64",
     "success": false
   }
 }

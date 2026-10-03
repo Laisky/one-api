@@ -66,7 +66,7 @@ func getWebAuthn() (*webauthn.WebAuthn, error) {
 				zap.Strings("rp_origins", rpOrigins))
 		}
 	})
-	return webAuthnInstance, webAuthnErr
+	return webAuthnInstance, errors.WithStack(webAuthnErr)
 }
 
 func parseRPOrigins() []string {

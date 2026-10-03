@@ -18,12 +18,26 @@ func sanitizeClaudeMessagesRequest(request *ClaudeMessagesRequest) {
 	if request == nil {
 		return
 	}
-	anthropic.NormalizeModelCompatibility(request.Model, &request.Temperature, &request.TopP, &request.TopK, &request.Thinking)
+	name := request.Model
+	if request.CompatibilityModel != "" {
+		name = request.CompatibilityModel
+	}
+	anthropic.NormalizeModelCompatibility(name, &request.Temperature, &request.TopP, &request.TopK, &request.Thinking)
 }
 
 // applyClaudeRequestRewriteFields rewrites sanitized top-level Claude request fields in obj.
 // It updates only the top-level fields that one-api intentionally normalizes and returns any rewrite error.
 func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *ClaudeMessagesRequest) error {
+	if obj == nil {
+		return errors.New("validation failed: Claude request must be an object")
+	}
+	name := request.Model
+	if request.CompatibilityModel != "" {
+		name = request.CompatibilityModel
+	}
+	if err := anthropic.NormalizeSonnet55Controls(name, obj); err != nil {
+		return err
+	}
 	if request.Model != "" {
 		modelBytes, merr := json.Marshal(request.Model)
 		if merr != nil {
@@ -43,7 +57,10 @@ func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *Cl
 		delete(obj, "top_k")
 	}
 
-	if anthropic.IsClaudeAdaptiveThinkingModel(request.Model) {
+	if anthropic.IsClaudeAdaptiveThinkingModel(name) && !anthropic.IsClaudeSonnet55(name) {
+		if name == "claude-sonnet-5" && request.Thinking != nil && request.Thinking.Type == "disabled" {
+			return nil
+		}
 		rewrittenThinking, changed, err := rewriteClaudeAdaptiveThinking(obj["thinking"])
 		if err != nil {
 			return errors.Wrap(err, "rewrite Claude adaptive thinking")
@@ -76,6 +93,11 @@ func rewriteClaudeAdaptiveThinking(rawThinking json.RawMessage) (json.RawMessage
 		}
 		return json.RawMessage(rewritten), true, nil
 	}
+	if obj == nil {
+		// JSON null represents an absent optional thinking configuration. Preserve it
+		// rather than synthesizing adaptive thinking or assigning into a nil map.
+		return rawThinking, false, nil
+	}
 
 	var thinkingType string
 	if rawType, ok := obj["type"]; ok {
@@ -88,15 +110,16 @@ func rewriteClaudeAdaptiveThinking(rawThinking json.RawMessage) (json.RawMessage
 		if _, ok := obj["budget_tokens"]; !ok {
 			return rawThinking, false, nil
 		}
-		delete(obj, "budget_tokens")
-		rewritten, err := encodeClaudeRawJSONObject(obj)
-		if err != nil {
-			return nil, false, errors.Wrap(err, "marshal adaptive thinking")
-		}
-		return json.RawMessage(rewritten), true, nil
 	}
 
-	rewritten, err := json.Marshal(map[string]string{"type": "adaptive"})
+	adaptiveType, err := json.Marshal("adaptive")
+	if err != nil {
+		return nil, false, errors.Wrap(err, "marshal adaptive thinking type")
+	}
+	obj["type"] = json.RawMessage(adaptiveType)
+	delete(obj, "budget_tokens")
+
+	rewritten, err := encodeClaudeRawJSONObject(obj)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "marshal adaptive thinking")
 	}
@@ -381,8 +404,9 @@ func stripClaudeThinkingFromAssistantHistory(raw []byte) ([]byte, claudeSignatur
 	return encodedRequest, stats, nil
 }
 
-// stripClaudeUnsignedThinkingFromAssistantMessage removes assistant thinking blocks that cannot be replayed because they lack signatures.
-// stripClaudeUnsignedThinkingFromAssistantMessage returns the rewritten message, removal stats, whether the message should be kept, and any error.
+// stripClaudeUnsignedThinkingFromAssistantMessage removes visible assistant thinking blocks that cannot be replayed because they lack signatures.
+// Redacted thinking blocks carry opaque data instead of a signature and must be replayed unchanged.
+// The function returns the rewritten message, removal stats, whether the message should be kept, and any error.
 func stripClaudeUnsignedThinkingFromAssistantMessage(messageRaw json.RawMessage, messageIndex int) ([]byte, claudeUnsignedThinkingStats, bool, error) {
 	var stats claudeUnsignedThinkingStats
 	var message map[string]json.RawMessage
@@ -425,7 +449,9 @@ func stripClaudeUnsignedThinkingFromAssistantMessage(messageRaw json.RawMessage,
 		}
 
 		normalizedType := strings.ToLower(strings.TrimSpace(blockType))
-		if normalizedType != "thinking" && normalizedType != "redacted_thinking" {
+		if normalizedType != "thinking" {
+			// redacted_thinking has an opaque data field and no signature field.
+			// Preserve it, along with unknown future block types, byte-for-byte.
 			keptBlocks = append(keptBlocks, blockRaw)
 			continue
 		}

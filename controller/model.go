@@ -496,6 +496,7 @@ type ModelDisplayTier struct {
 
 // VideoDisplayPricing represents video generation pricing for display
 type VideoDisplayPricing struct {
+	InputImageUsd         float64            `json:"input_image_usd,omitempty"`
 	PerSecondUsd          float64            `json:"per_second_usd"`                   // USD per rendered second at base resolution
 	BaseResolution        string             `json:"base_resolution,omitempty"`        // Base resolution (e.g. "1280x720")
 	ResolutionMultipliers map[string]float64 `json:"resolution_multipliers,omitempty"` // Resolution -> multiplier map
@@ -503,6 +504,13 @@ type VideoDisplayPricing struct {
 
 // AudioDisplayPricing represents audio pricing for display
 type AudioDisplayPricing struct {
+	InputPriceQuantity float64 `json:"input_price_quantity,omitempty"`
+	// InputUnit makes direct input pricing explicit: characters, utf8_bytes, or seconds.
+	InputUnit               string  `json:"input_unit,omitempty"`
+	InputPriceUsd           float64 `json:"input_price_usd,omitempty"`
+	MinimumBillableSeconds  float64 `json:"minimum_billable_seconds,omitempty"`
+	BillingIncrementSeconds float64 `json:"billing_increment_seconds,omitempty"`
+
 	PromptTokenRatio          float64 `json:"prompt_token_ratio,omitempty"`           // Audio-to-text token conversion ratio for prompt
 	CompletionTokenRatio      float64 `json:"completion_token_ratio,omitempty"`       // Audio-to-text token conversion ratio for completion
 	PromptTokensPerSecond     float64 `json:"prompt_tokens_per_second,omitempty"`     // Tokens generated per second of prompt audio
@@ -526,8 +534,8 @@ type ImageDisplayPricing struct {
 // Providers commonly price by query ("$X per 1K calls"); rerank is the canonical
 // example. Display surfaces both per-1K-calls and the derived per-call USD figure.
 type PerCallDisplayPricing struct {
-	UsdPerThousandCalls float64 `json:"usd_per_thousand_calls,omitempty"` // USD per 1000 invocations
-	UsdPerCall          float64 `json:"usd_per_call,omitempty"`           // Derived USD per single invocation
+	UsdPerThousandCalls float64 `json:"usd_per_thousand_calls"` // USD per 1000 invocations
+	UsdPerCall          float64 `json:"usd_per_call"`           // Derived USD per single invocation
 }
 
 // EmbeddingDisplayPricing represents embedding pricing for display
@@ -586,6 +594,7 @@ func buildVideoDisplayPricing(cfg *adaptorpkg.VideoPricingConfig) *VideoDisplayP
 	}
 	return &VideoDisplayPricing{
 		PerSecondUsd:          cfg.PerSecondUsd,
+		InputImageUsd:         cfg.InputImageUsd,
 		BaseResolution:        cfg.BaseResolution,
 		ResolutionMultipliers: cfg.ResolutionMultipliers,
 	}
@@ -604,6 +613,11 @@ func buildAudioDisplayPricing(cfg *adaptorpkg.AudioPricingConfig) *AudioDisplayP
 		PromptTokensPerSecond:     cfg.PromptTokensPerSecond,
 		CompletionTokensPerSecond: cfg.CompletionTokensPerSecond,
 		UsdPerSecond:              cfg.UsdPerSecond,
+		InputUnit:                 cfg.InputUnit,
+		InputPriceUsd:             cfg.InputPriceUsd,
+		InputPriceQuantity:        cfg.InputPriceQuantity,
+		MinimumBillableSeconds:    cfg.MinimumBillableSeconds,
+		BillingIncrementSeconds:   cfg.BillingIncrementSeconds,
 	}
 }
 
@@ -757,9 +771,13 @@ func convertLocalDisplayConfig(cfg model.ModelConfigLocal) adaptorpkg.ModelConfi
 			})
 		}
 	}
+	if cfg.PerCall != nil {
+		converted.PerCall = &adaptorpkg.PerCallPricingConfig{UsdPerThousandCalls: cfg.PerCall.UsdPerThousandCalls}
+	}
 	if cfg.Video != nil {
 		converted.Video = &adaptorpkg.VideoPricingConfig{
 			PerSecondUsd:          cfg.Video.PerSecondUsd,
+			InputImageUsd:         cfg.Video.InputImageUsd,
 			BaseResolution:        cfg.Video.BaseResolution,
 			ResolutionMultipliers: cfg.Video.ResolutionMultipliers,
 		}
@@ -771,6 +789,11 @@ func convertLocalDisplayConfig(cfg model.ModelConfigLocal) adaptorpkg.ModelConfi
 			PromptTokensPerSecond:     cfg.Audio.PromptTokensPerSecond,
 			CompletionTokensPerSecond: cfg.Audio.CompletionTokensPerSecond,
 			UsdPerSecond:              cfg.Audio.UsdPerSecond,
+			InputUnit:                 cfg.Audio.InputUnit,
+			InputPriceUsd:             cfg.Audio.InputPriceUsd,
+			InputPriceQuantity:        cfg.Audio.InputPriceQuantity,
+			MinimumBillableSeconds:    cfg.Audio.MinimumBillableSeconds,
+			BillingIncrementSeconds:   cfg.Audio.BillingIncrementSeconds,
 		}
 	}
 	if cfg.Image != nil {
@@ -1249,6 +1272,7 @@ func GetModelsDisplay(c *gin.Context) {
 			var huggingFaceID string
 			var description string
 			var videoPricing *VideoDisplayPricing
+			var perCallPricing *PerCallDisplayPricing
 			var audioPricing *AudioDisplayPricing
 			var imagePricing *ImageDisplayPricing
 			var embeddingPricing *EmbeddingDisplayPricing
@@ -1310,63 +1334,7 @@ func GetModelsDisplay(c *gin.Context) {
 
 			if cfg, ok := defaultPricing[actual]; ok {
 				timeWindows, activeTimeWindow = buildTimeWindowDisplays(cfg.TimeWindows, convertRatioToPrice(cfg.Ratio), cfg.CompletionRatio, displayNow, convertRatioToPrice)
-				if cfg.Image != nil && cfg.Image.PricePerImageUsd > 0 && cfg.Ratio == 0 && cfg.CachedInputRatio <= 0 {
-					info := ModelDisplayInfo{
-						MaxTokens:                 cfg.MaxTokens,
-						ContextLength:             cfg.ContextLength,
-						MaxOutputTokens:           cfg.MaxOutputTokens,
-						MaxReasoningTokens:        cfg.MaxReasoningTokens,
-						InputModalities:           append([]string(nil), cfg.InputModalities...),
-						OutputModalities:          append([]string(nil), cfg.OutputModalities...),
-						SupportedFeatures:         append([]string(nil), cfg.SupportedFeatures...),
-						SupportedSampling:         append([]string(nil), cfg.SupportedSamplingParameters...),
-						SupportedReasoningEfforts: append([]string(nil), cfg.SupportedReasoningEfforts...),
-						DefaultReasoningEffort:    cfg.DefaultReasoningEffort,
-						Quantization:              cfg.Quantization,
-						HuggingFaceID:             cfg.HuggingFaceID,
-						Description:               cfg.Description,
-						ImagePrice:                cfg.Image.PricePerImageUsd,
-						InputPrice:                0,
-						CachedInputPrice:          0,
-						ImagePricing:              buildImageDisplayPricing(cfg.Image, cfg.Image),
-						TimeWindows:               timeWindows,
-						ActiveTimeWindow:          activeTimeWindow,
-					}
-					if filters.matchesModel(info) {
-						result[modelName] = info
-					}
-					continue
-				}
-				if cfg.PerCall != nil && cfg.PerCall.HasData() {
-					info := ModelDisplayInfo{
-						MaxTokens:                 cfg.MaxTokens,
-						ContextLength:             cfg.ContextLength,
-						MaxOutputTokens:           cfg.MaxOutputTokens,
-						MaxReasoningTokens:        cfg.MaxReasoningTokens,
-						InputModalities:           append([]string(nil), cfg.InputModalities...),
-						OutputModalities:          append([]string(nil), cfg.OutputModalities...),
-						SupportedFeatures:         append([]string(nil), cfg.SupportedFeatures...),
-						SupportedSampling:         append([]string(nil), cfg.SupportedSamplingParameters...),
-						SupportedReasoningEfforts: append([]string(nil), cfg.SupportedReasoningEfforts...),
-						DefaultReasoningEffort:    cfg.DefaultReasoningEffort,
-						Quantization:              cfg.Quantization,
-						HuggingFaceID:             cfg.HuggingFaceID,
-						Description:               cfg.Description,
-						InputPrice:                0,
-						CachedInputPrice:          0,
-						OutputPrice:               0,
-						PerCallPricing: &PerCallDisplayPricing{
-							UsdPerThousandCalls: cfg.PerCall.UsdPerThousandCalls,
-							UsdPerCall:          cfg.PerCall.UsdPerThousandCalls / 1000.0,
-						},
-						TimeWindows:      timeWindows,
-						ActiveTimeWindow: activeTimeWindow,
-					}
-					if filters.matchesModel(info) {
-						result[modelName] = info
-					}
-					continue
-				}
+				perCallPricing = buildPerCallDisplayPricing(cfg.PerCall)
 				inputPrice = convertRatioToPrice(cfg.Ratio)
 				cachedInputPrice = inputPrice
 				if cfg.CachedInputRatio != 0 {
@@ -1434,6 +1402,7 @@ func GetModelsDisplay(c *gin.Context) {
 				if cfg.Video != nil && cfg.Video.HasData() {
 					videoPricing = &VideoDisplayPricing{
 						PerSecondUsd:          cfg.Video.PerSecondUsd,
+						InputImageUsd:         cfg.Video.InputImageUsd,
 						BaseResolution:        cfg.Video.BaseResolution,
 						ResolutionMultipliers: cfg.Video.ResolutionMultipliers,
 					}
@@ -1446,6 +1415,11 @@ func GetModelsDisplay(c *gin.Context) {
 						PromptTokensPerSecond:     cfg.Audio.PromptTokensPerSecond,
 						CompletionTokensPerSecond: cfg.Audio.CompletionTokensPerSecond,
 						UsdPerSecond:              cfg.Audio.UsdPerSecond,
+						InputUnit:                 cfg.Audio.InputUnit,
+						InputPriceUsd:             cfg.Audio.InputPriceUsd,
+						InputPriceQuantity:        cfg.Audio.InputPriceQuantity,
+						MinimumBillableSeconds:    cfg.Audio.MinimumBillableSeconds,
+						BillingIncrementSeconds:   cfg.Audio.BillingIncrementSeconds,
 					}
 				}
 				// Embedding pricing
@@ -1510,7 +1484,33 @@ func GetModelsDisplay(c *gin.Context) {
 					imagePrice = cfg.Image.PricePerImageUsd
 					imagePricing = buildImageDisplayPricing(nil, cfg.Image)
 				}
-				timeWindows, activeTimeWindow = buildTimeWindowDisplays(convertLocalDisplayTimeWindows(cfg.TimeWindows), inputPrice, baseCompletionRatio, displayNow, convertRatioToPrice)
+				// Native tariffs have the same presence semantics as the billing
+				// resolvers: a present zero rate is free, not missing configuration.
+				converted := convertLocalDisplayConfig(*cfg)
+				if converted.PerCall != nil && converted.PerCall.HasData() {
+					perCallPricing = buildPerCallDisplayPricing(converted.PerCall)
+				} else if perCallPricing != nil && cfg.Ratio != 0 && cfg.Video == nil {
+					// The video relay interprets a legacy scalar override as
+					// quota/call, not quota/token. Keep its native display unit.
+					perCallPricing = buildPerCallDisplayPricing(&adaptorpkg.PerCallPricingConfig{
+						UsdPerThousandCalls: cfg.Ratio * 1000 / ratio.QuotaPerUsd,
+					})
+				}
+				if converted.Audio != nil && converted.Audio.HasData() {
+					audioPricing = buildAudioDisplayPricing(converted.Audio)
+				} else if cfg.Audio == nil && cfg.Ratio != 0 {
+					audioPricing = buildLegacyAudioTariffDisplay(audioPricing, cfg.Ratio)
+				}
+				if converted.PerCall != nil || (converted.Audio != nil && converted.Audio.HasData()) || cfg.Ratio != 0 {
+					// Explicit local native tariffs do not inherit provider date
+					// schedules in the billing resolvers. Do not advertise them.
+					if perCallPricing != nil || audioPricing != nil {
+						timeWindows, activeTimeWindow = nil, ""
+					}
+				}
+				if len(cfg.TimeWindows) > 0 {
+					timeWindows, activeTimeWindow = buildTimeWindowDisplays(convertLocalDisplayTimeWindows(cfg.TimeWindows), inputPrice, baseCompletionRatio, displayNow, convertRatioToPrice)
+				}
 			}
 
 			if cfg, ok := getOverride(modelName); ok {
@@ -1522,6 +1522,12 @@ func GetModelsDisplay(c *gin.Context) {
 					overrideApplied = true
 					applyOverride(cfg)
 				}
+			}
+
+			if perCallPricing != nil {
+				inputPrice, outputPrice, cachedInputPrice = 0, 0, 0
+				cacheWrite5mPrice, cacheWrite1hPrice = 0, 0
+				tiers = nil
 			}
 
 			info := ModelDisplayInfo{
@@ -1547,6 +1553,7 @@ func GetModelsDisplay(c *gin.Context) {
 				Tiers:                     tiers,
 				VideoPricing:              videoPricing,
 				AudioPricing:              audioPricing,
+				PerCallPricing:            perCallPricing,
 				ImagePricing:              imagePricing,
 				EmbeddingPricing:          embeddingPricing,
 				TimeWindows:               timeWindows,
@@ -1620,7 +1627,7 @@ func GetModelsDisplay(c *gin.Context) {
 		v, err, _ := anonymousModelsDisplayGroup.Do(cacheKey, func() (any, error) {
 			result, err := buildResult()
 			if err != nil {
-				return nil, err
+				return nil, errors.WithStack(err)
 			}
 			anonymousModelsDisplayCache.Store(cacheKey, result)
 			return result, nil

@@ -111,6 +111,10 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/default-pricing", controller.GetChannelDefaultPricing)
 			channelRoute.POST("/", controller.AddChannel)
 			channelRoute.POST("/:id/duplicate", controller.DuplicateChannel)
+			channelRoute.POST("/:id/reset_models", controller.ResetChannelModels)
+			channelRoute.POST("/reset_models", controller.ResetSelectedChannelModels)
+			channelRoute.POST("/selection", controller.ResolveChannelSelection)
+			channelRoute.POST("/delete_selected_disabled", controller.DeleteSelectedDisabledChannels)
 			channelRoute.PUT("/", controller.UpdateChannel)
 			channelRoute.PUT("/pricing/:id", controller.UpdateChannelPricing)
 			channelRoute.DELETE("/disabled", controller.DeleteDisabledChannel)
@@ -165,12 +169,18 @@ func SetApiRouter(router *gin.Engine) {
 			redemptionRoute.DELETE("/:id", controller.DeleteRedemption)
 		}
 		logRoute := apiRouter.Group("/log")
+		logRoute.POST("/selection", middleware.UserAuth(), controller.ResolveLogSelection)
+		logRoute.POST("/delete_selected", middleware.AdminAuth(), controller.DeleteSelectedLogs)
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
 		logRoute.DELETE("/", middleware.AdminAuth(), controller.DeleteHistoryLogs)
 		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
+		// Additive keyset routes. They are siblings of the offset routes above,
+		// never a mode of them, so the legacy response envelope stays frozen.
+		logRoute.GET("/cursor", middleware.AdminAuth(), controller.GetAllLogsCursor)
+		logRoute.GET("/self/cursor", middleware.UserAuth(), controller.GetUserLogsCursor)
 		logRoute.GET("/self/search", middleware.UserAuth(), controller.SearchUserLogs)
 
 		// Tracing routes

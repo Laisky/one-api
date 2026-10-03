@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
@@ -310,7 +312,10 @@ func DeleteHistoryLogs(c *gin.Context) {
 		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("target timestamp is required")))
 		return
 	}
-	count, err := model.DeleteOldLog(targetTimestamp)
+	// Detached from the request: the purge is now chunked and can run for many
+	// minutes on a large logs table, and a client that closes the connection
+	// must not leave it half done while the response reports success.
+	count, err := model.DeleteOldLogContext(context.WithoutCancel(gmw.Ctx(c)), targetTimestamp)
 	if err != nil {
 		helper.RespondError(c, err)
 		return

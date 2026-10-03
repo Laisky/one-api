@@ -154,8 +154,10 @@ func TestRealtimeHandler_EndToEnd(t *testing.T) {
 	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
 	clientConn, _, err := dialer.Dial(wsURL, nil)
 	if err != nil {
-		// If the upgrade fails (common in test environments), skip the E2E test
-		t.Skipf("WebSocket dial failed (expected in some test envs): %v", err)
+		// See ws_model_guard_integration_test.go: this is a local httptest server, so
+		// a refused upgrade is a defect in the proxy, not an environment quirk.
+		// Skipping on it hid exactly the regression this test exists to catch.
+		require.NoError(t, err, "the local realtime proxy must accept a WebSocket upgrade")
 	}
 	defer clientConn.Close()
 

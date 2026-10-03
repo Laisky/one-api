@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ import (
 )
 
 // This file implements the T17/T18 black-box differential harness described in
-// docs/proposals/20260714_boundary-response-dtos.md. It drives every handler
+// docs/proposals/archive/20260714_boundary-response-dtos.md. It drives every handler
 // site in the proposal's Appendix A (28 sites: User 6, Token 9, Channel 4,
 // Redemption 4, Log 5) plus the documented T18 error cases through the real
 // handlers over httptest, and records (status, canonicalized JSON body) into
@@ -86,7 +87,7 @@ const behaviorDiffDeviationDir = behaviorDiffBaselineDir + "/deviations"
 
 // behaviorDiffKnownDeviations enumerates the cases where post-refactor behavior
 // intentionally differs from the pre-refactor baseline, mapped to the reason on
-// record. See §10.3 of docs/proposals/20260714_boundary-response-dtos.md.
+// record. See §10.3 of docs/proposals/archive/20260714_boundary-response-dtos.md.
 //
 // These are NOT skips. A listed case is still asserted byte-for-byte against its
 // recorded post-refactor expectation, and it is additionally required to still
@@ -255,7 +256,7 @@ func (n *behaviorDiffNormalizer) apply(v any) any {
 		}
 		return typed
 	case string:
-		out := typed
+		out := canonicalizeGoStructFieldPath(typed)
 		for _, r := range n.sortedStrings() {
 			out = strings.ReplaceAll(out, r.value, r.placeholder)
 		}
@@ -271,6 +272,40 @@ func (n *behaviorDiffNormalizer) apply(v any) any {
 	default:
 		return v
 	}
+}
+
+// goStructFieldPathPattern matches the struct path encoding/json embeds in an
+// unmarshal error: `Go struct field <path> of type <type>`.
+var goStructFieldPathPattern = regexp.MustCompile(`Go struct field ([A-Za-z0-9_.]+) of type `)
+
+// canonicalizeGoStructFieldPath reduces the struct path in an encoding/json
+// unmarshal error to its final segment, i.e. the JSON field name.
+//
+// The full path is a Go-internal detail whose spelling depends on the toolchain:
+// for a field promoted from an embedded struct, Go 1.26 renders
+// `channelPayload.Channel.type` while Go 1.27 renders `channelPayload.type`.
+// Pinning either spelling makes this suite fail on the other toolchain without
+// any behavior having changed. The parts a client can actually act on — the
+// failing field name and the expected Go type — are preserved, so a real change
+// to which field rejects the payload still breaks the baseline.
+//
+// Parameters:
+//   - value: a candidate response string.
+//
+// Return values:
+//   - string: value with any struct path reduced to its final segment.
+func canonicalizeGoStructFieldPath(value string) string {
+	return goStructFieldPathPattern.ReplaceAllStringFunc(value, func(match string) string {
+		groups := goStructFieldPathPattern.FindStringSubmatch(match)
+		if len(groups) != 2 {
+			return match
+		}
+		path := groups[1]
+		if idx := strings.LastIndex(path, "."); idx >= 0 {
+			path = path[idx+1:]
+		}
+		return "Go struct field " + path + " of type "
+	})
 }
 
 // sortedStrings returns the string replacements ordered longest-value-first so a

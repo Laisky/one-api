@@ -2,7 +2,7 @@
 """Drive the management-API surface over real HTTP and record the result (T19).
 
 Covers every handler site in Appendix A of
-docs/proposals/20260714_boundary-response-dtos.md (user/token/channel/redemption/
+docs/proposals/archive/20260714_boundary-response-dtos.md (user/token/channel/redemption/
 log) plus error paths, against a running server. Unlike the in-process Go harness
 (controller/behavior_differential_test.go), this exercises the real router,
 middleware, session auth and database, so it catches anything that lives outside

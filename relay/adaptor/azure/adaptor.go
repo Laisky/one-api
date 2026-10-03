@@ -59,7 +59,19 @@ func (a *Adaptor) GetRequestURL(m *meta.Meta) (string, error) {
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, m *meta.Meta) error {
 	if m.AzureTargetsAnthropic() {
-		return a.claude.SetupRequestHeader(c, req, m)
+		if err := a.claude.SetupRequestHeader(c, req, m); err != nil {
+			return err
+		}
+		// Only an administrator's explicit bearer configuration can select Entra auth.
+		// The downstream gateway Authorization token must never become an upstream credential.
+		for key, value := range m.Config.CustomHeaders {
+			if strings.EqualFold(strings.TrimSpace(key), "Authorization") && strings.HasPrefix(strings.ToLower(strings.TrimSpace(value)), "bearer ") {
+				req.Header.Del("x-api-key")
+				req.Header.Del("api-key")
+				req.Header.Set("Authorization", strings.ReplaceAll(value, "{{key}}", m.APIKey))
+			}
+		}
+		return nil
 	}
 	return a.Adaptor.SetupRequestHeader(c, req, m)
 }
@@ -81,6 +93,13 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 func (a *Adaptor) DoRequest(c *gin.Context, m *meta.Meta, requestBody io.Reader) (*http.Response, error) {
 	// Route through DoRequestHelper with this adaptor so GetRequestURL and
 	// SetupRequestHeader dispatch by model family (openai vs anthropic surface).
+	if m.AzureTargetsAnthropic() {
+		prepared, err := anthropic.PrepareRequestBody(c, m.ActualModelName, requestBody)
+		if err != nil {
+			return nil, err
+		}
+		requestBody = prepared
+	}
 	return adaptor.DoRequestHelper(a, c, m, requestBody)
 }
 

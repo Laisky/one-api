@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import * as Yup from 'yup';
 import { Formik } from 'formik';
@@ -46,34 +47,38 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
   const [inputs, setInputs] = useState(originInputs);
 
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
-    setSubmitting(true);
+    try {
+      setSubmitting(true);
 
-    let res;
-    if (values.is_edit) {
-      res = await API.put(`/api/redemption/`, { ...values, uuid: redemptiondId });
-    } else {
-      res = await API.post(`/api/redemption/`, values);
-    }
-    const { success, message, data } = res.data;
-    if (success) {
+      let res;
       if (values.is_edit) {
-        showSuccess('兑换码更新成功！');
+        res = await API.put(`/api/redemption/`, { ...values, uuid: redemptiondId });
       } else {
-        showSuccess('兑换码创建成功！');
-        if (data.length > 1) {
-          let text = '';
-          for (let i = 0; i < data.length; i++) {
-            text += data[i] + '\n';
-          }
-          downloadTextAsFile(text, `${values.name}.txt`);
-        }
+        res = await API.post(`/api/redemption/`, values);
       }
+      const { success, message, data } = res.data;
+      if (success) {
+        if (values.is_edit) {
+          showSuccess('兑换码更新成功！');
+        } else {
+          showSuccess('兑换码创建成功！');
+          if (data.length > 1) {
+            let text = '';
+            for (let i = 0; i < data.length; i++) {
+              text += data[i] + '\n';
+            }
+            downloadTextAsFile(text, `${values.name}.txt`);
+          }
+        }
+        setSubmitting(false);
+        setStatus({ success: true });
+        onOk(true);
+      } else {
+        showError(message);
+        setErrors({ submit: message });
+      }
+    } finally {
       setSubmitting(false);
-      setStatus({ success: true });
-      onOk(true);
-    } else {
-      showError(message);
-      setErrors({ submit: message });
     }
   };
 
@@ -89,7 +94,7 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
       showError(message);
     }
     } catch (error) {
-      showError(error.message);
+      showError(error);
     } finally {
       setLoading(false);
     }
@@ -97,7 +102,7 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
 
   useEffect(() => {
     if (redemptiondId) {
-      loadRedemptiond().then();
+      loadRedemptiond().then().catch(reportUIError);
     } else {
       setInputs(originInputs);
     }
@@ -136,7 +141,7 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
             </Box>
           </Box>
         ) : (
-          <Formik initialValues={inputs} enableReinitialize validationSchema={validationSchema} onSubmit={submit}>
+          <Formik initialValues={inputs} enableReinitialize validationSchema={validationSchema} onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>
             {({ errors, handleBlur, handleChange, handleSubmit, touched, values, isSubmitting }) => (
             <form noValidate onSubmit={handleSubmit}>
               <FormControl fullWidth error={Boolean(touched.name && errors.name)} sx={{ ...theme.typography.otherInput }}>

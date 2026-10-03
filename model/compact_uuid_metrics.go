@@ -59,10 +59,8 @@ const (
 // Return values:
 //   - metrics.MetricsRecorder: the process recorder, or a no-op when metrics are disabled.
 func compactMetricsRecorder() metrics.MetricsRecorder {
-	if metrics.GlobalRecorder == nil {
-		return &metrics.NoOpRecorder{}
-	}
-	return metrics.GlobalRecorder
+	// metrics.Recorder() already substitutes a no-op when nothing is installed.
+	return metrics.Recorder()
 }
 
 // publishCompactStateMetrics sets exactly one active state gauge per role.

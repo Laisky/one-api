@@ -237,18 +237,20 @@ var (
 	SQLiteBusyTimeout = env.Int("SQLITE_BUSY_TIMEOUT", 10000)
 
 	// SQLMaxIdleConns controls the primary database pool's idle connection count.
-	// Set based on expected concurrent connections and database server capacity.
+	// The default targets one instance serving about 100 requests per second
+	// while limiting the memory retained by idle database backends.
 	//
 	// Environment variable: SQL_MAX_IDLE_CONNS
-	// Default: 200
-	SQLMaxIdleConns = env.Int("SQL_MAX_IDLE_CONNS", 200)
+	// Default: 10
+	SQLMaxIdleConns = env.Int("SQL_MAX_IDLE_CONNS", defaultSQLMaxIdleConns)
 
 	// SQLMaxOpenConns controls the primary database pool's maximum open connections.
-	// Limit this based on database server connection limits.
+	// The default provides burst headroom for short database operations without
+	// allowing one pool to consume a typical PostgreSQL server's entire capacity.
 	//
 	// Environment variable: SQL_MAX_OPEN_CONNS
-	// Default: 2000
-	SQLMaxOpenConns = env.Int("SQL_MAX_OPEN_CONNS", 2000)
+	// Default: 50
+	SQLMaxOpenConns = env.Int("SQL_MAX_OPEN_CONNS", defaultSQLMaxOpenConns)
 
 	// SQLMaxLifetimeSeconds sets how long database connections live before being
 	// recycled. Helps balance connection freshness with connection setup overhead.
@@ -256,7 +258,7 @@ var (
 	// Environment variable: SQL_MAX_LIFETIME
 	// Default: 300 (5 minutes)
 	// Unit: seconds
-	SQLMaxLifetimeSeconds = env.Int("SQL_MAX_LIFETIME", 300)
+	SQLMaxLifetimeSeconds = env.Int("SQL_MAX_LIFETIME", defaultSQLMaxLifetimeSeconds)
 
 	// LogSQLDSN overrides the DSN used for the logging database.
 	// Useful for separating high-volume logging writes from transactional data.
@@ -553,15 +555,20 @@ var (
 		return v
 	}()
 
-	// ChannelDisableThreshold defines the failure ratio that triggers automatic
-	// channel disablement when AutomaticDisableChannelEnabled is true.
+	// ChannelDisableThreshold is the channel-test RESPONSE TIME limit, in seconds.
+	// A channel whose health check takes longer than this is disabled even when the
+	// probe itself succeeded (see controller.testChannels). It is NOT a failure
+	// ratio: the failure-rate mechanism is MetricSuccessRateThreshold, consumed by
+	// monitor/metric.go. A value of 0 disables the latency check entirely.
 	//
 	// Runtime variable (set via admin UI)
-	// Default: 5.0 (500% - effectively disabled by default)
+	// Default: 5.0 seconds
 	ChannelDisableThreshold = 5.0
 
-	// AutomaticDisableChannelEnabled enables automatic channel disabling when
-	// failure rate exceeds ChannelDisableThreshold.
+	// AutomaticDisableChannelEnabled enables automatic channel disabling when a
+	// health check fails with a credential, quota or permission error, when the
+	// upstream cannot be reached, or when it exceeds ChannelDisableThreshold.
+	// Channels skipped by the health check are never auto-disabled.
 	//
 	// Runtime variable (set via admin UI)
 	// Default: false
@@ -886,6 +893,19 @@ var (
 	// Unit: seconds
 	UserContentRequestTimeout = env.Int("USER_CONTENT_REQUEST_TIMEOUT", 30)
 
+	// MaxRequestBodySizeMB caps how many bytes a single relay request body may
+	// contribute, both as uploaded bytes and as gzip-decompressed bytes.
+	//
+	// Without a cap, GzipDecodeMiddleware hands downstream readers an unbounded
+	// compress/gzip stream and common.GetRequestBody reads it fully into memory, so
+	// a ~1 MB upload of compressed zeros expands to ~1 GB of resident heap. The cap
+	// has to be generous because relay payloads legitimately carry base64 media.
+	//
+	// Environment variable: MAX_REQUEST_BODY_SIZE_MB
+	// Default: 128 MB
+	// Unit: megabytes; 0 or negative disables the limit
+	MaxRequestBodySizeMB = env.Int("MAX_REQUEST_BODY_SIZE_MB", 128)
+
 	// MaxInlineImageSizeMB limits the size of images that can be inlined as base64
 	// to prevent oversized payloads from overwhelming upstream providers.
 	//
@@ -961,6 +981,17 @@ var (
 	// Default: "" (metrics endpoint blocked)
 	MetricsToken = strings.TrimSpace(env.String("METRICS_TOKEN", ""))
 
+	// MetricsMaxPathLabels bounds how many distinct normalized request paths
+	// may become HTTP metric "path" label values per process; further paths are
+	// recorded under "/other". Legitimate traffic uses a few hundred distinct
+	// normalized paths, while vulnerability scanners probe thousands, each of
+	// which would otherwise create permanent time series. Non-positive values
+	// fall back to the default.
+	//
+	// Environment variable: METRICS_MAX_PATH_LABELS
+	// Default: 1000
+	MetricsMaxPathLabels = env.Int("METRICS_MAX_PATH_LABELS", 1000)
+
 	// EnablePprof exposes the Go net/http/pprof profiling endpoints on a
 	// dedicated listener (see PprofListen) when true. Use it to debug live
 	// memory/CPU/goroutine usage with `go tool pprof`. Disabled by default
@@ -1033,10 +1064,7 @@ var (
 	// Default: ""
 	// Example: "100.97.108.34:4318"
 	OpenTelemetryEndpoint = func() string {
-		endpoint := strings.TrimSpace(env.String("OTEL_EXPORTER_OTLP_ENDPOINT", ""))
-		endpoint = strings.TrimPrefix(endpoint, "http://")
-		endpoint = strings.TrimPrefix(endpoint, "https://")
-		return endpoint
+		return normalizeOTLPEndpoint(env.String(EnvOpenTelemetryEndpoint, ""))
 	}()
 
 	// OpenTelemetryInsecure determines whether the OTLP exporters should skip
@@ -1044,7 +1072,7 @@ var (
 	//
 	// Environment variable: OTEL_EXPORTER_OTLP_INSECURE
 	// Default: true
-	OpenTelemetryInsecure = env.Bool("OTEL_EXPORTER_OTLP_INSECURE", true)
+	OpenTelemetryInsecure = env.Bool(EnvOpenTelemetryInsecure, true)
 
 	// OpenTelemetryServiceName labels emitted telemetry with the logical
 	// service identifier. This appears in tracing backends and metrics UIs.
@@ -1082,14 +1110,29 @@ var (
 	// Allowed values: "hourly", "daily", "weekly"
 	LogRotationInterval = strings.TrimSpace(strings.ToLower(env.String("LOG_ROTATION_INTERVAL", "daily")))
 
-	// LogRetentionDays determines how many days logs are kept before the
+	// LogRetentionDays determines how many days log FILES are kept before the
 	// retention worker purges them. Set to 0 to disable cleanup.
 	//
+	// The default stays 0 (never delete) under the standalone profile. Enabling
+	// it by default was considered and rejected: an existing deployment that
+	// upgrades without changing its configuration would have had years of
+	// accumulated log files deleted on first start, which is exactly the kind
+	// of surprise this project's backward-compatibility rules forbid. The
+	// unbounded-growth problem is real at high volume, so the scaled and
+	// external profiles enable retention -- but reaching those profiles is an
+	// explicit operator decision.
+	//
+	// Operators who leave every disk guard off are warned once at startup; see
+	// logger.StartLogRetentionCleaner.
+	//
+	// See also LOG_MAX_TOTAL_SIZE_MB and LOG_MIN_FREE_DISK_MB, which bound disk
+	// even when a single retention window does not fit on the volume.
+	//
 	// Environment variable: LOG_RETENTION_DAYS
-	// Default: 0 (disabled)
+	// Default: 0 (disabled) for standalone, 3 for scaled, 1 for external
 	// Unit: days
 	LogRetentionDays = func() int {
-		v := env.Int("LOG_RETENTION_DAYS", 0)
+		v := env.Int("LOG_RETENTION_DAYS", profileInt(ObservabilityProfile, 0, 3, 1))
 		if v < 0 {
 			return 0
 		}

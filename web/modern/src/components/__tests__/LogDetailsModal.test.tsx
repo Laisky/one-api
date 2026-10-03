@@ -253,7 +253,7 @@ describe('LogDetailsModal', () => {
     });
 
     await waitFor(() => {
-      expect(apiGetMock()).toHaveBeenCalledWith(`/api/trace/log/${LOG_UUID}`);
+      expect(apiGetMock()).toHaveBeenCalledWith('/api/trace/trace-abc', expect.objectContaining({ signal: expect.any(AbortSignal) }));
     });
 
     expect(await screen.findByText(/request information/i)).toBeInTheDocument();
@@ -261,6 +261,43 @@ describe('LogDetailsModal', () => {
     expect(screen.getByText('200')).toBeInTheDocument();
     expect(screen.getByText(/total request time/i)).toBeInTheDocument();
     expect(screen.getAllByText(/request received/i).length).toBeGreaterThan(0);
+  });
+
+  it('explains that an expected sampled or external trace is not retained locally', async () => {
+    const log: LogEntry = {
+      uuid: LOG_UUID,
+      user_uuid: USER_UUID,
+      type: LOG_TYPES.CONSUME,
+      created_at: 1_700_100_000,
+      model_name: 'claude-v3',
+      token_name: 'trace-token',
+      username: 'trace-user',
+      channel_uuid: CHANNEL_UUID,
+      quota: 2_000,
+      prompt_tokens: 600,
+      completion_tokens: 400,
+      cached_prompt_tokens: 0,
+      elapsed_time: 3_000,
+      request_id: 'req-trace-not-retained',
+      trace_id: 'trace-not-retained-locally',
+      metadata: {},
+    };
+    apiGetMock().mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          availability: 'not_retained_locally',
+          trace_id: log.trace_id,
+        },
+      },
+    } as any);
+
+    await act(async () => {
+      renderLogDetailsModal(log);
+    });
+
+    expect(await screen.findByText(/trace data was not retained locally/i)).toBeInTheDocument();
+    expect(screen.queryByText(/failed to load trace information/i)).not.toBeInTheDocument();
   });
 
   it.each([
@@ -295,6 +332,7 @@ describe('LogDetailsModal', () => {
           id: 12,
           trace_id: 'trace-any',
           url: '/api/channel/test/3',
+          body_size: 0,
           method: 'GET',
           status: 200,
           created_at: 1_700_200_000,
@@ -311,7 +349,7 @@ describe('LogDetailsModal', () => {
     });
 
     await waitFor(() => {
-      expect(apiGetMock()).toHaveBeenCalledWith(`/api/trace/log/${LOG_UUID}`);
+      expect(apiGetMock()).toHaveBeenCalledWith('/api/trace/trace-any', expect.objectContaining({ signal: expect.any(AbortSignal) }));
     });
   });
 

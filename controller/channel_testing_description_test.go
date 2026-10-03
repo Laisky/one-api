@@ -21,5 +21,5 @@ func TestModelDescriptionAllowsSummarizationCapability(t *testing.T) {
 		OutputModalities: []string{"text"},
 		Description:      "General-purpose Chat model supporting text summarization and question answering.",
 	}
-	require.True(t, modelConfigSupportsTextTest(cfg, true))
+	require.True(t, modelConfigUsesChatFormat(cfg))
 }

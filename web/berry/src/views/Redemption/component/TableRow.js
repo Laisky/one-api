@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import { useState } from 'react';
 
@@ -72,7 +73,7 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
               {item.status === 3 ? '已使用' : '未知'}
             </Label>
           ) : (
-            <TableSwitch id={`switch-${ref}`} checked={statusSwitch === 1} onChange={handleStatus} />
+            <TableSwitch id={`switch-${ref}`} checked={statusSwitch === 1} onChange={(...uiArgs) => handleStatus(...uiArgs).catch(reportUIError)} />
           )}
         </TableCell>
 
@@ -131,7 +132,7 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDeleteClose}>关闭</Button>
-          <Button onClick={handleDelete} sx={{ color: 'error.main' }} autoFocus>
+          <Button onClick={(...uiArgs) => handleDelete(...uiArgs).catch(reportUIError)} sx={{ color: 'error.main' }} autoFocus>
             删除
           </Button>
         </DialogActions>

@@ -82,7 +82,7 @@ func prepareModernMCPToolCall(c *gin.Context, params modernMCPCallParams) (*mode
 		return nil, errors.Wrap(err, "get user from context")
 	}
 
-	serverLabel, toolName := splitToolName(params.Name)
+	serverLabel, toolName := resolveQualifiedToolName(params.Name)
 	if toolName == "" {
 		toolName = strings.TrimSpace(params.Name)
 	}
@@ -225,6 +225,8 @@ func executeModernMCPToolCall(
 		callResult, err := client.CallToolLatestWithOptions(ctx, descriptor, params.Arguments, mcp.CallToolRequestOptions{
 			InputResponses: params.InputResponses,
 			RequestState:   params.RequestState,
+			Meta:           params.Meta,
+			OnNotification: params.OnNotification,
 		})
 		if err != nil {
 			return nil, errors.Wrapf(err, "call mcp tool %q on server %d", candidate.Tool.Name, candidate.ServerID)

@@ -9,7 +9,8 @@
       "edit": "编辑",
       "enable": "启用",
       "refresh_balance": "刷新「{{name}}」余额",
-      "test": "测试"
+      "test": "测试",
+      "test_help": "按该渠道的 Testing Model 设置，立即执行一次健康检查。"
     },
     "columns": {
       "actions": "操作",
@@ -455,6 +456,8 @@
         "error_title": "测试出错",
         "failed_message": "渠道测试失败。",
         "failed_title": "测试失败",
+        "skipped_message": "已跳过渠道测试：{{message}}",
+        "skipped_title": "已跳过",
         "success_message": "渠道测试成功完成。",
         "success_title": "测试通过"
       },
@@ -583,6 +586,8 @@
       "status_failed_title": "更新失败",
       "test_failed_message": "未知错误",
       "test_failed_title": "渠道测试失败",
+      "test_skipped_message": "该渠道未提供可用于对话的接口，无法进行健康检查，已保持启用状态。",
+      "test_skipped_title": "已跳过渠道测试",
       "test_success": "渠道测试成功。",
       "testing_model_failed_message": "更新测试模型失败",
       "testing_model_failed_title": "保存失败",
@@ -603,7 +608,10 @@
       "paused": "已暂停"
     },
     "testing": {
-      "auto": "自动最便宜"
+      "auto": "自动最便宜",
+      "help": "选择用于对该渠道做健康检查的模型。\n\nCHEAPEST —— 自动选用价格最低、且通过对话类接口（chat completions、response API、Claude messages 或 Gemini chat）提供服务的模型。\n\nSKIP —— 将该渠道完全排除在健康检查之外：不会发起探测，也不会被自动禁用。\n\n只有对话格式的模型可被测试。嵌入、重排序、内容审核、补全以及多媒体模型均被排除；API 格式未知的模型同样默认排除 —— 如需测试，可在此处手动指定。",
+      "help_label": "测试模型的选取逻辑",
+      "skip": "SKIP（不测试）"
     },
     "title": "渠道",
     "toolbar": {
@@ -615,6 +623,7 @@
       "refresh_balances": "刷新所有余额",
       "refresh_balances_mobile": "刷新余额",
       "test_all": "测试全部",
+      "test_all_help": "对所有渠道执行健康检查，每个渠道各自使用其 Testing Model 设置（设为 CHEAPEST 时使用其最便宜的对话格式模型）。\n\n设为 SKIP 的渠道，以及没有可探测的对话格式模型的渠道，将被跳过：既不会被判定为失败，也不会被自动禁用。",
       "test_all_mobile": "测试所有渠道"
     },
     "type_unknown": "类型 {{type}}"

@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "scope": "Two separate diagnostics on unchanged retained production; no new unprofiled A/B or performance gain.",
+  "parent": "36e3e994d2d9a396ea7b47af18a00cb7b25c381f",
+  "tooling_commit": "c3aae60c50ff8de4d6e705cc8d3b389b9b3b321a",
+  "binary_sha256": "b194162e565267d03678863531ca2e66cd47e465770b43fa5c50039f98e81a46",
+  "driver_sha256": "7f52e6fef16f2ad4fa9ecb27d937663e18325813f60ce26d7e29b56b117fc61e",
+  "mode_separation": "independent CPU60s and trace5s runs; identical runtime binary; no A/B",
+  "runs": {
+    "cpu": {
+      "qualified": true,
+      "requests": 8192,
+      "failed": 0,
+      "dropped": 0,
+      "used_quota": 40280064,
+      "gateway_machine_cpu_mean": 0.610752118834733,
+      "high_load_time_fraction": 1.0,
+      "coverage_seconds": 59.00102331000005,
+      "upstream_rate_drift": 0.021685491827163172,
+      "profile_sha256": "4226887da73ed0d24ff92d957bd54eb02080baa2162f33870698ef3f884c4be5",
+      "profile_bytes": 166231,
+      "capture_started_elapsed": 30.00263698799995,
+      "capture_finished_elapsed": 90.05697286999998,
+      "summary_sha256": "88717ca669b7c65df904e0d07b632853bb9ad0ada688e56f2ee2289e1b9590c1",
+      "samples_sha256": "473b075c409d932d4d25eafb91cb61ad2052d069dba853a48ebf880a8cad5d73",
+      "requests_sha256": "ba8bb4f67ed05049a5dbfc31cc21222d84878a1b2c465671950638d4236c0938"
+    },
+    "trace": {
+      "qualified": true,
+      "requests": 8192,
+      "failed": 0,
+      "dropped": 0,
+      "used_quota": 40280064,
+      "gateway_machine_cpu_mean": 0.5934507521303921,
+      "high_load_time_fraction": 0.9830296477849889,
+      "coverage_seconds": 59.00236856099991,
+      "upstream_rate_drift": -0.006734131537305621,
+      "profile_sha256": "2477cb4ebe9ea4d6d7511b519867222176ec9e0d0a7ac626132d8e2e154153b1",
+      "profile_bytes": 14535977,
+      "capture_started_elapsed": 45.002125147000015,
+      "capture_finished_elapsed": 50.20046210800001,
+      "summary_sha256": "2ff84397163b90c76c83d4735c327db0825cb1b16c732dc213a1232fdfe14eef",
+      "samples_sha256": "73055c6cf6034caf16805b1efc6afccfbf2c845ba1b7bdececc83ea9c2c97443",
+      "requests_sha256": "8b98d4a8c856dfb112df6b7377feb8a2ab44a5d0c784502e57848a310e414795"
+    }
+  },
+  "interpretation": {
+    "cpu_sample_seconds": 145.41,
+    "cpu_wall_seconds": 60.01,
+    "bpe_merge_cumulative_cpu_pct": 29.7,
+    "background_mark_cumulative_cpu_pct": 6.66,
+    "trace_span_seconds": 5.015147649,
+    "aggregate_runnable_delay_seconds": 108.9737,
+    "gosched_attributed_delay_seconds": 92.30191,
+    "gosched_delay_pct": 84.7,
+    "complete_gc_stw_ranges": 71,
+    "gc_stw_sum_ms": 22.271168,
+    "gc_stw_max_ms": 3.030784,
+    "complete_mark_assist_ranges": 1033,
+    "mark_assist_max_elapsed_ms": 21.123136,
+    "causal_latency_attribution": false
+  }
+}

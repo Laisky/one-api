@@ -155,7 +155,7 @@ func runPostBillingWithTimeout(
 				}
 				lg.Error(info.logMessage, fields...)
 
-				metrics.GlobalRecorder.RecordBillingTimeout(info.userID, info.channelID, info.model, estimatedQuota, elapsedTime)
+				metrics.Recorder().RecordBillingTimeout(info.userID, info.channelID, info.model, estimatedQuota, elapsedTime)
 				// TODO: Implement dead letter queue or retry mechanism for failed billing
 			}
 			// Join the inner goroutine so it remains tracked by graceful.Drain. work's ctx is

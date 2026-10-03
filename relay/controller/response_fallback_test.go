@@ -672,6 +672,10 @@ func TestRelayResponseAPIHelper_FallbackStreaming(t *testing.T) {
 	require.NotEmpty(t, finalResponse.Output, "expected output in final response")
 	require.NotEmpty(t, finalResponse.Output[0].Content, "expected output content in final response")
 	require.Equal(t, "Hello world!", finalResponse.Output[0].Content[0].Text, "unexpected final response text")
+	require.NotNil(t, finalResponse.Usage)
+	require.Equal(t, 5, finalResponse.Usage.InputTokens)
+	require.Equal(t, 7, finalResponse.Usage.OutputTokens)
+	require.Equal(t, 12, finalResponse.Usage.TotalTokens)
 	require.NotNil(t, finalResponse.Usage, "expected usage in final response")
 	require.Equal(t, 12, finalResponse.Usage.TotalTokens, "unexpected usage total tokens in final response")
 }
@@ -817,6 +821,7 @@ func TestRelayResponseAPIHelper_FallbackAnthropicStreamingHandled(t *testing.T) 
 			`{"type":"content_block_start","index":0,"content_block":{"id":"cb_1","type":"text","text":""}}`,
 			`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`,
 			`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" world!"}}`,
+			`{"type":"content_block_stop","index":0}`,
 			`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":5,"output_tokens":7}}`,
 			`{"type":"message_stop"}`,
 		}
@@ -1038,12 +1043,15 @@ func ensureResponseFallbackFixtures(t *testing.T) {
 		&model.Token{},
 		&model.Channel{},
 		&model.UserRequestCost{},
+		&model.QuotaRefund{},
 		&model.Log{},
 		&model.Trace{},
 		&model.MCPServer{},
 		&model.MCPTool{},
 	)
 	require.NoError(t, err, "failed to migrate tables")
+
+	require.NoError(t, model.DB.Where("token_id = ?", fallbackTokenID).Delete(&model.QuotaRefund{}).Error)
 
 	err = model.DB.Where("id = ?", fallbackUserID).Delete(&model.User{}).Error
 	require.NoError(t, err, "failed to clean user fixture")

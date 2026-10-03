@@ -9,17 +9,8 @@ import (
 // Reranker and embedding members of the Qwen3 family live in models_rerank.go
 // and models_embedding.go respectively.
 var qwenModels = map[string]adaptor.ModelConfig{
-	"accounts/fireworks/models/qwen3p8-max": {
-		Ratio:                       2.00 * ratio.MilliTokensUsd,
-		CompletionRatio:             6.00 / 2.00,
-		CachedInputRatio:            0.25 * ratio.MilliTokensUsd,
-		InputModalities:             fwTextImageInModalities,
-		OutputModalities:            fwTextOnlyModalities,
-		SupportedFeatures:           fwChatFeatures,
-		SupportedSamplingParameters: fwChatSamplingParams,
-		HuggingFaceID:               "Qwen/Qwen3.8-2.4T-A95B",
-		Description:                 "Fireworks Qwen 3.8 Max serverless endpoint for multimodal, long-horizon coding, professional work, research, and agentic tasks. The Fireworks card does not currently publish a context limit.",
-	},
+	// Fireworks publishes qwen3p8-2p4t-a95b as the canonical API model path.
+	// The former qwen3p8-max catalog alias is intentionally not exposed.
 	"accounts/fireworks/models/qwen3p8-2p4t-a95b": {
 		Ratio:                       2.00 * ratio.MilliTokensUsd,
 		CompletionRatio:             6.00 / 2.00,

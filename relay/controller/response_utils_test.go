@@ -83,7 +83,7 @@ func TestGetResponseAPIPromptTokens_CountsDeepSeekFileImages(t *testing.T) {
 				},
 			}
 			fileTokens := getResponseAPIPromptTokens(context.Background(), fileRequest)
-			require.Equal(t, baseTokens+384, fileTokens)
+			require.Equal(t, baseTokens+1024, fileTokens)
 		})
 	}
 }
@@ -110,5 +110,5 @@ func TestGetResponseAPIPromptTokens_CountsDeepSeekToolOutputFileImages(t *testin
 	}
 
 	fileTokens := getResponseAPIPromptTokens(context.Background(), withImage)
-	require.Equal(t, 384, fileTokens)
+	require.Equal(t, 1024, fileTokens)
 }

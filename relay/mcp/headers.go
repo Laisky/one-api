@@ -458,6 +458,9 @@ func renderInteger(value any) (string, error) {
 		}
 		return strconv.FormatFloat(typed, 'f', -1, 64), nil
 	case json.Number:
+		if !boundedMCPHeaderNumber(typed) {
+			return "", errors.New("MCP header integer representation exceeds supported bounds")
+		}
 		rational, ok := new(big.Rat).SetString(string(typed))
 		if !ok || !rational.IsInt() {
 			return "", errors.Errorf("expected exact JSON integer, got %q", typed)

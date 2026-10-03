@@ -225,8 +225,8 @@
         "no_enabled": "No se encontraron tokens habilitados.",
         "no_tokens": "No hay tokens disponibles",
         "select_placeholder": "Selecciona un token",
-        "unnamed": "Token {{ref}}",
-        "unlimited": "Ilimitado"
+        "unlimited": "Ilimitado",
+        "unnamed": "Token {{ref}}"
       },
       "top_k": {
         "description": "Muestreo Top-K: limita las opciones a los K tokens más probables",

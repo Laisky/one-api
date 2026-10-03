@@ -39,6 +39,8 @@
 package zai
 
 import (
+	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/one-api/relay/relaymode"
 	"io"
 	"net/http"
 
@@ -80,6 +82,12 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, m *meta.
 // this, zhipu's promoted DoRequest would bind to the embedded adaptor and send
 // JWT-signed requests. Mirrors azure.Adaptor.DoRequest.
 func (a *Adaptor) DoRequest(c *gin.Context, m *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if m.Mode == relaymode.Videos && c.Request.Method != http.MethodPost && c.Request.Method != http.MethodGet {
+		return nil, errors.New("unsupported video method")
+	}
+	if m.Mode == relaymode.Videos && c.Request.Method == http.MethodGet && (c.Request.URL.Path == "/v1/videos" || c.Request.URL.Path == "/v1/videos/generations") {
+		return nil, errors.New("video polling requires a task ID")
+	}
 	return adaptor.DoRequestHelper(a, c, m, requestBody)
 }
 

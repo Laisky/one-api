@@ -76,8 +76,37 @@ func (s *RedisStore) convIdemKey(k string) string  { return s.ns + ":idem:conv:"
 func (s *RedisStore) convAppendIdemKey(id, k string) string {
 	return s.ns + ":idem:convapp:" + id + ":" + k
 }
-func (s *RedisStore) leaseKey(id string) string    { return s.ns + ":lease:" + id }
-func (s *RedisStore) itemKey(itemID string) string { return s.ns + ":item:" + itemID }
+func (s *RedisStore) leaseKey(id string) string { return s.ns + ":lease:" + id }
+
+// itemKey scopes an item-index entry to its owner.
+//
+// The namespace used to be global (":item:<id>"), which let any caller name any
+// other tenant's key. UpstreamItemID is taken verbatim from a client-supplied
+// "id" on POST /v1/conversations/{id}/items, so a user could squat a victim's
+// upstream item id (the SetNX in indexItems then silently no-ops for the real
+// owner) and, worse, the unconditional Del in the purge paths deleted a victim's
+// index entry. Both are closed by putting the user id in the key.
+//
+// Parameters:
+//   - owner: the owner scope the entry belongs to.
+//   - itemID: the gateway or upstream item id.
+//
+// Return values:
+//   - string: the owner-scoped Redis key.
+func (s *RedisStore) itemKey(owner OwnerScope, itemID string) string {
+	return s.ns + ":item:" + strconv.Itoa(owner.UserID) + ":" + itemID
+}
+
+// legacyItemKey is the pre-owner-scoping key layout, still read (never written)
+// so entries written before the fix stay resolvable until their TTL expires.
+// Reads through it are safe because GetItem still verifies blob.Owner.
+//
+// Parameters:
+//   - itemID: the gateway or upstream item id.
+//
+// Return values:
+//   - string: the unscoped Redis key.
+func (s *RedisStore) legacyItemKey(itemID string) string { return s.ns + ":item:" + itemID }
 func (s *RedisStore) userRespZKey(userID int) string {
 	return s.ns + ":ucap:resp:" + strconv.Itoa(userID)
 }
@@ -134,7 +163,7 @@ func (s *RedisStore) decode(token string, v any) error {
 func (s *RedisStore) getString(ctx context.Context, key string) (string, error) {
 	val, err := s.rdb.Get(ctx, key).Result()
 	if errors.Is(err, redis.Nil) {
-		return "", ErrNotFound
+		return "", errors.WithStack(ErrNotFound)
 	}
 	if err != nil {
 		return "", errors.Wrap(ErrStoreUnavailable, err.Error())
@@ -150,7 +179,7 @@ func (s *RedisStore) CreateResponse(ctx context.Context, record *ResponseStateRe
 		return nil, errors.New("state: nil response record")
 	}
 	if !record.Owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	count := len(record.InputItems) + len(record.OutputItems)
 	if s.limits.ItemCountExceeded(count) {
@@ -260,10 +289,7 @@ func (s *RedisStore) purgeResponse(ctx context.Context, id string, rec *Response
 	_ = s.rdb.Del(ctx, s.respKey(id)).Err()
 	_ = s.rdb.Set(ctx, s.respTombKey(id), "1", s.nodeTTL(rec.ExpiresAt)).Err()
 	for _, env := range append(append([]ItemEnvelope{}, rec.InputItems...), rec.OutputItems...) {
-		_ = s.rdb.Del(ctx, s.itemKey(env.GatewayItemID)).Err()
-		if env.UpstreamItemID != "" {
-			_ = s.rdb.Del(ctx, s.itemKey(env.UpstreamItemID)).Err()
-		}
+		s.deleteItemIndex(ctx, rec.Owner, env)
 	}
 }
 
@@ -296,7 +322,7 @@ func (s *RedisStore) nodeTTL(expiresAt int64) time.Duration {
 // GetResponse returns the owner's node, or ErrNotFound.
 func (s *RedisStore) GetResponse(ctx context.Context, owner OwnerScope, id string) (*ResponseStateRecord, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	token, err := s.getString(ctx, s.respKey(id))
 	if err != nil {
@@ -307,10 +333,10 @@ func (s *RedisStore) GetResponse(ctx context.Context, owner OwnerScope, id strin
 		return nil, err
 	}
 	if !rec.Owner.Matches(owner) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	if rec.ExpiresAt > 0 && s.now().Unix() >= rec.ExpiresAt {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	return &rec, nil
 }
@@ -345,7 +371,7 @@ func (s *RedisStore) DeleteResponse(ctx context.Context, owner OwnerScope, id st
 // nodes.
 func (s *RedisStore) BatchGetResponses(ctx context.Context, owner OwnerScope, ids []string) ([]*ResponseStateRecord, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	out := make([]*ResponseStateRecord, len(ids))
 	if len(ids) == 0 {
@@ -396,22 +422,49 @@ func (s *RedisStore) indexItems(ctx context.Context, owner OwnerScope, items []I
 		if err != nil {
 			return err
 		}
-		if err := s.rdb.Set(ctx, s.itemKey(env.GatewayItemID), token, ttl).Err(); err != nil {
+		if err := s.rdb.Set(ctx, s.itemKey(owner, env.GatewayItemID), token, ttl).Err(); err != nil {
 			return errors.Wrap(ErrStoreUnavailable, err.Error())
 		}
 		if env.UpstreamItemID != "" {
-			_ = s.rdb.SetNX(ctx, s.itemKey(env.UpstreamItemID), token, ttl).Err()
+			_ = s.rdb.SetNX(ctx, s.itemKey(owner, env.UpstreamItemID), token, ttl).Err()
 		}
 	}
 	return nil
 }
 
+// deleteItemIndex removes an envelope's index entries for one owner, including
+// the pre-owner-scoping key so upgraded deployments do not leak stale entries.
+//
+// Parameters:
+//   - ctx: request context.
+//   - owner: the owner whose index entries are being purged.
+//   - env: the envelope whose gateway/upstream ids to remove.
+func (s *RedisStore) deleteItemIndex(ctx context.Context, owner OwnerScope, env ItemEnvelope) {
+	ids := []string{env.GatewayItemID}
+	if env.UpstreamItemID != "" {
+		ids = append(ids, env.UpstreamItemID)
+	}
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		_ = s.rdb.Del(ctx, s.itemKey(owner, id)).Err()
+		_ = s.rdb.Del(ctx, s.legacyItemKey(id)).Err()
+	}
+}
+
 // GetItem resolves a stored item under owner scope.
 func (s *RedisStore) GetItem(ctx context.Context, owner OwnerScope, itemID string) (*ItemEnvelope, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
-	token, err := s.getString(ctx, s.itemKey(itemID))
+	token, err := s.getString(ctx, s.itemKey(owner, itemID))
+	if errors.Is(err, ErrNotFound) {
+		// Entries written before item keys were owner-scoped live under the old
+		// layout. The blob.Owner check below still gates them, so this cannot leak
+		// across tenants; it only avoids losing pre-upgrade references.
+		token, err = s.getString(ctx, s.legacyItemKey(itemID))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -420,7 +473,7 @@ func (s *RedisStore) GetItem(ctx context.Context, owner OwnerScope, itemID strin
 		return nil, err
 	}
 	if !blob.Owner.Matches(owner) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	env := blob.Env
 	return &env, nil
@@ -434,7 +487,7 @@ func (s *RedisStore) CreateConversation(ctx context.Context, record *Conversatio
 		return nil, errors.New("state: nil conversation record")
 	}
 	if !record.Owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	if s.limits.ItemCountExceeded(len(record.Items)) {
 		return nil, errors.Wrapf(ErrLimitExceeded, "conversation item count %d", len(record.Items))
@@ -550,7 +603,7 @@ func (s *RedisStore) touchConversation(ctx context.Context, userID int, id strin
 // GetConversation returns the owner's conversation.
 func (s *RedisStore) GetConversation(ctx context.Context, owner OwnerScope, id string) (*ConversationStateRecord, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	token, err := s.getString(ctx, s.convKey(id))
 	if err != nil {
@@ -561,10 +614,10 @@ func (s *RedisStore) GetConversation(ctx context.Context, owner OwnerScope, id s
 		return nil, err
 	}
 	if !rec.Owner.Matches(owner) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	if rec.ExpiresAt > 0 && s.now().Unix() >= rec.ExpiresAt {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	// Reading is activity: slide the idle TTL forward (row L08).
 	s.touchConversation(ctx, owner.UserID, id)
@@ -583,10 +636,7 @@ func (s *RedisStore) DeleteConversation(ctx context.Context, owner OwnerScope, i
 	_ = s.rdb.Del(ctx, s.leaseKey(id)).Err()
 	// Purge both gateway-id and upstream-id item index entries (ST-018 parity).
 	for _, env := range rec.Items {
-		_ = s.rdb.Del(ctx, s.itemKey(env.GatewayItemID)).Err()
-		if env.UpstreamItemID != "" {
-			_ = s.rdb.Del(ctx, s.itemKey(env.UpstreamItemID)).Err()
-		}
+		s.deleteItemIndex(ctx, rec.Owner, env)
 	}
 	if s.limits.MaxConversationsPerUser > 0 {
 		_ = s.rdb.ZRem(ctx, s.userConvZKey(owner.UserID), id).Err()
@@ -594,11 +644,78 @@ func (s *RedisStore) DeleteConversation(ctx context.Context, owner OwnerScope, i
 	return nil
 }
 
+// appendLeaseTTL bounds how long one append may hold the conversation lease. It
+// only has to outlive a single read-modify-write against Redis, and an abandoned
+// lease must clear quickly, so it is deliberately short.
+const appendLeaseTTL = 5 * time.Second
+
+// appendLeaseAttempts bounds how long a writer waits for a contended lease before
+// reporting a conflict to the caller.
+const appendLeaseAttempts = 20
+
+// appendLeaseRetryDelay paces retries while another writer holds the lease.
+const appendLeaseRetryDelay = 25 * time.Millisecond
+
 // AppendConversationItems atomically appends items and advances the version.
 //
-// Concurrency is serialized by the per-conversation lease the controller holds
-// during a write (CON04); the version check here guards against a stale writer.
+// The write below is a read-modify-write over an encrypted blob, so it cannot be
+// expressed as a Redis CAS. CON04 specifies that the per-conversation lease
+// serializes it — but nothing outside this package ever took that lease, and the
+// public Conversations API has no if-match semantics, so callers pass AnyVersion
+// and two concurrent POSTs both read version N and both wrote N+1. The loser's
+// items vanished from the record while the API returned 200 and echoed them, and
+// its already-written rs:item:* index entries became unreachable by every cleanup
+// path. Taking the lease here rather than in the controller makes every caller
+// safe by construction.
 func (s *RedisStore) AppendConversationItems(ctx context.Context, owner OwnerScope, id string, expectedVersion int64, items []ItemEnvelope, idempotencyKey string) (*ConversationStateRecord, error) {
+	leaseToken, err := s.acquireAppendLease(ctx, owner, id)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = s.ReleaseConversationLease(ctx, owner, id, leaseToken) }()
+
+	return s.appendConversationItemsLocked(ctx, owner, id, expectedVersion, items, idempotencyKey)
+}
+
+// acquireAppendLease takes the per-conversation write lease, waiting briefly for
+// a contended one rather than failing the first concurrent writer outright.
+//
+// Parameters:
+//   - ctx: request context; cancellation aborts the wait.
+//   - owner: the conversation owner.
+//   - id: the gateway conversation id.
+//
+// Return values:
+//   - string: the lease token to release with.
+//   - error: ErrLeaseHeld when the lease stays contended, or a store error.
+func (s *RedisStore) acquireAppendLease(ctx context.Context, owner OwnerScope, id string) (string, error) {
+	var lastErr error
+	for attempt := 0; attempt < appendLeaseAttempts; attempt++ {
+		token, err := s.AcquireConversationLease(ctx, owner, id, appendLeaseTTL)
+		if err == nil {
+			return token, nil
+		}
+		if !errors.Is(err, ErrLeaseHeld) {
+			return "", err
+		}
+		lastErr = err
+		select {
+		case <-ctx.Done():
+			return "", errors.WithStack(ctx.Err())
+		case <-time.After(appendLeaseRetryDelay):
+		}
+	}
+	return "", lastErr
+}
+
+// appendConversationItemsLocked performs the append with the write lease held.
+//
+// Parameters mirror AppendConversationItems.
+//
+// Return values:
+//   - *ConversationStateRecord: the updated record.
+//   - error: a store, limit, or version error.
+func (s *RedisStore) appendConversationItemsLocked(ctx context.Context, owner OwnerScope, id string, expectedVersion int64, items []ItemEnvelope, idempotencyKey string) (*ConversationStateRecord, error) {
 	if idempotencyKey != "" {
 		ok, err := s.rdb.SetNX(ctx, s.convAppendIdemKey(id, idempotencyKey), "1", s.convAppendIdemTTL()).Result()
 		if err != nil {
@@ -615,7 +732,7 @@ func (s *RedisStore) AppendConversationItems(ctx context.Context, owner OwnerSco
 		return nil, err
 	}
 	if expectedVersion != AnyVersion && expectedVersion != rec.Version {
-		return nil, ErrVersionConflict
+		return nil, errors.WithStack(ErrVersionConflict)
 	}
 	projected := len(rec.Items) + len(items)
 	if s.limits.ItemCountExceeded(projected) {
@@ -648,7 +765,7 @@ func (s *RedisStore) UpdateConversationMetadata(ctx context.Context, owner Owner
 		return nil, err
 	}
 	if expectedVersion != AnyVersion && expectedVersion != rec.Version {
-		return nil, ErrVersionConflict
+		return nil, errors.WithStack(ErrVersionConflict)
 	}
 	rec.Metadata = cloneRaw(metadata)
 	rec.Version++
@@ -665,7 +782,7 @@ func (s *RedisStore) DeleteConversationItem(ctx context.Context, owner OwnerScop
 		return nil, err
 	}
 	if expectedVersion != AnyVersion && expectedVersion != rec.Version {
-		return nil, ErrVersionConflict
+		return nil, errors.WithStack(ErrVersionConflict)
 	}
 	filtered := make([]ItemEnvelope, 0, len(rec.Items))
 	removed := false
@@ -673,16 +790,13 @@ func (s *RedisStore) DeleteConversationItem(ctx context.Context, owner OwnerScop
 		if env.GatewayItemID == itemID || (env.UpstreamItemID != "" && env.UpstreamItemID == itemID) {
 			removed = true
 			// Purge both gateway-id and upstream-id index entries (ST-018 parity).
-			_ = s.rdb.Del(ctx, s.itemKey(env.GatewayItemID)).Err()
-			if env.UpstreamItemID != "" {
-				_ = s.rdb.Del(ctx, s.itemKey(env.UpstreamItemID)).Err()
-			}
+			s.deleteItemIndex(ctx, rec.Owner, env)
 			continue
 		}
 		filtered = append(filtered, env)
 	}
 	if !removed {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	rec.Items = filtered
 	rec.Version++
@@ -710,7 +824,7 @@ func (s *RedisStore) AcquireConversationLease(ctx context.Context, owner OwnerSc
 		return "", errors.Wrap(ErrStoreUnavailable, err.Error())
 	}
 	if !ok {
-		return "", ErrLeaseHeld
+		return "", errors.WithStack(ErrLeaseHeld)
 	}
 	return token, nil
 }
@@ -722,10 +836,10 @@ func (s *RedisStore) RenewConversationLease(ctx context.Context, owner OwnerScop
 	}
 	current, err := s.getString(ctx, s.leaseKey(id))
 	if err != nil {
-		return ErrLeaseInvalid
+		return errors.WithStack(ErrLeaseInvalid)
 	}
 	if current != leaseToken {
-		return ErrLeaseInvalid
+		return errors.WithStack(ErrLeaseInvalid)
 	}
 	if err := s.rdb.Expire(ctx, s.leaseKey(id), ttl).Err(); err != nil {
 		return errors.Wrap(ErrStoreUnavailable, err.Error())
@@ -743,7 +857,7 @@ func (s *RedisStore) ReleaseConversationLease(ctx context.Context, owner OwnerSc
 		return err
 	}
 	if current != leaseToken {
-		return ErrLeaseInvalid
+		return errors.WithStack(ErrLeaseInvalid)
 	}
 	if err := s.rdb.Del(ctx, s.leaseKey(id)).Err(); err != nil {
 		return errors.Wrap(ErrStoreUnavailable, err.Error())
@@ -759,7 +873,7 @@ func (s *RedisStore) PutCheckpoint(ctx context.Context, record *CheckpointRecord
 		return errors.New("state: nil checkpoint record")
 	}
 	if !record.Owner.Valid() {
-		return ErrInvalidOwner
+		return errors.WithStack(ErrInvalidOwner)
 	}
 	clone := cloneCheckpointRecord(record)
 	if clone.SchemaVersion == 0 {
@@ -792,7 +906,7 @@ func (s *RedisStore) checkpointTTL(expiresAt int64) time.Duration {
 // GetCheckpoint returns a checkpoint for the owner scope.
 func (s *RedisStore) GetCheckpoint(ctx context.Context, owner OwnerScope, key string) (*CheckpointRecord, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	token, err := s.getString(ctx, s.checkpointKey(owner, key))
 	if err != nil {
@@ -803,10 +917,10 @@ func (s *RedisStore) GetCheckpoint(ctx context.Context, owner OwnerScope, key st
 		return nil, err
 	}
 	if !rec.Owner.Matches(owner) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	if rec.ExpiresAt > 0 && s.now().Unix() >= rec.ExpiresAt {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	return &rec, nil
 }

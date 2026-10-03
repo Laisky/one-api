@@ -548,7 +548,7 @@ func increaseUserQuota(ctx context.Context, id int, quota int64) (err error) {
 		ctx = context.Background()
 	}
 	err = runWithSQLiteBusyRetry(ctx, func() error {
-		return DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", quota)).Error
+		return errors.WithStack(DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", quota)).Error)
 	})
 	if err != nil {
 		return identity.Tag(
@@ -583,7 +583,7 @@ func decreaseUserQuota(ctx context.Context, id int, quota int64) (err error) {
 		result = DB.Model(&User{}).
 			Where("id = ? AND quota >= ?", id, quota).
 			Update("quota", gorm.Expr("quota - ?", quota))
-		return result.Error
+		return errors.WithStack(result.Error)
 	})
 	if err != nil {
 		return identity.Tag(
@@ -628,13 +628,19 @@ func UpdateUserUsedQuotaAndRequestCountWithContext(ctx context.Context, id int, 
 	updateUserUsedQuotaAndRequestCount(ctx, id, quota, 1)
 }
 
+// updateUserUsedQuotaAndRequestCount atomically increments the two usage counters for id.
+// A failed SQLite write is retried within ctx; successful writes are never replayed.
 func updateUserUsedQuotaAndRequestCount(ctx context.Context, id int, quota int64, count int) {
-	err := DB.Model(&User{}).Where("id = ?", id).Updates(
-		map[string]any{
-			"used_quota":    gorm.Expr("used_quota + ?", quota),
-			"request_count": gorm.Expr("request_count + ?", count),
-		},
-	).Error
+	db := DB
+	err := runWithSQLiteBusyRetryForDB(ctx, db, func() error {
+		// Start from a fresh session on each attempt, not a query carrying the previous error.
+		return errors.WithStack(db.WithContext(ctx).Model(&User{}).Where("id = ?", id).Updates(
+			map[string]any{
+				"used_quota":    gorm.Expr("used_quota + ?", quota),
+				"request_count": gorm.Expr("request_count + ?", count),
+			},
+		).Error)
+	})
 	if err != nil {
 		// Error path only, so resolving the reference here costs at most one narrow
 		// SELECT and never runs on the successful billing path.

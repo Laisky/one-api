@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API, isMobile, showError, showSuccess } from '../../helpers';
@@ -37,7 +38,7 @@ const EditUser = (props) => {
         value: group
       })));
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
   const navigate = useNavigate();
@@ -45,26 +46,29 @@ const EditUser = (props) => {
     props.handleClose();
   };
   const loadUser = async () => {
-    setLoading(true);
-    let res = undefined;
-    if (userId) {
-      res = await API.get(`/api/user/${userId}`);
-    } else {
-      res = await API.get(`/api/user/self`);
-    }
-    const { success, message, data } = res.data;
-    if (success) {
-      data.password = '';
-      setInputs(data);
-      // The user DTO never exposes the TOTP secret; ask the dedicated
-      // admin status endpoint instead.
+    try {
+      setLoading(true);
+      let res = undefined;
       if (userId) {
-        await loadTotpStatus();
+        res = await API.get(`/api/user/${userId}`);
+      } else {
+        res = await API.get(`/api/user/self`);
       }
-    } else {
-      showError(message);
+      const { success, message, data } = res.data;
+      if (success) {
+        data.password = '';
+        setInputs(data);
+        // The user DTO never exposes the TOTP secret; ask the dedicated
+        // admin status endpoint instead.
+        if (userId) {
+          await loadTotpStatus();
+        }
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // loadTotpStatus fetches whether the edited user has TOTP enabled via the
@@ -80,7 +84,7 @@ const EditUser = (props) => {
         showError(message);
       }
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -101,33 +105,36 @@ const EditUser = (props) => {
   };
 
   useEffect(() => {
-    loadUser().then();
+    loadUser().then().catch(reportUIError);
     if (userId) {
-      fetchGroups().then();
+      fetchGroups().then().catch(reportUIError);
     }
   }, [props.editingUser.uuid, props.editingUser.id]);
 
   const submit = async () => {
-    setLoading(true);
-    let res = undefined;
-    if (userId) {
-      let data = { ...inputs, uuid: userId };
-      if (typeof data.quota === 'string') {
-        data.quota = parseInt(data.quota);
+    try {
+      setLoading(true);
+      let res = undefined;
+      if (userId) {
+        let data = { ...inputs, uuid: userId };
+        if (typeof data.quota === 'string') {
+          data.quota = parseInt(data.quota);
+        }
+        res = await API.put(`/api/user/`, data);
+      } else {
+        res = await API.put(`/api/user/self`, inputs);
       }
-      res = await API.put(`/api/user/`, data);
-    } else {
-      res = await API.put(`/api/user/self`, inputs);
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess('用户信息更新成功！');
+        props.refresh();
+        props.handleClose();
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess('用户信息更新成功！');
-      props.refresh();
-      props.handleClose();
-    } else {
-      showError(message);
-    }
-    setLoading(false);
   };
 
   return (
@@ -141,7 +148,7 @@ const EditUser = (props) => {
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Space>
-              <Button theme="solid" size={'large'} onClick={submit}>提交</Button>
+              <Button theme="solid" size={'large'} onClick={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>提交</Button>
               <Button theme="solid" size={'large'} type={'tertiary'} onClick={handleCancel}>取消</Button>
             </Space>
           </div>
@@ -291,7 +298,7 @@ const EditUser = (props) => {
                     <Button
                       theme="solid"
                       type="danger"
-                      onClick={adminDisableTotp}
+                      onClick={(...uiArgs) => adminDisableTotp(...uiArgs).catch(reportUIError)}
                       loading={totpLoading}
                     >
                       管理员禁用 TOTP

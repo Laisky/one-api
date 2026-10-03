@@ -12,12 +12,14 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/one-api/internal/tokenizer"
 	"github.com/Laisky/zap"
-	"github.com/pkoukk/tiktoken-go"
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"
 	imgutil "github.com/Laisky/one-api/common/image"
+	"github.com/Laisky/one-api/relay/adaptor/common/claudevision"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
 )
@@ -108,11 +110,14 @@ func getTokenEncoder(model string) *tiktoken.Tiktoken {
 	return nil
 }
 
+// getTokenNum counts ordinary text exactly, retaining the configured approximate fallback.
 func getTokenNum(tokenEncoder *tiktoken.Tiktoken, text string) int {
 	if config.ApproximateTokenEnabled || tokenEncoder == nil {
 		return int(float64(len(text)) * 0.38)
 	}
-	return len(tokenEncoder.Encode(text, nil, nil))
+	// Encode(text, nil, nil) enables no special tokens. EncodeOrdinary has the
+	// same tokenization contract without scanning for unusable special tokens.
+	return len(tokenEncoder.EncodeOrdinary(text))
 }
 
 // CountTokenMessages counts the number of tokens in a list of messages.
@@ -120,6 +125,7 @@ func CountTokenMessages(ctx context.Context,
 	messages []model.Message, actualModel string) int {
 	lg := gmw.GetLogger(ctx)
 
+	actualModel = claudeImageReservationModel(ctx, actualModel)
 	tokenEncoder := getTokenEncoder(actualModel)
 	// Reference:
 	// https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
@@ -211,8 +217,11 @@ func CountTokenMessages(ctx context.Context,
 				}
 			}
 		}
-		if actualModel == deepseekV4VisionModelName {
+		if deepseekcompat.IsFlashVisionModel(actualModel) {
 			tokenNum += countDeepSeekFileImageTokens(message.Content)
+		}
+		if claudevision.IsSonnet55(actualModel) {
+			tokenNum += countSonnet55FileImages(message.Content) * claudevision.Sonnet55MaxImageTokens
 		}
 
 		tokenNum += getTokenNum(tokenEncoder, message.Role)
@@ -229,7 +238,7 @@ func CountTokenMessages(ctx context.Context,
 // countDeepSeekFileImageTokens estimates DeepSeek file content parts without
 // downloading or decoding their image payloads.
 // Parameters: content is the raw message content; the caller has already
-// restricted this helper to the DeepSeek vision model.
+// restricted this helper to a current DeepSeek Flash vision API name.
 // Returns: the documented upper-bound token estimate for each valid file image.
 func countDeepSeekFileImageTokens(content any) int {
 	total := 0
@@ -247,14 +256,14 @@ func countDeepSeekFileImageTokens(content any) int {
 			fileID, _ := block["file_id"].(string)
 			fileData, _ := block["file_data"].(string)
 			if strings.TrimSpace(fileID) != "" || strings.TrimSpace(fileData) != "" {
-				total += deepseekV4VisionMaxImageTokens
+				total += deepseekFlashMaxImageTokens
 			}
 		}
 	case []model.MessageContent:
 		for _, block := range blocks {
 			if strings.EqualFold(block.Type, model.ContentTypeFile) &&
 				(strings.TrimSpace(block.FileID) != "" || strings.TrimSpace(block.FileData) != "") {
-				total += deepseekV4VisionMaxImageTokens
+				total += deepseekFlashMaxImageTokens
 			}
 		}
 	}
@@ -317,10 +326,10 @@ const (
 	gpt4oMiniLowDetailCost  = 2833
 	gpt4oMiniHighDetailCost = 5667
 	gpt4oMiniAdditionalCost = 2833
-	// DeepSeek documents a hard post-resize upper bound for each image. The
-	// upstream response usage remains authoritative for final billing.
-	deepseekV4VisionMaxImageTokens = 384
-	deepseekV4VisionModelName      = "deepseek-v4-flash-vision-exp"
+	// DeepSeek's current Flash model and its aliases share this post-resize
+	// image bound. It is only a pre-consume estimate; upstream usage determines
+	// the final charge. Source: https://api-docs.deepseek.com/guides/vision/
+	deepseekFlashMaxImageTokens = 1024
 )
 
 // getImageSizeFn is injected for testability
@@ -353,12 +362,15 @@ func getVisionBaseTile(model string) (base int, tile int) {
 }
 
 func countImageTokens(url string, detail string, model string) (_ int, err error) {
+	if claudevision.IsSonnet55(model) {
+		return claudevision.Sonnet55MaxImageTokens, nil
+	}
 	// DeepSeek's exact image-token count is returned by the API usage object.
 	// For pre-consume estimation, use the documented per-image upper bound rather
 	// than applying OpenAI's unrelated tile formula or fetching a remote image.
 	// Post-consume billing reconciles this estimate against upstream usage.
-	if model == deepseekV4VisionModelName {
-		return deepseekV4VisionMaxImageTokens, nil
+	if deepseekcompat.IsFlashVisionModel(model) {
+		return deepseekFlashMaxImageTokens, nil
 	}
 
 	var fetchSize = true

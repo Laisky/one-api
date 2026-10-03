@@ -5,16 +5,16 @@ import (
 )
 
 // Reusable metadata fragments. Fireworks publishes per-model cards at
-// https://app.fireworks.ai/models/<provider>/<slug> that report serverless
+// https://fireworks.ai/models/<provider>/<slug> that report serverless
 // availability, pricing, context length, Hugging Face lineage, calibration,
 // modalities, and function-calling support. The values below were verified
-// against the live model library and model cards on 2026-08-18 and standardized
+// against the live model library and model cards on 2026-09-04 and standardized
 // to the OpenRouter-compatible vocabulary expected by adaptor.ModelConfig.
 //
 // Sources:
-//   - https://app.fireworks.ai/models
-//   - https://fireworks.ai/pricing
-//   - Per-model cards under https://app.fireworks.ai/models/<provider>/<slug>
+//   - https://fireworks.ai/models?modelTypes=Serverless
+//   - https://docs.fireworks.ai/serverless/pricing
+//   - Per-model cards under https://fireworks.ai/models/<provider>/<slug>
 var (
 	// fwTextOnlyModalities advertises a chat model that consumes and emits text only.
 	fwTextOnlyModalities = []string{"text"}
@@ -78,8 +78,9 @@ var (
 // embedding entries retain the model IDs accepted by their older endpoints.
 //
 // Per-model serverless prices and availability are sourced from the live model
-// library and individual cards (verified 2026-08-18). Generic dedicated
-// deployment buckets remain documented at https://fireworks.ai/pricing.
+// library, serverless pricing table, and individual cards (verified 2026-09-04).
+// Generic dedicated deployment buckets remain documented at
+// https://fireworks.ai/pricing.
 //
 // Capability metadata (context length, modalities, Hugging Face lineage, and
 // quantization where explicitly published) is sourced from the model cards and

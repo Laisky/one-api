@@ -56,17 +56,47 @@ func readMCPResponseBody(reader io.Reader) ([]byte, error) {
 //   - *mcpJSONRPCEnvelope: the validated response envelope.
 //   - error: a wrapped JSON, version, or response-correlation error.
 func parseMCPResponseEnvelope(body []byte, expectedID string) (*mcpJSONRPCEnvelope, error) {
+	var fields map[string]json.RawMessage
+	if err := DecodeJSON(body, &fields); err != nil {
+		return nil, err
+	}
+	result, hasResult := fields["result"]
+	rpcError, hasError := fields["error"]
+	if hasResult == hasError || (hasResult && (len(bytes.TrimSpace(result)) == 0 || bytes.TrimSpace(result)[0] != '{')) || (hasError && (len(bytes.TrimSpace(rpcError)) == 0 || bytes.TrimSpace(rpcError)[0] != '{')) {
+		return nil, errors.New("MCP response must contain exactly one object result or error")
+	}
 	var envelope mcpJSONRPCEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil {
+	if err := DecodeJSON(body, &envelope); err != nil {
 		return nil, errors.Wrap(err, "decode mcp JSON-RPC response")
 	}
 	if envelope.JSONRPC != "2.0" {
 		return nil, errors.Errorf("mcp response jsonrpc must be 2.0, got %q", envelope.JSONRPC)
 	}
+	// JSON-RPC 2.0 section 5 requires a null id when the server could not read the
+	// request id, and the MCP error-response shape makes id optional for the same
+	// reason. Rejecting those envelopes would discard the actual error code and
+	// return a plain error, which IsModernFallbackCandidate cannot inspect. A
+	// *result* still has to correlate: accepting a mismatched one would hand one
+	// request's answer to another.
+	if envelope.Error != nil && isUncorrelatedErrorID(envelope.ID) {
+		return &envelope, nil
+	}
 	if err := validateMCPResponseID(envelope.ID, expectedID); err != nil {
 		return nil, err
 	}
 	return &envelope, nil
+}
+
+// isUncorrelatedErrorID reports whether a JSON-RPC id is absent or explicitly null.
+//
+// Parameters:
+//   - rawID: the encoded id field, which may be empty when the key was absent.
+//
+// Return values:
+//   - bool: true when the server declined to echo an id.
+func isUncorrelatedErrorID(rawID json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(rawID)
+	return len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null"))
 }
 
 // extractMCPResponseEnvelope finds the SSE data event correlated with one request identifier.
@@ -96,12 +126,19 @@ func extractMCPResponseEnvelope(body []byte, expectedID string) ([]byte, error) 
 		}
 		candidate := []byte(strings.Join(dataLines, "\n"))
 		var envelope struct {
-			ID json.RawMessage `json:"id"`
+			ID    json.RawMessage `json:"id"`
+			Error json.RawMessage `json:"error"`
 		}
 		if err := json.Unmarshal(candidate, &envelope); err != nil {
 			continue
 		}
 		if validateMCPResponseID(envelope.ID, expectedID) == nil {
+			return candidate, nil
+		}
+		// Same rule as parseMCPResponseEnvelope: an error event is allowed to carry
+		// no id, and skipping it would report "no event for request id" instead of
+		// the error the server actually sent.
+		if len(envelope.Error) > 0 && isUncorrelatedErrorID(envelope.ID) {
 			return candidate, nil
 		}
 	}

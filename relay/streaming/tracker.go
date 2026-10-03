@@ -260,7 +260,7 @@ func (t *QuotaTracker) ensureQuotaLocked(delta int64) error {
 		return errors.Wrap(err, "get user quota during streaming flush")
 	}
 	if remaining < delta {
-		return ErrQuotaExceeded
+		return errors.WithStack(ErrQuotaExceeded)
 	}
 	return nil
 }

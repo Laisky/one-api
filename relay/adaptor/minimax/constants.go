@@ -186,7 +186,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// existing channels; current pricing pages no longer list these but
 	// upstream still serves the SKUs to existing keys (historical pricing).
 	"abab6.5-chat": {
-		Ratio:                       0.03 * ratio.MilliTokensRmb,
+		Ratio:                       30 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               245760,
 		MaxOutputTokens:             8192,
@@ -197,7 +197,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "MiniMax abab6.5 long-context closed-weight chat model (legacy).",
 	},
 	"abab6.5s-chat": {
-		Ratio:                       0.01 * ratio.MilliTokensRmb,
+		Ratio:                       10 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               245760,
 		MaxOutputTokens:             8192,
@@ -208,7 +208,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "MiniMax abab6.5s cost-optimized variant of abab6.5 (legacy).",
 	},
 	"abab6.5t-chat": {
-		Ratio:                       0.005 * ratio.MilliTokensRmb,
+		Ratio:                       5 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             4096,
@@ -219,7 +219,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "MiniMax abab6.5t tiny cost-optimized chat model (legacy).",
 	},
 	"abab6-chat": {
-		Ratio:                       0.1 * ratio.MilliTokensRmb,
+		Ratio:                       100 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
@@ -230,7 +230,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "MiniMax abab6 closed-weight chat model with 32k context (legacy).",
 	},
 	"abab5.5-chat": {
-		Ratio:                       0.015 * ratio.MilliTokensRmb,
+		Ratio:                       15 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               16384,
 		MaxOutputTokens:             4096,
@@ -241,7 +241,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "MiniMax abab5.5 closed-weight chat model (legacy).",
 	},
 	"abab5.5s-chat": {
-		Ratio:                       0.005 * ratio.MilliTokensRmb,
+		Ratio:                       5 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             4096,
@@ -255,7 +255,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// MiniMax-VL-01 multimodal (text + image). Pricing estimated based on
 	// historical pay-as-you-go disclosures; not on the current paygo page.
 	"MiniMax-VL-01": {
-		Ratio:                       0.02 * ratio.MilliTokensRmb,
+		Ratio:                       20 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               1000000,
 		MaxOutputTokens:             8192,
@@ -266,7 +266,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "MiniMax-VL-01 multimodal chat model accepting text and image inputs (legacy estimated pricing).",
 	},
 	"MiniMax-Text-01": {
-		Ratio:                       0.015 * ratio.MilliTokensRmb,
+		Ratio:                       15 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               1000000,
 		MaxOutputTokens:             8192,
@@ -299,7 +299,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// embo-01 text embedding model. Pricing held over from historical
 	// pay-as-you-go disclosure (not on current paygo page).
 	"embo-01": {
-		Ratio:            0.0005 * ratio.MilliTokensRmb,
+		Ratio:            0.5 * ratio.MilliTokensRmb,
 		CompletionRatio:  1,
 		ContextLength:    4096,
 		InputModalities:  minimaxTextInputs,

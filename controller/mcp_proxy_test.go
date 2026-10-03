@@ -41,6 +41,38 @@ func marshalIDForFixture(id any) string {
 	return string(encoded)
 }
 
+// echoFixtureResponseID rewrites the `id` of a JSON-RPC success envelope to the
+// id the client actually sent. JSON-RPC 2.0 requires a server to echo the request
+// id, and relay/mcp enforces that correlation, so a fixture with a hard-coded id
+// does not model a real MCP server. Bodies that are not 2xx JSON-RPC envelopes
+// (transport-failure fixtures) are returned untouched.
+//
+// Parameters:
+//   - body: the canned response body.
+//   - status: the HTTP status the fixture is returning.
+//   - requestID: the id decoded from the inbound request.
+//
+// Return values:
+//   - []byte: body with the id corrected, or the original body when it does not apply.
+func echoFixtureResponseID(body []byte, status int, requestID any) []byte {
+	if status < http.StatusOK || status >= http.StatusMultipleChoices || requestID == nil {
+		return body
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return body
+	}
+	if _, ok := envelope["id"]; !ok {
+		return body
+	}
+	envelope["id"] = json.RawMessage(marshalIDForFixture(requestID))
+	rewritten, err := json.Marshal(envelope)
+	if err != nil {
+		return body
+	}
+	return rewritten
+}
+
 // setupMCPProxyTest spins up an isolated SQLite database, fake MCP backend,
 // and a test user/server/tool seeded for callMCPToolForUser-driven scenarios.
 // The returned mcpFixture lets tests configure pricing, swap the upstream
@@ -124,7 +156,7 @@ func setupMCPProxyTest(t *testing.T) (cleanup func(), fx *mcpFixture) {
 		body, status := fx.respondPayload()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		_, _ = w.Write(body)
+		_, _ = w.Write(echoFixtureResponseID(body, status, rpc.ID))
 	}))
 
 	user := &model.User{

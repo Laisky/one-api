@@ -13,10 +13,12 @@ Usage and billing audit trail. Admin view at `/api/log/`; user self-view at `/ap
 | GET    | `/api/log/self/search`  | User   | Search self-logs                        |
 | GET    | `/api/log/self/stat`    | User   | Self-stats                              |
 | DELETE | `/api/log/`             | Admin  | **Destructive.** Delete logs by filter |
+| GET    | `/api/log/cursor`       | Admin  | List all logs, keyset pagination (opt-in) |
+| GET    | `/api/log/self/cursor`  | User   | Self-logs, keyset pagination (opt-in)     |
 
 ## Query parameters
 
-All list/search endpoints accept:
+All offset list/search endpoints accept:
 
 | Param             | Type   | Notes                                                   |
 |-------------------|--------|---------------------------------------------------------|
@@ -24,7 +26,7 @@ All list/search endpoints accept:
 | `size`            | int    | Capped at `MaxItemsPerPage`                             |
 | `type`            | int    | Log type filter. `1=top-up`, `2=consume`, `3=manage`, `4=system`. Omit for all |
 | `start_timestamp` | int64  | Unix **seconds** (inclusive)                            |
-| `end_timestamp`   | int64  | Unix **seconds** (exclusive)                            |
+| `end_timestamp`   | int64  | Unix **seconds** (inclusive — `created_at <= end_timestamp`) |
 | `username`        | string | Admin-only filter (self-routes ignore)                  |
 | `token_name`      | string | Filter by token label                                   |
 | `model_name`      | string | e.g. `gpt-4o`                                            |
@@ -33,6 +35,69 @@ All list/search endpoints accept:
 | `order` / `sort_order` | string | `asc` / `desc`                                      |
 
 **Time range is capped at 30 days when sort requires it** ([controller/log.go](../../../../controller/log.go) — look for `thirty days` / `30 day` guards).
+
+
+## Keyset pagination (opt-in)
+
+The two `/cursor` routes are **additive siblings** of the offset routes, not a mode of them.
+The offset routes' pagination, filters, sorts, default `id DESC` order and exact `total` are
+unchanged; use them for anything that needs a stable page address or a snapshot-shaped walk.
+
+They are **disabled by default** (`LOG_CURSOR_ENABLED=false`). The keyset order
+(`created_at DESC, id DESC`) needs an access path the shipped schema does not have — on
+MySQL 8.4 the first page is a full table scan without it. Enable only on a database with the
+supporting indexes; see
+[the plan evidence](../../../benchmarks/20260906_w24-cursor-plans.md). When disabled, the
+routes answer `{"success": false, "code": "capability_disabled"}` and clients fall back.
+
+Parameters differ from the offset routes:
+
+| Param    | Type   | Notes                                                                  |
+|----------|--------|------------------------------------------------------------------------|
+| `v`      | int    | Capability version; must be `1` if supplied                            |
+| `cursor` | string | Opaque page token from the previous response; omit for the first page  |
+| `size`   | int    | Capped at `MaxItemsPerPage`                                            |
+| `count`  | string | `exact` requests an exact count under its own budget; omit for the bounded probe |
+| `p`      | —      | **Rejected.** A keyset page has no page number                         |
+| `sort`   | string | Only `created_at` is supported                                         |
+| `order`  | string | Only `desc` is supported                                               |
+
+Filters (`type`, `start_timestamp`, `end_timestamp`, `username`, `token_name`, `model_name`,
+`channel`) behave exactly as on the offset routes and select exactly the same rows.
+
+Response:
+
+```json
+{
+  "success": true,
+  "version": 1,
+  "data": [ /* log rows, newest first */ ],
+  "has_more": true,
+  "next_cursor": "lc1.…",
+  "count": { "value": 10000, "quality": "lower_bound", "as_of": 1767225540, "cached": false },
+  "bytes_capped": true
+}
+```
+
+- `count.quality` is `exact`, `lower_bound` or `unavailable`. A `lower_bound` means the
+  bounded probe stopped at its limit — it is **not** a total. An `unavailable` count carries
+  a null `value`; never render it as zero.
+- `count.as_of` is when the count ran, and `count.cached` marks a reused one. A cached exact
+  count is exact as of `as_of`, not as of now.
+- `bytes_capped` means the page stopped early to stay under `LOG_CURSOR_MAX_RESPONSE_BYTES`.
+  `oversized_record` means one record alone exceeded the budget and is returned on its own.
+  **No field is ever truncated.**
+
+A cursor is bound to the caller's scope, the endpoint, the normalized filters and an expiry.
+Presenting it under a different user, on the other route, or with changed filters returns
+`{"success": false, "restart_required": true, "code": "cursor_expired" | "cursor_invalid" |
+"cursor_query_changed"}` — restart from the first page. A cursor is never an authorization
+grant; scope is re-derived from the authenticated principal on every request.
+
+**Live traversal, not a snapshot.** Rows inserted ahead of the anchor do not appear and do
+not shift later pages; deletes may shorten them; late provisional finalization can change
+membership. For snapshot-complete audit work, use the export path, which walks the offset
+routes.
 
 ## List logs
 
@@ -57,7 +122,7 @@ Always pass timestamps via `--data-urlencode` — some shells mangle the Unix-se
 |---------------------|-----------------------------------------------------------|
 | `uuid`              | Log row identifier (string); feed it to `/api/trace/log/:log_id` |
 | `user_uuid`         | Requesting user's `uuid` (nullable)                        |
-| `created_at`        | Millisecond timestamp                                      |
+| `created_at`        | Unix **seconds** (`helper.GetTimestamp()`), not milliseconds |
 | `type`              | 1=top-up, 2=consume, 3=manage, 4=system                    |
 | `username`          | Who made the request                                       |
 | `token_name`        | Token label (useful for drilling into a specific key)      |

@@ -2,7 +2,7 @@
 //
 // This file defines the external UUID backfill settings consumed by the
 // background catch-up worker and by finalizer-mode DDL. The settings are
-// documented in docs/proposals/20260715_incremental-uuid-backfill.md sections
+// documented in docs/proposals/archive/20260715_incremental-uuid-backfill.md sections
 // 6.7 and 6.8 (work items UUID-020 and UUID-042).
 //
 // Unlike most settings in config.go, these values are not read with the

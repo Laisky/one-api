@@ -19,6 +19,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/fireworks"
 	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/groq"
+	"github.com/Laisky/one-api/relay/adaptor/jina"
 	"github.com/Laisky/one-api/relay/adaptor/mistral"
 	"github.com/Laisky/one-api/relay/adaptor/moonshot"
 	"github.com/Laisky/one-api/relay/adaptor/nvidia"
@@ -29,6 +30,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/proxy"
 	"github.com/Laisky/one-api/relay/adaptor/replicate"
 	"github.com/Laisky/one-api/relay/adaptor/tencent"
+	"github.com/Laisky/one-api/relay/adaptor/typesafe"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai"
 	"github.com/Laisky/one-api/relay/adaptor/xai"
 	"github.com/Laisky/one-api/relay/adaptor/xunfei"
@@ -38,6 +40,8 @@ import (
 	"github.com/Laisky/one-api/relay/pricing"
 )
 
+// GetAdaptor returns a new adaptor for apiType, or nil when the API type is not
+// registered.
 func GetAdaptor(apiType int) adaptor.Adaptor {
 	switch apiType {
 	case apitype.AIProxyLibrary:
@@ -104,6 +108,10 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &azure.Adaptor{}
 	case apitype.Zai:
 		return &zai.Adaptor{}
+	case apitype.Jina:
+		return &jina.Adaptor{}
+	case apitype.TypeSafe:
+		return &typesafe.Adaptor{}
 	}
 
 	return nil

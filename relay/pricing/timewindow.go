@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Laisky/errors/v2"
+
 	"github.com/Laisky/one-api/relay/adaptor"
 )
 
@@ -86,7 +88,7 @@ func matchWindow(window adaptor.TimeWindow, at time.Time) (bool, error) {
 		if window.DateFrom != "" {
 			from, err := time.ParseInLocation("2006-01-02", window.DateFrom, loc)
 			if err != nil {
-				return false, err
+				return false, errors.WithStack(err)
 			}
 			if localDate.Before(from) {
 				return false, nil
@@ -95,7 +97,7 @@ func matchWindow(window adaptor.TimeWindow, at time.Time) (bool, error) {
 		if window.DateTo != "" {
 			to, err := time.ParseInLocation("2006-01-02", window.DateTo, loc)
 			if err != nil {
-				return false, err
+				return false, errors.WithStack(err)
 			}
 			if !localDate.Before(to) {
 				return false, nil
@@ -149,7 +151,7 @@ func matchWindow(window adaptor.TimeWindow, at time.Time) (bool, error) {
 func parseClockMinutes(value string) (int, error) {
 	parsed, err := time.Parse("15:04", value)
 	if err != nil {
-		return 0, err
+		return 0, errors.WithStack(err)
 	}
 	return parsed.Hour()*60 + parsed.Minute(), nil
 }
@@ -163,7 +165,7 @@ func loadLocationCached(tz string) (*time.Location, error) {
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	actual, _ := timeWindowLocationCache.LoadOrStore(tz, loc)
 	return actual.(*time.Location), nil
@@ -228,6 +230,9 @@ func mergeVideoPricing(base *adaptor.VideoPricingConfig, overlay *adaptor.VideoP
 	if overlay.PerSecondUsd != 0 {
 		merged.PerSecondUsd = overlay.PerSecondUsd
 	}
+	if overlay.InputImageUsd != 0 {
+		merged.InputImageUsd = overlay.InputImageUsd
+	}
 	if overlay.BaseResolution != "" {
 		merged.BaseResolution = overlay.BaseResolution
 	}
@@ -257,6 +262,25 @@ func mergeAudioPricing(base *adaptor.AudioPricingConfig, overlay *adaptor.AudioP
 	}
 	if overlay.UsdPerSecond != 0 {
 		merged.UsdPerSecond = overlay.UsdPerSecond
+	}
+	if overlay.InputUnit != "" {
+		merged.InputUnit = overlay.InputUnit
+		merged.InputPriceUsd = overlay.InputPriceUsd
+		merged.InputPriceQuantity = overlay.InputPriceQuantity
+		merged.MinimumBillableSeconds = overlay.MinimumBillableSeconds
+		merged.BillingIncrementSeconds = overlay.BillingIncrementSeconds
+		if overlay.InputUnit == "seconds" {
+			merged.UsdPerSecond = overlay.UsdPerSecond
+		}
+	}
+	if overlay.InputPriceUsd != 0 {
+		merged.InputPriceUsd = overlay.InputPriceUsd
+	}
+	if overlay.MinimumBillableSeconds != 0 {
+		merged.MinimumBillableSeconds = overlay.MinimumBillableSeconds
+	}
+	if overlay.BillingIncrementSeconds != 0 {
+		merged.BillingIncrementSeconds = overlay.BillingIncrementSeconds
 	}
 	return merged
 }
@@ -342,9 +366,7 @@ func mergePerCallPricing(base *adaptor.PerCallPricingConfig, overlay *adaptor.Pe
 		return overlay.Clone()
 	}
 	merged := base.Clone()
-	if overlay.UsdPerThousandCalls != 0 {
-		merged.UsdPerThousandCalls = overlay.UsdPerThousandCalls
-	}
+	merged.UsdPerThousandCalls = overlay.UsdPerThousandCalls
 	return merged
 }
 
