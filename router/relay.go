@@ -56,9 +56,10 @@ func SetRelayRouter(router *gin.Engine) {
 		// Track in-flight requests for graceful shutdown/drain
 		func(c *gin.Context) { done := graceful.BeginRequest(); defer done(); c.Next() },
 		middleware.RelayPanicRecover(), middleware.TokenAuth(),
+		middleware.GlobalRelayRateLimit(),
+		relaycontroller.ReplayAsyncVideoTask,
 		middleware.BindAsyncTaskChannel(),
 		middleware.Distribute(),
-		middleware.GlobalRelayRateLimit(),
 		middleware.LowBalanceRelayRateLimit(),
 		middleware.ChannelRateLimit(),
 	}
@@ -90,6 +91,10 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.GET("/videos/:video_id", controller.Relay)
 	relayV1Router.GET("/videos/:video_id/content", controller.Relay)
 	relayV1Router.DELETE("/videos/:video_id", controller.Relay)
+	relayV1Router.POST("/async/videos", controller.Relay)
+	asyncRead := router.Group("/v1/async/videos")
+	asyncRead.Use(func(c *gin.Context) { done := graceful.BeginRequest(); defer done(); c.Next() }, middleware.RelayPanicRecover(), middleware.TokenAuth(), middleware.GlobalRelayRateLimit())
+	asyncRead.GET("/:video_id", relaycontroller.GetAsyncVideoTask)
 	relayV1Router.POST("/voice/clones", controller.Relay)
 	relayV1Router.POST("/voice/clone", controller.Relay)
 	relayV1Router.POST("/embeddings", controller.Relay)

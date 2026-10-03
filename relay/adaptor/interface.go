@@ -248,6 +248,14 @@ func (cfg *PerCallPricingConfig) Clone() *PerCallPricingConfig {
 // Pricing is expressed as a per-second USD cost that can be adjusted via resolution
 // multipliers relative to the base resolution.
 type VideoPricingConfig struct {
+	// TotalUsd is a legacy floating-point provider quote for the complete request.
+	// New estimators should set TotalUsdDecimal to preserve the provider's exact
+	// decimal quote through quota conversion.
+	TotalUsd float64 `json:"total_usd,omitempty"`
+	// TotalUsdDecimal is an exact provider quote for the complete request. When
+	// set, quota conversion uses this decimal directly instead of deriving a
+	// per-second float and multiplying it back.
+	TotalUsdDecimal string `json:"total_usd_decimal,omitempty"`
 	// InputImageUsd is the USD fee for each image/frame supplied to video generation.
 	InputImageUsd float64 `json:"input_image_usd,omitempty"`
 	// PerSecondUsd is the USD price per rendered second at the base resolution.
@@ -264,7 +272,7 @@ func (cfg *VideoPricingConfig) HasData() bool {
 	if cfg == nil {
 		return false
 	}
-	if cfg.PerSecondUsd > 0 || cfg.InputImageUsd > 0 {
+	if cfg.TotalUsd > 0 || cfg.TotalUsdDecimal != "" || cfg.PerSecondUsd > 0 || cfg.InputImageUsd > 0 {
 		return true
 	}
 	return len(cfg.ResolutionMultipliers) > 0
@@ -276,9 +284,11 @@ func (cfg *VideoPricingConfig) Clone() *VideoPricingConfig {
 		return nil
 	}
 	clone := &VideoPricingConfig{
-		PerSecondUsd:   cfg.PerSecondUsd,
-		InputImageUsd:  cfg.InputImageUsd,
-		BaseResolution: cfg.BaseResolution,
+		TotalUsd:        cfg.TotalUsd,
+		TotalUsdDecimal: cfg.TotalUsdDecimal,
+		PerSecondUsd:    cfg.PerSecondUsd,
+		InputImageUsd:   cfg.InputImageUsd,
+		BaseResolution:  cfg.BaseResolution,
 	}
 	if len(cfg.ResolutionMultipliers) > 0 {
 		clone.ResolutionMultipliers = make(map[string]float64, len(cfg.ResolutionMultipliers))
