@@ -32,8 +32,6 @@ type smtpCapture struct {
 }
 
 func TestLoginAuthRequiresTLS(t *testing.T) {
-	t.Parallel()
-
 	prevVerify := config.ForceEmailTLSVerify
 	defer func() {
 		config.ForceEmailTLSVerify = prevVerify
@@ -43,6 +41,10 @@ func TestLoginAuthRequiresTLS(t *testing.T) {
 
 	config.ForceEmailTLSVerify = true
 	_, _, err := auth.Start(&smtp.ServerInfo{TLS: false})
+	require.Error(t, err)
+
+	config.ForceEmailTLSVerify = false
+	_, _, err = auth.Start(&smtp.ServerInfo{TLS: false})
 	require.Error(t, err)
 
 	mech, initial, err := auth.Start(&smtp.ServerInfo{TLS: true})
@@ -61,12 +63,29 @@ func TestLoginAuthRequiresTLS(t *testing.T) {
 	resp, err = auth.Next(nil, false)
 	require.NoError(t, err)
 	require.Nil(t, resp)
+}
+
+// TestPlainAuthRequiresTLS verifies PLAIN authentication refuses plaintext sessions regardless of certificate verification settings.
+func TestPlainAuthRequiresTLS(t *testing.T) {
+	prevVerify := config.ForceEmailTLSVerify
+	defer func() {
+		config.ForceEmailTLSVerify = prevVerify
+	}()
+
+	auth := newPlainAuth("", "user", "pass", "smtp.example.com")
+
+	config.ForceEmailTLSVerify = true
+	_, _, err := auth.Start(&smtp.ServerInfo{Name: "smtp.example.com", TLS: false})
+	require.Error(t, err)
 
 	config.ForceEmailTLSVerify = false
-	mech, initial, err = auth.Start(&smtp.ServerInfo{TLS: false})
+	_, _, err = auth.Start(&smtp.ServerInfo{Name: "smtp.example.com", TLS: false})
+	require.Error(t, err)
+
+	mech, initial, err := auth.Start(&smtp.ServerInfo{Name: "smtp.example.com", TLS: true})
 	require.NoError(t, err)
-	require.Equal(t, "LOGIN", mech)
-	require.Len(t, initial, 0)
+	require.Equal(t, "PLAIN", mech)
+	require.Equal(t, []byte("\x00user\x00pass"), initial)
 }
 
 func TestSendEmailWithStartTLSFallback(t *testing.T) {
@@ -143,7 +162,8 @@ func TestSendEmailWithoutSTARTTLSNoAuth(t *testing.T) {
 	}
 }
 
-func TestSendEmailWithoutSTARTTLSAuthAllowed(t *testing.T) {
+// TestSendEmailWithoutSTARTTLSAuthRejected verifies SendEmail does not send SMTP credentials when STARTTLS is unavailable.
+func TestSendEmailWithoutSTARTTLSAuthRejected(t *testing.T) {
 	captureCh := make(chan smtpCapture, 1)
 	var firstConn atomic.Int32
 
@@ -165,17 +185,14 @@ func TestSendEmailWithoutSTARTTLSAuthAllowed(t *testing.T) {
 	defer restore()
 
 	err := SendEmail("LegacyAuth", "recipient@example.com", "legacy body")
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SMTP server does not advertise STARTTLS")
 
 	select {
 	case capture := <-captureCh:
-		require.NoError(t, capture.err)
-		require.Equal(t, "user", capture.username)
-		require.Equal(t, "pass", capture.password)
-		require.Contains(t, capture.message, "Subject: =?UTF-8?B?TGVnYWN5QXV0aA==?=")
-		require.Contains(t, capture.message, "legacy body")
-	case <-time.After(5 * time.Second):
-		require.FailNow(t, "timed out waiting for SMTP capture")
+		require.Empty(t, capture.username)
+		require.Empty(t, capture.password)
+	case <-time.After(100 * time.Millisecond):
 	}
 }
 

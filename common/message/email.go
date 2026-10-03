@@ -34,16 +34,7 @@ func newPlainAuth(identity, username, password, host string) smtp.Auth {
 	return &plainAuthCompat{identity: identity, username: username, password: password, host: host}
 }
 
-func isLocalhost(name string) bool {
-	switch strings.ToLower(name) {
-	case "localhost", "127.0.0.1", "::1":
-		return true
-	default:
-		return false
-	}
-}
-
-// Start implements smtp.Auth for the PLAIN mechanism, validating the server identity before proceeding.
+// Start implements smtp.Auth for the PLAIN mechanism, validating the server identity and refusing plaintext credential exchange before proceeding.
 func (a *plainAuthCompat) Start(server *smtp.ServerInfo) (string, []byte, error) {
 	if server == nil {
 		return "", nil, errors.New("missing SMTP server info for PLAIN auth")
@@ -51,8 +42,8 @@ func (a *plainAuthCompat) Start(server *smtp.ServerInfo) (string, []byte, error)
 	if server.Name != a.host {
 		return "", nil, errors.Errorf("unexpected SMTP server name: got %s, want %s", server.Name, a.host)
 	}
-	if !server.TLS && config.ForceEmailTLSVerify && !isLocalhost(server.Name) {
-		return "", nil, errors.New("unencrypted connection")
+	if !server.TLS {
+		return "", nil, errors.New("refusing PLAIN without TLS")
 	}
 
 	resp := []byte(a.identity + "\x00" + a.username + "\x00" + a.password)
@@ -74,7 +65,7 @@ func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
 		return "", nil, errors.New("missing SMTP server info for LOGIN auth")
 	}
 
-	if !server.TLS && config.ForceEmailTLSVerify {
+	if !server.TLS {
 		return "", nil, errors.Errorf("refusing LOGIN without TLS")
 	}
 
@@ -164,7 +155,7 @@ func dialSMTPClient(ctx context.Context, addr, localName string) (*smtp.Client, 
 		}
 		usingTLS = true
 		// Note: net/smtp will internally handle the necessary EHLO state after STARTTLS.
-	} else if shouldAuth() && config.ForceEmailTLSVerify {
+	} else if shouldAuth() {
 		client.Close()
 		return nil, "", false, errors.New("SMTP server does not advertise STARTTLS, refusing to authenticate without TLS")
 	}
@@ -232,6 +223,10 @@ func SendEmail(subject string, receiver string, content string) error {
 
 	// Authenticate if credentials are provided
 	if shouldAuth() {
+		if !usingTLS {
+			return errors.New("refusing SMTP authentication without TLS")
+		}
+
 		mechSet := make(map[string]struct{})
 		addMechanisms := func(raw string) {
 			for token := range strings.FieldsSeq(strings.ToUpper(raw)) {
@@ -244,9 +239,6 @@ func SendEmail(subject string, receiver string, content string) error {
 		}
 
 		preferred := []string{"PLAIN", "LOGIN"}
-		if !usingTLS {
-			preferred = []string{"LOGIN", "PLAIN"}
-		}
 
 		var chosen string
 		for _, candidate := range preferred {
