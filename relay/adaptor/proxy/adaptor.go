@@ -14,7 +14,6 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
-	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 var _ adaptor.Adaptor = new(Adaptor)
@@ -29,59 +28,28 @@ type Adaptor struct {
 func (a *Adaptor) Init(meta *meta.Meta) {
 }
 
-// ConvertRequest forwards the incoming OpenAI-style request without modification so upstream can handle it natively.
+// ConvertRequest forwards an OpenAI-style request for native upstream handling.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("proxy adaptor received nil request")
 	}
-
-	// Proxy adaptor forwards the caller payload as-is so upstream can handle the request natively.
 	return request, nil
 }
 
-// DoResponse writes the upstream response back to the caller while returning zero usage for proxy traffic.
-func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
-	// When the Response API chat-completions fallback (relayResponseAPIThroughChat)
-	// is active it installs a stream-rewrite bridge in the context for streaming
-	// requests. In that case the upstream body is an OpenAI chat-completions SSE
-	// stream that must be converted into Responses API events; a verbatim byte
-	// copy would hand the /v1/responses client an unparseable stream (the same
-	// class of bug fixed for the replicate adaptor). Delegate to the shared
-	// streaming handler, which honors the bridge.
+// DoResponse preserves response bytes while returning observed usage to the
+// caller's settlement policy. Explicit unmetered proxy routes remain unmetered.
+func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, m *meta.Meta) (*model.Usage, *model.ErrorWithStatusCode) {
+	// The Responses chat-completions fallback installs a rewrite bridge. Keep
+	// its shared handler: raw copying here would break /v1/responses streams.
 	if openai_compatible.StreamRewriterFromContext(c) != nil {
-		streamErr, streamUsage := openai_compatible.StreamHandler(c, resp, meta.PromptTokens, meta.ActualModelName)
+		promptTokens, modelName := proxyUsageMetadata(m)
+		streamErr, streamUsage := openai_compatible.StreamHandler(c, resp, promptTokens, modelName)
 		return streamUsage, streamErr
 	}
-
-	for k, v := range resp.Header {
-		for _, vv := range v {
-			c.Writer.Header().Set(k, vv)
-		}
-	}
-
-	c.Writer.WriteHeader(resp.StatusCode)
-	if _, gerr := io.Copy(c.Writer, resp.Body); gerr != nil {
-		return nil, &relaymodel.ErrorWithStatusCode{
-			StatusCode: http.StatusInternalServerError,
-			Error: relaymodel.Error{
-				Message:  gerr.Error(),
-				RawError: gerr,
-			},
-		}
-	}
-
-	// Return empty usage with zero tokens for proxy requests
-	// This will allow proper logging in postConsumeQuota without charging anything
-	return &model.Usage{
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
-		ToolsCost:        0,
-	}, nil
+	return forwardProxyResponse(c, resp, m)
 }
 
-// GetModelList returns nil because proxy channels don't advertise specific models.
-// They forward requests to upstream services where models are configured per-channel.
+// GetModelList returns nil because proxy models are configured per channel.
 func (a *Adaptor) GetModelList() (models []string) {
 	return nil
 }
@@ -91,41 +59,38 @@ func (a *Adaptor) GetChannelName() string {
 	return channelName
 }
 
-// GetRequestURL remove static prefix, and return the real request url to the upstream service
+// GetRequestURL removes the static proxy prefix from the upstream request URL.
 func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	prefix := fmt.Sprintf("/v1/oneapi/proxy/%d", meta.ChannelId)
 	return meta.BaseURL + strings.TrimPrefix(meta.RequestURLPath, prefix), nil
 }
 
-// SetupRequestHeader clones caller headers to the upstream request and overrides auth-related fields.
+// SetupRequestHeader clones caller headers and overrides upstream credentials.
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	for k, v := range c.Request.Header {
-		req.Header.Set(k, v[0])
+		if len(v) > 0 {
+			req.Header.Set(k, v[0])
+		}
 	}
-
-	// remove unnecessary headers
 	req.Header.Del("Host")
 	req.Header.Del("Content-Length")
 	req.Header.Del("Accept-Encoding")
 	req.Header.Del("Connection")
-
-	// set authorization header
 	req.Header.Set("Authorization", meta.APIKey)
-
 	return nil
 }
 
-// ConvertImageRequest returns a not-implemented error because proxy channels forward raw requests.
+// ConvertImageRequest reports that image conversion is not implemented.
 func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageRequest) (any, error) {
 	return nil, errors.Errorf("not implement")
 }
 
-// ConvertClaudeRequest returns the original Claude request for pass-through proxying
+// ConvertClaudeRequest returns the original Claude request for pass-through.
 func (a *Adaptor) ConvertClaudeRequest(_ *gin.Context, request *model.ClaudeRequest) (any, error) {
 	return request, nil
 }
 
-// DoRequest forwards the caller request to the upstream endpoint using the shared helper.
+// DoRequest forwards the request using the shared upstream transport helper.
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
 	return channelhelper.DoRequestHelper(a, c, meta, requestBody)
 }
