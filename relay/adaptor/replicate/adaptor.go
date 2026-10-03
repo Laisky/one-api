@@ -114,10 +114,11 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		}
 	}
 
-	// Image models are not supported via chat API
-	// if pricing, ok := ModelRatios[request.Model]; ok && pricing.Image != nil {
-	// 	return nil, errors.Errorf("model %s is an image model, please use image API", request.Model)
-	// }
+	// Image models are not supported via chat API because chat billing does not
+	// apply per-image pricing. They must use the image API path instead.
+	if pricing, ok := ModelRatios[request.Model]; ok && pricing.Image != nil {
+		return nil, errors.Errorf("model %s is an image model, please use image API", request.Model)
+	}
 
 	replicateRequest := ReplicateChatRequest{
 		Input: ChatInput{
