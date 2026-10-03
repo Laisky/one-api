@@ -106,7 +106,7 @@ func (w *responseCaptureWriter) Size() int {
 // getResponseAPIRequestBody gets the request body for Response API requests
 func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRequest *openai.ResponseAPIRequest, adaptor adaptor.Adaptor) (io.Reader, error) {
 	lg := gmw.GetLogger(c)
-	// Prefer forwarding the exact user payload to avoid mutating vendor-specific fields
+	// Preserve compatible raw fields only within the admitted billing boundary.
 	rawBody, err := common.GetRequestBody(c)
 	if err != nil {
 		return nil, errors.Wrap(err, "get raw Response API request body")
@@ -137,7 +137,10 @@ func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRe
 func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequest, channelType int) ([]byte, openai.ResponseAPIInputContentNormalizationStats, bool, error) {
 	var stats openai.ResponseAPIInputContentNormalizationStats
 	if request == nil {
-		return rawBody, stats, false, nil
+		return nil, stats, false, errors.New("Response API billing validation requires a typed request")
+	}
+	if err := validateNativeResponseToolBilling(request.Tools); err != nil {
+		return nil, stats, false, err
 	}
 
 	normalizeResponseProviderReasoning(request, channelType)
@@ -166,6 +169,12 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		return nil, stats, false, errors.New("Response API request body must be a JSON object")
 	}
 	changed := false
+	for key := range root {
+		if !nativeResponseRootAllowed(key) {
+			delete(root, key)
+			changed = true
+		}
+	}
 
 	if request.Model != "" {
 		modelBytes, err := json.Marshal(request.Model)
