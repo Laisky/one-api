@@ -489,15 +489,45 @@ func processPostConsume(ctx context.Context, c *gin.Context, token *model.Token,
 		return nil, nil, errors.Wrap(err, "convert final_used_quota to int64")
 	}
 
-	existingTxn, err = model.FinalizePendingTokenTransaction(ctx, token.Id, existingTxn.Id, model.TokenTransactionFinalization{
-		Status:        model.TokenTransactionStatusConfirmed,
-		FinalQuota:    finalQuota,
-		At:            helper.GetTimestamp(),
-		Reason:        &req.AddReason,
-		ElapsedTimeMs: req.ElapsedTimeMs,
-	})
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "finalize post-consume transaction")
+	delta := finalQuota - existingTxn.PreQuota
+	quotaAdjusted := false
+	if delta != 0 {
+		if err = model.PostConsumeTokenQuota(ctx, token.Id, delta); err != nil {
+			return nil, nil, errors.Wrap(err, "post-consume token quota delta")
+		}
+		quotaAdjusted = true
+	}
+
+	confirmedAt := helper.GetTimestamp()
+	updates := map[string]any{
+		"status":         model.TokenTransactionStatusConfirmed,
+		"final_quota":    finalQuota,
+		"confirmed_at":   confirmedAt,
+		"auto_confirmed": false,
+		"expires_at":     int64(0),
+		"reason":         req.AddReason,
+	}
+
+	if req.ElapsedTimeMs != nil && *req.ElapsedTimeMs > 0 {
+		updates["elapsed_time_ms"] = *req.ElapsedTimeMs
+	}
+
+	if err = model.UpdateTokenTransaction(ctx, existingTxn.Id, updates); err != nil {
+		if quotaAdjusted {
+			_ = model.PostConsumeTokenQuota(ctx, token.Id, -delta)
+		}
+		return nil, nil, errors.Wrap(err, "update token transaction for post-consume")
+	}
+
+	updatedFinal := finalQuota
+	existingTxn.Status = model.TokenTransactionStatusConfirmed
+	existingTxn.AutoConfirmed = false
+	existingTxn.FinalQuota = &updatedFinal
+	existingTxn.Reason = req.AddReason
+	existingTxn.ConfirmedAt = &confirmedAt
+	if req.ElapsedTimeMs != nil && *req.ElapsedTimeMs > 0 {
+		elapsed := *req.ElapsedTimeMs
+		existingTxn.ElapsedTimeMs = &elapsed
 	}
 
 	if existingTxn.LogId != nil {
@@ -544,13 +574,28 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 		return nil, nil, errors.Errorf("transaction %s cannot be canceled because it is %s", transactionID, model.TokenTransactionStatusString(txn.Status))
 	}
 
-	txn, err = model.FinalizePendingTokenTransaction(ctx, token.Id, txn.Id, model.TokenTransactionFinalization{
-		Status: model.TokenTransactionStatusCanceled,
-		At:     helper.GetTimestamp(),
-	})
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "finalize canceled transaction")
+	if err = model.PostConsumeTokenQuota(ctx, token.Id, -txn.PreQuota); err != nil {
+		return nil, nil, errors.Wrap(err, "refund reserved token quota on cancel")
 	}
+
+	canceledAt := helper.GetTimestamp()
+	updates := map[string]any{
+		"status":      model.TokenTransactionStatusCanceled,
+		"canceled_at": canceledAt,
+		"final_quota": int64(0),
+		"expires_at":  int64(0),
+	}
+
+	if err = model.UpdateTokenTransaction(ctx, txn.Id, updates); err != nil {
+		_ = model.PostConsumeTokenQuota(ctx, token.Id, txn.PreQuota)
+		return nil, nil, errors.Wrap(err, "update token transaction for cancel")
+	}
+
+	zero := int64(0)
+	txn.Status = model.TokenTransactionStatusCanceled
+	txn.CanceledAt = &canceledAt
+	txn.FinalQuota = &zero
+	txn.AutoConfirmed = false
 
 	if txn.LogId != nil {
 		logUpdates := map[string]any{
