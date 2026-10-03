@@ -3,7 +3,7 @@
 // This file defines the automatic compact UUID storage settings consumed by the
 // background compact migration coordinator, its DDL, and its per-process health
 // monitor. The settings are documented in
-// docs/proposals/20260715_compact-uuid-storage.md section 8.7 (work item
+// docs/proposals/archive/20260715_compact-uuid-storage.md section 8.7 (work item
 // AUTO-011).
 //
 // Compact storage is deliberately zero-touch: every setting has a default that

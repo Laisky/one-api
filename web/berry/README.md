@@ -1,61 +1,58 @@
-# One API 前端界面
+# One API Berry frontend
 
-这个项目是 One API 的前端界面，它基于 [Berry Free React Admin Template](https://github.com/codedthemes/berry-free-react-admin-template) 进行开发。
+This frontend is based on [Berry Free React Admin Template](https://github.com/codedthemes/berry-free-react-admin-template). It uses React 18, Vite and Yarn Classic. Use Node 24, matching CI.
 
-## 使用的开源项目
+## Development and acceptance
 
-使用了以下开源项目作为我们项目的一部分：
+```sh
+yarn install --frozen-lockfile --non-interactive
+yarn dev                 # http://127.0.0.1:3003
+yarn test                # Transport, security, lifecycle and build regressions
+yarn build               # Lint and build into ../build/berry
+yarn build:prod          # Production build with the existing timestamp version
+yarn build:dev           # Development-mode build with source maps
+```
 
-- [Berry Free React Admin Template](https://github.com/codedthemes/berry-free-react-admin-template)
-- [minimal-ui-kit](minimal-ui-kit)
+Development `/api` requests use the `proxy` in `package.json`; override it with `PROXY_TARGET=http://127.0.0.1:3000`. `HOST` and `PORT` override the loopback address and theme port. `REACT_APP_SERVER` selects another API origin at build time. `REACT_APP_VERSION` supplies a version for `yarn build`; `build:prod` and `dev:backend` retain timestamp stamping.
 
-## 开发说明
+The HTML entry is `index.html`; static assets remain in `public`. Shared configuration in `../legacy/vite-config.mjs` preserves absolute source imports, SVG React components and the independent output directory. The retired CRA service worker is no longer registered; cleanup targets only the matching old worker, not other applications.
 
-当添加新的渠道时，需要修改以下地方：
+CI requires zero-advisory full-tree audits, lint/build checks and real-browser failure/retry acceptance against both production assets and the development proxy. See [dependency quality acceptance](../../docs/dependency-refresh-2026-09-30.md) for the commands and evidence.
 
-1. `web/berry/src/constants/ChannelConstants.js`
+## Adding a channel
 
-在该文件中的 `CHANNEL_OPTIONS` 添加新的渠道
+Add the channel to `CHANNEL_OPTIONS` in `src/constants/ChannelConstants.js`:
 
 ```js
 export const CHANNEL_OPTIONS = {
-  //key 为渠道ID
   1: {
-    key: 1, // 渠道ID
-    text: "OpenAI", // 渠道名称
-    value: 1, // 渠道ID
-    color: "primary", // 渠道列表显示的颜色
+    key: 1, // Channel identifier.
+    text: 'OpenAI',
+    value: 1,
+    color: 'primary',
   },
 };
 ```
 
-2. `web/berry/src/views/Channel/type/Config.js`
-
-在该文件中的`typeConfig`添加新的渠道配置， 如果无需配置，可以不添加
+Add a matching `typeConfig` entry in `src/views/Channel/type/Config.js` when the channel requires additional configuration:
 
 ```js
 const typeConfig = {
-  // key 为渠道ID
   3: {
     inputLabel: {
-      // 输入框名称 配置
-      // 对应的字段名称
-      base_url: "AZURE_OPENAI_ENDPOINT",
-      other: "默认 API 版本",
+      base_url: 'AZURE_OPENAI_ENDPOINT',
+      other: 'Default API version',
     },
     prompt: {
-      // 输入框提示 配置
-      // 对应的字段名称
-      base_url: "请填写AZURE_OPENAI_ENDPOINT",
-
-      // 注意：通过判断 `other` 是否有值来判断是否需要显示 `other` 输入框， 默认是没有值的
-      other: "请输入默认API版本，例如：2024-03-01-preview",
+      base_url: 'Enter AZURE_OPENAI_ENDPOINT',
+      // The other input is shown only when this property is present.
+      other: 'Enter a default API version, such as 2024-03-01-preview',
     },
-    modelGroup: "openai", // 模型组名称,这个值是给 填入渠道支持模型 按钮使用的。 填入渠道支持模型 按钮会根据这个值来获取模型组，如果填写默认是 openai
+    modelGroup: 'openai', // Selects the models used by the autofill button.
   },
 };
 ```
 
-## 许可证
+## Acknowledgments and license
 
-本项目中使用的代码遵循 MIT 许可证。
+This frontend incorporates Berry Free React Admin Template and minimal-ui-kit. The incorporated code follows the MIT license.

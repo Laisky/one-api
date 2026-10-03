@@ -4,7 +4,7 @@
 #   docker buildx build --platform linux/amd64,linux/arm64 -t yourrepo/one-api:latest .
 
 ARG NODE_IMAGE=node:24-bookworm
-ARG GO_IMAGE=golang:1.26.3-bookworm
+ARG GO_IMAGE=golang:1.27.1-bookworm
 ARG FFMPEG_IMAGE=linuxserver/ffmpeg:latest
 
 #############################

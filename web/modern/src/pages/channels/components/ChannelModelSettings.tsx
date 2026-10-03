@@ -4,14 +4,15 @@ import { SelectionListManager } from '@/components/ui/selection-list-manager';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertCircle } from 'lucide-react';
 import { useMemo } from 'react';
-import type { UseFormReturn } from 'react-hook-form';
 import { MODEL_CONFIGS_EXAMPLE, MODEL_MAPPING_EXAMPLE } from '../constants';
 import { formatJSON, sanitizeJsonInput } from '../helpers';
-import type { ChannelForm } from '../schemas';
+import type { ChannelFormMethods } from '../schemas';
 import { LabelWithHelp } from './LabelWithHelp';
 
+const EMPTY_MODELS: string[] = [];
+
 interface ChannelModelSettingsProps {
-  form: UseFormReturn<ChannelForm>;
+  form: ChannelFormMethods;
   availableModels: { id: string; name: string }[];
   currentCatalogModels: string[];
   defaultPricing: string;
@@ -29,8 +30,8 @@ export const ChannelModelSettings = ({
 }: ChannelModelSettingsProps) => {
   const fieldHasError = (name: string) => !!(form.formState.errors as any)?.[name];
   const errorClass = (name: string) => (fieldHasError(name) ? 'border-destructive focus-visible:ring-destructive' : '');
-  const selectedModels = form.watch('models');
-  const hiddenModels = form.watch('hidden_models');
+  const selectedModels = form.watch('models') ?? EMPTY_MODELS;
+  const hiddenModels = form.watch('hidden_models') ?? EMPTY_MODELS;
   const modelMapping = form.watch('model_mapping') || '';
 
   const selectedModelSet = useMemo(() => {
@@ -166,13 +167,13 @@ export const ChannelModelSettings = ({
     if (currentCatalogModels.length === 0) {
       return;
     }
-    const currentModels = form.getValues('models');
+    const currentModels = form.getValues('models') ?? [];
     const uniqueModels = [...new Set([...currentModels, ...currentCatalogModels])];
     form.setValue('models', uniqueModels);
   };
 
   const fillAllModels = () => {
-    const currentModels = form.getValues('models');
+    const currentModels = form.getValues('models') ?? [];
     const allModelIds = availableModels.map((m) => m.id);
     const uniqueModels = [...new Set([...currentModels, ...allModelIds])];
     form.setValue('models', uniqueModels);
@@ -224,7 +225,7 @@ export const ChannelModelSettings = ({
                 value: model.id,
                 label: model.name,
               }))}
-              selected={form.watch('models')}
+              selected={form.watch('models') ?? []}
               onChange={(next) => form.setValue('models', next)}
               searchPlaceholder={tr('models.search_placeholder', 'Search models...')}
               customPlaceholder={tr('models.custom_placeholder', 'Add custom model...')}

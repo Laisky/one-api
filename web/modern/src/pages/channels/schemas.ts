@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import type { UseFormReturn } from 'react-hook-form';
 
 type SchemaTranslationFn = (key: string, defaultValue: string) => string;
 
@@ -12,7 +13,7 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
   return z.object({
     name: z.string().min(1, message('validation.name_required', 'Channel name is required')),
     // Coerce because Select returns string
-    type: z.coerce.number().int().min(1, message('validation.type_required', 'Channel type is required')),
+    type: z.coerce.number<string | number>().int().min(1, message('validation.type_required', 'Channel type is required')),
     // API Key is optional for every channel type on both create and edit; no
     // presence validation is enforced anywhere.
     key: z.string().optional(),
@@ -26,9 +27,9 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
     system_prompt: z.string().optional(),
     groups: z.array(z.string()).default(['default']),
     // Coerce because inputs emit strings; enforce integers for these numeric fields
-    priority: z.coerce.number().int().default(0),
-    weight: z.coerce.number().int().default(0),
-    ratelimit: z.coerce.number().int().min(0).default(0),
+    priority: z.coerce.number<string | number>().int().default(0),
+    weight: z.coerce.number<string | number>().int().default(0),
+    ratelimit: z.coerce.number<string | number>().int().min(0).default(0),
     // AWS and Vertex AI specific config
     config: z
       .object({
@@ -44,9 +45,9 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
         supported_endpoints: z.array(z.string()).optional(),
         // Per-endpoint full upstream URL overrides, keyed by endpoint name.
         // An empty/absent value for an endpoint means "use the default URL".
-        endpoint_urls: z.record(z.string()).optional(),
+        endpoint_urls: z.record(z.string(), z.string()).optional(),
         mcp_tool_blacklist: z.array(z.string()).optional(),
-        custom_headers: z.record(z.string()).optional(),
+        custom_headers: z.record(z.string(), z.string()).optional(),
         // iFlytek Spark (type 18): APPID|APISecret|APIKey
         spark_app_id: z.string().optional(),
         spark_api_secret: z.string().optional(),
@@ -56,7 +57,7 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
         tencent_secret_id: z.string().optional(),
         tencent_secret_key: z.string().optional(),
       })
-      .default({}),
+      .prefault({}),
     inference_profile_arn_map: z.string().optional(),
   });
 };
@@ -66,7 +67,12 @@ type ChannelSchema = ReturnType<typeof createChannelSchema>;
 // Enhanced channel schema with comprehensive validation
 export const channelSchema: ChannelSchema = createChannelSchema();
 
-export type ChannelForm = z.infer<ChannelSchema>;
+/** ChannelFormInput describes values accepted from channel form controls before schema conversion. */
+export type ChannelFormInput = z.input<ChannelSchema>;
+/** ChannelForm describes validated channel values after schema conversion and defaults. */
+export type ChannelForm = z.output<ChannelSchema>;
+/** ChannelFormMethods exposes React Hook Form methods with distinct channel input and output types. */
+export type ChannelFormMethods = UseFormReturn<ChannelFormInput, unknown, ChannelForm>;
 export type ChannelConfigForm = NonNullable<ChannelForm['config']>;
 
 export type ToolPricingEntry = {

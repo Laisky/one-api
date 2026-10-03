@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -127,7 +126,7 @@ func GitHubOAuth(c *gin.Context) {
 		}
 	} else {
 		if config.RegisterEnabled {
-			user.Username = "github_" + strconv.Itoa(model.GetMaxUserId()+1)
+			user.Username = defaultOAuthUsername("github")
 			if githubUser.Name != "" {
 				user.DisplayName = githubUser.Name
 			} else {

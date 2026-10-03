@@ -3,8 +3,7 @@ import { FormItem, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
-import type { UseFormReturn } from 'react-hook-form';
-import type { ChannelForm } from '../schemas';
+import type { ChannelFormMethods } from '../schemas';
 import { LabelWithHelp } from './LabelWithHelp';
 
 const COMMON_HEADER_KEYS = [
@@ -34,7 +33,7 @@ interface CustomHeaderRow {
 // ChannelCustomHeadersProps describes the form bindings and translator used by
 // the custom upstream-header editor.
 interface ChannelCustomHeadersProps {
-  form: UseFormReturn<ChannelForm>;
+  form: ChannelFormMethods;
   tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
   /** Grid span for the outer FormItem; defaults to the two-column Basic Info grid. */
   className?: string;

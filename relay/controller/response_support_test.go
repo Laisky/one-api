@@ -37,23 +37,27 @@ func TestSupportsNativeResponseAPIDeepSeekContractForcesFallback(t *testing.T) {
 	require.False(t, supportsNativeResponseAPI(metaInfo))
 }
 
-// TestSupportsNativeResponseAPIDeepSeekV4Flash verifies that DeepSeek V4 Flash
-// uses DeepSeek's native Responses API so plaintext reasoning state survives a
-// Codex tool-call continuation without a lossy Chat Completions conversion.
-func TestSupportsNativeResponseAPIDeepSeekV4Flash(t *testing.T) {
+// TestSupportsNativeResponseAPIDeepSeekV4 verifies that all current DeepSeek
+// V4 models use the native Responses API for plaintext reasoning preservation.
+// Parameters: t is the testing handle used for assertions and test lifecycle control.
+// Returns: nothing; the test fails through t when a current model is routed through fallback.
+func TestSupportsNativeResponseAPIDeepSeekV4(t *testing.T) {
 	t.Parallel()
 
 	for _, channelType := range []int{channeltype.DeepSeek, channeltype.OpenAICompatible} {
-		metaInfo := &metalib.Meta{
-			ChannelType:     channelType,
-			Config:          model.ChannelConfig{APIFormat: channeltype.OpenAICompatibleAPIFormatResponse},
-			BaseURL:         "https://api.deepseek.com/v1",
-			ActualModelName: "deepseek-v4-flash",
+		for _, modelName := range []string{
+			"deepseek-v4-flash",
+			"deepseek-v4-flash-vision-exp",
+			"deepseek-v4-pro",
+		} {
+			metaInfo := &metalib.Meta{
+				ChannelType:     channelType,
+				Config:          model.ChannelConfig{APIFormat: channeltype.OpenAICompatibleAPIFormatResponse},
+				BaseURL:         "https://api.deepseek.com/v1",
+				ActualModelName: modelName,
+			}
+			require.True(t, supportsNativeResponseAPI(metaInfo), "channel type %d must preserve native Responses state for %s", channelType, modelName)
 		}
-		require.True(t, supportsNativeResponseAPI(metaInfo), "channel type %d must preserve native Responses state", channelType)
-
-		metaInfo.ActualModelName = "deepseek-v4-pro"
-		require.False(t, supportsNativeResponseAPI(metaInfo), "channel type %d must retain the V4 Pro chat fallback", channelType)
 	}
 }
 

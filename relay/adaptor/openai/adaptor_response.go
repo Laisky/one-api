@@ -19,6 +19,7 @@ import (
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
@@ -91,7 +92,11 @@ func (a *Adaptor) DoResponse(c *gin.Context,
 		switch meta.Mode {
 		case relaymode.ImagesGenerations,
 			relaymode.ImagesEdits:
-			err, usage = ImageHandler(c, resp)
+			if meta.ChannelType == channeltype.SiliconFlow {
+				err, usage = SiliconFlowImageHandler(c, resp)
+			} else {
+				err, usage = ImageHandler(c, resp)
+			}
 		case relaymode.ResponseAPI:
 			err, usage = ResponseAPIDirectHandler(c, resp, meta.PromptTokens, meta.ActualModelName)
 		case relaymode.Videos:

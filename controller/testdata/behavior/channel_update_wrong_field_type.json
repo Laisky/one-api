@@ -3,7 +3,7 @@
   "site": "C4 UpdateChannel (error)",
   "status": 200,
   "body": {
-    "message": "unmarshal channel payload: unmarshal request body failed: json: cannot unmarshal string into Go struct field channelPayload.Channel.type of type int",
+    "message": "unmarshal channel payload: unmarshal request body failed: json: cannot unmarshal string into Go struct field type of type int",
     "success": false
   }
 }

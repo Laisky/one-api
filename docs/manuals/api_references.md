@@ -420,9 +420,9 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 | `POST` | [`/api/paas/v4/layout_parsing`](#ocr-mcp-channel-proxy-model-discovery--openrouter-listing) | API key | Zhipu-compatible document OCR / layout parsing; per-call billing; upstream body forwarded verbatim |
 | `ANY` | [`/mcp`](#ocr-mcp-channel-proxy-model-discovery--openrouter-listing) | API key | MCP Streamable HTTP transport: POST=JSON-RPC 2.0 (initialize/tools.list/tools.call/ping/notifications); GET… |
 | `ANY` | [`/v1/oneapi/proxy/:channelid/*target`](#ocr-mcp-channel-proxy-model-discovery--openrouter-listing) | API key | Raw passthrough pinning one channel; strips proxy prefix, swaps Authorization for channel credential, mirro… |
-| `GET` | [`/v1/models`](#ocr-mcp-channel-proxy-model-discovery--openrouter-listing) | API key | OpenAI-compatible list of models accessible to the key's user group (hidden-model filtered, sorted by id) |
-| `GET` | [`/v1/models/:model`](#ocr-mcp-channel-proxy-model-discovery--openrouter-listing) | API key | OpenAI-compatible single-model descriptor; case-insensitive; 200+model_not_found error when unknown/forbidden |
-| `GET` | [`/openrouter/v1/models`](#ocr-mcp-channel-proxy-model-discovery--openrouter-listing) | Public | Public OpenRouter provider model catalog, deduped by lowercased id and sorted by lowercased name |
+| `GET` | [`/v1/models`](#ocr-mcp-channel-proxy-model-discovery--openrouter-listing) | API key | OpenAI-compatible list of models scoped to the calling key: the user group's enabled abilities, hidden-model filtered, then narrowed by the key's own `models` allow-list using the same predicate that produces the relay's 403 (exact, case-sensitive, untrimmed). A key with no allow-list sees the whole group. Derived from enabled channels, never the compiled-in adaptor catalog: `owned_by` names the channel that would serve the model (highest priority, then lowest channel id) and `created` is a fixed constant |
+| `GET` | [`/v1/models/:model`](#ocr-mcp-channel-proxy-model-discovery--openrouter-listing) | API key | OpenAI-compatible single-model descriptor; case-insensitive; **404** + `model_not_found` when unknown, hidden, or outside the key's allow-list (one indistinguishable response for all three, so the endpoint cannot be used to enumerate the catalog). Rendered from the same ability as `/v1/models` and narrowed by the same allow-list. Lookup remains deliberately case-insensitive, so requesting a non-routable casing still resolves to the callable routing key rather than 404ing |
+| `GET` | [`/openrouter/v1/models`](#ocr-mcp-channel-proxy-model-discovery--openrouter-listing) | Public | Public OpenRouter provider model catalog, deduped by lowercased id and sorted by lowercased name. Built from the compiled-in adaptors, so it advertises what this binary supports rather than what is enabled here, and its `owned_by` vocabulary intentionally differs from `/v1/models` |
 
 **[Usage, Billing Dashboard & API-Key Introspection](#usage-billing-dashboard--api-key-introspection)**
 
@@ -1283,7 +1283,7 @@ This is a WebSocket upgrade request, not a normal HTTP call. The client sends th
 
 **Response**
 
-On success the server responds with HTTP `101 Switching Protocols` and the socket stays open. After the upgrade, the gateway transparently relays Realtime protocol events in both directions (e.g. `session.update`, `input_audio_buffer.append`, `response.create`, `response.done`); the message shapes follow the upstream OpenAI Realtime schema. Client-to-upstream `session.update` frames that attempt to change the session `model` are rejected: the gateway sends back an `error` event (`{"type":"error","error":{"type":"invalid_request_error","code":"model_switch_denied","message":"..."}}`) and then closes the socket with WebSocket close code `1008` (policy violation) and reason `model_switch_denied`.
+On success the server responds with HTTP `101 Switching Protocols` and the socket stays open. After the upgrade, the gateway transparently relays Realtime protocol events in both directions (e.g. `session.update`, `input_audio_buffer.append`, `response.create`, `response.done`); the message shapes follow the upstream OpenAI Realtime schema. Client-to-upstream `session.update` frames that attempt to change the session `model` to a *different* model are rejected: the gateway sends back an `error` event (`{"type":"error","error":{"type":"invalid_request_error","code":"model_switch_denied","message":"..."}}`) and then closes the socket with WebSocket close code `1008` (policy violation) and reason `model_switch_denied`. Sending the bound model is allowed — `session.created` carries it and clients echo that object back — and the channel's user-facing alias is rewritten to the actual model. A transcription session is opened with `?model=<routing model>&intent=transcription`; the gateway drops the `model` parameter upstream, because OpenAI requires transcription sessions to carry none, and the transcription model is selected inside `session.audio.input.transcription`.
 
 If the handshake or the upstream dial fails the gateway does not return a JSON body over the socket in the normal way:
 - Upgrade failure: the WebSocket upgrade response carries HTTP `400`; the controller records `{"error": {"message": "websocket upgrade failed: ...", "type": "one_api_error", "code": "ws_upgrade_failed"}}`.
@@ -1332,7 +1332,7 @@ curl -i -N \
 | 403 (`pre_consume_failed`) | Pre-consuming the estimated quota from the token failed. |
 | 500 (`one_api_error`) | The gateway could not read the user's quota before starting the session. |
 | 502 (`upstream_connect_failed`) | The gateway could not establish the upstream WebSocket connection; pre-consumed quota is refunded. |
-| 1008 (WS close) | A client `session.update` frame attempted to change the session model (`model_switch_denied`). |
+| 1008 (WS close) | A client `session.update` frame attempted to switch to a different model (`model_switch_denied`). |
 | 1013 (WS close) | The upstream WebSocket connection could not be established (pairs with the `502 upstream_connect_failed` record). |
 
 ### POST /v1/realtime/sessions
@@ -2440,7 +2440,7 @@ Lists the models the authenticated key may access, in the OpenAI-compatible mode
 | `data[].id` | string | Model name. |
 | `data[].object` | string | Always `"model"`. |
 | `data[].created` | integer | Unix timestamp. |
-| `data[].owned_by` | string | The owning channel/adaptor name (or `channel-<id>` when unnamed). |
+| `data[].owned_by` | string | The owning channel/adaptor name (or `channel-<uuid>` when the channel type has no display name; `unknown` if the channel has no UUID). |
 | `data[].permission` | array | OpenAI-style permission records. |
 | `data[].root` | string | Equals `id`. |
 | `data[].parent` | string \| null | Always `null`. |
@@ -2538,7 +2538,7 @@ curl "$BASE_URL/v1/models/gpt-4o-mini" \
 
 | Status | Meaning |
 |--------|---------|
-| 200 + `error` body | When the model is unknown or not permitted for the key, the response is `200 OK` carrying an OpenAI-style error: `{"error": {"message": "The model '<id>' does not exist", "type": "invalid_request_error", "param": "model", "code": "model_not_found"}}`. |
+| 404 + `error` body | When the model is unknown, hidden on its channel, or outside the calling key's allow-list, the response is `404 Not Found` carrying an OpenAI-style error: `{"error": {"message": "The model '<id>' does not exist or you do not have access to it", "type": "invalid_request_error", "param": "model", "code": "model_not_found"}}`. The three cases are deliberately indistinguishable. Matches OpenAI, whose SDKs raise `NotFoundError` from the status rather than the body. |
 
 ### GET /openrouter/v1/models
 

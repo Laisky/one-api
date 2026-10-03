@@ -134,7 +134,10 @@ func streamResponseXunfei2OpenAI(c *gin.Context, xunfeiResponse *ChatResponse) *
 	return &response
 }
 
-func buildXunfeiAuthUrl(hostUrl string, apiKey, apiSecret string) string {
+// buildXunfeiAuthUrl creates a signed Xunfei websocket URL. Parameters:
+// hostUrl is the provider websocket endpoint, apiKey identifies the caller, and
+// apiSecret signs the request. Returns: the signed URL or a wrapped parse error.
+func buildXunfeiAuthUrl(hostUrl string, apiKey, apiSecret string) (string, error) {
 	HmacWithShaToBase64 := func(algorithm, data, key string) string {
 		mac := hmac.New(sha256.New, []byte(key))
 		mac.Write([]byte(data))
@@ -143,7 +146,10 @@ func buildXunfeiAuthUrl(hostUrl string, apiKey, apiSecret string) string {
 	}
 	ul, err := url.Parse(hostUrl)
 	if err != nil {
-		fmt.Println(err)
+		return "", errors.Wrap(err, "parse Xunfei websocket URL")
+	}
+	if ul.Host == "" {
+		return "", errors.Errorf("Xunfei websocket URL has no host: %s", hostUrl)
 	}
 	date := time.Now().UTC().Format(time.RFC1123)
 	signString := []string{"host: " + ul.Host, "date: " + date, "GET " + ul.Path + " HTTP/1.1"}
@@ -157,12 +163,15 @@ func buildXunfeiAuthUrl(hostUrl string, apiKey, apiSecret string) string {
 	v.Add("date", date)
 	v.Add("authorization", authorization)
 	callUrl := hostUrl + "?" + v.Encode()
-	return callUrl
+	return callUrl, nil
 }
 
 func StreamHandler(c *gin.Context, meta *meta.Meta, textRequest model.GeneralOpenAIRequest, appId string, apiSecret string, apiKey string) (*model.ErrorWithStatusCode, *model.Usage) {
 	lg := gmw.GetLogger(c)
-	domain, authUrl := getXunfeiAuthUrl(meta.Config.APIVersion, apiKey, apiSecret)
+	domain, authUrl, err := getXunfeiAuthUrl(meta.Config.APIVersion, apiKey, apiSecret)
+	if err != nil {
+		return openai.ErrorWrapper(err, "xunfei_auth_url_failed", http.StatusInternalServerError), nil
+	}
 	dataChan, stopChan, err := xunfeiMakeRequest(textRequest, domain, authUrl, appId)
 	if err != nil {
 		return openai.ErrorWrapper(err, "xunfei_request_failed", http.StatusInternalServerError), nil
@@ -190,7 +199,10 @@ func StreamHandler(c *gin.Context, meta *meta.Meta, textRequest model.GeneralOpe
 }
 
 func Handler(c *gin.Context, meta *meta.Meta, textRequest model.GeneralOpenAIRequest, appId string, apiSecret string, apiKey string) (*model.ErrorWithStatusCode, *model.Usage) {
-	domain, authUrl := getXunfeiAuthUrl(meta.Config.APIVersion, apiKey, apiSecret)
+	domain, authUrl, err := getXunfeiAuthUrl(meta.Config.APIVersion, apiKey, apiSecret)
+	if err != nil {
+		return openai.ErrorWrapper(err, "xunfei_auth_url_failed", http.StatusInternalServerError), nil
+	}
 	dataChan, stopChan, err := xunfeiMakeRequest(textRequest, domain, authUrl, appId)
 	if err != nil {
 		return openai.ErrorWrapper(err, "xunfei_request_failed", http.StatusInternalServerError), nil

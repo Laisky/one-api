@@ -14,10 +14,12 @@ import "github.com/Laisky/one-api/relay/adaptor/openai"
 //     (/anthropic/v1/messages). These are enumerated in FoundryClaudeModels and
 //     priced by the anthropic adaptor.
 //
-// Sources (retrieved 2026-07):
+// Claude sources rechecked 2026-09-28; the OpenAI catalog is unchanged:
 //   - https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/models
 //   - https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models
 //   - https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure
+//   - https://platform.claude.com/docs/en/build-with-claude/claude-in-microsoft-foundry
+//   - https://platform.claude.com/docs/en/about-claude/pricing#microsoft-foundry
 //
 // Azure requires the request `model` field to be the user-chosen deployment name.
 // one-api sends the (post-mapping) model name, so name the deployment after the
@@ -31,9 +33,16 @@ import "github.com/Laisky/one-api/relay/adaptor/openai"
 //
 // The gated research preview "claude-mythos-preview" is intentionally omitted: it
 // requires Microsoft Entra ID auth, is access-restricted, and has no published
-// per-token price. Deploy it via a custom model entry + per-channel price if needed.
+// per-token price. Existing priced Mythos entries and the new 5.1 entry remain
+// access-restricted and require Microsoft Entra ID. This catalog does not add
+// Entra credential acquisition/refresh or certify availability for API-key users.
+// First-party pricing applies to Foundry standard/global usage; regional/data-zone
+// or negotiated prices require channel overrides. Legacy entries are retained.
 var FoundryClaudeModels = []string{
-	// Generally available
+	// Generally available; Sonnet 5.5 is Global Standard at launch.
+	"claude-sonnet-5-5",
+	"claude-opus-5-5",
+	"claude-opus-5",
 	"claude-opus-4-8",
 	"claude-opus-4-7",
 	"claude-opus-4-6",
@@ -44,8 +53,10 @@ var FoundryClaudeModels = []string{
 	"claude-sonnet-4-5",
 	"claude-haiku-4-5",
 	// Preview
+	"claude-fable-5-1",
 	"claude-fable-5",
-	// Gated research preview (priced)
+	// Gated research preview (priced; Entra authentication required)
+	"claude-mythos-5-1",
 	"claude-mythos-5",
 }
 

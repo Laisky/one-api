@@ -67,7 +67,7 @@ export function Header() {
   const { isMobile } = useResponsive();
   const { systemStatus } = useSystemStatus();
 
-  const isAdmin = user?.role >= 10;
+  const isAdmin = (user?.role ?? 0) >= 10;
 
   // Navigation items visible to logged-in users
   const authenticatedNavItems = user
@@ -92,6 +92,7 @@ export function Header() {
         { name: t('common.models'), to: '/models', show: true },
         { name: t('common.tools'), to: '/tools', show: true },
         { name: t('common.status'), to: '/status', show: true },
+        { name: t('common.about'), to: '/about', show: true },
       ];
 
   const navigationItems = authenticatedNavItems

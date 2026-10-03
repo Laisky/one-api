@@ -17,7 +17,6 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
-	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/meta"
@@ -28,11 +27,10 @@ import (
 )
 
 // Realtime session preConsume estimation constants.
-// Since we can't know session length upfront (live audio streaming), we estimate
-// a conservative minimum charge based on a short audio conversation.
+// Since we cannot know session length upfront, reserve an estimate based on a
+// short audio conversation. This reservation is not a minimum session fee.
 const (
-	// realtimePreConsumeSeconds is the estimated session duration (seconds) for
-	// pre-consuming quota. 120s (2 minutes) is a conservative minimum.
+	// realtimePreConsumeSeconds is the estimated session duration in seconds.
 	realtimePreConsumeSeconds = 120
 
 	// Audio token rates per OpenAI docs:
@@ -42,14 +40,15 @@ const (
 	realtimeAudioOutputTokensPerSec = 20
 )
 
-// RelayRealtime handles WebSocket Realtime proxying for OpenAI Realtime API.
+// RelayRealtime handles authenticated WebSocket conversations and receipt billing.
+// Parameters: c is the request context. Returns: none after session settlement.
 //
 // Billing flow (mirrors text endpoints):
 //  1. Pre-consume quota — reserve a conservative estimate BEFORE upgrading WS
 //  2. Record provisional log — audit trail in case of crash
 //  3. Defer billing audit safety net — catch unreconciled pre-consumption
-//  4. Run WebSocket session — proxy all frames, parse usage from response.done
-//  5. Post-consume quota — reconcile with actual usage (or keep pre-consumed if 0)
+//  4. Run WebSocket session — preserve native frames and collect provider usage
+//  5. Post-consume quota — settle response and transcription receipts by modality
 func RelayRealtime(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)
@@ -57,7 +56,13 @@ func RelayRealtime(c *gin.Context) {
 	relayMeta := meta.GetByContext(c)
 
 	// Record channel requests in flight
-	PrometheusMonitor.RecordChannelRequest(relayMeta, start)
+	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
+
+	if err := validateGeminiRealtimeTransport(relayMeta); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": err.Error(), "type": "unsupported_realtime_transport"}})
+		PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, false, 0, 0, 0)
+		return
+	}
 
 	// ── Step 1: Resolve pricing ─────────────────────────────────────────
 	var channelModelRatio map[string]float64
@@ -65,9 +70,9 @@ func RelayRealtime(c *gin.Context) {
 	var channelCompletionRatio map[string]float64
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := channelModel.(*model.Channel); ok {
-			channelModelRatio = channel.GetModelRatioFromConfigs()
-			channelModelConfigs = channel.GetModelPriceConfigs()
-			channelCompletionRatio = channel.GetCompletionRatioFromConfigs()
+			channelModelRatio = channel.GetModelRatioFromConfigsWithContext(ctx)
+			channelModelConfigs = channel.GetModelPriceConfigsWithContext(ctx)
+			channelCompletionRatio = channel.GetCompletionRatioFromConfigsWithContext(ctx)
 		}
 	}
 
@@ -79,8 +84,14 @@ func RelayRealtime(c *gin.Context) {
 	// ── Step 2: Pre-consume quota ───────────────────────────────────────
 	// Estimate based on a short audio conversation.
 	// Use audio pricing when available (much higher than text), fall back to text.
-	preConsumedQuota := estimateRealtimePreConsumeQuota(
-		modelName, modelRatio, groupRatio, channelModelConfigs, pricingAdaptor, relayMeta.StartTime)
+	preConsumedQuota, reserveErr := estimateRealtimeSessionReservation(
+		relayMeta, modelRatio, groupRatio, channelModelConfigs, pricingAdaptor)
+
+	if reserveErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": reserveErr.Error(), "type": "invalid_realtime_pricing"}})
+		PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, false, 0, 0, 0)
+		return
+	}
 
 	// Check user quota before allowing the session
 	userQuota, err := model.CacheGetUserQuota(ctx, relayMeta.UserId)
@@ -104,7 +115,7 @@ func RelayRealtime(c *gin.Context) {
 	// Check if user has enough quota that we can skip pre-consumption (trusted user)
 	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
 	tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
-	if userQuota > 100*preConsumedQuota &&
+	if !isGeminiLiveRequest(relayMeta) && userQuota > 100*preConsumedQuota &&
 		(tokenQuotaUnlimited || tokenQuota > 100*preConsumedQuota) {
 		// Trusted user with plenty of quota — skip pre-consumption
 		preConsumedQuota = 0
@@ -134,7 +145,7 @@ func RelayRealtime(c *gin.Context) {
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 
 	// ── Step 4: Run WebSocket session ───────────────────────────────────
-	bizErr, usage := openai.RealtimeHandler(c, relayMeta)
+	bizErr, usage := runRealtimeProviderWithGemini(c, relayMeta)
 	if bizErr != nil {
 		// Handshake/connection error — upstream was NOT reached, safe to refund
 		c.Set(ctxkey.UpstreamRequestPossiblyForwarded, false)
@@ -164,11 +175,9 @@ func RelayRealtime(c *gin.Context) {
 }
 
 // postConsumeRealtimeQuota reconciles actual usage against pre-consumed quota
-// after a realtime WebSocket session ends.
-//
-// Key safety invariant: if usage is zero but pre-consumed quota exists, the
-// pre-consumed amount is KEPT (not refunded) to prevent free rides when
-// upstream fails to report usage.
+// after a realtime WebSocket session ends. OpenAI receipt paths persist either
+// measured usage or a labeled estimate; authoritative idle/zero usage refunds
+// the reservation. Providers without receipt accounting retain legacy behavior.
 func postConsumeRealtimeQuota(
 	c *gin.Context,
 	relayMeta *meta.Meta,
@@ -190,32 +199,24 @@ func postConsumeRealtimeQuota(
 		return 0
 	}
 
-	modelName := relayMeta.ActualModelName
-
-	// ── ZERO-USAGE GUARD ────────────────────────────────────────────────
-	// If upstream reported no usage but we pre-consumed quota, keep the
-	// pre-consumed amount as the charge. This prevents free rides when
-	// upstream fails to emit response.done / usage events.
-	if usage == nil || (usage.PromptTokens == 0 && usage.CompletionTokens == 0) {
+	// Do not change the legacy no-ledger provider contract as part of the
+	// OpenAI receipt audit. Every OpenAI ledger, including one with missing
+	// receipts, still reaches the persisted settlement below.
+	if (usage == nil || usage.Realtime == nil) && retainRealtimeEstimate(usage) {
 		if preConsumedQuota > 0 {
-			lg.Warn("realtime billing: zero usage but pre-consumed quota exists, keeping pre-consumed amount",
-				zap.Int64("pre_consumed_quota", preConsumedQuota),
-				zap.String("model", modelName))
+			lg.Warn("realtime billing: retaining legacy no-usage reservation",
+				zap.Int64("pre_consumed_quota", preConsumedQuota))
 		}
-		// Mark billing reconciled — the pre-consumed amount is the final charge
 		rtMarkBillingReconciled(c)
 		return float64(preConsumedQuota)
 	}
 
-	// ── Apply audio token surcharge ─────────────────────────────────────
-	// quota.Compute bills all tokens at uniform text rate. Realtime sessions
-	// contain audio tokens that cost significantly more. Add the delta as a
-	// surcharge to usage.ToolsCost so it's included in the total quota.
-	applyRealtimeAudioSurcharge(usage, modelName, modelRatio, groupRatio,
-		channelModelRatio, channelModelConfigs, pricingAdaptor, lg, relayMeta.StartTime)
+	modelName := relayMeta.ActualModelName
+	if usage == nil {
+		usage = &rmodel.Usage{}
+	}
 
-	// ── Compute actual quota from usage ─────────────────────────────────
-	computeResult := quotautil.Compute(quotautil.ComputeInput{
+	computeResult, metadata := prepareRealtimeReceiptSettlement(quotautil.ComputeInput{
 		Usage:                  usage,
 		ModelName:              modelName,
 		ModelRatio:             modelRatio,
@@ -225,11 +226,12 @@ func postConsumeRealtimeQuota(
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
 		RequestTime:            relayMeta.StartTime,
-	})
+	}, preConsumedQuota, lg)
 
 	totalQuota := computeResult.TotalQuota
-	if computeResult.PromptTokens+computeResult.CompletionTokens == 0 {
-		totalQuota = 0
+	if len(computeResult.BillingIssues) > 0 {
+		lg.Warn("realtime billing requires reconciliation",
+			zap.Strings("billing_issues", computeResult.BillingIssues))
 	}
 
 	// quotaDelta = actual - preConsumed
@@ -267,30 +269,33 @@ func postConsumeRealtimeQuota(
 			userAPIFormat = relaymode.String(relayMeta.Mode)
 		}
 		billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
-			Ctx:               ctx,
-			TokenId:           relayMeta.TokenId,
-			QuotaDelta:        quotaDelta,
-			TotalQuota:        totalQuota,
-			UserId:            relayMeta.UserId,
-			UserUUID:          relayMeta.UserUUID,
-			ChannelId:         relayMeta.ChannelId,
-			ChannelUUID:       relayMeta.ChannelUUID,
-			PromptTokens:      computeResult.PromptTokens,
-			CompletionTokens:  computeResult.CompletionTokens,
-			ModelRatio:        computeResult.UsedModelRatio,
-			GroupRatio:        groupRatio,
-			ModelName:         modelName,
-			TokenUUID:         relayMeta.TokenUUID,
-			TokenName:         relayMeta.TokenName,
-			IsStream:          true,
-			StartTime:         relayMeta.StartTime,
-			CompletionRatio:   computeResult.UsedCompletionRatio,
-			RequestId:         requestId,
-			TraceId:           traceId,
-			ProvisionalLogId:  provisionalLogId,
-			UserAPIFormat:     userAPIFormat,
-			UpstreamAPIFormat: apitype.String(relayMeta.APIType),
-			UpstreamEndpoint:  relayMeta.UpstreamRequestURL,
+			Metadata:           metadata,
+			CachedPromptTokens: computeResult.CachedPromptTokens,
+			ToolsCost:          usage.ToolsCost,
+			Ctx:                ctx,
+			TokenId:            relayMeta.TokenId,
+			QuotaDelta:         quotaDelta,
+			TotalQuota:         totalQuota,
+			UserId:             relayMeta.UserId,
+			UserUUID:           relayMeta.UserUUID,
+			ChannelId:          relayMeta.ChannelId,
+			ChannelUUID:        relayMeta.ChannelUUID,
+			PromptTokens:       computeResult.PromptTokens,
+			CompletionTokens:   computeResult.CompletionTokens,
+			ModelRatio:         computeResult.UsedModelRatio,
+			GroupRatio:         groupRatio,
+			ModelName:          modelName,
+			TokenUUID:          relayMeta.TokenUUID,
+			TokenName:          relayMeta.TokenName,
+			IsStream:           true,
+			StartTime:          relayMeta.StartTime,
+			CompletionRatio:    computeResult.UsedCompletionRatio,
+			RequestId:          requestId,
+			TraceId:            traceId,
+			ProvisionalLogId:   provisionalLogId,
+			UserAPIFormat:      userAPIFormat,
+			UpstreamAPIFormat:  apitype.String(relayMeta.APIType),
+			UpstreamEndpoint:   relayMeta.UpstreamRequestURL,
 		})
 	})
 
@@ -300,30 +305,22 @@ func postConsumeRealtimeQuota(
 // resolveRealtimePricingAdaptor returns the pricing adaptor for a realtime session
 // using the same two-layer lookup as text endpoints.
 func resolveRealtimePricingAdaptor(relayMeta *meta.Meta) adaptor.Adaptor {
+	if isGeminiLiveRequest(relayMeta) {
+		return geminiLivePricingAdaptor(relayMeta)
+	}
 	if a := relay.GetAdaptor(relayMeta.APIType); a != nil {
 		return a
 	}
 	return relay.GetAdaptor(relayMeta.ChannelType)
 }
 
-// RelayRealtimeSessions handles POST /v1/realtime/sessions by proxying to the
-// upstream OpenAI Realtime Sessions API to create ephemeral tokens for WebRTC clients.
+// RelayRealtimeSessions rejects credential minting even if a future route or an
+// internal caller accidentally invokes this retired handler. Parameters: c is
+// the request context. Returns: no value; a static forbidden response is written
+// before accessing channel credentials or contacting any upstream provider.
 func RelayRealtimeSessions(c *gin.Context) {
-	start := time.Now()
-	relayMeta := meta.GetByContext(c)
-
-	PrometheusMonitor.RecordChannelRequest(relayMeta, start)
-
-	if bizErr, err := openai.RealtimeSessionsHandler(c, relayMeta); bizErr != nil {
-		if !c.Writer.Written() {
-			c.JSON(bizErr.StatusCode, gin.H{"error": bizErr.Error})
-		}
-		PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, false, 0, 0, 0)
-		if err != nil {
-			gmw.GetLogger(c).Error("realtime sessions error", zap.Error(err))
-		}
-		return
-	}
-
-	PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, true, 0, 0, 0)
+	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{
+		"message": "Realtime credential minting is disabled; use the metered /v1/realtime WebSocket endpoint with a one-api bearer token",
+		"type":    "one_api_error", "code": "realtime_sessions_disabled",
+	}})
 }

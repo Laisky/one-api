@@ -1,7 +1,8 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserContext } from '../context/User';
-import { API, getLogo, showError, showInfo, showSuccess } from '../helpers';
+import { API, getLogo, normalizeUser, showError, showInfo, showSuccess } from '../helpers';
 import { onGitHubOAuthClicked } from './utils';
 import Turnstile from 'react-turnstile';
 import { Button, Card, Divider, Form, Icon, Layout, Modal } from '@douyinfe/semi-ui';
@@ -11,12 +12,6 @@ import TelegramLoginButton from 'react-telegram-login';
 
 import { IconGithubLogo } from '@douyinfe/semi-icons';
 import WeChatIcon from './WeChatIcon';
-
-const normalizeUser = (user) => {
-  if (!user) return user;
-  const uuid = user.uuid || user.user_uuid;
-  return uuid ? { ...user, uuid, id: uuid } : user;
-};
 
 const LoginForm = () => {
   const [inputs, setInputs] = useState({
@@ -28,7 +23,6 @@ const LoginForm = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [submitted, setSubmitted] = useState(false);
   const [totpRequired, setTotpRequired] = useState(false);
-  const [userId, setUserId] = useState(null);
   const { username, password, totp_code } = inputs;
   const [userState, userDispatch] = useContext(UserContext);
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
@@ -117,7 +111,6 @@ const LoginForm = () => {
         // Check if TOTP is required
         if (message === 'totp_required' && data && data.totp_required) {
           setTotpRequired(true);
-          setUserId(data.user_id);
           showError('请输入您的TOTP验证码');
         } else {
           showError(message);
@@ -192,7 +185,7 @@ const LoginForm = () => {
                   )}
 
                   <Button theme="solid" style={{ width: '100%' }} type={'primary'} size="large"
-                          htmlType={'submit'} onClick={handleSubmit}
+                          htmlType={'submit'} onClick={(...uiArgs) => handleSubmit(...uiArgs).catch(reportUIError)}
                           disabled={totpRequired && (!totp_code || totp_code.length !== 6)}>
                     {totpRequired ? '验证TOTP' : '登录'}
                   </Button>

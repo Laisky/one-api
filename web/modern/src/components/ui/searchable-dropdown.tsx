@@ -75,7 +75,7 @@ export function SearchableDropdown({
   const [searchValue, setSearchValue] = React.useState('');
   const [apiOptions, setApiOptions] = React.useState<SearchOption[]>([]);
   const [apiLoading, setApiLoading] = React.useState(false);
-  const searchTimeoutRef = React.useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = React.useRef<NodeJS.Timeout | undefined>(undefined);
 
   // Use API options if available, otherwise use initial options
   const options = searchEndpoint && searchValue.length >= minQueryLength ? apiOptions : initialOptions;
@@ -204,9 +204,11 @@ export function SearchableDropdown({
       <PopoverTrigger asChild>
         <Button variant="outline" role="combobox" aria-expanded={open} className={cn('w-full justify-between', className)}>
           {selectedOption ? (
-            <span className="truncate">{selectedOption.text}</span>
+            <span className="min-w-0 flex-1 truncate text-left">{selectedOption.text}</span>
           ) : (
-            <span className="text-muted-foreground">{effectivePlaceholder}</span>
+            <span className={cn('min-w-0 flex-1 truncate text-left', !value && 'text-muted-foreground')}>
+              {value || effectivePlaceholder}
+            </span>
           )}
           <div className="flex items-center ml-2 shrink-0">
             {clearable && selectedOption && <X className="h-4 w-4 opacity-50 hover:opacity-100 mr-1" onClick={handleClear} />}

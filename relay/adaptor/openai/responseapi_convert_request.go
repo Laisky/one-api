@@ -2,6 +2,7 @@ package openai
 
 import (
 	"maps"
+	"strconv"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -29,16 +30,18 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 	}
 
 	chatReq := &model.GeneralOpenAIRequest{
-		Model:       request.Model,
-		ExtraBody:   maps.Clone(request.ExtraBody),
-		Store:       request.Store,
-		Metadata:    request.Metadata,
-		Stream:      request.Stream != nil && *request.Stream,
-		Reasoning:   request.Reasoning,
-		ServiceTier: request.ServiceTier,
-		Temperature: request.Temperature,
-		TopP:        request.TopP,
-		ToolChoice:  request.ToolChoice,
+		Thinking:     request.Thinking,
+		OutputConfig: request.OutputConfig,
+		Model:        request.Model,
+		ExtraBody:    maps.Clone(request.ExtraBody),
+		Store:        request.Store,
+		Metadata:     request.Metadata,
+		Stream:       request.Stream != nil && *request.Stream,
+		Reasoning:    request.Reasoning,
+		ServiceTier:  request.ServiceTier,
+		Temperature:  request.Temperature,
+		TopP:         request.TopP,
+		ToolChoice:   request.ToolChoice,
 	}
 
 	if request.MaxOutputTokens != nil {
@@ -87,16 +90,24 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 		})
 	}
 
-	// openToolCallMsgIdx tracks an assistant message that was just emitted from a
-	// function_call item and is still "open" to receive sibling tool calls. The OpenAI
-	// Responses API represents parallel tool calls (issued in a single assistant turn) as
-	// multiple consecutive function_call items. ChatCompletion upstreams such as DeepSeek
-	// require those to live in ONE assistant message's tool_calls array; otherwise the
-	// trailing tool results end up following a tool message instead of an assistant message
-	// with tool_calls, producing the upstream 400 "Messages with role 'tool' must be a
-	// response to a preceding message with 'tool_calls'". The index is reset at the start of
-	// every iteration so only directly-adjacent function_call items are merged; anything else
-	// in between (a tool output, user/assistant text, etc.) starts a fresh assistant turn.
+	// openToolCallMsgIdx tracks the assistant message of the turn currently being
+	// lowered, which is still "open" to receive tool calls. The OpenAI Responses API
+	// represents one assistant turn as several items: an optional reasoning item, an
+	// optional assistant message, and one function_call item per (possibly parallel)
+	// tool call. ChatCompletion upstreams such as DeepSeek require the whole turn to
+	// live in ONE assistant message — its text, its tool_calls array and its
+	// reasoning_content together. Splitting it puts one assistant message directly
+	// after another, so the first one's calls are not followed by their tool results
+	// and upstream answers 400 "An assistant message with 'tool_calls' must be
+	// followed by tool messages responding to each 'tool_call_id'. (insufficient tool
+	// messages following tool_calls message)" — verified against api.deepseek.com
+	// with deepseek-flash on 2026-09-18.
+	//
+	// The index is reset at the start of every iteration, so only items that belong to
+	// the same turn keep it alive: an assistant content item opens a turn, a
+	// function_call joins or opens one, and a reasoning item passes through. Anything
+	// that ends the turn (a user/system message, a tool output) leaves it at -1 and the
+	// next function_call starts a fresh assistant message.
 	openToolCallMsgIdx := -1
 	// pendingToolCallIDs holds the normalized tool-call IDs from the current assistant
 	// tool-call turn that are still eligible to be answered by an adjacent tool message. It
@@ -106,9 +117,14 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 	// orphan: emitting it as a `tool` message would violate the ChatCompletion rule that a
 	// tool message must follow an assistant message carrying the matching tool_calls, so it
 	// is downgraded to a user message instead of forwarding an invalid sequence upstream.
-	pendingToolCallIDs := make(map[string]struct{})
-	// pendingReasoning holds replayable thinking state until its adjacent
-	// assistant message is lowered. DeepSeek requires it on tool-call history.
+	// The value is the FIFO of tool-call IDs actually emitted for that input ID. It is a
+	// queue rather than a single value because one assistant turn may repeat an ID (see
+	// uniqueToolCallIDWithin): the Nth output for an input ID answers the Nth emitted call.
+	pendingToolCallIDs := make(map[string][]string)
+	// pendingReasoning holds replayable thinking state until the assistant message of its
+	// turn exists. It is only used for producers that emit the reasoning item *before* the
+	// assistant message; a reasoning item that trails its message is written back into that
+	// message directly. See the "reasoning" case for why both orders must work.
 	pendingReasoning := ""
 	for _, item := range request.Input {
 		currentToolCallMsgIdx := openToolCallMsgIdx
@@ -122,8 +138,46 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 			if typeVal, ok := v["type"].(string); ok {
 				switch strings.ToLower(typeVal) {
 				case "reasoning":
-					pendingReasoning = extractResponseAPIReasoningContent(v)
-					clear(pendingToolCallIDs)
+					// A reasoning item marks thinking *within* a turn, not a turn
+					// boundary, so it must not close an open assistant message. This
+					// gateway's own response.output orders a turn as message, reasoning,
+					// function_call (see buildFinalResponse in the stream bridge), so
+					// resetting here would split every replayed thinking turn into two
+					// assistant messages. It also lowers to no chat message at all, so
+					// unlike a content item it cannot come between an assistant message
+					// and the tool messages answering it: the in-flight tool calls stay
+					// answerable across it.
+					openToolCallMsgIdx = currentToolCallMsgIdx
+
+					reasoning := extractResponseAPIReasoningContent(v)
+					if reasoning == "" {
+						// An empty reasoning item carries nothing to replay; keep whatever
+						// a previous item already staged instead of discarding it.
+						continue
+					}
+					// Producers disagree on where the reasoning item sits inside a turn:
+					// OpenAI emits it before the assistant message, this gateway's own
+					// bridge emits it after (buildFinalResponse appends message, reasoning,
+					// function_call in that order). Carrying it forward unconditionally
+					// therefore stamped one turn's thinking onto the *next* turn's assistant
+					// message and dropped the last turn's thinking entirely — and DeepSeek
+					// rejects a replayed turn whose assistant message lost its thinking with
+					// "The `reasoning_content` in the thinking mode must be passed back to
+					// the API". Write back into the turn's own assistant message when it has
+					// already been lowered, and only stage it forward otherwise.
+					if currentToolCallMsgIdx >= 0 &&
+						chatReq.Messages[currentToolCallMsgIdx].Role == "assistant" {
+						appendReasoningContent(&chatReq.Messages[currentToolCallMsgIdx], reasoning)
+						pendingReasoning = ""
+						continue
+					}
+					if pendingReasoning != "" {
+						// Several reasoning items can precede the message they belong to;
+						// they are one turn's thinking, so join rather than overwrite.
+						pendingReasoning += "\n" + reasoning
+						continue
+					}
+					pendingReasoning = reasoning
 					continue
 				case "function_call":
 					fcID, _ := v["id"].(string)
@@ -138,8 +192,23 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					name, _ := v["name"].(string)
 					arguments := stringifyFunctionCallArguments(v["arguments"])
 
+					role := "assistant"
+
+					// Parallel calls merged into one assistant message must not repeat an
+					// ID: DeepSeek answers a repeat with "Duplicate value for 'tool_call_id'
+					// of <id> in message[N]". Clients that take the call identity from a
+					// stream event which omitted call_id send the same placeholder (commonly
+					// "undefined") for every call of the turn, so disambiguate the emitted
+					// ID and remember it, keeping the client's own ID as the lookup key for
+					// the matching outputs.
+					emittedID := normalizedID
+					if currentToolCallMsgIdx >= 0 && chatReq.Messages[currentToolCallMsgIdx].Role == role {
+						emittedID = uniqueToolCallIDWithin(
+							chatReq.Messages[currentToolCallMsgIdx].ToolCalls, normalizedID)
+					}
+
 					toolCall := model.Tool{
-						Id:   normalizedID,
+						Id:   emittedID,
 						Type: "function",
 						Function: &model.Function{
 							Name:      name,
@@ -147,12 +216,10 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 						},
 					}
 
-					role := "assistant"
-
 					// This tool call is now in-flight and may be answered by an adjacent
 					// function_call_output later in the input.
 					if normalizedID != "" {
-						pendingToolCallIDs[normalizedID] = struct{}{}
+						pendingToolCallIDs[normalizedID] = append(pendingToolCallIDs[normalizedID], emittedID)
 					}
 
 					// Merge consecutive function_call items from the same assistant turn into
@@ -160,6 +227,13 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					if currentToolCallMsgIdx >= 0 && chatReq.Messages[currentToolCallMsgIdx].Role == role {
 						chatReq.Messages[currentToolCallMsgIdx].ToolCalls = append(
 							chatReq.Messages[currentToolCallMsgIdx].ToolCalls, toolCall)
+						// An assistant message item with empty or unrecognized content
+						// decodes to a nil Content, which `json:"content,omitempty"` drops
+						// entirely. DeepSeek requires non-null content on tool-call history,
+						// so mirror the fresh-message branch below and pin it to "".
+						if chatReq.Messages[currentToolCallMsgIdx].Content == nil {
+							chatReq.Messages[currentToolCallMsgIdx].Content = ""
+						}
 						if pendingReasoning != "" && chatReq.Messages[currentToolCallMsgIdx].ReasoningContent == nil {
 							reasoning := pendingReasoning
 							chatReq.Messages[currentToolCallMsgIdx].ReasoningContent = &reasoning
@@ -209,13 +283,20 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					// must be a response to a preceding message with 'tool_calls'". Downgrade
 					// such orphans to a user message so the content survives without forwarding
 					// an invalid sequence.
-					if _, answered := pendingToolCallIDs[normalizedID]; answered && role == "tool" && normalizedID != "" {
+					if queue := pendingToolCallIDs[normalizedID]; len(queue) > 0 && role == "tool" && normalizedID != "" {
+						// Answer the oldest still-unanswered call carrying this input ID so
+						// that a turn whose IDs were disambiguated above still pairs each
+						// output with exactly one call, in arrival order.
+						if len(queue) == 1 {
+							delete(pendingToolCallIDs, normalizedID)
+						} else {
+							pendingToolCallIDs[normalizedID] = queue[1:]
+						}
 						chatReq.Messages = append(chatReq.Messages, model.Message{
 							Role:       role,
-							ToolCallId: normalizedID,
+							ToolCallId: queue[0],
 							Content:    output,
 						})
-						delete(pendingToolCallIDs, normalizedID)
 						continue
 					}
 
@@ -242,12 +323,70 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 			chatReq.Messages = append(chatReq.Messages, *msg)
 			// A non-tool content message ends the current tool-call turn.
 			clear(pendingToolCallIDs)
+			// An assistant text message stays open so directly following function_call
+			// items join it: Chat Completions carries a turn's text and tool calls in one
+			// assistant message, and DeepSeek requires that message to hold the turn's
+			// reasoning_content.
+			if msg.Role == "assistant" {
+				openToolCallMsgIdx = len(chatReq.Messages) - 1
+			}
 		default:
 			return nil, errors.Errorf("unsupported input item of type %T", item)
 		}
 	}
 
 	return chatReq, nil
+}
+
+// appendReasoningContent records reasoning on an already-lowered assistant message.
+// Parameters: message is the assistant message to annotate; reasoning is non-empty
+// replayable thinking. Returns: nothing; several reasoning items in one turn are
+// joined with a newline, matching extractResponseAPIReasoningContent's own joiner.
+func appendReasoningContent(message *model.Message, reasoning string) {
+	if message == nil || reasoning == "" {
+		return
+	}
+	if message.ReasoningContent == nil || *message.ReasoningContent == "" {
+		combined := reasoning
+		message.ReasoningContent = &combined
+		return
+	}
+	combined := *message.ReasoningContent + "\n" + reasoning
+	message.ReasoningContent = &combined
+}
+
+// uniqueToolCallIDWithin returns an ID that no tool call in existing already uses.
+// Parameters: existing is the assistant message's current tool_calls; id is the
+// caller's preferred ID. Returns: id when it is still free, otherwise a suffixed
+// variant, because upstreams reject repeated IDs inside one tool_calls array.
+func uniqueToolCallIDWithin(existing []model.Tool, id string) string {
+	if !toolCallIDTaken(existing, id) {
+		return id
+	}
+
+	base := id
+	if base == "" {
+		base = "tool_call"
+	}
+	// existing is finite, so a free candidate is always reached.
+	for suffix := 2; ; suffix++ {
+		candidate := base + "_" + strconv.Itoa(suffix)
+		if !toolCallIDTaken(existing, candidate) {
+			return candidate
+		}
+	}
+}
+
+// toolCallIDTaken reports whether any call in existing already carries id.
+// Parameters: existing is the tool_calls array to scan; id is the candidate ID.
+// Returns: true when the ID is already used within that assistant message.
+func toolCallIDTaken(existing []model.Tool, id string) bool {
+	for _, call := range existing {
+		if call.Id == id {
+			return true
+		}
+	}
+	return false
 }
 
 // extractResponseAPIReasoningContent returns replayable plaintext reasoning
@@ -324,13 +463,26 @@ func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
 					textSections = append(textSections, text)
 				}
 			case "input_image":
-				if url, ok := partMap["image_url"].(string); ok {
+				if url, ok := partMap["image_url"].(string); ok && url != "" {
 					image := &model.ImageURL{Url: url}
 					if detail, ok := partMap["detail"].(string); ok {
 						image.Detail = detail
 					}
 					parts = append(parts, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: image})
 					hasNonText = true
+				} else {
+					fileID, _ := partMap["file_id"].(string)
+					fileData, _ := partMap["file_data"].(string)
+					filename, _ := partMap["filename"].(string)
+					if fileID != "" || fileData != "" {
+						parts = append(parts, model.MessageContent{
+							Type:     model.ContentTypeFile,
+							FileID:   fileID,
+							FileData: fileData,
+							Filename: filename,
+						})
+						hasNonText = true
+					}
 				}
 			case "input_audio":
 				if inputAudio, ok := partMap["input_audio"].(map[string]any); ok {

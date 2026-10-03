@@ -6,13 +6,13 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
-	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -50,6 +50,7 @@ func GetOptions(c *gin.Context) {
 
 // UpdateOption persists a configuration option after validating prerequisite fields for feature toggles.
 func UpdateOption(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	var req struct {
 		Key   string `json:"key"`
 		Value string `json:"value"`
@@ -70,7 +71,7 @@ func UpdateOption(c *gin.Context) {
 	if req.Clear && isSensitiveOptionKey(option.Key) {
 		option.Value = ""
 	} else if strings.TrimSpace(option.Value) == "" && isSensitiveOptionKey(option.Key) {
-		logger.Logger.Debug("ignored empty value for sensitive option to prevent overwrite",
+		lg.Debug("ignored empty value for sensitive option to prevent overwrite",
 			zap.String("key", option.Key))
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,

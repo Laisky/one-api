@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import { useState, useEffect } from 'react';
 import { showError, showSuccess } from 'utils/common';
 
@@ -35,21 +36,24 @@ export default function Token() {
   const siteInfo = useSelector((state) => state.siteInfo);
 
   const loadTokens = async (startIdx) => {
-    setSearching(true);
-    const res = await API.get(`/api/token/?p=${startIdx}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setTokens(data);
+    try {
+      setSearching(true);
+      const res = await API.get(`/api/token/?p=${startIdx}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (startIdx === 0) {
+          setTokens(data);
+        } else {
+          let newTokens = [...tokens];
+          newTokens.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
+          setTokens(newTokens);
+        }
       } else {
-        let newTokens = [...tokens];
-        newTokens.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
-        setTokens(newTokens);
+        showError(message);
       }
-    } else {
-      showError(message);
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   useEffect(() => {
@@ -71,22 +75,25 @@ export default function Token() {
   };
 
   const searchTokens = async (event) => {
-    event.preventDefault();
-    if (searchKeyword === '') {
-      await loadTokens(0);
-      setActivePage(0);
-      return;
+    try {
+      event.preventDefault();
+      if (searchKeyword === '') {
+        await loadTokens(0);
+        setActivePage(0);
+        return;
+      }
+      setSearching(true);
+      const res = await API.get(`/api/token/search?keyword=${searchKeyword}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setTokens(data);
+        setActivePage(0);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(true);
-    const res = await API.get(`/api/token/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setTokens(data);
-      setActivePage(0);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
   };
 
   const handleSearchKeyword = (event) => {
@@ -139,7 +146,7 @@ export default function Token() {
   const handleOkModal = (status) => {
     if (status === true) {
       handleCloseModal();
-      handleRefresh();
+      handleRefresh().catch(reportUIError);
     }
   };
 
@@ -164,7 +171,7 @@ export default function Token() {
         </Alert>
       </Stack>
       <Card>
-        <Box component="form" onSubmit={searchTokens} noValidate sx={{marginTop: 2}}>
+        <Box component="form" onSubmit={(...uiArgs) => searchTokens(...uiArgs).catch(reportUIError)} noValidate sx={{marginTop: 2}}>
           <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索令牌的名称或 UUID...'} />
         </Box>
         <Toolbar
@@ -178,7 +185,7 @@ export default function Token() {
         >
           <Container>
             <ButtonGroup variant="outlined" aria-label="outlined small primary button group" sx={{marginBottom: 2}}>
-              <Button onClick={handleRefresh} startIcon={<IconRefresh width={'18px'} />}>
+              <Button onClick={(...uiArgs) => handleRefresh(...uiArgs).catch(reportUIError)} startIcon={<IconRefresh width={'18px'} />}>
                 刷新
               </Button>
             </ButtonGroup>

@@ -27,6 +27,7 @@ describe('LogsPage action feedback', () => {
     useAuthStore.setState({
       user: {
         id: 1,
+        uuid: '018f0000-0000-7000-8000-000000000101',
         username: 'admin',
         role: 10,
         status: 1,
@@ -45,22 +46,16 @@ describe('LogsPage action feedback', () => {
     (api.get as any).mockResolvedValue({ data: { success: true, data: [], total: 0 } });
   });
 
-  it('shows an error when clear logs returns success false', async () => {
-    (api.delete as any).mockResolvedValue({ data: { success: false, message: 'clear logs rejected' } });
-
-    const user = userEvent.setup();
+  it('hides record actions when no logs are selected', async () => {
     render(
       <MemoryRouter>
         <LogsPage />
       </MemoryRouter>
     );
-
-    const clearButton = await screen.findByRole('button', { name: 'Clear' });
-    await user.click(clearButton);
-
-    await waitFor(() => {
-      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: 'clear logs rejected' }));
-    });
+    await screen.findByRole('group', { name: 'Table controls' });
+    expect(screen.queryByRole('menuitem', { name: 'Delete selected logs' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
+    expect(api.delete).not.toHaveBeenCalled();
   });
 
   it('shows channel names and reveals channel UUIDs from the channel column', async () => {
@@ -116,5 +111,64 @@ describe('LogsPage action feedback', () => {
     await user.click(channelButton);
 
     expect(screen.getAllByText('Channel: 018f0000-0000-7000-8000-000000000207').length).toBeGreaterThan(0);
+  });
+  it('renders UUID-only token and user search results with unique keys in the filter dropdowns', async () => {
+    const tokenRows = [
+      { uuid: '018f0000-0000-7000-8000-000000000301', name: 'alpha-token' },
+      { uuid: '018f0000-0000-7000-8000-000000000302', name: 'alpha-secondary' },
+    ];
+    const userRows = [
+      { uuid: '018f0000-0000-7000-8000-000000000101', username: 'alice' },
+      { uuid: '018f0000-0000-7000-8000-000000000102', username: 'alicia' },
+    ];
+    (api.get as any).mockImplementation((url: string) => {
+      if (url.startsWith('/api/log/stat')) {
+        return Promise.resolve({ data: { success: true, data: { quota: 0 } } });
+      }
+      if (url.startsWith('/api/token/search')) {
+        return Promise.resolve({ data: { success: true, data: tokenRows } });
+      }
+      if (url.startsWith('/api/user/search')) {
+        return Promise.resolve({ data: { success: true, data: userRows } });
+      }
+      return Promise.resolve({ data: { success: true, data: [], total: 0 } });
+    });
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter>
+          <LogsPage />
+        </MemoryRouter>
+      );
+
+      await screen.findByRole('group', { name: 'Table controls' });
+      const findTrigger = (label: string) => {
+        const trigger = screen.getAllByRole('combobox').find((el) => el.textContent?.trim() === label);
+        if (!trigger) throw new Error(`combobox "${label}" not found`);
+        return trigger;
+      };
+
+      // Token filter
+      await user.click(findTrigger('Select token'));
+      await user.type(screen.getByPlaceholderText('Select token'), 'al');
+      expect(await screen.findByText('alpha-token')).toBeInTheDocument();
+      expect(screen.getByText('alpha-secondary')).toBeInTheDocument();
+      await user.keyboard('{Escape}');
+
+      // Username filter
+      await user.click(findTrigger('Select user'));
+      await user.type(screen.getByPlaceholderText('Select user'), 'al');
+      expect(await screen.findByText('alice')).toBeInTheDocument();
+      expect(screen.getByText('alicia')).toBeInTheDocument();
+
+      const keyWarnings = consoleError.mock.calls.filter((call) =>
+        call.some((arg) => typeof arg === 'string' && /same key|unique "key"/i.test(arg))
+      );
+      expect(keyWarnings).toHaveLength(0);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

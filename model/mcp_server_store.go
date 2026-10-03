@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -145,6 +146,13 @@ func CreateMCPServer(server *MCPServer) error {
 
 // UpdateMCPServer updates an existing MCP server record.
 func UpdateMCPServer(server *MCPServer) error {
+	return UpdateMCPServerWithContext(context.Background(), server)
+}
+
+// UpdateMCPServerWithContext updates an MCP server and binds safe field-clearing diagnostics to ctx.
+// Parameters: ctx carries request logging and server is the MCP server to persist.
+// Returns: a wrapped persistence or validation error.
+func UpdateMCPServerWithContext(ctx context.Context, server *MCPServer) error {
 	if server == nil {
 		return errors.New("mcp server is nil")
 	}
@@ -157,7 +165,7 @@ func UpdateMCPServer(server *MCPServer) error {
 	if err := encryptMCPServerSecret(server); err != nil {
 		return errors.Wrap(err, "encrypt mcp server secret")
 	}
-	if err := DB.Model(server).Omit("uuid").Updates(server).Error; err != nil {
+	if err := DB.WithContext(ctx).Model(server).Omit("uuid").Updates(server).Error; err != nil {
 		return errors.Wrap(err, "update mcp server")
 	}
 	// GORM's struct-based Updates silently skips zero-value fields (empty
@@ -199,14 +207,14 @@ func UpdateMCPServer(server *MCPServer) error {
 			}
 		}
 		if len(forcedUpdates) > 0 {
-			if err := DB.Model(&MCPServer{}).Where("id = ?", server.Id).Updates(forcedUpdates).Error; err != nil {
+			if err := DB.WithContext(ctx).Model(&MCPServer{}).Where("id = ?", server.Id).Updates(forcedUpdates).Error; err != nil {
 				return identity.Tag(
 					errors.Wrapf(err, "update provided fields for mcp server id=%d", server.Id),
 					server.Ref())
 			}
-			if len(cleared) > 0 && logger.Logger != nil {
+			if len(cleared) > 0 {
 				// Field NAMES only, never values (api_key, headers may contain secrets).
-				logger.Logger.Debug("mcp server update cleared fields",
+				logger.FromContext(ctx).Debug("mcp server update cleared fields",
 					append(server.Ref().Zap(), zap.Strings("cleared_fields", cleared))...)
 			}
 		}
@@ -270,8 +278,21 @@ func GetMCPServerByName(name string) (*MCPServer, error) {
 
 // ListEnabledMCPServers returns enabled MCP servers.
 func ListEnabledMCPServers() ([]*MCPServer, error) {
+	return ListEnabledMCPServersWithContext(context.Background())
+}
+
+// ListEnabledMCPServersWithContext returns enabled MCP servers using ctx for
+// database cancellation.
+//
+// Parameters:
+//   - ctx: lifecycle and deadline scope for the query.
+//
+// Return values:
+//   - []*MCPServer: enabled servers with decrypted secrets.
+//   - error: wrapped query or decryption failure.
+func ListEnabledMCPServersWithContext(ctx context.Context) ([]*MCPServer, error) {
 	var servers []*MCPServer
-	if err := DB.Where("status = ?", MCPServerStatusEnabled).Find(&servers).Error; err != nil {
+	if err := DB.WithContext(ctx).Where("status = ?", MCPServerStatusEnabled).Find(&servers).Error; err != nil {
 		return nil, errors.Wrap(err, "list enabled mcp servers")
 	}
 	if err := decryptMCPServerSecrets(servers); err != nil {

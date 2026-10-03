@@ -10,7 +10,7 @@ note: >-
   Snapshot the values you need on the request goroutine BEFORE spawning, then spawn with
   relayctx.GoRequestScoped(c, name, fn) or graceful.GoCritical(relayctx.Detach(c), ...)
   / detachForBilling(c), and use the passed ctx inside (gmw.GetLogger(ctx), not
-  gmw.GetLogger(c)). See docs/proposals/20260608_relay-billing-async-sync-race-fixes.md.
+  gmw.GetLogger(c)). See docs/proposals/archive/20260608_relay-billing-async-sync-race-fixes.md.
 # Flags any reference to the identifier `c` (the gin context, by repo convention)
 # lexically inside a goroutine body: a `go func(){...}` or the closure passed to
 # graceful.GoCritical / relayctx.GoRequestScoped / runPostBillingWithTimeout /

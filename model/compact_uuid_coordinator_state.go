@@ -35,6 +35,19 @@ func (coordinator *compactCoordinator) recordCleanPass(ownership *compactOwnersh
 	coordinator.cleanPasses++
 }
 
+// requireFullAudit updates the coordinator's in-memory full-validation requirement. Completed
+// steady-state drift uses persistFullAuditRequired so the same requirement survives restart.
+//
+// It is deliberately separate from resetEpoch. The epoch also resets on transient events — a
+// failed query, an ownership handover — that say nothing about the data, and a full traversal
+// of every target is far too expensive to trigger on those. Only drift pays for one.
+// Parameters: none.
+//
+// Return values: none.
+func (coordinator *compactCoordinator) requireFullAudit() {
+	coordinator.fullAuditRequired = true
+}
+
 // resetEpoch discards the clean-pass streak after anything that changes the observed world.
 // Parameters: none.
 //

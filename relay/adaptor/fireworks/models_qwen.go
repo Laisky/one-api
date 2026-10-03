@@ -9,6 +9,21 @@ import (
 // Reranker and embedding members of the Qwen3 family live in models_rerank.go
 // and models_embedding.go respectively.
 var qwenModels = map[string]adaptor.ModelConfig{
+	// Fireworks publishes qwen3p8-2p4t-a95b as the canonical API model path.
+	// The former qwen3p8-max catalog alias is intentionally not exposed.
+	"accounts/fireworks/models/qwen3p8-2p4t-a95b": {
+		Ratio:                       2.00 * ratio.MilliTokensUsd,
+		CompletionRatio:             6.00 / 2.00,
+		CachedInputRatio:            0.25 * ratio.MilliTokensUsd,
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             fwTextOnlyModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwChatFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		HuggingFaceID:               "Qwen/Qwen3.8-2.4T-A95B",
+		Description:                 "Alibaba Qwen3.8 2.4T-A95B sparse MoE (about 95B active) for autonomous long-horizon coding and research, with 262K context and function calling.",
+	},
 	"accounts/fireworks/models/qwen3-vl-30b-a3b-thinking": {
 		Ratio:                       0.15 * ratio.MilliTokensUsd,
 		CompletionRatio:             0.60 / 0.15,

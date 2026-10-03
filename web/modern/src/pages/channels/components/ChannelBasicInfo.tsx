@@ -7,16 +7,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import type { UseFormReturn } from 'react-hook-form';
 import { CHANNEL_TYPES, CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD } from '../constants';
 import { getKeyPrompt } from '../helpers';
-import type { ChannelForm } from '../schemas';
+import type { ChannelFormMethods } from '../schemas';
 import { resolveChannelColor } from '../utils/colorGenerator';
 import { ChannelCustomHeaders } from './ChannelCustomHeaders';
 import { LabelWithHelp } from './LabelWithHelp';
 
 interface ChannelBasicInfoProps {
-  form: UseFormReturn<ChannelForm>;
+  form: ChannelFormMethods;
   normalizedChannelType: number | null;
   tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
   /** Callback to request a type change (may trigger confirmation dialog in edit mode) */
@@ -27,7 +26,7 @@ export const ChannelBasicInfo = ({ form, normalizedChannelType, tr, onTypeChange
   const [typePopoverOpen, setTypePopoverOpen] = useState(false);
   const watchType = form.watch('type');
   const channelTypeOverridesKeyField = normalizedChannelType !== null && CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD.has(normalizedChannelType);
-  const keyPrompt = getKeyPrompt(watchType);
+  const keyPrompt = getKeyPrompt(Number(watchType));
   const translatedKeyPrompt =
     keyPrompt === 'Please enter your API key'
       ? tr('key.placeholder', keyPrompt)

@@ -116,9 +116,9 @@ func compactAllowedLabelValues() map[string][]string {
 // Return values: none.
 func withCompactPrometheusRecorder(t *testing.T) {
 	t.Helper()
-	original := metrics.GlobalRecorder
-	t.Cleanup(func() { metrics.GlobalRecorder = original })
-	metrics.GlobalRecorder = &oneapiprom.PrometheusRecorder{}
+	original := metrics.Recorder()
+	t.Cleanup(func() { metrics.SetRecorder(original) })
+	metrics.SetRecorder(&oneapiprom.PrometheusRecorder{})
 }
 
 // gatherCompactMetrics scrapes the default registry and returns every compact UUID series.

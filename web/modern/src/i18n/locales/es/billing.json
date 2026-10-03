@@ -23,6 +23,7 @@
     "balance": {
       "available": "Cuota disponible para uso de API",
       "description": "Tu saldo de cuota actual",
+      "note": "Los créditos se facturan en USD y nunca caducan.",
       "refresh": "Actualizar saldo",
       "title": "Saldo actual"
     },
@@ -45,6 +46,26 @@
       "success": "¡Canjeado exitosamente! Se agregaron {{value}} tokens.",
       "title": "Canjear código"
     },
+    "stripe": {
+      "button": "Continuar con Stripe",
+      "description": "Paga con tarjeta a través de Stripe. Solo USD, mínimo ${{min}}. Se envía un recibo a tu correo registrado.",
+      "failed": "No se pudo crear la sesión de pago",
+      "label": "Importe (USD)",
+      "max": "Importe demasiado grande",
+      "min": "Mínimo ${{value}}",
+      "note": "Serás redirigido a Stripe Checkout. Tu saldo se actualizará cuando se confirme el pago.",
+      "outcome_cancel": "No se te ha cobrado.",
+      "outcome_cancel_title": "Pago cancelado",
+      "outcome_credited": "Tu saldo se ha actualizado según el estado del pedido del servidor.",
+      "outcome_credited_title": "Créditos añadidos",
+      "outcome_failed": "El pago se registró pero requiere revisión. Contacta con soporte si el saldo es incorrecto.",
+      "outcome_failed_title": "Pago pendiente de revisión",
+      "outcome_success": "Confirmando con el servidor… tu saldo se actualiza cuando el webhook liquida el pedido.",
+      "outcome_success_title": "Pago recibido",
+      "processing": "Redirigiendo…",
+      "required": "Introduce un importe en USD",
+      "title": "Añadir créditos"
+    },
     "tips": {
       "content": [
         "La cuota se consume según el uso de tu API y los costos del modelo",
@@ -55,6 +76,7 @@
       ],
       "title": "Consejos"
     },
-    "title": "Recargar"
+    "title": "Recargar",
+    "tokens": "créditos"
   }
 }

@@ -165,7 +165,7 @@ func TestComputeOpenAIGPT56CacheWritePricing(t *testing.T) {
 				CompletionTokens:   10,
 				CacheWrite5mTokens: 20,
 			},
-			expected:    413,
+			expected:    310,
 			expectedIn:  openai.ModelRatios["gpt-5.6-sol"].Ratio,
 			expectedOut: openai.ModelRatios["gpt-5.6-sol"].CompletionRatio,
 		},
@@ -177,9 +177,9 @@ func TestComputeOpenAIGPT56CacheWritePricing(t *testing.T) {
 				CompletionTokens:   1000,
 				CacheWrite5mTokens: 1000,
 			},
-			expected:    1523750,
+			expected:    1216000,
 			expectedIn:  10.0 * openai.ModelRatios["gpt-5.6-sol"].Ratio / 5.0,
-			expectedOut: 4.5,
+			expectedOut: 3.75,
 		},
 	}
 

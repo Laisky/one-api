@@ -35,6 +35,12 @@ func SanitizeURLForLogging(rawURL string) string {
 		return rawURL
 	}
 
+	// Most API request URLs have no query string. Avoid net/url parsing and its
+	// query-map allocations when there is nothing that could require redaction.
+	if !strings.Contains(rawURL, "?") {
+		return rawURL
+	}
+
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return rawURL

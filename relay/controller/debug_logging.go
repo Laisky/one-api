@@ -12,6 +12,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
 )
 
 const debugLogBodyLimit = common.DefaultLogBodyLimit
@@ -126,7 +127,7 @@ func logUpstreamResponseFromCapture(lg glog.Logger, resp *http.Response, capture
 	if resp.Request != nil {
 		fields = append(fields,
 			zap.String("method", resp.Request.Method),
-			zap.String("url", resp.Request.URL.String()),
+			zap.String("url", model.SanitizeLogUpstreamEndpoint(resp.Request.URL.String())),
 		)
 	}
 	lg.Debug("upstream response received", fields...)
@@ -149,7 +150,7 @@ func logUpstreamResponseFromBytes(lg glog.Logger, resp *http.Response, body []by
 	if resp.Request != nil {
 		fields = append(fields,
 			zap.String("method", resp.Request.Method),
-			zap.String("url", resp.Request.URL.String()),
+			zap.String("url", model.SanitizeLogUpstreamEndpoint(resp.Request.URL.String())),
 		)
 	}
 	lg.Debug("upstream response received", fields...)

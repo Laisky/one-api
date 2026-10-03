@@ -1,6 +1,7 @@
 package model
 
 import (
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -109,6 +110,9 @@ func (s *MCPServer) NormalizeAndValidate() error {
 	if s.AuthType == "" {
 		s.AuthType = MCPAuthTypeNone
 	}
+	if parsedURL.Scheme == "http" && s.HasSensitiveCredentials() && !isLoopbackMCPServerHost(parsedURL.Hostname()) {
+		return errkind.InvalidRequestErr(errors.New("credentialed mcp server base_url must use https unless it targets a loopback host"))
+	}
 
 	if s.AutoSyncIntervalMinutes == 0 {
 		s.AutoSyncIntervalMinutes = 60
@@ -123,6 +127,79 @@ func (s *MCPServer) NormalizeAndValidate() error {
 	}
 
 	return nil
+}
+
+// HasSensitiveCredentials reports whether the server configuration carries credentials that must not traverse remote plaintext HTTP.
+//
+// Parameters: none.
+//
+// Return values:
+//   - bool: True is returned when the API key, URL user information, or configured authentication headers contain sensitive data.
+func (s *MCPServer) HasSensitiveCredentials() bool {
+	if s == nil {
+		return false
+	}
+	if strings.TrimSpace(s.APIKey) != "" {
+		return true
+	}
+	if parsedURL, err := url.Parse(strings.TrimSpace(s.BaseURL)); err == nil && parsedURL.User != nil && parsedURL.User.String() != "" {
+		return true
+	}
+
+	for key, value := range s.Headers {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		normalizedKey := strings.ToLower(strings.TrimSpace(key))
+		if isSensitiveMCPServerHeaderName(normalizedKey) {
+			return true
+		}
+		switch normalizedKey {
+		case "accept", "accept-encoding", "content-type", "user-agent", "mcp-protocol-version", "mcp-session-id":
+			continue
+		default:
+			// Arbitrary configured headers can implement custom authentication even
+			// when their names do not contain a conventional credential token.
+			return true
+		}
+	}
+	return false
+}
+
+// isSensitiveMCPServerHeaderName reports whether a configured header name conventionally carries credentials.
+//
+// Parameters:
+//   - name: The configured HTTP header name is inspected case-insensitively.
+//
+// Return values:
+//   - bool: True is returned when the header name contains a credential-bearing token.
+func isSensitiveMCPServerHeaderName(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if lower == "" {
+		return false
+	}
+	for _, token := range []string{"authorization", "proxy-authorization", "api_key", "apikey", "token", "secret", "password", "passwd", "x-api-key", "cookie"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
+// isLoopbackMCPServerHost reports whether a hostname is restricted to the local machine.
+//
+// Parameters:
+//   - hostname: The URL hostname is checked as localhost or a loopback IP address.
+//
+// Return values:
+//   - bool: True is returned only for localhost and IP loopback addresses.
+func isLoopbackMCPServerHost(hostname string) bool {
+	hostname = strings.TrimSpace(hostname)
+	if strings.EqualFold(hostname, "localhost") {
+		return true
+	}
+	address := net.ParseIP(hostname)
+	return address != nil && address.IsLoopback()
 }
 
 // ValidateToolPricing ensures per-tool pricing values are non-negative.

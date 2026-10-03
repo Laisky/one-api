@@ -1,6 +1,7 @@
 package tooling
 
 import (
+	"context"
 	"math"
 	"strings"
 
@@ -31,7 +32,7 @@ func ValidateChatBuiltinTools(c *gin.Context, request *relaymodel.GeneralOpenAIR
 	}
 
 	modelName := resolveModelName(meta, request.Model)
-	return ValidateRequestedBuiltins(modelName, meta, channel, provider, requested)
+	return validateRequestedBuiltinsWithContext(gmw.Ctx(c), modelName, meta, channel, provider, requested)
 }
 
 // PruneDisallowedResponseBuiltins removes built-in tools from the Response API request when the
@@ -105,7 +106,7 @@ func ApplyBuiltinToolCharges(c *gin.Context, usage **relaymodel.Usage, meta *met
 	}
 
 	modelName := resolveModelName(meta, meta.ActualModelName)
-	policy := buildToolPolicy(channel, provider, modelName)
+	policy := buildToolPolicyWithContext(gmw.Ctx(c), channel, provider, modelName)
 
 	ensureUsage := func() *relaymodel.Usage {
 		if usage == nil {
@@ -336,6 +337,14 @@ func ValidateResponseBuiltinToolsWithExclusions(request *openai.ResponseAPIReque
 
 // ValidateRequestedBuiltins verifies the requested built-in tools against channel/provider policy.
 func ValidateRequestedBuiltins(modelName string, meta *metalib.Meta, channel *model.Channel, provider adaptor.Adaptor, requested map[string]struct{}) error {
+	return validateRequestedBuiltinsWithContext(context.Background(), modelName, meta, channel, provider, requested)
+}
+
+// validateRequestedBuiltinsWithContext validates built-in tools using the
+// request logger carried by ctx. Parameters: ctx carries correlation, modelName
+// and meta identify the effective model, channel/provider supply policy, and
+// requested contains canonical tool names. Returns: a policy error or nil.
+func validateRequestedBuiltinsWithContext(ctx context.Context, modelName string, meta *metalib.Meta, channel *model.Channel, provider adaptor.Adaptor, requested map[string]struct{}) error {
 	if len(requested) == 0 {
 		return nil
 	}
@@ -353,7 +362,7 @@ func ValidateRequestedBuiltins(modelName string, meta *metalib.Meta, channel *mo
 			effectiveProvider = nil
 		}
 	}
-	policy := buildToolPolicy(channel, effectiveProvider, effectiveModel)
+	policy := buildToolPolicyWithContext(ctx, channel, effectiveProvider, effectiveModel)
 	for toolName := range requested {
 		if !policy.isAllowed(toolName) {
 			return errors.Errorf("tool %s is not allowed on this channel (model=%s); update the tooling whitelist or pricing", toolName, effectiveModel)
@@ -383,7 +392,7 @@ func IsBuiltinToolAllowed(modelName string, meta *metalib.Meta, channel *model.C
 			effectiveProvider = nil
 		}
 	}
-	policy := buildToolPolicy(channel, effectiveProvider, effectiveModel)
+	policy := buildToolPolicyWithContext(context.Background(), channel, effectiveProvider, effectiveModel)
 	return policy.isAllowed(canonical)
 }
 
@@ -441,6 +450,14 @@ func (p toolPolicy) isAllowed(tool string) bool {
 
 // buildToolPolicy merges channel overrides with provider defaults to construct the effective policy.
 func buildToolPolicy(channel *model.Channel, provider adaptor.Adaptor, modelName string) toolPolicy {
+	return buildToolPolicyWithContext(context.Background(), channel, provider, modelName)
+}
+
+// buildToolPolicyWithContext merges channel overrides with provider defaults and
+// keeps request correlation in the channel configuration logger. Parameters: ctx
+// carries correlation, channel/provider provide policy sources, and modelName is
+// the effective model. Returns: the effective tool policy.
+func buildToolPolicyWithContext(ctx context.Context, channel *model.Channel, provider adaptor.Adaptor, modelName string) toolPolicy {
 	policy := toolPolicy{
 		allowed:         make(map[string]struct{}),
 		pricing:         make(map[string]int64),
@@ -508,7 +525,7 @@ func buildToolPolicy(channel *model.Channel, provider adaptor.Adaptor, modelName
 
 	var channelTooling *model.ChannelToolingConfig
 	if channel != nil {
-		channelTooling = channel.GetToolingConfig()
+		channelTooling = channel.GetToolingConfigWithContext(ctx)
 	}
 
 	if channelTooling != nil {

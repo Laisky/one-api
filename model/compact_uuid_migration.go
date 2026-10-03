@@ -65,6 +65,10 @@ type compactCoordinator struct {
 	// unreachable — the migration would validate forever and never complete. Ownership loss
 	// still resets the epoch, via the error path and the failed-acquisition path.
 	workerToken uint64
+	// fullAuditRequired caches the durable audit-required control row for this cycle. Drift writes
+	// that row before recovery mutation, so a process restart or ownership handover cannot lose the
+	// requirement that two clean full validation passes precede ready.
+	fullAuditRequired bool
 }
 
 // newCompactCoordinator builds a coordinator for one topology.
@@ -140,6 +144,7 @@ func runCompactCycle(ctx context.Context, coordinator *compactCoordinator,
 	}
 	if !supported {
 		coordinator.resetEpoch()
+		coordinator.requireFullAudit()
 		return compactCycleResult{state: compactStateBlockedValidation, reason: reason}, nil
 	}
 
@@ -189,6 +194,7 @@ func runCompactCycle(ctx context.Context, coordinator *compactCoordinator,
 		}
 		if !ok {
 			coordinator.resetEpoch()
+			coordinator.requireFullAudit()
 			return compactCycleResult{state: compactStateBlockedValidation, reason: manifestReason}, nil
 		}
 	}
@@ -197,11 +203,31 @@ func runCompactCycle(ctx context.Context, coordinator *compactCoordinator,
 		return compactCycleResult{}, err
 	} else if !capable {
 		coordinator.resetEpoch()
+		coordinator.requireFullAudit()
 		return compactCycleResult{state: compactStateBlockedValidation, reason: capableReason}, nil
 	}
 
 	if err := requireOwnership(ctx, ownership); err != nil {
 		return compactCycleResult{}, err
+	}
+
+	auditRequired, err := compactFullAuditRequired(ctx, topology)
+	if err != nil {
+		return compactCycleResult{}, err
+	}
+	if auditRequired {
+		coordinator.fullAuditRequired = true
+	}
+	if markers.allPresent() && coordinator.fullAuditRequired && !auditRequired {
+		if err := coordinator.persistFullAuditRequired(ctx); err != nil {
+			return compactCycleResult{}, err
+		}
+	}
+	if markers.allPresent() && prerequisiteMet && !coordinator.fullAuditRequired {
+		// Completed installations take the bounded steady-state path before the DDL walkers.
+		// Besides avoiding duplicate catalog traversals, this persists drift evidence before a
+		// later cycle recreates any missing object.
+		return runCompactSteadyState(ctx, coordinator, ownership)
 	}
 
 	expanded, err := advanceCompactExpansion(ctx, coordinator, ownership)
@@ -210,8 +236,10 @@ func runCompactCycle(ctx context.Context, coordinator *compactCoordinator,
 	}
 	if expanded {
 		// Expansion changed the object set, so any prior clean passes described a
-		// different world and cannot be combined with later ones.
+		// different world and cannot be combined with later ones. After completion it also
+		// means objects had gone missing, and rows written meanwhile may not match.
 		coordinator.resetEpoch()
+		coordinator.requireFullAudit()
 		return compactCycleResult{state: compactStateExpanding, progressed: true}, nil
 	}
 
@@ -221,6 +249,7 @@ func runCompactCycle(ctx context.Context, coordinator *compactCoordinator,
 	}
 	if indexed {
 		coordinator.resetEpoch()
+		coordinator.requireFullAudit()
 		return compactCycleResult{state: compactStateIndexing, progressed: true}, nil
 	}
 
@@ -417,6 +446,7 @@ func runCompactReconciliation(ctx context.Context, coordinator *compactCoordinat
 			// text, so the contract is to block rather than to "fix" it. Blocking here also
 			// stops the row spinning as actionable-but-unrepairable on every later pass.
 			coordinator.resetEpoch()
+			coordinator.requireFullAudit()
 			result.state = compactStateBlockedValidation
 			result.blockers += progress.collisions
 			result.reason = "compact uniqueness permutation for " + target.id() +
@@ -429,6 +459,7 @@ func runCompactReconciliation(ctx context.Context, coordinator *compactCoordinat
 		// Repair invalidates the clean-pass streak: the passes that preceded it observed a
 		// world where these rows were still wrong.
 		coordinator.resetEpoch()
+		coordinator.requireFullAudit()
 		result.progressed = true
 		return result, nil
 	}
@@ -466,6 +497,7 @@ func applyCompactValidation(ctx context.Context, coordinator *compactCoordinator
 
 	if report.objectReason != "" {
 		coordinator.resetEpoch()
+		coordinator.requireFullAudit()
 		result.state = compactStateExpanding
 		result.reason = report.objectReason
 		if markers.anyPresent() {
@@ -476,12 +508,14 @@ func applyCompactValidation(ctx context.Context, coordinator *compactCoordinator
 	}
 	if report.blockers > 0 {
 		coordinator.resetEpoch()
+		coordinator.requireFullAudit()
 		result.state = compactStateBlockedValidation
 		result.reason = report.blockerReason
 		return result, nil
 	}
 	if report.actionable > 0 {
 		coordinator.resetEpoch()
+		coordinator.requireFullAudit()
 		result.state = compactStateBackfilling
 		if markers.anyPresent() {
 			result.state = compactStateDegraded
@@ -505,6 +539,15 @@ func applyCompactValidation(ctx context.Context, coordinator *compactCoordinator
 		return result, nil
 	}
 	if markers.allPresent() {
+		// A fresh full audit restores ready (section 8.6), and from here the bounded steady
+		// state is enough again.
+		if err := requireOwnership(ctx, ownership); err != nil {
+			return result, err
+		}
+		if err := clearFullAuditRequired(ctx, coordinator.topology); err != nil {
+			return result, err
+		}
+		coordinator.fullAuditRequired = false
 		result.state = compactStateReady
 		result.completed = true
 		return result, nil
@@ -531,6 +574,10 @@ func applyCompactValidation(ctx context.Context, coordinator *compactCoordinator
 	compactLogger(ctx).Info("compact uuid storage reached validated completion",
 		zap.String("topology", string(coordinator.topology.mode)),
 		zap.Int("examined", report.examined))
+	if err := clearFullAuditRequired(ctx, coordinator.topology); err != nil {
+		return result, err
+	}
+	coordinator.fullAuditRequired = false
 	result.state = compactStateReady
 	result.completed = true
 	result.progressed = true

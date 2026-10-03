@@ -79,8 +79,12 @@ func calculateTestCost(usage *relaymodel.Usage, meta *meta.Meta, request *relaym
 		return 0
 	}
 
-	// Get model ratio and completion ratio using three-layer pricing system
-	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
+	// Get model ratio and completion ratio using three-layer pricing system.
+	// relay.GetAdaptor takes an API type, not a channel type -- passing the channel
+	// type resolves whichever adaptor happens to share that numeric id (e.g.
+	// channeltype.LingYiWanWu is 31 and so is apitype.Zai), which silently prices
+	// the test request off an unrelated provider's table.
+	pricingAdaptor := relay.GetAdaptor(channeltype.ToAPIType(meta.ChannelType))
 	modelRatio := pricing.ResolveModelRatioAt(request.Model, nil, nil, pricingAdaptor, meta.StartTime)
 	completionRatio := pricing.ResolveCompletionRatioAt(request.Model, nil, nil, pricingAdaptor, meta.StartTime)
 
@@ -108,6 +112,10 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	startTime := time.Now()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	// Every adaptor translates this internal chat request into its upstream's own
+	// wire format and derives the upstream URL from the channel type, so a single
+	// probe shape reaches Claude-native channels at /v1/messages and
+	// OpenAI-compatible ones at /v1/chat/completions.
 	c.Request = &http.Request{
 		Method: http.MethodPost,
 		URL:    &url.URL{Path: "/v1/chat/completions"},
@@ -134,12 +142,12 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	// -----------------------------
 	requestedModel := strings.TrimSpace(request.Model)
 	resolvedModel := requestedModel
-	modelMap := channel.GetModelMapping()
+	modelMap := channel.GetModelMappingWithContext(ctx)
 
 	// initial context for debugging
 	lg.Debug("channel test: initial model context",
 		zap.Int("channel_type", channel.Type),
-		zap.String("base_url", channel.GetBaseURL()),
+		zap.String("base_url", model.SanitizeLogUpstreamEndpoint(channel.GetBaseURL())),
 		zap.String("requested_model", requestedModel),
 		zap.String("stored_models", channel.Models),
 	)
@@ -158,7 +166,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	// Provider-specific actual model resolution (e.g., AWS ARN)
 	actualModel := resolvedModel
 	if channel.Type == channeltype.AwsClaude {
-		if arnMap := channel.GetInferenceProfileArnMap(); arnMap != nil {
+		if arnMap := channel.GetInferenceProfileArnMapWithContext(ctx); arnMap != nil {
 			if arn, ok := arnMap[resolvedModel]; ok && arn != "" {
 				actualModel = arn
 			}
@@ -239,7 +247,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 		lg.Debug("prepare test request",
 			zap.String("actual_model", meta.ActualModelName),
 			zap.Int("channel_type", channel.Type),
-			zap.String("upstream_url", fullURL),
+			zap.String("upstream_url", model.SanitizeLogUpstreamEndpoint(fullURL)),
 			zap.ByteString("test_request", jsonData))
 	} else {
 		// Return early if URL cannot be built (e.g., missing deployment for Azure)
@@ -276,6 +284,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 		err = errors.Wrapf(nil, "response error: %s", respErr.Error.Message)
 		return "", err, &respErr.Error
 	}
+
 	if usage == nil {
 		err = errors.New("usage is nil")
 		return "", errors.WithStack(err), nil
@@ -338,7 +347,7 @@ func TestChannel(c *gin.Context) {
 	// testChannel, which relies on its caller having bound it.
 	lg = lg.With(channel.Ref().Zap()...)
 
-	modelName, clearTestingModel, err := chooseChannelTestModel(channel, c.Query("model"))
+	modelName, clearTestingModel, err := chooseChannelTestModelWithContext(gmw.Ctx(c), channel, c.Query("model"))
 	if clearTestingModel {
 		channel.TestingModel = nil
 		if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
@@ -346,6 +355,21 @@ func TestChannel(c *gin.Context) {
 		}
 	}
 	if err != nil {
+		// A channel with no chat-capable surface was never probed, so it is
+		// neither healthy nor broken. Report that distinctly instead of as a
+		// failure, so the admin UI does not present it as an outage.
+		if isChannelTestNotApplicable(err) {
+			lg.Info("skipped channel test: channel is not chat-probeable",
+				zap.String("reason", err.Error()))
+			c.JSON(http.StatusOK, gin.H{
+				"success":   false,
+				"skipped":   true,
+				"message":   err.Error(),
+				"time":      0.0,
+				"modelName": "",
+			})
+			return
+		}
 		lg.Debug("failed to choose channel test model", zap.Error(err))
 		helper.RespondError(c, identity.Tag(err, channel.Ref()))
 		return
@@ -362,7 +386,7 @@ func TestChannel(c *gin.Context) {
 		milliseconds = 0
 	}
 
-	go channel.UpdateResponseTime(milliseconds)
+	go channel.UpdateResponseTimeWithContext(ctx, milliseconds)
 	consumedTime := float64(milliseconds) / 1000.0
 	if err != nil || openaiErr != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -393,18 +417,58 @@ func TestChannel(c *gin.Context) {
 var testAllChannelsLock sync.Mutex
 var testAllChannelsRunning bool = false
 
-func testChannels(ctx context.Context, notify bool, scope string) error {
+// beforeChannelSweepRun is a test hook that runs after asynchronous sweep
+// registration and before database work begins. Returning an error stops the
+// sweep, which lets lifecycle tests exercise registration without a database.
+var beforeChannelSweepRun func() error
+
+// beginChannelSweep atomically reserves the one allowed channel-test sweep.
+//
+// Parameters: none.
+//
+// Return values:
+//   - bool: true when the caller owns the reservation.
+func beginChannelSweep() bool {
+	testAllChannelsLock.Lock()
+	defer testAllChannelsLock.Unlock()
+	if testAllChannelsRunning {
+		return false
+	}
+	testAllChannelsRunning = true
+	return true
+}
+
+// finishChannelSweep releases a channel-test sweep reservation.
+//
+// Parameters: none.
+//
+// Return values: none.
+func finishChannelSweep() {
+	testAllChannelsLock.Lock()
+	testAllChannelsRunning = false
+	testAllChannelsLock.Unlock()
+}
+
+// runAutomaticChannelSweep runs a reserved channel-test sweep and returns only after every
+// channel has completed or ctx is cancelled.
+//
+// Parameters:
+//   - ctx: lifecycle and cancellation scope for the sweep.
+//   - notify: whether to send the completion notification.
+//   - scope: channel scope to test.
+//
+// Return values:
+//   - error: wrapped setup or cancellation error.
+func runAutomaticChannelSweep(ctx context.Context, notify bool, scope string) error {
+	if beforeChannelSweepRun != nil {
+		if err := beforeChannelSweepRun(); err != nil {
+			return errors.Wrap(err, "run channel sweep test hook")
+		}
+	}
 	if config.RootUserEmail == "" {
 		config.RootUserEmail = model.GetRootUserEmail()
 	}
-	testAllChannelsLock.Lock()
-	if testAllChannelsRunning {
-		testAllChannelsLock.Unlock()
-		return errors.WithStack(errors.New("Test is already running"))
-	}
-	testAllChannelsRunning = true
-	testAllChannelsLock.Unlock()
-	channels, err := model.GetAllChannels(0, 0, scope, "", "")
+	channels, err := model.GetAllChannelsWithContext(ctx, 0, 0, scope, "", "")
 	if err != nil {
 		return errors.Wrap(err, "failed to get all channels")
 	}
@@ -412,69 +476,125 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 	if disableThreshold == 0 {
 		disableThreshold = 10000000 // a impossible value
 	}
-	go func() {
-		lg := gmw.GetLogger(ctx)
-		for _, channel := range channels {
-			// Bind the channel under test explicitly: this sweep runs off any
-			// request, so nothing else carries the channel identity.
-			clg := lg.With(channel.Ref().Zap()...)
-			cctx := gmw.SetLogger(ctx, clg)
-			isChannelEnabled := channel.Status == model.ChannelStatusEnabled
-			tik := time.Now()
-			chosenModel, clearTestingModel, err := chooseChannelTestModel(channel, "")
-			if clearTestingModel {
-				channel.TestingModel = nil
-				if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
-					clg.Error("failed to clear invalid testing_model in bulk test", zap.Error(updateErr))
-				}
-			}
-			var openaiErr *relaymodel.Error
-			if err == nil {
-				testRequest := buildTestRequest(chosenModel)
-				_, err, openaiErr = testChannel(cctx, channel, testRequest)
-			}
-			tok := time.Now()
-			milliseconds := tok.Sub(tik).Milliseconds()
-			if isChannelEnabled && milliseconds > disableThreshold {
-				err = errors.Errorf("Response time %.2fs exceeds threshold %.2fs", float64(milliseconds)/1000.0, float64(disableThreshold)/1000.0)
-				if config.AutomaticDisableChannelEnabled {
-					monitor.DisableChannel(channel.Id, channel.Name, err.Error())
-				} else {
-					_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test timed out: %s", channel.Ref().String()), "", err.Error())
-				}
-			}
-			// Only disable a channel on failure when AutomaticDisableChannelEnabled is true.
-			if isChannelEnabled && (err != nil || monitor.ShouldDisableChannel(openaiErr, -1)) {
-				// Build a safe reason string to avoid nil dereference
-				reason := "channel test failed"
-				if err != nil {
-					reason = err.Error()
-				} else if openaiErr != nil {
-					reason = openaiErr.Message
-				}
-				if config.AutomaticDisableChannelEnabled {
-					monitor.DisableChannel(channel.Id, channel.Name, reason)
-				} else {
-					// Notify only when auto-disable is off
-					_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test failed: %s", channel.Ref().String()), "", reason)
-				}
-			}
-			if !isChannelEnabled && (err == nil && monitor.ShouldEnableChannel(err, openaiErr)) {
-				monitor.EnableChannel(channel.Id, channel.Name)
-			}
-			channel.UpdateResponseTime(milliseconds)
-			time.Sleep(config.RequestInterval)
+	lg := gmw.GetLogger(ctx)
+	for _, channel := range channels {
+		if err := ctx.Err(); err != nil {
+			return errors.Wrap(err, "cancel channel test sweep")
 		}
-		testAllChannelsLock.Lock()
-		testAllChannelsRunning = false
-		testAllChannelsLock.Unlock()
-		if notify {
-			err := message.Notify(message.ByAll, "Channel test completed", "", "Channel test completed, if you have not received the disable notification, it means that all channels are normal")
+		// Bind the channel under test explicitly: this sweep runs off any
+		// request, so nothing else carries the channel identity.
+		clg := lg.With(channel.Ref().Zap()...)
+		cctx := gmw.SetLogger(ctx, clg)
+		isChannelEnabled := channel.Status == model.ChannelStatusEnabled
+		tik := time.Now()
+		chosenModel, clearTestingModel, err := chooseChannelTestModelWithContext(cctx, channel, "")
+		if clearTestingModel {
+			channel.TestingModel = nil
+			if updateErr := model.DB.WithContext(cctx).Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
+				clg.Error("failed to clear invalid testing_model in bulk test", zap.Error(updateErr))
+			}
+		}
+		// A channel that exposes no chat-capable surface, or whose every model
+		// is a non-chat task model (embeddings, rerank, translation, media),
+		// cannot receive a representative probe. That is an inconclusive
+		// result, not a failure: skip it entirely rather than judging it.
+		// Letting it fall through is what auto-disabled healthy
+		// embeddings-only channels (issue #400).
+		if err != nil && isChannelTestNotApplicable(err) {
+			clg.Info("skipped channel test: channel is not chat-probeable",
+				zap.String("reason", err.Error()))
+			continue
+		}
+		var openaiErr *relaymodel.Error
+		if err == nil {
+			testRequest := buildTestRequest(chosenModel)
+			_, err, openaiErr = testChannel(cctx, channel, testRequest)
+		}
+		tok := time.Now()
+		milliseconds := tok.Sub(tik).Milliseconds()
+		if isChannelEnabled && milliseconds > disableThreshold {
+			err = errors.Errorf("Response time %.2fs exceeds threshold %.2fs", float64(milliseconds)/1000.0, float64(disableThreshold)/1000.0)
+			if config.AutomaticDisableChannelEnabled {
+				monitor.DisableChannel(channel.Id, channel.Name, err.Error())
+			} else {
+				_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test timed out: %s", channel.Ref().String()), "", err.Error())
+			}
+		}
+		// Only disable a channel on failure when AutomaticDisableChannelEnabled is true.
+		if isChannelEnabled && (err != nil || monitor.ShouldDisableChannel(openaiErr, -1)) {
+			// Build a safe reason string to avoid nil dereference
+			reason := "channel test failed"
 			if err != nil {
-				lg.Error("failed to send notify", zap.Error(err))
+				reason = err.Error()
+			} else if openaiErr != nil {
+				reason = openaiErr.Message
+			}
+			if config.AutomaticDisableChannelEnabled {
+				monitor.DisableChannel(channel.Id, channel.Name, reason)
+			} else {
+				// Notify only when auto-disable is off
+				_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test failed: %s", channel.Ref().String()), "", reason)
 			}
 		}
-	}()
+		if !isChannelEnabled && (err == nil && monitor.ShouldEnableChannel(err, openaiErr)) {
+			monitor.EnableChannel(channel.Id, channel.Name)
+		}
+		channel.UpdateResponseTimeWithContext(cctx, milliseconds)
+		if config.RequestInterval > 0 {
+			timer := time.NewTimer(config.RequestInterval)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return errors.Wrap(ctx.Err(), "cancel channel test sweep")
+			case <-timer.C:
+			}
+		}
+	}
+	if notify {
+		if err := message.Notify(message.ByAll, "Channel test completed", "", "Channel test completed, if you have not received the disable notification, it means that all channels are normal"); err != nil {
+			lg.Error("failed to send notify", zap.Error(err))
+		}
+	}
+	return nil
+}
+
+// testChannelsSync runs one channel-test sweep synchronously under an atomic
+// reservation so lifecycle workers can be joined at shutdown.
+//
+// Parameters:
+//   - ctx: lifecycle and cancellation scope for the sweep.
+//   - notify: whether to send the completion notification.
+//   - scope: channel scope to test.
+//
+// Return values:
+//   - error: immediate rejection or a wrapped sweep failure.
+func testChannelsSync(ctx context.Context, notify bool, scope string) error {
+	if !beginChannelSweep() {
+		return errors.WithStack(errors.New("Test is already running"))
+	}
+	defer finishChannelSweep()
+	return runAutomaticChannelSweep(ctx, notify, scope)
+}
+
+// testChannels starts one asynchronous operator-requested sweep.
+//
+// Parameters:
+//   - ctx: lifecycle scope detached from the HTTP request.
+//   - notify: whether to send the completion notification.
+//   - scope: channel scope to test.
+//
+// Return values:
+//   - error: immediate rejection when another sweep is already running.
+func testChannels(ctx context.Context, notify bool, scope string) error {
+	if !beginChannelSweep() {
+		return errors.WithStack(errors.New("Test is already running"))
+	}
+	model.StartBackgroundWorker(ctx, func(ctx context.Context) {
+		defer finishChannelSweep()
+		if err := runAutomaticChannelSweep(ctx, notify, scope); err != nil && !errors.Is(err, context.Canceled) {
+			gmw.GetLogger(ctx).Warn("channel test sweep stopped", zap.Error(err))
+		}
+	})
 	return nil
 }
 
@@ -496,16 +616,54 @@ func TestChannels(c *gin.Context) {
 	})
 }
 
-// AutomaticallyTestChannels continuously runs channel tests at the provided interval in minutes.
+// AutomaticallyTestChannels preserves the historical frequency-only worker
+// API.
+//
+// Parameters:
+//   - frequency: minutes between sweeps; values <= 0 disable the loop.
+//
+// Return values: none.
 func AutomaticallyTestChannels(frequency int) {
+	AutomaticallyTestChannelsContext(context.Background(), frequency)
+}
+
+// AutomaticallyTestChannelsContext continuously runs channel tests at the
+// provided interval until ctx is cancelled.
+//
+// It is a database producer, so it takes the caller's lifecycle context rather
+// than context.Background(): an unstoppable loop keeps testing channels and
+// writing their status during shutdown and after CloseDB. A sweep already in
+// flight is cancelled through the same context. main registers this worker in
+// model's background-worker lifecycle, so shutdown joins it before CloseDB and
+// reports an expired deadline rather than closing a database beneath it.
+//
+// Parameters:
+//   - ctx: lifecycle scope; cancellation ends the loop and any in-flight sweep.
+//   - frequency: minutes between sweeps; values <= 0 disable the loop.
+//
+// Return values: none.
+func AutomaticallyTestChannelsContext(ctx context.Context, frequency int) {
 	lg := logger.Logger.Named("auto_test_channels")
-	ctx := context.Background()
+	if frequency <= 0 {
+		lg.Info("automatic channel testing disabled", zap.Int("frequency_minutes", frequency))
+		return
+	}
 	ctx = gmw.SetLogger(ctx, lg)
 
+	ticker := time.NewTicker(time.Duration(frequency) * time.Minute)
+	defer ticker.Stop()
 	for {
-		time.Sleep(time.Duration(frequency) * time.Minute)
-		lg.Info("testing all channels")
-		_ = testChannels(ctx, false, "all")
-		lg.Info("channel test finished")
+		select {
+		case <-ctx.Done():
+			lg.Info("automatic channel testing stopped", zap.Error(ctx.Err()))
+			return
+		case <-ticker.C:
+			lg.Info("testing all channels")
+			if err := testChannelsSync(ctx, false, "all"); err != nil && !errors.Is(err, context.Canceled) {
+				lg.Warn("automatic channel test stopped", zap.Error(err))
+			} else {
+				lg.Info("channel test finished")
+			}
+		}
 	}
 }

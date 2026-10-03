@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -35,7 +34,7 @@ func (r *OtelRecorder) RecordResponseStateEvent(category, outcome string) {
 		return
 	}
 	responseStateEventsCounter.Add(context.Background(), 1, metric.WithAttributes(
-		attribute.String("category", category),
-		attribute.String("outcome", outcome),
+		strAttr("category", category),
+		strAttr("outcome", outcome),
 	))
 }

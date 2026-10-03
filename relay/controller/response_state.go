@@ -155,6 +155,17 @@ func hydrateResponseAPIRequestForFallback(ctx context.Context, meta *metalib.Met
 	// resolved here too, otherwise it reaches lowering unresolved and degrades into
 	// an empty message (review finding). An unresolvable reference fails closed with
 	// invalid_state_selector (P05).
+	// Bound the item count BEFORE resolving. resolveItemReferences performs one
+	// store round-trip (Redis GET + decrypt + JSON decode) per element, and the
+	// element list comes straight from the request body, so checking only
+	// afterwards let a single unbilled request drive an unbounded number of store
+	// reads and hold every decoded item in memory. Resolution is 1:1, so this is
+	// the same bound the post-resolve check applies.
+	if limits.ItemCountExceeded(len(combined)) {
+		return nil, stateErrorf(codeStateLimitExceeded, http.StatusRequestEntityTooLarge,
+			"item count %d exceeds limit %d", len(combined), limits.MaxItemCount)
+	}
+
 	combined, serr := resolveItemReferences(ctx, store, owner, combined)
 	if serr != nil {
 		return nil, serr

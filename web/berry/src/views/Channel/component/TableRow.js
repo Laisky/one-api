@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from "prop-types";
 import { useState } from "react";
 
@@ -160,7 +161,7 @@ export default function ChannelTableRow({
             <TableSwitch
               id={`switch-${ref}`}
               checked={statusSwitch === 1}
-              onChange={handleStatus}
+              onChange={(...uiArgs) => handleStatus(...uiArgs).catch(reportUIError)}
             />
           </Tooltip>
         </TableCell>
@@ -177,7 +178,7 @@ export default function ChannelTableRow({
           <Tooltip
             title={"点击更新余额"}
             placement="top"
-            onClick={updateChannelBalance}
+            onClick={(...uiArgs) => updateChannelBalance(...uiArgs).catch(reportUIError)}
           >
             {renderBalance(item.type, itemBalance)}
           </Tooltip>
@@ -185,7 +186,7 @@ export default function ChannelTableRow({
         <TableCell>
           <TextField
             id={`priority-${ref}`}
-            onBlur={handlePriority}
+            onBlur={(...uiArgs) => handlePriority(...uiArgs).catch(reportUIError)}
             type="number"
             label="优先级"
             variant="standard"
@@ -247,7 +248,7 @@ export default function ChannelTableRow({
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDeleteClose}>关闭</Button>
-          <Button onClick={handleDelete} sx={{ color: "error.main" }} autoFocus>
+          <Button onClick={(...uiArgs) => handleDelete(...uiArgs).catch(reportUIError)} sx={{ color: "error.main" }} autoFocus>
             删除
           </Button>
         </DialogActions>

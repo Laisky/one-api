@@ -1,14 +1,9 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { Dimmer, Loader, Segment } from 'semantic-ui-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { API, showError, showSuccess } from '../helpers';
+import { API, normalizeUser, showError, showSuccess } from '../helpers';
 import { UserContext } from '../context/User';
-
-const normalizeUser = (user) => {
-  if (!user) return user;
-  const uuid = user.uuid || user.user_uuid;
-  return uuid ? { ...user, uuid, id: uuid } : user;
-};
 
 const GitHubOAuth = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -50,7 +45,7 @@ const GitHubOAuth = () => {
   useEffect(() => {
     let code = searchParams.get('code');
     let state = searchParams.get('state');
-    sendCode(code, state, 0).then();
+    sendCode(code, state, 0).then().catch(reportUIError);
   }, []);
 
   return (

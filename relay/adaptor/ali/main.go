@@ -2,7 +2,6 @@ package ali
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -301,7 +300,10 @@ func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *
 	if err != nil {
 		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
-	lg.Debug(fmt.Sprintf("response body: %s\n", responseBody))
+	lg.Debug("received Ali upstream response",
+		zap.Int("status_code", resp.StatusCode),
+		zap.Int("response_bytes", len(responseBody)),
+	)
 	err = json.Unmarshal(responseBody, &aliResponse)
 	if err != nil {
 		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil

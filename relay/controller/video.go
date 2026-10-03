@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -26,19 +25,22 @@ import (
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/asyncvideo"
 	"github.com/Laisky/one-api/relay/billing"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
-	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // RelayVideoHelper handles OpenAI /v1/videos requests, performing quota accounting
 // based on per-second pricing while proxying the raw payload to the upstream channel.
 func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if c.Request.Method != http.MethodPost {
-		return RelayProxyHelper(c, relaymode.Videos)
+		// Task ownership and channel binding are checked by BindAsyncTaskChannel
+		// on the video routes. Retrieval/deletion does not create another paid job;
+		// it must not be confused with the public arbitrary-target proxy endpoint.
+		return relayUnmeteredRequest(c)
 	}
 
 	ctx := gmw.Ctx(c)
@@ -64,8 +66,33 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		originalRequestedModel = videoRequest.Model
 	}
 
+	meta.OriginModelName = videoRequest.Model
+	meta.ActualModelName = metalib.GetMappedModelName(videoRequest.Model, meta.ModelMapping)
+	meta.EnsureActualModelName(videoRequest.Model)
+	videoRequest.Model = meta.ActualModelName
+	metalib.Set2Context(c, meta)
+
+	ad := relay.GetAdaptor(meta.APIType)
+	if ad == nil {
+		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
+	}
+	ad.Init(meta)
+	if _, durable := ad.(asyncvideo.Provider); durable {
+		return openai.ErrorWrapper(errors.New("native async video requires the durable task controller"), "unsupported_video_protocol", http.StatusBadRequest)
+	}
+
+	inputImages := 0
+	if preparer, ok := ad.(adaptor.VideoRequestPreparer); ok {
+		var err error
+		inputImages, err = preparer.PrepareVideoRequest(c, videoRequest)
+		if err != nil {
+			return openai.ErrorWrapper(err, "invalid_video_request", http.StatusBadRequest)
+		}
+	}
+
 	requestSnapshot := map[string]any{
-		"model": originalRequestedModel,
+		"model":        originalRequestedModel,
+		"input_images": inputImages,
 	}
 	if trimmedPrompt := strings.TrimSpace(videoRequest.Prompt); trimmedPrompt != "" {
 		runes := []rune(trimmedPrompt)
@@ -90,43 +117,78 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	requestSnapshot["path"] = c.Request.URL.Path
 	c.Set(ctxkey.AsyncTaskRequestMetadata, requestSnapshot)
 
-	meta.OriginModelName = videoRequest.Model
-	meta.ActualModelName = metalib.GetMappedModelName(videoRequest.Model, meta.ModelMapping)
-	meta.EnsureActualModelName(videoRequest.Model)
-	videoRequest.Model = meta.ActualModelName
-	metalib.Set2Context(c, meta)
-
 	durationSeconds := videoRequest.RequestedDurationSeconds()
-	if durationSeconds <= 0 {
-		return openai.ErrorWrapper(errors.New("seconds must be positive for video generation"), "invalid_video_duration", http.StatusBadRequest)
-	}
-	resolutionKey := videoRequest.RequestedResolution()
 
 	var channelModelConfigs map[string]model.ModelConfigLocal
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := channelModel.(*model.Channel); ok {
-			channelModelConfigs = channel.GetModelPriceConfigs()
+			channelModelConfigs = channel.GetModelPriceConfigsWithContext(gmw.Ctx(c))
 		}
 	}
 
-	pricingAdaptor := relay.GetAdaptor(meta.APIType)
-	var videoPricing *adaptor.VideoPricingConfig
-	if cfg, ok := pricing.ResolveModelConfig(meta.ActualModelName, channelModelConfigs, pricingAdaptor, meta.StartTime); ok && cfg.Video != nil && cfg.Video.HasData() {
-		videoPricing = cfg.Video
-	}
-	if videoPricing == nil {
-		if cfg, ok := pricing.ResolveModelConfig(meta.ActualModelName, nil, pricingAdaptor, meta.StartTime); ok && cfg.Video != nil && cfg.Video.HasData() {
-			videoPricing = cfg.Video
-		}
-	}
-	if videoPricing == nil {
-		return openai.ErrorWrapper(errors.Errorf("video pricing missing for model %s", meta.ActualModelName), "video_pricing_missing", http.StatusBadRequest)
+	pricingAdaptor := resolvePricingAdaptor(meta)
+	resolvedCfg, ok := pricing.ResolveModelConfig(meta.ActualModelName, channelModelConfigs, pricingAdaptor, meta.StartTime)
+	if !ok {
+		resolvedCfg, ok = pricing.ResolveModelConfig(meta.ActualModelName, nil, pricingAdaptor, meta.StartTime)
 	}
 
-	multiplier := videoPricing.EffectiveMultiplier(resolutionKey)
-	costUsd := videoPricing.PerSecondUsd * multiplier * durationSeconds
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
-	usedQuota := max(int64(math.Ceil(costUsd*billingratio.QuotaPerUsd*groupRatio)), 0)
+
+	// Per-call video models (e.g. Zhipu Vidu) are billed as a flat price per
+	// invocation. The upstream fixes the clip duration, so the client is not
+	// required to send `seconds` for these models.
+	providerCfg, providerHasConfig := pricing.ResolveModelConfig(meta.ActualModelName, nil, pricingAdaptor, meta.StartTime)
+	var perCallQuota *int64
+	if ok && resolvedCfg.PerCall != nil {
+		value, err := decimalQuotaRate(1000, resolvedCfg.PerCall.UsdPerThousandCalls, billingratio.QuotaPerUsd, groupRatio)
+		if err != nil {
+			return openai.ErrorWrapper(err, "invalid_video_pricing", http.StatusBadRequest)
+		}
+		perCallQuota = &value
+	} else if providerHasConfig && providerCfg.PerCall != nil && resolvedCfg.Video == nil {
+		// A scalar administrator override for a per-call model is quota/call,
+		// not quota/token and not a reason to fall back to per-second pricing.
+		var value int64
+		var err error
+		if resolvedCfg.Ratio != 0 {
+			value, err = decimalQuotaProduct(resolvedCfg.Ratio, groupRatio)
+		} else {
+			// Metadata alone must not turn a paid provider task into a free
+			// invocation. Explicit PerCall={} remains the way to configure free.
+			value, err = decimalQuotaRate(1000, providerCfg.PerCall.UsdPerThousandCalls, billingratio.QuotaPerUsd, groupRatio)
+		}
+		if err != nil {
+			return openai.ErrorWrapper(err, "invalid_video_pricing", http.StatusBadRequest)
+		}
+		perCallQuota = &value
+	}
+
+	var videoPricing *adaptor.VideoPricingConfig
+	var multiplier float64
+	logContent := ""
+	usedQuota := int64(0)
+	if perCallQuota != nil {
+		usedQuota = *perCallQuota
+		logContent = fmt.Sprintf("video per-call quota %d, group rate %.2f", usedQuota, groupRatio)
+	} else {
+		if durationSeconds <= 0 {
+			return openai.ErrorWrapper(errors.New("seconds must be positive for video generation"), "invalid_video_duration", http.StatusBadRequest)
+		}
+		if ok && resolvedCfg.Video != nil && resolvedCfg.Video.HasData() {
+			videoPricing = resolvedCfg.Video
+		}
+		if videoPricing == nil {
+			return openai.ErrorWrapper(errors.Errorf("video pricing missing for model %s", meta.ActualModelName), "video_pricing_missing", http.StatusBadRequest)
+		}
+		resolutionKey := videoRequest.RequestedResolution()
+		multiplier = videoPricing.EffectiveMultiplier(resolutionKey)
+		var quotaErr error
+		usedQuota, quotaErr = videoQuota(videoPricing.PerSecondUsd, multiplier, durationSeconds, videoPricing.InputImageUsd, inputImages, groupRatio)
+		if quotaErr != nil {
+			return openai.ErrorWrapper(quotaErr, "invalid_video_pricing", http.StatusBadRequest)
+		}
+		logContent = fmt.Sprintf("video seconds %.2f, usd %.3f, multiplier %.2f, input images %d at usd %.4f, group rate %.2f", durationSeconds, videoPricing.PerSecondUsd, multiplier, inputImages, videoPricing.InputImageUsd, groupRatio)
+	}
 
 	tokenId := c.GetInt(ctxkey.TokenId)
 	userId := meta.UserId
@@ -147,7 +209,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		tokenQuota := c.GetInt64(ctxkey.TokenQuota)
 		tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
 		preConsumedQuota = usedQuota
-		if userQuota > 100*usedQuota && (tokenQuotaUnlimited || tokenQuota > 100*usedQuota) {
+		if usedQuota <= (userQuota-1)/100 && (tokenQuotaUnlimited || usedQuota <= (tokenQuota-1)/100) {
 			preConsumedQuota = 0
 		}
 		if preConsumedQuota > 0 {
@@ -192,7 +254,6 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 
 		quotaDelta := usedQuota - preConsumedQuota
-		logContent := fmt.Sprintf("video seconds %.2f, usd %.3f, multiplier %.2f, group rate %.2f", durationSeconds, videoPricing.PerSecondUsd, multiplier, groupRatio)
 		entry := &model.Log{
 			UserId:      userId,
 			UserUUID:    model.StringPtrIfNotEmpty(meta.UserUUID),
@@ -227,11 +288,15 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	bodyBytes := rawBody
 	contentType := strings.ToLower(c.GetHeader("Content-Type"))
 	if meta.OriginModelName != meta.ActualModelName && strings.HasPrefix(contentType, "application/json") {
-		var payload map[string]any
+		var payload map[string]json.RawMessage
 		if err := json.Unmarshal(rawBody, &payload); err != nil {
 			return openai.ErrorWrapper(errors.Wrap(err, "unmarshal video request for model mapping"), "invalid_video_request", http.StatusBadRequest)
 		}
-		payload["model"] = meta.ActualModelName
+		encodedModel, err := json.Marshal(meta.ActualModelName)
+		if err != nil {
+			return openai.ErrorWrapper(errors.Wrap(err, "encode mapped video model"), "invalid_video_request", http.StatusBadRequest)
+		}
+		payload["model"] = encodedModel
 		bodyBytes, err = json.Marshal(payload)
 		if err != nil {
 			return openai.ErrorWrapper(errors.Wrap(err, "marshal video request after mapping"), "invalid_video_request", http.StatusInternalServerError)
@@ -241,12 +306,6 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	} else if meta.OriginModelName != meta.ActualModelName && !strings.HasPrefix(contentType, "application/json") {
 		lg.Warn("model mapping for non-JSON video request not applied", zap.String("content_type", contentType))
 	}
-
-	ad := relay.GetAdaptor(meta.APIType)
-	if ad == nil {
-		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
-	}
-	ad.Init(meta)
 
 	requestBody := bytes.NewBuffer(bodyBytes)
 	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
@@ -258,6 +317,12 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	usage, respErr := ad.DoResponse(c, resp, meta)
 	_ = usage // video responses currently do not return usage metrics
+	if c.GetBool(adaptor.AsyncVideoAcceptedKey) {
+		// Accepted jobs remain billable even if writing the response to a
+		// disconnected client fails. The provider has accepted the paid work.
+		succeed = true
+		markBillingReconciled(c)
+	}
 	if respErr != nil {
 		return respErr
 	}
@@ -291,6 +356,7 @@ func convertVideoLocalToAdaptor(local *model.VideoPricingLocal) *adaptor.VideoPr
 	}
 	cfg := &adaptor.VideoPricingConfig{
 		PerSecondUsd:   local.PerSecondUsd,
+		InputImageUsd:  local.InputImageUsd,
 		BaseResolution: local.BaseResolution,
 	}
 	if len(local.ResolutionMultipliers) > 0 {

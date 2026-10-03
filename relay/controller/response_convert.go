@@ -191,10 +191,16 @@ func buildResponseOutput(choices []openai_compatible.TextResponseChoice) []opena
 					}
 				}
 			}
+			// Mirror the streaming bridge's function_call item exactly: both id and
+			// call_id must be present and carry the same normalized call ID. A client
+			// that keys the tool call on either field has to see the same value from
+			// the streamed and the non-streamed fallback of the same channel.
+			callID := ensureResponseAPICallID(tool.Id)
 			output = append(output, openai.OutputItem{
 				Type:   "function_call",
 				Status: "completed",
-				CallId: tool.Id,
+				Id:     callID,
+				CallId: callID,
 				Name: func() string {
 					if tool.Function != nil {
 						return tool.Function.Name

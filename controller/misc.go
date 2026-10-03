@@ -53,8 +53,19 @@ func GetStatus(c *gin.Context) {
 			"oidc_userinfo_endpoint":      config.OidcUserinfoEndpoint,
 			"password_login":              config.PasswordLoginEnabled,
 			"password_register":           config.PasswordRegisterEnabled,
+			// Stripe is enabled only when secret, webhook secret, and public base URL are ready.
+			"stripe_enabled": StripeReady(),
+			"min_topup_usd":  effectiveMinTopUpUSD(),
 		},
 	})
+}
+
+// effectiveMinTopUpUSD returns the configured minimum Stripe top-up in whole USD, at least 1.
+func effectiveMinTopUpUSD() int {
+	if config.MinTopUpUSD < 1 {
+		return 1
+	}
+	return config.MinTopUpUSD
 }
 
 // GetNotice returns the configured notice content for the UI.

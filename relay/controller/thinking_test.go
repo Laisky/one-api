@@ -73,6 +73,25 @@ func TestApplyThinkingQueryToChatRequestSetsReasoningEffort(t *testing.T) {
 	require.Equal(t, "high", *payload.ReasoningEffort)
 }
 
+// TestApplyThinkingQueryToDeepSeekV4SetsReasoningEffort verifies V4 models are
+// included in the query-driven reasoning injection path.
+// Parameters: t is the testing handle used for assertions and test lifecycle control.
+// Returns: nothing; the test fails through t when the V4 effort is omitted.
+func TestApplyThinkingQueryToDeepSeekV4SetsReasoningEffort(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=true", nil)
+
+	meta := &metalib.Meta{ActualModelName: "deepseek-v4-flash-vision-exp", APIType: apitype.OpenAI, ChannelType: channeltype.DeepSeek}
+	payload := &relaymodel.GeneralOpenAIRequest{Model: meta.ActualModelName}
+
+	applyThinkingQueryToChatRequest(c, payload, meta)
+
+	require.NotNil(t, payload.ReasoningEffort)
+	require.Equal(t, "high", *payload.ReasoningEffort)
+}
+
 func TestApplyThinkingQueryClampsMediumOnlyReasoningModels(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()

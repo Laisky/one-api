@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -58,8 +59,13 @@ const (
 	// compactFaultPace paces one worker, keeping the load a request stream rather than a tight
 	// loop that would measure the driver instead of the contract.
 	compactFaultPace = 20 * time.Millisecond
-	// compactFaultHoldFor is how long each barrier is held under traffic.
+	// compactFaultHoldFor is the shortest time each barrier is held under traffic.
 	compactFaultHoldFor = 3 * time.Second
+	// compactFaultHoldOps is how many workload operations must complete while a barrier is held.
+	compactFaultHoldOps = 1000
+	// compactFaultHoldMax bounds a hold that is still waiting for compactFaultHoldOps, so a
+	// workload that genuinely stalls behind a barrier fails instead of hanging the test.
+	compactFaultHoldMax = 2 * time.Minute
 	// compactFaultForegroundBound is the proposal's foreground blocking ceiling.
 	compactFaultForegroundBound = 5 * time.Second
 	// compactFaultMaxCycles bounds every cycle loop so a stall fails loudly.
@@ -302,6 +308,30 @@ func (traffic *compactFaultTraffic) ack(id int, text string) {
 	traffic.mu.Lock()
 	traffic.acked[id] = text
 	traffic.mu.Unlock()
+}
+
+// holdBarrier holds the current barrier: no cycle runs while the workload keeps going.
+//
+// The hold lasts at least compactFaultHoldFor and until compactFaultHoldOps operations have
+// completed under it. Four paced workers manage roughly that many in compactFaultHoldFor on an
+// idle machine, so a fixed-length hold failed the count whenever the machine was busy, although
+// the barrier itself had behaved. Waiting for the operations instead measures the contract, and
+// only a workload that stalls for compactFaultHoldMax, or fails, ends the hold short.
+//
+// Return values:
+//   - int64: the operations the workload completed during the hold.
+func (traffic *compactFaultTraffic) holdBarrier() int64 {
+	before := traffic.ops.Load()
+	shortest := time.Now().Add(compactFaultHoldFor)
+	longest := time.Now().Add(compactFaultHoldMax)
+	for {
+		held := traffic.ops.Load() - before
+		now := time.Now()
+		if (now.After(shortest) && held >= compactFaultHoldOps) || now.After(longest) || traffic.firstFailure() != nil {
+			return held
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // firstFailure returns the first unexpected error observed so far, or nil.
@@ -548,16 +578,35 @@ func (proxy *compactFaultProxy) setOpen(open bool) {
 	proxy.conns = map[net.Conn]struct{}{}
 }
 
-// compactFaultRedirectDSN rewrites a key/value DSN's host and port, returning both forms.
+// compactFaultRedirectDSN rewrites a live DSN so its host:port points at the
+// relay address, returning the rewritten DSN and the original host:port target.
+// Both URL DSNs (postgres://user:pass@host:port/db?params) and libpq keyword
+// DSNs (host=... port=...) are accepted, mirroring what pr.yml and the manual
+// qualification runs set in COMPACT_UUID_TEST_POSTGRES_DSN.
 // Parameters:
-//   - dsn: key/value PostgreSQL DSN.
-//   - addr: the relay's host:port, or an empty string to only read the server's address.
+//   - dsn: the live DSN to rewrite.
+//   - addr: relay listener address in host:port form, or "" to keep the DSN as-is.
 //
 // Return values:
-//   - string: the DSN, redirected when addr was supplied.
-//   - string: the original server's host:port.
-//   - error: wrapped error when an address is missing or cannot be split.
+//   - string: the DSN with host:port replaced by addr when addr is non-empty.
+//   - string: the original host:port for the relay to dial.
+//   - error: wrapped parse failures, or an error when the DSN names no host/port.
 func compactFaultRedirectDSN(dsn string, addr string) (string, string, error) {
+	if strings.Contains(dsn, "://") {
+		parsed, err := url.Parse(dsn)
+		if err != nil {
+			return "", "", errors.Wrap(err, "parse DSN url")
+		}
+		if parsed.Hostname() == "" || parsed.Port() == "" {
+			return "", "", errors.New("dsn must name a host and a port")
+		}
+		target := net.JoinHostPort(parsed.Hostname(), parsed.Port())
+		if addr != "" {
+			parsed.Host = addr
+		}
+		return parsed.String(), target, nil
+	}
+
 	host, port := "", ""
 	if addr != "" {
 		split, splitPort, err := net.SplitHostPort(addr)

@@ -61,9 +61,9 @@ Selection uses the in‑memory cache when `MEMORY_CACHE_ENABLED` is true; otherw
 - Default selection (outside of the retry handler) prefers highest priority:
   - Among available candidates for (group, model), pick highest priority (max value); if multiple at that priority, choose randomly.
   - If `DEFAULT_USE_MIN_MAX_TOKENS_MODEL` is true, within the highest priority tier, prefer the smallest `max_tokens` (from `Model Configs`) and randomize among ties. This optimizes for lower capacity usage by default.
-- Retry selection (see next section) alters the target tier and/or filters by `max_tokens` depending on error class.
+- Retry selection (see next section) walks the remaining (not yet tried) channels strictly by descending priority, and additionally filters by `max_tokens` on 413.
 
-Priority semantics (as implemented): higher integer value = higher priority. “Ignore first priority” in code means “skip the current highest priority tier and try lower tiers.”
+Priority semantics (as implemented): higher integer value = higher priority. “Ignore first priority” in code means “skip the current highest priority tier and try lower tiers.” The retry driver never combines it with its exclusion set: both selectors recompute the highest tier AFTER exclusions, so excluding the failed channel already moves selection to the next tier, and skipping on top of that would double-skip (A(10) fails → C(0) before B(5)).
 
 ## Retry
 
@@ -89,11 +89,11 @@ Per‑attempt selection strategy
 - A failed channel is added to an in‑memory exclusion set for the duration of this request. Subsequent selections avoid these channels.
 - Strategy depends on the classified error of the most recent attempt:
   - Rate‑limit (429):
-    - Prefer lower priority tiers first to escape localized throttling. If no lower tier available, fall back to the highest priority tier among remaining candidates.
+    - Strict priority walk (`retry_selection_policy=strict_priority`): the rate‑limited channel is excluded and the next attempt goes to the highest priority tier that still has an untried channel. A same‑priority sibling is tried before dropping a tier, so with A(10), B(5), C(0) the order is A → B → C (and A1 → A2 → B for a two‑channel top tier). The 429 budget doubling (above) is what lets the walk reach every tier.
   - Capacity (413):
-    - Prefer channels whose `max_tokens` for the requested model differs from the failed ones (channels with no `max_tokens` limit are also eligible). This avoids immediately retrying channels with the same capacity constraint that just failed.
+    - `retry_selection_policy=larger_max_tokens`: prefer channels whose `max_tokens` for the requested model differs from the failed ones (channels with no `max_tokens` limit are also eligible). This avoids immediately retrying channels with the same capacity constraint that just failed. Only the memory‑cache selector implements this filter; the DB selector falls back to the strict priority walk.
   - Server/transport transient (5xx/network):
-    - Avoid the exact (channel, model) ability first; probe other abilities in the same tier to maintain performance, then drop to lower tiers if needed.
+    - Same strict priority walk as 429: the failed channel is excluded, then the highest remaining tier is probed (same‑tier siblings first), dropping to lower tiers only when a tier is exhausted.
   - Client request errors (4xx due to user input):
     - Do not retry; surface the error.
 
@@ -135,7 +135,7 @@ Classification (examples):
 
 Debugging aids
 
-- With `DEBUG=true`, the retry loop logs the exclusion set and attempt ordering. If selection fails, it queries the DB for the excluded channels’ suspension status to help diagnose cache vs. DB discrepancies.
+- With `DEBUG=true`, the retry loop logs the exclusion set, `retry_selection_policy`, and attempt ordering (`using channel to retry` carries `retry_channel` and `retry_channel_priority`); the cache selector emits `channel tier selection in cache` at DEBUG with the tier boundary it computed after exclusions. If selection fails, it queries the DB for the excluded channels’ suspension status to help diagnose cache vs. DB discrepancies.
 
 Concurrency note
 
@@ -183,7 +183,7 @@ Environment variables (see `common/config/config.go`):
 
 ## Operational guidance
 
-- Priority assignment: higher integer = higher priority. Place primary channels at higher numbers; backups use lower numbers. The retry engine will intentionally drop to lower tiers first on 429 to escape local rate limits.
+- Priority assignment: higher integer = higher priority. Place primary channels at higher numbers; backups use lower numbers. On any retryable failure (429 included) the retry engine excludes the failed channel and walks the remaining channels strictly by descending priority, so backups are reached only after every higher‑priority channel has been tried.
 - Max tokens configuration: populate `Model Configs` with realistic `max_tokens` per model. This enables the 413 path to move to channels with larger capacity.
 - Pinning to a specific channel disables retries: if a request carries a specific channel id (populated into `SpecificChannelId`), the system will not try alternatives.
 - Cache consistency: suspensions take effect for new requests after the next cache refresh; the current request already excludes the failed channel via its local exclusion set.

@@ -286,6 +286,46 @@ export const CHANNEL_TYPES: ChannelType[] = [
     description: 'Cerebras Inference (api.cerebras.ai); ultra-fast OpenAI-compatible chat on wafer-scale hardware (gpt-oss-120b, GLM-4.7).',
   },
   {
+    key: 57,
+    text: 'DeepInfra',
+    value: 57,
+    color: 'purple',
+    description:
+      'DeepInfra serverless inference; OpenAI-compatible chat, completions, embeddings, images, and audio, plus rerank and native Anthropic Messages.',
+  },
+  {
+    key: 58,
+    text: 'Z.ai',
+    value: 58,
+    color: 'teal',
+    description:
+      'Z.ai international GLM platform (api.z.ai). Same models as Zhipu but a separate account, key, and flat USD pricing. Serves chat, vision, image, video, ASR, and OCR; no embeddings, rerank, TTS, or realtime.',
+  },
+  {
+    key: 59,
+    text: 'Jina AI',
+    value: 59,
+    color: 'purple',
+    description:
+      'Jina Search Foundation API: text and multimodal embeddings, rerank, and jina-ocr-v1 chat. Responses and Claude Messages use chat conversion; no image generation.',
+  },
+  {
+    key: 60,
+    text: 'TypeSafe',
+    value: 60,
+    color: 'teal',
+    description:
+      'TypeSafe System One evaluation (noul, choice, score) via /v1/systemone; input-token pricing and free output. Not a chat or streaming API.',
+  },
+  {
+    key: 61,
+    text: 'MuAPI',
+    value: 61,
+    color: 'purple',
+    description:
+      'MuAPI unified video generation: route any catalog model slug through durable /v1/async/videos or synchronous /v1/videos/generations (mu_async_videos capability); request-specific pricing is quoted before quota admission.',
+  },
+  {
     key: 42,
     text: 'VertexAI',
     value: 42,

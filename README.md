@@ -5,7 +5,7 @@
 Open‑source version of OpenRouter, managed through a unified gateway that handles all AI SaaS model calls. Core functions include:
 
 1. Aggregating chat, image, speech, TTS, embeddings, rerank and other capabilities.
-2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, Groq, Grok/xAI, Fireworks, NVIDIA, Cerebras, Cloudflare, ZHIPU GLM, Cohere, etc.
+2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, Groq, Grok/xAI, Fireworks, NVIDIA, Cerebras, Cloudflare, ZHIPU GLM, Z.ai, Cohere, etc.
 3. Aggregating various upstream API request formats like Chat Completion, Response, Claude Messages.
 4. Supporting different request formats; users can issue requests via Chat Completion, Response, or Claude Messages, which are automatically and transparently converted to the native request format of the upstream model. Even if the client sends a mismatched request format to wrong api endpoint, it will still be correctly processed.
 5. Supporting multi‑tenant management, allowing each tenant to set distinct quotas and permissions.
@@ -151,6 +151,9 @@ The original author stopped maintaining the project, leaving critical PRs and ne
       - [Image Generation Models](#image-generation-models)
       - [Other Models](#other-models)
       - [GLM OCR](#glm-ocr)
+    - [Z.ai Features](#zai-features)
+      - [Z.ai vs Zhipu / open.bigmodel.cn](#zai-vs-zhipu--openbigmodelcn)
+      - [Z.ai Model Catalog](#zai-model-catalog)
     - [XAI / Grok Features](#xai--grok-features)
       - [Support XAI/Grok Text \& Image Models](#support-xaigrok-text--image-models)
     - [Black Forest Labs Features](#black-forest-labs-features)
@@ -245,6 +248,146 @@ OTEL_EXPORTER_OTLP_INSECURE="true"
 OTEL_SERVICE_NAME="one-api"
 OTEL_ENVIRONMENT="debug"
 ```
+
+Use `http://` with `OTEL_EXPORTER_OTLP_INSECURE=true` or `https://` with
+`OTEL_EXPORTER_OTLP_INSECURE=false`. Startup rejects an explicit scheme paired
+with the opposite transport mode.
+
+#### Scalable request tracing
+
+Request traces are accumulated in memory and written once per request by an
+asynchronous batching writer, instead of the per-timestamp read-modify-write
+statements earlier versions issued. Defaults are unchanged for small
+deployments; high-volume deployments select a profile and, optionally, move
+traces out of the database entirely.
+
+```sh
+# One preset governs every trace knob. Individual variables still win.
+# Defaults are chosen so an upgrade changes nothing; "scaled" opts in.
+OBSERVABILITY_PROFILE="scaled"   # standalone (default) | scaled | external
+
+# Or tune individually. The standalone value is shown in the comment.
+TRACE_WRITE_MODE="batched"       # standalone: sync (pre-existing behaviour)
+TRACE_SAMPLE_RATE="0.05"         # standalone: 1.0
+TRACE_ALWAYS_SAMPLE_ERRORS="true"
+TRACE_ALWAYS_SAMPLE_SLOW_MS="5000"
+TRACE_EXCLUDED_PATH_PREFIXES="/api/status,/metrics,/health,/static,/assets"
+TRACE_SINK="db"                  # db | otlp | none, comma-separated to fan out
+TRACE_BATCH_SIZE="500"
+TRACE_FLUSH_INTERVAL_MS="1000"
+TRACE_QUEUE_SIZE="50000"
+TRACE_WRITER_COUNT="4"
+
+# Bounded trace resources. TRACE_QUEUE_SIZE bounds only COMPLETED records;
+# long-lived streaming requests accumulate on the active side, which is what
+# TRACE_MAX_ACTIVE_RECORDERS bounds. Over the limit a request runs normally
+# but records no trace, counted as oneapi_trace_records_total{outcome=
+# "dropped_active_limit"}.
+TRACE_MAX_ACTIVE_RECORDERS="200000"  # all profiles; 0 restores unbounded
+TRACE_MAX_RECORD_BYTES="65536"       # standalone: 262144; minimum 1024; truncates, never drops
+TRACE_MAX_EXTERNAL_CALLS="256"       # standalone: 1024
+TRACE_BATCH_MAX_BYTES="8388608"      # bounds one writer's flush-local buffer
+```
+
+Errors and slow requests are always retained regardless of the sample rate.
+`TRACE_WRITE_MODE=sync` is the legacy in-flight SQL path and therefore requires
+`TRACE_SINK=db` (or `none`) and `TRACE_SAMPLE_RATE=1`; configurations that need
+sampling, OTLP, or sink fan-out must use `batched` and fail fast otherwise.
+See [docs/arch/tracing_system.md](./docs/arch/tracing_system.md).
+
+> **Upgrade note — observability settings are now validated at startup.**
+> These variables previously accepted anything and silently substituted a
+> default: `OTEL_ENABLED=1` meant `false`, `TRACE_SINK=cassandra` meant `db`,
+> `TRACE_SAMPLE_RATE=5` meant `1`, and `TRACE_WRITE_MODE=async` meant `batched`.
+> A misconfigured deployment therefore ran with telemetry quietly disabled and
+> no way to find out. They are now rejected at startup with a message naming the
+> variable, the offending value and the allowed values.
+>
+> This intentional startup behavior affects configurations that were already
+> not doing what they said. Only booleans spelled exactly `true`/`false` are
+> accepted — `1`, `yes` and `on` are not.
+
+The OTLP trace outcome labels are now `span_recorded` and
+`span_record_failed`. The former labels local SDK recording; it does not claim
+that the asynchronous exporter or collector persisted the span. Dashboards that
+previously selected `exported` or `export_failed` must use the new labels.
+
+#### Bounded log and telemetry retention
+
+Retention sweeps delete in bounded chunks instead of one unbounded `DELETE`, and
+the log directory is bounded by age, total size, and free disk.
+
+```sh
+# Log files. Every deletion knob is OFF by default so an upgrade never removes
+# files an operator chose to keep; OBSERVABILITY_PROFILE=scaled turns them on.
+LOG_RETENTION_DAYS="7"          # standalone: 0 (never delete)
+LOG_MAX_TOTAL_SIZE_MB="20480"   # standalone: 0 (unlimited)
+LOG_MIN_FREE_DISK_MB="1024"     # standalone: 0 (guard disabled)
+APP_LOG_SINK="both"             # file | stdout | both; stdout suits Kubernetes
+
+# Optional OTLP application logs. Add the additive "otlp" token to APP_LOG_SINK
+# (both,otlp / stdout,otlp / file,otlp) to also export log records to the
+# collector configured by OTEL_EXPORTER_OTLP_ENDPOINT. It requires
+# OTEL_ENABLED=true, and a bare "otlp" is rejected: the bridge drops records on a
+# full queue, before its provider is installed and after shutdown, so it may not
+# be a deployment's only log destination. Exported records carry the request's
+# trace and span ids, so logs join to traces in Loki/Tempo/ClickHouse.
+# Off by default in EVERY profile, including external.
+# APP_LOG_SINK="both,otlp"
+LOG_OTLP_MIN_LEVEL="info"              # debug | info | warn | error; independent of LOG_LEVEL
+LOG_OTLP_QUEUE_SIZE="10000"            # records resident before drops are counted
+LOG_OTLP_QUEUE_MAX_MB="64"             # byte ceiling; record count alone does not bound memory
+LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES="4096"  # the SDK default is unlimited
+
+# Active-file ceiling and disk-pressure guard. LOG_MAX_TOTAL_SIZE_MB can only
+# delete already-rotated files, so it cannot bound the file currently being
+# written; LOG_MAX_ACTIVE_FILE_SIZE_MB rotates on bytes and closes that hole.
+# The guard samples on its OWN fast cadence, not the slow retention sweep: at
+# 16 MB/s a 1 GB reserve lasts about 62 seconds.
+LOG_MAX_ACTIVE_FILE_SIZE_MB="2048"     # standalone: 4096; 0 disables
+LOG_DISK_CHECK_INTERVAL_SEC="5"        # independent of RETENTION_SWEEP_INTERVAL_MINUTES
+LOG_EMERGENCY_MAX_BYTES_PER_SEC="1048576"  # byte budget once headroom is gone
+LOG_DISK_RECOVERY_MARGIN_PCT="20"      # hysteresis, so the guard cannot flap
+
+# Per-request log line. The full form is the default so existing log pipelines
+# keep parsing the same fields.
+LOG_RECORD_LINE_FORMAT="compact"   # standalone: full
+LOG_SAMPLE_INITIAL="100"           # standalone: 0 (no sampling)
+LOG_SAMPLE_THEREAFTER="100"
+LOG_SAMPLE_TICK_MS="1000"
+
+# Database retention sweeps (traces, logs, async task bindings). These bound the
+# size of each DELETE; they do not change what gets deleted.
+RETENTION_DELETE_BATCH_SIZE="5000"
+RETENTION_DELETE_PAUSE_MS="10"
+RETENTION_SWEEP_INTERVAL_MINUTES="60"   # standalone: 1440 (historical 24h cadence)
+
+# Dashboard.
+DASHBOARD_CACHE_TTL_SEC="60"            # standalone: 0 (always live)
+DASHBOARD_MAX_SITEWIDE_RANGE_DAYS="31"  # standalone: 365 (the existing limit)
+DASHBOARD_MAX_CONCURRENT_AGGREGATES="2" # standalone: 0 (unlimited). Concurrent
+                                        # misses are coalesced regardless.
+
+# Keyset log pagination. Two ADDITIVE routes (/api/log/cursor and
+# /api/log/self/cursor); the existing offset routes are untouched.
+#
+# OFF by default, and not because it is experimental: the keyset order
+# (created_at DESC, id DESC) has no supporting index in the shipped schema, so
+# on MySQL 8.4 the first page is a full table scan. Turn it on only after adding
+# the access paths for your engine. Measured plans:
+# docs/benchmarks/20260906_w24-cursor-plans.md
+LOG_CURSOR_ENABLED="true"               # default: false
+LOG_CURSOR_TTL_SEC="1800"               # how long a page token stays usable
+LOG_CURSOR_MAX_RESPONSE_BYTES="4194304" # 0 disables the cap
+LOG_COUNT_PROBE_MAX_ROWS="10000"        # beyond this the count is a lower bound
+LOG_COUNT_PROBE_TIMEOUT_MS="3000"       # beyond this the count is unavailable
+LOG_COUNT_CACHE_TTL_SEC="30"            # 0 disables count reuse
+```
+
+Upgrading from an earlier release changes nothing unless you set one of these:
+retention, sampling, caching, the compact log line and keyset pagination are all
+off by default, and trace writes stay synchronous. See
+[the compatibility contract](./docs/proposals/20260905_observability-data-tiering.md#45-backward-compatibility-contract).
 
 #### Support channel's built-in tooling configuration
 
@@ -1399,11 +1542,11 @@ Kimi K3 is also available through several hosted providers, each with its own ca
 
 #### Flagship Models - Text
 
-`glm-5-turbo` / `glm-5` / `glm-4.7` / `glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` / `glm-4.5-air` / `glm-4.5-airx`
+`glm-5.3` / `glm-5.2` / `glm-5.1` / `glm-5-turbo` / `glm-5` / `glm-4.7` / `glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` / `glm-4.5-air` / `glm-4.5-airx`
 
 #### Flagship Models - Visual
 
-`glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` / `glm-4.5v` / `glm-4.6v-flash` / `glm-4v-flash`
+`autoglm-phone` / `glm-5.3-flash` / `glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` / `glm-4.5v` / `glm-4.6v-flash` / `glm-4v-flash`
 
 #### Language Models
 
@@ -1419,7 +1562,18 @@ Kimi K3 is also available through several hosted providers, each with its own ca
 
 #### Image Generation Models
 
-`cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogviewx` / `cogviewx-flash`
+`glm-image` / `cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogvideox-3` / `cogvideox-2` / `cogviewx` / `cogviewx-flash` / `viduq1-image` / `viduq1-start-end` / `viduq1-text` / `vidu2-image` / `vidu2-start-end` / `vidu2-reference`
+
+#### Audio Models
+
+`glm-tts` / `glm-asr-2512` / `glm-tts-clone`
+
+Voice cloning is exposed through `/v1/voice/clones` (Zhipu-compatible
+`/api/paas/v4/voice/clone` is also accepted).
+
+#### Realtime Models
+
+`glm-realtime-flash` / `glm-realtime-air`
 
 #### Other Models
 
@@ -1522,6 +1676,71 @@ Response:
   }
 }
 ```
+
+### Z.ai Features
+
+Z.ai (`https://api.z.ai`) and Zhipu / open.bigmodel.cn are two brands of the same
+company serving the same GLM wire protocol, so one-api exposes them as **two
+separate channel types**: `Zhipu` (16) and `Z.ai` (58). Each holds its own API key
+and its own model list, and each bills from its own price table. Requests to
+`glm-4.7` on a Zhipu channel bill at BigModel's CNY tiers; the same model on a
+Z.ai channel bills at Z.ai's flat USD rate.
+
+#### Z.ai vs Zhipu / open.bigmodel.cn
+
+| | Zhipu (16) | Z.ai (58) |
+|---|---|---|
+| Base URL | `https://open.bigmodel.cn` | `https://api.z.ai` |
+| Auth | HS256-signed JWT built from a dotted `{id}.{secret}` key | plain `Authorization: Bearer <key>` |
+| Pricing | CNY, tiered by input and output length | USD, flat (no tiers) |
+| Endpoints | chat, embeddings, images, response API, Claude Messages, OCR | chat, images, videos, audio transcription, response API, Claude Messages, OCR |
+| Not available | — | embeddings, rerank, text-to-speech, realtime |
+
+Because the two catalogs overlap almost entirely, a model id served by both is
+attributed to a single channel in the listings.
+
+`/v1/models` is derived entirely from the channels enabled on this deployment,
+scoped to the caller's group and then narrowed to the API key's own model
+allow-list — it never consults the compiled-in adaptor catalog. Every model it
+lists passes the same allow-list check the relay applies before serving a request,
+so a key is no longer shown models it would be refused. (The converse does not
+hold: models hidden on a channel are deliberately omitted from the listing while
+remaining callable.)
+Every row is rendered from the ability that makes the model routable, so each id
+is callable by construction, and `owned_by` names the channel that would serve
+it: the highest-priority channel offering that model, with the lowest channel id
+breaking ties. A deployment running only a Zhipu channel therefore reports
+`zhipu` and never `zai`, and with no channels configured the list is empty.
+
+The admin catalog at `/api/channel/models` ranks enabled channels the same way
+but *does* fall back to the compiled-in adaptor list for models no channel serves
+yet — that list is what lets you pick models while creating your first channel.
+
+`owned_by` is a display label in every case: billing always follows the channel
+the request was actually routed to, so the same `glm-4.7` call bills at CNY tiers
+on a Zhipu channel and at flat USD on a Z.ai channel.
+
+Z.ai's GLM Coding Plan uses different base URLs (`/api/anthropic`,
+`/api/coding/paas/v4`) and is **not** served by this channel; point a
+`ClaudeCompatible` channel at `https://api.z.ai/api/anthropic` for that instead.
+
+#### Z.ai Model Catalog
+
+Text: `glm-5.3` / `glm-5.2` / `glm-5.1` / `glm-5` / `glm-5-turbo` / `glm-4.7` /
+`glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` /
+`glm-4.5-air` / `glm-4.5-airx` / `glm-4.5-flash` / `glm-4-32b-0414-128k`
+
+Vision: `glm-5.3-flash` / `glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` /
+`glm-4.6v-flash` / `glm-4.5v`
+
+OCR, image, video, audio: `glm-ocr` / `glm-image` / `cogview-4-250304` /
+`cogvideox-3` / `viduq1-text` / `viduq1-image` / `viduq1-start-end` /
+`vidu2-image` / `vidu2-start-end` / `vidu2-reference` / `glm-asr-2512`
+
+`glm-4.7-flash`, `glm-4.5-flash` and `glm-4.6v-flash` are free on Z.ai.
+`glm-4-32b-0414-128k` and `cogview-4-250304` exist only on Z.ai; conversely
+`embedding-3`, `rerank`, `glm-tts` and `glm-realtime-*` exist only on Zhipu.
+Pricing source: <https://docs.z.ai/guides/overview/pricing>.
 
 ### XAI / Grok Features
 

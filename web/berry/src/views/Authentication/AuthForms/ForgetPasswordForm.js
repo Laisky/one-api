@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
 import Turnstile from "react-turnstile";
@@ -39,26 +40,32 @@ const ForgetPasswordForm = ({ ...others }) => {
   const [countdown, setCountdown] = useState(30);
 
   const submit = async (values, { setSubmitting }) => {
-    setDisableButton(true);
-    setSubmitting(true);
-    if (turnstileEnabled && turnstileToken === "") {
-      showInfo("请稍后几秒重试，Turnstile 正在检查用户环境！");
-      setSubmitting(false);
-      return;
-    }
-    const res = await API.get(
-      `/api/reset_password?email=${values.email}&turnstile=${turnstileToken}`
-    );
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess("重置邮件发送成功，请检查邮箱！");
-      setSendEmail(true);
-    } else {
-      showError(message);
+    try {
+      if (turnstileEnabled && turnstileToken === '') {
+        showInfo('请稍后几秒重试，Turnstile 正在检查用户环境！');
+        return;
+      }
+      setDisableButton(true);
+      setSubmitting(true);
+      const res = await API.get('/api/reset_password', {
+        params: { email: values.email, turnstile: turnstileToken }
+      });
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess('重置邮件发送成功，请检查邮箱！');
+        setSendEmail(true);
+      } else {
+        showError(message);
+        setDisableButton(false);
+        setCountdown(30);
+      }
+    } catch (error) {
+      showError(error);
       setDisableButton(false);
       setCountdown(30);
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   useEffect(() => {
@@ -98,7 +105,7 @@ const ForgetPasswordForm = ({ ...others }) => {
               .max(255)
               .required("Email是必填项"),
           })}
-          onSubmit={submit}
+          onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}
         >
           {({
             errors,

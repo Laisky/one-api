@@ -190,7 +190,10 @@ const (
 
 	// AvailableModels is the CSV of models allowed by the API token (token.Models).
 	// Set in: middleware/auth.TokenAuth when token has model restrictions.
-	// Read in: controller/model.GetUserAvailableModels to build filtered model lists.
+	// Read in: controller/model.filterAbilitiesByTokenAllowList (scopes GET /v1/models
+	// and GET /v1/models/:model to what the key may invoke),
+	// controller/model.GetAvailableModelsByToken, and controller/user.GetTokenInfo.
+	// Absent means the token is unrestricted -- never treat absence as "deny all".
 	AvailableModels = "available_models"
 
 	// KeyRequestBody caches the raw request body bytes for reuse (avoid double read).
@@ -227,6 +230,13 @@ const (
 	// Set in: middleware/distributor based on channel.RateLimit (or 0 if disabled).
 	// Read in: middleware/rate-limit to enforce QPS/RPM limits.
 	RateLimit = "rate_limit"
+
+	// RateLimitMark identifies which limiter rejected the request, using the
+	// limiter's short mark ("GW", "GA", "CT", "DW", "UP", "GR", "CV", "CR", "LB").
+	// Set in: middleware/rate-limit (setRateLimitExceededHeaders) on every 429 abort.
+	// Read in: middleware/rate_limit_prometheus to label the hit counter with a
+	// bounded limit type instead of the client IP.
+	RateLimitMark = "rate_limit_mark"
 
 	// ClaudeMessagesConversion flags that this request/response should be converted
 	// between Claude Messages API and another provider format.
@@ -365,16 +375,35 @@ const (
 	// Read in: billing audit defer in relay handlers.
 	PreConsumedQuotaAmount = "pre_consumed_quota_amount"
 
+	// PreConsumedQuotaRefundClaimed means an explicit media rollback already owns
+	// this attempt's refund, including while its detached write is pending. A
+	// cross-channel retry must not schedule a second refund of the same hold.
+	// Set/reset only on the request goroutine, never from detached billing work.
+	PreConsumedQuotaRefundClaimed = "pre_consumed_quota_refund_claimed"
+
 	// ProvisionalLogId stores the database ID of the provisional consume log entry
 	// created at pre-consume time. Post-billing uses this to reconcile the log
 	// with actual usage data.
 	ProvisionalLogId = "provisional_log_id"
+
+	// UpstreamRequestId stores the provider's own request identifier for the
+	// attempt that was just made, when upstream returns one. It is the handle an
+	// operator needs to reconcile an estimated charge against provider records.
+	// Set in: relay/adaptor/typesafe when reading an upstream response.
+	// Read in: relay/controller settlement when writing the consume log.
+	UpstreamRequestId = "upstream_request_id"
 
 	// Identity holds the common/identity.Set bound for this request (user + token
 	// + channel references, each carrying id + uuid + name).
 	// Set in: common/identity.Bind, driven by middleware/auth and middleware/distributor.
 	// Read in: error funnels and any handler that needs identity without a lookup.
 	Identity = "identity"
+
+	// TraceRecorder holds the *tracing.Recorder accumulating this request's
+	// trace document in memory. Set in: middleware.TracingMiddleware. Read in:
+	// common/tracing lifecycle helpers, which mutate it instead of issuing a
+	// SELECT plus UPDATE per lifecycle mark.
+	TraceRecorder = "trace_recorder"
 
 	// BaseLogger holds the pristine request logger captured before any identity
 	// field was bound, so common/identity.Bind can REBUILD the logger instead of

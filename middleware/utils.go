@@ -196,7 +196,20 @@ func getRequestModel(c *gin.Context) (string, error) {
 	return modelRequest.Model, nil
 }
 
-func isModelInList(modelName string, models string) bool {
+// IsModelInList reports whether modelName is permitted by an API token's
+// comma-separated allow-list (Token.Models).
+//
+// This is the authoritative predicate: TokenAuth calls it to 403 a disallowed
+// model, and controller.ListModels / controller.RetrieveModel call it to decide
+// what a token may see. Both MUST use this one function -- if discovery used a
+// different rule, a key would either be shown models it cannot call or denied
+// models it can.
+//
+// Matching is exact: byte-for-byte, case-sensitive, no wildcards, and entries are
+// NOT trimmed. A stored list of "a, b" therefore permits "a" and " b", not "b".
+// That is long-standing behavior and is deliberately preserved here; changing it
+// would silently widen every existing token's permissions.
+func IsModelInList(modelName string, models string) bool {
 	modelList := strings.Split(models, ",")
 	return slices.Contains(modelList, modelName)
 }

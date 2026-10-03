@@ -2,7 +2,7 @@
 
 - Status: Implemented
 - Migration generation: `compact_uuid_storage_v1`
-- Proposal: [Automatic Compact UUID Storage Implementation Handbook](../proposals/20260715_compact-uuid-storage.md)
+- Proposal: [Automatic Compact UUID Storage Implementation Handbook](../proposals/archive/20260715_compact-uuid-storage.md)
 - Related: [External UUID Backfill](./external_uuid_backfill.md)
 
 ## 1. What this is
@@ -65,6 +65,11 @@ upgrade does not inherit a backlog.
 | `ready` | Markers exist and the current audit is healthy | Nothing |
 | `passive_legacy` | Incomplete with no eligible master, or paused | Start/promote a master |
 
+While the state is `waiting_prerequisite` there is nothing this worker is permitted to do, so
+it waits at the idle interval rather than re-checking every few seconds. It does not sleep
+through the handover: completing the v3 migration wakes it immediately, so it resumes within a
+second of the markers being written.
+
 Only two states ever need a human.
 
 **`blocked_validation`** means something cannot be fixed without a decision. Most often it is
@@ -101,6 +106,38 @@ from the text. When that happens:
 A compact read is only ever used by a process with its own fresh healthy audit, which expires
 after twice `COMPACT_UUID_IDLE_INTERVAL`. A process that has not audited recently serves legacy
 text. This is why a non-master, or a replica, is safe by default rather than by configuration.
+
+### What the completed worker does each interval
+
+External UUIDs are a one-time migration. Once the historical rows are derived and the markers
+written, the database derives every new shadow itself, in the same statement as the write, and
+every compact read is verified against its authoritative text. The completed worker therefore
+does bounded work whose per-cycle cost does not grow with table size:
+
+1. **Object metadata.** Shadow columns, triggers, including whether PostgreSQL has them enabled,
+   indexes, and the legacy index manifest. Catalog reads only.
+2. **Rows the read path proved wrong.** When a compact lookup falls back and the text index finds
+   the row, that row's shadow is proven missing or wrong, and the worker repairs exactly that row
+   by primary key. A lookup for an identifier that exists nowhere queues nothing.
+3. **One probe per owned UUID column.** An owned UUID is never legitimately NULL, so on a clean
+   table this is a single seek into an empty index range. It is what notices rows that bypassed
+   the trigger, such as a `pg_dump --data-only --disable-triggers` restore, which re-enables the
+   triggers afterwards and so leaves nothing wrong in the catalog.
+4. **Bounded rolling equality pages.** This audit is the cross-process correctness backstop for
+   wrong non-NULL shadows and nullable foreign-key drift. It rotates the starting target and stays
+   within the configured statement, row, and time budgets.
+
+Foreign-key shadows never use the NULL existence probe after completion. Their references are
+legitimately NULL wherever the reference is, so that probe would cost as many rows as there are
+NULL references. They remain covered by the bounded rolling equality audit.
+
+Evidence of drift that the catalog or an owned probe can see sends the worker through recovery:
+recreate objects, repair in id order, then a fresh full validation before `ready`. That traversal
+is the one-time price of an abnormal event.
+
+A clean restart does not repeat full validation. If drift was previously observed, a durable
+audit-required control row keeps every process degraded across restart until two clean full passes
+complete; completion marker timestamps remain unchanged.
 
 ## 6. Configuration
 

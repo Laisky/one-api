@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { ListTableCard } from '@/components/shared/ListTableCard';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -18,12 +18,13 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, renderQuota } from '@/lib/utils';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { Ban, Check, CheckCircle, Copy, ExternalLink, Eye, EyeOff, Plus, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useClipboardManager } from './useClipboardManager';
+import { TokenDuplicateAction, useDuplicateToken } from './useDuplicateToken';
 
 export interface Token {
   id?: number;
@@ -143,12 +144,15 @@ export function TokensPage() {
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState(searchParams.get('keyword') || '');
+  const [appliedKeyword, setAppliedKeyword] = useState('');
+  const loadSequence = useRef(0);
+  const latestListRefresh = useRef<(() => Promise<void>) | null>(null);
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const initializedRef = useRef(false);
-  const [showKeys, setShowKeys] = useState<Record<number, boolean>>({});
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const { copiedTokens, manualCopyToken, handleCopySuccess, handleCopyFailure, clearManualCopyToken } = useClipboardManager();
   const formatQuotaLabel = useCallback(
     (quota: number, unlimited = false) => {
@@ -212,30 +216,39 @@ export function TokensPage() {
     [formatTokenLabel, tr]
   );
 
-  const load = async (p = 0, size = pageSize) => {
+  /** load preserves the applied result set and optionally propagates refresh errors to the duplicate interaction. */
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword, propagateError = false): Promise<void> => {
+    // Capture requested page/filter/sort before awaiting, including navigation not yet committed by React.
+    latestListRefresh.current = () => load(p, size, keyword, true);
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/token/?p=${p}&size=${size}`;
+      let url = keyword
+        ? `/api/token/search?keyword=${encodeURIComponent(keyword)}&p=${p}&size=${size}`
+        : `/api/token/?p=${p}&size=${size}`;
       if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-
       const res = await api.get(url);
-      const { success, data: responseData, total: responseTotal } = res.data;
-
-      if (success) {
-        setData(responseData || []);
-        setTotal(responseTotal || 0);
-        setPageIndex(p);
-        setPageSize(size);
-      }
+      if (sequence !== loadSequence.current) return;
+      if (!res.data?.success) throw new Error(res.data?.message || t('table_selection.failed'));
+      const rows: Token[] = res.data.data || [];
+      setData(rows);
+      setTotal(res.data.total ?? rows.length);
+      setPageIndex(p);
+      setPageSize(size);
+      setAppliedKeyword(keyword);
     } catch (error) {
-      console.error('Failed to load tokens:', error);
+      if (sequence !== loadSequence.current) return;
+      // Keep the visible rows when a successful duplicate cannot refresh the list.
+      if (propagateError) throw error;
       setData([]);
       setTotal(0);
+      notify({ type: 'error', message: (error as Error)?.message || t('table_selection.failed') });
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   };
+
+  const duplicateAction = useDuplicateToken(() => latestListRefresh.current?.());
 
   // Load initial data (perform search if keyword is pre-filled from URL)
   useEffect(() => {
@@ -306,39 +319,14 @@ export function TokensPage() {
     }
   };
 
-  const performSearch = async () => {
-    if (!searchKeyword.trim()) {
-      setSearchParams((prev) => {
-        prev.delete('keyword');
-        return prev;
-      });
-      return load(0, pageSize);
-    }
-
+  const performSearch = () => {
     setSearchParams((prev) => {
-      prev.set('keyword', searchKeyword);
-      return prev;
+      const next = new URLSearchParams(prev);
+      if (searchKeyword.trim()) next.set('keyword', searchKeyword.trim());
+      else next.delete('keyword');
+      return next;
     });
-    setLoading(true);
-    try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/token/search?keyword=${encodeURIComponent(searchKeyword)}`;
-      if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-      url += `&size=${pageSize}`;
-
-      const res = await api.get(url);
-      const { success, data: responseData } = res.data;
-
-      if (success) {
-        setData(responseData || []);
-        setPageIndex(0);
-        setTotal(responseData?.length || 0);
-      }
-    } catch (error) {
-      console.error('Search failed:', error);
-    } finally {
-      setLoading(false);
-    }
+    return load(0, pageSize, searchKeyword.trim());
   };
 
   const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete') => {
@@ -457,11 +445,7 @@ export function TokensPage() {
       accessorKey: 'name',
       header: tr('columns.name', 'Name'),
       cell: ({ row }) => (
-        <NameWithId
-          name={formatTokenLabel(row.original)}
-          refId={tokenRefText(row.original)}
-          idLabel={tr('columns.id', 'ID')}
-        />
+        <NameWithId name={formatTokenLabel(row.original)} refId={tokenRefText(row.original)} idLabel={tr('columns.id', 'ID')} />
       ),
     },
     {
@@ -596,6 +580,7 @@ export function TokensPage() {
             <Button variant="outline" size="sm" onClick={() => navigate(`/tokens/edit/${tokenRef(token)}`)} className="touch-target">
               {tr('actions.edit', 'Edit')}
             </Button>
+            <TokenDuplicateAction tokenRef={tokenRef(token)} action={duplicateAction} />
             {renderClientDropdown(token)}
             <Button
               variant="outline"
@@ -674,71 +659,72 @@ export function TokensPage() {
           </Button>
         }
       >
-        <Card className="border-0 md:border shadow-none md:shadow-sm">
-          <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
-            <EnhancedDataTable
-              columns={columns}
-              data={data}
-              floatingRowActions={(row) => (
-                <div className="flex items-center gap-1">
-                  <ListActionButton
-                    onClick={() => navigate(`/tokens/edit/${tokenRef(row)}`)}
-                    title={tr('actions.edit', 'Edit')}
-                    icon={<Settings className="h-4 w-4" />}
-                  />
-                  <ListActionButton
-                    onClick={() => manage(tokenRef(row), row.status === TOKEN_STATUS.ENABLED ? 'disable' : 'enable')}
-                    title={row.status === TOKEN_STATUS.ENABLED ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
-                    className={
-                      row.status === TOKEN_STATUS.ENABLED ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'
-                    }
-                    icon={row.status === TOKEN_STATUS.ENABLED ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-                  />
-                  <ListActionButton
-                    onClick={async () => {
-                      const label =
-                        row.name ||
-                        tr('table.id_placeholder', '(ID {{id}})', {
-                          id: tokenRefText(row),
-                        });
-                      const confirmed = await confirmDelete({
-                        title: tr('confirm.delete_title', 'Delete Token'),
-                        description: tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }),
-                        details: buildTokenDeleteDetails(row),
+        <ListTableCard>
+          <EnhancedDataTable
+            selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
+            selectionDisabled={searchKeyword.trim() !== appliedKeyword}
+            columns={columns}
+            data={data}
+            floatingRowActions={(row) => (
+              <div className="flex items-center gap-1">
+                <ListActionButton
+                  onClick={() => navigate(`/tokens/edit/${tokenRef(row)}`)}
+                  title={tr('actions.edit', 'Edit')}
+                  icon={<Settings className="h-4 w-4" />}
+                />
+                <TokenDuplicateAction tokenRef={tokenRef(row)} action={duplicateAction} compact />
+                <ListActionButton
+                  onClick={() => manage(tokenRef(row), row.status === TOKEN_STATUS.ENABLED ? 'disable' : 'enable')}
+                  title={row.status === TOKEN_STATUS.ENABLED ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
+                  className={
+                    row.status === TOKEN_STATUS.ENABLED ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'
+                  }
+                  icon={row.status === TOKEN_STATUS.ENABLED ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                />
+                <ListActionButton
+                  onClick={async () => {
+                    const label =
+                      row.name ||
+                      tr('table.id_placeholder', '(ID {{id}})', {
+                        id: tokenRefText(row),
                       });
-                      if (confirmed) manage(tokenRef(row), 'delete');
-                    }}
-                    title={tr('actions.delete', 'Delete')}
-                    icon={<Trash2 className="h-4 w-4" />}
-                  />
-                </div>
-              )}
-              pageIndex={pageIndex}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={handlePageChange}
-              onPageSizeChange={handlePageSizeChange}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              onSortChange={handleSortChange}
-              searchValue={searchKeyword}
-              searchOptions={searchOptions}
-              searchLoading={searchLoading}
-              onSearchChange={searchTokens}
-              onSearchValueChange={setSearchKeyword}
-              onSearchSubmit={performSearch}
-              onSearchSelect={(key) => navigate(`/tokens/edit/${key}`)}
-              searchPlaceholder={tr('search.placeholder', 'Search tokens by name or UUID...')}
-              allowSearchAdditions={true}
-              onRefresh={refresh}
-              loading={loading}
-              emptyMessage={tr('empty', 'No tokens found. Create your first token to get started.')}
-              mobileCardLayout={true}
-              hideColumnsOnMobile={['created_time', 'accessed_time', 'expired_time']}
-              compactMode={isMobile}
-            />
-          </CardContent>
-        </Card>
+                    const confirmed = await confirmDelete({
+                      title: tr('confirm.delete_title', 'Delete Token'),
+                      description: tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }),
+                      details: buildTokenDeleteDetails(row),
+                    });
+                    if (confirmed) manage(tokenRef(row), 'delete');
+                  }}
+                  title={tr('actions.delete', 'Delete')}
+                  icon={<Trash2 className="h-4 w-4" />}
+                />
+              </div>
+            )}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={handleSortChange}
+            searchValue={searchKeyword}
+            searchOptions={searchOptions}
+            searchLoading={searchLoading}
+            onSearchChange={searchTokens}
+            onSearchValueChange={setSearchKeyword}
+            onSearchSubmit={performSearch}
+            onSearchSelect={(key) => navigate(`/tokens/edit/${key}`)}
+            searchPlaceholder={tr('search.placeholder', 'Search tokens by name or UUID...')}
+            allowSearchAdditions={true}
+            onRefresh={refresh}
+            loading={loading}
+            emptyMessage={tr('empty', 'No tokens found. Create your first token to get started.')}
+            mobileCardLayout={true}
+            hideColumnsOnMobile={['created_time', 'accessed_time', 'expired_time']}
+            compactMode={isMobile}
+          />
+        </ListTableCard>
       </ResponsivePageContainer>
 
       <ConfirmDeleteDialog />

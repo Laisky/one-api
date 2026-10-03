@@ -5,12 +5,11 @@ import { FormControl, FormField, FormItem } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Pencil } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { UseFormReturn } from 'react-hook-form';
-import type { ChannelForm, EndpointInfo } from '../schemas';
+import type { ChannelFormMethods, EndpointInfo } from '../schemas';
 import { LabelWithHelp } from './LabelWithHelp';
 
 interface ChannelEndpointSettingsProps {
-  form: UseFormReturn<ChannelForm>;
+  form: ChannelFormMethods;
   allEndpoints: EndpointInfo[];
   defaultEndpoints: string[];
   // defaultBaseURL is the channel-type default base URL, used to preview the
@@ -220,9 +219,7 @@ export const ChannelEndpointSettings = ({ form, allEndpoints, defaultEndpoints, 
   const endpointError = (form.formState.errors as any)?.config?.supported_endpoints?.message;
 
   // The effective default upstream URL for the endpoint whose modal is open.
-  const selectedDefaultURL = selectedEndpoint
-    ? buildDefaultEndpointURL(baseURL || defaultBaseURL || '', selectedEndpoint.path)
-    : '';
+  const selectedDefaultURL = selectedEndpoint ? buildDefaultEndpointURL(baseURL || defaultBaseURL || '', selectedEndpoint.path) : '';
 
   // Seed the draft when a modal opens: show the stored override if present,
   // otherwise pre-fill the computed default so it can be edited in place.

@@ -5,11 +5,25 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// kimiModels contains Moonshot Kimi family models served by Fireworks
-// (Kimi K2.5, K2.6). Sources:
-//   - https://fireworks.ai/models/fireworks/kimi-k2p5
-//   - https://fireworks.ai/models/fireworks/kimi-k2p6
+// kimiModels contains Moonshot Kimi family models served by Fireworks.
+// Sources:
+//   - https://app.fireworks.ai/models/fireworks/kimi-k3
+//   - https://app.fireworks.ai/models/fireworks/kimi-k2p6
+//   - https://app.fireworks.ai/models/fireworks/kimi-k2p7-code
 var kimiModels = map[string]adaptor.ModelConfig{
+	"accounts/fireworks/models/kimi-k3": {
+		Ratio:                       3.00 * ratio.MilliTokensUsd,
+		CompletionRatio:             15.00 / 3.00,
+		CachedInputRatio:            0.30 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             131072,
+		InputModalities:             fwTextImageInModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		HuggingFaceID:               "moonshotai/Kimi-K3",
+		Description:                 "Moonshot Kimi K3 (2.78T MoE) flagship with Kimi Delta Attention, native visual understanding, 1M-token context, function calling, and long-horizon coding/reasoning.",
+	},
 	"accounts/fireworks/models/kimi-k2p5": {
 		Ratio:                       0.60 * ratio.MilliTokensUsd,
 		CompletionRatio:             3.00 / 0.60,

@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
@@ -56,20 +57,24 @@ var tokenSortFields = map[string]string{
 	"updated_at":   "updated_at",
 }
 
+// clearTokenCache completes bounded invalidation even if the initiating request
+// has ended, while retaining request metadata and never logging raw credentials.
 func clearTokenCache(ctx context.Context, key string) {
-	if common.IsRedisEnabled() {
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		err := common.RedisDel(ctx, fmt.Sprintf("token:%s", key))
-		if err != nil {
-			// The raw API key must never appear verbatim in a log (same invariant
-			// enforced in ValidateUserToken below). No identity reference is
-			// resolved here: this runs on every token write and a lookup by key
-			// would add a query to a hot path.
-			logger.Logger.Warn("failed to clear token cache, continuing",
-				zap.String("key", helper.MaskAPIKey(key)), zap.Error(err))
-		}
+	if !common.IsRedisEnabled() {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cacheCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := common.RedisDel(cacheCtx, fmt.Sprintf("token:%s", key)); err != nil {
+		// The raw API key must never appear verbatim in a log (same invariant
+		// enforced in ValidateUserToken below). No identity reference is
+		// resolved here: this runs on every token write and a lookup by key
+		// would add a query to a hot path.
+		logger.FromContext(cacheCtx).Warn("failed to clear token cache, continuing",
+			zap.String("key", helper.MaskAPIKey(key)), zap.Error(err))
 	}
 }
 
@@ -174,6 +179,18 @@ func SearchAllTokensForAdmin(keyword string, startIdx int, num int, sortBy strin
 }
 
 func ValidateUserToken(ctx context.Context, key string) (token *Token, err error) {
+	return validateUserToken(ctx, key, true)
+}
+
+// ValidateUserTokenForTask authenticates retrieval/reattachment of prepaid work.
+// It never admits new work: expired, disabled and unknown tokens still fail;
+// only the balance check is skipped. Creation must independently reserve quota.
+func ValidateUserTokenForTask(ctx context.Context, key string) (*Token, error) {
+	return validateUserToken(ctx, key, false)
+}
+
+// validateUserToken shares credential checks, with optional quota admission.
+func validateUserToken(ctx context.Context, key string, requireQuota bool) (token *Token, err error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -201,6 +218,9 @@ func ValidateUserToken(ctx context.Context, key string) (token *Token, err error
 
 	switch token.Status {
 	case TokenStatusExhausted:
+		if !requireQuota {
+			break
+		}
 		// Specifically about funds.
 		return nil, errkind.Quota(identity.Tag(
 			errors.Errorf("API Key %s (#%d) quota has been exhausted", token.Name, token.Id),
@@ -211,7 +231,7 @@ func ValidateUserToken(ctx context.Context, key string) (token *Token, err error
 			token.Ref(), token.OwnerRef()))
 	}
 
-	if token.Status != TokenStatusEnabled {
+	if token.Status != TokenStatusEnabled && (requireQuota || token.Status != TokenStatusExhausted) {
 		// A valid credential that the operator or the owner has disabled.
 		return nil, errkind.ForbiddenErr(identity.Tag(
 			errors.Errorf("token %s (#%d) status is not available (status: %d)", token.Name, token.Id, token.Status),
@@ -222,7 +242,7 @@ func ValidateUserToken(ctx context.Context, key string) (token *Token, err error
 			token.Status = TokenStatusExpired
 			err := token.SelectUpdate(ctx)
 			if err != nil {
-				logger.Logger.Error("failed to update token status",
+				logger.FromContext(ctx).Error("failed to update token status",
 					append(token.OwnerRef().AppendZap(token.Ref().Zap()), zap.Error(err))...)
 			}
 		} else {
@@ -237,13 +257,13 @@ func ValidateUserToken(ctx context.Context, key string) (token *Token, err error
 			errors.Errorf("token %s (#%d) has expired at timestamp %d", token.Name, token.Id, token.ExpiredTime),
 			token.Ref(), token.OwnerRef()))
 	}
-	if !token.UnlimitedQuota && token.RemainQuota <= 0 {
+	if requireQuota && !token.UnlimitedQuota && token.RemainQuota <= 0 {
 		if !common.IsRedisEnabled() {
 			// in this case, we can make sure the token is exhausted
 			token.Status = TokenStatusExhausted
 			err := token.SelectUpdate(ctx)
 			if err != nil {
-				logger.Logger.Error("failed to update token status",
+				logger.FromContext(ctx).Error("failed to update token status",
 					append(token.OwnerRef().AppendZap(token.Ref().Zap()), zap.Error(err))...)
 			}
 		} else {
@@ -428,7 +448,7 @@ func increaseTokenQuota(ctx context.Context, id int, quota int64) (err error) {
 				"accessed_time": helper.GetTimestamp(),
 			},
 		)
-		return result.Error
+		return errors.WithStack(result.Error)
 	})
 	if err != nil {
 		return identity.Tag(
@@ -442,7 +462,7 @@ func increaseTokenQuota(ctx context.Context, id int, quota int64) (err error) {
 	} else if fetchErr != nil {
 		// Error path only: LookupTokenRef consults the context identity first and
 		// only falls back to a narrow SELECT.
-		logger.Logger.Error("failed to fetch token for cache clearing after quota increase",
+		logger.FromContext(ctx).Error("failed to fetch token for cache clearing after quota increase",
 			append(LookupTokenRef(ctx, id).Zap(), zap.Error(fetchErr))...)
 	}
 	return nil
@@ -472,7 +492,7 @@ func decreaseTokenQuota(ctx context.Context, id int, quota int64) (err error) {
 				"used_quota":    gorm.Expr("used_quota + ?", quota),
 				"accessed_time": helper.GetTimestamp(),
 			})
-		return result.Error
+		return errors.WithStack(result.Error)
 	})
 	if err != nil {
 		return identity.Tag(
@@ -498,12 +518,16 @@ func decreaseTokenQuota(ctx context.Context, id int, quota int64) (err error) {
 	} else if fetchErr != nil {
 		// Error path only: LookupTokenRef consults the context identity first and
 		// only falls back to a narrow SELECT.
-		logger.Logger.Error("failed to fetch token for cache clearing after quota decrease",
+		logger.FromContext(ctx).Error("failed to fetch token for cache clearing after quota decrease",
 			append(LookupTokenRef(ctx, id).Zap(), zap.Error(fetchErr))...)
 	}
 	return nil
 }
 
+// PreConsumeTokenQuota validates available user and token balances, then
+// atomically reserves quota from the user and, unless unlimited, the token. The
+// quota must be nonnegative; a failed reservation leaves both balances unchanged.
+// Crossing a reminder threshold may also trigger a best-effort email.
 func PreConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -544,7 +568,7 @@ func PreConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err er
 		var emailErr error
 		reminderEmail, emailErr = GetUserEmail(token.UserId)
 		if emailErr != nil {
-			logger.Logger.Error("failed to fetch user email",
+			logger.FromContext(ctx).Error("failed to fetch user email",
 				append(ownerRef.AppendZap(tokenRef.Zap()), zap.Error(emailErr))...)
 		}
 		go func(email string, exhausted bool, quotaRemaining int64) {
@@ -574,27 +598,24 @@ func PreConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err er
 				// return value from this goroutine would race with the caller.
 				// The address is never logged (see the no-email rule).
 				if sendErr := message.SendEmail(prompt, email, content); sendErr != nil {
-					logger.Logger.Error("failed to send email",
+					logger.FromContext(ctx).Error("failed to send email",
 						append(ownerRef.AppendZap(tokenRef.Zap()), zap.Error(sendErr))...)
 				}
 			}
 		}(reminderEmail, noMoreQuota, userQuota)
 	}
-	if !token.UnlimitedQuota {
-		if err = DecreaseTokenQuota(ctx, tokenId, quota); err != nil {
-			return identity.Tag(
-				errors.Wrapf(err, "decrease quota for token %d", tokenId),
-				token.Ref(), token.OwnerRef())
-		}
-	}
-	if err = DecreaseUserQuota(ctx, token.UserId, quota); err != nil {
-		return identity.Tag(
-			errors.Wrapf(err, "decrease quota for user %d in pre-consume", token.UserId),
-			token.Ref(), token.OwnerRef())
+	// Admission must reserve both balances durably before paid upstream work.
+	// Never put this debit in the optional in-memory batch update queue.
+	if err = reserveTokenQuota(ctx, token, quota); err != nil {
+		return identity.Tag(errors.Wrap(err, "reserve quota before upstream dispatch"), token.Ref(), token.OwnerRef())
 	}
 	return nil
 }
 
+// PostConsumeTokenQuota atomically adjusts the owning user's quota and the
+// token quota by quota. Positive values consume quota, negative values refund
+// quota, and zero leaves balances unchanged. It returns a wrapped error when
+// either balance cannot be adjusted.
 func PostConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -605,22 +626,60 @@ func PostConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err e
 			errors.Wrapf(err, "get token %d for post-consume", tokenId),
 			identity.NewTokenRef(tokenId, "", ""))
 	}
-	if quota > 0 {
-		err = DecreaseUserQuota(ctx, token.UserId, quota)
-	} else {
-		err = IncreaseUserQuota(ctx, token.UserId, -quota)
+	if quota == 0 {
+		return nil
 	}
-	if !token.UnlimitedQuota {
-		if quota > 0 {
-			err = DecreaseTokenQuota(ctx, tokenId, quota)
-		} else {
-			err = IncreaseTokenQuota(ctx, tokenId, -quota)
-		}
-		if err != nil {
-			return identity.Tag(
-				errors.Wrapf(err, "adjust token %d quota in post-consume", tokenId),
-				token.Ref(), token.OwnerRef())
-		}
+	// Balance movements (including stream debits and refunds) must be durable.
+	// Only non-financial aggregates may use the optional in-memory batch queue.
+
+	err = runWithSQLiteBusyRetry(ctx, func() error {
+		return errors.WithStack(DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return adjustPostConsumeQuota(tx, token, quota)
+		}))
+	})
+	if err != nil {
+		return identity.Tag(
+			errors.Wrapf(err, "adjust quotas in post-consume for token %d", tokenId),
+			token.Ref(), token.OwnerRef())
+	}
+	clearTokenCache(ctx, token.Key)
+	return nil
+}
+
+// adjustPostConsumeQuota updates both persistent quota balances within tx.
+// token identifies the token and its owner, while quota is positive for a
+// debit and negative for a refund. It returns an error when either row is
+// missing, has insufficient quota, or cannot be updated.
+func adjustPostConsumeQuota(tx *gorm.DB, token *Token, quota int64) error {
+	userQuery := tx.Model(&User{}).Where("id = ?", token.UserId)
+	if quota > 0 {
+		userQuery = userQuery.Where("quota >= ?", quota)
+	}
+	userResult := userQuery.Update("quota", gorm.Expr("quota - ?", quota))
+	if userResult.Error != nil {
+		return errors.Wrapf(userResult.Error, "adjust quota for user %d", token.UserId)
+	}
+	if userResult.RowsAffected == 0 {
+		return errors.Errorf("insufficient user quota or missing user %d", token.UserId)
+	}
+
+	if token.UnlimitedQuota {
+		return nil
+	}
+	tokenQuery := tx.Model(&Token{}).Where("id = ?", token.Id)
+	if quota > 0 {
+		tokenQuery = tokenQuery.Where("remain_quota >= ?", quota)
+	}
+	tokenResult := tokenQuery.Updates(map[string]any{
+		"remain_quota":  gorm.Expr("remain_quota - ?", quota),
+		"used_quota":    gorm.Expr("used_quota + ?", quota),
+		"accessed_time": helper.GetTimestamp(),
+	})
+	if tokenResult.Error != nil {
+		return errors.Wrapf(tokenResult.Error, "adjust quota for token %d", token.Id)
+	}
+	if tokenResult.RowsAffected == 0 {
+		return errors.Errorf("insufficient token quota or missing token %d", token.Id)
 	}
 	return nil
 }

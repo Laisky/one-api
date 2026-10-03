@@ -15,14 +15,22 @@ import (
 
 const defaultSyncTimeout = 20 * time.Second
 
-// SyncServerTools fetches tools from the MCP server and stores them locally.
+// SyncServerTools fetches a complete upstream catalog and atomically stores lossless descriptors.
+//
+// Parameters:
+//   - ctx: the request context controlling cancellation and deadlines.
+//   - server: the configured upstream MCP server to synchronize.
+//
+// Return values:
+//   - int: the number of valid tools stored in the replacement catalog.
+//   - error: a wrapped client, encoding, or database error.
 func SyncServerTools(ctx context.Context, server *model.MCPServer) (int, error) {
 	if server == nil {
 		return 0, errors.New("mcp server is nil")
 	}
 
 	client := NewStreamableHTTPClient(server, nil, defaultSyncTimeout)
-	tools, err := client.ListTools(ctx)
+	tools, err := client.ListToolsLatest(ctx)
 	if err != nil {
 		return 0, errors.Wrap(err, "list mcp tools from server")
 	}
@@ -36,46 +44,57 @@ func SyncServerTools(ctx context.Context, server *model.MCPServer) (int, error) 
 		if tool.InputSchema != nil {
 			schemaBytes, err := json.Marshal(tool.InputSchema)
 			if err != nil {
-				return 0, errors.Wrap(err, "marshal mcp tool schema")
+				return 0, errors.Wrapf(err, "marshal input schema for mcp tool %q", tool.Name)
 			}
-			if string(schemaBytes) != "null" {
-				inputSchema = string(schemaBytes)
-			}
+			inputSchema = string(schemaBytes)
+		}
+		descriptorBytes, err := json.Marshal(tool)
+		if err != nil {
+			return 0, errors.Wrapf(err, "marshal complete descriptor for mcp tool %q", tool.Name)
+		}
+		displayName := tool.Title
+		if displayName == "" {
+			displayName = tool.Name
 		}
 		stored = append(stored, &model.MCPTool{
-			Name:        tool.Name,
-			DisplayName: tool.Name,
-			Description: tool.Description,
-			InputSchema: inputSchema,
-			Status:      1,
+			Name:           tool.Name,
+			DisplayName:    displayName,
+			Description:    tool.Description,
+			InputSchema:    inputSchema,
+			DescriptorJSON: string(descriptorBytes),
+			Status:         1,
 		})
 	}
 
-	if err := model.UpsertMCPTools(server.Id, server.UUID, stored); err != nil {
+	if err := model.UpsertMCPToolsWithContext(ctx, server.Id, server.UUID, stored); err != nil {
 		return 0, identity.Tag(
 			errors.Wrapf(err, "upsert mcp tools for server %d", server.Id),
 			server.Ref())
 	}
-
 	return len(stored), nil
 }
 
-// StartAutoSync triggers MCP server tool syncs on a periodic schedule.
+// StartAutoSync starts the periodic MCP catalog synchronization loop for enabled servers.
+//
+// Parameters:
+//   - ctx: the process context controlling worker shutdown.
+//
+// Return values: none; the worker logs each background result with the server identity.
 func StartAutoSync(ctx context.Context) {
 	log := logger.FromContext(ctx)
 	if log == nil {
 		return
 	}
 
-	ticker := time.NewTicker(time.Minute)
-	go func() {
+	model.StartBackgroundWorker(ctx, func(ctx context.Context) {
+		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				servers, err := model.ListEnabledMCPServers()
+				servers, err := model.ListEnabledMCPServersWithContext(ctx)
 				if err != nil {
 					log.Error("failed to list mcp servers for sync", zap.Error(err))
 					continue
@@ -95,12 +114,10 @@ func StartAutoSync(ctx context.Context) {
 					syncCtx, cancel := context.WithTimeout(ctx, defaultSyncTimeout)
 					count, err := SyncServerTools(syncCtx, server)
 					cancel()
-					// This is a background job: the logger is not request-bound,
-					// so every line must carry the MCP server identity explicitly.
 					serverRef := server.Ref()
 					if err != nil {
 						server.MarkSyncResult(false, err.Error())
-						if updateErr := model.UpdateMCPServer(server); updateErr != nil {
+						if updateErr := model.UpdateMCPServerWithContext(ctx, server); updateErr != nil {
 							log.Error("failed to update mcp sync status",
 								append(serverRef.Zap(), zap.Error(updateErr))...)
 						}
@@ -108,7 +125,7 @@ func StartAutoSync(ctx context.Context) {
 						continue
 					}
 					server.MarkSyncResult(true, "")
-					if updateErr := model.UpdateMCPServer(server); updateErr != nil {
+					if updateErr := model.UpdateMCPServerWithContext(ctx, server); updateErr != nil {
 						log.Error("failed to update mcp sync status",
 							append(serverRef.Zap(), zap.Error(updateErr))...)
 					}
@@ -117,5 +134,5 @@ func StartAutoSync(ctx context.Context) {
 				}
 			}
 		}
-	}()
+	})
 }

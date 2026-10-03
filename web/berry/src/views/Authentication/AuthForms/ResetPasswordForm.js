@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -51,7 +52,7 @@ const ResetPasswordForm = () => {
           请登录后及时修改密码
         </Alert>
       ) : (
-        <Button fullWidth onClick={submit} size="large" type="submit" variant="contained" color="primary">
+        <Button fullWidth onClick={(...uiArgs) => submit(...uiArgs).catch(reportUIError)} size="large" type="submit" variant="contained" color="primary">
           点击重置密码
         </Button>
       )}

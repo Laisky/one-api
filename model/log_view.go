@@ -38,7 +38,7 @@ func (log *Log) ToResponse() dto.LogResponse {
 		IsStream:           log.IsStream,
 		SystemPromptReset:  log.SystemPromptReset,
 		CachedPromptTokens: log.CachedPromptTokens,
-		Metadata:           map[string]any(log.Metadata),
+		Metadata:           publicLogMetadata(log.Metadata),
 	}
 }
 

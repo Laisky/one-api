@@ -22,5 +22,5 @@ var responseStateEventsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 //
 // category and outcome MUST be compile-time registry constants.
 func (p *PrometheusRecorder) RecordResponseStateEvent(category, outcome string) {
-	responseStateEventsTotal.WithLabelValues(category, outcome).Inc()
+	responseStateEventsTotal.WithLabelValues(labelValues(category, outcome)...).Inc()
 }

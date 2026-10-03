@@ -182,6 +182,36 @@ export const CHANNEL_OPTIONS = {
     value: 56,
     color: 'orange'
   },
+  57: {
+    key: 57,
+    text: 'DeepInfra',
+    value: 57,
+    color: 'primary'
+  },
+  58: {
+    key: 58,
+    text: 'Z.ai',
+    value: 58,
+    color: 'primary'
+  },
+  59: {
+    key: 59,
+    text: 'Jina AI',
+    value: 59,
+    color: 'primary'
+  },
+  60: {
+    key: 60,
+    text: 'TypeSafe',
+    value: 60,
+    color: 'primary'
+  },
+  61: {
+    key: 61,
+    text: 'MuAPI',
+    value: 61,
+    color: 'primary'
+  },
   50: {
     key: 50,
     text: 'OpenAI Compatible',
@@ -280,7 +310,7 @@ export const CHANNEL_OPTIONS = {
   },
   20: {
     key: 20,
-      text: 'OpenRouter',
+    text: 'OpenRouter',
     value: 20,
     color: 'success'
   },

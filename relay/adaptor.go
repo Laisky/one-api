@@ -13,13 +13,16 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/cohere"
 	"github.com/Laisky/one-api/relay/adaptor/copilot"
 	"github.com/Laisky/one-api/relay/adaptor/coze"
+	"github.com/Laisky/one-api/relay/adaptor/deepinfra"
 	"github.com/Laisky/one-api/relay/adaptor/deepl"
 	"github.com/Laisky/one-api/relay/adaptor/deepseek"
 	"github.com/Laisky/one-api/relay/adaptor/fireworks"
 	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/groq"
+	"github.com/Laisky/one-api/relay/adaptor/jina"
 	"github.com/Laisky/one-api/relay/adaptor/mistral"
 	"github.com/Laisky/one-api/relay/adaptor/moonshot"
+	"github.com/Laisky/one-api/relay/adaptor/muapi"
 	"github.com/Laisky/one-api/relay/adaptor/nvidia"
 	"github.com/Laisky/one-api/relay/adaptor/ollama"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
@@ -28,14 +31,18 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/proxy"
 	"github.com/Laisky/one-api/relay/adaptor/replicate"
 	"github.com/Laisky/one-api/relay/adaptor/tencent"
+	"github.com/Laisky/one-api/relay/adaptor/typesafe"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai"
 	"github.com/Laisky/one-api/relay/adaptor/xai"
 	"github.com/Laisky/one-api/relay/adaptor/xunfei"
+	"github.com/Laisky/one-api/relay/adaptor/zai"
 	"github.com/Laisky/one-api/relay/adaptor/zhipu"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/pricing"
 )
 
+// GetAdaptor returns a new adaptor for apiType, or nil when the API type is not
+// registered.
 func GetAdaptor(apiType int) adaptor.Adaptor {
 	switch apiType {
 	case apitype.AIProxyLibrary:
@@ -78,6 +85,8 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &replicate.Adaptor{}
 	case apitype.DeepSeek:
 		return &deepseek.Adaptor{}
+	case apitype.DeepInfra:
+		return &deepinfra.Adaptor{}
 	case apitype.Groq:
 		return &groq.Adaptor{}
 	case apitype.Mistral:
@@ -98,6 +107,14 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &cerebras.Adaptor{}
 	case apitype.Azure:
 		return &azure.Adaptor{}
+	case apitype.Zai:
+		return &zai.Adaptor{}
+	case apitype.Jina:
+		return &jina.Adaptor{}
+	case apitype.TypeSafe:
+		return &typesafe.Adaptor{}
+	case apitype.MuAPI:
+		return &muapi.Adaptor{}
 	}
 
 	return nil

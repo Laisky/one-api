@@ -3,11 +3,20 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { useResponsive } from '@/hooks/useResponsive';
+import { cn } from '@/lib/utils';
 import { formatTierThreshold } from '@/pages/models/tier-threshold';
+import {
+  NO_ACTIVE_TIME_WINDOW,
+  UNRESOLVED_TIME_WINDOWS,
+  resolveActiveTimeWindowIndex,
+  timeWindowScheduleSignature,
+} from '@/pages/models/time-window';
 import { X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { ModelApiExamples } from './ModelApiExamples';
+import { AudioTariffDetails, type AudioInputTariff } from './AudioTariffDetails';
 
 // ---- Types matching the backend ModelDisplayInfo ----
 
@@ -52,12 +61,13 @@ interface TierData {
 }
 
 interface VideoPricingData {
+  input_image_usd?: number;
   per_second_usd: number;
   base_resolution?: string;
   resolution_multipliers?: Record<string, number>;
 }
 
-interface AudioPricingData {
+interface AudioPricingData extends AudioInputTariff {
   prompt_token_ratio?: number;
   completion_token_ratio?: number;
   prompt_tokens_per_second?: number;
@@ -117,6 +127,43 @@ interface TimeWindowOverlayData {
   per_call_pricing?: PerCallPricingData;
 }
 
+// ---- Active time window tracking ----
+
+/** How often the active pricing window is re-evaluated against the wall clock. */
+const ACTIVE_WINDOW_POLL_MS = 1000;
+
+/**
+ * useActiveTimeWindowIndex tracks which pricing window is active right now.
+ * Parameters: windows is the ordered window list rendered by the pricing modal.
+ * Returns: the active window index, NO_ACTIVE_TIME_WINDOW when none matches, or
+ * UNRESOLVED_TIME_WINDOWS when the runtime cannot evaluate any window.
+ *
+ * The interval is owned by the mounted content, so closing the modal or
+ * switching models tears it down before a new one starts: at most one timer
+ * exists per mounted pricing panel.
+ */
+function useActiveTimeWindowIndex(windows: TimeWindowData[] | undefined): number {
+  const windowsRef = useRef(windows);
+  windowsRef.current = windows;
+  const signature = useMemo(() => timeWindowScheduleSignature(windows), [windows]);
+  const [activeIndex, setActiveIndex] = useState(() => resolveActiveTimeWindowIndex(windows, new Date()));
+
+  useEffect(() => {
+    const evaluate = () => {
+      const next = resolveActiveTimeWindowIndex(windowsRef.current, new Date());
+      // Only commit real transitions so the modal does not re-render every second.
+      setActiveIndex((prev) => (prev === next ? prev : next));
+    };
+    evaluate();
+    const timer = setInterval(evaluate, ACTIVE_WINDOW_POLL_MS);
+    return () => clearInterval(timer);
+    // `signature` covers every schedule field read by the evaluator; the latest
+    // window list itself is always read through windowsRef.
+  }, [signature]);
+
+  return activeIndex;
+}
+
 // ---- Props ----
 
 interface ModelPricingModalProps {
@@ -155,7 +202,12 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
     </span>
   );
 
-  const content = <PricingContent modelName={modelName} data={data} channelName={channelName} tr={tr} locale={i18n.language} />;
+  const content = (
+    <div className="min-w-0 space-y-5">
+      <PricingContent modelName={modelName} data={data} channelName={channelName} tr={tr} locale={i18n.language} />
+      <ModelApiExamples key={modelName} modelName={modelName} data={data} />
+    </div>
+  );
 
   if (isMobile) {
     return (
@@ -356,6 +408,7 @@ function PricingContent({
   tr: TrFn;
   locale: string;
 }) {
+  const activeTimeWindowIndex = useActiveTimeWindowIndex(data.time_windows);
   const hasCache =
     (data.cached_input_price !== undefined && data.cached_input_price !== data.input_price) ||
     (data.cache_write_5m_price !== undefined && data.cache_write_5m_price > 0) ||
@@ -489,10 +542,10 @@ function PricingContent({
       )}
 
       {/* Per-call pricing — flat per-invocation billing (e.g. rerank) */}
-      {data.per_call_pricing && (data.per_call_pricing.usd_per_thousand_calls || data.per_call_pricing.usd_per_call) ? (
+      {data.per_call_pricing && (data.per_call_pricing.usd_per_thousand_calls !== undefined || data.per_call_pricing.usd_per_call !== undefined) ? (
         <PricingSection title={tr('per_call_pricing', 'Per-Call Pricing')} icon="text">
           <PriceGrid>
-            {data.per_call_pricing.usd_per_thousand_calls !== undefined && data.per_call_pricing.usd_per_thousand_calls > 0 && (
+            {data.per_call_pricing.usd_per_thousand_calls !== undefined && (
               <PriceCell
                 label={tr('base_rate', 'Base Rate')}
                 sublabel={tr('per_1k_calls', 'per 1K calls')}
@@ -501,7 +554,7 @@ function PricingContent({
                 raw
               />
             )}
-            {data.per_call_pricing.usd_per_call !== undefined && data.per_call_pricing.usd_per_call > 0 && (
+            {data.per_call_pricing.usd_per_call !== undefined && (
               <PriceCell
                 label={tr('per_call_label', 'Per Call')}
                 sublabel={tr('per_call', 'per call')}
@@ -552,13 +605,29 @@ function PricingContent({
           <div className="space-y-3">
             {data.time_windows.map((window, index) => {
               const label = window.name || `${tr('window_name', 'Window')} ${index + 1}`;
-              const isActive = data.active_time_window && window.name === data.active_time_window;
+              // Fall back to the server-rendered name only when the browser cannot
+              // evaluate the schedules itself (missing timezone data).
+              const isActive =
+                activeTimeWindowIndex === UNRESOLVED_TIME_WINDOWS
+                  ? Boolean(data.active_time_window && window.name === data.active_time_window)
+                  : activeTimeWindowIndex !== NO_ACTIVE_TIME_WINDOW && activeTimeWindowIndex === index;
               return (
-                <div key={`${label}-${index}`} className="rounded-lg border bg-muted/20 p-3">
+                <div
+                  key={`${label}-${index}`}
+                  aria-current={isActive ? 'true' : undefined}
+                  className={cn(
+                    'rounded-lg border p-3 transition-colors',
+                    isActive ? 'border-accent/50 bg-accent/[0.07] ring-1 ring-accent/20' : 'bg-muted/20'
+                  )}
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-medium">{label}</div>
+                    <div className={cn('font-medium', isActive && 'text-accent')}>{label}</div>
                     {isActive && (
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge variant="outline" className="gap-1.5 border-accent/40 bg-accent/10 text-xs text-accent">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60 reduce-motion:hidden" />
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+                        </span>
                         {tr('window_active', 'Active now')}
                       </Badge>
                     )}
@@ -623,8 +692,7 @@ function PricingContent({
                           tr={tr}
                         />
                       )}
-                      {window.overlay.per_call_pricing?.usd_per_thousand_calls !== undefined &&
-                        window.overlay.per_call_pricing.usd_per_thousand_calls > 0 && (
+                      {window.overlay.per_call_pricing?.usd_per_thousand_calls !== undefined && (
                           <PriceCell
                             label={tr('per_call_pricing', 'Per-call Pricing')}
                             sublabel={tr('per_1k_calls', 'per 1K calls')}
@@ -652,6 +720,7 @@ function PricingContent({
                           raw
                         />
                       )}
+                      <AudioTariffDetails pricing={window.overlay.audio_pricing} />
                       {window.overlay.audio_pricing?.usd_per_second !== undefined && window.overlay.audio_pricing.usd_per_second > 0 && (
                         <PriceCell
                           label={tr('audio_pricing', 'Audio Pricing')}
@@ -840,6 +909,9 @@ function PricingContent({
               tr={tr}
               raw
             />
+            {data.video_pricing.input_image_usd !== undefined && data.video_pricing.input_image_usd > 0 && (
+              <PriceCell label={tr('input', 'Input')} sublabel={tr('per_image', 'per image')} value={data.video_pricing.input_image_usd} tr={tr} raw />
+            )}
           </PriceGrid>
           {data.video_pricing.base_resolution && (
             <div className="mt-2">
@@ -866,6 +938,7 @@ function PricingContent({
       {data.audio_pricing && (
         <PricingSection title={tr('audio_pricing', 'Audio Pricing')} icon="audio">
           <PriceGrid>
+            <AudioTariffDetails pricing={data.audio_pricing} />
             {data.audio_pricing.usd_per_second !== undefined && data.audio_pricing.usd_per_second > 0 && (
               <PriceCell
                 label={tr('base_rate', 'Base Rate')}

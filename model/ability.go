@@ -275,7 +275,7 @@ func (channel *Channel) UpdateAbilities() error {
 }
 
 func UpdateAbilityStatus(channelId int, status bool) error {
-	return DB.Model(&Ability{}).Where("channel_id = ?", channelId).Select("enabled").Update("enabled", status).Error
+	return errors.WithStack(DB.Model(&Ability{}).Where("channel_id = ?", channelId).Select("enabled").Update("enabled", status).Error)
 }
 
 func GetGroupModels(ctx context.Context, group string) ([]string, error) {
@@ -336,17 +336,39 @@ func deleteRedisKeysByPattern(ctx context.Context, pattern string) error {
 
 // InvalidateChannelModelCaches refreshes the in-memory routing cache and clears group-model list caches.
 func InvalidateChannelModelCaches(groupCSVs ...string) {
+	InvalidateChannelModelCachesWithContext(context.Background(), groupCSVs...)
+}
+
+const channelModelCacheInvalidationTimeout = 5 * time.Second
+
+// newChannelModelCacheInvalidationContext detaches cache invalidation from
+// request cancellation while retaining context values, including the
+// request-scoped logger, and returns a bounded context plus its cancel function.
+func newChannelModelCacheInvalidationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithTimeout(context.WithoutCancel(ctx), channelModelCacheInvalidationTimeout)
+}
+
+// InvalidateChannelModelCachesWithContext refreshes routing caches and binds Redis diagnostics to ctx.
+// Parameters: ctx carries request logging and groupCSVs lists affected channel groups.
+// Returns: none; cache invalidation failures are logged.
+func InvalidateChannelModelCachesWithContext(ctx context.Context, groupCSVs ...string) {
+	invalidationCtx, cancel := newChannelModelCacheInvalidationContext(ctx)
+	defer cancel()
+	lg := logger.FromContext(invalidationCtx)
+
 	InitChannelCache()
 	affectedGroups := collectChannelGroups(groupCSVs...)
-	ctx := context.Background()
 	redisReady := common.IsRedisEnabled() && common.RDB != nil
 	if len(affectedGroups) == 0 {
 		if redisReady {
-			if err := deleteRedisKeysByPattern(ctx, "group_models:*"); err != nil {
-				logger.Logger.Warn("failed to clear redis group_models cache by pattern", zap.Error(err))
+			if err := deleteRedisKeysByPattern(invalidationCtx, "group_models:*"); err != nil {
+				lg.Warn("failed to clear redis group_models cache by pattern", zap.Error(err))
 			}
-			if err := deleteRedisKeysByPattern(ctx, "group_models_v2:*"); err != nil {
-				logger.Logger.Warn("failed to clear redis group_models_v2 cache by pattern", zap.Error(err))
+			if err := deleteRedisKeysByPattern(invalidationCtx, "group_models_v2:*"); err != nil {
+				lg.Warn("failed to clear redis group_models_v2 cache by pattern", zap.Error(err))
 			}
 		}
 		return
@@ -357,11 +379,11 @@ func InvalidateChannelModelCaches(groupCSVs ...string) {
 		if !redisReady {
 			continue
 		}
-		if err := common.RedisDel(ctx, fmt.Sprintf("group_models:%s", group)); err != nil {
-			logger.Logger.Warn("failed to clear redis group_models cache", zap.String("group", group), zap.Error(err))
+		if err := common.RedisDel(invalidationCtx, fmt.Sprintf("group_models:%s", group)); err != nil {
+			lg.Warn("failed to clear redis group_models cache", zap.String("group", group), zap.Error(err))
 		}
-		if err := common.RedisDel(ctx, fmt.Sprintf("group_models_v2:%s", group)); err != nil {
-			logger.Logger.Warn("failed to clear redis group_models_v2 cache", zap.String("group", group), zap.Error(err))
+		if err := common.RedisDel(invalidationCtx, fmt.Sprintf("group_models_v2:%s", group)); err != nil {
+			lg.Warn("failed to clear redis group_models_v2 cache", zap.String("group", group), zap.Error(err))
 		}
 	}
 }
@@ -385,7 +407,10 @@ func GetGroupModelsV2(ctx context.Context, group string) ([]dto.EnabledAbility, 
 	// query with JOIN to get model, channel type, and channel ID in a single query
 	var models []dto.EnabledAbility
 	query := DB.Model(&Ability{}).
-		Select("DISTINCT abilities.model AS model, channels.type AS channel_type, abilities.channel_id AS channel_id").
+		// COALESCE because Ability.Priority is *int64: a NULL row scans fine into
+		// SQLite but raises "converting NULL to int64 is unsupported" on
+		// PostgreSQL/MySQL, which would 500 the entire model listing for a group.
+		Select("DISTINCT abilities.model AS model, channels.type AS channel_type, abilities.channel_id AS channel_id, COALESCE(abilities.priority, 0) AS priority").
 		Joins("JOIN channels ON abilities.channel_id = channels.id").
 		Where("abilities."+groupCol+" = ? AND abilities.enabled = "+trueVal+" AND (abilities.suspend_until IS NULL OR abilities.suspend_until < ?)", group, now).
 		Order("abilities.model")
@@ -449,4 +474,21 @@ func GetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstP
 		policy = tierSkipHighestStrict
 	}
 	return getRandomSatisfiedChannel(group, model, excludeChannelIds, policy)
+}
+
+// CountAvailableChannels counts enabled, unsuspended channels that can serve an
+// exact group and model pair. Parameters: ctx controls the database query, group
+// identifies the request group, and model is the caller-facing model name. Returns:
+// the number of routable channel abilities or an error.
+func CountAvailableChannels(ctx context.Context, group string, model string) (int, error) {
+	if DB == nil {
+		return 0, errors.New("database not initialized")
+	}
+
+	var count int64
+	if err := availableAbilitiesQuery(DB.WithContext(ctx), group, model, time.Now().UTC(), nil).
+		Distinct("channel_id").Count(&count).Error; err != nil {
+		return 0, errors.Wrapf(err, "count available channels for group %q and model %q", group, model)
+	}
+	return int(count), nil
 }

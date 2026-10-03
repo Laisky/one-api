@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import { useState } from 'react';
 import { useSelector } from 'react-redux';
@@ -169,7 +170,7 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
 
   return (
     <>
-      <TableRow tabIndex={item.id}>
+      <TableRow tabIndex={0}>
         <TableCell>
           <ResourceRefTooltip refId={ref}>{item.name}</ResourceRefTooltip>
         </TableCell>
@@ -193,9 +194,9 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
             placement="top"
           >
             <TableSwitch
-              id={`switch-${item.id}`}
+              id={`switch-${ref}`}
               checked={statusSwitch === 1}
-              onChange={handleStatus}
+              onChange={(...uiArgs) => handleStatus(...uiArgs).catch(reportUIError)}
               // disabled={statusSwitch !== 1 && statusSwitch !== 2}
             />
           </Tooltip>
@@ -258,7 +259,7 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDeleteClose}>关闭</Button>
-          <Button onClick={handleDelete} sx={{ color: 'error.main' }} autoFocus>
+          <Button onClick={(...uiArgs) => handleDelete(...uiArgs).catch(reportUIError)} sx={{ color: 'error.main' }} autoFocus>
             删除
           </Button>
         </DialogActions>

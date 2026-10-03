@@ -63,13 +63,13 @@ func TestClaudeOpus5PricingMatchesPublishedRatios(t *testing.T) {
 func TestClaudeSonnet5PricingMatchesPublishedRatios(t *testing.T) {
 	pricing, ok := ModelRatios["claude-sonnet-5"]
 	require.True(t, ok, "Claude Sonnet 5 pricing missing from Anthropic model ratios")
-	// Standard pricing is $3/$15 per MTok (the introductory $2/$10 promo through
-	// 2026-08-31 is intentionally not encoded to avoid under-billing afterwards).
-	require.InDelta(t, 3*ratio.MilliTokensUsd, pricing.Ratio, 1e-12)
+	// Anthropic made the launch price permanent and canceled the scheduled
+	// September 1, 2026 increase to $3/$15 per MTok.
+	require.InDelta(t, 2*ratio.MilliTokensUsd, pricing.Ratio, 1e-12)
 	require.InDelta(t, 5.0, pricing.CompletionRatio, 1e-12)
-	require.InDelta(t, 0.3*ratio.MilliTokensUsd, pricing.CachedInputRatio, 1e-12)
-	require.InDelta(t, 3.75*ratio.MilliTokensUsd, pricing.CacheWrite5mRatio, 1e-12)
-	require.InDelta(t, 6.0*ratio.MilliTokensUsd, pricing.CacheWrite1hRatio, 1e-12)
+	require.InDelta(t, 0.2*ratio.MilliTokensUsd, pricing.CachedInputRatio, 1e-12)
+	require.InDelta(t, 2.5*ratio.MilliTokensUsd, pricing.CacheWrite5mRatio, 1e-12)
+	require.InDelta(t, 4.0*ratio.MilliTokensUsd, pricing.CacheWrite1hRatio, 1e-12)
 	require.EqualValues(t, 1000000, pricing.ContextLength)
 	require.EqualValues(t, 128000, pricing.MaxOutputTokens)
 	// Sonnet 5 shares Opus 4.7+'s adaptive-only sampling surface: temperature/top_p/top_k

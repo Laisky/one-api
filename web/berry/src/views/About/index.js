@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import React, { useEffect, useState } from 'react';
 import { API } from 'utils/api';
 import { showError } from 'utils/common';
@@ -29,7 +30,7 @@ const About = () => {
   };
 
   useEffect(() => {
-    displayAbout().then();
+    displayAbout().then().catch(reportUIError);
   }, []);
 
   return (

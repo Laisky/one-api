@@ -173,3 +173,60 @@ func mustNewResponseID(t *testing.T) string {
 	require.NoError(t, err)
 	return id
 }
+
+// countingItemStore wraps a store and counts GetItem calls so a test can prove
+// how much work an unresolved request is able to drive.
+type countingItemStore struct {
+	state.ResponseStateStore
+	getItemCalls int
+}
+
+// GetItem records the call and delegates.
+//
+// Parameters:
+//   - ctx: request context.
+//   - owner: the owner scope.
+//   - itemID: the referenced item id.
+//
+// Return values:
+//   - *state.ItemEnvelope: the delegated envelope.
+//   - error: the delegated error.
+func (s *countingItemStore) GetItem(ctx context.Context, owner state.OwnerScope, itemID string) (*state.ItemEnvelope, error) {
+	s.getItemCalls++
+	return s.ResponseStateStore.GetItem(ctx, owner, itemID)
+}
+
+// TestResponseStateItemCountLimitPrecedesReferenceResolution pins that the item
+// count cap is enforced BEFORE item_reference fan-out.
+//
+// resolveItemReferences performs one store round-trip (Redis GET + AES-GCM
+// decrypt + JSON decode) per input element, and the element list is taken
+// verbatim from the request body. The cap used to run only after that loop, so a
+// single request — which consumes no quota, because hydration happens before
+// pre-consume — could drive an unbounded number of store reads and hold every
+// decoded item in memory at once.
+func TestResponseStateItemCountLimitPrecedesReferenceResolution(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := enableStateForTest(t)
+	meta := testMeta()
+
+	orig := config.ResponseStateMaxItemCount
+	config.ResponseStateMaxItemCount = 4
+	t.Cleanup(func() { config.ResponseStateMaxItemCount = orig })
+
+	counting := &countingItemStore{ResponseStateStore: store}
+	state.SetForTest(counting)
+	t.Cleanup(func() { state.SetForTest(nil) })
+
+	input := make(openai.ResponseAPIInput, 0, 50)
+	for i := 0; i < 50; i++ {
+		input = append(input, map[string]any{"type": state.KindItemReference, "id": "item_does_not_exist"})
+	}
+
+	req := &openai.ResponseAPIRequest{Model: "gpt-5", Input: input}
+	_, serr := hydrateResponseAPIRequestForFallback(context.Background(), meta, req, targetChatFallback)
+	require.NotNil(t, serr)
+	require.Equal(t, http.StatusRequestEntityTooLarge, serr.StatusCode)
+	require.Zero(t, counting.getItemCalls,
+		"the item cap must reject the request before any item_reference is resolved")
+}

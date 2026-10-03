@@ -9,7 +9,7 @@ requests and responses — so the two servers may be arbitrarily far apart in
 source.
 
 This was written for the boundary-response-DTO refactor
-([proposal](../../docs/proposals/20260714_boundary-response-dtos.md), rows
+([proposal](../../docs/proposals/archive/20260714_boundary-response-dtos.md), rows
 T19/T20), whose acceptance bar was "architecture changed, behavior didn't". It
 is not specific to that change: any refactor claiming observable-behavior
 invariance can use it.

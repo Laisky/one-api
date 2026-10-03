@@ -249,7 +249,17 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 		if textRequest.ResponseFormat.JsonSchema != nil {
 			// Clean the schema to remove unsupported properties for Gemini
 			cleanedSchema := cleanJsonSchemaForGemini(textRequest.ResponseFormat.JsonSchema.Schema)
-			geminiRequest.GenerationConfig.ResponseSchema = cleanedSchema
+			// ResponseSchema is an `any` field, so omitempty will not drop an empty
+			// map: cleaning a schema whose top level holds only unsupported keys
+			// (a $ref/$defs wrapper, which pydantic and zod emit constantly) yields
+			// an empty map, and `"responseSchema": {}` alongside a JSON mime type is
+			// rejected by Gemini. Send the mime type without a schema instead.
+			if schemaMap, ok := cleanedSchema.(map[string]any); ok && len(schemaMap) == 0 {
+				cleanedSchema = nil
+			}
+			if cleanedSchema != nil {
+				geminiRequest.GenerationConfig.ResponseSchema = cleanedSchema
+			}
 			geminiRequest.GenerationConfig.ResponseMimeType = mimeTypeMap["json_object"]
 		}
 	}
@@ -266,9 +276,18 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 	// FIX(https://github.com/Laisky/one-api/issues/60):
 	// Gemini's function call supports fewer parameters than OpenAI's,
 	// so a conversion is needed here to keep only the parameters supported by Gemini.
-	if textRequest.Tools != nil {
+	// len() rather than != nil: an explicitly empty "tools": [] is non-nil, and it
+	// used to produce "function_declarations": [], which Gemini rejects with 400
+	// INVALID_ARGUMENT. FunctionDeclarations is an `any` field, so omitempty does
+	// not drop the empty slice for us.
+	if len(textRequest.Tools) > 0 {
 		convertedGeminiFunctions := make([]model.Function, 0, len(textRequest.Tools))
 		for _, tool := range textRequest.Tools {
+			// Tool.Function is a pointer filled from the request body, so a tool entry
+			// without a "function" object must be skipped rather than dereferenced.
+			if tool.Function == nil {
+				continue
+			}
 			// Use the helper function to recursively clean function parameters
 			cleanedParams := cleanFunctionParameters(tool.Function.Parameters)
 			// Type assert to map[string]any
@@ -291,12 +310,14 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 				Required:    tool.Function.Required,
 			})
 		}
-		geminiRequest.Tools = []ChatTools{
-			{
-				FunctionDeclarations: convertedGeminiFunctions,
-			},
+		if len(convertedGeminiFunctions) > 0 {
+			geminiRequest.Tools = []ChatTools{
+				{
+					FunctionDeclarations: convertedGeminiFunctions,
+				},
+			}
 		}
-	} else if textRequest.Functions != nil {
+	} else if len(textRequest.Functions) > 0 {
 		for _, function := range textRequest.Functions {
 			// Use the helper function to recursively clean function parameters
 			cleanedParams := cleanFunctionParameters(function.Parameters)
@@ -352,16 +373,22 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 		// Handle OpenAI tool calls - convert them to Gemini function calls
 		if len(message.ToolCalls) > 0 {
 			for _, toolCall := range message.ToolCalls {
-				// Parse the arguments from JSON string to interface{}
+				// Parse the arguments from JSON string to interface{}.
+				// ArgumentsJSON keeps a client-supplied object, a missing `function`
+				// or absent arguments from panicking here.
 				var args any
-				if err := json.Unmarshal([]byte(toolCall.Function.Arguments.(string)), &args); err != nil {
+				rawArguments, argErr := toolCall.Function.ArgumentsJSON()
+				if argErr != nil {
+					rawArguments = "{}"
+				}
+				if err := json.Unmarshal([]byte(rawArguments), &args); err != nil {
 					// If parsing fails, use the raw string
-					args = toolCall.Function.Arguments
+					args = rawArguments
 				}
 
 				parts = append(parts, Part{
 					FunctionCall: &FunctionCall{
-						FunctionName: toolCall.Function.Name,
+						FunctionName: toolCall.FunctionName(),
 						Arguments:    args,
 					},
 				})

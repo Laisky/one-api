@@ -9,10 +9,10 @@ import (
 // per-family files stay focused and readable. Model list is derived from the keys of
 // this map, eliminating redundancy.
 //
-// Pricing sources verified 2026-07-31:
+// Pricing sources verified 2026-09-03; GPT Image 2.5 additions verified 2026-09-09:
 //   - https://developers.openai.com/api/docs/pricing
 //   - https://developers.openai.com/api/docs/models
-var ModelRatios = mergeModelRatios(
+var ModelRatios = applyOpenAIModelCatalog202609(mergeModelRatios(
 	gpt35ModelRatios,
 	gpt4ModelRatios,
 	gpt4oModelRatios,
@@ -20,13 +20,15 @@ var ModelRatios = mergeModelRatios(
 	gpt45ModelRatios,
 	gpt41ModelRatios,
 	gpt5ModelRatios,
+	gpt6ModelRatios,
 	oSeriesModelRatios,
 	specializedModelRatios,
 	embeddingModelRatios,
 	audioModelRatios,
 	imageModelRatios,
+	image25ModelRatios,
 	videoModelRatios,
-)
+))
 
 // ModelList derived from ModelRatios for backward compatibility.
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
@@ -81,7 +83,7 @@ func standardSamplingParameters() []string {
 }
 
 // reasoningSamplingParameters returns the constrained sampling-parameter set
-// supported by OpenAI's reasoning models (o-series, gpt-5 family). Reasoning
+// supported by OpenAI's reasoning models (o-series and GPT-5/GPT-6 families). Reasoning
 // models reject temperature, top_p, frequency_penalty, and presence_penalty.
 func reasoningSamplingParameters() []string {
 	return []string{"seed", "max_tokens"}

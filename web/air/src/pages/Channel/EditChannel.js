@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { API, isMobile, showError, showInfo, showSuccess, verifyJSON } from '../../helpers';
@@ -323,7 +324,7 @@ const EditChannel = (props) => {
         });
         if (name === 'type') {
             // Load default pricing for the new channel type
-            loadDefaultPricing(value);
+            loadDefaultPricing(value).catch(reportUIError);
             setConfig({ ...defaultConfig });
         }
         //setAutoBan
@@ -331,86 +332,89 @@ const EditChannel = (props) => {
 
 
     const loadChannel = async () => {
-        setLoading(true)
-        // Add cache busting parameter to ensure fresh data
-        const cacheBuster = Date.now();
-        let res = await API.get(`/api/channel/${channelId}?_cb=${cacheBuster}`);
-        const { success, message, data } = res.data;
-        if (success) {
-            if (data.models === '') {
-                data.models = [];
-            } else {
-                data.models = data.models.split(',');
-            }
-            if (data.group === '') {
-                data.groups = [];
-            } else {
-                data.groups = data.group.split(',');
-            }
-            if (data.model_mapping !== '') {
-                data.model_mapping = JSON.stringify(JSON.parse(data.model_mapping), null, 2);
-            }
-            // Format pricing fields for display
-            if (data.model_ratio && data.model_ratio !== '') {
-                try {
-                    data.model_ratio = JSON.stringify(JSON.parse(data.model_ratio), null, 2);
-                } catch (e) {
-                    console.error('Failed to parse model_ratio:', e);
-                }
-            }
-            if (data.completion_ratio && data.completion_ratio !== '') {
-                try {
-                    data.completion_ratio = JSON.stringify(JSON.parse(data.completion_ratio), null, 2);
-                } catch (e) {
-                    console.error('Failed to parse completion_ratio:', e);
-                }
-            }
-            if (data.model_configs && data.model_configs !== '') {
-                try {
-                    const parsedConfigs = JSON.parse(data.model_configs);
-                    // Pretty format with proper indentation
-                    data.model_configs = JSON.stringify(parsedConfigs, null, 2);
-                    console.log('Loaded model_configs for channel:', data.id, 'type:', data.type, 'models:', Object.keys(parsedConfigs));
-                } catch (e) {
-                    console.error('Failed to parse model_configs:', e);
-                    // If parsing fails, keep original value but log the error
-                }
-            }
-            if (data.inference_profile_arn_map && data.inference_profile_arn_map !== '') {
-                try {
-                    data.inference_profile_arn_map = JSON.stringify(JSON.parse(data.inference_profile_arn_map), null, 2);
-                } catch (e) {
-                    console.error('Failed to parse inference_profile_arn_map:', e);
-                }
-            }
-            setInputs(data);
-            if (data.config && data.config !== '') {
-                try {
-                    const parsedConfig = JSON.parse(data.config);
-                    setConfig({
-                        ...defaultConfig,
-                        ...parsedConfig,
-                        api_format: parsedConfig.api_format || 'chat_completion',
-                    });
-                } catch (error) {
-                    console.error('Failed to parse channel config:', error);
-                    setConfig({ ...defaultConfig });
-                }
-            } else {
-                setConfig({ ...defaultConfig });
-            }
-            // Load default pricing for this channel type, but don't override existing model_configs
-            loadDefaultPricing(data.type);
-            if (data.auto_ban === 0) {
-                setAutoBan(false);
-            } else {
-                setAutoBan(true);
-            }
-            // console.log(data);
-        } else {
-            showError(message);
-        }
+      try {
+          setLoading(true)
+          // Add cache busting parameter to ensure fresh data
+          const cacheBuster = Date.now();
+          let res = await API.get(`/api/channel/${channelId}?_cb=${cacheBuster}`);
+          const { success, message, data } = res.data;
+          if (success) {
+              if (data.models === '') {
+                  data.models = [];
+              } else {
+                  data.models = data.models.split(',');
+              }
+              if (data.group === '') {
+                  data.groups = [];
+              } else {
+                  data.groups = data.group.split(',');
+              }
+              if (data.model_mapping !== '') {
+                  data.model_mapping = JSON.stringify(JSON.parse(data.model_mapping), null, 2);
+              }
+              // Format pricing fields for display
+              if (data.model_ratio && data.model_ratio !== '') {
+                  try {
+                      data.model_ratio = JSON.stringify(JSON.parse(data.model_ratio), null, 2);
+                  } catch (e) {
+                      console.error('Failed to parse model_ratio:', e);
+                  }
+              }
+              if (data.completion_ratio && data.completion_ratio !== '') {
+                  try {
+                      data.completion_ratio = JSON.stringify(JSON.parse(data.completion_ratio), null, 2);
+                  } catch (e) {
+                      console.error('Failed to parse completion_ratio:', e);
+                  }
+              }
+              if (data.model_configs && data.model_configs !== '') {
+                  try {
+                      const parsedConfigs = JSON.parse(data.model_configs);
+                      // Pretty format with proper indentation
+                      data.model_configs = JSON.stringify(parsedConfigs, null, 2);
+                      console.log('Loaded model_configs for channel:', channelId, 'type:', data.type, 'models:', Object.keys(parsedConfigs));
+                  } catch (e) {
+                      console.error('Failed to parse model_configs:', e);
+                      // If parsing fails, keep original value but log the error
+                  }
+              }
+              if (data.inference_profile_arn_map && data.inference_profile_arn_map !== '') {
+                  try {
+                      data.inference_profile_arn_map = JSON.stringify(JSON.parse(data.inference_profile_arn_map), null, 2);
+                  } catch (e) {
+                      console.error('Failed to parse inference_profile_arn_map:', e);
+                  }
+              }
+              setInputs(data);
+              if (data.config && data.config !== '') {
+                  try {
+                      const parsedConfig = JSON.parse(data.config);
+                      setConfig({
+                          ...defaultConfig,
+                          ...parsedConfig,
+                          api_format: parsedConfig.api_format || 'chat_completion',
+                      });
+                  } catch (error) {
+                      console.error('Failed to parse channel config:', error);
+                      setConfig({ ...defaultConfig });
+                  }
+              } else {
+                  setConfig({ ...defaultConfig });
+              }
+              // Load default pricing for this channel type, but don't override existing model_configs
+              loadDefaultPricing(data.type).catch(reportUIError);
+              if (data.auto_ban === 0) {
+                  setAutoBan(false);
+              } else {
+                  setAutoBan(true);
+              }
+              // console.log(data);
+          } else {
+              showError(message);
+          }
+      } finally {
         setLoading(false);
+      }
     };
 
     const fetchModels = async () => {
@@ -426,7 +430,7 @@ const EditChannel = (props) => {
                 return model.id.startsWith('gpt-3') || model.id.startsWith('text-');
             }).map((model) => model.id));
         } catch (error) {
-            showError(error.message);
+            showError(error);
         }
     };
 
@@ -445,7 +449,7 @@ const EditChannel = (props) => {
                 value: group
             })));
         } catch (error) {
-            showError(error.message);
+            showError(error);
         }
     };
 
@@ -463,15 +467,15 @@ const EditChannel = (props) => {
     }, [originModelOptions, inputs.models]);
 
     useEffect(() => {
-        fetchModels().then();
-        fetchGroups().then();
+        fetchModels().then().catch(reportUIError);
+        fetchGroups().then().catch(reportUIError);
         if (isEdit) {
-            loadChannel().then();
+            loadChannel().then().catch(reportUIError);
         } else {
             setInputs(originInputs);
             setConfig({ ...defaultConfig });
             // Load default pricing for new channels
-            loadDefaultPricing(originInputs.type);
+            loadDefaultPricing(originInputs.type).catch(reportUIError);
         }
     }, [props.editingChannel.uuid, props.editingChannel.id]);
 
@@ -596,7 +600,7 @@ const EditChannel = (props) => {
                 footer={
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <Space>
-                            <Button theme='solid' size={'large'} onClick={submit}>提交</Button>
+                            <Button theme='solid' size={'large'} onClick={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>提交</Button>
                             <Button theme='solid' size={'large'} type={'tertiary'} onClick={handleCancel}>取消</Button>
                         </Space>
                     </div>

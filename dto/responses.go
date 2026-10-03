@@ -2,7 +2,7 @@ package dto
 
 // This file holds the boundary response DTOs for the management API. Each
 // XResponse replicates, field-for-field, the whitelist that used to live in a
-// model-level MarshalJSON method (see docs/proposals/20260714_boundary-response-dtos.md).
+// model-level MarshalJSON method (see docs/proposals/archive/20260714_boundary-response-dtos.md).
 //
 // These shapes enforce the S2 strict-out contract (external UUID identifiers
 // only; no internal integer ids; no secrets) explicitly at the API boundary,

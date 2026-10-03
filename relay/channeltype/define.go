@@ -58,5 +58,10 @@ const (
 	Fireworks
 	NVIDIA
 	Cerebras
+	DeepInfra
+	Zai
+	Jina
+	TypeSafe
+	MuAPI
 	Dummy
 )

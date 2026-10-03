@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { API, copy, isAdmin, showError, showSuccess, timestamp2string } from '../helpers';
 
@@ -15,6 +16,24 @@ const { Header } = Layout;
 
 
 const MODE_OPTIONS = [{ key: 'all', text: '全部用户', value: 'all' }, { key: 'self', text: '当前用户', value: 'self' }];
+
+/**
+ * stableHash maps an arbitrary string to a non-negative integer so display
+ * colours stay consistent for the same identifier across renders and reloads.
+ *
+ * Parameters:
+ *   - value: any, coerced to string; undefined/null hash to 0.
+ *
+ * Return value: a non-negative 32-bit integer.
+ */
+function stableHash(value) {
+  const str = value === undefined || value === null ? '' : String(value);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
 
 const colors = ['amber', 'blue', 'cyan', 'green', 'grey', 'indigo', 'light-blue', 'lime', 'orange', 'pink', 'purple', 'red', 'teal', 'violet', 'yellow'];
 
@@ -59,11 +78,15 @@ const LogsTable = () => {
     title: '时间', dataIndex: 'timestamp2string'
   }, {
     title: '渠道',
-    dataIndex: 'channel',
+    dataIndex: 'channel_uuid',
     className: isAdmin() ? 'tableShow' : 'tableHiddle',
     render: (text, record, index) => {
+      const channelRef = record.channel_uuid;
+      const channelLabel = record.channel_name || channelRef;
       return (isAdminUser ? record.type === 0 || record.type === 2 ? <div>
-        {<Tag color={colors[parseInt(text) % colors.length]} size="large"> {text} </Tag>}
+        <ResourceRefTooltip refId={channelRef} label="渠道 ID">
+          <Tag color={colors[stableHash(channelRef) % colors.length]} size="large"> {channelLabel} </Tag>
+        </ResourceRefTooltip>
       </div> : <></> : <></>);
     }
   }, {
@@ -73,7 +96,7 @@ const LogsTable = () => {
     render: (text, record, index) => {
       return (isAdminUser ? <div>
         <Avatar size="small" color={stringToColor(text)} style={{ marginRight: 4 }}
-          onClick={() => showUserInfo(record.user_uuid || record.user_id)}>
+          onClick={() => showUserInfo(record.user_uuid || record.user_id).catch(reportUIError)}>
           {typeof text === 'string' && text.slice(0, 1)}
         </Avatar>
         <ResourceRefTooltip refId={record.user_uuid || record.user_id} label="用户 ID">{text}</ResourceRefTooltip>
@@ -84,7 +107,7 @@ const LogsTable = () => {
       return (record.type === 0 || record.type === 2 ? <div>
         <ResourceRefTooltip refId={record.token_uuid} label="令牌 ID">
           <Tag color="grey" size="large" onClick={() => {
-            copyText(text);
+            copyText(text).catch(reportUIError);
           }}> {text} </Tag>
         </ResourceRefTooltip>
       </div> : <></>);
@@ -99,7 +122,7 @@ const LogsTable = () => {
     title: '模型', dataIndex: 'model_name', render: (text, record, index) => {
       return (record.type === 0 || record.type === 2 ? <div>
         <Tag color={stringToColor(text)} size="large" onClick={() => {
-          copyText(text);
+          copyText(text).catch(reportUIError);
         }}> {text} </Tag>
       </div> : <></>);
     }
@@ -115,7 +138,7 @@ const LogsTable = () => {
   //   }
   // },
   {
-    title: <span style={{ cursor: sortLoading ? 'wait' : 'pointer', opacity: sortLoading ? 0.6 : 1 }} onClick={() => handleSort('prompt_tokens')}>
+    title: <span style={{ cursor: sortLoading ? 'wait' : 'pointer', opacity: sortLoading ? 0.6 : 1 }} onClick={() => handleSort('prompt_tokens').catch(reportUIError)}>
       提示{getSortIcon('prompt_tokens')}
       {sortLoading && sortBy === 'prompt_tokens' && <span> ⏳</span>}
     </span>,
@@ -126,7 +149,7 @@ const LogsTable = () => {
       </div> : <></>);
     }
   }, {
-    title: <span style={{ cursor: sortLoading ? 'wait' : 'pointer', opacity: sortLoading ? 0.6 : 1 }} onClick={() => handleSort('completion_tokens')}>
+    title: <span style={{ cursor: sortLoading ? 'wait' : 'pointer', opacity: sortLoading ? 0.6 : 1 }} onClick={() => handleSort('completion_tokens').catch(reportUIError)}>
       补全{getSortIcon('completion_tokens')}
       {sortLoading && sortBy === 'completion_tokens' && <span> ⏳</span>}
     </span>,
@@ -137,7 +160,7 @@ const LogsTable = () => {
       </div> : <></>);
     }
   }, {
-    title: <span style={{ cursor: sortLoading ? 'wait' : 'pointer', opacity: sortLoading ? 0.6 : 1 }} onClick={() => handleSort('quota')}>
+    title: <span style={{ cursor: sortLoading ? 'wait' : 'pointer', opacity: sortLoading ? 0.6 : 1 }} onClick={() => handleSort('quota').catch(reportUIError)}>
       花费{getSortIcon('quota')}
       {sortLoading && sortBy === 'quota' && <span> ⏳</span>}
     </span>,
@@ -148,7 +171,7 @@ const LogsTable = () => {
       </div> : <></>);
     }
   }, {
-    title: <span style={{ cursor: sortLoading ? 'wait' : 'pointer', opacity: sortLoading ? 0.6 : 1 }} onClick={() => handleSort('elapsed_time')}>
+    title: <span style={{ cursor: sortLoading ? 'wait' : 'pointer', opacity: sortLoading ? 0.6 : 1 }} onClick={() => handleSort('elapsed_time').catch(reportUIError)}>
       Latency{getSortIcon('elapsed_time')}
       {sortLoading && sortBy === 'elapsed_time' && <span> ⏳</span>}
     </span>,
@@ -228,7 +251,7 @@ const LogsTable = () => {
           label: `${user.display_name || user.username} (@${user.username})`,
           username: user.username,
           display_name: user.display_name,
-          id: user.id
+          uuid: user.uuid
         }));
         setUserOptions(options);
       }
@@ -320,7 +343,7 @@ const LogsTable = () => {
           {compactTimestamp}
         </span>
       );
-      logs[i].key = '' + logs[i].id;
+      logs[i].key = '' + (logs[i].uuid ?? logs[i].id ?? i);
     }
     // data.key = '' + data.id
     setLogs(logs);
@@ -329,36 +352,39 @@ const LogsTable = () => {
   };
 
   const loadLogs = async (startIdx, pageSize, logType = 0) => {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    let url = '';
-    let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-    let localEndTimestamp = Date.parse(end_timestamp) / 1000;
-    let sortParams = '';
-    if (sortBy) {
-      sortParams = `&sort_by=${sortBy}&sort_order=${sortOrder}`;
-    }
-    if (isAdminUser) {
-      url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${logType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}${sortParams}`;
-    } else {
-      url = `/api/log/self?p=${startIdx}&page_size=${pageSize}&type=${logType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}${sortParams}`;
-    }
-    const res = await API.get(url);
-    const { success, message, data } = res.data;
-    if (success) {
-      // Leaving search mode: the rows now come from the structured listing.
-      setActiveSearch('');
-      if (startIdx === 0) {
-        setLogsFormat(data);
-      } else {
-        let newLogs = [...logs];
-        newLogs.splice(startIdx * pageSize, data.length, ...data);
-        setLogsFormat(newLogs);
+      let url = '';
+      let localStartTimestamp = Date.parse(start_timestamp) / 1000;
+      let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+      let sortParams = '';
+      if (sortBy) {
+        sortParams = `&sort_by=${sortBy}&sort_order=${sortOrder}`;
       }
-    } else {
-      showError(message);
+      if (isAdminUser) {
+        url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${logType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}${sortParams}`;
+      } else {
+        url = `/api/log/self?p=${startIdx}&page_size=${pageSize}&type=${logType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}${sortParams}`;
+      }
+      const res = await API.get(url);
+      const { success, message, data } = res.data;
+      if (success) {
+        // Leaving search mode: the rows now come from the structured listing.
+        setActiveSearch('');
+        if (startIdx === 0) {
+          setLogsFormat(data);
+        } else {
+          let newLogs = [...logs];
+          newLogs.splice(startIdx * pageSize, data.length, ...data);
+          setLogsFormat(newLogs);
+        }
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // loadSearchPage fetches one page from the keyword search endpoint and keeps
@@ -406,11 +432,11 @@ const LogsTable = () => {
       // In this case we have to load more data and then append them.
       if (activeSearch !== '') {
         loadSearchPage(activeSearch, page - 1, pageSize).then(r => {
-        });
+        }).catch(reportUIError);
         return;
       }
       loadLogs(page - 1, pageSize).then(r => {
-      });
+      }).catch(reportUIError);
     }
   };
 
@@ -513,14 +539,14 @@ const LogsTable = () => {
       <Header className="logs-header">
         <Spin spinning={loadingStat}>
           <h3>使用明细（总消耗额度：
-            <span onClick={handleEyeClick} style={{
+            <span onClick={(...uiArgs) => handleEyeClick(...uiArgs).catch(reportUIError)} style={{
               cursor: 'pointer', color: 'gray'
             }}>{showStat ? renderQuota(stat.quota) : '点击查看'}</span>
             {showStat && (
               <IconButton
                 icon={<IconRefresh />}
                 size="small"
-                onClick={handleStatRefresh}
+                onClick={(...uiArgs) => handleStatRefresh(...uiArgs).catch(reportUIError)}
                 loading={isStatRefreshing}
                 disabled={isStatRefreshing}
                 style={{ marginLeft: '8px' }}
@@ -557,8 +583,8 @@ const LogsTable = () => {
             name="end_timestamp" disabled={keywordActive}
             onChange={value => handleInputChange(value, 'end_timestamp')} />
           {isAdminUser && <>
-            <Form.Input field="channel" label="渠道 ID" style={{ width: 176 }} value={channel}
-              placeholder="可选值" name="channel" disabled={keywordActive}
+            <Form.Input field="channel" label="渠道 UUID" style={{ width: 176 }} value={channel}
+              placeholder="可选，渠道 UUID" name="channel" disabled={keywordActive}
               onChange={value => handleInputChange(value, 'channel')} />
             <Form.Field field="username" label="用户名称" style={{ width: 176 }}>
               <AutoComplete
@@ -566,7 +592,7 @@ const LogsTable = () => {
                 value={username}
                 placeholder="搜索用户名称"
                 disabled={keywordActive}
-                onSearch={searchUsers}
+                onSearch={(...uiArgs) => searchUsers(...uiArgs).catch(reportUIError)}
                 onChange={value => handleInputChange(value, 'username')}
                 loading={userSearchLoading}
                 emptyContent="未找到用户"
@@ -577,7 +603,7 @@ const LogsTable = () => {
                       {option.display_name || option.username}
                     </div>
                     <div style={{ fontSize: '12px', color: '#666' }}>
-                      @{option.username} • ID: {option.id}
+                      @{option.username}{option.uuid ? ` • ID: ${String(option.uuid).slice(0, 8)}` : ''}
                     </div>
                   </div>
                 )}
@@ -590,14 +616,14 @@ const LogsTable = () => {
             name="search_keyword"
             onChange={value => setSearchKeyword(value)}
             onEnterPress={() => {
-              searchLogs().then();
+              searchLogs().then().catch(reportUIError);
             }} />
           <Form.Section>
             <Button label="查询" type="primary" htmlType="submit" className="btn-margin-right"
-              onClick={refresh} loading={loading} disabled={keywordActive}>查询</Button>
+              onClick={(...uiArgs) => refresh(...uiArgs).catch(reportUIError)} loading={loading} disabled={keywordActive}>查询</Button>
             <Button label="搜索" type="tertiary" className="btn-margin-right"
               onClick={() => {
-                searchLogs().then();
+                searchLogs().then().catch(reportUIError);
               }} loading={searching}>搜索</Button>
           </Form.Section>
         </>
@@ -618,13 +644,13 @@ const LogsTable = () => {
           pageSizeOpts: [10, 20, 50, 100],
           showSizeChanger: true,
           onPageSizeChange: (size) => {
-            handlePageSizeChange(size).then();
+            handlePageSizeChange(size).then().catch(reportUIError);
           },
           onPageChange: handlePageChange
         }} />
       <Select className="logs-select" defaultValue="0" style={{ width: 120 }} disabled={keywordActive} onChange={(value) => {
         setLogType(parseInt(value));
-        refresh(parseInt(value)).then();
+        refresh(parseInt(value)).then().catch(reportUIError);
       }}>
         <Select.Option value="0">全部</Select.Option>
         <Select.Option value="1">充值</Select.Option>

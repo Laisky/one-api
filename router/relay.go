@@ -6,8 +6,10 @@ import (
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/controller"
 	"github.com/Laisky/one-api/middleware"
+	relaycontroller "github.com/Laisky/one-api/relay/controller"
 )
 
+// SetRelayRouter registers the public inference and MCP relay endpoints.
 func SetRelayRouter(router *gin.Engine) {
 	// Rewrite various Claude Code prefixes to the canonical /v1/messages path.
 	// Put this before other middlewares to avoid double-running them on redispatch.
@@ -23,6 +25,10 @@ func SetRelayRouter(router *gin.Engine) {
 	// so that misrouted requests are redirected to the correct endpoint with all middlewares applied.
 	router.Use(middleware.APIFormatAutoDetect(router))
 	router.Use(middleware.CORS())
+	// Bound the upload before anything reads it, then bound the decompressed stream
+	// inside the gzip middleware. Order matters: the cap has to be installed on the
+	// raw body first.
+	router.Use(middleware.RequestBodyLimit())
 	router.Use(middleware.GzipDecodeMiddleware())
 
 	// OpenRouter provider listing endpoint. Public (no auth) since OpenRouter
@@ -42,18 +48,18 @@ func SetRelayRouter(router *gin.Engine) {
 		modelsRouter.GET("/:model", controller.RetrieveModel)
 	}
 
-	// MCP Streamable HTTP transport: a single endpoint serves POST (JSON-RPC
-	// requests/notifications), GET (optional server-initiated SSE), and
-	// DELETE (session termination). The handler dispatches by method.
-	router.Any("/mcp", middleware.TokenAuth(), controller.MCPProxy)
+	// MCP Streamable HTTP transport: a single endpoint serves MCP 2026-07-28
+	// requests and transparently delegates legacy initialize/session clients.
+	router.Any("/mcp", middleware.TokenAuth(), controller.MCPProxyLatest)
 
 	relayMws := []gin.HandlerFunc{
 		// Track in-flight requests for graceful shutdown/drain
 		func(c *gin.Context) { done := graceful.BeginRequest(); defer done(); c.Next() },
 		middleware.RelayPanicRecover(), middleware.TokenAuth(),
+		middleware.GlobalRelayRateLimit(),
+		relaycontroller.ReplayAsyncVideoTask,
 		middleware.BindAsyncTaskChannel(),
 		middleware.Distribute(),
-		middleware.GlobalRelayRateLimit(),
 		middleware.LowBalanceRelayRateLimit(),
 		middleware.ChannelRateLimit(),
 	}
@@ -62,8 +68,10 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router := router.Group("/v1")
 	relayV1Router.Use(relayMws...)
 
+	relayV1Router.POST("/systemone", relaycontroller.RelaySystemOne)
 	relayV1Router.GET("/realtime", controller.RelayRealtime)
-	relayV1Router.POST("/realtime/sessions", controller.RelayRealtimeSessions)
+	// Ephemeral credentials authorize upstream usage that this gateway cannot bill.
+	// Keep Realtime traffic on the metered WebSocket relay only.
 	relayV1Router.Any("/oneapi/proxy/:channelid/*target", controller.Relay)
 	relayV1Router.POST("/completions", controller.Relay)
 	relayV1Router.POST("/chat/completions", controller.Relay)
@@ -78,10 +86,17 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.POST("/images/edits", controller.Relay)
 	relayV1Router.POST("/images/variations", controller.RelayNotImplemented)
 	relayV1Router.POST("/videos", controller.Relay)
+	relayV1Router.POST("/videos/generations", controller.Relay)
 	relayV1Router.GET("/videos", controller.Relay)
 	relayV1Router.GET("/videos/:video_id", controller.Relay)
 	relayV1Router.GET("/videos/:video_id/content", controller.Relay)
 	relayV1Router.DELETE("/videos/:video_id", controller.Relay)
+	relayV1Router.POST("/async/videos", controller.Relay)
+	asyncRead := router.Group("/v1/async/videos")
+	asyncRead.Use(func(c *gin.Context) { done := graceful.BeginRequest(); defer done(); c.Next() }, middleware.RelayPanicRecover(), middleware.TokenAuth(), middleware.GlobalRelayRateLimit())
+	asyncRead.GET("/:video_id", relaycontroller.GetAsyncVideoTask)
+	relayV1Router.POST("/voice/clones", controller.Relay)
+	relayV1Router.POST("/voice/clone", controller.Relay)
 	relayV1Router.POST("/embeddings", controller.Relay)
 	relayV1Router.POST("/rerank", controller.Relay)
 	relayV1Router.POST("/engines/:model/embeddings", controller.Relay)
@@ -161,4 +176,5 @@ func SetRelayRouter(router *gin.Engine) {
 	relayZhipuRouter := router.Group("/api/paas/v4")
 	relayZhipuRouter.Use(relayMws...)
 	relayZhipuRouter.POST("/layout_parsing", controller.Relay)
+	relayZhipuRouter.POST("/voice/clone", controller.Relay)
 }

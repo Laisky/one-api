@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import * as Yup from 'yup';
 import { Formik } from 'formik';
@@ -33,7 +34,7 @@ import { API } from 'utils/api';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import { createFilterOptions } from '@mui/material/Autocomplete';
-require('dayjs/locale/zh-cn');
+import 'dayjs/locale/zh-cn';
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
 const filter = createFilterOptions();
@@ -63,29 +64,33 @@ const EditModal = ({ open, tokenId, onCancel, onOk }) => {
   const [modelOptions, setModelOptions] = useState([]);
 
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
-    setSubmitting(true);
+    try {
+      setSubmitting(true);
 
-    values.remain_quota = parseInt(values.remain_quota);
-    let res;
-    let models = values.models.join(',');
-    if (values.is_edit) {
-      res = await API.put(`/api/token/`, { ...values, uuid: tokenId, models: models });
-    } else {
-      res = await API.post(`/api/token/`, { ...values, models: models });
-    }
-    const { success, message } = res.data;
-    if (success) {
+      values.remain_quota = parseInt(values.remain_quota);
+      let res;
+      let models = values.models.join(',');
       if (values.is_edit) {
-        showSuccess('令牌更新成功！');
+        res = await API.put(`/api/token/`, { ...values, uuid: tokenId, models: models });
       } else {
-        showSuccess('令牌创建成功，请在列表页面点击复制获取令牌！');
+        res = await API.post(`/api/token/`, { ...values, models: models });
       }
+      const { success, message } = res.data;
+      if (success) {
+        if (values.is_edit) {
+          showSuccess('令牌更新成功！');
+        } else {
+          showSuccess('令牌创建成功，请在列表页面点击复制获取令牌！');
+        }
+        setSubmitting(false);
+        setStatus({ success: true });
+        onOk(true);
+      } else {
+        showError(message);
+        setErrors({ submit: message });
+      }
+    } finally {
       setSubmitting(false);
-      setStatus({ success: true });
-      onOk(true);
-    } else {
-      showError(message);
-      setErrors({ submit: message });
     }
   };
 
@@ -106,7 +111,7 @@ const EditModal = ({ open, tokenId, onCancel, onOk }) => {
       showError(message);
     }
     } catch (error) {
-      showError(error.message);
+      showError(error);
     } finally {
       setLoading(false);
     }
@@ -123,11 +128,11 @@ const EditModal = ({ open, tokenId, onCancel, onOk }) => {
 
   useEffect(() => {
     if (tokenId) {
-      loadToken().then();
+      loadToken().then().catch(reportUIError);
     } else {
       setInputs({ ...originInputs });
     }
-    loadAvailableModels().then();
+    loadAvailableModels().then().catch(reportUIError);
   }, [tokenId]);
 
   return (
@@ -173,7 +178,7 @@ const EditModal = ({ open, tokenId, onCancel, onOk }) => {
         ) : (
           <>
             <Alert severity="info">注意，令牌的额度仅用于限制令牌本身的最大额度使用量，实际的使用受到账户的剩余额度限制。</Alert>
-            <Formik initialValues={inputs} enableReinitialize validationSchema={validationSchema} onSubmit={submit}>
+            <Formik initialValues={inputs} enableReinitialize validationSchema={validationSchema} onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>
               {({ errors, handleBlur, handleChange, handleSubmit, touched, values, setFieldError, setFieldValue, isSubmitting }) => (
             <form noValidate onSubmit={handleSubmit}>
               <FormControl fullWidth error={Boolean(touched.name && errors.name)} sx={{ ...theme.typography.otherInput }}>

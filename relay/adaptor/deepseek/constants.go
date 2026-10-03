@@ -5,100 +5,87 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-var (
-	// deepseekTextInputs lists the input modalities supported by DeepSeek V4 models.
-	deepseekTextInputs = []string{"text"}
-	// deepseekTextOutputs lists the output modalities supported by DeepSeek V4 models.
-	deepseekTextOutputs = []string{"text"}
-
-	// deepseekFlashFeatures advertises DeepSeek V4 Flash capabilities across its
-	// Chat Completions and native Responses API endpoints.
-	deepseekFlashFeatures = []string{"tools", "json_mode", "logprobs", "reasoning", "web_search"}
-	// deepseekProFeatures advertises DeepSeek V4 Pro Chat Completions capabilities.
-	// Native Responses API support has not yet been enabled for this model.
-	deepseekProFeatures = []string{"tools", "json_mode", "logprobs", "reasoning"}
-
-	// deepseekSamplingParams lists the OpenAI-compatible sampling parameters
-	// accepted by DeepSeek Chat Completions. Temperature and top_p have no effect
-	// while thinking is enabled.
-	deepseekSamplingParams = []string{"temperature", "top_p", "stop", "max_tokens"}
-
-	// deepseekFlashReasoningEfforts lists the distinct reasoning levels supported
-	// by DeepSeek V4 Flash. The API defaults to high.
-	deepseekFlashReasoningEfforts = []string{"low", "high", "max"}
-	// deepseekProReasoningEfforts lists the effective reasoning levels supported
-	// by DeepSeek V4 Pro. The API accepts low but currently treats it as high.
-	deepseekProReasoningEfforts = []string{"high", "max"}
-)
-
-// DeepSeek V4 regular per-token ratios. DeepSeek has announced that a future
-// peak-hours policy will double all billing items between 09:00-12:00 and
-// 14:00-18:00 Beijing time, but it has not published an effective date. Keep
-// these flat prices until the official activation announcement.
+// Prices are USD per million tokens. The base configuration uses the current
+// off-peak rate; time windows override all three prices together.
 const (
-	// deepseekV4FlashInputRatio is the V4 Flash cache-miss input ratio.
-	deepseekV4FlashInputRatio = 0.14 * ratio.MilliTokensUsd
-	// deepseekV4FlashCachedInputRatio is the V4 Flash cache-hit input ratio.
-	deepseekV4FlashCachedInputRatio = 0.0028 * ratio.MilliTokensUsd
-	// deepseekV4ProInputRatio is the V4 Pro cache-miss input ratio.
-	deepseekV4ProInputRatio = 0.435 * ratio.MilliTokensUsd
-	// deepseekV4ProCachedInputRatio is the V4 Pro cache-hit input ratio.
-	deepseekV4ProCachedInputRatio = 0.003625 * ratio.MilliTokensUsd
+	deepseekFlashInputPrice       = 0.15
+	deepseekFlashCachedInputPrice = 0.003
+	deepseekFlashOutputPrice      = 0.60
+	deepseekProInputPrice         = 0.66
+	deepseekProCachedInputPrice   = 0.022
+	deepseekProOutputPrice        = 1.98
 )
 
-// ModelRatios contains the currently available DeepSeek API models and their
-// pricing and capability metadata. Model IDs and prices were verified on
-// 2026-08-01 against the official DeepSeek documentation:
-//   - https://api-docs.deepseek.com/quick_start/pricing/
-//   - https://api-docs.deepseek.com/api/list-models/
-//   - https://api-docs.deepseek.com/api/create-chat-completion/
-//   - https://api-docs.deepseek.com/guides/responses_api/
-//   - https://api-docs.deepseek.com/updates/
-//
-// The retired deepseek-chat and deepseek-reasoner aliases are intentionally
-// omitted; DeepSeek made them inaccessible after 2026-07-24 15:59 UTC.
-var ModelRatios = map[string]adaptor.ModelConfig{
-	// deepseek-v4-flash uses the DeepSeek-V4-Flash-0731 API version. Its regular
-	// price is $0.14/1M cache-miss input, $0.0028/1M cache-hit input, and
-	// $0.28/1M output.
-	"deepseek-v4-flash": {
-		Ratio:                       deepseekV4FlashInputRatio,
-		CachedInputRatio:            deepseekV4FlashCachedInputRatio,
-		CompletionRatio:             0.28 / 0.14,
-		ContextLength:               1048576,
-		MaxOutputTokens:             393216,
-		InputModalities:             deepseekTextInputs,
-		OutputModalities:            deepseekTextOutputs,
-		SupportedFeatures:           deepseekFlashFeatures,
-		SupportedSamplingParameters: deepseekSamplingParams,
-		SupportedReasoningEfforts:   deepseekFlashReasoningEfforts,
+// deepseekModelConfig constructs independent capability slices for an API name.
+// Parameters: description identifies the current version; vision enables image
+// inputs, including uploaded image files (not arbitrary document ingestion).
+// Returns: metadata shared by the current Flash and Pro API models.
+func deepseekModelConfig(description string, vision bool) adaptor.ModelConfig {
+	inputs := []string{"text"}
+	if vision {
+		inputs = append(inputs, "image", "file")
+	}
+	return adaptor.ModelConfig{
+		ContextLength:     1048576,
+		MaxOutputTokens:   393216,
+		InputModalities:   inputs,
+		OutputModalities:  []string{"text"},
+		SupportedFeatures: []string{"tools", "json_mode", "logprobs", "reasoning"},
+		// Temperature has no effect in thinking mode. top_p is effective there
+		// with a 0.95 floor; in non-thinking mode top_p is fixed at 1.0.
+		SupportedSamplingParameters: []string{"temperature", "top_p", "stop", "max_tokens"},
+		SupportedReasoningEfforts:   []string{"low", "high", "max"},
 		DefaultReasoningEffort:      "high",
-		// Official instruct weights use FP4 MoE experts and FP8 for most other parameters.
-		Quantization:  "fp4",
-		HuggingFaceID: "deepseek-ai/DeepSeek-V4-Flash",
-		Description:   "DeepSeek-V4-Flash-0731, a 284B/13B-active MoE model with thinking and non-thinking modes, 1M context, and native Responses API support.",
-	},
-	// deepseek-v4-pro costs $0.435/1M cache-miss input, $0.003625/1M cache-hit
-	// input, and $0.87/1M output. Native Responses API support remains pending.
-	"deepseek-v4-pro": {
-		Ratio:                       deepseekV4ProInputRatio,
-		CachedInputRatio:            deepseekV4ProCachedInputRatio,
-		CompletionRatio:             0.87 / 0.435,
-		ContextLength:               1048576,
-		MaxOutputTokens:             393216,
-		InputModalities:             deepseekTextInputs,
-		OutputModalities:            deepseekTextOutputs,
-		SupportedFeatures:           deepseekProFeatures,
-		SupportedSamplingParameters: deepseekSamplingParams,
-		SupportedReasoningEfforts:   deepseekProReasoningEfforts,
-		DefaultReasoningEffort:      "high",
-		// Official instruct weights use FP4 MoE experts and FP8 for most other parameters.
-		Quantization:  "fp4",
-		HuggingFaceID: "deepseek-ai/DeepSeek-V4-Pro",
-		Description:   "DeepSeek-V4-Pro, a 1.6T/49B-active MoE model with thinking and non-thinking modes and a 1M context window; native Responses API support is pending.",
-	},
+		Description:                 description,
+	}
 }
 
-// DeepseekToolingDefaults documents that DeepSeek does not publish separate
-// built-in tool prices; server-side web search incurs normal model token usage.
-var DeepseekToolingDefaults = adaptor.ChannelToolConfig{}
+// deepseekFlashModelConfig returns current V4.1 Flash metadata and pricing.
+// Parameters: description distinguishes the recommended name from aliases.
+// Returns: a fresh configuration so aliases cannot share mutable pricing slices.
+func deepseekFlashModelConfig(description string) adaptor.ModelConfig {
+	cfg := deepseekModelConfig(description, true)
+	cfg.Ratio = deepseekFlashInputPrice * ratio.MilliTokensUsd
+	cfg.CachedInputRatio = deepseekFlashCachedInputPrice * ratio.MilliTokensUsd
+	cfg.CompletionRatio = deepseekFlashOutputPrice / deepseekFlashInputPrice
+	cfg.TimeWindows = deepseekFlashPricingWindows()
+	return cfg
+}
+
+// deepseekProModelConfig returns the current text-only Pro metadata, preserving
+// Pro prices after the canceled September 14 migration.
+// Parameters: none. Returns: current metadata with the scheduled pricing switch.
+func deepseekProModelConfig() adaptor.ModelConfig {
+	cfg := deepseekModelConfig("DeepSeek-V4-Pro-0813 with thinking and non-thinking modes, 1M context, and native Responses and Anthropic API support. DeepSeek canceled the September 14 Pro-to-Flash migration; this API continues serving V4 Pro with unchanged Pro billing.", false)
+	cfg.Ratio = deepseekProInputPrice * ratio.MilliTokensUsd
+	cfg.CachedInputRatio = deepseekProCachedInputPrice * ratio.MilliTokensUsd
+	cfg.CompletionRatio = deepseekProOutputPrice / deepseekProInputPrice
+	cfg.TimeWindows = deepseekProPricingWindows()
+	return cfg
+}
+
+// ModelRatios contains the current DeepSeek API names, including documented
+// compatibility aliases. Verified on 2026-09-10 against:
+//   - https://api-docs.deepseek.com/quick_start/pricing/
+//   - https://api-docs.deepseek.com/guides/thinking_mode/
+//   - https://api-docs.deepseek.com/guides/vision/
+//   - https://api-docs.deepseek.com/guides/responses_api/
+//
+// These defaults retain the immediately preceding Flash rates for the announced
+// transition, not a complete historical price archive. Image inputs use
+// upstream prompt-token usage, never generated-image pricing. Retired V3 names
+// deepseek-chat and deepseek-reasoner remain excluded. Old V4 weight/quantization
+// metadata is not attached to aliases now served by the newer V4.1 model.
+var ModelRatios = map[string]adaptor.ModelConfig{
+	"deepseek-flash":               deepseekFlashModelConfig("DeepSeek-V4.1-Flash, the recommended multimodal Flash API name, with thinking and non-thinking modes, 1M context, and native Responses and Anthropic API support."),
+	"deepseek-v4-flash":            deepseekFlashModelConfig("Compatibility alias for DeepSeek-V4.1-Flash; the original V4 Flash model is retired. Supports text and image input and uses current Flash prices."),
+	"deepseek-v4-flash-vision-exp": deepseekFlashModelConfig("Compatibility alias for DeepSeek-V4.1-Flash; the experimental V4 vision model is retired. Supports text and image input and uses current Flash prices."),
+	"deepseek-v4-pro":              deepseekProModelConfig(),
+}
+
+// DeepseekToolingDefaults does not advertise a separate built-in tool policy.
+// The current Responses API ignores web_search and other built-in tool types;
+// function tools remain supported and their token usage is billed normally.
+var DeepseekToolingDefaults = adaptor.ChannelToolConfig{
+	Pricing: map[string]adaptor.ToolPricingConfig{},
+}

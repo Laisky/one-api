@@ -27,15 +27,16 @@ func getChannelRatios(c *gin.Context) (map[string]float64, map[string]float64) {
 	channel := c.MustGet(ctxkey.ChannelModel).(*model.Channel)
 
 	// Only use unified ModelConfigs after migration
-	modelRatios := channel.GetModelRatioFromConfigs()
-	completionRatios := channel.GetCompletionRatioFromConfigs()
+	ctx := gmw.Ctx(c)
+	modelRatios := channel.GetModelRatioFromConfigsWithContext(ctx)
+	completionRatios := channel.GetCompletionRatioFromConfigsWithContext(ctx)
 
 	return modelRatios, completionRatios
 }
 
 func getChannelModelConfigs(c *gin.Context) map[string]model.ModelConfigLocal {
 	channel := c.MustGet(ctxkey.ChannelModel).(*model.Channel)
-	return channel.GetModelPriceConfigs()
+	return channel.GetModelPriceConfigsWithContext(gmw.Ctx(c))
 }
 
 // errStateSelectorsMutuallyExclusive marks the dual-selector validation failure
@@ -187,11 +188,11 @@ func countResponseAPIInputMapTokens(ctx context.Context, itemMap map[string]any,
 				total += countResponseAPIValueTokens(ctx, args, model)
 			}
 			return total
-		case "function_call_output":
+		case "function_call_output", "custom_tool_call_output":
 			if output, ok := itemMap["output"]; ok {
-				total += countResponseAPIValueTokens(ctx, output, model)
+				total += countResponseAPIEmbeddedContentTokens(ctx, output, model)
 			} else if content, ok := itemMap["content"]; ok {
-				total += countResponseAPIValueTokens(ctx, content, model)
+				total += countResponseAPIEmbeddedContentTokens(ctx, content, model)
 			}
 			return total
 		}
@@ -212,6 +213,25 @@ func countResponseAPIInputMapTokens(ctx context.Context, itemMap map[string]any,
 
 	total += countResponseAPIValueTokens(ctx, itemMap, model)
 	return total
+}
+
+// countResponseAPIEmbeddedContentTokens counts tool-output values while
+// recognizing nested Responses content parts such as file-backed images.
+// Parameters: ctx is the request context; value is the tool output; model is the target model name.
+// Returns: the estimated token count for text and structured content in value.
+func countResponseAPIEmbeddedContentTokens(ctx context.Context, value any, model string) int {
+	switch v := value.(type) {
+	case []any:
+		return countResponseAPIContentTokens(ctx, v, model)
+	case map[string]any:
+		if content, ok := v["content"]; ok {
+			return countResponseAPIEmbeddedContentTokens(ctx, content, model)
+		}
+		if typeStr, ok := v["type"].(string); ok {
+			return countResponseAPIContentPartTokens(ctx, v, typeStr, model)
+		}
+	}
+	return countResponseAPIValueTokens(ctx, value, model)
 }
 
 // countResponseAPIContentTokens counts tokens for a Response API content field.
@@ -250,6 +270,15 @@ func countResponseAPIContentPartTokens(ctx context.Context, partMap map[string]a
 	case "input_image":
 		url, _ := partMap["image_url"].(string)
 		detail, _ := partMap["detail"].(string)
+		if url == "" && deepseekcompat.IsFlashVisionModel(model) {
+			fileID, _ := partMap["file_id"].(string)
+			fileData, _ := partMap["file_data"].(string)
+			if strings.TrimSpace(fileID) != "" || strings.TrimSpace(fileData) != "" {
+				// CountImageTokens uses DeepSeek's fixed upper bound and does not
+				// inspect the sentinel because the model is handled specially.
+				url = "deepseek-file-input"
+			}
+		}
 		return countResponseAPIImageTokens(ctx, url, detail, model)
 	case "input_audio":
 		if inputAudio, ok := partMap["input_audio"].(map[string]any); ok {
@@ -436,8 +465,8 @@ func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 }
 
 // supportsDeepSeekNativeResponseAPI reports whether the request targets a model
-// served by DeepSeek's native, stateless Responses endpoint. DeepSeek currently
-// exposes that endpoint only for V4 Flash; other models retain the chat fallback.
+// served by DeepSeek's native, stateless Responses endpoint. DeepSeek exposes
+// that endpoint for the current Flash and Pro API names and Flash aliases.
 func supportsDeepSeekNativeResponseAPI(meta *metalib.Meta) bool {
 	if meta == nil || !isDeepSeekUpstream(meta) {
 		return false
@@ -448,12 +477,8 @@ func supportsDeepSeekNativeResponseAPI(meta *metalib.Meta) bool {
 		modelName = strings.TrimSpace(strings.ToLower(meta.OriginModelName))
 	}
 
-	// The Responses API currently only supports the deepseek-v4-flash model,
-	// and does not yet support the deepseek-v4-pro model.
-	// We will add support for the deepseek-v4-pro model in early August 2026.
-	//
 	// https://api-docs.deepseek.com/guides/responses_api/
-	return modelName == "deepseek-v4-flash"
+	return deepseekcompat.IsFlashVisionModel(modelName) || modelName == "deepseek-v4-pro"
 }
 
 // isDeepSeekModel checks if the model is a DeepSeek model
@@ -499,7 +524,9 @@ func shouldRouteResponseFallbackThroughDeepSeek(meta *metalib.Meta) bool {
 	return isDeepSeekUpstream(meta)
 }
 
-// isReasoningModel checks if the model is a reasoning model
+// isReasoningModel identifies models requiring OpenAI-style sampling removal.
+// DeepSeek accepts top_p in thinking mode and temperature in non-thinking mode,
+// so its canonical names and aliases must leave sampling controls to upstream.
 func isReasoningModel(modelName string) bool {
 	if modelName == "" {
 		return false

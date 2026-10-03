@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { Typography, Stack, OutlinedInput, InputAdornment, Button, InputLabel, FormControl } from '@mui/material';
 import { IconWallet } from '@tabler/icons-react';
 import { useTheme } from '@mui/material/styles';
@@ -68,7 +69,7 @@ const TopupCard = () => {
         setTopUpLink(status.top_up_link);
       }
     }
-    getUserQuota().then();
+    getUserQuota().then().catch(reportUIError);
   }, []);
 
   return (
@@ -97,7 +98,7 @@ const TopupCard = () => {
             placeholder="请输入兑换码"
             endAdornment={
               <InputAdornment position="end">
-                <Button variant="contained" onClick={topUp} disabled={isSubmitting}>
+                <Button variant="contained" onClick={(...uiArgs) => topUp(...uiArgs).catch(reportUIError)} disabled={isSubmitting}>
                   {isSubmitting ? '兑换中...' : '兑换'}
                 </Button>
               </InputAdornment>
