@@ -1,0 +1,9 @@
+{
+  "case": "token/update_missing_uuid",
+  "site": "T6 UpdateToken (error)",
+  "status": 200,
+  "body": {
+    "message": "resource uuid is required",
+    "success": false
+  }
+}

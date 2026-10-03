@@ -18,6 +18,7 @@ const baseConfig = (overrides: Partial<ChannelConfigForm> = {}): ChannelConfigFo
   api_format: 'chat_completion',
   supported_endpoints: [],
   mcp_tool_blacklist: [],
+  custom_headers: {},
   spark_app_id: '',
   spark_api_secret: '',
   spark_api_key: '',
@@ -175,10 +176,10 @@ describe('buildChannelSubmitPayload key handling on edit', () => {
     expect(payload.key).toBe('sk-new-rotation');
   });
 
-  it('keeps an empty key on create so downstream validation can reject it', () => {
-    // The hook enforces "API key is required" on create BEFORE building the
-    // payload. The helper itself must not silently strip the field on create
-    // — that would mask validation bugs.
+  it('keeps an empty key on create instead of dropping the field', () => {
+    // API Key is optional, so an empty key is valid on create. The helper must
+    // still emit an explicit empty `key` rather than silently stripping it, so
+    // the backend receives a well-formed payload.
     const data = baseForm({ key: '' });
 
     const payload = buildChannelSubmitPayload(data, createOpts());
@@ -213,6 +214,42 @@ describe('buildChannelSubmitPayload misc shape guarantees', () => {
 
     expect(Object.hasOwn(payload, 'hidden_models')).toBe(true);
     expect(payload.hidden_models).toBeNull();
+  });
+
+  it('serialises custom headers in channel config with API-key placeholders intact', () => {
+    const data = baseForm({
+      config: baseConfig({
+        custom_headers: {
+          'api-key': '{{key}}',
+          Authorization: 'Bearer {{key}}',
+        },
+      }),
+    });
+
+    const payload = buildChannelSubmitPayload(data, editOpts());
+    const config = JSON.parse(payload.config as string) as ChannelConfigForm;
+
+    expect(config.custom_headers).toEqual({
+      'api-key': '{{key}}',
+      Authorization: 'Bearer {{key}}',
+    });
+  });
+
+  it('serialises per-endpoint upstream URL overrides in channel config', () => {
+    const data = baseForm({
+      config: baseConfig({
+        endpoint_urls: {
+          rerank: 'https://custom.example.com/v2/rerank',
+        },
+      }),
+    });
+
+    const payload = buildChannelSubmitPayload(data, editOpts());
+    const config = JSON.parse(payload.config as string) as ChannelConfigForm;
+
+    expect(config.endpoint_urls).toEqual({
+      rerank: 'https://custom.example.com/v2/rerank',
+    });
   });
 
   it('joins groups[] into a comma-separated `group` field and removes `groups`', () => {

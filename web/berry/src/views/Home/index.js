@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import React, { useEffect, useState } from 'react';
 import { showError, showNotice } from 'utils/common';
 import { API } from 'utils/api';
@@ -42,8 +43,8 @@ const Home = () => {
   };
 
   useEffect(() => {
-    displayNotice().then();
-    displayHomePageContent().then();
+    displayNotice().then().catch(reportUIError);
+    displayHomePageContent().then().catch(reportUIError);
   }, []);
 
   return (

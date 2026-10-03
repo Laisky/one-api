@@ -20,10 +20,6 @@ const FixedPagination = ({
     console.log(`[Air FixedPagination] Component rendered - currentPage: ${currentPage}, pageSize: ${pageSize}, total: ${total}, totalPages: ${totalPages}`);
   }, [currentPage, pageSize, total, totalPages]);
 
-  if (!shouldShow) {
-    console.log(`[Air FixedPagination] Hiding pagination - total: ${total}, totalPages: ${totalPages}`);
-    return null;
-  }
 
   const handlePageChange = useMemo(() => (page, pageSize) => {
     console.log(`[Air FixedPagination] Page change - from ${currentPage} to ${page}, pageSize: ${pageSize}`);
@@ -38,6 +34,11 @@ const FixedPagination = ({
       onPageSizeChange(currentPage, pageSize);
     }
   }, [onPageSizeChange]);
+
+  if (!shouldShow) {
+    console.log(`[Air FixedPagination] Hiding pagination - total: ${total}, totalPages: ${totalPages}`);
+    return null;
+  }
 
   console.log(`[Air FixedPagination] Rendering pagination`);
   return (

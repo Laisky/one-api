@@ -121,7 +121,7 @@ These are applied when a channel **does not** have `model_configs` or the reques
 
 ## Per-channel pricing (new preferred)
 
-Each channel can carry its own pricing via the `model_configs` JSON string field, or via the dedicated pricing endpoints at `/api/channel/pricing/:id`.
+Each channel can carry its own pricing via the `model_configs` JSON string field, or via the dedicated pricing endpoints at `/api/channel/pricing/:uuid` (`$CHANNEL_UUID` below is the channel's `uuid` string).
 
 **Shape:**
 ```json
@@ -138,13 +138,13 @@ jq -nc '{
   "gpt-4o-mini": {"input_ratio": 0.15, "output_ratio": 0.6}
 }' | curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
       -H "Content-Type: application/json" \
-      -X PUT -d @- "$ONEAPI_BASE_URL/api/channel/pricing/42"
+      -X PUT -d @- "$ONEAPI_BASE_URL/api/channel/pricing/$CHANNEL_UUID"
 ```
 
 Fetch a channel's pricing:
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/channel/pricing/42" | jq .
+  "$ONEAPI_BASE_URL/api/channel/pricing/$CHANNEL_UUID" | jq .
 ```
 
 Fetch system defaults (useful to seed a new channel):
@@ -158,7 +158,7 @@ curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
 If you inherited a deployment that still uses legacy `model_ratio`/`completion_ratio` fields on channels:
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/debug/channel/42/migration-status" \
+  "$ONEAPI_BASE_URL/api/debug/channel/$CHANNEL_UUID/migration-status" \
   | jq .
 # migration_status: "unknown" | "empty" | "needs_migration" | "migrated" | "migrated_with_legacy"
 ```

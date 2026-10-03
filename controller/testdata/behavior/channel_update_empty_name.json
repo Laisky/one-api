@@ -1,0 +1,9 @@
+{
+  "case": "channel/update_empty_name",
+  "site": "C4 UpdateChannel (error)",
+  "status": 200,
+  "body": {
+    "message": "Channel name cannot be empty",
+    "success": false
+  }
+}

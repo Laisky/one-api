@@ -9,31 +9,34 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
+// TestShouldRetry429Logic pins the retry budget doubling for 429 and that the
+// selection policy stays strict priority for 429 and 5xx alike: a rate-limited
+// channel is excluded, its tier is never skipped.
 func TestShouldRetry429Logic(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name                   string
-		statusCode             int
-		expectedRetryTimes     int
-		shouldTryLowerPriority bool
+		name               string
+		statusCode         int
+		expectedRetryTimes int
+		expectedPolicy     retrySelectionPolicy
 	}{
 		{
-			name:                   "429 error should increase retry times and try lower priority",
-			statusCode:             http.StatusTooManyRequests,
-			expectedRetryTimes:     6, // Original retryTimes * 2
-			shouldTryLowerPriority: true,
+			name:               "429 error should increase retry times and walk strict priority",
+			statusCode:         http.StatusTooManyRequests,
+			expectedRetryTimes: 6, // Original retryTimes * 2
+			expectedPolicy:     retrySelectStrictPriority,
 		},
 		{
-			name:                   "500 error should use normal retry times",
-			statusCode:             http.StatusInternalServerError,
-			expectedRetryTimes:     3, // Original retryTimes
-			shouldTryLowerPriority: false,
+			name:               "500 error should use normal retry times",
+			statusCode:         http.StatusInternalServerError,
+			expectedRetryTimes: 3, // Original retryTimes
+			expectedPolicy:     retrySelectStrictPriority,
 		},
 		{
-			name:                   "503 error should use normal retry times",
-			statusCode:             http.StatusServiceUnavailable,
-			expectedRetryTimes:     3, // Original retryTimes
-			shouldTryLowerPriority: false,
+			name:               "503 error should use normal retry times",
+			statusCode:         http.StatusServiceUnavailable,
+			expectedRetryTimes: 3, // Original retryTimes
+			expectedPolicy:     retrySelectStrictPriority,
 		},
 	}
 
@@ -57,10 +60,8 @@ func TestShouldRetry429Logic(t *testing.T) {
 				retryTimes = retryTimes * 2
 			}
 
-			shouldTryLowerPriorityFirst := bizErr.StatusCode == http.StatusTooManyRequests
-
 			assert.Equal(t, tt.expectedRetryTimes, retryTimes, "Retry times should match expected")
-			assert.Equal(t, tt.shouldTryLowerPriority, shouldTryLowerPriorityFirst, "Lower priority preference should match expected")
+			assert.Equal(t, tt.expectedPolicy, retrySelectionPolicyFor(bizErr.StatusCode), "Retry selection policy should match expected")
 		})
 	}
 }

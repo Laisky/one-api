@@ -33,26 +33,31 @@ var (
 	}, []string{"path", "method"})
 
 	// API relay metrics
+	//
+	// NOTE: user_id and token_id labels are intentionally omitted. Their
+	// unbounded (user_id x token_id) cardinality created one permanent time
+	// series per user/token combination, causing unbounded memory growth.
+	// Per-user/per-token detail already lives in logs and the billing tables.
 	relayRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "one_api_relay_request_duration_seconds",
 		Help:    "Duration of API relay requests in seconds",
 		Buckets: []float64{.1, .25, .5, 1, 2.5, 5, 10, 30, 60, 120},
-	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type", "success"})
+	}, []string{"channel_id", "channel_type", "model", "group", "api_format", "api_type", "success"})
 
 	relayRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_relay_requests_total",
 		Help: "Total number of API relay requests",
-	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type", "success"})
+	}, []string{"channel_id", "channel_type", "model", "group", "api_format", "api_type", "success"})
 
 	relayTokensUsed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_relay_tokens_total",
 		Help: "Total number of tokens used in relay requests",
-	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type", "token_type"})
+	}, []string{"channel_id", "channel_type", "model", "group", "api_format", "api_type", "token_type"})
 
 	relayQuotaUsed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_relay_quota_used_total",
 		Help: "Total quota used in relay requests",
-	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type"})
+	}, []string{"channel_id", "channel_type", "model", "group", "api_format", "api_type"})
 
 	// Channel metrics
 	channelStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
@@ -81,25 +86,31 @@ var (
 	}, []string{"channel_id", "channel_name", "channel_type"})
 
 	// User metrics
+	//
+	// NOTE: user_id and username labels are intentionally omitted. Their
+	// unbounded (user_id x username) cardinality created one permanent time
+	// series per user, causing unbounded memory growth. Per-user detail already
+	// lives in the DB and logs, so these metrics are now broken down only by
+	// group (and token_type for the tokens counter).
 	userRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_user_requests_total",
-		Help: "Total number of requests by user",
-	}, []string{"user_id", "username", "group"})
+		Help: "Total number of requests by user group",
+	}, []string{"group"})
 
 	userQuotaUsed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_user_quota_used_total",
-		Help: "Total quota used by user",
-	}, []string{"user_id", "username", "group"})
+		Help: "Total quota used by user group",
+	}, []string{"group"})
 
 	userTokensUsed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_user_tokens_total",
-		Help: "Total tokens used by user",
-	}, []string{"user_id", "username", "group", "token_type"})
+		Help: "Total tokens used by user group",
+	}, []string{"group", "token_type"})
 
 	userBalance = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "one_api_user_balance",
-		Help: "User balance/quota remaining",
-	}, []string{"user_id", "username", "group"})
+		Help: "User balance/quota remaining (deprecated: no longer populated, see RecordUserMetrics)",
+	}, []string{"group"})
 
 	// Database metrics
 	dbConnectionsInUse = promauto.NewGauge(prometheus.GaugeOpts{
@@ -179,6 +190,38 @@ var (
 		Help: "Total number of errors by type",
 	}, []string{"error_type", "component"})
 
+	// External UUID backfill metrics
+	//
+	// NOTE: these metrics intentionally use the "oneapi_" prefix rather than
+	// the "one_api_" prefix used elsewhere in this file, because the names are
+	// specified literally by the incremental UUID backfill proposal (§6.9).
+	//
+	// Every label is bounded: role, phase, target, mode, and result are all
+	// drawn from compile-time registries. No ID, UUID, DSN, or error message
+	// may ever reach these labels.
+	uuidBackfillRowsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "oneapi_uuid_backfill_rows_total",
+		Help: "Total rows processed by the external UUID backfill",
+	}, []string{"role", "phase", "target", "result"})
+
+	uuidBackfillLastBacklog = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "oneapi_uuid_backfill_last_backlog",
+		Help: "Last observed external UUID backfill backlog per target",
+	}, []string{"role", "target"})
+
+	uuidBackfillCycleDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "oneapi_uuid_backfill_cycle_duration_seconds",
+		Help:    "Duration of external UUID backfill cycles in seconds",
+		Buckets: []float64{.05, .1, .5, 1, 5, 15, 30, 60, 300, 900, 1800},
+	}, []string{"role", "mode", "result"})
+
+	uuidBackfillFinalizerTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "oneapi_uuid_backfill_finalizer_total",
+		Help: "Total external UUID backfill finalizer attempts by result",
+	}, []string{"role", "result"})
+
+	// Compact UUID storage metrics are declared in recorder_compact_uuid.go.
+
 	// Model usage metrics
 	modelUsage = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_model_usage_total",
@@ -248,13 +291,13 @@ var (
 // RecordHTTPRequest records HTTP request metrics
 func (p *PrometheusRecorder) RecordHTTPRequest(startTime time.Time, path, method, statusCode string) {
 	duration := time.Since(startTime).Seconds()
-	httpRequestDuration.WithLabelValues(path, method, statusCode).Observe(duration)
-	httpRequestsTotal.WithLabelValues(path, method, statusCode).Inc()
+	httpRequestDuration.WithLabelValues(labelValues(path, method, statusCode)...).Observe(duration)
+	httpRequestsTotal.WithLabelValues(labelValues(path, method, statusCode)...).Inc()
 }
 
 // RecordHTTPActiveRequest tracks active HTTP requests
 func (p *PrometheusRecorder) RecordHTTPActiveRequest(path, method string, delta float64) {
-	httpActiveRequests.WithLabelValues(path, method).Add(delta)
+	httpActiveRequests.WithLabelValues(labelValues(path, method)...).Add(delta)
 }
 
 // RecordRelayRequest records API relay request metrics
@@ -263,17 +306,25 @@ func (p *PrometheusRecorder) RecordRelayRequest(startTime time.Time, channelId i
 	channelIdStr := strconv.Itoa(channelId)
 	successStr := strconv.FormatBool(success)
 
-	relayRequestDuration.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, successStr).Observe(duration)
-	relayRequestsTotal.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, successStr).Inc()
+	// NOTE: user_id and token_id are intentionally NOT used as label values
+	// here. Their unbounded cardinality created one permanent time series per
+	// user/token combination, causing unbounded memory growth. The userId and
+	// tokenId parameters are kept in the signature for caller stability and
+	// potential logging use.
+	_ = userId
+	_ = tokenId
+
+	relayRequestDuration.WithLabelValues(labelValues(channelIdStr, channelType, model, group, apiFormat, apiType, successStr)...).Observe(duration)
+	relayRequestsTotal.WithLabelValues(labelValues(channelIdStr, channelType, model, group, apiFormat, apiType, successStr)...).Inc()
 
 	if promptTokens > 0 {
-		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, "prompt").Add(float64(promptTokens))
+		relayTokensUsed.WithLabelValues(labelValues(channelIdStr, channelType, model, group, apiFormat, apiType, "prompt")...).Add(float64(promptTokens))
 	}
 	if completionTokens > 0 {
-		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, "completion").Add(float64(completionTokens))
+		relayTokensUsed.WithLabelValues(labelValues(channelIdStr, channelType, model, group, apiFormat, apiType, "completion")...).Add(float64(completionTokens))
 	}
 	if quotaUsed > 0 {
-		relayQuotaUsed.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType).Add(quotaUsed)
+		relayQuotaUsed.WithLabelValues(labelValues(channelIdStr, channelType, model, group, apiFormat, apiType)...).Add(quotaUsed)
 	}
 }
 
@@ -290,31 +341,45 @@ func (p *PrometheusRecorder) UpdateChannelMetrics(channelId int, channelName, ch
 		statusValue = 0
 	}
 
-	channelStatus.WithLabelValues(channelIdStr, channelName, channelType).Set(statusValue)
-	channelBalance.WithLabelValues(channelIdStr, channelName, channelType).Set(balance)
-	channelResponseTime.WithLabelValues(channelIdStr, channelName, channelType).Set(float64(responseTimeMs))
-	channelSuccessRate.WithLabelValues(channelIdStr, channelName, channelType).Set(successRate)
+	channelStatus.WithLabelValues(labelValues(channelIdStr, channelName, channelType)...).Set(statusValue)
+	channelBalance.WithLabelValues(labelValues(channelIdStr, channelName, channelType)...).Set(balance)
+	channelResponseTime.WithLabelValues(labelValues(channelIdStr, channelName, channelType)...).Set(float64(responseTimeMs))
+	channelSuccessRate.WithLabelValues(labelValues(channelIdStr, channelName, channelType)...).Set(successRate)
 }
 
 // UpdateChannelRequestsInFlight updates the number of requests currently being processed
 func (p *PrometheusRecorder) UpdateChannelRequestsInFlight(channelId int, channelName, channelType string, delta float64) {
 	channelIdStr := strconv.Itoa(channelId)
-	channelRequestsInFlight.WithLabelValues(channelIdStr, channelName, channelType).Add(delta)
+	channelRequestsInFlight.WithLabelValues(labelValues(channelIdStr, channelName, channelType)...).Add(delta)
 }
 
 // RecordUserMetrics records user-related metrics
 func (p *PrometheusRecorder) RecordUserMetrics(userId, username, group string, quotaUsed float64, promptTokens, completionTokens int, balance float64) {
-	userRequestsTotal.WithLabelValues(userId, username, group).Inc()
+	// NOTE: user_id and username are intentionally NOT used as label values
+	// here. Their unbounded (user_id x username) cardinality created one
+	// permanent time series per user, causing unbounded memory growth. The
+	// userId/username parameters are kept in the signature for caller stability
+	// and potential logging use.
+	_ = userId
+	_ = username
+
+	userRequestsTotal.WithLabelValues(labelValues(group)...).Inc()
 	if quotaUsed > 0 {
-		userQuotaUsed.WithLabelValues(userId, username, group).Add(quotaUsed)
+		userQuotaUsed.WithLabelValues(labelValues(group)...).Add(quotaUsed)
 	}
 	if promptTokens > 0 {
-		userTokensUsed.WithLabelValues(userId, username, group, "prompt").Add(float64(promptTokens))
+		userTokensUsed.WithLabelValues(labelValues(group, "prompt")...).Add(float64(promptTokens))
 	}
 	if completionTokens > 0 {
-		userTokensUsed.WithLabelValues(userId, username, group, "completion").Add(float64(completionTokens))
+		userTokensUsed.WithLabelValues(labelValues(group, "completion")...).Add(float64(completionTokens))
 	}
-	userBalance.WithLabelValues(userId, username, group).Set(balance)
+	// NOTE: per-user balance is intentionally NOT exported as a metric. Once
+	// user_id/username are dropped a per-group gauge would be last-write-wins
+	// across all users in the group, which is misleading. Per-user balance lives
+	// in the DB, and site-wide quota is already covered by the one_api_site_*
+	// gauges. The userBalance instrument declaration is kept to avoid rippling
+	// changes, but it is no longer fed per-user values.
+	_ = balance
 }
 
 // RecordDBQuery records database-related metrics
@@ -322,8 +387,8 @@ func (p *PrometheusRecorder) RecordDBQuery(startTime time.Time, operation, table
 	duration := time.Since(startTime).Seconds()
 	successStr := strconv.FormatBool(success)
 
-	dbQueryDuration.WithLabelValues(operation, table).Observe(duration)
-	dbQueriesTotal.WithLabelValues(operation, table, successStr).Inc()
+	dbQueryDuration.WithLabelValues(labelValues(operation, table)...).Observe(duration)
+	dbQueriesTotal.WithLabelValues(labelValues(operation, table, successStr)...).Inc()
 }
 
 // UpdateDBConnectionMetrics updates database connection metrics
@@ -337,8 +402,8 @@ func (p *PrometheusRecorder) RecordRedisCommand(startTime time.Time, command str
 	duration := time.Since(startTime).Seconds()
 	successStr := strconv.FormatBool(success)
 
-	redisCommandDuration.WithLabelValues(command).Observe(duration)
-	redisCommandsTotal.WithLabelValues(command, successStr).Inc()
+	redisCommandDuration.WithLabelValues(labelValues(command)...).Observe(duration)
+	redisCommandsTotal.WithLabelValues(labelValues(command, successStr)...).Inc()
 }
 
 // UpdateRedisConnectionMetrics updates Redis connection metrics
@@ -348,34 +413,34 @@ func (p *PrometheusRecorder) UpdateRedisConnectionMetrics(active int) {
 
 // RecordRateLimitHit records rate limiting metrics
 func (p *PrometheusRecorder) RecordRateLimitHit(limitType, identifier string) {
-	rateLimitHits.WithLabelValues(limitType, identifier).Inc()
+	rateLimitHits.WithLabelValues(labelValues(limitType, identifier)...).Inc()
 }
 
 // UpdateRateLimitRemaining updates remaining rate limit tokens
 func (p *PrometheusRecorder) UpdateRateLimitRemaining(limitType, identifier string, remaining int) {
-	rateLimitRemaining.WithLabelValues(limitType, identifier).Set(float64(remaining))
+	rateLimitRemaining.WithLabelValues(labelValues(limitType, identifier)...).Set(float64(remaining))
 }
 
 // RecordTokenAuth records token authentication attempts
 func (p *PrometheusRecorder) RecordTokenAuth(success bool) {
 	successStr := strconv.FormatBool(success)
-	tokenAuthAttempts.WithLabelValues(successStr).Inc()
+	tokenAuthAttempts.WithLabelValues(labelValues(successStr)...).Inc()
 }
 
 // UpdateActiveTokens updates the count of active tokens
 func (p *PrometheusRecorder) UpdateActiveTokens(userId, tokenName string, count int) {
-	activeTokens.WithLabelValues(userId, tokenName).Set(float64(count))
+	activeTokens.WithLabelValues(labelValues(userId, tokenName)...).Set(float64(count))
 }
 
 // RecordError records errors by type and component
 func (p *PrometheusRecorder) RecordError(errorType, component string) {
-	errorsTotal.WithLabelValues(errorType, component).Inc()
+	errorsTotal.WithLabelValues(labelValues(errorType, component)...).Inc()
 }
 
 // RecordModelUsage records model usage and latency
 func (p *PrometheusRecorder) RecordModelUsage(modelName, channelType string, latency time.Duration) {
-	modelUsage.WithLabelValues(modelName, channelType).Inc()
-	modelLatency.WithLabelValues(modelName, channelType).Observe(latency.Seconds())
+	modelUsage.WithLabelValues(labelValues(modelName, channelType)...).Inc()
+	modelLatency.WithLabelValues(labelValues(modelName, channelType)...).Observe(latency.Seconds())
 }
 
 // RecordBillingOperation records billing operation metrics
@@ -385,11 +450,11 @@ func (p *PrometheusRecorder) RecordBillingOperation(startTime time.Time, operati
 	channelIdStr := strconv.Itoa(channelId)
 	successStr := strconv.FormatBool(success)
 
-	billingOperationDuration.WithLabelValues(operation, successStr, userIdStr, channelIdStr, modelName).Observe(duration)
-	billingOperationsTotal.WithLabelValues(operation, successStr, userIdStr, channelIdStr, modelName).Inc()
+	billingOperationDuration.WithLabelValues(labelValues(operation, successStr, userIdStr, channelIdStr, modelName)...).Observe(duration)
+	billingOperationsTotal.WithLabelValues(labelValues(operation, successStr, userIdStr, channelIdStr, modelName)...).Inc()
 
 	if quotaAmount > 0 {
-		billingQuotaProcessed.WithLabelValues(operation, userIdStr, channelIdStr, modelName).Add(quotaAmount)
+		billingQuotaProcessed.WithLabelValues(labelValues(operation, userIdStr, channelIdStr, modelName)...).Add(quotaAmount)
 	}
 }
 
@@ -398,10 +463,10 @@ func (p *PrometheusRecorder) RecordBillingTimeout(userId int, channelId int, mod
 	userIdStr := strconv.Itoa(userId)
 	channelIdStr := strconv.Itoa(channelId)
 
-	billingTimeoutsTotal.WithLabelValues(userIdStr, channelIdStr, modelName).Inc()
+	billingTimeoutsTotal.WithLabelValues(labelValues(userIdStr, channelIdStr, modelName)...).Inc()
 
 	// Also record as a billing error
-	billingErrorsTotal.WithLabelValues("timeout", "post_consume", userIdStr, channelIdStr, modelName).Inc()
+	billingErrorsTotal.WithLabelValues(labelValues("timeout", "post_consume", userIdStr, channelIdStr, modelName)...).Inc()
 }
 
 // RecordBillingError records billing error events
@@ -409,19 +474,53 @@ func (p *PrometheusRecorder) RecordBillingError(errorType, operation string, use
 	userIdStr := strconv.Itoa(userId)
 	channelIdStr := strconv.Itoa(channelId)
 
-	billingErrorsTotal.WithLabelValues(errorType, operation, userIdStr, channelIdStr, modelName).Inc()
+	billingErrorsTotal.WithLabelValues(labelValues(errorType, operation, userIdStr, channelIdStr, modelName)...).Inc()
 }
 
 // UpdateBillingStats updates overall billing statistics
 func (p *PrometheusRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
-	billingStats.WithLabelValues("total_operations").Set(float64(totalBillingOperations))
-	billingStats.WithLabelValues("successful_operations").Set(float64(successfulBillingOperations))
-	billingStats.WithLabelValues("failed_operations").Set(float64(failedBillingOperations))
+	billingStats.WithLabelValues(labelValues("total_operations")...).Set(float64(totalBillingOperations))
+	billingStats.WithLabelValues(labelValues("successful_operations")...).Set(float64(successfulBillingOperations))
+	billingStats.WithLabelValues(labelValues("failed_operations")...).Set(float64(failedBillingOperations))
 }
+
+// RecordUUIDBackfillRows records rows processed by one external UUID backfill batch.
+//
+// role, phase, target, and result must be compile-time registry constants; they
+// become metric labels and must never carry an ID, UUID, DSN, or error message.
+func (p *PrometheusRecorder) RecordUUIDBackfillRows(role, phase, target, result string, count int) {
+	if count <= 0 {
+		return
+	}
+	uuidBackfillRowsTotal.WithLabelValues(labelValues(role, phase, target, result)...).Add(float64(count))
+}
+
+// UpdateUUIDBackfillBacklog publishes the last observed backlog for one target.
+//
+// role and target must be compile-time registry constants.
+func (p *PrometheusRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {
+	uuidBackfillLastBacklog.WithLabelValues(labelValues(role, target)...).Set(backlog)
+}
+
+// RecordUUIDBackfillCycle records one catch-up or finalizer cycle outcome and duration.
+//
+// role, mode, and result must be compile-time registry constants.
+func (p *PrometheusRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
+	uuidBackfillCycleDuration.WithLabelValues(labelValues(role, mode, result)...).Observe(duration.Seconds())
+}
+
+// RecordUUIDBackfillFinalizer records one finalizer attempt result for a database role.
+//
+// role and result must be compile-time registry constants.
+func (p *PrometheusRecorder) RecordUUIDBackfillFinalizer(role, result string) {
+	uuidBackfillFinalizerTotal.WithLabelValues(labelValues(role, result)...).Inc()
+}
+
+// Compact UUID storage metrics are recorded in recorder_compact_uuid.go.
 
 // InitSystemMetrics initializes system-wide metrics
 func (p *PrometheusRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {
-	systemInfo.WithLabelValues(version, buildTime, goVersion).Set(1)
+	systemInfo.WithLabelValues(labelValues(version, buildTime, goVersion)...).Set(1)
 	systemStartTime.Set(float64(startTime.Unix()))
 }
 
@@ -435,5 +534,5 @@ func (p *PrometheusRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, to
 
 // InitPrometheusRecorder initializes the Prometheus recorder and sets it as the global recorder
 func InitPrometheusRecorder() {
-	metrics.GlobalRecorder = &PrometheusRecorder{}
+	metrics.SetRecorder(&PrometheusRecorder{})
 }

@@ -1,0 +1,9 @@
+{
+  "case": "user/register_wrong_type_unbound_field",
+  "site": "Register (request DTO, error)",
+  "status": 200,
+  "body": {
+    "message": "",
+    "success": true
+  }
+}

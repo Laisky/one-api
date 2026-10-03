@@ -38,14 +38,33 @@ func extractGptVersion(modelName string) (float64, bool) {
 // isModelSupportedReasoning checks if the model supports reasoning features.
 func isModelSupportedReasoning(modelName string) bool {
 	lower := normalizedModelName(modelName)
+	if lower == "" {
+		return false
+	}
+
+	// Preserve the existing explicit exclusion before consulting catalog metadata.
+	if strings.HasPrefix(lower, "gpt-5-chat-latest") || lower == "gpt-5-chat" {
+		return false
+	}
+
+	// Catalog metadata handles aliases whose names do not carry a GPT/o-series prefix,
+	// such as the separately provisioned Daybreak models.
+	if cfg, ok := ModelRatios[lower]; ok {
+		for _, feature := range cfg.SupportedFeatures {
+			if strings.EqualFold(feature, "reasoning") {
+				return true
+			}
+		}
+		if len(cfg.SupportedReasoningEfforts) > 0 || cfg.DefaultReasoningEffort != "" {
+			return true
+		}
+	}
+
 	if strings.HasPrefix(lower, "o") {
 		return true
 	}
 
 	if version, ok := extractGptVersion(lower); ok && version >= 5 {
-		if strings.HasPrefix(lower, "gpt-5-chat-latest") || lower == "gpt-5-chat" {
-			return false
-		}
 		return true
 	}
 
@@ -71,7 +90,7 @@ func isMediumOnlyReasoningModel(modelName string) bool {
 		return false
 	}
 
-	if cfg, ok := ModelRatios[modelName]; ok && len(cfg.SupportedReasoningEfforts) > 0 {
+	if cfg, ok := ModelRatios[lower]; ok && len(cfg.SupportedReasoningEfforts) > 0 {
 		if len(cfg.SupportedReasoningEfforts) != 1 {
 			return false
 		}
@@ -94,7 +113,7 @@ func isMediumOnlyReasoningModel(modelName string) bool {
 // defaultReasoningEffortForModel returns the default reasoning effort level
 // for the model. Falls back to "medium" when the model config doesn't pin one.
 func defaultReasoningEffortForModel(modelName string) string {
-	if cfg, ok := ModelRatios[modelName]; ok {
+	if cfg, ok := ModelRatios[normalizedModelName(modelName)]; ok {
 		if cfg.DefaultReasoningEffort != "" {
 			return cfg.DefaultReasoningEffort
 		}
@@ -112,21 +131,26 @@ func isReasoningEffortAllowedForModel(modelName, effort string) bool {
 	if effort == "" {
 		return false
 	}
-	normalized := strings.ToLower(strings.TrimSpace(effort))
+	lowerModelName := normalizedModelName(modelName)
+	normalizedEffort := strings.ToLower(strings.TrimSpace(effort))
 
-	if cfg, ok := ModelRatios[modelName]; ok && len(cfg.SupportedReasoningEfforts) > 0 {
+	if cfg, ok := ModelRatios[lowerModelName]; ok && len(cfg.SupportedReasoningEfforts) > 0 {
 		for _, allowed := range cfg.SupportedReasoningEfforts {
-			if strings.EqualFold(allowed, normalized) {
+			if strings.EqualFold(allowed, normalizedEffort) {
+				return true
+			}
+			// GPT-5.6 uses canonical "none" while legacy clients may still send "minimal".
+			if normalizedEffort == "minimal" && strings.EqualFold(allowed, "none") {
 				return true
 			}
 		}
 		return false
 	}
 
-	if isDeepResearchModel(modelName) || isMediumOnlyReasoningModel(modelName) {
-		return normalized == "medium"
+	if isDeepResearchModel(lowerModelName) || isMediumOnlyReasoningModel(lowerModelName) {
+		return normalizedEffort == "medium"
 	}
-	switch normalized {
+	switch normalizedEffort {
 	case "low", "medium", "high":
 		return true
 	default:
@@ -139,7 +163,19 @@ func normalizeReasoningEffortForModel(modelName string, effort *string) *string 
 	if effort == nil {
 		return stringRef(defaultEffort)
 	}
+
 	normalized := strings.ToLower(strings.TrimSpace(*effort))
+	if normalized == "minimal" {
+		if cfg, ok := ModelRatios[normalizedModelName(modelName)]; ok {
+			for _, allowed := range cfg.SupportedReasoningEfforts {
+				if strings.EqualFold(allowed, "none") {
+					normalized = "none"
+					break
+				}
+			}
+		}
+	}
+
 	if !isReasoningEffortAllowedForModel(modelName, normalized) {
 		return stringRef(defaultEffort)
 	}

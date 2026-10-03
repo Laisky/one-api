@@ -23,6 +23,7 @@
     "balance": {
       "available": "API 利用可能なクォータ",
       "description": "現在のクォータ残高",
+      "note": "クレジットは USD で請求され、期限切れになることはありません。",
       "refresh": "残高を更新",
       "title": "現在の残高"
     },
@@ -45,6 +46,26 @@
       "success": "引き換えに成功しました！ {{value}} トークンを追加しました。",
       "title": "コードを引き換え"
     },
+    "stripe": {
+      "button": "Stripe に進む",
+      "description": "Stripe でカード払いできます。USD のみ、最低 ${{min}}。領収書は登録済みのメールアドレスに送信されます。",
+      "failed": "チェックアウトセッションを作成できませんでした",
+      "label": "金額（USD）",
+      "max": "金額が大きすぎます",
+      "min": "最低 ${{value}}",
+      "note": "Stripe Checkout にリダイレクトされます。支払い確認後に残高が更新されます。",
+      "outcome_cancel": "請求は行われていません。",
+      "outcome_cancel_title": "支払いがキャンセルされました",
+      "outcome_credited": "サーバーの注文ステータスに基づき、残高が更新されました。",
+      "outcome_credited_title": "クレジット追加済み",
+      "outcome_failed": "支払いは記録されましたが、オペレーターの確認が必要です。残高に誤りがある場合はサポートに連絡してください。",
+      "outcome_failed_title": "支払いの確認が必要です",
+      "outcome_success": "サーバーと確認中…Webhook が注文を確定すると残高が更新されます。",
+      "outcome_success_title": "支払いを受け付けました",
+      "processing": "リダイレクト中…",
+      "required": "USD の金額を入力してください",
+      "title": "クレジットを追加"
+    },
     "tips": {
       "content": [
         "クォータは API の利用状況とモデルのコストに基づいて消費されます",
@@ -55,6 +76,7 @@
       ],
       "title": "ヒント"
     },
-    "title": "チャージ"
+    "title": "チャージ",
+    "tokens": "クレジット"
   }
 }

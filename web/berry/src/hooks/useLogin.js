@@ -4,6 +4,12 @@ import { LOGIN } from 'store/actions';
 import { useNavigate } from 'react-router';
 import { showSuccess } from 'utils/common';
 
+const normalizeUser = (user) => {
+  if (!user) return user;
+  const uuid = user.uuid || user.user_uuid;
+  return uuid ? { ...user, uuid, id: uuid } : user;
+};
+
 const useLogin = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -17,8 +23,9 @@ const useLogin = () => {
       const res = await API.post(`/api/user/login`, loginData);
       const { success, message, data } = res.data;
       if (success) {
-        localStorage.setItem('user', JSON.stringify(data));
-        dispatch({ type: LOGIN, payload: data });
+        const user = normalizeUser(data);
+        localStorage.setItem('user', JSON.stringify(user));
+        dispatch({ type: LOGIN, payload: user });
         navigate('/panel');
       }
       return { success, message, data };
@@ -37,8 +44,9 @@ const useLogin = () => {
           showSuccess('绑定成功！');
           navigate('/panel');
         } else {
-          dispatch({ type: LOGIN, payload: data });
-          localStorage.setItem('user', JSON.stringify(data));
+          const user = normalizeUser(data);
+          dispatch({ type: LOGIN, payload: user });
+          localStorage.setItem('user', JSON.stringify(user));
           showSuccess('登录成功！');
           navigate('/panel');
         }
@@ -59,8 +67,9 @@ const useLogin = () => {
           showSuccess('绑定成功！');
           navigate('/panel');
         } else {
-          dispatch({ type: LOGIN, payload: data });
-          localStorage.setItem('user', JSON.stringify(data));
+          const user = normalizeUser(data);
+          dispatch({ type: LOGIN, payload: user });
+          localStorage.setItem('user', JSON.stringify(user));
           showSuccess('登录成功！');
           navigate('/panel');
         }
@@ -81,8 +90,9 @@ const useLogin = () => {
           showSuccess('绑定成功！');
           navigate('/panel');
         } else {
-          dispatch({ type: LOGIN, payload: data });
-          localStorage.setItem('user', JSON.stringify(data));
+          const user = normalizeUser(data);
+          dispatch({ type: LOGIN, payload: user });
+          localStorage.setItem('user', JSON.stringify(user));
           showSuccess('登录成功！');
           navigate('/panel');
         }
@@ -99,8 +109,9 @@ const useLogin = () => {
       const res = await API.get(`/api/oauth/wechat?code=${code}`);
       const { success, message, data } = res.data;
       if (success) {
-        dispatch({ type: LOGIN, payload: data });
-        localStorage.setItem('user', JSON.stringify(data));
+        const user = normalizeUser(data);
+        dispatch({ type: LOGIN, payload: user });
+        localStorage.setItem('user', JSON.stringify(user));
         showSuccess('登录成功！');
         navigate('/panel');
       }

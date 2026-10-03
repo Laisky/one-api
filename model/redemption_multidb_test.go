@@ -3,27 +3,22 @@ package model
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 // redemptionMultidbCases lists the live-database backends to exercise. Each
 // case is gated on its own DSN env variable so the suite stays opt-in for
 // developers without a local MySQL/Postgres.
 var redemptionMultidbCases = []struct {
-	name   string
-	envVar string
-	open   func(dsn string) gorm.Dialector
+	name    string
+	backend string
 }{
-	{name: "PostgreSQL", envVar: "PG_DSN", open: func(dsn string) gorm.Dialector { return postgres.Open(dsn) }},
-	{name: "MySQL", envVar: "MYSQL_DSN", open: func(dsn string) gorm.Dialector { return mysql.Open(dsn) }},
+	{name: "PostgreSQL", backend: "postgres"},
+	{name: "MySQL", backend: "mysql"},
 }
 
 // TestRedeem_ConcurrentSingleSuccess_LiveDB is the gh #2398 reproducer
@@ -41,13 +36,10 @@ func TestRedeem_ConcurrentSingleSuccess_LiveDB(t *testing.T) {
 	for _, tc := range redemptionMultidbCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			dsn := os.Getenv(tc.envVar)
-			if dsn == "" {
-				t.Skipf("%s not set; skipping %s concurrent redemption test", tc.envVar, tc.name)
+			db := openBackend(t, tc.backend)
+			if db == nil {
+				t.Skipf("%s DSN not set; skipping %s concurrent redemption test", tc.backend, tc.name)
 			}
-
-			db, err := gorm.Open(tc.open(dsn), &gorm.Config{})
-			require.NoError(t, err)
 			sqlDB, err := db.DB()
 			require.NoError(t, err)
 			sqlDB.SetMaxOpenConns(32)
@@ -65,6 +57,7 @@ func TestRedeem_ConcurrentSingleSuccess_LiveDB(t *testing.T) {
 				_ = db.Migrator().DropTable(&Redemption{}, &User{}, &Log{})
 				DB = origDB
 				LOG_DB = origLog
+				resetBackendFlags()
 				_ = sqlDB.Close()
 			})
 

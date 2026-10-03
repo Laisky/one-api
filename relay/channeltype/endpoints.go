@@ -29,6 +29,7 @@ const (
 	EndpointRealtime           Endpoint = Endpoint(relaymode.Realtime)
 	EndpointVideos             Endpoint = Endpoint(relaymode.Videos)
 	EndpointOCR                Endpoint = Endpoint(relaymode.OCR)
+	EndpointSystemOne          Endpoint = Endpoint(relaymode.SystemOne)
 )
 
 // EndpointInfo contains metadata about an endpoint for display purposes.
@@ -58,6 +59,7 @@ func AllEndpoints() []EndpointInfo {
 		{ID: EndpointRealtime, Name: "realtime", Description: "Realtime API (WebSocket)", Path: "/v1/realtime"},
 		{ID: EndpointVideos, Name: "videos", Description: "Video Generation API", Path: "/v1/videos"},
 		{ID: EndpointOCR, Name: "ocr", Description: "OCR / Layout Parsing API", Path: "/api/paas/v4/layout_parsing"},
+		{ID: EndpointSystemOne, Name: "systemone", Description: "TypeSafe System One Evaluation API", Path: "/v1/systemone"},
 	}
 }
 
@@ -88,7 +90,7 @@ func EndpointNameToID(name string) Endpoint {
 	return -1
 }
 
-// EndpointIDToName converts an Endpoint ID to its string name.
+// EndpointIDToName converts an endpoint ID to its string name.
 // Returns empty string if the ID is not recognized.
 func EndpointIDToName(id Endpoint) string {
 	if name, ok := endpointIDToName[id]; ok {
@@ -205,14 +207,31 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case PaLM:
 		return chatOnly
 	case Gemini, GeminiOpenAICompatible:
-		return chatAndEmbeddings
+		return append(chatAndEmbeddings, EndpointRealtime, EndpointAudioSpeech)
 	case Copilot:
 		return copilotDefault
 	case Zhipu:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
+			EndpointAudioTranscription,
+			EndpointVideos,
 			EndpointEmbeddings,
 			EndpointImagesGenerations,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+			EndpointOCR,
+		}
+	case Zai:
+		// Z.AI international (api.z.ai) is the same company as Zhipu/BigModel serving
+		// the same GLM wire protocol, but a smaller catalog: it has NO embeddings, NO
+		// rerank, NO text-to-speech and NO realtime surface -- those are BigModel-only.
+		// Source: https://docs.z.ai/llms.txt and https://docs.z.ai/guides/overview/pricing
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointImagesGenerations,
+			EndpointVideos,
+			EndpointAudioTranscription,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 			EndpointOCR,
@@ -265,6 +284,8 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Mistral:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
+			EndpointAudioTranscription,
 			EndpointEmbeddings,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
@@ -272,6 +293,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Groq:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
 			EndpointAudioTranscription,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
@@ -294,6 +316,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Cohere:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointEmbeddings,
 			EndpointRerank,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
@@ -335,6 +358,8 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointImagesGenerations,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
+			EndpointRealtime,
+			EndpointAudioSpeech,
 		}
 	case Proxy:
 		// Proxy mode supports all endpoints - it's a passthrough
@@ -342,6 +367,8 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case SiliconFlow:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
+			EndpointImagesGenerations,
 			EndpointEmbeddings,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
@@ -351,6 +378,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointChatCompletions,
 			EndpointEmbeddings,
 			EndpointImagesGenerations,
+			EndpointVideos,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
@@ -373,6 +401,61 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
+	case NVIDIA:
+		// NVIDIA's hosted API (https://integrate.api.nvidia.com/v1) natively serves
+		// OpenAI-compatible chat completions. The Responses API and Anthropic
+		// Messages surfaces are provided through one-api's shared OpenAI-compatible
+		// conversion/fallback layer rather than upstream-native. Embeddings are not
+		// advertised by default until NVIDIA's model-specific input_type requirements
+		// are represented in the model catalog.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
+	case Cerebras:
+		// Cerebras' OpenAI-compatible API (https://api.cerebras.ai/v1) natively
+		// serves Chat Completions only. The Responses API and Anthropic Messages
+		// surfaces are provided through one-api's shared OpenAI-compatible
+		// conversion/fallback layer rather than upstream-native. Cerebras does
+		// not expose embeddings.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
+	case DeepInfra:
+		// DeepInfra combines OpenAI-compatible, native Anthropic Messages, and
+		// model-native inference surfaces under one Bearer-authenticated API.
+		// Responses uses one-api's Chat Completions fallback. DeepInfra video is
+		// intentionally omitted because its native inference contract does not
+		// match one-api's /v1/videos lifecycle API.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointCompletions,
+			EndpointEmbeddings,
+			EndpointImagesGenerations,
+			EndpointImagesEdits,
+			EndpointAudioSpeech,
+			EndpointAudioTranscription,
+			EndpointAudioTranslation,
+			EndpointRerank,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
+	case Jina:
+		// Jina natively serves search endpoints and OCR chat. Responses and
+		// Claude Messages use the shared Chat Completions conversion layer.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointEmbeddings,
+			EndpointRerank,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
+	case TypeSafe:
+		// Typed evaluation is not a generative conversation API.
+		return []Endpoint{EndpointSystemOne}
 	case Custom, OpenAICompatible:
 		return openAICompatibleBasic
 	case ClaudeCompatible:

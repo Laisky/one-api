@@ -19,6 +19,7 @@ const mockedGet = api.get as unknown as ReturnType<typeof vi.fn>;
 
 const sampleToken: Token = {
   id: 42,
+  uuid: '018f0000-0000-7000-8000-000000000042',
   name: 'Sample',
   key: 'abcdef1234567890',
   status: 1,
@@ -143,7 +144,7 @@ describe('TokensPage share dropdown integration', () => {
     const trigger = screen.getByRole('button', { name: /Open in client/i });
     await user.click(trigger);
 
-    const item = await screen.findByTestId(`token-share-next-${sampleToken.id}`);
+    const item = await screen.findByTestId(`token-share-next-${sampleToken.uuid}`);
     await user.click(item);
 
     expect(openSpy).toHaveBeenCalledTimes(1);
@@ -171,10 +172,10 @@ describe('TokensPage share dropdown integration', () => {
     const trigger = screen.getByRole('button', { name: /Open in client/i });
     await user.click(trigger);
 
-    await screen.findByTestId(`token-share-ama-${sampleToken.id}`);
-    expect(screen.queryByTestId(`token-share-next-${sampleToken.id}`)).not.toBeInTheDocument();
-    expect(screen.queryByTestId(`token-share-lobechat-${sampleToken.id}`)).not.toBeInTheDocument();
-    expect(screen.getByTestId(`token-share-opencat-${sampleToken.id}`)).toBeInTheDocument();
+    await screen.findByTestId(`token-share-ama-${sampleToken.uuid}`);
+    expect(screen.queryByTestId(`token-share-next-${sampleToken.uuid}`)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(`token-share-lobechat-${sampleToken.uuid}`)).not.toBeInTheDocument();
+    expect(screen.getByTestId(`token-share-opencat-${sampleToken.uuid}`)).toBeInTheDocument();
   });
 
   it('shows token name and id in the delete confirmation dialog', async () => {
@@ -189,7 +190,7 @@ describe('TokensPage share dropdown integration', () => {
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Sample')).toBeInTheDocument();
-    expect(within(dialog).getByText('42')).toBeInTheDocument();
+    expect(within(dialog).getByText(sampleToken.uuid)).toBeInTheDocument();
     expect(within(dialog).getByText('Name')).toBeInTheDocument();
     expect(within(dialog).getByText('ID')).toBeInTheDocument();
   });

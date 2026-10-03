@@ -245,6 +245,10 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 		return openai_compatible.GetFullRequestURL(meta.BaseURL, meta.RequestURLPath, meta.ChannelType), nil
 	}
 
+	if meta.Mode == relaymode.Videos && requestPath == "/v1/videos" {
+		return openai_compatible.GetFullRequestURL(meta.BaseURL, "/v1/videos/generations"+strings.TrimPrefix(meta.RequestURLPath, requestPath), meta.ChannelType), nil
+	}
+
 	// XAI uses OpenAI-compatible API endpoints
 	return openai_compatible.GetFullRequestURL(meta.BaseURL, meta.RequestURLPath, meta.ChannelType), nil
 }
@@ -258,58 +262,71 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 }
 
 // ConvertRequest converts and validates OpenAI-compatible requests for x.AI.
-// It removes unsupported parameters like reasoning_effort and adjusts model-specific parameters.
+// It preserves only model-supported reasoning and sampling parameters.
 // Returns the modified request or an error if conversion fails.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
-	// XAI is OpenAI-compatible, so we can pass the request through with minimal changes
-	// Remove reasoning_effort as XAI doesn't support it
-	if request.ReasoningEffort != nil {
+	// XAI is OpenAI-compatible, so we can pass the request through with minimal changes.
+	// Use the catalog as the source of truth instead of maintaining a second model allowlist.
+	config, knownModel := ModelRatios[request.Model]
+	if request.ReasoningEffort != nil &&
+		(!knownModel || !supportsStringValue(config.SupportedReasoningEfforts, *request.ReasoningEffort)) {
 		request.ReasoningEffort = nil
 	}
-	// Remove presence_penalty and frequency_penalty for grok-4 family reasoning models
-	// per xAI API reference: presencePenalty, frequencyPenalty, and stop cannot be used
-	// with reasoning models. Source: https://docs.x.ai/docs/api-reference#chat-completions
-	switch request.Model {
-	case "grok-4.3",
-		"grok-4-0709",
-		"grok-4.20",
-		"grok-4.20-reasoning",
-		"grok-4.20-non-reasoning",
-		"grok-4.20-multi-agent",
-		"grok-4.20-0309-reasoning",
-		"grok-4.20-0309-non-reasoning",
-		"grok-4.20-multi-agent-0309",
-		"grok-4-1-fast-reasoning",
-		"grok-4-1-fast-non-reasoning",
-		"grok-4-fast-reasoning",
-		"grok-4-fast-non-reasoning",
-		"grok-code-fast-1":
-		if request.PresencePenalty != nil {
+
+	// Retired aliases retain their historical compatibility filtering even when
+	// their copied metadata advertises a wider sampling set than the redirect target.
+	legacyPenaltyRestricted := isLegacyPenaltyRestrictedModel(request.Model)
+	if knownModel && len(config.SupportedSamplingParameters) > 0 {
+		if request.PresencePenalty != nil &&
+			(legacyPenaltyRestricted || !supportsStringValue(config.SupportedSamplingParameters, "presence_penalty")) {
 			request.PresencePenalty = nil
 		}
-		if request.FrequencyPenalty != nil {
+		if request.FrequencyPenalty != nil &&
+			(legacyPenaltyRestricted || !supportsStringValue(config.SupportedSamplingParameters, "frequency_penalty")) {
 			request.FrequencyPenalty = nil
 		}
+		if request.Stop != nil && !supportsStringValue(config.SupportedSamplingParameters, "stop") {
+			request.Stop = nil
+		}
+	} else if legacyPenaltyRestricted {
+		request.PresencePenalty = nil
+		request.FrequencyPenalty = nil
 	}
 	return request, nil
 }
 
 // ConvertImageRequest converts and validates image generation requests for x.AI.
-// It ensures correct model naming and removes unsupported parameters like quality, size, and style.
+// It maps the shared OpenAI size field to xAI's resolution field and removes
+// parameters that the selected Imagine model does not accept.
 // Returns the modified request or an error if conversion fails.
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {
-	// XAI supports image generation with grok-2-image model
-	// The API is OpenAI-compatible, so we can pass the request through with minimal changes
-
-	// Ensure we're using the correct model name for xAI
+	// Ensure we're using the correct model name for the legacy xAI image model.
 	if request.Model == "grok-2-image" {
-		// XAI API uses grok-2-image as the model name
 		request.Model = "grok-2-image"
 	}
 
-	// XAI doesn't support quality, size, or style parameters according to their docs
-	// Remove unsupported parameters
-	request.Quality = ""
+	// xAI's Imagine API exposes 1k and 2k resolution values instead of
+	// OpenAI's pixel-size field. Preserve an explicitly supplied resolution.
+	if request.Resolution == "" && strings.HasPrefix(request.Model, "grok-imagine-image") {
+		switch request.Size {
+		case "2048x2048":
+			request.Resolution = "2k"
+		case "1024x1024":
+			request.Resolution = "1k"
+		}
+	}
+
+	// Image 2.0 accepts low, medium, and auto quality. Older Imagine slugs do
+	// not expose that parameter, so retain the previous compatibility behavior.
+	if request.Model == "grok-imagine-image-2.0" {
+		switch request.Quality {
+		case "", "low", "medium", "auto":
+		default:
+			request.Quality = ""
+		}
+	} else {
+		request.Quality = ""
+	}
 	request.Size = ""
 	request.Style = ""
 
@@ -328,6 +345,11 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 // It uses the common request helper for standard HTTP handling.
 // Returns the HTTP response or an error if the request fails.
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if meta.Mode == relaymode.Videos {
+		if err := validateVideoOperation(c); err != nil {
+			return nil, err
+		}
+	}
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
@@ -335,6 +357,9 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 // It handles different response types including images, Response API, and Claude Messages.
 // Returns usage information and any errors encountered during processing.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	if meta.Mode == relaymode.Videos {
+		return a.handleVideoResponse(c, resp)
+	}
 	// Handle image generation requests differently
 	if meta.Mode == relaymode.ImagesGenerations {
 		// TODO: Do we need a meta tag to include the actual model name for this image generation?
@@ -358,23 +383,13 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 // It handles both streaming and non-streaming Response API responses, passing them through
 // to the client while extracting billing information from the usage field.
 func (a *Adaptor) handleResponseAPIResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
-	// For streaming Response API, pass through directly
+	// For streaming Response API, forward every byte to the client while sniffing
+	// the stream for the terminal response.completed usage block. A blind io.Copy
+	// here reports no usage at all, which leaves the pre-consumed quota
+	// unreconciled: the caller then charges its estimate while the consume log
+	// stays provisional, i.e. invisible on the Logs page.
 	if meta.IsStream {
-		// Copy response to client
-		for key, values := range resp.Header {
-			for _, value := range values {
-				c.Writer.Header().Add(key, value)
-			}
-		}
-		if resp.Header.Get("Content-Type") == "" {
-			c.Writer.Header().Set("Content-Type", "text/event-stream")
-		}
-		c.Writer.WriteHeader(resp.StatusCode)
-		if _, copyErr := io.Copy(c.Writer, resp.Body); copyErr != nil {
-			return nil, openai_compatible.ErrorWrapper(copyErr, "copy_response_body_failed", http.StatusInternalServerError)
-		}
-		resp.Body.Close()
-		return nil, nil
+		return a.streamResponseAPI(c, resp, meta)
 	}
 
 	// For non-streaming, read the entire response

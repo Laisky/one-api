@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import { useState, useEffect } from 'react';
 import { showError, showSuccess } from 'utils/common';
 
@@ -21,31 +22,38 @@ import { IconRefresh, IconPlus } from '@tabler/icons-react';
 import EditeModal from './component/EditModal';
 import { useSelector } from 'react-redux';
 
+const refPayload = (ref) => (typeof ref === 'string' ? { uuid: ref } : { id: ref });
+
+const tokenRef = (token) => token.uuid || token.id;
+
 export default function Token() {
   const [tokens, setTokens] = useState([]);
   const [activePage, setActivePage] = useState(0);
   const [searching, setSearching] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [openModal, setOpenModal] = useState(false);
-  const [editTokenId, setEditTokenId] = useState(0);
+  const [editTokenId, setEditTokenId] = useState('');
   const siteInfo = useSelector((state) => state.siteInfo);
 
   const loadTokens = async (startIdx) => {
-    setSearching(true);
-    const res = await API.get(`/api/token/?p=${startIdx}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setTokens(data);
+    try {
+      setSearching(true);
+      const res = await API.get(`/api/token/?p=${startIdx}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (startIdx === 0) {
+          setTokens(data);
+        } else {
+          let newTokens = [...tokens];
+          newTokens.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
+          setTokens(newTokens);
+        }
       } else {
-        let newTokens = [...tokens];
-        newTokens.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
-        setTokens(newTokens);
+        showError(message);
       }
-    } else {
-      showError(message);
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   useEffect(() => {
@@ -67,22 +75,25 @@ export default function Token() {
   };
 
   const searchTokens = async (event) => {
-    event.preventDefault();
-    if (searchKeyword === '') {
-      await loadTokens(0);
-      setActivePage(0);
-      return;
+    try {
+      event.preventDefault();
+      if (searchKeyword === '') {
+        await loadTokens(0);
+        setActivePage(0);
+        return;
+      }
+      setSearching(true);
+      const res = await API.get(`/api/token/search?keyword=${searchKeyword}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setTokens(data);
+        setActivePage(0);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(true);
-    const res = await API.get(`/api/token/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setTokens(data);
-      setActivePage(0);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
   };
 
   const handleSearchKeyword = (event) => {
@@ -91,7 +102,7 @@ export default function Token() {
 
   const manageToken = async (id, action, value) => {
     const url = '/api/token/';
-    let data = { id };
+    let data = refPayload(id);
     let res;
     switch (action) {
       case 'delete':
@@ -129,13 +140,13 @@ export default function Token() {
 
   const handleCloseModal = () => {
     setOpenModal(false);
-    setEditTokenId(0);
+    setEditTokenId('');
   };
 
   const handleOkModal = (status) => {
     if (status === true) {
       handleCloseModal();
-      handleRefresh();
+      handleRefresh().catch(reportUIError);
     }
   };
 
@@ -147,7 +158,7 @@ export default function Token() {
           variant="contained"
           color="primary"
           onClick={() => {
-            handleOpenModal(0);
+            handleOpenModal('');
           }}
           startIcon={<IconPlus />}
         >
@@ -160,8 +171,8 @@ export default function Token() {
         </Alert>
       </Stack>
       <Card>
-        <Box component="form" onSubmit={searchTokens} noValidate sx={{marginTop: 2}}>
-          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索令牌的名称...'} />
+        <Box component="form" onSubmit={(...uiArgs) => searchTokens(...uiArgs).catch(reportUIError)} noValidate sx={{marginTop: 2}}>
+          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索令牌的名称或 UUID...'} />
         </Box>
         <Toolbar
           sx={{
@@ -174,7 +185,7 @@ export default function Token() {
         >
           <Container>
             <ButtonGroup variant="outlined" aria-label="outlined small primary button group" sx={{marginBottom: 2}}>
-              <Button onClick={handleRefresh} startIcon={<IconRefresh width={'18px'} />}>
+              <Button onClick={(...uiArgs) => handleRefresh(...uiArgs).catch(reportUIError)} startIcon={<IconRefresh width={'18px'} />}>
                 刷新
               </Button>
             </ButtonGroup>
@@ -190,7 +201,7 @@ export default function Token() {
                   <TokensTableRow
                     item={row}
                     manageToken={manageToken}
-                    key={row.id}
+                    key={tokenRef(row)}
                     handleOpenModal={handleOpenModal}
                     setModalTokenId={setEditTokenId}
                   />

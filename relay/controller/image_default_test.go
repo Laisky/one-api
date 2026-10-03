@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func TestGetImageRequest_DefaultQuality_DALLE3(t *testing.T) {
 
 	ir, err := getImageRequest(c, 0)
 	require.NoError(t, err, "getImageRequest error")
-	cfg, ok := pricing.ResolveModelConfig("dall-e-3", nil, &openai.Adaptor{})
+	cfg, ok := pricing.ResolveModelConfig("dall-e-3", nil, &openai.Adaptor{}, time.Now())
 	require.True(t, ok && cfg.Image != nil, "expected pricing config for dall-e-3")
 	applyImageDefaults(ir, cfg.Image)
 	require.Equal(t, "standard", ir.Quality, "expected default quality 'standard' for dall-e-3")
@@ -55,7 +56,7 @@ func TestGetImageRequest_DefaultQuality_GPTImage1(t *testing.T) {
 
 	ir, err := getImageRequest(c, 0)
 	require.NoError(t, err, "getImageRequest error")
-	cfg, ok := pricing.ResolveModelConfig("gpt-image-1", nil, &openai.Adaptor{})
+	cfg, ok := pricing.ResolveModelConfig("gpt-image-1", nil, &openai.Adaptor{}, time.Now())
 	require.True(t, ok && cfg.Image != nil, "expected pricing config for gpt-image-1")
 	applyImageDefaults(ir, cfg.Image)
 	require.Equal(t, "high", ir.Quality, "expected default quality 'high' for gpt-image-1")
@@ -78,7 +79,7 @@ func TestGetImageRequest_DefaultQuality_GPTImage1Mini(t *testing.T) {
 
 	ir, err := getImageRequest(c, 0)
 	require.NoError(t, err, "getImageRequest error")
-	cfg, ok := pricing.ResolveModelConfig("gpt-image-1-mini", nil, &openai.Adaptor{})
+	cfg, ok := pricing.ResolveModelConfig("gpt-image-1-mini", nil, &openai.Adaptor{}, time.Now())
 	require.True(t, ok && cfg.Image != nil, "expected pricing config for gpt-image-1-mini")
 	applyImageDefaults(ir, cfg.Image)
 	require.Equal(t, "high", ir.Quality, "expected default quality 'high' for gpt-image-1-mini")
@@ -100,7 +101,7 @@ func TestGetImageRequest_Defaults_GPTImage2(t *testing.T) {
 
 	ir, err := getImageRequest(c, 0)
 	require.NoError(t, err, "getImageRequest error")
-	cfg, ok := pricing.ResolveModelConfig("gpt-image-2", nil, &openai.Adaptor{})
+	cfg, ok := pricing.ResolveModelConfig("gpt-image-2", nil, &openai.Adaptor{}, time.Now())
 	require.True(t, ok && cfg.Image != nil, "expected pricing config for gpt-image-2")
 	applyImageDefaults(ir, cfg.Image)
 	require.Equal(t, "1024x1024", ir.Size, "expected default size '1024x1024' for gpt-image-2")
@@ -124,7 +125,7 @@ func TestGetImageRequest_DefaultQuality_DALLE2(t *testing.T) {
 
 	ir, err := getImageRequest(c, 0)
 	require.NoError(t, err, "getImageRequest error")
-	cfg, ok := pricing.ResolveModelConfig("dall-e-2", nil, &openai.Adaptor{})
+	cfg, ok := pricing.ResolveModelConfig("dall-e-2", nil, &openai.Adaptor{}, time.Now())
 	require.True(t, ok && cfg.Image != nil, "expected pricing config for dall-e-2")
 	applyImageDefaults(ir, cfg.Image)
 	require.Equal(t, "standard", ir.Quality, "expected default quality 'standard' for dall-e-2")
@@ -142,7 +143,7 @@ func TestResolveImagePricing_ChannelModelWithoutImage(t *testing.T) {
 		},
 	}
 
-	imagePricingCfg, ok := pricing.ResolveImagePricing(imageModel, channelConfigs, &gemini.Adaptor{})
+	imagePricingCfg, ok := pricing.ResolveImagePricing(imageModel, channelConfigs, &gemini.Adaptor{}, time.Now())
 	require.True(t, ok, "expected image pricing resolution to succeed")
 
 	require.NotNil(t, imagePricingCfg, "expected resolved image pricing config")

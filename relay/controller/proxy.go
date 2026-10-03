@@ -13,16 +13,35 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/apitype"
+	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // RelayProxyHelper is a helper function to proxy the request to the upstream service
-func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatusCode {
+func RelayProxyHelper(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+	meta := metalib.GetByContext(c)
+	// Zero-quota forwarding is an explicit operator choice for Proxy channels,
+	// never a property an API caller may select for an ordinary paid channel.
+	// Enforce this before reading the body or resolving/overriding an upstream URL.
+	if meta.ChannelType != channeltype.Proxy || meta.APIType != apitype.Proxy {
+		return openai.ErrorWrapper(errors.New("unmetered proxy relay requires an explicitly configured Proxy channel"),
+			"proxy_channel_required", http.StatusForbidden)
+	}
+	return relayUnmeteredRequest(c)
+}
+
+// relayUnmeteredRequest forwards an operation whose charging policy was already
+// selected by its controller. Only the guarded explicit-proxy entrypoint and
+// authenticated video retrieval/deletion routes may call it; model generation
+// must continue through its normal admission and settlement controller.
+func relayUnmeteredRequest(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	meta := metalib.GetByContext(c)
 	if err := logClientRequestPayload(c, "proxy"); err != nil {
 		return openai.ErrorWrapper(err, "invalid_proxy_request", http.StatusBadRequest)
@@ -59,18 +78,25 @@ func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	isStream := meta.IsStream
 	modelName := "proxy"
 	elapsed := helper.CalcElapsedTime(meta.StartTime)
-	go func() {
-		ctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), 30*time.Second)
+	// GoRequestScoped hands the goroutine a detached, c-free context: it must not read
+	// the *gin.Context after the handler returns (gin recycles it via sync.Pool). All
+	// request-scoped values are value-captured above; deriving the timeout from the
+	// detached ctx (not gmw.BackgroundCtx(c)) keeps the goroutine off the recycled c.
+	relayctx.GoRequestScoped(c, "proxyLog", func(ctx context.Context) {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
 		// Log the proxy request with zero quota
 		model.RecordConsumeLog(ctx, &model.Log{
 			UserId:           userId,
+			UserUUID:         model.StringPtrIfNotEmpty(meta.UserUUID),
 			ChannelId:        channelId,
+			ChannelUUID:      model.StringPtrIfNotEmpty(meta.ChannelUUID),
 			PromptTokens:     promptTokens,
 			CompletionTokens: completionTokens,
 			ModelName:        modelName,
 			TokenName:        tokenName,
+			TokenUUID:        model.StringPtrIfNotEmpty(meta.TokenUUID),
 			Quota:            0,
 			Content:          "proxy request, no quota consumption",
 			IsStream:         isStream,
@@ -78,14 +104,14 @@ func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			TraceId:          traceId,
 			RequestId:        requestId,
 		})
-		model.UpdateUserUsedQuotaAndRequestCount(userId, 0)
-		model.UpdateChannelUsedQuota(channelId, 0)
+		model.UpdateUserUsedQuotaAndRequestCountWithContext(ctx, userId, 0)
+		model.UpdateChannelUsedQuotaWithContext(ctx, channelId, 0)
 
 		// Reconcile user request cost (proxy does not consume quota)
 		if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
 			gmw.GetLogger(ctx).Error("update user request cost failed", zap.Error(err))
 		}
-	}()
+	})
 
 	return nil
 }
@@ -95,8 +121,7 @@ func proxyTokenSummary(c *gin.Context, meta *metalib.Meta, usage *relaymodel.Usa
 		if lg := gmw.GetLogger(c); lg != nil {
 			lg.Debug("proxy adaptor returned no usage payload; defaulting to zero tokens",
 				zap.String("method", c.Request.Method),
-				zap.String("path", c.Request.URL.Path),
-				zap.Int("channel_id", meta.ChannelId))
+				zap.String("path", c.Request.URL.Path))
 		}
 		return 0, 0
 	}

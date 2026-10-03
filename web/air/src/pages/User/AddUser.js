@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useState } from 'react';
 import { API, isMobile, showError, showSuccess } from '../../helpers';
 import Title from '@douyinfe/semi-ui/lib/es/typography/title';
@@ -18,19 +19,22 @@ const AddUser = (props) => {
   };
 
   const submit = async () => {
-    setLoading(true);
-    if (inputs.username === '' || inputs.password === '') return;
-    const res = await API.post(`/api/user/`, inputs);
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess('用户账户创建成功！');
-      setInputs(originInputs);
-      props.refresh();
-      props.handleClose();
-    } else {
-      showError(message);
+    try {
+      setLoading(true);
+      if (inputs.username === '' || inputs.password === '') return;
+      const res = await API.post(`/api/user/`, inputs);
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess('用户账户创建成功！');
+        setInputs(originInputs);
+        props.refresh();
+        props.handleClose();
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleCancel = () => {
@@ -48,7 +52,7 @@ const AddUser = (props) => {
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Space>
-              <Button theme="solid" size={'large'} onClick={submit}>提交</Button>
+              <Button theme="solid" size={'large'} onClick={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>提交</Button>
               <Button theme="solid" size={'large'} type={'tertiary'} onClick={handleCancel}>取消</Button>
             </Space>
           </div>

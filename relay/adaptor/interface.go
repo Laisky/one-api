@@ -15,9 +15,11 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// ModelConfig represents pricing and configuration information for a model
+// ModelConfig represents pricing and configuration information for a model.
 // This structure consolidates both pricing (Ratio, CompletionRatio) and
-// configuration (MaxTokens, etc.) to eliminate the need for separate ModelConfig
+// configuration (MaxTokens, etc.) to eliminate the need for separate ModelConfig.
+// TimeWindows are applied above Tiers: a matching time-of-day overlay is merged
+// into the base config before tier resolution.
 type ModelConfig struct {
 	Ratio float64 `json:"ratio"`
 	// CompletionRatio represents the output rate / input rate
@@ -36,7 +38,7 @@ type ModelConfig struct {
 	CacheWrite1hRatio float64 `json:"cache_write_1h_ratio,omitempty"`
 	// Tiers contains tiered pricing data. If present, the first tier is the base
 	// Ratio/CompletionRatio/Cached* fields in this struct. Elements must be sorted
-	// ascending by InputTokenThreshold and represent the 2nd+ tiers.
+	// by input and output thresholds and represent the 2nd+ tiers.
 	Tiers []ModelRatioTier `json:"tiers,omitempty"`
 	// MaxTokens represents the maximum token limit for this model on this channel
 	// 0 means no limit (infinity)
@@ -53,6 +55,9 @@ type ModelConfig struct {
 	// is billed and displayed as flat per call rather than per token, regardless
 	// of model type (rerank is the canonical example, but the schema is generic).
 	PerCall *PerCallPricingConfig `json:"per_call,omitempty"`
+	// TimeWindows holds time-of-day pricing overlays applied above Tiers.
+	// Empty means pricing is invariant across the request start time.
+	TimeWindows []TimeWindow `json:"time_windows,omitempty"`
 	// ContextLength is the total token context (input+output) the model supports.
 	// 0 means unspecified — caller should fall back to a reasonable default.
 	ContextLength int32 `json:"context_length,omitempty"`
@@ -89,6 +94,89 @@ type ModelConfig struct {
 	HuggingFaceID string `json:"hugging_face_id,omitempty"`
 	// Description is a short human-readable description (optional).
 	Description string `json:"description,omitempty"`
+}
+
+// Clone returns a deep copy of the model configuration.
+// Parameters: none.
+// Returns: a copied ModelConfig whose slices, maps, and pricing blocks can be mutated safely.
+func (cfg ModelConfig) Clone() ModelConfig {
+	clone := cfg
+	if len(cfg.Tiers) > 0 {
+		clone.Tiers = append([]ModelRatioTier(nil), cfg.Tiers...)
+	}
+	if cfg.Video != nil {
+		clone.Video = cfg.Video.Clone()
+	}
+	if cfg.Audio != nil {
+		clone.Audio = cfg.Audio.Clone()
+	}
+	if cfg.Image != nil {
+		clone.Image = cfg.Image.Clone()
+	}
+	if cfg.Embedding != nil {
+		clone.Embedding = cfg.Embedding.Clone()
+	}
+	if cfg.PerCall != nil {
+		clone.PerCall = cfg.PerCall.Clone()
+	}
+	if len(cfg.TimeWindows) > 0 {
+		clone.TimeWindows = make([]TimeWindow, 0, len(cfg.TimeWindows))
+		for _, window := range cfg.TimeWindows {
+			clone.TimeWindows = append(clone.TimeWindows, window.Clone())
+		}
+	}
+	if len(cfg.InputModalities) > 0 {
+		clone.InputModalities = append([]string(nil), cfg.InputModalities...)
+	}
+	if len(cfg.OutputModalities) > 0 {
+		clone.OutputModalities = append([]string(nil), cfg.OutputModalities...)
+	}
+	if len(cfg.SupportedFeatures) > 0 {
+		clone.SupportedFeatures = append([]string(nil), cfg.SupportedFeatures...)
+	}
+	if len(cfg.SupportedSamplingParameters) > 0 {
+		clone.SupportedSamplingParameters = append([]string(nil), cfg.SupportedSamplingParameters...)
+	}
+	if len(cfg.SupportedReasoningEfforts) > 0 {
+		clone.SupportedReasoningEfforts = append([]string(nil), cfg.SupportedReasoningEfforts...)
+	}
+	return clone
+}
+
+// TimeWindow describes a wall-clock pricing overlay for a model.
+// Parameters: fields are JSON-configured schedule bounds and a sparse Overlay.
+// Returns: this type is data-only and does not return values.
+type TimeWindow struct {
+	Name       string       `json:"name,omitempty"`
+	TimeZone   string       `json:"timezone,omitempty"`
+	Ranges     []ClockRange `json:"ranges"`
+	DaysOfWeek []int        `json:"days_of_week,omitempty"`
+	DateFrom   string       `json:"date_from,omitempty"`
+	DateTo     string       `json:"date_to,omitempty"`
+	Overlay    ModelConfig  `json:"overlay"`
+}
+
+// Clone returns a deep copy of the time-window definition.
+// Parameters: none.
+// Returns: a copied TimeWindow whose overlay and slices can be mutated safely.
+func (w TimeWindow) Clone() TimeWindow {
+	clone := w
+	if len(w.Ranges) > 0 {
+		clone.Ranges = append([]ClockRange(nil), w.Ranges...)
+	}
+	if len(w.DaysOfWeek) > 0 {
+		clone.DaysOfWeek = append([]int(nil), w.DaysOfWeek...)
+	}
+	clone.Overlay = w.Overlay.Clone()
+	return clone
+}
+
+// ClockRange describes one local wall-clock span in a TimeWindow.
+// Parameters: Start and End use the "15:04" layout, where End <= Start crosses midnight.
+// Returns: this type is data-only and does not return values.
+type ClockRange struct {
+	Start string `json:"start"`
+	End   string `json:"end"`
 }
 
 // EmbeddingPricingConfig captures modality-specific pricing metadata for embedding requests.
@@ -144,7 +232,7 @@ func (cfg *PerCallPricingConfig) HasData() bool {
 	if cfg == nil {
 		return false
 	}
-	return cfg.UsdPerThousandCalls != 0
+	return true // A present per-call tariff may intentionally be free.
 }
 
 // Clone returns a copy of the per-call pricing configuration.
@@ -160,6 +248,8 @@ func (cfg *PerCallPricingConfig) Clone() *PerCallPricingConfig {
 // Pricing is expressed as a per-second USD cost that can be adjusted via resolution
 // multipliers relative to the base resolution.
 type VideoPricingConfig struct {
+	// InputImageUsd is the USD fee for each image/frame supplied to video generation.
+	InputImageUsd float64 `json:"input_image_usd,omitempty"`
 	// PerSecondUsd is the USD price per rendered second at the base resolution.
 	PerSecondUsd float64 `json:"per_second_usd,omitempty"`
 	// BaseResolution identifies the resolution treated as multiplier 1. Empty means unspecified.
@@ -174,7 +264,7 @@ func (cfg *VideoPricingConfig) HasData() bool {
 	if cfg == nil {
 		return false
 	}
-	if cfg.PerSecondUsd > 0 {
+	if cfg.PerSecondUsd > 0 || cfg.InputImageUsd > 0 {
 		return true
 	}
 	return len(cfg.ResolutionMultipliers) > 0
@@ -187,6 +277,7 @@ func (cfg *VideoPricingConfig) Clone() *VideoPricingConfig {
 	}
 	clone := &VideoPricingConfig{
 		PerSecondUsd:   cfg.PerSecondUsd,
+		InputImageUsd:  cfg.InputImageUsd,
 		BaseResolution: cfg.BaseResolution,
 	}
 	if len(cfg.ResolutionMultipliers) > 0 {
@@ -246,8 +337,8 @@ func normalizeResolutionKey(value string) string {
 	return strconv.Itoa(width) + "x" + strconv.Itoa(height)
 }
 
-// ModelRatioTier describes pricing for a specific input token tier. It overrides
-// the base ModelConfig starting at InputTokenThreshold. Zero values for optional
+// ModelRatioTier describes pricing for a token-usage tier. It overrides the base
+// ModelConfig when both non-zero thresholds are met. Zero values for pricing
 // fields mean "inherit from base"; negative cached ratios mean free tokens.
 type ModelRatioTier struct {
 	// Base price for this tier (per input token)
@@ -265,6 +356,9 @@ type ModelRatioTier struct {
 
 	// The minimum input‑token count at which this tier becomes applicable
 	InputTokenThreshold int `json:"input_token_threshold"`
+
+	// The minimum output-token count at which this tier becomes applicable
+	OutputTokenThreshold int `json:"output_token_threshold,omitempty"`
 }
 
 // ToolPricingConfig describes the per-invocation pricing for a provider built-in tool.
@@ -291,6 +385,13 @@ type ChannelToolConfig struct {
 // applies when upstream returns audio completions. Per-second fields allow direct
 // billing of duration-based models.
 type AudioPricingConfig struct {
+	InputPriceQuantity float64 `json:"input_price_quantity,omitempty"`
+	// InputUnit makes direct input pricing explicit: characters, utf8_bytes, or seconds.
+	InputUnit               string  `json:"input_unit,omitempty"`
+	InputPriceUsd           float64 `json:"input_price_usd,omitempty"`
+	MinimumBillableSeconds  float64 `json:"minimum_billable_seconds,omitempty"`
+	BillingIncrementSeconds float64 `json:"billing_increment_seconds,omitempty"`
+
 	PromptRatio               float64 `json:"prompt_ratio,omitempty"`
 	CompletionRatio           float64 `json:"completion_ratio,omitempty"`
 	PromptTokensPerSecond     float64 `json:"prompt_tokens_per_second,omitempty"`
@@ -304,7 +405,7 @@ func (cfg *AudioPricingConfig) HasData() bool {
 		return false
 	}
 	return cfg.PromptRatio != 0 || cfg.CompletionRatio != 0 || cfg.PromptTokensPerSecond != 0 ||
-		cfg.CompletionTokensPerSecond != 0 || cfg.UsdPerSecond != 0
+		cfg.CompletionTokensPerSecond != 0 || cfg.UsdPerSecond != 0 || cfg.InputUnit != "" || cfg.InputPriceUsd != 0 || cfg.MinimumBillableSeconds != 0 || cfg.BillingIncrementSeconds != 0
 }
 
 // Clone returns a copy of the audio pricing configuration.
@@ -381,6 +482,28 @@ type ToolingDefaultsProvider interface {
 	DefaultToolingConfig() ChannelToolConfig
 }
 
+// ToolingDefaultsForModelProvider is implemented by adaptors whose built-in tool
+// defaults vary by model. When an adaptor implements this, the tooling-policy
+// builder prefers it over DefaultToolingConfig so per-model pricing is billed
+// correctly (e.g. Gemini grounded web search costs $14/1K queries for 3.x models
+// but $35/1K for 2.5 and earlier). Implementations must fall back to their
+// channel-wide defaults for unknown/empty model names.
+type ToolingDefaultsForModelProvider interface {
+	DefaultToolingConfigForModel(model string) ChannelToolConfig
+}
+
+// ChannelTypeAware is implemented by adaptors that serve more than one channel
+// type and therefore need to know which one they are answering for.
+//
+// The OpenAI adaptor backs every OpenAI-compatible channel (Doubao, MiniMax,
+// BaiduV2, ...), and each of those has its own pricing table. Code that builds an
+// adaptor outside the relay request path — pricing resolution, the admin
+// default-pricing endpoint — must call SetChannelType, otherwise the adaptor
+// answers with OpenAI's table for every channel.
+type ChannelTypeAware interface {
+	SetChannelType(channelType int)
+}
+
 type Adaptor interface {
 	Init(meta *meta.Meta)
 	GetRequestURL(meta *meta.Meta) (string, error)
@@ -412,6 +535,15 @@ type OCRAdaptor interface {
 // controller will reject the call as unsupported.
 type RerankAdaptor interface {
 	ConvertRerankRequest(c *gin.Context, request *model.RerankRequest) (any, error)
+}
+
+// VoiceCloneAdaptor represents adaptors that can natively consume the dedicated
+// voice-clone DTO. Adaptors must implement this interface to accept
+// /v1/voice/clones requests; otherwise the controller will reject the call as
+// unsupported.
+type VoiceCloneAdaptor interface {
+	ConvertVoiceCloneRequest(c *gin.Context, request *model.VoiceCloneRequest) (any, error)
+	DoVoiceCloneResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode)
 }
 
 // DefaultPricingMethods provides default implementations for adapters without specific pricing

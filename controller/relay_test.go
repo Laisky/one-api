@@ -10,11 +10,14 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 	"github.com/Laisky/zap/zapcore"
+	"github.com/Laisky/zap/zaptest/observer"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common/config"
@@ -52,11 +55,11 @@ func TestAppendRelayFailureFields(t *testing.T) {
 		field.AddTo(encoder)
 	}
 
-	require.Equal(t, "req-123", encoder.Fields["request_id"])
 	require.Equal(t, "/v1/chat/completions", encoder.Fields["request_url"])
-	require.EqualValues(t, 11, encoder.Fields["user_id"])
-	require.EqualValues(t, 22, encoder.Fields["token_id"])
-	require.EqualValues(t, 33, encoder.Fields["channel_id"])
+	require.Equal(t, "req-123", encoder.Fields["request_id"])
+	require.Equal(t, int64(11), encoder.Fields["user_id"])
+	require.Equal(t, int64(22), encoder.Fields["token_id"])
+	require.Equal(t, int64(33), encoder.Fields["channel_id"])
 	require.Equal(t, "primary-openai", encoder.Fields["channel_name"])
 	require.Equal(t, "default", encoder.Fields["group"])
 	require.Equal(t, "gpt-4o", encoder.Fields["origin_model"])
@@ -84,6 +87,11 @@ func TestIsExpectedChannelSelectionExhaustedError(t *testing.T) {
 		{
 			name: "explicit no channels available",
 			err:  errors.New("no channels available for model gpt-4o in group default after excluding 2 channels"),
+			want: true,
+		},
+		{
+			name: "no available channels support model after exclusions",
+			err:  errors.New("no available channels support model gemini-3.5-flash after exclusions"),
 			want: true,
 		},
 		{
@@ -154,7 +162,7 @@ func TestShouldRetry(t *testing.T) {
 			c, _ := gin.CreateTestContext(nil)
 			c.Set(ctxkey.SpecificChannelId, tt.specificChannel)
 
-			err := shouldRetry(c, tt.statusCode, nil)
+			err := shouldRetry(c, &model.ErrorWithStatusCode{StatusCode: tt.statusCode})
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -281,6 +289,74 @@ func TestProcessChannelRelayError_InternalAdaptorFailureDoesNotSuspend(t *testin
 		})
 	})
 }
+
+func TestProcessChannelRelayError_StatusTooManyRequestsLogsWarnNotError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalSuspendDuration := config.ChannelSuspendSecondsFor429
+	config.ChannelSuspendSecondsFor429 = time.Minute
+	defer func() {
+		config.ChannelSuspendSecondsFor429 = originalSuspendDuration
+	}()
+
+	originalDB := dbmodel.DB
+	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, errors.Wrap(err, "open sqlite memory db"))
+	require.NoError(t, errors.Wrap(testDB.AutoMigrate(&dbmodel.Ability{}), "migrate abilities table"))
+	// Seed the ability row that the 429 handler suspends. Without a matching row
+	// SuspendAbility reports 0 affected rows and logs an ERROR, which would defeat
+	// this test's purpose of asserting the 429 path stays at WARN level.
+	require.NoError(t, errors.Wrap(testDB.Create(&dbmodel.Ability{
+		Group:     "default",
+		Model:     "glm-4.6v-flash",
+		ChannelId: 3,
+		Enabled:   true,
+	}).Error, "seed ability row"))
+	dbmodel.DB = testDB
+	defer func() {
+		dbmodel.DB = originalDB
+	}()
+
+	core, observed := observer.New(zapcore.DebugLevel)
+	testLogger, err := glog.New(
+		glog.WithName("relay-429-test"),
+		glog.WithLevel(glog.LevelDebug),
+		glog.WithZapOptions(zap.WrapCore(func(zapcore.Core) zapcore.Core {
+			return core
+		})),
+	)
+	require.NoError(t, errors.Wrap(err, "create observer logger"))
+	ctx := gmw.SetLogger(context.Background(), testLogger)
+
+	processChannelRelayError(ctx, processChannelRelayErrorParams{
+		RequestID:     "req-429",
+		UserId:        1,
+		TokenId:       2,
+		ChannelId:     3,
+		ChannelName:   "upstream-rate-limited",
+		Group:         "default",
+		OriginalModel: "glm-4.6v-flash",
+		ActualModel:   "glm-4.6v-flash",
+		RequestURL:    "/v1/chat/completions",
+		Err: model.ErrorWithStatusCode{
+			StatusCode: http.StatusTooManyRequests,
+			Error: model.Error{
+				Message:  "upstream rate limit",
+				Type:     model.ErrorTypeRateLimit,
+				Code:     "1305",
+				RawError: errors.New("upstream rate limit"),
+			},
+		},
+	})
+
+	require.Equal(t, 0, observed.FilterLevelExact(zapcore.ErrorLevel).Len())
+
+	warnLogs := observed.FilterLevelExact(zapcore.WarnLevel)
+	require.Equal(t, 2, warnLogs.Len())
+	require.Equal(t, 1, warnLogs.FilterMessage("relay error").Len())
+	require.Equal(t, 1, warnLogs.FilterMessage("ability suspended due to rate limit (429)").Len())
+}
+
 func TestProcessChannelRelayError_StatusTooManyRequests(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -572,126 +648,6 @@ func TestFailedChannelTracking(t *testing.T) {
 
 	// Verify count for error messaging
 	assert.Equal(t, 3, len(failedChannels))
-}
-
-// Test for the priority handling fix with 429 errors
-func TestRelay429PriorityHandling(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	tests := []struct {
-		name                        string
-		initialErrorStatus          int
-		retryAttempts               int
-		expectedIgnoreFirstPriority []bool // Expected value for each retry attempt
-	}{
-		{
-			name:               "429 error should ignore first priority for all retries",
-			initialErrorStatus: http.StatusTooManyRequests,
-			retryAttempts:      3,
-			// For 429 errors, should ignore first priority for all retries
-			expectedIgnoreFirstPriority: []bool{true, true, true},
-		},
-		{
-			name:               "500 error should follow normal priority logic",
-			initialErrorStatus: http.StatusInternalServerError,
-			retryAttempts:      3,
-			// For non-429 errors: i=3 (i==retryTimes, false), i=2 (i!=retryTimes, true), i=1 (i!=retryTimes, true)
-			expectedIgnoreFirstPriority: []bool{false, true, true},
-		},
-		{
-			name:               "404 error should follow normal priority logic",
-			initialErrorStatus: http.StatusNotFound,
-			retryAttempts:      3,
-			// For non-429 errors: i=3 (i==retryTimes, false), i=2 (i!=retryTimes, true), i=1 (i!=retryTimes, true)
-			expectedIgnoreFirstPriority: []bool{false, true, true},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Simulate the priority logic from the relay function
-			ignoreFirstPriority := tt.initialErrorStatus == http.StatusTooManyRequests
-
-			for i := tt.retryAttempts; i > 0; i-- {
-				// This is the fixed logic from the relay function
-				shouldIgnoreFirstPriority := ignoreFirstPriority || i != tt.retryAttempts
-
-				// Get expected value for this retry attempt (convert retry index to array index)
-				expectedIndex := tt.retryAttempts - i
-				expected := tt.expectedIgnoreFirstPriority[expectedIndex]
-
-				assert.Equal(t, expected, shouldIgnoreFirstPriority,
-					"Retry attempt %d (i=%d) should have ignoreFirstPriority=%v", expectedIndex+1, i, expected)
-
-				t.Logf("Retry attempt %d: ignoreFirstPriority=%v (expected %v)",
-					expectedIndex+1, shouldIgnoreFirstPriority, expected)
-			}
-		})
-	}
-}
-
-// Test that demonstrates the bug fix for channel priority selection
-func TestChannelPriorityBugFix(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	// This test verifies the specific bug that was fixed:
-	// Before fix: After first retry, system would go back to highest priority channels
-	// After fix: Once we get a 429, we should continue trying lower priority channels
-
-	testCases := []struct {
-		name        string
-		errorStatus int
-		description string
-		retryLogic  string
-	}{
-		{
-			name:        "429 error - should try lower priority channels throughout",
-			errorStatus: http.StatusTooManyRequests,
-			description: "429 errors should cause system to ignore first priority for ALL retries",
-			retryLogic:  "ignoreFirstPriority || i != retryTimes",
-		},
-		{
-			name:        "Non-429 error - normal priority behavior",
-			errorStatus: http.StatusInternalServerError,
-			description: "Non-429 errors should follow normal priority logic (first retry uses first priority, subsequent ignore it)",
-			retryLogic:  "ignoreFirstPriority || i != retryTimes",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			retryTimes := 4
-			ignoreFirstPriority := tc.errorStatus == http.StatusTooManyRequests
-
-			t.Logf("Testing %s", tc.description)
-			t.Logf("Error status: %d", tc.errorStatus)
-			t.Logf("Initial ignoreFirstPriority flag: %v", ignoreFirstPriority)
-
-			retryResults := make([]bool, 0)
-
-			for i := retryTimes; i > 0; i-- {
-				shouldIgnore := ignoreFirstPriority || i != retryTimes
-				retryResults = append(retryResults, shouldIgnore)
-
-				t.Logf("Retry %d (i=%d): ignoreFirstPriority = %v", retryTimes-i+1, i, shouldIgnore)
-			}
-
-			if tc.errorStatus == http.StatusTooManyRequests {
-				// For 429 errors, ALL retries should ignore first priority
-				for i, result := range retryResults {
-					assert.True(t, result, "Retry %d should ignore first priority for 429 errors", i+1)
-				}
-				t.Log("✓ All retries correctly ignore first priority for 429 errors")
-			} else {
-				// For non-429 errors: first retry should NOT ignore first priority, subsequent should
-				assert.False(t, retryResults[0], "First retry should NOT ignore first priority")
-				for i := 1; i < len(retryResults); i++ {
-					assert.True(t, retryResults[i], "Retry %d should ignore first priority for non-429 errors", i+1)
-				}
-				t.Log("✓ First retry uses first priority, subsequent retries ignore first priority for non-429 errors")
-			}
-		})
-	}
 }
 
 // Test to verify the model-specific suspension behavior

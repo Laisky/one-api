@@ -6,11 +6,54 @@
   },
   "playground": {
     "actions": {
+      "assistant_message_options": "Options du message assistant",
       "copy": "Copier",
+      "copy_message": "Copier le message",
+      "copy_response": "Copier la réponse",
       "delete": "Supprimer",
+      "delete_message": "Supprimer le message",
+      "delete_response": "Supprimer la réponse",
       "edit": "Modifier",
+      "edit_message": "Modifier le message",
+      "edit_response": "Modifier la réponse",
       "message_options": "Options du message",
-      "retry": "Réessayer"
+      "regenerate_response": "Régénérer la réponse",
+      "retry": "Réessayer",
+      "user_message_options": "Options du message utilisateur"
+    },
+    "attachments": {
+      "add_images": "Ajouter des images",
+      "attach_images": "Joindre des images",
+      "attached_image_alt": "Image jointe",
+      "count": "{{count}}/{{max}} images",
+      "delete_image": "Supprimer l’image",
+      "finalizing": "Finalisation...",
+      "info": "Formats pris en charge : JPG, PNG, GIF, WebP - 5 Mo max par image - Jusqu’à {{max}} images",
+      "notifications": {
+        "all_processing_failed_message": "Impossible de traiter {{file}}. Essayez une autre image ou contactez le support.",
+        "all_processing_failed_title": "Toutes les méthodes de traitement ont échoué",
+        "image_processing_failed_message": "Échec du traitement de {{file}} : {{message}}",
+        "image_processing_failed_title": "Échec du traitement de l’image",
+        "mobile_processing_failed_message": "Échec du traitement de {{file}} sur mobile : {{message}}",
+        "mobile_processing_failed_title": "Échec du traitement mobile"
+      },
+      "optimizing": "Optimisation {{progress}}%",
+      "processing": "Traitement {{progress}}%",
+      "remove_image": "Retirer l’image",
+      "validation": {
+        "dismiss_error": "Fermer l’erreur",
+        "extension_unsupported": "Extension de fichier non prise en charge. Formats pris en charge : {{formats}}",
+        "file_type_unsupported": "Le type de fichier « {{type}} » n’est pas pris en charge. Sélectionnez une image.",
+        "limit_exceeded": "Maximum de {{max}} images autorisées. Retirez des images avant d’en ajouter.",
+        "limit_skipped": "Maximum de {{max}} images autorisées. Ce fichier a été ignoré.",
+        "multiple_errors": "{{count}} erreurs de validation de fichier :",
+        "processing_error": "Une erreur est survenue pendant le traitement des images. Veuillez réessayer.",
+        "single_error": "Erreur de validation de fichier :",
+        "size_exceeded": "La taille du fichier ({{size}} Mo) dépasse la limite de 5 Mo. Compressez ou redimensionnez l’image.",
+        "tip": "Astuce : vous pouvez fermer ces erreurs avec le bouton de fermeture de chaque carte.",
+        "unknown_error": "Erreur inconnue",
+        "unknown_type": "inconnu"
+      }
     },
     "chat": {
       "clear": "Effacer",
@@ -47,10 +90,13 @@
       "title": "Supprimer le message {{role}}"
     },
     "edit": {
+      "attachment_alt": "Pièce jointe {{index}}",
       "attachments_hint": "Vous pouvez supprimer chaque pièce jointe en cliquant sur le bouton × qui apparaît au survol.",
       "attachments_label": "Pièces jointes ({{count}})",
       "cancel": "Annuler",
       "content_label": "Contenu du message {{role}}",
+      "content_placeholder": "Saisissez le contenu du message {{role}}...",
+      "delete_attachment": "Supprimer la pièce jointe",
       "description": "Modifiez le contenu du message. Utilisez \u003c1\u003eCtrl+Entrée\u003c/1\u003e pour enregistrer ou \u003c3\u003eÉchap\u003c/3\u003e pour annuler.",
       "save": "Enregistrer les modifications",
       "shortcuts": {
@@ -143,8 +189,10 @@
         "options": {
           "high": "Élevé",
           "low": "Faible",
+          "max": "Maximum",
           "medium": "Moyen",
-          "none": "Aucun"
+          "none": "Aucun",
+          "xhigh": "Très élevé"
         }
       },
       "show_reasoning": {
@@ -177,7 +225,8 @@
         "no_enabled": "Aucun jeton activé trouvé.",
         "no_tokens": "Aucun jeton disponible",
         "select_placeholder": "Sélectionnez un jeton",
-        "unlimited": "Illimité"
+        "unlimited": "Illimité",
+        "unnamed": "Jeton {{ref}}"
       },
       "top_k": {
         "description": "Échantillonnage Top-K : limite les choix aux K tokens les plus probables",
@@ -230,6 +279,12 @@
       "usage": "Utilisation",
       "user": "Vous",
       "voice": "Voix"
+    },
+    "reasoning": {
+      "chars": "{{count}} caractères",
+      "processing": "Traitement...",
+      "streaming": "Raisonnement...",
+      "title": "Processus de raisonnement"
     },
     "roles": {
       "assistant": "Assistant",

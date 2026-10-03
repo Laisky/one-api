@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Laisky One API HTTP Message Signatures Directory",
+  "url": "https://oneapi.laisky.com/.well-known/http-message-signatures-directory",
+  "httpMessageSignaturesSupported": false,
+  "description": "Laisky One API currently authenticates relay requests with bearer relay API keys. HTTP Message Signatures are not required for the public relay endpoints.",
+  "documentation": "https://oneapi.laisky.com/auth.md"
+}

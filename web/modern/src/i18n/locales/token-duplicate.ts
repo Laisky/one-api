@@ -1,0 +1,48 @@
+// tokenDuplicateTranslations provides complete copy-action messages for each supported locale.
+export const tokenDuplicateTranslations = {
+  en: {
+    action: 'Duplicate',
+    pending: 'Duplicating...',
+    success: 'Created token "{{name}}".',
+    load_failed: 'Unable to load the source token.',
+    create_failed: 'Unable to duplicate the token.',
+    name_too_long: 'The new name exceeds 30 bytes. Shorten the source token name before duplicating it.',
+    refresh_failed: 'The token was created, but the list could not be refreshed. Refresh the page.',
+  },
+  zh: {
+    action: '创建副本',
+    pending: '正在创建副本...',
+    success: '已创建令牌“{{name}}”。',
+    load_failed: '无法加载原令牌。',
+    create_failed: '无法创建令牌副本。',
+    name_too_long: '新名称超过 30 字节，请缩短原令牌名称后重试。',
+    refresh_failed: '令牌已创建，但列表刷新失败，请刷新页面。',
+  },
+  fr: {
+    action: 'Dupliquer',
+    pending: 'Duplication...',
+    success: 'Le jeton « {{name}} » a été créé.',
+    load_failed: 'Impossible de charger le jeton source.',
+    create_failed: 'Impossible de dupliquer le jeton.',
+    name_too_long: 'Le nouveau nom dépasse 30 octets. Raccourcissez le nom du jeton source avant de le dupliquer.',
+    refresh_failed: 'Le jeton a été créé, mais la liste n’a pas pu être actualisée. Actualisez la page.',
+  },
+  es: {
+    action: 'Duplicar',
+    pending: 'Duplicando...',
+    success: 'Se ha creado el token «{{name}}».',
+    load_failed: 'No se puede cargar el token original.',
+    create_failed: 'No se puede duplicar el token.',
+    name_too_long: 'El nuevo nombre supera los 30 bytes. Acorta el nombre del token original antes de duplicarlo.',
+    refresh_failed: 'El token se ha creado, pero no se ha podido actualizar la lista. Actualiza la página.',
+  },
+  ja: {
+    action: '複製',
+    pending: '複製中...',
+    success: 'トークン「{{name}}」を作成しました。',
+    load_failed: '元のトークンを読み込めません。',
+    create_failed: 'トークンを複製できません。',
+    name_too_long: '新しい名前が 30 バイトを超えています。元のトークン名を短くしてから複製してください。',
+    refresh_failed: 'トークンは作成されましたが、一覧を更新できませんでした。ページを再読み込みしてください。',
+  },
+} as const;

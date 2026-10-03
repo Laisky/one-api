@@ -1,0 +1,9 @@
+{
+  "case": "user/register_wrong_field_type",
+  "site": "Register (request DTO, error)",
+  "status": 200,
+  "body": {
+    "message": "invalid parameter",
+    "success": false
+  }
+}

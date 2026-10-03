@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { API, copy, isAdmin, showError, showSuccess, timestamp2string } from '../helpers';
 
@@ -122,7 +123,7 @@ const LogsTable = () => {
 
           <div>
             <Tag color={colors[parseInt(text) % colors.length]} size="large" onClick={() => {
-              copyText(text); // 假设copyText是用于文本复制的函数
+              copyText(text).catch(reportUIError); // 假设copyText是用于文本复制的函数
             }}> {text} </Tag>
           </div>
 
@@ -325,30 +326,33 @@ const LogsTable = () => {
   };
 
   const loadLogs = async (startIdx) => {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    let url = '';
-    let localStartTimestamp = Date.parse(start_timestamp);
-    let localEndTimestamp = Date.parse(end_timestamp);
-    if (isAdminUser) {
-      url = `/api/mj/?p=${startIdx}&channel_id=${channel_id}&mj_id=${mj_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
-    } else {
-      url = `/api/mj/self/?p=${startIdx}&mj_id=${mj_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
-    }
-    const res = await API.get(url);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setLogsFormat(data);
+      let url = '';
+      let localStartTimestamp = Date.parse(start_timestamp);
+      let localEndTimestamp = Date.parse(end_timestamp);
+      if (isAdminUser) {
+        url = `/api/mj/?p=${startIdx}&channel_id=${channel_id}&mj_id=${mj_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
       } else {
-        let newLogs = [...logs];
-        newLogs.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
-        setLogsFormat(newLogs);
+        url = `/api/mj/self/?p=${startIdx}&mj_id=${mj_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
       }
-    } else {
-      showError(message);
+      const res = await API.get(url);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (startIdx === 0) {
+          setLogsFormat(data);
+        } else {
+          let newLogs = [...logs];
+          newLogs.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
+          setLogsFormat(newLogs);
+        }
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const pageData = logs.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE);
@@ -358,7 +362,7 @@ const LogsTable = () => {
     if (page === Math.ceil(logs.length / ITEMS_PER_PAGE) + 1) {
       // In this case we have to load more data and then append them.
       loadLogs(page - 1).then(r => {
-      });
+      }).catch(reportUIError);
     }
   };
 
@@ -378,7 +382,7 @@ const LogsTable = () => {
   };
 
   useEffect(() => {
-    refresh().then();
+    refresh().then().catch(reportUIError);
   }, [logType]);
 
   useEffect(() => {
@@ -419,7 +423,7 @@ const LogsTable = () => {
 
             <Form.Section>
               <Button label="查询" type="primary" htmlType="submit" className="btn-margin-right"
-                      onClick={refresh}>查询</Button>
+                      onClick={(...uiArgs) => refresh(...uiArgs).catch(reportUIError)}>查询</Button>
             </Form.Section>
           </>
         </Form>
