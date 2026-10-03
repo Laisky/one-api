@@ -129,6 +129,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if err := tooling.ValidateRequestedBuiltins(responseAPIRequest.Model, meta, channelRecord, requestAdaptor, requestedBuiltins); err != nil {
 		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
 	}
+	// Validate every surviving tool, including types unknown to the builtin
+	// registry, before reserving quota. The wire boundary repeats this check.
+	if err := validateNativeResponseToolBilling(responseAPIRequest.Tools); err != nil {
+		return openai.ErrorWrapper(err, "tool_billing_not_supported", http.StatusBadRequest)
+	}
 
 	// get channel model ratio
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
