@@ -3,6 +3,7 @@ package model
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 )
 
@@ -15,7 +16,7 @@ type ResponseUsageAccumulator struct {
 	incomplete                bool
 	stream, decided, finished bool
 	line, event, body         []byte
-	droppingLine, afterCR     bool
+	droppingLine, afterCR      bool
 	limited, malformed        bool
 	totalBytes                int
 	inputSeen, outputSeen     bool
@@ -104,16 +105,29 @@ func (a *ResponseUsageAccumulator) consumeLine() {
 		a.consumeEvent()
 		return
 	}
-	if json.Valid(data) {
-		a.consumeEvent()
-		a.consumeJSON(data)
-		return
+	if len(a.event) == 0 {
+		if json.Valid(data) {
+			a.consumeJSON(data)
+			return
+		}
+		// Preserve a potentially incomplete JSON envelope. A subsequent data
+		// line may be a valid JSON value inside it, not an independent event.
+		// Reject irreparably malformed prefixes now so legacy streams can
+		// recover at their next complete receipt without a blank separator.
+		var fragment json.RawMessage
+		err := json.NewDecoder(bytes.NewReader(data)).Decode(&fragment)
+		if err != io.ErrUnexpectedEOF && err != io.EOF {
+			a.malformed = true
+			return
+		}
 	}
 	if len(a.event)+len(data)+1 > responseUsageCaptureLimit {
 		a.limited = true
 		a.event = a.event[:0]
 		return
 	}
+	// Parse the accumulated envelope only at its boundary, not on each line;
+	// repeated whole-prefix parsing would make long multiline events quadratic.
 	a.event = append(a.event, data...)
 	a.event = append(a.event, '\n')
 }
@@ -275,7 +289,10 @@ func (a *ResponseUsageAccumulator) consumeUsage(raw json.RawMessage, claude, pro
 	}
 	for _, key := range []string{"prompt_tokens", "input_tokens"} {
 		if value, ok := a.counter(fields, key); ok {
-			a.inputSeen = true
+			// Responses lifecycle events can contain placeholder input counters;
+			// they must not suppress estimation when the final receipt omits one.
+			// Claude message_start input is already measured, including zero.
+			a.inputSeen = a.inputSeen || !provisional || claude
 			a.input = max(a.input, value)
 			break
 		}
