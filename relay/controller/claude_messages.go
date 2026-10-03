@@ -546,50 +546,8 @@ handleResponse:
 					// 2) If not Claude JSON, it may be SSE (OpenAI-compatible). Detect and compute from stream text.
 					ct := resp.Header.Get("Content-Type")
 					if strings.Contains(strings.ToLower(ct), "text/event-stream") || bytes.HasPrefix(body, []byte("data:")) || bytes.Contains(body, []byte("\ndata:")) {
-						accumulated := ""
-						for line := range bytes.SplitSeq(body, []byte("\n")) {
-							line = bytes.TrimSpace(line)
-							if !bytes.HasPrefix(line, []byte("data:")) {
-								continue
-							}
-							payload := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
-							if bytes.Equal(payload, []byte("[DONE]")) {
-								continue
-							}
-							// Minimal parse of OpenAI chat stream chunk
-							var chunk struct {
-								Choices []struct {
-									Delta struct {
-										Content any `json:"content"`
-									} `json:"delta"`
-								} `json:"choices"`
-							}
-							if err := json.Unmarshal(payload, &chunk); err == nil {
-								for _, ch := range chunk.Choices {
-									switch v := ch.Delta.Content.(type) {
-									case string:
-										accumulated += v
-									case []any:
-										for _, p := range v {
-											if m, ok := p.(map[string]any); ok {
-												if t, _ := m["type"].(string); t == "text" {
-													if s, ok := m["text"].(string); ok {
-														accumulated += s
-													}
-												}
-											}
-										}
-									}
-								}
-							}
-						}
 						promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
-						completion := openai.CountTokenText(accumulated, meta.ActualModelName)
-						usage = &relaymodel.Usage{
-							PromptTokens:     promptTokens,
-							CompletionTokens: completion,
-							TotalTokens:      promptTokens + completion,
-						}
+						usage = extractConvertedClaudeSSEUsage(body, promptTokens, meta.ActualModelName)
 					} else {
 						// 3) Fallback: estimate prompt only
 						promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
