@@ -299,9 +299,15 @@ func (a *Adaptor) Init(meta *meta.Meta) {
 	a.meta = meta
 }
 
+// GetRequestURL resolves the upstream model URL only when the relay mode uses
+// the matching billing unit. This also protects callers bypassing conversion.
 func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	if !slices.Contains(ModelList, meta.OriginModelName) {
 		return "", errors.Errorf("model %s not supported", meta.OriginModelName)
+	}
+	if pricing, ok := ModelRatios[meta.OriginModelName]; ok && pricing.Image != nil &&
+		meta.Mode != relaymode.ImagesGenerations && meta.Mode != relaymode.ImagesEdits {
+		return "", errors.Errorf("model %s is an image model, please use image API", meta.OriginModelName)
 	}
 
 	return fmt.Sprintf("https://api.replicate.com/v1/models/%s/predictions", meta.OriginModelName), nil
