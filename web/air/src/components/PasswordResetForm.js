@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Grid, Header, Image, Segment } from 'semantic-ui-react';
 import { API, showError, showInfo, showSuccess } from '../helpers';
@@ -35,24 +36,34 @@ const PasswordResetForm = () => {
   }
 
   async function handleSubmit(e) {
-    setDisableButton(true);
-    if (!email) return;
+    e?.preventDefault();
+    if (!email || loading || disableButton) return;
     if (turnstileEnabled && turnstileToken === '') {
       showInfo('请稍后几秒重试，Turnstile 正在检查用户环境！');
       return;
     }
+    setDisableButton(true);
     setLoading(true);
-    const res = await API.get(
-      `/api/reset_password?email=${email}&turnstile=${turnstileToken}`
-    );
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess('重置邮件发送成功，请检查邮箱！');
-      setInputs({ ...inputs, email: '' });
-    } else {
-      showError(message);
+    try {
+      const res = await API.get('/api/reset_password', {
+        params: { email, turnstile: turnstileToken }
+      });
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess('重置邮件发送成功，请检查邮箱！');
+        setInputs({ ...inputs, email: '' });
+      } else {
+        showError(message);
+        setDisableButton(false);
+        setCountdown(30);
+      }
+    } catch (error) {
+      showError(error);
+      setDisableButton(false);
+      setCountdown(30);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (
@@ -86,7 +97,7 @@ const PasswordResetForm = () => {
               color="green"
               fluid
               size="large"
-              onClick={handleSubmit}
+              onClick={(...uiArgs) => handleSubmit(...uiArgs).catch(reportUIError)}
               loading={loading}
               disabled={disableButton}
             >

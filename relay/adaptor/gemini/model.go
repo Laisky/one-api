@@ -12,7 +12,11 @@ type ChatRequest struct {
 }
 
 type UsageMetadata struct {
-	PromptTokenCount        int                   `json:"promptTokenCount,omitempty"`
+	PromptTokenCount int `json:"promptTokenCount,omitempty"`
+	// CachedContentTokenCount is the portion of PromptTokenCount served from Gemini's
+	// context cache. Gemini includes these tokens in PromptTokenCount but discounts them,
+	// so they must be surfaced to bill the cached portion at CachedInputRatio.
+	CachedContentTokenCount int                   `json:"cachedContentTokenCount,omitempty"`
 	CandidatesTokenCount    int                   `json:"candidatesTokenCount,omitempty"`
 	TotalTokenCount         int                   `json:"totalTokenCount,omitempty"`
 	ThoughtsTokenCount      int                   `json:"thoughtsTokenCount,omitempty"`

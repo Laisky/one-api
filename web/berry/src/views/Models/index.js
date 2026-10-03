@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import React, { useEffect, useState } from 'react';
 import {
   Box,
@@ -62,7 +63,7 @@ const Models = () => {
   };
 
   useEffect(() => {
-    fetchModelsData();
+    fetchModelsData().catch(reportUIError);
   }, []);
 
   useEffect(() => {

@@ -22,7 +22,9 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 		},
 		InputModalities:  []string{"audio"},
 		OutputModalities: []string{"text"},
-		Description:      "Whisper v1: speech-to-text transcription model.",
+		// The only OpenAI transcription model accepting srt, vtt and verbose_json, and the
+		// only one supporting timestamp_granularities[].
+		Description: "Whisper v1: speech-to-text transcription model; the only one supporting srt/vtt/verbose_json response formats and word/segment timestamps.",
 	},
 	"tts-1": {
 		Ratio:            15.0 * ratio.MilliTokensUsd,
@@ -64,7 +66,7 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 		MaxOutputTokens:  2000,
 		InputModalities:  []string{"audio"},
 		OutputModalities: []string{"text"},
-		Description:      "GPT-4o transcribe: high-quality speech-to-text successor to Whisper.",
+		Description:      "GPT-4o transcribe: high-quality speech-to-text successor to Whisper; response_format json or text only (use whisper-1 for srt/vtt/verbose_json).",
 	},
 	"gpt-4o-mini-transcribe": {
 		Ratio:           1.25 * ratio.MilliTokensUsd,
@@ -78,7 +80,7 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 		MaxOutputTokens:  2000,
 		InputModalities:  []string{"audio"},
 		OutputModalities: []string{"text"},
-		Description:      "GPT-4o mini transcribe: cost-efficient speech-to-text model.",
+		Description:      "GPT-4o mini transcribe: cost-efficient speech-to-text model; response_format json or text only (use whisper-1 for srt/vtt/verbose_json).",
 	},
 	"gpt-4o-mini-tts": {
 		Ratio:            0.6 * ratio.MilliTokensUsd,
@@ -201,6 +203,6 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text", "audio"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
-		Description:                 "GPT Audio mini snapshot from 2025-10-06.",
+		Description:                 "GPT Audio mini snapshot from 2025-10-06. (retires 2026-07-23; use gpt-audio-1.5)",
 	},
 }

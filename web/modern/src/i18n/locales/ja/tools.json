@@ -2,6 +2,10 @@
   "tools": {
     "clear_filters": "フィルターをクリア",
     "description": "MCP サーバーから同期されたツールを、サーバーごとに料金とスキーマ情報付きで表示します。",
+    "filters": {
+      "description": "ツール名、説明、またはサーバーで検索します。",
+      "title": "ツールをフィルター"
+    },
     "found": "{{servers}} サーバーに {{count}} 件のツールが見つかりました",
     "labels": {
       "free": "無料",

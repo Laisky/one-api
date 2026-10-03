@@ -1,11 +1,22 @@
 import { Badge } from '@/components/ui/badge';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { useResponsive } from '@/hooks/useResponsive';
+import { cn } from '@/lib/utils';
+import { formatTierThreshold } from '@/pages/models/tier-threshold';
+import {
+  NO_ACTIVE_TIME_WINDOW,
+  UNRESOLVED_TIME_WINDOWS,
+  resolveActiveTimeWindowIndex,
+  timeWindowScheduleSignature,
+} from '@/pages/models/time-window';
 import { X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { ModelApiExamples } from './ModelApiExamples';
+import { AudioTariffDetails, type AudioInputTariff } from './AudioTariffDetails';
 
 // ---- Types matching the backend ModelDisplayInfo ----
 
@@ -35,6 +46,8 @@ export interface ModelDisplayData {
   image_pricing?: ImagePricingData;
   embedding_pricing?: EmbeddingPricingData;
   per_call_pricing?: PerCallPricingData;
+  time_windows?: TimeWindowData[];
+  active_time_window?: string;
 }
 
 interface TierData {
@@ -44,15 +57,17 @@ interface TierData {
   cache_write_5m_price?: number;
   cache_write_1h_price?: number;
   input_token_threshold: number;
+  output_token_threshold?: number;
 }
 
 interface VideoPricingData {
+  input_image_usd?: number;
   per_second_usd: number;
   base_resolution?: string;
   resolution_multipliers?: Record<string, number>;
 }
 
-interface AudioPricingData {
+interface AudioPricingData extends AudioInputTariff {
   prompt_token_ratio?: number;
   completion_token_ratio?: number;
   prompt_tokens_per_second?: number;
@@ -88,6 +103,67 @@ interface PerCallPricingData {
   usd_per_call?: number;
 }
 
+interface TimeWindowData {
+  name?: string;
+  timezone?: string;
+  ranges: { start: string; end: string }[];
+  days_of_week?: number[];
+  date_from?: string;
+  date_to?: string;
+  overlay: TimeWindowOverlayData;
+}
+
+interface TimeWindowOverlayData {
+  input_price?: number;
+  cached_input_price?: number;
+  cache_write_5m_price?: number;
+  cache_write_1h_price?: number;
+  output_price?: number;
+  tiers?: TierData[];
+  video_pricing?: VideoPricingData;
+  audio_pricing?: AudioPricingData;
+  image_pricing?: ImagePricingData;
+  embedding_pricing?: EmbeddingPricingData;
+  per_call_pricing?: PerCallPricingData;
+}
+
+// ---- Active time window tracking ----
+
+/** How often the active pricing window is re-evaluated against the wall clock. */
+const ACTIVE_WINDOW_POLL_MS = 1000;
+
+/**
+ * useActiveTimeWindowIndex tracks which pricing window is active right now.
+ * Parameters: windows is the ordered window list rendered by the pricing modal.
+ * Returns: the active window index, NO_ACTIVE_TIME_WINDOW when none matches, or
+ * UNRESOLVED_TIME_WINDOWS when the runtime cannot evaluate any window.
+ *
+ * The interval is owned by the mounted content, so closing the modal or
+ * switching models tears it down before a new one starts: at most one timer
+ * exists per mounted pricing panel.
+ */
+function useActiveTimeWindowIndex(windows: TimeWindowData[] | undefined): number {
+  const windowsRef = useRef(windows);
+  windowsRef.current = windows;
+  const signature = useMemo(() => timeWindowScheduleSignature(windows), [windows]);
+  const [activeIndex, setActiveIndex] = useState(() => resolveActiveTimeWindowIndex(windows, new Date()));
+
+  useEffect(() => {
+    const evaluate = () => {
+      const next = resolveActiveTimeWindowIndex(windowsRef.current, new Date());
+      // Only commit real transitions so the modal does not re-render every second.
+      setActiveIndex((prev) => (prev === next ? prev : next));
+    };
+    evaluate();
+    const timer = setInterval(evaluate, ACTIVE_WINDOW_POLL_MS);
+    return () => clearInterval(timer);
+    // `signature` covers every schedule field read by the evaluator; the latest
+    // window list itself is always read through windowsRef.
+  }, [signature]);
+
+  return activeIndex;
+}
+
 // ---- Props ----
 
 interface ModelPricingModalProps {
@@ -100,20 +176,42 @@ interface ModelPricingModalProps {
 
 // ---- Component ----
 
+/**
+ * ModelPricingModal renders detailed pricing and metadata for a selected model
+ * and exposes a copy action for the model name in desktop and mobile headers.
+ */
 export function ModelPricingModal({ open, onOpenChange, modelName, data, channelName }: ModelPricingModalProps) {
   const { isMobile } = useResponsive();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`models.detail.${key}`, { defaultValue, ...options }),
     [t]
   );
   const closeLabel = tr('close', 'Close');
+  const copyModelLabel = tr('copy_model_name', 'Copy model name');
+  const copyModelSuccess = tr('model_name_copied', 'Model name copied');
+  const modelTitle = (
+    <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+      <span className="min-w-0 truncate font-mono">{modelName}</span>
+      <CopyButton
+        text={modelName}
+        label={copyModelLabel}
+        successMessage={copyModelSuccess}
+        className="h-7 w-7 shrink-0 p-0"
+      />
+    </span>
+  );
 
-  const content = <PricingContent modelName={modelName} data={data} channelName={channelName} tr={tr} />;
+  const content = (
+    <div className="min-w-0 space-y-5">
+      <PricingContent modelName={modelName} data={data} channelName={channelName} tr={tr} locale={i18n.language} />
+      <ModelApiExamples key={modelName} modelName={modelName} data={data} />
+    </div>
+  );
 
   if (isMobile) {
     return (
-      <MobileBottomSheet open={open} onClose={() => onOpenChange(false)} title={modelName} subtitle={channelName} closeLabel={closeLabel}>
+      <MobileBottomSheet open={open} onClose={() => onOpenChange(false)} title={modelTitle} subtitle={channelName} closeLabel={closeLabel}>
         {content}
       </MobileBottomSheet>
     );
@@ -123,7 +221,7 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-mono text-base">{modelName}</DialogTitle>
+          <DialogTitle className="text-base">{modelTitle}</DialogTitle>
           <DialogDescription>{channelName}</DialogDescription>
         </DialogHeader>
         {content}
@@ -134,6 +232,10 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
 
 // ---- Mobile bottom sheet ----
 
+/**
+ * MobileBottomSheet renders the mobile pricing sheet with drag-to-close and
+ * keyboard-close interactions, returning its content through a portal.
+ */
 function MobileBottomSheet({
   open,
   onClose,
@@ -144,7 +246,7 @@ function MobileBottomSheet({
 }: {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title: React.ReactNode;
   subtitle?: string;
   closeLabel: string;
   children: React.ReactNode;
@@ -271,7 +373,7 @@ function MobileBottomSheet({
           {/* Header */}
           <div className="flex items-start justify-between px-4 pb-3 border-b">
             <div className="min-w-0 flex-1 pr-3">
-              <h2 id="mobile-sheet-title" className="font-mono text-sm font-semibold truncate">
+              <h2 id="mobile-sheet-title" className="text-sm font-semibold">
                 {title}
               </h2>
               {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
@@ -298,12 +400,15 @@ function PricingContent({
   data,
   channelName: _channelName,
   tr,
+  locale,
 }: {
   modelName: string;
   data: ModelDisplayData;
   channelName: string;
   tr: TrFn;
+  locale: string;
 }) {
+  const activeTimeWindowIndex = useActiveTimeWindowIndex(data.time_windows);
   const hasCache =
     (data.cached_input_price !== undefined && data.cached_input_price !== data.input_price) ||
     (data.cache_write_5m_price !== undefined && data.cache_write_5m_price > 0) ||
@@ -437,10 +542,10 @@ function PricingContent({
       )}
 
       {/* Per-call pricing — flat per-invocation billing (e.g. rerank) */}
-      {data.per_call_pricing && (data.per_call_pricing.usd_per_thousand_calls || data.per_call_pricing.usd_per_call) ? (
+      {data.per_call_pricing && (data.per_call_pricing.usd_per_thousand_calls !== undefined || data.per_call_pricing.usd_per_call !== undefined) ? (
         <PricingSection title={tr('per_call_pricing', 'Per-Call Pricing')} icon="text">
           <PriceGrid>
-            {data.per_call_pricing.usd_per_thousand_calls !== undefined && data.per_call_pricing.usd_per_thousand_calls > 0 && (
+            {data.per_call_pricing.usd_per_thousand_calls !== undefined && (
               <PriceCell
                 label={tr('base_rate', 'Base Rate')}
                 sublabel={tr('per_1k_calls', 'per 1K calls')}
@@ -449,7 +554,7 @@ function PricingContent({
                 raw
               />
             )}
-            {data.per_call_pricing.usd_per_call !== undefined && data.per_call_pricing.usd_per_call > 0 && (
+            {data.per_call_pricing.usd_per_call !== undefined && (
               <PriceCell
                 label={tr('per_call_label', 'Per Call')}
                 sublabel={tr('per_call', 'per call')}
@@ -494,6 +599,181 @@ function PricingContent({
         </PricingSection>
       )}
 
+      {/* Time-of-day pricing */}
+      {data.time_windows && data.time_windows.length > 0 && (
+        <PricingSection title={tr('time_pricing', 'Time-of-day Pricing')} icon="time">
+          <div className="space-y-3">
+            {data.time_windows.map((window, index) => {
+              const label = window.name || `${tr('window_name', 'Window')} ${index + 1}`;
+              // Fall back to the server-rendered name only when the browser cannot
+              // evaluate the schedules itself (missing timezone data).
+              const isActive =
+                activeTimeWindowIndex === UNRESOLVED_TIME_WINDOWS
+                  ? Boolean(data.active_time_window && window.name === data.active_time_window)
+                  : activeTimeWindowIndex !== NO_ACTIVE_TIME_WINDOW && activeTimeWindowIndex === index;
+              return (
+                <div
+                  key={`${label}-${index}`}
+                  aria-current={isActive ? 'true' : undefined}
+                  className={cn(
+                    'rounded-lg border p-3 transition-colors',
+                    isActive ? 'border-accent/50 bg-accent/[0.07] ring-1 ring-accent/20' : 'bg-muted/20'
+                  )}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className={cn('font-medium', isActive && 'text-accent')}>{label}</div>
+                    {isActive && (
+                      <Badge variant="outline" className="gap-1.5 border-accent/40 bg-accent/10 text-xs text-accent">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60 reduce-motion:hidden" />
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+                        </span>
+                        {tr('window_active', 'Active now')}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                    <Badge variant="outline" className="font-mono text-[11px]">
+                      {formatWindowSchedule(window, locale)}
+                    </Badge>
+                    <Badge variant="outline" className="text-[11px]">
+                      {tr('window_timezone', 'Timezone')}: {window.timezone || 'UTC'}
+                    </Badge>
+                    {window.days_of_week && window.days_of_week.length > 0 && (
+                      <Badge variant="outline" className="text-[11px]">
+                        {tr('window_days', 'Days')}: {formatWeekdays(window.days_of_week, tr)}
+                      </Badge>
+                    )}
+                    {(window.date_from || window.date_to) && (
+                      <Badge variant="outline" className="text-[11px]">
+                        {tr('window_dates', 'Dates')}: {window.date_from || '...'} - {window.date_to || '...'}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-3">
+                    <PriceGrid>
+                      {window.overlay.input_price !== undefined && window.overlay.input_price > 0 && (
+                        <PriceCell
+                          label={tr('input', 'Input')}
+                          sublabel={tr('per_1m', 'per 1M tokens')}
+                          value={window.overlay.input_price}
+                          tr={tr}
+                        />
+                      )}
+                      {window.overlay.output_price !== undefined && window.overlay.output_price > 0 && (
+                        <PriceCell
+                          label={tr('output', 'Output')}
+                          sublabel={tr('per_1m', 'per 1M tokens')}
+                          value={window.overlay.output_price}
+                          tr={tr}
+                        />
+                      )}
+                      {window.overlay.cached_input_price !== undefined && window.overlay.cached_input_price > 0 && (
+                        <PriceCell
+                          label={tr('cached_read', 'Cache Read')}
+                          sublabel={tr('per_1m', 'per 1M tokens')}
+                          value={window.overlay.cached_input_price}
+                          tr={tr}
+                        />
+                      )}
+                      {window.overlay.cache_write_5m_price !== undefined && window.overlay.cache_write_5m_price > 0 && (
+                        <PriceCell
+                          label={tr('cache_write_5m', '5-min Cache Write')}
+                          sublabel={tr('per_1m', 'per 1M tokens')}
+                          value={window.overlay.cache_write_5m_price}
+                          tr={tr}
+                        />
+                      )}
+                      {window.overlay.cache_write_1h_price !== undefined && window.overlay.cache_write_1h_price > 0 && (
+                        <PriceCell
+                          label={tr('cache_write_1h', '1-hour Cache Write')}
+                          sublabel={tr('per_1m', 'per 1M tokens')}
+                          value={window.overlay.cache_write_1h_price}
+                          tr={tr}
+                        />
+                      )}
+                      {window.overlay.per_call_pricing?.usd_per_thousand_calls !== undefined && (
+                          <PriceCell
+                            label={tr('per_call_pricing', 'Per-call Pricing')}
+                            sublabel={tr('per_1k_calls', 'per 1K calls')}
+                            value={window.overlay.per_call_pricing.usd_per_thousand_calls}
+                            tr={tr}
+                            raw
+                          />
+                        )}
+                      {window.overlay.image_pricing?.price_per_image_usd !== undefined &&
+                        window.overlay.image_pricing.price_per_image_usd > 0 && (
+                          <PriceCell
+                            label={tr('image_pricing', 'Image Pricing')}
+                            sublabel={tr('per_image', 'per image')}
+                            value={window.overlay.image_pricing.price_per_image_usd}
+                            tr={tr}
+                            raw
+                          />
+                        )}
+                      {window.overlay.video_pricing?.per_second_usd !== undefined && window.overlay.video_pricing.per_second_usd > 0 && (
+                        <PriceCell
+                          label={tr('video_pricing', 'Video Pricing')}
+                          sublabel={tr('per_second', 'per second')}
+                          value={window.overlay.video_pricing.per_second_usd}
+                          tr={tr}
+                          raw
+                        />
+                      )}
+                      <AudioTariffDetails pricing={window.overlay.audio_pricing} />
+                      {window.overlay.audio_pricing?.usd_per_second !== undefined && window.overlay.audio_pricing.usd_per_second > 0 && (
+                        <PriceCell
+                          label={tr('audio_pricing', 'Audio Pricing')}
+                          sublabel={tr('per_second', 'per second')}
+                          value={window.overlay.audio_pricing.usd_per_second}
+                          tr={tr}
+                          raw
+                        />
+                      )}
+                      {window.overlay.embedding_pricing?.text_token_price !== undefined &&
+                        window.overlay.embedding_pricing.text_token_price > 0 && (
+                          <PriceCell
+                            label={tr('text_tokens', 'Text Token Pricing')}
+                            sublabel={tr('per_1m', 'per 1M tokens')}
+                            value={window.overlay.embedding_pricing.text_token_price}
+                            tr={tr}
+                          />
+                        )}
+                    </PriceGrid>
+                    {window.overlay.tiers && window.overlay.tiers.length > 0 && (
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b text-muted-foreground">
+                              <th className="py-1.5 pr-3 text-left font-medium">{tr('tier_threshold', 'Threshold')}</th>
+                              <th className="px-3 py-1.5 text-left font-medium">{tr('input', 'Input')}</th>
+                              <th className="px-3 py-1.5 text-left font-medium">{tr('output', 'Output')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {window.overlay.tiers.map((tier, tierIndex) => (
+                              <tr key={tierIndex} className="border-b border-dashed last:border-0">
+                                <td className="py-1.5 pr-3">
+                                  <Badge variant="outline" className="text-[11px]">
+                                    {formatTierThreshold(tier, tr('input', 'Input'), tr('output', 'Output'))}
+                                  </Badge>
+                                </td>
+                                <td className="px-3 py-1.5 font-mono">{formatUsd(tier.input_price)}</td>
+                                <td className="px-3 py-1.5 font-mono">{formatUsd(tier.output_price)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </PricingSection>
+      )}
+
       {/* Tiered pricing */}
       {data.tiers && data.tiers.length > 0 && (
         <PricingSection title={tr('tiered_pricing', 'Tiered Pricing')} icon="tiers">
@@ -527,7 +807,7 @@ function PricingContent({
                   <tr key={i} className="border-b border-dashed last:border-0">
                     <td className="py-2 pr-3">
                       <Badge variant="outline" className="text-xs">
-                        &ge; {formatTokenCount(tier.input_token_threshold)}
+                        {formatTierThreshold(tier, tr('input', 'Input'), tr('output', 'Output'))}
                       </Badge>
                     </td>
                     <td className="py-2 px-3 font-mono text-sm">{formatUsd(tier.input_price)}</td>
@@ -629,6 +909,9 @@ function PricingContent({
               tr={tr}
               raw
             />
+            {data.video_pricing.input_image_usd !== undefined && data.video_pricing.input_image_usd > 0 && (
+              <PriceCell label={tr('input', 'Input')} sublabel={tr('per_image', 'per image')} value={data.video_pricing.input_image_usd} tr={tr} raw />
+            )}
           </PriceGrid>
           {data.video_pricing.base_resolution && (
             <div className="mt-2">
@@ -655,6 +938,7 @@ function PricingContent({
       {data.audio_pricing && (
         <PricingSection title={tr('audio_pricing', 'Audio Pricing')} icon="audio">
           <PriceGrid>
+            <AudioTariffDetails pricing={data.audio_pricing} />
             {data.audio_pricing.usd_per_second !== undefined && data.audio_pricing.usd_per_second > 0 && (
               <PriceCell
                 label={tr('base_rate', 'Base Rate')}
@@ -784,6 +1068,7 @@ const sectionIcons: Record<string, string> = {
   text: '\u{1F4DD}',
   cache: '\u{1F4BE}',
   tiers: '\u{1F4CA}',
+  time: '\u{23F1}',
   image: '\u{1F5BC}',
   video: '\u{1F3AC}',
   audio: '\u{1F3B5}',
@@ -970,4 +1255,29 @@ function formatTokenCount(count: number): string {
 
 function formatTokenCountFull(count: number): string {
   return count.toLocaleString();
+}
+
+function formatWindowSchedule(window: TimeWindowData, locale: string): string {
+  return window.ranges.map((range) => `${formatClockTime(range.start, locale)}-${formatClockTime(range.end, locale)}`).join(', ');
+}
+
+function formatClockTime(value: string, locale: string): string {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) {
+    return value;
+  }
+  const date = new Date(Date.UTC(2026, 0, 1, Number(match[1]), Number(match[2])));
+  return new Intl.DateTimeFormat(locale || undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(date);
+}
+
+function formatWeekdays(days: number[], tr: TrFn): string {
+  return days.map((day) => tr(`weekday_${day}`, weekdayFallback(day))).join(', ');
+}
+
+function weekdayFallback(day: number): string {
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day] || String(day);
 }

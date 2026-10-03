@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"net/url"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 )
@@ -38,6 +39,47 @@ type Function struct {
 	Arguments   any      `json:"arguments,omitempty"`   // Function arguments data for responses (actual values passed to function)
 	Required    []string `json:"required,omitempty"`    // Required parameter names for function validation
 	Strict      *bool    `json:"strict,omitempty"`      // Whether to enforce strict parameter validation
+}
+
+// ArgumentsJSON returns this tool call's arguments as a JSON document.
+//
+// Function.Arguments is typed `any` because the field arrives from the client in
+// more than one shape: OpenAI sends a JSON *string*, while some clients (and some
+// of our own converters) leave it as an already-decoded object. Call sites used to
+// write Arguments.(string) directly, which panics on an object, on a nil
+// Arguments, and — via Tool.Function — on a tool call that omits `function`
+// entirely. All three are reachable from a request body, so this must not panic.
+//
+// Return values:
+//   - string: a JSON document, "{}" when the call carries no arguments.
+//   - error: only when a decoded Arguments value cannot be re-encoded.
+func (f *Function) ArgumentsJSON() (string, error) {
+	if f == nil || f.Arguments == nil {
+		return "{}", nil
+	}
+	if raw, ok := f.Arguments.(string); ok {
+		if strings.TrimSpace(raw) == "" {
+			return "{}", nil
+		}
+		return raw, nil
+	}
+	encoded, err := json.Marshal(f.Arguments)
+	if err != nil {
+		return "", errors.Wrap(err, "marshal tool call arguments")
+	}
+	return string(encoded), nil
+}
+
+// FunctionName returns the tool call's function name without dereferencing a nil
+// Function, which a client can produce by sending a tool call with no `function`.
+//
+// Return values:
+//   - string: the function name, or "" when the tool call carries no function.
+func (t *Tool) FunctionName() string {
+	if t == nil || t.Function == nil {
+		return ""
+	}
+	return t.Function.Name
 }
 
 // ValidateFunction validates function tool configuration

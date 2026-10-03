@@ -32,7 +32,11 @@ func GetMCPTools(c *gin.Context) {
 		sortOrder = "desc"
 	}
 
-	serverID, _ := strconv.Atoi(c.Query("server_id"))
+	serverID, err := resolveOptionalMCPServerRef(c.Query("server_id"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	status, statusProvided := parseOptionalInt(c.Query("status"))
 	var statusPtr *int
 	if statusProvided {

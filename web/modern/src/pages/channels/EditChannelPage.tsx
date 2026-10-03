@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { ChannelAdvancedSettings } from './components/ChannelAdvancedSettings';
 import { ChannelBasicInfo } from './components/ChannelBasicInfo';
 import { ChannelEndpointSettings } from './components/ChannelEndpointSettings';
+import { ChannelGroups } from './components/ChannelGroups';
 import { ChannelMCPSettings } from './components/ChannelMCPSettings';
 import { ChannelModelSettings } from './components/ChannelModelSettings';
 import { ChannelSpecificConfig } from './components/ChannelSpecificConfig';
@@ -154,13 +155,7 @@ export function EditChannelPage() {
             )}
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
-                <ChannelBasicInfo
-                  form={form}
-                  groups={groups}
-                  normalizedChannelType={normalizedChannelType}
-                  tr={tr}
-                  onTypeChange={requestTypeChange}
-                />
+                <ChannelBasicInfo form={form} normalizedChannelType={normalizedChannelType} tr={tr} onTypeChange={requestTypeChange} />
 
                 <ChannelSpecificConfig
                   form={form}
@@ -169,6 +164,8 @@ export function EditChannelPage() {
                   baseURLEditable={baseURLEditable}
                   tr={tr}
                 />
+
+                <ChannelGroups form={form} groups={groups} tr={tr} />
 
                 <ChannelModelSettings
                   form={form}
@@ -181,7 +178,13 @@ export function EditChannelPage() {
 
                 <ChannelAdvancedSettings form={form} normalizedChannelType={normalizedChannelType} tr={tr} />
 
-                <ChannelEndpointSettings form={form} allEndpoints={allEndpoints} defaultEndpoints={defaultEndpoints} tr={tr} />
+                <ChannelEndpointSettings
+                  form={form}
+                  allEndpoints={allEndpoints}
+                  defaultEndpoints={defaultEndpoints}
+                  defaultBaseURL={defaultBaseURL}
+                  tr={tr}
+                />
 
                 <ChannelToolingSettings form={form} defaultTooling={defaultTooling} tr={tr} notify={notify} />
 

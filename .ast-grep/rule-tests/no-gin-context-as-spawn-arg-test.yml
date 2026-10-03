@@ -1,0 +1,64 @@
+id: no-gin-context-as-spawn-arg
+valid:
+  # Detach(c) is the sanctioned spawn context — it snapshots/detaches from the request c.
+  - |
+    func ok(c *gin.Context) {
+        graceful.GoCritical(relayctx.Detach(c), "x", func(ctx context.Context) {
+            doWork(ctx)
+        })
+    }
+  # detachForBilling(c) is likewise sanctioned.
+  - |
+    func ok2(c *gin.Context) {
+        graceful.GoCritical(detachForBilling(c), "x", func(ctx context.Context) {
+            doWork(ctx)
+        })
+    }
+  # Synchronous, on-the-request-goroutine use of gmw.Ctx(c) — no spawn at all. Legitimate.
+  - |
+    func ok3(c *gin.Context) {
+        ctx := gmw.Ctx(c)
+        _ = ctx.Err()
+    }
+  # GoRequestScoped(c, ...) takes the raw c and detaches internally — sanctioned.
+  - |
+    func ok4(c *gin.Context) {
+        relayctx.GoRequestScoped(c, "x", func(ctx context.Context) {
+            doWork(ctx)
+        })
+    }
+  # Synchronous use of gmw.BackgroundCtx(c) on the request goroutine — legitimate.
+  - |
+    func ok5(c *gin.Context) {
+        bg := gmw.BackgroundCtx(c)
+        _ = bg
+    }
+  # gmw.Ctx(c) wrapped one level deeper is not a DIRECT spawn arg (known limitation).
+  - |
+    func ok6(c *gin.Context) {
+        graceful.GoCritical(wrap(gmw.Ctx(c)), "x", func(ctx context.Context) {
+            doWork(ctx)
+        })
+    }
+invalid:
+  # gmw.Ctx(c) passed directly as the GoCritical context argument.
+  - |
+    func bad1(c *gin.Context) {
+        graceful.GoCritical(gmw.Ctx(c), "x", func(ctx context.Context) {
+            doWork(ctx)
+        })
+    }
+  # gmw.BackgroundCtx(c) passed directly as the GoCritical context argument.
+  - |
+    func bad2(c *gin.Context) {
+        graceful.GoCritical(gmw.BackgroundCtx(c), "x", func(ctx context.Context) {
+            doWork(ctx)
+        })
+    }
+  # gmw.Ctx(c) passed directly as the GoRequestScoped context argument.
+  - |
+    func bad3(c *gin.Context) {
+        relayctx.GoRequestScoped(gmw.Ctx(c), "x", func(ctx context.Context) {
+            doWork(ctx)
+        })
+    }

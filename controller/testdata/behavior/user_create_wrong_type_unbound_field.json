@@ -1,0 +1,9 @@
+{
+  "case": "user/create_wrong_type_unbound_field",
+  "site": "CreateUser (request DTO, error)",
+  "status": 200,
+  "body": {
+    "message": "invalid parameter",
+    "success": false
+  }
+}

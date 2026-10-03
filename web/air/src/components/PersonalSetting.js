@@ -1,6 +1,7 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API, copy, isRoot, showError, showInfo, showSuccess } from '../helpers';
+import { API, copy, isRoot, showError, showInfo, showSuccess, normalizeUser } from '../helpers';
 import Turnstile from 'react-turnstile';
 import { UserContext } from '../context/User';
 import { onGitHubOAuthClicked } from './utils';
@@ -20,7 +21,6 @@ import {
   Typography
 } from '@douyinfe/semi-ui';
 import { getQuotaPerUnit, renderQuota, renderQuotaWithPrompt, stringToColor } from '../helpers/render';
-import TelegramLoginButton from 'react-telegram-login';
 
 const PersonalSetting = () => {
   const [userState, userDispatch] = useContext(UserContext);
@@ -71,9 +71,9 @@ const PersonalSetting = () => {
       (res) => {
         console.log(userState);
       }
-    );
-    loadModels().then();
-    getAffLink().then();
+    ).catch(reportUIError);
+    loadModels().then().catch(reportUIError);
+    getAffLink().then().catch(reportUIError);
     setTransferAmount(getQuotaPerUnit());
   }, []);
 
@@ -121,7 +121,9 @@ const PersonalSetting = () => {
     let res = await API.get(`/api/user/self`);
     const { success, message, data } = res.data;
     if (success) {
-      userDispatch({ type: 'login', payload: data });
+      // Normalise the raw DTO so the context keeps the uuid-backed `id` shape
+      // established at login instead of being overwritten by the bare payload.
+      userDispatch({ type: 'login', payload: normalizeUser(data) });
     } else {
       showError(message);
     }
@@ -220,7 +222,7 @@ const PersonalSetting = () => {
     if (success) {
       showSuccess(message);
       setOpenTransfer(false);
-      getUserData().then();
+      getUserData().then().catch(reportUIError);
     } else {
       showError(message);
     }
@@ -237,36 +239,46 @@ const PersonalSetting = () => {
       return;
     }
     setLoading(true);
-    const res = await API.get(
-      `/api/verification?email=${inputs.email}&turnstile=${turnstileToken}`
-    );
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess('验证码发送成功，请检查邮箱！');
-    } else {
-      showError(message);
+    try {
+      const res = await API.get(
+        `/api/verification?email=${inputs.email}&turnstile=${turnstileToken}`
+      );
+      // The shared axios interceptor resolves to undefined on error; bail out before
+      // reading res.data so a failed request can't throw and leave `loading` stuck true,
+      // which would keep the 获取验证码 button disabled even after the resend countdown ends.
+      if (!res) return;
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess('验证码发送成功，请检查邮箱！');
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const bindEmail = async () => {
-    if (inputs.email_verification_code === '') {
-      showError('请输入邮箱验证码！');
-      return;
+    try {
+      if (inputs.email_verification_code === '') {
+        showError('请输入邮箱验证码！');
+        return;
+      }
+      setLoading(true);
+      const res = await API.get(
+        `/api/oauth/email/bind?email=${inputs.email}&code=${inputs.email_verification_code}`
+      );
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess('邮箱账户绑定成功！');
+        setShowEmailBindModal(false);
+        userState.user.email = inputs.email;
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(true);
-    const res = await API.get(
-      `/api/oauth/email/bind?email=${inputs.email}&code=${inputs.email_verification_code}`
-    );
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess('邮箱账户绑定成功！');
-      setShowEmailBindModal(false);
-      userState.user.email = inputs.email;
-    } else {
-      showError(message);
-    }
-    setLoading(false);
   };
 
   const getUsername = () => {
@@ -304,8 +316,8 @@ const PersonalSetting = () => {
             centered={true}
           >
             <div style={{ marginTop: 20 }}>
-              <Typography.Text>{`可用额度${renderQuotaWithPrompt(userState?.user?.aff_quota)}`}</Typography.Text>
-              <Input style={{ marginTop: 5 }} value={userState?.user?.aff_quota} disabled={true}></Input>
+              <Typography.Text>{`可用额度${renderQuotaWithPrompt(userState?.user?.aff_quota ?? 0)}`}</Typography.Text>
+              <Input style={{ marginTop: 5 }} value={userState?.user?.aff_quota ?? 0} disabled={true}></Input>
             </div>
             <div style={{ marginTop: 20 }}>
               <Typography.Text>{`划转额度${renderQuotaWithPrompt(transferAmount)} 最低` + renderQuota(getQuotaPerUnit())}</Typography.Text>
@@ -330,7 +342,7 @@ const PersonalSetting = () => {
               headerExtraContent={
                 <>
                   <Space vertical align="start">
-                    <Tag color="green">{'ID: ' + userState?.user?.id}</Tag>
+                    <Tag color="green">{'ID: ' + (userState?.user?.uuid ?? '-')}</Tag>
                     <Tag color="blue">{userState?.user?.group}</Tag>
                   </Space>
                 </>
@@ -349,7 +361,7 @@ const PersonalSetting = () => {
                 <Space wrap>
                   {models.map((model) => (
                     <Tag key={model} color="cyan" onClick={() => {
-                      copyText(model);
+                      copyText(model).catch(reportUIError);
                     }}>
                       {model}
                     </Tag>
@@ -376,15 +388,15 @@ const PersonalSetting = () => {
                   <Descriptions.Item itemKey="待使用收益">
                     <span style={{ color: 'rgba(var(--semi-red-5), 1)' }}>
                       {
-                        renderQuota(userState?.user?.aff_quota)
+                        renderQuota(userState?.user?.aff_quota ?? 0)
                       }
                     </span>
                     <Button type={'secondary'} onClick={() => setOpenTransfer(true)} size={'small'}
                       style={{ marginLeft: 10 }}>划转</Button>
                   </Descriptions.Item>
                   <Descriptions.Item
-                    itemKey="总收益">{renderQuota(userState?.user?.aff_history_quota)}</Descriptions.Item>
-                  <Descriptions.Item itemKey="邀请人数">{userState?.user?.aff_count}</Descriptions.Item>
+                    itemKey="总收益">{renderQuota(userState?.user?.aff_history_quota ?? 0)}</Descriptions.Item>
+                  <Descriptions.Item itemKey="邀请人数">{userState?.user?.aff_count ?? 0}</Descriptions.Item>
                 </Descriptions>
               </div>
             </Card> */}
@@ -393,7 +405,7 @@ const PersonalSetting = () => {
               <Input
                 style={{ marginTop: 10 }}
                 value={affLink}
-                onClick={handleAffLinkClick}
+                onClick={(...uiArgs) => handleAffLinkClick(...uiArgs).catch(reportUIError)}
                 readOnly
               />
             </Card>
@@ -459,29 +471,10 @@ const PersonalSetting = () => {
                 </div>
               </div>
 
-              {/* <div style={{ marginTop: 10 }}>
-                <Typography.Text strong>Telegram</Typography.Text>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <div>
-                    <Input
-                      value={userState.user && userState.user.telegram_id !== '' ? userState.user.telegram_id : '未绑定'}
-                      readonly={true}
-                    ></Input>
-                  </div>
-                  <div>
-                    {status.telegram_oauth ?
-                      userState.user.telegram_id !== '' ? <Button disabled={true}>已绑定</Button>
-                        : <TelegramLoginButton dataAuthUrl="/api/oauth/telegram/bind"
-                          botName={status.telegram_bot_name} />
-                      : <Button disabled={true}>未启用</Button>
-                    }
-                  </div>
-                </div>
-              </div> */}
 
               <div style={{ marginTop: 10 }}>
                 <Space>
-                  <Button onClick={generateAccessToken}>生成系统访问令牌</Button>
+                  <Button onClick={(...uiArgs) => generateAccessToken(...uiArgs).catch(reportUIError)}>生成系统访问令牌</Button>
                   <Button onClick={() => {
                     setShowChangePasswordModal(true);
                   }}>修改密码</Button>
@@ -494,7 +487,7 @@ const PersonalSetting = () => {
                   <Input
                     readOnly
                     value={systemToken}
-                    onClick={handleSystemTokenClick}
+                    onClick={(...uiArgs) => handleSystemTokenClick(...uiArgs).catch(reportUIError)}
                     style={{ marginTop: '10px' }}
                   />
                 )}
@@ -527,7 +520,7 @@ const PersonalSetting = () => {
                     value={inputs.wechat_verification_code}
                     onChange={(v) => handleInputChange('wechat_verification_code', v)}
                   />
-                  <Button color="" fluid size="large" onClick={bindWeChat}>
+                  <Button color="" fluid size="large" onClick={(...uiArgs) => bindWeChat(...uiArgs).catch(reportUIError)}>
                     绑定
                   </Button>
                 </Modal>
@@ -551,7 +544,7 @@ const PersonalSetting = () => {
                   name="email"
                   type="email"
                 />
-                <Button onClick={sendVerificationCode}
+                <Button onClick={(...uiArgs) => sendVerificationCode(...uiArgs).catch(reportUIError)}
                   disabled={disableButton || loading}>
                   {disableButton ? `重新发送(${countdown})` : '获取验证码'}
                 </Button>

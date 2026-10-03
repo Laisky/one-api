@@ -62,6 +62,24 @@ func createSelfUpdateUser(t *testing.T) *model.User {
 	return user
 }
 
+// createUserWithUniqueFields inserts a user row with generated-column stand-ins
+// so duplicate tests only exercise the requested username collision.
+func createUserWithUniqueFields(t *testing.T, username string, accessToken string, affCode string) *model.User {
+	t.Helper()
+	user := &model.User{
+		Username:    username,
+		Password:    "already-hashed",
+		DisplayName: username,
+		AccessToken: accessToken,
+		AffCode:     affCode,
+		Group:       "default",
+		Role:        model.RoleCommonUser,
+		Status:      model.UserStatusEnabled,
+	}
+	require.NoError(t, model.DB.Create(user).Error)
+	return user
+}
+
 // TestUpdateSelfPasswordOnly verifies that sending only a password
 // (without username/display_name) succeeds by falling back to current values.
 func TestUpdateSelfPasswordOnly(t *testing.T) {
@@ -272,6 +290,108 @@ func TestCreateUserMinimalFields(t *testing.T) {
 	require.Equal(t, "minimaluser", created.DisplayName) // defaults to username
 }
 
+// TestCreateUserDuplicateUsernameReturnsPublicFailure verifies admin-created
+// duplicate usernames do not expose database unique-constraint details.
+func TestCreateUserDuplicateUsernameReturnsPublicFailure(t *testing.T) {
+	setupSelfUpdateTest(t)
+	createUserWithUniqueFields(t, "taken-admin-create", "access-admin-create", "A001")
+
+	router := gin.New()
+	router.POST("/api/user/", func(c *gin.Context) {
+		c.Set("role", model.RoleRootUser)
+		CreateUser(c)
+	})
+
+	payload := map[string]string{
+		"username": "taken-admin-create",
+		"password": "testpass123",
+	}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/user/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, false, resp["success"])
+	require.Equal(t, "Username already exists", resp["message"])
+	require.NotContains(t, w.Body.String(), "unique constraint")
+	require.NotContains(t, w.Body.String(), "duplicate key")
+
+	var count int64
+	require.NoError(t, model.DB.Model(&model.User{}).Where("username = ?", "taken-admin-create").Count(&count).Error)
+	require.Equal(t, int64(1), count)
+}
+
+// TestUpdateSelfDuplicateUsernameReturnsPublicFailure verifies self-service
+// username collisions produce a stable public response.
+func TestUpdateSelfDuplicateUsernameReturnsPublicFailure(t *testing.T) {
+	setupSelfUpdateTest(t)
+	createUserWithUniqueFields(t, "taken-self-update", "access-self-taken", "S001")
+	target := createUserWithUniqueFields(t, "self-update-target", "access-self-target", "S002")
+
+	router := gin.New()
+	router.PUT("/api/user/self", func(c *gin.Context) {
+		c.Set(ctxkey.Id, target.Id)
+		UpdateSelf(c)
+	})
+
+	payload := map[string]string{"username": "taken-self-update"}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/user/self", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, false, resp["success"])
+	require.Equal(t, "Username already exists", resp["message"])
+	require.NotContains(t, w.Body.String(), "unique constraint")
+	require.NotContains(t, w.Body.String(), "duplicate key")
+
+	var updated model.User
+	require.NoError(t, model.DB.First(&updated, target.Id).Error)
+	require.Equal(t, "self-update-target", updated.Username)
+}
+
+// TestUpdateUserDuplicateUsernameReturnsPublicFailure verifies admin username
+// collisions produce a stable public response.
+func TestUpdateUserDuplicateUsernameReturnsPublicFailure(t *testing.T) {
+	setupSelfUpdateTest(t)
+	createUserWithUniqueFields(t, "taken-admin-update", "access-admin-taken", "U001")
+	target := createUserWithUniqueFields(t, "admin-update-target", "access-admin-target", "U002")
+
+	router := gin.New()
+	router.PUT("/api/user/", func(c *gin.Context) {
+		c.Set(ctxkey.Role, model.RoleRootUser)
+		c.Set(ctxkey.Id, 1)
+		UpdateUser(c)
+	})
+
+	payloadJSON := fmt.Sprintf(`{"uuid":%q,"username":"taken-admin-update"}`, target.UUID)
+	req := httptest.NewRequest(http.MethodPut, "/api/user/", bytes.NewReader([]byte(payloadJSON)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, false, resp["success"])
+	require.Equal(t, "Username already exists", resp["message"])
+	require.NotContains(t, w.Body.String(), "unique constraint")
+	require.NotContains(t, w.Body.String(), "duplicate key")
+
+	var updated model.User
+	require.NoError(t, model.DB.First(&updated, target.Id).Error)
+	require.Equal(t, "admin-update-target", updated.Username)
+}
+
 // TestUpdateUserMcpToolBlacklistWithoutGroup verifies that mcp_tool_blacklist
 // can be updated independently from group (the scoping bug fix).
 func TestUpdateUserMcpToolBlacklistWithoutGroup(t *testing.T) {
@@ -293,8 +413,8 @@ func TestUpdateUserMcpToolBlacklistWithoutGroup(t *testing.T) {
 		UpdateUser(c)
 	})
 
-	// Send only id and mcp_tool_blacklist, NO group field
-	payloadJSON := fmt.Sprintf(`{"id": %d, "mcp_tool_blacklist": ["tool1", "tool2"]}`, user.Id)
+	// Send only uuid and mcp_tool_blacklist, NO group field
+	payloadJSON := fmt.Sprintf(`{"uuid": %q, "mcp_tool_blacklist": ["tool1", "tool2"]}`, user.UUID)
 	req := httptest.NewRequest(http.MethodPut, "/api/user/", bytes.NewReader([]byte(payloadJSON)))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -312,6 +432,45 @@ func TestUpdateUserMcpToolBlacklistWithoutGroup(t *testing.T) {
 	require.Contains(t, updated.MCPToolBlacklist, "tool2")
 	// Group should remain unchanged
 	require.Equal(t, "default", updated.Group)
+}
+
+// TestUpdateUserIgnoresClientUUIDFields verifies bind-safety for admin user updates.
+func TestUpdateUserIgnoresClientUUIDFields(t *testing.T) {
+	setupSelfUpdateTest(t)
+
+	user := &model.User{
+		Username:    "uuid-safe-user",
+		Password:    "hashed",
+		DisplayName: "UUID Safe User",
+		Group:       "default",
+		Status:      model.UserStatusEnabled,
+	}
+	require.NoError(t, model.DB.Create(user).Error)
+	originalUUID := user.UUID
+	require.NotEmpty(t, originalUUID)
+
+	router := gin.New()
+	router.PUT("/api/user/", func(c *gin.Context) {
+		c.Set(ctxkey.Role, model.RoleRootUser)
+		c.Set(ctxkey.Id, 1)
+		UpdateUser(c)
+	})
+
+	payloadJSON := fmt.Sprintf(`{"uuid":%q,"username":"uuid-safe-user","display_name":"Updated","group":"default","status":1,"inviter_uuid":"018f0000-0000-7000-8000-00000000feed"}`, originalUUID)
+	req := httptest.NewRequest(http.MethodPut, "/api/user/", bytes.NewReader([]byte(payloadJSON)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, true, resp["success"], "expected success, got: %v", resp["message"])
+
+	var updated model.User
+	require.NoError(t, model.DB.First(&updated, user.Id).Error)
+	require.Equal(t, originalUUID, updated.UUID)
+	require.Nil(t, updated.InviterUUID)
+	require.Equal(t, "Updated", updated.DisplayName)
 }
 
 // createLockedSelfUser provisions a logged-in user whose Metadata.PasswordLocked

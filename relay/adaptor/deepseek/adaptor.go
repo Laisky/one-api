@@ -33,13 +33,16 @@ func (a *Adaptor) GetModelList() []string {
 	return adaptor.GetModelListFromPricing(ModelRatios)
 }
 
-// GetDefaultModelPricing returns the pricing information for DeepSeek models
-// Based on official DeepSeek pricing: https://platform.deepseek.com/api-docs/pricing/
+// GetDefaultModelPricing returns current DeepSeek model pricing and capability metadata.
+// Parameters: none. Returns: the official-model-ID keyed pricing configuration map.
+// Source: https://api-docs.deepseek.com/quick_start/pricing/
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return ModelRatios
 }
 
-// DefaultToolingConfig returns DeepSeek's provider-level tooling defaults (none published as of 2025-11-12).
+// DefaultToolingConfig returns DeepSeek's provider-level tooling defaults.
+// Parameters: none. Returns: no built-in tool pricing entries because the
+// current Responses API ignores web_search and other built-in tool types.
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return DeepseekToolingDefaults
 }
@@ -83,18 +86,26 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	adaptor.SetupCommonRequestHeader(c, req, meta)
+
 	req.Header.Set("Authorization", "Bearer "+meta.APIKey)
 	return nil
 }
 
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	// DeepSeek is OpenAI-compatible, so we can pass the request through with minimal changes
-	// Remove reasoning_effort as DeepSeek doesn't support it
-	if request.ReasoningEffort != nil {
-		request.ReasoningEffort = nil
+	if request == nil {
+		return nil, errors.New("request is nil")
 	}
+	if request.MaxCompletionTokens != nil && request.MaxTokens == 0 {
+		request.MaxTokens = *request.MaxCompletionTokens
+	}
+	request.MaxCompletionTokens = nil
+	normalizeDeepSeekReasoningEffort(request)
+	ensureDeepSeekStreamUsage(request)
 
 	normalizeDeepSeekThinkingConfig(c, request)
+	normalizeDeepSeekMessageReasoning(request)
+	enforceDeepSeekHistoryContract(c, request)
 
 	normalizeDeepSeekToolMessageContent(c, request)
 
@@ -106,21 +117,72 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 
 	if request.ResponseFormat != nil {
-		if request.ResponseFormat.JsonSchema != nil {
+		if strings.EqualFold(request.ResponseFormat.Type, "json_object") && request.ResponseFormat.JsonSchema == nil {
+			// DeepSeek supports the standard JSON object mode directly.
+		} else if request.ResponseFormat.JsonSchema != nil {
 			structuredjson.EnsureInstruction(request)
+			request.ResponseFormat = nil
+		} else {
+			request.ResponseFormat = nil
 		}
-		request.ResponseFormat = nil
 	}
 
 	return request, nil
 }
 
-// normalizeDeepSeekThinkingConfig coerces thinking.type into values accepted by DeepSeek.
-// DeepSeek chat completion currently supports only enabled/disabled.
+// normalizeDeepSeekReasoningEffort maps portable reasoning levels to the values
+// currently documented by DeepSeek. Parameters: request is the mutable
+// OpenAI-style request to normalize and may be nil. Returns: nothing; supported
+// values are normalized in place and unsupported values are cleared.
+func normalizeDeepSeekReasoningEffort(request *model.GeneralOpenAIRequest) {
+	if request == nil || request.ReasoningEffort == nil {
+		return
+	}
+
+	effort := strings.ToLower(strings.TrimSpace(*request.ReasoningEffort))
+	switch effort {
+	case "low", "high", "max":
+	case "minimal":
+		effort = "low"
+	case "medium", "xhigh":
+		// DeepSeek maps both OpenAI compatibility aliases to high.
+		effort = "high"
+	case "ultra":
+		effort = "max"
+	default:
+		request.ReasoningEffort = nil
+		return
+	}
+
+	request.ReasoningEffort = &effort
+}
+
+// ensureDeepSeekStreamUsage requests the upstream usage event needed to
+// reconcile streaming quota estimates with authoritative token accounting.
+// Parameters: request is the mutable OpenAI-style request to update.
+// Returns: nothing; stream_options.include_usage is enabled when streaming.
+func ensureDeepSeekStreamUsage(request *model.GeneralOpenAIRequest) {
+	if request == nil || !request.Stream {
+		return
+	}
+	if request.StreamOptions == nil {
+		request.StreamOptions = &model.StreamOptions{}
+	}
+	request.StreamOptions.IncludeUsage = true
+}
+
+// normalizeDeepSeekThinkingConfig removes Anthropic-only controls and coerces
+// thinking.type into values accepted by DeepSeek. The context supplies request-scoped
+// logging, request is mutated in place, and the function returns no value.
 func normalizeDeepSeekThinkingConfig(c *gin.Context, request *model.GeneralOpenAIRequest) {
 	if request == nil || request.Thinking == nil {
 		return
 	}
+
+	// block_binding controls Anthropic signature validation and has no DeepSeek
+	// equivalent. Remove it while retaining portable thinking mode and budget data.
+	request.Thinking.BlockBinding = nil
+	request.Thinking.ExtraFields = nil
 
 	originalType := request.Thinking.Type
 	normalizedType, changed := deepseekcompat.NormalizeThinkingType(originalType, request.Thinking.BudgetTokens)
@@ -195,7 +257,80 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
 	// Use the shared OpenAI-compatible Claude Messages conversion
-	return openai_compatible.ConvertClaudeRequest(c, request)
+	converted, err := openai_compatible.ConvertClaudeRequest(c, request)
+	if err != nil {
+		return nil, errors.Wrap(err, "convert Claude request for DeepSeek")
+	}
+	chatRequest, ok := converted.(*model.GeneralOpenAIRequest)
+	if !ok {
+		return nil, errors.Errorf("unexpected DeepSeek Claude conversion type %T", converted)
+	}
+	ensureDeepSeekStreamUsage(chatRequest)
+	if request.Thinking != nil {
+		thinking := *request.Thinking
+		chatRequest.Thinking = &thinking
+	}
+	normalizeDeepSeekThinkingConfig(c, chatRequest)
+	normalizeDeepSeekMessageReasoning(chatRequest)
+	enforceDeepSeekHistoryContract(c, chatRequest)
+	normalizeDeepSeekToolMessageContent(c, chatRequest)
+	return chatRequest, nil
+}
+
+// normalizeDeepSeekMessageReasoning converts portable reasoning fields on
+// assistant history into DeepSeek's reasoning_content contract. The request is
+// mutated in place; existing provider-native reasoning takes precedence.
+func normalizeDeepSeekMessageReasoning(request *model.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+
+	for idx := range request.Messages {
+		message := &request.Messages[idx]
+		if message.Role != "assistant" {
+			continue
+		}
+
+		if message.ReasoningContent == nil {
+			switch {
+			case message.Reasoning != nil:
+				reasoning := *message.Reasoning
+				message.ReasoningContent = &reasoning
+			case message.Thinking != nil:
+				reasoning := *message.Thinking
+				message.ReasoningContent = &reasoning
+			}
+		}
+		message.Reasoning = nil
+		message.Thinking = nil
+
+		if len(message.ToolCalls) > 0 && message.Content == nil {
+			message.Content = ""
+		}
+	}
+}
+
+// enforceDeepSeekHistoryContract repairs replayed history that DeepSeek would
+// reject outright: tool calls nobody answered and an in-flight assistant turn
+// whose thinking was not replayed. The context supplies request-scoped logging,
+// request is mutated in place, and the function returns no value.
+func enforceDeepSeekHistoryContract(c *gin.Context, request *model.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+
+	repaired, stats := deepseekcompat.EnforceHistoryContract(request.Messages)
+	request.Messages = repaired
+	if !stats.Changed() {
+		return
+	}
+
+	gmw.GetLogger(c).Debug("repaired deepseek history for provider validation",
+		zap.String("model", request.Model),
+		zap.Int("unanswered_tool_calls_dropped", stats.UnansweredToolCallsDropped),
+		zap.Int("assistant_messages_dropped", stats.AssistantMessagesDropped),
+		zap.Int("reasoning_placeholders_added", stats.ReasoningPlaceholdersAdded),
+	)
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {

@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { useSystemStatus } from '@/hooks/useSystemStatus';
 import { api, isSafeInternalPath } from '@/lib/api';
-import { buildGitHubOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
+import { buildGitHubOAuthUrl, buildLarkOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -39,6 +39,9 @@ export function LoginPage() {
   const [totpValue, setTotpValue] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileRequired, setTurnstileRequired] = useState(false);
+  // Bumping this remounts the Turnstile widget to force a fresh, unused token after the
+  // previous one is consumed by a failed login attempt.
+  const [turnstileNonce, setTurnstileNonce] = useState(0);
   const totpRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -133,6 +136,7 @@ export function LoginPage() {
 
   const onGitHubOAuth = async () => {
     if (!systemStatus.github_client_id) return;
+    form.clearErrors('root');
     try {
       // Request state from backend to prevent CSRF
       const state = await getOAuthState();
@@ -140,31 +144,38 @@ export function LoginPage() {
       const url = buildGitHubOAuthUrl(systemStatus.github_client_id, state, redirectUri);
       window.location.href = url;
     } catch (e) {
-      // Fallback: try without state if backend unavailable
-      const redirectUri = `${window.location.origin}/oauth/github`;
-      const url = buildGitHubOAuthUrl(systemStatus.github_client_id, '', redirectUri);
-      window.location.href = url;
+      form.setError('root', {
+        message: e instanceof Error && e.message ? e.message : t('auth.oauth.state_failed'),
+      });
     }
   };
 
-  const onLarkOAuth = () => {
-    if (systemStatus.lark_client_id) {
+  const onLarkOAuth = async () => {
+    if (!systemStatus.lark_client_id) return;
+    form.clearErrors('root');
+    try {
+      const state = await getOAuthState();
       const redirectUri = `${window.location.origin}/oauth/lark`;
-      window.location.href = `https://open.larksuite.com/open-apis/authen/v1/index?app_id=${encodeURIComponent(systemStatus.lark_client_id)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      window.location.href = buildLarkOAuthUrl(systemStatus.lark_client_id, state, redirectUri);
+    } catch (error) {
+      form.setError('root', {
+        message: error instanceof Error && error.message ? error.message : t('auth.oauth.state_failed'),
+      });
     }
   };
 
   const onOidcOAuth = async () => {
     if (!systemStatus.oidc_client_id || !systemStatus.oidc_authorization_endpoint) return;
+    form.clearErrors('root');
     try {
       const state = await getOAuthState();
       const redirectUri = `${window.location.origin}/oauth/oidc`;
       const url = buildOidcOAuthUrl(systemStatus.oidc_authorization_endpoint, systemStatus.oidc_client_id, state, redirectUri);
       window.location.href = url;
-    } catch {
-      const redirectUri = `${window.location.origin}/oauth/oidc`;
-      const url = buildOidcOAuthUrl(systemStatus.oidc_authorization_endpoint, systemStatus.oidc_client_id, '', redirectUri);
-      window.location.href = url;
+    } catch (error) {
+      form.setError('root', {
+        message: error instanceof Error && error.message ? error.message : t('auth.oauth.state_failed'),
+      });
     }
   };
 
@@ -246,7 +257,13 @@ export function LoginPage() {
       // Check if the server is now requiring Turnstile (after failed login).
       if (!success && respData?.turnstile_required) {
         setTurnstileRequired(true);
+        // Login re-verifies the Turnstile token on every attempt (it does not mark the
+        // session), so the consumed token is now useless. Clear it AND remount the widget
+        // (via key bump) so it issues a fresh token — otherwise the login button, gated on
+        // `turnstileRequired && !turnstileToken`, would stay disabled until the widget's own
+        // ~5-minute expiry re-challenge, stranding the user after a failed retry.
         setTurnstileToken('');
+        setTurnstileNonce((n) => n + 1);
       }
 
       if (needsTotp) {
@@ -265,7 +282,8 @@ export function LoginPage() {
 
         // Handle default root password warning
         if (data.username === 'root' && data.password === '123456') {
-          navigate('/users/edit');
+          const selfUserRef = respData?.uuid || respData?.user_uuid;
+          navigate(selfUserRef ? `/users/edit/${selfUserRef}` : '/dashboard');
           console.warn(t('auth.login.root_password_warning'));
         } else if (redirectTo) {
           // Decode and navigate to the original page, enforcing same-origin
@@ -424,6 +442,7 @@ export function LoginPage() {
 
               {turnstileRenderable && systemStatus?.turnstile_site_key && (
                 <Turnstile
+                  key={turnstileNonce}
                   siteKey={systemStatus.turnstile_site_key}
                   onVerify={handleTurnstileVerify}
                   onExpire={handleTurnstileExpire}

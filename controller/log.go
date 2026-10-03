@@ -1,14 +1,17 @@
 package controller
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/model"
 )
@@ -25,7 +28,11 @@ func GetAllLogs(c *gin.Context) {
 	username := c.Query("username")
 	tokenName := c.Query("token_name")
 	modelName := c.Query("model_name")
-	channel, _ := strconv.Atoi(c.Query("channel"))
+	channel, err := resolveOptionalChannelRef(c.Query("channel"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	sortBy := c.DefaultQuery("sort_by", "")
 	if sortBy == "" { // frontend sends 'sort'
 		sortBy = c.Query("sort")
@@ -39,7 +46,7 @@ func GetAllLogs(c *gin.Context) {
 	if sortBy != "" && startTimestamp > 0 && endTimestamp > 0 {
 		maxRange := int64(30 * 24 * 60 * 60) // 30 days in seconds
 		if endTimestamp-startTimestamp > maxRange {
-			helper.RespondError(c, errors.New("Date range for sorting cannot exceed 30 days"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Date range for sorting cannot exceed 30 days")))
 			return
 		}
 	}
@@ -73,7 +80,7 @@ func GetAllLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    model.LogsToResponses(logs),
 		"total":   totalCount,
 	})
 }
@@ -103,7 +110,7 @@ func GetUserLogs(c *gin.Context) {
 	if sortBy != "" && startTimestamp > 0 && endTimestamp > 0 {
 		maxRange := int64(30 * 24 * 60 * 60) // 30 days in seconds
 		if endTimestamp-startTimestamp > maxRange {
-			helper.RespondError(c, errors.New("Date range for sorting cannot exceed 30 days"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Date range for sorting cannot exceed 30 days")))
 			return
 		}
 	}
@@ -133,7 +140,7 @@ func GetUserLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    model.LogsToResponses(logs),
 		"total":   totalCount,
 	})
 }
@@ -176,7 +183,7 @@ func GetTokenLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    model.LogsToResponses(logs),
 		"total":   totalCount,
 	})
 }
@@ -209,7 +216,7 @@ func SearchAllLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    model.LogsToResponses(logs),
 		"total":   total,
 	})
 }
@@ -243,7 +250,7 @@ func SearchUserLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    model.LogsToResponses(logs),
 		"total":   total,
 	})
 }
@@ -256,7 +263,11 @@ func GetLogsStat(c *gin.Context) {
 	tokenName := c.Query("token_name")
 	username := c.Query("username")
 	modelName := c.Query("model_name")
-	channel, _ := strconv.Atoi(c.Query("channel"))
+	channel, err := resolveOptionalChannelRef(c.Query("channel"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	quotaNum := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
 	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, "")
 	c.JSON(http.StatusOK, gin.H{
@@ -277,7 +288,11 @@ func GetLogsSelfStat(c *gin.Context) {
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	tokenName := c.Query("token_name")
 	modelName := c.Query("model_name")
-	channel, _ := strconv.Atoi(c.Query("channel"))
+	channel, err := resolveOptionalChannelRef(c.Query("channel"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	quotaNum := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
 	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, tokenName)
 	c.JSON(http.StatusOK, gin.H{
@@ -294,10 +309,13 @@ func GetLogsSelfStat(c *gin.Context) {
 func DeleteHistoryLogs(c *gin.Context) {
 	targetTimestamp, _ := strconv.ParseInt(c.Query("target_timestamp"), 10, 64)
 	if targetTimestamp == 0 {
-		helper.RespondError(c, errors.New("target timestamp is required"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("target timestamp is required")))
 		return
 	}
-	count, err := model.DeleteOldLog(targetTimestamp)
+	// Detached from the request: the purge is now chunked and can run for many
+	// minutes on a large logs table, and a client that closes the connection
+	// must not leave it half done while the response reports success.
+	count, err := model.DeleteOldLogContext(context.WithoutCancel(gmw.Ctx(c)), targetTimestamp)
 	if err != nil {
 		helper.RespondError(c, err)
 		return

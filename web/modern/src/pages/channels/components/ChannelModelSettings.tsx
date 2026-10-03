@@ -4,14 +4,15 @@ import { SelectionListManager } from '@/components/ui/selection-list-manager';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertCircle } from 'lucide-react';
 import { useMemo } from 'react';
-import type { UseFormReturn } from 'react-hook-form';
 import { MODEL_CONFIGS_EXAMPLE, MODEL_MAPPING_EXAMPLE } from '../constants';
 import { formatJSON, sanitizeJsonInput } from '../helpers';
-import type { ChannelForm } from '../schemas';
+import type { ChannelFormMethods } from '../schemas';
 import { LabelWithHelp } from './LabelWithHelp';
 
+const EMPTY_MODELS: string[] = [];
+
 interface ChannelModelSettingsProps {
-  form: UseFormReturn<ChannelForm>;
+  form: ChannelFormMethods;
   availableModels: { id: string; name: string }[];
   currentCatalogModels: string[];
   defaultPricing: string;
@@ -29,13 +30,15 @@ export const ChannelModelSettings = ({
 }: ChannelModelSettingsProps) => {
   const fieldHasError = (name: string) => !!(form.formState.errors as any)?.[name];
   const errorClass = (name: string) => (fieldHasError(name) ? 'border-destructive focus-visible:ring-destructive' : '');
-  const selectedModels = form.watch('models');
-  const hiddenModels = form.watch('hidden_models');
+  const selectedModels = form.watch('models') ?? EMPTY_MODELS;
+  const hiddenModels = form.watch('hidden_models') ?? EMPTY_MODELS;
   const modelMapping = form.watch('model_mapping') || '';
 
   const selectedModelSet = useMemo(() => {
-    return new Set(selectedModels.map((model) => model.trim().toLowerCase()).filter((model) => model.length > 0));
+    return new Set(selectedModels.map((model) => model.trim()).filter((model) => model.length > 0));
   }, [selectedModels]);
+
+  const foldedSelectedModelSet = useMemo(() => new Set([...selectedModelSet].map((model) => model.toLowerCase())), [selectedModelSet]);
 
   const mappingSources = useMemo(() => {
     if (!modelMapping.trim()) {
@@ -66,8 +69,8 @@ export const ChannelModelSettings = ({
   );
 
   const hiddenModelsOutsideSupported = useMemo(
-    () => hiddenModels.filter((model) => !selectedModelSet.has(model.trim().toLowerCase())),
-    [hiddenModels, selectedModelSet]
+    () => hiddenModels.filter((model) => !foldedSelectedModelSet.has(model.trim().toLowerCase())),
+    [hiddenModels, foldedSelectedModelSet]
   );
 
   const hiddenMappingSources = useMemo(
@@ -109,7 +112,7 @@ export const ChannelModelSettings = ({
   const hasMappingJsonIssue = mappingJsonIssue !== null;
 
   const availableModelSet = useMemo(
-    () => new Set(availableModels.map((model) => model.id.trim().toLowerCase()).filter((model) => model.length > 0)),
+    () => new Set(availableModels.map((model) => model.id.trim()).filter((model) => model.length > 0)),
     [availableModels]
   );
 
@@ -128,7 +131,7 @@ export const ChannelModelSettings = ({
       const parsed = JSON.parse(sanitizeJsonInput(modelMapping)) as Record<string, unknown>;
       return Object.keys(parsed)
         .map((key) => key.trim())
-        .filter((key) => key.length > 0 && !selectedModelSet.has(key.toLowerCase()));
+        .filter((key) => key.length > 0 && !selectedModelSet.has(key));
     } catch (_error) {
       return [] as string[];
     }
@@ -146,7 +149,7 @@ export const ChannelModelSettings = ({
         if (typeof rawValue !== 'string') continue;
         const target = rawValue.trim();
         if (!target) continue;
-        if (!knownTargetSet.has(target.toLowerCase())) {
+        if (!knownTargetSet.has(target)) {
           offending.push({ source: rawKey.trim(), target });
         }
       }
@@ -164,13 +167,13 @@ export const ChannelModelSettings = ({
     if (currentCatalogModels.length === 0) {
       return;
     }
-    const currentModels = form.getValues('models');
+    const currentModels = form.getValues('models') ?? [];
     const uniqueModels = [...new Set([...currentModels, ...currentCatalogModels])];
     form.setValue('models', uniqueModels);
   };
 
   const fillAllModels = () => {
-    const currentModels = form.getValues('models');
+    const currentModels = form.getValues('models') ?? [];
     const allModelIds = availableModels.map((m) => m.id);
     const uniqueModels = [...new Set([...currentModels, ...allModelIds])];
     form.setValue('models', uniqueModels);
@@ -201,9 +204,7 @@ export const ChannelModelSettings = ({
    * @returns void
    */
   const loadDefaultModelConfigs = () => {
-    console.debug('[ChannelModelSettings] Load default model configs', {
-      hasDefaultPricing: Boolean(defaultPricing),
-    });
+    console.debug(`[ChannelModelSettings] Load default model configs hasDefaultPricing=${Boolean(defaultPricing)}`);
     if (!defaultPricing) {
       return;
     }
@@ -224,7 +225,7 @@ export const ChannelModelSettings = ({
                 value: model.id,
                 label: model.name,
               }))}
-              selected={form.watch('models')}
+              selected={form.watch('models') ?? []}
               onChange={(next) => form.setValue('models', next)}
               searchPlaceholder={tr('models.search_placeholder', 'Search models...')}
               customPlaceholder={tr('models.custom_placeholder', 'Add custom model...')}

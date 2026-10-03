@@ -8,42 +8,58 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/relay/model"
-	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-// TestConvertRequestRejectsImageModels verifies that Replicate image models are
-// rejected by the chat conversion path so per-image billing cannot be bypassed.
-func TestConvertRequestRejectsImageModels(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	adaptor := &Adaptor{}
+// TestConvertRequestRejectsImagePricedModels verifies that Replicate image
+// models cannot be converted through chat completions, because image-priced
+// models must use the image endpoint to receive per-image billing.
+func TestConvertRequestRejectsImagePricedModels(t *testing.T) {
+	t.Parallel()
 
-	converted, err := adaptor.ConvertRequest(ctx, relaymode.ChatCompletions, &model.GeneralOpenAIRequest{
-		Model: "google/imagen-4",
+	ctx := newReplicateTestContext()
+	adaptor := &Adaptor{}
+	req := &model.GeneralOpenAIRequest{
+		Model: "black-forest-labs/flux-pro",
 		Messages: []model.Message{
-			{Role: "user", Content: "generate an image of an aardvark"},
+			{Role: "user", Content: "draw a red cube"},
 		},
-	})
+	}
+
+	converted, err := adaptor.ConvertRequest(ctx, 0, req)
 
 	require.Error(t, err)
 	require.Nil(t, converted)
 	require.Contains(t, err.Error(), "please use image API")
 }
 
-// TestConvertRequestAllowsLanguageModels verifies that Replicate language
-// models continue to use the chat conversion path.
+// TestConvertRequestAllowsLanguageModels verifies that regular Replicate chat
+// models continue to convert to Replicate chat prediction requests.
 func TestConvertRequestAllowsLanguageModels(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	adaptor := &Adaptor{}
+	t.Parallel()
 
-	converted, err := adaptor.ConvertRequest(ctx, relaymode.ChatCompletions, &model.GeneralOpenAIRequest{
-		Model: "meta/meta-llama-3-8b-instruct",
+	ctx := newReplicateTestContext()
+	adaptor := &Adaptor{}
+	req := &model.GeneralOpenAIRequest{
+		Model: "anthropic/claude-3.5-haiku",
 		Messages: []model.Message{
 			{Role: "user", Content: "hello"},
 		},
-	})
+	}
+
+	converted, err := adaptor.ConvertRequest(ctx, 0, req)
 
 	require.NoError(t, err)
 	require.NotNil(t, converted)
+	replicateReq, ok := converted.(ReplicateChatRequest)
+	require.True(t, ok)
+	require.Contains(t, replicateReq.Input.Prompt, "user: hello")
+}
+
+// newReplicateTestContext creates a Gin context for Replicate adaptor tests and
+// returns it without registering routes because ConvertRequest only needs the
+// request-scoped context storage.
+func newReplicateTestContext() *gin.Context {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	return ctx
 }

@@ -9,11 +9,10 @@ import (
 // per-family files stay focused and readable. Model list is derived from the keys of
 // this map, eliminating redundancy.
 //
-// Pricing sources:
-//   - https://platform.openai.com/docs/pricing
-//   - https://platform.openai.com/docs/models
-//   - https://developers.openai.com/api/docs/pricing (realtime/audio)
-var ModelRatios = mergeModelRatios(
+// Pricing sources verified 2026-09-03; GPT Image 2.5 additions verified 2026-09-09:
+//   - https://developers.openai.com/api/docs/pricing
+//   - https://developers.openai.com/api/docs/models
+var ModelRatios = applyOpenAIModelCatalog202609(mergeModelRatios(
 	gpt35ModelRatios,
 	gpt4ModelRatios,
 	gpt4oModelRatios,
@@ -21,22 +20,24 @@ var ModelRatios = mergeModelRatios(
 	gpt45ModelRatios,
 	gpt41ModelRatios,
 	gpt5ModelRatios,
+	gpt6ModelRatios,
 	oSeriesModelRatios,
 	specializedModelRatios,
 	embeddingModelRatios,
 	audioModelRatios,
 	imageModelRatios,
+	image25ModelRatios,
 	videoModelRatios,
-)
+))
 
 // ModelList derived from ModelRatios for backward compatibility.
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// OpenAIToolingDefaults enumerates OpenAI's built-in tool whitelist and pricing (retrieved 2026-03-05).
-// Source: https://r.jina.ai/https://platform.openai.com/docs/pricing#built-in-tools
+// OpenAIToolingDefaults enumerates OpenAI's built-in tool whitelist and pricing (retrieved 2026-07-31).
+// Source: https://developers.openai.com/api/docs/pricing#tools
 var OpenAIToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{
-		"code_interpreter":                 {UsdPerCall: 0.03},   // $0.03 per default-tier container session (20-minute billing begins 2026-03-31)
+		"code_interpreter":                 {UsdPerCall: 0.03},   // $0.03 per default 1 GB container session
 		"file_search":                      {UsdPerCall: 0.0025}, // $2.50 per 1K tool calls
 		"web_search":                       {UsdPerCall: 0.01},   // $10 per 1K tool calls
 		"web_search_preview_reasoning":     {UsdPerCall: 0.01},   // Preview tier for reasoning models, $10 per 1K tool calls
@@ -82,7 +83,7 @@ func standardSamplingParameters() []string {
 }
 
 // reasoningSamplingParameters returns the constrained sampling-parameter set
-// supported by OpenAI's reasoning models (o-series, gpt-5 family). Reasoning
+// supported by OpenAI's reasoning models (o-series and GPT-5/GPT-6 families). Reasoning
 // models reject temperature, top_p, frequency_penalty, and presence_penalty.
 func reasoningSamplingParameters() []string {
 	return []string{"seed", "max_tokens"}
