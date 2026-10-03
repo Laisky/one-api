@@ -17,7 +17,7 @@ var videoModelRatios = map[string]adaptor.ModelConfig{
 		},
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"video"},
-		Description:      "Sora 2: text-to-video model rendering 720p clips at $0.10/second.",
+		Description:      "Sora 2: text-to-video model rendering 720p clips at $0.10/second. (retires 2026-09-24)",
 	},
 	"sora-2-pro": {
 		Video: &adaptor.VideoPricingConfig{
@@ -31,6 +31,6 @@ var videoModelRatios = map[string]adaptor.ModelConfig{
 		},
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"video"},
-		Description:      "Sora 2 Pro: text-to-video model with tiered resolutions ($0.30/$0.50/$0.70 per sec at 720p/1024p/1080p).",
+		Description:      "Sora 2 Pro: text-to-video model with tiered resolutions ($0.30/$0.50/$0.70 per sec at 720p/1024p/1080p). (retires 2026-09-24)",
 	},
 }

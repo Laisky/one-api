@@ -1,0 +1,34 @@
+{
+  "case": "user/get_by_uuid",
+  "site": "U4 GetUser",
+  "status": 200,
+  "body": {
+    "data": {
+      "aff_code": "AFFUSER",
+      "created_at": 1730000000111,
+      "display_name": "Behavior Diff User",
+      "email": "user@behaviordiff.test",
+      "github_id": "gh-user",
+      "group": "default",
+      "inviter_uuid": "<root-user-uuid>",
+      "lark_id": "lark-user",
+      "mcp_tool_blacklist": [
+        "user_blocked_tool_a",
+        "user_blocked_tool_b"
+      ],
+      "metadata": {},
+      "oidc_id": "oidc-user",
+      "quota": 920002,
+      "request_count": 72,
+      "role": 1,
+      "status": 1,
+      "updated_at": 1730000000222,
+      "used_quota": 820002,
+      "username": "behaviordiff-user",
+      "uuid": "<user-uuid>",
+      "wechat_id": "wx-user"
+    },
+    "message": "",
+    "success": true
+  }
+}

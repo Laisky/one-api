@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useState } from 'react';
 import { Button, Modal, Typography, List, Tag, Notification } from '@douyinfe/semi-ui';
 import { API } from '../helpers';
@@ -26,49 +27,58 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
   };
 
   const checkMigrationStatus = async () => {
-    setLoading(true);
     try {
-      const res = await API.get(`/api/debug/channel/${channelId}/migration-status`);
-      if (res.data.success) {
-        setMigrationStatus(res.data.data);
-      } else {
-        showError('获取迁移状态失败: ' + res.data.message);
+      setLoading(true);
+      try {
+        const res = await API.get(`/api/debug/channel/${channelId}/migration-status`);
+        if (res.data.success) {
+          setMigrationStatus(res.data.data);
+        } else {
+          showError('获取迁移状态失败: ' + res.data.message);
+        }
+      } catch (error) {
+        showError('检查迁移状态失败: ' + error.message);
       }
-    } catch (error) {
-      showError('检查迁移状态失败: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const fixChannel = async () => {
-    setLoading(true);
     try {
-      const res = await API.post(`/api/debug/channel/${channelId}/fix`);
-      if (res.data.success) {
-        showSuccess('渠道修复成功，请刷新页面。');
-        await checkMigrationStatus(); // Refresh status
-      } else {
-        showError('修复渠道失败: ' + res.data.message);
+      setLoading(true);
+      try {
+        const res = await API.post(`/api/debug/channel/${channelId}/fix`);
+        if (res.data.success) {
+          showSuccess('渠道修复成功，请刷新页面。');
+          await checkMigrationStatus(); // Refresh status
+        } else {
+          showError('修复渠道失败: ' + res.data.message);
+        }
+      } catch (error) {
+        showError('修复渠道失败: ' + error.message);
       }
-    } catch (error) {
-      showError('修复渠道失败: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const debugChannel = async () => {
-    setLoading(true);
     try {
-      const res = await API.post(`/api/debug/channel/${channelId}/debug`);
-      if (res.data.success) {
-        showSuccess('调试信息已记录，请查看应用程序日志。');
-      } else {
-        showError('调试渠道失败: ' + res.data.message);
+      setLoading(true);
+      try {
+        const res = await API.post(`/api/debug/channel/${channelId}/debug`);
+        if (res.data.success) {
+          showSuccess('调试信息已记录，请查看应用程序日志。');
+        } else {
+          showError('调试渠道失败: ' + res.data.message);
+        }
+      } catch (error) {
+        showError('调试渠道失败: ' + error.message);
       }
-    } catch (error) {
-      showError('调试渠道失败: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const getMigrationStatusColor = (status) => {
@@ -98,7 +108,7 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
         theme="borderless"
         onClick={() => {
           setVisible(true);
-          checkMigrationStatus();
+          checkMigrationStatus().catch(reportUIError);
         }}
         style={{ marginLeft: '10px' }}
       >
@@ -112,14 +122,14 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
         width={600}
         footer={
           <div style={{ textAlign: 'right' }}>
-            <Button onClick={debugChannel} loading={loading} style={{ marginRight: 8 }}>
+            <Button onClick={(...uiArgs) => debugChannel(...uiArgs).catch(reportUIError)} loading={loading} style={{ marginRight: 8 }}>
               记录调试信息
             </Button>
-            <Button onClick={checkMigrationStatus} loading={loading} style={{ marginRight: 8 }}>
+            <Button onClick={(...uiArgs) => checkMigrationStatus(...uiArgs).catch(reportUIError)} loading={loading} style={{ marginRight: 8 }}>
               刷新状态
             </Button>
             {migrationStatus && migrationStatus.migration_status === 'needs_migration' && (
-              <Button type="warning" onClick={fixChannel} loading={loading} style={{ marginRight: 8 }}>
+              <Button type="warning" onClick={(...uiArgs) => fixChannel(...uiArgs).catch(reportUIError)} loading={loading} style={{ marginRight: 8 }}>
                 修复渠道
               </Button>
             )}

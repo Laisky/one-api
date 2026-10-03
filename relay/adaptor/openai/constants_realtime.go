@@ -11,7 +11,52 @@ import (
 // sub-config.
 // Sources verified 2026-05-18:
 //   - https://developers.openai.com/api/docs/pricing (Realtime and audio table)
-var realtimeModelRatios = map[string]adaptor.ModelConfig{
+var realtimeModelRatios = withRealtimeDatedSnapshots(map[string]adaptor.ModelConfig{
+	// gpt-realtime-2.1: text $4/$24 (cached $0.40), audio $32/$64, image $5/$0.50 in.
+	// Same token pricing as gpt-realtime-2; 128K context, 32K max output.
+	// Knowledge cutoff 2024-09-30. Not a replacement for gpt-realtime-2 (both active).
+	// Sources verified 2026-07-10 (model detail + pricing pages agree exactly):
+	//   - https://developers.openai.com/api/docs/models/gpt-realtime-2.1
+	//   - https://developers.openai.com/api/docs/pricing
+	"gpt-realtime-2.1": {
+		Ratio:            4.0 * ratio.MilliTokensUsd,
+		CompletionRatio:  24.0 / 4.0,
+		CachedInputRatio: 0.4 * ratio.MilliTokensUsd,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:           8, // $32/$4 = 8x
+			CompletionRatio:       2, // $64/$32 = 2x
+			PromptTokensPerSecond: 10,
+		},
+		ContextLength:               128000,
+		MaxOutputTokens:             32000,
+		InputModalities:             []string{"text", "audio", "image"},
+		OutputModalities:            []string{"text", "audio"},
+		SupportedFeatures:           []string{"tools"},
+		SupportedSamplingParameters: standardSamplingParameters(),
+		Description:                 "GPT Realtime 2.1: reasoning realtime model with bidirectional audio + image input and tool calls (128K context, 32K output).",
+	},
+	// gpt-realtime-2.1-mini: text $0.60/$2.40 (cached $0.06), audio $10/$20, image $0.80/$0.08 in.
+	// Distilled realtime reasoning model; 128K context, 32K max output.
+	// Sources verified 2026-07-10 (model detail + pricing pages agree exactly):
+	//   - https://developers.openai.com/api/docs/models/gpt-realtime-2.1-mini
+	//   - https://developers.openai.com/api/docs/pricing
+	"gpt-realtime-2.1-mini": {
+		Ratio:            0.6 * ratio.MilliTokensUsd,
+		CompletionRatio:  2.4 / 0.6,
+		CachedInputRatio: 0.06 * ratio.MilliTokensUsd,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:           10.0 / 0.6, // audio $10 / text $0.60 (exact, ~16.667x)
+			CompletionRatio:       2,          // $20/$10 = 2x
+			PromptTokensPerSecond: 10,
+		},
+		ContextLength:               128000,
+		MaxOutputTokens:             32000,
+		InputModalities:             []string{"text", "audio", "image"},
+		OutputModalities:            []string{"text", "audio"},
+		SupportedFeatures:           []string{"tools"},
+		SupportedSamplingParameters: standardSamplingParameters(),
+		Description:                 "GPT Realtime 2.1 mini: distilled realtime reasoning voice model with image input and tool calls (128K context, 32K output).",
+	},
 	// gpt-realtime-2: text $4/$24, audio $32/$64, cached text $0.40, image $5/$0.50
 	// MaxOutputTokens verified 32K per developers.openai.com/api/docs/models/gpt-realtime-2 (May 2026).
 	// Source: https://developers.openai.com/api/docs/pricing#multimodal-models
@@ -78,8 +123,8 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:  4.0,
 		CachedInputRatio: 0.06 * ratio.MilliTokensUsd,
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:           16.67, // $10/$0.6 ≈ 16.67x
-			CompletionRatio:       2,     // $20/$10 = 2x
+			PromptRatio:           10.0 / 0.6, // audio $10 / text $0.60 (exact, ~16.667x)
+			CompletionRatio:       2,          // $20/$10 = 2x
 			PromptTokensPerSecond: 10,
 		},
 		ContextLength:               128000,
@@ -150,8 +195,8 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:  4.0,
 		CachedInputRatio: 0.3 * ratio.MilliTokensUsd,
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:           16.67, // $10/$0.6 ≈ 16.67x
-			CompletionRatio:       2,     // $20/$10 = 2x
+			PromptRatio:           10.0 / 0.6, // Exact $10/$0.60; do not round a billing multiplier.
+			CompletionRatio:       2,          // $20/$10 = 2x
 			PromptTokensPerSecond: 10,
 		},
 		ContextLength:               128000,
@@ -167,7 +212,7 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:  4.0,
 		CachedInputRatio: 0.3 * ratio.MilliTokensUsd,
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:           16.67,
+			PromptRatio:           10.0 / 0.6,
 			CompletionRatio:       2,
 			PromptTokensPerSecond: 10,
 		},
@@ -179,4 +224,35 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: standardSamplingParameters(),
 		Description:                 "GPT-4o mini Realtime preview snapshot from 2024-12-17.",
 	},
+})
+
+// realtimeDatedSnapshots maps each dated Realtime snapshot that /v1/models
+// serves to the alias whose published price it shares. OpenAI lists these IDs
+// alongside their aliases, so an operator who imports a channel's models from
+// upstream gets them; without an entry a session on one settles at zero,
+// because realtime pricing has no snapshot fallback and an entirely unpriced
+// receipt only falls back to the reservation, which trusted accounts skip.
+// No per-snapshot price differentiation is published. Verified 2026-09-18
+// against https://developers.openai.com/api/docs/pricing and /v1/models.
+var realtimeDatedSnapshots = map[string]string{
+	"gpt-realtime-2025-08-28":      "gpt-realtime",
+	"gpt-realtime-mini-2025-12-15": "gpt-realtime-mini",
+}
+
+// withRealtimeDatedSnapshots registers each dated snapshot by copying its alias
+// configuration, so a price correction on the alias cannot leave its snapshot
+// behind. Parameters: catalog is the hand-written Realtime table. Returns: the
+// same map with the snapshots added. This runs during package variable
+// initialization because the assembled ModelRatios reads the result; an init()
+// function would mutate the table after that copy was already taken.
+func withRealtimeDatedSnapshots(catalog map[string]adaptor.ModelConfig) map[string]adaptor.ModelConfig {
+	for snapshot, alias := range realtimeDatedSnapshots {
+		config, ok := catalog[alias]
+		if !ok {
+			continue
+		}
+		config.Description = "Dated snapshot of " + alias + "; identical published pricing."
+		catalog[snapshot] = config
+	}
+	return catalog
 }

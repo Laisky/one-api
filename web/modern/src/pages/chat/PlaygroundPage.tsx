@@ -182,7 +182,7 @@ export function PlaygroundPage() {
         message: t('playground.realtime.error_send'),
         type: 'warning',
       });
-      return;
+      return Promise.resolve();
     }
     return baseHandleSendMessage(...args);
   };

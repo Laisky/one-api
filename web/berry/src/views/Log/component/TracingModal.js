@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -42,7 +43,7 @@ const TracingModal = ({ open, onClose, logId }) => {
 
   useEffect(() => {
     if (open && logId) {
-      fetchTraceData();
+      fetchTraceData().catch(reportUIError);
     }
   }, [open, logId]);
 

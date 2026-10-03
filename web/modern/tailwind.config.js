@@ -1,3 +1,6 @@
+import typography from '@tailwindcss/typography';
+import animate from 'tailwindcss-animate';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ['class'],
@@ -32,15 +35,9 @@ export default {
       tablet: { min: '768px', max: '1023px' },
       desktop: { min: '1024px' },
       // Touch device detection
-      touch: { raw: '(hover: none) and (pointer: coarse)' },
-      'no-touch': { raw: '(hover: hover) and (pointer: fine)' },
       // Orientation
-      portrait: { raw: '(orientation: portrait)' },
-      landscape: { raw: '(orientation: landscape)' },
       // Reduced motion
-      'reduce-motion': { raw: '(prefers-reduced-motion: reduce)' },
       // High contrast
-      'high-contrast': { raw: '(prefers-contrast: high)' },
     },
     extend: {
       colors: {
@@ -175,8 +172,8 @@ export default {
     },
   },
   plugins: [
-    require('tailwindcss-animate'),
-    require('@tailwindcss/typography'),
+    animate,
+    typography,
     // Custom plugin for responsive utilities
     function ({ addUtilities, theme }) {
       const newUtilities = {

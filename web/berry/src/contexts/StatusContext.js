@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../utils/common';
 import { useEffect, useCallback, createContext } from "react";
 import { API } from "utils/api";
 import { showNotice, showError } from "utils/common";
@@ -68,7 +69,7 @@ const StatusProvider = ({ children }) => {
   }, [dispatch]);
 
   useEffect(() => {
-    loadStatus().then();
+    loadStatus().then().catch(reportUIError);
   }, [loadStatus]);
 
   return (

@@ -3,6 +3,7 @@ package controller
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -559,7 +560,7 @@ func TestAudioPricingResolvesViaAdaptor(t *testing.T) {
 		"gpt-4o-mini-realtime-preview",
 	} {
 		t.Run(modelName, func(t *testing.T) {
-			cfg, ok := pricing.ResolveAudioPricing(modelName, nil, pricingAdaptor)
+			cfg, ok := pricing.ResolveAudioPricing(modelName, nil, pricingAdaptor, time.Now())
 			require.True(t, ok, "%s: ResolveAudioPricing should succeed", modelName)
 			require.NotNil(t, cfg)
 			require.Greater(t, cfg.PromptRatio, 1.0,

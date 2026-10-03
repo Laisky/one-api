@@ -466,7 +466,7 @@ All admin endpoints require admin auth.
 
 1. List available MCP tools (merged)
 
-- `GET /api/mcp_tools?server_id=&status=`
+- `GET /api/mcp_tools?server_id=&status=` where `server_id` carries the MCP server UUID string in the external API.
 
 ### MCP Proxy Server
 
@@ -536,7 +536,7 @@ Shared UI component
 
 4. `mcp_tools`
 
-- `id`, `server_id`, `name`, `display_name`, `description`, `input_schema`, `default_pricing`, `status`, `created_at`, `updated_at`.
+- `id`/`server_id` remain internal; the external API emits `uuid`, `server_uuid`, `name`, `display_name`, `description`, `input_schema`, `default_pricing`, `status`, `created_at`, `updated_at`.
 
 Notes
 

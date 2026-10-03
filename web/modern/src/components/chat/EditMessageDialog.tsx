@@ -181,7 +181,8 @@ export function EditMessageDialog({ isOpen, onClose, onSave, currentContent, ori
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`Enter ${messageRole} message content...`}
+              placeholder={t('playground.edit.content_placeholder', { role: getRoleDisplayName() })}
+              aria-label={t('playground.edit.content_placeholder', { role: getRoleDisplayName() })}
               className="min-h-[120px] sm:min-h-[180px] max-h-[250px] sm:max-h-[350px] resize-y text-sm leading-relaxed
                 border-2 border-border hover:border-border/80 focus:border-primary focus:ring-2 focus:ring-primary/20
                 transition-all duration-200 rounded-lg p-3
@@ -216,7 +217,7 @@ export function EditMessageDialog({ isOpen, onClose, onSave, currentContent, ori
                         <div className="relative aspect-square">
                           <img
                             src={attachment.image_url?.url}
-                            alt={`Attachment ${index + 1}`}
+                            alt={t('playground.edit.attachment_alt', { index: index + 1 })}
                             className="w-full h-full object-cover rounded-lg"
                             loading="lazy"
                           />
@@ -226,7 +227,8 @@ export function EditMessageDialog({ isOpen, onClose, onSave, currentContent, ori
                             size="icon"
                             onClick={() => handleDeleteAttachment(index)}
                             className="absolute top-2 right-2 h-8 w-8 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 shadow-lg rounded-full"
-                            title="Delete attachment"
+                            title={t('playground.edit.delete_attachment')}
+                            aria-label={t('playground.edit.delete_attachment')}
                           >
                             <X className="h-4 w-4" />
                           </Button>

@@ -1,0 +1,13 @@
+{
+  "uuid": "018f0000-0000-7000-8000-0000000000a1",
+  "user_uuid": "018f0000-0000-7000-8000-0000000000a2",
+  "key": "REDEEMCODE0000000000000000000001",
+  "status": 1,
+  "name": "golden-redemption",
+  "quota": 123456,
+  "created_time": 1710000000,
+  "redeemed_time": 1710000600,
+  "count": 7,
+  "created_at": 1710000001,
+  "updated_at": 1710000002
+}

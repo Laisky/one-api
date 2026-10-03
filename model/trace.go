@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -15,11 +16,13 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/utils"
 )
 
 // Trace represents a request tracing record with key timestamps
 type Trace struct {
-	Id         int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	Id         int    `json:"-" gorm:"primaryKey;autoIncrement"`
+	UUID       string `json:"uuid" gorm:"type:char(36);column:uuid"`
 	TraceId    string `json:"trace_id" gorm:"type:varchar(64);uniqueIndex;not null"` // TraceID from gin-middlewares
 	URL        string `json:"url" gorm:"type:text;not null"`                         // Request URL
 	Method     string `json:"method" gorm:"type:varchar(16);not null"`               // HTTP method
@@ -28,6 +31,21 @@ type Trace struct {
 	Timestamps string `json:"timestamps" gorm:"type:text"`                           // JSON object with timestamps
 	CreatedAt  int64  `json:"created_at" gorm:"bigint;autoCreateTime:milli;index"`
 	UpdatedAt  int64  `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
+
+	// Per-timestamp columns (proposal 20260905_observability-data-tiering.md, W1.5).
+	//
+	// These carry the same values as the Timestamps JSON document and exist so
+	// latency questions ("which requests had a first-token time above N") are
+	// answerable in SQL without parsing every blob. They are written together
+	// with Timestamps, never instead of it, so a pre-migration binary reading a
+	// row written by this binary still sees a complete document. They are
+	// excluded from JSON so the /api/trace response shape is unchanged.
+	TsRequestReceived       *int64 `json:"-" gorm:"column:ts_request_received;bigint"`
+	TsRequestForwarded      *int64 `json:"-" gorm:"column:ts_request_forwarded;bigint"`
+	TsFirstUpstreamResponse *int64 `json:"-" gorm:"column:ts_first_upstream_response;bigint"`
+	TsFirstClientResponse   *int64 `json:"-" gorm:"column:ts_first_client_response;bigint"`
+	TsUpstreamCompleted     *int64 `json:"-" gorm:"column:ts_upstream_completed;bigint"`
+	TsRequestCompleted      *int64 `json:"-" gorm:"column:ts_request_completed;bigint"`
 }
 
 // TraceExternalCall records an external call made during a request.
@@ -74,32 +92,25 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 	lg := gmw.GetLogger(ctx)
 	now := time.Now().UnixMilli()
 
-	timestamps := &TraceTimestamps{
-		RequestReceived: &now,
+	traceRecord, truncated, err := NewTraceRow(TraceRowInput{
+		TraceId:    traceId,
+		URL:        url,
+		Method:     method,
+		BodySize:   bodySize,
+		Timestamps: &TraceTimestamps{RequestReceived: &now},
+	})
+	if err != nil {
+		lg.Error("failed to build trace record",
+			zap.Error(err),
+			zap.String("trace_id", traceId))
+		return nil, errors.Wrapf(err, "failed to build trace record for trace_id: %s", traceId)
 	}
-
-	urlToStore, truncated := enforceTraceURLLimit(url)
+	urlToStore := traceRecord.URL
 	if truncated {
 		lg.Warn("trace url truncated to max length",
 			zap.String("trace_id", traceId),
 			zap.Int("original_length", len(url)),
 			zap.Int("truncated_length", len(urlToStore)))
-	}
-
-	timestampsJSON, err := json.Marshal(timestamps)
-	if err != nil {
-		lg.Error("failed to marshal trace timestamps",
-			zap.Error(err),
-			zap.String("trace_id", traceId))
-		return nil, errors.Wrapf(err, "failed to marshal trace timestamps for trace_id: %s", traceId)
-	}
-
-	traceRecord := &Trace{
-		TraceId:    traceId,
-		URL:        urlToStore,
-		Method:     method,
-		BodySize:   bodySize,
-		Timestamps: string(timestampsJSON),
 	}
 
 	// Integrate with OpenTelemetry
@@ -114,13 +125,13 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 		span.AddEvent(TimestampRequestReceived)
 	}
 
-	db := traceDBWithContext(ctx)
+	db := traceWriteSession(traceDBWithDetachedContext(ctx))
 
 	if err := db.Create(traceRecord).Error; err != nil {
 		// Creating the trace record is best-effort. Under unusual client tracing setups
 		// (or retries), callers may attempt to create the same trace id twice.
 		// Treat duplicated key errors as a no-op so the request flow is not impacted.
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
+		if IsDuplicateTraceKeyError(err) {
 			lg.Debug("trace record already exists (best-effort, skipping create)",
 				zap.String("trace_id", traceId),
 				zap.String("url", urlToStore),
@@ -207,7 +218,19 @@ func UpdateTraceTimestamp(ctx *gin.Context, traceId, timestampKey string) error 
 		return errors.Wrapf(err, "failed to marshal updated trace timestamps for trace_id: %s", traceId)
 	}
 
-	if err := db.Model(&traceRecord).Update("timestamps", string(timestampsJSON)).Error; err != nil {
+	// Keep the dedicated column in step with the JSON document in this legacy
+	// synchronous path too, so both representations agree regardless of which
+	// write mode produced the row. During a rolling upgrade, an upgraded slave
+	// may still see the pre-projection schema; in that case update only the JSON
+	// document until the master has added every projection column.
+	updates := map[string]any{"timestamps": string(timestampsJSON)}
+	if traceTimestampColumnsAvailable(db) {
+		if column := timestampColumnName(timestampKey); column != "" {
+			updates[column] = now
+		}
+	}
+
+	if err := db.Model(&traceRecord).Updates(updates).Error; err != nil {
 		lg.Error("failed to update trace timestamp",
 			zap.Error(err),
 			zap.String("trace_id", traceId),
@@ -303,7 +326,7 @@ func UpdateTraceStatus(ctx context.Context, traceId string, status int) error {
 	}
 
 	// Use RowsAffected to determine if the record exists; treat 0 as best-effort no-op.
-	db := traceDBWithContext(ctx)
+	db := traceDBWithDetachedContext(ctx)
 	tx := db.Model(&Trace{}).Where("trace_id = ?", traceId).Update("status", status)
 	if tx.Error != nil {
 		lg.Error("failed to update trace status",
@@ -340,6 +363,40 @@ func GetTraceByTraceId(ctx context.Context, traceId string) (*Trace, error) {
 	return &traceRecord, nil
 }
 
+// TraceBelongsToUser reports whether a log owned by userID is correlated with
+// traceID. Trace rows intentionally do not store user ownership themselves, so
+// the immutable billing log is the authorization source for trace reads.
+// Parameters:
+//   - ctx: cancellation scope for the log lookup.
+//   - traceID: trace correlation identifier to authorize.
+//   - userID: authenticated ordinary user's internal identifier.
+//
+// Return values:
+//   - bool: true when the user owns at least one correlated log row.
+//   - error: wrapped database failure while checking ownership.
+func TraceBelongsToUser(ctx context.Context, traceID string, userID int) (bool, error) {
+	if userID <= 0 || strings.TrimSpace(traceID) == "" {
+		return false, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	var log Log
+	if err := LOG_DB.WithContext(ctx).
+		Select("id").
+		Where("trace_id = ? AND user_id = ?", traceID, userID).
+		Limit(1).
+		First(&log).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "check trace ownership for trace_id: %s and user_id: %d", traceID, userID)
+	}
+
+	return true, nil
+}
+
 // traceDBWithGin returns a gorm session suitable for trace operations. When running on
 // PostgreSQL we must disable prepared statements for these queries because schema
 // migrations that alter JSON/TEXT columns can invalidate cached plans. Using
@@ -361,12 +418,29 @@ func traceDBWithGin(ctx *gin.Context) *gorm.DB {
 	return applyTraceDBSession(base)
 }
 
-// traceDBWithContext mirrors traceDBWithGin but accepts a standard context for callers
-// outside the Gin execution flow.
+// traceDBWithContext creates a trace session that preserves the caller's
+// cancellation. SQL sink workers use it with their own lifecycle context, so a
+// timed-out shutdown can stop in-flight writes before the database closes.
 func traceDBWithContext(ctx context.Context) *gorm.DB {
 	if ctx != nil {
-		detachedCtx := context.WithoutCancel(ctx)
-		return applyTraceDBSession(DB.WithContext(detachedCtx))
+		return applyTraceDBSession(DB.WithContext(ctx))
+	}
+	return applyTraceDBSession(DB)
+}
+
+// traceDBWithDetachedContext creates a trace session whose values survive a
+// request cancellation. It is limited to legacy synchronous trace updates;
+// background SQL writers must use traceDBWithContext so their lifecycle can be
+// cancelled during shutdown.
+//
+// Parameters:
+//   - ctx: request context whose values should be retained.
+//
+// Return values:
+//   - *gorm.DB: a trace session detached from request cancellation.
+func traceDBWithDetachedContext(ctx context.Context) *gorm.DB {
+	if ctx != nil {
+		return applyTraceDBSession(DB.WithContext(context.WithoutCancel(ctx)))
 	}
 	return applyTraceDBSession(DB)
 }
@@ -385,25 +459,37 @@ func applyTraceDBSession(db *gorm.DB) *gorm.DB {
 	return session
 }
 
-// GetTraceTimestamps parses and returns the timestamps from a trace record
+// GetTraceTimestamps parses and returns the timestamps from a trace record.
+//
+// It reads the Timestamps JSON document and then overlays any per-timestamp
+// column that is populated, so rows written before the W1.5 columns existed,
+// rows written by the current binary (which writes both), and rows that only
+// carry columns all resolve to the same view.
+//
+// Parameters: none; the receiver supplies the stored row.
+//
+// Return values:
+//   - *TraceTimestamps: the merged timestamp document, never nil on success.
+//   - error: wrapped failure when the stored JSON document is malformed.
 func (t *Trace) GetTraceTimestamps() (*TraceTimestamps, error) {
 	var timestamps TraceTimestamps
-	if err := json.Unmarshal([]byte(t.Timestamps), &timestamps); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal trace timestamps for trace_id: %s", t.TraceId)
+	if raw := strings.TrimSpace(t.Timestamps); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &timestamps); err != nil {
+			return nil, errors.Wrapf(err, "failed to unmarshal trace timestamps for trace_id: %s", t.TraceId)
+		}
 	}
+	t.overlayTimestampColumns(&timestamps)
 	return &timestamps, nil
 }
 
-// enforceTraceURLLimit truncates URLs longer than maxTraceURLLength while preserving UTF-8 boundaries.
+// enforceTraceURLLimit truncates URLs longer than maxTraceURLLength bytes on a
+// UTF-8 rune boundary, so the stored value never exceeds the column budget and
+// never ends in a split multi-byte character.
+// Parameters: raw is the sanitized URL. Return values: the bounded URL and
+// whether it was truncated.
 func enforceTraceURLLimit(raw string) (string, bool) {
 	if len(raw) <= maxTraceURLLength {
 		return raw, false
 	}
-
-	runes := []rune(raw)
-	if len(runes) <= maxTraceURLLength {
-		return raw[:maxTraceURLLength], true
-	}
-
-	return string(runes[:maxTraceURLLength]), true
+	return utils.TruncateUTF8(raw, maxTraceURLLength), true
 }

@@ -1,5 +1,6 @@
 import { Copy, X } from 'lucide-react';
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 
 // Helper function to copy text to clipboard
@@ -118,6 +119,8 @@ export const NotificationsViewport: React.FC<{
   items: Notification[];
   onClose: (id: string) => void;
 }> = ({ items, onClose }) => {
+  const { t } = useTranslation();
+
   const handleCopy = async (e: React.MouseEvent, notification: Notification) => {
     e.preventDefault();
     e.stopPropagation();
@@ -134,7 +137,7 @@ export const NotificationsViewport: React.FC<{
     <div
       className="fixed right-3 top-3 z-[1000] flex w-[90vw] max-w-sm flex-col gap-2 md:right-6 md:top-6"
       role="region"
-      aria-label="Notifications"
+      aria-label={t('notifications.region', 'Notifications')}
     >
       {items.map((n) => (
         <div
@@ -157,16 +160,16 @@ export const NotificationsViewport: React.FC<{
               <button
                 onClick={(e) => handleCopy(e, n)}
                 className="rounded p-1 text-current/70 hover:text-current focus:outline-none focus:ring-2 focus:ring-current focus:ring-offset-1"
-                aria-label="Copy notification"
-                title="Copy notification content"
+                aria-label={t('notifications.copy', 'Copy notification')}
+                title={t('notifications.copy_content', 'Copy notification content')}
               >
                 <Copy className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
               <button
                 onClick={() => onClose(n.id)}
                 className="rounded p-1 text-current/70 hover:text-current focus:outline-none focus:ring-2 focus:ring-current focus:ring-offset-1"
-                aria-label="Dismiss"
-                title="Dismiss notification"
+                aria-label={t('notifications.dismiss', 'Dismiss')}
+                title={t('notifications.dismiss_content', 'Dismiss notification')}
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
