@@ -96,6 +96,7 @@ func setupMCPProxyTest(t *testing.T) (cleanup func(), fx *mcpFixture) {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&model.User{},
+		&model.Token{},
 		&model.MCPServer{},
 		&model.MCPTool{},
 		&model.Log{},
@@ -169,6 +170,11 @@ func setupMCPProxyTest(t *testing.T) (cleanup func(), fx *mcpFixture) {
 	}
 	require.NoError(t, model.DB.Create(user).Error)
 	fx.user = user
+	// Paid admission requires the same token identity supplied by TokenAuth.
+	require.NoError(t, model.DB.Create(&model.Token{
+		Id: 7, UserId: user.Id, Key: "mcp-proxy-fixture-token", Name: "MCP fixture",
+		Status: model.TokenStatusEnabled, ExpiredTime: -1, RemainQuota: 1000,
+	}).Error)
 
 	server := &model.MCPServer{
 		Id:                      1,
@@ -237,6 +243,7 @@ func newMCPCallContext(t *testing.T, userID int, requestID string) (*gin.Context
 	c.Request = req
 
 	c.Set(ctxkey.Id, userID)
+	c.Set(ctxkey.TokenId, 7)
 	c.Set(ctxkey.RequestId, requestID)
 	c.Set(helper.RequestIdKey, requestID)
 	gmw.SetLogger(c, logger.Logger)

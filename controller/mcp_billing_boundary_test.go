@@ -81,7 +81,8 @@ func TestMCPBillingBoundaryAdmission(t *testing.T) {
 }
 
 // TestMCPBillingBoundaryLifecycle observes persistent balances at the real HTTP
-// side-effect boundary, then checks success, errors and cancellation settlement.
+// side-effect boundary. A client disconnect after admission must not cancel
+// paid execution or turn successful upstream work into an automatic refund.
 func TestMCPBillingBoundaryLifecycle(t *testing.T) {
 	for _, modern := range []bool{false, true} {
 		protocol := "legacy"
@@ -122,10 +123,10 @@ func TestMCPBillingBoundaryLifecycle(t *testing.T) {
 					return []byte(`{"jsonrpc":"2.0","id":1,"result":{"content":"ok","is_error":false}}`), http.StatusOK
 				}
 				_, callErr := invokeMCPBillingBoundary(ctx, c, modern)
-				if outcome == "success" || outcome == "tool_error" {
-					require.NoError(t, callErr)
-				} else {
+				if outcome == "transport_error" {
 					require.Error(t, callErr)
+				} else {
+					require.NoError(t, callErr)
 				}
 				select {
 				case atDispatch := <-observed:
@@ -140,7 +141,7 @@ func TestMCPBillingBoundaryLifecycle(t *testing.T) {
 				stored, err := model.GetTokenById(token.Id)
 				require.NoError(t, err)
 				remaining, used := int64(1000), int64(0)
-				if outcome == "success" {
+				if outcome == "success" || outcome == "canceled" {
 					remaining, used = 925, 75
 				}
 				require.Equal(t, remaining, user.Quota, "must not double-debit or lose a refund")
