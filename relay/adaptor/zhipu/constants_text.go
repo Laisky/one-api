@@ -5,17 +5,36 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// flagshipTextModels enumerates Zhipu's flagship text-only chat models with tiered pricing.
-// Pricing comes from https://open.bigmodel.cn/pricing; metadata derives from
+// flagshipTextModels enumerates Zhipu's flagship text-only chat models.
+// Pricing comes from https://bigmodel.cn/pricing; metadata derives from
 // https://docs.bigmodel.cn/cn/guide/start/model-overview and per-model spec pages.
+// Last updated: 2026-08-26.
 var flagshipTextModels = map[string]adaptor.ModelConfig{
+	// GLM-5.3: same base model as GLM-5.2 with post-training improvements.
+	// Official pricing is now published on the flagship table (verified 2026-08-26):
+	// ¥8 input / ¥2 cached input / ¥28 output per 1M tokens, no tiers. The z.ai
+	// international list quotes the same tier ($1.4 / $0.26 / $4.4).
+	"glm-5.3": {
+		Ratio:                       8 * ratio.MilliTokensRmb,
+		CompletionRatio:             28.0 / 8.0,
+		CachedInputRatio:            2 * ratio.MilliTokensRmb,
+		ContextLength:               1_000_000,
+		MaxOutputTokens:             131_072,
+		InputModalities:             textInput(),
+		OutputModalities:            textOutput(),
+		SupportedFeatures:           reasoningChatFeatures(),
+		SupportedSamplingParameters: chatSamplingParameters(),
+		SupportedReasoningEfforts:   []string{"low", "high", "max"},
+		DefaultReasoningEffort:      "max",
+		Description:                 "GLM-5.3: latest flagship text model built on the GLM-5.2 base; 1M context, 128K max output, always-on thinking with reasoning_effort low/high/max (thinking cannot be disabled); coding SOTA and emergent cybersecurity capabilities. Official pricing ¥8/¥28 per 1M input/output, ¥2 cached-input.",
+	},
 	// GLM-5-Turbo: input [0,32K) ¥5/¥22, input [32K+) ¥7/¥26
 	"glm-5-turbo": {
 		Ratio:            5 * ratio.MilliTokensRmb,
 		CompletionRatio:  22.0 / 5.0,
 		CachedInputRatio: 1.2 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 7 * ratio.MilliTokensRmb, CompletionRatio: 26.0 / 7.0, CachedInputRatio: 1.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 7 * ratio.MilliTokensRmb, CompletionRatio: 26.0 / 7.0, CachedInputRatio: 1.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               200_000,
 		MaxOutputTokens:             131_072,
@@ -31,7 +50,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		CompletionRatio:  18.0 / 4.0,
 		CachedInputRatio: 1 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 6 * ratio.MilliTokensRmb, CompletionRatio: 22.0 / 6.0, CachedInputRatio: 1.5 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 6 * ratio.MilliTokensRmb, CompletionRatio: 22.0 / 6.0, CachedInputRatio: 1.5 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               200_000,
 		MaxOutputTokens:             131_072,
@@ -43,14 +62,47 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		Quantization:                "bf16",
 		Description:                 "GLM-5: 754B agentic engineering flagship aligned with Claude Opus 4.5 on coding.",
 	},
-	// GLM-4.7: input [0,32K) output [0,0.2M) ¥2/¥8; output [0.2M+) ¥3/¥14; input [32K,200K) ¥4/¥16
+	// GLM-5.1: input [0,32K) ¥6/¥24, input [32K+) ¥8/¥28
+	"glm-5.1": {
+		Ratio:            6 * ratio.MilliTokensRmb,
+		CompletionRatio:  24.0 / 6.0,
+		CachedInputRatio: 1.3 * ratio.MilliTokensRmb,
+		Tiers: []adaptor.ModelRatioTier{
+			{Ratio: 8 * ratio.MilliTokensRmb, CompletionRatio: 28.0 / 8.0, CachedInputRatio: 2 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
+		},
+		ContextLength:               200_000,
+		MaxOutputTokens:             131_072,
+		InputModalities:             textInput(),
+		OutputModalities:            textOutput(),
+		SupportedFeatures:           reasoningChatFeatures(),
+		SupportedSamplingParameters: chatSamplingParameters(),
+		HuggingFaceID:               "zai-org/GLM-5.1",
+		Quantization:                "bf16",
+		Description:                 "GLM-5.1: 754B MoE agentic flagship (released 2026-04-07) with stronger coding aligned with Claude Opus 4.6, MCP integration, and 8-hour autonomous task execution; 200K context.",
+	},
+	// GLM-5.2: ¥8/¥28 per 1M input/output, ¥2 cached-input, 1M context
+	"glm-5.2": {
+		Ratio:                       8 * ratio.MilliTokensRmb,
+		CompletionRatio:             28.0 / 8.0,
+		CachedInputRatio:            2 * ratio.MilliTokensRmb,
+		ContextLength:               1_000_000,
+		MaxOutputTokens:             131_072,
+		InputModalities:             textInput(),
+		OutputModalities:            textOutput(),
+		SupportedFeatures:           reasoningChatFeatures(),
+		SupportedSamplingParameters: chatSamplingParameters(),
+		HuggingFaceID:               "zai-org/GLM-5.2",
+		Quantization:                "bf16",
+		Description:                 "GLM-5.2: flagship long-task MoE coding model with Solid 1M lossless context and dual reasoning presets (High/Max); official API pricing ¥8/¥28 per 1M input/output, ¥2 cached-input.",
+	},
+	// GLM-4.7: input [0,32K) output [0,0.2K) ¥2/¥8; output [0.2K+) ¥3/¥14; input [32K,200K) ¥4/¥16
 	"glm-4.7": {
 		Ratio:            2 * ratio.MilliTokensRmb,
 		CompletionRatio:  8.0 / 2.0,
 		CachedInputRatio: 0.4 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 3 * ratio.MilliTokensRmb, CompletionRatio: 14.0 / 3.0, CachedInputRatio: 0.6 * ratio.MilliTokensRmb, InputTokenThreshold: 0},
-			{Ratio: 4 * ratio.MilliTokensRmb, CompletionRatio: 16.0 / 4.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 3 * ratio.MilliTokensRmb, CompletionRatio: 14.0 / 3.0, CachedInputRatio: 0.6 * ratio.MilliTokensRmb, OutputTokenThreshold: 200},
+			{Ratio: 4 * ratio.MilliTokensRmb, CompletionRatio: 16.0 / 4.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               200_000,
 		MaxOutputTokens:             131_072,
@@ -90,14 +142,15 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		Quantization:                "bf16",
 		Description:                 "GLM-4.7-Flash: free 31B open-weight base model with 200K context.",
 	},
-	// GLM-4.6: same tiered pricing as GLM-4.7
+	// GLM-4.6: same tiered pricing as GLM-4.7. No longer carries a published rate on
+	// BigModel's flagship pricing table (verified 2026-08-26); still served by the API.
 	"glm-4.6": {
 		Ratio:            2 * ratio.MilliTokensRmb,
 		CompletionRatio:  8.0 / 2.0,
 		CachedInputRatio: 0.4 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 3 * ratio.MilliTokensRmb, CompletionRatio: 14.0 / 3.0, CachedInputRatio: 0.6 * ratio.MilliTokensRmb, InputTokenThreshold: 0},
-			{Ratio: 4 * ratio.MilliTokensRmb, CompletionRatio: 16.0 / 4.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 3 * ratio.MilliTokensRmb, CompletionRatio: 14.0 / 3.0, CachedInputRatio: 0.6 * ratio.MilliTokensRmb, OutputTokenThreshold: 200},
+			{Ratio: 4 * ratio.MilliTokensRmb, CompletionRatio: 16.0 / 4.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               200_000,
 		MaxOutputTokens:             131_072,
@@ -107,16 +160,16 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: chatSamplingParameters(),
 		HuggingFaceID:               "zai-org/GLM-4.6",
 		Quantization:                "bf16",
-		Description:                 "GLM-4.6: 355B/32B-active MoE coding model with 200K context, aligned with Claude Sonnet 4.",
+		Description:                 "GLM-4.6: 355B/32B-active MoE coding model with 200K context, aligned with Claude Sonnet 4. Still served, but dropped from BigModel's priced flagship table; rates below are its last published tiers.",
 	},
-	// GLM-4.5-Air: input [0,32K) output [0,0.2M) ¥0.8/¥2; output [0.2M+) ¥0.8/¥6; input [32K,128K) ¥1.2/¥8
+	// GLM-4.5-Air: input [0,32K) output [0,0.2K) ¥0.8/¥2; output [0.2K+) ¥0.8/¥6; input [32K,128K) ¥1.2/¥8
 	"glm-4.5-air": {
 		Ratio:            0.8 * ratio.MilliTokensRmb,
 		CompletionRatio:  2.0 / 0.8,
 		CachedInputRatio: 0.16 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 0.8 * ratio.MilliTokensRmb, CompletionRatio: 6.0 / 0.8, CachedInputRatio: 0.16 * ratio.MilliTokensRmb, InputTokenThreshold: 0},
-			{Ratio: 1.2 * ratio.MilliTokensRmb, CompletionRatio: 8.0 / 1.2, CachedInputRatio: 0.24 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 0.8 * ratio.MilliTokensRmb, CompletionRatio: 6.0 / 0.8, CachedInputRatio: 0.16 * ratio.MilliTokensRmb, OutputTokenThreshold: 200},
+			{Ratio: 1.2 * ratio.MilliTokensRmb, CompletionRatio: 8.0 / 1.2, CachedInputRatio: 0.24 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               131_072,
 		MaxOutputTokens:             98_304,
@@ -134,8 +187,8 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		CompletionRatio:  8.0 / 2.0,
 		CachedInputRatio: 0.4 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 3 * ratio.MilliTokensRmb, CompletionRatio: 14.0 / 3.0, CachedInputRatio: 0.6 * ratio.MilliTokensRmb, InputTokenThreshold: 0},
-			{Ratio: 4 * ratio.MilliTokensRmb, CompletionRatio: 16.0 / 4.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 3 * ratio.MilliTokensRmb, CompletionRatio: 14.0 / 3.0, CachedInputRatio: 0.6 * ratio.MilliTokensRmb, OutputTokenThreshold: 200},
+			{Ratio: 4 * ratio.MilliTokensRmb, CompletionRatio: 16.0 / 4.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               131_072,
 		MaxOutputTokens:             98_304,
@@ -145,7 +198,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: chatSamplingParameters(),
 		HuggingFaceID:               "zai-org/GLM-4.5",
 		Quantization:                "bf16",
-		Description:                 "GLM-4.5: 355B/32B-active MoE flagship for agent applications with hybrid thinking.",
+		Description:                 "GLM-4.5: 355B/32B-active MoE flagship for agent applications with hybrid thinking. Deprecated: BigModel announces GLM-4.5 and GLM-4.5-X are 即将下线 (no date given) and no longer prices them; migrate to GLM-4.7.",
 	},
 	// GLM-4.5-X
 	"glm-4.5-x": {
@@ -153,8 +206,8 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		CompletionRatio:  2,
 		CachedInputRatio: 1.6 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 12 * ratio.MilliTokensRmb, CompletionRatio: 32.0 / 12.0, CachedInputRatio: 2.4 * ratio.MilliTokensRmb, InputTokenThreshold: 0},
-			{Ratio: 16 * ratio.MilliTokensRmb, CompletionRatio: 64.0 / 16.0, CachedInputRatio: 3.2 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 12 * ratio.MilliTokensRmb, CompletionRatio: 32.0 / 12.0, CachedInputRatio: 2.4 * ratio.MilliTokensRmb, OutputTokenThreshold: 200},
+			{Ratio: 16 * ratio.MilliTokensRmb, CompletionRatio: 64.0 / 16.0, CachedInputRatio: 3.2 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               131_072,
 		MaxOutputTokens:             98_304,
@@ -162,7 +215,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           reasoningChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
-		Description:                 "GLM-4.5-X: high-performance speed-optimized variant of GLM-4.5 (slated for retirement).",
+		Description:                 "GLM-4.5-X: high-performance speed-optimized variant of GLM-4.5. Deprecated: removed from BigModel's current model enum and pricing table (verified 2026-08-26); migrate to GLM-4.7.",
 	},
 	// GLM-4.5-AirX
 	"glm-4.5-airx": {
@@ -170,7 +223,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		CompletionRatio:  16.0 / 4.0,
 		CachedInputRatio: 0.8 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 8 * ratio.MilliTokensRmb, CompletionRatio: 32.0 / 8.0, CachedInputRatio: 1.6 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 8 * ratio.MilliTokensRmb, CompletionRatio: 32.0 / 8.0, CachedInputRatio: 1.6 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               131_072,
 		MaxOutputTokens:             98_304,
@@ -178,7 +231,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           reasoningChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
-		Description:                 "GLM-4.5-AirX: speed-optimized GLM-4.5-Air with 100+ tokens/s generation throughput.",
+		Description:                 "GLM-4.5-AirX: speed-optimized GLM-4.5-Air with 100+ tokens/s generation throughput. Still in BigModel's model enum but no longer priced on the pricing page; rates below are its last published tiers.",
 	},
 }
 
@@ -188,7 +241,7 @@ var languageModels = map[string]adaptor.ModelConfig{
 		Ratio:                       5 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               131_072,
-		MaxOutputTokens:             4_096,
+		MaxOutputTokens:             4_095,
 		InputModalities:             textInput(),
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           commonChatFeatures(),
@@ -199,18 +252,29 @@ var languageModels = map[string]adaptor.ModelConfig{
 		Ratio:                       0.5 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               131_072,
-		MaxOutputTokens:             4_096,
+		MaxOutputTokens:             4_095,
 		InputModalities:             textInput(),
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           commonChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
 		Description:                 "GLM-4-Air: cost-efficient legacy text model.",
 	},
+	"glm-4-air-250414": {
+		Ratio:                       0.5 * ratio.MilliTokensRmb,
+		CompletionRatio:             1,
+		ContextLength:               131_072,
+		MaxOutputTokens:             16_384,
+		InputModalities:             textInput(),
+		OutputModalities:            textOutput(),
+		SupportedFeatures:           commonChatFeatures(),
+		SupportedSamplingParameters: chatSamplingParameters(),
+		Description:                 "GLM-4-Air-250414: current 128K-context GLM-4-Air snapshot with a 16K maximum output.",
+	},
 	"glm-4-airx": {
 		Ratio:                       10 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               8_192,
-		MaxOutputTokens:             4_096,
+		MaxOutputTokens:             4_095,
 		InputModalities:             textInput(),
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           commonChatFeatures(),
@@ -272,14 +336,14 @@ var languageModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           reasoningChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
-		Description:                 "GLM-4.5-Flash: free GLM-4.5 sibling with thinking mode (slated for retirement).",
+		Description:                 "GLM-4.5-Flash: free GLM-4.5 sibling with thinking mode. RETIRED 2026-01-30; BigModel auto-routes requests to GLM-4.7-Flash.",
 	},
 	"glm-4-flash": {
 		Ratio:                       0,
 		CompletionRatio:             1,
 		CachedInputRatio:            0,
 		ContextLength:               131_072,
-		MaxOutputTokens:             4_096,
+		MaxOutputTokens:             4_095,
 		InputModalities:             textInput(),
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           commonChatFeatures(),
@@ -301,18 +365,18 @@ var reasoningModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           []string{"reasoning"},
 		SupportedSamplingParameters: reasoningSamplingParameters(),
-		Description:                 "GLM-Z1-Air: cost-efficient reasoning model (deprecated 2025-11-15).",
+		Description:                 "GLM-Z1-Air: cost-efficient reasoning model (deprecated 2025-11-15) (RETIRED 2025-11-15).",
 	},
 	"glm-z1-airx": {
 		Ratio:                       5 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
-		ContextLength:               131_072,
+		ContextLength:               32_768,
 		MaxOutputTokens:             32_768,
 		InputModalities:             textInput(),
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           []string{"reasoning"},
 		SupportedSamplingParameters: reasoningSamplingParameters(),
-		Description:                 "GLM-Z1-AirX: speed-optimized reasoning model (deprecated 2025-11-15).",
+		Description:                 "GLM-Z1-AirX: speed-optimized reasoning model (deprecated 2025-11-15) (RETIRED 2025-11-15).",
 	},
 	"glm-z1-flashx": {
 		Ratio:                       0.1 * ratio.MilliTokensRmb,
@@ -323,7 +387,7 @@ var reasoningModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           []string{"reasoning"},
 		SupportedSamplingParameters: reasoningSamplingParameters(),
-		Description:                 "GLM-Z1-FlashX: high-throughput reasoning Flash variant (deprecated 2025-11-15).",
+		Description:                 "GLM-Z1-FlashX: high-throughput reasoning Flash variant (deprecated 2025-11-15) (RETIRED 2025-11-15).",
 	},
 	"glm-4.1v-thinking-flashx": {
 		Ratio:                       2 * ratio.MilliTokensRmb,
@@ -357,7 +421,9 @@ var reasoningModels = map[string]adaptor.ModelConfig{
 // legacyModels enumerates older Zhipu chat models retained for backward compatibility.
 var legacyModels = map[string]adaptor.ModelConfig{
 	"glm-3-turbo": {
-		Ratio:                       0.005 * ratio.MilliTokensRmb,
+		// Zhipu published GLM-3-Turbo at CNY 0.005 per 1k tokens, i.e. CNY 5 per 1M,
+		// which is the unit every other entry in this package uses.
+		Ratio:                       5 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               131_072,
 		MaxOutputTokens:             4_096,

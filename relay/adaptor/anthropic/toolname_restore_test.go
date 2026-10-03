@@ -92,7 +92,11 @@ func TestAnthropicStreamHandler_RestoresSanitizedToolName(t *testing.T) {
 		``,
 		`data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"q\":\"hi\"}"}}`,
 		``,
+		`data: {"type":"content_block_stop","index":0}`,
+		``,
 		`data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":3,"output_tokens":7}}`,
+		``,
+		`data: {"type":"message_stop"}`,
 		``,
 	}, "\n")
 

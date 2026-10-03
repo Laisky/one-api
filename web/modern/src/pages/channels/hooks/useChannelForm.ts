@@ -1,6 +1,6 @@
 import { useNotifications } from '@/components/ui/notifications';
 import { api } from '@/lib/api';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -15,8 +15,8 @@ import {
   toInt,
   validateModelConfigs,
 } from '../helpers';
-import { createChannelSchema, type ChannelConfigForm, type ChannelForm, type EndpointInfo } from '../schemas';
-
+import { createChannelSchema, type ChannelConfigForm, type ChannelForm, type ChannelFormInput, type EndpointInfo } from '../schemas';
+/** useChannelForm manages channel loading, validation, submission, and related UI state, returning the complete page model. */
 export const useChannelForm = () => {
   const params = useParams();
   const channelId = params.id;
@@ -28,7 +28,6 @@ export const useChannelForm = () => {
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`channels.edit.${key}`, { defaultValue, ...options }),
     [t]
   );
-
   const [loading, setLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modelsCatalog, setModelsCatalog] = useState<Record<number, string[]>>({});
@@ -52,10 +51,8 @@ export const useChannelForm = () => {
     unreachableMappingKeys: string[];
     unknownMappingTargets: { source: string; target: string }[];
   } | null>(null);
-
   const schema = useMemo(() => createChannelSchema((key, defaultValue) => tr(key, defaultValue)), [tr]);
-
-  const form = useForm<ChannelForm>({
+  const form = useForm<ChannelFormInput, unknown, ChannelForm>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: '',
@@ -83,7 +80,9 @@ export const useChannelForm = () => {
         auth_type: 'personal_access_token',
         api_format: 'chat_completion',
         supported_endpoints: [],
+        endpoint_urls: {},
         mcp_tool_blacklist: [],
+        custom_headers: {},
         spark_app_id: '',
         spark_api_secret: '',
         spark_api_key: '',
@@ -94,11 +93,13 @@ export const useChannelForm = () => {
       inference_profile_arn_map: '',
     },
   });
-
   const watchType = form.watch('type');
-  const watchConfig = form.watch('config');
+  const watchConfig: ChannelConfigForm = {
+    auth_type: 'personal_access_token',
+    api_format: 'chat_completion',
+    ...(form.watch('config') ?? {}),
+  };
   const watchTooling = form.watch('tooling') ?? '';
-
   const normalizedChannelType = useMemo(() => normalizeChannelType(watchType), [watchType]);
 
   const loadDefaultPricing = useCallback(async (channelType: number) => {
@@ -132,7 +133,7 @@ export const useChannelForm = () => {
         }
       }
     } catch (error) {
-      console.error('Error loading default pricing:', error);
+      console.error(`Error loading default pricing: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, []);
 
@@ -172,7 +173,9 @@ export const useChannelForm = () => {
           auth_type: 'personal_access_token',
           api_format: 'chat_completion',
           supported_endpoints: [],
+          endpoint_urls: {},
           mcp_tool_blacklist: [],
+          custom_headers: {},
           spark_app_id: '',
           spark_api_secret: '',
           spark_api_key: '',
@@ -188,10 +191,27 @@ export const useChannelForm = () => {
               ...parsed,
               api_format: parsed.api_format === 'response' ? 'response' : 'chat_completion',
               supported_endpoints: Array.isArray(parsed.supported_endpoints) ? parsed.supported_endpoints : [],
+              endpoint_urls:
+                parsed.endpoint_urls && typeof parsed.endpoint_urls === 'object' && !Array.isArray(parsed.endpoint_urls)
+                  ? Object.fromEntries(
+                      Object.entries(parsed.endpoint_urls)
+                        .map(([key, value]) => [key, typeof value === 'string' ? value.trim() : String(value ?? '').trim()])
+                        .filter(([, value]) => value !== '')
+                    )
+                  : {},
               mcp_tool_blacklist: Array.isArray(parsed.mcp_tool_blacklist) ? parsed.mcp_tool_blacklist : [],
+              custom_headers:
+                parsed.custom_headers && typeof parsed.custom_headers === 'object' && !Array.isArray(parsed.custom_headers)
+                  ? Object.fromEntries(
+                      Object.entries(parsed.custom_headers).map(([key, value]) => [
+                        key,
+                        typeof value === 'string' ? value : String(value ?? ''),
+                      ])
+                    )
+                  : {},
             };
           } catch (e) {
-            console.error('Failed to parse config JSON:', e);
+            console.error(`Failed to parse config JSON: ${e instanceof Error ? e.message : String(e)}`);
           }
         }
 
@@ -277,14 +297,12 @@ export const useChannelForm = () => {
           inference_profile_arn_map: formatJsonField(data.inference_profile_arn_map),
         };
 
-        console.debug('[EditChannel] Loaded channel payload', {
-          channelId: data.id ?? channelId,
-          channelType,
-          hasModelMapping: Boolean(data.model_mapping),
-          modelMappingLength: typeof data.model_mapping === 'string' ? data.model_mapping.length : 0,
-          hasModelConfigs: Boolean(data.model_configs),
-          hasSystemPrompt: Boolean(data.system_prompt),
-        });
+        console.debug(
+          `[EditChannel] Loaded channel payload channelId=${data.id ?? channelId} channelType=${channelType} ` +
+            `hasModelMapping=${Boolean(data.model_mapping)} ` +
+            `modelMappingLength=${typeof data.model_mapping === 'string' ? data.model_mapping.length : 0} ` +
+            `hasModelConfigs=${Boolean(data.model_configs)} hasSystemPrompt=${Boolean(data.system_prompt)}`
+        );
 
         if (channelType) {
           await loadDefaultPricing(channelType);
@@ -308,7 +326,7 @@ export const useChannelForm = () => {
         throw new Error(message || 'Failed to load channel');
       }
     } catch (error) {
-      console.error('Error loading channel:', error);
+      console.error(`Error loading channel: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoading(false);
     }
@@ -331,7 +349,7 @@ export const useChannelForm = () => {
         setModelsCatalog(catalog);
       }
     } catch (error) {
-      console.error('Error loading models catalog:', error);
+      console.error(`Error loading models catalog: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, []);
 
@@ -353,7 +371,7 @@ export const useChannelForm = () => {
         }
       }
     } catch (error) {
-      console.error('Error loading groups:', error);
+      console.error(`Error loading groups: ${error instanceof Error ? error.message : String(error)}`);
       setGroups(['default']);
     }
   }, []);
@@ -432,10 +450,10 @@ export const useChannelForm = () => {
     if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
       return empty;
     }
-    const supported = new Set((data.models || []).map((model) => model.trim().toLowerCase()).filter((model) => model.length > 0));
+    const supported = new Set((data.models || []).map((model) => model.trim()).filter((model) => model.length > 0));
     const channelType = normalizeChannelType(data.type);
     const catalog = channelType !== null ? (modelsCatalog[channelType] ?? []) : [];
-    const catalogSet = new Set(catalog.map((model) => model.trim().toLowerCase()).filter((model) => model.length > 0));
+    const catalogSet = new Set(catalog.map((model) => model.trim()).filter((model) => model.length > 0));
     const knownTargets = new Set<string>();
     supported.forEach((entry) => knownTargets.add(entry));
     catalogSet.forEach((entry) => knownTargets.add(entry));
@@ -445,14 +463,14 @@ export const useChannelForm = () => {
     for (const [rawKey, rawValue] of Object.entries(parsed as Record<string, unknown>)) {
       const key = rawKey.trim();
       if (key.length === 0) continue;
-      if (!supported.has(key.toLowerCase())) {
+      if (!supported.has(key)) {
         unreachableKeys.push(key);
       }
       if (catalogSet.size === 0) continue; // Cannot judge target validity without a catalog.
       if (typeof rawValue !== 'string') continue;
       const target = rawValue.trim();
       if (target.length === 0) continue;
-      if (!knownTargets.has(target.toLowerCase())) {
+      if (!knownTargets.has(target)) {
         unknownTargets.push({ source: key, target });
       }
     }
@@ -477,29 +495,8 @@ export const useChannelForm = () => {
   const performSubmit = async (data: ChannelForm) => {
     setIsSubmitting(true);
     try {
-      // Pre-flight: composite key materialisation for create-time validation.
-      // We compute the would-be key here so the "API key is required" check
-      // matches what `buildChannelSubmitPayload` will produce later.
-      let derivedKey: string | undefined = data.key;
-      if (watchType === 33 && watchConfig.ak && watchConfig.sk && watchConfig.region) {
-        derivedKey = `${watchConfig.ak}|${watchConfig.sk}|${watchConfig.region}`;
-      } else if (watchType === 42 && watchConfig.region && watchConfig.vertex_ai_project_id && watchConfig.vertex_ai_adc) {
-        derivedKey = `${watchConfig.region}|${watchConfig.vertex_ai_project_id}|${watchConfig.vertex_ai_adc}`;
-      } else if (watchType === 18 && (watchConfig.spark_app_id || watchConfig.spark_api_secret || watchConfig.spark_api_key)) {
-        derivedKey = `${watchConfig.spark_app_id || ''}|${watchConfig.spark_api_secret || ''}|${watchConfig.spark_api_key || ''}`;
-      } else if (watchType === 23 && (watchConfig.tencent_app_id || watchConfig.tencent_secret_id || watchConfig.tencent_secret_key)) {
-        derivedKey = `${watchConfig.tencent_app_id || ''}|${watchConfig.tencent_secret_id || ''}|${watchConfig.tencent_secret_key || ''}`;
-      }
-
-      if (!isEdit && (!derivedKey || derivedKey.trim() === '')) {
-        form.setError('key', { message: tr('validation.api_key_required', 'API key is required.') });
-        notify({
-          type: 'error',
-          title: tr('validation.error_title', 'Validation error'),
-          message: tr('validation.api_key_required', 'API key is required.'),
-        });
-        return;
-      }
+      // API Key is optional for every channel type: an empty key is accepted on
+      // both create and edit, so no presence validation is enforced here.
 
       if (data.model_mapping && !isValidJSON(data.model_mapping)) {
         form.setError('model_mapping', {
@@ -540,7 +537,9 @@ export const useChannelForm = () => {
         return;
       }
 
-      if (watchType === 34 && watchConfig.auth_type === 'oauth_jwt') {
+      // Only validate the Coze OAuth JWT payload when a key was actually
+      // provided; an empty key is permitted like every other channel type.
+      if (data.type === 34 && watchConfig.auth_type === 'oauth_jwt' && data.key && data.key.trim() !== '') {
         if (!isValidJSON(data.key)) {
           form.setError('key', {
             message: tr('validation.oauth_invalid_json', 'OAuth JWT configuration JSON is invalid.'),
@@ -618,7 +617,7 @@ export const useChannelForm = () => {
 
       const payload = buildChannelSubmitPayload(data, {
         isEdit,
-        watchType: watchType ?? null,
+        watchType: data.type,
         watchConfig,
       });
 
@@ -626,7 +625,7 @@ export const useChannelForm = () => {
       if (isEdit && channelId) {
         response = await api.put('/api/channel/', {
           ...payload,
-          id: parseInt(channelId, 10),
+          uuid: channelId,
         });
       } else {
         response = await api.post('/api/channel/', payload);
@@ -668,7 +667,7 @@ export const useChannelForm = () => {
    */
   const requestTypeChange = useCallback(
     (newType: number) => {
-      const currentType = getValues('type');
+      const currentType = normalizeChannelType(getValues('type')) ?? 1;
       if (isEdit && loadedChannelType !== null && currentType !== newType) {
         // In edit mode, show confirmation dialog
         setPendingTypeChange({
@@ -733,13 +732,23 @@ export const useChannelForm = () => {
     try {
       setIsSubmitting(true);
       const response = await api.get(`/api/channel/test/${channelId}`);
-      const { success, message } = response.data;
+      const { success, message, skipped } = response.data;
 
       if (success) {
         notify({
           type: 'success',
           title: tr('test.success_title', 'Success'),
           message: tr('test.success_message', 'Channel test successful!'),
+        });
+      } else if (skipped) {
+        // The channel exposes no chat-capable endpoint, so no representative
+        // probe exists. That is not a failure and must not read like one.
+        notify({
+          type: 'info',
+          title: tr('test.skipped_title', 'Skipped'),
+          message: tr('test.skipped_message', 'Channel test skipped: {{message}}', {
+            message: message || 'this channel serves no chat-capable endpoint',
+          }),
         });
       } else {
         notify({

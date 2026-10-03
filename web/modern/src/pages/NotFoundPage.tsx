@@ -9,8 +9,8 @@ export function NotFoundPage() {
   const [seconds, setSeconds] = useState(5);
   const [redirectCancelled, setRedirectCancelled] = useState(false);
   const { t } = useTranslation();
-  const tickRef = useRef<ReturnType<typeof setInterval>>();
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const tickRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const cancelRedirect = useCallback(() => {
     setRedirectCancelled(true);

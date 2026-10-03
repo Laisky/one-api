@@ -237,18 +237,20 @@ var (
 	SQLiteBusyTimeout = env.Int("SQLITE_BUSY_TIMEOUT", 10000)
 
 	// SQLMaxIdleConns controls the primary database pool's idle connection count.
-	// Set based on expected concurrent connections and database server capacity.
+	// The default targets one instance serving about 100 requests per second
+	// while limiting the memory retained by idle database backends.
 	//
 	// Environment variable: SQL_MAX_IDLE_CONNS
-	// Default: 200
-	SQLMaxIdleConns = env.Int("SQL_MAX_IDLE_CONNS", 200)
+	// Default: 10
+	SQLMaxIdleConns = env.Int("SQL_MAX_IDLE_CONNS", defaultSQLMaxIdleConns)
 
 	// SQLMaxOpenConns controls the primary database pool's maximum open connections.
-	// Limit this based on database server connection limits.
+	// The default provides burst headroom for short database operations without
+	// allowing one pool to consume a typical PostgreSQL server's entire capacity.
 	//
 	// Environment variable: SQL_MAX_OPEN_CONNS
-	// Default: 2000
-	SQLMaxOpenConns = env.Int("SQL_MAX_OPEN_CONNS", 2000)
+	// Default: 50
+	SQLMaxOpenConns = env.Int("SQL_MAX_OPEN_CONNS", defaultSQLMaxOpenConns)
 
 	// SQLMaxLifetimeSeconds sets how long database connections live before being
 	// recycled. Helps balance connection freshness with connection setup overhead.
@@ -256,7 +258,7 @@ var (
 	// Environment variable: SQL_MAX_LIFETIME
 	// Default: 300 (5 minutes)
 	// Unit: seconds
-	SQLMaxLifetimeSeconds = env.Int("SQL_MAX_LIFETIME", 300)
+	SQLMaxLifetimeSeconds = env.Int("SQL_MAX_LIFETIME", defaultSQLMaxLifetimeSeconds)
 
 	// LogSQLDSN overrides the DSN used for the logging database.
 	// Useful for separating high-volume logging writes from transactional data.
@@ -362,6 +364,140 @@ var (
 )
 
 // =============================================================================
+// RESPONSE STATE (STATEFUL RESPONSES)
+// =============================================================================
+// Settings for the gateway-owned Responses state layer, which virtualizes
+// response/conversation IDs, hydrates previous_response_id / conversation
+// selectors before conversion, and stores an encrypted lossless item ledger.
+// The feature is OFF by default and refuses to enable without a healthy Redis
+// backend and a stable, explicitly configured encryption key. When disabled,
+// one-api behaves exactly as before (proposal row O01).
+
+var (
+	// ResponseStateEnabled turns on the gateway state layer. It is validated at
+	// startup and forced back off when Redis is unavailable or no stable
+	// encryption key is configured.
+	//
+	// When RESPONSE_STATE_ENABLED is not set explicitly, the state layer
+	// auto-enables at startup once both prerequisites are present: a stable
+	// RESPONSE_STATE_ENCRYPTION_KEYS and a healthy Redis. Setting the variable
+	// explicitly (true or false) always overrides that default. Either way, one
+	// INFO line at startup reports the resolved state and the reason.
+	//
+	// Environment variable: RESPONSE_STATE_ENABLED
+	// Default: false, or true when Redis + RESPONSE_STATE_ENCRYPTION_KEYS are set
+	ResponseStateEnabled = env.Bool("RESPONSE_STATE_ENABLED", false)
+
+	// ResponseStateShadow computes hydration/portability without altering the
+	// upstream payload or routing, emitting mismatch metrics only (row O02).
+	//
+	// Environment variable: RESPONSE_STATE_SHADOW
+	// Default: false
+	ResponseStateShadow = env.Bool("RESPONSE_STATE_SHADOW", false)
+
+	// ResponseStateAllowlist restricts gateway state behavior to a comma-separated
+	// set of user IDs, token IDs, or channel IDs (row O03). Empty means all when
+	// the feature is enabled.
+	//
+	// Environment variable: RESPONSE_STATE_ALLOWLIST
+	// Default: "" (all)
+	ResponseStateAllowlist = strings.TrimSpace(env.String("RESPONSE_STATE_ALLOWLIST", ""))
+
+	// ResponseStateLegacyPassthrough forwards an unknown incoming response ID on
+	// GET/DELETE/cancel to the upstream exactly as today (OpenAI-type channels
+	// only). It defaults OFF: at completion, unknown IDs return the standard
+	// not-found error and are never forwarded upstream (rows R08, SEC04). It is
+	// only consulted when the feature is enabled; with the feature disabled the
+	// action handlers keep their current forwarding behavior.
+	//
+	// Environment variable: RESPONSE_STATE_LEGACY_PASSTHROUGH
+	// Default: false
+	ResponseStateLegacyPassthrough = env.Bool("RESPONSE_STATE_LEGACY_PASSTHROUGH", false)
+
+	// ResponseStateEncryptionKeys carries the versioned AES-256 keys used to
+	// encrypt state payloads before Redis storage, newest first, as
+	// "<version>:<base64-key>" entries separated by commas or whitespace.
+	//
+	// When this is empty but SESSION_SECRET was set EXPLICITLY by the operator
+	// (SessionSecretEnvValue), the encryption key is derived from SESSION_SECRET
+	// instead. This is safe only because an explicitly configured SESSION_SECRET is
+	// stable across restarts; an AUTO-GENERATED per-boot SESSION_SECRET is never
+	// used, because it would orphan durable ciphertext after a restart (Section 5.4).
+	//
+	// Environment variable: RESPONSE_STATE_ENCRYPTION_KEYS
+	// Default: "" (falls back to an explicit SESSION_SECRET; else feature cannot enable)
+	ResponseStateEncryptionKeys = strings.TrimSpace(env.String("RESPONSE_STATE_ENCRYPTION_KEYS", ""))
+
+	// State limit knobs (rows L01-L05). A non-positive value disables that bound.
+	ResponseStateMaxChainDepth     = env.Int("RESPONSE_STATE_MAX_CHAIN_DEPTH", 64)
+	ResponseStateMaxItemCount      = env.Int("RESPONSE_STATE_MAX_ITEM_COUNT", 2048)
+	ResponseStateMaxRecordBytes    = env.Int("RESPONSE_STATE_MAX_RECORD_BYTES", 8<<20)
+	ResponseStateMaxHydratedBytes  = env.Int("RESPONSE_STATE_MAX_HYDRATED_BYTES", 32<<20)
+	ResponseStateMaxHydratedTokens = env.Int("RESPONSE_STATE_MAX_HYDRATED_TOKENS", 1_000_000)
+
+	// ResponseStateResponseTTLDays is the default lifetime of a stored response
+	// node. Conversations do not inherit this TTL (rows S02, S03).
+	//
+	// Environment variable: RESPONSE_STATE_RESPONSE_TTL_DAYS
+	// Default: 30
+	ResponseStateResponseTTLDays = env.Int("RESPONSE_STATE_RESPONSE_TTL_DAYS", 30)
+
+	// Per-user aggregate governance caps (rows L06-L10). They bound the state a
+	// single authenticated user can accumulate so an abusive token cannot grow
+	// gateway state without bound (the state Redis runs `noeviction`, so these
+	// caps and TTLs are the operative bound). A non-positive value disables that
+	// particular cap. When the feature is disabled the caps are inert (row L05).
+
+	// ResponseStateMaxResponsesPerUser bounds the number of stored response
+	// records one user may retain. On overflow the user's OLDEST records are
+	// pruned first (TTL+LRU); an evicted parent then degrades to the standard
+	// previous_response_not_found contract (row L06). 0 disables the cap.
+	//
+	// Environment variable: RESPONSE_STATE_MAX_RESPONSES_PER_USER
+	// Default: 20000
+	ResponseStateMaxResponsesPerUser = env.Int("RESPONSE_STATE_MAX_RESPONSES_PER_USER", 20000)
+
+	// ResponseStateMaxConversationsPerUser bounds the number of active
+	// conversations one user may hold. Creating beyond the cap fails with
+	// state_limit_exceeded (413); existing conversations are unaffected. Silent
+	// conversation eviction is forbidden — it corrupts continuation semantics
+	// (row L07). 0 disables the cap.
+	//
+	// Environment variable: RESPONSE_STATE_MAX_CONVERSATIONS_PER_USER
+	// Default: 2000
+	ResponseStateMaxConversationsPerUser = env.Int("RESPONSE_STATE_MAX_CONVERSATIONS_PER_USER", 2000)
+
+	// ResponseStateConversationIdleTTLDays is the idle time-to-live for a
+	// conversation. Expiration is SLIDING: every read or append refreshes it, so
+	// only an abandoned conversation expires. The next access to an expired
+	// conversation returns conversation_not_found (row L08). 0 retains a
+	// conversation until explicit deletion (today's S03 default).
+	//
+	// Environment variable: RESPONSE_STATE_CONVERSATION_IDLE_TTL_DAYS
+	// Default: 0 (retain until explicit deletion)
+	ResponseStateConversationIdleTTLDays = env.Int("RESPONSE_STATE_CONVERSATION_IDLE_TTL_DAYS", 0)
+)
+
+var (
+	// ConversationRateLimitNum bounds how many gateway Conversations API calls a
+	// single authenticated token may make within ConversationRateLimitDuration.
+	// Conversation CRUD is a quota-free store-write path, so it must be throttled
+	// before any store write to prevent a cheap unbounded-growth denial of
+	// service (row L09). A non-positive value disables the limit.
+	//
+	// Environment variable: CONVERSATION_RATE_LIMIT
+	// Default: 240
+	ConversationRateLimitNum = env.Int("CONVERSATION_RATE_LIMIT", 240)
+
+	// ConversationRateLimitDuration is the Conversations API rate-limit window in
+	// seconds.
+	//
+	// Environment variable: CONVERSATION_RATE_LIMIT_DURATION
+	// Default: 60
+	ConversationRateLimitDuration = int64(env.Int("CONVERSATION_RATE_LIMIT_DURATION", 60))
+)
+
+// =============================================================================
 // CHANNEL MANAGEMENT
 // =============================================================================
 // Settings for managing upstream provider channels, including suspension
@@ -419,15 +555,20 @@ var (
 		return v
 	}()
 
-	// ChannelDisableThreshold defines the failure ratio that triggers automatic
-	// channel disablement when AutomaticDisableChannelEnabled is true.
+	// ChannelDisableThreshold is the channel-test RESPONSE TIME limit, in seconds.
+	// A channel whose health check takes longer than this is disabled even when the
+	// probe itself succeeded (see controller.testChannels). It is NOT a failure
+	// ratio: the failure-rate mechanism is MetricSuccessRateThreshold, consumed by
+	// monitor/metric.go. A value of 0 disables the latency check entirely.
 	//
 	// Runtime variable (set via admin UI)
-	// Default: 5.0 (500% - effectively disabled by default)
+	// Default: 5.0 seconds
 	ChannelDisableThreshold = 5.0
 
-	// AutomaticDisableChannelEnabled enables automatic channel disabling when
-	// failure rate exceeds ChannelDisableThreshold.
+	// AutomaticDisableChannelEnabled enables automatic channel disabling when a
+	// health check fails with a credential, quota or permission error, when the
+	// upstream cannot be reached, or when it exceeds ChannelDisableThreshold.
+	// Channels skipped by the health check are never auto-disabled.
 	//
 	// Runtime variable (set via admin UI)
 	// Default: false
@@ -564,6 +705,23 @@ var (
 	// Default: 1200 seconds (20 minutes)
 	// Unit: seconds
 	CriticalRateLimitDuration int64 = 20 * 60
+
+	// RedeemFailureRateLimitNum bounds the number of FAILED redemption attempts a
+	// single authenticated user may make within RedeemFailureRateLimitDuration
+	// before further attempts are rejected with HTTP 429. This throttles
+	// enumeration/brute-force of redemption codes from a logged-in account.
+	// Successful redemptions never count toward this limit, so a legitimate user
+	// is unaffected. Set to 0 to disable.
+	//
+	// Environment variable: REDEEM_FAILURE_RATE_LIMIT
+	// Default: 5 failed attempts per 5 minutes
+	RedeemFailureRateLimitNum = env.Int("REDEEM_FAILURE_RATE_LIMIT", 5)
+
+	// RedeemFailureRateLimitDuration sets the window for redeem-failure rate limiting.
+	//
+	// Default: 600 seconds (10 minutes)
+	// Unit: seconds
+	RedeemFailureRateLimitDuration int64 = 10 * 60
 
 	// UploadRateLimitNum bounds the number of file uploads allowed per client
 	// within UploadRateLimitDuration.
@@ -735,6 +893,19 @@ var (
 	// Unit: seconds
 	UserContentRequestTimeout = env.Int("USER_CONTENT_REQUEST_TIMEOUT", 30)
 
+	// MaxRequestBodySizeMB caps how many bytes a single relay request body may
+	// contribute, both as uploaded bytes and as gzip-decompressed bytes.
+	//
+	// Without a cap, GzipDecodeMiddleware hands downstream readers an unbounded
+	// compress/gzip stream and common.GetRequestBody reads it fully into memory, so
+	// a ~1 MB upload of compressed zeros expands to ~1 GB of resident heap. The cap
+	// has to be generous because relay payloads legitimately carry base64 media.
+	//
+	// Environment variable: MAX_REQUEST_BODY_SIZE_MB
+	// Default: 128 MB
+	// Unit: megabytes; 0 or negative disables the limit
+	MaxRequestBodySizeMB = env.Int("MAX_REQUEST_BODY_SIZE_MB", 128)
+
 	// MaxInlineImageSizeMB limits the size of images that can be inlined as base64
 	// to prevent oversized payloads from overwhelming upstream providers.
 	//
@@ -810,6 +981,37 @@ var (
 	// Default: "" (metrics endpoint blocked)
 	MetricsToken = strings.TrimSpace(env.String("METRICS_TOKEN", ""))
 
+	// MetricsMaxPathLabels bounds how many distinct normalized request paths
+	// may become HTTP metric "path" label values per process; further paths are
+	// recorded under "/other". Legitimate traffic uses a few hundred distinct
+	// normalized paths, while vulnerability scanners probe thousands, each of
+	// which would otherwise create permanent time series. Non-positive values
+	// fall back to the default.
+	//
+	// Environment variable: METRICS_MAX_PATH_LABELS
+	// Default: 1000
+	MetricsMaxPathLabels = env.Int("METRICS_MAX_PATH_LABELS", 1000)
+
+	// EnablePprof exposes the Go net/http/pprof profiling endpoints on a
+	// dedicated listener (see PprofListen) when true. Use it to debug live
+	// memory/CPU/goroutine usage with `go tool pprof`. Disabled by default
+	// because the profiling surface can leak internal data and add load.
+	//
+	// Environment variable: ENABLE_PPROF
+	// Default: false
+	EnablePprof = env.Bool("ENABLE_PPROF", false)
+
+	// PprofListen is the bind address for the pprof listener. It defaults to
+	// loopback so the profiling endpoints are only reachable locally (e.g. via
+	// an SSH tunnel: `ssh -L 6060:localhost:6060 <host>`). Bind it to a
+	// non-loopback address only behind a firewall/auth proxy, since pprof has
+	// no built-in authentication.
+	//
+	// Environment variable: PPROF_LISTEN
+	// Default: "localhost:6060"
+	// Example: "0.0.0.0:6060"
+	PprofListen = strings.TrimSpace(env.String("PPROF_LISTEN", "localhost:6060"))
+
 	// MetricQueueSize configures the buffered queue that aggregates success/failure
 	// events before processing. Larger queues handle burst traffic better.
 	//
@@ -862,10 +1064,7 @@ var (
 	// Default: ""
 	// Example: "100.97.108.34:4318"
 	OpenTelemetryEndpoint = func() string {
-		endpoint := strings.TrimSpace(env.String("OTEL_EXPORTER_OTLP_ENDPOINT", ""))
-		endpoint = strings.TrimPrefix(endpoint, "http://")
-		endpoint = strings.TrimPrefix(endpoint, "https://")
-		return endpoint
+		return normalizeOTLPEndpoint(env.String(EnvOpenTelemetryEndpoint, ""))
 	}()
 
 	// OpenTelemetryInsecure determines whether the OTLP exporters should skip
@@ -873,7 +1072,7 @@ var (
 	//
 	// Environment variable: OTEL_EXPORTER_OTLP_INSECURE
 	// Default: true
-	OpenTelemetryInsecure = env.Bool("OTEL_EXPORTER_OTLP_INSECURE", true)
+	OpenTelemetryInsecure = env.Bool(EnvOpenTelemetryInsecure, true)
 
 	// OpenTelemetryServiceName labels emitted telemetry with the logical
 	// service identifier. This appears in tracing backends and metrics UIs.
@@ -911,14 +1110,29 @@ var (
 	// Allowed values: "hourly", "daily", "weekly"
 	LogRotationInterval = strings.TrimSpace(strings.ToLower(env.String("LOG_ROTATION_INTERVAL", "daily")))
 
-	// LogRetentionDays determines how many days logs are kept before the
+	// LogRetentionDays determines how many days log FILES are kept before the
 	// retention worker purges them. Set to 0 to disable cleanup.
 	//
+	// The default stays 0 (never delete) under the standalone profile. Enabling
+	// it by default was considered and rejected: an existing deployment that
+	// upgrades without changing its configuration would have had years of
+	// accumulated log files deleted on first start, which is exactly the kind
+	// of surprise this project's backward-compatibility rules forbid. The
+	// unbounded-growth problem is real at high volume, so the scaled and
+	// external profiles enable retention -- but reaching those profiles is an
+	// explicit operator decision.
+	//
+	// Operators who leave every disk guard off are warned once at startup; see
+	// logger.StartLogRetentionCleaner.
+	//
+	// See also LOG_MAX_TOTAL_SIZE_MB and LOG_MIN_FREE_DISK_MB, which bound disk
+	// even when a single retention window does not fit on the volume.
+	//
 	// Environment variable: LOG_RETENTION_DAYS
-	// Default: 0 (disabled)
+	// Default: 0 (disabled) for standalone, 3 for scaled, 1 for external
 	// Unit: days
 	LogRetentionDays = func() int {
-		v := env.Int("LOG_RETENTION_DAYS", 0)
+		v := env.Int("LOG_RETENTION_DAYS", profileInt(ObservabilityProfile, 0, 3, 1))
 		if v < 0 {
 			return 0
 		}
@@ -1345,6 +1559,13 @@ var (
 	}
 )
 
+const (
+	// EnvResendAPIKey names the environment variable that provides the Resend API key.
+	EnvResendAPIKey = "RESEND_API_KEY"
+	// EnvEmailProvider names the environment variable that forces the email backend.
+	EnvEmailProvider = "EMAIL_PROVIDER"
+)
+
 // SMTP server settings for outbound email (password reset, verification, alerts).
 // All settings are runtime variables configured via admin UI.
 var (
@@ -1381,6 +1602,41 @@ var (
 	// Runtime variable (set via admin UI)
 	// Default: "" (no authentication)
 	SMTPToken = ""
+
+	// ResendAPIKey holds the API key for Resend.com email service.
+	// Used when EmailProvider is set to "resend".
+	//
+	// Runtime variable (set via admin UI; non-empty env value takes precedence)
+	// Default: ""
+	// Example: "re_123456789"
+	ResendAPIKey = env.String(EnvResendAPIKey, "")
+
+	// EmailProvider selects the outbound email backend.
+	// Valid values: "smtp" (default), "resend".
+	// When unset, the backend falls back to "resend" if ResendAPIKey is configured,
+	// otherwise "smtp" — preserving behaviour for installations upgraded from older versions.
+	//
+	// Runtime variable (set via admin UI; non-empty env value takes precedence)
+	// Default: "" (auto-detected as described above)
+	EmailProvider = strings.ToLower(strings.TrimSpace(env.String(EnvEmailProvider, "")))
+
+	// StripeSecretKey is the Stripe API secret key (sk_live_... or sk_test_...).
+	// Environment variable: STRIPE_SECRET_KEY
+	StripeSecretKey = env.String("STRIPE_SECRET_KEY", "")
+
+	// StripeWebhookSecret verifies incoming Stripe webhook signatures (whsec_...).
+	// Environment variable: STRIPE_WEBHOOK_SECRET
+	StripeWebhookSecret = env.String("STRIPE_WEBHOOK_SECRET", "")
+
+	// StripePublicBaseURL is the trusted public origin for Checkout success/cancel URLs.
+	// Prefer this over request Host headers. Example: https://oneapi.example.com
+	// Environment variable: STRIPE_PUBLIC_BASE_URL
+	// Default: "" (falls back to ServerAddress)
+	StripePublicBaseURL = strings.TrimRight(strings.TrimSpace(env.String("STRIPE_PUBLIC_BASE_URL", "")), "/")
+
+	// MinTopUpUSD is the minimum freeform USD top-up amount accepted via Stripe.
+	// Environment variable: MIN_TOPUP_USD. Default: 5.
+	MinTopUpUSD = env.Int("MIN_TOPUP_USD", 5)
 )
 
 // =============================================================================
@@ -1621,6 +1877,17 @@ func init() {
 
 	// Enable consumption logging by default
 	logConsumeEnabled.Store(true)
+
+	// Load the external UUID backfill settings. These are parsed strictly rather
+	// than through the silently-defaulting env helpers, so an out-of-range or
+	// unparseable value fails configuration loading instead of starting the
+	// backfill worker on an unintended budget or timeout.
+	MustLoadExternalUUIDBackfillSettings()
+
+	// Load the compact UUID storage settings under the same strict contract, so an
+	// invalid budget, interval, or timeout fails startup before the compact
+	// migration worker is created rather than after it has begun DDL.
+	MustLoadCompactUUIDSettings()
 
 	// Validate all environment variables with constraints
 	// This will panic if any validation fails, ensuring fast failure on misconfiguration

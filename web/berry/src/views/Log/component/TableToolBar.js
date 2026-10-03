@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from "prop-types";
 import { useTheme } from "@mui/material/styles";
 import { useState } from "react";
@@ -6,12 +7,14 @@ import {
   IconKey,
   IconBrandGithubCopilot,
   IconSitemap,
+  IconSearch,
 } from "@tabler/icons-react";
 import {
   InputAdornment,
   OutlinedInput,
   Stack,
   FormControl,
+  FormHelperText,
   InputLabel,
   Select,
   MenuItem,
@@ -23,7 +26,7 @@ import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 import LogType from "../type/LogType";
-require("dayjs/locale/zh-cn");
+import 'dayjs/locale/zh-cn';
 // ----------------------------------------------------------------------
 
 export default function TableToolBar({
@@ -33,6 +36,10 @@ export default function TableToolBar({
 }) {
   const theme = useTheme();
   const grey500 = theme.palette.grey[500];
+  // The keyword search endpoint only understands the keyword itself, so the
+  // structured filters below are greyed out while a keyword is present rather
+  // than silently ignored.
+  const keywordActive = (filterName.keyword || "").trim() !== "";
   const [userOptions, setUserOptions] = useState([]);
   const [userSearchLoading, setUserSearchLoading] = useState(false);
 
@@ -48,7 +55,7 @@ export default function TableToolBar({
       const { success, data } = res.data;
       if (success) {
         const options = data.map(user => ({
-          id: user.id,
+          uuid: user.uuid,
           username: user.username,
           label: `${user.display_name || user.username} (@${user.username})`,
           display_name: user.display_name
@@ -71,10 +78,33 @@ export default function TableToolBar({
         paddingBottom={"0px"}
       >
         <FormControl>
+          <InputLabel htmlFor="log-keyword-label">关键字</InputLabel>
+          <OutlinedInput
+            id="keyword"
+            name="keyword"
+            sx={{
+              minWidth: "100%",
+            }}
+            label="关键字"
+            value={filterName.keyword}
+            onChange={handleFilterName}
+            placeholder="按 UUID 或详情搜索 ..."
+            startAdornment={
+              <InputAdornment position="start">
+                <IconSearch stroke={1.5} size="20px" color={grey500} />
+              </InputAdornment>
+            }
+          />
+          {keywordActive && (
+            <FormHelperText>关键字搜索会忽略其他筛选条件。</FormHelperText>
+          )}
+        </FormControl>
+        <FormControl>
           <InputLabel htmlFor="channel-token_name-label">令牌名称</InputLabel>
           <OutlinedInput
             id="token_name"
             name="token_name"
+            disabled={keywordActive}
             sx={{
               minWidth: "100%",
             }}
@@ -94,6 +124,7 @@ export default function TableToolBar({
           <OutlinedInput
             id="model_name"
             name="model_name"
+            disabled={keywordActive}
             sx={{
               minWidth: "100%",
             }}
@@ -122,6 +153,7 @@ export default function TableToolBar({
               label="起始时间"
               ampm={false}
               name="start_timestamp"
+              disabled={keywordActive}
               value={
                 filterName.start_timestamp === 0
                   ? null
@@ -155,6 +187,7 @@ export default function TableToolBar({
             <DateTimePicker
               label="结束时间"
               name="end_timestamp"
+              disabled={keywordActive}
               ampm={false}
               value={
                 filterName.end_timestamp === 0
@@ -193,6 +226,7 @@ export default function TableToolBar({
             <OutlinedInput
               id="channel"
               name="channel"
+              disabled={keywordActive}
               sx={{
                 minWidth: "100%",
               }}
@@ -213,11 +247,12 @@ export default function TableToolBar({
           <FormControl sx={{ minWidth: "100%" }}>
             <Autocomplete
               freeSolo
+              disabled={keywordActive}
               options={userOptions}
               getOptionLabel={(option) => typeof option === 'string' ? option : option.username}
               value={filterName.username}
               onInputChange={(_, newInputValue) => {
-                searchUsers(newInputValue);
+                searchUsers(newInputValue).catch(reportUIError);
                 handleFilterName({
                   target: { name: 'username', value: newInputValue }
                 });
@@ -251,7 +286,7 @@ export default function TableToolBar({
                       {option.display_name || option.username}
                     </div>
                     <div style={{ fontSize: '0.9em', color: '#666' }}>
-                      @{option.username} • ID: {option.id}
+                      @{option.username}{option.uuid ? ` • ${String(option.uuid).slice(0, 8)}` : ''}
                     </div>
                   </div>
                 </li>
@@ -266,6 +301,7 @@ export default function TableToolBar({
           <Select
             id="channel-type-label"
             label="类型"
+            disabled={keywordActive}
             value={filterName.type}
             name="type"
             onChange={handleFilterName}

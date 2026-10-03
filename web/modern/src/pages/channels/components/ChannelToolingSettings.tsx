@@ -1,4 +1,3 @@
-import type { UseFormReturn } from 'react-hook-form';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
@@ -6,11 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { TOOLING_CONFIG_EXAMPLE } from '../constants';
 import { useChannelTooling } from '../hooks/useChannelTooling';
-import type { ChannelForm } from '../schemas';
+import type { ChannelFormMethods } from '../schemas';
 import { LabelWithHelp } from './LabelWithHelp';
 
 interface ChannelToolingSettingsProps {
-  form: UseFormReturn<ChannelForm>;
+  form: ChannelFormMethods;
   defaultTooling: string;
   tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
   notify: (options: any) => void;

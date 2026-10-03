@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * ClipboardManagerToken describes the minimal token fields required to manage clipboard feedback.
  */
 export interface ClipboardManagerToken {
-  id: number;
+  ref: string;
   key: string;
 }
 
@@ -12,9 +12,9 @@ export interface ClipboardManagerToken {
  * ClipboardManagerResult exposes clipboard feedback state and handlers for the token table.
  */
 export interface ClipboardManagerResult {
-  copiedTokens: Record<number, boolean>;
+  copiedTokens: Record<string, boolean>;
   manualCopyToken: ClipboardManagerToken | null;
-  handleCopySuccess: (tokenId: number) => void;
+  handleCopySuccess: (tokenRef: string) => void;
   handleCopyFailure: (token: ClipboardManagerToken) => void;
   clearManualCopyToken: () => void;
 }
@@ -23,27 +23,27 @@ export interface ClipboardManagerResult {
  * useClipboardManager centralizes clipboard success animations and manual fallback handling.
  */
 export function useClipboardManager(): ClipboardManagerResult {
-  const [copiedTokens, setCopiedTokens] = useState<Record<number, boolean>>({});
+  const [copiedTokens, setCopiedTokens] = useState<Record<string, boolean>>({});
   const [manualCopyToken, setManualCopyToken] = useState<ClipboardManagerToken | null>(null);
-  const resetTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const resetTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  const handleCopySuccess = useCallback((tokenId: number) => {
+  const handleCopySuccess = useCallback((tokenRef: string) => {
     setCopiedTokens((prev) => ({
       ...prev,
-      [tokenId]: true,
+      [tokenRef]: true,
     }));
 
-    if (resetTimersRef.current[tokenId]) {
-      clearTimeout(resetTimersRef.current[tokenId]);
+    if (resetTimersRef.current[tokenRef]) {
+      clearTimeout(resetTimersRef.current[tokenRef]);
     }
 
-    resetTimersRef.current[tokenId] = setTimeout(() => {
+    resetTimersRef.current[tokenRef] = setTimeout(() => {
       setCopiedTokens((prevState) => {
         const nextState = { ...prevState };
-        delete nextState[tokenId];
+        delete nextState[tokenRef];
         return nextState;
       });
-      delete resetTimersRef.current[tokenId];
+      delete resetTimersRef.current[tokenRef];
     }, 3000);
   }, []);
 

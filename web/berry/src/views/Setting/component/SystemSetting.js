@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { useState, useEffect } from 'react';
 import SubCard from 'ui-component/cards/SubCard';
 import {
@@ -87,7 +88,7 @@ const SystemSetting = () => {
   };
 
   useEffect(() => {
-    getOptions().then();
+    getOptions().then().catch(reportUIError);
   }, []);
 
   const updateOption = async (key, value) => {
@@ -107,24 +108,32 @@ const SystemSetting = () => {
       default:
         break;
     }
-    const res = await API.put('/api/option/', {
-      key,
-      value
-    });
-    const { success, message } = res.data;
-    if (success) {
-      if (key === 'EmailDomainWhitelist') {
-        value = value.split(',');
+    let res;
+    try {
+      res = await API.put('/api/option/', {
+        key,
+        value
+      });
+      // The shared axios interceptor resolves to undefined on error; bail out before
+      // reading res.data so a failed request can't throw and leave `loading` stuck true,
+      // which would keep every settings button disabled until a page reload.
+      if (!res) return;
+      const { success, message } = res.data;
+      if (success) {
+        if (key === 'EmailDomainWhitelist') {
+          value = value.split(',');
+        }
+        setInputs((inputs) => ({
+          ...inputs,
+          [key]: value
+        }));
+        showSuccess('设置成功！');
+      } else {
+        showError(message);
       }
-      setInputs((inputs) => ({
-        ...inputs,
-        [key]: value
-      }));
-      showSuccess('设置成功！');
-    } else {
-      showError(message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleInputChange = async (event) => {
@@ -289,7 +298,7 @@ const SystemSetting = () => {
                   id="ServerAddress"
                   name="ServerAddress"
                   value={inputs.ServerAddress || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="服务器地址"
                   placeholder="例如：https://yourdomain.com"
                   disabled={loading}
@@ -297,7 +306,7 @@ const SystemSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitServerAddress}>
+              <Button variant="contained" onClick={(...uiArgs) => submitServerAddress(...uiArgs).catch(reportUIError)}>
                 更新服务器地址
               </Button>
             </Grid>
@@ -309,7 +318,7 @@ const SystemSetting = () => {
               <FormControlLabel
                 label="允许通过密码进行登录"
                 control={
-                  <Checkbox checked={inputs.PasswordLoginEnabled === 'true'} onChange={handleInputChange} name="PasswordLoginEnabled" />
+                  <Checkbox checked={inputs.PasswordLoginEnabled === 'true'} onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)} name="PasswordLoginEnabled" />
                 }
               />
             </Grid>
@@ -319,7 +328,7 @@ const SystemSetting = () => {
                 control={
                   <Checkbox
                     checked={inputs.PasswordRegisterEnabled === 'true'}
-                    onChange={handleInputChange}
+                    onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                     name="PasswordRegisterEnabled"
                   />
                 }
@@ -331,7 +340,7 @@ const SystemSetting = () => {
                 control={
                   <Checkbox
                     checked={inputs.EmailVerificationEnabled === 'true'}
-                    onChange={handleInputChange}
+                    onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                     name="EmailVerificationEnabled"
                   />
                 }
@@ -340,32 +349,32 @@ const SystemSetting = () => {
             <Grid xs={12} md={3}>
               <FormControlLabel
                 label="允许通过 GitHub 账户登录 & 注册"
-                control={<Checkbox checked={inputs.GitHubOAuthEnabled === 'true'} onChange={handleInputChange} name="GitHubOAuthEnabled" />}
+                control={<Checkbox checked={inputs.GitHubOAuthEnabled === 'true'} onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)} name="GitHubOAuthEnabled" />}
               />
             </Grid>
             <Grid xs={12} md={3}>
               <FormControlLabel
                 label="允许通过 OIDC 登录 & 注册"
-                control={<Checkbox checked={inputs.OidcEnabled === 'true'} onChange={handleInputChange} name="OidcEnabled" />}
+                control={<Checkbox checked={inputs.OidcEnabled === 'true'} onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)} name="OidcEnabled" />}
               />
             </Grid>
             <Grid xs={12} md={3}>
               <FormControlLabel
                 label="允许通过微信登录 & 注册"
-                control={<Checkbox checked={inputs.WeChatAuthEnabled === 'true'} onChange={handleInputChange} name="WeChatAuthEnabled" />}
+                control={<Checkbox checked={inputs.WeChatAuthEnabled === 'true'} onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)} name="WeChatAuthEnabled" />}
               />
             </Grid>
             <Grid xs={12} md={3}>
               <FormControlLabel
                 label="允许新用户注册（此项为否时，新用户将无法以任何方式进行注册）"
-                control={<Checkbox checked={inputs.RegisterEnabled === 'true'} onChange={handleInputChange} name="RegisterEnabled" />}
+                control={<Checkbox checked={inputs.RegisterEnabled === 'true'} onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)} name="RegisterEnabled" />}
               />
             </Grid>
             <Grid xs={12} md={3}>
               <FormControlLabel
                 label="启用 Turnstile 用户校验"
                 control={
-                  <Checkbox checked={inputs.TurnstileCheckEnabled === 'true'} onChange={handleInputChange} name="TurnstileCheckEnabled" />
+                  <Checkbox checked={inputs.TurnstileCheckEnabled === 'true'} onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)} name="TurnstileCheckEnabled" />
                 }
               />
             </Grid>
@@ -379,7 +388,7 @@ const SystemSetting = () => {
                 control={
                   <Checkbox
                     checked={inputs.EmailDomainRestrictionEnabled === 'true'}
-                    onChange={handleInputChange}
+                    onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                     name="EmailDomainRestrictionEnabled"
                   />
                 }
@@ -400,7 +409,7 @@ const SystemSetting = () => {
                         value: value
                       }
                     };
-                    handleInputChange(event);
+                    handleInputChange(event).catch(reportUIError);
                   }}
                   filterSelectedOptions
                   renderInput={(params) => <TextField {...params} name="EmailDomainWhitelist" label="允许的邮箱域名" />}
@@ -417,7 +426,7 @@ const SystemSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitEmailDomainWhitelist}>
+              <Button variant="contained" onClick={(...uiArgs) => submitEmailDomainWhitelist(...uiArgs).catch(reportUIError)}>
                 保存邮箱域名白名单设置
               </Button>
             </Grid>
@@ -432,7 +441,7 @@ const SystemSetting = () => {
                   id="SMTPServer"
                   name="SMTPServer"
                   value={inputs.SMTPServer || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="SMTP 服务器地址"
                   placeholder="例如：smtp.qq.com"
                   disabled={loading}
@@ -446,7 +455,7 @@ const SystemSetting = () => {
                   id="SMTPPort"
                   name="SMTPPort"
                   value={inputs.SMTPPort || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="SMTP 端口"
                   placeholder="默认: 587"
                   disabled={loading}
@@ -460,7 +469,7 @@ const SystemSetting = () => {
                   id="SMTPAccount"
                   name="SMTPAccount"
                   value={inputs.SMTPAccount || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="SMTP 账户"
                   placeholder="通常是邮箱地址"
                   disabled={loading}
@@ -474,7 +483,7 @@ const SystemSetting = () => {
                   id="SMTPFrom"
                   name="SMTPFrom"
                   value={inputs.SMTPFrom || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="SMTP 发送者邮箱"
                   placeholder="通常和邮箱地址保持一致"
                   disabled={loading}
@@ -488,7 +497,7 @@ const SystemSetting = () => {
                   id="SMTPToken"
                   name="SMTPToken"
                   value={inputs.SMTPToken || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="SMTP 访问凭证"
                   placeholder="敏感信息不会发送到前端显示"
                   disabled={loading}
@@ -496,7 +505,7 @@ const SystemSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitSMTP}>
+              <Button variant="contained" onClick={(...uiArgs) => submitSMTP(...uiArgs).catch(reportUIError)}>
                 保存 SMTP 设置
               </Button>
             </Grid>
@@ -529,7 +538,7 @@ const SystemSetting = () => {
                   id="GitHubClientId"
                   name="GitHubClientId"
                   value={inputs.GitHubClientId || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="GitHub Client ID"
                   placeholder="输入你注册的 GitHub OAuth APP 的 ID"
                   disabled={loading}
@@ -543,7 +552,7 @@ const SystemSetting = () => {
                   id="GitHubClientSecret"
                   name="GitHubClientSecret"
                   value={inputs.GitHubClientSecret || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="GitHub Client Secret"
                   placeholder="敏感信息不会发送到前端显示"
                   disabled={loading}
@@ -551,7 +560,7 @@ const SystemSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitGitHubOAuth}>
+              <Button variant="contained" onClick={(...uiArgs) => submitGitHubOAuth(...uiArgs).catch(reportUIError)}>
                 保存 GitHub OAuth 设置
               </Button>
             </Grid>
@@ -584,7 +593,7 @@ const SystemSetting = () => {
                   id="LarkClientId"
                   name="LarkClientId"
                   value={inputs.LarkClientId || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="App ID"
                   placeholder="输入 App ID"
                   disabled={loading}
@@ -598,7 +607,7 @@ const SystemSetting = () => {
                   id="LarkClientSecret"
                   name="LarkClientSecret"
                   value={inputs.LarkClientSecret || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="App Secret"
                   placeholder="敏感信息不会发送到前端显示"
                   disabled={loading}
@@ -606,7 +615,7 @@ const SystemSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitLarkOAuth}>
+              <Button variant="contained" onClick={(...uiArgs) => submitLarkOAuth(...uiArgs).catch(reportUIError)}>
                 保存飞书 OAuth 设置
               </Button>
             </Grid>
@@ -632,7 +641,7 @@ const SystemSetting = () => {
                   id="WeChatServerAddress"
                   name="WeChatServerAddress"
                   value={inputs.WeChatServerAddress || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="WeChat Server 服务器地址"
                   placeholder="例如：https://yourdomain.com"
                   disabled={loading}
@@ -646,7 +655,7 @@ const SystemSetting = () => {
                   id="WeChatServerToken"
                   name="WeChatServerToken"
                   value={inputs.WeChatServerToken || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="WeChat Server 访问凭证"
                   placeholder="敏感信息不会发送到前端显示"
                   disabled={loading}
@@ -660,7 +669,7 @@ const SystemSetting = () => {
                   id="WeChatAccountQRCodeImageURL"
                   name="WeChatAccountQRCodeImageURL"
                   value={inputs.WeChatAccountQRCodeImageURL || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="微信公众号二维码图片链接"
                   placeholder="输入一个图片链接"
                   disabled={loading}
@@ -668,7 +677,7 @@ const SystemSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitWeChat}>
+              <Button variant="contained" onClick={(...uiArgs) => submitWeChat(...uiArgs).catch(reportUIError)}>
                 保存 WeChat Server 设置
               </Button>
             </Grid>
@@ -700,7 +709,7 @@ const SystemSetting = () => {
                   id="OidcClientId"
                   name="OidcClientId"
                   value={ inputs.OidcClientId || '' }
-                  onChange={ handleInputChange }
+                  onChange={ (...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError) }
                   label="Client ID"
                   placeholder="输入 OIDC 的 Client ID"
                   disabled={ loading }
@@ -714,7 +723,7 @@ const SystemSetting = () => {
                   id="OidcClientSecret"
                   name="OidcClientSecret"
                   value={ inputs.OidcClientSecret || '' }
-                  onChange={ handleInputChange }
+                  onChange={ (...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError) }
                   label="Client Secret"
                   placeholder="敏感信息不会发送到前端显示"
                   disabled={ loading }
@@ -728,7 +737,7 @@ const SystemSetting = () => {
                   id="OidcWellKnown"
                   name="OidcWellKnown"
                   value={ inputs.OidcWellKnown || '' }
-                  onChange={ handleInputChange }
+                  onChange={ (...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError) }
                   label="Well-Known URL"
                   placeholder="请输入 OIDC 的 Well-Known URL"
                   disabled={ loading }
@@ -742,7 +751,7 @@ const SystemSetting = () => {
                   id="OidcAuthorizationEndpoint"
                   name="OidcAuthorizationEndpoint"
                   value={ inputs.OidcAuthorizationEndpoint || '' }
-                  onChange={ handleInputChange }
+                  onChange={ (...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError) }
                   label="Authorization Endpoint"
                   placeholder="输入 OIDC 的 Authorization Endpoint"
                   disabled={ loading }
@@ -756,7 +765,7 @@ const SystemSetting = () => {
                   id="OidcTokenEndpoint"
                   name="OidcTokenEndpoint"
                   value={ inputs.OidcTokenEndpoint || '' }
-                  onChange={ handleInputChange }
+                  onChange={ (...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError) }
                   label="Token Endpoint"
                   placeholder="输入 OIDC 的 Token Endpoint"
                   disabled={ loading }
@@ -770,7 +779,7 @@ const SystemSetting = () => {
                   id="OidcUserinfoEndpoint"
                   name="OidcUserinfoEndpoint"
                   value={ inputs.OidcUserinfoEndpoint || '' }
-                  onChange={ handleInputChange }
+                  onChange={ (...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError) }
                   label="Userinfo Endpoint"
                   placeholder="输入 OIDC 的 Userinfo Endpoint"
                   disabled={ loading }
@@ -778,7 +787,7 @@ const SystemSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={ 12 }>
-              <Button variant="contained" onClick={ submitOidc }>
+              <Button variant="contained" onClick={ (...uiArgs) => submitOidc(...uiArgs).catch(reportUIError) }>
                 保存 OIDC 设置
               </Button>
             </Grid>
@@ -805,7 +814,7 @@ const SystemSetting = () => {
                   id="MessagePusherAddress"
                   name="MessagePusherAddress"
                   value={inputs.MessagePusherAddress || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="Message Pusher 推送地址"
                   placeholder="例如：https://msgpusher.com/push/your_username"
                   disabled={loading}
@@ -820,7 +829,7 @@ const SystemSetting = () => {
                   name="MessagePusherToken"
                   type="password"
                   value={inputs.MessagePusherToken || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="Message Pusher 访问凭证"
                   placeholder="敏感信息不会发送到前端显示"
                   disabled={loading}
@@ -828,7 +837,7 @@ const SystemSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitMessagePusher}>
+              <Button variant="contained" onClick={(...uiArgs) => submitMessagePusher(...uiArgs).catch(reportUIError)}>
                 保存 Message Pusher 设置
               </Button>
             </Grid>
@@ -854,7 +863,7 @@ const SystemSetting = () => {
                   id="TurnstileSiteKey"
                   name="TurnstileSiteKey"
                   value={inputs.TurnstileSiteKey || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="Turnstile Site Key"
                   placeholder="输入你注册的 Turnstile Site Key"
                   disabled={loading}
@@ -869,7 +878,7 @@ const SystemSetting = () => {
                   name="TurnstileSecretKey"
                   type="password"
                   value={inputs.TurnstileSecretKey || ''}
-                  onChange={handleInputChange}
+                  onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
                   label="Turnstile Secret Key"
                   placeholder="敏感信息不会发送到前端显示"
                   disabled={loading}
@@ -877,7 +886,7 @@ const SystemSetting = () => {
               </FormControl>
             </Grid>
             <Grid xs={12}>
-              <Button variant="contained" onClick={submitTurnstile}>
+              <Button variant="contained" onClick={(...uiArgs) => submitTurnstile(...uiArgs).catch(reportUIError)}>
                 保存 Turnstile 设置
               </Button>
             </Grid>
@@ -894,10 +903,10 @@ const SystemSetting = () => {
           <Button onClick={() => setShowPasswordWarningModal(false)}>取消</Button>
           <Button
             sx={{ color: 'error.main' }}
-            onClick={async () => {
+            onClick={(...uiArgs) => (async () => {
               setShowPasswordWarningModal(false);
               await updateOption('PasswordLoginEnabled', 'false');
-            }}
+            })(...uiArgs).catch(reportUIError)}
           >
             确定
           </Button>

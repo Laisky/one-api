@@ -41,13 +41,44 @@ func marshalIDForFixture(id any) string {
 	return string(encoded)
 }
 
+// echoFixtureResponseID rewrites the `id` of a JSON-RPC success envelope to the
+// id the client actually sent. JSON-RPC 2.0 requires a server to echo the request
+// id, and relay/mcp enforces that correlation, so a fixture with a hard-coded id
+// does not model a real MCP server. Bodies that are not 2xx JSON-RPC envelopes
+// (transport-failure fixtures) are returned untouched.
+//
+// Parameters:
+//   - body: the canned response body.
+//   - status: the HTTP status the fixture is returning.
+//   - requestID: the id decoded from the inbound request.
+//
+// Return values:
+//   - []byte: body with the id corrected, or the original body when it does not apply.
+func echoFixtureResponseID(body []byte, status int, requestID any) []byte {
+	if status < http.StatusOK || status >= http.StatusMultipleChoices || requestID == nil {
+		return body
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return body
+	}
+	if _, ok := envelope["id"]; !ok {
+		return body
+	}
+	envelope["id"] = json.RawMessage(marshalIDForFixture(requestID))
+	rewritten, err := json.Marshal(envelope)
+	if err != nil {
+		return body
+	}
+	return rewritten
+}
+
 // setupMCPProxyTest spins up an isolated SQLite database, fake MCP backend,
 // and a test user/server/tool seeded for callMCPToolForUser-driven scenarios.
 // The returned mcpFixture lets tests configure pricing, swap the upstream
 // response, and inspect logged invocations.
 type mcpFixture struct {
 	user           *model.User
-	token          *model.Token
 	server         *model.MCPServer
 	tool           *model.MCPTool
 	upstream       *httptest.Server
@@ -65,7 +96,6 @@ func setupMCPProxyTest(t *testing.T) (cleanup func(), fx *mcpFixture) {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&model.User{},
-		&model.Token{},
 		&model.MCPServer{},
 		&model.MCPTool{},
 		&model.Log{},
@@ -126,7 +156,7 @@ func setupMCPProxyTest(t *testing.T) (cleanup func(), fx *mcpFixture) {
 		body, status := fx.respondPayload()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		_, _ = w.Write(body)
+		_, _ = w.Write(echoFixtureResponseID(body, status, rpc.ID))
 	}))
 
 	user := &model.User{
@@ -139,18 +169,6 @@ func setupMCPProxyTest(t *testing.T) (cleanup func(), fx *mcpFixture) {
 	}
 	require.NoError(t, model.DB.Create(user).Error)
 	fx.user = user
-
-	token := &model.Token{
-		Id:          7,
-		UserId:      user.Id,
-		Key:         "mcp-proxy-token",
-		Name:        "MCP proxy token",
-		Status:      model.TokenStatusEnabled,
-		RemainQuota: 1000,
-		ExpiredTime: -1,
-	}
-	require.NoError(t, model.DB.Create(token).Error)
-	fx.token = token
 
 	server := &model.MCPServer{
 		Id:                      1,
@@ -219,7 +237,6 @@ func newMCPCallContext(t *testing.T, userID int, requestID string) (*gin.Context
 	c.Request = req
 
 	c.Set(ctxkey.Id, userID)
-	c.Set(ctxkey.TokenId, 7)
 	c.Set(ctxkey.RequestId, requestID)
 	c.Set(helper.RequestIdKey, requestID)
 	gmw.SetLogger(c, logger.Logger)
@@ -297,11 +314,6 @@ func TestCallMCPToolForUser_PaidToolDeductsQuotaAndLogs(t *testing.T) {
 	require.Equal(t, int64(925), refreshed.Quota)
 	require.Equal(t, int64(75), refreshed.UsedQuota)
 	require.Equal(t, 1, refreshed.RequestCount)
-
-	chargedToken, err := model.GetTokenById(fx.token.Id)
-	require.NoError(t, err)
-	require.Equal(t, int64(925), chargedToken.RemainQuota)
-	require.Equal(t, int64(75), chargedToken.UsedQuota)
 }
 
 // TestCallMCPToolForUser_ErrorResultIsNotLoggedOrCharged confirms that when
@@ -759,7 +771,7 @@ func TestMCPProxy_FullInspectorHandshake(t *testing.T) {
 	require.Nil(t, initResp["error"])
 	result, ok := initResp["result"].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, mcpProtocolVersion, result["protocolVersion"])
+	require.Equal(t, mcp.LegacyProtocolVersionFallback, result["protocolVersion"])
 	info := result["serverInfo"].(map[string]any)
 	require.Equal(t, mcpServerName, info["name"])
 
@@ -775,4 +787,107 @@ func TestMCPProxy_FullInspectorHandshake(t *testing.T) {
 		"handshake must end with a tools/list response containing a tools array")
 	require.NotContains(t, listRec.Body.String(), `"tools":null`,
 		"tools must never be null — issue #340")
+}
+
+// TestMCPProxy_ToolsList_NoWhitelistReturnsAllSyncedTools is the regression
+// guard for the second leg of issue #340: a user configures an MCP server,
+// runs sync (which never populates ToolWhitelist), then connects MCP
+// Inspector. Before the fix, an empty whitelist denied every tool and the
+// Inspector saw `{"tools":[]}` despite the DB containing many tool rows.
+// After the fix, an empty whitelist applies no whitelist filter and tools
+// flow through subject only to blacklists.
+func TestMCPProxy_ToolsList_NoWhitelistReturnsAllSyncedTools(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	// Clear the fixture-default whitelist to mirror a freshly synced server.
+	require.NoError(t, model.DB.Model(&model.MCPServer{}).
+		Where("id = ?", fx.server.Id).
+		Update("tool_whitelist", nil).Error)
+	reloadedServer, err := model.GetMCPServerByName(fx.server.Name)
+	require.NoError(t, err)
+	require.Empty(t, reloadedServer.ToolWhitelist,
+		"precondition: server must have empty whitelist to reproduce issue #340")
+	fx.server = reloadedServer
+
+	// Seed two more tools to mimic a real sync result. Combined with the
+	// fixture's seeded `echo` row, the registry now holds three tools.
+	for _, extra := range []*model.MCPTool{
+		{Id: 11, ServerId: fx.server.Id, Name: "search", DisplayName: "Search",
+			Description: "Search the web", InputSchema: `{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`, Status: 1},
+		{Id: 12, ServerId: fx.server.Id, Name: "fetch", DisplayName: "Fetch",
+			Description: "Fetch a URL", InputSchema: `{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}`, Status: 1},
+	} {
+		require.NoError(t, model.DB.Create(extra).Error)
+	}
+
+	recorder := invokeMCPProxy(t, fx, http.MethodPost, "req-no-whitelist",
+		`{"jsonrpc":"2.0","id":99,"method":"tools/list"}`)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	raw := recorder.Body.String()
+	require.NotContains(t, raw, `"tools":[]`,
+		"empty tools array means the empty-whitelist deny-all bug is back — issue #340")
+	require.NotContains(t, raw, `"tools":null`)
+
+	var resp struct {
+		Result struct {
+			Tools []mcp.ToolDescriptor `json:"tools"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+
+	names := make([]string, 0, len(resp.Result.Tools))
+	for _, tool := range resp.Result.Tools {
+		names = append(names, tool.Name)
+	}
+	require.ElementsMatch(t,
+		[]string{"fake-mcp.echo", "fake-mcp.search", "fake-mcp.fetch"},
+		names,
+		"all synced tools must be returned when whitelist is empty")
+}
+
+// TestMCPProxy_ToolsList_NoWhitelistStillRespectsBlacklists asserts the
+// empty-whitelist relaxation does not bypass the user MCPToolBlacklist —
+// privacy/policy filters must still apply.
+func TestMCPProxy_ToolsList_NoWhitelistStillRespectsBlacklists(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	require.NoError(t, model.DB.Model(&model.MCPServer{}).
+		Where("id = ?", fx.server.Id).
+		Update("tool_whitelist", nil).Error)
+	reloadedServer, err := model.GetMCPServerByName(fx.server.Name)
+	require.NoError(t, err)
+	fx.server = reloadedServer
+
+	require.NoError(t, model.DB.Create(&model.MCPTool{
+		Id: 21, ServerId: fx.server.Id, Name: "dangerous", DisplayName: "Dangerous",
+		Description: "Should be blocked", InputSchema: `{"type":"object"}`, Status: 1,
+	}).Error)
+
+	fx.user.MCPToolBlacklist = model.JSONStringSlice{"dangerous"}
+	require.NoError(t, model.DB.Save(fx.user).Error)
+	reloadedUser, err := model.GetUserById(fx.user.Id, true)
+	require.NoError(t, err)
+	fx.user = reloadedUser
+
+	recorder := invokeMCPProxy(t, fx, http.MethodPost, "req-blacklist-stillworks",
+		`{"jsonrpc":"2.0","id":100,"method":"tools/list"}`)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp struct {
+		Result struct {
+			Tools []mcp.ToolDescriptor `json:"tools"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+
+	names := make([]string, 0, len(resp.Result.Tools))
+	for _, tool := range resp.Result.Tools {
+		names = append(names, tool.Name)
+	}
+	require.Contains(t, names, "fake-mcp.echo")
+	require.NotContains(t, names, "fake-mcp.dangerous",
+		"user blacklist must still filter even when whitelist is empty")
 }

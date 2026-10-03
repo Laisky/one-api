@@ -36,3 +36,15 @@ func TestOCRModeString(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "ocr", String(OCR))
 }
+
+// TestGetByPathVoiceClone verifies voice-clone path detection across the
+// client-facing and Zhipu-compatible surfaces.
+func TestGetByPathVoiceClone(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, VoiceClone, GetByPath("/v1/voice/clones"), "expected VoiceClone for /v1/voice/clones")
+	require.Equal(t, VoiceClone, GetByPath("/v1/voice/clone"), "expected VoiceClone for /v1/voice/clone")
+	require.Equal(t, VoiceClone, GetByPath("/api/paas/v4/voice/clone"), "expected VoiceClone for /api/paas/v4/voice/clone")
+	require.Equal(t, VoiceClone, GetByPath("/api/paas/v4/voice_clone"), "expected VoiceClone for /api/paas/v4/voice_clone")
+	require.Equal(t, "voice_clone", String(VoiceClone), "expected voice_clone mode string")
+}

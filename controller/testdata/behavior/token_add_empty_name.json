@@ -1,0 +1,9 @@
+{
+  "case": "token/add_empty_name",
+  "site": "T4 AddToken (error)",
+  "status": 200,
+  "body": {
+    "message": "Token name is required",
+    "success": false
+  }
+}

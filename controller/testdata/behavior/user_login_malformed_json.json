@@ -1,0 +1,9 @@
+{
+  "case": "user/login_malformed_json",
+  "site": "U1 SetupLogin (error)",
+  "status": 200,
+  "body": {
+    "message": "invalid parameter",
+    "success": false
+  }
+}

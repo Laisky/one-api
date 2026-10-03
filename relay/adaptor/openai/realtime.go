@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -20,9 +21,95 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
+// realtimeSessionsUpstreamURL returns the upstream URL for the realtime sessions
+// (ephemeral token) surface. A per-endpoint "realtime" URL override reroutes the
+// request to the override's scheme+host; the /v1/realtime/sessions path is
+// protocol-fixed and always preserved so token minting follows the same host as
+// the realtime WebSocket connection.
+func realtimeSessionsUpstreamURL(m *rmeta.Meta) string {
+	base := m.BaseURL
+	if base == "" {
+		base = "https://api.openai.com"
+	}
+	if override := m.UpstreamEndpointURLOverride(); override != "" {
+		if ou, err := url.Parse(override); err == nil && ou.Host != "" {
+			base = ou.Scheme + "://" + ou.Host
+		}
+	}
+	return strings.TrimRight(base, "/") + "/v1/realtime/sessions"
+}
+
+// realtimeWebSocketUpstreamURL returns the upstream WebSocket URL for the realtime
+// connect surface (/v1/realtime). A per-endpoint "realtime" URL override fully
+// specifies the upstream host and path (its scheme is normalized to ws/wss); when
+// absent, the channel BaseURL is used with the canonical /v1/realtime path. The
+// mapped model name is applied as the `model` query parameter while preserving
+// other client query parameters.
+func realtimeWebSocketUpstreamURL(m *rmeta.Meta, clientRawQuery string) string {
+	base := m.BaseURL
+	if base == "" {
+		base = "https://api.openai.com" // fallback
+	}
+	overridden := false
+	if override := m.UpstreamEndpointURLOverride(); override != "" {
+		base = override
+		overridden = true
+	}
+
+	u, err := url.Parse(base)
+	if err != nil || u == nil {
+		u = &url.URL{Scheme: "wss", Host: "api.openai.com"}
+	}
+
+	u.Scheme = strings.Replace(u.Scheme, "http", "ws", 1) // http->ws, https->wss
+	switch u.Scheme {
+	case "", "http":
+		u.Scheme = "wss"
+	case "https":
+		u.Scheme = "wss"
+	}
+
+	// Without an override, always use the canonical realtime path. With an
+	// override, respect the path it carries, falling back to the canonical path
+	// when the override omits one.
+	if !overridden || u.Path == "" || u.Path == "/" {
+		u.Path = "/v1/realtime"
+	}
+
+	q, _ := url.ParseQuery(clientRawQuery)
+	switch {
+	case isRealtimeTranscriptionIntent(q):
+		// A transcription session selects its model inside
+		// `session.audio.input.transcription`, and the upstream rejects the
+		// handshake outright with "You must not provide a model parameter for
+		// transcription sessions" (verified 2026-09-18). The caller still has to
+		// name a model in its own query so one-api can route and bill it, so the
+		// routing model is dropped here rather than forwarded.
+		q.Del("model")
+	case m.ActualModelName != "":
+		q.Set("model", m.ActualModelName)
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// isRealtimeTranscriptionIntent reports whether a handshake opens a
+// transcription session rather than a conversation. Parameters: query is the
+// client's parsed query string. Returns: true for `intent=transcription`.
+func isRealtimeTranscriptionIntent(query url.Values) bool {
+	return strings.EqualFold(strings.TrimSpace(query.Get("intent")), "transcription")
+}
+
 // RealtimeSessionsHandler proxies a POST request to the upstream OpenAI
 // Realtime Sessions endpoint (/v1/realtime/sessions) which creates ephemeral
 // tokens for WebRTC browser clients.
+//
+// Upstream status: api.openai.com answered this path with 404 "Invalid URL" on
+// 2026-09-18; GA moved ephemeral tokens to POST /v1/realtime/client_secrets,
+// which this gateway does not route. That is not an oversight to fix casually:
+// an ephemeral token lets the client reach the provider directly, so the session
+// it opens cannot be metered or logged here. The path is kept for
+// OpenAI-compatible upstreams that still implement it.
 //
 // Security: the body's `model` field is enforced against `meta.ActualModelName`
 // before forwarding. If the client requests a model that does not match the
@@ -45,15 +132,11 @@ func RealtimeSessionsHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWit
 
 	body, bizErr := enforceRealtimeSessionsBodyModel(body, meta)
 	if bizErr != nil {
-		return bizErr, bizErr.Error.RawError
+		return bizErr, errors.WithStack(bizErr.Error.RawError)
 	}
 
-	// Build upstream URL
-	base := meta.BaseURL
-	if base == "" {
-		base = "https://api.openai.com"
-	}
-	upstreamURL := strings.TrimRight(base, "/") + "/v1/realtime/sessions"
+	// Build upstream URL (honoring any per-endpoint "realtime" override)
+	upstreamURL := realtimeSessionsUpstreamURL(meta)
 
 	// Create upstream request
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, upstreamURL, bytes.NewReader(body))
@@ -65,7 +148,11 @@ func RealtimeSessionsHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWit
 	}
 	req.Header.Set("Authorization", "Bearer "+meta.APIKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("OpenAI-Beta", "realtime=v1")
+	// No OpenAI-Beta header: the Realtime beta interface was removed upstream,
+	// and sending it selects the retired beta schema.
+	if beta := c.GetHeader("OpenAI-Beta"); beta != "" {
+		req.Header.Set("OpenAI-Beta", beta)
+	}
 
 	// Send request to upstream
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -125,7 +212,7 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	upgrader := websocket.Upgrader{
 		CheckOrigin:      func(r *http.Request) bool { return true },
 		HandshakeTimeout: 10 * time.Second,
-		Subprotocols:     negotiateRealtimeSubprotocols(c.Request),
+		Subprotocols:     NegotiateRealtimeSubprotocols(c.Request),
 	}
 
 	clientConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -138,46 +225,32 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	// Ensure close on exit
 	defer func() { _ = clientConn.Close() }()
 
-	// Build upstream URL
-	base := meta.BaseURL
-	if base == "" {
-		base = "https://api.openai.com" // fallback
-	}
-	// Preserve query but ensure model uses mapped ActualModelName
-	rawQuery := c.Request.URL.RawQuery
-	u, _ := url.Parse(base)
-
-	u.Scheme = strings.Replace(u.Scheme, "http", "ws", 1) // http->ws, https->wss
-	switch u.Scheme {
-	case "", "http":
-		u.Scheme = "wss"
-	case "https":
-		u.Scheme = "wss"
-	}
-
-	u.Path = "/v1/realtime"
-	// Override model query with mapped model if provided
-	q, _ := url.ParseQuery(rawQuery)
-	if meta.ActualModelName != "" {
-		q.Set("model", meta.ActualModelName)
-	}
-	u.RawQuery = q.Encode()
+	// Build upstream URL (honoring any per-endpoint "realtime" override).
+	// Preserves client query while forcing the mapped model name.
+	wsURL := realtimeWebSocketUpstreamURL(meta, c.Request.URL.RawQuery)
 
 	// Prepare headers and subprotocols
 	requestHeader := http.Header{}
-	if sp := c.GetHeader("Sec-WebSocket-Protocol"); sp != "" {
-		requestHeader.Set("Sec-WebSocket-Protocol", sp)
+	// Forward only the non-auth subprotocols. Browser clients cannot set headers
+	// on a WebSocket, so they carry their gateway key in the
+	// "openai-insecure-api-key.*" subprotocol. Relaying that upstream alongside
+	// the channel's own Authorization header makes OpenAI reject the handshake
+	// with "You must only send one of protocol api key and Authorization header".
+	if sp := NegotiateRealtimeSubprotocols(c.Request); len(sp) > 0 {
+		requestHeader.Set("Sec-WebSocket-Protocol", strings.Join(sp, ", "))
 	}
+	// Only mirror OpenAI-Beta when the client explicitly asked for it. The
+	// Realtime beta interface was removed on 2026-05-12, and OpenAI's GA
+	// migration guide says to drop the header. Defaulting it selects the beta
+	// event schema, which rejects GA fields such as `session.type` with
+	// "Unknown parameter: 'session.type'".
 	if beta := c.GetHeader("OpenAI-Beta"); beta != "" {
 		requestHeader.Set("OpenAI-Beta", beta)
-	} else {
-		// Default beta header required by OpenAI Realtime during beta period
-		requestHeader.Set("OpenAI-Beta", "realtime=v1")
 	}
 	requestHeader.Set("Authorization", "Bearer "+meta.APIKey)
 
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second, Proxy: http.ProxyFromEnvironment}
-	upstreamConn, _, derr := dialer.Dial(u.String(), requestHeader)
+	upstreamConn, _, derr := dialer.Dial(wsURL, requestHeader)
 	if derr != nil {
 		_ = clientConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream connect failed"))
 		return &rmodel.ErrorWithStatusCode{
@@ -187,12 +260,35 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	}
 	defer func() { _ = upstreamConn.Close() }()
 
-	// Bi-directional pump
+	return nil, meteredRealtimePump(clientConn, upstreamConn, lg, meta.ActualModelName, meta.OriginModelName, isRealtimeTranscriptionIntent(c.Request.URL.Query()))
+}
+
+// RealtimeBidirectionalPump relays frames between the client and upstream
+// realtime WebSocket connections until either direction closes, parsing token
+// usage from upstream `response.done` events. When guardClientModel is true,
+// client `session.update` frames that mutate `session.model` are rejected;
+// providers that select the model through session.update (e.g. Zhipu
+// GLM-Realtime) pass false.
+//
+// Parameters:
+//   - clientConn: the downstream connection upgraded from the client.
+//   - upstreamConn: the dialed upstream realtime connection.
+//   - guardClientModel: whether to enforce the OpenAI session-model guard.
+//   - lg: request-scoped logger for close diagnostics.
+//   - boundModel: mapped upstream model bound at the handshake; empty disables
+//     the guard, matching the legacy unresolved-binding path.
+//   - originModel: the user-facing alias the caller requested, if different.
+//
+// Returns: the accumulated usage parsed from upstream events, or nil when the
+// upstream never reported usage.
+func RealtimeBidirectionalPump(clientConn, upstreamConn *websocket.Conn, guardClientModel bool, lg glog.Logger, boundModel, originModel string) *rmodel.Usage {
 	errc := make(chan error, 2)
 	usage := &rmodel.Usage{}
 	countedResponseIDs := map[string]struct{}{}
 	go func() { errc <- copyWSUpstreamToClient(upstreamConn, clientConn, usage, countedResponseIDs) }()
-	go func() { errc <- copyRealtimeClientToUpstream(clientConn, upstreamConn) }()
+	go func() {
+		errc <- copyRealtimeClientToUpstream(clientConn, upstreamConn, guardClientModel, boundModel, originModel, false)
+	}()
 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
@@ -211,24 +307,28 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	if usage != nil && usage.TotalTokens == 0 {
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
-
-	return nil, usage
+	return usage
 }
 
 // copyRealtimeClientToUpstream forwards client frames to the upstream realtime
-// connection while rejecting `session.update` events that attempt to change
-// the session model. OpenAI's Realtime API itself rejects model changes, but
-// defense-in-depth keeps the proxy authoritative against non-conformant
-// upstreams and prevents the proxy from forwarding billing-ambiguous frames.
+// connection while optionally rejecting `session.update` events that attempt
+// to change the session model. OpenAI's Realtime API itself rejects model
+// changes, but defense-in-depth keeps the proxy authoritative against
+// non-conformant upstreams and prevents the proxy from forwarding
+// billing-ambiguous frames.
 //
 // Parameters:
 //   - src: client WebSocket connection (reader).
 //   - dst: upstream realtime WebSocket connection (writer).
+//   - guardClientModel: when true, enforce the model binding on JSON frames.
+//   - transcription: the immutable transcription intent from the handshake.
+//   - boundModel: mapped upstream model bound at the handshake.
+//   - originModel: the user-facing alias the caller requested, if different.
 //
 // Returns:
 //   - error: nil on clean close; ErrModelSwitchDenied (wrapped) when a client
 //     attempts to mutate `session.model`; other errors propagate I/O failures.
-func copyRealtimeClientToUpstream(src, dst *websocket.Conn) error {
+func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel bool, boundModel, originModel string, transcription bool) error {
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {
@@ -244,8 +344,9 @@ func copyRealtimeClientToUpstream(src, dst *websocket.Conn) error {
 			return errors.WithStack(err)
 		}
 
-		if mt == websocket.TextMessage {
-			if _, guardErr := enforceRealtimeSessionUpdate(msg); guardErr != nil {
+		if guardClientModel && (mt == websocket.TextMessage || mt == websocket.BinaryMessage) {
+			forward, guardErr := enforceRealtimeSessionUpdate(msg, boundModel, originModel, transcription)
+			if guardErr != nil {
 				errEvent := buildModelSwitchErrorEvent(guardErr.Error())
 				_ = src.WriteMessage(websocket.TextMessage, errEvent)
 				_ = src.WriteControl(
@@ -255,6 +356,7 @@ func copyRealtimeClientToUpstream(src, dst *websocket.Conn) error {
 				)
 				return errors.WithStack(guardErr)
 			}
+			msg = forward
 		}
 
 		if werr := dst.WriteMessage(mt, msg); werr != nil {
@@ -312,11 +414,11 @@ func copyWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage, count
 	}
 }
 
-// negotiateRealtimeSubprotocols extracts subprotocols from the client request
+// NegotiateRealtimeSubprotocols extracts subprotocols from the client request
 // that should be echoed back during the WebSocket handshake. Auth-related
 // subprotocols (openai-insecure-api-key.*) are filtered out so they are not
 // echoed to the client.
-func negotiateRealtimeSubprotocols(r *http.Request) []string {
+func NegotiateRealtimeSubprotocols(r *http.Request) []string {
 	sp := r.Header.Get("Sec-WebSocket-Protocol")
 	if sp == "" {
 		return nil

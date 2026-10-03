@@ -15,15 +15,12 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
-	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/image"
-	"github.com/Laisky/one-api/common/random"
 	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
-	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
-	"github.com/Laisky/one-api/relay/constant"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -252,7 +249,17 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 		if textRequest.ResponseFormat.JsonSchema != nil {
 			// Clean the schema to remove unsupported properties for Gemini
 			cleanedSchema := cleanJsonSchemaForGemini(textRequest.ResponseFormat.JsonSchema.Schema)
-			geminiRequest.GenerationConfig.ResponseSchema = cleanedSchema
+			// ResponseSchema is an `any` field, so omitempty will not drop an empty
+			// map: cleaning a schema whose top level holds only unsupported keys
+			// (a $ref/$defs wrapper, which pydantic and zod emit constantly) yields
+			// an empty map, and `"responseSchema": {}` alongside a JSON mime type is
+			// rejected by Gemini. Send the mime type without a schema instead.
+			if schemaMap, ok := cleanedSchema.(map[string]any); ok && len(schemaMap) == 0 {
+				cleanedSchema = nil
+			}
+			if cleanedSchema != nil {
+				geminiRequest.GenerationConfig.ResponseSchema = cleanedSchema
+			}
 			geminiRequest.GenerationConfig.ResponseMimeType = mimeTypeMap["json_object"]
 		}
 	}
@@ -269,9 +276,18 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 	// FIX(https://github.com/Laisky/one-api/issues/60):
 	// Gemini's function call supports fewer parameters than OpenAI's,
 	// so a conversion is needed here to keep only the parameters supported by Gemini.
-	if textRequest.Tools != nil {
+	// len() rather than != nil: an explicitly empty "tools": [] is non-nil, and it
+	// used to produce "function_declarations": [], which Gemini rejects with 400
+	// INVALID_ARGUMENT. FunctionDeclarations is an `any` field, so omitempty does
+	// not drop the empty slice for us.
+	if len(textRequest.Tools) > 0 {
 		convertedGeminiFunctions := make([]model.Function, 0, len(textRequest.Tools))
 		for _, tool := range textRequest.Tools {
+			// Tool.Function is a pointer filled from the request body, so a tool entry
+			// without a "function" object must be skipped rather than dereferenced.
+			if tool.Function == nil {
+				continue
+			}
 			// Use the helper function to recursively clean function parameters
 			cleanedParams := cleanFunctionParameters(tool.Function.Parameters)
 			// Type assert to map[string]any
@@ -294,12 +310,14 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 				Required:    tool.Function.Required,
 			})
 		}
-		geminiRequest.Tools = []ChatTools{
-			{
-				FunctionDeclarations: convertedGeminiFunctions,
-			},
+		if len(convertedGeminiFunctions) > 0 {
+			geminiRequest.Tools = []ChatTools{
+				{
+					FunctionDeclarations: convertedGeminiFunctions,
+				},
+			}
 		}
-	} else if textRequest.Functions != nil {
+	} else if len(textRequest.Functions) > 0 {
 		for _, function := range textRequest.Functions {
 			// Use the helper function to recursively clean function parameters
 			cleanedParams := cleanFunctionParameters(function.Parameters)
@@ -355,16 +373,22 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 		// Handle OpenAI tool calls - convert them to Gemini function calls
 		if len(message.ToolCalls) > 0 {
 			for _, toolCall := range message.ToolCalls {
-				// Parse the arguments from JSON string to interface{}
+				// Parse the arguments from JSON string to interface{}.
+				// ArgumentsJSON keeps a client-supplied object, a missing `function`
+				// or absent arguments from panicking here.
 				var args any
-				if err := json.Unmarshal([]byte(toolCall.Function.Arguments.(string)), &args); err != nil {
+				rawArguments, argErr := toolCall.Function.ArgumentsJSON()
+				if argErr != nil {
+					rawArguments = "{}"
+				}
+				if err := json.Unmarshal([]byte(rawArguments), &args); err != nil {
 					// If parsing fails, use the raw string
-					args = toolCall.Function.Arguments
+					args = rawArguments
 				}
 
 				parts = append(parts, Part{
 					FunctionCall: &FunctionCall{
-						FunctionName: toolCall.Function.Name,
+						FunctionName: toolCall.FunctionName(),
 						Arguments:    args,
 					},
 				})
@@ -513,376 +537,14 @@ func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) (*BatchEmbeddin
 	}, nil
 }
 
-type ChatResponse struct {
-	Candidates     []ChatCandidate    `json:"candidates"`
-	PromptFeedback ChatPromptFeedback `json:"promptFeedback"`
-	UsageMetadata  *UsageMetadata     `json:"usageMetadata,omitempty"`
-	ModelVersion   string             `json:"modelVersion,omitempty"`
-	ResponseId     string             `json:"responseId,omitempty"`
-}
-
-func (g *ChatResponse) GetResponseText() string {
-	if g == nil {
-		return ""
-	}
-	if len(g.Candidates) > 0 && len(g.Candidates[0].Content.Parts) > 0 {
-		return g.Candidates[0].Content.Parts[0].Text
-	}
-	return ""
-}
-
-type ChatCandidate struct {
-	Content       ChatContent        `json:"content"`
-	FinishReason  string             `json:"finishReason"`
-	Index         int64              `json:"index"`
-	SafetyRatings []ChatSafetyRating `json:"safetyRatings"`
-}
-
-type ChatSafetyRating struct {
-	Category    string `json:"category"`
-	Probability string `json:"probability"`
-}
-
-type ChatPromptFeedback struct {
-	SafetyRatings []ChatSafetyRating `json:"safetyRatings"`
-}
-
-// getToolCalls extracts function call tool information from a Gemini chat candidate.
-// It processes all parts that contain function calls and returns them as OpenAI-compatible tool calls.
-// Returns an empty slice if no function calls are present or if the candidate has no parts.
-func getToolCalls(c *gin.Context, candidate *ChatCandidate) []model.Tool {
-	lg := gmw.GetLogger(c)
-	var toolCalls []model.Tool
-
-	// Guard against empty Parts slice to prevent index out of range panic
-	if len(candidate.Content.Parts) == 0 {
-		lg.Debug("getToolCalls: candidate has no parts, returning empty tool calls")
-		return toolCalls
-	}
-
-	// Process all parts that contain function calls, not just the first one
-	for _, part := range candidate.Content.Parts {
-		if part.FunctionCall == nil {
-			continue
-		}
-		argsBytes, err := json.Marshal(part.FunctionCall.Arguments)
-		if err != nil {
-			lg.Error("getToolCalls: failed to marshal function call arguments",
-				zap.String("function_name", part.FunctionCall.FunctionName),
-				zap.Error(err))
-			continue
-		}
-		toolCall := model.Tool{
-			Id:   fmt.Sprintf("call_%s", random.GetUUID()),
-			Type: "function",
-			Function: &model.Function{
-				Arguments: string(argsBytes),
-				Name:      part.FunctionCall.FunctionName,
-			},
-		}
-		toolCalls = append(toolCalls, toolCall)
-	}
-	return toolCalls
-}
-
-// getStreamingToolCalls creates tool calls for streaming responses with Index field set.
-// It processes all parts that contain function calls and returns them with proper indexing
-// for stream delta accumulation.
-func getStreamingToolCalls(c *gin.Context, candidate *ChatCandidate) []model.Tool {
-	lg := gmw.GetLogger(c)
-	var toolCalls []model.Tool
-
-	// Process all parts in case there are multiple function calls
-	for partIndex, part := range candidate.Content.Parts {
-		if part.FunctionCall == nil {
-			continue
-		}
-		argsBytes, err := json.Marshal(part.FunctionCall.Arguments)
-		if err != nil {
-			lg.Error("getStreamingToolCalls: failed to marshal function call arguments",
-				zap.String("function_name", part.FunctionCall.FunctionName),
-				zap.Error(err))
-			continue
-		}
-		// Set index for streaming tool calls - use the part index to ensure proper ordering
-		// This handles the case where Gemini might support multiple parallel tool calls in the future
-		index := partIndex
-		toolCall := model.Tool{
-			Id:   fmt.Sprintf("call_%s", random.GetUUID()),
-			Type: "function",
-			Function: &model.Function{
-				Arguments: string(argsBytes),
-				Name:      part.FunctionCall.FunctionName,
-			},
-			Index: &index, // Set index for streaming delta accumulation
-		}
-		toolCalls = append(toolCalls, toolCall)
-	}
-	return toolCalls
-}
-
-func responseGeminiChat2OpenAI(c *gin.Context, response *ChatResponse) *openai.TextResponse {
-	fullTextResponse := openai.TextResponse{
-		Id:      tracing.GenerateChatCompletionID(c),
-		Object:  "chat.completion",
-		Created: helper.GetTimestamp(),
-		Choices: make([]openai.TextResponseChoice, 0, len(response.Candidates)),
-	}
-	for i, candidate := range response.Candidates {
-		choice := openai.TextResponseChoice{
-			Index: i,
-			Message: model.Message{
-				Role: "assistant",
-			},
-			FinishReason: constant.StopFinishReason,
-		}
-
-		toolCalls := getToolCalls(c, &candidate)
-		if len(toolCalls) > 0 {
-			choice.Message.ToolCalls = toolCalls
-		}
-
-		if len(candidate.Content.Parts) > 0 {
-			var textParts []string
-			var structured []model.MessageContent
-
-			for _, part := range candidate.Content.Parts {
-				if part.FunctionCall != nil {
-					continue
-				}
-
-				if part.Text != "" {
-					textParts = append(textParts, part.Text)
-					structured = append(structured, model.MessageContent{
-						Type: model.ContentTypeText,
-						Text: &part.Text,
-					})
-				}
-
-				if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" &&
-					isGeminiImageMimeType(part.InlineData.MimeType) {
-					imageURL := &model.ImageURL{
-						Url: fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data),
-					}
-					structured = append(structured, model.MessageContent{
-						Type:     model.ContentTypeImageURL,
-						ImageURL: imageURL,
-					})
-				}
-				if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
-					imageURL := &model.ImageURL{
-						Url: part.FileData.FileURI,
-					}
-					structured = append(structured, model.MessageContent{
-						Type:     model.ContentTypeImageURL,
-						ImageURL: imageURL,
-					})
-				}
-			}
-
-			joined := strings.Join(textParts, "\n")
-			if len(structured) > 1 || (len(structured) == 1 && structured[0].Type != model.ContentTypeText) {
-				choice.Message.Content = structured
-			} else if joined != "" {
-				choice.Message.Content = joined
-			} else if len(toolCalls) == 0 {
-				choice.Message.Content = ""
-			}
-		} else {
-			choice.Message.Content = ""
-			choice.FinishReason = candidate.FinishReason
-		}
-
-		fullTextResponse.Choices = append(fullTextResponse.Choices, choice)
-	}
-	return &fullTextResponse
-}
-
-func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatResponse) *openai.ChatCompletionsStreamResponse {
-	var choice openai.ChatCompletionsStreamResponseChoice
-	choice.Delta.Role = "assistant"
-
-	// Check if we have any candidates
-	if len(geminiResponse.Candidates) == 0 {
-		return nil
-	}
-
-	// Get the first candidate
-	candidate := geminiResponse.Candidates[0]
-
-	// Check if there are parts in the content
-	if len(candidate.Content.Parts) == 0 {
-		return nil
-	}
-
-	// Handle different content types in the parts
-	for _, part := range candidate.Content.Parts {
-		// Handle text content
-		if part.Text != "" {
-			// Store as string for simple text responses
-			textContent := part.Text
-			choice.Delta.Content = textContent
-		}
-
-		// Handle image content
-		imageURL := ""
-		if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" &&
-			isGeminiImageMimeType(part.InlineData.MimeType) {
-			imageURL = fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data)
-		} else if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
-			imageURL = part.FileData.FileURI
-		}
-		if imageURL != "" {
-			// If we already have text content, create a mixed content response
-			if strContent, ok := choice.Delta.Content.(string); ok && strContent != "" {
-				// Convert the existing text content and add the image
-				messageContents := []model.MessageContent{
-					{
-						Type: model.ContentTypeText,
-						Text: &strContent,
-					},
-					{
-						Type: model.ContentTypeImageURL,
-						ImageURL: &model.ImageURL{
-							Url: imageURL,
-						},
-					},
-				}
-				choice.Delta.Content = messageContents
-			} else {
-				// Only have image content
-				choice.Delta.Content = []model.MessageContent{
-					{
-						Type: model.ContentTypeImageURL,
-						ImageURL: &model.ImageURL{
-							Url: imageURL,
-						},
-					},
-				}
-			}
-		}
-
-		// Handle function calls (if present)
-		if part.FunctionCall != nil {
-			choice.Delta.ToolCalls = getStreamingToolCalls(c, &candidate)
-		}
-	}
-
-	// Create response
-	var response openai.ChatCompletionsStreamResponse
-	response.Id = tracing.GenerateChatCompletionID(c)
-	response.Created = helper.GetTimestamp()
-	response.Object = "chat.completion.chunk"
-	response.Model = "gemini"
-	response.Choices = []openai.ChatCompletionsStreamResponseChoice{choice}
-
-	return &response
-}
-
-// embeddingResponseGemini2OpenAI converts Gemini embedding results into OpenAI format.
-// Parameters: response is the parsed Gemini embedding response, promptTokens is the locally counted input token total, and details is the optional modality breakdown from preflight countTokens.
-// Returns: an OpenAI-compatible embedding response populated with a billing-safe usage fallback.
-func embeddingResponseGemini2OpenAI(response *EmbeddingResponse, promptTokens int, details *model.UsagePromptTokensDetails) *openai.EmbeddingResponse {
-	openAIEmbeddingResponse := openai.EmbeddingResponse{
-		Object: "list",
-		Data:   make([]openai.EmbeddingResponseItem, 0, len(response.Embeddings)),
-		Model:  "gemini-embedding",
-		Usage: model.Usage{
-			PromptTokens:        promptTokens,
-			TotalTokens:         promptTokens,
-			PromptTokensDetails: details,
-		},
-	}
-	for _, item := range response.Embeddings {
-		openAIEmbeddingResponse.Data = append(openAIEmbeddingResponse.Data, openai.EmbeddingResponseItem{
-			Object:    `embedding`,
-			Index:     0,
-			Embedding: item.Values,
-		})
-	}
-	return &openAIEmbeddingResponse
-}
-
-// embeddingPromptTokensDetailsFromContext returns preflight embedding modality details stored in the request context.
-// Parameters: c is the current request context.
-// Returns: the stored prompt token details or nil when no preflight details were captured.
-func embeddingPromptTokensDetailsFromContext(c *gin.Context) *model.UsagePromptTokensDetails {
-	if c == nil {
-		return nil
-	}
-	raw, exists := c.Get(ctxkey.EmbeddingPromptTokensDetails)
-	if !exists {
-		return nil
-	}
-
-	details, ok := raw.(*model.UsagePromptTokensDetails)
-	if !ok {
-		return nil
-	}
-	return details
-}
-
-// geminiOutputImageCounts aggregates image counts for Gemini output parts.
-type geminiOutputImageCounts struct {
-	Total  int
-	Inline int
-	File   int
-}
-
-// isGeminiImageMimeType reports whether the MIME type should be treated as an image.
-// Parameters: mimeType is the MIME type string from Gemini output.
-// Returns: true when the MIME type is empty or starts with "image/".
-func isGeminiImageMimeType(mimeType string) bool {
-	if mimeType == "" {
-		return true
-	}
-	return strings.HasPrefix(strings.ToLower(mimeType), "image/")
-}
-
-// countGeminiOutputImages counts image parts (inline data and file references) in a Gemini chat response.
-// Parameters: response is the parsed Gemini ChatResponse payload.
-// Returns: aggregated image counts by representation and total.
-func countGeminiOutputImages(response *ChatResponse) geminiOutputImageCounts {
-	if response == nil {
-		return geminiOutputImageCounts{}
-	}
-	var counts geminiOutputImageCounts
-	for _, candidate := range response.Candidates {
-		for _, part := range candidate.Content.Parts {
-			if part.InlineData != nil && part.InlineData.Data != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
-				counts.Inline++
-				counts.Total++
-			}
-			if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
-				counts.File++
-				counts.Total++
-			}
-		}
-	}
-	return counts
-}
-
-// recordGeminiOutputImageCount accumulates output image counts in the Gin context.
-// Parameters: c is the Gin context for the request; count is the number of images to add.
-// Returns: nothing; the aggregated count is stored under ctxkey.OutputImageCount.
-func recordGeminiOutputImageCount(c *gin.Context, count int) {
-	if c == nil || count <= 0 {
-		return
-	}
-	if raw, ok := c.Get(ctxkey.OutputImageCount); ok {
-		if existing, ok := raw.(int); ok {
-			c.Set(ctxkey.OutputImageCount, existing+count)
-			return
-		}
-	}
-	c.Set(ctxkey.OutputImageCount, count)
-}
-
 // StreamHandler processes streaming responses from the Gemini API and converts them to OpenAI-compatible
 // Server-Sent Events (SSE) format. It reads the response body line by line, unmarshals each chunk,
 // converts it to OpenAI format, and streams it to the client.
-// Returns an error if the response processing fails, and the accumulated response text on success.
-func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, string) {
+//
+// Returns an error if the response processing fails, the accumulated response text, and the
+// authoritative usage captured from the upstream usageMetadata. The returned usage is nil when no
+// usageMetadata was present in the stream, signalling the caller to fall back to a local estimate.
+func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, string, *model.Usage) {
 	lg := gmw.GetLogger(c)
 	responseText := ""
 	outputImageCount := 0
@@ -896,6 +558,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)
 	defer hbr.Close()
 	var streamErr error
+
+	// usageMetadata captures the authoritative upstream token accounting. Gemini reports
+	// cumulative running totals (typically in the final chunk), so we overwrite with the
+	// latest non-empty snapshot rather than summing, to avoid double-counting.
+	var usageMetadata *UsageMetadata
 
 	for {
 		line, err := hbr.Next()
@@ -928,12 +595,21 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		data = strings.TrimPrefix(data, "data: ")
 		data = strings.TrimSuffix(data, "\"")
 
+		if data == "[DONE]" {
+			break
+		}
+
 		var geminiResponse ChatResponse
 		err = json.Unmarshal([]byte(data), &geminiResponse)
 		if err != nil {
 			lg.Error("error unmarshalling stream response",
 				zap.Error(errors.Wrap(err, "unmarshal stream")))
 			continue
+		}
+
+		// Capture the latest non-empty usageMetadata (cumulative totals, not deltas).
+		if geminiResponse.UsageMetadata != nil && geminiResponse.UsageMetadata.TotalTokenCount > 0 {
+			usageMetadata = geminiResponse.UsageMetadata
 		}
 
 		chunkCounts := countGeminiOutputImages(&geminiResponse)
@@ -948,7 +624,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 		responseText += response.Choices[0].Delta.StringContent()
 
-		err = render.ObjectData(c, response)
+		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
 		if err != nil {
 			lg.Error("error rendering stream",
 				zap.Error(errors.Wrap(err, "render stream")))
@@ -969,14 +645,16 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		)
 	}
 
-	render.Done(c)
+	usage := geminiUsageMetadataToOpenAIUsage(usageMetadata)
+
+	openai_compatible.FinalizeStreamWithBridge(c, usage)
 
 	err := resp.Body.Close()
 	if err != nil {
-		return openai.ErrorWrapper(errors.Wrap(err, "close_response_body_failed"), "close_response_body_failed", http.StatusInternalServerError), ""
+		return openai.ErrorWrapper(errors.Wrap(err, "close_response_body_failed"), "close_response_body_failed", http.StatusInternalServerError), "", nil
 	}
 
-	return nil, responseText
+	return nil, responseText, usage
 }
 
 // Handler processes non-streaming responses from the Gemini API and converts them to OpenAI-compatible format.
@@ -1049,13 +727,10 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	var usage model.Usage
 	if geminiResponse.UsageMetadata != nil &&
 		geminiResponse.UsageMetadata.TotalTokenCount > 0 {
-		// Use Gemini's provided token counts
-		usage = model.Usage{
-			PromptTokens: geminiResponse.UsageMetadata.PromptTokenCount,
-			CompletionTokens: geminiResponse.UsageMetadata.CandidatesTokenCount +
-				geminiResponse.UsageMetadata.ThoughtsTokenCount,
-			TotalTokens: geminiResponse.UsageMetadata.TotalTokenCount,
-		}
+		// Use Gemini's provided token counts. The helper keeps PromptTokens at the full
+		// promptTokenCount (which includes cached tokens) while surfacing the cached portion
+		// via PromptTokensDetails so it is billed at the discounted CachedInputRatio.
+		usage = *geminiUsageMetadataToOpenAIUsage(geminiResponse.UsageMetadata)
 	} else {
 		// Fall back to manual calculation if usageMetadata is unavailable or zero
 		completionTokens := openai.CountTokenText(geminiResponse.GetResponseText(), modelName)

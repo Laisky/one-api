@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -84,9 +83,7 @@ func getLarkUserInfoByCode(code string) (*LarkUser, error) {
 func LarkOAuth(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	session := sessions.Default(c)
-	state := c.Query("state")
-	if state == "" || session.Get("oauth_state") == nil || state != session.Get("oauth_state").(string) {
-		helper.RespondErrorWithStatus(c, http.StatusForbidden, errors.New("state is empty or not same"))
+	if !validateOAuthState(c, "lark") {
 		return
 	}
 	username := session.Get("username")
@@ -115,7 +112,7 @@ func LarkOAuth(c *gin.Context) {
 			if len(parts) > 1 {
 				user.Username = parts[0]
 			} else {
-				user.Username = "lark_" + strconv.Itoa(model.GetMaxUserId()+1)
+				user.Username = defaultOAuthUsername("lark")
 			}
 			if larkUser.Name != "" {
 				user.DisplayName = larkUser.Name
@@ -126,6 +123,10 @@ func LarkOAuth(c *gin.Context) {
 			user.Status = model.UserStatusEnabled
 
 			if err := user.Insert(ctx, 0); err != nil {
+				if controller.IsUsernameAlreadyTakenError(err) {
+					controller.RespondUsernameAlreadyExists(c)
+					return
+				}
 				helper.RespondError(c, err)
 				return
 			}

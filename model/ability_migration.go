@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -162,11 +163,13 @@ func normalizeAbilitySuspendUntilValues() error {
 	for _, row := range rows {
 		parsed, ok := parseLegacySuspendUntil(row.Raw)
 		if !ok {
+			// Startup migration: only the ability row is in scope, so the channel
+			// reference is resolved explicitly (snapshot first, then one narrow SELECT).
 			logger.Logger.Warn("unable to parse legacy suspend_until value, resetting to NULL",
-				zap.String("group", row.Group),
-				zap.String("model", row.Model),
-				zap.Int("channel_id", row.ChannelID),
-				zap.ByteString("raw", row.Raw))
+				append(LookupChannelRef(context.Background(), row.ChannelID).Zap(),
+					zap.String("group", row.Group),
+					zap.String("model", row.Model),
+					zap.ByteString("raw", row.Raw))...)
 			if err := DB.Exec(fmt.Sprintf("UPDATE abilities SET suspend_until = NULL WHERE %s = ? AND model = ? AND channel_id = ?", groupCol), row.Group, row.Model, row.ChannelID).Error; err != nil {
 				return errors.Wrap(err, "clear invalid suspend_until value")
 			}
