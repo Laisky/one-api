@@ -93,8 +93,12 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 	}
 
 	requestHeader := http.Header{}
-	if sp := c.GetHeader("Sec-WebSocket-Protocol"); sp != "" {
-		requestHeader.Set("Sec-WebSocket-Protocol", sp)
+	// Drop the client's "openai-insecure-api-key.*" subprotocol before dialing.
+	// Sending it together with the channel's Authorization header makes OpenAI
+	// reject the handshake with "You must only send one of protocol api key and
+	// Authorization header".
+	if sp := NegotiateRealtimeSubprotocols(c.Request); len(sp) > 0 {
+		requestHeader.Set("Sec-WebSocket-Protocol", strings.Join(sp, ", "))
 	}
 	requestHeader.Set("Authorization", "Bearer "+meta.APIKey)
 	requestHeader.Set("OpenAI-Beta", "responses-api=v1")

@@ -4,6 +4,8 @@ import "strings"
 
 func GetByPath(path string) int {
 	switch {
+	case path == "/v1/systemone":
+		return SystemOne
 	case strings.HasPrefix(path, "/v1/realtime"):
 		return Realtime
 	case strings.HasPrefix(path, "/v1/oneapi/proxy"):

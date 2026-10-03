@@ -57,7 +57,7 @@ func (b *boundedBody) Read(p []byte) (int, error) {
 // Return values:
 //   - error: the underlying close error.
 func (b *boundedBody) Close() error {
-	return b.reader.Close()
+	return errors.WithStack(b.reader.Close())
 }
 
 // newBoundedBody wraps body with the configured cap. It returns body unchanged

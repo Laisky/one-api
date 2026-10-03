@@ -27,6 +27,7 @@ var (
 	}
 )
 
+// cloneModelConfig returns independent mutable slices and nested pricing values for a catalog entry.
 func cloneModelConfig(config adaptor.ModelConfig) adaptor.ModelConfig {
 	cloned := config
 	cloned.Tiers = slices.Clone(config.Tiers)
@@ -48,7 +49,20 @@ func cloneModelConfig(config adaptor.ModelConfig) adaptor.ModelConfig {
 	return cloned
 }
 
+// applyOpenAIModelCatalog202609 applies verified catalog corrections and returns the updated map.
 func applyOpenAIModelCatalog202609(modelRatios map[string]adaptor.ModelConfig) map[string]adaptor.ModelConfig {
+	// GPT-5.2 supports canonical none (also its default); a legacy minimal-only
+	// catalog made normalization silently discard supported sampling parameters.
+	// Do not broaden this to GPT-5, Pro or Codex models with different contracts.
+	// Verified 2026-09-24: https://developers.openai.com/api/docs/models/gpt-5.2
+	for _, name := range []string{"gpt-5.2", "gpt-5.2-2025-12-11"} {
+		if config, ok := modelRatios[name]; ok {
+			config.SupportedReasoningEfforts = []string{"none", "low", "medium", "high", "xhigh"}
+			config.DefaultReasoningEffort = "none"
+			modelRatios[name] = config
+		}
+	}
+
 	sol := adaptor.ModelConfig{
 		Ratio:                       4.0 * ratio.MilliTokensUsd,
 		CompletionRatio:             20.0 / 4.0,
@@ -108,7 +122,10 @@ func applyOpenAIModelCatalog202609(modelRatios map[string]adaptor.ModelConfig) m
 		},
 		InputModalities:  []string{"audio"},
 		OutputModalities: []string{"text"},
-		Description:      "GPT Transcribe: speech-to-text model for file and Realtime transcription.",
+		// response_format is limited to json/text on /v1/audio/transcriptions; srt, vtt and
+		// verbose_json are whisper-1 only. Upstream answers 400 unsupported_value otherwise.
+		// Source: https://developers.openai.com/api/docs/models/gpt-transcribe
+		Description: "GPT Transcribe: speech-to-text model for file and Realtime transcription; response_format json or text only (use whisper-1 for srt/vtt/verbose_json).",
 	}
 
 	modelRatios["gpt-live-transcribe"] = adaptor.ModelConfig{

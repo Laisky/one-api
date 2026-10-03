@@ -1,6 +1,9 @@
 package anthropic
 
-import "github.com/Laisky/one-api/relay/model"
+import (
+	"encoding/json"
+	"github.com/Laisky/one-api/relay/model"
+)
 
 // https://docs.anthropic.com/claude/reference/messages_post
 
@@ -36,15 +39,17 @@ type Message struct {
 }
 
 type Tool struct {
+	Strict      *bool       `json:"strict,omitempty"`
 	Name        string      `json:"name"`
 	Description string      `json:"description,omitempty"`
 	InputSchema InputSchema `json:"input_schema"`
 }
 
 type InputSchema struct {
-	Type       string `json:"type"`
-	Properties any    `json:"properties,omitempty"`
-	Required   any    `json:"required,omitempty"`
+	ExtraFields map[string]json.RawMessage `json:"-"`
+	Type        string                     `json:"type"`
+	Properties  any                        `json:"properties,omitempty"`
+	Required    any                        `json:"required,omitempty"`
 }
 
 // Request is anthropic's request body
@@ -62,6 +67,7 @@ type Request struct {
 	ToolChoice    any       `json:"tool_choice,omitempty"`
 	//Metadata    `json:"metadata,omitempty"`
 	Thinking         *model.Thinking `json:"thinking,omitempty"`
+	OutputConfig     json.RawMessage `json:"output_config,omitempty"`
 	AnthropicVersion string          `json:"anthropic_version,omitempty"`
 }
 

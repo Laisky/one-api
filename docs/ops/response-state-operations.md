@@ -2,7 +2,7 @@
 
 - Area: relay routing, Responses API, shared state storage (Redis)
 - Audience: platform operators running one-api in production
-- Design reference: [`20260719_stateful-responses-format-conversion.md`](../proposals/20260719_stateful-responses-format-conversion.md)
+- Design reference: [`20260719_stateful-responses-format-conversion.md`](../proposals/archive/20260719_stateful-responses-format-conversion.md)
 - Implements: task **ST-015** (operations rollout, dashboards, limits, runbooks, rollback). Covers acceptance rows O01-O10, PERF01-PERF06, S12, SEC01-SEC08, L06-L10.
 
 This runbook is operator-facing. It does not describe internal code paths; it

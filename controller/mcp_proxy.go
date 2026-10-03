@@ -41,7 +41,7 @@ type mcpCallParams struct {
 
 const (
 	mcpServerName    = "one-api-mcp-proxy"
-	mcpServerVersion = "1.1.0"
+	mcpServerVersion = mcp.ImplementationVersion
 )
 
 const (
@@ -184,15 +184,8 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 	if err != nil {
 		return nil, errors.Wrap(err, "get user from context")
 	}
-	if err := validateMCPToolName(params.Name); err != nil {
-		return nil, errors.Wrap(err, "validate mcp tool name")
-	}
 
-	servers, err := model.ListConfiguredMCPServersForToolResolution()
-	if err != nil {
-		return nil, errors.Wrap(err, "list configured mcp servers")
-	}
-	serverLabel, toolName, err := resolveQualifiedToolName(params.Name, servers)
+	serverLabel, toolName, err := resolveQualifiedToolName(c.Request.Context(), params.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve qualified mcp tool name")
 	}
@@ -206,9 +199,9 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		params.Arguments = map[string]any{}
 	}
 
-	servers, serverByID, err := loadMCPCallServers(serverLabel, servers)
+	servers, serverByID, err := loadMCPCallServers(serverLabel)
 	if err != nil {
-		return nil, errors.Wrap(err, "select mcp call servers")
+		return nil, err
 	}
 	toolsByServer, err := loadMCPToolsByServer(servers)
 	if err != nil {
@@ -272,35 +265,32 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 //
 // Parameters:
 //   - serverLabel: an optional configured MCP server name.
-//   - servers: the finite configured-server snapshot used for in-memory selection.
 //
 // Return values:
 //   - []*model.MCPServer: candidate servers in repository-defined order.
 //   - map[int]*model.MCPServer: candidate servers indexed by internal id.
 //   - error: a wrapped server lookup error.
-func loadMCPCallServers(serverLabel string, servers []*model.MCPServer) ([]*model.MCPServer, map[int]*model.MCPServer, error) {
+func loadMCPCallServers(serverLabel string) ([]*model.MCPServer, map[int]*model.MCPServer, error) {
 	serverByID := make(map[int]*model.MCPServer)
 	if serverLabel != "" {
-		for _, server := range servers {
-			if server != nil && strings.TrimSpace(server.Name) == serverLabel {
-				serverByID[server.Id] = server
-				return []*model.MCPServer{server}, serverByID, nil
-			}
+		server, err := model.GetMCPServerByName(serverLabel)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "get mcp server by name %q", serverLabel)
 		}
-		return nil, nil, errors.Errorf("get configured mcp server by name %q: server not found", serverLabel)
+		serverByID[server.Id] = server
+		return []*model.MCPServer{server}, serverByID, nil
+	}
+
+	servers, err := model.ListEnabledMCPServers()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "list enabled mcp servers")
 	}
 	for _, server := range servers {
-		if server != nil && server.Status == model.MCPServerStatusEnabled {
+		if server != nil {
 			serverByID[server.Id] = server
 		}
 	}
-	enabledServers := make([]*model.MCPServer, 0, len(serverByID))
-	for _, server := range servers {
-		if server != nil && server.Status == model.MCPServerStatusEnabled {
-			enabledServers = append(enabledServers, server)
-		}
-	}
-	return enabledServers, serverByID, nil
+	return servers, serverByID, nil
 }
 
 // loadMCPToolsByServer loads synchronized tool rows for each candidate MCP server.
@@ -478,54 +468,32 @@ func splitToolName(value string) (string, string) {
 
 const maxMCPToolNameBytes = 1024
 
-// validateMCPToolName rejects names that would cause excessive request processing.
-//
-// Parameters:
-//   - value: the attacker-controlled qualified or unqualified tool name.
-//
-// Return values:
-//   - error: a wrapped validation error when the name exceeds the byte limit.
-func validateMCPToolName(value string) error {
+// resolveQualifiedToolName resolves a bounded raw wire name using configured names
+// only. Disabled names participate to prevent shorter-prefix fallback. ctx bounds
+// the lookup. It returns a server label, exact tool name, and any validation or DB
+// error; credentials and policies are loaded only for selected candidates later.
+func resolveQualifiedToolName(ctx context.Context, value string) (string, string, error) {
 	if len(value) > maxMCPToolNameBytes {
-		return errors.Errorf("tool name exceeds maximum length of %d bytes", maxMCPToolNameBytes)
+		return "", "", errors.Errorf("tool name exceeds maximum length of %d bytes", maxMCPToolNameBytes)
 	}
-	return nil
-}
-
-// resolveQualifiedToolName splits a "<server>.<tool>" name against one finite server snapshot.
-// It prefers the longest configured server prefix and falls back to the legacy first-dot split.
-//
-// Parameters:
-//   - value: the qualified or unqualified tool name from the request.
-//   - servers: the finite configured-server snapshot to inspect in memory.
-//
-// Return values:
-//   - string: the resolved server label, empty when the name is unqualified.
-//   - string: the remaining exact tool name.
-//   - error: a wrapped validation error when the name exceeds the safe byte limit.
-func resolveQualifiedToolName(value string, servers []*model.MCPServer) (string, string, error) {
 	value = strings.TrimSpace(value)
-	if err := validateMCPToolName(value); err != nil {
-		return "", "", errors.Wrap(err, "validate qualified mcp tool name")
-	}
 	if !strings.Contains(value, ".") {
 		return "", value, nil
 	}
-
-	longestLabel := ""
-	for _, server := range servers {
-		if server == nil {
-			continue
-		}
-		label := strings.TrimSpace(server.Name)
-		if len(label) > len(longestLabel) && strings.HasPrefix(value, label+".") {
-			longestLabel = label
+	names, err := model.ListMCPServerNamesForToolResolution(ctx)
+	if err != nil {
+		return "", "", errors.Wrap(err, "list mcp server names")
+	}
+	longest := ""
+	for _, name := range names {
+		label := strings.TrimSpace(name)
+		if len(label) > len(longest) && strings.HasPrefix(value, label+".") {
+			longest = label
 		}
 	}
-	if longestLabel != "" {
-		return longestLabel, strings.TrimSpace(value[len(longestLabel)+1:]), nil
+	if longest != "" {
+		return longest, strings.TrimSpace(value[len(longest)+1:]), nil
 	}
-
 	serverLabel, toolName := splitToolName(value)
 	return serverLabel, toolName, nil
 }

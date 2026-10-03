@@ -179,7 +179,11 @@ func mergeAnthropicBetaHeaders(headers []string) []string {
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
-	return adaptor.DoRequestHelper(a, c, meta, requestBody)
+	prepared, err := PrepareRequestBody(c, meta.ActualModelName, requestBody)
+	if err != nil {
+		return nil, err
+	}
+	return adaptor.DoRequestHelper(a, c, meta, prepared)
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {

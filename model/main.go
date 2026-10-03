@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -131,13 +132,15 @@ func chooseDB(dsn string) (*gorm.DB, error) {
 func openPostgreSQL(dsn string) (*gorm.DB, error) {
 	logger.Logger.Info("using PostgreSQL as database")
 	common.UsingPostgreSQL.Store(true)
-	return gorm.Open(postgres.New(postgres.Config{
+	db, err := gorm.Open(postgres.New(postgres.Config{
 		DSN:                  dsn,
 		PreferSimpleProtocol: true, // disables implicit prepared statement usage
 	}), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
 		Logger:      gormLogger,
 	})
+	// gorm.Open hands back its handle even on failure; it is passed through unchanged.
+	return db, errors.WithStack(err)
 }
 
 func openMySQL(dsn string) (*gorm.DB, error) {
@@ -148,10 +151,11 @@ func openMySQL(dsn string) (*gorm.DB, error) {
 		return nil, errors.Wrap(err, "normalize MySQL DSN")
 	}
 
-	return gorm.Open(mysql.Open(normalized), &gorm.Config{
+	db, err := gorm.Open(mysql.Open(normalized), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
 		Logger:      gormLogger,
 	})
+	return db, errors.WithStack(err)
 }
 
 func openSQLite() (*gorm.DB, error) {
@@ -170,10 +174,11 @@ func openSQLite() (*gorm.DB, error) {
 	// writer slot is held — combined with the existing sqlite_retry helper
 	// this is the standard recipe for SQLite under multi-goroutine workloads.
 	dsn := fmt.Sprintf("%s?_busy_timeout=%d&_journal_mode=WAL&_synchronous=NORMAL", sqlitePath, common.SQLiteBusyTimeout)
-	return gorm.Open(sqlite.Open(dsn), &gorm.Config{
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
 		Logger:      gormLogger,
 	})
+	return db, errors.WithStack(err)
 }
 
 // ensureSQLitePath prepares the SQLite file path by creating the parent directory if needed
@@ -276,6 +281,16 @@ func initPrimaryDatabase() error {
 	if config.OpenTelemetryEnabled {
 		if err = enableGormOpenTelemetry(DB, "primary"); err != nil {
 			return errors.Wrap(err, "enable OpenTelemetry for primary database")
+		}
+	}
+
+	// Register the query-metrics hook before anything can issue a statement
+	// through the handle: gorm callback registration mutates the shared callback
+	// chain without locking, and the migrations below (plus the bootstrap workers
+	// they start) run queries concurrently with whatever main.go does next.
+	if config.EnablePrometheusMetrics || config.OpenTelemetryEnabled {
+		if err = registerDBMetricsHook(DB); err != nil {
+			return errors.Wrap(err, "register database metrics hook")
 		}
 	}
 
@@ -387,6 +402,9 @@ func migrateDB() error {
 		if err = DB.AutoMigrate(&Log{}); err != nil {
 			return errors.Wrapf(err, "failed to migrate Log")
 		}
+	}
+	if err = DB.AutoMigrate(&QuotaRefund{}); err != nil {
+		return errors.Wrap(err, "migrate pending quota refunds")
 	}
 	if err = DB.AutoMigrate(&TokenTransaction{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate TokenTransaction")
@@ -527,6 +545,14 @@ func migrateLOGDB() error {
 	return nil
 }
 
+// setDBConns applies the configured connection limits to db, starts pool
+// monitoring, and returns the underlying SQL database handle.
+//
+// Parameters:
+//   - db: the GORM database handle to configure.
+//
+// Return values:
+//   - *sql.DB: the configured underlying SQL database handle.
 func setDBConns(db *gorm.DB) *sql.DB {
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -534,10 +560,9 @@ func setDBConns(db *gorm.DB) *sql.DB {
 		return nil
 	}
 
-	// Increase default connection pool sizes to handle billing load better
-	maxIdleConns := config.SQLMaxIdleConns      // Increased from 100
-	maxOpenConns := config.SQLMaxOpenConns      // Increased from 1000
-	maxLifetime := config.SQLMaxLifetimeSeconds // Increased from 60 seconds
+	maxIdleConns := config.SQLMaxIdleConns
+	maxOpenConns := config.SQLMaxOpenConns
+	maxLifetime := config.SQLMaxLifetimeSeconds
 
 	sqlDB.SetMaxIdleConns(maxIdleConns)
 	sqlDB.SetMaxOpenConns(maxOpenConns)
@@ -555,7 +580,13 @@ func setDBConns(db *gorm.DB) *sql.DB {
 	return sqlDB
 }
 
-// monitorDBConnections monitors database connection pool health
+// monitorDBConnections periodically logs connection-pool saturation and wait
+// pressure until the process exits.
+//
+// Parameters:
+//   - sqlDB: the SQL database pool to monitor.
+//
+// Return values: none.
 func monitorDBConnections(sqlDB *sql.DB) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -584,6 +615,13 @@ func monitorDBConnections(sqlDB *sql.DB) {
 	}
 }
 
+// closeDB closes the connection pool backing a single GORM handle.
+//
+// Parameters:
+//   - db: the handle to close; must not be nil.
+//
+// Return values:
+//   - error: wrapped failure returned while resolving or closing the pool.
 func closeDB(db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -593,22 +631,70 @@ func closeDB(db *gorm.DB) error {
 	return errors.WithStack(err)
 }
 
+var (
+	// closeDBMu serializes CloseDB so two callers cannot race the worker joins or
+	// the handle bookkeeping below.
+	closeDBMu sync.Mutex
+	// closedPrimaryDB and closedLogDB remember the handles the previous CloseDB
+	// already closed. Comparing pointers (rather than latching a single boolean)
+	// keeps CloseDB idempotent for the process lifetime while still closing a
+	// handle that a later InitDatabases/InitDB opened, which tests depend on.
+	closedPrimaryDB *gorm.DB
+	closedLogDB     *gorm.DB
+)
+
+// CloseDB stops every database-backed background loop and closes both database
+// handles. It is the last step of the graceful shutdown sequence, after all
+// producers have drained and all consuming sinks have been closed.
+//
+// CloseDB is idempotent and safe to call more than once, concurrently or
+// sequentially: a handle that a previous call already closed is skipped, so a
+// duplicate call can neither panic nor report a confusing "sql: database is
+// closed" style failure. A handle opened again after a close (as tests do) is
+// a different pointer and is therefore closed normally.
+//
+// Parameters: none.
+//
+// Return values:
+//   - error: wrapped failure from closing either handle; nil when there was
+//     nothing left to close.
 func CloseDB() error {
+	closeDBMu.Lock()
+	defer closeDBMu.Unlock()
+
 	// Cancel and join every background loop before either database is closed. Both migration
 	// generations own workers that issue statements, so a loop still in flight would run
-	// against a closed pool.
+	// against a closed pool. Both stop helpers are themselves idempotent.
 	stopUUIDCatchUpWorker()
 	stopCompactLoops()
+	var closeErrs []error
+
 	// LOG_DB is nil for an InitDB-only caller that never initialized the log database, so it
-	// must be checked before use rather than only compared against DB.
-	if LOG_DB != nil && LOG_DB != DB {
-		err := closeDB(LOG_DB)
-		if err != nil {
-			return errors.Wrap(err, "close log database")
+	// must be checked before use rather than only compared against DB. Both independent
+	// handles are attempted even if one close fails; shutdown must not leak the primary
+	// pool merely because the log pool reported an error.
+	if LOG_DB != nil && LOG_DB != DB && LOG_DB != closedLogDB {
+		if err := closeDB(LOG_DB); err != nil {
+			closeErrs = append(closeErrs, errors.Wrap(err, "close log database"))
+		} else {
+			closedLogDB = LOG_DB
 		}
 	}
-	if DB == nil {
-		return nil
+	if DB != nil && DB != closedPrimaryDB {
+		if err := closeDB(DB); err != nil {
+			closeErrs = append(closeErrs, errors.Wrap(err, "close primary database"))
+		} else {
+			closedPrimaryDB = DB
+			// A shared handle is reachable through both globals, so mark it closed
+			// on both sides rather than letting the log branch re-close it.
+			if LOG_DB == DB {
+				closedLogDB = DB
+			}
+		}
 	}
-	return closeDB(DB)
+
+	if len(closeErrs) > 0 {
+		return errors.Wrap(errors.Join(closeErrs...), "close databases")
+	}
+	return nil
 }

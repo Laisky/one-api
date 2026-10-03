@@ -40,7 +40,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	case relaymode.ImagesGenerations:
 		return fmt.Sprintf("%s/api/paas/v4/images/generations", meta.BaseURL), nil
 	case relaymode.Videos:
-		return fmt.Sprintf("%s/api/paas/v4/videos/generations", meta.BaseURL), nil
+		return videoRequestURL(meta)
 	case relaymode.VoiceClone:
 		return fmt.Sprintf("%s/api/paas/v4/voice/clone", meta.BaseURL), nil
 	case relaymode.Embeddings:
@@ -257,6 +257,12 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if meta.Mode == relaymode.Videos && c.Request.Method != http.MethodPost && c.Request.Method != http.MethodGet {
+		return nil, errors.New("unsupported video method")
+	}
+	if meta.Mode == relaymode.Videos && c.Request.Method == http.MethodGet && (c.Request.URL.Path == "/v1/videos" || c.Request.URL.Path == "/v1/videos/generations") {
+		return nil, errors.New("video polling requires a task ID")
+	}
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 

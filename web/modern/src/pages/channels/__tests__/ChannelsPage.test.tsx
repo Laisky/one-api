@@ -1,8 +1,10 @@
+import { chooseTableAction } from '@/test/table-toolbar';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ChannelsPage } from '../ChannelsPage';
+import { CHANNEL_TESTING_MODEL_SKIP } from '../channels-page-columns';
 import { api } from '@/lib/api';
 const notify = vi.fn();
 vi.mock('@/components/ui/notifications', () => ({
@@ -237,28 +239,23 @@ describe('ChannelsPage Pagination', () => {
     });
   });
 
-  it('shows an error notification when bulk test returns success false', async () => {
-    mockApiGet.mockImplementation((url: string) => {
-      if (url === '/api/channel/test') {
-        return Promise.resolve({ data: { success: false, message: 'bulk test rejected' } }) as any;
-      }
-      return Promise.resolve({ data: mockChannelsData }) as any;
-    });
-
+  it('reports a failed selected channel test without calling the global test endpoint', async () => {
+    mockApiGet.mockImplementation(
+      (url: string) =>
+        Promise.resolve({
+          data: url === '/api/channel/test/1' ? { success: false, message: 'selected test rejected' } : mockChannelsData,
+        }) as any
+    );
+    mockApiPost.mockResolvedValue({ data: { success: true, data: [{ uuid: '1', name: 'Channel 1' }] } });
     renderChannelsPage();
     const user = userEvent.setup();
-
-    await screen.findByText('Channel 1');
-    await user.click(screen.getByRole('button', { name: /test all/i }));
-
-    await waitFor(() => {
-      expect(notify).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'error',
-          message: 'bulk test rejected',
-        })
-      );
-    });
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Channel 1' }));
+    await chooseTableAction('Test selected channels');
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    await screen.findByText(/selected test rejected/);
+    expect(mockApiGet).toHaveBeenCalledWith('/api/channel/test/1');
+    expect(mockApiGet).not.toHaveBeenCalledWith('/api/channel/test');
   });
 
   it('only offers text-compatible testing models and clears to CHEAPEST', async () => {
@@ -293,7 +290,7 @@ describe('ChannelsPage Pagination', () => {
     expect(row).not.toBeNull();
 
     const selector = within(row as HTMLElement).getByRole('combobox', { name: 'Testing Model' }) as HTMLSelectElement;
-    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', 'gpt-4o-mini']);
+    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', CHANNEL_TESTING_MODEL_SKIP, 'gpt-4o-mini']);
     expect(selector).not.toHaveTextContent('sora-2');
     expect(selector).not.toHaveTextContent('text-embedding-3-small');
 
@@ -337,7 +334,7 @@ describe('ChannelsPage Pagination', () => {
     expect(row).not.toBeNull();
 
     const selector = within(row as HTMLElement).getByRole('combobox', { name: 'Testing Model' }) as HTMLSelectElement;
-    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', 'gpt-4o-mini']);
+    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', CHANNEL_TESTING_MODEL_SKIP, 'gpt-4o-mini']);
     expect(selector).not.toHaveTextContent('dall-e-2');
     expect(selector).not.toHaveTextContent('text-embedding-3-small');
   });

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	apimetric "go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -91,22 +92,37 @@ func BenchmarkCollect(b *testing.B) {
 // TestZeroReservoirCutsCollectBytes asserts the zero-capacity reservoir view
 // reduces per-collect allocated BYTES by a large margin (the heap profile's
 // exemplar-reservoir reallocation). It also demonstrates that the exemplar
-// FILTER (always_off) is NOT a substitute — bytes barely move — which is why we
-// use a reservoir view, not a filter.
+// FILTER (always_off) is NOT a substitute -- bytes barely move -- which is why
+// we use a reservoir view, not a filter.
+//
+// MEASUREMENT NOTE (Phase 3, the otel-go v1.44.0 -> v1.46.0 bump).
+//
+// This test used to read process-global runtime.MemStats.TotalAlloc across 50
+// iterations. That counts EVERY allocation in the process during the window,
+// not this closure's, so it only worked while the measured effect was far
+// larger than whatever else the test binary happened to be doing. The SDK bump
+// roughly halved the default arm's per-collect cost (753 KB -> 369 KB measured
+// on this machine), the background noise stayed where it was, and the test
+// began failing five runs in six -- while the optimization itself was
+// unaffected.
+//
+// It now measures the same closures with Go's per-operation allocation
+// accounting, which attributes only what the benchmarked function allocates.
+// That is both stabler and stricter: the margin it can assert went from 2x to
+// 10x, and the observed ratio under SDK v1.46.0 is about 838x
+// (368,764 B/op -> 440 B/op, 1,011 -> 11 allocs/op).
 func TestZeroReservoirCutsCollectBytes(t *testing.T) {
-	bytesPerCollect := func(opts ...sdkmetric.Option) uint64 {
-		collect, shutdown := recordAndCollect(t, opts...)
-		defer shutdown()
-		const iters = 50
-		runtime.GC()
-		var m0 runtime.MemStats
-		runtime.ReadMemStats(&m0)
-		for n := 0; n < iters; n++ {
-			collect(n)
-		}
-		var m1 runtime.MemStats
-		runtime.ReadMemStats(&m1)
-		return (m1.TotalAlloc - m0.TotalAlloc) / iters
+	bytesPerCollect := func(opts ...sdkmetric.Option) int64 {
+		result := testing.Benchmark(func(b *testing.B) {
+			collect, shutdown := recordAndCollect(b, opts...)
+			defer shutdown()
+			b.ReportAllocs()
+			b.ResetTimer()
+			for n := 0; n < b.N; n++ {
+				collect(n)
+			}
+		})
+		return result.AllocedBytesPerOp()
 	}
 
 	def := bytesPerCollect()
@@ -114,8 +130,9 @@ func TestZeroReservoirCutsCollectBytes(t *testing.T) {
 	t.Logf("per-collect bytes: default=%d, zero-reservoir=%d (%.1f%% of default)",
 		def, zero, 100*float64(zero)/float64(def))
 
-	if zero >= def/2 {
-		t.Fatalf("zero-reservoir view should cut per-collect bytes by far more than half: default=%d zero=%d", def, zero)
+	require.Positive(t, def, "the default arm must allocate something to compare against")
+	if zero*10 >= def {
+		t.Fatalf("zero-reservoir view should cut per-collect bytes by at least 10x: default=%d zero=%d", def, zero)
 	}
 }
 

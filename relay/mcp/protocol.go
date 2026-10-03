@@ -10,6 +10,8 @@ import (
 const (
 	// ProtocolVersion is the latest stable MCP protocol version supported by one-api.
 	ProtocolVersion = "2026-07-28"
+	// ImplementationVersion identifies the native MCP client and gateway feature set.
+	ImplementationVersion = "1.2.0"
 	// LegacyProtocolVersion is the preferred initialization-based MCP protocol version.
 	LegacyProtocolVersion = "2025-11-25"
 	// LegacyProtocolVersionFallback keeps compatibility with older Streamable HTTP servers.
@@ -225,7 +227,19 @@ func WithModernMeta(params map[string]any) map[string]any {
 	for key, value := range params {
 		out[key] = value
 	}
-	out["_meta"] = ModernRequestMeta()
+	meta := make(map[string]any)
+	if supplied, ok := params["_meta"].(map[string]any); ok {
+		for key, value := range supplied {
+			meta[key] = value
+		}
+	}
+	defaults := ModernRequestMeta()
+	meta[MetaProtocolVersionKey] = defaults.ProtocolVersion
+	meta[MetaClientInfoKey] = defaults.ClientInfo
+	if _, supplied := meta[MetaClientCapabilitiesKey]; !supplied {
+		meta[MetaClientCapabilitiesKey] = defaults.ClientCapabilities
+	}
+	out["_meta"] = meta
 	return out
 }
 

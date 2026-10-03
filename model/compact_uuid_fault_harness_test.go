@@ -59,8 +59,13 @@ const (
 	// compactFaultPace paces one worker, keeping the load a request stream rather than a tight
 	// loop that would measure the driver instead of the contract.
 	compactFaultPace = 20 * time.Millisecond
-	// compactFaultHoldFor is how long each barrier is held under traffic.
+	// compactFaultHoldFor is the shortest time each barrier is held under traffic.
 	compactFaultHoldFor = 3 * time.Second
+	// compactFaultHoldOps is how many workload operations must complete while a barrier is held.
+	compactFaultHoldOps = 1000
+	// compactFaultHoldMax bounds a hold that is still waiting for compactFaultHoldOps, so a
+	// workload that genuinely stalls behind a barrier fails instead of hanging the test.
+	compactFaultHoldMax = 2 * time.Minute
 	// compactFaultForegroundBound is the proposal's foreground blocking ceiling.
 	compactFaultForegroundBound = 5 * time.Second
 	// compactFaultMaxCycles bounds every cycle loop so a stall fails loudly.
@@ -303,6 +308,30 @@ func (traffic *compactFaultTraffic) ack(id int, text string) {
 	traffic.mu.Lock()
 	traffic.acked[id] = text
 	traffic.mu.Unlock()
+}
+
+// holdBarrier holds the current barrier: no cycle runs while the workload keeps going.
+//
+// The hold lasts at least compactFaultHoldFor and until compactFaultHoldOps operations have
+// completed under it. Four paced workers manage roughly that many in compactFaultHoldFor on an
+// idle machine, so a fixed-length hold failed the count whenever the machine was busy, although
+// the barrier itself had behaved. Waiting for the operations instead measures the contract, and
+// only a workload that stalls for compactFaultHoldMax, or fails, ends the hold short.
+//
+// Return values:
+//   - int64: the operations the workload completed during the hold.
+func (traffic *compactFaultTraffic) holdBarrier() int64 {
+	before := traffic.ops.Load()
+	shortest := time.Now().Add(compactFaultHoldFor)
+	longest := time.Now().Add(compactFaultHoldMax)
+	for {
+		held := traffic.ops.Load() - before
+		now := time.Now()
+		if (now.After(shortest) && held >= compactFaultHoldOps) || now.After(longest) || traffic.firstFailure() != nil {
+			return held
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // firstFailure returns the first unexpected error observed so far, or nil.

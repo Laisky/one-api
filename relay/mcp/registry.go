@@ -199,7 +199,7 @@ func SignatureFromJSON(raw string) (string, error) {
 		return "", nil
 	}
 	var parsed any
-	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+	if err := DecodeJSON([]byte(trimmed), &parsed); err != nil {
 		return "", errors.Wrap(err, "parse tool signature json")
 	}
 	if parsed == nil {
@@ -228,7 +228,7 @@ func writeCanonicalJSON(buf *bytes.Buffer, value any) error {
 	}
 	if raw, ok := value.(json.RawMessage); ok {
 		var parsed any
-		if err := json.Unmarshal(raw, &parsed); err != nil {
+		if err := DecodeJSON(raw, &parsed); err != nil {
 			return errors.Wrap(err, "parse raw json")
 		}
 		return writeCanonicalJSON(buf, parsed)

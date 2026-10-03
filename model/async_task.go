@@ -16,25 +16,42 @@ import (
 // and the channel/user metadata required to resume or poll that task later.
 // Fields capture routing identifiers plus a trimmed request snapshot for diagnostics.
 type AsyncTaskBinding struct {
-	Id             int     `json:"id" gorm:"primaryKey;autoIncrement"`
-	UUID           string  `json:"uuid" gorm:"type:char(36);column:uuid"`
-	TaskID         string  `json:"task_id" gorm:"size:191;uniqueIndex;not null"`
-	TaskType       string  `json:"task_type" gorm:"size:32;index;not null"`
-	UserID         int     `json:"user_id" gorm:"index;not null"`
-	UserUUID       *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
-	TokenID        int     `json:"token_id" gorm:"index"`
-	TokenUUID      *string `json:"token_uuid" gorm:"type:char(36);column:token_uuid;index"`
-	ChannelID      int     `json:"channel_id" gorm:"index;not null"`
-	ChannelUUID    *string `json:"channel_uuid" gorm:"type:char(36);column:channel_uuid;index"`
-	ChannelType    int     `json:"channel_type" gorm:"index;not null"`
-	OriginModel    string  `json:"origin_model" gorm:"size:128"`
-	ActualModel    string  `json:"actual_model" gorm:"size:128"`
-	RequestMethod  string  `json:"request_method" gorm:"size:16"`
-	RequestPath    string  `json:"request_path" gorm:"size:255"`
-	RequestParams  string  `json:"request_params" gorm:"type:text"`
-	CreatedAt      int64   `json:"created_at" gorm:"autoCreateTime:milli;index"`
-	UpdatedAt      int64   `json:"updated_at" gorm:"autoUpdateTime:milli"`
-	LastAccessedAt int64   `json:"last_accessed_at" gorm:"index"`
+	Id            int     `json:"id" gorm:"primaryKey;autoIncrement"`
+	UUID          string  `json:"uuid" gorm:"type:char(36);column:uuid"`
+	TaskID        string  `json:"task_id" gorm:"size:191;uniqueIndex;not null"`
+	TaskType      string  `json:"task_type" gorm:"size:32;index;not null"`
+	UserID        int     `json:"user_id" gorm:"index;not null"`
+	UserUUID      *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
+	TokenID       int     `json:"token_id" gorm:"index"`
+	TokenUUID     *string `json:"token_uuid" gorm:"type:char(36);column:token_uuid;index"`
+	ChannelID     int     `json:"channel_id" gorm:"index;not null"`
+	ChannelUUID   *string `json:"channel_uuid" gorm:"type:char(36);column:channel_uuid;index"`
+	ChannelType   int     `json:"channel_type" gorm:"index;not null"`
+	OriginModel   string  `json:"origin_model" gorm:"size:128"`
+	ActualModel   string  `json:"actual_model" gorm:"size:128"`
+	RequestMethod string  `json:"request_method" gorm:"size:16"`
+	RequestPath   string  `json:"request_path" gorm:"size:255"`
+	RequestParams string  `json:"request_params" gorm:"type:text"`
+	// idx_async_task_retention is the composite (last_accessed_at, created_at)
+	// index that the retention sweep in async_task_retention.go plans against.
+	// Its two passes are `last_accessed_at > 0 AND last_accessed_at < cutoff`
+	// (a range on the leading column) and
+	// `last_accessed_at <= 0 AND created_at < cutoff` (the leading column pinned to
+	// the never-accessed values, ranged on the second column), so one index serves
+	// both without a sort.
+	//
+	// Write cost: this REPLACES the standalone index on last_accessed_at rather
+	// than adding to it -- the composite's leading column is last_accessed_at, so
+	// every lookup the old index served it serves too. A new deployment therefore
+	// maintains the same number of indexes on this table as before, and the write
+	// path pays no extra index maintenance. Its entries are slightly wider (two
+	// bigints instead of one), which is the whole cost. Existing deployments keep
+	// the now-redundant single-column index until an operator drops it: GORM's
+	// AutoMigrate creates missing indexes and never drops them, which is also why
+	// adding this one needs no migration step.
+	CreatedAt      int64 `json:"created_at" gorm:"autoCreateTime:milli;index;index:idx_async_task_retention,priority:2"`
+	UpdatedAt      int64 `json:"updated_at" gorm:"autoUpdateTime:milli"`
+	LastAccessedAt int64 `json:"last_accessed_at" gorm:"index:idx_async_task_retention,priority:1"`
 }
 
 // SaveAsyncTaskBinding creates or updates an async task binding for the provided task id.

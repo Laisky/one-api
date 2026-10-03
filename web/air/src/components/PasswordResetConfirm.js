@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Grid, Header, Image, Segment } from 'semantic-ui-react';
 import { API, copy, showError, showNotice } from '../helpers';
@@ -41,23 +42,26 @@ const PasswordResetConfirm = () => {
   }, [disableButton, countdown]);
 
   async function handleSubmit(e) {
-    setDisableButton(true);
-    if (!email) return;
-    setLoading(true);
-    const res = await API.post(`/api/user/reset`, {
-      email,
-      token
-    });
-    const { success, message } = res.data;
-    if (success) {
-      let password = res.data.data;
-      setNewPassword(password);
-      await copy(password);
-      showNotice(`新密码已复制到剪贴板：${password}`);
-    } else {
-      showError(message);
+    try {
+      setDisableButton(true);
+      if (!email) return;
+      setLoading(true);
+      const res = await API.post(`/api/user/reset`, {
+        email,
+        token
+      });
+      const { success, message } = res.data;
+      if (success) {
+        let password = res.data.data;
+        setNewPassword(password);
+        await copy(password);
+        showNotice(`新密码已复制到剪贴板：${password}`);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (
@@ -97,7 +101,7 @@ const PasswordResetConfirm = () => {
               color="green"
               fluid
               size="large"
-              onClick={handleSubmit}
+              onClick={(...uiArgs) => handleSubmit(...uiArgs).catch(reportUIError)}
               loading={loading}
               disabled={disableButton}
             >

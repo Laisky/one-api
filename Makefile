@@ -1,7 +1,7 @@
 .PHONY: install
 install:
 	# https://golangci-lint.run/docs/welcome/install/local/
-	curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.10.1
+	curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.13.2
 
 	go install golang.org/x/tools/cmd/goimports@latest
 	go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -33,7 +33,7 @@ lint:
 # lint-goroutine-guard enforces the structural rule that no background goroutine may
 # reference the request *gin.Context (gin recycles it via sync.Pool after the handler
 # returns). See .ast-grep/rules/no-gin-context-in-goroutine.yml and
-# docs/proposals/20260608_relay-billing-async-sync-race-fixes.md.
+# docs/proposals/archive/20260608_relay-billing-async-sync-race-fixes.md.
 # Requires ast-grep (install: `pipx install ast-grep-cli`, `cargo install ast-grep --locked`,
 # or a prebuilt binary from https://github.com/ast-grep/ast-grep/releases); skips gracefully
 # when not installed.
@@ -47,7 +47,7 @@ lint-goroutine-guard:
 # (model.User/Token/Channel/Redemption/Log) is serialized raw at the HTTP
 # boundary. It is a type-aware go/analysis analyzer (ast-grep is syntactic and
 # cannot see that gin.H{"data": users} carries []*model.User). See
-# tools/analyzers/noentityresponse and docs/proposals/20260714_boundary-response-dtos.md.
+# tools/analyzers/noentityresponse and docs/proposals/archive/20260714_boundary-response-dtos.md.
 .PHONY: lint-entity-response
 lint-entity-response:
 	go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...

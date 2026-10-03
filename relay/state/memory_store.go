@@ -110,7 +110,7 @@ func (s *MemoryStore) CreateResponse(_ context.Context, record *ResponseStateRec
 		return nil, errors.New("state: nil response record")
 	}
 	if !record.Owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	if err := s.validateResponseLimits(record); err != nil {
 		return nil, err
@@ -290,23 +290,23 @@ func (s *MemoryStore) BatchGetResponses(_ context.Context, owner OwnerScope, ids
 
 func (s *MemoryStore) lookupResponseLocked(owner OwnerScope, id string) (*ResponseStateRecord, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	// Consult the tombstone first so a deleted or evicted id can never resolve,
 	// even against a record that was somehow re-added (ST-018: tombstones are read,
 	// not just written).
 	if _, dead := s.respTombstones[id]; dead {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	rec, ok := s.responses[id]
 	if !ok {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	if !rec.Owner.Matches(owner) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	if s.isResponseExpiredLocked(rec) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	return rec, nil
 }
@@ -330,13 +330,13 @@ func (s *MemoryStore) isResponseExpiredLocked(rec *ResponseStateRecord) bool {
 // GetItem resolves a stored item under owner scope for item_reference hydration.
 func (s *MemoryStore) GetItem(_ context.Context, owner OwnerScope, itemID string) (*ItemEnvelope, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry, ok := s.items[itemIndexKey{userID: owner.UserID, itemID: itemID}]
 	if !ok || !entry.owner.Matches(owner) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	env := entry.env
 	env.Raw = cloneRaw(entry.env.Raw)
@@ -370,7 +370,7 @@ func (s *MemoryStore) CreateConversation(_ context.Context, record *Conversation
 		return nil, errors.New("state: nil conversation record")
 	}
 	if !record.Owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	if err := s.validateConversationLimits(record); err != nil {
 		return nil, err
@@ -468,7 +468,7 @@ func (s *MemoryStore) AppendConversationItems(_ context.Context, owner OwnerScop
 	}
 
 	if expectedVersion != AnyVersion && expectedVersion != rec.Version {
-		return nil, ErrVersionConflict
+		return nil, errors.WithStack(ErrVersionConflict)
 	}
 
 	projected := len(rec.Items) + len(items)
@@ -502,7 +502,7 @@ func (s *MemoryStore) UpdateConversationMetadata(_ context.Context, owner OwnerS
 		return nil, err
 	}
 	if expectedVersion != AnyVersion && expectedVersion != rec.Version {
-		return nil, ErrVersionConflict
+		return nil, errors.WithStack(ErrVersionConflict)
 	}
 	rec.Metadata = cloneRaw(metadata)
 	rec.Version++
@@ -518,7 +518,7 @@ func (s *MemoryStore) DeleteConversationItem(_ context.Context, owner OwnerScope
 		return nil, err
 	}
 	if expectedVersion != AnyVersion && expectedVersion != rec.Version {
-		return nil, ErrVersionConflict
+		return nil, errors.WithStack(ErrVersionConflict)
 	}
 	filtered := rec.Items[:0:0]
 	removed := false
@@ -532,7 +532,7 @@ func (s *MemoryStore) DeleteConversationItem(_ context.Context, owner OwnerScope
 		filtered = append(filtered, env)
 	}
 	if !removed {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	rec.Items = filtered
 	rec.Version++
@@ -542,20 +542,20 @@ func (s *MemoryStore) DeleteConversationItem(_ context.Context, owner OwnerScope
 
 func (s *MemoryStore) lookupConversationLocked(owner OwnerScope, id string) (*ConversationStateRecord, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	if _, dead := s.convTombstones[id]; dead {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	rec, ok := s.conversations[id]
 	if !ok {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	if !rec.Owner.Matches(owner) {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	if rec.ExpiresAt > 0 && s.now().Unix() >= rec.ExpiresAt {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	return rec, nil
 }
@@ -638,7 +638,7 @@ func (s *MemoryStore) AcquireConversationLease(_ context.Context, owner OwnerSco
 		return "", err
 	}
 	if lease, ok := s.leases[id]; ok && s.now().Before(lease.expiresAt) {
-		return "", ErrLeaseHeld
+		return "", errors.WithStack(ErrLeaseHeld)
 	}
 	token, err := randomHex(16)
 	if err != nil {
@@ -657,7 +657,7 @@ func (s *MemoryStore) RenewConversationLease(_ context.Context, owner OwnerScope
 	}
 	lease, ok := s.leases[id]
 	if !ok || lease.token != leaseToken || !s.now().Before(lease.expiresAt) {
-		return ErrLeaseInvalid
+		return errors.WithStack(ErrLeaseInvalid)
 	}
 	lease.expiresAt = s.now().Add(ttl)
 	s.leases[id] = lease
@@ -673,7 +673,7 @@ func (s *MemoryStore) ReleaseConversationLease(_ context.Context, owner OwnerSco
 		return nil
 	}
 	if lease.token != leaseToken {
-		return ErrLeaseInvalid
+		return errors.WithStack(ErrLeaseInvalid)
 	}
 	delete(s.leases, id)
 	return nil
@@ -687,7 +687,7 @@ func (s *MemoryStore) PutCheckpoint(_ context.Context, record *CheckpointRecord)
 		return errors.New("state: nil checkpoint record")
 	}
 	if !record.Owner.Valid() {
-		return ErrInvalidOwner
+		return errors.WithStack(ErrInvalidOwner)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -702,16 +702,16 @@ func (s *MemoryStore) PutCheckpoint(_ context.Context, record *CheckpointRecord)
 // GetCheckpoint returns a checkpoint for the owner scope, or ErrNotFound.
 func (s *MemoryStore) GetCheckpoint(_ context.Context, owner OwnerScope, key string) (*CheckpointRecord, error) {
 	if !owner.Valid() {
-		return nil, ErrInvalidOwner
+		return nil, errors.WithStack(ErrInvalidOwner)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rec, ok := s.checkpoints[checkpointStoreKey(owner, key)]
 	if !ok {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	if rec.ExpiresAt > 0 && s.now().Unix() >= rec.ExpiresAt {
-		return nil, ErrNotFound
+		return nil, errors.WithStack(ErrNotFound)
 	}
 	return cloneCheckpointRecord(rec), nil
 }

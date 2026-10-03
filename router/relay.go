@@ -6,6 +6,7 @@ import (
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/controller"
 	"github.com/Laisky/one-api/middleware"
+	relaycontroller "github.com/Laisky/one-api/relay/controller"
 )
 
 // SetRelayRouter registers the public inference and MCP relay endpoints.
@@ -66,8 +67,10 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router := router.Group("/v1")
 	relayV1Router.Use(relayMws...)
 
+	relayV1Router.POST("/systemone", relaycontroller.RelaySystemOne)
 	relayV1Router.GET("/realtime", controller.RelayRealtime)
-	relayV1Router.POST("/realtime/sessions", controller.RelayRealtimeSessions)
+	// Ephemeral credentials authorize upstream usage that this gateway cannot bill.
+	// Keep Realtime traffic on the metered WebSocket relay only.
 	relayV1Router.Any("/oneapi/proxy/:channelid/*target", controller.Relay)
 	relayV1Router.POST("/completions", controller.Relay)
 	relayV1Router.POST("/chat/completions", controller.Relay)
@@ -82,6 +85,7 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.POST("/images/edits", controller.Relay)
 	relayV1Router.POST("/images/variations", controller.RelayNotImplemented)
 	relayV1Router.POST("/videos", controller.Relay)
+	relayV1Router.POST("/videos/generations", controller.Relay)
 	relayV1Router.GET("/videos", controller.Relay)
 	relayV1Router.GET("/videos/:video_id", controller.Relay)
 	relayV1Router.GET("/videos/:video_id/content", controller.Relay)

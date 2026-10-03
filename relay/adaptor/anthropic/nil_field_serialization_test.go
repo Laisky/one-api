@@ -26,8 +26,9 @@ func TestConvertClaudeRequestNeverSendsEmptyRequiredFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	for _, tc := range []struct {
-		name    string
-		request model.ClaudeRequest
+		name      string
+		wantError bool
+		request   model.ClaudeRequest
 	}{
 		{
 			name: "tool without input_schema",
@@ -39,7 +40,8 @@ func TestConvertClaudeRequestNeverSendsEmptyRequiredFields(t *testing.T) {
 			},
 		},
 		{
-			name: "tool whose input_schema is not an object",
+			name:      "tool whose input_schema is not an object",
+			wantError: true,
 			request: model.ClaudeRequest{
 				Model:     "claude-opus-4-6",
 				MaxTokens: 100,
@@ -63,6 +65,12 @@ func TestConvertClaudeRequestNeverSendsEmptyRequiredFields(t *testing.T) {
 			c.Request = httptest.NewRequest("POST", "/v1/messages", nil)
 
 			converted, err := ConvertClaudeRequest(c, tc.request)
+			if tc.wantError {
+				// Reject malformed explicit schemas; never replace constraints with an empty object.
+				require.ErrorContains(t, err, "validation failed")
+				require.Nil(t, converted)
+				return
+			}
 			require.NoError(t, err)
 
 			body, err := json.Marshal(converted)

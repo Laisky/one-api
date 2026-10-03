@@ -67,11 +67,11 @@ func ValidateUnknownParameters(requestBody []byte) error {
 	return nil
 }
 
-// ValidateUnknownParametersWithContext checks for unknown parameters and logs warnings
-// with request context. Use this variant when you have access to a gin.Context for
-// richer logging context.
+// ValidateUnknownParametersWithContext logs unknown request parameters with
+// request context. Jina parameters recognized for the selected native endpoint
+// are excluded from the warning.
 func ValidateUnknownParametersWithContext(c *gin.Context, requestBody []byte) error {
-	unknownParams := findUnknownParameters(requestBody)
+	unknownParams := filterJinaNativeParameters(c, findUnknownParameters(requestBody))
 	if len(unknownParams) > 0 {
 		lg := gmw.GetLogger(c)
 		lg.Warn("request contains unknown parameters that will be ignored",

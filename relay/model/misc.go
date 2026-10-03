@@ -1,7 +1,14 @@
 package model
 
+import "github.com/Laisky/one-api/relay/realtime"
+
 // Usage is the token usage information returned by OpenAI API.
 type Usage struct {
+	// BillingEstimateReason is server-only evidence that usage was conservatively
+	// estimated rather than measured. Clients cannot supply it through JSON.
+	BillingEstimateReason string `json:"-"`
+	// Realtime is server-only accounting evidence; clients cannot inject it via JSON.
+	Realtime *realtime.Ledger `json:"-"`
 	// Omitting this field using 'omitempty' is crucial to avoid returning zero values
 	// when conversion mechanisms are not employed, particularly in scenarios like image generation.
 	//
@@ -80,6 +87,7 @@ func (u *Usage) NormalizeCacheWriteTokens() {
 	if u == nil || u.CacheWriteTokens <= 0 {
 		return
 	}
+
 	u.CacheWrite5mTokens += u.CacheWriteTokens
 	u.CacheWriteTokens = 0
 }
@@ -117,7 +125,7 @@ const (
 	ErrorTypeTest ErrorType = "test_error"
 	// ErrorTypeAli represents errors emitted by Aliyun DashScope endpoints.
 	ErrorTypeAli ErrorType = "ali_error"
-	// ErrorTypeBaidu represents errors emitted by Baidu Wenxin endpoints.
+	// ErrorTypeBaidu represents errors returned by Baidu Wenxin endpoints.
 	ErrorTypeBaidu ErrorType = "baidu_error"
 	// ErrorTypeZhipu represents errors returned by Zhipu/ChatGLM providers.
 	ErrorTypeZhipu ErrorType = "zhipu_error"
@@ -144,8 +152,9 @@ type ErrorWithStatusCode struct {
 
 // UsagePromptTokensDetails contains details about the prompt tokens used in a request.
 type UsagePromptTokensDetails struct {
-	CachedTokens int `json:"cached_tokens"`
-	AudioTokens  int `json:"audio_tokens"`
+	CachedTokensDetails *UsageCachedTokensDetails `json:"cached_tokens_details,omitempty"`
+	CachedTokens        int                       `json:"cached_tokens"`
+	AudioTokens         int                       `json:"audio_tokens"`
 	// TextTokens could be zero for pure text chats
 	TextTokens     int     `json:"text_tokens"`
 	ImageTokens    int     `json:"image_tokens"`

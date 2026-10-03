@@ -264,16 +264,17 @@ func TestGemini35FlashGAPricing(t *testing.T) {
 	require.Contains(t, geminiWebSearchModels, "gemini-3.5-flash")
 }
 
-// TestGemini36FlashPricing verifies Gemini 3.6 Flash pricing from Google Cloud Agent Platform.
-// Parameter t drives test execution, and the function returns no values.
+// TestGemini36FlashPricing verifies the current Gemini 3.6 Flash promotional pricing
+// while retaining the published limits and capabilities. Parameter t drives test execution,
+// and the function returns no values.
 func TestGemini36FlashPricing(t *testing.T) {
 	t.Parallel()
 
 	cfg, ok := ModelRatios["gemini-3.6-flash"]
 	require.True(t, ok, "gemini-3.6-flash missing from pricing map")
-	require.InDelta(t, 1.50*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
-	require.InDelta(t, 7.50/1.50, cfg.CompletionRatio, 1e-9)
-	require.InDelta(t, 0.15*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.InDelta(t, geminiFlashPromotionalInputUsd*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, geminiFlashPromotionalOutputUsd/geminiFlashPromotionalInputUsd, cfg.CompletionRatio, 1e-9)
+	require.InDelta(t, geminiFlashPromotionalCacheUsd*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
 	require.EqualValues(t, 1_048_576, cfg.ContextLength)
 	require.EqualValues(t, 65536, cfg.MaxOutputTokens)
 	require.Equal(t, "medium", cfg.DefaultReasoningEffort)

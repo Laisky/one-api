@@ -184,7 +184,7 @@ func TestAudioModelMetadata(t *testing.T) {
 	require.Equal(t, []string{"text"}, tts.InputModalities)
 	require.Equal(t, []string{"audio"}, tts.OutputModalities)
 	require.NotNil(t, tts.Audio)
-	require.InDelta(t, (0.2/3000)*ratio.QuotaPerRMB, tts.Ratio, 1e-9)
+	require.InDelta(t, 200*ratio.MilliTokensRmb, tts.Ratio, 1e-9)
 
 	asr, ok := ModelRatios["glm-asr-2512"]
 	require.True(t, ok)
@@ -192,13 +192,13 @@ func TestAudioModelMetadata(t *testing.T) {
 	require.Equal(t, []string{"text"}, asr.OutputModalities)
 	require.NotNil(t, asr.Audio)
 	require.InDelta(t, 10.0, asr.Audio.PromptTokensPerSecond, 1e-9)
-	require.InDelta(t, (0.5/600)*ratio.QuotaPerRMB, asr.Ratio, 1e-9)
+	require.InDelta(t, 16*ratio.MilliTokensRmb, asr.Ratio, 1e-9)
 
 	clone, ok := ModelRatios["glm-tts-clone"]
 	require.True(t, ok)
 	require.NotNil(t, clone.PerCall)
-	require.InDelta(t, 2*ratio.QuotaPerRMB, clone.Ratio, 1e-9)
-	require.InDelta(t, 2.0/7*1000, clone.PerCall.UsdPerThousandCalls, 1e-9)
+	require.InDelta(t, 6.0/7*ratio.QuotaPerUsd, clone.Ratio, 1e-9)
+	require.InDelta(t, 6.0/7*1000, clone.PerCall.UsdPerThousandCalls, 1e-9)
 }
 
 // TestRealtimeModelMetadata verifies the GLM-Realtime models carry pricing

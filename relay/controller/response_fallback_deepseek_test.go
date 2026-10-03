@@ -1,13 +1,21 @@
 package controller
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // TestIsDeepSeekUpstream verifies the channel-upstream detection used to scope
@@ -112,4 +120,65 @@ func TestResponseFallbackPreservesNvidiaFreePricingForDeepSeekModel(t *testing.T
 		APIType:     channeltype.ToAPIType(channeltype.DeepSeek),
 	}
 	require.Equal(t, "deepseek", resolvePricingAdaptor(dsMeta).GetChannelName())
+}
+
+// TestResponseFallbackThroughDeepSeekAdaptorSatisfiesHistoryContract walks the
+// wiring the fallback actually relies on: the Responses input is lowered by the
+// shared converter, and the adaptor that apitype.DeepSeek resolves to must then
+// repair whatever DeepSeek would reject. The scenario is the one an agent loop
+// produces after trimming a tool result, which upstream answers with "An assistant
+// message with 'tool_calls' must be followed by tool messages responding to each
+// 'tool_call_id'" (verified against api.deepseek.com with deepseek-flash on
+// 2026-09-18; see the live suite in relay/adaptor/openai).
+// Parameters: t is the testing handle used for assertions.
+// Returns: nothing; the test fails through t when the wiring skips the repair.
+func TestResponseFallbackThroughDeepSeekAdaptorSatisfiesHistoryContract(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	metaInfo := &metalib.Meta{
+		Mode:            relaymode.ChatCompletions,
+		APIType:         apitype.DeepSeek,
+		ChannelType:     channeltype.DeepSeek,
+		BaseURL:         "https://api.deepseek.com",
+		ActualModelName: "deepseek-flash",
+		RequestURLPath:  "/v1/chat/completions",
+	}
+	c.Set(ctxkey.Meta, metaInfo)
+
+	chatRequest, err := openai.ConvertResponseAPIToChatCompletionRequest(&openai.ResponseAPIRequest{
+		Model: "deepseek-flash",
+		Input: openai.ResponseAPIInput{
+			map[string]any{"type": "message", "role": "user",
+				"content": []any{map[string]any{"type": "input_text", "text": "weather in Paris?"}}},
+			map[string]any{"type": "message", "role": "assistant",
+				"content": []any{map[string]any{"type": "output_text", "text": "Checking."}}},
+			map[string]any{"type": "reasoning",
+				"content": []any{map[string]any{"type": "text", "text": "call the tool"}}},
+			map[string]any{"type": "function_call", "id": "fc_1", "call_id": "call_1",
+				"name": "get_weather", "arguments": `{"city":"Paris"}`},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, chatRequest.Messages[1].ToolCalls, 1,
+		"the converter lowers the turn faithfully; repairing it is the adaptor's job")
+
+	adaptorForType := relay.GetAdaptor(metaInfo.APIType)
+	require.NotNil(t, adaptorForType)
+
+	convertedAny, err := adaptorForType.ConvertRequest(c, relaymode.ChatCompletions, chatRequest)
+	require.NoError(t, err)
+	converted, ok := convertedAny.(*relaymodel.GeneralOpenAIRequest)
+	require.True(t, ok)
+
+	require.Len(t, converted.Messages, 2)
+	assistant := converted.Messages[1]
+	require.Empty(t, assistant.ToolCalls, "an unanswered tool call must not reach DeepSeek")
+	require.Equal(t, "Checking.", assistant.StringContent())
+	require.NotNil(t, assistant.ReasoningContent)
+	require.Equal(t, "call the tool", *assistant.ReasoningContent,
+		"the turn's replayed thinking must survive the repair")
 }

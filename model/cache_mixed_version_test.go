@@ -20,7 +20,7 @@ import (
 // During a rolling deploy the pre-refactor and post-refactor binaries share the
 // same Redis instance and the same cache keys ("user_obj:<id>", "token:<key>"),
 // so each binary must be able to read payloads written by the other. §3.3.5 of
-// docs/proposals/20260714_boundary-response-dtos.md asserts this is safe because
+// docs/proposals/archive/20260714_boundary-response-dtos.md asserts this is safe because
 // "cache payloads only ever gain keys". The fixtures and assertions below turn
 // that assertion into a measurement.
 //

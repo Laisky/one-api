@@ -1,7 +1,7 @@
 package model
 
 // Section 12 compatibility workload for compact UUID storage
-// (docs/proposals/20260715_compact-uuid-storage.md):
+// (docs/proposals/archive/20260715_compact-uuid-storage.md):
 //
 //	"The compatibility workload uses the recorded fixture hash, eight concurrent clients, at
 //	 least 10 requests/second, and at least 1,000 successful operations per held migration

@@ -1,8 +1,14 @@
 package vertexai
 
-import "github.com/Laisky/one-api/relay/adaptor/anthropic"
+import (
+	"encoding/json"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
+	"github.com/Laisky/one-api/relay/model"
+)
 
 type Request struct {
+	Thinking     *model.Thinking `json:"thinking,omitempty"`
+	OutputConfig json.RawMessage `json:"output_config,omitempty"`
 	// AnthropicVersion must be "vertex-2023-10-16"
 	AnthropicVersion string `json:"anthropic_version"`
 	// Model            string              `json:"model"`

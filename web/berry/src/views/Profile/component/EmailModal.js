@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import React from "react";
@@ -73,24 +74,28 @@ const EmailModal = ({ open, handleClose, turnstileToken }) => {
   }, [disableButton, countdown]);
 
   const handleSendCode = async (email) => {
-    setDisableButton(true);
-    if (email === "") {
-      showError("请输入邮箱");
-      return;
-    }
-    if (turnstileToken === "") {
-      showError("请稍后几秒重试，Turnstile 正在检查用户环境！");
-      return;
-    }
-    setLoading(true);
-    const { success, message } = await sendVerificationCode(
-      email,
-      turnstileToken
-    );
-    setLoading(false);
-    if (!success) {
-      showError(message);
-      return;
+    try {
+      setDisableButton(true);
+      if (email === "") {
+        showError("请输入邮箱");
+        return;
+      }
+      if (turnstileToken === "") {
+        showError("请稍后几秒重试，Turnstile 正在检查用户环境！");
+        return;
+      }
+      setLoading(true);
+      const { success, message } = await sendVerificationCode(
+        email,
+        turnstileToken
+      );
+      setLoading(false);
+      if (!success) {
+        showError(message);
+        return;
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -106,7 +111,7 @@ const EmailModal = ({ open, handleClose, turnstileToken }) => {
             }}
             enableReinitialize
             validationSchema={validationSchema}
-            onSubmit={submit}
+            onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}
           >
             {({
               errors,
@@ -135,7 +140,7 @@ const EmailModal = ({ open, handleClose, turnstileToken }) => {
                         <Button
                           variant="contained"
                           color="primary"
-                          onClick={() => handleSendCode(values.email)}
+                          onClick={() => handleSendCode(values.email).catch(reportUIError)}
                           disabled={disableButton || loading}
                         >
                           {disableButton

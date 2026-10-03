@@ -41,8 +41,8 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 }
 
 // DefaultToolingConfig returns DeepSeek's provider-level tooling defaults.
-// Parameters: none. Returns: an empty separate-pricing map because built-in web
-// search is billed through normal model token usage as of 2026-08-01.
+// Parameters: none. Returns: no built-in tool pricing entries because the
+// current Responses API ignores web_search and other built-in tool types.
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return DeepseekToolingDefaults
 }
@@ -86,6 +86,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	adaptor.SetupCommonRequestHeader(c, req, meta)
+
 	req.Header.Set("Authorization", "Bearer "+meta.APIKey)
 	return nil
 }
@@ -104,6 +105,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 
 	normalizeDeepSeekThinkingConfig(c, request)
 	normalizeDeepSeekMessageReasoning(request)
+	enforceDeepSeekHistoryContract(c, request)
 
 	normalizeDeepSeekToolMessageContent(c, request)
 
@@ -140,9 +142,13 @@ func normalizeDeepSeekReasoningEffort(request *model.GeneralOpenAIRequest) {
 	effort := strings.ToLower(strings.TrimSpace(*request.ReasoningEffort))
 	switch effort {
 	case "low", "high", "max":
+	case "minimal":
+		effort = "low"
 	case "medium", "xhigh":
 		// DeepSeek maps both OpenAI compatibility aliases to high.
 		effort = "high"
+	case "ultra":
+		effort = "max"
 	default:
 		request.ReasoningEffort = nil
 		return
@@ -176,6 +182,7 @@ func normalizeDeepSeekThinkingConfig(c *gin.Context, request *model.GeneralOpenA
 	// block_binding controls Anthropic signature validation and has no DeepSeek
 	// equivalent. Remove it while retaining portable thinking mode and budget data.
 	request.Thinking.BlockBinding = nil
+	request.Thinking.ExtraFields = nil
 
 	originalType := request.Thinking.Type
 	normalizedType, changed := deepseekcompat.NormalizeThinkingType(originalType, request.Thinking.BudgetTokens)
@@ -265,6 +272,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	}
 	normalizeDeepSeekThinkingConfig(c, chatRequest)
 	normalizeDeepSeekMessageReasoning(chatRequest)
+	enforceDeepSeekHistoryContract(c, chatRequest)
 	normalizeDeepSeekToolMessageContent(c, chatRequest)
 	return chatRequest, nil
 }
@@ -300,6 +308,29 @@ func normalizeDeepSeekMessageReasoning(request *model.GeneralOpenAIRequest) {
 			message.Content = ""
 		}
 	}
+}
+
+// enforceDeepSeekHistoryContract repairs replayed history that DeepSeek would
+// reject outright: tool calls nobody answered and an in-flight assistant turn
+// whose thinking was not replayed. The context supplies request-scoped logging,
+// request is mutated in place, and the function returns no value.
+func enforceDeepSeekHistoryContract(c *gin.Context, request *model.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+
+	repaired, stats := deepseekcompat.EnforceHistoryContract(request.Messages)
+	request.Messages = repaired
+	if !stats.Changed() {
+		return
+	}
+
+	gmw.GetLogger(c).Debug("repaired deepseek history for provider validation",
+		zap.String("model", request.Model),
+		zap.Int("unanswered_tool_calls_dropped", stats.UnansweredToolCallsDropped),
+		zap.Int("assistant_messages_dropped", stats.AssistantMessagesDropped),
+		zap.Int("reasoning_placeholders_added", stats.ReasoningPlaceholdersAdded),
+	)
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {

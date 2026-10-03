@@ -85,6 +85,30 @@ func normalizeDeepSeekToolMessageContent(lg deepSeekToolNormalizeLogger, request
 	}
 }
 
+// enforceDeepSeekHistoryContract repairs replayed history that DeepSeek would reject
+// outright: tool calls nobody answered and an in-flight assistant turn whose thinking
+// was not replayed. See deepseekcompat.EnforceHistoryContract for the verified rules.
+// Parameters: lg receives a debug summary and may be nil; request is mutated in place.
+// Returns: nothing.
+func enforceDeepSeekHistoryContract(lg deepSeekThinkingNormalizeLogger, request *model.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+
+	repaired, stats := deepseekcompat.EnforceHistoryContract(request.Messages)
+	request.Messages = repaired
+	if !stats.Changed() || lg == nil {
+		return
+	}
+
+	lg.Debug("repaired deepseek history for provider validation",
+		zap.String("model", request.Model),
+		zap.Int("unanswered_tool_calls_dropped", stats.UnansweredToolCallsDropped),
+		zap.Int("assistant_messages_dropped", stats.AssistantMessagesDropped),
+		zap.Int("reasoning_placeholders_added", stats.ReasoningPlaceholdersAdded),
+	)
+}
+
 // normalizeClaudeThinkingForDeepSeek coerces Claude thinking payloads into DeepSeek-compatible values.
 // DeepSeek currently accepts only `enabled` or `disabled` for thinking.type.
 func normalizeClaudeThinkingForDeepSeek(lg deepSeekThinkingNormalizeLogger, request *model.GeneralOpenAIRequest) {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
+	"github.com/Laisky/zap/zapcore"
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
@@ -23,11 +24,11 @@ import (
 
 // Log represents a persisted usage or management entry emitted by the billing pipeline.
 type Log struct {
-	Id        int     `json:"id"`
-	UserId    int     `json:"user_id" gorm:"index;index:idx_user_token,priority:1"`
+	Id        int     `json:"id" gorm:"index:idx_logs_user_created_at_id,priority:3"`
+	UserId    int     `json:"user_id" gorm:"index;index:idx_user_token,priority:1;index:idx_logs_user_created_at_id,priority:1"`
 	UUID      string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	UserUUID  *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
-	CreatedAt int64   `json:"created_at" gorm:"bigint;index:idx_created_at_type"`
+	CreatedAt int64   `json:"created_at" gorm:"bigint;index:idx_created_at_type;index:idx_logs_user_created_at_id,priority:2"`
 	Type      int     `json:"type" gorm:"index:idx_created_at_type"`
 	Content   string  `json:"content" gorm:"type:text"`
 	Username  string  `json:"username" gorm:"index:index_username_model_name,priority:2;default:''"`
@@ -178,7 +179,7 @@ func (m LogMetadata) MarshalJSON() ([]byte, error) {
 	if m == nil {
 		return []byte("{}"), nil
 	}
-	payload, err := json.Marshal(map[string]any(m))
+	payload, err := json.Marshal(map[string]any(SanitizeLogMetadata(m)))
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal log metadata")
 	}
@@ -191,7 +192,7 @@ func (m LogMetadata) Value() (driver.Value, error) {
 		return nil, nil
 	}
 
-	payload, err := json.Marshal(map[string]any(m))
+	payload, err := json.Marshal(map[string]any(SanitizeLogMetadata(m)))
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal log metadata")
 	}
@@ -630,11 +631,59 @@ func recordLogHelper(ctx context.Context, log *Log) {
 	// deliberately not called request_id / trace_id: the request-scoped logger already
 	// carries those for the CURRENT request, and on the reconciliation path the row's
 	// values belong to the earlier request that created it.
+	//
+	// The full form is DEBUG. It carries the rendered `content` string, which is
+	// already persisted on the row this function just wrote, so duplicating it
+	// into the log file once per request buys nothing. The INFO form keeps the
+	// correlators and the billing numbers an operator actually greps for.
+	//
+	// Measured by BenchmarkRecordLogLineBytes, cross-tree against the pre-change
+	// code (commit 397781e1), console encoding as production uses: this line
+	// shrinks from 516/576/751 bytes to a flat 413 bytes for short/typical/long
+	// content, i.e. 103-338 bytes saved per billed request (20-45% of the line).
+	// At 10k requests per second and typical content that is ~141 GB/day of log
+	// bytes not written WITH SAMPLING OFF. Under the scaled/external profiles,
+	// which default LOG_SAMPLE_INITIAL=100, the sampler already thins this line
+	// to ~199/s and the demotion is worth ~2.8 GB/day there. It is a large
+	// saving on ONE line at volumes where sampling is off, not on total process
+	// log volume.
+	if lg.Level().Zap() <= zapcore.DebugLevel {
+		lg.Debug("record log",
+			logRowFields(ctx, log,
+				zap.Int64("created_at", log.CreatedAt),
+				zap.Int("type", log.Type),
+				zap.String("content", log.Content),
+				zap.String("log_request_id", log.RequestId),
+				zap.String("log_trace_id", log.TraceId),
+				zap.Int("quota", log.Quota),
+				zap.Int("prompt_tokens", log.PromptTokens),
+				zap.Int("completion_tokens", log.CompletionTokens),
+			)...,
+		)
+		return
+	}
+
+	if config.LogRecordLineFormat == config.LogRecordLineFull {
+		// Pre-proposal shape, kept as the standalone default so an existing
+		// log-parsing pipeline does not break on upgrade.
+		lg.Info("record log",
+			logRowFields(ctx, log,
+				zap.Int64("created_at", log.CreatedAt),
+				zap.Int("type", log.Type),
+				zap.String("content", log.Content),
+				zap.String("log_request_id", log.RequestId),
+				zap.String("log_trace_id", log.TraceId),
+				zap.Int("quota", log.Quota),
+				zap.Int("prompt_tokens", log.PromptTokens),
+				zap.Int("completion_tokens", log.CompletionTokens),
+			)...,
+		)
+		return
+	}
+
 	lg.Info("record log",
 		logRowFields(ctx, log,
-			zap.Int64("created_at", log.CreatedAt),
 			zap.Int("type", log.Type),
-			zap.String("content", log.Content),
 			zap.String("log_request_id", log.RequestId),
 			zap.String("log_trace_id", log.TraceId),
 			zap.Int("quota", log.Quota),
@@ -1207,15 +1256,7 @@ func GetUserLogsCount(userId int, logType int, startTimestamp int64, endTimestam
 // SearchAllLogs performs a keyword search across all log entries with pagination.
 func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrder string) (logs []*Log, total int64, err error) {
 	db := excludeProvisionalScope(LOG_DB.Model(&Log{}))
-	if keyword != "" {
-		// FK uuid arms let an operator paste a user/token/channel UUID and get the rows
-		// that entity produced; the provisional exclusion above still ANDs.
-		if scoped, matched := applyUUIDKeyword(db, keyword, "uuid", "user_uuid", "token_uuid", "channel_uuid"); matched {
-			db = scoped
-		} else {
-			db = db.Where("(content LIKE ?)", "%"+keyword+"%")
-		}
-	}
+	db = applyLogKeyword(db, keyword)
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error
@@ -1231,15 +1272,7 @@ func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrd
 // SearchUserLogs searches logs owned by a specific user using a keyword filter.
 func SearchUserLogs(userId int, keyword string, startIdx int, num int, sortBy string, sortOrder string) (logs []*Log, total int64, err error) {
 	db := excludeProvisionalScope(LOG_DB.Model(&Log{}).Where("user_id = ?", userId))
-	if keyword != "" {
-		// FK uuid arms let the owner paste a token/channel UUID and get the rows it
-		// produced; the user_id scope above still ANDs, so nothing crosses owners.
-		if scoped, matched := applyUUIDKeyword(db, keyword, "uuid", "user_uuid", "token_uuid", "channel_uuid"); matched {
-			db = scoped
-		} else {
-			db = db.Where("(content LIKE ?)", "%"+keyword+"%")
-		}
-	}
+	db = applyLogKeyword(db, keyword)
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error
@@ -1307,10 +1340,54 @@ func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	return token
 }
 
-// DeleteOldLog removes log entries older than the provided timestamp and returns the number deleted.
+// DeleteOldLog removes log entries older than the provided timestamp.
+//
+// The signature is unchanged from before the chunked-retention work so existing
+// callers keep compiling; DeleteOldLogContext is the variant to prefer in new
+// code, because a cancelled request can then stop a long purge.
+//
+// Parameters:
+//   - targetTimestamp: exclusive upper bound on created_at.
+//
+// Return values:
+//   - int64: rows removed.
+//   - error: wrapped failure from the chunk that could not complete.
 func DeleteOldLog(targetTimestamp int64) (int64, error) {
-	result := LOG_DB.Where("created_at < ?", targetTimestamp).Delete(&Log{})
-	return result.RowsAffected, result.Error
+	return DeleteOldLogContext(context.Background(), targetTimestamp)
+}
+
+// DeleteOldLogContext removes log entries older than the provided timestamp, in
+// bounded chunks.
+//
+// This is an operator-triggered purge over the largest table in the system, and
+// a single unbounded DELETE would lock it for the duration. Chunking makes the
+// purge take longer in wall-clock terms but keeps the gateway serving
+// throughout.
+//
+// Parameters:
+//   - ctx: cancellation scope; a cancelled purge returns what it already removed.
+//   - targetTimestamp: exclusive upper bound on created_at.
+//
+// Return values:
+//   - int64: rows removed.
+//   - error: wrapped failure from the chunk that could not complete.
+func DeleteOldLogContext(ctx context.Context, targetTimestamp int64) (int64, error) {
+	// This purge is operator-triggered rather than periodic, but it is the same
+	// bounded sweep over the same allow-listed table, so it feeds the same
+	// throughput series (W3.3). A purge abandoned when the operator's request
+	// context ends is reported as `canceled`, not as a completed purge.
+	started := time.Now()
+	stats, err := ChunkedDeleteWithStats(ctx, LOG_DB, ChunkedDeleteOptions{
+		Table: "logs",
+		Where: "created_at < ?",
+		Args:  []any{targetTimestamp},
+		Pause: config.RetentionDeletePause(),
+	})
+	recordRetentionSweep("logs", stats, err, time.Since(started))
+	if err != nil {
+		return stats.Deleted, errors.Wrap(err, "purge expired logs")
+	}
+	return stats.Deleted, nil
 }
 
 // GetLogById retrieves a log entry by its ID
@@ -1325,17 +1402,40 @@ func GetLogById(id int) (*Log, error) {
 }
 
 // dayAggregationSelect returns the SQL expression that normalizes log timestamps
-// into YYYY-MM-DD strings, accounting for the configured database engine.
-func dayAggregationSelect() string {
-	if common.UsingPostgreSQL.Load() {
-		return "TO_CHAR(date_trunc('day', to_timestamp(created_at)), 'YYYY-MM-DD') as day"
-	}
-
-	if common.UsingSQLite.Load() {
+// into UTC YYYY-MM-DD strings for the engine that owns the given handle.
+//
+// Two properties matter here, and the pre-W2 implementation had neither.
+//
+// The dialect is read from the HANDLE, not from the process-global
+// common.UsingPostgreSQL / UsingSQLite flags. Those flags are set as a side
+// effect of opening any handle, so a deployment that points LOG_SQL_DSN at a
+// different engine from SQL_DSN leaves them describing whichever handle was
+// opened last. These queries run on LOG_DB, so reading the globals could emit
+// one engine's date syntax against another's.
+//
+// The expressions are also independent of the database session time zone.
+// `to_timestamp()` on PostgreSQL and `FROM_UNIXTIME()` on MySQL both resolve in
+// the session zone, while SQLite's `unixepoch` modifier is unconditionally UTC:
+// on a server whose zone is not UTC the same row landed in different days on
+// different engines. Verified: at session zone +09:00 both engines bucketed
+// epoch second 1767225540 as 2026-01-01, where UTC is 2025-12-31. The forms
+// below build the timestamp from a zone-free epoch literal instead, so every
+// engine agrees on the UTC day.
+//
+// Parameters:
+//   - db: the handle the query will run on; its dialector names the engine.
+//
+// Return values:
+//   - string: the aliased `day` select expression.
+func dayAggregationSelect(db *gorm.DB) string {
+	switch dialectName(db) {
+	case "postgres":
+		return "TO_CHAR(TIMESTAMP 'epoch' + created_at * INTERVAL '1 second', 'YYYY-MM-DD') as day"
+	case "mysql":
+		return "DATE_FORMAT(DATE_ADD('1970-01-01', INTERVAL created_at SECOND), '%Y-%m-%d') as day"
+	default:
 		return "strftime('%Y-%m-%d', datetime(created_at, 'unixepoch')) as day"
 	}
-
-	return "DATE_FORMAT(FROM_UNIXTIME(created_at), '%Y-%m-%d') as day"
 }
 
 // SearchToolLogsByDayAndTool returns per-day, per-tool aggregates of tool
@@ -1343,7 +1443,15 @@ func dayAggregationSelect() string {
 // invocations (one log row per invocation) and quota is the sum of the
 // charged quota.
 func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLogStatistic, error) {
-	groupSelect := dayAggregationSelect()
+	return SearchToolLogsByDayAndToolWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchToolLogsByDayAndToolWithContext returns per-day tool aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchToolLogsByDayAndToolWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.ToolLogStatistic, error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1378,7 +1486,7 @@ func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLog
 	}
 
 	var stats []*dto.ToolLogStatistic
-	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+	if err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error; err != nil {
 		return nil, errors.Wrap(err, "search tool logs by day and tool")
 	}
 	return stats, nil
@@ -1387,7 +1495,15 @@ func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLog
 // SearchToolLogsByDayAndUser returns per-day, per-user aggregates of tool
 // invocation logs (Type == LogTypeTool).
 func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByUser, error) {
-	groupSelect := dayAggregationSelect()
+	return SearchToolLogsByDayAndUserWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchToolLogsByDayAndUserWithContext returns per-day tool user aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchToolLogsByDayAndUserWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.ToolLogStatisticByUser, error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1426,7 +1542,7 @@ func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLog
 	}
 
 	var stats []*dto.ToolLogStatisticByUser
-	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+	if err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error; err != nil {
 		return nil, errors.Wrap(err, "search tool logs by day and user")
 	}
 	return stats, nil
@@ -1435,7 +1551,15 @@ func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLog
 // SearchToolLogsByDayAndToken returns per-day, per-token aggregates of tool
 // invocation logs (Type == LogTypeTool).
 func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByToken, error) {
-	groupSelect := dayAggregationSelect()
+	return SearchToolLogsByDayAndTokenWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchToolLogsByDayAndTokenWithContext returns per-day tool token aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchToolLogsByDayAndTokenWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.ToolLogStatisticByToken, error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1476,7 +1600,7 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 	}
 
 	var stats []*dto.ToolLogStatisticByToken
-	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+	if err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error; err != nil {
 		return nil, errors.Wrap(err, "search tool logs by day and token")
 	}
 	return stats, nil
@@ -1486,7 +1610,15 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 // half-open timestamp range [start, endExclusive). `start` and `endExclusive`
 // are Unix seconds.
 func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*dto.LogStatistic, err error) {
-	groupSelect := dayAggregationSelect()
+	return SearchLogsByDayAndModelWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchLogsByDayAndModelWithContext returns per-day model aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchLogsByDayAndModelWithContext(ctx context.Context, userId, start, endExclusive int) (LogStatistics []*dto.LogStatistic, err error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	// If userId is 0, query all users (site-wide statistics)
 	var query string
@@ -1530,7 +1662,7 @@ func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*
 		args = []any{userId, start, endExclusive}
 	}
 
-	err = LOG_DB.Raw(query, args...).Scan(&LogStatistics).Error
+	err = LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&LogStatistics).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search logs by day and model")
 	}
@@ -1540,7 +1672,15 @@ func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*
 // SearchLogsByDayAndUser returns per-day, per-user aggregates for logs within
 // the half-open timestamp range [start, endExclusive).
 func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisticByUser, error) {
-	groupSelect := dayAggregationSelect()
+	return SearchLogsByDayAndUserWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchLogsByDayAndUserWithContext returns per-day user aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchLogsByDayAndUserWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.LogStatisticByUser, error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1585,7 +1725,7 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 	}
 
 	var stats []*dto.LogStatisticByUser
-	err := LOG_DB.Raw(query, args...).Scan(&stats).Error
+	err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search logs by day and user")
 	}
@@ -1596,7 +1736,15 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 // username to disambiguate tokens with identical names) for the half-open
 // range [start, endExclusive).
 func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatisticByToken, error) {
-	groupSelect := dayAggregationSelect()
+	return SearchLogsByDayAndTokenWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchLogsByDayAndTokenWithContext returns per-day token aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchLogsByDayAndTokenWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.LogStatisticByToken, error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1643,7 +1791,7 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 	}
 
 	var stats []*dto.LogStatisticByToken
-	err := LOG_DB.Raw(query, args...).Scan(&stats).Error
+	err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search logs by day and token")
 	}

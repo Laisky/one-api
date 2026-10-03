@@ -1,11 +1,13 @@
+import { DuplicateAction } from '@/components/shared/DuplicateAction';
 import { NameWithId } from '@/components/shared/NameWithId';
 import { Button } from '@/components/ui/button';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { cn, formatTimestamp } from '@/lib/utils';
-import { Copy, FlaskConical, RefreshCw, Settings, Trash2 } from 'lucide-react';
+import { FlaskConical, Info, RefreshCw, Settings, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { TFunction } from 'i18next';
 import type { NavigateFunction } from 'react-router-dom';
@@ -45,7 +47,19 @@ export const channelRefPayload = (ref: string | number): { id: number } | { uuid
 export const sameChannelRef = (left: Pick<Channel, 'id' | 'uuid'>, right: Pick<Channel, 'id' | 'uuid'>) =>
   String(channelRef(left)) === String(channelRef(right));
 
-const nonTextTestingModelMarkers = [
+/**
+ * CHANNEL_TESTING_MODEL_SKIP mirrors model.ChannelTestingModelSkip in the backend.
+ * Selecting it excludes the channel from health checking entirely.
+ */
+export const CHANNEL_TESTING_MODEL_SKIP = '__skip__';
+
+/**
+ * fallbackTestingModelMarkers is only consulted when the server did not send
+ * test_models (an older backend). The server is otherwise authoritative: it
+ * classifies by API format using provider metadata, which this list cannot do, and
+ * re-filtering its answer here would hide models the backend accepts.
+ */
+const fallbackTestingModelMarkers = [
   'embedding',
   'rerank',
   'sora',
@@ -56,14 +70,13 @@ const nonTextTestingModelMarkers = [
   'gpt-image',
   'imagen',
   'veo',
-  'video',
 ];
 
-/** isTextTestingModelName rejects known non-chat model families from testing-model choices. */
-const isTextTestingModelName = (modelName: string) => {
+/** isLikelyChatModelName is the offline fallback for the testing-model choices. */
+const isLikelyChatModelName = (modelName: string) => {
   const lowerName = modelName.trim().toLowerCase();
   if (!lowerName) return false;
-  return !nonTextTestingModelMarkers.some((marker) => lowerName.includes(marker));
+  return !fallbackTestingModelMarkers.some((marker) => lowerName.includes(marker));
 };
 
 /** formatResponseTime renders a response time with its latency severity color. */
@@ -80,10 +93,12 @@ interface ChannelColumnsOptions {
   refreshingBalanceIds: Set<string | number>;
   renderChannelTypeBadge: (type: number) => ReactNode;
   renderStatusBadge: (status: number, priority?: number) => ReactNode;
+  renderResetAction?: (channel: Channel) => ReactNode;
   onPriorityUpdate: (channel: Channel, priority: number) => void;
   onBalanceRefresh: (channel: Channel) => void;
   onTestingModelUpdate: (channel: Channel, testingModel: string | null) => void;
-  onDuplicate: (channel: Channel) => void;
+  onDuplicate: (channel: Channel) => void | Promise<void>;
+  duplicatingIds?: ReadonlySet<string>;
   onManage: (id: string | number, action: 'enable' | 'disable' | 'delete' | 'test', index?: number) => void;
 }
 
@@ -94,10 +109,12 @@ export const createChannelColumns = ({
   refreshingBalanceIds,
   renderChannelTypeBadge,
   renderStatusBadge,
+  renderResetAction,
   onPriorityUpdate,
   onBalanceRefresh,
   onTestingModelUpdate,
   onDuplicate,
+  duplicatingIds,
   onManage,
 }: ChannelColumnsOptions): ColumnDef<Channel>[] => [
   {
@@ -195,15 +212,43 @@ export const createChannelColumns = ({
   },
   {
     accessorKey: 'testing_model',
-    header: t('channels.columns.testing_model'),
+    header: () => (
+      <TooltipProvider>
+        <div className="flex items-center gap-1">
+          <span>{t('channels.columns.testing_model')}</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center text-muted-foreground hover:text-foreground focus:outline-none"
+                aria-label={t('channels.testing.help_label')}
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" align="start" className="max-w-[360px] whitespace-pre-line">
+              {t('channels.testing.help')}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
+    ),
     cell: ({ row }) => {
       const channel = row.original;
-      const models = (Array.isArray(channel.test_models) ? channel.test_models : (channel.models || '').split(','))
+      const serverProvided = Array.isArray(channel.test_models);
+      const models = (serverProvided ? channel.test_models! : (channel.models || '').split(','))
         .map((model) => String(model).trim())
         .filter(Boolean)
-        .filter(isTextTestingModelName)
+        // The server already filtered test_models by API format; only the offline
+        // fallback needs the local heuristic.
+        .filter((model) => (serverProvided ? true : isLikelyChatModelName(model)))
         .sort();
-      const value = channel.testing_model && models.includes(channel.testing_model) ? channel.testing_model : '';
+      const isSkipped = channel.testing_model === CHANNEL_TESTING_MODEL_SKIP;
+      const value = isSkipped
+        ? CHANNEL_TESTING_MODEL_SKIP
+        : channel.testing_model && models.includes(channel.testing_model)
+          ? channel.testing_model
+          : '';
       return (
         <div className="w-[140px] md:w-[160px] max-w-[220px]">
           <select
@@ -213,6 +258,7 @@ export const createChannelColumns = ({
             onChange={(event) => onTestingModelUpdate(channel, event.target.value === '' ? null : event.target.value)}
           >
             <option value="">{t('channels.testing.auto')}</option>
+            <option value={CHANNEL_TESTING_MODEL_SKIP}>{t('channels.testing.skip')}</option>
             {models.map((model) => (
               <option key={model} value={model}>
                 {model}
@@ -243,15 +289,11 @@ export const createChannelColumns = ({
           >
             {t('channels.actions.edit')}
           </ListActionButton>
-          <ListActionButton
-            variant="outline"
-            size="sm"
-            onClick={() => onDuplicate(channel)}
-            className="gap-1"
-            icon={<Copy className="h-3 w-3" />}
-          >
-            {t('channels.actions.duplicate', 'Duplicate')}
-          </ListActionButton>
+          <DuplicateAction
+            onDuplicate={() => onDuplicate(channel)}
+            pending={duplicatingIds?.has(String(channelRef(channel)))}
+          />
+          {renderResetAction?.(channel)}
           <ListActionButton
             variant="outline"
             size="sm"
@@ -265,6 +307,7 @@ export const createChannelColumns = ({
             size="sm"
             onClick={() => onManage(channelRef(channel), 'test', row.index)}
             className="gap-1"
+            title={t('channels.actions.test_help')}
             icon={<FlaskConical className="h-3 w-3" />}
           >
             {t('channels.actions.test')}

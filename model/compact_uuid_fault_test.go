@@ -237,11 +237,10 @@ func compactFaultBarrierHold(t *testing.T) {
 	for _, barrier := range barriers {
 		t.Run(barrier.name, func(t *testing.T) {
 			barrier.reach(t)
-			before := traffic.ops.Load()
-			time.Sleep(compactFaultHoldFor) // The hold: no cycle runs while the workload keeps going.
+			held := traffic.holdBarrier()
 			require.NoError(t, traffic.firstFailure(), "the workload must survive the %s barrier", barrier.name)
 			barrier.prove(t)
-			require.Greater(t, traffic.ops.Load()-before, int64(1000),
+			require.GreaterOrEqual(t, held, int64(compactFaultHoldOps),
 				"the %s barrier must be held under at least 1,000 operations", barrier.name)
 			require.Equal(t, digest, compactFaultDigest(db, compactFaultSeedRows),
 				"the fixture's authoritative text must never move")
@@ -254,24 +253,17 @@ func compactFaultBarrierHold(t *testing.T) {
 // compactFaultPartialBackfillBarrier holds an unfinished historical fill under traffic (AUTO-T09).
 //
 // It is separate from the other barriers because it is the one that needs a fill larger than a
-// single cycle's row budget, and that is exactly the shape the coordinator currently cannot
-// complete. This test FAILS, and the failure is a real defect rather than a fixture problem:
+// single cycle's row budget. It is the regression test for a starvation defect fixed in 60e1ab30:
 //
 // compactRegistry sorts targets by (role, table, legacyColumn), so users.inviter_uuid is
-// reconciled before users.uuid. runCompactReconciliation gives every target a single SHARED
-// row budget in that order and breaks when it is spent, while reconcileCompactTarget
-// (compact_uuid_backfill.go:122) seeds only progress.cursor from the durable cursor and never
-// seeds progress.wrapped from cursor.wrapped. The durable wrapped flag is therefore write-only,
-// so a target that has already traversed its table wraps to zero and re-examines it again on
-// every subsequent cycle. users.inviter_uuid consequently spends the entire global budget every
-// cycle, forever, and users.uuid never receives any: its historical rows are never filled,
-// validation always reports actionable rows, and no marker is ever written.
+// reconciled before users.uuid, and every target shares one row budget per cycle in that order.
+// A target that had already traversed its table used to wrap to zero and re-examine it within the
+// same cycle, so users.inviter_uuid spent the entire budget every cycle and users.uuid never
+// received any: its historical rows were never filled and no marker was ever written. Measured on
+// PostgreSQL 17 with 2,500 seeded users and the minimum row budget of 1,000, 81 consecutive cycles
+// each reported examined=1000 updated=0. reconcileCompactTarget now rewinds for the next cycle and
+// falls through to the bounded rolling sweep instead, so a later target always receives budget.
 //
-// Measured on PostgreSQL 17 with 2,500 seeded users and the minimum row budget of 1,000: 81
-// consecutive reconciliation cycles each reported examined=1000 updated=0 while
-// users.uuid_compact remained NULL for all 2,500 rows. With the shipped 10,000 default the same
-// starvation begins once users exceeds roughly 5,000 rows, which is every real upgrade and both
-// of Section 12's own 100k and 1m fixtures.
 // Parameters:
 //   - t: test handle used for assertions.
 //
@@ -307,14 +299,13 @@ func compactFaultPartialBackfillBarrier(t *testing.T) {
 		"the historical fill of users.uuid never started: users.inviter_uuid sorts first and "+
 			"spends the whole shared row budget on every cycle, so users.uuid is starved forever")
 
-	before := traffic.ops.Load()
-	time.Sleep(compactFaultHoldFor) // The hold.
+	held := traffic.holdBarrier()
 	require.NoError(t, traffic.firstFailure(), "the workload must survive the partial-backfill barrier")
 	require.Positive(t, compactFaultCount(t, db, unfilled),
 		"the partial-backfill barrier must still have unfilled rows, or it is not partial")
 	require.False(t, compactFaultMarkerIntegrity(t, ctx, topology),
 		"an unfinished backfill must never carry a completion marker")
-	require.Greater(t, traffic.ops.Load()-before, int64(1000),
+	require.GreaterOrEqual(t, held, int64(compactFaultHoldOps),
 		"the partial-backfill barrier must be held under at least 1,000 operations")
 
 	require.Equal(t, compactStateReady, driveCompactToReady(t, coordinator).state)

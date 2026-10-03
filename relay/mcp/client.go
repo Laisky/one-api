@@ -47,7 +47,7 @@ const (
 	mcpDefaultProtocolVersion = LegacyProtocolVersion
 	mcpAcceptHeaderValue      = "application/json, text/event-stream"
 	mcpClientName             = "one-api-mcp-client"
-	mcpClientVersion          = "1.0.0"
+	mcpClientVersion          = ImplementationVersion
 )
 
 // NewStreamableHTTPClient constructs a StreamableHTTPClient from MCP server metadata.
@@ -260,7 +260,10 @@ func (c *StreamableHTTPClient) CallTool(ctx context.Context, name string, argume
 	}
 	var result CallToolResult
 	if err := c.doRPC(ctx, "tools/call", params, &result); err != nil {
-		return nil, errors.Wrapf(err, "mcp rpc tools/call %s", name)
+		// The server may have performed the operation before its receipt failed.
+		// Keep pre-execution initialization/argument failures above retryable, but
+		// never replay this attempted call on another eligible server.
+		return nil, &ToolExecutionUncertainError{Err: errors.Wrapf(err, "mcp rpc tools/call %s", name)}
 	}
 	return &result, nil
 }
@@ -553,7 +556,7 @@ func (c *StreamableHTTPClient) debugLogRequest(method string, headers http.Heade
 			zap.String("url", c.BaseURL),
 			zap.Any("headers", sanitizeHeadersForLog(headers)),
 			zap.Int("body_bytes", len(body)),
-			zap.String("body", sanitizeBodyForLog(body)),
+			zap.String("body", "<MCP payload omitted>"),
 		)...)
 }
 
@@ -576,7 +579,7 @@ func (c *StreamableHTTPClient) debugLogResponse(method string, resp *http.Respon
 			zap.Int("status_code", resp.StatusCode),
 			zap.Any("headers", sanitizeHeadersForLog(resp.Header)),
 			zap.Int("body_bytes", len(body)),
-			zap.String("body", sanitizeBodyForLog(body)),
+			zap.String("body", "<MCP payload omitted>"),
 		)...)
 }
 
