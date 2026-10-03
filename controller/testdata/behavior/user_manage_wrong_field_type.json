@@ -1,0 +1,9 @@
+{
+  "case": "user/manage_wrong_field_type",
+  "site": "U6 ManageUser (error)",
+  "status": 200,
+  "body": {
+    "message": "invalid parameter",
+    "success": false
+  }
+}

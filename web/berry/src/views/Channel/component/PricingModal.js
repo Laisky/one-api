@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -33,8 +34,8 @@ const PricingModal = ({ open, onClose, channelId, channelName, channelType }) =>
 
   useEffect(() => {
     if (open && channelId) {
-      loadPricing();
-      loadSupportedModels();
+      loadPricing().catch(reportUIError);
+      loadSupportedModels().catch(reportUIError);
     }
   }, [open, channelId]);
 
@@ -160,7 +161,7 @@ const PricingModal = ({ open, onClose, channelId, channelName, channelType }) =>
             Channel Pricing - {channelName}
           </Typography>
           <Tooltip title="Refresh">
-            <IconButton onClick={loadPricing} disabled={loading}>
+            <IconButton onClick={(...uiArgs) => loadPricing(...uiArgs).catch(reportUIError)} disabled={loading}>
               <RefreshIcon />
             </IconButton>
           </Tooltip>
@@ -355,7 +356,7 @@ const PricingModal = ({ open, onClose, channelId, channelName, channelType }) =>
         <Button onClick={onClose} disabled={loading}>
           Cancel
         </Button>
-        <Button onClick={savePricing} variant="contained" disabled={loading}>
+        <Button onClick={(...uiArgs) => savePricing(...uiArgs).catch(reportUIError)} variant="contained" disabled={loading}>
           Save Pricing
         </Button>
       </DialogActions>

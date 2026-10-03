@@ -1,6 +1,8 @@
 package model
 
 import (
+	"context"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 )
 
+// Option stores one runtime configuration value by key.
 type Option struct {
 	Key       string `json:"key" gorm:"primaryKey"`
 	Value     string `json:"value"`
@@ -20,10 +23,22 @@ type Option struct {
 	UpdatedAt int64  `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
 
+// AllOption returns all persisted runtime configuration options.
 func AllOption() ([]*Option, error) {
+	return AllOptionWithContext(context.Background())
+}
+
+// AllOptionWithContext returns all persisted options using ctx for database cancellation.
+//
+// Parameters:
+//   - ctx: lifecycle and deadline scope for the database query.
+//
+// Return values:
+//   - []*Option: persisted options.
+//   - error: wrapped query failure.
+func AllOptionWithContext(ctx context.Context) ([]*Option, error) {
 	var options []*Option
-	var err error
-	err = DB.Find(&options).Error
+	err := DB.WithContext(ctx).Find(&options).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "query all options")
 	}
@@ -56,6 +71,12 @@ func InitOptionMap() {
 	config.OptionMap["SMTPPort"] = strconv.Itoa(config.SMTPPort)
 	config.OptionMap["SMTPAccount"] = ""
 	config.OptionMap["SMTPToken"] = ""
+	config.OptionMap["EmailProvider"] = config.EmailProvider
+	// Never seed secrets into OptionMap — GetOptions must not leak them if filtering regresses.
+	config.OptionMap["ResendAPIKey"] = ""
+	config.OptionMap["StripeSecretKey"] = ""
+	config.OptionMap["StripeWebhookSecret"] = ""
+	config.OptionMap["MinTopUpUSD"] = strconv.Itoa(config.MinTopUpUSD)
 	config.OptionMap["Notice"] = ""
 	config.OptionMap["About"] = ""
 	config.OptionMap["HomePageContent"] = ""
@@ -95,8 +116,24 @@ func InitOptionMap() {
 	loadOptionsFromDatabase()
 }
 
+// loadOptionsFromDatabase replays persisted options into the in-memory config map.
 func loadOptionsFromDatabase() {
-	options, _ := AllOption()
+	loadOptionsFromDatabaseWithContext(context.Background())
+}
+
+// loadOptionsFromDatabaseWithContext replays persisted options using ctx for
+// the database query.
+//
+// Parameters:
+//   - ctx: lifecycle and deadline scope for the query.
+//
+// Return values: none; failures are logged.
+func loadOptionsFromDatabaseWithContext(ctx context.Context) {
+	options, err := AllOptionWithContext(ctx)
+	if err != nil {
+		logger.Logger.Error("failed to query options from database", zap.Error(err))
+		return
+	}
 	for _, option := range options {
 		// Skip deprecated global pricing options
 		if option.Key == "ModelRatio" || option.Key == "CompletionRatio" {
@@ -109,31 +146,90 @@ func loadOptionsFromDatabase() {
 	}
 }
 
+// SyncOptions preserves the historical frequency-only worker API.
+//
+// Parameters:
+//   - frequency: seconds between refreshes; values <= 0 disable the loop.
+//
+// Return values: none.
 func SyncOptions(frequency int) {
+	SyncOptionsContext(context.Background(), frequency)
+}
+
+// SyncOptionsContext periodically refreshes runtime configuration from
+// persisted options until ctx is cancelled.
+//
+// It is a database producer, so it takes the caller's lifecycle context: an
+// unstoppable loop keeps querying during shutdown and after CloseDB. It is not
+// joined -- a missed refresh has no durable consequence -- so a shutdown does
+// not wait for it, unlike the retention cleaners.
+//
+// Parameters:
+//   - ctx: lifecycle scope; cancellation ends the loop at the next tick.
+//   - frequency: seconds between refreshes; values <= 0 disable the loop.
+//
+// Return values: none.
+func SyncOptionsContext(ctx context.Context, frequency int) {
+	if frequency <= 0 {
+		logger.Logger.Info("option sync disabled", zap.Int("sync_frequency", frequency))
+		return
+	}
+
+	ticker := time.NewTicker(time.Duration(frequency) * time.Second)
+	defer ticker.Stop()
 	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
-		logger.Logger.Info("syncing options from database")
-		loadOptionsFromDatabase()
+		select {
+		case <-ctx.Done():
+			logger.Logger.Info("option sync stopped", zap.Error(ctx.Err()))
+			return
+		case <-ticker.C:
+			logger.Logger.Info("syncing options from database")
+			loadOptionsFromDatabaseWithContext(ctx)
+		}
 	}
 }
 
+// UpdateOption persists an option and updates the in-memory configuration only after storage succeeds.
 func UpdateOption(key string, value string) error {
 	// Save to database first
 	option := Option{
 		Key: key,
 	}
 	// https://gorm.io/docs/update.html#Save-All-Fields
-	DB.FirstOrCreate(&option, Option{Key: key})
+	if err := DB.FirstOrCreate(&option, Option{Key: key}).Error; err != nil {
+		return errors.Wrapf(err, "first or create option %q", key)
+	}
 	option.Value = value
 	// Save is a combination function.
 	// If save value does not contain primary key, it will execute Create,
 	// otherwise it will execute Update (with all fields).
-	DB.Save(&option)
+	if err := DB.Save(&option).Error; err != nil {
+		return errors.Wrapf(err, "save option %q", key)
+	}
 	// Update OptionMap
 	return updateOptionMap(key, value)
 }
 
+// envOverrideForOption returns an environment value that must override a persisted option.
+func envOverrideForOption(key string) (string, bool) {
+	switch key {
+	case "EmailProvider":
+		value := strings.ToLower(strings.TrimSpace(os.Getenv(config.EnvEmailProvider)))
+		return value, value != ""
+	case "ResendAPIKey":
+		value := strings.TrimSpace(os.Getenv(config.EnvResendAPIKey))
+		return value, value != ""
+	default:
+		return "", false
+	}
+}
+
+// updateOptionMap applies one option value to config.OptionMap and typed config variables.
 func updateOptionMap(key string, value string) (err error) {
+	if envValue, ok := envOverrideForOption(key); ok {
+		value = envValue
+	}
+
 	config.OptionMapRWMutex.Lock()
 	defer config.OptionMapRWMutex.Unlock()
 	config.OptionMap[key] = value
@@ -199,6 +295,24 @@ func updateOptionMap(key string, value string) (err error) {
 		config.SMTPFrom = value
 	case "SMTPToken":
 		config.SMTPToken = value
+	case "EmailProvider":
+		val := strings.ToLower(strings.TrimSpace(value))
+		if val != "" && val != "smtp" && val != "resend" {
+			return errors.Errorf("invalid email provider %q (expected \"smtp\", \"resend\", or empty)", val)
+		}
+		config.EmailProvider = val
+	case "ResendAPIKey":
+		config.ResendAPIKey = strings.TrimSpace(value)
+	case "StripeSecretKey":
+		config.StripeSecretKey = strings.TrimSpace(value)
+	case "StripeWebhookSecret":
+		config.StripeWebhookSecret = strings.TrimSpace(value)
+	case "MinTopUpUSD":
+		intValue, _ := strconv.Atoi(value)
+		if intValue < 1 {
+			intValue = 1
+		}
+		config.MinTopUpUSD = intValue
 	case "ServerAddress":
 		config.ServerAddress = value
 	case "GitHubClientId":

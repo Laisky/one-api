@@ -176,6 +176,29 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		MaxReasoningTokens: 120000,
 		Description:        "Claude Sonnet 4.6 on AWS Bedrock with 1M-token context and extended thinking.",
 	},
+	"claude-sonnet-5": {
+		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
+		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
+		// Sonnet 5 is adaptive-thinking-only: budget_tokens is rejected upstream, so
+		// MaxReasoningTokens stays unset (matches first-party Sonnet 5 and AWS Opus 4.8).
+		Description: "Claude Sonnet 5 on AWS Bedrock with 1M-token context and adaptive thinking; base $3/$15 with an introductory $2/$10 promo applied as a time-window discount through 2026-08-31.",
+		// Bedrock mirrors Anthropic's introductory $2/$10 promo until 2026-09-01, then the $3/$15 base applies.
+		TimeWindows: []adaptor.TimeWindow{{
+			Name:     "claude-sonnet-5-intro-promo",
+			TimeZone: "UTC",
+			DateTo:   "2026-09-01",
+			Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "00:00"}},
+			Overlay: adaptor.ModelConfig{
+				Ratio:             2 * ratio.MilliTokensUsd,
+				CachedInputRatio:  0.2 * ratio.MilliTokensUsd,
+				CacheWrite5mRatio: 2.5 * ratio.MilliTokensUsd,
+				CacheWrite1hRatio: 4 * ratio.MilliTokensUsd,
+			},
+		}},
+	},
 	"claude-3-opus-20240229": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
 		CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd,
@@ -218,7 +241,7 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 30000,
-		Description:        "Claude Opus 4.1 (August 2025 release) on AWS Bedrock with extended thinking.",
+		Description:        "Claude Opus 4.1 (August 2025 release) on AWS Bedrock with extended thinking. AWS Bedrock model entered Legacy state on 2026-07-08 with EOL scheduled 2027-01-08.",
 	},
 	"claude-opus-4-5": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
@@ -263,12 +286,28 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		Description: "Claude Opus 4.8 on AWS Bedrock with 1M-token context and adaptive thinking; flagship Anthropic model.",
 	},
+	"claude-opus-5": {
+		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
+		CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
+		Description: "Claude Opus 5 on AWS Bedrock with 1M-token context and adaptive thinking; most capable Anthropic model.",
+	},
+	"claude-fable-5": {
+		Ratio: 10 * ratio.MilliTokensUsd, CompletionRatio: 5,
+		CachedInputRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
+		Description: "Claude Fable 5 on AWS Bedrock with 1M-token context and frontier-level reasoning (adaptive thinking; budget_tokens not supported).",
+	},
 
 	// Llama Models on AWS Bedrock
 	// Llama 4 models - Pricing given per 1K tokens; normalize to $/1M then to $/token via ratio.MilliTokensUsd
 	"llama4-maverick-17b-1m": {
 		Ratio: 0.24 * ratio.MilliTokensUsd, CompletionRatio: 4.04,
-		ContextLength: 1000000, MaxOutputTokens: 4096,
+		ContextLength: 1000000, MaxOutputTokens: 8192,
 		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsLlamaToolsFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
 		HuggingFaceID: "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
@@ -276,7 +315,7 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 	},
 	"llama4-scout-17b-3.5m": {
 		Ratio: 0.17 * ratio.MilliTokensUsd, CompletionRatio: 3.88,
-		ContextLength: 3500000, MaxOutputTokens: 4096,
+		ContextLength: 10000000, MaxOutputTokens: 8192,
 		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsLlamaToolsFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
 		HuggingFaceID: "meta-llama/Llama-4-Scout-17B-16E-Instruct",
@@ -365,14 +404,14 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 
 	// Amazon Nova Models
 	"amazon-nova-micro": {
-		Ratio: 0.035 * ratio.MilliTokensUsd, CompletionRatio: 4.28,
+		Ratio: 0.035 * ratio.MilliTokensUsd, CompletionRatio: 4.0,
 		ContextLength: 128000, MaxOutputTokens: 5120,
 		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsNovaFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
 		Description: "Amazon Nova Micro fast text-only chat model.",
 	},
 	"amazon-nova-lite": {
-		Ratio: 0.06 * ratio.MilliTokensUsd, CompletionRatio: 4.17,
+		Ratio: 0.06 * ratio.MilliTokensUsd, CompletionRatio: 4.0,
 		ContextLength: 300000, MaxOutputTokens: 5120,
 		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsNovaFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
@@ -386,11 +425,18 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		Description: "Amazon Nova Pro multimodal flagship with 300k context.",
 	},
 	"amazon-nova-premier": {
-		Ratio: 2.4 * ratio.MilliTokensUsd, CompletionRatio: 4.17,
+		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
 		ContextLength: 1000000, MaxOutputTokens: 5120,
 		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsNovaFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
 		Description: "Amazon Nova Premier multimodal model with 1M-token context.",
+	},
+	"amazon-nova-2-lite": {
+		Ratio: 0.3 * ratio.MilliTokensUsd, CompletionRatio: 8.33,
+		ContextLength: 1000000, MaxOutputTokens: 64000,
+		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsNovaReasoningFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
+		Description: "Amazon Nova 2 Lite multimodal reasoning model with 1M-token context on AWS Bedrock (GA 2025-12-02).",
 	},
 
 	// Titan Models
@@ -587,6 +633,22 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		HuggingFaceID: "openai/gpt-oss-120b",
 		Description:   "OpenAI gpt-oss 120B open-weight reasoning model on AWS Bedrock.",
 	},
+	"gpt-oss-safeguard-120b": {
+		Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 4,
+		ContextLength: 128000, MaxOutputTokens: 16000,
+		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsOpenAIOSSFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
+		HuggingFaceID: "openai/gpt-oss-safeguard-120b",
+		Description:   "OpenAI gpt-oss-safeguard 120B open-weight safety/content-moderation reasoning model on AWS Bedrock.",
+	},
+	"gpt-oss-safeguard-20b": {
+		Ratio: 0.07 * ratio.MilliTokensUsd, CompletionRatio: 20.0 / 7,
+		ContextLength: 128000, MaxOutputTokens: 16000,
+		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsOpenAIOSSFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
+		HuggingFaceID: "openai/gpt-oss-safeguard-20b",
+		Description:   "OpenAI gpt-oss-safeguard 20B compact open-weight safety/content-moderation model on AWS Bedrock.",
+	},
 
 	// Writer Models
 	"palmyra-x4": {
@@ -602,5 +664,12 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsWriterFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
 		Description: "Writer Palmyra X5 enterprise chat model with 1M-token context on AWS Bedrock.",
+	},
+	"palmyra-vision-7b": {
+		Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 4,
+		ContextLength: 4096, MaxOutputTokens: 4096,
+		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsWriterFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
+		Description: "Writer Palmyra Vision 7B multimodal (text+image) visual-understanding model on AWS Bedrock.",
 	},
 }

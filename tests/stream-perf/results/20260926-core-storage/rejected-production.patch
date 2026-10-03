@@ -1,0 +1,49 @@
+diff --git a/internal/tokenizer/core_bpe.go b/internal/tokenizer/core_bpe.go
+index 8607402..102e018 100644
+--- a/internal/tokenizer/core_bpe.go
++++ b/internal/tokenizer/core_bpe.go
+@@ -1,13 +1,11 @@
+ package tiktoken
+ 
+ import (
+-	"bytes"
+ 	"errors"
+ 	"fmt"
+ 	"math"
+ 	"regexp"
+ 	"runtime"
+-	"sort"
+ 	"strings"
+ 
+ 	"github.com/dlclark/regexp2"
+@@ -21,7 +19,6 @@ type CoreBPE struct {
+ 	specialTokensDecoder map[int]string
+ 	tlRegex              *regexp2.Regexp
+ 	tlSpecialRegex       *regexp2.Regexp
+-	sortedTokenBytes     [][]byte
+ }
+ 
+ // NewCoreBPE constructs the upstream core and selects an exact supported ordinary matcher.
+@@ -54,14 +51,6 @@ func NewCoreBPE(encoder map[string]int, specialTokensEncoder map[string]int, pat
+ 		specialTokensDecoder[v] = k
+ 	}
+ 
+-	sortedTokenBytes := make([][]byte, 0, len(encoder))
+-	for k := range encoder {
+-		sortedTokenBytes = append(sortedTokenBytes, []byte(k))
+-	}
+-	sort.Slice(sortedTokenBytes, func(i, j int) bool {
+-		return bytes.Compare(sortedTokenBytes[i], sortedTokenBytes[j]) < 0
+-	})
+-
+ 	canonical := canonicalOrdinaryRegexp(pattern)
+ 	// A configured finite deadline is part of the original matcher contract.
+ 	// Test the captured instance timeout, not the mutable package default.
+@@ -77,7 +66,6 @@ func NewCoreBPE(encoder map[string]int, specialTokensEncoder map[string]int, pat
+ 		specialTokensDecoder: specialTokensDecoder,
+ 		tlRegex:              regex,
+ 		tlSpecialRegex:       specialRegex,
+-		sortedTokenBytes:     sortedTokenBytes,
+ 	}, nil
+ }
+ 

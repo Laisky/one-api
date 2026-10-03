@@ -1,8 +1,8 @@
+import type { TableBatchAction } from '@/components/ui/table-toolbar';
 import { LogDetailsModal } from '@/components/LogDetailsModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,96 +11,45 @@ import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { SearchableDropdown, type SearchOption } from '@/components/ui/searchable-dropdown';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TimestampDisplay } from '@/components/ui/timestamp';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { api } from '@/lib/api';
 import { LOG_TYPES, LOG_TYPE_OPTIONS } from '@/lib/constants/logs';
-import { buildCsv, fetchAllPaginatedResults, mapWithConcurrency } from '@/lib/export';
+import type { LogCursorFilters } from '@/lib/logCursor';
+import { useSelectedLogActions } from './useSelectedLogActions';
+import { useTableSelection } from '@/hooks/useTableSelection';
 import { useAuthStore } from '@/lib/stores/auth';
-import { cn, formatTimestamp, fromDateTimeLocal, renderQuota, toDateTimeLocal } from '@/lib/utils';
-import type { LogEntry, LogMetadata } from '@/types/log';
-import type { ColumnDef } from '@tanstack/react-table';
-import { Copy, Eye, EyeOff, FileDown, Filter, RefreshCw } from 'lucide-react';
+import { cn, fromDateTimeLocal, renderQuota, toDateTimeLocal } from '@/lib/utils';
+import { Eye, EyeOff, FileDown, Filter, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { LogModelCell } from './components/LogModelCell';
+import { createLogColumns, logRef, type LogRow } from './logs-page-columns';
+import { LOG_TYPE_TRANSLATION_KEYS } from './log-types';
+import { LogCursorPager } from './components/LogCursorPager';
+import { useLogCursorPagination, type LogCursorNavigation } from './useLogCursorPagination';
 
-type LogRow = LogEntry;
-
+/** LogStatistics describes the aggregate quota and request totals returned by log statistics APIs. */
 interface LogStatistics {
   quota: number;
   token_count?: number;
   request_count?: number;
 }
 
-const LOG_TYPE_TRANSLATION_KEYS: Record<number, string> = {
-  [LOG_TYPES.ALL]: 'all',
-  [LOG_TYPES.TOPUP]: 'topup',
-  [LOG_TYPES.CONSUME]: 'consume',
-  [LOG_TYPES.MANAGE]: 'manage',
-  [LOG_TYPES.SYSTEM]: 'system',
-  [LOG_TYPES.TEST]: 'test',
-  [LOG_TYPES.TOOL]: 'tool',
-};
-
-const formatLatency = (ms?: number, fallback: string = '-') => {
-  if (!ms) return fallback;
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-};
-
-const getLatencyColor = (ms?: number) => {
-  if (!ms) return '';
-  if (ms < 1000) return 'text-success';
-  if (ms < 3000) return 'text-warning';
-  return 'text-destructive';
-};
-
-const coerceTokenCount = (value: unknown) => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
-  return Math.trunc(value);
-};
-
-const getCacheWriteSummaries = (metadata?: LogMetadata) => {
-  const details = metadata?.cache_write_tokens;
-  if (!details) {
-    return { fiveMinute: 0, oneHour: 0 };
-  }
-
-  return {
-    fiveMinute: coerceTokenCount(details.ephemeral_5m),
-    oneHour: coerceTokenCount(details.ephemeral_1h),
-  };
-};
-
-interface ExportTracePayload {
-  id: number;
-  trace_id: string;
-  url: string;
-  method: string;
-  body_size: number;
-  status: number;
-  created_at: number;
-  updated_at: number;
-  timestamps?: Record<string, unknown>;
-  durations?: Record<string, unknown>;
-  log?: Record<string, unknown>;
-}
-
+/** LogsPage renders log filters, statistics, export actions, pagination, and trace details. */
 export function LogsPage() {
   const { t } = useTranslation();
   const { notify } = useNotifications();
   const { user } = useAuthStore();
-  const [confirmAction, ConfirmActionDialog] = useConfirmDialog();
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [pageIndex, setPageIndex] = useState(Math.max(0, parseInt(searchParams.get('p') || '1') - 1));
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
+  // cursorActive reflects the source of the rows on screen, not the eligibility
+  // of the next request, so the pager never describes data it did not produce.
+  const [cursorActive, setCursorActive] = useState(false);
   const mounted = useRef(false);
 
   // Determine if user is admin/root
@@ -134,12 +83,19 @@ export function LogsPage() {
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  const selectionScope = JSON.stringify([user?.uuid || user?.username, user?.role, filters, searchKeyword.trim()]);
+  const selection = useTableSelection(selectionScope);
+  const [loadedScope, setLoadedScope] = useState('');
+  const [filterApplyVersion, setFilterApplyVersion] = useState(0);
+  const requestSequence = useRef(0);
+  const scopeRef = useRef(selectionScope);
+  scopeRef.current = selectionScope;
+
   // Tracing modal — driven by URL ?id=xxx
   const selectedLog = useMemo(() => {
     const idStr = searchParams.get('id');
     if (!idStr) return null;
-    const id = parseInt(idStr);
-    return data.find((row) => row.id === id) ?? null;
+    return data.find((row) => String(logRef(row)) === idStr || String(row.id) === idStr) ?? null;
   }, [searchParams, data]);
   const detailsModalOpen = selectedLog !== null;
 
@@ -167,7 +123,12 @@ export function LogsPage() {
 
   // (removed duplicate isAdmin declaration)
 
-  const load = async (p = 0, size = pageSize) => {
+  const load = async (p = 0, size = pageSize, sortOverride?: { by: string; order: 'asc' | 'desc' }) => {
+    // The sort is passed explicitly because a caller that has just called
+    // setSortBy still sees the previous value in this closure.
+    const activeSortBy = sortOverride?.by ?? sortBy;
+    const activeSortOrder = sortOverride?.order ?? sortOrder;
+    const sequence = ++requestSequence.current;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -181,9 +142,9 @@ export function LogsPage() {
       if (filters.channel && isAdminOrRoot) params.set('channel', filters.channel);
       if (filters.start_timestamp) params.set('start_timestamp', String(fromDateTimeLocal(filters.start_timestamp)));
       if (filters.end_timestamp) params.set('end_timestamp', String(fromDateTimeLocal(filters.end_timestamp)));
-      if (sortBy) {
-        params.set('sort', sortBy);
-        params.set('order', sortOrder);
+      if (activeSortBy) {
+        params.set('sort', activeSortBy);
+        params.set('order', activeSortOrder);
       }
 
       // Unified API call - complete URL with /api prefix
@@ -191,19 +152,83 @@ export function LogsPage() {
       const res = await api.get(path);
       const { success, data: responseData, total: responseTotal } = res.data;
 
+      if (sequence !== requestSequence.current || scopeRef.current !== selectionScope) return;
       if (success) {
+        setLoadedScope(selectionScope);
         setData(responseData || []);
         setTotal(responseTotal || 0);
         setPageIndex(p);
         setPageSize(size);
+        setCursorActive(false);
       }
     } catch (error) {
-      console.error('Failed to load logs:', error);
+      if (sequence !== requestSequence.current || scopeRef.current !== selectionScope) return;
+      console.error(`Failed to load logs: ${String(error)}`);
       setData([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
+  };
+
+  const cursor = useLogCursorPagination<LogRow>({
+    isAdminOrRoot,
+    filters: filters as LogCursorFilters,
+    pageSize,
+    toUnixSeconds: fromDateTimeLocal,
+    get: (url) => api.get(url),
+    onRestart: () =>
+      notify({
+        type: 'info',
+        title: t('logs.notifications.cursor_restart_title'),
+        message: t('logs.notifications.cursor_restart_message'),
+      }),
+  });
+
+  /**
+   * loadPage fetches a page, preferring the keyset route.
+   *
+   * The keyset route only answers the view it can answer: the default
+   * created_at DESC listing with no keyword search. Anything else — a different
+   * sort, a keyword search, or a server without the capability — uses the
+   * legacy offset route unchanged, so no existing capability is lost.
+   *
+   * @param navigation - the move being made.
+   * @param options - per-call overrides for state that has not committed yet.
+   * @returns nothing; the page state is updated in place.
+   */
+  const loadPage = async (
+    navigation: LogCursorNavigation,
+    options: { size?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; offsetPage?: number } = {}
+  ) => {
+    const size = options.size ?? pageSize;
+    const activeSortBy = options.sortBy ?? sortBy;
+    const activeSortOrder = options.sortOrder ?? sortOrder;
+    const eligible = cursor.supported && !searchKeyword.trim() && activeSortBy === 'created_at' && activeSortOrder === 'desc';
+
+    if (eligible) {
+      const sequence = ++requestSequence.current;
+      setLoading(true);
+      try {
+        if (navigation === 'first') cursor.reset();
+        const rows = await cursor.fetchPage(navigation);
+        if (sequence !== requestSequence.current || scopeRef.current !== selectionScope) return;
+        if (rows) {
+          setLoadedScope(selectionScope);
+          setData(rows);
+          setPageSize(size);
+          setCursorActive(true);
+          return;
+        }
+      } finally {
+        if (sequence === requestSequence.current) setLoading(false);
+      }
+      // rows === null means this server cannot answer with a cursor; fall
+      // through to the legacy route rather than showing an empty list.
+    }
+
+    setCursorActive(false);
+    await load(options.offsetPage ?? 0, size, { by: activeSortBy, order: activeSortOrder });
   };
 
   const loadStatistics = async () => {
@@ -248,7 +273,7 @@ export function LogsPage() {
 
       if (success && Array.isArray(responseData)) {
         const options: SearchOption[] = responseData.slice(0, 10).map((log: LogRow) => ({
-          key: log.id.toString(),
+          key: String(logRef(log)),
           value: log.content || log.model_name || t('logs.search.log_entry'),
           text: log.content || log.model_name || t('logs.search.log_entry'),
           content: (
@@ -274,37 +299,46 @@ export function LogsPage() {
     }
   };
 
-  const performSearch = async () => {
-    if (!searchKeyword.trim()) {
-      return load(0, pageSize);
-    }
-
+  /** performSearch paginates the keyword universe without silently switching to the unfiltered list. */
+  const performSearch = async (p = 0, size = pageSize, activeSort = sortBy, activeOrder = sortOrder) => {
+    if (!searchKeyword.trim()) return loadPage('first');
+    const sequence = ++requestSequence.current;
     setLoading(true);
     try {
-      // Unified API call - complete URL with /api prefix
-      const url = isAdminOrRoot ? '/api/log/search' : '/api/log/self/search';
-      const res = await api.get(url + '?keyword=' + encodeURIComponent(searchKeyword));
-      const { success, data: responseData } = res.data;
-
-      if (success) {
-        setData(responseData || []);
-        setPageIndex(0);
-        setTotal(responseData?.length || 0);
+      const path = isAdminOrRoot ? '/api/log/search' : '/api/log/self/search';
+      const res = await api.get(
+        `${path}?keyword=${encodeURIComponent(searchKeyword.trim())}&p=${p}&size=${size}&sort=${activeSort}&order=${activeOrder}`
+      );
+      if (sequence !== requestSequence.current || scopeRef.current !== selectionScope) return;
+      if (res.data?.success) {
+        setData(res.data.data || []);
+        setPageIndex(p);
+        setPageSize(size);
+        setTotal(res.data.total ?? res.data.data?.length ?? 0);
+        setLoadedScope(selectionScope);
+        setCursorActive(false);
       }
     } catch (error) {
-      console.error('Search failed:', error);
+      notify({ type: 'error', message: String(error) });
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
-      load(pageIndex, pageSize);
+      // A ?p= deep link is an offset address; it has no keyset equivalent, so
+      // it is honoured only by the route that understands it.
+      if (pageIndex > 0) {
+        load(pageIndex, pageSize);
+      } else {
+        loadPage('first');
+      }
       return;
     }
-    load(0, pageSize);
+    if (searchKeyword.trim()) performSearch();
+    else loadPage('first');
   }, [pageSize]);
 
   useEffect(() => {
@@ -317,313 +351,26 @@ export function LogsPage() {
     setShowStat(!showStat);
   };
 
+  // Form filters and keyword search use different existing API routes. Applying
+  // form filters exits keyword mode so both the displayed rows and selection
+  // resolver use the same universe, after the updated state has committed.
+  useEffect(() => {
+    if (filterApplyVersion > 0) void loadPage('first');
+  }, [filterApplyVersion]);
   const handleFilterSubmit = () => {
-    load(0, pageSize);
+    selection.clear();
+    setSearchKeyword('');
+    setFilterApplyVersion((version) => version + 1);
   };
 
-  const handleClearLogs = async () => {
-    const ts = fromDateTimeLocal(filters.end_timestamp);
-    const confirmed = await confirmAction({
-      title: t('logs.actions.clear'),
-      description: t('logs.confirm.delete_before', { timestamp: filters.end_timestamp }),
-      details: [
-        {
-          label: t('logs.filters.end'),
-          value: filters.end_timestamp,
-        },
-      ],
-      variant: 'destructive',
-    });
-    if (!confirmed) return;
-
-    try {
-      // Unified API call - complete URL with /api prefix
-      const res = await api.delete('/api/log?target_timestamp=' + ts);
-      if (!res.data?.success) {
-        notify({
-          type: 'error',
-          title: t('logs.notifications.clear_failed_title', 'Clear failed'),
-          message: res.data?.message || t('logs.notifications.clear_failed_message', 'Failed to clear logs.'),
-        });
-        return;
-      }
-      load(0, pageSize);
-      notify({
-        type: 'success',
-        title: t('logs.notifications.clear_success_title', 'Logs cleared'),
-        message: t('logs.notifications.clear_success_message', 'Logs cleared successfully.'),
-      });
-    } catch (error) {
-      console.error('Failed to clear logs:', error);
-      notify({
-        type: 'error',
-        title: t('logs.notifications.clear_failed_title', 'Clear failed'),
-        message:
-          (error as any)?.response?.data?.message ||
-          (error as Error)?.message ||
-          t('logs.notifications.clear_failed_message', 'Failed to clear logs.'),
-      });
-    }
-  };
-
-  const handleExportLogs = async () => {
-    setExporting(true);
-    try {
-      const params = new URLSearchParams();
-      if (filters.type !== '0') params.set('type', filters.type);
-      if (filters.model_name) params.set('model_name', filters.model_name);
-      if (filters.token_name) params.set('token_name', filters.token_name);
-      if (isAdminOrRoot && filters.username) params.set('username', filters.username);
-      if (filters.channel && isAdminOrRoot) params.set('channel', filters.channel);
-      if (filters.start_timestamp) params.set('start_timestamp', String(fromDateTimeLocal(filters.start_timestamp)));
-      if (filters.end_timestamp) params.set('end_timestamp', String(fromDateTimeLocal(filters.end_timestamp)));
-      if (sortBy) {
-        params.set('sort', sortBy);
-        params.set('order', sortOrder);
-      }
-
-      const exportPath = isAdminOrRoot ? '/api/log/' : '/api/log/self';
-      const exportData = await fetchAllPaginatedResults<LogRow>((url) => api.get(url), exportPath, params);
-      const logsWithTrace = exportData.filter((log) => log.trace_id?.trim());
-      const traceEntries = await mapWithConcurrency(logsWithTrace, async (log) => {
-        try {
-          const traceResponse = await api.get(`/api/trace/log/${log.id}`);
-          if (traceResponse.data?.success === false) {
-            return {
-              logId: log.id,
-              trace: { error: traceResponse.data?.message || t('logs.details.load_failed') } as ExportTracePayload | { error: string },
-            };
-          }
-
-          return {
-            logId: log.id,
-            trace: (traceResponse.data?.data as ExportTracePayload | undefined) ?? null,
-          };
-        } catch (_error) {
-          return {
-            logId: log.id,
-            trace: { error: t('logs.details.load_failed') } as ExportTracePayload | { error: string },
-          };
-        }
-      });
-      const tracesByLogId = new Map<number, ExportTracePayload | { error: string } | null>(
-        traceEntries.map((entry) => [entry.logId, entry.trace])
-      );
-
-      const csvHeaders = [
-        t('logs.details.recorded_at'),
-        t('logs.details.type'),
-        t('logs.details.log_id'),
-        t('logs.details.model'),
-        t('logs.details.origin_model'),
-        t('logs.details.token'),
-        t('logs.details.user'),
-        t('logs.details.channel'),
-        t('logs.details.quota'),
-        t('logs.details.quota_raw'),
-        t('logs.details.prompt_tokens_input'),
-        t('logs.details.completion_tokens_output'),
-        t('logs.details.prompt_tokens_cached'),
-        t('logs.details.cache_write_5m'),
-        t('logs.details.cache_write_1h'),
-        t('logs.details.total_tokens'),
-        t('logs.details.latency'),
-        t('logs.details.request_id'),
-        t('logs.details.trace_id'),
-        t('logs.details.stream'),
-        t('logs.details.system_reset'),
-        t('logs.details.content'),
-        t('logs.details.metadata'),
-        t('logs.details.tracing'),
-      ];
-      const csvData = exportData.map((log) => {
-        const { fiveMinute, oneHour } = getCacheWriteSummaries(log.metadata);
-        const totalTokens = (log.prompt_tokens ?? 0) + (log.completion_tokens ?? 0);
-        const tracePayload = tracesByLogId.get(log.id) ?? null;
-        return [
-          formatTimestamp(log.created_at),
-          `${getLogTypeLabelText(log.type)} (${log.type})`,
-          log.id,
-          log.model_name,
-          log.origin_model_name || '',
-          log.token_name || '',
-          log.username || '',
-          log.channel ?? '',
-          renderQuota(log.quota),
-          log.quota,
-          log.prompt_tokens || 0,
-          log.completion_tokens || 0,
-          log.cached_prompt_tokens || 0,
-          fiveMinute,
-          oneHour,
-          totalTokens,
-          formatLatency(log.elapsed_time, t('logs.labels.not_available')),
-          log.request_id || '',
-          log.trace_id || '',
-          Boolean(log.is_stream),
-          Boolean(log.system_prompt_reset),
-          log.content || '',
-          log.metadata ?? null,
-          tracePayload,
-        ];
-      });
-
-      const csv = buildCsv([csvHeaders, ...csvData]);
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `logs_${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Failed to export logs:', error);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const CopyButton = ({ text }: { text: string }) => (
-    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => navigator.clipboard.writeText(text)}>
-      <Copy className="h-3 w-3" />
-    </Button>
-  );
-
-  const columns: ColumnDef<LogRow>[] = [
-    {
-      accessorKey: 'created_at',
-      header: t('logs.table.time'),
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <TimestampDisplay
-            timestamp={row.original.created_at}
-            className="font-mono text-xs"
-            title={row.original.request_id || undefined}
-          />
-          {row.original.request_id && <CopyButton text={row.original.request_id} />}
-        </div>
-      ),
-    },
-    ...(isAdminOrRoot
-      ? [
-          {
-            accessorKey: 'channel',
-            header: t('logs.table.channel'),
-            cell: ({ row }: { row: any }) => <span className="font-mono text-sm">{row.original.channel || t('logs.labels.missing')}</span>,
-          } as ColumnDef<LogRow>,
-        ]
-      : []),
-    {
-      accessorKey: 'type',
-      header: t('logs.table.type'),
-      cell: ({ row }) => renderLogTypeBadge(row.original.type),
-    },
-    {
-      accessorKey: 'model_name',
-      header: t('logs.table.model'),
-      cell: ({ row }) => (
-        <LogModelCell
-          modelName={row.original.model_name}
-          originModelName={row.original.origin_model_name}
-          targetLabel={t('logs.table.model')}
-          originLabel={t('logs.details.origin_model')}
-        />
-      ),
-    },
-    ...(Number(filters.type) !== LOG_TYPES.TEST
-      ? [
-          // Always show user column; for non-admins fall back to current user if username missing
-          {
-            accessorKey: 'username',
-            header: t('logs.table.user'),
-            cell: ({ row }: { row: any }) => (
-              <span className="text-sm">{row.original.username || user?.username || t('logs.labels.missing')}</span>
-            ),
-          } as ColumnDef<LogRow>,
-          {
-            accessorKey: 'token_name',
-            header: t('logs.table.token'),
-            cell: ({ row }: { row: any }) => <span className="text-sm">{row.original.token_name || t('logs.labels.missing')}</span>,
-          },
-          {
-            accessorKey: 'prompt_tokens',
-            header: t('logs.table.prompt'),
-            cell: ({ row }: { row: any }) => (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="font-mono text-sm cursor-help">{row.original.prompt_tokens || 0}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="flex flex-col gap-1">
-                      <div>
-                        {t('logs.tooltip.input_tokens', {
-                          value: row.original.prompt_tokens ?? 0,
-                        })}
-                      </div>
-                      <div>
-                        {t('logs.tooltip.cached_tokens', {
-                          value: row.original.cached_prompt_tokens ?? 0,
-                        })}
-                      </div>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ),
-          },
-          {
-            accessorKey: 'completion_tokens',
-            header: t('logs.table.completion'),
-            cell: ({ row }: { row: any }) => {
-              const { fiveMinute, oneHour } = getCacheWriteSummaries(row.original.metadata);
-              return (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="font-mono text-sm cursor-help">{row.original.completion_tokens || 0}</span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <div className="flex flex-col gap-1">
-                        <div>
-                          {t('logs.tooltip.output_tokens', {
-                            value: row.original.completion_tokens ?? 0,
-                          })}
-                        </div>
-                        <div>
-                          {t('logs.tooltip.cache_write_5m', {
-                            value: fiveMinute,
-                          })}
-                        </div>
-                        <div>{t('logs.tooltip.cache_write_1h', { value: oneHour })}</div>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              );
-            },
-          },
-          {
-            accessorKey: 'quota',
-            header: t('logs.table.cost'),
-            cell: ({ row }: { row: any }) => (
-              <span className="font-mono text-sm" title={row.original.content || ''}>
-                {renderQuota(row.original.quota)}
-              </span>
-            ),
-          },
-          {
-            accessorKey: 'elapsed_time',
-            header: t('logs.table.latency'),
-            cell: ({ row }: { row: any }) => (
-              <span className={cn('font-mono text-sm', getLatencyColor(row.original.elapsed_time))}>
-                {formatLatency(row.original.elapsed_time, t('logs.labels.not_available'))}
-              </span>
-            ),
-          },
-        ]
-      : ([] as ColumnDef<LogRow>[])),
-  ];
+  const columns = createLogColumns({
+    t,
+    isAdminOrRoot,
+    filterType: filters.type,
+    currentUsername: user?.username,
+    testLogType: LOG_TYPES.TEST,
+    renderLogTypeBadge,
+  });
 
   const handlePageChange = (newPageIndex: number, newPageSize: number) => {
     setSearchParams((prev) => {
@@ -631,7 +378,7 @@ export function LogsPage() {
       return prev;
     });
     if (searchKeyword.trim()) {
-      setPageIndex(newPageIndex);
+      performSearch(newPageIndex, newPageSize);
     } else {
       load(newPageIndex, newPageSize);
     }
@@ -640,21 +387,22 @@ export function LogsPage() {
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize);
     if (searchKeyword.trim()) {
-      performSearch();
+      performSearch(0, newPageSize);
     } else {
-      load(0, newPageSize);
+      loadPage('first', { size: newPageSize });
     }
   };
 
   const handleSortChange = (newSortBy: string, newSortOrder: 'asc' | 'desc') => {
     setSortBy(newSortBy);
     setSortOrder(newSortOrder);
-    load(0, pageSize);
+    if (searchKeyword.trim()) performSearch(0, pageSize, newSortBy, newSortOrder);
+    else loadPage('first', { sortBy: newSortBy, sortOrder: newSortOrder });
   };
 
   const handleRowClick = (log: LogRow) => {
     setSearchParams((prev) => {
-      prev.set('id', log.id.toString());
+      prev.set('id', String(logRef(log)));
       return prev;
     });
   };
@@ -671,10 +419,24 @@ export function LogsPage() {
   const refresh = () => {
     if (searchKeyword.trim()) {
       performSearch();
+    } else if (cursorActive) {
+      loadPage('reload');
     } else {
       load(pageIndex, pageSize);
     }
   };
+  const selectedActions = useSelectedLogActions(selection, filters, searchKeyword.trim(), sortBy, sortOrder, () =>
+    searchKeyword.trim() ? performSearch(pageIndex, pageSize) : loadPage('first')
+  );
+  const selectionDisabled = loading || selectedActions.busy || loadedScope !== selectionScope;
+  const batchDisabled = selectionDisabled || !selection.hasSelection;
+
+  const batchActions: TableBatchAction[] = [
+    { id: 'export', label: t('table_selection.export'), icon: <FileDown className="h-4 w-4" />, onSelect: selectedActions.exportSelected },
+    ...(isAdminOrRoot
+      ? [{ id: 'delete', label: t('table_selection.delete'), onSelect: selectedActions.deleteSelected, destructive: true }]
+      : []),
+  ];
 
   return (
     <ResponsivePageContainer
@@ -699,21 +461,6 @@ export function LogsPage() {
               {showStat ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               {showStat ? t('logs.actions.hide_stats') : t('logs.actions.show_stats')}
             </Button>
-            <Button
-              variant="outline"
-              onClick={handleExportLogs}
-              className="gap-2 whitespace-nowrap w-full sm:w-auto"
-              size="sm"
-              disabled={exporting}
-            >
-              {exporting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              {t('logs.actions.export')}
-            </Button>
-            {isAdmin && (
-              <Button variant="destructive" onClick={handleClearLogs} size="sm" className="w-full sm:w-auto">
-                {t('logs.actions.clear')}
-              </Button>
-            )}
           </div>
         </div>
       }
@@ -782,7 +529,7 @@ export function LogsPage() {
                 transformResponse={(data) =>
                   Array.isArray(data)
                     ? data.map((t: any) => ({
-                        key: String(t.id),
+                        key: String(t.uuid ?? t.id ?? t.name),
                         value: t.name,
                         text: t.name,
                       }))
@@ -803,7 +550,7 @@ export function LogsPage() {
                 transformResponse={(data) =>
                   Array.isArray(data)
                     ? data.map((u: any) => ({
-                        key: String(u.id),
+                        key: String(u.uuid ?? u.id ?? u.username),
                         value: u.username,
                         text: u.username,
                       }))
@@ -813,7 +560,7 @@ export function LogsPage() {
                 clearable
               />
             </div>
-            {isAdmin && (
+            {isAdminOrRoot && (
               <>
                 <div>
                   <Label className="text-xs">{t('logs.filters.channel')}</Label>
@@ -855,6 +602,12 @@ export function LogsPage() {
           </div>
 
           <EnhancedDataTable
+            batchActions={batchActions}
+            batchActionsDisabled={batchDisabled}
+            batchActionsBusy={selectedActions.busy}
+            selection={selection}
+            selectionDisabled={selectionDisabled}
+            selectionTotal={cursorActive ? null : total}
             columns={columns}
             data={data}
             pageIndex={pageIndex}
@@ -869,11 +622,28 @@ export function LogsPage() {
             onRefresh={refresh}
             loading={loading}
             emptyMessage={t('logs.table.empty')}
+            paginationSlot={
+              cursorActive ? (
+                <LogCursorPager
+                  rowsBefore={cursor.rowsBefore}
+                  pageSize={pageSize}
+                  rowCount={data.length}
+                  hasMore={cursor.hasMore}
+                  hasPrevious={cursor.hasPrevious}
+                  count={cursor.count}
+                  notice={cursor.notice}
+                  loading={loading}
+                  onPrevious={() => loadPage('previous')}
+                  onNext={() => loadPage('next')}
+                  onPageSizeChange={handlePageSizeChange}
+                />
+              ) : undefined
+            }
           />
         </CardContent>
       </Card>
 
-      <ConfirmActionDialog />
+      {selectedActions.confirmation}
       <LogDetailsModal open={detailsModalOpen} onOpenChange={handleDetailsModalChange} log={selectedLog} />
     </ResponsivePageContainer>
   );

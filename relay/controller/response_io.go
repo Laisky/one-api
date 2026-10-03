@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -105,7 +106,7 @@ func (w *responseCaptureWriter) Size() int {
 // getResponseAPIRequestBody gets the request body for Response API requests
 func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRequest *openai.ResponseAPIRequest, adaptor adaptor.Adaptor) (io.Reader, error) {
 	lg := gmw.GetLogger(c)
-	// Prefer forwarding the exact user payload to avoid mutating vendor-specific fields
+	// Preserve compatible raw fields only within the admitted billing boundary.
 	rawBody, err := common.GetRequestBody(c)
 	if err != nil {
 		return nil, errors.Wrap(err, "get raw Response API request body")
@@ -129,31 +130,51 @@ func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRe
 	return bytes.NewReader(patched), nil
 }
 
-// normalizeResponseAPIRawBody normalizes the raw request body for Response API requests
+// normalizeResponseAPIRawBody normalizes native Responses payloads and typed fallbacks.
+// Parameters: rawBody is the original payload, request holds sanitized fields,
+// and channelType selects provider semantics. Returns: normalized JSON, content
+// statistics, whether the payload changed, and a wrapped error when preparation fails.
 func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequest, channelType int) ([]byte, openai.ResponseAPIInputContentNormalizationStats, bool, error) {
 	var stats openai.ResponseAPIInputContentNormalizationStats
 	if request == nil {
-		return rawBody, stats, false, nil
+		return nil, stats, false, errors.New("Response API billing validation requires a typed request")
+	}
+	if err := validateNativeResponseToolBilling(request.Tools); err != nil {
+		return nil, stats, false, err
 	}
 
-	if len(rawBody) == 0 {
-		patched, err := json.Marshal(request)
-		if err != nil {
-			return rawBody, stats, false, errors.Wrap(err, "marshal response API request")
-		}
-		return patched, stats, true, nil
-	}
+	normalizeResponseProviderReasoning(request, channelType)
 
+	// Rebuild unavailable raw input from the typed request, then run it through
+	// the same normalization and controlled extension merge as ordinary input.
+	// Returning json.Marshal(request) here would leak extra_body to the wire
+	// and skip query-injected thinking settings and content normalization.
+	usedTypedFallback := false
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(rawBody, &root); err != nil {
-		patched, err2 := json.Marshal(request)
-		if err2 != nil {
-			return rawBody, stats, false, errors.Wrap(err2, "marshal response API request after unmarshal failure")
+		patched, marshalErr := json.Marshal(request)
+		if marshalErr != nil {
+			return rawBody, stats, false, errors.Wrap(marshalErr, "marshal response API request for fallback")
 		}
-		return patched, stats, true, nil
+		// Discard any partially decoded fields from the invalid original body.
+		root = nil
+		if decodeErr := json.Unmarshal(patched, &root); decodeErr != nil {
+			return rawBody, stats, false, errors.Wrap(decodeErr, "decode typed response API fallback")
+		}
+		rawBody = patched
+		usedTypedFallback = true
 	}
 
+	if root == nil {
+		return nil, stats, false, errors.New("Response API request body must be a JSON object")
+	}
 	changed := false
+	for key := range root {
+		if !nativeResponseRootAllowed(key) {
+			delete(root, key)
+			changed = true
+		}
+	}
 
 	if request.Model != "" {
 		modelBytes, err := json.Marshal(request.Model)
@@ -162,6 +183,21 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		}
 		if existing, ok := root["model"]; !ok || !bytes.Equal(existing, modelBytes) {
 			root["model"] = modelBytes
+			changed = true
+		}
+	}
+
+	// Sync previous_response_id from the typed request so the same-provider handle
+	// rewrite (ST-021) actually reaches the upstream. In the common case the typed
+	// value equals the raw value and this is a no-op; it never invents a selector
+	// the client did not send (a nil pointer leaves the raw body untouched).
+	if request.PreviousResponseId != nil {
+		prevBytes, err := json.Marshal(*request.PreviousResponseId)
+		if err != nil {
+			return nil, stats, false, errors.Wrap(err, "marshal previous_response_id")
+		}
+		if existing, ok := root["previous_response_id"]; !ok || !bytes.Equal(existing, prevBytes) {
+			root["previous_response_id"] = prevBytes
 			changed = true
 		}
 	}
@@ -212,30 +248,29 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		}
 	}
 
-	// Normalize reasoning.summary for channels that follow OpenAI's strict validation.
+	// Normalize the typed summary before synchronizing all known reasoning
+	// fields. The query path may have changed effort even when summary is valid.
 	if request.Reasoning != nil && (channelType == channeltype.OpenAI || channelType == channeltype.Azure) {
 		norm := openai.NormalizeResponseReasoningSummaryForModel(request.Model, request.Reasoning)
 		if norm.Changed {
 			stats.ReasoningSummaryFixed++
-			reasoningMap := map[string]any{}
-			if rawReasoning, ok := root["reasoning"]; ok && len(rawReasoning) > 0 {
-				_ = json.Unmarshal(rawReasoning, &reasoningMap)
-				if reasoningMap == nil {
-					reasoningMap = map[string]any{}
-				}
-			}
-			if request.Reasoning.Summary == nil {
-				delete(reasoningMap, "summary")
-			} else {
-				reasoningMap["summary"] = *request.Reasoning.Summary
-			}
-			reasoningBytes, err := json.Marshal(reasoningMap)
-			if err != nil {
-				return nil, stats, false, errors.Wrap(err, "marshal normalized reasoning config")
-			}
-			root["reasoning"] = reasoningBytes
-			changed = true
 		}
+	}
+	if reasoningChanged, err := syncResponseReasoning(root, request.Reasoning); err != nil {
+		return nil, stats, false, errors.Wrap(err, "synchronize Response API reasoning")
+	} else {
+		changed = changed || reasoningChanged
+	}
+
+	// Make query-injected allowlisted extensions visible to the common merge.
+	// Its raw-first precedence still preserves explicit client extension values.
+	if len(request.ExtraBody) > 0 {
+		extraBody, err := json.Marshal(request.ExtraBody)
+		if err != nil {
+			return nil, stats, false, errors.Wrap(err, "marshal response extra_body")
+		}
+		root["extra_body"] = extraBody
+		changed = true
 	}
 
 	// Backward-compat: normalize historical assistant/user message content item types.
@@ -271,7 +306,29 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		if err != nil {
 			return nil, stats, false, errors.Wrap(err, "marshal sanitized response tools")
 		}
-		if existing, ok := root["tools"]; !ok || !bytes.Equal(existing, toolsBytes) {
+
+		// Compare only the typed representation to determine whether sanitization
+		// actually changed the tools. If it did not, retain the raw array so custom
+		// provider fields (for example Codex apply_patch grammar metadata) survive
+		// native Responses passthrough.
+		existing, exists := root["tools"]
+		typedToolsChanged := true
+		if exists {
+			var originalTools []openai.ResponseAPITool
+			if err := json.Unmarshal(existing, &originalTools); err == nil {
+				if originalTypedBytes, err := json.Marshal(originalTools); err == nil {
+					typedToolsChanged = !bytes.Equal(originalTypedBytes, toolsBytes)
+				}
+			}
+		}
+		if !exists || typedToolsChanged {
+			if exists {
+				mergedTools, mergeErr := mergeResponseToolsPreservingUnknown(existing, request.Tools)
+				if mergeErr != nil {
+					return nil, stats, false, errors.Wrap(mergeErr, "merge sanitized response tools")
+				}
+				toolsBytes = mergedTools
+			}
 			root["tools"] = toolsBytes
 			changed = true
 		}
@@ -282,7 +339,7 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		if err != nil {
 			return nil, stats, false, errors.Wrap(err, "merge response passthrough fields")
 		}
-		return merged, stats, mergeChanged, nil
+		return merged, stats, usedTypedFallback || mergeChanged, nil
 	}
 
 	patched, err := json.Marshal(root)
@@ -295,5 +352,92 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		return nil, stats, false, errors.Wrap(err, "merge response passthrough fields")
 	}
 
-	return merged, stats, changed || mergeChanged, nil
+	return merged, stats, usedTypedFallback || (changed || mergeChanged) && !bytes.Equal(rawBody, merged), nil
+}
+
+// mergeResponseToolsPreservingUnknown overlays sanitized typed tool fields on
+// their original raw objects while retaining provider extensions unknown to
+// one-api. The returned JSON array follows the sanitized tool order.
+func mergeResponseToolsPreservingUnknown(original json.RawMessage, sanitized []openai.ResponseAPITool) ([]byte, error) {
+	var rawTools []json.RawMessage
+	if err := json.Unmarshal(original, &rawTools); err != nil {
+		return nil, errors.Wrap(err, "unmarshal raw response tools")
+	}
+	var originalTools []openai.ResponseAPITool
+	if err := json.Unmarshal(original, &originalTools); err != nil {
+		return nil, errors.Wrap(err, "unmarshal typed response tools")
+	}
+
+	used := make([]bool, len(originalTools))
+	merged := make([]json.RawMessage, 0, len(sanitized))
+	for _, sanitizedTool := range sanitized {
+		match := -1
+		identity := responseToolIdentity(sanitizedTool)
+		for idx := range originalTools {
+			if used[idx] || responseToolIdentity(originalTools[idx]) != identity {
+				continue
+			}
+			match = idx
+			break
+		}
+
+		sanitizedBytes, err := json.Marshal(sanitizedTool)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal sanitized response tool")
+		}
+		if match < 0 || match >= len(rawTools) {
+			merged = append(merged, sanitizedBytes)
+			continue
+		}
+		used[match] = true
+
+		originalTypedBytes, err := json.Marshal(originalTools[match])
+		if err == nil && bytes.Equal(originalTypedBytes, sanitizedBytes) {
+			merged = append(merged, rawTools[match])
+			continue
+		}
+
+		var rawObject map[string]json.RawMessage
+		if err := json.Unmarshal(rawTools[match], &rawObject); err != nil {
+			merged = append(merged, sanitizedBytes)
+			continue
+		}
+		var sanitizedObject map[string]json.RawMessage
+		if err := json.Unmarshal(sanitizedBytes, &sanitizedObject); err != nil {
+			return nil, errors.Wrap(err, "unmarshal sanitized response tool")
+		}
+		for _, key := range responseToolKnownJSONKeys {
+			delete(rawObject, key)
+		}
+		for key, value := range sanitizedObject {
+			rawObject[key] = value
+		}
+		mergedBytes, err := json.Marshal(rawObject)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal merged response tool")
+		}
+		merged = append(merged, mergedBytes)
+	}
+
+	result, err := json.Marshal(merged)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal merged response tool array")
+	}
+	return result, nil
+}
+
+var responseToolKnownJSONKeys = []string{
+	"type", "name", "description", "parameters", "function",
+	"search_context_size", "filters", "user_location",
+	"server_label", "server_url", "require_approval", "allowed_tools", "headers",
+}
+
+// responseToolIdentity returns a stable matching key for correlating a typed
+// sanitized tool with its original raw object.
+func responseToolIdentity(tool openai.ResponseAPITool) string {
+	name := tool.Name
+	if tool.Function != nil && tool.Function.Name != "" {
+		name = tool.Function.Name
+	}
+	return strings.ToLower(strings.TrimSpace(tool.Type)) + "\x00" + name + "\x00" + tool.ServerLabel
 }

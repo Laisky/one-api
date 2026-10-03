@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import { useState, useEffect } from 'react';
 import { CHANNEL_OPTIONS } from 'constants/ChannelConstants';
@@ -42,6 +43,8 @@ const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
 
 const filter = createFilterOptions();
+const isClockHHMM = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+
 const validationSchema = Yup.object().shape({
   is_edit: Yup.boolean(),
   name: Yup.string().required('名称 不能为空'),
@@ -115,8 +118,35 @@ const validationSchema = Yup.object().shape({
           }
         }
 
+        if (config.time_windows !== undefined) {
+          if (!Array.isArray(config.time_windows)) {
+            return this.createError({ message: `Model "${modelName}" time_windows must be an array` });
+          }
+          for (const [index, window] of config.time_windows.entries()) {
+            if (typeof window !== 'object' || window === null || Array.isArray(window)) {
+              return this.createError({ message: `Model "${modelName}" time window ${index + 1} must be an object` });
+            }
+            if (!Array.isArray(window.ranges) || window.ranges.length === 0) {
+              return this.createError({ message: `Model "${modelName}" time window ${index + 1} ranges must be a non-empty array` });
+            }
+            for (const range of window.ranges) {
+              if (typeof range !== 'object' || range === null || !isClockHHMM(range.start) || !isClockHHMM(range.end)) {
+                return this.createError({ message: `Model "${modelName}" time window ${index + 1} ranges must use HH:MM strings` });
+              }
+            }
+            if (typeof window.overlay !== 'object' || window.overlay === null || Array.isArray(window.overlay)) {
+              return this.createError({ message: `Model "${modelName}" time window ${index + 1} overlay must be an object` });
+            }
+          }
+        }
+
         // Check if at least one meaningful field is provided
-        if (config.ratio === undefined && config.completion_ratio === undefined && config.max_tokens === undefined) {
+        if (
+          config.ratio === undefined &&
+          config.completion_ratio === undefined &&
+          config.max_tokens === undefined &&
+          (!Array.isArray(config.time_windows) || config.time_windows.length === 0)
+        ) {
           return this.createError({ message: `模型"${modelName}"必须至少有一个配置字段（ratio、completion_ratio或max_tokens）` });
         }
       }
@@ -231,7 +261,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
 
     setFieldValue('config', { api_format: 'chat_completion' });
     // Load default pricing for the new channel type
-    loadDefaultPricing(typeValue);
+    loadDefaultPricing(typeValue).catch(reportUIError);
   };
 
   const fetchGroups = async () => {
@@ -239,7 +269,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
       let res = await API.get(`/api/group/`);
       setGroupOptions(res.data.data);
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -270,7 +300,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
         })
       );
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -301,63 +331,67 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
   };
 
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
-    setSubmitting(true);
-    if (values.base_url && values.base_url.endsWith('/')) {
-      values.base_url = values.base_url.slice(0, values.base_url.length - 1);
-    }
-    if (values.type === 3 && values.other === '') {
-      values.other = '2023-09-01-preview';
-    }
-    if (values.type === 18 && values.other === '') {
-      values.other = 'v2.1';
-    }
-    if (values.key === '') {
-      if (values.config.ak && values.config.sk && values.config.region) {
-        values.key = `${values.config.ak}|${values.config.sk}|${values.config.region}`;
-      } else if (values.config.region && values.config.vertex_ai_project_id && values.config.vertex_ai_adc) {
-        values.key = `${values.config.region}|${values.config.vertex_ai_project_id}|${values.config.vertex_ai_adc}`;
+    try {
+      setSubmitting(true);
+      if (values.base_url && values.base_url.endsWith('/')) {
+        values.base_url = values.base_url.slice(0, values.base_url.length - 1);
       }
-    }
+      if (values.type === 3 && values.other === '') {
+        values.other = '2023-09-01-preview';
+      }
+      if (values.type === 18 && values.other === '') {
+        values.other = 'v2.1';
+      }
+      if (values.key === '') {
+        if (values.config.ak && values.config.sk && values.config.region) {
+          values.key = `${values.config.ak}|${values.config.sk}|${values.config.region}`;
+        } else if (values.config.region && values.config.vertex_ai_project_id && values.config.vertex_ai_adc) {
+          values.key = `${values.config.region}|${values.config.vertex_ai_project_id}|${values.config.vertex_ai_adc}`;
+        }
+      }
 
-    let res;
-    const modelsStr = values.models.map((model) => model.id).join(',');
-    const configStr = JSON.stringify(values.config);
-    values.group = values.groups.join(',');
+      let res;
+      const modelsStr = values.models.map((model) => model.id).join(',');
+      const configStr = JSON.stringify(values.config);
+      values.group = values.groups.join(',');
 
-    // Handle pricing fields - convert empty strings to null for the API
-    if (values.model_ratio === '') {
-      values.model_ratio = null;
-    }
-    if (values.completion_ratio === '') {
-      values.completion_ratio = null;
-    }
-    if (values.model_configs === '') {
-      values.model_configs = null;
-    }
-    if (channelId) {
-      res = await API.put(`/api/channel/`, {
-        ...values,
-        id: parseInt(channelId),
-        models: modelsStr,
-        config: configStr
-      });
-    } else {
-      res = await API.post(`/api/channel/`, { ...values, models: modelsStr, config: configStr });
-    }
-    const { success, message } = res.data;
-    if (success) {
+      // Handle pricing fields - convert empty strings to null for the API
+      if (values.model_ratio === '') {
+        values.model_ratio = null;
+      }
+      if (values.completion_ratio === '') {
+        values.completion_ratio = null;
+      }
+      if (values.model_configs === '') {
+        values.model_configs = null;
+      }
       if (channelId) {
-        showSuccess('渠道更新成功！');
+        res = await API.put(`/api/channel/`, {
+          ...values,
+          uuid: channelId,
+          models: modelsStr,
+          config: configStr
+        });
       } else {
-        showSuccess('渠道创建成功！');
+        res = await API.post(`/api/channel/`, { ...values, models: modelsStr, config: configStr });
       }
+      const { success, message } = res.data;
+      if (success) {
+        if (channelId) {
+          showSuccess('渠道更新成功！');
+        } else {
+          showSuccess('渠道创建成功！');
+        }
+        setSubmitting(false);
+        setStatus({ success: true });
+        onOk(true);
+      } else {
+        setStatus({ success: false });
+        showError(message);
+        setErrors({ submit: message });
+      }
+    } finally {
       setSubmitting(false);
-      setStatus({ success: true });
-      onOk(true);
-    } else {
-      setStatus({ success: false });
-      showError(message);
-      setErrors({ submit: message });
     }
   };
 
@@ -436,7 +470,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
             const parsedConfigs = JSON.parse(data.model_configs);
             // Pretty format with proper indentation
             data.model_configs = JSON.stringify(parsedConfigs, null, 2);
-            console.log('Loaded model_configs for channel:', data.id, 'type:', data.type, 'models:', Object.keys(parsedConfigs));
+            console.log('Loaded model_configs for channel:', data.uuid, 'type:', data.type, 'models:', Object.keys(parsedConfigs));
           } catch (e) {
             console.error('Failed to parse model_configs:', e);
             // If parsing fails, keep original value but log the error
@@ -447,31 +481,31 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
         initChannel(data.type);
         setInitialInput(data);
         // Load default pricing for this channel type, but don't override existing model_configs
-        loadDefaultPricing(data.type);
+        loadDefaultPricing(data.type).catch(reportUIError);
       } else {
         showError(message);
       }
     } catch (error) {
-      showError(error.message);
+      showError(error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchGroups().then();
-    fetchModels().then();
+    fetchGroups().then().catch(reportUIError);
+    fetchModels().then().catch(reportUIError);
   }, []);
 
   useEffect(() => {
     setBatchAdd(false);
     if (channelId) {
-      loadChannel().then();
+      loadChannel().then().catch(reportUIError);
     } else {
       initChannel(1);
       setInitialInput({ ...defaultConfig.input, is_edit: false });
       // Load default pricing for new channels
-      loadDefaultPricing(1);
+      loadDefaultPricing(1).catch(reportUIError);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
@@ -527,7 +561,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
             </Box>
           </Box>
         ) : (
-          <Formik initialValues={initialInput} enableReinitialize validationSchema={validationSchema} onSubmit={submit}>
+          <Formik initialValues={initialInput} enableReinitialize validationSchema={validationSchema} onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>
             {({ errors, handleBlur, handleChange, handleSubmit, isSubmitting, touched, values, setFieldValue }) => (
               <form noValidate onSubmit={handleSubmit}>
                 <FormControl fullWidth error={Boolean(touched.type && errors.type)} sx={{ ...theme.typography.otherInput }}>
@@ -811,7 +845,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                         <FormHelperText id="helper-tex-channel-key-label"> {inputPrompt.key} </FormHelperText>
                       )}
                     </FormControl>
-                    {channelId === 0 && (
+                    {!channelId && (
                       <Container
                         sx={{
                           textAlign: 'right'
@@ -1136,7 +1170,7 @@ export default EditModal;
 
 EditModal.propTypes = {
   open: PropTypes.bool,
-  channelId: PropTypes.number,
+  channelId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   onCancel: PropTypes.func,
   onOk: PropTypes.func
 };

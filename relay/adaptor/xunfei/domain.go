@@ -3,6 +3,8 @@ package xunfei
 import (
 	"fmt"
 	"strings"
+
+	"github.com/Laisky/errors/v2"
 )
 
 // https://www.xfyun.cn/doc/spark/Web.html#_1-%E6%8E%A5%E5%8F%A3%E8%AF%B4%E6%98%8E
@@ -80,16 +82,24 @@ func apiVersion2domain(apiVersion string) string {
 	return "general" + apiVersion
 }
 
-func getXunfeiAuthUrl(apiVersion string, apiKey string, apiSecret string) (string, string) {
+// getXunfeiAuthUrl builds the Xunfei websocket authorization URL for an API
+// version. Parameters: apiVersion selects the Xunfei endpoint, apiKey and
+// apiSecret authenticate the request. Returns: the provider domain, signed URL,
+// and a wrapped error when URL construction fails.
+func getXunfeiAuthUrl(apiVersion string, apiKey string, apiSecret string) (string, string, error) {
 	var authUrl string
 	domain := apiVersion2domain(apiVersion)
+	var err error
 	switch apiVersion {
 	case "v3.1-128K":
-		authUrl = buildXunfeiAuthUrl("wss://spark-api.xf-yun.com/chat/pro-128k", apiKey, apiSecret)
+		authUrl, err = buildXunfeiAuthUrl("wss://spark-api.xf-yun.com/chat/pro-128k", apiKey, apiSecret)
 	case "v3.5-32K":
-		authUrl = buildXunfeiAuthUrl("wss://spark-api.xf-yun.com/chat/max-32k", apiKey, apiSecret)
+		authUrl, err = buildXunfeiAuthUrl("wss://spark-api.xf-yun.com/chat/max-32k", apiKey, apiSecret)
 	default:
-		authUrl = buildXunfeiAuthUrl(fmt.Sprintf("wss://spark-api.xf-yun.com/%s/chat", apiVersion), apiKey, apiSecret)
+		authUrl, err = buildXunfeiAuthUrl(fmt.Sprintf("wss://spark-api.xf-yun.com/%s/chat", apiVersion), apiKey, apiSecret)
 	}
-	return domain, authUrl
+	if err != nil {
+		return "", "", errors.Wrap(err, "build Xunfei authorization URL")
+	}
+	return domain, authUrl, nil
 }

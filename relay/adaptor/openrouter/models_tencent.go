@@ -1,0 +1,88 @@
+package openrouter
+
+import "github.com/Laisky/one-api/relay/adaptor"
+
+// tencentModels returns the tencent model defaults for openrouter.
+// It takes no arguments and returns independently owned, directly editable Go configurations.
+func tencentModels() map[string]adaptor.ModelConfig {
+	return map[string]adaptor.ModelConfig{
+		"tencent/hunyuan-a13b-instruct": {
+			Ratio:                       nativeRate(0.14),
+			CompletionRatio:             4.071428571428571,
+			ContextLength:               131072,
+			MaxOutputTokens:             117964,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "reasoning", "response_format", "structured_outputs", "temperature", "top_k", "top_p"},
+			HuggingFaceID:               "tencent/Hunyuan-A13B-Instruct",
+			Description:                 "tencent/hunyuan-a13b-instruct on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"tencent/hy-mt2-1.8b": {
+			Ratio:                       nativeRate(0.044),
+			CompletionRatio:             4.022727272727273,
+			ContextLength:               8192,
+			MaxOutputTokens:             4096,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{},
+			SupportedSamplingParameters: []string{"max_completion_tokens", "max_tokens", "stop", "temperature"},
+			HuggingFaceID:               "tencent/Hy-MT2-1.8B",
+			Description:                 "tencent/hy-mt2-1.8b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"tencent/hy-mt2-30b-a3b": {
+			Ratio:                       nativeRate(0.074),
+			CompletionRatio:             3.9864864864864864,
+			ContextLength:               8192,
+			MaxOutputTokens:             4096,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"json_mode", "structured_outputs"},
+			SupportedSamplingParameters: []string{"max_completion_tokens", "max_tokens", "response_format", "stop", "structured_outputs", "temperature"},
+			HuggingFaceID:               "tencent/Hy-MT2-30B-A3B",
+			Description:                 "tencent/hy-mt2-30b-a3b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"tencent/hy-mt2-7b": {
+			Ratio:                       nativeRate(0.074),
+			CompletionRatio:             3.9864864864864864,
+			ContextLength:               8192,
+			MaxOutputTokens:             4096,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"json_mode", "structured_outputs"},
+			SupportedSamplingParameters: []string{"max_completion_tokens", "max_tokens", "response_format", "stop", "structured_outputs", "temperature"},
+			HuggingFaceID:               "tencent/Hy-MT2-7B",
+			Description:                 "tencent/hy-mt2-7b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"tencent/hy3-preview": {
+			Ratio:                       nativeRate(0.18),
+			CompletionRatio:             3.3333333333333335,
+			CachedInputRatio:            nativeRate(0.06),
+			ContextLength:               262144,
+			MaxOutputTokens:             235929,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "seed", "temperature", "tool_choice", "tools", "top_p"},
+			SupportedReasoningEfforts:   []string{"high", "low", "none"},
+			DefaultReasoningEffort:      "high",
+			HuggingFaceID:               "tencent/Hy3-preview",
+			Description:                 "tencent/hy3-preview on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"tencent/hy4-preview": {
+			Ratio:                       nativeRate(0.834),
+			CompletionRatio:             2.998800959232614,
+			CachedInputRatio:            nativeRate(0.041999999999999996),
+			ContextLength:               1048576,
+			MaxOutputTokens:             64000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_completion_tokens", "max_tokens", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			SupportedReasoningEfforts:   []string{"high", "low", "none"},
+			DefaultReasoningEffort:      "high",
+			HuggingFaceID:               "tencent/Hy4-preview",
+			Description:                 "tencent/hy4-preview on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+	}
+}

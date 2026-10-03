@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
@@ -46,7 +47,6 @@ const LoginForm = ({ ...others }) => {
   const { login, wechatLogin } = useLogin();
   const [openWechat, setOpenWechat] = useState(false);
   const [totpRequired, setTotpRequired] = useState(false);
-  const [userId, setUserId] = useState(null);
   const matchDownSM = useMediaQuery(theme.breakpoints.down('md'));
   const customization = useSelector((state) => state.customization);
   const siteInfo = useSelector((state) => state.siteInfo);
@@ -216,7 +216,7 @@ const LoginForm = ({ ...others }) => {
           password: Yup.string().max(255).required('Password is required'),
           totp_code: totpRequired ? Yup.string().length(6, 'TOTP code must be 6 digits').required('TOTP code is required') : Yup.string()
         })}
-        onSubmit={async (values, { setErrors, setStatus, setSubmitting }) => {
+        onSubmit={(...uiArgs) => (async (values, { setErrors, setStatus, setSubmitting }) => {
           const { success, message, data } = await login(values.username, values.password, values.totp_code || null);
           if (success) {
             setStatus({ success: true });
@@ -225,14 +225,13 @@ const LoginForm = ({ ...others }) => {
             // Check if TOTP is required
             if (message === 'totp_required' && data && data.totp_required) {
               setTotpRequired(true);
-              setUserId(data.user_id);
               setErrors({ submit: '请输入您的TOTP验证码' });
             } else if (message) {
               setErrors({ submit: message });
             }
           }
           setSubmitting(false);
-        }}
+        })(...uiArgs).catch(reportUIError)}
       >
         {({ errors, handleBlur, handleChange, handleSubmit, isSubmitting, touched, values }) => (
           <form noValidate onSubmit={handleSubmit} {...others}>
@@ -348,7 +347,6 @@ const LoginForm = ({ ...others }) => {
                       color="secondary"
                       onClick={() => {
                         setTotpRequired(false);
-                        setUserId(null);
                       }}
                     >
                       返回登录

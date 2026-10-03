@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import Turnstile from '@/components/Turnstile';
 import { useSystemStatus } from '@/hooks/useSystemStatus';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -124,7 +124,7 @@ export function PasswordResetPage() {
               <div className="text-center text-sm">
                 {t('auth.reset.remember_password')}{' '}
                 <Link to="/login" className="text-primary hover:underline">
-                  {t('auth.login.sign_in')}
+                  {t('common.login')}
                 </Link>
               </div>
             </form>

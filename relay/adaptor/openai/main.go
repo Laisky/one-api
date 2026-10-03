@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -83,18 +84,6 @@ func recordUpstreamCompleted(c *gin.Context) {
 	tracing.RecordTraceTimestamp(c, relaymodel.TimestampUpstreamCompleted)
 }
 
-func shouldLogDetailedUpstreamBody(c *gin.Context) bool {
-	if c == nil {
-		return true
-	}
-	if skipRaw, exists := c.Get(ctxkey.SkipAdaptorResponseBodyLog); exists {
-		if flag, ok := skipRaw.(bool); ok {
-			return !flag
-		}
-	}
-	return true
-}
-
 // StreamHandler processes streaming responses from OpenAI API
 // It handles incremental content delivery and accumulates the final response text
 // Returns error (if any), accumulated response text, and token usage information
@@ -104,8 +93,8 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 	tracker := streaming.FromContext(c)
 	var trackerErr error
 	// Initialize accumulators for the response
-	responseText := ""
-	reasoningText := ""
+	var responseText strings.Builder
+	var reasoningText strings.Builder
 	var usage *model.Usage
 
 	var streamRewriter openai_compatible.StreamRewriteHandler
@@ -175,11 +164,11 @@ streamLoop:
 				for _, choice := range streamResponse.Choices {
 					currentReasoningChunk := extractReasoningContent(&choice.Delta)
 					if currentReasoningChunk != "" {
-						reasoningText += currentReasoningChunk
+						reasoningText.WriteString(currentReasoningChunk)
 					}
 
 					choice.Delta.SetReasoningContent(c.Query("reasoning_format"), currentReasoningChunk)
-					responseText += conv.AsString(choice.Delta.Content)
+					responseText.WriteString(conv.AsString(choice.Delta.Content))
 
 					if tracker != nil && metaInfo != nil {
 						deltaTokens := 0
@@ -248,7 +237,7 @@ streamLoop:
 				render.StringData(c, "data: "+string(payload))
 
 				for _, choice := range streamResponse.Choices {
-					responseText += choice.Text
+					responseText.WriteString(choice.Text)
 					if tracker != nil && metaInfo != nil {
 						if tokens := CountTokenText(choice.Text, metaInfo.ActualModelName); tokens > 0 {
 							if err := tracker.RecordCompletionTokens(tokens); err != nil {
@@ -338,14 +327,14 @@ streamLoop:
 
 				// Update accumulated reasoning text
 				if currentReasoningChunk != "" {
-					reasoningText += currentReasoningChunk
+					reasoningText.WriteString(currentReasoningChunk)
 				}
 
 				// Set the reasoning content in the format requested by client
 				choice.Delta.SetReasoningContent(c.Query("reasoning_format"), currentReasoningChunk)
 
 				// Accumulate response content
-				responseText += conv.AsString(choice.Delta.Content)
+				responseText.WriteString(conv.AsString(choice.Delta.Content))
 
 				if tracker != nil && metaInfo != nil {
 					deltaTokens := 0
@@ -420,7 +409,7 @@ streamLoop:
 
 			// Accumulate text from all choices
 			for _, choice := range streamResponse.Choices {
-				responseText += choice.Text
+				responseText.WriteString(choice.Text)
 				if tracker != nil && metaInfo != nil {
 					if tokens := CountTokenText(choice.Text, metaInfo.ActualModelName); tokens > 0 {
 						if err := tracker.RecordCompletionTokens(tokens); err != nil {
@@ -450,6 +439,12 @@ streamLoop:
 	if streamErr != nil && trackerErr == nil {
 		render.LogHeartbeatLineReaderError(c, lg, streamErr, hbr)
 	}
+
+	// Promote any top-level cached_tokens into the nested
+	// prompt_tokens_details.cached_tokens field so downstream billing applies
+	// the cache-hit ratio. No-op for OpenAI-shaped responses.
+	usage.NormalizeCachedTokens()
+	usage.NormalizeCacheWriteTokens()
 
 	// Let the streamRewriter finalize if present, but do NOT fabricate a
 	// [DONE] when the upstream didn't send one — be an honest proxy.
@@ -482,11 +477,11 @@ streamLoop:
 	// Record when upstream streaming is completed
 	recordUpstreamCompleted(c)
 
-	combined := reasoningText + responseText
+	combined := reasoningText.String() + responseText.String()
 	if combined != "" || usage != nil {
 		c.Set(ctxkey.ConvertedResponse, map[string]any{
 			"stream":    true,
-			"reasoning": reasoningText,
+			"reasoning": reasoningText.String(),
 			"content":   combined,
 			"usage":     usage,
 		})
@@ -537,11 +532,7 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
 		fields = append(fields, zap.String("content_type", contentType))
 	}
-	if shouldLogDetailedUpstreamBody(c) {
-		fields = append(fields, zap.ByteString("body", responseBody))
-	} else {
-		fields = append(fields, zap.Bool("body_logging_suppressed", true))
-	}
+	fields = append(fields, zap.Bool("body_logging_suppressed", true))
 	logger.Debug("receive upstream response", fields...)
 
 	// Parse the response JSON
@@ -625,7 +616,9 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 		responseBody = modifiedBody
 		resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
 	}
-	logger.Debug("handler converted response", zap.ByteString("body", responseBody))
+	logger.Debug("handler converted response",
+		zap.Int("body_bytes", len(responseBody)),
+		zap.Bool("body_logging_suppressed", true))
 
 	// Forward all response headers (not just first value of each)
 	for k, values := range resp.Header {
@@ -685,11 +678,7 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response, promptTokens int, mod
 	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
 		fields = append(fields, zap.String("content_type", contentType))
 	}
-	if shouldLogDetailedUpstreamBody(c) {
-		fields = append(fields, zap.ByteString("body", responseBody))
-	} else {
-		fields = append(fields, zap.Bool("body_logging_suppressed", true))
-	}
+	fields = append(fields, zap.Bool("body_logging_suppressed", true))
 	logger.Debug("receive upstream embedding response", fields...)
 
 	if len(responseBody) == 0 {
@@ -704,7 +693,8 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response, promptTokens int, mod
 	if err = json.Unmarshal(responseBody, &embeddingResponse); err != nil {
 		logger.Error("failed to unmarshal embedding response body",
 			zap.Error(err),
-			zap.ByteString("response_body", responseBody))
+			zap.Int("body_bytes", len(responseBody)),
+			zap.Bool("body_logging_suppressed", true))
 		return ErrorWrapper(err, "unmarshal_embedding_response_failed", http.StatusInternalServerError), nil
 	}
 
@@ -724,7 +714,8 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response, promptTokens int, mod
 
 	if len(embeddingResponse.Data) == 0 {
 		logger.Error("embedding response has no data, possible upstream error",
-			zap.ByteString("response_body", responseBody))
+			zap.Int("body_bytes", len(responseBody)),
+			zap.Bool("body_logging_suppressed", true))
 		return ErrorWrapper(errors.Errorf("no embedding data in upstream response"),
 			"missing_embedding_data", http.StatusInternalServerError), nil
 	}
@@ -840,6 +831,12 @@ func calculateTokenUsage(response *SlimTextResponse, promptTokens int, modelName
 		// Handle audio tokens conversion
 		calculateAudioTokens(response, modelName)
 	}
+
+	// Promote any top-level cached_tokens into the nested
+	// prompt_tokens_details.cached_tokens field so downstream billing applies
+	// the cache-hit ratio. No-op for OpenAI-shaped responses.
+	response.Usage.NormalizeCachedTokens()
+	response.Usage.NormalizeCacheWriteTokens()
 }
 
 // Helper function to check if response has audio tokens
@@ -851,7 +848,7 @@ func hasAudioTokens(response *SlimTextResponse) bool {
 // Helper function to calculate audio token usage
 func calculateAudioTokens(response *SlimTextResponse, modelName string) {
 	// Convert audio tokens for prompt
-	audioCfg, found := pricing.ResolveAudioPricing(modelName, nil, &Adaptor{})
+	audioCfg, found := pricing.ResolveAudioPricing(modelName, nil, &Adaptor{}, time.Time{})
 	promptRatio := pricing.DefaultAudioPromptRatio
 	completionRatio := pricing.DefaultAudioCompletionRatio
 	if found && audioCfg != nil {
@@ -902,11 +899,7 @@ func ResponseAPIHandler(c *gin.Context, resp *http.Response, promptTokens int, m
 	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
 		fields = append(fields, zap.String("content_type", contentType))
 	}
-	if shouldLogDetailedUpstreamBody(c) {
-		fields = append(fields, zap.ByteString("body", responseBody))
-	} else {
-		fields = append(fields, zap.Bool("body_logging_suppressed", true))
-	}
+	fields = append(fields, zap.Bool("body_logging_suppressed", true))
 	lg.Debug("got response from upstream", fields...)
 
 	// Close the original response body
@@ -937,9 +930,22 @@ func ResponseAPIHandler(c *gin.Context, resp *http.Response, promptTokens int, m
 		c.Set(ctxkey.WebSearchCallCount, calls)
 	}
 
+	// Surface the upstream Responses id so the controller can record a
+	// stateless-client continuation checkpoint against it (ST-022). Internal only;
+	// never written to the client body.
+	if responseAPIResp.Id != "" {
+		c.Set(ctxkey.ResponseAPIUpstreamID, responseAPIResp.Id)
+	}
+
 	// Convert Response API response to ChatCompletion format
 	chatCompletionResp := ConvertResponseAPIToChatCompletion(&responseAPIResp)
 	chatCompletionResp.Model = modelName
+
+	// Surface the rendered assistant turn so a stateless-client checkpoint can key on
+	// the full transcript the client will resend next time (ST-022).
+	if len(chatCompletionResp.Choices) > 0 {
+		c.Set(ctxkey.ResponseAPIAssistantMessage, chatCompletionResp.Choices[0].Message)
+	}
 
 	// Handle reasoning content in the choice
 	if len(chatCompletionResp.Choices) > 0 {
@@ -992,7 +998,9 @@ func ResponseAPIHandler(c *gin.Context, resp *http.Response, promptTokens int, m
 		return ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 
-	lg.Debug("generate response to user", zap.ByteString("body", jsonResponse))
+	lg.Debug("generate response to user",
+		zap.Int("body_bytes", len(jsonResponse)),
+		zap.Bool("body_logging_suppressed", true))
 
 	// Forward all response headers
 	for k, values := range resp.Header {
@@ -1392,7 +1400,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 						if forwardedChunks == 1 {
 							lg.Debug("first response api converted stream chunk flushed to client")
 						}
-						lg.Debug("sent usage chunk from response.completed", zap.ByteString("chunk", jsonStr))
+						lg.Debug("sent usage chunk from response.completed", zap.Int("chunk_bytes", len(jsonStr)))
 					}
 				}
 			}
@@ -1778,7 +1786,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 					if forwardedChunks == 1 {
 						lg.Debug("first response api converted stream chunk flushed to client")
 					}
-					lg.Debug("sent usage chunk from response.completed", zap.ByteString("chunk", jsonStr))
+					lg.Debug("sent usage chunk from response.completed", zap.Int("chunk_bytes", len(jsonStr)))
 				}
 			}
 			// ALL other events (done events, in_progress events, etc.) are discarded to avoid duplicate content leakage
@@ -1849,11 +1857,7 @@ func ResponseAPIDirectHandler(c *gin.Context, resp *http.Response, promptTokens 
 	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
 		fields = append(fields, zap.String("content_type", contentType))
 	}
-	if shouldLogDetailedUpstreamBody(c) {
-		fields = append(fields, zap.ByteString("body", responseBody))
-	} else {
-		fields = append(fields, zap.Bool("body_logging_suppressed", true))
-	}
+	fields = append(fields, zap.Bool("body_logging_suppressed", true))
 	gmw.GetLogger(c).Debug("got response from upstream", fields...)
 
 	// Close the original response body
@@ -1970,6 +1974,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	)
 
 	doneRendered := false
+	terminalEventSeen := false
 	forwardedChunks := 0
 	var streamErr error
 
@@ -2074,6 +2079,13 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 		} else if streamEvent != nil {
 			// Convert streaming event to ResponseAPIResponse for processing
 			responseAPIChunk = ConvertStreamEventToResponse(streamEvent)
+			if streamEvent.Response != nil {
+				lastFullResponse = streamEvent.Response
+			}
+			switch streamEvent.Type {
+			case "response.completed", "response.failed", "response.incomplete":
+				terminalEventSeen = true
+			}
 		} else {
 			// Still forward — don't silently drop events the client expects.
 			render.SSEEvent(c, pendingEventType, data)
@@ -2133,7 +2145,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	// An honest proxy must let the client observe the same stream termination
 	// behaviour as the upstream API: if the upstream connection dropped before
 	// sending [DONE], the client should see the connection close without it.
-	if !doneRendered {
+	if !doneRendered && !terminalEventSeen {
 		lg.Warn("upstream stream ended without sending [DONE]",
 			zap.Int("forwarded_chunks", forwardedChunks),
 		)
@@ -2156,6 +2168,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	lg.Debug("completed response api native stream forwarding",
 		zap.Int("forwarded_chunks", forwardedChunks),
 		zap.Bool("done_rendered", doneRendered),
+		zap.Bool("terminal_event_seen", terminalEventSeen),
 		zap.Int("heartbeats_sent", hbr.HeartbeatsSent()),
 	)
 

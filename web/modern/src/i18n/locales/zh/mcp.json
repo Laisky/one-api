@@ -9,6 +9,8 @@
         "sync_in_progress": "同步中…",
         "update": "更新服务器"
       },
+      "description_add": "添加新的 MCP 服务器，并配置其工具的暴露方式。",
+      "description_edit": "更新此 MCP 服务器及其暴露的工具配置。",
       "fields": {
         "api_key": "API 密钥",
         "auth_type": "认证类型",
@@ -81,6 +83,7 @@
         "actions": "操作",
         "auth_type": "认证类型",
         "base_url": "基础 URL",
+        "id": "ID",
         "last_sync": "最近同步",
         "name": "名称",
         "priority": "优先级",
@@ -92,7 +95,7 @@
       "labels": {
         "never": "从不"
       },
-      "search_placeholder": "搜索 MCP 服务器...",
+      "search_placeholder": "按名称、URL 或 UUID 搜索 MCP 服务器...",
       "subtitle": "管理 MCP 服务器注册与工具同步",
       "title": "MCP 服务器"
     },
