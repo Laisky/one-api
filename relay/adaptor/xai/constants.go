@@ -280,6 +280,63 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 
 	// ============================================================
+	// Historical Grok chat aliases. These slugs are no longer listed in
+	// current xAI docs, but deployments may still have them configured in
+	// existing channels. Keep explicit pricing so they never fall through to
+	// generic fallback billing when a caller requests one of these names.
+	// ============================================================
+	"grok-3-fast": {
+		Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 3.0, CachedInputRatio: 0.75 * ratio.MilliTokensUsd, // $3.00 input, $0.75 cached input, $15.00 output
+		ContextLength:   131072,
+		InputModalities: grokTextInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesBase, SupportedSamplingParameters: grokSamplingParams,
+		Description: "Grok 3 Fast — historical alias retained with explicit pricing for billing continuity.",
+	},
+	"grok-3-mini-fast": {
+		Ratio: 0.3 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.3, CachedInputRatio: 0.075 * ratio.MilliTokensUsd, // $0.30 input, $0.075 cached input, $0.50 output
+		ContextLength:   131072,
+		InputModalities: grokTextInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokSamplingParams,
+		SupportedReasoningEfforts: grokMiniReasoningEfforts, DefaultReasoningEffort: "low",
+		Description: "Grok 3 Mini Fast — historical alias retained with explicit pricing for billing continuity.",
+	},
+	"grok-2-1212": {
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 2.0, // $2.00 input, $10.00 output
+		ContextLength:   131072,
+		InputModalities: grokTextInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesLegacy, SupportedSamplingParameters: grokSamplingParams,
+		Description: "Grok 2 1212 — historical text model retained with explicit pricing for billing continuity.",
+	},
+	"grok-beta": {
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 2.0, // $2.00 input, $10.00 output
+		ContextLength:   131072,
+		InputModalities: grokTextInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesLegacy, SupportedSamplingParameters: grokSamplingParams,
+		Description: "Grok Beta — legacy alias retained with explicit pricing for billing continuity.",
+	},
+	"grok-2": {
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 2.0, // $2.00 input, $10.00 output
+		ContextLength:   131072,
+		InputModalities: grokTextInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesLegacy, SupportedSamplingParameters: grokSamplingParams,
+		Description: "Grok 2 — legacy alias retained with explicit pricing for billing continuity.",
+	},
+	"grok-2-latest": {
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 2.0, // $2.00 input, $10.00 output
+		ContextLength:   131072,
+		InputModalities: grokTextInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesLegacy, SupportedSamplingParameters: grokSamplingParams,
+		Description: "Grok 2 Latest — legacy alias retained with explicit pricing for billing continuity.",
+	},
+	"grok-vision-beta": {
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 2.0, // $2.00 input, $10.00 output
+		ContextLength:   32768,
+		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesLegacy, SupportedSamplingParameters: grokSamplingParams,
+		Description: "Grok Vision Beta — legacy vision alias retained with explicit pricing for billing continuity.",
+	},
+
+	// ============================================================
 	// Image generation models. Current xAI line-up:
 	//   grok-imagine-image            $0.02/image (standard)
 	//   grok-imagine-image-quality    $0.05/image (high fidelity, replaces grok-imagine-image-pro)
