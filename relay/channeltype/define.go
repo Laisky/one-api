@@ -56,5 +56,12 @@ const (
 	ClaudeCompatible
 	Copilot
 	Fireworks
+	NVIDIA
+	Cerebras
+	DeepInfra
+	Zai
+	Jina
+	TypeSafe
+	MuAPI
 	Dummy
 )

@@ -3,6 +3,9 @@ package telemetry
 import (
 	"context"
 	stdErrors "errors"
+	"os"
+	"strconv"
+	"sync/atomic"
 	"time"
 
 	laerrors "github.com/Laisky/errors/v2"
@@ -12,19 +15,162 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/exemplar"
 	sdkresource "go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/common/logger/otelbridge"
 )
+
+// dropExemplarReservoir is a no-op exemplar.Reservoir: it stores nothing and
+// collects nothing. Installing it on every instrument disables metric exemplars
+// outright, which is what one-api wants (no trace-to-metric exemplar drilldown)
+// and incidentally removes the per-collect exemplar-reservoir reallocation that
+// dominated heap allocations.
+//
+// It deliberately does NOT embed the SDK's internal reservoir.ConcurrentSafe
+// marker (that type lives in an internal package and cannot be imported), so the
+// filtered wrapper guards each Offer with its own mutex. The cost is one
+// uncontended lock per sampled measurement against a method that does nothing —
+// negligible — and in exchange Offer is trivially concurrency-safe.
+type dropExemplarReservoir struct{}
+
+func (dropExemplarReservoir) Offer(context.Context, time.Time, exemplar.Value, []attribute.KeyValue) {
+}
+
+func (dropExemplarReservoir) Collect(*[]exemplar.Exemplar) {}
+
+// defaultMetricExportInterval is the OpenTelemetry metric export interval. It
+// matches the OTEL SDK default (60s). The previous 15s value quadrupled the
+// per-collect export churn (protobuf re-marshal of every cumulative series plus
+// the exemplar-reservoir reallocation), which dominated heap allocations.
+// Operators can override it with the standard OTEL_METRIC_EXPORT_INTERVAL env
+// var (in milliseconds).
+const defaultMetricExportInterval = 60 * time.Second
+
+// metricExportInterval resolves the periodic-reader interval, honoring the
+// standard OTEL_METRIC_EXPORT_INTERVAL (milliseconds) override and falling back
+// to defaultMetricExportInterval.
+func metricExportInterval() time.Duration {
+	if v := os.Getenv("OTEL_METRIC_EXPORT_INTERVAL"); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms > 0 {
+			return time.Duration(ms) * time.Millisecond
+		}
+	}
+	return defaultMetricExportInterval
+}
+
+// newZeroExemplarReservoirView returns a wildcard view that installs a no-op
+// exemplar reservoir (dropExemplarReservoir) on every instrument, so zero
+// exemplars are ever retained.
+//
+// With the default exemplar filter (TraceBasedFilter) and tracing enabled,
+// every sampled measurement reserves an exemplar slot, and the metric SDK
+// reallocates a GOMAXPROCS-sized []metricdata.Exemplar backing array per series
+// on EVERY collect cycle. That reservoir reallocation was ~38% of all process
+// heap allocations.
+//
+// NOTE: setting the exemplar FILTER to always_off does NOT fix this — the
+// reservoir backing array is sized to GOMAXPROCS regardless of the filter
+// (benchmarked: the filter cuts collect bytes by only ~1%). Dropping exemplars
+// at the reservoir is the only effective lever (benchmarked: ~96% fewer bytes
+// per collect, ~8x faster). one-api does not use metric exemplars (no
+// trace-to-metric exemplar drilldown), so dropping them is safe.
+//
+// WARNING: do NOT use exemplar.FixedSizeReservoirProvider(0) here. A
+// zero-capacity FixedSizeReservoir is NOT a no-op — its Algorithm-L sampler runs
+// `rand.IntN(int(r.k))` once a series receives its second offered measurement
+// within an export interval, and rand.IntN(0) panics with "invalid argument to
+// IntN". Under TraceBasedFilter every sampled request feeds the otelgin HTTP
+// histogram, so the panic fired on the 2nd request per 60s window. A dedicated
+// no-op reservoir is the correct way to suppress exemplars without panicking.
+func newZeroExemplarReservoirView() sdkmetric.View {
+	return sdkmetric.NewView(
+		sdkmetric.Instrument{Name: "*"},
+		sdkmetric.Stream{
+			ExemplarReservoirProviderSelector: func(sdkmetric.Aggregation) exemplar.ReservoirProvider {
+				return func(attribute.Set) exemplar.Reservoir {
+					return dropExemplarReservoir{}
+				}
+			},
+		},
+	)
+}
 
 // ProviderBundle holds the tracer and meter providers so they can be shut down gracefully.
 type ProviderBundle struct {
 	tracerProvider *sdktrace.TracerProvider
 	meterProvider  *sdkmetric.MeterProvider
+	loggerProvider *sdklog.LoggerProvider
+	generation     uint64
+}
+
+// providerInitialized records whether InitOpenTelemetry installed real global
+// providers in this process.
+//
+// It exists because the global providers cannot be interrogated for this.
+// otel.GetTracerProvider() answers every caller, and before (or after a failed)
+// InitOpenTelemetry that answer is the SDK's built-in NO-OP provider, whose
+// spans are indistinguishable from real ones at the call site except that they
+// never record. A component that must not be built against a no-op provider --
+// the OTLP trace sink, proposal section 3.2 row "Any sink including otlp |
+// batched | OTEL_ENABLED=false -> Reject; never count a no-op provider as
+// export" -- therefore has no way to ask, and would rediscover the
+// misconfiguration once per request forever.
+//
+// The readiness flag mirrors exactly the global state the sink reads. Its
+// generation prevents Shutdown of an older bundle from clearing readiness after
+// a replacement provider has been installed.
+var (
+	providerInitialized      atomic.Bool
+	providerGeneration       atomic.Uint64
+	activeProviderGeneration atomic.Uint64
+)
+
+// ProviderInitialized reports whether this process initialized real OpenTelemetry
+// providers, as opposed to still running on the global no-op provider.
+//
+// Callers use it as a startup precondition, not per record: a false answer
+// means every span handed to otel.GetTracerProvider() would be dropped without
+// ever reaching an exporter.
+//
+// Parameters: none.
+//
+// Return values:
+//   - bool: true between a successful InitOpenTelemetry and ProviderBundle.Shutdown.
+func ProviderInitialized() bool {
+	return providerInitialized.Load()
+}
+
+// SetProviderInitializedForTest overrides the provider-installed flag and
+// returns a restore function. It must only be used from tests: production code
+// sets the flag by actually installing providers.
+//
+// Parameters:
+//   - installed: the value to report from ProviderInitialized.
+//
+// Return values:
+//   - func(): restores the value the flag had before this call.
+func SetProviderInitializedForTest(installed bool) func() {
+	previousReady := providerInitialized.Load()
+	previousGeneration := activeProviderGeneration.Load()
+	if installed {
+		generation := providerGeneration.Add(1)
+		activeProviderGeneration.Store(generation)
+		providerInitialized.Store(true)
+	} else {
+		activeProviderGeneration.Store(0)
+		providerInitialized.Store(false)
+	}
+	return func() {
+		activeProviderGeneration.Store(previousGeneration)
+		providerInitialized.Store(previousReady)
+	}
 }
 
 // InitOpenTelemetry configures global OpenTelemetry providers when enabled.
@@ -49,22 +195,28 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 		return nil, laerrors.Wrap(err, "create OTLP trace exporter")
 	}
 
-	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(traceExporter),
-		sdktrace.WithResource(res),
-	)
+	tracerProvider := newTracerProvider(traceExporter, res)
 	otel.SetTracerProvider(tracerProvider)
 
 	metricExporter, err := otlpmetrichttp.New(ctx, buildMetricExporterOptions()...)
 	if err != nil {
 		_ = tracerProvider.Shutdown(ctx)
+		// The global tracer provider above now points at the shut-down provider.
+		// Any readiness inherited from an earlier initialization would be stale
+		// and would let an OTLP sink start against a provider that records
+		// nothing.
+		activeProviderGeneration.Store(0)
+		providerInitialized.Store(false)
 		return nil, laerrors.Wrap(err, "create OTLP metric exporter")
 	}
 
-	reader := sdkmetric.NewPeriodicReader(metricExporter, sdkmetric.WithInterval(15*time.Second))
+	reader := sdkmetric.NewPeriodicReader(privacyMetricExporter{Exporter: metricExporter},
+		sdkmetric.WithInterval(metricExportInterval()))
+
 	meterProvider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(reader),
 		sdkmetric.WithResource(res),
+		sdkmetric.WithView(newPrivateMetricView()),
 	)
 	otel.SetMeterProvider(meterProvider)
 
@@ -73,23 +225,80 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 		propagation.Baggage{},
 	))
 
+	// The optional application-log bridge is built last and only on request.
+	// A deployment that did not name the otlp app-log sink gets no exporter and
+	// no batch worker at all.
+	var loggerProvider *sdklog.LoggerProvider
+	if config.AppLogOTLPEnabled {
+		loggerProvider, err = newLoggerProvider(ctx, res)
+		if err != nil {
+			_ = meterProvider.Shutdown(ctx)
+			_ = tracerProvider.Shutdown(ctx)
+			activeProviderGeneration.Store(0)
+			providerInitialized.Store(false)
+			return nil, laerrors.Wrap(err, "create OTLP log provider")
+		}
+		if err = installLoggerProvider(loggerProvider); err != nil {
+			_ = loggerProvider.Shutdown(ctx)
+			_ = meterProvider.Shutdown(ctx)
+			_ = tracerProvider.Shutdown(ctx)
+			activeProviderGeneration.Store(0)
+			providerInitialized.Store(false)
+			return nil, laerrors.Wrap(err, "install OTLP log provider")
+		}
+	}
+
+	// Both global providers are installed at this point, so components that
+	// refuse to run against the no-op provider may now be constructed. Set the
+	// flag before the log line: an operator reading "OpenTelemetry initialized"
+	// must not be able to observe a process where the flag still says otherwise.
+	generation := providerGeneration.Add(1)
+	activeProviderGeneration.Store(generation)
+	providerInitialized.Store(true)
+
 	logger.Logger.Info("OpenTelemetry initialized",
 		zap.String("endpoint", config.OpenTelemetryEndpoint),
 		zap.Bool("insecure", config.OpenTelemetryInsecure),
 		zap.String("service", config.OpenTelemetryServiceName),
 		zap.String("environment", config.OpenTelemetryEnvironment),
+		zap.Bool("app_log_otlp", loggerProvider != nil),
 	)
 
 	return &ProviderBundle{
 		tracerProvider: tracerProvider,
 		meterProvider:  meterProvider,
+		loggerProvider: loggerProvider,
+		generation:     generation,
 	}, nil
+}
+
+// newTracerProvider builds the tracer provider used by InitOpenTelemetry: the
+// UTF-8 attribute sanitizer runs first so request-derived span attributes can
+// never make the OTLP exporter reject a batch, then the batching exporter.
+// Parameters: exporter receives the ended spans; res is the resource attached
+// to every span (nil is allowed). Return value: the configured provider.
+func newTracerProvider(exporter sdktrace.SpanExporter, res *sdkresource.Resource) *sdktrace.TracerProvider {
+	opts := []sdktrace.TracerProviderOption{
+		sdktrace.WithSpanProcessor(newUTF8AttributeSanitizer()),
+		sdktrace.WithBatcher(privacySpanExporter{SpanExporter: exporter}),
+	}
+	if res != nil {
+		opts = append(opts, sdktrace.WithResource(res))
+	}
+	return sdktrace.NewTracerProvider(opts...)
 }
 
 // Shutdown drains telemetry providers, ensuring exporters flush pending data.
 func (p *ProviderBundle) Shutdown(ctx context.Context) error {
 	if p == nil {
 		return nil
+	}
+
+	// A shut-down provider records nothing, so anything that gated itself on
+	// ProviderInitialized must see the process go back to "no real provider"
+	// even if a later re-init never happens.
+	if p.generation != 0 && activeProviderGeneration.CompareAndSwap(p.generation, 0) {
+		providerInitialized.Store(false)
 	}
 
 	var errs []error
@@ -103,6 +312,20 @@ func (p *ProviderBundle) Shutdown(ctx context.Context) error {
 	if p.tracerProvider != nil {
 		if err := p.tracerProvider.Shutdown(ctx); err != nil {
 			errs = append(errs, laerrors.Wrap(err, "shutdown tracer provider"))
+		}
+	}
+
+	// The log provider goes last, and its bridge is closed first. Shutting the
+	// trace and metric providers down emits diagnostics through the application
+	// logger, so draining logs before them would discard exactly the lines that
+	// explain a failed shutdown. Closing the bridge before the drain means any
+	// line written after this point is counted as dropped_shutdown rather than
+	// racing a provider that is tearing itself down; those lines still reach
+	// the file and stdout sinks.
+	if p.loggerProvider != nil {
+		otelbridge.Shared.Close()
+		if err := p.loggerProvider.Shutdown(ctx); err != nil {
+			errs = append(errs, laerrors.Wrap(err, "shutdown logger provider"))
 		}
 	}
 
@@ -120,16 +343,30 @@ func buildResource(ctx context.Context) (*sdkresource.Resource, error) {
 	}
 
 	if config.OpenTelemetryEnvironment != "" {
-		attrs = append(attrs, attribute.String("deployment.environment", config.OpenTelemetryEnvironment))
+		attrs = append(attrs,
+			attribute.String("deployment.environment", config.OpenTelemetryEnvironment),
+			attribute.String("deployment.environment.name", config.OpenTelemetryEnvironment),
+		)
 	}
 
-	return sdkresource.New(ctx,
-		sdkresource.WithFromEnv(),
+	res, err := sdkresource.New(ctx,
 		sdkresource.WithHost(),
+		// Operator identity overrides container-local hostname detection.
+		sdkresource.WithFromEnv(),
 		sdkresource.WithTelemetrySDK(),
-		sdkresource.WithProcess(),
+		// Do not automatically export argv or process.owner: either can expose
+		// credentials or private account details before the edge WAL persists them.
+		sdkresource.WithProcessPID(),
+		sdkresource.WithProcessRuntimeName(),
+		sdkresource.WithProcessRuntimeVersion(),
+		sdkresource.WithProcessRuntimeDescription(),
 		sdkresource.WithAttributes(attrs...),
 	)
+	// resource.New can return a usable resource together with its error; both are passed on.
+	if res != nil {
+		res = privateResource(res)
+	}
+	return res, laerrors.WithStack(err)
 }
 
 func buildTraceExporterOptions() []otlptracehttp.Option {

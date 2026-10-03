@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import useRegister from 'hooks/useRegister';
@@ -114,7 +115,7 @@ const RegisterForm = ({ ...others }) => {
           email: showEmailVerification ? Yup.string().email('必须是有效的Email地址').max(255).required('Email是必填项') : Yup.mixed(),
           verification_code: showEmailVerification ? Yup.string().max(255).required('验证码是必填项') : Yup.mixed()
         })}
-        onSubmit={async (values, { setErrors, setStatus, setSubmitting }) => {
+        onSubmit={(...uiArgs) => (async (values, { setErrors, setStatus, setSubmitting }) => {
           if (turnstileEnabled && turnstileToken === '') {
             showInfo('请稍后几秒重试，Turnstile 正在检查用户环境！');
             setSubmitting(false);
@@ -130,7 +131,7 @@ const RegisterForm = ({ ...others }) => {
               setErrors({ submit: message });
             }
           }
-        }}
+        })(...uiArgs).catch(reportUIError)}
       >
         {({ errors, handleBlur, handleChange, handleSubmit, isSubmitting, touched, values }) => (
           <form noValidate onSubmit={handleSubmit} {...others}>
@@ -240,7 +241,7 @@ const RegisterForm = ({ ...others }) => {
                     onChange={handleChange}
                     endAdornment={
                       <InputAdornment position="end">
-                        <Button variant="contained" color="primary" onClick={() => handleSendCode(values.email)}>
+                        <Button variant="contained" color="primary" onClick={() => handleSendCode(values.email).catch(reportUIError)}>
                           发送验证码
                         </Button>
                       </InputAdornment>

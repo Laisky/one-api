@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/network"
 	"github.com/Laisky/one-api/common/random"
@@ -27,7 +28,7 @@ import (
 func GetRequestCost(c *gin.Context) {
 	reqId := c.Param("request_id")
 	if reqId == "" {
-		helper.RespondError(c, errors.New("request_id should not be empty"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("request_id should not be empty")))
 
 	}
 
@@ -80,7 +81,7 @@ func GetAllTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    tokens,
+		"data":    model.TokensToResponses(tokens),
 		"total":   totalCount,
 	})
 }
@@ -112,13 +113,13 @@ func SearchTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    tokens,
+		"data":    model.TokensToResponses(tokens),
 		"total":   total,
 	})
 }
 
 func GetToken(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveTokenRef(c.Param("id"))
 	userId := c.GetInt(ctxkey.Id)
 	if err != nil {
 		helper.RespondError(c, err)
@@ -132,7 +133,7 @@ func GetToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    token,
+		"data":    token.ToResponse(),
 	})
 }
 
@@ -176,19 +177,22 @@ func AddToken(c *gin.Context) {
 	token := new(model.Token)
 	err := c.ShouldBindJSON(token)
 	if err != nil {
-		helper.RespondError(c, err)
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
 		return
 	}
+	token.UUID = ""
+	token.UserUUID = nil
 
 	// Disallow empty name on create
 	if strings.TrimSpace(token.Name) == "" {
-		helper.RespondError(c, errors.New("Token name is required"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Token name is required")))
 		return
 	}
 
 	err = validateToken(c, token)
 	if err != nil {
-		helper.RespondError(c, errors.Errorf("invalid token: %s", err.Error()))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.Errorf("invalid token: %s", err.Error())))
 		return
 	}
 
@@ -212,14 +216,18 @@ func AddToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    cleanToken,
+		"data":    cleanToken.ToResponse(),
 	})
 }
 
 func DeleteToken(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
+	id, err := resolveTokenRef(c.Param("id"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	userId := c.GetInt(ctxkey.Id)
-	err := model.DeleteTokenById(gmw.Ctx(c), id, userId)
+	err = model.DeleteTokenById(gmw.Ctx(c), id, userId)
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -284,13 +292,14 @@ func ConsumeToken(c *gin.Context) {
 
 	req := new(consumeTokenRequest)
 	if err := c.ShouldBindJSON(req); err != nil {
-		helper.RespondError(c, err)
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
 		return
 	}
 
 	req.AddReason = strings.TrimSpace(req.AddReason)
 	if req.AddReason == "" {
-		helper.RespondError(c, errors.New("add_reason cannot be empty"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("add_reason cannot be empty")))
 		return
 	}
 
@@ -336,7 +345,7 @@ func ConsumeToken(c *gin.Context) {
 	case ConsumePhaseSingle:
 		transaction, updatedToken, err = processImmediateConsume(ctx, c, cleanToken, userID, req, requestID, traceID)
 	default:
-		helper.RespondError(c, errors.Errorf("unsupported phase: %s", phase))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.Errorf("unsupported phase: %s", phase)))
 		return
 	}
 
@@ -345,10 +354,16 @@ func ConsumeToken(c *gin.Context) {
 		return
 	}
 
+	// ToResponse returns the zero object for a nil receiver, so guard the nil
+	// case to preserve the historical `"data": null` when no token was updated.
+	var tokenData any
+	if updatedToken != nil {
+		tokenData = updatedToken.ToResponse()
+	}
 	response := gin.H{
 		"success": true,
 		"message": "",
-		"data":    updatedToken,
+		"data":    tokenData,
 	}
 	if transaction != nil {
 		response["transaction"] = buildTransactionResponse(transaction)
@@ -383,8 +398,10 @@ func processPreConsume(ctx context.Context, _ *gin.Context, token *model.Token, 
 
 	logEntry := &model.Log{
 		UserId:    userID,
+		UserUUID:  token.UserUUID,
 		ModelName: req.AddReason,
 		TokenName: token.Name,
+		TokenUUID: &token.UUID,
 		Quota:     clampQuotaToInt(preQuota),
 		Content:   buildPreConsumeLogContent(req.AddReason, preQuota, transactionID, timeoutSeconds),
 		RequestId: requestID,
@@ -398,7 +415,9 @@ func processPreConsume(ctx context.Context, _ *gin.Context, token *model.Token, 
 	transaction := &model.TokenTransaction{
 		TransactionID: transactionID,
 		TokenId:       token.Id,
+		TokenUUID:     &token.UUID,
 		UserId:        userID,
+		UserUUID:      token.UserUUID,
 		Status:        model.TokenTransactionStatusPending,
 		PreQuota:      preQuota,
 		Reason:        req.AddReason,
@@ -406,6 +425,9 @@ func processPreConsume(ctx context.Context, _ *gin.Context, token *model.Token, 
 		TraceId:       traceID,
 		ExpiresAt:     expiresAt,
 		LogId:         &logEntry.Id,
+	}
+	if logEntry.UUID != "" {
+		transaction.LogUUID = &logEntry.UUID
 	}
 
 	if req.ElapsedTimeMs != nil && *req.ElapsedTimeMs > 0 {
@@ -467,45 +489,16 @@ func processPostConsume(ctx context.Context, c *gin.Context, token *model.Token,
 		return nil, nil, errors.Wrap(err, "convert final_used_quota to int64")
 	}
 
-	delta := finalQuota - existingTxn.PreQuota
-	quotaAdjusted := false
-	if delta != 0 {
-		if err = model.PostConsumeTokenQuota(ctx, token.Id, delta); err != nil {
-			return nil, nil, errors.Wrap(err, "post-consume token quota delta")
-		}
-		quotaAdjusted = true
-	}
-
-	confirmedAt := helper.GetTimestamp()
-	updates := map[string]any{
-		"status":         model.TokenTransactionStatusConfirmed,
-		"final_quota":    finalQuota,
-		"confirmed_at":   confirmedAt,
-		"auto_confirmed": false,
-		"expires_at":     int64(0),
-		"reason":         req.AddReason,
-	}
-
-	if req.ElapsedTimeMs != nil && *req.ElapsedTimeMs > 0 {
-		updates["elapsed_time_ms"] = *req.ElapsedTimeMs
-	}
-
-	if err = model.UpdateTokenTransaction(ctx, existingTxn.Id, updates); err != nil {
-		if quotaAdjusted {
-			_ = model.PostConsumeTokenQuota(ctx, token.Id, -delta)
-		}
-		return nil, nil, errors.Wrap(err, "update token transaction for post-consume")
-	}
-
-	updatedFinal := finalQuota
-	existingTxn.Status = model.TokenTransactionStatusConfirmed
-	existingTxn.AutoConfirmed = false
-	existingTxn.FinalQuota = &updatedFinal
-	existingTxn.Reason = req.AddReason
-	existingTxn.ConfirmedAt = &confirmedAt
-	if req.ElapsedTimeMs != nil && *req.ElapsedTimeMs > 0 {
-		elapsed := *req.ElapsedTimeMs
-		existingTxn.ElapsedTimeMs = &elapsed
+	reservationExpiresAt := existingTxn.ExpiresAt
+	existingTxn, err = model.FinalizePendingTokenTransaction(ctx, token.Id, existingTxn.Id, model.TokenTransactionFinalization{
+		Status:        model.TokenTransactionStatusConfirmed,
+		FinalQuota:    finalQuota,
+		At:            helper.GetTimestamp(),
+		Reason:        &req.AddReason,
+		ElapsedTimeMs: req.ElapsedTimeMs,
+	})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "finalize post-consume transaction")
 	}
 
 	if existingTxn.LogId != nil {
@@ -530,6 +523,9 @@ func processPostConsume(ctx context.Context, c *gin.Context, token *model.Token,
 		return nil, nil, errors.Wrap(err, "get token by ids after post-consume")
 	}
 
+	// Preserve the historical response deadline without reopening the persisted
+	// terminal transaction, whose expires_at stays zero after atomic finalization.
+	existingTxn.ExpiresAt = reservationExpiresAt
 	return existingTxn, updatedToken, nil
 }
 
@@ -552,28 +548,14 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 		return nil, nil, errors.Errorf("transaction %s cannot be canceled because it is %s", transactionID, model.TokenTransactionStatusString(txn.Status))
 	}
 
-	if err = model.PostConsumeTokenQuota(ctx, token.Id, -txn.PreQuota); err != nil {
-		return nil, nil, errors.Wrap(err, "refund reserved token quota on cancel")
+	reservationExpiresAt := txn.ExpiresAt
+	txn, err = model.FinalizePendingTokenTransaction(ctx, token.Id, txn.Id, model.TokenTransactionFinalization{
+		Status: model.TokenTransactionStatusCanceled,
+		At:     helper.GetTimestamp(),
+	})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "finalize canceled transaction")
 	}
-
-	canceledAt := helper.GetTimestamp()
-	updates := map[string]any{
-		"status":      model.TokenTransactionStatusCanceled,
-		"canceled_at": canceledAt,
-		"final_quota": int64(0),
-		"expires_at":  int64(0),
-	}
-
-	if err = model.UpdateTokenTransaction(ctx, txn.Id, updates); err != nil {
-		_ = model.PostConsumeTokenQuota(ctx, token.Id, txn.PreQuota)
-		return nil, nil, errors.Wrap(err, "update token transaction for cancel")
-	}
-
-	zero := int64(0)
-	txn.Status = model.TokenTransactionStatusCanceled
-	txn.CanceledAt = &canceledAt
-	txn.FinalQuota = &zero
-	txn.AutoConfirmed = false
 
 	if txn.LogId != nil {
 		logUpdates := map[string]any{
@@ -596,6 +578,9 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 		return nil, nil, errors.Wrap(err, "get token by ids after cancel")
 	}
 
+	// Preserve the historical response deadline without reopening the persisted
+	// terminal transaction, whose expires_at stays zero after atomic finalization.
+	txn.ExpiresAt = reservationExpiresAt
 	return txn, updatedToken, nil
 }
 
@@ -653,8 +638,10 @@ func processZeroQuotaImmediateConsume(ctx context.Context, token *model.Token, u
 
 	logEntry := &model.Log{
 		UserId:    userID,
+		UserUUID:  token.UserUUID,
 		ModelName: req.AddReason,
 		TokenName: token.Name,
+		TokenUUID: &token.UUID,
 		Quota:     0,
 		Content:   buildPostConsumeLogContent(req.AddReason, 0, 0, transactionID),
 		RequestId: requestID,
@@ -670,7 +657,9 @@ func processZeroQuotaImmediateConsume(ctx context.Context, token *model.Token, u
 	transaction := &model.TokenTransaction{
 		TransactionID: transactionID,
 		TokenId:       token.Id,
+		TokenUUID:     &token.UUID,
 		UserId:        userID,
+		UserUUID:      token.UserUUID,
 		Status:        model.TokenTransactionStatusConfirmed,
 		PreQuota:      0,
 		FinalQuota:    &zeroQuota,
@@ -683,6 +672,9 @@ func processZeroQuotaImmediateConsume(ctx context.Context, token *model.Token, u
 	if logEntry.Id > 0 {
 		logID := logEntry.Id
 		transaction.LogId = &logID
+	}
+	if logEntry.UUID != "" {
+		transaction.LogUUID = &logEntry.UUID
 	}
 	if req.ElapsedTimeMs != nil && *req.ElapsedTimeMs > 0 {
 		elapsed := *req.ElapsedTimeMs
@@ -743,9 +735,11 @@ func buildTransactionResponse(txn *model.TokenTransaction) gin.H {
 	}
 
 	response := gin.H{
-		"id":             txn.Id,
+		"uuid":           txn.UUID,
 		"transaction_id": txn.TransactionID,
-		"token_id":       txn.TokenId,
+		"token_uuid":     txn.TokenUUID,
+		"user_uuid":      txn.UserUUID,
+		"log_uuid":       txn.LogUUID,
 		"status_code":    txn.Status,
 		"status":         model.TokenTransactionStatusString(txn.Status),
 		"pre_quota":      txn.PreQuota,
@@ -766,9 +760,6 @@ func buildTransactionResponse(txn *model.TokenTransaction) gin.H {
 	}
 	if txn.CanceledAt != nil {
 		response["canceled_at"] = *txn.CanceledAt
-	}
-	if txn.LogId != nil {
-		response["log_id"] = *txn.LogId
 	}
 	if txn.ElapsedTimeMs != nil {
 		response["elapsed_time_ms"] = *txn.ElapsedTimeMs
@@ -881,13 +872,27 @@ func UpdateToken(c *gin.Context) {
 	tokenPatch := new(model.Token)
 	err := c.ShouldBindJSON(tokenPatch)
 	if err != nil {
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
+		return
+	}
+	ref, err := preferUUIDRef(tokenPatch.UUID, tokenPatch.Id)
+	if err != nil {
 		helper.RespondError(c, err)
 		return
 	}
+	resolvedTokenID, err := resolveTokenRef(ref)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	tokenPatch.Id = resolvedTokenID
+	tokenPatch.UUID = ""
+	tokenPatch.UserUUID = nil
 
 	// Disallow empty name when not status_only
 	if statusOnly == "" && strings.TrimSpace(tokenPatch.Name) == "" {
-		helper.RespondError(c, errors.New("Token name cannot be empty"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Token name cannot be empty")))
 		return
 	}
 
@@ -899,7 +904,7 @@ func UpdateToken(c *gin.Context) {
 
 	err = validateToken(c, token)
 	if err != nil {
-		helper.RespondError(c, errors.Errorf("invalid token: %s", err.Error()))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.Errorf("invalid token: %s", err.Error())))
 		return
 	}
 
@@ -914,13 +919,13 @@ func UpdateToken(c *gin.Context) {
 		if cleanToken.Status == model.TokenStatusExpired &&
 			cleanToken.ExpiredTime <= helper.GetTimestamp() && cleanToken.ExpiredTime != -1 &&
 			token.ExpiredTime != -1 && token.ExpiredTime < helper.GetTimestamp() {
-			helper.RespondError(c, errors.New("The token has expired and cannot be enabled. Please modify the expiration time of the token, or set it to never expire."))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("The token has expired and cannot be enabled. Please modify the expiration time of the token, or set it to never expire.")))
 			return
 		}
 		if cleanToken.Status == model.TokenStatusExhausted &&
 			cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota &&
 			token.RemainQuota <= 0 && !token.UnlimitedQuota {
-			helper.RespondError(c, errors.New("The available quota of the token has been used up and cannot be enabled. Please modify the remaining quota of the token, or set it to unlimited quota"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("The available quota of the token has been used up and cannot be enabled. Please modify the remaining quota of the token, or set it to unlimited quota")))
 			return
 		}
 	case model.TokenStatusExhausted:
@@ -954,7 +959,7 @@ func UpdateToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    cleanToken,
+		"data":    cleanToken.ToResponse(),
 	})
 }
 
@@ -1048,7 +1053,11 @@ func AdminGetAllTokens(c *gin.Context) {
 	if size > config.MaxItemsPerPage {
 		size = config.MaxItemsPerPage
 	}
-	userId, _ := strconv.Atoi(c.Query("user_id"))
+	userId, err := resolveOptionalUserRef(c.Query("user_id"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	sortBy := c.Query("sort")
 	sortOrder := c.Query("order")
 	if sortOrder == "" {
@@ -1064,7 +1073,7 @@ func AdminGetAllTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    tokens,
+		"data":    model.TokensToResponses(tokens),
 		"total":   total,
 	})
 }
@@ -1098,14 +1107,14 @@ func AdminSearchTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    tokens,
+		"data":    model.TokensToResponses(tokens),
 		"total":   total,
 	})
 }
 
 // AdminGetToken returns a token by id regardless of owner. Admin-only, read-only.
 func AdminGetToken(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveTokenRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, errors.Wrap(err, "invalid token id"))
 		return
@@ -1118,6 +1127,6 @@ func AdminGetToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    token,
+		"data":    token.ToResponse(),
 	})
 }

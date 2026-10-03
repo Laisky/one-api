@@ -33,7 +33,7 @@ func applyThinkingQueryToChatRequest(c *gin.Context, request *relaymodel.General
 
 	modelName := resolveModelName(meta, request.Model)
 	if state == thinkingQueryEnabled && supportsThinkingInjection(meta, modelName) {
-		ensureReasoningEffort(c, request, modelName)
+		ensureReasoningEffort(c, request, modelName, meta)
 		ensureIncludeReasoning(meta, request)
 	}
 
@@ -50,7 +50,7 @@ func applyThinkingQueryToResponseRequest(c *gin.Context, request *openaipayload.
 
 	modelName := resolveModelName(meta, request.Model)
 	if state == thinkingQueryEnabled && supportsThinkingInjection(meta, modelName) {
-		ensureResponseReasoning(c, request, modelName)
+		ensureResponseReasoning(c, request, modelName, meta)
 	}
 
 	ensureResponseVLLMThinkingOverride(c, meta, request, modelName, state)
@@ -243,21 +243,22 @@ func supportsThinkingInjection(meta *metalib.Meta, modelName string) bool {
 		}
 	}
 
+	if cfg, known := reasoningModelConfig(meta, modelName); known {
+		return len(cfg.SupportedReasoningEfforts) > 0
+	}
 	return isReasoningCapableModel(modelName)
 }
 
 // ensureReasoningEffort populates reasoning_effort on the chat request when it
-// has not been provided by the caller.
-func ensureReasoningEffort(c *gin.Context, request *relaymodel.GeneralOpenAIRequest, modelName string) {
+// has not been provided by the caller. Parameters: c supplies query values,
+// request is mutated, and modelName/meta select the upstream catalog. Returns: none.
+func ensureReasoningEffort(c *gin.Context, request *relaymodel.GeneralOpenAIRequest, modelName string, meta *metalib.Meta) {
 	if request.ReasoningEffort != nil && strings.TrimSpace(*request.ReasoningEffort) != "" {
 		return
 	}
 
 	requested := strings.TrimSpace(c.Query("reasoning_effort"))
-	desired := normalizeReasoningEffort(modelName, requested)
-	if desired == "" {
-		desired = defaultReasoningEffort(modelName)
-	}
+	desired := queryReasoningEffort(meta, modelName, requested)
 	if desired == "" {
 		return
 	}
@@ -285,8 +286,10 @@ func ensureIncludeReasoning(meta *metalib.Meta, request *relaymodel.GeneralOpenA
 	request.IncludeReasoning = &include
 }
 
-// ensureResponseReasoning ensures Response API requests include a reasoning effort configuration.
-func ensureResponseReasoning(c *gin.Context, request *openaipayload.ResponseAPIRequest, modelName string) {
+// ensureResponseReasoning adds a query-selected effort without replacing body values.
+// Parameters: c supplies query values, request is mutated, and modelName/meta
+// select the upstream catalog. Returns: none.
+func ensureResponseReasoning(c *gin.Context, request *openaipayload.ResponseAPIRequest, modelName string, meta *metalib.Meta) {
 	var existing string
 	if request.Reasoning != nil && request.Reasoning.Effort != nil {
 		existing = strings.TrimSpace(*request.Reasoning.Effort)
@@ -296,10 +299,7 @@ func ensureResponseReasoning(c *gin.Context, request *openaipayload.ResponseAPIR
 	}
 
 	requested := strings.TrimSpace(c.Query("reasoning_effort"))
-	desired := normalizeReasoningEffort(modelName, requested)
-	if desired == "" {
-		desired = defaultReasoningEffort(modelName)
-	}
+	desired := queryReasoningEffort(meta, modelName, requested)
 	if desired == "" {
 		return
 	}
@@ -360,6 +360,8 @@ func isReasoningCapableModel(modelName string) bool {
 		return true
 	case strings.Contains(name, "deepseek-r1"):
 		return true
+	case strings.HasPrefix(name, "deepseek-v4-"):
+		return true
 	case strings.Contains(name, "reasoner"):
 		return true
 	default:
@@ -379,12 +381,27 @@ func defaultReasoningEffort(modelName string) string {
 	return "high"
 }
 
-// normalizeReasoningEffort sanitizes a requested reasoning effort value for a model.
+// normalizeReasoningEffort sanitizes a requested reasoning effort for a model.
+// Parameters: modelName selects provider-specific rules and effort is the requested value.
+// Returns: a normalized provider-compatible value, or an empty string when unsupported.
 func normalizeReasoningEffort(modelName, effort string) string {
 	normalized := strings.ToLower(strings.TrimSpace(effort))
 	if normalized == "" {
 		return ""
 	}
+
+	name := strings.ToLower(strings.TrimSpace(modelName))
+	if strings.HasPrefix(name, "deepseek-v4-") {
+		switch normalized {
+		case "medium", "xhigh":
+			return "high"
+		case "low", "high", "max":
+			return normalized
+		default:
+			return ""
+		}
+	}
+
 	if !isReasoningEffortAllowed(modelName, normalized) {
 		return ""
 	}
@@ -396,17 +413,25 @@ func isReasoningEffortAllowed(modelName, effort string) bool {
 	if effort == "" {
 		return false
 	}
-	switch effort {
-	case "low", "medium", "high":
-	default:
-		return false
-	}
 
 	name := strings.ToLower(strings.TrimSpace(modelName))
 	if strings.Contains(name, "deep-research") || isMediumOnlyOpenAIReasoningModel(name) {
 		return effort == "medium"
 	}
-	return true
+
+	switch effort {
+	case "low", "medium", "high":
+		return true
+	case "none", "minimal", "xhigh", "max":
+		// Extended GPT-5 effort ladder: xhigh (since GPT-5.4), max (since GPT-5.6),
+		// and the legacy none/minimal aliases. Gate to the GPT-5 (non-chat) family;
+		// the openai adaptor re-normalizes per model and coerces any value the
+		// specific model does not support to its default, so other providers keep
+		// their previous {low,medium,high} behaviour on the query-parameter path.
+		return strings.HasPrefix(name, "gpt-5") && !strings.HasPrefix(name, "gpt-5-chat")
+	default:
+		return false
+	}
 }
 
 // stringPtr returns a pointer to a copy of the provided string value.

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -78,12 +77,16 @@ func WeChatAuth(c *gin.Context) {
 		}
 	} else {
 		if config.RegisterEnabled {
-			user.Username = "wechat_" + strconv.Itoa(model.GetMaxUserId()+1)
+			user.Username = defaultOAuthUsername("wechat")
 			user.DisplayName = "WeChat User"
 			user.Role = model.RoleCommonUser
 			user.Status = model.UserStatusEnabled
 
 			if err := user.Insert(ctx, 0); err != nil {
+				if controller.IsUsernameAlreadyTakenError(err) {
+					controller.RespondUsernameAlreadyExists(c)
+					return
+				}
 				helper.RespondError(c, err)
 				return
 			}

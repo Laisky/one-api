@@ -46,6 +46,7 @@ Key points:
 - Native-capable channels are contacted using their preferred protocol (for example, OpenAI GPT-4o via Responses, Anthropic Claude via Claude Messages).
 - Channels lacking native Responses support automatically fall back to Chat Completions while the controller rebuilds a Responses payload for the caller.
 - Cross-family access (Claude client → OpenAI model, OpenAI client → Claude model, etc.) works without user code changes.
+- Responses state is not just a format concern. `previous_response_id` and `conversation` depend on upstream server-side state; fallback paths can only preserve multi-turn context that the client supplies explicitly in the current `input`.
 
 ## 2. Request Routing Overview
 
@@ -141,6 +142,14 @@ The middleware (`middleware.APIFormatAutoDetect`) runs early in the request chai
 5. The adaptor call proceeds. If a fallback was used, the upstream Chat Completion response is transformed back into a Responses envelope via `ResponseAPIHandler` (non-streaming) or `ResponseAPIStreamHandler` (streaming). The helper registered under `ctxkey.ResponseRewriteHandler` performs the final rewrite before bytes are flushed to the client.
 6. `normalizeResponseAPIRawBody` also deletes `temperature`/`top_p` keys from the raw payload when the sanitized struct dropped them, ensuring double coverage for channels that reject those parameters outright.
 
+State handling:
+
+- Native pass-through preserves OpenAI-managed state fields in the outbound raw JSON whenever upstream supports them.
+- `previous_response_id` creates a continuation against an upstream Responses object and cannot be used together with `conversation`.
+- `conversation` belongs to OpenAI's Conversations + Responses state model. The current typed request model does not expose it as a first-class field, so any deeper proxy behavior requires explicit implementation rather than fallback conversion.
+- Chat fallback does not fetch or expand `previous_response_id` or `conversation`. If callers need reliable fallback across non-Responses channels, they must provide the complete replayable history in `input`, including prior `response.output` items such as reasoning and function-call items when relevant.
+- Stable `instructions` should be resent on each chained Responses request because OpenAI does not carry previous top-level `instructions` through `previous_response_id`.
+
 ### 4.2.1 OpenAI Upstream WebSocket Transport (Default)
 
 For official OpenAI upstream channels, `/v1/responses` requests now default to the Responses WebSocket mode for lower continuation overhead:
@@ -148,6 +157,7 @@ For official OpenAI upstream channels, `/v1/responses` requests now default to t
 - The adaptor sends a `response.create` event to the upstream `wss://.../v1/responses` endpoint.
 - For `stream=true`, upstream WebSocket events are bridged into SSE lines so existing stream handlers and billing remain unchanged.
 - For `stream=false`, events are aggregated until completion and materialized into a standard JSON response body.
+- Continuation uses the same `previous_response_id` semantics as HTTP. The active socket can reuse the most recent response state from connection-local memory; with `store=false`, an uncached previous response has no persisted fallback and may fail upstream as `previous_response_not_found`.
 
 Fallback and guardrails:
 

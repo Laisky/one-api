@@ -9,6 +9,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
@@ -25,6 +26,24 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 	output := buildResponseOutput(textResp.Choices)
 	toolCalls := buildRequiredActionToolCalls(textResp.Choices)
 
+	// Commit a gateway response node so the fallback ID is resolvable, retrievable,
+	// and deletable (closes B10). No-op when the feature is inactive; on any store
+	// failure the response still renders with a synthetic ID.
+	var storePtr *bool
+	var conversationPtr *openai.ResponseAPIConversation
+	if commit := pendingCommitFromContext(c); commit != nil {
+		res := commitFallbackResponseNode(c, commit, output, usage, statusText)
+		output = res.output
+		if res.committed {
+			responseID = res.gatewayID
+		}
+		storeMode := res.storeMode
+		storePtr = &storeMode
+		if res.conversation != "" {
+			conversationPtr = &openai.ResponseAPIConversation{Id: res.conversation}
+		}
+	}
+
 	response := openai.ResponseAPIResponse{
 		Id:                 responseID,
 		Object:             "response",
@@ -33,6 +52,8 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 		Model:              userVisibleModelName(meta, originalReq.Model),
 		Output:             output,
 		Usage:              usage,
+		Store:              storePtr,
+		Conversation:       conversationPtr,
 		Instructions:       originalReq.Instructions,
 		MaxOutputTokens:    originalReq.MaxOutputTokens,
 		Metadata:           originalReq.Metadata,
@@ -74,6 +95,34 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 	c.Writer.WriteHeader(status)
 	_, err = c.Writer.Write(data)
 	return errors.Wrap(err, "write response API response")
+}
+
+// renderChatResponseAsResponseAPIStream renders a completed Chat Completion response as a terminal Responses API SSE sequence.
+func renderChatResponseAsResponseAPIStream(c *gin.Context, status int, textResp *openai_compatible.SlimTextResponse, originalReq *openai.ResponseAPIRequest, meta *metalib.Meta) error {
+	c.Set(ctxkey.ResponseRewriteApplied, true)
+	c.Status(status)
+	common.SetEventStreamHeaders(c)
+
+	bridge := newChatToResponseStreamBridge(c, meta, originalReq)
+	choices := make([]openai_compatible.ChatCompletionsStreamResponseChoice, 0, len(textResp.Choices))
+	for _, choice := range textResp.Choices {
+		finishReason := choice.FinishReason
+		choices = append(choices, openai_compatible.ChatCompletionsStreamResponseChoice{
+			Index:        choice.Index,
+			Delta:        choice.Message,
+			FinishReason: &finishReason,
+		})
+	}
+
+	bridge.HandleChunk(c, &openai_compatible.ChatCompletionsStreamResponse{
+		Object:  "chat.completion.chunk",
+		Model:   meta.ActualModelName,
+		Choices: choices,
+		Usage:   &textResp.Usage,
+	})
+	bridge.FinalizeUsage(&textResp.Usage)
+	bridge.HandleDone(c)
+	return nil
 }
 
 // generateResponseAPIID generates a unique ID for a Response API response
@@ -121,6 +170,9 @@ func buildResponseOutput(choices []openai_compatible.TextResponseChoice) []opena
 			output = append(output, openai.OutputItem{
 				Type:   "reasoning",
 				Status: "completed",
+				Content: []openai.OutputContent{
+					{Type: "text", Text: reasoning},
+				},
 				Summary: []openai.OutputContent{
 					{Type: "summary_text", Text: reasoning},
 				},
@@ -139,10 +191,16 @@ func buildResponseOutput(choices []openai_compatible.TextResponseChoice) []opena
 					}
 				}
 			}
+			// Mirror the streaming bridge's function_call item exactly: both id and
+			// call_id must be present and carry the same normalized call ID. A client
+			// that keys the tool call on either field has to see the same value from
+			// the streamed and the non-streamed fallback of the same channel.
+			callID := ensureResponseAPICallID(tool.Id)
 			output = append(output, openai.OutputItem{
 				Type:   "function_call",
 				Status: "completed",
-				CallId: tool.Id,
+				Id:     callID,
+				CallId: callID,
 				Name: func() string {
 					if tool.Function != nil {
 						return tool.Function.Name

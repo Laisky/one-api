@@ -3,9 +3,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ConfirmDetailsList } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { MobileTableSort } from '@/components/ui/mobile-table';
+import { NameWithId } from '@/components/shared/NameWithId';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
@@ -16,25 +16,26 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, renderQuota } from '@/lib/utils';
-import { zodResolver } from '@hookform/resolvers/zod';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { Ban, CheckCircle, CreditCard, Settings, ShieldOff, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import * as z from 'zod';
+import { CreateUserDialog, TopUpDialog } from './UserDialogs';
 
 type ConfirmKind = 'promote' | 'demote' | 'disable_2fa';
 
+/** ConfirmState describes the pending privileged user action and its dialog visibility. */
 interface ConfirmState {
   open: boolean;
   kind?: ConfirmKind;
   user?: UserRow;
 }
 
+/** UserRow describes one user record displayed and managed by the users table. */
 interface UserRow {
-  id: number;
+  id?: number;
+  uuid?: string;
   username: string;
   display_name?: string;
   role: number;
@@ -47,6 +48,20 @@ interface UserRow {
   updated_at?: number;
 }
 
+/** userRef accepts a user identity and returns its stable UUID or numeric identifier for API requests. */
+const userRef = (user: Pick<UserRow, 'id' | 'uuid'>): string | number => user.uuid || user.id || '';
+
+/** sameUserRef accepts two user identities and returns whether they resolve to the same stable identifier. */
+const sameUserRef = (left: Pick<UserRow, 'id' | 'uuid'>, right: Pick<UserRow, 'id' | 'uuid'>): boolean => {
+  return String(userRef(left)) === String(userRef(right));
+};
+
+/** userRefPayload accepts a stable user identifier and returns the matching management API payload. */
+const userRefPayload = (ref: string | number): { id: number } | { uuid: string } => {
+  return typeof ref === 'string' ? { uuid: ref } : { id: ref };
+};
+
+/** UsersPage accepts no props and returns the user search, management, pagination, and dialog interface. */
 export function UsersPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -63,6 +78,8 @@ export function UsersPage() {
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [appliedKeyword, setAppliedKeyword] = useState('');
+  const loadSequence = useRef(0);
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('');
@@ -70,7 +87,7 @@ export function UsersPage() {
   const [openCreate, setOpenCreate] = useState(false);
   const [openTopup, setOpenTopup] = useState<{
     open: boolean;
-    userId?: number;
+    userId?: string | number;
     username?: string;
   }>({ open: false });
   const [confirmState, setConfirmState] = useState<ConfirmState>({ open: false });
@@ -78,6 +95,7 @@ export function UsersPage() {
   const currentUser = useAuthStore((s) => s.user);
   const isSuperAdmin = (currentUser?.role ?? 0) >= 100;
   const mounted = useRef(false);
+  /** getRoleLabel accepts a numeric role and returns its localized display label. */
   const getRoleLabel = useCallback(
     (role: number) => {
       if (role >= 100) {
@@ -93,10 +111,12 @@ export function UsersPage() {
     },
     [tr]
   );
+  /** getStatusLabel accepts a numeric status and returns its localized display label. */
   const getStatusLabel = useCallback(
     (status: number) => (status === 1 ? tr('table.status.enabled', 'Enabled') : tr('table.status.disabled', 'Disabled')),
     [tr]
   );
+  /** formatRemainingQuota accepts a quota value and returns its localized display label. */
   const formatRemainingQuota = useCallback(
     (quota: number) => {
       if (quota === -1) {
@@ -107,32 +127,33 @@ export function UsersPage() {
     [tr]
   );
 
-  const load = async (p = 0, size = pageSize) => {
+  /** load accepts a zero-based page and size, loads that user page, and returns when state is updated. */
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword) => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/user/?p=${p}&size=${size}`;
+      let url = keyword ? `/api/user/search?keyword=${encodeURIComponent(keyword)}&p=${p}&size=${size}` : `/api/user/?p=${p}&size=${size}`;
       if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
       const res = await api.get(url);
-      const { success, data, total } = res.data;
-      if (success) {
-        setData(data);
-        setTotal(total || data.length);
-        setPageIndex(p);
-        setPageSize(size);
-      }
+      if (sequence !== loadSequence.current) return;
+      if (!res.data?.success) throw new Error(res.data?.message || t('table_selection.failed'));
+      const rows: UserRow[] = res.data.data || [];
+      setData(keyword ? rows.slice(p * size, (p + 1) * size) : rows);
+      setTotal(keyword ? rows.length : (res.data.total ?? rows.length));
+      setPageIndex(p);
+      setPageSize(size);
+      setAppliedKeyword(keyword);
     } catch (error) {
-      const message = (error as any)?.response?.data?.message || tr('notifications.load_failed_message', 'Failed to load users.');
-      notify({
-        type: 'error',
-        title: tr('notifications.load_failed_title', 'Access denied'),
-        message,
-      });
+      if (sequence !== loadSequence.current) return;
+      setData([]);
+      setTotal(0);
+      notify({ type: 'error', message: (error as Error)?.message || t('table_selection.failed') });
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   };
 
+  /** searchUsers accepts a query and returns after updating remote search suggestions. */
   const searchUsers = async (query: string) => {
     if (!query.trim()) {
       setSearchOptions([]);
@@ -146,14 +167,17 @@ export function UsersPage() {
       const { success, data } = res.data;
       if (success && Array.isArray(data)) {
         const options: SearchOption[] = data.map((user: UserRow) => ({
-          key: user.id.toString(),
+          key: String(userRef(user)),
           value: user.username,
           text: user.username,
+          // Operators copy UUIDs out of the UI / logs, so the UUID must be a
+          // first-class match target and not only the username.
+          keywords: [String(userRef(user)), user.uuid || '', String(user.id ?? '')].filter(Boolean),
           content: (
             <div className="flex flex-col">
               <div className="font-medium">{user.username}</div>
               <div className="text-sm text-muted-foreground flex flex-wrap gap-2">
-                <span>{tr('search.id_label', 'ID: {{id}}', { id: user.id })}</span>
+                <span>{tr('search.id_label', 'ID: {{id}}', { id: userRef(user) })}</span>
                 <span>
                   {tr('search.role_label', 'Role: {{role}}', {
                     role: getRoleLabel(user.role),
@@ -190,35 +214,15 @@ export function UsersPage() {
     }
   }, [sortBy, sortOrder]);
 
-  const search = async () => {
-    setLoading(true);
-    try {
-      if (!searchKeyword.trim()) return load(0, pageSize);
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/user/search?keyword=${encodeURIComponent(searchKeyword)}`;
-      if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-      url += `&size=${pageSize}`;
-      const res = await api.get(url);
-      const { success, data } = res.data;
-      if (success) {
-        setData(data);
-        setPageIndex(0);
-      }
-    } catch (error) {
-      const message = (error as any)?.response?.data?.message || tr('notifications.search_failed_message', 'Search failed.');
-      notify({
-        type: 'error',
-        title: tr('notifications.search_failed_title', 'Search failed'),
-        message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  /** search reads the current search state, updates matching users, and returns when the request completes. */
+  const search = () => load(0, pageSize, searchKeyword.trim());
 
   const columns: ColumnDef<UserRow>[] = [
-    { header: tr('columns.id', 'ID'), accessorKey: 'id' },
-    { header: tr('columns.username', 'Username'), accessorKey: 'username' },
+    {
+      header: tr('columns.username', 'Username'),
+      accessorKey: 'username',
+      cell: ({ row }) => <NameWithId name={row.original.username} refId={userRef(row.original)} idLabel={tr('columns.id', 'ID')} />,
+    },
     {
       header: tr('columns.display_name', 'Display Name'),
       accessorKey: 'display_name',
@@ -281,15 +285,17 @@ export function UsersPage() {
       header: tr('columns.actions', 'Actions'),
       cell: ({ row }) => {
         const target = row.original;
+        const targetRef = userRef(target);
+        const currentUserRef = currentUser?.uuid || currentUser?.id;
         const canPromote = isSuperAdmin && target.role < 100;
-        const canDemote = isSuperAdmin && target.role > 1 && target.id !== currentUser?.id;
+        const canDemote = isSuperAdmin && target.role > 1 && String(targetRef) !== String(currentUserRef ?? '');
         const canDisable2fa = isSuperAdmin;
         return (
           <ResponsiveActionGroup justify="start">
-            <Button variant="outline" size="sm" onClick={() => navigate(`/users/edit/${target.id}`)}>
+            <Button variant="outline" size="sm" onClick={() => navigate(`/users/edit/${targetRef}`)}>
               {tr('actions.edit', 'Edit')}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => manage(target.id, target.status === 1 ? 'disable' : 'enable', row.index)}>
+            <Button variant="outline" size="sm" onClick={() => manage(targetRef, target.status === 1 ? 'disable' : 'enable', row.index)}>
               {target.status === 1 ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
             </Button>
             {canPromote && (
@@ -307,7 +313,7 @@ export function UsersPage() {
                 {tr('actions.disable_2fa', 'Disable 2FA')}
               </Button>
             )}
-            <Button variant="destructive" size="sm" onClick={() => manage(target.id, 'delete', row.index)}>
+            <Button variant="destructive" size="sm" onClick={() => manage(targetRef, 'delete', row.index)}>
               {tr('actions.delete', 'Delete')}
             </Button>
             <Button
@@ -316,7 +322,7 @@ export function UsersPage() {
               onClick={() =>
                 setOpenTopup({
                   open: true,
-                  userId: target.id,
+                  userId: targetRef,
                   username: target.username,
                 })
               }
@@ -329,6 +335,7 @@ export function UsersPage() {
     },
   ];
 
+  /** closeConfirm accepts no parameters, closes an idle confirmation dialog, and returns no value. */
   const closeConfirm = () => {
     if (confirmBusy) return;
     setConfirmState({ open: false });
@@ -347,6 +354,7 @@ export function UsersPage() {
       ]
     : [];
 
+  /** runConfirmAction accepts no parameters, executes the pending action, and returns when it completes. */
   const runConfirmAction = async () => {
     const { kind, user } = confirmState;
     if (!kind || !user) return;
@@ -369,7 +377,7 @@ export function UsersPage() {
             : undefined;
         setData((prev) =>
           prev.map((u) => {
-            if (u.id !== user.id) return u;
+            if (!sameUserRef(u, user)) return u;
             if (typeof updatedRole === 'number') {
               return { ...u, role: updatedRole };
             }
@@ -388,7 +396,7 @@ export function UsersPage() {
           ),
         });
       } else if (kind === 'disable_2fa') {
-        const res = await api.post(`/api/user/totp/disable/${user.id}`);
+        const res = await api.post(`/api/user/totp/disable/${userRef(user)}`);
         const { success, message } = res.data || {};
         if (!success) {
           throw new Error(message || tr('notifications.disable_2fa_failed_message', 'Unable to disable 2FA.'));
@@ -429,14 +437,15 @@ export function UsersPage() {
     }
   };
 
-  const manage = async (id: number, action: 'enable' | 'disable' | 'delete', idx: number) => {
+  /** manage accepts a user identifier, action, and row index, then returns after applying the change. */
+  const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete', idx: number) => {
     try {
       let res: any;
       if (action === 'delete') {
         // Unified API call - complete URL with /api prefix
         res = await api.delete(`/api/user/${id}`);
       } else {
-        const body: any = { id, status: action === 'enable' ? 1 : 2 };
+        const body: any = { ...userRefPayload(id), status: action === 'enable' ? 1 : 2 };
         res = await api.put('/api/user/?status_only=true', body);
       }
       const { success, message } = res.data || {};
@@ -467,6 +476,12 @@ export function UsersPage() {
     }
   };
 
+  /** changeSort updates the existing server sort state; the effect remains the only reload owner. */
+  const changeSort = (key: string, order: 'asc' | 'desc') => {
+    setSortBy(key);
+    setSortOrder(order);
+  };
+
   const toolbarActions = (
     <div className={cn('flex gap-2', isMobile ? 'flex-col w-full' : 'items-center')}>
       <Button
@@ -476,35 +491,52 @@ export function UsersPage() {
       >
         {tr('toolbar.add_user', 'Add User')}
       </Button>
-      <div className="flex gap-2 w-full">
-        <select
-          className={cn('h-9 border rounded-md px-3 py-2 text-sm flex-1', isMobile ? '' : 'min-w-[120px]')}
-          value={sortBy}
-          onChange={(e) => {
-            setSortBy(e.target.value);
-            setSortOrder('desc');
-          }}
-        >
-          <option value="">{tr('toolbar.sort.default', 'Default')}</option>
-          <option value="quota">{tr('toolbar.sort.quota', 'Remaining Quota')}</option>
-          <option value="used_quota">{tr('toolbar.sort.used_quota', 'Used Quota')}</option>
-          <option value="username">{tr('toolbar.sort.username', 'Username')}</option>
-          <option value="id">{tr('toolbar.sort.id', 'ID')}</option>
-          <option value="created_at">{tr('toolbar.sort.register_time', 'Register Time')}</option>
-        </select>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
-          className={cn('h-9 px-3', isMobile ? 'flex-shrink-0' : '')}
-        >
-          {sortOrder === 'asc' ? tr('toolbar.sort_order.asc', 'ASC') : tr('toolbar.sort_order.desc', 'DESC')}
-        </Button>
-      </div>
+      {isMobile ? (
+        <MobileTableSort
+          options={[
+            { value: 'quota', label: tr('toolbar.sort.quota', 'Remaining Quota') },
+            { value: 'used_quota', label: tr('toolbar.sort.used_quota', 'Used Quota') },
+            { value: 'username', label: tr('toolbar.sort.username', 'Username') },
+            { value: 'id', label: tr('toolbar.sort.id', 'ID') },
+            { value: 'created_at', label: tr('toolbar.sort.register_time', 'Register Time') },
+          ]}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSortChange={changeSort}
+          loading={loading}
+          defaultOrder="desc"
+        />
+      ) : (
+        <div className="flex gap-2 w-full">
+          <select
+            className="h-9 border rounded-md px-3 py-2 text-sm flex-1 min-w-[120px]"
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value);
+              setSortOrder('desc');
+            }}
+          >
+            <option value="">{tr('toolbar.sort.default', 'Default')}</option>
+            <option value="quota">{tr('toolbar.sort.quota', 'Remaining Quota')}</option>
+            <option value="used_quota">{tr('toolbar.sort.used_quota', 'Used Quota')}</option>
+            <option value="username">{tr('toolbar.sort.username', 'Username')}</option>
+            <option value="id">{tr('toolbar.sort.id', 'ID')}</option>
+            <option value="created_at">{tr('toolbar.sort.register_time', 'Register Time')}</option>
+          </select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
+            className="h-9 px-3"
+          >
+            {sortOrder === 'asc' ? tr('toolbar.sort_order.asc', 'ASC') : tr('toolbar.sort_order.desc', 'DESC')}
+          </Button>
+        </div>
+      )}
     </div>
   );
 
-  // Handlers for page change and page size change
+  /** handlePageChange accepts pagination values, loads that page, and returns no value. */
   const handlePageChange = (newPageIndex: number, newPageSize: number) => {
     setSearchParams((prev) => {
       prev.set('p', (newPageIndex + 1).toString());
@@ -513,6 +545,7 @@ export function UsersPage() {
     load(newPageIndex, newPageSize);
   };
 
+  /** handlePageSizeChange accepts a page size, resets pagination, and returns no value. */
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize);
     setPageIndex(0);
@@ -524,19 +557,21 @@ export function UsersPage() {
       <Card className="border-0 md:border shadow-none md:shadow-sm">
         <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
           <EnhancedDataTable
+            selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
+            selectionDisabled={searchKeyword.trim() !== appliedKeyword}
             columns={columns}
             data={data}
             floatingRowActions={(row) => (
               <div className="flex items-center gap-1">
                 <ListActionButton
-                  onClick={() => navigate(`/users/edit/${row.id}`)}
+                  onClick={() => navigate(`/users/edit/${userRef(row)}`)}
                   title={tr('actions.edit', 'Edit')}
                   icon={<Settings className="h-4 w-4" />}
                 />
                 <ListActionButton
                   onClick={() => {
-                    const idx = data.findIndex((u) => u.id === row.id);
-                    manage(row.id, row.status === 1 ? 'disable' : 'enable', idx);
+                    const idx = data.findIndex((u) => sameUserRef(u, row));
+                    manage(userRef(row), row.status === 1 ? 'disable' : 'enable', idx);
                   }}
                   title={row.status === 1 ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
                   className={row.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'}
@@ -553,7 +588,7 @@ export function UsersPage() {
                   onClick={() =>
                     setOpenTopup({
                       open: true,
-                      userId: row.id,
+                      userId: userRef(row),
                       username: row.username,
                     })
                   }
@@ -562,8 +597,8 @@ export function UsersPage() {
                 />
                 <ListActionButton
                   onClick={() => {
-                    const idx = data.findIndex((u) => u.id === row.id);
-                    manage(row.id, 'delete', idx);
+                    const idx = data.findIndex((u) => sameUserRef(u, row));
+                    manage(userRef(row), 'delete', idx);
                   }}
                   title={tr('actions.delete', 'Delete')}
                   icon={<Trash2 className="h-4 w-4" />}
@@ -577,11 +612,9 @@ export function UsersPage() {
             onPageSizeChange={handlePageSizeChange}
             sortBy={sortBy}
             sortOrder={sortOrder}
-            onSortChange={(newSortBy, newSortOrder) => {
-              setSortBy(newSortBy);
-              setSortOrder(newSortOrder);
-              // Let useEffect handle the reload to avoid double requests
-            }}
+            // The page's mobile control includes ID sorting, which is not a
+            // data column. Keep that full contract without a second selector.
+            onSortChange={isMobile ? undefined : changeSort}
             searchValue={searchKeyword}
             searchOptions={searchOptions}
             searchLoading={searchLoading}
@@ -589,7 +622,7 @@ export function UsersPage() {
             onSearchValueChange={setSearchKeyword}
             onSearchSubmit={search}
             onSearchSelect={(key) => navigate(`/users/edit/${key}`)}
-            searchPlaceholder={tr('search.placeholder', 'Search users by username...')}
+            searchPlaceholder={tr('search.placeholder', 'Search users by username or UUID...')}
             allowSearchAdditions={true}
             onRefresh={() => load(pageIndex, pageSize)}
             loading={loading}
@@ -661,229 +694,5 @@ export function UsersPage() {
         </DialogContent>
       </Dialog>
     </ResponsivePageContainer>
-  );
-}
-
-// Create User Dialog
-function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void }) {
-  const schema = z.object({
-    username: z.string().min(1),
-    password: z.string().min(6),
-    display_name: z.string().optional(),
-  });
-  type FormT = z.infer<typeof schema>;
-  const form = useForm<FormT>({
-    resolver: zodResolver(schema),
-    defaultValues: { username: '', password: '', display_name: '' },
-  });
-  const { t } = useTranslation();
-  const { notify } = useNotifications();
-  const tr = useCallback(
-    (key: string, defaultValue: string, options?: Record<string, unknown>) =>
-      t(`users.dialogs.create.${key}`, { defaultValue, ...options }),
-    [t]
-  );
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{tr('title', 'Create User')}</DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form
-            className="space-y-3"
-            onSubmit={form.handleSubmit(async (values) => {
-              try {
-                // Unified API call - complete URL with /api prefix
-                const res = await api.post('/api/user/', {
-                  username: values.username,
-                  password: values.password,
-                  display_name: values.display_name || values.username,
-                });
-                if (!res.data?.success) {
-                  notify({
-                    type: 'error',
-                    title: tr('notifications.create_failed_title', 'Create failed'),
-                    message: res.data?.message || tr('notifications.create_failed_message', 'Unable to create user.'),
-                  });
-                  return;
-                }
-                onOpenChange(false);
-                form.reset();
-                onCreated();
-              } catch (error) {
-                notify({
-                  type: 'error',
-                  title: tr('notifications.create_failed_title', 'Create failed'),
-                  message:
-                    (error as any)?.response?.data?.message ||
-                    (error as Error)?.message ||
-                    tr('notifications.create_failed_message', 'Unable to create user.'),
-                });
-              }
-            })}
-          >
-            <FormField
-              control={form.control}
-              name="username"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{tr('fields.username.label', 'Username')}</FormLabel>
-                  <FormControl>
-                    <Input placeholder={tr('fields.username.placeholder', 'Enter username')} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{tr('fields.password.label', 'Password')}</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder={tr('fields.password.placeholder', 'Enter password')} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="display_name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{tr('fields.display_name.label', 'Display Name')}</FormLabel>
-                  <FormControl>
-                    <Input placeholder={tr('fields.display_name.placeholder', 'Enter display name')} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="pt-2 flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                {tr('actions.close', 'Close')}
-              </Button>
-              <Button type="submit">{tr('actions.create', 'Create')}</Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Top Up Dialog
-function TopUpDialog({
-  open,
-  onOpenChange,
-  userId,
-  username,
-  onDone,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  userId?: number;
-  username?: string;
-  onDone: () => void;
-}) {
-  const schema = z.object({
-    quota: z.coerce.number().int(),
-    remark: z.string().optional(),
-  });
-  type FormT = z.infer<typeof schema>;
-  const form = useForm<FormT>({
-    resolver: zodResolver(schema),
-    defaultValues: { quota: 0, remark: '' },
-  });
-  const { t } = useTranslation();
-  const { notify } = useNotifications();
-  const tr = useCallback(
-    (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`users.dialogs.topup.${key}`, { defaultValue, ...options }),
-    [t]
-  );
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {tr('title', 'Top Up {{username}}', {
-              username: username ? `@${username}` : '',
-            })}
-          </DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form
-            className="space-y-3"
-            onSubmit={form.handleSubmit(async (values) => {
-              if (!userId) return;
-              try {
-                // Unified API call - complete URL with /api prefix
-                const res = await api.post('/api/topup', {
-                  user_id: userId,
-                  quota: values.quota,
-                  remark: values.remark,
-                });
-                if (!res.data?.success) {
-                  notify({
-                    type: 'error',
-                    title: tr('notifications.submit_failed_title', 'Top up failed'),
-                    message: res.data?.message || tr('notifications.submit_failed_message', 'Unable to top up user.'),
-                  });
-                  return;
-                }
-                onOpenChange(false);
-                form.reset();
-                onDone();
-              } catch (error) {
-                notify({
-                  type: 'error',
-                  title: tr('notifications.submit_failed_title', 'Top up failed'),
-                  message:
-                    (error as any)?.response?.data?.message ||
-                    (error as Error)?.message ||
-                    tr('notifications.submit_failed_message', 'Unable to top up user.'),
-                });
-              }
-            })}
-          >
-            <FormField
-              control={form.control}
-              name="quota"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{tr('fields.quota.label', 'Quota')}</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder={tr('fields.quota.placeholder', 'Enter quota change')} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="remark"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{tr('fields.remark.label', 'Remark')}</FormLabel>
-                  <FormControl>
-                    <Input placeholder={tr('fields.remark.placeholder', 'Optional')} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="pt-2 flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                {tr('actions.close', 'Close')}
-              </Button>
-              <Button type="submit">{tr('actions.submit', 'Submit')}</Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
   );
 }

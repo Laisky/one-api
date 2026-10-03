@@ -18,6 +18,7 @@
       "completion_ratio": "Ratio de completado",
       "completion_tps": "Completado",
       "context_length": "Longitud de contexto",
+      "copy_model_name": "Copiar nombre del modelo",
       "default_quality": "Calidad",
       "default_reasoning_effort": "Esfuerzo de razonamiento predeterminado",
       "default_size": "Predeterminado",
@@ -34,6 +35,7 @@
       "max_reasoning_tokens": "Máx. tokens de razonamiento",
       "max_tokens": "Máx. tokens",
       "min_images": "Mín",
+      "model_name_copied": "Nombre del modelo copiado",
       "model_profile": "Perfil del modelo",
       "multiplier": "Multiplicador",
       "output": "Salida",
@@ -63,8 +65,22 @@
       "text_tokens": "Precio de tokens de texto",
       "tier_threshold": "Umbral",
       "tiered_pricing": "Precios escalonados",
+      "time_pricing": "Precios por hora del día",
       "video": "Video",
-      "video_pricing": "Precios de video"
+      "video_pricing": "Precios de video",
+      "weekday_0": "Dom",
+      "weekday_1": "Lun",
+      "weekday_2": "Mar",
+      "weekday_3": "Mié",
+      "weekday_4": "Jue",
+      "weekday_5": "Vie",
+      "weekday_6": "Sáb",
+      "window_active": "Activo ahora",
+      "window_dates": "Fechas",
+      "window_days": "Días",
+      "window_name": "Ventana",
+      "window_schedule": "Horario",
+      "window_timezone": "Zona horaria"
     },
     "errors": {
       "fetch_failed": "Error al obtener modelos"
@@ -73,6 +89,7 @@
       "capabilities_title": "Capacidades",
       "context_any": "Cualquiera",
       "context_title": "Ventana de contexto",
+      "description": "Busca por nombre de modelo o limita la lista por canal.",
       "feature_json_mode": "Modo JSON",
       "feature_logprobs": "Logprobs",
       "feature_reasoning": "Razonamiento",
@@ -92,7 +109,8 @@
       "modality_video": "Video",
       "output_modality_title": "Modalidad de salida",
       "price_any": "Cualquiera",
-      "price_title": "Precio máx. de entrada"
+      "price_title": "Precio máx. de entrada",
+      "title": "Filtrar modelos"
     },
     "found": "Se encontraron {{count}} modelos en {{channels}} canales",
     "labels": {

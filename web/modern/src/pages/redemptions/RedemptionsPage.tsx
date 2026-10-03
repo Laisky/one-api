@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { NameWithId } from '@/components/shared/NameWithId';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
@@ -14,8 +15,8 @@ import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { zodResolver } from '@hookform/resolvers/zod';
-import type { ColumnDef } from '@tanstack/react-table';
+import { zodResolver } from '@/lib/zod-resolver';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -23,13 +24,20 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as z from 'zod';
 
 interface RedemptionRow {
-  id: number;
+  id?: number;
+  uuid?: string;
   name: string;
   key: string;
   status: number;
   created_time: number;
   quota: number;
 }
+
+const redemptionRef = (redemption: Pick<RedemptionRow, 'id' | 'uuid'>): string | number => redemption.uuid || redemption.id || '';
+
+const redemptionRefPayload = (ref: string | number): { id: number } | { uuid: string } => {
+  return typeof ref === 'string' ? { uuid: ref } : { id: ref };
+};
 
 export function RedemptionsPage() {
   const navigate = useNavigate();
@@ -64,6 +72,8 @@ export function RedemptionsPage() {
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [appliedKeyword, setAppliedKeyword] = useState('');
+  const loadSequence = useRef(0);
   const [sortBy, setSortBy] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [open, setOpen] = useState(false);
@@ -76,33 +86,43 @@ export function RedemptionsPage() {
       .min(1, tr('edit.validation.name_required', 'Name is required'))
       .max(20, tr('edit.validation.name_max', 'Max 20 chars')),
     count: z.coerce
-      .number()
+      .number<string | number>()
       .int()
       .min(1, tr('edit.validation.count_min', 'Count must be positive'))
       .max(100, tr('edit.validation.count_max', 'Count cannot exceed 100')),
-    quota: z.coerce.number().int().min(0, tr('edit.validation.quota_min', 'Quota cannot be negative')),
+    quota: z.coerce.number<string | number>().int().min(0, tr('edit.validation.quota_min', 'Quota cannot be negative')),
   });
-  type CreateForm = z.infer<typeof schema>;
-  const form = useForm<CreateForm>({
+  type CreateFormInput = z.input<typeof schema>;
+  type CreateForm = z.output<typeof schema>;
+  const form = useForm<CreateFormInput, unknown, CreateForm>({
     resolver: zodResolver(schema),
     defaultValues: { name: '', count: 1, quota: 0 },
   });
 
-  const load = async (p = 0, size = pageSize) => {
+  const load = async (p = 0, size = pageSize, keyword = appliedKeyword) => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/redemption/?p=${p}&size=${size}`;
+      let url = keyword
+        ? `/api/redemption/search?keyword=${encodeURIComponent(keyword)}&p=${p}&size=${size}`
+        : `/api/redemption/?p=${p}&size=${size}`;
       if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
       const res = await api.get(url);
-      const { success, data, total } = res.data;
-      if (success) {
-        setData(data);
-        setTotal(total);
-        setPageIndex(p);
-      }
+      if (sequence !== loadSequence.current) return;
+      if (!res.data?.success) throw new Error(res.data?.message || t('table_selection.failed'));
+      const rows: RedemptionRow[] = res.data.data || [];
+      setData(rows);
+      setTotal(res.data.total ?? rows.length);
+      setPageIndex(p);
+      setPageSize(size);
+      setAppliedKeyword(keyword);
+    } catch (error) {
+      if (sequence !== loadSequence.current) return;
+      setData([]);
+      setTotal(0);
+      notify({ type: 'error', message: (error as Error)?.message || t('table_selection.failed') });
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   };
 
@@ -119,28 +139,14 @@ export function RedemptionsPage() {
     }
   }, [sortBy, sortOrder]);
 
-  const search = async () => {
-    if (!searchKeyword.trim()) return load(0, pageSize);
-    setLoading(true);
-    try {
-      // Unified API call - complete URL with /api prefix
-      let url = `/api/redemption/search?keyword=${encodeURIComponent(searchKeyword)}`;
-      if (sortBy) url += `&sort=${sortBy}&order=${sortOrder}`;
-      url += `&size=${pageSize}`;
-      const res = await api.get(url);
-      const { success, data } = res.data;
-      if (success) {
-        setData(data);
-        setPageIndex(0);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  const search = () => load(0, pageSize, searchKeyword.trim());
 
   const columns: ColumnDef<RedemptionRow>[] = [
-    { header: tr('columns.id', 'ID'), accessorKey: 'id' },
-    { header: tr('columns.name', 'Name'), accessorKey: 'name' },
+    {
+      header: tr('columns.name', 'Name'),
+      accessorKey: 'name',
+      cell: ({ row }) => <NameWithId name={row.original.name} refId={redemptionRef(row.original)} idLabel={tr('columns.id', 'ID')} />,
+    },
     { header: tr('columns.code', 'Code'), accessorKey: 'key' },
     {
       header: tr('columns.quota', 'Quota'),
@@ -166,17 +172,17 @@ export function RedemptionsPage() {
       header: tr('columns.actions', 'Actions'),
       cell: ({ row }) => (
         <ResponsiveActionGroup justify="start">
-          <ListActionButton variant="outline" size="sm" onClick={() => navigate(`/redemptions/edit/${row.original.id}`)}>
+          <ListActionButton variant="outline" size="sm" onClick={() => navigate(`/redemptions/edit/${redemptionRef(row.original)}`)}>
             {tr('actions.edit', 'Edit')}
           </ListActionButton>
           <ListActionButton
             variant="outline"
             size="sm"
-            onClick={() => manage(row.original.id, row.original.status === 1 ? 'disable' : 'enable', row.index)}
+            onClick={() => manage(redemptionRef(row.original), row.original.status === 1 ? 'disable' : 'enable', row.index)}
           >
             {row.original.status === 1 ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
           </ListActionButton>
-          <ListActionButton variant="destructive" size="sm" onClick={() => manage(row.original.id, 'delete', row.index)}>
+          <ListActionButton variant="destructive" size="sm" onClick={() => manage(redemptionRef(row.original), 'delete', row.index)}>
             {tr('actions.delete', 'Delete')}
           </ListActionButton>
         </ResponsiveActionGroup>
@@ -184,14 +190,14 @@ export function RedemptionsPage() {
     },
   ];
 
-  const manage = async (id: number, action: 'enable' | 'disable' | 'delete', idx: number) => {
+  const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete', idx: number) => {
     try {
       let res: any;
       if (action === 'delete') {
         // Unified API call - complete URL with /api prefix
         res = await api.delete(`/api/redemption/${id}`);
       } else {
-        const body: any = { id, status: action === 'enable' ? 1 : 2 };
+        const body: any = { ...redemptionRefPayload(id), status: action === 'enable' ? 1 : 2 };
         res = await api.put('/api/redemption/?status_only=true', body);
       }
       if (!res.data?.success) {
@@ -267,31 +273,31 @@ export function RedemptionsPage() {
     >
       <Card className="border-0 md:border shadow-none md:shadow-sm">
         <CardContent className={cn(isMobile ? 'p-3' : 'p-6')}>
-          <div className={cn('flex gap-2 mb-3 flex-wrap', isMobile ? 'w-full flex-col' : 'items-center')}>
-            <SearchableDropdown
-              value={searchKeyword}
-              placeholder={tr('search.placeholder', 'Search redemptions by name...')}
-              searchPlaceholder={tr('search.dropdown_placeholder', 'Type redemption name...')}
-              options={[]}
-              searchEndpoint="/api/redemption/search"
-              transformResponse={(data) =>
-                Array.isArray(data)
-                  ? data.map((r: any) => ({
-                      key: String(r.id),
-                      value: r.name,
-                      text: r.name,
-                    }))
-                  : []
-              }
-              onChange={(value) => setSearchKeyword(value)}
-              clearable
-              className={cn(isMobile ? 'w-full' : 'max-w-md')}
-            />
-            <Button onClick={search} disabled={loading} className={cn(isMobile ? 'w-full touch-target' : '')}>
-              {tr('actions.search', 'Search')}
-            </Button>
-          </div>
           <DataTable
+            searchControl={
+              <SearchableDropdown
+                value={searchKeyword}
+                placeholder={tr('search.placeholder', 'Search redemptions by name or UUID...')}
+                searchPlaceholder={tr('search.dropdown_placeholder', 'Type redemption name...')}
+                options={[]}
+                searchEndpoint="/api/redemption/search"
+                transformResponse={(data) =>
+                  Array.isArray(data)
+                    ? data.map((r: any) => ({
+                        key: String(r.uuid || r.id || ''),
+                        value: r.name,
+                        text: r.name,
+                      }))
+                    : []
+                }
+                onChange={(value) => setSearchKeyword(value)}
+                clearable
+                className="table-toolbar-control"
+              />
+            }
+            onSearchSubmit={search}
+            selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
+            selectionDisabled={searchKeyword.trim() !== appliedKeyword}
             columns={columns}
             data={data}
             pageIndex={pageIndex}

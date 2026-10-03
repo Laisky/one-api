@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import { Stack, Typography, Container, Box, OutlinedInput, InputAdornment, Button } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import SubCard from 'ui-component/cards/SubCard';
@@ -61,7 +62,7 @@ const InviteCard = () => {
             placeholder="点击生成邀请链接"
             endAdornment={
               <InputAdornment position="end">
-                <Button variant="contained" onClick={handleInviteUrl}>
+                <Button variant="contained" onClick={(...uiArgs) => handleInviteUrl(...uiArgs).catch(reportUIError)}>
                   {inviteUl ? '复制' : '生成'}
                 </Button>
               </InputAdornment>

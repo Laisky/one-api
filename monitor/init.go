@@ -32,18 +32,18 @@ func InitMonitoring(version, buildTime, goVersion string, startTime time.Time) e
 	}
 
 	if len(recorders) == 0 {
-		metrics.GlobalRecorder = &metrics.NoOpRecorder{}
+		metrics.SetRecorder(&metrics.NoOpRecorder{})
 		return nil
 	}
 
 	if len(recorders) == 1 {
-		metrics.GlobalRecorder = recorders[0]
+		metrics.SetRecorder(recorders[0])
 	} else {
-		metrics.GlobalRecorder = &metrics.MultiRecorder{Recorders: recorders}
+		metrics.SetRecorder(&metrics.MultiRecorder{Recorders: recorders})
 	}
 
 	// Initialize system metrics
-	metrics.GlobalRecorder.InitSystemMetrics(version, buildTime, goVersion, startTime)
+	metrics.Recorder().InitSystemMetrics(version, buildTime, goVersion, startTime)
 
 	// Start background metric collection
 	go collectSystemMetrics()
@@ -104,6 +104,6 @@ func collectDashboardMetrics() {
 		model.DB.Model(&model.User{}).Where("status != ?", model.UserStatusDeleted).Count(&totalUsers)
 		model.DB.Model(&model.User{}).Where("status = ?", model.UserStatusEnabled).Count(&activeUsers)
 
-		metrics.GlobalRecorder.UpdateSiteWideStats(totalQuota, usedQuota, int(totalUsers), int(activeUsers))
+		metrics.Recorder().UpdateSiteWideStats(totalQuota, usedQuota, int(totalUsers), int(activeUsers))
 	}
 }

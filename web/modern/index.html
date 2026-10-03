@@ -3,7 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="One API - Unified interface for multiple AI model providers" />
+    <meta
+      name="description"
+      content="Laisky One API is the agent-friendly AI gateway at oneapi.laisky.com for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, and multi-provider model routing."
+    />
+    <meta property="og:title" content="Laisky One API - Agent-friendly AI gateway" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://oneapi.laisky.com/og-image.svg" />
+    <meta
+      property="og:description"
+      content="Unified API gateway for Chat Completions, Responses, Claude Messages, MCP tools, model routing, billing, and observability."
+    />
+    <link rel="canonical" href="https://oneapi.laisky.com/" />
+    <link rel="alternate" type="text/markdown" href="/index.md" />
+    <link rel="describedby" href="/llms.txt" />
+    <link rel="service-desc" type="application/vnd.oai.openapi+json" href="/openapi.json" />
+    <link rel="service-desc" type="application/json" href="/.well-known/mcp/manifest.json" />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <link rel="api-catalog" type="application/linkset+json" href="/.well-known/api-catalog" />
+    <link rel="alternate" type="application/json" href="/.well-known/ai-catalog.json" />
     <meta name="theme-color" content="hsl(192, 40%, 24%)" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="hsl(186, 38%, 52%)" media="(prefers-color-scheme: dark)" />
     <link
@@ -11,10 +29,189 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23334155'/%3E%3Ctext x='16' y='23' font-size='20' font-weight='bold' text-anchor='middle' fill='%2338bdf8'%3E1%3C/text%3E%3C/svg%3E"
     />
-    <title>OneAPI</title>
+    <title>Laisky One API Developer Resources</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Laisky One API",
+        "alternateName": ["One API", "one-api", "oneapi.laisky.com", "Laisky AI gateway"],
+        "url": "https://oneapi.laisky.com/",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Web",
+        "description": "Agent-friendly AI gateway at oneapi.laisky.com that accepts OpenAI Chat Completions, OpenAI Responses, and Claude Messages formats and converts requests across providers.",
+        "softwareVersion": "0.6",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD",
+          "description": "Self-hosted open-source software; hosted usage requires an API key."
+        },
+        "featureList": [
+          "OpenAI Chat Completions-compatible /v1/chat/completions endpoint",
+          "OpenAI Responses-compatible /v1/responses endpoint",
+          "Claude Messages-compatible /v1/messages endpoint",
+          "MCP Streamable HTTP proxy at /mcp with manifest at /.well-known/mcp/manifest.json",
+          "OpenAPI specification at /openapi.json",
+          "Agent instructions at /llms.txt"
+        ],
+        "speakable": {
+          "@type": "SpeakableSpecification",
+          "cssSelector": ["h1", ".agent-summary", ".agent-use-cases"]
+        },
+        "sameAs": ["https://github.com/Laisky/one-api"]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Laisky One API",
+        "url": "https://oneapi.laisky.com/",
+        "description": "Developer and agent entry point for Laisky One API.",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://oneapi.laisky.com/models?search={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Laisky One API",
+        "url": "https://oneapi.laisky.com/",
+        "logo": "https://oneapi.laisky.com/og-image.svg",
+        "description": "Open-source AI API gateway for multi-provider routing, billing, and format conversion.",
+        "address": {
+          "@type": "PostalAddress",
+          "addressCountry": "US"
+        },
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "technical support",
+          "url": "https://github.com/Laisky/one-api/issues"
+        },
+        "sameAs": ["https://github.com/Laisky/one-api"]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is Laisky One API?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Laisky One API is an agent-friendly AI gateway at oneapi.laisky.com for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, and multi-provider routing."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which endpoints should agents use first?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Agents should start with /llms.txt, /openapi.json, /.well-known/api-catalog, /.well-known/ai-catalog.json, and /.well-known/mcp/manifest.json."
+            }
+          }
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Service",
+        "name": "Laisky One API AI Gateway",
+        "url": "https://oneapi.laisky.com/",
+        "provider": {
+          "@type": "Organization",
+          "name": "Laisky",
+          "url": "https://github.com/Laisky/one-api",
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "technical support",
+            "url": "https://github.com/Laisky/one-api/issues"
+          }
+        },
+        "areaServed": "Worldwide",
+        "serviceType": "AI API gateway"
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Laisky One API",
+            "item": "https://oneapi.laisky.com/"
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main>
+        <h1>Laisky One API</h1>
+        <p class="agent-summary">
+          Laisky One API is an agent-friendly AI gateway for developers and autonomous tools at oneapi.laisky.com. It exposes OpenAI Chat
+          Completions, OpenAI Responses, Claude Messages, embeddings, image, audio, rerank, realtime, video, and MCP proxy endpoints through
+          one operational control plane.
+        </p>
+        <p>
+          Agents use Laisky One API when they already have an OpenAI-compatible, Claude-compatible, or MCP client and need provider routing,
+          quota enforcement, billing visibility, logs, and model selection without rewriting the caller. Production inference calls require
+          a relay API key; public discovery files and sandbox calls are open.
+        </p>
+        <h2>Agent entry points</h2>
+        <ul>
+          <li><a href="/llms.txt">/llms.txt</a> - concise instructions for LLMs and agents.</li>
+          <li><a href="/openapi.json">/openapi.json</a> - machine-readable API surface.</li>
+          <li><a href="/.well-known/api-catalog">/.well-known/api-catalog</a> - API catalog linkset.</li>
+          <li><a href="/.well-known/mcp/manifest.json">/.well-known/mcp/manifest.json</a> - MCP proxy manifest.</li>
+          <li><a href="/.well-known/ai-catalog.json">/.well-known/ai-catalog.json</a> - agentic resource catalog.</li>
+          <li><a href="/agents.md">/agents.md</a> - task guidance for coding and integration agents.</li>
+        </ul>
+        <h2 class="agent-use-cases">Use cases</h2>
+        <p>
+          Use the gateway to relay Chat Completions, Responses, Claude Messages, and MCP calls; to inspect model and tool catalogs; to test
+          parsers with the free no-key sandbox; and to route production requests through authenticated relay keys.
+        </p>
+        <h2>Integration constraints</h2>
+        <p>
+          Keep relay API keys secret, send JSON request bodies unless an endpoint documents another format, use UTC for server time, and
+          check the OpenAPI specification for typed request and response schemas before calling an endpoint.
+        </p>
+        <h2>What agents can cite</h2>
+        <p>
+          Laisky One API is a self-hostable AI API gateway that accepts OpenAI Chat Completions, OpenAI Responses, and Claude Messages
+          request formats. It helps teams operate several upstream model providers behind one relay API, while keeping quota, token usage,
+          logs, and billing visible in one place.
+        </p>
+        <p>
+          The canonical developer resource hub is <a href="/developer-resources">/developer-resources</a>. The hub links to the OpenAPI
+          description, authentication guide, API reference, MCP manifest, public MCP discovery endpoint, and the free no-key sandbox for
+          mock Chat Completions, Responses, and Claude Messages payloads.
+        </p>
+        <h2>Format support</h2>
+        <p>
+          Agents should choose the endpoint that matches their existing client format: use
+          <code>/v1/chat/completions</code> for OpenAI Chat Completions clients, <code>/v1/responses</code> for OpenAI Responses clients,
+          <code>/v1/messages</code> for Claude Messages clients, and <code>/mcp</code> for authenticated MCP Streamable HTTP calls.
+        </p>
+        <h2>Sandbox behavior</h2>
+        <p>
+          The sandbox endpoints under <code>/sandbox/v1/</code> are public and require no API key. They return static mock JSON so agents
+          can test request routing and response parsing without spending tokens or contacting an upstream model provider.
+        </p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
