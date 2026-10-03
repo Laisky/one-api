@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
@@ -56,20 +57,24 @@ var tokenSortFields = map[string]string{
 	"updated_at":   "updated_at",
 }
 
+// clearTokenCache completes bounded invalidation even if the initiating request
+// has ended, while retaining request metadata and never logging raw credentials.
 func clearTokenCache(ctx context.Context, key string) {
-	if common.IsRedisEnabled() {
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		err := common.RedisDel(ctx, fmt.Sprintf("token:%s", key))
-		if err != nil {
-			// The raw API key must never appear verbatim in a log (same invariant
-			// enforced in ValidateUserToken below). No identity reference is
-			// resolved here: this runs on every token write and a lookup by key
-			// would add a query to a hot path.
-			logger.FromContext(ctx).Warn("failed to clear token cache, continuing",
-				zap.String("key", helper.MaskAPIKey(key)), zap.Error(err))
-		}
+	if !common.IsRedisEnabled() {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cacheCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := common.RedisDel(cacheCtx, fmt.Sprintf("token:%s", key)); err != nil {
+		// The raw API key must never appear verbatim in a log (same invariant
+		// enforced in ValidateUserToken below). No identity reference is
+		// resolved here: this runs on every token write and a lookup by key
+		// would add a query to a hot path.
+		logger.FromContext(cacheCtx).Warn("failed to clear token cache, continuing",
+			zap.String("key", helper.MaskAPIKey(key)), zap.Error(err))
 	}
 }
 
