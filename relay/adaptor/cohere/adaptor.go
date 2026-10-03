@@ -34,6 +34,8 @@ func (a *Adaptor) Init(meta *meta.Meta) {
 
 func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	switch meta.Mode {
+	case relaymode.Embeddings:
+		return strings.TrimSuffix(strings.TrimSuffix(strings.TrimRight(meta.BaseURL, "/"), "/v2"), "/v1") + "/v2/embed", nil
 	case relaymode.Rerank:
 		return fmt.Sprintf("%s/v2/rerank", meta.BaseURL), nil
 	default:
@@ -50,6 +52,9 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
+	}
+	if relayMode == relaymode.Embeddings {
+		return convertEmbedRequest(c, request)
 	}
 	return ConvertRequest(*request), nil
 }
@@ -208,6 +213,9 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	if meta.Mode == relaymode.Embeddings {
+		return embedResponse(c, resp, meta)
+	}
 	if meta.IsStream {
 		err, usage = StreamHandler(c, resp)
 	} else {

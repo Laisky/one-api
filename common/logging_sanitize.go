@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -17,6 +18,55 @@ const (
 	// base64SampleSize controls how many characters are sampled for base64 detection.
 	base64SampleSize = 256
 )
+
+var sensitiveURLQueryKeys = map[string]struct{}{
+	"access_token": {},
+	"api_key":      {},
+	"key":          {},
+	"password":     {},
+	"secret":       {},
+	"token":        {},
+	"turnstile":    {},
+}
+
+// SanitizeURLForLogging redacts sensitive query parameter values before URLs are written to logs or traces.
+func SanitizeURLForLogging(rawURL string) string {
+	if rawURL == "" {
+		return rawURL
+	}
+
+	// Most API request URLs have no query string. Avoid net/url parsing and its
+	// query-map allocations when there is nothing that could require redaction.
+	if !strings.Contains(rawURL, "?") {
+		return rawURL
+	}
+
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	query := parsed.Query()
+	changed := false
+	for key := range query {
+		if isSensitiveURLQueryKey(key) {
+			query[key] = []string{"[redacted]"}
+			changed = true
+		}
+	}
+	if !changed {
+		return rawURL
+	}
+
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
+}
+
+// isSensitiveURLQueryKey reports whether a query parameter key should be redacted in logs.
+func isSensitiveURLQueryKey(key string) bool {
+	_, ok := sensitiveURLQueryKeys[strings.ToLower(strings.TrimSpace(key))]
+	return ok
+}
 
 // SanitizePayloadForLogging returns a sanitized preview of the payload and whether it was truncated.
 // Parameters: body is the raw payload; limit caps the returned preview length.

@@ -55,14 +55,15 @@ func textInput() []string { return []string{"text"} }
 func textImageInput() []string { return []string{"text", "image"} }
 
 // textImageVideoFileInput returns the full multimodal input set used by GLM-4.6V.
-func textImageVideoFileInput() []string { return []string{"text", "image", "file"} }
+func textImageVideoFileInput() []string { return []string{"text", "image", "video", "file"} }
 
 // ModelRatios contains all supported models and their pricing ratios.
 // The model list is derived from the keys of this map, eliminating redundancy.
-// Pricing source: https://open.bigmodel.cn/pricing.
+// Pricing source: https://bigmodel.cn/pricing.
 //
 // The map is composed from family-specific sub-maps defined in sibling files
-// (constants_text.go, constants_vision.go, constants_misc.go) so that each
+// (constants_text.go, constants_vision.go, constants_misc.go,
+// constants_audio.go) so that each
 // file stays small and easy to navigate. Pricing entries are immutable.
 //
 // Metadata sources:
@@ -79,6 +80,8 @@ var ModelRatios = mergeModelRatios(
 	utilityModels,
 	embeddingModels,
 	ocrModels,
+	audioModels,
+	realtimeModels,
 	legacyModels,
 )
 
@@ -103,8 +106,8 @@ func mergeModelRatios(tables ...map[string]adaptor.ModelConfig) map[string]adapt
 	return merged
 }
 
-// ZhipuToolingDefaults captures Open BigModel's published search-tool pricing tiers (retrieved 2026-05-18).
-// Source: https://open.bigmodel.cn/pricing
+// ZhipuToolingDefaults captures Open BigModel's published search-tool pricing tiers (retrieved 2026-08-11).
+// Source: https://bigmodel.cn/pricing
 var ZhipuToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{
 		"search_std":       {UsdPerCall: 0.01},

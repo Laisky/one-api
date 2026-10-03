@@ -3,10 +3,13 @@ package render
 import (
 	"context"
 	"io"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/Laisky/errors/v2"
 
 	commonsse "github.com/Laisky/one-api/common/sse"
 )
@@ -19,6 +22,9 @@ const (
 	// heartbeatPayload is a minimal SSE comment line used as a keep-alive.
 	// It starts with ':' so compliant SSE parsers ignore it.
 	heartbeatPayload = ":\n"
+
+	// bufferedYieldBytes bounds consecutive already-buffered line processing between scheduling opportunities.
+	bufferedYieldBytes = 4 * 1024
 )
 
 // heartbeatLineResult captures a single asynchronous line-reader result.
@@ -36,6 +42,8 @@ type HeartbeatLineReader struct {
 	closeOnce         sync.Once
 	heartbeatsSent    int
 	heartbeatWriteErr error
+	fastPathBytes     int
+	yield             func()
 }
 
 // NewHeartbeatLineReader creates a heartbeat wrapper around the provided line reader.
@@ -50,6 +58,7 @@ func NewHeartbeatLineReader(c *gin.Context, reader *commonsse.LineReader, interv
 		reader:   reader,
 		interval: interval,
 		done:     make(chan struct{}),
+		yield:    runtime.Gosched,
 	}
 
 	if c != nil && c.Writer != nil {
@@ -61,6 +70,44 @@ func NewHeartbeatLineReader(c *gin.Context, reader *commonsse.LineReader, interv
 
 // Next returns the next SSE line while sending heartbeats during idle periods.
 func (h *HeartbeatLineReader) Next() (commonsse.Line, error) {
+	clientCtx := context.Background()
+	if h.c != nil && h.c.Request != nil {
+		clientCtx = h.c.Request.Context()
+	}
+	select {
+	case <-h.done:
+		return commonsse.Line{}, io.EOF
+	case <-clientCtx.Done():
+		return commonsse.Line{}, errors.WithStack(clientCtx.Err())
+	default:
+	}
+	// Yield only between returned lines, after the caller has processed the prior
+	// result. Counting across calls matters when each token delta is much smaller
+	// than the budget. This neither batches lines nor changes the caller's flushes.
+	if h.fastPathBytes >= bufferedYieldBytes {
+		h.fastPathBytes = 0
+		h.yield()
+		// A cancellation or Close at the scheduling point must win before another
+		// buffered line is consumed, just as at the original entry check.
+		select {
+		case <-h.done:
+			return commonsse.Line{}, io.EOF
+		case <-clientCtx.Done():
+			return commonsse.Line{}, errors.WithStack(clientCtx.Err())
+		default:
+		}
+	}
+	// Buffered complete lines need no asynchronous I/O or heartbeat timer.
+	// A partial or oversized line keeps the original blocking/heartbeat path.
+	if line, ready, err := h.reader.NextBuffered(); ready {
+		if err == nil {
+			h.fastPathBytes += len(line.Small)
+		}
+		return line, err
+	}
+	// Blocking I/O already returns control to the scheduler; start a fresh budget.
+	h.fastPathBytes = 0
+
 	resultCh := make(chan heartbeatLineResult, 1)
 	go func() {
 		line, err := h.reader.Next()
@@ -73,11 +120,6 @@ func (h *HeartbeatLineReader) Next() (commonsse.Line, error) {
 	ticker := time.NewTicker(h.interval)
 	defer ticker.Stop()
 
-	clientCtx := context.Background()
-	if h.c != nil && h.c.Request != nil {
-		clientCtx = h.c.Request.Context()
-	}
-
 	for {
 		select {
 		case result := <-resultCh:
@@ -85,7 +127,7 @@ func (h *HeartbeatLineReader) Next() (commonsse.Line, error) {
 		case <-ticker.C:
 			h.sendHeartbeat()
 		case <-clientCtx.Done():
-			return commonsse.Line{}, clientCtx.Err()
+			return commonsse.Line{}, errors.WithStack(clientCtx.Err())
 		case <-h.done:
 			return commonsse.Line{}, io.EOF
 		}
@@ -118,7 +160,7 @@ func (h *HeartbeatLineReader) sendHeartbeat() {
 	_, err := h.c.Writer.Write([]byte(heartbeatPayload))
 	if err != nil {
 		if h.heartbeatWriteErr == nil {
-			h.heartbeatWriteErr = err
+			h.heartbeatWriteErr = errors.WithStack(err)
 		}
 		return
 	}

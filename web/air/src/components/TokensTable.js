@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { API, copy, showError, showSuccess, timestamp2string } from '../helpers';
 
@@ -7,6 +8,7 @@ import { Button, Dropdown, Form, Modal, Popconfirm, Popover, SplitButtonGroup, T
 
 import { IconTreeTriangleDown } from '@douyinfe/semi-icons';
 import EditToken from '../pages/Token/EditToken';
+import ResourceRefTooltip from './ResourceRefTooltip';
 
 const COPY_OPTIONS = [
   { key: 'next', text: 'ChatGPT Next Web', value: 'next' },
@@ -20,6 +22,8 @@ const OPEN_LINK_OPTIONS = [
   { key: 'opencat', text: 'OpenCat', value: 'opencat' },
   { key: 'lobechat', text: 'LobeChat', value: 'lobechat' }
 ];
+
+const tokenRef = (token) => token.uuid || token.id;
 
 function renderTimestamp(timestamp) {
   return (
@@ -53,19 +57,19 @@ const TokensTable = () => {
   const link_menu = [
     {
       node: 'item', key: 'next', name: 'ChatGPT Next Web', onClick: () => {
-        onOpenLink('next');
+        onOpenLink('next').catch(reportUIError);
       }
     },
     { node: 'item', key: 'ama', name: 'AMA 问天', value: 'ama' },
     {
       node: 'item', key: 'next-mj', name: 'ChatGPT Web & Midjourney', value: 'next-mj', onClick: () => {
-        onOpenLink('next-mj');
+        onOpenLink('next-mj').catch(reportUIError);
       }
     },
     { node: 'item', key: 'opencat', name: 'OpenCat', value: 'opencat' },
     {
       node: 'item', key: 'lobechat', name: 'LobeChat', onClick: () => {
-        onOpenLink('lobechat');
+        onOpenLink('lobechat').catch(reportUIError);
       }
     }
   ];
@@ -73,7 +77,10 @@ const TokensTable = () => {
   const columns = [
     {
       title: '名称',
-      dataIndex: 'name'
+      dataIndex: 'name',
+      render: (text, record) => (
+        <ResourceRefTooltip refId={tokenRef(record)}>{text}</ResourceRefTooltip>
+      )
     },
     {
       title: '状态',
@@ -147,13 +154,13 @@ const TokensTable = () => {
             <Button theme="light" type="tertiary" style={{ marginRight: 1 }}>查看</Button>
           </Popover>
           <Button theme="light" type="secondary" style={{ marginRight: 1 }}
-                  onClick={async (text) => {
+                  onClick={(...uiArgs) => (async (text) => {
                     await copyText('sk-' + record.key);
-                  }}
+                  })(...uiArgs).catch(reportUIError)}
           >复制</Button>
           <SplitButtonGroup style={{ marginRight: 1 }} aria-label="项目操作按钮组">
             <Button theme="light" style={{ color: 'rgba(var(--semi-teal-7), 1)' }} onClick={() => {
-              onOpenLink('next', record.key);
+              onOpenLink('next', record.key).catch(reportUIError);
             }}>聊天</Button>
             <Dropdown trigger="click" position="bottomRight" menu={
               [
@@ -163,7 +170,7 @@ const TokensTable = () => {
                   disabled: !localStorage.getItem('chat_link'),
                   name: 'ChatGPT Next Web',
                   onClick: () => {
-                    onOpenLink('next', record.key);
+                    onOpenLink('next', record.key).catch(reportUIError);
                   }
                 },
                 {
@@ -172,22 +179,22 @@ const TokensTable = () => {
                   disabled: !localStorage.getItem('chat_link2'),
                   name: 'ChatGPT Web & Midjourney',
                   onClick: () => {
-                    onOpenLink('next-mj', record.key);
+                    onOpenLink('next-mj', record.key).catch(reportUIError);
                   }
                 },
                 {
                   node: 'item', key: 'ama', name: 'AMA 问天（BotGem）', onClick: () => {
-                    onOpenLink('ama', record.key);
+                    onOpenLink('ama', record.key).catch(reportUIError);
                   }
                 },
                 {
                   node: 'item', key: 'opencat', name: 'OpenCat', onClick: () => {
-                    onOpenLink('opencat', record.key);
+                    onOpenLink('opencat', record.key).catch(reportUIError);
                   }
                 },
                 {
                   node: 'item', key: 'lobechat', name: 'LobeChat', onClick: () => {
-                    onOpenLink('lobechat');
+                    onOpenLink('lobechat').catch(reportUIError);
                   }
                 }
               ]
@@ -203,11 +210,7 @@ const TokensTable = () => {
             okType={'danger'}
             position={'left'}
             onConfirm={() => {
-              manageToken(record.id, 'delete', record).then(
-                () => {
-                  removeRecord(record.key);
-                }
-              );
+              manageToken(tokenRef(record), 'delete', record).catch(showError);
             }}
           >
             <Button theme="light" type="danger" style={{ marginRight: 1 }}>删除</Button>
@@ -215,22 +218,22 @@ const TokensTable = () => {
           {
             record.status === 1 ?
               <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={
-                async () => {
+                (...uiArgs) => (async () => {
                   manageToken(
-                    record.id,
+                    tokenRef(record),
                     'disable',
                     record
-                  );
-                }
+                  ).catch(showError);
+                })(...uiArgs).catch(reportUIError)
               }>禁用</Button> :
               <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={
-                async () => {
+                (...uiArgs) => (async () => {
                   manageToken(
-                    record.id,
+                    tokenRef(record),
                     'enable',
                     record
-                  );
-                }
+                  ).catch(showError);
+                })(...uiArgs).catch(reportUIError)
               }>启用</Button>
           }
           <Button theme="light" type="tertiary" style={{ marginRight: 1 }} onClick={
@@ -282,21 +285,24 @@ const TokensTable = () => {
 
   let pageData = tokens.slice((activePage - 1) * pageSize, activePage * pageSize);
   const loadTokens = async (startIdx) => {
-    setLoading(true);
-    const res = await API.get(`/api/token/?p=${startIdx}&size=${pageSize}&order=${orderBy}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setTokensFormat(data);
+    try {
+      setLoading(true);
+      const res = await API.get(`/api/token/?p=${startIdx}&size=${pageSize}&order=${orderBy}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (startIdx === 0) {
+          setTokensFormat(data);
+        } else {
+          let newTokens = [...tokens];
+          newTokens.splice(startIdx * pageSize, data.length, ...data);
+          setTokensFormat(newTokens);
+        }
       } else {
-        let newTokens = [...tokens];
-        newTokens.splice(startIdx * pageSize, data.length, ...data);
-        setTokensFormat(newTokens);
+        showError(message);
       }
-    } else {
-      showError(message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const onPaginationChange = (e, { activePage }) => {
@@ -416,72 +422,63 @@ const TokensTable = () => {
       });
   }, [pageSize, orderBy]);
 
-  const removeRecord = key => {
-    let newDataSource = [...tokens];
-    if (key != null) {
-      let idx = newDataSource.findIndex(data => data.key === key);
-
-      if (idx > -1) {
-        newDataSource.splice(idx, 1);
-        setTokensFormat(newDataSource);
-      }
-    }
-  };
-
-  const manageToken = async (id, action, record) => {
+  // manageToken updates local rows only after a confirmed server mutation.
+  const manageToken = async (id, action) => {
     setLoading(true);
-    let data = { id };
-    let res;
-    switch (action) {
-      case 'delete':
-        res = await API.delete(`/api/token/${id}`);
-        break;
-      case 'enable':
-        data.status = 1;
-        res = await API.put('/api/token/?status_only=true', data);
-        break;
-      case 'disable':
-        data.status = 2;
-        res = await API.put('/api/token/?status_only=true', data);
-        break;
-    }
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess('操作成功完成！');
-      let token = res.data.data;
-      let newTokens = [...tokens];
-      // let realIdx = (activePage - 1) * ITEMS_PER_PAGE + idx;
-      if (action === 'delete') {
-
-      } else {
-        record.status = token.status;
-        // newTokens[realIdx].status = token.status;
+    try {
+      const data = typeof id === 'string' ? { uuid: id } : { id };
+      let res;
+      switch (action) {
+        case 'delete':
+          res = await API.delete(`/api/token/${id}`);
+          break;
+        case 'enable':
+        case 'disable':
+          data.status = action === 'enable' ? 1 : 2;
+          res = await API.put('/api/token/?status_only=true', data);
+          break;
+        default:
+          throw new Error('Unsupported token action');
       }
-      setTokensFormat(newTokens);
-    } else {
-      showError(message);
+      const { success, message } = res.data;
+      if (!success) {
+        showError(message);
+        return false;
+      }
+      if (action === 'delete') {
+        setTokensFormat(tokens.filter(token => tokenRef(token) !== id));
+      } else {
+        setTokensFormat(tokens.map(token => tokenRef(token) === id
+          ? { ...token, status: res.data.data.status } : token));
+      }
+      showSuccess('操作成功完成！');
+      return true;
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const searchTokens = async () => {
-    if (searchKeyword === '' && searchToken === '') {
-      // if keyword is blank, load files instead.
-      await loadTokens(0);
-      setActivePage(1);
-      setOrderBy('');
-      return;
+    try {
+      if (searchKeyword === '' && searchToken === '') {
+        // if keyword is blank, load files instead.
+        await loadTokens(0);
+        setActivePage(1);
+        setOrderBy('');
+        return;
+      }
+      setSearching(true);
+      const res = await API.get(`/api/token/search?keyword=${searchKeyword}&token=${searchToken}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setTokensFormat(data);
+        setActivePage(1);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(true);
-    const res = await API.get(`/api/token/search?keyword=${searchKeyword}&token=${searchToken}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setTokensFormat(data);
-      setActivePage(1);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
   };
 
   const handleKeywordChange = async (value) => {
@@ -499,7 +496,7 @@ const TokensTable = () => {
     sortedTokens.sort((a, b) => {
       return ('' + a[key]).localeCompare(b[key]);
     });
-    if (sortedTokens[0].id === tokens[0].id) {
+    if (tokenRef(sortedTokens[0]) === tokenRef(tokens[0])) {
       sortedTokens.reverse();
     }
     setTokens(sortedTokens);
@@ -512,7 +509,7 @@ const TokensTable = () => {
     if (page === Math.ceil(tokens.length / pageSize) + 1) {
       // In this case we have to load more data and then append them.
       loadTokens(page - 1).then(r => {
-      });
+      }).catch(reportUIError);
     }
   };
 
@@ -562,10 +559,10 @@ const TokensTable = () => {
         <Form.Input
           field="keyword"
           label="搜索关键字"
-          placeholder="令牌名称"
+          placeholder="令牌名称或 UUID"
           value={searchKeyword}
           loading={searching}
-          onChange={handleKeywordChange}
+          onChange={(...uiArgs) => handleKeywordChange(...uiArgs).catch(reportUIError)}
         />
         {/* <Form.Input
           field="token"
@@ -576,7 +573,7 @@ const TokensTable = () => {
           onChange={handleSearchTokenChange}
         /> */}
         <Button label="查询" type="primary" htmlType="submit" className="btn-margin-right"
-                onClick={searchTokens} style={{ marginRight: 8 }}>查询</Button>
+                onClick={(...uiArgs) => searchTokens(...uiArgs).catch(reportUIError)} style={{ marginRight: 8 }}>查询</Button>
       </Form>
 
       <Table style={{ marginTop: 20 }} columns={columns} dataSource={pageData} pagination={{
@@ -602,7 +599,7 @@ const TokensTable = () => {
         }
       }>添加令牌</Button>
       <Button label="复制所选令牌" type="warning" onClick={
-        async () => {
+        (...uiArgs) => (async () => {
           if (selectedKeys.length === 0) {
             showError('请至少选择一个令牌！');
             return;
@@ -612,7 +609,7 @@ const TokensTable = () => {
             keys += selectedKeys[i].name + '    sk-' + selectedKeys[i].key + '\n';
           }
           await copyText(keys);
-        }
+        })(...uiArgs).catch(reportUIError)
       }>复制所选令牌到剪贴板</Button>
       <Dropdown
         trigger="click"

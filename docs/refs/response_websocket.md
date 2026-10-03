@@ -2,7 +2,7 @@
 
 > https://developers.openai.com/api/docs/guides/websocket-mode/
 
-The Responses API supports a WebSocket mode for long-running, tool-call-heavy workflows. In this mode, you keep a persistent connection to `/v1/responses` and continue each turn by sending only new input items plus `previous_response_id`.
+The Responses API supports a WebSocket mode for long-running, tool-call-heavy workflows. In this mode, you keep a persistent connection to `/v1/responses` and continue each turn by sending only new input items plus `previous_response_id`, using connection-local in-memory state for the active socket.
 
 WebSocket mode is compatible with both Zero Data Retention (ZDR) and `store=false`.
 

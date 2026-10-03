@@ -1,7 +1,8 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { Dimmer, Loader, Segment } from 'semantic-ui-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { API, showError, showSuccess } from '../helpers';
+import { API, normalizeUser, showError, showSuccess } from '../helpers';
 import { UserContext } from '../context/User';
 
 const GitHubOAuth = () => {
@@ -21,8 +22,9 @@ const GitHubOAuth = () => {
         showSuccess('绑定成功！');
         navigate('/setting');
       } else {
-        userDispatch({ type: 'login', payload: data });
-        localStorage.setItem('user', JSON.stringify(data));
+        const user = normalizeUser(data);
+        userDispatch({ type: 'login', payload: user });
+        localStorage.setItem('user', JSON.stringify(user));
         showSuccess('登录成功！');
         navigate('/');
       }
@@ -43,7 +45,7 @@ const GitHubOAuth = () => {
   useEffect(() => {
     let code = searchParams.get('code');
     let state = searchParams.get('state');
-    sendCode(code, state, 0).then();
+    sendCode(code, state, 0).then().catch(reportUIError);
   }, []);
 
   return (

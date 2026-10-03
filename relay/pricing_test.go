@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/relay/adaptor/ali"
+	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/openrouter"
 	"github.com/Laisky/one-api/relay/adaptor/xai"
 	"github.com/Laisky/one-api/relay/apitype"
@@ -34,8 +35,11 @@ func TestAdapterPricingImplementations(t *testing.T) {
 		{"VertexAI", apitype.VertexAI, "gemini-2.5-flash", false},
 		{"xAI", apitype.XAI, "grok-3", false},
 		{"AWS Bedrock/Mistral AI", apitype.AwsClaude, "mistral-pixtral-large-2502", false},
-		// Adapters that still use DefaultPricingMethods (expected to have empty pricing)
-		{"Ollama", apitype.Ollama, "llama2", true},
+		// Ollama publishes a deliberately symbolic price (it runs locally and is not
+		// metered upstream). It used to embed DefaultPricingMethods without wiring
+		// ModelRatios, which billed every model at the 2.5 USD/1M fallback instead —
+		// roughly 250x the intended rate.
+		{"Ollama", apitype.Ollama, "llama2:latest", false},
 		{"Cohere", apitype.Cohere, "command", false},
 		{"Coze", apitype.Coze, "coze-chat", false},
 	}
@@ -194,22 +198,17 @@ func TestSpecificAdapterPricing(t *testing.T) {
 		adaptor := GetAdaptor(apitype.Gemini)
 		require.NotNil(t, adaptor, "Gemini adaptor not found")
 
-		// Gemini uses USD pricing with ratio.MilliTokensUsd = 0.5
-		testModels := map[string]struct {
-			expectedRatio           float64
-			expectedCompletionRatio float64
-		}{
-			"gemini-2.5-pro":   {1.25 * 0.5, 10.0 / 1.25},
-			"gemini-2.5-flash": {0.30 * 0.5, 2.5 / 0.30},
-			"gemini-2.0-flash": {0.15 * 0.5, 0.60 / 0.15},
-		}
+		testModels := []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"}
 
-		for model, expected := range testModels {
+		for _, model := range testModels {
+			expectedConfig, ok := gemini.ModelRatios[model]
+			require.True(t, ok, "Gemini model %s missing from ModelRatios", model)
+
 			ratio := adaptor.GetModelRatio(model)
 			completionRatio := adaptor.GetCompletionRatio(model)
 
-			require.Equal(t, expected.expectedRatio, ratio, "Gemini %s: expected ratio %.9f, got %.9f", model, expected.expectedRatio, ratio)
-			require.Equal(t, expected.expectedCompletionRatio, completionRatio, "Gemini %s: expected completion ratio %.2f, got %.2f", model, expected.expectedCompletionRatio, completionRatio)
+			require.Equal(t, expectedConfig.Ratio, ratio, "Gemini %s: expected ratio %.9f, got %.9f", model, expectedConfig.Ratio, ratio)
+			require.Equal(t, expectedConfig.CompletionRatio, completionRatio, "Gemini %s: expected completion ratio %.2f, got %.2f", model, expectedConfig.CompletionRatio, completionRatio)
 		}
 	})
 

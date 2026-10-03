@@ -11,40 +11,47 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
+	"github.com/Laisky/zap/zapcore"
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/dto"
 )
 
 // Log represents a persisted usage or management entry emitted by the billing pipeline.
 type Log struct {
-	Id        int    `json:"id"`
-	UserId    int    `json:"user_id" gorm:"index;index:idx_user_token,priority:1"`
-	CreatedAt int64  `json:"created_at" gorm:"bigint;index:idx_created_at_type"`
-	Type      int    `json:"type" gorm:"index:idx_created_at_type"`
-	Content   string `json:"content" gorm:"type:text"`
-	Username  string `json:"username" gorm:"index:index_username_model_name,priority:2;default:''"`
-	TokenName string `json:"token_name" gorm:"index;index:idx_user_token,priority:2;default:''"`
-	ModelName string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
+	Id        int     `json:"id" gorm:"index:idx_logs_user_created_at_id,priority:3"`
+	UserId    int     `json:"user_id" gorm:"index;index:idx_user_token,priority:1;index:idx_logs_user_created_at_id,priority:1"`
+	UUID      string  `json:"uuid" gorm:"type:char(36);column:uuid"`
+	UserUUID  *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
+	CreatedAt int64   `json:"created_at" gorm:"bigint;index:idx_created_at_type;index:idx_logs_user_created_at_id,priority:2"`
+	Type      int     `json:"type" gorm:"index:idx_created_at_type"`
+	Content   string  `json:"content" gorm:"type:text"`
+	Username  string  `json:"username" gorm:"index:index_username_model_name,priority:2;default:''"`
+	TokenName string  `json:"token_name" gorm:"index;index:idx_user_token,priority:2;default:''"`
+	TokenUUID *string `json:"token_uuid" gorm:"type:char(36);column:token_uuid;index"`
+	ModelName string  `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
 	// OriginModelName records the model name as requested by the client before any mapping.
 	// When a channel has model mapping configured (e.g., "my-model" -> "gpt-4"),
 	// this field preserves the original model name requested ("my-model") while ModelName
 	// holds the mapped model used for billing ("gpt-4").
-	OriginModelName   string `json:"origin_model_name" gorm:"index;default:''"`
-	Quota             int    `json:"quota" gorm:"default:0;index"`             // Added index for sorting
-	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0;index"`     // Added index for sorting
-	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0;index"` // Added index for sorting
-	ChannelId         int    `json:"channel" gorm:"index"`
-	RequestId         string `json:"request_id" gorm:"default:''"`
-	TraceId           string `json:"trace_id" gorm:"type:varchar(64);index;default:''"` // TraceID from gin-middlewares
-	UpdatedAt         int64  `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
-	ElapsedTime       int64  `json:"elapsed_time" gorm:"default:0;index"` // Added index for sorting (unit is ms)
-	IsStream          bool   `json:"is_stream" gorm:"default:false"`
-	SystemPromptReset bool   `json:"system_prompt_reset" gorm:"default:false"`
+	OriginModelName   string  `json:"origin_model_name" gorm:"index;default:''"`
+	Quota             int     `json:"quota" gorm:"default:0;index"`             // Added index for sorting
+	PromptTokens      int     `json:"prompt_tokens" gorm:"default:0;index"`     // Added index for sorting
+	CompletionTokens  int     `json:"completion_tokens" gorm:"default:0;index"` // Added index for sorting
+	ChannelId         int     `json:"channel" gorm:"index"`
+	ChannelUUID       *string `json:"channel_uuid" gorm:"type:char(36);column:channel_uuid;index"`
+	ChannelName       string  `json:"channel_name,omitempty" gorm:"-"`
+	RequestId         string  `json:"request_id" gorm:"default:''"`
+	TraceId           string  `json:"trace_id" gorm:"type:varchar(64);index;default:''"` // TraceID from gin-middlewares
+	UpdatedAt         int64   `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
+	ElapsedTime       int64   `json:"elapsed_time" gorm:"default:0;index"` // Added index for sorting (unit is ms)
+	IsStream          bool    `json:"is_stream" gorm:"default:false"`
+	SystemPromptReset bool    `json:"system_prompt_reset" gorm:"default:false"`
 	// Cached prompt tokens for cost transparency.
 	CachedPromptTokens int `json:"cached_prompt_tokens" gorm:"default:0;index"`
 	// Metadata holds provider-specific attributes serialized as JSON (e.g., cache write tokens).
@@ -55,6 +62,63 @@ type Log struct {
 // It is serialized as JSON in the underlying database column to avoid schema churn when
 // new adaptor-specific fields appear.
 type LogMetadata map[string]any
+
+// SetLogExternalUUIDs copies external UUIDs onto a log when they are available.
+// Parameters:
+//   - log: log row being prepared for persistence.
+//   - userUUID: external UUID of the user associated with the log.
+//   - channelUUID: external UUID of the channel associated with the log.
+//   - tokenUUID: optional external UUID of the token associated with the log.
+//
+// Return values: none.
+func SetLogExternalUUIDs(log *Log, userUUID string, channelUUID string, tokenUUID ...string) {
+	if log == nil {
+		return
+	}
+	if userUUID != "" {
+		log.UserUUID = &userUUID
+	}
+	if channelUUID != "" {
+		log.ChannelUUID = &channelUUID
+	}
+	if len(tokenUUID) > 0 && tokenUUID[0] != "" {
+		log.TokenUUID = &tokenUUID[0]
+	}
+}
+
+// FillLogUserUUIDByID fills log.UserUUID from log.UserId when it is missing.
+// Parameters:
+//   - ctx: context used for structured warning logs.
+//   - log: log row being prepared for persistence.
+//
+// Return values: none. Lookup failures are logged and the log remains writable.
+func FillLogUserUUIDByID(ctx context.Context, log *Log) {
+	if log == nil || log.UserUUID != nil || log.UserId <= 0 {
+		return
+	}
+	userUUID, err := GetUserUUIDByID(log.UserId)
+	if err != nil {
+		logger.FromContext(ctx).Warn("failed to fill log user uuid",
+			append(log.Refs().User.Zap(), zap.Error(err))...)
+		return
+	}
+	if userUUID != "" {
+		log.UserUUID = &userUUID
+	}
+}
+
+// StringPtrIfNotEmpty returns a pointer to value when value is non-empty.
+// Parameters:
+//   - value: candidate string value.
+//
+// Return values:
+//   - *string: pointer to value, or nil when value is empty.
+func StringPtrIfNotEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
 
 // logSortFields enumerates whitelisted columns for log sorting.
 var logSortFields = map[string]string{
@@ -83,6 +147,11 @@ const (
 	LogMetadataKeyUpstreamAPIFormat = "upstream_api_format"
 	// LogMetadataKeyUpstreamEndpoint records the final URL sent to the upstream provider.
 	LogMetadataKeyUpstreamEndpoint = "upstream_endpoint"
+	// LogMetadataKeyEstimatedCharge marks a consume log whose quota is the
+	// pre-consumed estimate rather than measured usage, because the upstream
+	// reported none. The charge is real and already debited; the flag tells an
+	// operator the token counts on the row are not authoritative.
+	LogMetadataKeyEstimatedCharge = "estimated_charge"
 )
 
 // ToolUsageEntry captures per-tool usage metadata for logging.
@@ -110,7 +179,7 @@ func (m LogMetadata) MarshalJSON() ([]byte, error) {
 	if m == nil {
 		return []byte("{}"), nil
 	}
-	payload, err := json.Marshal(map[string]any(m))
+	payload, err := json.Marshal(map[string]any(SanitizeLogMetadata(m)))
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal log metadata")
 	}
@@ -123,7 +192,7 @@ func (m LogMetadata) Value() (driver.Value, error) {
 		return nil, nil
 	}
 
-	payload, err := json.Marshal(map[string]any(m))
+	payload, err := json.Marshal(map[string]any(SanitizeLogMetadata(m)))
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal log metadata")
 	}
@@ -292,11 +361,87 @@ func sanitizeManageValue(field string, value any) string {
 	return text
 }
 
-func buildManageFallbackContent(log *Log) string {
+// logUserDetails renders the user identity for a log content string using the
+// external UUID and username only; the internal integer id never appears in
+// user-visible content.
+// Parameters:
+//   - log: log row; UserUUID/Username are resolved best-effort from UserId
+//     when missing and a database is available.
+//
+// Return values:
+//   - []string: zero or more "user=<name>" / "user_uuid=<uuid>" fragments.
+func logUserDetails(log *Log) []string {
 	details := []string{}
-	if log.UserId != 0 {
-		details = append(details, fmt.Sprintf("user_id=%d", log.UserId))
+	if log == nil {
+		return details
 	}
+	username := strings.TrimSpace(log.Username)
+	userUUID := ""
+	if log.UserUUID != nil {
+		userUUID = strings.TrimSpace(*log.UserUUID)
+	}
+	if log.UserId > 0 && DB != nil {
+		if username == "" {
+			username = strings.TrimSpace(GetUsernameById(log.UserId))
+		}
+		if userUUID == "" {
+			if resolved, err := GetUserUUIDByID(log.UserId); err == nil {
+				userUUID = strings.TrimSpace(resolved)
+			}
+		}
+	}
+	if username != "" {
+		details = append(details, fmt.Sprintf("user=%s", username))
+	}
+	if userUUID != "" {
+		details = append(details, fmt.Sprintf("user_uuid=%s", userUUID))
+	}
+	return details
+}
+
+// logChannelDetails renders the channel identity for a log content string
+// using the channel name and external UUID only.
+// Parameters:
+//   - log: log row; ChannelUUID/ChannelName are resolved best-effort from
+//     ChannelId when missing and a database is available.
+//
+// Return values:
+//   - []string: zero or more "channel=<name>" / "channel_uuid=<uuid>" fragments.
+func logChannelDetails(log *Log) []string {
+	details := []string{}
+	if log == nil {
+		return details
+	}
+	name := strings.TrimSpace(log.ChannelName)
+	channelUUID := ""
+	if log.ChannelUUID != nil {
+		channelUUID = strings.TrimSpace(*log.ChannelUUID)
+	}
+	if log.ChannelId > 0 && DB != nil && (name == "" || channelUUID == "") {
+		var row struct {
+			UUID string
+			Name string
+		}
+		if err := DB.Model(&Channel{}).Select("uuid", "name").Where("id = ?", log.ChannelId).Take(&row).Error; err == nil {
+			if name == "" {
+				name = strings.TrimSpace(row.Name)
+			}
+			if channelUUID == "" {
+				channelUUID = strings.TrimSpace(row.UUID)
+			}
+		}
+	}
+	if name != "" {
+		details = append(details, fmt.Sprintf("channel=%s", name))
+	}
+	if channelUUID != "" {
+		details = append(details, fmt.Sprintf("channel_uuid=%s", channelUUID))
+	}
+	return details
+}
+
+func buildManageFallbackContent(log *Log) string {
+	details := logUserDetails(log)
 	if log.RequestId != "" {
 		details = append(details, fmt.Sprintf("request_id=%s", log.RequestId))
 	}
@@ -317,9 +462,7 @@ func buildTopupContent(log *Log) string {
 	if log.TokenName != "" {
 		details = append(details, fmt.Sprintf("token=%s", log.TokenName))
 	}
-	if log.ChannelId != 0 {
-		details = append(details, fmt.Sprintf("channel_id=%d", log.ChannelId))
-	}
+	details = append(details, logChannelDetails(log)...)
 	if len(details) == 0 {
 		return "Top-up event recorded."
 	}
@@ -331,9 +474,7 @@ func buildConsumeContent(log *Log) string {
 	if log.ModelName != "" {
 		details = append(details, fmt.Sprintf("model=%s", log.ModelName))
 	}
-	if log.ChannelId != 0 {
-		details = append(details, fmt.Sprintf("channel_id=%d", log.ChannelId))
-	}
+	details = append(details, logChannelDetails(log)...)
 	if log.Quota != 0 {
 		details = append(details, fmt.Sprintf("quota=%s", common.LogQuota(int64(log.Quota))))
 	}
@@ -347,12 +488,7 @@ func buildConsumeContent(log *Log) string {
 }
 
 func buildSystemContent(log *Log) string {
-	details := []string{}
-	if log.Username != "" {
-		details = append(details, fmt.Sprintf("username=%s", log.Username))
-	} else if log.UserId != 0 {
-		details = append(details, fmt.Sprintf("user_id=%d", log.UserId))
-	}
+	details := logUserDetails(log)
 	if log.Quota != 0 {
 		details = append(details, fmt.Sprintf("quota=%s", common.LogQuota(int64(log.Quota))))
 	}
@@ -370,9 +506,7 @@ func buildTestContent(log *Log) string {
 	if log.ModelName != "" {
 		details = append(details, fmt.Sprintf("model=%s", log.ModelName))
 	}
-	if log.ChannelId != 0 {
-		details = append(details, fmt.Sprintf("channel_id=%d", log.ChannelId))
-	}
+	details = append(details, logChannelDetails(log)...)
 	if log.ElapsedTime != 0 {
 		details = append(details, fmt.Sprintf("elapsed=%dms", log.ElapsedTime))
 	}
@@ -390,9 +524,7 @@ func buildTestContent(log *Log) string {
 
 func buildGenericContent(log *Log) string {
 	details := []string{fmt.Sprintf("type=%d", log.Type)}
-	if log.UserId != 0 {
-		details = append(details, fmt.Sprintf("user_id=%d", log.UserId))
-	}
+	details = append(details, logUserDetails(log)...)
 	if log.RequestId != "" {
 		details = append(details, fmt.Sprintf("request_id=%s", log.RequestId))
 	}
@@ -420,6 +552,58 @@ func GetLogOrderClause(sortBy string, sortOrder string) string {
 // We need a systematic audit of every function that attempts to fetch values
 // from `context.Context` and change the design to pass those values explicitly
 // as parameters, rather than trying to read them from a generic `context.Context`.
+// sameZapField reports whether two zap fields are identical for the field shapes
+// identity references emit (zap.Int and zap.String).
+func sameZapField(a, b zap.Field) bool {
+	return a.Key == b.Key && a.Type == b.Type &&
+		a.Integer == b.Integer && a.String == b.String
+}
+
+// logRowFields returns the log row's own reference (log_id/log_uuid) plus only
+// the denormalised user/token/channel fields that ctx's request-scoped logger
+// does not already carry.
+//
+// Rationale: on the billing hot path the logger bound by identity.Bind already
+// emits the request's user/token/channel identity, and zap performs no key
+// de-duplication, so emitting log.LogFields() there would repeat ~8 keys on every
+// billed request. A row field whose value DIFFERS from the bound identity is
+// kept: it means the row is about another entity (admin action, cron job), which
+// is information rather than noise. This mirrors identity.ExtraFields.
+//
+// Parameters:
+//   - ctx: request or background context; its bound identity is used to suppress duplicates.
+//   - log: the row being reported; nil contributes only extra.
+//   - extra: additional fields appended after the identity fields.
+//
+// Return values:
+//   - []zap.Field: ready-to-log field slice.
+func logRowFields(ctx context.Context, log *Log, extra ...zap.Field) []zap.Field {
+	if log == nil {
+		return extra
+	}
+
+	bound := identity.FromContext(ctx).Zap()
+	if len(bound) == 0 {
+		return log.LogFields(extra...)
+	}
+
+	fields := identity.NewLogRef(log.Id, log.UUID).Zap()
+	for _, f := range log.Refs().Zap() {
+		duplicate := false
+		for _, b := range bound {
+			if sameZapField(f, b) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			fields = append(fields, f)
+		}
+	}
+
+	return append(fields, extra...)
+}
+
 func recordLogHelper(ctx context.Context, log *Log) {
 	lg := logger.FromContext(ctx)
 	// IDs must be pre-populated by the caller from gin.Context
@@ -430,31 +614,82 @@ func recordLogHelper(ctx context.Context, log *Log) {
 		// For billing logs (consume type), this is critical as it means we sent upstream request but failed to log it
 		if log.Type == LogTypeConsume {
 			lg.Error("failed to record billing log - audit trail incomplete",
-				zap.Error(err),
-				zap.Int("userId", log.UserId),
-				zap.Int("channelId", log.ChannelId),
-				zap.String("model", log.ModelName),
-				zap.Int("quota", log.Quota),
-				zap.String("requestId", log.RequestId),
-				zap.String("note", "billing completed successfully but log recording failed"))
+				logRowFields(ctx, log,
+					zap.Error(err),
+					zap.String("model", log.ModelName),
+					zap.Int("quota", log.Quota),
+					zap.String("log_request_id", log.RequestId),
+					zap.String("note", "billing completed successfully but log recording failed"))...)
 		} else {
-			lg.Error("failed to record log", zap.Error(err))
+			lg.Error("failed to record log", logRowFields(ctx, log, zap.Error(err))...)
 		}
 
 		return
 	}
 
+	// log_request_id / log_trace_id are the correlators stored ON THE ROW. They are
+	// deliberately not called request_id / trace_id: the request-scoped logger already
+	// carries those for the CURRENT request, and on the reconciliation path the row's
+	// values belong to the earlier request that created it.
+	//
+	// The full form is DEBUG. It carries the rendered `content` string, which is
+	// already persisted on the row this function just wrote, so duplicating it
+	// into the log file once per request buys nothing. The INFO form keeps the
+	// correlators and the billing numbers an operator actually greps for.
+	//
+	// Measured by BenchmarkRecordLogLineBytes, cross-tree against the pre-change
+	// code (commit 397781e1), console encoding as production uses: this line
+	// shrinks from 516/576/751 bytes to a flat 413 bytes for short/typical/long
+	// content, i.e. 103-338 bytes saved per billed request (20-45% of the line).
+	// At 10k requests per second and typical content that is ~141 GB/day of log
+	// bytes not written WITH SAMPLING OFF. Under the scaled/external profiles,
+	// which default LOG_SAMPLE_INITIAL=100, the sampler already thins this line
+	// to ~199/s and the demotion is worth ~2.8 GB/day there. It is a large
+	// saving on ONE line at volumes where sampling is off, not on total process
+	// log volume.
+	if lg.Level().Zap() <= zapcore.DebugLevel {
+		lg.Debug("record log",
+			logRowFields(ctx, log,
+				zap.Int64("created_at", log.CreatedAt),
+				zap.Int("type", log.Type),
+				zap.String("content", log.Content),
+				zap.String("log_request_id", log.RequestId),
+				zap.String("log_trace_id", log.TraceId),
+				zap.Int("quota", log.Quota),
+				zap.Int("prompt_tokens", log.PromptTokens),
+				zap.Int("completion_tokens", log.CompletionTokens),
+			)...,
+		)
+		return
+	}
+
+	if config.LogRecordLineFormat == config.LogRecordLineFull {
+		// Pre-proposal shape, kept as the standalone default so an existing
+		// log-parsing pipeline does not break on upgrade.
+		lg.Info("record log",
+			logRowFields(ctx, log,
+				zap.Int64("created_at", log.CreatedAt),
+				zap.Int("type", log.Type),
+				zap.String("content", log.Content),
+				zap.String("log_request_id", log.RequestId),
+				zap.String("log_trace_id", log.TraceId),
+				zap.Int("quota", log.Quota),
+				zap.Int("prompt_tokens", log.PromptTokens),
+				zap.Int("completion_tokens", log.CompletionTokens),
+			)...,
+		)
+		return
+	}
+
 	lg.Info("record log",
-		zap.Int("user_id", log.UserId),
-		zap.String("username", log.Username),
-		zap.Int64("created_at", log.CreatedAt),
-		zap.Int("type", log.Type),
-		zap.String("content", log.Content),
-		zap.String("request_id", log.RequestId),
-		zap.String("trace_id", log.TraceId),
-		zap.Int("quota", log.Quota),
-		zap.Int("prompt_tokens", log.PromptTokens),
-		zap.Int("completion_tokens", log.CompletionTokens),
+		logRowFields(ctx, log,
+			zap.Int("type", log.Type),
+			zap.String("log_request_id", log.RequestId),
+			zap.String("log_trace_id", log.TraceId),
+			zap.Int("quota", log.Quota),
+			zap.Int("prompt_tokens", log.PromptTokens),
+			zap.Int("completion_tokens", log.CompletionTokens),
+		)...,
 	)
 }
 
@@ -472,6 +707,7 @@ func RecordLog(ctx context.Context, userId int, logType int, content string) {
 		Type:      logType,
 		Content:   content,
 	}
+	FillLogUserUUIDByID(ctx, log)
 	recordLogHelper(ctx, log)
 }
 
@@ -486,6 +722,7 @@ func RecordLogWithIDs(ctx context.Context, userId int, logType int, content stri
 		RequestId: requestId,
 		TraceId:   traceId,
 	}
+	FillLogUserUUIDByID(ctx, log)
 	recordLogHelper(ctx, log)
 }
 
@@ -498,6 +735,7 @@ func RecordManageLog(ctx context.Context, userId int, field string, previous any
 		Type:      LogTypeManage,
 		Content:   buildManageLogContent(field, previous, next, note),
 	}
+	FillLogUserUUIDByID(ctx, log)
 	recordLogHelper(ctx, log)
 }
 
@@ -511,6 +749,7 @@ func RecordTopupLog(ctx context.Context, userId int, content string, quota int) 
 		Content:   content,
 		Quota:     quota,
 	}
+	FillLogUserUUIDByID(ctx, log)
 	recordLogHelper(ctx, log)
 }
 
@@ -526,6 +765,7 @@ func RecordTopupLogWithIDs(ctx context.Context, userId int, content string, quot
 		RequestId: requestId,
 		TraceId:   traceId,
 	}
+	FillLogUserUUIDByID(ctx, log)
 	recordLogHelper(ctx, log)
 }
 
@@ -624,15 +864,18 @@ func RecordToolLogs(ctx context.Context, base *Log, summary *ToolUsageSummary) {
 			}
 			row := &Log{
 				UserId:          base.UserId,
+				UserUUID:        base.UserUUID,
 				Username:        username,
 				CreatedAt:       now,
 				Type:            LogTypeTool,
 				Content:         fmt.Sprintf("Tool invocation: %s", tool),
 				TokenName:       base.TokenName,
+				TokenUUID:       base.TokenUUID,
 				ModelName:       tool,
 				OriginModelName: originModelName,
 				Quota:           int(rowQuota),
 				ChannelId:       base.ChannelId,
+				ChannelUUID:     base.ChannelUUID,
 				RequestId:       base.RequestId,
 				TraceId:         base.TraceId,
 				ElapsedTime:     base.ElapsedTime,
@@ -641,11 +884,12 @@ func RecordToolLogs(ctx context.Context, base *Log, summary *ToolUsageSummary) {
 			ensureLogContent(row)
 			if err := LOG_DB.Create(row).Error; err != nil {
 				lg.Error("failed to record tool log",
-					zap.Error(err),
-					zap.Int("user_id", base.UserId),
-					zap.String("tool", tool),
-					zap.Int64("quota", rowQuota),
-					zap.String("request_id", base.RequestId),
+					logRowFields(ctx, row,
+						zap.Error(err),
+						zap.String("tool", tool),
+						zap.Int64("quota", rowQuota),
+						zap.String("log_request_id", base.RequestId),
+					)...,
 				)
 			}
 		}
@@ -689,22 +933,22 @@ func RecordProvisionalConsumeLog(ctx context.Context, log *Log, estimatedQuota i
 	err := LOG_DB.Create(log).Error
 	if err != nil {
 		lg.Error("failed to record provisional billing log",
-			zap.Error(err),
-			zap.Int("userId", log.UserId),
-			zap.Int("channelId", log.ChannelId),
-			zap.String("model", log.ModelName),
-			zap.Int("quota", log.Quota),
-			zap.String("requestId", log.RequestId),
+			logRowFields(ctx, log,
+				zap.Error(err),
+				zap.String("model", log.ModelName),
+				zap.Int("quota", log.Quota),
+				zap.String("log_request_id", log.RequestId),
+			)...,
 		)
 		return 0
 	}
 
 	lg.Debug("recorded provisional consume log",
-		zap.Int("log_id", log.Id),
-		zap.Int("user_id", log.UserId),
-		zap.Int64("estimated_quota", estimatedQuota),
-		zap.String("model", log.ModelName),
-		zap.String("request_id", log.RequestId),
+		logRowFields(ctx, log,
+			zap.Int64("estimated_quota", estimatedQuota),
+			zap.String("model", log.ModelName),
+			zap.String("log_request_id", log.RequestId),
+		)...,
 	)
 
 	return log.Id
@@ -785,7 +1029,9 @@ func ReconcileConsumeLogDetailed(ctx context.Context, logID int, detail ConsumeL
 			zap.Int64("final_quota", detail.FinalQuota),
 			zap.NamedError("ctx_err", ctx.Err()),
 		)
-		return errors.Wrapf(err, "failed to reconcile consume log: id=%d", logID)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to reconcile consume log: id=%d", logID),
+			identity.NewLogRef(logID, ""), identity.FromContext(ctx))
 	}
 
 	lg.Debug("reconciled provisional consume log",
@@ -850,7 +1096,9 @@ func UpdateConsumeLogByID(ctx context.Context, logID int, updates map[string]any
 	if err := LOG_DB.WithContext(ctx).Model(&Log{}).
 		Where("id = ?", logID).
 		Updates(updates).Error; err != nil {
-		return errors.Wrapf(err, "failed to update consume log: id=%d", logID)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to update consume log: id=%d", logID),
+			identity.NewLogRef(logID, ""), identity.FromContext(ctx))
 	}
 	return nil
 }
@@ -894,6 +1142,9 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "get all logs")
+	}
+	if err := fillLogChannelNames(logs); err != nil {
+		return nil, errors.Wrap(err, "fill all log channel names")
 	}
 	return logs, nil
 }
@@ -965,7 +1216,10 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		err = tx.Order(orderClause).Limit(num).Offset(startIdx).Find(&logs).Error
 	}
 	if err != nil {
-		return nil, errors.Wrapf(err, "get user %d logs", userId)
+		return nil, identity.Tag(errors.Wrapf(err, "get user %d logs", userId), LookupUserRef(context.Background(), userId))
+	}
+	if err := fillLogChannelNames(logs); err != nil {
+		return nil, identity.Tag(errors.Wrapf(err, "fill user %d log channel names", userId), LookupUserRef(context.Background(), userId))
 	}
 	return logs, nil
 }
@@ -994,7 +1248,7 @@ func GetUserLogsCount(userId int, logType int, startTimestamp int64, endTimestam
 
 	err = tx.Model(&Log{}).Count(&count).Error
 	if err != nil {
-		return 0, errors.Wrapf(err, "count user %d logs", userId)
+		return 0, identity.Tag(errors.Wrapf(err, "count user %d logs", userId), LookupUserRef(context.Background(), userId))
 	}
 	return count, nil
 }
@@ -1002,14 +1256,15 @@ func GetUserLogsCount(userId int, logType int, startTimestamp int64, endTimestam
 // SearchAllLogs performs a keyword search across all log entries with pagination.
 func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrder string) (logs []*Log, total int64, err error) {
 	db := excludeProvisionalScope(LOG_DB.Model(&Log{}))
-	if keyword != "" {
-		db = db.Where("content LIKE ?", "%"+keyword+"%")
-	}
+	db = applyLogKeyword(db, keyword)
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "search all logs")
+	}
+	if err := fillLogChannelNames(logs); err != nil {
+		return nil, 0, errors.Wrap(err, "fill searched all log channel names")
 	}
 	return logs, total, nil
 }
@@ -1017,14 +1272,15 @@ func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrd
 // SearchUserLogs searches logs owned by a specific user using a keyword filter.
 func SearchUserLogs(userId int, keyword string, startIdx int, num int, sortBy string, sortOrder string) (logs []*Log, total int64, err error) {
 	db := excludeProvisionalScope(LOG_DB.Model(&Log{}).Where("user_id = ?", userId))
-	if keyword != "" {
-		db = db.Where("content LIKE ?", "%"+keyword+"%")
-	}
+	db = applyLogKeyword(db, keyword)
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
-		return nil, 0, errors.Wrapf(err, "search user %d logs", userId)
+		return nil, 0, identity.Tag(errors.Wrapf(err, "search user %d logs", userId), LookupUserRef(context.Background(), userId))
+	}
+	if err := fillLogChannelNames(logs); err != nil {
+		return nil, 0, identity.Tag(errors.Wrapf(err, "fill searched user %d log channel names", userId), LookupUserRef(context.Background(), userId))
 	}
 	return logs, total, nil
 }
@@ -1084,33 +1340,102 @@ func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	return token
 }
 
-// DeleteOldLog removes log entries older than the provided timestamp and returns the number deleted.
+// DeleteOldLog removes log entries older than the provided timestamp.
+//
+// The signature is unchanged from before the chunked-retention work so existing
+// callers keep compiling; DeleteOldLogContext is the variant to prefer in new
+// code, because a cancelled request can then stop a long purge.
+//
+// Parameters:
+//   - targetTimestamp: exclusive upper bound on created_at.
+//
+// Return values:
+//   - int64: rows removed.
+//   - error: wrapped failure from the chunk that could not complete.
 func DeleteOldLog(targetTimestamp int64) (int64, error) {
-	result := LOG_DB.Where("created_at < ?", targetTimestamp).Delete(&Log{})
-	return result.RowsAffected, result.Error
+	return DeleteOldLogContext(context.Background(), targetTimestamp)
+}
+
+// DeleteOldLogContext removes log entries older than the provided timestamp, in
+// bounded chunks.
+//
+// This is an operator-triggered purge over the largest table in the system, and
+// a single unbounded DELETE would lock it for the duration. Chunking makes the
+// purge take longer in wall-clock terms but keeps the gateway serving
+// throughout.
+//
+// Parameters:
+//   - ctx: cancellation scope; a cancelled purge returns what it already removed.
+//   - targetTimestamp: exclusive upper bound on created_at.
+//
+// Return values:
+//   - int64: rows removed.
+//   - error: wrapped failure from the chunk that could not complete.
+func DeleteOldLogContext(ctx context.Context, targetTimestamp int64) (int64, error) {
+	// This purge is operator-triggered rather than periodic, but it is the same
+	// bounded sweep over the same allow-listed table, so it feeds the same
+	// throughput series (W3.3). A purge abandoned when the operator's request
+	// context ends is reported as `canceled`, not as a completed purge.
+	started := time.Now()
+	stats, err := ChunkedDeleteWithStats(ctx, LOG_DB, ChunkedDeleteOptions{
+		Table: "logs",
+		Where: "created_at < ?",
+		Args:  []any{targetTimestamp},
+		Pause: config.RetentionDeletePause(),
+	})
+	recordRetentionSweep("logs", stats, err, time.Since(started))
+	if err != nil {
+		return stats.Deleted, errors.Wrap(err, "purge expired logs")
+	}
+	return stats.Deleted, nil
 }
 
 // GetLogById retrieves a log entry by its ID
 func GetLogById(id int) (*Log, error) {
 	var log Log
 	if err := LOG_DB.Where("id = ?", id).First(&log).Error; err != nil {
-		return nil, errors.Wrapf(err, "get log by id %d", id)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "get log by id %d", id),
+			identity.NewLogRef(id, ""))
 	}
 	return &log, nil
 }
 
 // dayAggregationSelect returns the SQL expression that normalizes log timestamps
-// into YYYY-MM-DD strings, accounting for the configured database engine.
-func dayAggregationSelect() string {
-	if common.UsingPostgreSQL.Load() {
-		return "TO_CHAR(date_trunc('day', to_timestamp(created_at)), 'YYYY-MM-DD') as day"
-	}
-
-	if common.UsingSQLite.Load() {
+// into UTC YYYY-MM-DD strings for the engine that owns the given handle.
+//
+// Two properties matter here, and the pre-W2 implementation had neither.
+//
+// The dialect is read from the HANDLE, not from the process-global
+// common.UsingPostgreSQL / UsingSQLite flags. Those flags are set as a side
+// effect of opening any handle, so a deployment that points LOG_SQL_DSN at a
+// different engine from SQL_DSN leaves them describing whichever handle was
+// opened last. These queries run on LOG_DB, so reading the globals could emit
+// one engine's date syntax against another's.
+//
+// The expressions are also independent of the database session time zone.
+// `to_timestamp()` on PostgreSQL and `FROM_UNIXTIME()` on MySQL both resolve in
+// the session zone, while SQLite's `unixepoch` modifier is unconditionally UTC:
+// on a server whose zone is not UTC the same row landed in different days on
+// different engines. Verified: at session zone +09:00 both engines bucketed
+// epoch second 1767225540 as 2026-01-01, where UTC is 2025-12-31. The forms
+// below build the timestamp from a zone-free epoch literal instead, so every
+// engine agrees on the UTC day.
+//
+// Parameters:
+//   - db: the handle the query will run on; its dialector names the engine.
+//
+// Return values:
+//   - string: the aliased `day` select expression.
+func dayAggregationSelect(db *gorm.DB) string {
+	switch dialectName(db) {
+	case "postgres":
+		return "TO_CHAR(TIMESTAMP 'epoch' + created_at * INTERVAL '1 second', 'YYYY-MM-DD') as day"
+	case "mysql":
+		return "DATE_FORMAT(DATE_ADD('1970-01-01', INTERVAL created_at SECOND), '%Y-%m-%d') as day"
+	default:
 		return "strftime('%Y-%m-%d', datetime(created_at, 'unixepoch')) as day"
 	}
-
-	return "DATE_FORMAT(FROM_UNIXTIME(created_at), '%Y-%m-%d') as day"
 }
 
 // SearchToolLogsByDayAndTool returns per-day, per-tool aggregates of tool
@@ -1118,7 +1443,15 @@ func dayAggregationSelect() string {
 // invocations (one log row per invocation) and quota is the sum of the
 // charged quota.
 func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLogStatistic, error) {
-	groupSelect := dayAggregationSelect()
+	return SearchToolLogsByDayAndToolWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchToolLogsByDayAndToolWithContext returns per-day tool aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchToolLogsByDayAndToolWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.ToolLogStatistic, error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1153,7 +1486,7 @@ func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLog
 	}
 
 	var stats []*dto.ToolLogStatistic
-	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+	if err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error; err != nil {
 		return nil, errors.Wrap(err, "search tool logs by day and tool")
 	}
 	return stats, nil
@@ -1162,7 +1495,15 @@ func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLog
 // SearchToolLogsByDayAndUser returns per-day, per-user aggregates of tool
 // invocation logs (Type == LogTypeTool).
 func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByUser, error) {
-	groupSelect := dayAggregationSelect()
+	return SearchToolLogsByDayAndUserWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchToolLogsByDayAndUserWithContext returns per-day tool user aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchToolLogsByDayAndUserWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.ToolLogStatisticByUser, error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1172,12 +1513,13 @@ func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLog
 			SELECT ` + groupSelect + `,
 			COALESCE(username, '') as username,
 			user_id,
+			COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			COALESCE(sum(quota), 0) as quota
 			FROM logs
 			WHERE type = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id
+			GROUP BY day, username, user_id, user_uuid
 			ORDER BY day, username, user_id
 		`
 		args = []any{LogTypeTool, start, endExclusive}
@@ -1186,20 +1528,21 @@ func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLog
 			SELECT ` + groupSelect + `,
 			COALESCE(username, '') as username,
 			user_id,
+			COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			COALESCE(sum(quota), 0) as quota
 			FROM logs
 			WHERE type = ?
 			AND user_id = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id
+			GROUP BY day, username, user_id, user_uuid
 			ORDER BY day, username, user_id
 		`
 		args = []any{LogTypeTool, userId, start, endExclusive}
 	}
 
 	var stats []*dto.ToolLogStatisticByUser
-	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+	if err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error; err != nil {
 		return nil, errors.Wrap(err, "search tool logs by day and user")
 	}
 	return stats, nil
@@ -1208,7 +1551,15 @@ func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLog
 // SearchToolLogsByDayAndToken returns per-day, per-token aggregates of tool
 // invocation logs (Type == LogTypeTool).
 func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByToken, error) {
-	groupSelect := dayAggregationSelect()
+	return SearchToolLogsByDayAndTokenWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchToolLogsByDayAndTokenWithContext returns per-day tool token aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchToolLogsByDayAndTokenWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.ToolLogStatisticByToken, error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1218,13 +1569,14 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 			SELECT ` + groupSelect + `,
 			COALESCE(username, '') as username,
 			user_id,
+			COALESCE(user_uuid, '') as user_uuid,
 			COALESCE(token_name, '') as token_name,
 			count(1) as request_count,
 			COALESCE(sum(quota), 0) as quota
 			FROM logs
 			WHERE type = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id, token_name
+			GROUP BY day, username, user_id, user_uuid, token_name
 			ORDER BY day, username, user_id, token_name
 		`
 		args = []any{LogTypeTool, start, endExclusive}
@@ -1233,6 +1585,7 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 			SELECT ` + groupSelect + `,
 			COALESCE(username, '') as username,
 			user_id,
+			COALESCE(user_uuid, '') as user_uuid,
 			COALESCE(token_name, '') as token_name,
 			count(1) as request_count,
 			COALESCE(sum(quota), 0) as quota
@@ -1240,14 +1593,14 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 			WHERE type = ?
 			AND user_id = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id, token_name
+			GROUP BY day, username, user_id, user_uuid, token_name
 			ORDER BY day, username, user_id, token_name
 		`
 		args = []any{LogTypeTool, userId, start, endExclusive}
 	}
 
 	var stats []*dto.ToolLogStatisticByToken
-	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+	if err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error; err != nil {
 		return nil, errors.Wrap(err, "search tool logs by day and token")
 	}
 	return stats, nil
@@ -1257,7 +1610,15 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 // half-open timestamp range [start, endExclusive). `start` and `endExclusive`
 // are Unix seconds.
 func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*dto.LogStatistic, err error) {
-	groupSelect := dayAggregationSelect()
+	return SearchLogsByDayAndModelWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchLogsByDayAndModelWithContext returns per-day model aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchLogsByDayAndModelWithContext(ctx context.Context, userId, start, endExclusive int) (LogStatistics []*dto.LogStatistic, err error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	// If userId is 0, query all users (site-wide statistics)
 	var query string
@@ -1301,7 +1662,7 @@ func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*
 		args = []any{userId, start, endExclusive}
 	}
 
-	err = LOG_DB.Raw(query, args...).Scan(&LogStatistics).Error
+	err = LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&LogStatistics).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search logs by day and model")
 	}
@@ -1311,7 +1672,15 @@ func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*
 // SearchLogsByDayAndUser returns per-day, per-user aggregates for logs within
 // the half-open timestamp range [start, endExclusive).
 func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisticByUser, error) {
-	groupSelect := dayAggregationSelect()
+	return SearchLogsByDayAndUserWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchLogsByDayAndUserWithContext returns per-day user aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchLogsByDayAndUserWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.LogStatisticByUser, error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1319,7 +1688,7 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 	if userId == 0 {
 		query = `
 			SELECT ` + groupSelect + `,
-			username, user_id,
+			username, user_id, COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
@@ -1330,14 +1699,14 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 			FROM logs
 			WHERE type=2
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id
+			GROUP BY day, username, user_id, user_uuid
 			ORDER BY day, username
 		`
 		args = []any{start, endExclusive}
 	} else {
 		query = `
 			SELECT ` + groupSelect + `,
-			username, user_id,
+			username, user_id, COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
@@ -1349,14 +1718,14 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 			WHERE type=2
 			AND user_id = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id
+			GROUP BY day, username, user_id, user_uuid
 			ORDER BY day, username
 		`
 		args = []any{userId, start, endExclusive}
 	}
 
 	var stats []*dto.LogStatisticByUser
-	err := LOG_DB.Raw(query, args...).Scan(&stats).Error
+	err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search logs by day and user")
 	}
@@ -1367,7 +1736,15 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 // username to disambiguate tokens with identical names) for the half-open
 // range [start, endExclusive).
 func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatisticByToken, error) {
-	groupSelect := dayAggregationSelect()
+	return SearchLogsByDayAndTokenWithContext(context.Background(), userId, start, endExclusive)
+}
+
+// SearchLogsByDayAndTokenWithContext returns per-day token aggregates using ctx.
+//
+// Parameters: ctx scopes the database query; userId, start and endExclusive select the window.
+// Return values: the aggregate rows and a wrapped query error.
+func SearchLogsByDayAndTokenWithContext(ctx context.Context, userId, start, endExclusive int) ([]*dto.LogStatisticByToken, error) {
+	groupSelect := dayAggregationSelect(LOG_DB)
 
 	var query string
 	var args []any
@@ -1376,7 +1753,7 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 		query = `
 			SELECT ` + groupSelect + `,
 			COALESCE(token_name, '') as token_name,
-			username, user_id,
+			username, user_id, COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
@@ -1387,7 +1764,7 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 			FROM logs
 			WHERE type=2
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, token_name, username, user_id
+			GROUP BY day, token_name, username, user_id, user_uuid
 			ORDER BY day, username, token_name
 		`
 		args = []any{start, endExclusive}
@@ -1395,7 +1772,7 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 		query = `
 			SELECT ` + groupSelect + `,
 			COALESCE(token_name, '') as token_name,
-			username, user_id,
+			username, user_id, COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
@@ -1407,14 +1784,14 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 			WHERE type=2
 			AND user_id = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, token_name, username, user_id
+			GROUP BY day, token_name, username, user_id, user_uuid
 			ORDER BY day, username, token_name
 		`
 		args = []any{userId, start, endExclusive}
 	}
 
 	var stats []*dto.LogStatisticByToken
-	err := LOG_DB.Raw(query, args...).Scan(&stats).Error
+	err := LOG_DB.WithContext(ctx).Raw(query, args...).Scan(&stats).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search logs by day and token")
 	}

@@ -139,6 +139,21 @@ type Usage struct {
 	InputTokens  int `json:"input_tokens"`
 	OutputTokens int `json:"output_tokens"`
 	TotalTokens  int `json:"total_tokens"`
+	// PromptTokensDetails carries the implicit/explicit context-cache hit count for
+	// text models on the DashScope-native protocol. Alibaba reports the cached
+	// portion of the input under usage.prompt_tokens_details.cached_tokens, and that
+	// portion is billed at a discounted rate (20% of the standard input price).
+	// See https://www.alibabacloud.com/help/en/model-studio/context-cache
+	PromptTokensDetails *PromptTokensDetails `json:"prompt_tokens_details,omitempty"`
+	// CachedTokens is the top-level cache-hit count reported by the multimodal
+	// (e.g. qwen-vl) DashScope-native shape, which places it directly under usage
+	// alongside input_tokens_details rather than nested in prompt_tokens_details.
+	CachedTokens int `json:"cached_tokens,omitempty"`
+}
+
+// PromptTokensDetails mirrors the DashScope usage.prompt_tokens_details object.
+type PromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens,omitempty"`
 }
 
 type Output struct {

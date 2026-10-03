@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/config"
@@ -347,7 +348,8 @@ func startMockSMTPServer(t *testing.T, handler func(net.Conn)) (string, func()) 
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
-				if ne, ok := err.(net.Error); ok && ne.Temporary() {
+				var ne net.Error
+				if errors.As(err, &ne) && ne.Temporary() {
 					continue
 				}
 				return

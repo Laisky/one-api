@@ -53,6 +53,27 @@ func TestMessageStringContent_OutputJSON(t *testing.T) {
 	require.Equal(t, "{\"topic\":\"AI\",\"confidence\":0.9}", *parts[0].Text)
 }
 
+// TestMessageStringContent_MixedFragmentsPreserveOrder verifies externally observable aggregation behavior.
+func TestMessageStringContent_MixedFragmentsPreserveOrder(t *testing.T) {
+	t.Parallel()
+	message := Message{
+		Role: "assistant",
+		Content: []any{
+			map[string]any{"type": "TEXT", "text": "alpha"},
+			"ignored non-map content",
+			map[string]any{
+				"type": "output_json",
+				"json": map[string]any{"answer": 42},
+				"text": ":tail",
+			},
+			map[string]any{"type": "output_json_delta", "partial_json": "!"},
+			map[string]any{"type": ContentTypeImageURL, "text": "ignored unsupported type"},
+		},
+	}
+
+	require.Equal(t, "alpha{\"answer\":42}:tail!", message.StringContent())
+}
+
 // TestSetReasoningContentThinking ensures thinking format only populates the thinking field.
 func TestSetReasoningContentThinking(t *testing.T) {
 	t.Parallel()

@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../utils/common';
 import { useState, useEffect } from 'react';
 import { showError, showSuccess } from 'utils/common';
 
@@ -20,30 +21,35 @@ import { IconRefresh, IconPlus } from '@tabler/icons-react';
 import EditeModal from './component/EditModal';
 
 // ----------------------------------------------------------------------
+const refPayload = (ref) => (typeof ref === 'string' ? { uuid: ref } : { id: ref });
+
 export default function Redemption() {
   const [redemptions, setRedemptions] = useState([]);
   const [activePage, setActivePage] = useState(0);
   const [searching, setSearching] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [openModal, setOpenModal] = useState(false);
-  const [editRedemptionId, setEditRedemptionId] = useState(0);
+  const [editRedemptionId, setEditRedemptionId] = useState('');
 
   const loadRedemptions = async (startIdx) => {
-    setSearching(true);
-    const res = await API.get(`/api/redemption/?p=${startIdx}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setRedemptions(data);
+    try {
+      setSearching(true);
+      const res = await API.get(`/api/redemption/?p=${startIdx}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (startIdx === 0) {
+          setRedemptions(data);
+        } else {
+          let newRedemptions = [...redemptions];
+          newRedemptions.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
+          setRedemptions(newRedemptions);
+        }
       } else {
-        let newRedemptions = [...redemptions];
-        newRedemptions.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
-        setRedemptions(newRedemptions);
+        showError(message);
       }
-    } else {
-      showError(message);
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   const onPaginationChange = (event, activePage) => {
@@ -57,22 +63,25 @@ export default function Redemption() {
   };
 
   const searchRedemptions = async (event) => {
-    event.preventDefault();
-    if (searchKeyword === '') {
-      await loadRedemptions(0);
-      setActivePage(0);
-      return;
+    try {
+      event.preventDefault();
+      if (searchKeyword === '') {
+        await loadRedemptions(0);
+        setActivePage(0);
+        return;
+      }
+      setSearching(true);
+      const res = await API.get(`/api/redemption/search?keyword=${searchKeyword}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setRedemptions(data);
+        setActivePage(0);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
     }
-    setSearching(true);
-    const res = await API.get(`/api/redemption/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setRedemptions(data);
-      setActivePage(0);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
   };
 
   const handleSearchKeyword = (event) => {
@@ -81,7 +90,7 @@ export default function Redemption() {
 
   const manageRedemptions = async (id, action, value) => {
     const url = '/api/redemption/';
-    let data = { id };
+    let data = refPayload(id);
     let res;
     switch (action) {
       case 'delete':
@@ -121,13 +130,13 @@ export default function Redemption() {
 
   const handleCloseModal = () => {
     setOpenModal(false);
-    setEditRedemptionId(0);
+    setEditRedemptionId('');
   };
 
   const handleOkModal = (status) => {
     if (status === true) {
       handleCloseModal();
-      handleRefresh();
+      handleRefresh().catch(reportUIError);
     }
   };
 
@@ -144,13 +153,13 @@ export default function Redemption() {
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2.5}>
         <Typography variant="h4">兑换</Typography>
 
-        <Button variant="contained" color="primary" startIcon={<IconPlus />} onClick={() => handleOpenModal(0)}>
+        <Button variant="contained" color="primary" startIcon={<IconPlus />} onClick={() => handleOpenModal('')}>
           新建兑换码
         </Button>
       </Stack>
       <Card>
-        <Box component="form" onSubmit={searchRedemptions} noValidate sx={{marginTop: 2}}>
-          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索兑换码的ID和名称...'} />
+        <Box component="form" onSubmit={(...uiArgs) => searchRedemptions(...uiArgs).catch(reportUIError)} noValidate sx={{marginTop: 2}}>
+          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索兑换码的ID、名称和 UUID...'} />
         </Box>
         <Toolbar
           sx={{
@@ -163,7 +172,7 @@ export default function Redemption() {
         >
           <Container>
             <ButtonGroup variant="outlined" aria-label="outlined small primary button group" sx={{marginBottom: 2}}>
-              <Button onClick={handleRefresh} startIcon={<IconRefresh width={'18px'} />}>
+              <Button onClick={(...uiArgs) => handleRefresh(...uiArgs).catch(reportUIError)} startIcon={<IconRefresh width={'18px'} />}>
                 刷新
               </Button>
             </ButtonGroup>
@@ -179,7 +188,7 @@ export default function Redemption() {
                   <RedemptionTableRow
                     item={row}
                     manageRedemption={manageRedemptions}
-                    key={row.id}
+                    key={row.uuid || row.id}
                     handleOpenModal={handleOpenModal}
                     setModalRedemptionId={setEditRedemptionId}
                   />

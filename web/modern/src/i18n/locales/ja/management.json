@@ -9,7 +9,8 @@
       "edit": "編集",
       "enable": "有効化",
       "refresh_balance": "{{name}} の残高を更新",
-      "test": "テスト"
+      "test": "テスト",
+      "test_help": "このチャネルの Testing Model 設定に従って、今すぐヘルスチェックを実行します。"
     },
     "columns": {
       "actions": "操作",
@@ -28,7 +29,9 @@
     },
     "confirm": {
       "delete": "このチャンネルを削除してよろしいですか？",
-      "delete_disabled": "無効なチャンネルをすべて削除しますか？この操作は元に戻せません。"
+      "delete_disabled": "無効なチャンネルをすべて削除しますか？この操作は元に戻せません。",
+      "delete_disabled_title": "無効なチャンネルを削除",
+      "delete_title": "チャンネルを削除"
     },
     "description": "API ルーティング チャンネルを設定・管理します",
     "edit": {
@@ -159,6 +162,15 @@
           "placeholder": "ボット操作用ユーザー ID"
         }
       },
+      "custom_headers": {
+        "add": "ヘッダーを追加",
+        "empty": "カスタムヘッダーは設定されていません。",
+        "help": "ここで設定したヘッダーは常に上流へ送信され、クライアント提供のヘッダーを上書きします。{{key}} を使用するとチャンネル API キーを挿入できます。",
+        "key_placeholder": "ヘッダーキー",
+        "label": "カスタムヘッダー",
+        "remove": "ヘッダーを削除",
+        "value_placeholder": "ヘッダー値、例: {{key}}"
+      },
       "description": {
         "create": "新しい API チャンネルを作成",
         "edit": "チャンネル設定を更新"
@@ -188,7 +200,9 @@
           "description": "従来の Completions API は指定したプロンプトに対するテキスト補完を生成します。これは初期のテキスト生成 API で、現在は主に Chat Completions に置き換えられています。",
           "label": "Completions"
         },
+        "custom_url_badge": "カスタム URL",
         "default_badge": "デフォルト",
+        "edit_endpoint": "ドキュメントを表示してエンドポイント URL を編集",
         "embeddings": {
           "description": "Embeddings API はテキストを数値ベクトル表現に変換します。これらのベクトルは意味検索、クラスタリング、類似度比較に利用できます。",
           "label": "埋め込み"
@@ -205,7 +219,12 @@
         "label": "サポートされるエンドポイント",
         "modal": {
           "description": "説明",
-          "example": "cURL の例"
+          "example": "cURL の例",
+          "no_description": "このエンドポイントの詳細ドキュメントはありません。",
+          "no_example": "# 利用可能な例はありません",
+          "url_override": "アップストリーム URL の上書き",
+          "url_override_help": "デフォルトのエンドポイント URL があらかじめ入力されています。編集すると、このエンドポイントを標準外のアップストリームアドレスにルーティングできます。デフォルトのままにすると、チャネルのベース URL に自動的に追従します。",
+          "url_override_reset": "デフォルトに戻す"
         },
         "moderations": {
           "description": "Moderations API はテキストがコンテンツポリシーに違反しているかを判定します。違反の可能性を示すカテゴリとスコアを返します。",
@@ -293,8 +312,10 @@
         "placeholder": "AWS Bedrock 推論プロファイル ARN マッピング:\n{{example}}"
       },
       "key": {
+        "github_placeholder": "有効な Copilot サブスクリプションを持つ GitHub アクセストークン（PAT または OAuth トークン）を入力してください",
         "help": "プロバイダー認証に使用する API キーです。",
-        "label": "API キー"
+        "label": "API キー",
+        "placeholder": "API キーを入力してください"
       },
       "loading": "チャンネルを読み込み中...",
       "mcp": {
@@ -430,6 +451,16 @@
           "placeholder": "SecretKey"
         }
       },
+      "test": {
+        "error_message": "チャンネルをテストできませんでした。",
+        "error_title": "テストエラー",
+        "failed_message": "チャンネルテストに失敗しました。",
+        "failed_title": "テスト失敗",
+        "skipped_message": "チャネルテストをスキップしました: {{message}}",
+        "skipped_title": "スキップ",
+        "success_message": "チャンネルテストが正常に完了しました。",
+        "success_title": "テスト成功"
+      },
       "title": {
         "create": "チャンネルを作成",
         "edit": "チャンネルを編集"
@@ -551,8 +582,12 @@
       "priority_failed_message": "優先度の更新に失敗しました。",
       "priority_failed_title": "更新に失敗しました",
       "priority_saved": "優先度を更新しました。",
+      "status_failed_message": "チャンネル状態を更新できませんでした。",
+      "status_failed_title": "更新に失敗しました",
       "test_failed_message": "不明なエラー",
       "test_failed_title": "チャンネルのテストに失敗しました",
+      "test_skipped_message": "このチャネルはチャット対応のエンドポイントを提供していないため、ヘルスチェックを実行できません。有効なまま維持されました。",
+      "test_skipped_title": "チャネルテストをスキップしました",
       "test_success": "チャンネルのテストに成功しました。",
       "testing_model_failed_message": "テスト用モデルの更新に失敗しました",
       "testing_model_failed_title": "保存に失敗しました",
@@ -565,7 +600,7 @@
     },
     "search": {
       "id_label": "ID",
-      "placeholder": "名前・タイプ・グループでチャンネルを検索..."
+      "placeholder": "名前・タイプ・グループ・UUIDでチャンネルを検索..."
     },
     "status": {
       "active": "有効",
@@ -573,7 +608,10 @@
       "paused": "一時停止"
     },
     "testing": {
-      "auto": "最安"
+      "auto": "最安",
+      "help": "このチャネルのヘルスチェックに使用するモデルを選びます。\n\nCHEAPEST — チャット系 API（chat completions、response API、Claude messages、Gemini chat）で提供される最も安価なモデルを自動的に使用します。\n\nSKIP — このチャネルをヘルスチェックの対象から完全に除外します。プローブは送信されず、自動的に無効化されることもありません。\n\nテストできるのはチャット形式のモデルのみです。埋め込み、リランク、モデレーション、補完、メディア系のモデルは除外されます。API 形式が不明なモデルも既定で除外されるため、テストしたい場合はここで明示的に選択してください。",
+      "help_label": "テスト用モデルの選択ロジック",
+      "skip": "SKIP（テストしない）"
     },
     "title": "チャンネル",
     "toolbar": {
@@ -585,6 +623,7 @@
       "refresh_balances": "全残高を更新",
       "refresh_balances_mobile": "残高を更新",
       "test_all": "すべてテスト",
+      "test_all_help": "すべてのチャネルをヘルスチェックします。各チャネルはそれぞれの Testing Model 設定（CHEAPEST の場合は最も安価なチャット形式モデル）を使用します。\n\nSKIP が設定されたチャネル、およびプローブ可能なチャット形式モデルを持たないチャネルはスキップされ、失敗として報告されることも自動的に無効化されることもありません。",
       "test_all_mobile": "全チャンネルをテスト"
     },
     "type_unknown": "タイプ {{type}}"
@@ -668,9 +707,13 @@
         "label": "クォータ"
       }
     },
+    "notifications": {
+      "action_failed_message": "変更を適用できませんでした。",
+      "action_failed_title": "操作に失敗しました"
+    },
     "search": {
       "dropdown_placeholder": "引き換え名を入力...",
-      "placeholder": "名前で引き換えを検索..."
+      "placeholder": "名前またはUUIDで引き換えを検索..."
     },
     "status": {
       "disabled": "無効",
@@ -789,7 +832,8 @@
         "used_title": "使用済み: {{label}}"
       },
       "confirm": {
-        "delete": "トークン \"{{label}}\" を削除してよろしいですか？"
+        "delete": "トークン \"{{label}}\" を削除してよろしいですか？",
+        "delete_title": "トークンを削除"
       },
       "description": "API アクセストークンを管理",
       "dialog": {
@@ -800,14 +844,20 @@
       "empty": "トークンが見つかりません。最初のトークンを作成して開始してください。",
       "key": {
         "copied": "コピーしました！",
-        "copy": "トークンをコピー"
+        "copy": "トークンをコピー",
+        "hide": "キーを非表示",
+        "show": "キーを表示"
+      },
+      "notifications": {
+        "action_failed_message": "変更を適用できませんでした。",
+        "action_failed_title": "操作に失敗しました"
       },
       "quota": {
         "unlimited": "無制限"
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "名前でトークンを検索...",
+        "placeholder": "名前またはUUIDでトークンを検索...",
         "quota_label": "クォータ: {{quota}}"
       },
       "share": {
@@ -855,7 +905,11 @@
           "create_failed_message": "ユーザーを作成できません。",
           "create_failed_title": "作成に失敗"
         },
-        "title": "ユーザーを作成"
+        "title": "ユーザーを作成",
+        "validation": {
+          "password_min": "パスワードは{{count}}文字以上で入力してください。",
+          "username_required": "ユーザー名を入力してください。"
+        }
       },
       "topup": {
         "actions": {
@@ -876,7 +930,10 @@
           "submit_failed_message": "ユーザーにチャージできません。",
           "submit_failed_title": "チャージに失敗"
         },
-        "title": "{{username}} にチャージ"
+        "title": "{{username}} にチャージ",
+        "validation": {
+          "quota_integer": "クォータは整数で入力してください。"
+        }
       }
     },
     "edit": {
@@ -915,6 +972,9 @@
         "unexpected_title": "予期しないエラー"
       },
       "fields": {
+        "created_at": {
+          "label": "登録日時"
+        },
         "display_name": {
           "help": "UI に表示される任意の読みやすい名前。",
           "label": "表示名",
@@ -949,6 +1009,9 @@
         "quota": {
           "help": "クォータの単位はトークンです。USD 推定値は管理者が設定した単位比率を使用します。",
           "label": "クォータ ({{usd}})"
+        },
+        "updated_at": {
+          "label": "最終更新"
         },
         "username": {
           "help": "一意のログイン名。3文字以上。",
@@ -1046,7 +1109,7 @@
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "ユーザー名でユーザーを検索...",
+        "placeholder": "ユーザー名またはUUIDでユーザーを検索...",
         "role_label": "ロール: {{role}}",
         "status_label": "ステータス: {{status}}"
       },

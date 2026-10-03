@@ -17,21 +17,21 @@ describe('useClipboardManager', () => {
     const { result } = renderHook(() => useClipboardManager());
 
     act(() => {
-      result.current.handleCopySuccess(42);
+      result.current.handleCopySuccess('018f0000-0000-7000-8000-000000000042');
     });
 
-    expect(result.current.copiedTokens[42]).toBe(true);
+    expect(result.current.copiedTokens['018f0000-0000-7000-8000-000000000042']).toBe(true);
 
     act(() => {
       vi.advanceTimersByTime(3000);
     });
 
-    expect(result.current.copiedTokens[42]).toBeUndefined();
+    expect(result.current.copiedTokens['018f0000-0000-7000-8000-000000000042']).toBeUndefined();
   });
 
   it('records the token that needs manual copying and clears it on demand', () => {
     const { result } = renderHook(() => useClipboardManager());
-    const token = { id: 7, key: 'manual-key' };
+    const token = { ref: '018f0000-0000-7000-8000-000000000007', key: 'manual-key' };
 
     act(() => {
       result.current.handleCopyFailure(token);

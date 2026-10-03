@@ -4,7 +4,24 @@ import (
 	"context"
 
 	"github.com/Laisky/errors/v2"
+	"gorm.io/gorm"
+
+	"github.com/Laisky/one-api/common/identity"
 )
+
+// refs returns the token and user references denormalised on the transaction row.
+// No I/O: token_uuid and user_uuid are stored on the row itself.
+//
+// Return values:
+//   - identity.TokenRef: the token the hold was placed on (name unknown here).
+//   - identity.UserRef: the owner of that token (username unknown here).
+func (txn *TokenTransaction) refs() (identity.TokenRef, identity.UserRef) {
+	if txn == nil {
+		return identity.TokenRef{}, identity.UserRef{}
+	}
+	return identity.NewTokenRef(txn.TokenId, derefStr(txn.TokenUUID), ""),
+		identity.NewUserRef(txn.UserId, derefStr(txn.UserUUID), "")
+}
 
 const (
 	// TokenTransactionStatusPending indicates the pre-consume hold has been created
@@ -42,24 +59,28 @@ const (
 //
 // GORM automatically manages CreatedAt/UpdatedAt as millisecond timestamps.
 type TokenTransaction struct {
-	Id            int    `json:"id"`
-	TransactionID string `json:"transaction_id" gorm:"size:128;uniqueIndex:uidx_token_txn"`
-	TokenId       int    `json:"token_id" gorm:"index;uniqueIndex:uidx_token_txn"`
-	UserId        int    `json:"user_id" gorm:"index"`
-	Status        int    `json:"status" gorm:"index"`
-	PreQuota      int64  `json:"pre_quota"`
-	FinalQuota    *int64 `json:"final_quota"`
-	Reason        string `json:"reason" gorm:"type:text"`
-	RequestId     string `json:"request_id" gorm:"size:64"`
-	TraceId       string `json:"trace_id" gorm:"size:64"`
-	ExpiresAt     int64  `json:"expires_at" gorm:"index"`
-	ConfirmedAt   *int64 `json:"confirmed_at"`
-	CanceledAt    *int64 `json:"canceled_at"`
-	AutoConfirmed bool   `json:"auto_confirmed" gorm:"default:false"`
-	LogId         *int   `json:"log_id" gorm:"index"`
-	ElapsedTimeMs *int64 `json:"elapsed_time_ms"`
-	CreatedAt     int64  `json:"created_at" gorm:"autoCreateTime:milli"`
-	UpdatedAt     int64  `json:"updated_at" gorm:"autoUpdateTime:milli"`
+	Id            int     `json:"-"`
+	UUID          string  `json:"uuid" gorm:"type:char(36);column:uuid"`
+	TransactionID string  `json:"transaction_id" gorm:"size:128;uniqueIndex:uidx_token_txn"`
+	TokenId       int     `json:"-" gorm:"index;uniqueIndex:uidx_token_txn"`
+	TokenUUID     *string `json:"token_uuid" gorm:"type:char(36);column:token_uuid;index"`
+	UserId        int     `json:"-" gorm:"index"`
+	UserUUID      *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
+	Status        int     `json:"status" gorm:"index"`
+	PreQuota      int64   `json:"pre_quota"`
+	FinalQuota    *int64  `json:"final_quota"`
+	Reason        string  `json:"reason" gorm:"type:text"`
+	RequestId     string  `json:"request_id" gorm:"size:64"`
+	TraceId       string  `json:"trace_id" gorm:"size:64"`
+	ExpiresAt     int64   `json:"expires_at" gorm:"index"`
+	ConfirmedAt   *int64  `json:"confirmed_at"`
+	CanceledAt    *int64  `json:"canceled_at"`
+	AutoConfirmed bool    `json:"auto_confirmed" gorm:"default:false"`
+	LogId         *int    `json:"-" gorm:"index"`
+	LogUUID       *string `json:"log_uuid" gorm:"type:char(36);column:log_uuid;index"`
+	ElapsedTimeMs *int64  `json:"elapsed_time_ms"`
+	CreatedAt     int64   `json:"created_at" gorm:"autoCreateTime:milli"`
+	UpdatedAt     int64   `json:"updated_at" gorm:"autoUpdateTime:milli"`
 }
 
 // TokenTransactionStatusString converts a status code into a human-readable label.
@@ -91,7 +112,10 @@ func CreateTokenTransaction(ctx context.Context, txn *TokenTransaction) error {
 	}
 
 	if err := DB.WithContext(ctx).Create(txn).Error; err != nil {
-		return errors.Wrap(err, "failed to create token transaction")
+		tokenRef, ownerRef := txn.refs()
+		return identity.Tag(
+			errors.Wrap(err, "failed to create token transaction"),
+			tokenRef, ownerRef)
 	}
 	return nil
 }
@@ -111,7 +135,9 @@ func GetTokenTransactionByTokenAndID(ctx context.Context, tokenID int, transacti
 		Where("token_id = ? AND transaction_id = ?", tokenID, transactionID).
 		First(txn).Error
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to fetch token transaction: token_id=%d, transaction_id=%s", tokenID, transactionID)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "failed to fetch token transaction: token_id=%d, transaction_id=%s", tokenID, transactionID),
+			LookupTokenRef(ctx, tokenID))
 	}
 	return txn, nil
 }
@@ -130,69 +156,7 @@ func UpdateTokenTransaction(ctx context.Context, transactionID int, updates map[
 	if len(updates) == 0 {
 		return nil
 	}
-	if err := validateTokenTransactionUpdates(updates); err != nil {
-		return errors.Wrap(err, "validate token transaction updates")
-	}
 
-	if err := DB.WithContext(ctx).Model(&TokenTransaction{}).
-		Where("id = ?", transactionID).
-		Updates(updates).Error; err != nil {
-		return errors.Wrapf(err, "failed to update token transaction: id=%d", transactionID)
-	}
-	return nil
-}
-
-// UpdatePendingTokenTransaction applies a partial update only when the transaction is still pending.
-// Parameters:
-//   - ctx: request context.
-//   - transactionID: primary key of the transaction to update.
-//   - updates: columns to update while atomically claiming the pending state.
-//
-// Returns an error if the update fails or if another worker already finalized the transaction.
-func UpdatePendingTokenTransaction(ctx context.Context, transactionID int, updates map[string]any) error {
-	updated, err := TryUpdatePendingTokenTransaction(ctx, transactionID, updates)
-	if err != nil {
-		return errors.Wrap(err, "try update pending token transaction")
-	}
-	if !updated {
-		return errors.Errorf("token transaction %d is not pending", transactionID)
-	}
-	return nil
-}
-
-// TryUpdatePendingTokenTransaction applies a partial update only when the transaction is still pending.
-// Parameters:
-//   - ctx: request context.
-//   - transactionID: primary key of the transaction to update.
-//   - updates: columns to update while atomically claiming the pending state.
-//
-// Returns true when the pending transaction was updated, false when it was already finalized, and an error for validation or database failures.
-func TryUpdatePendingTokenTransaction(ctx context.Context, transactionID int, updates map[string]any) (bool, error) {
-	if transactionID == 0 {
-		return false, errors.Errorf("transaction id cannot be zero")
-	}
-	if len(updates) == 0 {
-		return true, nil
-	}
-	if err := validateTokenTransactionUpdates(updates); err != nil {
-		return false, errors.Wrap(err, "validate token transaction updates")
-	}
-
-	result := DB.WithContext(ctx).Model(&TokenTransaction{}).
-		Where("id = ? AND status = ?", transactionID, TokenTransactionStatusPending).
-		Updates(updates)
-	if result.Error != nil {
-		return false, errors.Wrapf(result.Error, "failed to update pending token transaction: id=%d", transactionID)
-	}
-	return result.RowsAffected == 1, nil
-}
-
-// validateTokenTransactionUpdates ensures partial token transaction updates only target approved columns.
-// Parameters:
-//   - updates: columns and values the caller wants to persist.
-//
-// Returns an error when an unsupported column is present.
-func validateTokenTransactionUpdates(updates map[string]any) error {
 	for field := range updates {
 		switch field {
 		case "status", "final_quota", "confirmed_at", "auto_confirmed", "expires_at", "reason", "elapsed_time_ms", "canceled_at":
@@ -202,6 +166,11 @@ func validateTokenTransactionUpdates(updates map[string]any) error {
 		}
 	}
 
+	if err := DB.WithContext(ctx).Model(&TokenTransaction{}).
+		Where("id = ?", transactionID).
+		Updates(updates).Error; err != nil {
+		return errors.Wrapf(err, "failed to update token transaction: id=%d", transactionID)
+	}
 	return nil
 }
 
@@ -218,7 +187,9 @@ func AutoConfirmExpiredTokenTransactions(ctx context.Context, tokenID int, now i
 		Where("token_id = ? AND status = ? AND expires_at > 0 AND expires_at <= ?", tokenID, TokenTransactionStatusPending, now).
 		Find(&pending).Error
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to find expired token transactions: token_id=%d", tokenID)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "failed to find expired token transactions: token_id=%d", tokenID),
+			LookupTokenRef(ctx, tokenID))
 	}
 
 	if len(pending) == 0 {
@@ -227,29 +198,18 @@ func AutoConfirmExpiredTokenTransactions(ctx context.Context, tokenID int, now i
 
 	confirmed := make([]*TokenTransaction, 0, len(pending))
 	for _, txn := range pending {
-		final := txn.PreQuota
-		confirmedAt := now
-		updates := map[string]any{
-			"status":         TokenTransactionStatusAutoConfirmed,
-			"final_quota":    final,
-			"confirmed_at":   confirmedAt,
-			"auto_confirmed": true,
-			"expires_at":     int64(0),
-		}
-
-		updated, updateErr := TryUpdatePendingTokenTransaction(ctx, txn.Id, updates)
-		if updateErr != nil {
-			return nil, errors.Wrapf(updateErr, "failed to auto-confirm token transaction: id=%d", txn.Id)
-		}
-		if !updated {
+		updated, finalizeErr := FinalizePendingTokenTransaction(ctx, tokenID, txn.Id, TokenTransactionFinalization{
+			Status: TokenTransactionStatusAutoConfirmed,
+			At:     now,
+		})
+		if errors.Is(finalizeErr, ErrTokenTransactionNotPending) {
 			continue
 		}
-
-		txn.Status = TokenTransactionStatusAutoConfirmed
-		txn.AutoConfirmed = true
-		txn.FinalQuota = &final
-		txn.ConfirmedAt = &confirmedAt
-		confirmed = append(confirmed, txn)
+		if finalizeErr != nil {
+			tokenRef, ownerRef := txn.refs()
+			return nil, identity.Tag(errors.Wrapf(finalizeErr, "auto-confirm token transaction: id=%d", txn.Id), tokenRef, ownerRef)
+		}
+		confirmed = append(confirmed, updated)
 	}
 
 	return confirmed, nil
@@ -266,14 +226,52 @@ func AutoConfirmExpiredTokenTransactions(ctx context.Context, tokenID int, now i
 //   - []*TokenTransaction: list of transaction records.
 //   - error: wrapped error if the query fails.
 func GetTokenTransactionsByTokenID(ctx context.Context, tokenID int, startIdx int, num int) ([]*TokenTransaction, error) {
+	return SearchTokenTransactionsByTokenID(ctx, tokenID, "", startIdx, num)
+}
+
+// applyTokenTransactionKeyword narrows a token transaction query by a search keyword.
+//
+// Transactions carry no human-readable name, so only UUID keywords filter: the
+// transaction's own uuid plus the token/user/log uuids it references. A non-UUID keyword
+// is ignored, which preserves the endpoint's previous unfiltered behaviour exactly.
+//
+// Parameters:
+//   - query: query to narrow; never mutated, GORM returns a new statement.
+//   - keyword: raw search keyword supplied by the request.
+//
+// Return values:
+//   - *gorm.DB: narrowed query, or query unchanged when the keyword is not a UUID.
+func applyTokenTransactionKeyword(query *gorm.DB, keyword string) *gorm.DB {
+	scoped, _ := applyUUIDKeyword(query, keyword, "uuid", "token_uuid", "user_uuid", "log_uuid")
+	return scoped
+}
+
+// SearchTokenTransactionsByTokenID retrieves a paginated list of a token's transactions
+// narrowed by an optional UUID keyword.
+//
+// Parameters:
+//   - ctx: request context for cancellation.
+//   - tokenID: token ID whose transactions to retrieve; always ANDs, so a UUID keyword
+//     can never surface another token's transactions.
+//   - keyword: optional UUID keyword matching the transaction uuid or its token/user/log
+//     uuid; a non-UUID keyword applies no filter.
+//   - startIdx: offset for pagination.
+//   - num: number of records to return.
+//
+// Returns:
+//   - []*TokenTransaction: list of transaction records.
+//   - error: wrapped error if the query fails.
+func SearchTokenTransactionsByTokenID(ctx context.Context, tokenID int, keyword string, startIdx int, num int) ([]*TokenTransaction, error) {
 	var txns []*TokenTransaction
-	err := DB.WithContext(ctx).
+	err := applyTokenTransactionKeyword(DB.WithContext(ctx).Model(&TokenTransaction{}), keyword).
 		Where("token_id = ?", tokenID).
 		Order("id desc").
 		Limit(num).Offset(startIdx).
 		Find(&txns).Error
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to fetch token transactions: token_id=%d", tokenID)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "failed to fetch token transactions: token_id=%d", tokenID),
+			LookupTokenRef(ctx, tokenID))
 	}
 	return txns, nil
 }
@@ -287,12 +285,32 @@ func GetTokenTransactionsByTokenID(ctx context.Context, tokenID int, startIdx in
 //   - int64: total count.
 //   - error: wrapped error if the query fails.
 func GetTokenTransactionCountByTokenID(ctx context.Context, tokenID int) (int64, error) {
+	return CountSearchedTokenTransactionsByTokenID(ctx, tokenID, "")
+}
+
+// CountSearchedTokenTransactionsByTokenID returns the number of a token's transactions
+// matching an optional UUID keyword.
+//
+// It applies exactly the same keyword filter as SearchTokenTransactionsByTokenID so the
+// reported total always agrees with the rows a client can page through.
+//
+// Parameters:
+//   - ctx: request context for cancellation.
+//   - tokenID: token ID to query.
+//   - keyword: optional UUID keyword; a non-UUID keyword applies no filter.
+//
+// Returns:
+//   - int64: total count.
+//   - error: wrapped error if the query fails.
+func CountSearchedTokenTransactionsByTokenID(ctx context.Context, tokenID int, keyword string) (int64, error) {
 	var count int64
-	err := DB.WithContext(ctx).Model(&TokenTransaction{}).
+	err := applyTokenTransactionKeyword(DB.WithContext(ctx).Model(&TokenTransaction{}), keyword).
 		Where("token_id = ?", tokenID).
 		Count(&count).Error
 	if err != nil {
-		return 0, errors.Wrapf(err, "failed to count token transactions: token_id=%d", tokenID)
+		return 0, identity.Tag(
+			errors.Wrapf(err, "failed to count token transactions: token_id=%d", tokenID),
+			LookupTokenRef(ctx, tokenID))
 	}
 	return count, nil
 }

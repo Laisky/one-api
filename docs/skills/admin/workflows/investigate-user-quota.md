@@ -14,8 +14,11 @@ User reports: "my quota is gone already" or "why is my bill so high?" Walk the e
   ```bash
   curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
     "$ONEAPI_BASE_URL/api/user/search?keyword=alice" \
-    | jq '.data[] | {id, username, email, role, status, group, quota, used_quota}'
-  UID=17
+    | jq '.data[] | {uuid, username, email, role, status, group, quota, used_quota}'
+  # Pick the exact username — search is a substring match. The uuid is the only identifier.
+  USER_UUID=$(curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
+    "$ONEAPI_BASE_URL/api/user/search?keyword=alice" \
+    | jq -r '.data[] | select(.username == "alice") | .uuid')
   ```
 
 - [ ] **2. Check quota state and convert to dollars:**
@@ -25,20 +28,21 @@ User reports: "my quota is gone already" or "why is my bill so high?" Walk the e
     | jq -r '.data[] | select(.key=="QuotaPerUnit") | .value')
 
   curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-    "$ONEAPI_BASE_URL/api/user/$UID" \
-    | jq --argjson qpu "$QPU" '{
-        id, username, group, status,
+    "$ONEAPI_BASE_URL/api/user/$USER_UUID" \
+    | jq --argjson qpu "$QPU" '.data | {
+        uuid, username, group, status,
         quota_units: .quota, quota_usd: (.quota/$qpu),
         used_units: .used_quota, used_usd: (.used_quota/$qpu),
         request_count
       }'
   ```
 
-- [ ] **3. List their tokens** (admin read endpoint):
+- [ ] **3. List their tokens** (admin read endpoint; `user_id` takes the user's uuid):
   ```bash
   curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-    "$ONEAPI_BASE_URL/api/admin/tokens/?user_id=$UID&size=100" \
-    | jq '.data[] | {id, name, status, unlimited_quota, remain_quota, used_quota, subnet, models, expired_time}'
+    --data-urlencode "user_id=$USER_UUID" --data-urlencode "size=100" \
+    -G "$ONEAPI_BASE_URL/api/admin/tokens/" \
+    | jq '.data[] | {uuid, name, status, unlimited_quota, remain_quota, used_quota, subnet, models, expired_time}'
   ```
   Look for: high `used_quota` on one token (the leak), `unlimited_quota: true` (misissued), suspicious `subnet` (too permissive / empty).
 
@@ -78,7 +82,7 @@ User reports: "my quota is gone already" or "why is my bill so high?" Walk the e
     --data-urlencode "size=1000" \
     -G "$ONEAPI_BASE_URL/api/log/" \
     | jq --argjson qpu "$QPU" '
-        [.data[] | {token: .token_name, model: .model_name, quota, channel: .channel_id, tokens: (.prompt_tokens + .completion_tokens)}]
+        [.data[] | {token: .token_name, model: .model_name, quota, channel: .channel_uuid, tokens: (.prompt_tokens + .completion_tokens)}]
         | group_by([.token, .model])
         | map({token: .[0].token, model: .[0].model, calls: length, tokens: (map(.tokens)|add), usd: ((map(.quota)|add)/$qpu)})
         | sort_by(-.usd)
@@ -95,13 +99,13 @@ User reports: "my quota is gone already" or "why is my bill so high?" Walk the e
     --data-urlencode "sort=quota" \
     --data-urlencode "order=desc" \
     -G "$ONEAPI_BASE_URL/api/log/" \
-    | jq '.data[] | {created_at, token_name, model_name, prompt_tokens, completion_tokens, quota, trace_id, request_id}'
+    | jq '.data[] | {uuid, created_at, token_name, token_uuid, model_name, prompt_tokens, completion_tokens, quota, trace_id, request_id}'
   ```
 
-- [ ] **8. Trace a specific suspicious call** for timing / upstream attribution:
+- [ ] **8. Trace a specific suspicious call** for timing / upstream attribution (`<LOG_UUID>` is the row's `uuid` from step 7):
   ```bash
   curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-    "$ONEAPI_BASE_URL/api/trace/log/<LOG_ID>" | jq .
+    "$ONEAPI_BASE_URL/api/trace/log/<LOG_UUID>" | jq .
   ```
 
 ## Take action
@@ -119,7 +123,7 @@ Pick the smallest hammer:
 - **Tighten subnet or models list** on the token — admins can't, but can tell the user what to restrict.
 - **Adjust the user's group** to a ratio-capped group (e.g. `"throttled"`) — prevents repeat:
   ```bash
-  jq -nc --argjson id "$UID" '{id: $id, group: "throttled"}' \
+  jq -nc --arg uuid "$USER_UUID" '{uuid: $uuid, group: "throttled"}' \
     | curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
         -H "Content-Type: application/json" \
         -X PUT -d @- "$ONEAPI_BASE_URL/api/user/"
@@ -129,11 +133,11 @@ Pick the smallest hammer:
 
 ## Document the outcome
 
-Write down: user id, token id (if identified), incident time window, estimated loss in USD, action taken, follow-up (e.g. key rotation). This lives in your team's incident log — not an API call.
+Write down: user uuid, token uuid (if identified), incident time window, estimated loss in USD, action taken, follow-up (e.g. key rotation). This lives in your team's incident log — not an API call.
 
 ## Pitfalls
 
-- **Username substring match** in log filter means `alice` can match `alice-bot`. Cross-check with user id in the log output.
+- **Username substring match** in log filter means `alice` can match `alice-bot`. Cross-check with `user_uuid` in the log output against `$USER_UUID`.
 - **Streaming calls report tokens after completion** — a still-running megaburst won't show up until it finishes.
 - **`content` field can be large** on failed responses. `jq` may be slow for thousands of rows — filter first with time window and specific token name.
 - **Group change doesn't affect in-flight requests.** Apply before disabling, so the user sees consistent behavior.

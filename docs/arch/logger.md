@@ -31,6 +31,7 @@ The goal is to let multiple teams and projects integrate logging in a consistent
     - [4.1 Shared logger package](#41-shared-logger-package)
     - [4.2 Gin integration](#42-gin-integration)
     - [4.3 DB audit/usage log stream](#43-db-auditusage-log-stream)
+    - [4.4 Verbosity and test-run silence](#44-verbosity-and-test-run-silence)
   - [5. Integration Steps (Copy/Paste Checklist)](#5-integration-steps-copypaste-checklist)
     - [5.1 Initialize logging early (before serving requests)](#51-initialize-logging-early-before-serving-requests)
     - [5.2 Configure log directory](#52-configure-log-directory)
@@ -178,7 +179,7 @@ The reference implementation lives in `common/logger`:
 - `logger.Logger`: the shared structured logger instance.
 - `logger.SetupLogger()`: configures output sinks (stdout + file) and optional rotation.
 - `logger.SetupEnhancedLogger(ctx)`: adds alert push hook (if configured) and stable context fields (e.g., host).
-- `logger.StartLogRetentionCleaner(ctx, days, logDir)`: deletes old log files (time-based retention).
+- `logger.StartLogRetentionCleaner(ctx, days, logDir)`: bounds the log directory by age, total size, and free disk (see 6.3).
 
 ### 4.2 Gin integration
 
@@ -196,6 +197,25 @@ The DB audit log stream is backed by `model.Log` and stored via `LOG_DB`.
 - Initialize with `model.InitLogDB()`.
 - Record with helpers like `RecordConsumeLog`, `RecordManageLog`, etc.
 - Include `request_id`/`trace_id` where possible (`RecordLogWithIDs`, `RecordTopupLogWithIDs`, etc).
+
+### 4.4 Verbosity and test-run silence
+
+The starting level of `logger.Logger` is resolved once, at package init, in this order:
+
+1. `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `fatal`) — an unset or unrecognized value falls through.
+2. `DEBUG=true` → `debug`.
+3. Context default: `info` for a running server, `fatal` (i.e. silent) when the process is a `go test` binary.
+
+The same decision is applied to two other loggers so one knob governs the whole process:
+
+- `glog.Shared`, which `gmw.GetLogger` falls back to whenever it receives a context that carries no request logger.
+- GORM (`model.gormLogger`), which additionally sets `IgnoreRecordNotFoundError: true` — "record not found" is normal control flow here (every `First()` probe that decides whether to insert), not a query error worth printing.
+
+The test default exists because relay/billing logging otherwise buries test results in megabytes of interleaved output. Bring it back for a single run when debugging:
+
+```bash
+LOG_LEVEL=info go test ./relay/controller/ -run TestBilling -v
+```
 
 ## 5. Integration Steps (Copy/Paste Checklist)
 
@@ -324,14 +344,21 @@ Centralized logging usually starts with stdout, but file sinks are still common 
 
 ### 6.1 File sink behavior
 
-`logger.SetupLogger()` writes to:
+`logger.SetupLogger()` attaches sinks according to `APP_LOG_SINK`:
 
-- stdout (always)
-- one file sink under `logger.LogDir` (when non-empty)
+| `APP_LOG_SINK` | stdout/stderr | rotating file under `logger.LogDir` |
+| --- | --- | --- |
+| `both` (default) | yes | yes |
+| `stdout` | yes | no |
+| `file` | no | yes |
 
 Default filename:
 
 - `oneapi.log`
+
+`APP_LOG_SINK=stdout` is the right choice under Kubernetes: the platform
+already collects and rotates container output, and it removes local log growth
+as a failure mode entirely.
 
 ### 6.2 Rotation
 
@@ -348,21 +375,63 @@ Rotation intervals supported:
 
 Implementation detail (for teams extending this code): rotation is implemented via a Zap custom sink registered under the scheme `oneapi-rotate`.
 
-### 6.3 Retention
+### 6.3 Retention and disk guards
 
 Retention is implemented in two layers:
 
 1. **Writer retention** (when rotation is enabled) can use `retention_days` to prune.
-2. A **retention cleaner** deletes `.log` files older than a cutoff once every 24h:
+2. A **retention cleaner** enforces three independent limits every
+   `RETENTION_SWEEP_INTERVAL_MINUTES` (default 1440, i.e. the historical 24-hour
+   cadence; `60` under the `scaled` and `external` profiles):
 
 ```go
 logger.StartLogRetentionCleaner(ctx, config.LogRetentionDays, logger.LogDir)
 ```
 
-Rules:
+| Limit | Variable | Default | Behavior |
+| --- | --- | --- | --- |
+| Age | `LOG_RETENTION_DAYS` | `0` = disabled (`3` scaled, `1` external) | deletes files older than the cutoff, by modification time (UTC) |
+| Directory size | `LOG_MAX_TOTAL_SIZE_MB` | `0` = unlimited (`20480` scaled, `10240` external) | deletes oldest-first until the directory fits |
+| Free disk | `LOG_MIN_FREE_DISK_MB` | `0` = disabled (`1024` scaled and external) | deletes oldest-first, then raises the log level to `warn` if that is still not enough |
 
-- `LOG_RETENTION_DAYS <= 0` disables the retention worker.
-- Retention uses file modification time (UTC) to decide expiration.
+Rules and rationale:
+
+- **All three guards are off under the default (`standalone`) profile.** An
+  upgrade must never delete files an operator chose to keep, so the age limit,
+  the size ceiling, and the free-disk floor all default to `0`. At a few
+  thousand requests per second the log directory grows by roughly 1 TB/day, so
+  when all three are off the cleaner logs one warning at startup naming the
+  variables and `OBSERVABILITY_PROFILE=scaled`, which enables them together.
+- **Age alone cannot bound disk.** A single day of logs can exceed the volume,
+  and the age sweeper would still consider every file fresh. That is what the
+  size ceiling and the free-disk floor are for.
+- **The newest file is never deleted.** It is the file the logger currently
+  holds open; unlinking it frees nothing until the next rotation while losing
+  the log an operator is most likely reading.
+- **Level escalation is a last resort.** When purging every rotated file still
+  leaves free space below `LOG_MIN_FREE_DISK_MB`, the process stops emitting
+  anything below `warn` until space recovers, then restores the configured
+  level. A gateway that dies because its disk filled is worse than a gateway
+  that stops writing INFO.
+- The free-disk guard needs `statfs`, so it is inert on non-unix platforms.
+
+### 6.4 Sampling
+
+At a few thousand requests per second the same handful of message strings
+dominate log volume. `LOG_SAMPLE_INITIAL` (default `0` = disabled; `100` under
+the `scaled` and `external` profiles) installs zap's sampler through
+`logger.SetupEnhancedLogger`: it keeps the first `LOG_SAMPLE_INITIAL` entries of
+each `(level, message)` pair per `LOG_SAMPLE_TICK_MS` window, then one in every
+`LOG_SAMPLE_THEREAFTER`.
+
+**Sampling never applies at `warn` and above.** A repeated warning or error
+reports the *scale* of an incident — how many channels are failing, how many
+requests are timing out — and thinning it would misreport how bad things are.
+The level boundary is implemented by `levelBoundedSampler` in
+`common/logger/sampling.go`.
+
+Because a rare message keeps its own budget, sampling thins repetitive
+per-request chatter without hiding infrequent events.
 
 ## 7. Alert Push Integration (Escalation)
 

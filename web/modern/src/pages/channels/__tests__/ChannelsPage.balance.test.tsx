@@ -87,16 +87,9 @@ describe('ChannelsPage balance refresh', () => {
     });
   });
 
-  it('refreshes all balances from header bulk action', async () => {
+  it('does not expose a global balance refresh operation', async () => {
     renderPage();
-    await waitFor(() => expect(mockApiGet).toHaveBeenCalled());
-
-    const user = userEvent.setup();
-    const bulkBtn = await screen.findByRole('button', { name: /refresh all balances/i });
-    await user.click(bulkBtn);
-
-    await waitFor(() => {
-      expect(mockApiGet).toHaveBeenCalledWith('/api/channel/update_balance');
-    });
+    await screen.findByLabelText('Refresh balance for Channel 3');
+    expect(screen.queryByRole('button', { name: /refresh all balances/i })).not.toBeInTheDocument();
   });
 });

@@ -31,7 +31,7 @@ func NormalizeDateRange(fromStr, toStr string, maxDays int) (int64, int64, error
 	toDay := time.Date(toDate.Year(), toDate.Month(), toDate.Day(), 0, 0, 0, 0, time.UTC)
 
 	if toDay.Before(fromDay) {
-		return 0, 0, errFromDateAfterToDate
+		return 0, 0, errors.WithStack(errFromDateAfterToDate)
 	}
 
 	inclusiveDays := int(toDay.Sub(fromDay).Hours()/24) + 1

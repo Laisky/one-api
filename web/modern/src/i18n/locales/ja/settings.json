@@ -53,11 +53,11 @@
     },
     "monitoring": {
       "automatic_disable_channel": "チャネル自動停止",
-      "automatic_disable_channel_desc": "失敗が続くチャネルを自動的に無効化します。",
+      "automatic_disable_channel_desc": "認証・クォータ・権限のエラーでヘルスチェックが失敗した場合、上流に接続できない場合、または下記の応答時間しきい値を超えた場合に、チャネルを自動的に無効化します。単発の上流 5xx では無効化されません。\n\nヘルスチェックは各チャネルの Testing Model（または最も安価なチャット形式モデル）でプローブします。SKIP に設定されたチャネル、およびチャット形式モデルを持たないチャネルはスキップされ、無効化されることはありません。",
       "automatic_enable_channel": "チャネル自動再開",
-      "automatic_enable_channel_desc": "状態が回復した無効化済みチャネルを自動で再有効化します。",
+      "automatic_enable_channel_desc": "無効化されたチャネルのヘルスチェックが再び成功したとき、自動的に有効化します。スキップされたチャネルはプローブされないため、自動的に再有効化されることはありません。",
       "channel_disable_threshold": "無効化の閾値",
-      "channel_disable_threshold_desc": "チャネルを自動停止する失敗率（%）です。既定値は 5%。",
+      "channel_disable_threshold_desc": "チャネルのヘルスチェックにおける応答時間の上限（**秒**）。これを超えるチャネルは、プローブが成功していても無効化されます。既定は 5 秒、0 で遅延チェックを無効化します。失敗率ではありません。",
       "description": "監視閾値とチャネル管理を設定します",
       "quota_remind_threshold": "クォータ警告閾値",
       "quota_remind_threshold_desc": "残りクォータがこの値を下回るとユーザーへ通知されます。",
@@ -277,18 +277,21 @@
     "title": "設定"
   },
   "system_settings": {
+    "clear": "クリア",
+    "clear_aria": "{{key}} をクリア",
     "description": "システム全体の設定とオプションを管理します。",
     "descriptions": {
       "About": "About ページのコンテンツ（Markdown/HTML 対応）。",
       "ApproximateTokenEnabled": "より高速な概算トークン計測を使ってパフォーマンスを向上させます（やや精度が低下）。",
-      "AutomaticDisableChannelEnabled": "失敗が継続するチャネルを自動的に無効化します。",
-      "AutomaticEnableChannelEnabled": "状態が回復したチャネルを自動で再有効化します。",
-      "ChannelDisableThreshold": "チャネルを自動停止する失敗率（%）。既定値は 5%。",
+      "AutomaticDisableChannelEnabled": "認証・クォータ・権限のエラーでヘルスチェックが失敗した場合、上流に接続できない場合、または下記の応答時間しきい値を超えた場合に、チャネルを自動的に無効化します。単発の上流 5xx では無効化されません。\n\nヘルスチェックは各チャネルの Testing Model（または最も安価なチャット形式モデル）でプローブします。SKIP に設定されたチャネル、およびチャット形式モデルを持たないチャネルはスキップされ、無効化されることはありません。",
+      "AutomaticEnableChannelEnabled": "無効化されたチャネルのヘルスチェックが再び成功したとき、自動的に有効化します。スキップされたチャネルはプローブされないため、自動的に再有効化されることはありません。",
+      "ChannelDisableThreshold": "チャネルのヘルスチェックにおける応答時間の上限（**秒**）。これを超えるチャネルは、プローブが成功していても無効化されます。既定は 5 秒、0 で遅延チェックを無効化します。失敗率ではありません。",
       "ChatLink": "UI に表示される外部チャット／サポートリンクです。",
       "DisplayInCurrencyEnabled": "利用量とクォータを通貨表記で表示します。",
       "DisplayTokenStatEnabled": "トークン統計をログ・ダッシュボードに表示します。",
       "EmailDomainRestrictionEnabled": "下記のドメインのみ登録を許可します。",
       "EmailDomainWhitelist": "許可されたメールドメイン（カンマ区切り。例: gmail.com, example.com）。",
+      "EmailProvider": "送信メールを送るバックエンド。自動（Auto）は API キーが設定されていれば Resend、なければ SMTP を使用します。SMTP または Resend を選ぶと固定できます。Railway など SMTP を遮断する PaaS では Resend を推奨します。",
       "EmailVerificationEnabled": "登録やパスワードリセットなどでメール認証を必須にします。",
       "Footer": "サイト全体で表示されるフッターのテキスト／HTML。",
       "GitHubClientId": "GitHub OAuth のクライアント ID（ログインに使用）。",
@@ -319,12 +322,13 @@
       "QuotaPerUnit": "通貨表示用の換算レート。値が大きいほど 1 ドルあたりのクォータが増えます。",
       "QuotaRemindThreshold": "残りクォータがこの値を下回ると通知します。",
       "RegisterEnabled": "ユーザー登録のマスタースイッチです。オフにすると新規登録が停止します。",
+      "ResendAPIKey": "Resend API キー（re_ で始まる）。メールプロバイダーが Resend、または自動（Auto）でキーが設定されている場合に使用します。安全に保管され、表示されません。保存済みのキーを削除するには「クリア」を使用します。",
       "RetryTimes": "上流への再試行回数を自動制御します。",
-      "SMTPAccount": "SMTP 認証に使用するユーザー名／メールアドレス。",
-      "SMTPFrom": "送信メールに使用する送信元アドレス。",
-      "SMTPPort": "SMTP サーバーのポート（例: STARTTLS=587, SMTPS=465）。",
-      "SMTPServer": "メール送信に使用する SMTP サーバーのホスト名。",
-      "SMTPToken": "SMTP 認証用パスワード／アプリトークン（安全に保存）。",
+      "SMTPAccount": "SMTP 認証に使用するユーザー名／メールアドレス。メールプロバイダーが SMTP の場合にのみ使用されます。",
+      "SMTPFrom": "送信メールに使用する送信元アドレス。Resend の場合、ドメインは Resend 側で事前検証が必要です。",
+      "SMTPPort": "SMTP サーバーのポート（例: STARTTLS=587, SMTPS=465）。メールプロバイダーが SMTP の場合にのみ使用。",
+      "SMTPServer": "メール送信に使用する SMTP サーバーのホスト名。メールプロバイダーが SMTP の場合にのみ使用。",
+      "SMTPToken": "SMTP 認証用パスワード／アプリトークン。メールプロバイダーが SMTP の場合にのみ使用。安全に保存。",
       "ServerAddress": "このサーバーの公開ベース URL（リンクやコールバックで使用）。",
       "SystemName": "UI やメールに表示されるシステム名。",
       "Theme": "UI テーマ（berry / air / modern）。",
@@ -338,6 +342,11 @@
       "WeChatServerToken": "WeChat 連携の検証トークン（安全に保管）。"
     },
     "disabled": "無効",
+    "email_provider": {
+      "auto": "自動（キーがあれば Resend、なければ SMTP）",
+      "resend": "Resend (HTTP API)",
+      "smtp": "SMTP"
+    },
     "email_whitelist": {
       "add": "追加",
       "duplicate_domain": "ドメイン \"{{domain}}\" は既に存在します。",
@@ -364,8 +373,8 @@
         "title": "チャネルと信頼性"
       },
       "email": {
-        "description": "送信メール設定を構成します。",
-        "title": "メール（SMTP）"
+        "description": "送信メール設定を構成します。SMTP と Resend HTTP API を切り替えできます。",
+        "title": "メール"
       },
       "links": {
         "description": "エンドユーザーに公開する外部リンクを制御します。",

@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useState, useEffect } from 'react';
 import { Modal, Table, Tag, Typography, Space, Spin, Notification, Divider, Card, Row, Col } from '@douyinfe/semi-ui';
 import { IconClock, IconAlertCircle, IconPlay, IconSend, IconReply, IconCheckCircleStroked, IconFlag, IconArrowRight } from '@douyinfe/semi-icons';
@@ -11,7 +12,7 @@ const TracingModal = ({ visible, onCancel, logId }) => {
 
   useEffect(() => {
     if (visible && logId) {
-      fetchTraceData();
+      fetchTraceData().catch(reportUIError);
     }
   }, [visible, logId]);
 

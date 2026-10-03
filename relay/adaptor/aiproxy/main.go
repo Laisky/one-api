@@ -14,10 +14,10 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/helper"
-	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/constant"
 	"github.com/Laisky/one-api/relay/model"
 )
@@ -121,7 +121,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 				documents = aiProxyLibraryResponse.Documents
 			}
 			response := streamResponseAIProxyLibrary2OpenAI(c, &aiProxyLibraryResponse)
-			if err := render.ObjectData(c, response); err != nil {
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
 				lg.Error("render object data error", zap.Error(err))
 			}
 			continue
@@ -143,22 +143,26 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			documents = AIProxyLibraryResponse.Documents
 		}
 		response := streamResponseAIProxyLibrary2OpenAI(c, &AIProxyLibraryResponse)
-		err = render.ObjectData(c, response)
+		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
 		if err != nil {
 			lg.Error("render object data error", zap.Error(err))
 		}
 	}
 
 	if streamErr != nil {
-		lg.Error("error reading stream", zap.Error(streamErr))
+		err := resp.Body.Close()
+		if err != nil {
+			return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+		}
+		return openai.ErrorWrapper(streamErr, "read_stream_failed", http.StatusInternalServerError), &usage
 	}
 
 	response := documentsAIProxyLibrary(c, documents)
-	err := render.ObjectData(c, response)
+	err := openai_compatible.RenderStreamChunkWithBridge(c, response)
 	if err != nil {
 		lg.Error("render object data error", zap.Error(err))
 	}
-	render.Done(c)
+	openai_compatible.FinalizeStreamWithBridge(c, &usage)
 
 	err = resp.Body.Close()
 	if err != nil {
