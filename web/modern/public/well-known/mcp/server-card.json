@@ -1,0 +1,32 @@
+{
+  "name": "Laisky One API MCP Proxy",
+  "description": "Authenticated MCP Streamable HTTP proxy that exposes configured upstream MCP tools through Laisky One API relay keys.",
+  "version": "0.6",
+  "serverUrl": "https://oneapi.laisky.com/mcp",
+  "publicDiscoveryUrl": "https://oneapi.laisky.com/.well-known/mcp",
+  "protocol": "mcp-streamable-http",
+  "authentication": {
+    "type": "bearer",
+    "description": "Use Authorization: Bearer <relay-api-key>."
+  },
+  "tools": [
+    {
+      "name": "configured_upstream_tools",
+      "description": "Tool list depends on administrator-configured MCP servers and token permissions."
+    },
+    {
+      "name": "one_api_public_docs",
+      "description": "Public documentation discovery tool with MCP Apps UI output template."
+    }
+  ],
+  "resources": [
+    {
+      "uri": "ui://oneapi/public-discovery.html",
+      "url": "https://oneapi.laisky.com/mcp-apps/public-discovery.html",
+      "mimeType": "text/html;profile=mcp-app",
+      "description": "Public MCP Apps UI for developer resources and sandbox links."
+    }
+  ],
+  "documentationUrl": "https://oneapi.laisky.com/llms.txt",
+  "manifestUrl": "https://oneapi.laisky.com/.well-known/mcp/manifest.json"
+}

@@ -13,10 +13,12 @@ Usage and billing audit trail. Admin view at `/api/log/`; user self-view at `/ap
 | GET    | `/api/log/self/search`  | User   | Search self-logs                        |
 | GET    | `/api/log/self/stat`    | User   | Self-stats                              |
 | DELETE | `/api/log/`             | Admin  | **Destructive.** Delete logs by filter |
+| GET    | `/api/log/cursor`       | Admin  | List all logs, keyset pagination (opt-in) |
+| GET    | `/api/log/self/cursor`  | User   | Self-logs, keyset pagination (opt-in)     |
 
 ## Query parameters
 
-All list/search endpoints accept:
+All offset list/search endpoints accept:
 
 | Param             | Type   | Notes                                                   |
 |-------------------|--------|---------------------------------------------------------|
@@ -24,15 +26,78 @@ All list/search endpoints accept:
 | `size`            | int    | Capped at `MaxItemsPerPage`                             |
 | `type`            | int    | Log type filter. `1=top-up`, `2=consume`, `3=manage`, `4=system`. Omit for all |
 | `start_timestamp` | int64  | Unix **seconds** (inclusive)                            |
-| `end_timestamp`   | int64  | Unix **seconds** (exclusive)                            |
+| `end_timestamp`   | int64  | Unix **seconds** (inclusive — `created_at <= end_timestamp`) |
 | `username`        | string | Admin-only filter (self-routes ignore)                  |
 | `token_name`      | string | Filter by token label                                   |
 | `model_name`      | string | e.g. `gpt-4o`                                            |
-| `channel`         | int    | Channel id                                              |
-| `sort` / `sort_by`     | string | Column name                                        |
+| `channel`         | string | Channel `uuid` (resolved via `resolveOptionalChannelRef`; empty = no filter) |
+| `sort` / `sort_by`     | string | One of `created_at` (alias `created_time`), `prompt_tokens`, `completion_tokens`, `quota`, `elapsed_time` ([model/log.go](../../../../model/log.go) `logSortFields`); `id` accepted but opaque |
 | `order` / `sort_order` | string | `asc` / `desc`                                      |
 
 **Time range is capped at 30 days when sort requires it** ([controller/log.go](../../../../controller/log.go) — look for `thirty days` / `30 day` guards).
+
+
+## Keyset pagination (opt-in)
+
+The two `/cursor` routes are **additive siblings** of the offset routes, not a mode of them.
+The offset routes' pagination, filters, sorts, default `id DESC` order and exact `total` are
+unchanged; use them for anything that needs a stable page address or a snapshot-shaped walk.
+
+They are **disabled by default** (`LOG_CURSOR_ENABLED=false`). The keyset order
+(`created_at DESC, id DESC`) needs an access path the shipped schema does not have — on
+MySQL 8.4 the first page is a full table scan without it. Enable only on a database with the
+supporting indexes; see
+[the plan evidence](../../../benchmarks/20260906_w24-cursor-plans.md). When disabled, the
+routes answer `{"success": false, "code": "capability_disabled"}` and clients fall back.
+
+Parameters differ from the offset routes:
+
+| Param    | Type   | Notes                                                                  |
+|----------|--------|------------------------------------------------------------------------|
+| `v`      | int    | Capability version; must be `1` if supplied                            |
+| `cursor` | string | Opaque page token from the previous response; omit for the first page  |
+| `size`   | int    | Capped at `MaxItemsPerPage`                                            |
+| `count`  | string | `exact` requests an exact count under its own budget; omit for the bounded probe |
+| `p`      | —      | **Rejected.** A keyset page has no page number                         |
+| `sort`   | string | Only `created_at` is supported                                         |
+| `order`  | string | Only `desc` is supported                                               |
+
+Filters (`type`, `start_timestamp`, `end_timestamp`, `username`, `token_name`, `model_name`,
+`channel`) behave exactly as on the offset routes and select exactly the same rows.
+
+Response:
+
+```json
+{
+  "success": true,
+  "version": 1,
+  "data": [ /* log rows, newest first */ ],
+  "has_more": true,
+  "next_cursor": "lc1.…",
+  "count": { "value": 10000, "quality": "lower_bound", "as_of": 1767225540, "cached": false },
+  "bytes_capped": true
+}
+```
+
+- `count.quality` is `exact`, `lower_bound` or `unavailable`. A `lower_bound` means the
+  bounded probe stopped at its limit — it is **not** a total. An `unavailable` count carries
+  a null `value`; never render it as zero.
+- `count.as_of` is when the count ran, and `count.cached` marks a reused one. A cached exact
+  count is exact as of `as_of`, not as of now.
+- `bytes_capped` means the page stopped early to stay under `LOG_CURSOR_MAX_RESPONSE_BYTES`.
+  `oversized_record` means one record alone exceeded the budget and is returned on its own.
+  **No field is ever truncated.**
+
+A cursor is bound to the caller's scope, the endpoint, the normalized filters and an expiry.
+Presenting it under a different user, on the other route, or with changed filters returns
+`{"success": false, "restart_required": true, "code": "cursor_expired" | "cursor_invalid" |
+"cursor_query_changed"}` — restart from the first page. A cursor is never an authorization
+grant; scope is re-derived from the authenticated principal on every request.
+
+**Live traversal, not a snapshot.** Rows inserted ahead of the anchor do not appear and do
+not shift later pages; deletes may shorten them; late provisional finalization can change
+membership. For snapshot-complete audit work, use the export path, which walks the offset
+routes.
 
 ## List logs
 
@@ -44,7 +109,7 @@ curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   --data-urlencode "type=2" \
   --data-urlencode "size=100" \
   -G "$ONEAPI_BASE_URL/api/log/" \
-  | jq '{total, items: (.data | map({created_at, username, token_name, model_name, prompt_tokens, completion_tokens, quota, channel_id}))}'
+  | jq '{total, items: (.data | map({created_at, username, token_name, model_name, prompt_tokens, completion_tokens, quota, channel_uuid, channel_name}))}'
 ```
 
 Always pass timestamps via `--data-urlencode` — some shells mangle the Unix-seconds integer into scientific notation.
@@ -55,12 +120,16 @@ Always pass timestamps via `--data-urlencode` — some shells mangle the Unix-se
 
 | Field               | Notes                                                     |
 |---------------------|-----------------------------------------------------------|
-| `created_at`        | Millisecond timestamp                                      |
+| `uuid`              | Log row identifier (string); feed it to `/api/trace/log/:log_id` |
+| `user_uuid`         | Requesting user's `uuid` (nullable)                        |
+| `created_at`        | Unix **seconds** (`helper.GetTimestamp()`), not milliseconds |
 | `type`              | 1=top-up, 2=consume, 3=manage, 4=system                    |
 | `username`          | Who made the request                                       |
 | `token_name`        | Token label (useful for drilling into a specific key)      |
+| `token_uuid`        | Token's `uuid` (nullable) — exact join key to `/api/admin/tokens/:uuid` |
 | `model_name`        | Model as seen from consumer                                |
-| `channel_id`        | Which upstream served it                                   |
+| `channel_uuid`      | Which upstream served it (nullable); pass it back as `?channel=` |
+| `channel_name`      | Channel label at write time (omitted when empty)           |
 | `prompt_tokens`     | Input token count                                          |
 | `completion_tokens` | Output token count                                         |
 | `quota`             | Units charged (convert with `QuotaPerUnit`)                |
@@ -112,9 +181,9 @@ Every request produces a trace record with per-stage timestamps.
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   "$ONEAPI_BASE_URL/api/trace/$TRACE_ID" | jq .
 
-# By log id (when you only have the log row id)
+# By log uuid (the log row's `uuid` field)
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/trace/log/$LOG_ID" | jq .
+  "$ONEAPI_BASE_URL/api/trace/log/$LOG_UUID" | jq .
 ```
 Admin and user both allowed — users see their own traces only.
 
@@ -136,5 +205,6 @@ Before running: export a copy of the rows you're about to delete, and confirm wi
 - **Logs include both successful and failed requests.** Filter by `type=2` (consume) for billing-relevant rows; `type=4` (system) for server internals.
 - **Pagination past ~10000 rows is slow** — the `count(*)` becomes expensive on large deployments. Always pass a tight time window.
 - **`username` filter is a substring match**, not an exact match on newer versions — double-check results for collisions like `alice` matching `alice-bot`.
-- **`channel_id` shows which upstream served the request**, but if a request retried, only the final channel is recorded. For retry telemetry, check the trace.
+- **No integer ids on log rows.** `id`, `user_id`, `channel_id`, `token_id` are gone; use `uuid`, `user_uuid`, `channel_uuid`, `token_uuid`. The `?channel=` filter takes a channel `uuid`.
+- **`channel_uuid` shows which upstream served the request**, but if a request retried, only the final channel is recorded. For retry telemetry, check the trace.
 - **`content` field carries freeform upstream error text.** Parse defensively — do not regex it into JSON.

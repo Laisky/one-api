@@ -1,0 +1,15 @@
+{
+  "issuer": "https://oneapi.laisky.com",
+  "service_documentation": "https://oneapi.laisky.com/auth.md",
+  "scopes_supported": [
+    "models:read",
+    "chat:write",
+    "responses:write",
+    "messages:write",
+    "mcp:call"
+  ],
+  "bearer_methods_supported": ["header"],
+  "dynamic_client_registration_supported": false,
+  "agent_registration_supported": false,
+  "description": "Laisky One API relay endpoints use bearer relay API keys. Dynamic OAuth client registration, claim, and revocation endpoints are not currently exposed for agents."
+}

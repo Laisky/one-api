@@ -1,11 +1,14 @@
 package model
 
 import (
+	"net"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/common/errkind"
 )
 
 const (
@@ -33,7 +36,8 @@ const (
 
 // MCPServer stores admin-managed MCP server metadata and policies.
 type MCPServer struct {
-	Id                      int               `json:"id"`
+	Id                      int               `json:"-"`
+	UUID                    string            `json:"uuid" gorm:"type:char(36);column:uuid"`
 	Name                    string            `json:"name" gorm:"uniqueIndex;type:varchar(128);not null"`
 	Description             string            `json:"description" gorm:"type:text"`
 	Status                  int               `json:"status" gorm:"type:int;default:1"`
@@ -78,21 +82,23 @@ func (s *MCPServer) NormalizeAndValidate() error {
 		return errors.New("mcp server is nil")
 	}
 
+	// Everything validated below comes from the submitted payload, so a failure
+	// here is bad client input, never a server fault.
 	s.Name = strings.TrimSpace(s.Name)
 	if s.Name == "" {
-		return errors.New("mcp server name is required")
+		return errkind.InvalidRequestErr(errors.New("mcp server name is required"))
 	}
 
 	s.BaseURL = strings.TrimSpace(s.BaseURL)
 	if s.BaseURL == "" {
-		return errors.New("mcp server base_url is required")
+		return errkind.InvalidRequestErr(errors.New("mcp server base_url is required"))
 	}
 	parsedURL, err := url.Parse(s.BaseURL)
 	if err != nil {
-		return errors.Wrap(err, "invalid mcp server base_url")
+		return errkind.InvalidRequestErr(errors.Wrap(err, "invalid mcp server base_url"))
 	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return errors.New("mcp server base_url must use http or https")
+		return errkind.InvalidRequestErr(errors.New("mcp server base_url must use http or https"))
 	}
 
 	s.Protocol = strings.TrimSpace(strings.ToLower(s.Protocol))
@@ -104,13 +110,16 @@ func (s *MCPServer) NormalizeAndValidate() error {
 	if s.AuthType == "" {
 		s.AuthType = MCPAuthTypeNone
 	}
+	if parsedURL.Scheme == "http" && s.HasSensitiveCredentials() && !isLoopbackMCPServerHost(parsedURL.Hostname()) {
+		return errkind.InvalidRequestErr(errors.New("credentialed mcp server base_url must use https unless it targets a loopback host"))
+	}
 
 	if s.AutoSyncIntervalMinutes == 0 {
 		s.AutoSyncIntervalMinutes = 60
 	}
 
 	if s.AutoSyncIntervalMinutes < 5 || s.AutoSyncIntervalMinutes > 1440 {
-		return errors.New("auto_sync_interval_minutes must be between 5 and 1440")
+		return errkind.InvalidRequestErr(errors.New("auto_sync_interval_minutes must be between 5 and 1440"))
 	}
 
 	if err := s.ValidateToolPricing(); err != nil {
@@ -120,18 +129,92 @@ func (s *MCPServer) NormalizeAndValidate() error {
 	return nil
 }
 
+// HasSensitiveCredentials reports whether the server configuration carries credentials that must not traverse remote plaintext HTTP.
+//
+// Parameters: none.
+//
+// Return values:
+//   - bool: True is returned when the API key, URL user information, or configured authentication headers contain sensitive data.
+func (s *MCPServer) HasSensitiveCredentials() bool {
+	if s == nil {
+		return false
+	}
+	if strings.TrimSpace(s.APIKey) != "" {
+		return true
+	}
+	if parsedURL, err := url.Parse(strings.TrimSpace(s.BaseURL)); err == nil && parsedURL.User != nil && parsedURL.User.String() != "" {
+		return true
+	}
+
+	for key, value := range s.Headers {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		normalizedKey := strings.ToLower(strings.TrimSpace(key))
+		if isSensitiveMCPServerHeaderName(normalizedKey) {
+			return true
+		}
+		switch normalizedKey {
+		case "accept", "accept-encoding", "content-type", "user-agent", "mcp-protocol-version", "mcp-session-id":
+			continue
+		default:
+			// Arbitrary configured headers can implement custom authentication even
+			// when their names do not contain a conventional credential token.
+			return true
+		}
+	}
+	return false
+}
+
+// isSensitiveMCPServerHeaderName reports whether a configured header name conventionally carries credentials.
+//
+// Parameters:
+//   - name: The configured HTTP header name is inspected case-insensitively.
+//
+// Return values:
+//   - bool: True is returned when the header name contains a credential-bearing token.
+func isSensitiveMCPServerHeaderName(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if lower == "" {
+		return false
+	}
+	for _, token := range []string{"authorization", "proxy-authorization", "api_key", "apikey", "token", "secret", "password", "passwd", "x-api-key", "cookie"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
+// isLoopbackMCPServerHost reports whether a hostname is restricted to the local machine.
+//
+// Parameters:
+//   - hostname: The URL hostname is checked as localhost or a loopback IP address.
+//
+// Return values:
+//   - bool: True is returned only for localhost and IP loopback addresses.
+func isLoopbackMCPServerHost(hostname string) bool {
+	hostname = strings.TrimSpace(hostname)
+	if strings.EqualFold(hostname, "localhost") {
+		return true
+	}
+	address := net.ParseIP(hostname)
+	return address != nil && address.IsLoopback()
+}
+
 // ValidateToolPricing ensures per-tool pricing values are non-negative.
 func (s *MCPServer) ValidateToolPricing() error {
 	for name, pricing := range s.ToolPricing {
 		trimmed := strings.TrimSpace(name)
+		// Submitted pricing map: invalid values are the caller's input error.
 		if trimmed == "" {
-			return errors.New("tool pricing contains empty tool name")
+			return errkind.InvalidRequestErr(errors.New("tool pricing contains empty tool name"))
 		}
 		if pricing.UsdPerCall < 0 {
-			return errors.Errorf("tool %s usd_per_call cannot be negative", trimmed)
+			return errkind.InvalidRequestErr(errors.Errorf("tool %s usd_per_call cannot be negative", trimmed))
 		}
 		if pricing.QuotaPerCall < 0 {
-			return errors.Errorf("tool %s quota_per_call cannot be negative", trimmed)
+			return errkind.InvalidRequestErr(errors.Errorf("tool %s quota_per_call cannot be negative", trimmed))
 		}
 	}
 	return nil

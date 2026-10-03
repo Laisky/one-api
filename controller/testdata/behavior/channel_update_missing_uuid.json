@@ -1,0 +1,9 @@
+{
+  "case": "channel/update_missing_uuid",
+  "site": "C4 UpdateChannel (error)",
+  "status": 200,
+  "body": {
+    "message": "resource uuid is required",
+    "success": false
+  }
+}

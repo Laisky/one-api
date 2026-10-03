@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -140,6 +141,41 @@ func TestApplyOutputAudioCharges_TokensFallback(t *testing.T) {
 	require.Equal(t, expected, usage.ToolsCost)
 }
 
+// TestApplyOutputAudioCharges_TokensFallbackTimeWindow verifies token fallback uses the windowed model ratio.
+func TestApplyOutputAudioCharges_TokensFallbackTimeWindow(t *testing.T) {
+	modelName := "media-test-window-model"
+	channel := buildTestChannelWithMediaPricing(t, modelName, model.ModelConfigLocal{
+		Ratio: 2.0,
+		Audio: &model.AudioPricingLocal{
+			PromptRatio:     2.0,
+			CompletionRatio: 3.0,
+		},
+		TimeWindows: []model.TimeWindowLocal{{
+			TimeZone: "UTC",
+			Ranges:   []model.ClockRangeLocal{{Start: "00:00", End: "00:00"}},
+			Overlay:  model.ModelConfigLocal{Ratio: 0.5},
+		}},
+	})
+
+	c := newTestGinContext(t)
+	c.Set(ctxkey.ChannelRatio, 1.2)
+	c.Set(ctxkey.OutputAudioTokens, 100)
+	c.Set(ctxkey.ChannelModel, channel)
+
+	meta := &metalib.Meta{
+		ActualModelName: modelName,
+		ChannelType:     channeltype.OpenAI,
+		APIType:         apitype.OpenAI,
+		StartTime:       time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC),
+	}
+	usage := &relaymodel.Usage{}
+
+	applyOutputAudioCharges(c, &usage, meta)
+
+	expected := int64(math.Ceil(float64(100) * 2.0 * 3.0 * 0.5 * 1.2))
+	require.Equal(t, expected, usage.ToolsCost)
+}
+
 // TestApplyOutputAudioCharges_ChannelConfigMissingAudioFallback verifies provider audio defaults are used
 // when channel model config exists but omits audio pricing metadata.
 func TestApplyOutputAudioCharges_ChannelConfigMissingAudioFallback(t *testing.T) {
@@ -164,7 +200,7 @@ func TestApplyOutputAudioCharges_ChannelConfigMissingAudioFallback(t *testing.T)
 
 	applyOutputAudioCharges(c, &usage, meta)
 
-	audioPricingCfg, ok := pricing.ResolveAudioPricing(modelName, nil, &openai.Adaptor{})
+	audioPricingCfg, ok := pricing.ResolveAudioPricing(modelName, nil, &openai.Adaptor{}, time.Now())
 	require.True(t, ok)
 	require.NotNil(t, audioPricingCfg)
 
@@ -211,6 +247,46 @@ func TestApplyOutputVideoCharges_ResolutionMultiplier(t *testing.T) {
 	applyOutputVideoCharges(c, &usage, meta)
 
 	expected := int64(math.Ceil(0.1 * 2.0 * 4.0 * ratio.QuotaPerUsd))
+	require.Equal(t, expected, usage.ToolsCost)
+}
+
+// TestApplyOutputVideoCharges_TimeWindow verifies video per-second pricing uses the windowed video block.
+func TestApplyOutputVideoCharges_TimeWindow(t *testing.T) {
+	modelName := "media-test-window-model"
+	channel := buildTestChannelWithMediaPricing(t, modelName, model.ModelConfigLocal{
+		Video: &model.VideoPricingLocal{
+			PerSecondUsd:   0.1,
+			BaseResolution: "1280x720",
+			ResolutionMultipliers: map[string]float64{
+				"1920x1080": 2.0,
+			},
+		},
+		TimeWindows: []model.TimeWindowLocal{{
+			TimeZone: "UTC",
+			Ranges:   []model.ClockRangeLocal{{Start: "00:00", End: "00:00"}},
+			Overlay: model.ModelConfigLocal{
+				Video: &model.VideoPricingLocal{PerSecondUsd: 0.04},
+			},
+		}},
+	})
+
+	c := newTestGinContext(t)
+	c.Set(ctxkey.ChannelRatio, 1.0)
+	c.Set(ctxkey.OutputVideoSeconds, 4.0)
+	c.Set(ctxkey.OutputVideoResolution, "1920x1080")
+	c.Set(ctxkey.ChannelModel, channel)
+
+	meta := &metalib.Meta{
+		ActualModelName: modelName,
+		ChannelType:     channeltype.OpenAI,
+		APIType:         apitype.OpenAI,
+		StartTime:       time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC),
+	}
+	usage := &relaymodel.Usage{}
+
+	applyOutputVideoCharges(c, &usage, meta)
+
+	expected := int64(math.Ceil(0.04 * 2.0 * 4.0 * ratio.QuotaPerUsd))
 	require.Equal(t, expected, usage.ToolsCost)
 }
 

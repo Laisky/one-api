@@ -334,7 +334,7 @@ All adapters now follow the same four-layer pricing system and fallback logic, w
 - **Xunfei**: 6 models with Spark pricing
 - **VertexAI**: 34 models with Google Cloud pricing
 - **DeepSeek**: 2 models with DeepSeek pricing
-- **Groq**: 20+ models with Groq pricing
+- **Groq**: 15 current production/preview models plus 2 retired compatibility entries with Groq metadata
 - **Mistral**: 10+ models with Mistral pricing
 - **Moonshot**: 3 models with Moonshot pricing
 - **Cohere**: 12 models with Command pricing
@@ -350,7 +350,7 @@ All adapters now follow the same four-layer pricing system and fallback logic, w
 - **Baichuan**: 2 models with Baichuan pricing
 - **TogetherAI**: 40+ models with Together AI pricing
 - **SiliconFlow**: 30+ models with SiliconFlow pricing
-- **XAI**: 2 models with Grok pricing
+- **XAI**: current Grok text, image, and video catalog with context-tier pricing
 
 **❌ Adapters Using DefaultPricingMethods (3 remaining)**:
 
@@ -502,11 +502,13 @@ type ModelRatioTier struct {
     CacheWrite5mRatio float64 `json:"cache_write_5m_ratio,omitempty"`
     CacheWrite1hRatio float64 `json:"cache_write_1h_ratio,omitempty"`
     InputTokenThreshold int  `json:"input_token_threshold"`
+    OutputTokenThreshold int `json:"output_token_threshold,omitempty"`
 }
 ```
 
-- **Tiered pricing**: Adapters can attach sorted `tiers` to alter input, completion, and cache-write prices once a request crosses a token threshold. `pricing.ResolveEffectivePricing()` applies these tiers at runtime and records which threshold was selected for observability.
+- **Tiered pricing**: Adapters can attach sorted `tiers` to alter input, completion, and cache-write prices once a request crosses input and optional output token thresholds. `pricing.ResolveEffectivePricingForUsage()` applies both dimensions at runtime and records which thresholds were selected for observability.
 - **Cache-aware pricing**: `CachedInputRatio`, `CacheWrite5mRatio`, and `CacheWrite1hRatio` let adapters express Anthropic-style prompt caching economics. Negative values mark a bucket as free; zero means “inherit the base ratio.”
+- **Time-of-day pricing**: `time_windows` attach ordered wall-clock overlays to a model config. The resolver selects the first window matching `meta.StartTime`, deep-merges its sparse pricing overlay, clears `TimeWindows`, and then applies tiers. Windows use explicit IANA timezones, support daylight-saving changes through local wall-clock conversion, midnight-crossing ranges, optional weekday filters, and optional local-date bounds.
 - **Max token policy**: `MaxTokens` carries per-model token ceilings so controllers can clamp `max_tokens` before dispatching upstream.
 - **Multimedia metadata**: `Video`, `Audio`, and `Image` pointers hold secondary pricing dimensions (per-second, per-minute, or per-image tables) alongside text token billing. These blobs travel through the three-layer resolver so channel overrides, adapter defaults, and global fallbacks stay consistent across media types.
 - **Capability metadata**: `ContextLength`, `MaxOutputTokens`, `InputModalities`, `OutputModalities`, `SupportedFeatures`, `SupportedSamplingParameters`, `Quantization`, and `HuggingFaceID` describe the model surface so adaptors, request transformers, and the admin UI can advertise what each model actually accepts.
@@ -517,6 +519,7 @@ type ModelRatioTier struct {
 #### Tier Resolution Engine
 
 - `pricing.ResolveEffectivePricing(modelName, inputTokens, adaptor)` collapses the base config plus tier overrides into an `EffectivePricing` struct before quotas are debited.
+- `pricing.ApplyTimeWindow(config, at)` applies request-start pricing windows before tier resolution. Billing paths pass the request start time; read-only model display previews pass display time.
 - Tier thresholds are inclusive (>=) and the resolver tracks the winning threshold for observability and debugging.
 - Optional tier fields inherit from the previous layer unless explicitly overridden, so you only configure what changes at that scale break.
 - If no adapter pricing exists, the resolver falls back to adapter-provided defaults (`GetModelRatio()` / `GetCompletionRatio()`) and, failing that, the final USD-per-million default.
@@ -1144,7 +1147,7 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 - `relay/adaptor/vertexai/adaptor.go` - 34 Google Cloud VertexAI models
 - `relay/adaptor/zhipu/constants.go` - 23 Zhipu GLM models
 - `relay/adaptor/deepseek/constants.go` - 2 DeepSeek models
-- `relay/adaptor/groq/constants.go` - 20+ Groq models
+- `relay/adaptor/groq/constants.go` - current Groq production/preview models plus retired compatibility entries
 - `relay/adaptor/mistral/constants.go` - 10+ Mistral models
 - `relay/adaptor/moonshot/constants.go` - 3 Moonshot models
 - `relay/adaptor/cohere/constant.go` - 12 Cohere Command models
@@ -1160,7 +1163,7 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 - `relay/adaptor/baichuan/constants.go` - 2 Baichuan models
 - `relay/adaptor/togetherai/constants.go` - 40+ TogetherAI models
 - `relay/adaptor/siliconflow/constants.go` - 30+ SiliconFlow models
-- `relay/adaptor/xai/constants.go` - 2 XAI Grok models
+- `relay/adaptor/xai/constants.go` - current XAI/Grok text, image, and video catalog
 
 ### Global Pricing Enhancement and Clean Architecture
 

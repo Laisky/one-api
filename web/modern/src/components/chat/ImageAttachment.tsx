@@ -5,6 +5,7 @@ import { useNotifications } from '@/components/ui/notifications';
 import { generateUUIDv4 } from '@/lib/utils';
 import { AlertCircle, Eye, FileX, ImageIcon, Upload, X } from 'lucide-react';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface ImageAttachment {
   id: string;
@@ -29,6 +30,7 @@ interface ImageAttachmentProps {
 }
 
 export function ImageAttachmentComponent({ images, onImagesChange, disabled = false, maxImages = 5 }: ImageAttachmentProps) {
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
@@ -44,7 +46,9 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
       if (!file.type.startsWith('image/')) {
         return {
           fileName: file.name,
-          reason: `File type "${file.type || 'unknown'}" is not supported. Please select an image file.`,
+          reason: t('playground.attachments.validation.file_type_unsupported', {
+            type: file.type || t('playground.attachments.validation.unknown_type'),
+          }),
           type: 'file_type',
         };
       }
@@ -57,7 +61,7 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
       if (!hasValidExtension) {
         return {
           fileName: file.name,
-          reason: `File extension is not supported. Supported formats: ${validExtensions.join(', ')}`,
+          reason: t('playground.attachments.validation.extension_unsupported', { formats: validExtensions.join(', ') }),
           type: 'file_type',
         };
       }
@@ -68,7 +72,7 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
         const fileSize = (file.size / (1024 * 1024)).toFixed(2);
         return {
           fileName: file.name,
-          reason: `File size (${fileSize}MB) exceeds the 5MB limit. Please compress or resize the image.`,
+          reason: t('playground.attachments.validation.size_exceeded', { size: fileSize }),
           type: 'file_size',
         };
       }
@@ -77,14 +81,14 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
       if (currentImageCount >= maxImages) {
         return {
           fileName: file.name,
-          reason: `Maximum of ${maxImages} images allowed. Please remove some images before adding more.`,
+          reason: t('playground.attachments.validation.limit_exceeded', { max: maxImages }),
           type: 'file_limit',
         };
       }
 
       return null; // File is valid
     },
-    [maxImages]
+    [maxImages, t]
   );
 
   // Mobile device detection
@@ -301,8 +305,11 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
               // Enhanced mobile error handling
               notify({
                 type: 'error',
-                title: 'Mobile Processing Failed',
-                message: `Failed to process ${file.name} on mobile: ${mobileError instanceof Error ? mobileError.message : 'Unknown error'}`,
+                title: t('playground.attachments.notifications.mobile_processing_failed_title'),
+                message: t('playground.attachments.notifications.mobile_processing_failed_message', {
+                  file: file.name,
+                  message: mobileError instanceof Error ? mobileError.message : t('playground.attachments.validation.unknown_error'),
+                }),
                 durationMs: 6000,
               });
               throw mobileError;
@@ -342,8 +349,11 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
           processingErrors++;
           notify({
             type: 'error',
-            title: 'Image Processing Failed',
-            message: `Failed to process ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            title: t('playground.attachments.notifications.image_processing_failed_title'),
+            message: t('playground.attachments.notifications.image_processing_failed_message', {
+              file: file.name,
+              message: error instanceof Error ? error.message : t('playground.attachments.validation.unknown_error'),
+            }),
             durationMs: 5000,
           });
 
@@ -367,8 +377,8 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
             } catch (fallbackError) {
               notify({
                 type: 'error',
-                title: 'All Processing Methods Failed',
-                message: `Cannot process ${file.name}. Please try a different image or contact support.`,
+                title: t('playground.attachments.notifications.all_processing_failed_title'),
+                message: t('playground.attachments.notifications.all_processing_failed_message', { file: file.name }),
                 durationMs: 7000,
               });
             }
@@ -422,7 +432,7 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
 
       return results;
     },
-    [generateThumbnail, compressImage, fileToBase64, isMobile, notify]
+    [generateThumbnail, compressImage, fileToBase64, isMobile, notify, t]
   );
 
   // Debounced file selection to prevent rapid consecutive calls
@@ -472,7 +482,7 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
             // Add limit error for additional valid files
             errors.push({
               fileName: file.name,
-              reason: `Maximum of ${maxImages} images allowed. This file was skipped.`,
+              reason: t('playground.attachments.validation.limit_skipped', { max: maxImages }),
               type: 'file_limit',
             });
           }
@@ -528,7 +538,7 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
           ...prev,
           {
             fileName: 'Unknown',
-            reason: 'An error occurred while processing the images. Please try again.',
+            reason: t('playground.attachments.validation.processing_error'),
             type: 'processing_error',
           },
         ]);
@@ -543,7 +553,7 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
         }
       }
     },
-    [images, maxImages, processImagesInParallel, onImagesChange, validateFile]
+    [images, maxImages, processImagesInParallel, onImagesChange, validateFile, t]
   );
 
   // Cancel processing when component unmounts
@@ -595,21 +605,21 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
               <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
               {isMobile
                 ? processingProgress < 100
-                  ? `Optimizing ${Math.round(processingProgress)}%`
-                  : 'Finalizing...'
-                : `Processing ${Math.round(processingProgress)}%`}
+                  ? t('playground.attachments.optimizing', { progress: Math.round(processingProgress) })
+                  : t('playground.attachments.finalizing')
+                : t('playground.attachments.processing', { progress: Math.round(processingProgress) })}
             </>
           ) : (
             <>
               <ImageIcon className="h-4 w-4" />
-              {isMobile ? 'Add Images' : 'Attach Images'}
+              {isMobile ? t('playground.attachments.add_images') : t('playground.attachments.attach_images')}
             </>
           )}
         </Button>
 
         {images.length > 0 && (
           <Badge variant="secondary" className="text-xs">
-            {images.length}/{maxImages} images
+            {t('playground.attachments.count', { count: images.length, max: maxImages })}
           </Badge>
         )}
       </div>
@@ -627,7 +637,9 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
           <div className="flex items-center gap-2 text-destructive">
             <AlertCircle className="h-4 w-4" />
             <span className="text-sm font-medium">
-              {validationErrors.length === 1 ? 'File validation error:' : `${validationErrors.length} file validation errors:`}
+              {validationErrors.length === 1
+                ? t('playground.attachments.validation.single_error')
+                : t('playground.attachments.validation.multiple_errors', { count: validationErrors.length })}
             </span>
           </div>
           <div className="space-y-2 max-h-32 overflow-y-auto">
@@ -647,7 +659,8 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
                       size="sm"
                       onClick={() => setValidationErrors((prev) => prev.filter((_, i) => i !== index))}
                       className="h-6 w-6 p-0 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-                      title="Dismiss error"
+                      title={t('playground.attachments.validation.dismiss_error')}
+                      aria-label={t('playground.attachments.validation.dismiss_error')}
                     >
                       <X className="h-3 w-3" />
                     </Button>
@@ -656,7 +669,7 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
               </Card>
             ))}
           </div>
-          <div className="text-xs text-muted-foreground">💡 Tip: You can dismiss these errors by clicking the × button on each card.</div>
+          <div className="text-xs text-muted-foreground">{t('playground.attachments.validation.tip')}</div>
         </div>
       )}
 
@@ -688,7 +701,8 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
                         size="sm"
                         onClick={() => handleRemoveImage(image.id)}
                         className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                        title="Remove image"
+                        title={t('playground.attachments.remove_image')}
+                        aria-label={t('playground.attachments.remove_image')}
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -733,6 +747,8 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
                         size="sm"
                         onClick={() => handleRemoveImage(image.id)}
                         className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                        title={t('playground.attachments.remove_image')}
+                        aria-label={t('playground.attachments.remove_image')}
                       >
                         <X className="h-3 w-3" />
                       </Button>
@@ -746,7 +762,7 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
       )}
 
       {/* Info text */}
-      <div className="text-xs text-muted-foreground">Supports: JPG, PNG, GIF, WebP • Max 5MB per image • Up to {maxImages} images</div>
+      <div className="text-xs text-muted-foreground">{t('playground.attachments.info', { max: maxImages })}</div>
     </div>
   );
 }

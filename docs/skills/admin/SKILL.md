@@ -35,10 +35,27 @@ All endpoints return the envelope `{success: bool, message: string, data: ..., t
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   "$ONEAPI_BASE_URL/api/channel/?p=0&size=20" \
-  | jq '.data[] | {id, name, type, status, group, priority}'
+  | jq '.data[] | {uuid, name, type, status, group, priority}'
 ```
 
 The bundled [scripts/oneapi](scripts/oneapi) wraps this: `scripts/oneapi channel list`.
+
+## Identifier contract — UUIDs only
+
+The management API is **UUID-only in both directions**. Responses expose `uuid`, `user_uuid`, `channel_uuid`, `token_uuid`, `inviter_uuid` (strings) and **no** integer `id` / `user_id` / `channel` / `token_id` fields ([dto/responses.go](../../../dto/responses.go)). Requests must use the same strings:
+
+| Where                                   | What to send                                                                                   |
+|-----------------------------------------|------------------------------------------------------------------------------------------------|
+| Path params `/api/channel/:id`, `/api/user/:id`, `/api/token/:id`, `/api/admin/tokens/:id`, `/api/redemption/:id`, `/api/trace/log/:log_id` | the resource's `uuid` string |
+| Update bodies `PUT /api/channel/`, `PUT /api/user/`, `PUT /api/token/`, `PUT /api/redemption/` | a `uuid` field; a missing/empty `uuid` fails with `resource uuid is required` ([controller/id_refs.go](../../../controller/id_refs.go) `preferUUIDRef`) |
+| `POST /api/topup`                       | `user_uuid` (not `user_id`)                                                                    |
+| `GET /api/admin/tokens/?user_id=`       | the owning user's `uuid`; **omit the param** for all users (do not send `0`)                   |
+| `GET /api/log/?channel=`                | the channel's `uuid`                                                                           |
+| `GET /api/user/dashboard?user_id=`      | a user `uuid` or the literal `all` (root only)                                                 |
+| `POST /api/user/manage`                 | `{username, action}` — username-keyed, no id at all                                            |
+| `/api/*/search?keyword=`                | free text, or a pasted `uuid` for an exact match ([model/search_keyword.go](../../../model/search_keyword.go)) |
+
+In `jq`, build bodies with `--arg uuid "$UUID"` and `'{uuid: $uuid, ...}'` — never `--argjson`, the value is a string. Sort keys still accept `id`, but the value is invisible to clients, so sort by `created_at` (or `created_time` where the resource allows it) when you need a stable order.
 
 ## Which resource am I working with?
 
@@ -71,7 +88,7 @@ Step-by-step guides with validation gates. Follow the checkboxes in order — th
 2. **Role matters.** Admin routes (`role >= 10`) cover everything in this skill except `/api/option/` (model/group ratios, system toggles) which is **Root-only (`role == 100`)**. If a ratio PUT fails with 403, your token is admin-not-root — ask a root user to run it.
 3. **Quota is a 64-bit integer in internal "quota units", NOT dollars.** 1 USD ≈ `QuotaPerUnit` units (default 500000). Always fetch `QuotaPerUnit` from `/api/option/` before converting, and present both unit and USD forms when talking to humans. A carelessly typed extra zero grants 10× intended credit.
 4. **Channel `status` values:** `1=enabled`, `2=manually disabled`, `3=automatically disabled` (by health check / balance check). Setting `status=2` by PUT is the admin kill-switch. Do **not** overwrite `3` → `1` without understanding *why* it was auto-disabled (check `response_time`, `balance`, or run `GET /api/channel/test/:id`).
-5. **Never delete a channel/user/token as a first step.** Disable first (`status=2` for channels; `POST /api/user/manage` with `action=disable`; or `PUT /api/token/?status_only=1`). Delete only after downstream usage has stopped — logs and billing rows reference `channel_id` / `user_id`.
+5. **Never delete a channel/user/token as a first step.** Disable first (`status=2` for channels; `POST /api/user/manage` with `action=disable`; or `PUT /api/token/?status_only=1`). Delete only after downstream usage has stopped — logs and billing rows reference `channel_uuid` / `user_uuid`.
 6. **Ratio changes are system-wide and take effect immediately.** The server reloads option JSON on the next request. Validate your JSON with `jq -e` before PUT. Never hand-edit `ModelRatio` JSON in-place in the UI — copy-modify-paste so you have a rollback copy.
 7. **Pagination is zero-indexed (`p=0` is the first page).** `size` is capped at `MaxItemsPerPage` (from config). Always read `total` from the response envelope and loop `while p*size < total`. See [scripts/lib.sh](scripts/lib.sh) `oneapi_paginate`.
 8. **Use `jq` to parse responses, never `grep`/`sed`.** Channel/user fields can contain any character including commas and braces. Use `jq -r` for raw strings and `jq -e` for assertions (non-zero exit on null/false).
@@ -85,12 +102,12 @@ Prefer these over hand-rolling `curl` — they handle pagination, auth, and resp
 - **[scripts/oneapi](scripts/oneapi)** — unified CLI. Subcommands: `channel`, `user`, `token`, `group`, `option`, `log`. Examples:
   ```bash
   scripts/oneapi channel list --enabled-only
-  scripts/oneapi channel test 42               # test one channel
+  scripts/oneapi channel test "$CHANNEL_UUID"              # test one channel
   scripts/oneapi user get --keyword alice
-  scripts/oneapi user grant-quota 17 5000000   # add quota units (confirms first)
-  scripts/oneapi option get GroupRatio | jq .  # current group ratios
+  scripts/oneapi user grant-quota "$USER_UUID" 5000000     # add quota units (confirms first)
+  scripts/oneapi option get GroupRatio | jq .              # current group ratios
   ```
-  Run `scripts/oneapi --help` for the full command tree. If a subcommand you need is missing, use raw `curl` with the reference file — don't modify the script unless the user asks.
+  Every positional identifier (`channel get/test/disable/...`, `user get --uuid`, `user grant-quota/set-group/set-quota`, `token get/admin-get/disable`, `token admin-list --user-id`, `log list --channel`) is the resource's `uuid` string as printed by the corresponding `list`/`search` subcommand. Subcommand names and argument order are unchanged from the integer-id era; only the value type changed. Run `scripts/oneapi --help` for the full command tree. If a subcommand you need is missing, use raw `curl` with the reference file — don't modify the script unless the user asks.
 
 - **[scripts/lib.sh](scripts/lib.sh)** — sourced helpers for custom one-off scripts. Provides `oneapi_get`, `oneapi_post`, `oneapi_put`, `oneapi_delete`, `oneapi_paginate`, and `oneapi_confirm`.
 
@@ -99,8 +116,9 @@ Prefer these over hand-rolling `curl` — they handle pagination, auth, and resp
 - **`key` field in create-channel is case-sensitive and may contain commas** to encode multi-key round-robin (`key1,key2,key3`). Encode the whole comma-string as a JSON string, no array.
 - **`models` on channels and tokens is a comma-separated string**, not a JSON array. `"gpt-4o,gpt-4o-mini"`, no spaces after commas.
 - **`model_configs` on channels is a JSON-encoded string** (double-escaped inside the outer JSON). Build it with `jq -c` and pass as `--arg` — do not hand-quote.
-- **User creation does not return the new user id** — the response is `{success, message}`. To get the id, call `GET /api/user/search?keyword=<username>` right after.
-- **`/api/user/manage` takes a `username`, not an id.** The adjacent endpoints all take ids. Read the [users reference](references/users.md) carefully.
+- **Create endpoints do not return the new resource** — `POST /api/user/` and `POST /api/channel/` answer `{success, message}` only. To get the new `uuid`, call `GET /api/user/search?keyword=<username>` / `GET /api/channel/search?keyword=<name>` right after.
+- **`/api/user/manage` takes a `username`, not a uuid.** The adjacent endpoints all take the user's `uuid`. Read the [users reference](references/users.md) carefully.
+- **There is no integer id anywhere.** `jq '.data[] | .id'` yields `null`; `--argjson id 42` is rejected with `resource uuid is required`. Use `uuid` / `--arg uuid`.
 - **Admin tokens cannot modify other users' API tokens.** Read-only admin token visibility is the supported flow ([references/tokens.md](references/tokens.md)). To cut off a user's token, disable the *user* via `/api/user/manage` `action=disable`.
 - **Timestamps:** `created_at`/`updated_at` are **milliseconds**; log filter params `start_timestamp`/`end_timestamp` are **seconds**. Don't mix them.
 - **Channel `test/:id` returns 200 with `success: false` when the upstream responds but returns a billing/auth error.** Always print `.message` and the `.time` field (roundtrip ms).
@@ -131,4 +149,4 @@ Use these to spot-check the skill is working before real ops:
 2. "User `alice` says her quota is gone; show her current quota, recent logs, and token list."
 3. "Add a new Azure OpenAI channel for gpt-4o, test it, and attach it to the `vip` group."
 4. "Lower the `vip` group ratio from 0.5 to 0.4; show the before/after JSON." (root-only)
-5. "Rotate the key on channel 42 with zero downtime."
+5. "Rotate the key on the channel named `openai-prod` with zero downtime."

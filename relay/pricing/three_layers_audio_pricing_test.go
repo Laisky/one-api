@@ -2,6 +2,7 @@ package pricing
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -46,7 +47,7 @@ func TestResolveAudioPricing_AllLayers(t *testing.T) {
 			},
 		},
 	}
-	cfg, ok := ResolveAudioPricing(modelName, channelWithAudio, provider)
+	cfg, ok := ResolveAudioPricing(modelName, channelWithAudio, provider, time.Now())
 	require.True(t, ok)
 	require.InDelta(t, 30.0, cfg.PromptRatio, 1e-12)
 	require.InDelta(t, 3.5, cfg.CompletionRatio, 1e-12)
@@ -54,17 +55,17 @@ func TestResolveAudioPricing_AllLayers(t *testing.T) {
 	channelWithoutAudio := map[string]model.ModelConfigLocal{
 		modelName: {Ratio: 0.15},
 	}
-	cfg, ok = ResolveAudioPricing(modelName, channelWithoutAudio, provider)
+	cfg, ok = ResolveAudioPricing(modelName, channelWithoutAudio, provider, time.Now())
 	require.True(t, ok)
 	require.InDelta(t, 20.0, cfg.PromptRatio, 1e-12)
 	require.InDelta(t, 2.5, cfg.CompletionRatio, 1e-12)
 
-	cfg, ok = ResolveAudioPricing(modelName, channelWithoutAudio, &MockAdaptor{name: "empty", pricing: map[string]adaptor.ModelConfig{}})
+	cfg, ok = ResolveAudioPricing(modelName, channelWithoutAudio, &MockAdaptor{name: "empty", pricing: map[string]adaptor.ModelConfig{}}, time.Now())
 	require.True(t, ok)
 	require.InDelta(t, 10.0, cfg.PromptRatio, 1e-12)
 	require.InDelta(t, 1.5, cfg.CompletionRatio, 1e-12)
 
-	cfg, ok = ResolveAudioPricing("missing-audio-model", nil, &MockAdaptor{name: "empty", pricing: map[string]adaptor.ModelConfig{}})
+	cfg, ok = ResolveAudioPricing("missing-audio-model", nil, &MockAdaptor{name: "empty", pricing: map[string]adaptor.ModelConfig{}}, time.Now())
 	require.False(t, ok)
 	require.Nil(t, cfg)
 }

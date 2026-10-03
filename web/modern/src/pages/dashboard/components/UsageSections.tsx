@@ -1,9 +1,10 @@
 import type { TFunction } from 'i18next';
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, type TooltipProps, XAxis, YAxis } from 'recharts';
+import type { ComponentProps } from 'react';
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { barColor } from '../services/chartConfig';
 
-type UsageTooltipContent = TooltipProps<number, string>['content'];
+type UsageTooltipContent = ComponentProps<typeof Tooltip>['content'];
 
 interface BaseUsageProps {
   title: string;

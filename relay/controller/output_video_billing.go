@@ -88,14 +88,17 @@ func applyOutputVideoCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 		*usagePtr = usage
 	}
 
-	var channelVideoOverride *adaptor.VideoPricingConfig
-	if billingCtx.ChannelModelConfigs != nil {
-		if cfg, ok := billingCtx.ChannelModelConfigs[billingCtx.ModelName]; ok && cfg.Video != nil {
-			channelVideoOverride = convertVideoLocalToAdaptor(cfg.Video)
+	var videoPricing *adaptor.VideoPricingConfig
+	if cfg, ok := pricing.ResolveModelConfig(billingCtx.ModelName, billingCtx.ChannelModelConfigs, billingCtx.PricingAdaptor, billingCtx.RequestTime); ok {
+		if cfg.Video != nil && cfg.Video.HasData() {
+			videoPricing = cfg.Video
 		}
 	}
-
-	videoPricing := pricing.GetVideoPricingWithThreeLayers(billingCtx.ModelName, channelVideoOverride, billingCtx.PricingAdaptor)
+	if videoPricing == nil {
+		if cfg, ok := pricing.ResolveModelConfig(billingCtx.ModelName, nil, billingCtx.PricingAdaptor, billingCtx.RequestTime); ok && cfg.Video != nil && cfg.Video.HasData() {
+			videoPricing = cfg.Video
+		}
+	}
 	if videoPricing == nil || videoPricing.PerSecondUsd <= 0 {
 		if billingCtx.Logger != nil {
 			billingCtx.Logger.Debug("output video billing skipped due to missing pricing metadata",

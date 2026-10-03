@@ -1,0 +1,16 @@
+diff --git a/common/custom_event.go b/common/custom_event.go
+index a8695f00..59d2b2c7 100644
+--- a/common/custom_event.go
++++ b/common/custom_event.go
+@@ -44,7 +44,10 @@ func encode(writer io.Writer, event CustomEvent) error {
+ 
+ // writeData formats an event payload, escapes embedded line breaks, and terminates SSE data frames.
+ func writeData(writer io.Writer, data any) error {
+-	formatted := fmt.Sprint(data)
++	formatted, ok := data.(string)
++	if !ok {
++		formatted = fmt.Sprint(data)
++	}
+ 	if err := writeCustomEventString(writer, "data", dataReplacer.Replace(formatted)); err != nil {
+ 		return err
+ 	}

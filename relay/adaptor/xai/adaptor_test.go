@@ -84,7 +84,7 @@ func TestConvertRequest(t *testing.T) {
 		expectedRequest *model.GeneralOpenAIRequest
 	}{
 		{
-			name: "Remove reasoning_effort",
+			name: "Remove reasoning_effort for non-reasoning model",
 			inputRequest: &model.GeneralOpenAIRequest{
 				Model:           "grok-3",
 				ReasoningEffort: stringPtr("high"),
@@ -93,6 +93,19 @@ func TestConvertRequest(t *testing.T) {
 			expectedRequest: &model.GeneralOpenAIRequest{
 				Model:    "grok-3",
 				Messages: []model.Message{{Role: "user", Content: "hello"}},
+			},
+		},
+		{
+			name: "Preserve reasoning_effort for Grok 4.6",
+			inputRequest: &model.GeneralOpenAIRequest{
+				Model:           "grok-4.6",
+				ReasoningEffort: stringPtr("high"),
+				Messages:        []model.Message{{Role: "user", Content: "hello"}},
+			},
+			expectedRequest: &model.GeneralOpenAIRequest{
+				Model:           "grok-4.6",
+				ReasoningEffort: stringPtr("high"),
+				Messages:        []model.Message{{Role: "user", Content: "hello"}},
 			},
 		},
 		{
@@ -225,17 +238,18 @@ func TestConvertImageRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "Remove unsupported parameters",
+			name: "Map resolution and remove unsupported parameters",
 			inputRequest: &model.ImageRequest{
-				Model:   "grok-2-image",
+				Model:   "grok-imagine-image-quality",
 				Prompt:  "A beautiful sunset",
 				Quality: "hd",
 				Size:    "1024x1024",
 				Style:   "vivid",
 			},
 			expectedRequest: &model.ImageRequest{
-				Model:  "grok-2-image",
-				Prompt: "A beautiful sunset",
+				Model:      "grok-imagine-image-quality",
+				Prompt:     "A beautiful sunset",
+				Resolution: "1k",
 			},
 		},
 	}
@@ -254,6 +268,7 @@ func TestConvertImageRequest(t *testing.T) {
 			assert.Equal(t, tt.expectedRequest.Prompt, convertedReq.Prompt)
 			assert.Equal(t, tt.expectedRequest.Quality, convertedReq.Quality)
 			assert.Equal(t, tt.expectedRequest.Size, convertedReq.Size)
+			assert.Equal(t, tt.expectedRequest.Resolution, convertedReq.Resolution)
 			assert.Equal(t, tt.expectedRequest.Style, convertedReq.Style)
 		})
 	}
@@ -448,20 +463,59 @@ func TestHandleResponseAPIResponse(t *testing.T) {
 	t.Parallel()
 	adaptor := &Adaptor{}
 
-	t.Run("Streaming Response API", func(t *testing.T) {
+	// A streaming Response API call must hand billing the usage x.AI publishes on
+	// its terminal response.completed event, and must forward the stream to the
+	// client untouched. Reporting no usage here is what strands the pre-consumed
+	// charge as an invisible provisional log entry.
+	t.Run("Streaming Response API reports usage and forwards the stream", func(t *testing.T) {
 		t.Parallel()
-		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		meta := &meta.Meta{IsStream: true}
+
+		sse := "event: response.output_text.delta\n" +
+			`data: {"type":"response.output_text.delta","delta":"halo"}` + "\n\n" +
+			"event: response.completed\n" +
+			`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":320,"output_tokens":40,"total_tokens":360}}}` + "\n\n" +
+			"data: [DONE]\n\n"
+
+		resp := &http.Response{
+			StatusCode: 200,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(sse)),
+		}
+
+		usage, err := adaptor.handleResponseAPIResponse(c, resp, meta)
+		assert.Nil(t, err)
+		require.NotNil(t, usage, "usage from response.completed must reach billing")
+		assert.Equal(t, 320, usage.PromptTokens)
+		assert.Equal(t, 40, usage.CompletionTokens)
+		assert.Equal(t, 360, usage.TotalTokens)
+
+		body := recorder.Body.String()
+		assert.Equal(t, sse, body, "the client stream must be forwarded byte for byte")
+	})
+
+	// A stream that never reports usage still returns nil. This is not a silent
+	// free request: relay/controller/response_billing.go settles such a request at
+	// its pre-consumed estimate and reconciles the provisional log so the charge
+	// stays visible.
+	t.Run("Streaming Response API without usage returns nil", func(t *testing.T) {
+		t.Parallel()
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
 		meta := &meta.Meta{IsStream: true}
 
 		resp := &http.Response{
 			StatusCode: 200,
 			Header:     make(http.Header),
-			Body:       io.NopCloser(strings.NewReader("streaming data")),
+			Body:       io.NopCloser(strings.NewReader("event: response.created\ndata: {\"type\":\"response.created\"}\n\n")),
 		}
 
 		usage, err := adaptor.handleResponseAPIResponse(c, resp, meta)
 		assert.Nil(t, err)
-		assert.Nil(t, usage) // Streaming doesn't return usage
+		assert.Nil(t, usage)
+		assert.Contains(t, recorder.Body.String(), "response.created")
 	})
 }
 
@@ -477,11 +531,15 @@ func TestGetModelList(t *testing.T) {
 	models := adaptor.GetModelList()
 	assert.NotEmpty(t, models)
 	// Should include current flagship and current snapshot models from ModelRatios
+	assert.Contains(t, models, "grok-4.6")
+	assert.Contains(t, models, "grok-4.6-latest")
 	assert.Contains(t, models, "grok-4.3")
 	assert.Contains(t, models, "grok-4.20-0309-reasoning")
 	assert.Contains(t, models, "grok-4.20-multi-agent-0309")
 	assert.Contains(t, models, "grok-imagine-image")
 	assert.Contains(t, models, "grok-imagine-image-quality")
+	assert.Contains(t, models, "grok-imagine-image-2.0")
+	assert.Contains(t, models, "grok-imagine-video-1.5")
 	// Retired-but-redirected slugs are still in the table for billing continuity
 	assert.Contains(t, models, "grok-code-fast-1")
 	assert.Contains(t, models, "grok-4-1-fast-non-reasoning")

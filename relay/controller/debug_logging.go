@@ -12,6 +12,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
 )
 
 const debugLogBodyLimit = common.DefaultLogBodyLimit
@@ -76,7 +77,7 @@ func EnsureDebugResponseWriter(c *gin.Context) *DebugResponseWriter {
 			return existing
 		}
 	}
-	wrapper := newDebugResponseWriter(c.Writer, debugLogBodyLimit)
+	wrapper := newDebugResponseWriter(c.Writer, 0)
 	c.Writer = wrapper
 	c.Set(ctxkey.DebugResponseWriter, wrapper)
 	return wrapper
@@ -94,11 +95,10 @@ func LogClientResponse(c *gin.Context, message string) {
 		zap.String("url", c.Request.URL.String()),
 	}
 	if drw != nil {
-		preview, truncated, total := drw.Snapshot()
+		_, _, total := drw.Snapshot()
 		fields = append(fields,
 			zap.Int("body_bytes", total),
-			zap.Bool("body_truncated", truncated),
-			zap.ByteString("body_preview", preview),
+			zap.Bool("body_logging_suppressed", true),
 		)
 	}
 	lg.Debug(message, fields...)
@@ -115,20 +115,19 @@ func logUpstreamResponseFromCapture(lg glog.Logger, resp *http.Response, capture
 		)
 		return
 	}
-	preview, truncated, total := capture.Snapshot()
+	_, _, total := capture.Snapshot()
 	fields := make([]zap.Field, 0, 7)
 	fields = append(fields,
 		zap.String("label", label),
 		zap.Int("status_code", resp.StatusCode),
 		zap.String("content_type", resp.Header.Get("Content-Type")),
-		zap.Bool("body_truncated", truncated),
-		zap.ByteString("body_preview", preview),
+		zap.Bool("body_logging_suppressed", true),
 		zap.Int("body_bytes", total),
 	)
 	if resp.Request != nil {
 		fields = append(fields,
 			zap.String("method", resp.Request.Method),
-			zap.String("url", resp.Request.URL.String()),
+			zap.String("url", model.SanitizeLogUpstreamEndpoint(resp.Request.URL.String())),
 		)
 	}
 	lg.Debug("upstream response received", fields...)
@@ -141,19 +140,17 @@ func logUpstreamResponseFromBytes(lg glog.Logger, resp *http.Response, body []by
 		)
 		return
 	}
-	preview, truncated := truncateBytes(body, debugLogBodyLimit)
 	fields := []zap.Field{
 		zap.String("label", label),
 		zap.Int("status_code", resp.StatusCode),
 		zap.String("content_type", resp.Header.Get("Content-Type")),
 		zap.Int("body_bytes", len(body)),
-		zap.Bool("body_truncated", truncated),
-		zap.ByteString("body_preview", preview),
+		zap.Bool("body_logging_suppressed", true),
 	}
 	if resp.Request != nil {
 		fields = append(fields,
 			zap.String("method", resp.Request.Method),
-			zap.String("url", resp.Request.URL.String()),
+			zap.String("url", model.SanitizeLogUpstreamEndpoint(resp.Request.URL.String())),
 		)
 	}
 	lg.Debug("upstream response received", fields...)
@@ -211,7 +208,7 @@ func wrapUpstreamResponse(resp *http.Response) *loggingReadCloser {
 	if resp == nil || resp.Body == nil {
 		return nil
 	}
-	capture := newLoggingReadCloser(resp.Body, debugLogBodyLimit)
+	capture := newLoggingReadCloser(resp.Body, 0)
 	resp.Body = capture
 	return capture
 }

@@ -39,6 +39,10 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	switch meta.Mode {
 	case relaymode.ImagesGenerations:
 		return fmt.Sprintf("%s/api/paas/v4/images/generations", meta.BaseURL), nil
+	case relaymode.Videos:
+		return videoRequestURL(meta)
+	case relaymode.VoiceClone:
+		return fmt.Sprintf("%s/api/paas/v4/voice/clone", meta.BaseURL), nil
 	case relaymode.Embeddings:
 		return fmt.Sprintf("%s/api/paas/v4/embeddings", meta.BaseURL), nil
 	case relaymode.OCR:
@@ -253,6 +257,12 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if meta.Mode == relaymode.Videos && c.Request.Method != http.MethodPost && c.Request.Method != http.MethodGet {
+		return nil, errors.New("unsupported video method")
+	}
+	if meta.Mode == relaymode.Videos && c.Request.Method == http.MethodGet && (c.Request.URL.Path == "/v1/videos" || c.Request.URL.Path == "/v1/videos/generations") {
+		return nil, errors.New("video polling requires a task ID")
+	}
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
@@ -272,6 +282,9 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 		return
 	case relaymode.ImagesGenerations:
 		err, usage = openai.ImageHandler(c, resp)
+		return
+	case relaymode.Videos:
+		err, usage = VideoHandler(c, resp)
 		return
 	}
 	if isOCRModel(meta.ActualModelName) {

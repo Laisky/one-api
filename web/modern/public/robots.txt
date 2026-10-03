@@ -1,0 +1,31 @@
+User-agent: *
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: GoogleOther
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: DeepSeekBot
+Allow: /
+
+Sitemap: https://oneapi.laisky.com/sitemap.xml
+schemamap: https://oneapi.laisky.com/schemamap.json
+SchemaMap: https://oneapi.laisky.com/schemamap.json
+Host: https://oneapi.laisky.com
