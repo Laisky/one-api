@@ -264,6 +264,53 @@ func TestGemini35FlashGAPricing(t *testing.T) {
 	require.Contains(t, geminiWebSearchModels, "gemini-3.5-flash")
 }
 
+// TestGemini36FlashPricing verifies the current Gemini 3.6 Flash promotional pricing
+// while retaining the published limits and capabilities. Parameter t drives test execution,
+// and the function returns no values.
+func TestGemini36FlashPricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gemini-3.6-flash"]
+	require.True(t, ok, "gemini-3.6-flash missing from pricing map")
+	require.InDelta(t, geminiFlashPromotionalInputUsd*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, geminiFlashPromotionalOutputUsd/geminiFlashPromotionalInputUsd, cfg.CompletionRatio, 1e-9)
+	require.InDelta(t, geminiFlashPromotionalCacheUsd*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.EqualValues(t, 1_048_576, cfg.ContextLength)
+	require.EqualValues(t, 65536, cfg.MaxOutputTokens)
+	require.Equal(t, "medium", cfg.DefaultReasoningEffort)
+	require.Contains(t, geminiWebSearchModels, "gemini-3.6-flash")
+}
+
+// TestGemini35FlashLitePricing verifies Gemini 3.5 Flash-Lite pricing from Google Cloud Agent Platform.
+// Parameter t drives test execution, and the function returns no values.
+func TestGemini35FlashLitePricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gemini-3.5-flash-lite"]
+	require.True(t, ok, "gemini-3.5-flash-lite missing from pricing map")
+	require.InDelta(t, 0.30*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 2.50/0.30, cfg.CompletionRatio, 1e-9)
+	require.InDelta(t, 0.03*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.EqualValues(t, 1_048_576, cfg.ContextLength)
+	require.EqualValues(t, 65536, cfg.MaxOutputTokens)
+	require.Equal(t, "minimal", cfg.DefaultReasoningEffort)
+	require.Contains(t, geminiWebSearchModels, "gemini-3.5-flash-lite")
+}
+
+// TestGemini20FlashCloudPricing verifies Gemini 2.0 Flash uses Google Cloud pricing.
+// Parameter t drives test execution, and the function returns no values.
+func TestGemini20FlashCloudPricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gemini-2.0-flash"]
+	require.True(t, ok, "gemini-2.0-flash missing from pricing map")
+	require.InDelta(t, 0.15*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 0.60/0.15, cfg.CompletionRatio, 1e-9)
+	require.InDelta(t, 0.0375*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.NotNil(t, cfg.Audio, "expected audio input pricing for Gemini 2.0 Flash")
+	require.InDelta(t, 1.00/0.15, cfg.Audio.PromptRatio, 1e-9)
+}
+
 // TestGeminiEmbedding2GAAlias verifies that the GA gemini-embedding-2 alias mirrors the preview entry.
 func TestGeminiEmbedding2GAAlias(t *testing.T) {
 	t.Parallel()

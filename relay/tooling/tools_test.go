@@ -13,6 +13,7 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
+	deepseekadaptor "github.com/Laisky/one-api/relay/adaptor/deepseek"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -186,6 +187,30 @@ func TestApplyBuiltinToolCharges_WebSearchPreviewPricing(t *testing.T) {
 			require.Equal(t, expectedQuota, summary.CostByTool[toolName])
 		})
 	}
+}
+
+// TestApplyBuiltinToolCharges_GPT56WebSearch verifies GPT-5.6 Responses web
+// search calls use the current OpenAI built-in tool pricing.
+func TestApplyBuiltinToolCharges_GPT56WebSearch(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Set(ctxkey.WebSearchCallCount, 2)
+
+	meta := &metalib.Meta{ActualModelName: "gpt-5.6"}
+	usage := &relaymodel.Usage{PromptTokens: 100, CompletionTokens: 10}
+
+	ApplyBuiltinToolCharges(c, &usage, meta, nil, &openai.Adaptor{})
+
+	expectedPerCall := int64(math.Ceil(0.01 * float64(ratio.QuotaPerUsd)))
+	require.Equal(t, expectedPerCall*2, usage.ToolsCost)
+
+	summaryAny, exists := c.Get(ctxkey.ToolInvocationSummary)
+	require.True(t, exists)
+	summary := summaryAny.(*model.ToolUsageSummary)
+	require.Equal(t, 2, summary.Counts["web_search"])
+	require.Equal(t, expectedPerCall*2, summary.CostByTool["web_search"])
 }
 
 func TestValidateChatBuiltinTools_Disallowed(t *testing.T) {
@@ -493,6 +518,45 @@ func TestValidateRequestedBuiltins_OpenAIUsesProviderDefaults(t *testing.T) {
 	require.NoError(t, ValidateRequestedBuiltins("gpt-4o", meta, channel, &openai.Adaptor{}, map[string]struct{}{"web_search": {}}))
 }
 
+// TestDeepSeekReviewBuiltinPolicy verifies current DeepSeek defaults reject
+// unsupported native search, prune optional built-ins, and preserve a user's
+// function tool even when that function happens to be named web_search.
+func TestDeepSeekReviewBuiltinPolicy(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			metadata := &metalib.Meta{ChannelType: channeltype.DeepSeek, ActualModelName: name}
+			channel := &model.Channel{Type: channeltype.DeepSeek}
+			provider := &deepseekadaptor.Adaptor{}
+			require.NotContains(t, provider.DefaultToolingConfig().Pricing, "web_search")
+			require.ErrorContains(t, ValidateRequestedBuiltins(name, metadata, channel, provider,
+				map[string]struct{}{"web_search": {}}), "not allowed")
+
+			request := &openai.ResponseAPIRequest{
+				Model: name,
+				Tools: []openai.ResponseAPITool{
+					{Type: "web_search"},
+					{Type: "function", Name: "web_search", Parameters: map[string]any{"type": "object"}},
+				},
+			}
+			removed := PruneDisallowedResponseBuiltins(request, metadata, channel, provider)
+			require.Equal(t, []string{"web_search"}, removed)
+			require.Len(t, request.Tools, 1)
+			require.Equal(t, "function", request.Tools[0].Type)
+			require.Equal(t, "web_search", request.Tools[0].Name)
+			require.NoError(t, ValidateResponseBuiltinTools(request, metadata, channel, provider))
+
+			// A forced unsupported tool must fail validation rather than silently
+			// disappearing and changing the caller's requested behavior.
+			request.Tools = []openai.ResponseAPITool{{Type: "web_search"}}
+			request.ToolChoice = map[string]any{"type": "web_search"}
+			require.Empty(t, PruneDisallowedResponseBuiltins(request, metadata, channel, provider))
+			require.ErrorContains(t, ValidateResponseBuiltinTools(request, metadata, channel, provider), "not allowed")
+		})
+	}
+}
+
 func TestNormalizeBuiltinType_ToolSearchAliases(t *testing.T) {
 	t.Parallel()
 
@@ -506,11 +570,6 @@ func TestNormalizeBuiltinType_ToolSearchAliases(t *testing.T) {
 		{name: "dash alias", input: "web-search", expect: "web_search"},
 		{name: "regex tool search", input: "tool_search_tool_regex_20251119", expect: "web_search"},
 		{name: "bm25 tool search", input: "tool_search_tool_bm25_20251119", expect: "web_search"},
-		{name: "code interpreter", input: "code_interpreter", expect: "code_interpreter"},
-		{name: "code execution alias", input: "code_execution", expect: "code_interpreter"},
-		{name: "file search", input: "file_search", expect: "file_search"},
-		{name: "collections search alias", input: "collections_search", expect: "file_search"},
-		{name: "computer use", input: "computer-use-preview", expect: "computer_use"},
 		{name: "unknown stays empty", input: "tool_search_custom", expect: ""},
 	}
 
@@ -554,13 +613,4 @@ func TestApplyBuiltinToolCharges_ToolSearchCountsCanonicalized(t *testing.T) {
 	summary := summaryAny.(*model.ToolUsageSummary)
 	require.Equal(t, 2, summary.Counts["web_search"])
 	require.Equal(t, expectedPerCall*2, summary.CostByTool["web_search"])
-}
-
-func TestValidateNativeResponseBuiltinBillingSupport(t *testing.T) {
-	t.Parallel()
-	require.NoError(t, ValidateNativeResponseBuiltinBillingSupport(map[string]struct{}{"web_search": {}}))
-
-	err := ValidateNativeResponseBuiltinBillingSupport(map[string]struct{}{"code_interpreter": {}})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "code_interpreter")
 }

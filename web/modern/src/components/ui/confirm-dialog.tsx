@@ -52,6 +52,7 @@ export function ConfirmDetailsList({ details, variant = 'default' }: ConfirmDeta
  * Returns [confirm, ConfirmDialog] -- call confirm() to show the dialog, render <ConfirmDialog />.
  */
 export function useConfirmDialog() {
+  const { t } = useTranslation();
   const [state, setState] = useState<ConfirmState | null>(null);
   const resolveRef = useRef<((v: boolean) => void) | null>(null);
 
@@ -69,7 +70,6 @@ export function useConfirmDialog() {
   }, []);
 
   const ConfirmDialogComponent = useCallback(() => {
-    const { t } = useTranslation();
     if (!state) return null;
 
     return (
@@ -100,7 +100,7 @@ export function useConfirmDialog() {
         </DialogContent>
       </Dialog>
     );
-  }, [state, handleClose]);
+  }, [state, handleClose, t]);
 
   return [confirm, ConfirmDialogComponent] as const;
 }

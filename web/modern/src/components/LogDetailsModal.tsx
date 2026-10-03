@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { api } from '@/lib/api';
+import { useLogTrace, type TraceData, type TraceTimestamps } from '@/hooks/useLogTrace';
 import { getLogTypeLabel } from '@/lib/constants/logs';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, renderQuota } from '@/lib/utils';
@@ -74,56 +74,6 @@ const DetailItem = ({ label, value }: { label: string; value: ReactNode }) => (
   </div>
 );
 
-interface TraceTimestamps {
-  request_received?: number;
-  request_forwarded?: number;
-  first_upstream_response?: number;
-  first_client_response?: number;
-  upstream_completed?: number;
-  request_completed?: number;
-  external_calls?: TraceExternalCall[];
-}
-
-interface TraceExternalCall {
-  key?: string;
-  source?: string;
-  tool?: string;
-  server_id?: number;
-  server_label?: string;
-  started_at?: number;
-  ended_at?: number;
-  duration_ms?: number;
-  is_error?: boolean;
-}
-
-interface TraceDurations {
-  processing_time?: number;
-  upstream_response_time?: number;
-  response_processing_time?: number;
-  streaming_time?: number;
-  total_time?: number;
-}
-
-interface TraceData {
-  id: number;
-  trace_id: string;
-  url: string;
-  method: string;
-  body_size: number;
-  status: number;
-  created_at: number;
-  updated_at: number;
-  timestamps: TraceTimestamps;
-  durations?: TraceDurations;
-  log?: {
-    id: number;
-    user_id: number;
-    username: string;
-    content: string;
-    type: number;
-  };
-}
-
 const formatDuration = (milliseconds?: number): string => {
   if (!milliseconds) return 'N/A';
   if (milliseconds < 1000) {
@@ -171,11 +121,14 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
   );
   const metadataJSON = useMemo(() => (log?.metadata ? JSON.stringify(log.metadata, null, 2) : null), [log]);
   const cacheWriteSummary = useMemo(() => getCacheWriteSummaries(log?.metadata), [log]);
-  const [traceData, setTraceData] = useState<TraceData | null>(null);
-  const [traceLoading, setTraceLoading] = useState(false);
-  const [traceError, setTraceError] = useState<string | null>(null);
   const [traceCopied, setTraceCopied] = useState(false);
-  const hasTrace = Boolean(log && log.trace_id && log.trace_id.trim() !== '' && typeof log.id === 'number');
+  const logRef = log?.uuid || log?.id || '';
+  const hasTrace = Boolean(log?.trace_id?.trim());
+  const { traceData, traceLoading, traceError, traceNotRetainedLocally, retry } = useLogTrace(
+    log?.trace_id,
+    Boolean(open && log),
+    JSON.stringify([user?.uuid ?? user?.id ?? '', user?.role ?? 0])
+  );
 
   const timelineEvents = useMemo(
     () => [
@@ -224,37 +177,6 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     ],
     [t]
   );
-
-  useEffect(() => {
-    let active = true;
-    const loadTrace = async () => {
-      if (!open || !hasTrace || !log) {
-        return;
-      }
-
-      setTraceLoading(true);
-      try {
-        const response = await api.get(`/api/trace/log/${log.id}`);
-        if (active) {
-          setTraceData(response.data.data);
-        }
-      } catch (error: any) {
-        if (active) {
-          setTraceError(t('logs.details.load_failed'));
-        }
-      } finally {
-        if (active) {
-          setTraceLoading(false);
-        }
-      }
-    };
-
-    loadTrace();
-
-    return () => {
-      active = false;
-    };
-  }, [open, hasTrace, log, t]);
 
   const handleCopy = async (value?: string) => {
     if (!value) return;
@@ -324,7 +246,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
             <User className="h-4 w-4" />
             {t('logs.details.user', 'User')}
           </div>
-          <div className="text-sm">{trace.log?.username || log?.username || user?.username || 'N/A'}</div>
+          <div className="text-sm">{log?.username || user?.username || 'N/A'}</div>
         </div>
 
         <div className="space-y-2 md:col-span-2">
@@ -482,7 +404,13 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     <div className="flex items-center gap-2">
       <span className="font-mono text-xs bg-muted rounded px-2 py-1 break-all flex-1">{value || '—'}</span>
       {value && (
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleCopy(value)} aria-label="Copy to clipboard">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={() => handleCopy(value)}
+          aria-label={t('common.copy_to_clipboard', 'Copy to clipboard')}
+        >
           <Copy className="h-3.5 w-3.5" />
         </Button>
       )}
@@ -510,7 +438,8 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     if (!log) return null;
 
     const username = log.username || user?.username || '—';
-    const channelDisplay = log.channel ?? '—';
+    const channelRef = log.channel_uuid || log.channel || '';
+    const channelDisplay = log.channel_name || channelRef || '—';
     const promptTokens = log.prompt_tokens ?? 0;
     const cachedPromptTokens = log.cached_prompt_tokens ?? 0;
     const completionTokens = log.completion_tokens ?? 0;
@@ -523,7 +452,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     return (
       <div className="space-y-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <DetailItem label={t('logs.details.log_id', 'Log ID')} value={<span className="font-mono text-sm">{log.id}</span>} />
+          <DetailItem label={t('logs.details.log_id', 'Log ID')} value={renderIdentifier(String(logRef))} />
           <DetailItem label={t('logs.details.type', 'Type')} value={<Badge variant="outline">{logTypeLabel}</Badge>} />
           <DetailItem
             label={t('logs.details.recorded_at', 'Recorded At')}
@@ -534,11 +463,11 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
           <DetailItem
             label={t('logs.details.user', 'User')}
             value={
-              log.user_id ? (
+              log.user_uuid || log.user_id ? (
                 <button
                   type="button"
                   className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
-                  onClick={() => navigateTo(`/users/edit/${log.user_id}`)}
+                  onClick={() => navigateTo(`/users/edit/${log.user_uuid || log.user_id}`)}
                 >
                   {username}
                   <ExternalLink className="h-3 w-3 flex-shrink-0" />
@@ -568,15 +497,27 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
           <DetailItem
             label={t('logs.details.channel', 'Channel')}
             value={
-              log.channel != null ? (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 font-mono text-sm text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
-                  onClick={() => navigateTo(`/channels/edit/${log.channel}`)}
-                >
-                  {channelDisplay}
-                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                </button>
+              channelRef ? (
+                <span className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-mono text-sm text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
+                    title={String(channelRef)}
+                    onClick={() => navigateTo(`/channels/edit/${encodeURIComponent(String(channelRef))}`)}
+                  >
+                    {channelDisplay}
+                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                  </button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={() => handleCopy(String(channelRef))}
+                    aria-label={t('common.copy_id', 'Copy ID')}
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </span>
               ) : (
                 <span className="font-mono text-sm">—</span>
               )
@@ -729,13 +670,29 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
                     </div>
                   )}
 
-                  {hasTrace && !traceLoading && traceError && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{traceError}</AlertDescription>
+                  {hasTrace && !traceLoading && traceNotRetainedLocally && (
+                    <Alert>
+                      <AlertDescription>
+                        {t('logs.details.not_retained_locally')}
+                        <Button type="button" variant="outline" size="sm" className="ml-3" onClick={retry}>
+                          {t('common.refresh')}
+                        </Button>
+                      </AlertDescription>
                     </Alert>
                   )}
 
-                  {hasTrace && !traceLoading && traceData && (
+                  {hasTrace && !traceLoading && traceError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        {t('logs.details.load_failed')}{traceError.status ? ` (HTTP ${traceError.status})` : ''}
+                        <Button type="button" variant="outline" size="sm" className="ml-3" onClick={retry}>
+                          {t('common.refresh')}
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {hasTrace && !traceLoading && traceData && !traceNotRetainedLocally && (
                     <div className="space-y-6">
                       {renderTraceSummary(traceData)}
                       <Separator />

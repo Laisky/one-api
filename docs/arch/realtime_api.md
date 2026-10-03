@@ -39,13 +39,49 @@ Key principles:
   - Headers from client:
     - `Authorization: Bearer <one-api-token>` (required; one-api TokenAuth)
     - `Sec-WebSocket-Protocol: openai-realtime-v1` (recommended; forwarded to upstream if present)
+    - Browsers cannot set headers on a WebSocket, so they authenticate instead with
+      `Sec-WebSocket-Protocol: realtime, openai-insecure-api-key.<one-api-token>`.
+      `extractRawCredential` accepts that subprotocol as an auth source.
   - one-api applies: CORS, rate limits (global + channel), distribution, channel auth.
 
 - Upstream target: `wss://api.openai.com/v1/realtime?model=<model>`
   - Headers set by one-api:
     - `Authorization: Bearer <upstream-channel-key>`
-    - `Sec-WebSocket-Protocol: openai-realtime-v1` (if client requested, mirror/forward)
-    - Any additional OpenAI-required headers for Realtime beta (transparent forward if needed)
+    - `Sec-WebSocket-Protocol`: only the non-auth subprotocols the client offered,
+      via `NegotiateRealtimeSubprotocols`. The client's
+      `openai-insecure-api-key.*` entry must never be forwarded: OpenAI rejects a
+      handshake carrying both a protocol api key and an Authorization header with
+      "You must only send one of protocol api key and Authorization header", which
+      breaks every browser call. The same rule applies to the Responses WebSocket proxy.
+    - `OpenAI-Beta`: forwarded only when the client explicitly sent it. The relay must
+      not default `realtime=v1`. OpenAI removed the Realtime beta interface on
+      2026-05-12 and its GA migration guide says to drop the header; sending it
+      selects the retired beta schema, which rejects GA session fields such as
+      `session.type` with "Unknown parameter: 'session.type'". The same applies to the
+      `/v1/realtime/sessions` surface and to the legacy `openai-beta.realtime-v1`
+      subprotocol, which GA clients no longer send.
+
+- `session.update` frames are held to the model bound at connect time by the `model`
+  query parameter, which the relay rewrites to the channel's actual model name. The
+  bound model itself is allowed: the server's own `session.created` payload carries
+  `model`, and clients legitimately echo that object back. The channel's user-facing
+  alias is rewritten to the mapped upstream name. Only a *different* model is rejected,
+  with `ws_model_switch_denied` and a 1008 close. Verified upstream on 2026-09-18:
+  OpenAI accepts an unchanged model and silently ignores a changed one, so denying every
+  frame that merely mentions a model only broke conformant clients.
+
+- Transcription sessions (`?intent=transcription`) are forwarded **without** a `model`
+  query parameter. The caller still names a model for routing and billing, but the
+  upstream rejects the handshake with `invalid_model` ("You must not provide a model
+  parameter for transcription sessions"); the transcription model is chosen inside
+  `session.audio.input.transcription` and is what the receipt is billed under.
+
+- End-to-end probe: `API_BASE=... API_TOKEN=... go run ./cmd/test realtime` drives a
+  running server and a real OpenAI channel. Scenarios: `conversation` (session.update
+  echoing the bound model, two text turns, then a match of the persisted consume log
+  against the provider receipts), `audio` (PCM input with transcription enabled, which
+  must settle a second, transcription-model receipt), `model-guard` (a real switch is
+  denied) and `idle` (a connected but unused session is free). It spends real quota.
 
 Note: The OpenAI Realtime API also supports WebRTC and ephemeral tokens. For Phase 1 we only support the WebSocket path and do not issue OpenAI ephemeral tokens from one-api (that would bypass one-api’s logging/billing).
 

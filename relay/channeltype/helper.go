@@ -2,9 +2,13 @@ package channeltype
 
 import "github.com/Laisky/one-api/relay/apitype"
 
+// ToAPIType maps a channel type to its adaptor API type. Unmapped channel types
+// use the OpenAI API type.
 func ToAPIType(channelType int) int {
 	apiType := apitype.OpenAI
 	switch channelType {
+	case Azure:
+		apiType = apitype.Azure
 	case Anthropic:
 		apiType = apitype.Anthropic
 	case ClaudeCompatible:
@@ -57,6 +61,20 @@ func ToAPIType(channelType int) int {
 		apiType = apitype.Copilot
 	case Fireworks:
 		apiType = apitype.Fireworks
+	case NVIDIA:
+		apiType = apitype.NVIDIA
+	case Cerebras:
+		apiType = apitype.Cerebras
+	case DeepInfra:
+		apiType = apitype.DeepInfra
+	case Zai:
+		apiType = apitype.Zai
+	case Jina:
+		apiType = apitype.Jina
+	case TypeSafe:
+		apiType = apitype.TypeSafe
+	case MuAPI:
+		apiType = apitype.MuAPI
 	}
 
 	return apiType
@@ -182,6 +200,20 @@ func IdToName(channelType int) string {
 		return "copilot"
 	case Fireworks:
 		return "fireworks"
+	case NVIDIA:
+		return "nvidia"
+	case Cerebras:
+		return "cerebras"
+	case DeepInfra:
+		return "deepinfra"
+	case Zai:
+		return "zai"
+	case Jina:
+		return "jina"
+	case TypeSafe:
+		return "typesafe"
+	case MuAPI:
+		return "muapi"
 	case Dummy:
 		return "dummy"
 	default:

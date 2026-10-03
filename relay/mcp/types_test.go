@@ -60,3 +60,47 @@ func TestToolDescriptor_UnmarshalJSON_HandlesSchemaFields(t *testing.T) {
 	require.NotNil(t, underscore.InputSchema)
 	require.Equal(t, "object", underscore.InputSchema["type"])
 }
+
+// TestToolDescriptorOptionalNullFieldsAreAbsent verifies nullable optional fields do not reject an entire tools/list page.
+//
+// Parameters:
+//   - t: The test owns JSON compatibility assertions.
+//
+// Return values: none; failures are reported through t.
+func TestToolDescriptorOptionalNullFieldsAreAbsent(t *testing.T) {
+	var descriptor ToolDescriptor
+	err := json.Unmarshal([]byte(`{"name":"echo","inputSchema":{"type":"object"},"outputSchema":null,"annotations":null,"icons":null,"_meta":null}`), &descriptor)
+	require.NoError(t, err)
+	require.Nil(t, descriptor.OutputSchema)
+	require.Nil(t, descriptor.Annotations)
+	require.Nil(t, descriptor.Icons)
+	require.Nil(t, descriptor.Meta)
+}
+
+// TestToolDescriptorRequiredAndArrayFieldsRemainStrict verifies null compatibility does not weaken required schema validation.
+//
+// Parameters:
+//   - t: The test owns malformed descriptor assertions.
+//
+// Return values: none; failures are reported through t.
+func TestToolDescriptorRequiredAndArrayFieldsRemainStrict(t *testing.T) {
+	var descriptor ToolDescriptor
+	require.Error(t, json.Unmarshal([]byte(`{"name":"echo","inputSchema":null}`), &descriptor))
+	require.Error(t, json.Unmarshal([]byte(`{"name":"echo","inputSchema":{"type":"object"},"annotations":42}`), &descriptor))
+	require.Error(t, json.Unmarshal([]byte(`{"name":"echo","inputSchema":{"type":"object"},"icons":[null]}`), &descriptor))
+}
+
+// TestCallToolResultOptionalNullObjectsAreAbsent verifies nullable result objects remain backward compatible.
+//
+// Parameters:
+//   - t: The test owns JSON compatibility assertions.
+//
+// Return values: none; failures are reported through t.
+func TestCallToolResultOptionalNullObjectsAreAbsent(t *testing.T) {
+	var result CallToolResult
+	err := json.Unmarshal([]byte(`{"resultType":"complete","content":[],"structuredContent":null,"inputRequests":null,"_meta":null}`), &result)
+	require.NoError(t, err)
+	require.Nil(t, result.StructuredContent)
+	require.Nil(t, result.InputRequests)
+	require.Nil(t, result.Meta)
+}

@@ -5,7 +5,7 @@
 Open‑source version of OpenRouter, managed through a unified gateway that handles all AI SaaS model calls. Core functions include:
 
 1. Aggregating chat, image, speech, TTS, embeddings, rerank and other capabilities.
-2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, etc.
+2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, Groq, Grok/xAI, Fireworks, NVIDIA, Cerebras, Cloudflare, ZHIPU GLM, Z.ai, Cohere, etc.
 3. Aggregating various upstream API request formats like Chat Completion, Response, Claude Messages.
 4. Supporting different request formats; users can issue requests via Chat Completion, Response, or Claude Messages, which are automatically and transparently converted to the native request format of the upstream model. Even if the client sends a mismatched request format to wrong api endpoint, it will still be correctly processed.
 5. Supporting multi‑tenant management, allowing each tenant to set distinct quotas and permissions.
@@ -16,6 +16,8 @@ Open‑source version of OpenRouter, managed through a unified gateway that hand
 Also welcome to register and use my deployed one-api gateway, which supports various mainstream models. For usage instructions, please refer to <https://wiki.laisky.com/projects/gpt/pay/>.
 
 Try it at <https://oneapi.laisky.com>, login with `test` / `12345678`. 🚀
+
+> 📖 **API reference** — see [docs/manuals/api_references.md](docs/manuals/api_references.md) for the complete HTTP API: authentication, conventions, errors, and every endpoint with `curl` examples, organized for both end-users (inference + API-key management) and administrators.
 
 ```plain
 === One-API Compatibility Matrix 2025-12-12T04:37:09Z ===
@@ -97,7 +99,6 @@ The original author stopped maintaining the project, leaving critical PRs and ne
     - [OpenAI Features](#openai-features)
       - [Support whisper](#support-whisper)
       - [Support openai images edits](#support-openai-images-edits)
-      - [Support OpenAI o1/o1-mini/o1-preview](#support-openai-o1o1-minio1-preview)
       - [Support gpt-4o-audio](#support-gpt-4o-audio)
       - [Support OpenAI web search models](#support-openai-web-search-models)
       - [Support gpt-image family for image generation \& edits](#support-gpt-image-family-for-image-generation--edits)
@@ -107,6 +108,7 @@ The original author stopped maintaining the project, leaving critical PRs and ne
       - [Support o3-deep-research \& o4-mini-deep-research](#support-o3-deep-research--o4-mini-deep-research)
       - [Support Codex Cli](#support-codex-cli)
       - [Support Sora](#support-sora)
+      - [Deprecated Models](#deprecated-models)
     - [Anthropic (Claude) Features](#anthropic-claude-features)
       - [(Merged) Support aws claude](#merged-support-aws-claude)
       - [Support claude-3-7-sonnet \& thinking](#support-claude-3-7-sonnet--thinking)
@@ -116,15 +118,12 @@ The original author stopped maintaining the project, leaving critical PRs and ne
         - [Support Claude Code](#support-claude-code)
     - [Support Claude 4.x Models](#support-claude-4x-models)
     - [Google (Gemini \& Vertex) Features](#google-gemini--vertex-features)
-      - [Support gemini-2.0-flash-exp](#support-gemini-20-flash-exp)
-      - [Support gemini-2.0-flash](#support-gemini-20-flash)
-      - [Support gemini-2.0-flash-thinking-exp-01-21](#support-gemini-20-flash-thinking-exp-01-21)
-      - [Support Vertex Imagen3](#support-vertex-imagen3)
       - [Support gemini multimodal output #2197](#support-gemini-multimodal-output-2197)
       - [Support gemini-2.5-pro](#support-gemini-25-pro)
       - [Support GCP Vertex gloabl region and gemini-2.5-pro-preview-06-05](#support-gcp-vertex-gloabl-region-and-gemini-25-pro-preview-06-05)
       - [Support gemini-2.5-flash-image-preview \& imagen-4 series](#support-gemini-25-flash-image-preview--imagen-4-series)
       - [Support gemini-3 family](#support-gemini-3-family)
+      - [Deprecated Models](#deprecated-models-1)
     - [OpenCode Support](#opencode-support)
     - [AWS Features](#aws-features)
       - [Support AWS cross-region inferences](#support-aws-cross-region-inferences)
@@ -142,7 +141,7 @@ The original author stopped maintaining the project, leaving critical PRs and ne
     - [Coze Features](#coze-features)
       - [Support coze oauth authentication](#support-coze-oauth-authentication)
     - [Moonshot Features](#moonshot-features)
-      - [Support kimi-k2 Family](#support-kimi-k2-family)
+      - [Support Kimi Family](#support-kimi-family)
     - [GLM Features](#glm-features)
       - [Flagship Models - Text](#flagship-models---text)
       - [Flagship Models - Visual](#flagship-models---visual)
@@ -152,10 +151,17 @@ The original author stopped maintaining the project, leaving critical PRs and ne
       - [Image Generation Models](#image-generation-models)
       - [Other Models](#other-models)
       - [GLM OCR](#glm-ocr)
+    - [Z.ai Features](#zai-features)
+      - [Z.ai vs Zhipu / open.bigmodel.cn](#zai-vs-zhipu--openbigmodelcn)
+      - [Z.ai Model Catalog](#zai-model-catalog)
     - [XAI / Grok Features](#xai--grok-features)
       - [Support XAI/Grok Text \& Image Models](#support-xaigrok-text--image-models)
     - [Black Forest Labs Features](#black-forest-labs-features)
       - [Support black-forest-labs/flux-kontext-pro](#support-black-forest-labsflux-kontext-pro)
+    - [NVIDIA Features](#nvidia-features)
+      - [Support NVIDIA API Catalog (build.nvidia.com)](#support-nvidia-api-catalog-buildnvidiacom)
+    - [Cerebras Features](#cerebras-features)
+      - [Support Cerebras Inference (api.cerebras.ai)](#support-cerebras-inference-apicerebrasai)
   - [Bug Fixes \& Enterprise-Grade Improvements (Including Security Enhancements)](#bug-fixes--enterprise-grade-improvements-including-security-enhancements)
 
 ## Tutorial
@@ -194,6 +200,16 @@ oneapi:
 >
 > Session cookies are marked `Secure` by default, so the browser will only send them over HTTPS. If you are serving the service over plain HTTP (for example accessing `http://<host>:3000` directly, or a reverse proxy that terminates HTTPS but is misconfigured), logins will appear to succeed but the next request is unauthenticated, looping the user back to the login page. In that case set `ENABLE_COOKIE_SECURE=false` in the `environment` section. Keep it at the default (`true`) for any production deployment served over HTTPS.
 
+### Outbound Email Configuration
+
+one-api can send verification, password reset, quota reminder, and operator notification emails through either SMTP or the Resend HTTP API.
+
+- `EMAIL_PROVIDER=smtp` forces the SMTP backend.
+- `EMAIL_PROVIDER=resend` forces the Resend backend and requires `RESEND_API_KEY`.
+- Leaving `EMAIL_PROVIDER` empty enables auto mode: one-api uses Resend when `RESEND_API_KEY` is configured, otherwise it falls back to SMTP.
+
+When `RESEND_API_KEY` or `EMAIL_PROVIDER` is set as a non-empty environment variable, that environment value is authoritative during startup, periodic option sync, and runtime option updates. A saved or cleared database option will not override it. To manage these values from the admin UI instead, remove the corresponding environment variable and restart the service.
+
 ### Kubernetes Deployment
 
 The Kubernetes deployment guide has been moved into a dedicated document:
@@ -216,7 +232,9 @@ Support internationalization (i18n) in the web frontend, including English, Chin
 
 #### Unified Billing System
 
-All channels share a four-layer billing pipeline (channel overrides → adapter defaults → global fallback → safe default) with support for tiered token pricing, cached prompt buckets, and per-second/per-image media meters. Administrators can fetch defaults, override specific models, and audit every call via `X-Oneapi-Request-Id`; see [docs/arch/billing.md](./docs/arch/billing.md) for internals and [docs/manuals/billing.md](./docs/manuals/billing.md) for the operational playbook.
+All channels share a four-layer billing pipeline (channel overrides → adapter defaults → global fallback → safe default) with support for tiered token pricing, time-of-day pricing windows, cached prompt buckets, and per-second/per-image media meters. Administrators can fetch defaults, override specific models, and audit every call via `X-Oneapi-Request-Id`; see [docs/arch/billing.md](./docs/arch/billing.md) for internals and [docs/manuals/billing.md](./docs/manuals/billing.md) for the operational playbook.
+
+Per-channel `model_configs` can define `ratio`, `completion_ratio`, cache-read/cache-write ratios, `tiers`, `time_windows`, `max_tokens`, and media pricing blocks (`video`, `audio`, `image`, `embedding`). `time_windows` are ordered wall-clock overlays with explicit timezones; the first matching window at request start time is merged before tiers, so streaming requests keep one consistent rate even when they cross a boundary.
 
 Marketplace and aggregation-channel pricing snapshots such as OpenRouter, Together AI, Fireworks, Replicate, Cloudflare, and Novita are maintained from official provider docs or machine-readable official APIs rather than third-party trackers.
 
@@ -230,6 +248,146 @@ OTEL_EXPORTER_OTLP_INSECURE="true"
 OTEL_SERVICE_NAME="one-api"
 OTEL_ENVIRONMENT="debug"
 ```
+
+Use `http://` with `OTEL_EXPORTER_OTLP_INSECURE=true` or `https://` with
+`OTEL_EXPORTER_OTLP_INSECURE=false`. Startup rejects an explicit scheme paired
+with the opposite transport mode.
+
+#### Scalable request tracing
+
+Request traces are accumulated in memory and written once per request by an
+asynchronous batching writer, instead of the per-timestamp read-modify-write
+statements earlier versions issued. Defaults are unchanged for small
+deployments; high-volume deployments select a profile and, optionally, move
+traces out of the database entirely.
+
+```sh
+# One preset governs every trace knob. Individual variables still win.
+# Defaults are chosen so an upgrade changes nothing; "scaled" opts in.
+OBSERVABILITY_PROFILE="scaled"   # standalone (default) | scaled | external
+
+# Or tune individually. The standalone value is shown in the comment.
+TRACE_WRITE_MODE="batched"       # standalone: sync (pre-existing behaviour)
+TRACE_SAMPLE_RATE="0.05"         # standalone: 1.0
+TRACE_ALWAYS_SAMPLE_ERRORS="true"
+TRACE_ALWAYS_SAMPLE_SLOW_MS="5000"
+TRACE_EXCLUDED_PATH_PREFIXES="/api/status,/metrics,/health,/static,/assets"
+TRACE_SINK="db"                  # db | otlp | none, comma-separated to fan out
+TRACE_BATCH_SIZE="500"
+TRACE_FLUSH_INTERVAL_MS="1000"
+TRACE_QUEUE_SIZE="50000"
+TRACE_WRITER_COUNT="4"
+
+# Bounded trace resources. TRACE_QUEUE_SIZE bounds only COMPLETED records;
+# long-lived streaming requests accumulate on the active side, which is what
+# TRACE_MAX_ACTIVE_RECORDERS bounds. Over the limit a request runs normally
+# but records no trace, counted as oneapi_trace_records_total{outcome=
+# "dropped_active_limit"}.
+TRACE_MAX_ACTIVE_RECORDERS="200000"  # all profiles; 0 restores unbounded
+TRACE_MAX_RECORD_BYTES="65536"       # standalone: 262144; minimum 1024; truncates, never drops
+TRACE_MAX_EXTERNAL_CALLS="256"       # standalone: 1024
+TRACE_BATCH_MAX_BYTES="8388608"      # bounds one writer's flush-local buffer
+```
+
+Errors and slow requests are always retained regardless of the sample rate.
+`TRACE_WRITE_MODE=sync` is the legacy in-flight SQL path and therefore requires
+`TRACE_SINK=db` (or `none`) and `TRACE_SAMPLE_RATE=1`; configurations that need
+sampling, OTLP, or sink fan-out must use `batched` and fail fast otherwise.
+See [docs/arch/tracing_system.md](./docs/arch/tracing_system.md).
+
+> **Upgrade note — observability settings are now validated at startup.**
+> These variables previously accepted anything and silently substituted a
+> default: `OTEL_ENABLED=1` meant `false`, `TRACE_SINK=cassandra` meant `db`,
+> `TRACE_SAMPLE_RATE=5` meant `1`, and `TRACE_WRITE_MODE=async` meant `batched`.
+> A misconfigured deployment therefore ran with telemetry quietly disabled and
+> no way to find out. They are now rejected at startup with a message naming the
+> variable, the offending value and the allowed values.
+>
+> This intentional startup behavior affects configurations that were already
+> not doing what they said. Only booleans spelled exactly `true`/`false` are
+> accepted — `1`, `yes` and `on` are not.
+
+The OTLP trace outcome labels are now `span_recorded` and
+`span_record_failed`. The former labels local SDK recording; it does not claim
+that the asynchronous exporter or collector persisted the span. Dashboards that
+previously selected `exported` or `export_failed` must use the new labels.
+
+#### Bounded log and telemetry retention
+
+Retention sweeps delete in bounded chunks instead of one unbounded `DELETE`, and
+the log directory is bounded by age, total size, and free disk.
+
+```sh
+# Log files. Every deletion knob is OFF by default so an upgrade never removes
+# files an operator chose to keep; OBSERVABILITY_PROFILE=scaled turns them on.
+LOG_RETENTION_DAYS="7"          # standalone: 0 (never delete)
+LOG_MAX_TOTAL_SIZE_MB="20480"   # standalone: 0 (unlimited)
+LOG_MIN_FREE_DISK_MB="1024"     # standalone: 0 (guard disabled)
+APP_LOG_SINK="both"             # file | stdout | both; stdout suits Kubernetes
+
+# Optional OTLP application logs. Add the additive "otlp" token to APP_LOG_SINK
+# (both,otlp / stdout,otlp / file,otlp) to also export log records to the
+# collector configured by OTEL_EXPORTER_OTLP_ENDPOINT. It requires
+# OTEL_ENABLED=true, and a bare "otlp" is rejected: the bridge drops records on a
+# full queue, before its provider is installed and after shutdown, so it may not
+# be a deployment's only log destination. Exported records carry the request's
+# trace and span ids, so logs join to traces in Loki/Tempo/ClickHouse.
+# Off by default in EVERY profile, including external.
+# APP_LOG_SINK="both,otlp"
+LOG_OTLP_MIN_LEVEL="info"              # debug | info | warn | error; independent of LOG_LEVEL
+LOG_OTLP_QUEUE_SIZE="10000"            # records resident before drops are counted
+LOG_OTLP_QUEUE_MAX_MB="64"             # byte ceiling; record count alone does not bound memory
+LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES="4096"  # the SDK default is unlimited
+
+# Active-file ceiling and disk-pressure guard. LOG_MAX_TOTAL_SIZE_MB can only
+# delete already-rotated files, so it cannot bound the file currently being
+# written; LOG_MAX_ACTIVE_FILE_SIZE_MB rotates on bytes and closes that hole.
+# The guard samples on its OWN fast cadence, not the slow retention sweep: at
+# 16 MB/s a 1 GB reserve lasts about 62 seconds.
+LOG_MAX_ACTIVE_FILE_SIZE_MB="2048"     # standalone: 4096; 0 disables
+LOG_DISK_CHECK_INTERVAL_SEC="5"        # independent of RETENTION_SWEEP_INTERVAL_MINUTES
+LOG_EMERGENCY_MAX_BYTES_PER_SEC="1048576"  # byte budget once headroom is gone
+LOG_DISK_RECOVERY_MARGIN_PCT="20"      # hysteresis, so the guard cannot flap
+
+# Per-request log line. The full form is the default so existing log pipelines
+# keep parsing the same fields.
+LOG_RECORD_LINE_FORMAT="compact"   # standalone: full
+LOG_SAMPLE_INITIAL="100"           # standalone: 0 (no sampling)
+LOG_SAMPLE_THEREAFTER="100"
+LOG_SAMPLE_TICK_MS="1000"
+
+# Database retention sweeps (traces, logs, async task bindings). These bound the
+# size of each DELETE; they do not change what gets deleted.
+RETENTION_DELETE_BATCH_SIZE="5000"
+RETENTION_DELETE_PAUSE_MS="10"
+RETENTION_SWEEP_INTERVAL_MINUTES="60"   # standalone: 1440 (historical 24h cadence)
+
+# Dashboard.
+DASHBOARD_CACHE_TTL_SEC="60"            # standalone: 0 (always live)
+DASHBOARD_MAX_SITEWIDE_RANGE_DAYS="31"  # standalone: 365 (the existing limit)
+DASHBOARD_MAX_CONCURRENT_AGGREGATES="2" # standalone: 0 (unlimited). Concurrent
+                                        # misses are coalesced regardless.
+
+# Keyset log pagination. Two ADDITIVE routes (/api/log/cursor and
+# /api/log/self/cursor); the existing offset routes are untouched.
+#
+# OFF by default, and not because it is experimental: the keyset order
+# (created_at DESC, id DESC) has no supporting index in the shipped schema, so
+# on MySQL 8.4 the first page is a full table scan. Turn it on only after adding
+# the access paths for your engine. Measured plans:
+# docs/benchmarks/20260906_w24-cursor-plans.md
+LOG_CURSOR_ENABLED="true"               # default: false
+LOG_CURSOR_TTL_SEC="1800"               # how long a page token stays usable
+LOG_CURSOR_MAX_RESPONSE_BYTES="4194304" # 0 disables the cap
+LOG_COUNT_PROBE_MAX_ROWS="10000"        # beyond this the count is a lower bound
+LOG_COUNT_PROBE_TIMEOUT_MS="3000"       # beyond this the count is unavailable
+LOG_COUNT_CACHE_TTL_SEC="30"            # 0 disables count reuse
+```
+
+Upgrading from an earlier release changes nothing unless you set one of these:
+retention, sampling, caching, the compact log line and keyset pagination are all
+off by default, and trace writes stay synchronous. See
+[the compatibility contract](./docs/proposals/20260905_observability-data-tiering.md#45-backward-compatibility-contract).
 
 #### Support channel's built-in tooling configuration
 
@@ -571,10 +729,6 @@ Response:
 }
 ```
 
-#### Support OpenAI o1/o1-mini/o1-preview
-
-- [feat: add openai o1 #1990](https://github.com/Laisky/one-api/pull/1990)
-
 #### Support gpt-4o-audio
 
 - [feat: support gpt-4o-audio #2032](https://github.com/Laisky/one-api/pull/2032)
@@ -914,15 +1068,19 @@ Response:
 
 #### Support gpt-5 family
 
-gpt-5.5 / gpt-5.5-2026-04-23
+- **GPT-5.6** — Sol / Terra / Luna tiers (`gpt-5.6` aliases to `gpt-5.6-sol`; adds the new `max` reasoning effort): gpt-5.6 / gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna
+- **GPT-5.5**: gpt-5.5 / gpt-5.5-pro / gpt-5.5-2026-04-23
+- **GPT-5.4**: gpt-5.4 / gpt-5.4-2026-03-05 / gpt-5.4-mini / gpt-5.4-nano / gpt-5.4-pro
+- **GPT-5.3**: gpt-5.3-codex / ~~gpt-5.3-chat-latest~~ (retires 2026-08-10)
+- **GPT-5.2**: gpt-5.2 / gpt-5.2-2025-12-11 / gpt-5.2-pro / gpt-5.2-pro-2025-12-11 / ~~gpt-5.2-codex~~ (retires 2026-07-23)
+- **GPT-5.1**: gpt-5.1 / gpt-5.1-2025-11-13 / gpt-5.1-codex / gpt-5.1-codex-mini / gpt-5.1-codex-max / ~~gpt-5.1-chat-latest~~ (retires 2026-07-23)
+- **GPT-5**: gpt-5 / gpt-5-2025-08-07 / gpt-5-mini / gpt-5-mini-2025-08-07 / gpt-5-nano / gpt-5-nano-2025-08-07 / gpt-5-pro / gpt-5-pro-2025-10-06 / ~~gpt-5-chat-latest~~ / ~~gpt-5-codex~~ (retire 2026-07-23)
+- **ChatGPT alias**: chat-latest — rolling alias to the latest Instant model used in ChatGPT
 
-gpt-5.4 / gpt-5.4-pro
+##### Realtime models
 
-gpt-5.2 / gpt-5.2-2025-12-11 / gpt-5.2-pro / gpt-5.2-pro-2025-12-11 / gpt-5.2-codex
-
-gpt-5.1-chat-latest / gpt-5.1 / gpt-5.1-2025-11-13 / gpt-5.1-codex / gpt-5.1-codex-mini
-
-gpt-5-chat-latest / gpt-5 / gpt-5-mini / gpt-5-nano / gpt-5-codex / gpt-5.1-codex-max/ gpt-5-pro
+- gpt-realtime-2.1 / gpt-realtime-2.1-mini / gpt-realtime-2 / gpt-realtime-1.5 / gpt-realtime (alias) / gpt-realtime-mini / gpt-realtime-translate / gpt-realtime-whisper
+- ~~gpt-4o-realtime-preview~~ / ~~gpt-4o-realtime-preview-2025-06-03~~ / ~~gpt-4o-mini-realtime-preview~~ / ~~gpt-4o-mini-realtime-preview-2024-12-17~~ (GPT-4o realtime previews retired upstream 2026-05-07)
 
 #### Support o3-deep-research & o4-mini-deep-research
 
@@ -1083,6 +1241,10 @@ curl --location 'https://oneapi.laisky.com/v1/videos/video_691611812ca88190bfb12
   --header 'Authorization: sk-xxxxxxx'
 ```
 
+#### Deprecated Models
+
+- o1-preview (retired 2025-07-28), o1-mini (retired 2025-10-27), o1 (retires 2026-10-23) — [feat: add openai o1 #1990](https://github.com/Laisky/one-api/pull/1990)
+
 ### Anthropic (Claude) Features
 
 #### (Merged) Support aws claude
@@ -1121,33 +1283,23 @@ export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxx"
 
 You can use any model you like for Claude Code, even if the model doesn’t natively support the Claude Messages API.
 
+#### Support Azure AI Foundry Claude models
+
+[Azure AI Foundry](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) serves Anthropic Claude through the native Anthropic Messages API — there is no OpenAI-compatible route for Claude on Foundry. one-api's existing **Azure** channel handles this automatically: on an Azure channel, `claude-*` models are routed to the resource's `/anthropic/v1/messages` surface (with the `x-api-key` and `anthropic-version` headers and Anthropic pricing), while `gpt-*` deployments continue to use the Azure OpenAI surface. No separate channel type is required.
+
+To use it:
+
+1. Create an **Azure** channel and set the base URL to your resource endpoint, e.g. `https://<resource>.services.ai.azure.com` (no `/anthropic` or `/openai` suffix — one-api appends the correct path per model).
+2. Use the Azure resource key as the channel key (forwarded as `x-api-key`).
+3. Add the Claude models you deployed (e.g. `claude-sonnet-5`, `claude-opus-4-8`). Naming your Azure deployment to match the one-api model id lets both routing and default Anthropic pricing resolve automatically. If the deployment name differs, add a model mapping (`claude-* → your-deployment`); routing still works because it keys off the requested model, but you should then set a per-channel price for the deployment name so billing stays correct.
+
 ### Support Claude 4.x Models
 
 ![](https://s3.laisky.com/uploads/2025/09/claude-sonnet-4-5.png)
 
-claude-opus-4-0 / claude-opus-4-1 / claude-opus-4-5 / claude-opus-4-6 / claude-opus-4-7 / claude-opus-4-8 / claude-sonnet-4-0 / claude-sonnet-4-5 / claude-sonnet-4-6 / claude-haiku-4-5
+~~claude-opus-4-0~~ (retired 2026-06-15) / ~~claude-opus-4-1~~ (retires 2026-08-05) / claude-opus-4-5 / claude-opus-4-6 / claude-opus-4-7 / claude-opus-4-8 / claude-opus-5 / ~~claude-sonnet-4-0~~ (retired 2026-06-15) / claude-sonnet-4-5 / claude-sonnet-4-6 / claude-sonnet-5 / claude-haiku-4-5
 
 ### Google (Gemini & Vertex) Features
-
-#### Support gemini-2.0-flash-exp
-
-- [feat: add gemini-2.0-flash-exp #1983](https://github.com/Laisky/one-api/pull/1983)
-
-![](https://s3.laisky.com/uploads/2024/12/oneapi-gemini-flash.png)
-
-#### Support gemini-2.0-flash
-
-- [feat: support gemini-2.0-flash #2055](https://github.com/Laisky/one-api/pull/2055)
-
-#### Support gemini-2.0-flash-thinking-exp-01-21
-
-- [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/Laisky/one-api/pull/2045)
-
-#### Support Vertex Imagen3
-
-- [feat: support vertex imagen3 #2030](https://github.com/Laisky/one-api/pull/2030)
-
-![](https://s3.laisky.com/uploads/2025/01/oneapi-imagen3.png)
 
 #### Support gemini multimodal output #2197
 
@@ -1167,7 +1319,14 @@ claude-opus-4-0 / claude-opus-4-1 / claude-opus-4-5 / claude-opus-4-6 / claude-o
 
 #### Support gemini-3 family
 
-Support gemini-3.1-pro-preview / gemini-3.1-pro-preview-customtools / gemini-3-pro-preview / gemini-3-pro-image-preview / gemini-3-flash-preview / gemini-3.1-flash-image-preview / gemini-3.1-flash-lite-preview
+Support gemini-3.1-pro-preview / gemini-3.1-pro-preview-customtools / ~~gemini-3-pro-preview~~ (retired 2026-03-09) / ~~gemini-3-pro-image-preview~~ (retired 2026-06-25) / gemini-3-flash-preview / ~~gemini-3.1-flash-image-preview~~ (retired 2026-06-25) / ~~gemini-3.1-flash-lite-preview~~ (retired 2026-05-25)
+
+#### Deprecated Models
+
+- gemini-2.0-flash-exp — [feat: add gemini-2.0-flash-exp #1983](https://github.com/Laisky/one-api/pull/1983)
+- gemini-2.0-flash (retired 2026-06-01) — [feat: support gemini-2.0-flash #2055](https://github.com/Laisky/one-api/pull/2055)
+- gemini-2.0-flash-thinking-exp-01-21 — [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/Laisky/one-api/pull/2045)
+- imagen-3 (imagen-3.0-generate-002, retired 2025-11-10) — [feat: support vertex imagen3 #2030](https://github.com/Laisky/one-api/pull/2030)
 
 ### OpenCode Support
 
@@ -1348,25 +1507,46 @@ Response:
 
 ### Moonshot Features
 
-#### Support kimi-k2 Family
+#### Support Kimi Family
 
-Support:
+Current flagship (1M context, text + image + video input):
 
-- `kimi-k2-0905-preview`
-- `kimi-k2-0711-preview`
-- `kimi-k2-turbo-preview`
-- `kimi-k2-thinking`
-- `kimi-k2-thinking-turbo`
+- `kimi-k3` — always-on thinking, depth selected by `reasoning_effort` (`low` / `high` / `max`, default `max`)
+
+K3 pins `temperature`, `top_p`, `n`, `presence_penalty` and `frequency_penalty` upstream and rejects other
+values, so the Moonshot adaptor drops those fields for this model and maps the OpenAI effort ladder onto
+K3's three tiers (`minimal`/`none` → `low`, `medium` → `high`, `xhigh` → `max`).
+
+K2 generation (text + image + video, 256k context, open weights on HuggingFace):
+
+- `kimi-k2.7-code` — top coding model, thinking-only deep reasoning
+- `kimi-k2.7-code-highspeed` — high-throughput variant, priced at 2x standard
+- `kimi-k2.6` — multimodal, thinking and non-thinking modes
+- `kimi-k2.5` — multimodal, thinking and non-thinking modes
+
+Classic Moonshot V1 chat models (text, plus vision-preview variants):
+
+- `moonshot-v1-8k` / `moonshot-v1-32k` / `moonshot-v1-128k`
+- `moonshot-v1-8k-vision-preview` / `moonshot-v1-32k-vision-preview` / `moonshot-v1-128k-vision-preview`
+
+> `kimi-k2.5` and the whole `moonshot-v1` series stopped accepting newly registered Moonshot accounts when
+> K3 launched, and go fully offline on 2026-08-31.
+
+> The legacy `kimi-k2-0905-preview`, `kimi-k2-0711-preview`, `kimi-k2-turbo-preview`, `kimi-k2-thinking` and `kimi-k2-thinking-turbo` models were discontinued by Moonshot on 2026-05-25.
+
+Kimi K3 is also available through several hosted providers, each with its own case-sensitive model id:
+`moonshotai/kimi-k3` (OpenRouter, Novita), `moonshotai/Kimi-K3` (SiliconFlow) and `kimi/kimi-k3`
+(Alibaba Bailian, billed in CNY with cache hits at 10% of input).
 
 ### GLM Features
 
 #### Flagship Models - Text
 
-`glm-5-turbo` / `glm-5` / `glm-4.7` / `glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` / `glm-4.5-air` / `glm-4.5-airx`
+`glm-5.3` / `glm-5.2` / `glm-5.1` / `glm-5-turbo` / `glm-5` / `glm-4.7` / `glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` / `glm-4.5-air` / `glm-4.5-airx`
 
 #### Flagship Models - Visual
 
-`glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` / `glm-4.5v` / `glm-4.6v-flash` / `glm-4v-flash`
+`autoglm-phone` / `glm-5.3-flash` / `glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` / `glm-4.5v` / `glm-4.6v-flash` / `glm-4v-flash`
 
 #### Language Models
 
@@ -1382,7 +1562,18 @@ Support:
 
 #### Image Generation Models
 
-`cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogviewx` / `cogviewx-flash`
+`glm-image` / `cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogvideox-3` / `cogvideox-2` / `cogviewx` / `cogviewx-flash` / `viduq1-image` / `viduq1-start-end` / `viduq1-text` / `vidu2-image` / `vidu2-start-end` / `vidu2-reference`
+
+#### Audio Models
+
+`glm-tts` / `glm-asr-2512` / `glm-tts-clone`
+
+Voice cloning is exposed through `/v1/voice/clones` (Zhipu-compatible
+`/api/paas/v4/voice/clone` is also accepted).
+
+#### Realtime Models
+
+`glm-realtime-flash` / `glm-realtime-air`
 
 #### Other Models
 
@@ -1486,17 +1677,112 @@ Response:
 }
 ```
 
+### Z.ai Features
+
+Z.ai (`https://api.z.ai`) and Zhipu / open.bigmodel.cn are two brands of the same
+company serving the same GLM wire protocol, so one-api exposes them as **two
+separate channel types**: `Zhipu` (16) and `Z.ai` (58). Each holds its own API key
+and its own model list, and each bills from its own price table. Requests to
+`glm-4.7` on a Zhipu channel bill at BigModel's CNY tiers; the same model on a
+Z.ai channel bills at Z.ai's flat USD rate.
+
+#### Z.ai vs Zhipu / open.bigmodel.cn
+
+| | Zhipu (16) | Z.ai (58) |
+|---|---|---|
+| Base URL | `https://open.bigmodel.cn` | `https://api.z.ai` |
+| Auth | HS256-signed JWT built from a dotted `{id}.{secret}` key | plain `Authorization: Bearer <key>` |
+| Pricing | CNY, tiered by input and output length | USD, flat (no tiers) |
+| Endpoints | chat, embeddings, images, response API, Claude Messages, OCR | chat, images, videos, audio transcription, response API, Claude Messages, OCR |
+| Not available | — | embeddings, rerank, text-to-speech, realtime |
+
+Because the two catalogs overlap almost entirely, a model id served by both is
+attributed to a single channel in the listings.
+
+`/v1/models` is derived entirely from the channels enabled on this deployment,
+scoped to the caller's group and then narrowed to the API key's own model
+allow-list — it never consults the compiled-in adaptor catalog. Every model it
+lists passes the same allow-list check the relay applies before serving a request,
+so a key is no longer shown models it would be refused. (The converse does not
+hold: models hidden on a channel are deliberately omitted from the listing while
+remaining callable.)
+Every row is rendered from the ability that makes the model routable, so each id
+is callable by construction, and `owned_by` names the channel that would serve
+it: the highest-priority channel offering that model, with the lowest channel id
+breaking ties. A deployment running only a Zhipu channel therefore reports
+`zhipu` and never `zai`, and with no channels configured the list is empty.
+
+The admin catalog at `/api/channel/models` ranks enabled channels the same way
+but *does* fall back to the compiled-in adaptor list for models no channel serves
+yet — that list is what lets you pick models while creating your first channel.
+
+`owned_by` is a display label in every case: billing always follows the channel
+the request was actually routed to, so the same `glm-4.7` call bills at CNY tiers
+on a Zhipu channel and at flat USD on a Z.ai channel.
+
+Z.ai's GLM Coding Plan uses different base URLs (`/api/anthropic`,
+`/api/coding/paas/v4`) and is **not** served by this channel; point a
+`ClaudeCompatible` channel at `https://api.z.ai/api/anthropic` for that instead.
+
+#### Z.ai Model Catalog
+
+Text: `glm-5.3` / `glm-5.2` / `glm-5.1` / `glm-5` / `glm-5-turbo` / `glm-4.7` /
+`glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` /
+`glm-4.5-air` / `glm-4.5-airx` / `glm-4.5-flash` / `glm-4-32b-0414-128k`
+
+Vision: `glm-5.3-flash` / `glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` /
+`glm-4.6v-flash` / `glm-4.5v`
+
+OCR, image, video, audio: `glm-ocr` / `glm-image` / `cogview-4-250304` /
+`cogvideox-3` / `viduq1-text` / `viduq1-image` / `viduq1-start-end` /
+`vidu2-image` / `vidu2-start-end` / `vidu2-reference` / `glm-asr-2512`
+
+`glm-4.7-flash`, `glm-4.5-flash` and `glm-4.6v-flash` are free on Z.ai.
+`glm-4-32b-0414-128k` and `cogview-4-250304` exist only on Z.ai; conversely
+`embedding-3`, `rerank`, `glm-tts` and `glm-realtime-*` exist only on Zhipu.
+Pricing source: <https://docs.z.ai/guides/overview/pricing>.
+
 ### XAI / Grok Features
 
 #### Support XAI/Grok Text & Image Models
 
 ![](https://s3.laisky.com/uploads/2025/08/groq.png)
 
+The XAI adaptor tracks the current Grok 4.6 flagship, Grok 4.5/4.3 and
+Grok 4.20 snapshots, Grok Build 0.1, legacy redirect aliases, and the current
+Grok Imagine image/video model slugs. Pricing is sourced from the official
+[xAI pricing table](https://docs.x.ai/developers/pricing), including the
+published long-context surcharge at 200K input tokens.
+
 ### Black Forest Labs Features
 
 #### Support black-forest-labs/flux-kontext-pro
 
 ![](https://s3.laisky.com/uploads/2025/05/flux-kontext-pro.png)
+
+### NVIDIA Features
+
+#### Support NVIDIA API Catalog (build.nvidia.com)
+
+Adds an `NVIDIA` channel type that targets NVIDIA's OpenAI-compatible hosted inference API at `https://integrate.api.nvidia.com/v1` (the models published on [build.nvidia.com](https://build.nvidia.com/models)). Authenticate with an `nvapi-...` API key. The channel serves Chat Completions natively, and transparently handles Claude Messages / Response API requests through one-api's OpenAI-compatible conversion layer. Embeddings are not enabled by default until NVIDIA's model-specific request requirements are represented in the catalog.
+
+Curated models include NVIDIA's own Nemotron family (e.g. `nvidia/nemotron-3-ultra-550b-a55b`, `nvidia/llama-3.3-nemotron-super-49b-v1.5`, `nvidia/nemotron-nano-12b-v2-vl`) plus popular hosted open models such as `meta/llama-3.3-70b-instruct`, `deepseek-ai/deepseek-v4-flash`, `qwen/qwen3-next-80b-a3b-instruct`, `openai/gpt-oss-120b`, and `moonshotai/kimi-k2.6`.
+
+NVIDIA does not publish per-token pricing for the hosted endpoint (it is metered in free API credits rather than currency), so every bundled model defaults to free. Operators routing to NVIDIA AI Enterprise or a paid partner endpoint with real costs can set per-channel pricing overrides.
+
+### Cerebras Features
+
+#### Support Cerebras Inference (api.cerebras.ai)
+
+Adds a `Cerebras` channel type that targets [Cerebras Inference](https://inference-docs.cerebras.ai/), the OpenAI-compatible API served on Cerebras' wafer-scale (CS-3) hardware at `https://api.cerebras.ai/v1`. Authenticate with a Cerebras API key (`Authorization: Bearer ...`). The channel serves Chat Completions natively, and transparently handles Claude Messages / Response API requests through one-api's OpenAI-compatible conversion layer. Cerebras is chat-only — it does not expose embeddings or a native Anthropic Messages endpoint.
+
+Bundled models (live on the shared public API with officially published per-token pricing):
+
+- `gpt-oss-120b` — OpenAI gpt-oss 120B open-weight MoE reasoning model (Production / GA); 131K context, tools and structured outputs, `reasoning_effort` supported. Billed at $0.35 / 1M input and $0.75 / 1M output tokens.
+- `zai-glm-4.7` — Z.ai GLM-4.7 (355B) reasoning/agent model; 131K context. Marked **Preview** by Cerebras (evaluation only, may change on short notice). Billed at $2.25 / 1M input and $2.75 / 1M output tokens.
+- `gemma-4-31b` — Google Gemma 4 31B multimodal (text + image input) reasoning model; 131K context (paid tier), reasoning disabled by default (opt-in via `reasoning_effort`). Marked **Preview** by Cerebras. Billed at $0.99 / 1M input and $1.49 / 1M output tokens.
+
+Per-token rates above are taken from the official Cerebras model cards; operators can override pricing per channel.
 
 ## Bug Fixes & Enterprise-Grade Improvements (Including Security Enhancements)
 

@@ -137,9 +137,7 @@ func injectDeferredMCPToolsForToolSearch(c *gin.Context, request *ClaudeMessages
 		resolved, err := mcp.ResolveTools(server, tools, channelBlacklist, user.MCPToolBlacklist, nil)
 		if err != nil {
 			lg.Warn("failed to resolve MCP tools for tool search injection",
-				zap.Int("server_id", server.Id),
-				zap.String("server_name", server.Name),
-				zap.Error(err),
+				append(server.Ref().Zap(), zap.Error(err))...,
 			)
 			continue
 		}
@@ -227,8 +225,9 @@ func executeClaudeToolSearchMCPLoop(
 	}
 
 	channelModelRatio, _ := getChannelRatios(c)
+	channelModelConfigs := getChannelModelConfigs(c)
 	pricingAdaptor := resolvePricingAdaptor(meta)
-	modelRatio := pricing.GetModelRatioWithThreeLayers(request.Model, channelModelRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(request.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 	ratio := modelRatio * groupRatio
 
@@ -484,7 +483,11 @@ func buildClaudeAssistantMessage(resp *anthropic.Response) relaymodel.ClaudeMess
 		case "tool_use":
 			contentBlock["id"] = block.Id
 			contentBlock["name"] = block.Name
-			contentBlock["input"] = block.Input
+			// Anthropic requires tool_use.input to be an object. block.Input is `any`,
+			// so an upstream that omitted it would replay as `"input": null` on the
+			// next MCP round and be rejected. The default arm below already guards
+			// this; these two hot arms did not.
+			contentBlock["input"] = toolUseInputOrEmpty(block.Input)
 		case "thinking":
 			if block.Thinking != nil {
 				contentBlock["thinking"] = *block.Thinking
@@ -495,7 +498,7 @@ func buildClaudeAssistantMessage(resp *anthropic.Response) relaymodel.ClaudeMess
 		case "server_tool_use":
 			contentBlock["id"] = block.Id
 			contentBlock["name"] = block.Name
-			contentBlock["input"] = block.Input
+			contentBlock["input"] = toolUseInputOrEmpty(block.Input)
 		default:
 			// Preserve other block types as-is
 			contentBlock["text"] = block.Text
@@ -613,4 +616,18 @@ func resolveServerByIDFromCatalog(catalog *mcpToolCatalog, serverID int) *model.
 		}
 	}
 	return nil
+}
+
+// toolUseInputOrEmpty substitutes an empty object for a missing tool_use input.
+//
+// Parameters:
+//   - input: the block's decoded input, which may be nil.
+//
+// Return values:
+//   - any: input when present, otherwise an empty object.
+func toolUseInputOrEmpty(input any) any {
+	if input == nil {
+		return map[string]any{}
+	}
+	return input
 }

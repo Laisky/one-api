@@ -15,7 +15,7 @@ func ParseInputSchema(raw string) (map[string]any, error) {
 		return nil, nil
 	}
 	var parsed map[string]any
-	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+	if err := DecodeJSON([]byte(trimmed), &parsed); err != nil {
 		return nil, errors.Wrap(err, "parse mcp input schema")
 	}
 	return parsed, nil
@@ -257,11 +257,7 @@ func isInteger(value any) bool {
 	case float64:
 		return math.Trunc(typed) == typed
 	case json.Number:
-		asFloat, err := typed.Float64()
-		if err != nil {
-			return false
-		}
-		return math.Trunc(asFloat) == asFloat
+		return IsJSONInteger(typed)
 	default:
 		return false
 	}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://a2aproject.github.io/A2A/specification/agent-card.json",
+  "name": "Laisky One API",
+  "description": "Agent-friendly AI gateway at oneapi.laisky.com for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, and multi-provider model routing.",
+  "url": "https://oneapi.laisky.com/",
+  "provider": {
+    "organization": "Laisky",
+    "url": "https://github.com/Laisky/one-api"
+  },
+  "version": "0.6",
+  "documentationUrl": "https://oneapi.laisky.com/llms.txt",
+  "contact": {
+    "url": "https://github.com/Laisky/one-api/issues",
+    "description": "Use GitHub issues for technical support, bug reports, and integration questions."
+  },
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": false,
+    "stateTransitionHistory": true
+  },
+  "defaultInputModes": ["application/json", "text/plain"],
+  "defaultOutputModes": ["application/json", "text/event-stream"],
+  "skills": [
+    {
+      "id": "ai-gateway-format-routing",
+      "name": "AI gateway format routing",
+      "description": "Route and convert compatible requests across Chat Completions, Responses, and Claude Messages APIs.",
+      "tags": ["ai-gateway", "openai", "claude", "responses", "mcp"],
+      "examples": [
+        "Send a Chat Completions request to /v1/chat/completions.",
+        "Send a Responses request to /v1/responses.",
+        "Send a Claude Messages request to /v1/messages."
+      ]
+    }
+  ],
+  "securitySchemes": {
+    "relayApiKey": {
+      "type": "http",
+      "scheme": "bearer",
+      "description": "Relay API key for /v1/* inference endpoints and /mcp."
+    }
+  },
+  "endpoints": {
+    "openapi": "https://oneapi.laisky.com/openapi.json",
+    "mcpManifest": "https://oneapi.laisky.com/.well-known/mcp/manifest.json",
+    "apiCatalog": "https://oneapi.laisky.com/.well-known/api-catalog"
+  }
+}

@@ -21,30 +21,53 @@ var replicateImageModelRatios = map[string]adaptor.ModelConfig{
 		Description: "FLUX 1.1 [pro] high-quality text-to-image generator from Black Forest Labs.",
 	},
 	"black-forest-labs/flux-2-dev": {
-		// FLUX.2 [dev] is the open-weight distilled variant priced at $0.012/MP for both
-		// text-to-image and image editing. The base config assumes a single 1024x1024 (1MP)
-		// output. Confirm at https://bfl.ai/pricing for higher-resolution requests.
+		// FLUX.2 [dev] is the open-weight distilled variant. $0.012/MP applies to go_fast=true
+		// (default); go_fast=false is $0.014/MP. The base config assumes a single 1024x1024 (1MP)
+		// output, so a default 1MP text-to-image = $0.012.
+		// https://replicate.com/black-forest-labs/flux-2-dev#pricing
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.012),
 		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
 		HuggingFaceID: "black-forest-labs/FLUX.2-dev",
 		Description:   "FLUX.2 [dev] open-weight 32B distilled rectified-flow text-to-image and editing model.",
 	},
 	"black-forest-labs/flux-2-max": {
-		// FLUX.2 [max] is BFL's highest-quality FLUX.2 tier listed on Replicate at
-		// roughly $0.25/image (25 credits/image with 1 credit = 1 cent). Confirm at
-		// https://bfl.ai/pricing for current rates.
-		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.25),
+		// FLUX.2 [max] is priced at $0.04/run + $0.03 per output-image MP (+$0.03 per input-image
+		// MP for edits) on Replicate; ~$0.07 for a default 1MP text-to-image.
+		// https://replicate.com/black-forest-labs/flux-2-max#pricing
+		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.07),
 		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
 		Description: "FLUX.2 [max] highest-quality FLUX.2 tier with strongest prompt following and up to 8 reference images.",
 	},
 	"black-forest-labs/flux-2-pro": {
-		// Black Forest Labs publishes FLUX.2 [pro] at $0.03/megapixel for text-to-image
-		// (image editing is $0.045/megapixel). Most Replicate requests default to a
-		// single 1024x1024 (1MP) image, which lines up with $0.03/image. Confirm at
-		// https://bfl.ai/pricing for higher-resolution requests.
+		// Replicate prices FLUX.2 [pro] at $0.015/run + $0.015 per output-image MP (+$0.015 per
+		// input-image MP for edits). A default single 1024x1024 (1MP) text-to-image is
+		// $0.015+$0.015 = $0.03, matching the value below.
+		// https://replicate.com/black-forest-labs/flux-2-pro#pricing
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.03),
 		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
 		Description: "FLUX.2 [pro] high-resolution text-to-image and multi-reference editing model.",
+	},
+	"black-forest-labs/flux-2-flex": {
+		// FLUX.2 [flex] is priced per megapixel on Replicate: $0.06 per input-image MP +
+		// $0.06 per output-image MP. This adaptor's helper only encodes a flat per-image
+		// price, so we bill the 1MP-equivalent ($0.06), matching a default single 1024x1024
+		// (1MP) text-to-image. NOTE: high-resolution outputs and multi-image edits (which add
+		// per-input-MP charges) UNDERCHARGE here because per-MP pricing is not representable.
+		// https://replicate.com/black-forest-labs/flux-2-flex
+		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.06),
+		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
+		Description: "FLUX.2 [flex] tunable-quality text-to-image and multi-reference editing model (per-megapixel priced upstream).",
+	},
+	"black-forest-labs/flux-2-klein-4b": {
+		// FLUX.2 [klein 4B] is priced per megapixel on Replicate: $1 per 1,000 input-image MP +
+		// $1 per 1,000 output-image MP (i.e. $0.001/MP each). This adaptor's helper only encodes a
+		// flat per-image price, so we bill the 1MP-equivalent ($0.001), matching a default single
+		// 1024x1024 (1MP) text-to-image. NOTE: high-resolution outputs and multi-image edits
+		// UNDERCHARGE here because per-MP pricing is not representable.
+		// https://replicate.com/black-forest-labs/flux-2-klein-4b
+		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.001),
+		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
+		Description: "FLUX.2 [klein 4B] cheapest open-weight FLUX.2 text-to-image and editing tier (per-megapixel priced upstream).",
 	},
 	"black-forest-labs/flux-1.1-pro-ultra": {
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.06),
@@ -173,6 +196,13 @@ var replicateImageModelRatios = map[string]adaptor.ModelConfig{
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.04),
 		InputModalities: imageInputs, OutputModalities: imageOutputs,
 		Description: "Google Imagen 4 high-quality managed text-to-image model.",
+	},
+	"google/imagen-4-ultra": {
+		// Flat $0.06 per output image, text-to-image only.
+		// https://replicate.com/google/imagen-4-ultra
+		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.06),
+		InputModalities: imageInputs, OutputModalities: imageOutputs,
+		Description: "Google Imagen 4 Ultra highest-fidelity tier of the Imagen 4 text-to-image family.",
 	},
 	"google/imagen-4-fast": {
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.02),

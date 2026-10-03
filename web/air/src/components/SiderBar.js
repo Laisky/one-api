@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/User';
@@ -155,7 +156,7 @@ const SiderBar = () => {
   useEffect(() => {
     loadStatus().then(() => {
       setIsCollapsed(isMobile() || localStorage.getItem('default_collapse_sidebar') === 'true');
-    });
+    }).catch(reportUIError);
   }, []);
 
   return (

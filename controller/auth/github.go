@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -97,9 +96,7 @@ func getGitHubUserInfoByCode(ctx context.Context, code string) (*GitHubUser, err
 func GitHubOAuth(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	session := sessions.Default(c)
-	state := c.Query("state")
-	if state == "" || session.Get("oauth_state") == nil || state != session.Get("oauth_state").(string) {
-		helper.RespondErrorWithStatus(c, http.StatusForbidden, errors.New("state is empty or not same"))
+	if !validateOAuthState(c, "github") {
 		return
 	}
 	username := session.Get("username")
@@ -129,7 +126,7 @@ func GitHubOAuth(c *gin.Context) {
 		}
 	} else {
 		if config.RegisterEnabled {
-			user.Username = "github_" + strconv.Itoa(model.GetMaxUserId()+1)
+			user.Username = defaultOAuthUsername("github")
 			if githubUser.Name != "" {
 				user.DisplayName = githubUser.Name
 			} else {
@@ -140,6 +137,10 @@ func GitHubOAuth(c *gin.Context) {
 			user.Status = model.UserStatusEnabled
 
 			if err := user.Insert(ctx, 0); err != nil {
+				if controller.IsUsernameAlreadyTakenError(err) {
+					controller.RespondUsernameAlreadyExists(c)
+					return
+				}
 				helper.RespondError(c, err)
 				return
 			}

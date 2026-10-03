@@ -9,7 +9,8 @@
       "edit": "Editar",
       "enable": "Habilitar",
       "refresh_balance": "Actualizar saldo de {{name}}",
-      "test": "Probar"
+      "test": "Probar",
+      "test_help": "Comprueba ahora este canal usando su ajuste de modelo de prueba."
     },
     "columns": {
       "actions": "Acciones",
@@ -28,7 +29,9 @@
     },
     "confirm": {
       "delete": "¿Seguro que deseas eliminar este canal?",
-      "delete_disabled": "¿Eliminar todos los canales deshabilitados? Esta acción no se puede deshacer."
+      "delete_disabled": "¿Eliminar todos los canales deshabilitados? Esta acción no se puede deshacer.",
+      "delete_disabled_title": "Eliminar canales deshabilitados",
+      "delete_title": "Eliminar canal"
     },
     "description": "Configura y gestiona los canales de enrutamiento del API",
     "edit": {
@@ -159,6 +162,15 @@
           "placeholder": "ID de usuario para operaciones de bot"
         }
       },
+      "custom_headers": {
+        "add": "Agregar encabezado",
+        "empty": "No hay encabezados personalizados configurados.",
+        "help": "Los encabezados configurados aquí siempre se envían al proveedor y reemplazan los encabezados enviados por el cliente. Usa {{key}} para insertar la clave API del canal.",
+        "key_placeholder": "Clave del encabezado",
+        "label": "Encabezados personalizados",
+        "remove": "Eliminar encabezado",
+        "value_placeholder": "Valor del encabezado, p. ej. {{key}}"
+      },
       "description": {
         "create": "Crear un nuevo canal de API",
         "edit": "Actualizar configuración del canal"
@@ -188,7 +200,9 @@
           "description": "La API heredada Completions genera completions de texto para un prompt dado. Es la API original de generación de texto y hoy en día ha sido reemplazada en gran medida por Chat Completions.",
           "label": "Completions"
         },
+        "custom_url_badge": "URL personalizada",
         "default_badge": "predeterminado",
+        "edit_endpoint": "Ver documentación y editar la URL del endpoint",
         "embeddings": {
           "description": "La API Embeddings convierte texto en representaciones vectoriales numéricas. Estos vectores pueden usarse para búsqueda semántica, agrupación y comparaciones de similitud.",
           "label": "Embeddings"
@@ -205,7 +219,12 @@
         "label": "Endpoints compatibles",
         "modal": {
           "description": "Descripción",
-          "example": "Ejemplo cURL"
+          "example": "Ejemplo cURL",
+          "no_description": "No hay documentación detallada disponible para este endpoint.",
+          "no_example": "# No hay ejemplo disponible",
+          "url_override": "Anulación de URL upstream",
+          "url_override_help": "La URL de endpoint predeterminada está precargada. Edítala para enrutar este endpoint a una dirección upstream no estándar; déjala como la predeterminada para seguir automáticamente la URL base del canal.",
+          "url_override_reset": "Restablecer al valor predeterminado"
         },
         "moderations": {
           "description": "La API Moderations comprueba si un texto viola las políticas de contenido. Devuelve categorías y puntuaciones que indican la probabilidad de infracciones.",
@@ -293,8 +312,10 @@
         "placeholder": "Mapeo de ARN de perfil de inferencia de AWS Bedrock:\n{{example}}"
       },
       "key": {
+        "github_placeholder": "Introduce un token de acceso de GitHub (PAT u OAuth) con una suscripción activa de Copilot",
         "help": "La clave API para autenticarse con el proveedor.",
-        "label": "Clave API"
+        "label": "Clave API",
+        "placeholder": "Introduce tu clave API"
       },
       "loading": "Cargando canal...",
       "mcp": {
@@ -430,6 +451,16 @@
           "placeholder": "SecretKey"
         }
       },
+      "test": {
+        "error_message": "No se pudo probar el canal.",
+        "error_title": "Error de prueba",
+        "failed_message": "La prueba del canal falló.",
+        "failed_title": "Prueba fallida",
+        "skipped_message": "Prueba de canal omitida: {{message}}",
+        "skipped_title": "Omitido",
+        "success_message": "La prueba del canal se completó correctamente.",
+        "success_title": "Prueba aprobada"
+      },
       "title": {
         "create": "Crear canal",
         "edit": "Editar canal"
@@ -551,8 +582,12 @@
       "priority_failed_message": "No se pudo actualizar la prioridad.",
       "priority_failed_title": "Error al actualizar",
       "priority_saved": "Prioridad actualizada.",
+      "status_failed_message": "No se pudo actualizar el estado del canal.",
+      "status_failed_title": "Error al actualizar",
       "test_failed_message": "Error desconocido",
       "test_failed_title": "La prueba del canal falló",
+      "test_skipped_message": "Este canal no expone ningún endpoint compatible con chat, por lo que no se puede comprobar su estado. Se ha mantenido habilitado.",
+      "test_skipped_title": "Prueba de canal omitida",
       "test_success": "Prueba del canal exitosa.",
       "testing_model_failed_message": "No se pudo actualizar el modelo de prueba",
       "testing_model_failed_title": "Error al guardar",
@@ -565,7 +600,7 @@
     },
     "search": {
       "id_label": "ID",
-      "placeholder": "Buscar canales por nombre, tipo o grupo..."
+      "placeholder": "Buscar canales por nombre, tipo, grupo o UUID..."
     },
     "status": {
       "active": "Activo",
@@ -573,7 +608,10 @@
       "paused": "En pausa"
     },
     "testing": {
-      "auto": "MÁS ECONÓMICO"
+      "auto": "MÁS ECONÓMICO",
+      "help": "Elige el modelo usado para comprobar el estado de este canal.\n\nCHEAPEST — usa automáticamente el modelo más barato servido a través de una API de chat (chat completions, response API, Claude messages o Gemini chat).\n\nSKIP — excluye este canal por completo de las comprobaciones. Nunca se sondea ni se desactiva automáticamente.\n\nSolo se pueden probar modelos de formato chat. Los modelos de embeddings, reranking, moderación, completions y multimedia quedan excluidos, igual que los modelos cuyo formato de API se desconoce: selecciona uno aquí para probarlo de todos modos.",
+      "help_label": "Cómo se elige el modelo de prueba",
+      "skip": "SKIP (nunca probar)"
     },
     "title": "Canales",
     "toolbar": {
@@ -585,6 +623,7 @@
       "refresh_balances": "Actualizar todos los saldos",
       "refresh_balances_mobile": "Actualizar saldos",
       "test_all": "Probar todo",
+      "test_all_help": "Comprueba todos los canales, cada uno con su propio ajuste de modelo de prueba (o su modelo de chat más barato si está en CHEAPEST).\n\nLos canales con SKIP, y los que no tienen ningún modelo de formato chat que sondear, se omiten: nunca se informan como fallidos ni se desactivan automáticamente.",
       "test_all_mobile": "Probar todos los canales"
     },
     "type_unknown": "Tipo {{type}}"
@@ -668,9 +707,13 @@
         "label": "Cuota"
       }
     },
+    "notifications": {
+      "action_failed_message": "No se pudo aplicar el cambio.",
+      "action_failed_title": "Acción fallida"
+    },
     "search": {
       "dropdown_placeholder": "Escribe el nombre del canje...",
-      "placeholder": "Buscar canjes por nombre..."
+      "placeholder": "Buscar canjes por nombre o UUID..."
     },
     "status": {
       "disabled": "Deshabilitado",
@@ -789,7 +832,8 @@
         "used_title": "Utilizado: {{label}}"
       },
       "confirm": {
-        "delete": "¿Estás seguro de que quieres eliminar el token \"{{label}}\"?"
+        "delete": "¿Estás seguro de que quieres eliminar el token \"{{label}}\"?",
+        "delete_title": "Eliminar token"
       },
       "description": "Gestiona tus tokens de acceso a la API",
       "dialog": {
@@ -800,14 +844,20 @@
       "empty": "No se encontraron tokens. Crea tu primer token para comenzar.",
       "key": {
         "copied": "¡Copiado!",
-        "copy": "Copiar token"
+        "copy": "Copiar token",
+        "hide": "Ocultar clave",
+        "show": "Mostrar clave"
+      },
+      "notifications": {
+        "action_failed_message": "No se pudo aplicar el cambio.",
+        "action_failed_title": "Acción fallida"
       },
       "quota": {
         "unlimited": "Ilimitado"
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "Buscar tokens por nombre...",
+        "placeholder": "Buscar tokens por nombre o UUID...",
         "quota_label": "Cuota: {{quota}}"
       },
       "share": {
@@ -855,7 +905,11 @@
           "create_failed_message": "No se pudo crear el usuario.",
           "create_failed_title": "Error al crear"
         },
-        "title": "Crear usuario"
+        "title": "Crear usuario",
+        "validation": {
+          "password_min": "La contraseña debe tener al menos {{count}} caracteres.",
+          "username_required": "Introduce un nombre de usuario."
+        }
       },
       "topup": {
         "actions": {
@@ -876,7 +930,10 @@
           "submit_failed_message": "No se pudo recargar al usuario.",
           "submit_failed_title": "Error al recargar"
         },
-        "title": "Recargar {{username}}"
+        "title": "Recargar {{username}}",
+        "validation": {
+          "quota_integer": "La cuota debe ser un número entero."
+        }
       }
     },
     "edit": {
@@ -915,6 +972,9 @@
         "unexpected_title": "Error inesperado"
       },
       "fields": {
+        "created_at": {
+          "label": "Fecha de registro"
+        },
         "display_name": {
           "help": "Nombre legible opcional que se muestra en la interfaz.",
           "label": "Nombre para mostrar",
@@ -949,6 +1009,9 @@
         "quota": {
           "help": "Las unidades de cuota son tokens. La estimación en USD utiliza la relación por unidad configurada por el administrador.",
           "label": "Cuota ({{usd}})"
+        },
+        "updated_at": {
+          "label": "Última modificación"
         },
         "username": {
           "help": "Nombre de inicio de sesión único. Mínimo 3 caracteres.",
@@ -1046,7 +1109,7 @@
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "Buscar usuarios por nombre de usuario...",
+        "placeholder": "Buscar usuarios por nombre de usuario o UUID...",
         "role_label": "Rol: {{role}}",
         "status_label": "Estado: {{status}}"
       },

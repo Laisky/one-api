@@ -4,6 +4,8 @@ import "strings"
 
 func GetByPath(path string) int {
 	switch {
+	case path == "/v1/systemone":
+		return SystemOne
 	case strings.HasPrefix(path, "/v1/realtime"):
 		return Realtime
 	case strings.HasPrefix(path, "/v1/oneapi/proxy"):
@@ -38,8 +40,15 @@ func GetByPath(path string) int {
 		return AudioTranslation
 	case strings.HasPrefix(path, "/v1/images/edits"):
 		return ImagesEdits
+	case path == "/v1/async/videos", strings.HasPrefix(path, "/v1/async/videos/"):
+		return AsyncVideos
 	case strings.HasPrefix(path, "/v1/videos"):
 		return Videos
+	case strings.HasPrefix(path, "/v1/voice/clones"),
+		strings.HasPrefix(path, "/v1/voice/clone"),
+		strings.HasSuffix(path, "/voice/clone"),
+		strings.HasSuffix(path, "/voice_clone"):
+		return VoiceClone
 	case strings.HasPrefix(path, "/api/paas/v4/layout_parsing"):
 		return OCR
 	default:

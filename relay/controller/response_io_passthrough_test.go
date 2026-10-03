@@ -106,54 +106,78 @@ func TestNormalizeResponseAPIRawBodyThinkingBudgetViaExtraBody(t *testing.T) {
 	require.Equal(t, float64(4096), root["thinking_budget"])
 }
 
-func TestNormalizeResponseAPIRawBodyStripsUnknownRootFields(t *testing.T) {
+// TestNormalizeResponseAPIRawBodyPreservesCustomToolFields verifies that native
+// Responses passthrough does not erase Codex custom-tool grammar metadata that
+// is intentionally unknown to one-api's typed compatibility model.
+func TestNormalizeResponseAPIRawBodyPreservesCustomToolFields(t *testing.T) {
 	t.Parallel()
 	raw := []byte(`{
-	  "model": "gpt-4o",
-	  "input": "hello",
-	  "max_tool_calls": 100,
-	  "vendor_extra": true
-	}`)
-
-	var req openai.ResponseAPIRequest
-	require.NoError(t, json.Unmarshal(raw, &req))
-
-	patched, _, changed, err := normalizeResponseAPIRawBody(raw, &req, channeltype.OpenAI)
-	require.NoError(t, err)
-	require.True(t, changed)
-
-	var root map[string]any
-	require.NoError(t, json.Unmarshal(patched, &root))
-	require.NotContains(t, root, "max_tool_calls")
-	require.NotContains(t, root, "vendor_extra")
-	require.Equal(t, "gpt-4o", root["model"])
-}
-
-func TestNormalizeResponseAPIRawBodyStripsUnknownToolFields(t *testing.T) {
-	t.Parallel()
-	raw := []byte(`{
-	  "model": "gpt-4o",
-	  "input": "hello",
+	  "model": "deepseek-v4-flash",
+	  "input": "apply the patch",
 	  "tools": [{
-	    "type": "code_interpreter",
-	    "container": {"type": "auto"},
-	    "vendor_extra": true
+	    "type": "custom",
+	    "name": "apply_patch",
+	    "description": "Apply a patch",
+	    "format": {"type": "grammar", "syntax": "lark", "definition": "start: /.+/"},
+	    "provider_extension": {"mode": "strict"}
 	  }]
 	}`)
 
 	var req openai.ResponseAPIRequest
 	require.NoError(t, json.Unmarshal(raw, &req))
 
-	patched, _, changed, err := normalizeResponseAPIRawBody(raw, &req, channeltype.OpenAI)
+	patched, _, _, err := normalizeResponseAPIRawBody(raw, &req, channeltype.DeepSeek)
+	require.NoError(t, err)
+
+	var root map[string]any
+	require.NoError(t, json.Unmarshal(patched, &root))
+	tools, ok := root["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, tool, "format")
+	require.Contains(t, tool, "provider_extension")
+}
+
+// TestNormalizeResponseAPIRawBodyPreservesUnknownFieldsAcrossSiblingChanges
+// verifies that sanitizing one typed tool does not erase extension fields from
+// an unchanged custom sibling in the same Codex request.
+func TestNormalizeResponseAPIRawBodyPreservesUnknownFieldsAcrossSiblingChanges(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`{
+	  "model": "deepseek-v4-flash",
+	  "input": "apply the patch",
+	  "tools": [
+	    {
+	      "type": "custom",
+	      "name": "apply_patch",
+	      "format": {"type": "grammar", "syntax": "lark", "definition": "start: /.+/"}
+	    },
+	    {
+	      "type": "function",
+	      "name": "read_file",
+	      "description": "original",
+	      "parameters": {"type": "object"}
+	    }
+	  ]
+	}`)
+
+	var req openai.ResponseAPIRequest
+	require.NoError(t, json.Unmarshal(raw, &req))
+	req.Tools[1].Description = "sanitized"
+	req.Tools[1].Function.Description = "sanitized"
+
+	patched, _, changed, err := normalizeResponseAPIRawBody(raw, &req, channeltype.DeepSeek)
 	require.NoError(t, err)
 	require.True(t, changed)
 
-	var root struct {
-		Tools []map[string]any `json:"tools"`
-	}
+	var root map[string]any
 	require.NoError(t, json.Unmarshal(patched, &root))
-	require.Len(t, root.Tools, 1)
-	require.Equal(t, "code_interpreter", root.Tools[0]["type"])
-	require.NotContains(t, root.Tools[0], "container")
-	require.NotContains(t, root.Tools[0], "vendor_extra")
+	tools := root["tools"].([]any)
+	require.Len(t, tools, 2)
+	custom := tools[0].(map[string]any)
+	require.Contains(t, custom, "format")
+	function := tools[1].(map[string]any)
+	require.Equal(t, "sanitized", function["description"])
 }

@@ -4,7 +4,6 @@ const UsersTableHead = () => {
   return (
     <TableHead>
       <TableRow>
-        <TableCell>ID</TableCell>
         <TableCell>用户名</TableCell>
         <TableCell>分组</TableCell>
         <TableCell>统计信息</TableCell>
