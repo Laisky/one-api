@@ -213,7 +213,7 @@ func executeModernMCPToolCall(
 
 	logger := gmw.GetLogger(c)
 	startedAt := time.Now() // Preserve the monotonic component for elapsed-time measurement.
-	selected, result, err := mcp.CallWithFallback(ctx, plan.candidates, func(ctx context.Context, candidate mcp.ToolCandidate) (*mcp.CallToolResult, error) {
+	selected, result, err := callMCPWithQuotaReservation(ctx, c, plan.userID, plan.serverByID, plan.candidates, func(ctx context.Context, candidate mcp.ToolCandidate) (*mcp.CallToolResult, error) {
 		server := plan.serverByID[candidate.ServerID]
 		if server == nil {
 			return nil, errors.WithStack(errors.New("mcp server not loaded"))
@@ -247,7 +247,7 @@ func executeModernMCPToolCall(
 	if !shouldBillMCPToolResult(result) {
 		return result, nil
 	}
-	if err := chargeAndRecordMCPToolCall(ctx, c, plan.userID, plan.serverByID, selected, startedAt); err != nil {
+	if err := recordReservedMCPToolCall(ctx, c, plan.userID, plan.serverByID, selected, startedAt); err != nil {
 		return nil, err
 	}
 	return result, nil

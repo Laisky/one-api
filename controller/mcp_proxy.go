@@ -229,7 +229,7 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 	}
 
 	startedAt := time.Now() // Preserve the monotonic component for elapsed-time measurement.
-	selected, result, err := mcp.CallWithFallback(ctx, candidates, func(ctx context.Context, candidate mcp.ToolCandidate) (*mcp.CallToolResult, error) {
+	selected, result, err := callMCPWithQuotaReservation(ctx, c, user.Id, serverByID, candidates, func(ctx context.Context, candidate mcp.ToolCandidate) (*mcp.CallToolResult, error) {
 		server := serverByID[candidate.ServerID]
 		if server == nil {
 			return nil, errors.WithStack(errors.New("mcp server not loaded"))
@@ -258,7 +258,7 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 	if !shouldBillMCPToolResult(result) {
 		return result, nil
 	}
-	if err := chargeAndRecordMCPToolCall(ctx, c, user.Id, serverByID, selected, startedAt); err != nil {
+	if err := recordReservedMCPToolCall(ctx, c, user.Id, serverByID, selected, startedAt); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -322,32 +322,25 @@ func loadMCPToolsByServer(servers []*model.MCPServer) (map[int][]*model.MCPTool,
 	return toolsByServer, nil
 }
 
-// chargeAndRecordMCPToolCall applies quota and writes one finalized tool-call audit log.
-//
-// Parameters:
-//   - ctx: the request context controlling quota persistence.
-//   - c: the Gin context carrying request identity and tracing metadata.
-//   - userID: the authenticated user's internal id.
-//   - serverByID: loaded server configurations indexed by internal id.
-//   - selected: the successful tool candidate.
-//   - startedAt: the beginning of the logical tool call.
-//
-// Return values:
-//   - error: a wrapped server lookup or quota update error.
-func chargeAndRecordMCPToolCall(ctx context.Context, c *gin.Context, userID int, serverByID map[int]*model.MCPServer, selected mcp.ToolCandidate, startedAt time.Time) error {
+// recordReservedMCPToolCall records completed usage after the shared admission
+// boundary has already debited both balances. It never debits a second time.
+// ctx supplies metadata; bounded persistence survives a client disconnect.
+func recordReservedMCPToolCall(ctx context.Context, c *gin.Context, userID int, serverByID map[int]*model.MCPServer, selected mcp.ToolCandidate, startedAt time.Time) error {
 	server := serverByID[selected.ServerID]
 	if server == nil {
 		return errors.WithStack(errors.New("mcp server not loaded"))
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
 	cost := resolveToolCost(server, selected.Tool.Name)
 	if cost > 0 {
-		if err := model.DecreaseUserQuota(ctx, userID, cost); err != nil {
-			return errors.Wrap(err, "decrease user quota for mcp tool call")
-		}
-		model.UpdateUserUsedQuotaAndRequestCountWithContext(ctx, userID, cost)
+		model.UpdateUserUsedQuotaAndRequestCountWithContext(auditCtx, userID, cost)
 	}
 	qualifiedName := server.Name + "." + selected.Tool.Name
-	recordMCPToolLog(ctx, c, userID, server.Id, qualifiedName, cost, helper.CalcElapsedTime(startedAt))
+	recordMCPToolLog(auditCtx, c, userID, server.Id, qualifiedName, cost, helper.CalcElapsedTime(startedAt))
 	return nil
 }
 
