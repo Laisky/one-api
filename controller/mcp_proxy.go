@@ -19,6 +19,7 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/mcp"
 )
@@ -236,17 +237,35 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		return nil, errors.New("no eligible MCP tool found")
 	}
 
+	tokenID := c.GetInt(ctxkey.TokenId)
 	startedAt := time.Now()
 	selected, result, err := mcp.CallWithFallback(ctx, candidates, func(ctx context.Context, candidate mcp.ToolCandidate) (*mcp.CallToolResult, error) {
 		server := serverByID[candidate.ServerID]
 		if server == nil {
 			return nil, errors.New("mcp server not loaded")
 		}
+
+		cost := resolveToolPricingCost(candidate.Policy.Pricing)
+		if cost > 0 {
+			if tokenID <= 0 {
+				return nil, errors.New("token id missing for mcp tool billing")
+			}
+			if err := model.PreConsumeTokenQuota(ctx, tokenID, cost); err != nil {
+				return nil, errors.Wrap(err, "pre-consume quota for mcp tool call")
+			}
+		}
+
 		client := mcp.NewStreamableHTTPClientWithLogger(server, nil, time.Duration(config.MCPToolCallTimeoutSec)*time.Second, logger)
 		callResult, err := client.CallTool(ctx, candidate.Tool.Name, params.Arguments)
 		if err != nil {
+			if cost > 0 {
+				billing.ReturnPreConsumedQuota(ctx, cost, tokenID)
+			}
 			logger.Warn("mcp tool call failed", zap.Error(err), zap.Int("server_id", candidate.ServerID), zap.String("tool", candidate.Tool.Name))
 			return nil, errors.Wrapf(err, "call mcp tool %q on server %d", candidate.Tool.Name, candidate.ServerID)
+		}
+		if callResult.IsError && cost > 0 {
+			billing.ReturnPreConsumedQuota(ctx, cost, tokenID)
 		}
 		return callResult, nil
 	})
@@ -265,9 +284,6 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 
 	cost := resolveToolCost(server, selected.Tool.Name)
 	if cost > 0 {
-		if err := model.DecreaseUserQuota(ctx, user.Id, cost); err != nil {
-			return nil, errors.Wrap(err, "decrease user quota for mcp tool call")
-		}
 		model.UpdateUserUsedQuotaAndRequestCount(user.Id, cost)
 	}
 
@@ -280,6 +296,11 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 // resolveToolCost determines the quota cost for a MCP tool invocation.
 func resolveToolCost(server *model.MCPServer, toolName string) int64 {
 	pricing := server.ToolPricing[strings.ToLower(toolName)]
+	return resolveToolPricingCost(pricing)
+}
+
+// resolveToolPricingCost converts MCP tool pricing to the quota cost.
+func resolveToolPricingCost(pricing model.ToolPricingLocal) int64 {
 	if pricing.QuotaPerCall > 0 {
 		return pricing.QuotaPerCall
 	}
