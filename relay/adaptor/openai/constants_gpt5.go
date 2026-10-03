@@ -6,9 +6,9 @@ import (
 )
 
 // gpt5ModelRatios captures pricing and metadata for the GPT-5 family of reasoning
-// chat models. All members are reasoning models: SupportedSamplingParameters is
-// constrained to ["seed","max_tokens"] (no temperature/top_p/frequency_penalty/
-// presence_penalty), and SupportedFeatures includes "reasoning".
+// chat models. SupportedFeatures includes "reasoning" and the sampling metadata
+// lists the parameters safe at every effort. The wire policy additionally permits
+// conditional sampling controls when the model supports and uses effort "none".
 //
 // Verified context windows from OpenAI docs (2026-05-18): gpt-5 / gpt-5.1 / gpt-5.2
 // advertise 400K context with 128K max output. gpt-5.4 / gpt-5.4-pro / gpt-5.5 /
@@ -354,6 +354,9 @@ var gpt5ModelRatios = map[string]adaptor.ModelConfig{
 		DefaultReasoningEffort:      "medium",
 		Description:                 "GPT-5.3 Codex: code-tuned reasoning variant.",
 	},
+	// GPT-5.2 and its snapshot use canonical none by default. Do not change the
+	// shared effort slice: Pro, Codex, and older models have different contracts.
+	// Verified 2026-09-24: https://developers.openai.com/api/docs/models/gpt-5.2
 	"gpt-5.2": {
 		Ratio:                       1.75 * ratio.MilliTokensUsd,
 		CompletionRatio:             14 / 1.75,
@@ -364,8 +367,8 @@ var gpt5ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           gpt5ReasoningFeatures,
 		SupportedSamplingParameters: reasoningSamplingParameters(),
-		SupportedReasoningEfforts:   gpt5FullEfforts,
-		DefaultReasoningEffort:      "medium",
+		SupportedReasoningEfforts:   []string{"none", "low", "medium", "high", "xhigh"},
+		DefaultReasoningEffort:      "none",
 		Description:                 "GPT-5.2: reasoning chat model with 400K context.",
 	},
 	"gpt-5.2-2025-12-11": {
@@ -378,8 +381,8 @@ var gpt5ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           gpt5ReasoningFeatures,
 		SupportedSamplingParameters: reasoningSamplingParameters(),
-		SupportedReasoningEfforts:   gpt5FullEfforts,
-		DefaultReasoningEffort:      "medium",
+		SupportedReasoningEfforts:   []string{"none", "low", "medium", "high", "xhigh"},
+		DefaultReasoningEffort:      "none",
 		Description:                 "GPT-5.2 snapshot from 2025-12-11.",
 	},
 	"gpt-5.2-codex": {

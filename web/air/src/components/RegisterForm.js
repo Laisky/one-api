@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Grid, Header, Image, Message, Segment } from 'semantic-ui-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -153,7 +154,7 @@ const RegisterForm = () => {
                   name="email"
                   type="email"
                   action={
-                    <Button onClick={sendVerificationCode} disabled={loading}>
+                    <Button onClick={(...uiArgs) => sendVerificationCode(...uiArgs).catch(reportUIError)} disabled={loading}>
                       获取验证码
                     </Button>
                   }
@@ -184,7 +185,7 @@ const RegisterForm = () => {
               color="green"
               fluid
               size="large"
-              onClick={handleSubmit}
+              onClick={(...uiArgs) => handleSubmit(...uiArgs).catch(reportUIError)}
               loading={loading}
             >
               注册

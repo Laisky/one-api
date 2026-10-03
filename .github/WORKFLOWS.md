@@ -7,7 +7,7 @@ Filenames are retained for existing workflow URLs and badges.
 | File / display name | Responsibility | Triggers |
 | --- | --- | --- |
 | `workflows/lint.yml` / **CI** | Tests, analysis, vulnerability scan, coverage and aggregate gate | All PRs; pushes to `main`, `master`, `test/ci`; merge queues; manual |
-| `workflows/ci.yml` / **Build and deploy** | amd64/arm64 images and existing SSH deployment | Existing push branches and delivery exclusions only |
+| `workflows/ci.yml` / **Build and deploy** | amd64/arm64 images and safeguarded configs deployment | Existing push branches and delivery exclusions only |
 
 ## Go tests: complete, isolated shards
 
@@ -75,10 +75,28 @@ scenarios, which remain in every complete Go test run.
 ## Delivery policy
 
 Delivery remains an independent push workflow. Branches, path exclusions,
-commit-prefix skip rules, image tags, credential references, concurrency and
-SSH commands are unchanged. PR/manual CI cannot publish or deploy. CI completion
+commit-prefix skip rules, image tags and credential references remain unchanged.
+Only `main` can invoke production deployment; the existing build branches remain.
+PR/manual CI cannot publish or deploy. CI completion
 is **not** a deployment gate under this existing policy. The native amd64 build
 exports its own non-blocking cache; amd64/arm64 caches have separate scopes.
+
+The amd64 build exposes its pushed digest, full source-revision label and BuildKit
+provenance. Deployment passes that digest and the full release SHA to
+`python3 /opt/configs/observability/deploy_oneapi.py` on the existing SSH target.
+The configs entrypoint owns the approved local manifest, Compose input ordering,
+secret injection, immutable image selection, configuration-preservation preflight,
+host lock and bounded readiness checks. Install and qualify that entrypoint and
+its private manifest before enabling this workflow on production. A missing or
+unqualified entrypoint must fail closed; there is no legacy deployment fallback.
+
+All delivery branches share `deploy-oneapi-b1` with `cancel-in-progress: false`.
+Builds may still cancel superseded builds; a running remote deployment is not
+cancelled by a newer commit. Pending runs can be superseded and dispatch order is
+not guaranteed, so the entrypoint's host lock remains required.
+SSH has a 20-minute command budget inside the 30-minute job budget. Operators
+must inspect the entrypoint's private deployment receipt after a timeout or lost
+connection before retrying; a failed SSH job alone cannot prove rollback.
 
 The retired provider-specific workflows and temporary frontend security patch
 generators stay removed. No Windows/release job is silently re-enabled.

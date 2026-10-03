@@ -53,10 +53,10 @@ func deepseekFlashModelConfig(description string) adaptor.ModelConfig {
 }
 
 // deepseekProModelConfig returns the current text-only Pro metadata, preserving
-// Pro prices until its announced upstream redirection on 2026-09-14 04:00 UTC.
+// Pro prices after the canceled September 14 migration.
 // Parameters: none. Returns: current metadata with the scheduled pricing switch.
 func deepseekProModelConfig() adaptor.ModelConfig {
-	cfg := deepseekModelConfig("DeepSeek-V4-Pro-0813 with thinking and non-thinking modes, 1M context, and native Responses and Anthropic API support. From 2026-09-14 04:00 UTC, this API name is served by V4.1 Flash at Flash prices until V4.1 Pro is released.", false)
+	cfg := deepseekModelConfig("DeepSeek-V4-Pro-0813 with thinking and non-thinking modes, 1M context, and native Responses and Anthropic API support. DeepSeek canceled the September 14 Pro-to-Flash migration; this API continues serving V4 Pro with unchanged Pro billing.", false)
 	cfg.Ratio = deepseekProInputPrice * ratio.MilliTokensUsd
 	cfg.CachedInputRatio = deepseekProCachedInputPrice * ratio.MilliTokensUsd
 	cfg.CompletionRatio = deepseekProOutputPrice / deepseekProInputPrice

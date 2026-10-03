@@ -103,11 +103,11 @@ func isValidCustomHeaderName(name string) bool {
 	return true
 }
 
-// DoRequestHelper validates transport compatibility before preparing and sending an upstream REST request.
+// DoRequestHelper validates REST transport compatibility before preparing and sending an upstream REST request.
 // Parameters: a is the provider, c is the request context, meta carries routing metadata,
 // and requestBody contains the payload. Returns: the response or a wrapped error.
 func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
-	if err := ValidateModelTransport(meta); err != nil {
+	if err := ValidateRESTModelTransport(meta); err != nil {
 		return nil, errors.Wrap(err, "validate model transport")
 	}
 	fullRequestURL, err := a.GetRequestURL(meta)
@@ -146,7 +146,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	req, err := gutils.NewReusableRequest(gmw.Ctx(c),
 		c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
-		return nil, errors.Wrap(err, "new request failed")
+		return nil, errors.Wrap(SanitizeRequestURLError(err), "new request failed")
 	}
 
 	req.Header.Set("Content-Type", c.GetString(ctxkey.ContentType))
@@ -159,6 +159,10 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 		return nil, errors.Wrap(err, "apply channel custom headers")
 	}
 
+	// Sanitize diagnostics only: dispatch and metadata still need the original
+	// query values. Sanitize the bound logger as well as each explicit URL field.
+	logRequestURL := model.SanitizeLogUpstreamEndpoint(fullRequestURL)
+
 	// Prepare tagged logger and propagate to context.
 	// The request-scoped logger is already bound with the full user/token/channel
 	// identity (id + uuid + name) by the auth and distributor middlewares, so only
@@ -166,7 +170,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	// implementation name (e.g. "aws", "zhipu"), which is distinct from the
 	// operator-chosen "channel_name" carried by the bound logger.
 	lg := gmw.GetLogger(c).With(
-		zap.String("url", fullRequestURL),
+		zap.String("url", logRequestURL),
 		zap.String("adaptor", a.GetChannelName()),
 		zap.String("model", meta.ActualModelName),
 	)
@@ -176,7 +180,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	// Log upstream request for billing tracking
 	fields := []zap.Field{
 		zap.String("method", req.Method),
-		zap.String("url", fullRequestURL),
+		zap.String("url", logRequestURL),
 		zap.Bool("body_logging_suppressed", true),
 	}
 	if bodySize >= 0 {
@@ -205,7 +209,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 		lg.Debug("upstream returned error status",
 			zap.Int("status", resp.StatusCode),
 			zap.String("model", meta.ActualModelName),
-			zap.String("url", fullRequestURL),
+			zap.String("url", logRequestURL),
 		)
 	}
 
@@ -238,7 +242,7 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "perform upstream request")
+		return nil, errors.Wrap(SanitizeRequestURLError(err), "perform upstream request")
 	}
 	if resp == nil {
 		return nil, errors.New("resp is nil")

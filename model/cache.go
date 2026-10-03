@@ -217,7 +217,10 @@ func CacheUpdateUserQuota(ctx context.Context, id int) error {
 	if !common.IsRedisEnabled() {
 		return nil
 	}
-	quota, err := GetUserQuota(id)
+	var quota int64
+	// Keep the database read on the same bounded context as Redis. In
+	// particular, refund recovery must stop before shutdown closes its pool.
+	err := DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Select("quota").Find(&quota).Error
 	if err != nil {
 		return errors.Wrapf(err, "get database quota for user %d", id)
 	}

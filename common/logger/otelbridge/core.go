@@ -69,6 +69,8 @@ type Core struct {
 	emitCtx context.Context
 	// err is the error latched by With from a zap.Error field.
 	err error
+	// private restricts the production export to content-free diagnostics.
+	private bool
 }
 
 // Compile-time proof that the adapter satisfies the FORK's Core interface,
@@ -120,7 +122,7 @@ func (c *Core) With(fields []zapcore.Field) zapcore.Core {
 		return cloned
 	}
 
-	converted := convertFields(fields)
+	converted := c.convertFields(fields)
 	cloned.attrs = append(cloned.attrs, converted.attrs...)
 	if converted.spanCtx.IsValid() {
 		cloned.spanCtx = converted.spanCtx
@@ -149,6 +151,7 @@ func (c *Core) clone() *Core {
 		spanCtx:      c.spanCtx,
 		emitCtx:      c.emitCtx,
 		err:          c.err,
+		private:      c.private,
 	}
 }
 
@@ -199,7 +202,7 @@ func (c *Core) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.Check
 //   - error: always nil, by design.
 func (c *Core) Write(ent zapcore.Entry, fields []zapcore.Field) error {
 	scope := c.scope
-	if ent.LoggerName != "" {
+	if ent.LoggerName != "" && !c.private {
 		scope = ent.LoggerName
 	}
 
@@ -211,9 +214,12 @@ func (c *Core) Write(ent zapcore.Entry, fields []zapcore.Field) error {
 
 	// Walk the fields exactly once: the conversion allocates an encoder and
 	// touches every field, and both the record and its emit context need it.
-	converted := convertFields(fields)
+	converted := c.convertFields(fields)
 	record := c.buildRecord(ent, converted)
 	emitCtx := c.emitContext(converted)
+	if c.private {
+		emitCtx = context.WithValue(emitCtx, privateContextKey{}, true)
+	}
 
 	lg.Emit(emitCtx, record)
 	metrics.RecordAppLogExport(metrics.AppLogExportOutcomeEmitted, 1)
@@ -231,7 +237,11 @@ func (c *Core) Write(ent zapcore.Entry, fields []zapcore.Field) error {
 func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) log.Record {
 	var record log.Record
 	record.SetTimestamp(ent.Time)
-	record.SetBody(attribute.StringValue(ent.Message))
+	if c.private {
+		record.SetBody(attribute.StringValue("application log"))
+	} else {
+		record.SetBody(attribute.StringValue(ent.Message))
+	}
 	record.SetSeverity(convertLevel(ent.Level))
 	record.SetSeverityText(ent.Level.String())
 
@@ -248,7 +258,7 @@ func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) log.Rec
 			attribute.String(string(semconv.CodeFunctionNameKey), ent.Caller.Function),
 		)
 	}
-	if ent.Stack != "" {
+	if ent.Stack != "" && !c.private {
 		stackKey := semconv.CodeStacktraceKey
 		if recErr != nil || hasExceptionAttributes(c.attrs) || hasExceptionAttributes(converted.attrs) {
 			stackKey = semconv.ExceptionStacktraceKey
@@ -256,7 +266,7 @@ func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) log.Rec
 		record.AddAttributes(attribute.String(string(stackKey), ent.Stack))
 	}
 	record.AddAttributes(converted.attrs...)
-	if recErr != nil {
+	if recErr != nil && !c.private {
 		record.SetErr(recErr)
 	}
 	return record

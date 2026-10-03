@@ -5,6 +5,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -13,6 +14,7 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor"
 	channelhelper "github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 	vertexaiClaude "github.com/Laisky/one-api/relay/adaptor/vertexai/claude"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/deepseek"
@@ -86,6 +88,10 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	adaptor := GetAdaptor(meta.ActualModelName)
 	if adaptor == nil {
 		return nil, errors.Errorf("cannot found vertex adaptor for model %s", meta.ActualModelName)
+	}
+
+	if claude, ok := adaptor.(*vertexaiClaude.Adaptor); ok {
+		return claude.ConvertClaudeRequest(c, request)
 	}
 
 	// Convert Claude Messages API request to OpenAI format first
@@ -213,25 +219,22 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 	return adaptor.DoResponse(c, resp, meta)
 }
 
+// GetModelList returns configuration suggestions, not an upstream entitlement
+// allowlist. Parameters: none. Returns: published IDs, including Live models;
+// administrators may also configure IDs outside this bundled catalog.
 func (a *Adaptor) GetModelList() []string {
-	// Aggregate model lists from all subadaptors
 	var models []string
-
-	// Add models from each subadaptor
 	models = append(models, adaptor.GetModelListFromPricing(vertexaiClaude.ModelRatios)...)
 	models = append(models, adaptor.GetModelListFromPricing(imagen.ModelRatios)...)
-	// Vertex Live needs its own endpoint, credentials and price contract, so this
-	// build has no Live transport for it. Advertising the models Google serves
-	// only over bidiGenerateContent would let an operator publish IDs that every
-	// Vertex transport rejects; their prices stay in the shared catalog.
-	models = append(models, adaptor.WithoutLiveOnlyGoogleModels(
-		adaptor.GetModelListFromPricing(geminiOpenaiCompatible.ModelRatios))...)
+	models = append(models, adaptor.GetModelListFromPricing(geminiOpenaiCompatible.ModelRatios)...)
 	models = append(models, adaptor.GetModelListFromPricing(veo.ModelRatios)...)
 	models = append(models, adaptor.GetModelListFromPricing(deepseek.ModelRatios)...)
 	models = append(models, adaptor.GetModelListFromPricing(openai.ModelRatios)...)
 	models = append(models, adaptor.GetModelListFromPricing(qwen.ModelRatios)...)
-
-	return models
+	// Vertex's public Live overview also lists these backend-specific IDs.
+	models = append(models, "gemini-live-2.5-flash-native-audio", "gemini-3.5-transcribe-live-preview")
+	slices.Sort(models)
+	return slices.Compact(models)
 }
 
 func (a *Adaptor) GetChannelName() string {
@@ -250,8 +253,14 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	// Import Imagen models from imagen subadaptor
 	maps.Copy(pricing, imagen.ModelRatios)
 
-	// Import Gemini models from geminiOpenaiCompatible (shared with VertexAI)
-	maps.Copy(pricing, geminiOpenaiCompatible.ModelRatios)
+	// Ordinary Gemini models retain their shared defaults. Developer Live
+	// prices are not Vertex prices; those IDs remain selectable above and use
+	// administrator-owned channel rates rather than fabricated defaults.
+	for name, cfg := range geminiOpenaiCompatible.ModelRatios {
+		if !adaptor.IsLiveOnlyGoogleModel(name) {
+			pricing[name] = cfg
+		}
+	}
 
 	// Import Veo models from veo subadaptor
 	maps.Copy(pricing, veo.ModelRatios)
@@ -569,6 +578,18 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	return nil
 }
 
-func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
-	return channelhelper.DoRequestHelper(a, c, meta, requestBody)
+// DoRequest prepares native Claude transport fields before using the shared HTTP path.
+func (a *Adaptor) DoRequest(c *gin.Context, m *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if _, ok := GetAdaptor(m.ActualModelName).(*vertexaiClaude.Adaptor); ok {
+		normalized, err := anthropic.PrepareRequestBody(c, m.ActualModelName, requestBody)
+		if err != nil {
+			return nil, err
+		}
+		prepared, err := vertexaiClaude.PrepareRequestBody(normalized)
+		if err != nil {
+			return nil, err
+		}
+		requestBody = prepared
+	}
+	return channelhelper.DoRequestHelper(a, c, m, requestBody)
 }

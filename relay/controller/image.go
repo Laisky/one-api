@@ -19,7 +19,7 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/relay"
+	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/replicate"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
@@ -51,6 +51,12 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	meta.ActualModelName = imageRequest.Model
 	metalib.Set2Context(c, meta)
 
+	if meta.ChannelType == channeltype.SiliconFlow {
+		if err := openai.PrepareSiliconFlowImage(c, imageRequest); err != nil {
+			return openai.ErrorWrapper(err, "invalid_image_request", http.StatusBadRequest)
+		}
+	}
+
 	var channelModelRatio map[string]float64
 	var channelModelConfigs map[string]model.ModelConfigLocal
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
@@ -60,14 +66,17 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 	}
 
-	adaptor := relay.GetAdaptor(meta.APIType)
+	// Bind channel-aware catalogs before resolving image defaults or prices.
+	adaptor := resolvePricingAdaptor(meta)
 	if adaptor == nil {
 		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
 	}
 
 	imagePricingCfg, _ := pricing.ResolveImagePricing(imageRequest.Model, channelModelConfigs, adaptor, meta.StartTime)
 	imagePricingCfg = completeGPTImage25Defaults(imageRequest.Model, imagePricingCfg)
-	applyImageDefaults(imageRequest, imagePricingCfg)
+	if err := prepareImageRequest(imageRequest, imagePricingCfg, meta); err != nil {
+		return openai.ErrorWrapper(err, "invalid_image_request", http.StatusBadRequest)
+	}
 
 	bizErr := validateImageRequest(imageRequest, meta, imagePricingCfg)
 	if bizErr != nil {
@@ -112,7 +121,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		channeltype.VertextAI,
 		channeltype.Baidu,
 		channeltype.XAI:
-		finalRequest, err := adaptor.ConvertImageRequest(c, imageRequest)
+		finalRequest, err := convertImageRequestForUpstream(c, imageRequest, adaptor.ConvertImageRequest)
 		if err != nil {
 			// Check if this is a validation error and preserve the correct HTTP status code for AWS Bedrock
 			if strings.Contains(err.Error(), "does not support image generation") {
@@ -127,8 +136,18 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			return openai.ErrorWrapper(err, "marshal_image_request_failed", http.StatusInternalServerError)
 		}
 		requestBody = bytes.NewBuffer(jsonStr)
+	case channeltype.SiliconFlow:
+		converted, err := openai.ConvertSiliconFlowImage(c, imageRequest)
+		if err != nil {
+			return openai.ErrorWrapper(err, "invalid_image_request", http.StatusBadRequest)
+		}
+		encoded, err := json.Marshal(converted)
+		if err != nil {
+			return openai.ErrorWrapper(err, "marshal_image_request_failed", http.StatusInternalServerError)
+		}
+		requestBody = bytes.NewReader(encoded)
 	case channeltype.Replicate:
-		finalRequest, err := replicate.ConvertImageRequest(c, imageRequest)
+		finalRequest, err := convertImageRequestForUpstream(c, imageRequest, replicate.ConvertImageRequest)
 		if err != nil {
 			return openai.ErrorWrapper(err, "convert_image_request_failed", http.StatusInternalServerError)
 		}
@@ -181,6 +200,17 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	}
 	perImageBilling := imagePriceUsd > 0
 	baseQuota := calculateImageBaseQuota(imagePriceUsd, ratio, imageCostRatio, groupRatio, billedCount)
+	if meta.ChannelType == channeltype.SiliconFlow {
+		// This native profile has a fixed per-image tariff. An unknown model
+		// without an explicit tariff is not safe to bill at a token fallback.
+		if imagePricingCfg == nil {
+			return openai.ErrorWrapper(errors.New("configure an image tariff for this model"), "image_pricing_missing", http.StatusBadRequest)
+		}
+		baseQuota, err = decimalQuotaProduct(imagePriceUsd, billingratio.QuotaPerUsd, groupRatio, imageCostRatio, float64(billedCount))
+		if err != nil {
+			return openai.ErrorWrapper(err, "invalid_image_pricing", http.StatusBadRequest)
+		}
+	}
 	usedQuota := baseQuota
 	tokenQuota := int64(0)
 	tokenQuotaFloat := 0.0
@@ -249,7 +279,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		bgCtx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), time.Minute)
 		defer cancel()
 
-		if imageResponseRequiresFailureReconciliation(resp) {
+		if imageResponseRequiresFailureReconciliation(resp) || c.GetBool(relayadaptor.ImageReceiptRejectedKey) {
 			reconcileImageFailureBilling(c, bgCtx, meta.TokenId, preConsumedQuota, provLogID, "upstream_http_error")
 			return
 		}
@@ -395,7 +425,7 @@ func reconcileImageFailureBilling(
 		logContent = "upstream error, refunded"
 	}
 	if preConsumedQuota > 0 {
-		if shouldSkipPreConsumedRefund(c) {
+		if shouldSkipPreConsumedRefund(c) && !c.GetBool(relayadaptor.ImageReceiptRejectedKey) {
 			finalQuota = preConsumedQuota
 			requestCost = preConsumedQuota
 			logContent = "request failed, charge retained after forwarding"

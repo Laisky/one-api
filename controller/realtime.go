@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -18,7 +17,6 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
-	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/meta"
@@ -308,7 +306,7 @@ func postConsumeRealtimeQuota(
 // using the same two-layer lookup as text endpoints.
 func resolveRealtimePricingAdaptor(relayMeta *meta.Meta) adaptor.Adaptor {
 	if isGeminiLiveRequest(relayMeta) {
-		return geminiLivePricingAdaptor()
+		return geminiLivePricingAdaptor(relayMeta)
 	}
 	if a := relay.GetAdaptor(relayMeta.APIType); a != nil {
 		return a
@@ -316,45 +314,13 @@ func resolveRealtimePricingAdaptor(relayMeta *meta.Meta) adaptor.Adaptor {
 	return relay.GetAdaptor(relayMeta.ChannelType)
 }
 
-// RelayRealtimeSessions handles POST /v1/realtime/sessions by proxying to the
-// upstream OpenAI Realtime Sessions API to create ephemeral tokens for WebRTC clients.
+// RelayRealtimeSessions rejects credential minting even if a future route or an
+// internal caller accidentally invokes this retired handler. Parameters: c is
+// the request context. Returns: no value; a static forbidden response is written
+// before accessing channel credentials or contacting any upstream provider.
 func RelayRealtimeSessions(c *gin.Context) {
-	start := time.Now()
-	relayMeta := meta.GetByContext(c)
-
-	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
-
-	if relayMeta.APIType != apitype.OpenAI || isGeminiLiveRequest(relayMeta) {
-		// Keep provider-specific remediation accurate even when a Gemini
-		// OpenAI-compatible channel has the OpenAI API type.
-		message := "realtime sessions (ephemeral tokens) are only supported for OpenAI channels; Zhipu GLM-Realtime connects directly with the API key"
-		if isGeminiLiveRequest(relayMeta) {
-			message = "Gemini Live does not support ephemeral-session/WebRTC token minting through one-api; connect directly to /v1/realtime over WebSocket with a one-api bearer token and Gemini-native frames"
-		}
-		bizErr := &rmodel.ErrorWithStatusCode{
-			Error: rmodel.Error{
-				Message:  message,
-				Type:     rmodel.ErrorTypeOneAPI,
-				Code:     "realtime_sessions_unsupported",
-				RawError: errors.New("realtime sessions unsupported for this channel"),
-			},
-			StatusCode: http.StatusBadRequest,
-		}
-		c.JSON(bizErr.StatusCode, gin.H{"error": bizErr.Error})
-		PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, false, 0, 0, 0)
-		return
-	}
-
-	if bizErr, err := openai.RealtimeSessionsHandler(c, relayMeta); bizErr != nil {
-		if !c.Writer.Written() {
-			c.JSON(bizErr.StatusCode, gin.H{"error": bizErr.Error})
-		}
-		PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, false, 0, 0, 0)
-		if err != nil {
-			gmw.GetLogger(c).Error("realtime sessions error", zap.Error(err))
-		}
-		return
-	}
-
-	PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, true, 0, 0, 0)
+	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{
+		"message": "Realtime credential minting is disabled; use the metered /v1/realtime WebSocket endpoint with a one-api bearer token",
+		"type":    "one_api_error", "code": "realtime_sessions_disabled",
+	}})
 }

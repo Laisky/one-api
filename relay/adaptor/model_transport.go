@@ -1,43 +1,45 @@
 package adaptor
 
 import (
+	"net/url"
+	"strings"
+
 	"github.com/Laisky/errors/v2"
 
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 )
 
-// ErrModelRequiresLiveTransport marks a request for a model Google publishes
-// with `bidiGenerateContent` as its only generation method. It is a caller
-// mistake, not a channel fault: the same request fails on every Google channel.
+// ErrModelRequiresLiveTransport marks a local Google REST incompatibility.
+// Another channel may bridge the same model over REST; this is neither an
+// upstream entitlement decision nor evidence of channel health.
 var ErrModelRequiresLiveTransport = errors.New("model requires the Gemini Live API")
 
-// liveOnlyGoogleModels enumerates the catalog models whose only advertised
-// generation method is bidiGenerateContent. Verified against Google's own model
-// listing on 2026-09-18, where REST generateContent answers each of them with
-// HTTP 400 "only supports real-time bidirectional streaming via WebSocket".
-// This is the transport fact; realtime.IsGeminiLiveModel is the narrower set
-// whose wire and billing contracts this gateway implements.
+// liveOnlyGoogleModels records known native-only transport facts. The original
+// five IDs came from the 2026-09-18 Developer catalog; the additional Vertex IDs
+// come from https://docs.cloud.google.com/vertex-ai/generative-ai/docs/live-api.
+// This is a REST guard, not an allowlist for native Live model admission.
 var liveOnlyGoogleModels = map[string]struct{}{
-	"gemini-3.8-live":                   {},
-	"gemini-3.8-live-extended-thinking": {},
-	"gemini-3.1-flash-live-preview":     {},
-	"gemini-3.5-live-translate-preview": {},
-	"gemini-3.5-transcribe-live":        {},
+	"gemini-3.8-live":                    {},
+	"gemini-3.8-live-extended-thinking":  {},
+	"gemini-3.1-flash-live-preview":      {},
+	"gemini-3.5-live-translate-preview":  {},
+	"gemini-3.5-transcribe-live":         {},
+	"gemini-live-2.5-flash-native-audio": {},
+	"gemini-3.5-transcribe-live-preview": {},
 }
 
-// IsLiveOnlyGoogleModel reports whether Google serves a model exclusively over
-// the Live WebSocket API. Parameters: model is the upstream ID. Returns: true
-// for a model no REST endpoint can answer.
+// IsLiveOnlyGoogleModel reports whether Google's native generation transport
+// for this ID is Live-only. Parameters: model is the upstream ID. Returns: true
+// for known Live-only IDs, without restricting third-party REST bridges.
 func IsLiveOnlyGoogleModel(model string) bool {
 	_, live := liveOnlyGoogleModels[model]
 	return live
 }
 
-// WithoutLiveOnlyGoogleModels drops the Live-only IDs from an advertised catalog.
-// Parameters: models is a channel's candidate model list. Returns: a new slice
-// for channel types that have no Live transport, so an operator filling a channel
-// from it never publishes an ID that every transport rejects.
+// WithoutLiveOnlyGoogleModels filters a specifically REST-scoped list.
+// Parameters: models are candidate IDs. Returns: a fresh slice excluding known
+// native-only IDs. Do not use this to hide administrator model suggestions.
 func WithoutLiveOnlyGoogleModels(models []string) []string {
 	filtered := make([]string, 0, len(models))
 	for _, model := range models {
@@ -49,26 +51,35 @@ func WithoutLiveOnlyGoogleModels(models []string) []string {
 	return filtered
 }
 
-// ValidateModelTransport rejects catalog-only models before a Google REST request
-// can prepare credentials or reach the network. Parameters: m carries the selected
-// channel and mapped upstream model. Returns: a Live API requirement error or nil.
-// Callers must surface it as a client error; answering 5xx would retry the same
-// impossible request on further channels and count it against channel health.
-func ValidateModelTransport(m *meta.Meta) error {
+// IsRESTTransportMismatch reports whether err is the local routing condition where
+// a Google REST adaptor cannot serve a Live-only model. Parameters: err is a
+// normalized or wrapped error. Returns: true when another channel may still provide
+// a compatible REST bridge for the requested model.
+func IsRESTTransportMismatch(err error) bool {
+	return errors.Is(err, ErrModelRequiresLiveTransport)
+}
+
+// ValidateRESTModelTransport rejects known incompatible models before a Google
+// REST request can prepare credentials or reach the network. Parameters: m carries
+// the selected channel and mapped model. Returns: a Live requirement error or nil.
+// Native realtime requests deliberately do not call this REST-only guard.
+func ValidateRESTModelTransport(m *meta.Meta) error {
 	if m == nil {
 		return nil
 	}
 	switch m.ChannelType {
 	case channeltype.Gemini, channeltype.VertextAI, channeltype.GeminiOpenAICompatible:
 	default:
-		// An unrelated provider may implement a REST bridge for the same ID.
 		return nil
 	}
-
-	if _, live := liveOnlyGoogleModels[m.ActualModelName]; !live {
+	if !IsLiveOnlyGoogleModel(m.ActualModelName) {
 		return nil
+	}
+	requestedModel := strings.TrimSpace(m.OriginModelName)
+	if requestedModel == "" {
+		requestedModel = m.ActualModelName
 	}
 	return errors.Wrapf(ErrModelRequiresLiveTransport,
 		"model %q cannot be dispatched through this REST adaptor; connect to GET /v1/realtime?model=%s instead",
-		m.ActualModelName, m.ActualModelName)
+		m.ActualModelName, url.QueryEscape(requestedModel))
 }

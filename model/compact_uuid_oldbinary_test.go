@@ -73,11 +73,13 @@ func terminatePinnedOldBinary(t *testing.T, command *exec.Cmd) {
 //   - t: test handle used for assertions.
 //   - binary: absolute path to the pinned artifact.
 //   - dsn: SQL_DSN value pointing at the database under test.
-//   - startupTimeout: maximum time allowed for database and server startup.
+//   - startupTimeout: maximum time allowed for startup and post-startup checks.
+//   - afterStartup: optional checks completed while the artifact is still alive.
 //
 // Return values:
 //   - string: the binary's combined output, for diagnosis on failure.
-func runPinnedOldBinary(t *testing.T, binary string, dsn string, startupTimeout time.Duration) string {
+func runPinnedOldBinary(t *testing.T, binary string, dsn string, startupTimeout time.Duration,
+	afterStartup ...func(context.Context) error) string {
 	t.Helper()
 
 	port := strings.TrimSpace(os.Getenv(compactOldBinaryPortEnv))
@@ -117,6 +119,14 @@ func runPinnedOldBinary(t *testing.T, binary string, dsn string, startupTimeout 
 	if err := waitForPinnedStartup(ctx, output); err != nil {
 		terminate()
 		require.NoError(t, err, "pinned startup did not complete; output:\n%s", output.String())
+	}
+	// Startup readiness alone does not prove a concurrent qualification workload
+	// has finished. Let callers wait for that evidence before killing the server.
+	for _, check := range afterStartup {
+		if err := check(ctx); err != nil {
+			terminate()
+			require.NoError(t, err, "pinned post-startup check failed; output:\n%s", output.String())
+		}
 	}
 	// Signal 0 is a Unix-like liveness probe: it performs permission and existence checks
 	// without delivering anything. Windows does not implement it; the output and database
@@ -258,7 +268,7 @@ func TestCompactUUIDCompatibilityCorpus(t *testing.T) {
 			"the derived shadow must equal the authoritative text the old binary wrote")
 	}
 
-	// AUTO-T08: a new reader resolves the old binary's row through the verified compact path.
+	// AUTO-T08: a new reader resolves a row the old binary wrote through the verified compact path.
 	runCompactHealthAudit(ctx, topology)
 	target, err := compactLookupTarget("users")
 	require.NoError(t, err)

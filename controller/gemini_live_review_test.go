@@ -38,7 +38,7 @@ func TestGeminiLiveEphemeralRejectionExplainsSupportedTransport(t *testing.T) {
 		m := &meta.Meta{ChannelType: channel, APIType: apitype.OpenAI, Mode: relaymode.Realtime, ActualModelName: "gemini-3.8-live", StartTime: time.Now()}
 		meta.Set2Context(c, m)
 		RelayRealtimeSessions(c)
-		require.Equal(t, http.StatusBadRequest, w.Code)
+		require.Equal(t, http.StatusForbidden, w.Code)
 		var payload struct {
 			Error struct {
 				Code    string `json:"code"`
@@ -46,8 +46,8 @@ func TestGeminiLiveEphemeralRejectionExplainsSupportedTransport(t *testing.T) {
 			} `json:"error"`
 		}
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
-		require.Equal(t, "realtime_sessions_unsupported", payload.Error.Code)
-		require.Contains(t, payload.Error.Message, "Gemini Live")
+		require.Equal(t, "realtime_sessions_disabled", payload.Error.Code)
+		require.Contains(t, payload.Error.Message, "disabled")
 		require.Contains(t, payload.Error.Message, "WebSocket")
 		require.Contains(t, payload.Error.Message, "/v1/realtime")
 		require.Contains(t, payload.Error.Message, "one-api")

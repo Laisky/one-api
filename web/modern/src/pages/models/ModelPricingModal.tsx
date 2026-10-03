@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ModelApiExamples } from './ModelApiExamples';
+import { AudioTariffDetails, type AudioInputTariff } from './AudioTariffDetails';
 
 // ---- Types matching the backend ModelDisplayInfo ----
 
@@ -60,12 +61,13 @@ interface TierData {
 }
 
 interface VideoPricingData {
+  input_image_usd?: number;
   per_second_usd: number;
   base_resolution?: string;
   resolution_multipliers?: Record<string, number>;
 }
 
-interface AudioPricingData {
+interface AudioPricingData extends AudioInputTariff {
   prompt_token_ratio?: number;
   completion_token_ratio?: number;
   prompt_tokens_per_second?: number;
@@ -540,10 +542,10 @@ function PricingContent({
       )}
 
       {/* Per-call pricing — flat per-invocation billing (e.g. rerank) */}
-      {data.per_call_pricing && (data.per_call_pricing.usd_per_thousand_calls || data.per_call_pricing.usd_per_call) ? (
+      {data.per_call_pricing && (data.per_call_pricing.usd_per_thousand_calls !== undefined || data.per_call_pricing.usd_per_call !== undefined) ? (
         <PricingSection title={tr('per_call_pricing', 'Per-Call Pricing')} icon="text">
           <PriceGrid>
-            {data.per_call_pricing.usd_per_thousand_calls !== undefined && data.per_call_pricing.usd_per_thousand_calls > 0 && (
+            {data.per_call_pricing.usd_per_thousand_calls !== undefined && (
               <PriceCell
                 label={tr('base_rate', 'Base Rate')}
                 sublabel={tr('per_1k_calls', 'per 1K calls')}
@@ -552,7 +554,7 @@ function PricingContent({
                 raw
               />
             )}
-            {data.per_call_pricing.usd_per_call !== undefined && data.per_call_pricing.usd_per_call > 0 && (
+            {data.per_call_pricing.usd_per_call !== undefined && (
               <PriceCell
                 label={tr('per_call_label', 'Per Call')}
                 sublabel={tr('per_call', 'per call')}
@@ -690,8 +692,7 @@ function PricingContent({
                           tr={tr}
                         />
                       )}
-                      {window.overlay.per_call_pricing?.usd_per_thousand_calls !== undefined &&
-                        window.overlay.per_call_pricing.usd_per_thousand_calls > 0 && (
+                      {window.overlay.per_call_pricing?.usd_per_thousand_calls !== undefined && (
                           <PriceCell
                             label={tr('per_call_pricing', 'Per-call Pricing')}
                             sublabel={tr('per_1k_calls', 'per 1K calls')}
@@ -719,6 +720,7 @@ function PricingContent({
                           raw
                         />
                       )}
+                      <AudioTariffDetails pricing={window.overlay.audio_pricing} />
                       {window.overlay.audio_pricing?.usd_per_second !== undefined && window.overlay.audio_pricing.usd_per_second > 0 && (
                         <PriceCell
                           label={tr('audio_pricing', 'Audio Pricing')}
@@ -907,6 +909,9 @@ function PricingContent({
               tr={tr}
               raw
             />
+            {data.video_pricing.input_image_usd !== undefined && data.video_pricing.input_image_usd > 0 && (
+              <PriceCell label={tr('input', 'Input')} sublabel={tr('per_image', 'per image')} value={data.video_pricing.input_image_usd} tr={tr} raw />
+            )}
           </PriceGrid>
           {data.video_pricing.base_resolution && (
             <div className="mt-2">
@@ -933,6 +938,7 @@ function PricingContent({
       {data.audio_pricing && (
         <PricingSection title={tr('audio_pricing', 'Audio Pricing')} icon="audio">
           <PriceGrid>
+            <AudioTariffDetails pricing={data.audio_pricing} />
             {data.audio_pricing.usd_per_second !== undefined && data.audio_pricing.usd_per_second > 0 && (
               <PriceCell
                 label={tr('base_rate', 'Base Rate')}

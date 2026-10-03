@@ -24,11 +24,11 @@ import (
 
 // Log represents a persisted usage or management entry emitted by the billing pipeline.
 type Log struct {
-	Id        int     `json:"id"`
-	UserId    int     `json:"user_id" gorm:"index;index:idx_user_token,priority:1"`
+	Id        int     `json:"id" gorm:"index:idx_logs_user_created_at_id,priority:3"`
+	UserId    int     `json:"user_id" gorm:"index;index:idx_user_token,priority:1;index:idx_logs_user_created_at_id,priority:1"`
 	UUID      string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	UserUUID  *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
-	CreatedAt int64   `json:"created_at" gorm:"bigint;index:idx_created_at_type"`
+	CreatedAt int64   `json:"created_at" gorm:"bigint;index:idx_created_at_type;index:idx_logs_user_created_at_id,priority:2"`
 	Type      int     `json:"type" gorm:"index:idx_created_at_type"`
 	Content   string  `json:"content" gorm:"type:text"`
 	Username  string  `json:"username" gorm:"index:index_username_model_name,priority:2;default:''"`
@@ -179,7 +179,7 @@ func (m LogMetadata) MarshalJSON() ([]byte, error) {
 	if m == nil {
 		return []byte("{}"), nil
 	}
-	payload, err := json.Marshal(map[string]any(m))
+	payload, err := json.Marshal(map[string]any(SanitizeLogMetadata(m)))
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal log metadata")
 	}
@@ -192,7 +192,7 @@ func (m LogMetadata) Value() (driver.Value, error) {
 		return nil, nil
 	}
 
-	payload, err := json.Marshal(map[string]any(m))
+	payload, err := json.Marshal(map[string]any(SanitizeLogMetadata(m)))
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal log metadata")
 	}
@@ -1256,15 +1256,7 @@ func GetUserLogsCount(userId int, logType int, startTimestamp int64, endTimestam
 // SearchAllLogs performs a keyword search across all log entries with pagination.
 func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrder string) (logs []*Log, total int64, err error) {
 	db := excludeProvisionalScope(LOG_DB.Model(&Log{}))
-	if keyword != "" {
-		// FK uuid arms let an operator paste a user/token/channel UUID and get the rows
-		// that entity produced; the provisional exclusion above still ANDs.
-		if scoped, matched := applyUUIDKeyword(db, keyword, "uuid", "user_uuid", "token_uuid", "channel_uuid"); matched {
-			db = scoped
-		} else {
-			db = db.Where("(content LIKE ?)", "%"+keyword+"%")
-		}
-	}
+	db = applyLogKeyword(db, keyword)
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error
@@ -1280,15 +1272,7 @@ func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrd
 // SearchUserLogs searches logs owned by a specific user using a keyword filter.
 func SearchUserLogs(userId int, keyword string, startIdx int, num int, sortBy string, sortOrder string) (logs []*Log, total int64, err error) {
 	db := excludeProvisionalScope(LOG_DB.Model(&Log{}).Where("user_id = ?", userId))
-	if keyword != "" {
-		// FK uuid arms let the owner paste a token/channel UUID and get the rows it
-		// produced; the user_id scope above still ANDs, so nothing crosses owners.
-		if scoped, matched := applyUUIDKeyword(db, keyword, "uuid", "user_uuid", "token_uuid", "channel_uuid"); matched {
-			db = scoped
-		} else {
-			db = db.Where("(content LIKE ?)", "%"+keyword+"%")
-		}
-	}
+	db = applyLogKeyword(db, keyword)
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error

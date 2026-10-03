@@ -162,6 +162,9 @@ func main() {
 			model.SyncChannelCacheContext(ctx, config.SyncFrequency)
 		})
 	}
+	if config.IsMasterNode {
+		model.StartBackgroundWorker(workerCtx, model.RunQuotaRefundRecovery)
+	}
 	mcp.StartAutoSync(workerCtx)
 	if config.ChannelTestFrequency > 0 {
 		model.StartBackgroundWorker(workerCtx, func(ctx context.Context) {
@@ -273,7 +276,7 @@ func main() {
 	if port == "" {
 		port = strconv.Itoa(*common.Port)
 	}
-	addr := ":" + port
+	addr := config.APIListenAddress(port)
 	srv := &http.Server{Addr: addr, Handler: server}
 
 	// Start the pprof profiling listener (separate from the API server) when enabled.

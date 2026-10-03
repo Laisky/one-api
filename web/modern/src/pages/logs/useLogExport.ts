@@ -1,34 +1,16 @@
+import { useNotifications } from '@/components/ui/notifications';
 import { api } from '@/lib/api';
-import { buildCsv, fetchAllPaginatedResults, mapWithConcurrency } from '@/lib/export';
-import { formatTimestamp, fromDateTimeLocal, renderQuota } from '@/lib/utils';
-import { useCallback, useState } from 'react';
+import { buildCsv, mapWithConcurrency } from '@/lib/export';
+import { formatTimestamp, renderQuota } from '@/lib/utils';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { formatLatency, getCacheWriteSummaries, logRef, type LogRow } from './logs-page-columns';
 import { logTypeTranslationKey, type ExportTracePayload } from './log-types';
 
-/**
- * CSV export for the log list.
- *
- * Export deliberately keeps using the legacy offset route. It needs a
- * snapshot-shaped walk of the whole filtered set, which is a different job from
- * interactive paging, and the walker there is already the one under test.
- */
-
-/** UseLogExportOptions describes the filtered set to export. */
+/** UseLogExportOptions resolves the explicitly selected authorized records before CSV construction. */
 export interface UseLogExportOptions {
-  filters: {
-    type: string;
-    model_name: string;
-    token_name: string;
-    username: string;
-    channel: string;
-    start_timestamp: string;
-    end_timestamp: string;
-  };
-  isAdminOrRoot: boolean;
-  sortBy: string;
-  sortOrder: 'asc' | 'desc';
+  resolveSelected: () => Promise<LogRow[]>;
 }
 
 /** UseLogExportResult is the hook's public surface. */
@@ -38,36 +20,26 @@ export interface UseLogExportResult {
 }
 
 /**
- * useLogExport builds and downloads a CSV of the current filtered log set.
+ * useLogExport builds and downloads a CSV of the selected log snapshot.
  *
  * @param options - the filtered set to export.
  * @returns the export state and its trigger.
  */
 export function useLogExport(options: UseLogExportOptions): UseLogExportResult {
-  const { filters, isAdminOrRoot, sortBy, sortOrder } = options;
+  const { resolveSelected } = options;
+  const { notify } = useNotifications();
+  const inFlight = useRef(false);
   const { t } = useTranslation();
   const [exporting, setExporting] = useState(false);
 
   const getLogTypeLabelText = useCallback((typeValue: number) => t(`logs.types.${logTypeTranslationKey(typeValue)}`), [t]);
 
   const exportLogs = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setExporting(true);
     try {
-      const params = new URLSearchParams();
-      if (filters.type !== '0') params.set('type', filters.type);
-      if (filters.model_name) params.set('model_name', filters.model_name);
-      if (filters.token_name) params.set('token_name', filters.token_name);
-      if (isAdminOrRoot && filters.username) params.set('username', filters.username);
-      if (filters.channel && isAdminOrRoot) params.set('channel', filters.channel);
-      if (filters.start_timestamp) params.set('start_timestamp', String(fromDateTimeLocal(filters.start_timestamp)));
-      if (filters.end_timestamp) params.set('end_timestamp', String(fromDateTimeLocal(filters.end_timestamp)));
-      if (sortBy) {
-        params.set('sort', sortBy);
-        params.set('order', sortOrder);
-      }
-
-      const exportPath = isAdminOrRoot ? '/api/log/' : '/api/log/self';
-      const exportData = await fetchAllPaginatedResults<LogRow>((url) => api.get(url), exportPath, params);
+      const exportData = await resolveSelected();
       const logsWithTrace = exportData.filter((log) => log.trace_id?.trim());
       const traceEntries = await mapWithConcurrency(logsWithTrace, async (log) => {
         const ref = logRef(log);
@@ -162,11 +134,18 @@ export function useLogExport(options: UseLogExportOptions): UseLogExportResult {
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to export logs:', error);
+      notify({
+        type: 'error',
+        message:
+          (error as { response?: { data?: { message?: string } } }).response?.data?.message ||
+          (error as Error)?.message ||
+          t('table_selection.failed'),
+      });
     } finally {
+      inFlight.current = false;
       setExporting(false);
     }
-  }, [filters, isAdminOrRoot, sortBy, sortOrder, t, getLogTypeLabelText]);
+  }, [resolveSelected, notify, t, getLogTypeLabelText]);
 
   return { exporting, exportLogs };
 }

@@ -260,15 +260,15 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	}
 	defer func() { _ = upstreamConn.Close() }()
 
-	return nil, meteredRealtimePump(clientConn, upstreamConn, lg, meta.ActualModelName, meta.OriginModelName)
+	return nil, meteredRealtimePump(clientConn, upstreamConn, lg, meta.ActualModelName, meta.OriginModelName, isRealtimeTranscriptionIntent(c.Request.URL.Query()))
 }
 
 // RealtimeBidirectionalPump relays frames between the client and upstream
 // realtime WebSocket connections until either direction closes, parsing token
 // usage from upstream `response.done` events. When guardClientModel is true,
-// client `session.update` or `transcription_session.update` frames that mutate
-// the relevant model field are rejected; providers that select the model
-// through session.update (e.g. Zhipu GLM-Realtime) pass false.
+// client `session.update` frames that mutate `session.model` are rejected;
+// providers that select the model through session.update (e.g. Zhipu
+// GLM-Realtime) pass false.
 //
 // Parameters:
 //   - clientConn: the downstream connection upgraded from the client.
@@ -287,7 +287,7 @@ func RealtimeBidirectionalPump(clientConn, upstreamConn *websocket.Conn, guardCl
 	countedResponseIDs := map[string]struct{}{}
 	go func() { errc <- copyWSUpstreamToClient(upstreamConn, clientConn, usage, countedResponseIDs) }()
 	go func() {
-		errc <- copyRealtimeClientToUpstream(clientConn, upstreamConn, guardClientModel, boundModel, originModel)
+		errc <- copyRealtimeClientToUpstream(clientConn, upstreamConn, guardClientModel, boundModel, originModel, false)
 	}()
 
 	// Wait for one direction to finish, then close both connections
@@ -311,24 +311,24 @@ func RealtimeBidirectionalPump(clientConn, upstreamConn *websocket.Conn, guardCl
 }
 
 // copyRealtimeClientToUpstream forwards client frames to the upstream realtime
-// connection while optionally rejecting `session.update` and
-// `transcription_session.update` events that attempt to change the session
-// model. OpenAI's Realtime API itself rejects regular session model changes,
-// but defense-in-depth keeps the proxy authoritative against non-conformant
-// upstreams and prevents the proxy from forwarding billing-ambiguous frames.
+// connection while optionally rejecting `session.update` events that attempt
+// to change the session model. OpenAI's Realtime API itself rejects model
+// changes, but defense-in-depth keeps the proxy authoritative against
+// non-conformant upstreams and prevents the proxy from forwarding
+// billing-ambiguous frames.
 //
 // Parameters:
 //   - src: client WebSocket connection (reader).
 //   - dst: upstream realtime WebSocket connection (writer).
-//   - guardClientModel: when true, hold session updates to the bound model.
+//   - guardClientModel: when true, enforce the model binding on JSON frames.
+//   - transcription: the immutable transcription intent from the handshake.
 //   - boundModel: mapped upstream model bound at the handshake.
 //   - originModel: the user-facing alias the caller requested, if different.
 //
 // Returns:
 //   - error: nil on clean close; ErrModelSwitchDenied (wrapped) when a client
-//     attempts to mutate a guarded session model; other errors propagate I/O
-//     failures.
-func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel bool, boundModel, originModel string) error {
+//     attempts to mutate `session.model`; other errors propagate I/O failures.
+func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel bool, boundModel, originModel string, transcription bool) error {
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {
@@ -344,8 +344,8 @@ func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel boo
 			return errors.WithStack(err)
 		}
 
-		if guardClientModel && mt == websocket.TextMessage {
-			forward, guardErr := enforceRealtimeSessionUpdate(msg, boundModel, originModel)
+		if guardClientModel && (mt == websocket.TextMessage || mt == websocket.BinaryMessage) {
+			forward, guardErr := enforceRealtimeSessionUpdate(msg, boundModel, originModel, transcription)
 			if guardErr != nil {
 				errEvent := buildModelSwitchErrorEvent(guardErr.Error())
 				_ = src.WriteMessage(websocket.TextMessage, errEvent)

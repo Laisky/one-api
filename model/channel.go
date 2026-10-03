@@ -209,15 +209,7 @@ func GetEnabledChannelsVersionSignature() (string, error) {
 func SearchChannels(keyword string, sortBy string, sortOrder string) (channels []*Channel, err error) {
 	orderClause := ValidateOrderClause(sortBy, sortOrder, channelSortFields, "id desc")
 
-	db := DB.Omit("key")
-	if scoped, matched := applyUUIDKeyword(db, keyword, "uuid"); matched {
-		// A pasted UUID identifies exactly one channel; the LIKE arm cannot add matches.
-		db = scoped
-	} else {
-		// The internal incremental id is deliberately not searchable; UUID is the
-		// only external identifier for a channel.
-		db = db.Where("name LIKE ?", keyword+"%")
-	}
+	db := applyChannelSearch(DB.Omit("key"), keyword)
 	err = db.Order(orderClause).Find(&channels).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search channels")
@@ -693,8 +685,13 @@ func UpdateChannelUsedQuotaWithContext(ctx context.Context, id int, quota int64)
 	updateChannelUsedQuota(ctx, id, quota)
 }
 
+// updateChannelUsedQuota increments channel usage, retrying only failed SQLite busy writes within ctx.
 func updateChannelUsedQuota(ctx context.Context, id int, quota int64) {
-	err := DB.Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error
+	db := DB
+	err := runWithSQLiteBusyRetryForDB(ctx, db, func() error {
+		return errors.WithStack(db.WithContext(ctx).Model(&Channel{}).Where("id = ?", id).
+			Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error)
+	})
 	if err != nil {
 		logger.FromContext(ctx).Error("failed to update channel used quota - channel statistics may be inaccurate",
 			append(LookupChannelRef(ctx, id).Zap(),

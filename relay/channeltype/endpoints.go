@@ -207,12 +207,15 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case PaLM:
 		return chatOnly
 	case Gemini, GeminiOpenAICompatible:
-		return append(chatAndEmbeddings, EndpointRealtime)
+		return append(chatAndEmbeddings, EndpointRealtime, EndpointAudioSpeech)
 	case Copilot:
 		return copilotDefault
 	case Zhipu:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
+			EndpointAudioTranscription,
+			EndpointVideos,
 			EndpointEmbeddings,
 			EndpointImagesGenerations,
 			EndpointResponseAPI,
@@ -281,6 +284,8 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Mistral:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
+			EndpointAudioTranscription,
 			EndpointEmbeddings,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
@@ -288,6 +293,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Groq:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
 			EndpointAudioTranscription,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
@@ -310,6 +316,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Cohere:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointEmbeddings,
 			EndpointRerank,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
@@ -351,6 +358,8 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointImagesGenerations,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
+			EndpointRealtime,
+			EndpointAudioSpeech,
 		}
 	case Proxy:
 		// Proxy mode supports all endpoints - it's a passthrough
@@ -358,6 +367,8 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case SiliconFlow:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointAudioSpeech,
+			EndpointImagesGenerations,
 			EndpointEmbeddings,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,

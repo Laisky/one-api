@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { api } from '@/lib/api';
+import { useLogTrace, type TraceData, type TraceTimestamps } from '@/hooks/useLogTrace';
 import { getLogTypeLabel } from '@/lib/constants/logs';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, renderQuota } from '@/lib/utils';
@@ -74,60 +74,6 @@ const DetailItem = ({ label, value }: { label: string; value: ReactNode }) => (
   </div>
 );
 
-interface TraceTimestamps {
-  request_received?: number;
-  request_forwarded?: number;
-  first_upstream_response?: number;
-  first_client_response?: number;
-  upstream_completed?: number;
-  request_completed?: number;
-  external_calls?: TraceExternalCall[];
-}
-
-interface TraceExternalCall {
-  key?: string;
-  source?: string;
-  tool?: string;
-  server_id?: number;
-  server_label?: string;
-  started_at?: number;
-  ended_at?: number;
-  duration_ms?: number;
-  is_error?: boolean;
-}
-
-interface TraceDurations {
-  processing_time?: number;
-  upstream_response_time?: number;
-  response_processing_time?: number;
-  streaming_time?: number;
-  total_time?: number;
-}
-
-interface TraceData {
-  availability?: 'not_retained_locally';
-  id?: number;
-  uuid?: string;
-  trace_id: string;
-  url: string;
-  method: string;
-  body_size: number;
-  status: number;
-  created_at: number;
-  updated_at: number;
-  timestamps: TraceTimestamps;
-  durations?: TraceDurations;
-  log?: {
-    id?: number;
-    uuid?: string;
-    user_id?: number;
-    user_uuid?: string | null;
-    username: string;
-    content: string;
-    type: number;
-  };
-}
-
 const formatDuration = (milliseconds?: number): string => {
   if (!milliseconds) return 'N/A';
   if (milliseconds < 1000) {
@@ -175,12 +121,14 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
   );
   const metadataJSON = useMemo(() => (log?.metadata ? JSON.stringify(log.metadata, null, 2) : null), [log]);
   const cacheWriteSummary = useMemo(() => getCacheWriteSummaries(log?.metadata), [log]);
-  const [traceData, setTraceData] = useState<TraceData | null>(null);
-  const [traceLoading, setTraceLoading] = useState(false);
-  const [traceError, setTraceError] = useState<string | null>(null);
   const [traceCopied, setTraceCopied] = useState(false);
   const logRef = log?.uuid || log?.id || '';
-  const hasTrace = Boolean(log && log.trace_id && log.trace_id.trim() !== '' && logRef);
+  const hasTrace = Boolean(log?.trace_id?.trim());
+  const { traceData, traceLoading, traceError, traceNotRetainedLocally, retry } = useLogTrace(
+    log?.trace_id,
+    Boolean(open && log),
+    JSON.stringify([user?.uuid ?? user?.id ?? '', user?.role ?? 0])
+  );
 
   const timelineEvents = useMemo(
     () => [
@@ -229,51 +177,6 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     ],
     [t]
   );
-
-  useEffect(() => {
-    let active = true;
-    const loadTrace = async () => {
-      if (!open || !hasTrace || !log) {
-        if (active) {
-          setTraceData(null);
-          setTraceError(null);
-          setTraceLoading(false);
-        }
-        return;
-      }
-
-      setTraceLoading(true);
-      setTraceData(null);
-      setTraceError(null);
-      try {
-        const response = await api.get(`/api/trace/log/${logRef}`);
-        if (active) {
-          const trace = response.data?.data as TraceData | undefined;
-          if (trace) {
-            setTraceData(trace);
-          } else {
-            setTraceError(t('logs.details.load_failed'));
-          }
-        }
-      } catch (error: any) {
-        if (active) {
-          setTraceError(t('logs.details.load_failed'));
-        }
-      } finally {
-        if (active) {
-          setTraceLoading(false);
-        }
-      }
-    };
-
-    loadTrace();
-
-    return () => {
-      active = false;
-    };
-  }, [open, hasTrace, log, t]);
-
-  const traceNotRetainedLocally = traceData?.availability === 'not_retained_locally';
 
   const handleCopy = async (value?: string) => {
     if (!value) return;
@@ -343,7 +246,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
             <User className="h-4 w-4" />
             {t('logs.details.user', 'User')}
           </div>
-          <div className="text-sm">{trace.log?.username || log?.username || user?.username || 'N/A'}</div>
+          <div className="text-sm">{log?.username || user?.username || 'N/A'}</div>
         </div>
 
         <div className="space-y-2 md:col-span-2">
@@ -769,13 +672,23 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
 
                   {hasTrace && !traceLoading && traceNotRetainedLocally && (
                     <Alert>
-                      <AlertDescription>{t('logs.details.not_retained_locally')}</AlertDescription>
+                      <AlertDescription>
+                        {t('logs.details.not_retained_locally')}
+                        <Button type="button" variant="outline" size="sm" className="ml-3" onClick={retry}>
+                          {t('common.refresh')}
+                        </Button>
+                      </AlertDescription>
                     </Alert>
                   )}
 
                   {hasTrace && !traceLoading && traceError && (
                     <Alert variant="destructive">
-                      <AlertDescription>{traceError}</AlertDescription>
+                      <AlertDescription>
+                        {t('logs.details.load_failed')}{traceError.status ? ` (HTTP ${traceError.status})` : ''}
+                        <Button type="button" variant="outline" size="sm" className="ml-3" onClick={retry}>
+                          {t('common.refresh')}
+                        </Button>
+                      </AlertDescription>
                     </Alert>
                   )}
 

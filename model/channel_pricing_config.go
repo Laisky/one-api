@@ -12,6 +12,7 @@ import (
 // ModelConfigLocal represents the local definition of ModelConfig to avoid import cycles
 // This should match the structure in relay/adaptor/interface.go
 type ModelConfigLocal struct {
+	PerCall           *PerCallPricingLocal   `json:"per_call,omitempty"`
 	Ratio             float64                `json:"ratio"`
 	CompletionRatio   float64                `json:"completion_ratio,omitempty"`
 	CachedInputRatio  float64                `json:"cached_input_ratio,omitempty"`
@@ -57,15 +58,15 @@ type ModelRatioTierLocal struct {
 	OutputTokenThreshold int     `json:"output_token_threshold,omitempty"`
 }
 
-// VideoPricingLocal represents channel-scoped video pricing metadata stored alongside model configs.
-type VideoPricingLocal struct {
-	PerSecondUsd          float64            `json:"per_second_usd,omitempty"`
-	BaseResolution        string             `json:"base_resolution,omitempty"`
-	ResolutionMultipliers map[string]float64 `json:"resolution_multipliers,omitempty"`
-}
-
 // AudioPricingLocal mirrors adaptor.AudioPricingConfig for persistence without creating import cycles.
 type AudioPricingLocal struct {
+	InputPriceQuantity float64 `json:"input_price_quantity,omitempty"`
+	// InputUnit makes direct input pricing explicit: characters, utf8_bytes, or seconds.
+	InputUnit               string  `json:"input_unit,omitempty"`
+	InputPriceUsd           float64 `json:"input_price_usd,omitempty"`
+	MinimumBillableSeconds  float64 `json:"minimum_billable_seconds,omitempty"`
+	BillingIncrementSeconds float64 `json:"billing_increment_seconds,omitempty"`
+
 	PromptRatio               float64 `json:"prompt_ratio,omitempty"`
 	CompletionRatio           float64 `json:"completion_ratio,omitempty"`
 	PromptTokensPerSecond     float64 `json:"prompt_tokens_per_second,omitempty"`
@@ -102,6 +103,10 @@ type EmbeddingPricingLocal struct {
 
 // normalizeModelConfigLocal trims whitespace and validates numeric fields.
 func normalizeModelConfigLocal(cfg ModelConfigLocal) (ModelConfigLocal, error) {
+	perCall, err := normalizePerCallPricingLocal(cfg.PerCall)
+	if err != nil {
+		return ModelConfigLocal{}, errors.Wrap(err, "normalize per-call pricing")
+	}
 	video, err := normalizeVideoPricingLocal(cfg.Video)
 	if err != nil {
 		return ModelConfigLocal{}, errors.Wrap(err, "normalize video pricing")
@@ -120,6 +125,7 @@ func normalizeModelConfigLocal(cfg ModelConfigLocal) (ModelConfigLocal, error) {
 	}
 
 	normalized := ModelConfigLocal{
+		PerCall:           perCall,
 		Ratio:             cfg.Ratio,
 		CompletionRatio:   cfg.CompletionRatio,
 		CachedInputRatio:  cfg.CachedInputRatio,
@@ -286,6 +292,9 @@ func (channel *Channel) validateModelPriceConfigs(configs map[string]ModelConfig
 			return errors.Errorf("negative MaxTokens for model %s: %d", modelName, config.MaxTokens)
 		}
 
+		if _, err := normalizePerCallPricingLocal(config.PerCall); err != nil {
+			return errors.Wrapf(err, "validate per-call pricing for %s", modelName)
+		}
 		hasVideoData, err := validateVideoPricingLocal(config.Video, modelName)
 		if err != nil {
 			return errors.Wrap(err, "validate video pricing")
@@ -315,6 +324,7 @@ func (channel *Channel) validateModelPriceConfigs(configs map[string]ModelConfig
 			config.CacheWrite1hRatio == 0 &&
 			len(config.Tiers) == 0 &&
 			config.MaxTokens == 0 &&
+			config.PerCall == nil &&
 			!hasVideoData &&
 			!hasAudioData &&
 			!hasImageData &&
@@ -420,6 +430,9 @@ func validateTimeWindowOverlayLocal(overlay ModelConfigLocal, modelName string, 
 			return errors.Errorf("model %s time window %d overlay tier cache_write_1h_ratio cannot be negative", modelName, windowIdx)
 		}
 	}
+	if _, err := normalizePerCallPricingLocal(overlay.PerCall); err != nil {
+		return errors.Wrapf(err, "validate per-call overlay for %s", modelName)
+	}
 	hasVideoData, err := validateVideoPricingLocal(overlay.Video, modelName)
 	if err != nil {
 		return errors.Wrap(err, "validate overlay video pricing")
@@ -446,7 +459,7 @@ func validateTimeWindowOverlayLocal(overlay ModelConfigLocal, modelName string, 
 // Parameters: cfg is the normalized local model config.
 // Returns: true when token, tier, or nested pricing fields are present.
 func hasOverlayPricingData(cfg ModelConfigLocal) bool {
-	return cfg.Ratio != 0 ||
+	return cfg.PerCall != nil || cfg.Ratio != 0 ||
 		cfg.CompletionRatio != 0 ||
 		cfg.CachedInputRatio != 0 ||
 		cfg.CacheWrite5mRatio != 0 ||
@@ -458,85 +471,13 @@ func hasOverlayPricingData(cfg ModelConfigLocal) bool {
 		hasEmbeddingPricingData(cfg.Embedding)
 }
 
-func normalizeVideoPricingLocal(cfg *VideoPricingLocal) (*VideoPricingLocal, error) {
-	if cfg == nil {
-		return nil, nil
-	}
-
-	if cfg.PerSecondUsd < 0 {
-		return nil, errors.New("video per_second_usd cannot be negative")
-	}
-
-	normalized := &VideoPricingLocal{
-		PerSecondUsd: cfg.PerSecondUsd,
-	}
-	if strings.TrimSpace(cfg.BaseResolution) != "" {
-		normalized.BaseResolution = normalizeVideoResolutionKey(cfg.BaseResolution)
-	}
-
-	if len(cfg.ResolutionMultipliers) > 0 {
-		normalized.ResolutionMultipliers = make(map[string]float64, len(cfg.ResolutionMultipliers))
-		for rawKey, value := range cfg.ResolutionMultipliers {
-			key := normalizeVideoResolutionKey(rawKey)
-			if key == "" {
-				return nil, errors.Errorf("video resolution multiplier key cannot be empty for '%s'", rawKey)
-			}
-			if value <= 0 {
-				return nil, errors.Errorf("video resolution multiplier for %s must be positive", rawKey)
-			}
-			normalized.ResolutionMultipliers[key] = value
-		}
-	}
-
-	return normalized, nil
-}
-
-func validateVideoPricingLocal(cfg *VideoPricingLocal, modelName string) (bool, error) {
-	if cfg == nil {
-		return false, nil
-	}
-	if cfg.PerSecondUsd < 0 {
-		return false, errors.Errorf("video per_second_usd cannot be negative for model %s", modelName)
-	}
-	for key, value := range cfg.ResolutionMultipliers {
-		if strings.TrimSpace(key) == "" {
-			return false, errors.Errorf("video resolution multiplier key cannot be empty for model %s", modelName)
-		}
-		if value <= 0 {
-			return false, errors.Errorf("video resolution multiplier for %s must be positive (model %s)", key, modelName)
-		}
-	}
-	return hasVideoPricingData(cfg), nil
-}
-
-func hasVideoPricingData(cfg *VideoPricingLocal) bool {
-	if cfg == nil {
-		return false
-	}
-	if cfg.PerSecondUsd > 0 {
-		return true
-	}
-	return len(cfg.ResolutionMultipliers) > 0
-}
-
+// validateAudioPricingLocal validates all audio rates, including direct billing units.
 func validateAudioPricingLocal(cfg *AudioPricingLocal, modelName string) (bool, error) {
 	if cfg == nil {
 		return false, nil
 	}
-	if cfg.PromptRatio < 0 {
-		return false, errors.Errorf("audio prompt_ratio cannot be negative for model %s", modelName)
-	}
-	if cfg.CompletionRatio < 0 {
-		return false, errors.Errorf("audio completion_ratio cannot be negative for model %s", modelName)
-	}
-	if cfg.PromptTokensPerSecond < 0 {
-		return false, errors.Errorf("audio prompt_tokens_per_second cannot be negative for model %s", modelName)
-	}
-	if cfg.CompletionTokensPerSecond < 0 {
-		return false, errors.Errorf("audio completion_tokens_per_second cannot be negative for model %s", modelName)
-	}
-	if cfg.UsdPerSecond < 0 {
-		return false, errors.Errorf("audio usd_per_second cannot be negative for model %s", modelName)
+	if err := validateAudioRates(cfg); err != nil {
+		return false, errors.Wrapf(err, "audio pricing for model %s", modelName)
 	}
 	return hasAudioPricingData(cfg), nil
 }
@@ -546,7 +487,7 @@ func hasAudioPricingData(cfg *AudioPricingLocal) bool {
 		return false
 	}
 	return cfg.PromptRatio != 0 || cfg.CompletionRatio != 0 || cfg.PromptTokensPerSecond != 0 ||
-		cfg.CompletionTokensPerSecond != 0 || cfg.UsdPerSecond != 0
+		cfg.CompletionTokensPerSecond != 0 || cfg.UsdPerSecond != 0 || cfg.InputUnit != "" || cfg.InputPriceUsd != 0 || cfg.MinimumBillableSeconds != 0 || cfg.BillingIncrementSeconds != 0
 }
 
 func validateImagePricingLocal(cfg *ImagePricingLocal, modelName string) (bool, error) {
@@ -693,33 +634,17 @@ func normalizeVideoResolutionKey(value string) string {
 	return strconv.Itoa(width) + "x" + strconv.Itoa(height)
 }
 
+// normalizeAudioPricingLocal clones and validates audio rates without losing explicit zero tariffs.
 func normalizeAudioPricingLocal(cfg *AudioPricingLocal) (*AudioPricingLocal, error) {
 	if cfg == nil {
 		return nil, nil
 	}
-	if cfg.PromptRatio < 0 {
-		return nil, errors.New("audio prompt_ratio cannot be negative")
+	normalized := *cfg
+	normalized.InputUnit = strings.TrimSpace(strings.ToLower(normalized.InputUnit))
+	if err := validateAudioRates(&normalized); err != nil {
+		return nil, errors.Wrap(err, "normalize audio rates")
 	}
-	if cfg.CompletionRatio < 0 {
-		return nil, errors.New("audio completion_ratio cannot be negative")
-	}
-	if cfg.PromptTokensPerSecond < 0 {
-		return nil, errors.New("audio prompt_tokens_per_second cannot be negative")
-	}
-	if cfg.CompletionTokensPerSecond < 0 {
-		return nil, errors.New("audio completion_tokens_per_second cannot be negative")
-	}
-	if cfg.UsdPerSecond < 0 {
-		return nil, errors.New("audio usd_per_second cannot be negative")
-	}
-	normalized := &AudioPricingLocal{
-		PromptRatio:               cfg.PromptRatio,
-		CompletionRatio:           cfg.CompletionRatio,
-		PromptTokensPerSecond:     cfg.PromptTokensPerSecond,
-		CompletionTokensPerSecond: cfg.CompletionTokensPerSecond,
-		UsdPerSecond:              cfg.UsdPerSecond,
-	}
-	return normalized, nil
+	return &normalized, nil
 }
 
 func normalizeImagePricingLocal(cfg *ImagePricingLocal) (*ImagePricingLocal, error) {

@@ -341,17 +341,6 @@ func newRealtimeProxyTestServer(
 	t *testing.T,
 	upstreamURL string,
 ) *httptest.Server {
-	return newRealtimeProxyTestServerWithModel(
-		t, upstreamURL, "gpt-4o-realtime-preview", "gpt-4o-realtime-preview",
-	)
-}
-
-// newRealtimeProxyTestServerWithModel hosts the RealtimeHandler with the given
-// origin and actual model names and returns the local proxy test server.
-func newRealtimeProxyTestServerWithModel(
-	t *testing.T,
-	upstreamURL, originModel, actualModel string,
-) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gin.SetMode(gin.TestMode)
@@ -364,52 +353,11 @@ func newRealtimeProxyTestServerWithModel(
 			Mode:            relaymode.Realtime,
 			BaseURL:         upstreamURL,
 			APIKey:          "sk-test",
-			ActualModelName: actualModel,
-			OriginModelName: originModel,
+			ActualModelName: "gpt-4o-realtime-preview",
+			OriginModelName: "gpt-4o-realtime-preview",
 		}
 		_, _ = RealtimeHandler(c, meta)
 	}))
-}
-
-// TestRealtimeWS_TranscriptionSessionModelDenied verifies that a transcription
-// session cannot replace the authenticated query model inside its update event.
-func TestRealtimeWS_TranscriptionSessionModelDenied(t *testing.T) {
-	received := make(chan string, 4)
-	upstream := newRecordingRealtimeUpstream(t, received)
-	defer upstream.Close()
-
-	proxy := newRealtimeProxyTestServerWithModel(
-		t, upstream.URL, "gpt-4o-mini-transcribe", "gpt-4o-mini-transcribe",
-	)
-	defer proxy.Close()
-
-	wsURL := strings.Replace(proxy.URL, "http://", "ws://", 1) +
-		"/v1/realtime?model=gpt-4o-mini-transcribe&intent=transcription"
-	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err, "the local realtime transcription proxy must accept a WebSocket upgrade")
-	defer clientConn.Close()
-
-	attack := `{"type":"transcription_session.update","input_audio_transcription":{"model":"gpt-4o-transcribe"}}`
-	require.NoError(t, clientConn.WriteMessage(websocket.TextMessage, []byte(attack)))
-
-	require.NoError(t, clientConn.SetReadDeadline(time.Now().Add(3*time.Second)))
-	_, message, err := clientConn.ReadMessage()
-	require.NoError(t, err, "the client must receive an error event before the policy close")
-	var event map[string]any
-	require.NoError(t, json.Unmarshal(message, &event))
-	require.Equal(t, "error", event["type"])
-	errorBody, ok := event["error"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "model_switch_denied", errorBody["code"])
-
-	_, _, err = clientConn.ReadMessage()
-	require.True(t, websocket.IsCloseError(err, websocket.ClosePolicyViolation))
-
-	select {
-	case got := <-received:
-		t.Fatalf("upstream received a denied transcription model switch; got=%q", got)
-	case <-time.After(200 * time.Millisecond):
-	}
 }
 
 // newRecordingRealtimeUpstream creates a WS server that records all text

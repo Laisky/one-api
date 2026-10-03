@@ -86,6 +86,9 @@ func resolveRealtimeRecordRates(input ComputeInput, record realtime.Record) (rea
 	if record.Model != "" {
 		modelName = record.Model
 	}
+	if err := ValidateRealtimeModelPricing(modelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime); err != nil {
+		return realtime.Rates{}, ComputeResult{}, err
+	}
 	cfg, known := pricing.ResolveModelConfigRatioOnly(modelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime)
 	if !known {
 		return realtime.Rates{}, ComputeResult{}, errors.Wrapf(ErrRealtimePriceUnavailable, "model %q", modelName)
@@ -135,7 +138,7 @@ func resolveRealtimeRecordRates(input ComputeInput, record realtime.Record) (rea
 	} else if record.Tokens.Audio > 0 || record.Tokens.OutputAudio > 0 {
 		missing = append(missing, "audio")
 	}
-	if realtime.IsGeminiLiveModel(modelName) {
+	if usesGeminiRealtimePricing(input.PricingAdaptor) || realtime.IsGeminiLiveModel(modelName) {
 		return resolveGeminiLiveVisualRates(input, record, modelName, rates, resolved, missing)
 	}
 	cachedAudioDiscount, imageMultiplier, hasSupplement := realtimeSupplement(modelName)

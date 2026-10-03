@@ -375,6 +375,12 @@ const (
 	// Read in: billing audit defer in relay handlers.
 	PreConsumedQuotaAmount = "pre_consumed_quota_amount"
 
+	// PreConsumedQuotaRefundClaimed means an explicit media rollback already owns
+	// this attempt's refund, including while its detached write is pending. A
+	// cross-channel retry must not schedule a second refund of the same hold.
+	// Set/reset only on the request goroutine, never from detached billing work.
+	PreConsumedQuotaRefundClaimed = "pre_consumed_quota_refund_claimed"
+
 	// ProvisionalLogId stores the database ID of the provisional consume log entry
 	// created at pre-consume time. Post-billing uses this to reconcile the log
 	// with actual usage data.

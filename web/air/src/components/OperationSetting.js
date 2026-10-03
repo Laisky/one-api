@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { Divider, Form, Grid, Header } from 'semantic-ui-react';
 import { API, showError, showSuccess, timestamp2string } from '../helpers';
@@ -45,7 +46,7 @@ const OperationSetting = () => {
   };
 
   useEffect(() => {
-    getOptions().then();
+    getOptions().then().catch(reportUIError);
   }, []);
 
   const updateOption = async (key, value) => {
@@ -145,7 +146,7 @@ const OperationSetting = () => {
             <Form.Input
               label='充值链接'
               name='TopUpLink'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.TopUpLink}
               type='link'
@@ -154,7 +155,7 @@ const OperationSetting = () => {
             <Form.Input
               label='聊天页面链接'
               name='ChatLink'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.ChatLink}
               type='link'
@@ -163,7 +164,7 @@ const OperationSetting = () => {
             <Form.Input
               label='单位美元额度'
               name='QuotaPerUnit'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.QuotaPerUnit}
               type='number'
@@ -176,7 +177,7 @@ const OperationSetting = () => {
               type={'number'}
               step='1'
               min='0'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.RetryTimes}
               placeholder='失败重试次数'
@@ -187,23 +188,23 @@ const OperationSetting = () => {
               checked={inputs.DisplayInCurrencyEnabled === 'true'}
               label='以货币形式显示额度'
               name='DisplayInCurrencyEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
             <Form.Checkbox
               checked={inputs.DisplayTokenStatEnabled === 'true'}
               label='Billing 相关 API 显示令牌额度而非用户额度'
               name='DisplayTokenStatEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
             <Form.Checkbox
               checked={inputs.ApproximateTokenEnabled === 'true'}
               label='使用近似的方式估算 token 数以减少计算量'
               name='ApproximateTokenEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
           </Form.Group>
           <Form.Button onClick={() => {
-            submitConfig('general').then();
+            submitConfig('general').then().catch(reportUIError);
           }}>保存通用设置</Form.Button>
           <Divider />
           <Header as='h3'>
@@ -214,7 +215,7 @@ const OperationSetting = () => {
               checked={inputs.LogConsumeEnabled === 'true'}
               label='启用额度消费日志记录'
               name='LogConsumeEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
           </Form.Group>
           <Form.Group widths={4}>
@@ -225,7 +226,7 @@ const OperationSetting = () => {
                         }} />
           </Form.Group>
           <Form.Button onClick={() => {
-            deleteHistoryLogs().then();
+            deleteHistoryLogs().then().catch(reportUIError);
           }}>清理历史日志</Form.Button>
           <Divider />
           <Header as='h3'>
@@ -235,7 +236,7 @@ const OperationSetting = () => {
             <Form.Input
               label='最长响应时间'
               name='ChannelDisableThreshold'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.ChannelDisableThreshold}
               type='number'
@@ -245,7 +246,7 @@ const OperationSetting = () => {
             <Form.Input
               label='额度提醒阈值'
               name='QuotaRemindThreshold'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.QuotaRemindThreshold}
               type='number'
@@ -258,17 +259,17 @@ const OperationSetting = () => {
               checked={inputs.AutomaticDisableChannelEnabled === 'true'}
               label='失败时自动禁用渠道'
               name='AutomaticDisableChannelEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
             <Form.Checkbox
               checked={inputs.AutomaticEnableChannelEnabled === 'true'}
               label='成功时自动启用渠道'
               name='AutomaticEnableChannelEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
           </Form.Group>
           <Form.Button onClick={() => {
-            submitConfig('monitor').then();
+            submitConfig('monitor').then().catch(reportUIError);
           }}>保存监控设置</Form.Button>
           <Divider />
           <Header as='h3'>
@@ -278,7 +279,7 @@ const OperationSetting = () => {
             <Form.Input
               label='新用户初始额度'
               name='QuotaForNewUser'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.QuotaForNewUser}
               type='number'
@@ -288,7 +289,7 @@ const OperationSetting = () => {
             <Form.Input
               label='请求预扣费额度'
               name='PreConsumedQuota'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.PreConsumedQuota}
               type='number'
@@ -298,7 +299,7 @@ const OperationSetting = () => {
             <Form.Input
               label='邀请新用户奖励额度'
               name='QuotaForInviter'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.QuotaForInviter}
               type='number'
@@ -308,7 +309,7 @@ const OperationSetting = () => {
             <Form.Input
               label='新用户使用邀请码奖励额度'
               name='QuotaForInvitee'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.QuotaForInvitee}
               type='number'
@@ -317,7 +318,7 @@ const OperationSetting = () => {
             />
           </Form.Group>
           <Form.Button onClick={() => {
-            submitConfig('quota').then();
+            submitConfig('quota').then().catch(reportUIError);
           }}>保存额度设置</Form.Button>
 
         </Form>

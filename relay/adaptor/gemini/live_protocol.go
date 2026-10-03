@@ -17,20 +17,37 @@ import (
 // ErrLiveProtocol identifies a rejected client frame without including its data.
 var ErrLiveProtocol = errors.New("invalid Gemini Live protocol")
 
-// IsLiveChannel reports whether this channel uses the Gemini Developer Live API.
-// Parameters: channel is the configured channel type. Returns: native support.
-// Vertex has a separate authentication, endpoint and price contract; do not
-// silently use a Developer API key or Developer prices for a Vertex session.
+// IsLiveChannel reports whether a channel uses the Developer API transport.
+// Parameters: channel is its configured type. Returns: true for native and
+// compatibility Gemini channels; Vertex supplies a distinct OAuth transport.
 func IsLiveChannel(channel int) bool {
 	return channel == channeltype.Gemini || channel == channeltype.GeminiOpenAICompatible
 }
 
-// LiveRequestURL validates the selected channel/model and constructs a key-free
-// upstream URL. Parameters: m is authenticated, mapped request metadata.
-// Returns: a WebSocket URL or a configuration error before any network request.
+// ValidateLiveModelName validates a configured model ID's syntax, not its release
+// stage or upstream entitlement. Parameters: name is the mapped ID. Returns: an
+// error only for an empty, oversized, or path-escaping ID. The catalog is not an allowlist.
+func ValidateLiveModelName(name string) error {
+	if len(name) == 0 || len(name) > 200 || name == "." || name == ".." {
+		return errors.Wrap(ErrLiveProtocol, "invalid Live model ID")
+	}
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || strings.ContainsRune("-_.@", c)) {
+			return errors.Wrap(ErrLiveProtocol, "invalid Live model ID")
+		}
+	}
+	return nil
+}
+
+// LiveRequestURL constructs the Developer API endpoint. Parameters: m contains
+// authorized channel metadata. Returns: a key-free WebSocket URL or a local
+// configuration error. Model access is decided by the upstream, not this function.
 func LiveRequestURL(m *meta.Meta) (string, error) {
-	if m == nil || m.Mode != relaymode.Realtime || !IsLiveChannel(m.ChannelType) || !realtime.IsGeminiLiveModel(m.ActualModelName) {
-		return "", errors.Wrap(ErrLiveProtocol, "unsupported Gemini Live channel or model")
+	if m == nil || m.Mode != relaymode.Realtime || !IsLiveChannel(m.ChannelType) {
+		return "", errors.Wrap(ErrLiveProtocol, "unsupported Gemini Live channel")
+	}
+	if err := ValidateLiveModelName(m.ActualModelName); err != nil {
+		return "", err
 	}
 	version := m.Config.APIVersion
 	if version == "" {
@@ -43,12 +60,19 @@ func LiveRequestURL(m *meta.Meta) (string, error) {
 	if base == "" {
 		base = "https://generativelanguage.googleapis.com"
 	}
-	override := m.UpstreamEndpointURLOverride()
-	if override != "" {
-		base = override
+	if override := m.UpstreamEndpointURLOverride(); override != "" {
+		return ResolveLiveEndpoint(override, "", true)
 	}
+	return ResolveLiveEndpoint(base, "/ws/google.ai.generativelanguage."+version+".GenerativeService.BidiGenerateContent", false)
+}
+
+// ResolveLiveEndpoint validates a credential-free, administrator-owned endpoint.
+// Parameters: base is the configured URL, suffix the native RPC path, and exact
+// preserves an explicit endpoint override. Returns: a TLS WebSocket URL; plaintext
+// is allowed only for literal loopback fixtures. No caller headers or query are used.
+func ResolveLiveEndpoint(base, suffix string, exact bool) (string, error) {
 	u, err := url.Parse(base)
-	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
 		return "", errors.Wrap(ErrLiveProtocol, "invalid Gemini Live endpoint")
 	}
 	switch u.Scheme {
@@ -63,25 +87,32 @@ func LiveRequestURL(m *meta.Meta) (string, error) {
 	default:
 		return "", errors.Wrap(ErrLiveProtocol, "invalid Gemini Live scheme")
 	}
-	if override == "" {
+	if !exact {
 		prefix := strings.TrimSuffix(u.Path, "/")
-		for _, suffix := range []string{"/v1beta/openai", "/v1alpha/openai", "/v1beta", "/v1alpha", "/v1"} {
-			if strings.HasSuffix(prefix, suffix) {
-				prefix = strings.TrimSuffix(prefix, suffix)
+		for _, ending := range []string{"/v1beta/openai", "/v1alpha/openai", "/v1beta1", "/v1beta", "/v1alpha", "/v1"} {
+			if strings.HasSuffix(prefix, ending) {
+				prefix = strings.TrimSuffix(prefix, ending)
 				break
 			}
 		}
-		u.Path = prefix + "/ws/google.ai.generativelanguage." + version + ".GenerativeService.BidiGenerateContent"
+		u.Path = prefix + suffix
 		u.RawPath = ""
 	}
 	return u.String(), nil
 }
 
-// prepareLiveSetup validates the first client frame and pins the model to the
-// authenticated channel mapping. Parameters: data is JSON, actual is the billed
-// model and original is its public alias. Returns: the rewritten setup frame.
-// Nested native configuration is preserved; this is not an OpenAI event bridge.
+// prepareLiveSetup validates setup for the Developer API. Parameters: data is
+// JSON, actual is the mapped model and original its public alias. Returns: a
+// model-pinned native frame. Vertex uses prepareLiveSetupForResource instead.
 func prepareLiveSetup(data []byte, actual, original string) ([]byte, error) {
+	return prepareLiveSetupForResource(data, actual, original, "models/"+actual)
+}
+
+// prepareLiveSetupForResource validates setup and pins its provider resource.
+// Parameters: data is JSON; actual, original, and resource come exclusively from
+// authenticated channel metadata. Returns: the rewritten frame. A client cannot
+// change the billed model, project, or location through its setup object.
+func prepareLiveSetupForResource(data []byte, actual, original, resource string) ([]byte, error) {
 	root, err := liveObject(data)
 	if err != nil {
 		return nil, err
@@ -108,11 +139,13 @@ func prepareLiveSetup(data []byte, actual, original string) ([]byte, error) {
 			return nil, errors.Wrap(ErrLiveProtocol, "invalid setup model")
 		}
 	}
-	requested = strings.TrimPrefix(requested, "models/")
-	if requested != "" && requested != actual && requested != original {
-		return nil, errors.Wrap(ErrLiveProtocol, "setup model differs from authenticated model")
+	if requested != resource {
+		requested = strings.TrimPrefix(requested, "models/")
+		if requested != "" && requested != actual && requested != original {
+			return nil, errors.Wrap(ErrLiveProtocol, "setup model differs from authenticated model")
+		}
 	}
-	setup["model"], _ = json.Marshal("models/" + actual)
+	setup["model"], _ = json.Marshal(resource)
 	generation := map[string]json.RawMessage{}
 	if raw := setup["generationConfig"]; raw != nil {
 		generation, err = liveObject(raw)
@@ -129,36 +162,42 @@ func prepareLiveSetup(data []byte, actual, original string) ([]byte, error) {
 	}
 	if raw := generation["responseModalities"]; raw != nil {
 		var modalities []string
-		if err := json.Unmarshal(raw, &modalities); err != nil || len(modalities) != 1 || modalities[0] != "AUDIO" {
+		if err := json.Unmarshal(raw, &modalities); err != nil || len(modalities) != 1 || (modalities[0] != "AUDIO" && modalities[0] != "TEXT") {
+			return nil, errors.Wrap(ErrLiveProtocol, "Live requires one AUDIO or TEXT response modality")
+		}
+		if realtime.IsGeminiLiveModel(actual) && modalities[0] != "AUDIO" {
 			return nil, errors.Wrap(ErrLiveProtocol, "Live requires AUDIO response modality; enable outputAudioTranscription for text")
 		}
 	} else {
 		generation["responseModalities"] = json.RawMessage(`["AUDIO"]`)
 	}
 	if raw := generation["thinkingConfig"]; raw != nil {
-		if actual != "gemini-3.8-live-extended-thinking" {
+		if actual == "gemini-3.8-live" {
 			return nil, errors.Wrap(ErrLiveProtocol, "ordinary Live has automatic, not configurable, thinking")
 		}
 		thinking, err := liveObject(raw)
 		if err != nil {
 			return nil, err
 		}
-		for key := range thinking {
-			if key != "thinkingLevel" {
-				return nil, errors.Wrap(ErrLiveProtocol, "unsupported Live thinking setting")
+		if actual == "gemini-3.8-live-extended-thinking" {
+			for key := range thinking {
+				if key != "thinkingLevel" {
+					return nil, errors.Wrap(ErrLiveProtocol, "unsupported Live thinking setting")
+				}
 			}
+			var level string
+			if err := json.Unmarshal(thinking["thinkingLevel"], &level); err != nil {
+				return nil, errors.Wrap(ErrLiveProtocol, "invalid Live thinking level")
+			}
+			level = strings.ToUpper(level)
+			switch level {
+			case "LOW", "MEDIUM", "HIGH":
+			default:
+				return nil, errors.Wrap(ErrLiveProtocol, "unsupported Live thinking level")
+			}
+			thinking["thinkingLevel"], _ = json.Marshal(level)
 		}
-		var level string
-		if err := json.Unmarshal(thinking["thinkingLevel"], &level); err != nil {
-			return nil, errors.Wrap(ErrLiveProtocol, "invalid Live thinking level")
-		}
-		level = strings.ToUpper(level)
-		switch level {
-		case "LOW", "MEDIUM", "HIGH":
-		default:
-			return nil, errors.Wrap(ErrLiveProtocol, "unsupported Live thinking level")
-		}
-		thinking["thinkingLevel"], _ = json.Marshal(level)
+		// Other configured models retain their provider-native thinking settings.
 		generation["thinkingConfig"], err = json.Marshal(thinking)
 		if err != nil {
 			return nil, errors.Wrap(err, "encode Live thinking config")

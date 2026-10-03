@@ -1,6 +1,6 @@
 import { NameWithId } from '@/components/shared/NameWithId';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { ListTableCard } from '@/components/shared/ListTableCard';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { ListActionButton } from '@/components/ui/list-action-button';
 import { useNotifications } from '@/components/ui/notifications';
@@ -85,6 +85,10 @@ export function MCPServersPage() {
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [appliedKeyword, setAppliedKeyword] = useState('');
+  // Keep the submitted query available before a page-reset effect can run.
+  const requestedKeyword = useRef('');
+  const loadSequence = useRef(0);
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('id');
@@ -96,9 +100,7 @@ export function MCPServersPage() {
       {
         accessorKey: 'name',
         header: t('mcp.list.columns.name', 'Name'),
-        cell: ({ row }) => (
-          <NameWithId name={row.original.name} refId={serverRef(row.original)} idLabel={t('mcp.list.columns.id', 'ID')} />
-        ),
+        cell: ({ row }) => <NameWithId name={row.original.name} refId={serverRef(row.original)} idLabel={t('mcp.list.columns.id', 'ID')} />,
       },
       {
         accessorKey: 'status',
@@ -216,7 +218,8 @@ export function MCPServersPage() {
     updateSearchParamPage(nextPageIndex);
   };
 
-  const load = async (p = 0, size = pageSize, keyword = searchKeyword) => {
+  const load = async (p = 0, size = pageSize, keyword = requestedKeyword.current) => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
       // The backend owns keyword filtering (name / base URL / UUID, including a
@@ -233,6 +236,8 @@ export function MCPServersPage() {
           ...item.server,
           tool_count: item.tool_count,
         }));
+        if (sequence !== loadSequence.current) return;
+        setAppliedKeyword(keyword.trim());
         setData(rows);
         setTotal(totalCount ?? rows.length);
       } else {
@@ -249,7 +254,7 @@ export function MCPServersPage() {
         message: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   };
 
@@ -419,8 +424,10 @@ export function MCPServersPage() {
         </div>
       }
     >
-      <Card>
+      <ListTableCard>
         <EnhancedDataTable
+          selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
+          selectionDisabled={searchKeyword.trim() !== appliedKeyword}
           columns={columns}
           data={data}
           loading={loading}
@@ -479,15 +486,19 @@ export function MCPServersPage() {
           onSearchValueChange={setSearchKeyword}
           onSearchSelect={(key) => navigate(`/mcps/edit/${key}`)}
           onSearchSubmit={() => {
-            setPageIndex(0);
+            requestedKeyword.current = searchKeyword.trim();
             searchServers(searchKeyword);
-            load(0, pageSize, searchKeyword);
+            if (pageIndex !== 0) {
+              handlePageChange(0, pageSize);
+            } else {
+              load(0, pageSize);
+            }
           }}
           searchPlaceholder={t('mcp.list.search_placeholder', 'Search MCP servers by name, URL, or UUID...')}
           allowSearchAdditions={true}
           onRefresh={() => load(pageIndex, pageSize)}
         />
-      </Card>
+      </ListTableCard>
     </ResponsivePageContainer>
   );
 }

@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { Dimmer, Loader, Segment } from 'semantic-ui-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -44,7 +45,7 @@ const GitHubOAuth = () => {
   useEffect(() => {
     let code = searchParams.get('code');
     let state = searchParams.get('state');
-    sendCode(code, state, 0).then();
+    sendCode(code, state, 0).then().catch(reportUIError);
   }, []);
 
   return (

@@ -132,7 +132,7 @@ var (
 	activeProviderGeneration atomic.Uint64
 )
 
-// ProviderInitialized reports whether this process installed real OpenTelemetry
+// ProviderInitialized reports whether this process initialized real OpenTelemetry
 // providers, as opposed to still running on the global no-op provider.
 //
 // Callers use it as a startup precondition, not per record: a false answer
@@ -210,13 +210,13 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 		return nil, laerrors.Wrap(err, "create OTLP metric exporter")
 	}
 
-	reader := sdkmetric.NewPeriodicReader(metricExporter,
+	reader := sdkmetric.NewPeriodicReader(privacyMetricExporter{Exporter: metricExporter},
 		sdkmetric.WithInterval(metricExportInterval()))
 
 	meterProvider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(reader),
 		sdkmetric.WithResource(res),
-		sdkmetric.WithView(newZeroExemplarReservoirView()),
+		sdkmetric.WithView(newPrivateMetricView()),
 	)
 	otel.SetMeterProvider(meterProvider)
 
@@ -280,7 +280,7 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 func newTracerProvider(exporter sdktrace.SpanExporter, res *sdkresource.Resource) *sdktrace.TracerProvider {
 	opts := []sdktrace.TracerProviderOption{
 		sdktrace.WithSpanProcessor(newUTF8AttributeSanitizer()),
-		sdktrace.WithBatcher(exporter),
+		sdktrace.WithBatcher(privacySpanExporter{SpanExporter: exporter}),
 	}
 	if res != nil {
 		opts = append(opts, sdktrace.WithResource(res))
@@ -343,17 +343,29 @@ func buildResource(ctx context.Context) (*sdkresource.Resource, error) {
 	}
 
 	if config.OpenTelemetryEnvironment != "" {
-		attrs = append(attrs, attribute.String("deployment.environment", config.OpenTelemetryEnvironment))
+		attrs = append(attrs,
+			attribute.String("deployment.environment", config.OpenTelemetryEnvironment),
+			attribute.String("deployment.environment.name", config.OpenTelemetryEnvironment),
+		)
 	}
 
 	res, err := sdkresource.New(ctx,
-		sdkresource.WithFromEnv(),
 		sdkresource.WithHost(),
+		// Operator identity overrides container-local hostname detection.
+		sdkresource.WithFromEnv(),
 		sdkresource.WithTelemetrySDK(),
-		sdkresource.WithProcess(),
+		// Do not automatically export argv or process.owner: either can expose
+		// credentials or private account details before the edge WAL persists them.
+		sdkresource.WithProcessPID(),
+		sdkresource.WithProcessRuntimeName(),
+		sdkresource.WithProcessRuntimeVersion(),
+		sdkresource.WithProcessRuntimeDescription(),
 		sdkresource.WithAttributes(attrs...),
 	)
 	// resource.New can return a usable resource together with its error; both are passed on.
+	if res != nil {
+		res = privateResource(res)
+	}
 	return res, laerrors.WithStack(err)
 }
 

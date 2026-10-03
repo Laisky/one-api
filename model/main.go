@@ -403,6 +403,9 @@ func migrateDB() error {
 			return errors.Wrapf(err, "failed to migrate Log")
 		}
 	}
+	if err = DB.AutoMigrate(&QuotaRefund{}); err != nil {
+		return errors.Wrap(err, "migrate pending quota refunds")
+	}
 	if err = DB.AutoMigrate(&TokenTransaction{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate TokenTransaction")
 	}

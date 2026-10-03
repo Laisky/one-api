@@ -475,3 +475,20 @@ func GetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstP
 	}
 	return getRandomSatisfiedChannel(group, model, excludeChannelIds, policy)
 }
+
+// CountAvailableChannels counts enabled, unsuspended channels that can serve an
+// exact group and model pair. Parameters: ctx controls the database query, group
+// identifies the request group, and model is the caller-facing model name. Returns:
+// the number of routable channel abilities or an error.
+func CountAvailableChannels(ctx context.Context, group string, model string) (int, error) {
+	if DB == nil {
+		return 0, errors.New("database not initialized")
+	}
+
+	var count int64
+	if err := availableAbilitiesQuery(DB.WithContext(ctx), group, model, time.Now().UTC(), nil).
+		Distinct("channel_id").Count(&count).Error; err != nil {
+		return 0, errors.Wrapf(err, "count available channels for group %q and model %q", group, model)
+	}
+	return int(count), nil
+}

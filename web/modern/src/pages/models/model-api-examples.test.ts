@@ -187,7 +187,7 @@ describe('model API examples', () => {
   });
 
   it('treats unknown and conflicting task metadata as unverified, not a chat fallback', () => {
-    for (const model of ['my-private-alias', 'custom-video', 'gemini-image-model', 'Qwen/Qwen-Image-Edit', 'grok-imagine-video', 'mistral-ocr-latest', 'deepl', 'gpt-oss-safeguard', 'qwen3-omni', 'o3-deep-research']) {
+    for (const model of ['my-private-alias', 'custom-video', 'gemini-image-model', 'Qwen/Qwen-Image-Edit', 'grok-unverified-video', 'mistral-ocr-latest', 'deepl', 'gpt-oss-safeguard', 'qwen3-omni', 'o3-deep-research']) {
       assert.deepEqual(buildModelApiExamples(model, {}, BASE_URL), [], model);
     }
     assert.deepEqual(buildModelApiExamples('alias', { supported_features: ['systemone', 'embeddings'] }, BASE_URL), []);

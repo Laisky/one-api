@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
 import { useState, useEffect } from 'react';
 import { CHANNEL_OPTIONS } from 'constants/ChannelConstants';
@@ -260,7 +261,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
 
     setFieldValue('config', { api_format: 'chat_completion' });
     // Load default pricing for the new channel type
-    loadDefaultPricing(typeValue);
+    loadDefaultPricing(typeValue).catch(reportUIError);
   };
 
   const fetchGroups = async () => {
@@ -268,7 +269,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
       let res = await API.get(`/api/group/`);
       setGroupOptions(res.data.data);
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -299,7 +300,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
         })
       );
     } catch (error) {
-      showError(error.message);
+      showError(error);
     }
   };
 
@@ -330,63 +331,67 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
   };
 
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
-    setSubmitting(true);
-    if (values.base_url && values.base_url.endsWith('/')) {
-      values.base_url = values.base_url.slice(0, values.base_url.length - 1);
-    }
-    if (values.type === 3 && values.other === '') {
-      values.other = '2023-09-01-preview';
-    }
-    if (values.type === 18 && values.other === '') {
-      values.other = 'v2.1';
-    }
-    if (values.key === '') {
-      if (values.config.ak && values.config.sk && values.config.region) {
-        values.key = `${values.config.ak}|${values.config.sk}|${values.config.region}`;
-      } else if (values.config.region && values.config.vertex_ai_project_id && values.config.vertex_ai_adc) {
-        values.key = `${values.config.region}|${values.config.vertex_ai_project_id}|${values.config.vertex_ai_adc}`;
+    try {
+      setSubmitting(true);
+      if (values.base_url && values.base_url.endsWith('/')) {
+        values.base_url = values.base_url.slice(0, values.base_url.length - 1);
       }
-    }
+      if (values.type === 3 && values.other === '') {
+        values.other = '2023-09-01-preview';
+      }
+      if (values.type === 18 && values.other === '') {
+        values.other = 'v2.1';
+      }
+      if (values.key === '') {
+        if (values.config.ak && values.config.sk && values.config.region) {
+          values.key = `${values.config.ak}|${values.config.sk}|${values.config.region}`;
+        } else if (values.config.region && values.config.vertex_ai_project_id && values.config.vertex_ai_adc) {
+          values.key = `${values.config.region}|${values.config.vertex_ai_project_id}|${values.config.vertex_ai_adc}`;
+        }
+      }
 
-    let res;
-    const modelsStr = values.models.map((model) => model.id).join(',');
-    const configStr = JSON.stringify(values.config);
-    values.group = values.groups.join(',');
+      let res;
+      const modelsStr = values.models.map((model) => model.id).join(',');
+      const configStr = JSON.stringify(values.config);
+      values.group = values.groups.join(',');
 
-    // Handle pricing fields - convert empty strings to null for the API
-    if (values.model_ratio === '') {
-      values.model_ratio = null;
-    }
-    if (values.completion_ratio === '') {
-      values.completion_ratio = null;
-    }
-    if (values.model_configs === '') {
-      values.model_configs = null;
-    }
-    if (channelId) {
-      res = await API.put(`/api/channel/`, {
-        ...values,
-        uuid: channelId,
-        models: modelsStr,
-        config: configStr
-      });
-    } else {
-      res = await API.post(`/api/channel/`, { ...values, models: modelsStr, config: configStr });
-    }
-    const { success, message } = res.data;
-    if (success) {
+      // Handle pricing fields - convert empty strings to null for the API
+      if (values.model_ratio === '') {
+        values.model_ratio = null;
+      }
+      if (values.completion_ratio === '') {
+        values.completion_ratio = null;
+      }
+      if (values.model_configs === '') {
+        values.model_configs = null;
+      }
       if (channelId) {
-        showSuccess('渠道更新成功！');
+        res = await API.put(`/api/channel/`, {
+          ...values,
+          uuid: channelId,
+          models: modelsStr,
+          config: configStr
+        });
       } else {
-        showSuccess('渠道创建成功！');
+        res = await API.post(`/api/channel/`, { ...values, models: modelsStr, config: configStr });
       }
+      const { success, message } = res.data;
+      if (success) {
+        if (channelId) {
+          showSuccess('渠道更新成功！');
+        } else {
+          showSuccess('渠道创建成功！');
+        }
+        setSubmitting(false);
+        setStatus({ success: true });
+        onOk(true);
+      } else {
+        setStatus({ success: false });
+        showError(message);
+        setErrors({ submit: message });
+      }
+    } finally {
       setSubmitting(false);
-      setStatus({ success: true });
-      onOk(true);
-    } else {
-      setStatus({ success: false });
-      showError(message);
-      setErrors({ submit: message });
     }
   };
 
@@ -476,31 +481,31 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
         initChannel(data.type);
         setInitialInput(data);
         // Load default pricing for this channel type, but don't override existing model_configs
-        loadDefaultPricing(data.type);
+        loadDefaultPricing(data.type).catch(reportUIError);
       } else {
         showError(message);
       }
     } catch (error) {
-      showError(error.message);
+      showError(error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchGroups().then();
-    fetchModels().then();
+    fetchGroups().then().catch(reportUIError);
+    fetchModels().then().catch(reportUIError);
   }, []);
 
   useEffect(() => {
     setBatchAdd(false);
     if (channelId) {
-      loadChannel().then();
+      loadChannel().then().catch(reportUIError);
     } else {
       initChannel(1);
       setInitialInput({ ...defaultConfig.input, is_edit: false });
       // Load default pricing for new channels
-      loadDefaultPricing(1);
+      loadDefaultPricing(1).catch(reportUIError);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
@@ -556,7 +561,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
             </Box>
           </Box>
         ) : (
-          <Formik initialValues={initialInput} enableReinitialize validationSchema={validationSchema} onSubmit={submit}>
+          <Formik initialValues={initialInput} enableReinitialize validationSchema={validationSchema} onSubmit={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>
             {({ errors, handleBlur, handleChange, handleSubmit, isSubmitting, touched, values, setFieldValue }) => (
               <form noValidate onSubmit={handleSubmit}>
                 <FormControl fullWidth error={Boolean(touched.type && errors.type)} sx={{ ...theme.typography.otherInput }}>

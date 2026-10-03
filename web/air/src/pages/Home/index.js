@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { Card, Col, Row } from '@douyinfe/semi-ui';
 import { API, showError, showNotice, timestamp2string } from '../../helpers';
@@ -48,8 +49,8 @@ const Home = () => {
   };
 
   useEffect(() => {
-    displayNotice().then();
-    displayHomePageContent().then();
+    displayNotice().then().catch(reportUIError);
+    displayHomePageContent().then().catch(reportUIError);
   }, []);
   return (
     <>

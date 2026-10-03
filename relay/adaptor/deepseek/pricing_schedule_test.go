@@ -13,10 +13,9 @@ import (
 
 // TestDeepSeekPricingScheduleBoundaries verifies both billing paths against an
 // independent price oracle. It checks every peak boundary, weekends, UTC date
-// changes, and both announced price cutovers, including nanoseconds.
+// changes, and the Flash cutover and canceled Pro cutover, including nanoseconds.
 func TestDeepSeekPricingScheduleBoundaries(t *testing.T) {
 	t.Parallel()
-	cutover := time.Date(2026, 9, 14, 4, 0, 0, 0, time.UTC)
 	flashCutover := time.Date(2026, 9, 10, 4, 0, 0, 0, time.UTC)
 	start := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 	for name, cfg := range ModelRatios {
@@ -29,7 +28,7 @@ func TestDeepSeekPricingScheduleBoundaries(t *testing.T) {
 					for _, delta := range []time.Duration{-time.Nanosecond, 0, time.Nanosecond} {
 						at := boundary.Add(delta)
 						input, cached, output := 0.15, 0.003, 0.60
-						if name == "deepseek-v4-pro" && at.Before(cutover) {
+						if name == "deepseek-v4-pro" {
 							input, cached, output = 0.66, 0.022, 1.98
 						} else if name != "deepseek-v4-pro" && at.Before(flashCutover) {
 							input, cached, output = 0.22, 0.007, 0.66
@@ -55,7 +54,7 @@ func TestDeepSeekPricingScheduleBoundaries(t *testing.T) {
 }
 
 // TestDeepSeekPricingUsesUTC verifies that caller-local dates cannot turn a UTC
-// Monday peak into a Sunday off-peak or shift the Pro redirection instant.
+// Monday peak into a Sunday off-peak or introduce the canceled Pro redirection.
 func TestDeepSeekPricingUsesUTC(t *testing.T) {
 	t.Parallel()
 	for name, cfg := range ModelRatios {

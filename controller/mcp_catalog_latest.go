@@ -75,7 +75,7 @@ func listModernMCPToolsPage(ctx context.Context, c *gin.Context, rawParams json.
 	if end > len(tools) {
 		end = len(tools)
 	}
-	page := append([]mcp.ToolDescriptor(nil), tools[offset:end]...)
+	page := append([]mcp.ToolDescriptor{}, tools[offset:end]...)
 	result := gin.H{
 		"resultType": mcp.ResultTypeComplete,
 		"tools":      page,
@@ -175,7 +175,7 @@ func descriptorForMCPTool(tool *model.MCPTool) (mcp.ToolDescriptor, error) {
 		descriptor.Description = tool.Description
 	}
 	if descriptor.InputSchema == nil && strings.TrimSpace(tool.InputSchema) != "" {
-		if err := json.Unmarshal([]byte(tool.InputSchema), &descriptor.InputSchema); err != nil {
+		if err := mcp.DecodeJSON([]byte(tool.InputSchema), &descriptor.InputSchema); err != nil {
 			return mcp.ToolDescriptor{}, errors.Wrap(err, "decode stored mcp input schema")
 		}
 	}

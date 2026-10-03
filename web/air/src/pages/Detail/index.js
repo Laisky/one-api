@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, {useEffect, useRef, useState} from 'react';
 import {Button, Col, Form, Layout, Row, Spin, AutoComplete} from "@douyinfe/semi-ui";
 import VChart from '@visactor/vchart';
@@ -193,43 +194,46 @@ const Detail = (props) => {
     };
 
     const loadQuotaData = async (lineChart, pieChart) => {
-        setLoading(true);
+      try {
+          setLoading(true);
 
-        let url = '';
-        let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-        let localEndTimestamp = Date.parse(end_timestamp) / 1000;
-        if (isAdminUser) {
-            url = `/api/data/?username=${username}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
-        } else {
-            url = `/api/data/self/?start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
-        }
-        const res = await API.get(url);
-        const {success, message, data} = res.data;
-        if (success) {
-            setQuotaData(data);
-            if (data.length === 0) {
-                data.push({
-                    'count': 0,
-                    'model_name': '无数据',
-                    'quota': 0,
-                    'created_at': now.getTime() / 1000
-                })
-            }
-            // 根据dataExportDefaultTime重制时间粒度
-            let timeGranularity = 3600;
-            if (dataExportDefaultTime === 'day') {
-                timeGranularity = 86400;
-            } else if (dataExportDefaultTime === 'week') {
-                timeGranularity = 604800;
-            }
-            data.forEach(item => {
-                item['created_at'] = Math.floor(item['created_at'] / timeGranularity) * timeGranularity;
-            });
-            updateChart(lineChart, pieChart, data);
-        } else {
-            showError(message);
-        }
+          let url = '';
+          let localStartTimestamp = Date.parse(start_timestamp) / 1000;
+          let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+          if (isAdminUser) {
+              url = `/api/data/?username=${username}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
+          } else {
+              url = `/api/data/self/?start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
+          }
+          const res = await API.get(url);
+          const {success, message, data} = res.data;
+          if (success) {
+              setQuotaData(data);
+              if (data.length === 0) {
+                  data.push({
+                      'count': 0,
+                      'model_name': '无数据',
+                      'quota': 0,
+                      'created_at': now.getTime() / 1000
+                  })
+              }
+              // 根据dataExportDefaultTime重制时间粒度
+              let timeGranularity = 3600;
+              if (dataExportDefaultTime === 'day') {
+                  timeGranularity = 86400;
+              } else if (dataExportDefaultTime === 'week') {
+                  timeGranularity = 604800;
+              }
+              data.forEach(item => {
+                  item['created_at'] = Math.floor(item['created_at'] / timeGranularity) * timeGranularity;
+              });
+              updateChart(lineChart, pieChart, data);
+          } else {
+              showError(message);
+          }
+      } finally {
         setLoading(false);
+      }
     };
 
     const refresh = async () => {
@@ -279,7 +283,7 @@ const Detail = (props) => {
         }
 
         // Immediately trigger data refresh
-        loadQuotaData(modelDataChart, modelDataPieChart);
+        loadQuotaData(modelDataChart, modelDataPieChart).catch(reportUIError);
     };
 
     const initChart = async () => {
@@ -364,12 +368,12 @@ const Detail = (props) => {
         // }
         if (!initialized.current) {
             initialized.current = true;
-            initChart();
+            initChart().catch(reportUIError);
         }
 
         // Fetch users for admin users
         if (isAdminUser) {
-            fetchUsers();
+            fetchUsers().catch(reportUIError);
         }
     }, []);
 
@@ -462,7 +466,7 @@ const Detail = (props) => {
                             }
                             <Form.Section>
                                 <Button label='查询' type="primary" htmlType="submit" className="btn-margin-right"
-                                        onClick={refresh} loading={loading}>查询</Button>
+                                        onClick={(...uiArgs) => refresh(...uiArgs).catch(reportUIError)} loading={loading}>查询</Button>
                             </Form.Section>
                         </>
                     </Form>

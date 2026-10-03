@@ -12,12 +12,13 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/one-api/internal/tokenizer"
 	"github.com/Laisky/zap"
-	"github.com/pkoukk/tiktoken-go"
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"
 	imgutil "github.com/Laisky/one-api/common/image"
+	"github.com/Laisky/one-api/relay/adaptor/common/claudevision"
 	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
@@ -109,11 +110,14 @@ func getTokenEncoder(model string) *tiktoken.Tiktoken {
 	return nil
 }
 
+// getTokenNum counts ordinary text exactly, retaining the configured approximate fallback.
 func getTokenNum(tokenEncoder *tiktoken.Tiktoken, text string) int {
 	if config.ApproximateTokenEnabled || tokenEncoder == nil {
 		return int(float64(len(text)) * 0.38)
 	}
-	return len(tokenEncoder.Encode(text, nil, nil))
+	// Encode(text, nil, nil) enables no special tokens. EncodeOrdinary has the
+	// same tokenization contract without scanning for unusable special tokens.
+	return len(tokenEncoder.EncodeOrdinary(text))
 }
 
 // CountTokenMessages counts the number of tokens in a list of messages.
@@ -121,6 +125,7 @@ func CountTokenMessages(ctx context.Context,
 	messages []model.Message, actualModel string) int {
 	lg := gmw.GetLogger(ctx)
 
+	actualModel = claudeImageReservationModel(ctx, actualModel)
 	tokenEncoder := getTokenEncoder(actualModel)
 	// Reference:
 	// https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
@@ -214,6 +219,9 @@ func CountTokenMessages(ctx context.Context,
 		}
 		if deepseekcompat.IsFlashVisionModel(actualModel) {
 			tokenNum += countDeepSeekFileImageTokens(message.Content)
+		}
+		if claudevision.IsSonnet55(actualModel) {
+			tokenNum += countSonnet55FileImages(message.Content) * claudevision.Sonnet55MaxImageTokens
 		}
 
 		tokenNum += getTokenNum(tokenEncoder, message.Role)
@@ -354,6 +362,9 @@ func getVisionBaseTile(model string) (base int, tile int) {
 }
 
 func countImageTokens(url string, detail string, model string) (_ int, err error) {
+	if claudevision.IsSonnet55(model) {
+		return claudevision.Sonnet55MaxImageTokens, nil
+	}
 	// DeepSeek's exact image-token count is returned by the API usage object.
 	// For pre-consume estimation, use the documented per-image upper bound rather
 	// than applying OpenAI's unrelated tile formula or fetching a remote image.

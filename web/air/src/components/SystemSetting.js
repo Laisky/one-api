@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { Button, Divider, Form, Grid, Header, Modal, Message } from 'semantic-ui-react';
 import { API, removeTrailingSlash, showError } from '../helpers';
@@ -60,7 +61,7 @@ const SystemSetting = () => {
   };
 
   useEffect(() => {
-    getOptions().then();
+    getOptions().then().catch(reportUIError);
   }, []);
 
   const updateOption = async (key, value) => {
@@ -259,10 +260,10 @@ const SystemSetting = () => {
               placeholder='例如：https://yourdomain.com'
               value={inputs.ServerAddress}
               name='ServerAddress'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
           </Form.Group>
-          <Form.Button onClick={submitServerAddress}>
+          <Form.Button onClick={(...uiArgs) => submitServerAddress(...uiArgs).catch(reportUIError)}>
             更新服务器地址
           </Form.Button>
           <Divider />
@@ -272,7 +273,7 @@ const SystemSetting = () => {
               checked={inputs.PasswordLoginEnabled === 'true'}
               label='允许通过密码进行登录'
               name='PasswordLoginEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
             {
               showPasswordWarningModal &&
@@ -290,10 +291,10 @@ const SystemSetting = () => {
                   <Button onClick={() => setShowPasswordWarningModal(false)}>取消</Button>
                   <Button
                     color='yellow'
-                    onClick={async () => {
+                    onClick={(...uiArgs) => (async () => {
                       setShowPasswordWarningModal(false);
                       await updateOption('PasswordLoginEnabled', 'false');
-                    }}
+                    })(...uiArgs).catch(reportUIError)}
                   >
                     确定
                   </Button>
@@ -304,25 +305,25 @@ const SystemSetting = () => {
               checked={inputs.PasswordRegisterEnabled === 'true'}
               label='允许通过密码进行注册'
               name='PasswordRegisterEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
             <Form.Checkbox
               checked={inputs.EmailVerificationEnabled === 'true'}
               label='通过密码注册时需要进行邮箱验证'
               name='EmailVerificationEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
             <Form.Checkbox
               checked={inputs.GitHubOAuthEnabled === 'true'}
               label='允许通过 GitHub 账户登录 & 注册'
               name='GitHubOAuthEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
             <Form.Checkbox
               checked={inputs.WeChatAuthEnabled === 'true'}
               label='允许通过微信登录 & 注册'
               name='WeChatAuthEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
           </Form.Group>
           <Form.Group inline>
@@ -330,13 +331,13 @@ const SystemSetting = () => {
               checked={inputs.RegisterEnabled === 'true'}
               label='允许新用户注册（此项为否时，新用户将无法以任何方式进行注册）'
               name='RegisterEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
             <Form.Checkbox
               checked={inputs.TurnstileCheckEnabled === 'true'}
               label='启用 Turnstile 用户校验'
               name='TurnstileCheckEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
           </Form.Group>
           <Divider />
@@ -348,7 +349,7 @@ const SystemSetting = () => {
             <Form.Checkbox
               label='启用邮箱域名白名单'
               name='EmailDomainRestrictionEnabled'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               checked={inputs.EmailDomainRestrictionEnabled === 'true'}
             />
           </Form.Group>
@@ -361,7 +362,7 @@ const SystemSetting = () => {
               fluid
               multiple
               selection
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               value={inputs.EmailDomainWhitelist}
               autoComplete='new-password'
               options={EmailDomainWhitelist}
@@ -386,7 +387,7 @@ const SystemSetting = () => {
               }}
             />
           </Form.Group>
-          <Form.Button onClick={submitEmailDomainWhitelist}>保存邮箱域名白名单设置</Form.Button>
+          <Form.Button onClick={(...uiArgs) => submitEmailDomainWhitelist(...uiArgs).catch(reportUIError)}>保存邮箱域名白名单设置</Form.Button>
           <Divider />
           <Header as='h3'>
             配置 SMTP
@@ -396,7 +397,7 @@ const SystemSetting = () => {
             <Form.Input
               label='SMTP 服务器地址'
               name='SMTPServer'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.SMTPServer}
               placeholder='例如：smtp.qq.com'
@@ -404,7 +405,7 @@ const SystemSetting = () => {
             <Form.Input
               label='SMTP 端口'
               name='SMTPPort'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.SMTPPort}
               placeholder='默认: 587'
@@ -412,7 +413,7 @@ const SystemSetting = () => {
             <Form.Input
               label='SMTP 账户'
               name='SMTPAccount'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.SMTPAccount}
               placeholder='通常是邮箱地址'
@@ -422,7 +423,7 @@ const SystemSetting = () => {
             <Form.Input
               label='SMTP 发送者邮箱'
               name='SMTPFrom'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.SMTPFrom}
               placeholder='通常和邮箱地址保持一致'
@@ -430,14 +431,14 @@ const SystemSetting = () => {
             <Form.Input
               label='SMTP 访问凭证'
               name='SMTPToken'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               type='password'
               autoComplete='new-password'
               checked={inputs.RegisterEnabled === 'true'}
               placeholder='敏感信息不会发送到前端显示'
             />
           </Form.Group>
-          <Form.Button onClick={submitSMTP}>保存 SMTP 设置</Form.Button>
+          <Form.Button onClick={(...uiArgs) => submitSMTP(...uiArgs).catch(reportUIError)}>保存 SMTP 设置</Form.Button>
           <Divider />
           <Header as='h3'>
             配置 GitHub OAuth App
@@ -458,7 +459,7 @@ const SystemSetting = () => {
             <Form.Input
               label='GitHub Client ID'
               name='GitHubClientId'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.GitHubClientId}
               placeholder='输入你注册的 GitHub OAuth APP 的 ID'
@@ -466,14 +467,14 @@ const SystemSetting = () => {
             <Form.Input
               label='GitHub Client Secret'
               name='GitHubClientSecret'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               type='password'
               autoComplete='new-password'
               value={inputs.GitHubClientSecret}
               placeholder='敏感信息不会发送到前端显示'
             />
           </Form.Group>
-          <Form.Button onClick={submitGitHubOAuth}>
+          <Form.Button onClick={(...uiArgs) => submitGitHubOAuth(...uiArgs).catch(reportUIError)}>
             保存 GitHub OAuth 设置
           </Form.Button>
           <Divider />
@@ -495,7 +496,7 @@ const SystemSetting = () => {
               label='WeChat Server 服务器地址'
               name='WeChatServerAddress'
               placeholder='例如：https://yourdomain.com'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.WeChatServerAddress}
             />
@@ -503,7 +504,7 @@ const SystemSetting = () => {
               label='WeChat Server 访问凭证'
               name='WeChatServerToken'
               type='password'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.WeChatServerToken}
               placeholder='敏感信息不会发送到前端显示'
@@ -511,13 +512,13 @@ const SystemSetting = () => {
             <Form.Input
               label='微信公众号二维码图片链接'
               name='WeChatAccountQRCodeImageURL'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.WeChatAccountQRCodeImageURL}
               placeholder='输入一个图片链接'
             />
           </Form.Group>
-          <Form.Button onClick={submitWeChat}>
+          <Form.Button onClick={(...uiArgs) => submitWeChat(...uiArgs).catch(reportUIError)}>
             保存 WeChat Server 设置
           </Form.Button>
           <Divider />
@@ -539,7 +540,7 @@ const SystemSetting = () => {
               label='Message Pusher 推送地址'
               name='MessagePusherAddress'
               placeholder='例如：https://msgpusher.com/push/your_username'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.MessagePusherAddress}
             />
@@ -547,13 +548,13 @@ const SystemSetting = () => {
               label='Message Pusher 访问凭证'
               name='MessagePusherToken'
               type='password'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.MessagePusherToken}
               placeholder='敏感信息不会发送到前端显示'
             />
           </Form.Group>
-          <Form.Button onClick={submitMessagePusher}>
+          <Form.Button onClick={(...uiArgs) => submitMessagePusher(...uiArgs).catch(reportUIError)}>
             保存 Message Pusher 设置
           </Form.Button>
           <Divider />
@@ -571,7 +572,7 @@ const SystemSetting = () => {
             <Form.Input
               label='Turnstile Site Key'
               name='TurnstileSiteKey'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               autoComplete='new-password'
               value={inputs.TurnstileSiteKey}
               placeholder='输入你注册的 Turnstile Site Key'
@@ -579,14 +580,14 @@ const SystemSetting = () => {
             <Form.Input
               label='Turnstile Secret Key'
               name='TurnstileSecretKey'
-              onChange={handleInputChange}
+              onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
               type='password'
               autoComplete='new-password'
               value={inputs.TurnstileSecretKey}
               placeholder='敏感信息不会发送到前端显示'
             />
           </Form.Group>
-          <Form.Button onClick={submitTurnstile}>
+          <Form.Button onClick={(...uiArgs) => submitTurnstile(...uiArgs).catch(reportUIError)}>
             保存 Turnstile 设置
           </Form.Button>
         </Form>

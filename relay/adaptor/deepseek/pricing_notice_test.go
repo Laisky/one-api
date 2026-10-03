@@ -15,14 +15,14 @@ import (
 	"github.com/Laisky/one-api/relay/quota"
 )
 
-// TestDeepSeekReviewPricingNotice verifies both announced Beijing-noon changes
+// TestDeepSeekReviewPricingNotice verifies the Flash change and canceled Pro change
 // through the production pricing resolvers and final quota calculation.
 // Parameters: t is the test handle. Returns: nothing; incorrect rates fail tests.
 func TestDeepSeekReviewPricingNotice(t *testing.T) {
 	t.Parallel()
 	// Each price triple is cache-miss input, cache-hit input, output in USD/1M.
 	// Pre-notice Flash prices preserve the immediately preceding defaults from
-	// e000b8eb; new prices and both dates follow the operator-provided notice.
+	// e000b8eb; the revised official change log retains Pro after September 14.
 	cases := []struct {
 		at    string
 		flash [3]float64
@@ -37,10 +37,10 @@ func TestDeepSeekReviewPricingNotice(t *testing.T) {
 		{"2026-09-10T06:00:00Z", [3]float64{0.30, 0.006, 1.20}, [3]float64{1.32, 0.044, 3.96}},
 		{"2026-09-12T06:00:00Z", [3]float64{0.15, 0.003, 0.60}, [3]float64{0.66, 0.022, 1.98}},
 		{"2026-09-14T03:59:59.999999999Z", [3]float64{0.30, 0.006, 1.20}, [3]float64{1.32, 0.044, 3.96}},
-		{"2026-09-14T04:00:00Z", [3]float64{0.15, 0.003, 0.60}, [3]float64{0.15, 0.003, 0.60}},
-		{"2026-09-14T04:00:00.000000001Z", [3]float64{0.15, 0.003, 0.60}, [3]float64{0.15, 0.003, 0.60}},
-		{"2026-09-14T06:00:00Z", [3]float64{0.30, 0.006, 1.20}, [3]float64{0.30, 0.006, 1.20}},
-		{"2026-09-15T00:00:00Z", [3]float64{0.15, 0.003, 0.60}, [3]float64{0.15, 0.003, 0.60}},
+		{"2026-09-14T04:00:00Z", [3]float64{0.15, 0.003, 0.60}, [3]float64{0.66, 0.022, 1.98}},
+		{"2026-09-14T04:00:00.000000001Z", [3]float64{0.15, 0.003, 0.60}, [3]float64{0.66, 0.022, 1.98}},
+		{"2026-09-14T06:00:00Z", [3]float64{0.30, 0.006, 1.20}, [3]float64{1.32, 0.044, 3.96}},
+		{"2026-09-15T00:00:00Z", [3]float64{0.15, 0.003, 0.60}, [3]float64{0.66, 0.022, 1.98}},
 	}
 	provider := &Adaptor{}
 	for _, name := range []string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"} {

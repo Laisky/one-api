@@ -33,7 +33,7 @@ func applyThinkingQueryToChatRequest(c *gin.Context, request *relaymodel.General
 
 	modelName := resolveModelName(meta, request.Model)
 	if state == thinkingQueryEnabled && supportsThinkingInjection(meta, modelName) {
-		ensureReasoningEffort(c, request, modelName)
+		ensureReasoningEffort(c, request, modelName, meta)
 		ensureIncludeReasoning(meta, request)
 	}
 
@@ -50,7 +50,7 @@ func applyThinkingQueryToResponseRequest(c *gin.Context, request *openaipayload.
 
 	modelName := resolveModelName(meta, request.Model)
 	if state == thinkingQueryEnabled && supportsThinkingInjection(meta, modelName) {
-		ensureResponseReasoning(c, request, modelName)
+		ensureResponseReasoning(c, request, modelName, meta)
 	}
 
 	ensureResponseVLLMThinkingOverride(c, meta, request, modelName, state)
@@ -243,21 +243,22 @@ func supportsThinkingInjection(meta *metalib.Meta, modelName string) bool {
 		}
 	}
 
+	if cfg, known := reasoningModelConfig(meta, modelName); known {
+		return len(cfg.SupportedReasoningEfforts) > 0
+	}
 	return isReasoningCapableModel(modelName)
 }
 
 // ensureReasoningEffort populates reasoning_effort on the chat request when it
-// has not been provided by the caller.
-func ensureReasoningEffort(c *gin.Context, request *relaymodel.GeneralOpenAIRequest, modelName string) {
+// has not been provided by the caller. Parameters: c supplies query values,
+// request is mutated, and modelName/meta select the upstream catalog. Returns: none.
+func ensureReasoningEffort(c *gin.Context, request *relaymodel.GeneralOpenAIRequest, modelName string, meta *metalib.Meta) {
 	if request.ReasoningEffort != nil && strings.TrimSpace(*request.ReasoningEffort) != "" {
 		return
 	}
 
 	requested := strings.TrimSpace(c.Query("reasoning_effort"))
-	desired := normalizeReasoningEffort(modelName, requested)
-	if desired == "" {
-		desired = defaultReasoningEffort(modelName)
-	}
+	desired := queryReasoningEffort(meta, modelName, requested)
 	if desired == "" {
 		return
 	}
@@ -285,8 +286,10 @@ func ensureIncludeReasoning(meta *metalib.Meta, request *relaymodel.GeneralOpenA
 	request.IncludeReasoning = &include
 }
 
-// ensureResponseReasoning ensures Response API requests include a reasoning effort configuration.
-func ensureResponseReasoning(c *gin.Context, request *openaipayload.ResponseAPIRequest, modelName string) {
+// ensureResponseReasoning adds a query-selected effort without replacing body values.
+// Parameters: c supplies query values, request is mutated, and modelName/meta
+// select the upstream catalog. Returns: none.
+func ensureResponseReasoning(c *gin.Context, request *openaipayload.ResponseAPIRequest, modelName string, meta *metalib.Meta) {
 	var existing string
 	if request.Reasoning != nil && request.Reasoning.Effort != nil {
 		existing = strings.TrimSpace(*request.Reasoning.Effort)
@@ -296,10 +299,7 @@ func ensureResponseReasoning(c *gin.Context, request *openaipayload.ResponseAPIR
 	}
 
 	requested := strings.TrimSpace(c.Query("reasoning_effort"))
-	desired := normalizeReasoningEffort(modelName, requested)
-	if desired == "" {
-		desired = defaultReasoningEffort(modelName)
-	}
+	desired := queryReasoningEffort(meta, modelName, requested)
 	if desired == "" {
 		return
 	}

@@ -73,7 +73,8 @@ func realtimeReceiptMetadata(usage *rmodel.Usage, result quota.ComputeResult) mo
 	}
 	lowerBound := result.UnpricedUsage
 	for _, record := range usage.Realtime.Records {
-		lowerBound = lowerBound || record.Tokens.CachedUnallocated > 0
+		lowerBound = lowerBound || record.Tokens.Unallocated > 0 ||
+			record.Tokens.OutputUnallocated > 0 || record.Tokens.CachedUnallocated > 0
 	}
 	if lowerBound {
 		metadata["realtime_pricing_lower_bound"] = true

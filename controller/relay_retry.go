@@ -10,6 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -22,6 +24,14 @@ func shouldRetry(c *gin.Context, bizErr *model.ErrorWithStatusCode) error {
 	if bizErr == nil {
 		return nil
 	}
+	if c.Request != nil && c.Request.Method == http.MethodPost &&
+		(c.Request.URL.Path == "/v1/videos" || c.Request.URL.Path == "/v1/videos/generations") &&
+		(c.GetInt(ctxkey.Channel) == channeltype.XAI || c.GetInt(ctxkey.Channel) == channeltype.Zhipu || c.GetInt(ctxkey.Channel) == channeltype.Zai) && c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) {
+		return errors.New("video creation may already have created a paid job; automatic replay is unsafe")
+	}
+	if c.GetBool(adaptor.ImageReceiptAcceptedKey) || c.GetBool(adaptor.AudioReceiptAcceptedKey) {
+		return errors.New("upstream work is already accepted; replay after downstream failure is unsafe")
+	}
 	statusCode := bizErr.StatusCode
 	rawErr := bizErr.RawError
 
@@ -29,6 +39,14 @@ func shouldRetry(c *gin.Context, bizErr *model.ErrorWithStatusCode) error {
 		return errors.Errorf(
 			"specific channel ID (%d) was provided, retry is unvailable",
 			specificChannelId)
+	}
+
+	// A Live-only Google model cannot use this selected channel's REST adaptor,
+	// but a later OpenAI-compatible bridge can legally implement the same model
+	// ID. Keep the pinned-channel contract above, then let normal exclusions walk
+	// the remaining candidates.
+	if adaptor.IsRESTTransportMismatch(rawErr) {
+		return nil
 	}
 
 	// If we received a server error (5xx) but the underlying raw error is due to the caller's

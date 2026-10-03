@@ -223,4 +223,11 @@ func TestGetRequestURLForOpenAICompatible(t *testing.T) {
 	url, err = adaptor.GetRequestURL(metaInfo)
 	require.NoError(t, err)
 	require.Equal(t, "https://upstream.test/v4/chat/completions?foo=bar", url)
+
+	metaInfo.BaseURL = "https://models.github.ai"
+	metaInfo.Mode = relaymode.Proxy
+	metaInfo.RequestURLPath = "/v1/oneapi/proxy/123/anything?foo=bar"
+	url, err = adaptor.GetRequestURL(metaInfo)
+	require.NoError(t, err)
+	require.Equal(t, "https://models.github.ai/v1/oneapi/proxy/123/anything?foo=bar", url)
 }

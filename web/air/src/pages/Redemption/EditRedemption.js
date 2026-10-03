@@ -1,3 +1,4 @@
+import { showError as reportUIError } from '../../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { API, downloadTextAsFile, isMobile, showError, showSuccess } from '../../helpers';
@@ -30,15 +31,18 @@ const EditRedemption = (props) => {
   };
 
   const loadRedemption = async () => {
-    setLoading(true);
-    let res = await API.get(`/api/redemption/${redemptionRef}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setInputs(data);
-    } else {
-      showError(message);
+    try {
+      setLoading(true);
+      let res = await API.get(`/api/redemption/${redemptionRef}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setInputs(data);
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -47,61 +51,64 @@ const EditRedemption = (props) => {
         () => {
           // console.log(inputs);
         }
-      );
+      ).catch(reportUIError);
     } else {
       setInputs(originInputs);
     }
   }, [props.editingRedemption.id, props.editingRedemption.uuid]);
 
   const submit = async () => {
-    if (!isEdit && inputs.name === '') return;
-    setLoading(true);
-    let localInputs = inputs;
-    localInputs.count = parseInt(localInputs.count);
-    localInputs.quota = parseInt(localInputs.quota);
-    let res;
-    if (isEdit) {
-      res = await API.put(`/api/redemption/`, { ...localInputs, uuid: redemptionRef });
-    } else {
-      res = await API.post(`/api/redemption/`, {
-        ...localInputs
-      });
-    }
-    const { success, message, data } = res.data;
-    if (success) {
+    try {
+      if (!isEdit && inputs.name === '') return;
+      setLoading(true);
+      let localInputs = inputs;
+      localInputs.count = parseInt(localInputs.count);
+      localInputs.quota = parseInt(localInputs.quota);
+      let res;
       if (isEdit) {
-        showSuccess('兑换码更新成功！');
-        props.refresh();
-        props.handleClose();
+        res = await API.put(`/api/redemption/`, { ...localInputs, uuid: redemptionRef });
       } else {
-        showSuccess('兑换码创建成功！');
-        setInputs(originInputs);
-        props.refresh();
-        props.handleClose();
+        res = await API.post(`/api/redemption/`, {
+          ...localInputs
+        });
       }
-    } else {
-      showError(message);
-    }
-    if (!isEdit && data) {
-      let text = '';
-      for (let i = 0; i < data.length; i++) {
-        text += data[i] + '\n';
-      }
-      // downloadTextAsFile(text, `${inputs.name}.txt`);
-      Modal.confirm({
-        title: '兑换码创建成功',
-        content: (
-          <div>
-            <p>兑换码创建成功，是否下载兑换码？</p>
-            <p>兑换码将以文本文件的形式下载，文件名为兑换码的名称。</p>
-          </div>
-        ),
-        onOk: () => {
-          downloadTextAsFile(text, `${inputs.name}.txt`);
+      const { success, message, data } = res.data;
+      if (success) {
+        if (isEdit) {
+          showSuccess('兑换码更新成功！');
+          props.refresh();
+          props.handleClose();
+        } else {
+          showSuccess('兑换码创建成功！');
+          setInputs(originInputs);
+          props.refresh();
+          props.handleClose();
         }
-      });
+      } else {
+        showError(message);
+      }
+      if (!isEdit && data) {
+        let text = '';
+        for (let i = 0; i < data.length; i++) {
+          text += data[i] + '\n';
+        }
+        // downloadTextAsFile(text, `${inputs.name}.txt`);
+        Modal.confirm({
+          title: '兑换码创建成功',
+          content: (
+            <div>
+              <p>兑换码创建成功，是否下载兑换码？</p>
+              <p>兑换码将以文本文件的形式下载，文件名为兑换码的名称。</p>
+            </div>
+          ),
+          onOk: () => {
+            downloadTextAsFile(text, `${inputs.name}.txt`);
+          }
+        });
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -115,7 +122,7 @@ const EditRedemption = (props) => {
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Space>
-              <Button theme="solid" size={'large'} onClick={submit}>提交</Button>
+              <Button theme="solid" size={'large'} onClick={(...uiArgs) => submit(...uiArgs).catch(reportUIError)}>提交</Button>
               <Button theme="solid" size={'large'} type={'tertiary'} onClick={handleCancel}>取消</Button>
             </Space>
           </div>

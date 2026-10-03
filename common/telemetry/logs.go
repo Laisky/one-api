@@ -73,15 +73,14 @@ func newLoggerProvider(ctx context.Context, res *sdkresource.Resource) (*sdklog.
 		sdklog.WithExportTimeout(time.Duration(config.AppLogOTLPExportTimeoutMs)*time.Millisecond),
 	)
 	gate.next = batch
+	res = privateResource(res)
 
 	opts := []sdklog.LoggerProviderOption{
-		sdklog.WithProcessor(gate),
+		sdklog.WithProcessor(&privacyLogProcessor{next: gate, resource: res}),
 		sdklog.WithAttributeCountLimit(config.AppLogOTLPMaxAttributes),
 		sdklog.WithAttributeValueLengthLimit(config.AppLogOTLPMaxAttributeValueBytes),
 	}
-	if res != nil {
-		opts = append(opts, sdklog.WithResource(res))
-	}
+	opts = append(opts, sdklog.WithResource(res))
 
 	return sdklog.NewLoggerProvider(opts...), nil
 }
@@ -102,7 +101,7 @@ func installLoggerProvider(provider *sdklog.LoggerProvider) error {
 	// The global is set as well as the bridge holder: an out-of-tree library
 	// that emits through go.opentelemetry.io/otel/log/global then reaches the
 	// same bounded pipeline instead of a silent no-op.
-	global.SetLoggerProvider(provider)
+	global.SetLoggerProvider(privacyLoggerProvider{LoggerProvider: provider})
 	return laerrors.Wrap(otelbridge.Shared.Install(provider), "install app log bridge provider")
 }
 

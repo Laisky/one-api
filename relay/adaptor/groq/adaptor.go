@@ -189,6 +189,11 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	requestBody, err := prepareGroqRequestBody(meta, requestBody)
+	if err != nil {
+		return nil, err
+	}
+
 	// Log request details for debugging
 	logger := gmw.GetLogger(c)
 	logger.Debug("sending request to groq",
