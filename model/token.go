@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
@@ -22,6 +23,8 @@ const (
 	TokenStatusDisabled  = 2 // also don't use 0
 	TokenStatusExpired   = 3
 	TokenStatusExhausted = 4
+
+	tokenCacheClearTimeout = 5 * time.Second
 )
 
 type Token struct {
@@ -102,15 +105,21 @@ func (t Token) MarshalJSON() ([]byte, error) {
 	return json.Marshal(dto)
 }
 
+// clearTokenCache removes the Redis token cache entry for key after token state changes.
+// The ctx parameter supplies request logging metadata, while Redis invalidation uses
+// its own short-lived background context so client disconnects cannot preserve stale authorization data.
 func clearTokenCache(ctx context.Context, key string) {
-	if common.IsRedisEnabled() {
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		err := common.RedisDel(ctx, fmt.Sprintf("token:%s", key))
-		if err != nil {
-			logger.Logger.Warn("failed to clear token cache, continuing", zap.String("key", key), zap.Error(err))
-		}
+	if !common.IsRedisEnabled() {
+		return
+	}
+
+	lg := logger.FromContext(ctx)
+	cacheCtx, cancel := context.WithTimeout(context.Background(), tokenCacheClearTimeout)
+	defer cancel()
+
+	err := common.RedisDel(cacheCtx, fmt.Sprintf("token:%s", key))
+	if err != nil {
+		lg.Warn("failed to clear token cache, continuing", zap.String("key", key), zap.Error(err))
 	}
 }
 

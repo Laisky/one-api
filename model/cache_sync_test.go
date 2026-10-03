@@ -58,3 +58,38 @@ func TestCacheUpdateUserQuotaRefreshesFromDatabase(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "4321", quota)
 }
+
+// TestClearTokenCacheIgnoresCanceledRequestContext verifies token cache invalidation
+// still removes stale authorization data when the caller request context is canceled.
+func TestClearTokenCacheIgnoresCanceledRequestContext(t *testing.T) {
+	redisServer, err := miniredis.Run()
+	require.NoError(t, err)
+	t.Cleanup(redisServer.Close)
+
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() {
+		require.NoError(t, redisClient.Close())
+	})
+
+	originalRedisEnabled := common.IsRedisEnabled()
+	originalRedisClient := common.RDB
+	common.SetRedisEnabled(true)
+	common.RDB = redisClient
+	t.Cleanup(func() {
+		common.SetRedisEnabled(originalRedisEnabled)
+		common.RDB = originalRedisClient
+	})
+
+	ctx := context.Background()
+	tokenKey := fmt.Sprintf("test-token-cache-clear-%d", time.Now().UnixNano())
+	cacheKey := fmt.Sprintf("token:%s", tokenKey)
+	require.NoError(t, common.RedisSet(ctx, cacheKey, "cached-token", time.Minute))
+
+	canceledCtx, cancel := context.WithCancel(ctx)
+	cancel()
+
+	clearTokenCache(canceledCtx, tokenKey)
+
+	_, err = common.RedisGet(ctx, cacheKey)
+	require.Error(t, err)
+}
