@@ -90,7 +90,7 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen2.5 3B Instruct: open-weight small instruct model.",
 	},
 	"qwen2.5-1.5b-instruct": {
-		Ratio:                       0, // limited-time free per Aliyun pricing (May 2026).
+		Ratio:                       0.0003 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
@@ -100,10 +100,10 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: qwenStandardSamplingParameters(),
 		Quantization:                "bf16",
 		HuggingFaceID:               "Qwen/Qwen2.5-1.5B-Instruct",
-		Description:                 "Qwen2.5 1.5B Instruct: open-weight compact instruct model (limited-time free trial).",
+		Description:                 "Qwen2.5 1.5B Instruct: open-weight compact instruct model (minimum internal quota guard for upstream trial credits).",
 	},
 	"qwen2.5-0.5b-instruct": {
-		Ratio:                       0,
+		Ratio:                       0.0003 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
@@ -517,7 +517,7 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen2.5-Math 7B Instruct: open-weight math-specialized model.",
 	},
 	"qwen2.5-math-1.5b-instruct": {
-		Ratio:                       0,
+		Ratio:                       0.0003 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               4096,
 		MaxOutputTokens:             3072,
@@ -527,7 +527,7 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: qwenStandardSamplingParameters(),
 		Quantization:                "bf16",
 		HuggingFaceID:               "Qwen/Qwen2.5-Math-1.5B-Instruct",
-		Description:                 "Qwen2.5-Math 1.5B Instruct: open-weight compact math model (free trial).",
+		Description:                 "Qwen2.5-Math 1.5B Instruct: open-weight compact math model (minimum internal quota guard for upstream trial credits).",
 	},
 	"qwen2-math-72b-instruct": {
 		Ratio:                       0.004 * 1000 * ratio.MilliTokensRmb,
@@ -880,7 +880,7 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 
 	// ----- Qwen Audio (open) ---------------------------------------------------
 	"qwen2-audio-instruct": {
-		Ratio:                       0,
+		Ratio:                       0.00031 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -890,7 +890,7 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: qwenStandardSamplingParameters(),
 		Quantization:                "bf16",
 		HuggingFaceID:               "Qwen/Qwen2-Audio-7B-Instruct",
-		Description:                 "Qwen2-Audio Instruct: open-weight audio-understanding model (currently free trial).",
+		Description:                 "Qwen2-Audio Instruct: open-weight audio-understanding model (minimum internal quota guard for upstream trial credits).",
 	},
 
 	// ----- QwQ / QVQ reasoning models (open) ----------------------------------

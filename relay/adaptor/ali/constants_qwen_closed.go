@@ -370,7 +370,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 
 	// ----- Qwen-Audio (closed) -------------------------------------------------
 	"qwen-audio-turbo": {
-		Ratio:                       0,
+		Ratio:                       0.00031 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2000,
@@ -378,7 +378,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           []string{},
 		SupportedSamplingParameters: qwenStandardSamplingParameters(),
-		Description:                 "Qwen-Audio Turbo: closed-weight audio-understanding model (currently free trial).",
+		Description:                 "Qwen-Audio Turbo: closed-weight audio-understanding model (minimum internal quota guard for upstream trial credits).",
 	},
 
 	// ----- Qwen Math (closed) --------------------------------------------------
@@ -608,7 +608,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen-VL Chat v1: legacy closed-weight multimodal chat model.",
 	},
 	"qwen-audio-chat": {
-		Ratio:                       0,
+		Ratio:                       0.00031 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2000,
@@ -616,6 +616,6 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           []string{},
 		SupportedSamplingParameters: qwenStandardSamplingParameters(),
-		Description:                 "Qwen-Audio Chat: legacy closed-weight audio chat model (free trial).",
+		Description:                 "Qwen-Audio Chat: legacy closed-weight audio chat model (minimum internal quota guard for upstream trial credits).",
 	},
 }
