@@ -186,7 +186,8 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 		c.JSON(http.StatusOK, response)
 
-		// Preserve the reservation for the single final delta settlement below.
+		// refund pre-consumed quota immediately
+		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile_mcp")
 		if usage != nil {
 			userId := strconv.Itoa(meta.UserId)
 			username := c.GetString(ctxkey.Username)
@@ -363,7 +364,8 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	// post-consume quota
 	quotaId := c.GetInt(ctxkey.Id)
-	// Preserve the reservation for the single final delta settlement below.
+	// refund pre-consumed quota immediately
+	_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile")
 	if usage != nil {
 		// Get user information for metrics
 		userId := strconv.Itoa(meta.UserId)
