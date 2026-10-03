@@ -158,6 +158,24 @@ func channelSupportsEndpoint(channel *model.Channel, relayMode int) bool {
 // channel is the candidate, and relayMode identifies the endpoint. Returns:
 // true when the channel supports the endpoint.
 func channelSupportsEndpointWithContext(c *gin.Context, channel *model.Channel, relayMode int) bool {
+	if channel == nil {
+		return false
+	}
+	native, durable := channeltype.NativeAsyncVideoEndpoint(channel.Type)
+	// Only the explicit sync bridge translates native async work. Listing,
+	// retrieval, deletion and the existing /v1/videos lifecycle stay isolated.
+	bridge := c != nil && c.Request != nil && c.Request.Method == http.MethodPost && c.Request.URL.Path == "/v1/videos/generations"
+	if relayMode == relaymode.AsyncVideos {
+		if !durable {
+			return false
+		}
+		relayMode = int(native)
+	} else if relayMode == relaymode.Videos && durable {
+		if !bridge {
+			return false
+		}
+		relayMode = int(native)
+	}
 	// Get endpoint name for the relay mode
 	endpointName := channeltype.RelayModeToEndpointName(relayMode)
 	if endpointName == "" {
@@ -424,4 +442,10 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 		}
 	}
 	c.Set(ctxkey.Config, cfg)
+}
+
+// ChannelSupportsEndpointForRequest applies the same protocol boundary to both
+// first selection and retry candidates; native async never aliases legacy CRUD.
+func ChannelSupportsEndpointForRequest(c *gin.Context, channel *model.Channel, mode int) bool {
+	return channelSupportsEndpointWithContext(c, channel, mode)
 }

@@ -399,7 +399,7 @@ func migrateDB() error {
 	// logs table left over from a unified deployment is simply ignored; every log read and
 	// write in this package goes through LOG_DB.
 	if config.LogSQLDSN == "" {
-		if err = DB.AutoMigrate(&Log{}); err != nil {
+		if err = DB.AutoMigrate(&Log{}, &AsyncTaskLogReceipt{}); err != nil {
 			return errors.Wrapf(err, "failed to migrate Log")
 		}
 	}
@@ -414,6 +414,9 @@ func migrateDB() error {
 	}
 	if err = DB.AutoMigrate(&Trace{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate Trace")
+	}
+	if err = DB.AutoMigrate(&AsyncTask{}); err != nil {
+		return errors.Wrap(err, "migrate durable async tasks")
 	}
 	if err = DB.AutoMigrate(&AsyncTaskBinding{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate AsyncTaskBinding")
@@ -536,7 +539,7 @@ func runWrapperUUIDMigration(ctx context.Context, topology *databaseTopology) er
 
 func migrateLOGDB() error {
 	var err error
-	if err = LOG_DB.AutoMigrate(&Log{}); err != nil {
+	if err = LOG_DB.AutoMigrate(&Log{}, &AsyncTaskLogReceipt{}); err != nil {
 		return errors.Wrap(err, "auto migrate log database")
 	}
 	if err = LOG_DB.AutoMigrate(&DataMigration{}); err != nil {
