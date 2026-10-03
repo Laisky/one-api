@@ -39,6 +39,8 @@ import (
 	"github.com/Laisky/one-api/monitor"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/asyncvideo"
+	relaycontroller "github.com/Laisky/one-api/relay/controller"
 	"github.com/Laisky/one-api/relay/mcp"
 	responsestate "github.com/Laisky/one-api/relay/state"
 	"github.com/Laisky/one-api/router"
@@ -202,6 +204,7 @@ func main() {
 
 	// Initialize global pricing manager
 	relay.InitializeGlobalPricing()
+	asyncvideo.StartWorkers(workerCtx, relaycontroller.ResolveAsyncVideoProvider, config.AsyncVideoWorkers)
 
 	logLevel := glog.LevelInfo
 	if config.DebugEnabled {

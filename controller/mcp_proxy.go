@@ -180,12 +180,18 @@ func listMCPToolsForUser(ctx context.Context, c *gin.Context) ([]mcp.ToolDescrip
 //   - error: a wrapped authentication, catalog, routing, execution, or billing error.
 func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParams) (*mcp.CallToolResult, error) {
 	logger := gmw.GetLogger(c)
+	if err := validateMCPToolName(params.Name); err != nil {
+		return nil, errors.Wrap(err, "validate mcp tool name")
+	}
 	user, err := getUserFromContext(c)
 	if err != nil {
 		return nil, errors.Wrap(err, "get user from context")
 	}
 
-	serverLabel, toolName := resolveQualifiedToolName(params.Name)
+	serverLabel, toolName, err := resolveQualifiedToolName(c.Request.Context(), params.Name)
+	if err != nil {
+		return nil, errors.Wrap(err, "resolve qualified mcp tool name")
+	}
 	if toolName == "" {
 		toolName = strings.TrimSpace(params.Name)
 	}
@@ -466,45 +472,45 @@ func splitToolName(value string) (string, string) {
 	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 }
 
-// resolveQualifiedToolName splits a "<server>.<tool>" name using the server names
-// that actually exist, preferring the longest match.
-//
-// splitToolName cuts at the FIRST dot, which is wrong whenever a server name
-// contains one: a server called "github.com" advertises "github.com.search_repos"
-// in the catalog, and the naive split asked for a server named "github", so every
-// tool on that server was listed but permanently uncallable. Candidates are tried
-// longest-first so the most specific server name wins; a name with no dots, or one
-// whose prefixes match no server, falls back to the previous behavior and produces
-// the same error as before.
-//
-// Parameters:
-//   - value: the qualified or unqualified tool name from the request.
-//
-// Return values:
-//   - string: the resolved server label, empty when the name is unqualified.
-//   - string: the remaining exact tool name.
-func resolveQualifiedToolName(value string) (string, string) {
+const maxMCPToolNameBytes = 1024
+
+// validateMCPToolName bounds the raw caller-controlled name before any database
+// work or whitespace normalization. It returns a wrapped error for oversized input.
+func validateMCPToolName(value string) error {
+	if len(value) > maxMCPToolNameBytes {
+		return errors.Errorf("tool name exceeds maximum length of %d bytes", maxMCPToolNameBytes)
+	}
+	return nil
+}
+
+// resolveQualifiedToolName resolves a bounded raw wire name using configured names
+// only. Disabled names participate to prevent shorter-prefix fallback. ctx bounds
+// the lookup. It returns a server label, exact tool name, and any validation or DB
+// error; credentials and policies are loaded only for selected candidates later.
+func resolveQualifiedToolName(ctx context.Context, value string) (string, string, error) {
+	if err := validateMCPToolName(value); err != nil {
+		return "", "", err
+	}
 	value = strings.TrimSpace(value)
 	if !strings.Contains(value, ".") {
-		return "", value
+		return "", value, nil
 	}
-
-	// Build prefixes at every dot, longest first: "a.b.c" -> ["a.b", "a"].
-	var prefixes []string
-	for idx := strings.LastIndex(value, "."); idx > 0; idx = strings.LastIndex(value[:idx], ".") {
-		prefixes = append(prefixes, value[:idx])
+	names, err := model.ListMCPServerNamesForToolResolution(ctx)
+	if err != nil {
+		return "", "", errors.Wrap(err, "list mcp server names")
 	}
-	for _, prefix := range prefixes {
-		label := strings.TrimSpace(prefix)
-		if label == "" {
-			continue
-		}
-		if _, err := model.GetMCPServerByName(label); err == nil {
-			return label, strings.TrimSpace(value[len(prefix)+1:])
+	longest := ""
+	for _, name := range names {
+		label := strings.TrimSpace(name)
+		if len(label) > len(longest) && strings.HasPrefix(value, label+".") {
+			longest = label
 		}
 	}
-
-	return splitToolName(value)
+	if longest != "" {
+		return longest, strings.TrimSpace(value[len(longest)+1:]), nil
+	}
+	serverLabel, toolName := splitToolName(value)
+	return serverLabel, toolName, nil
 }
 
 // respondMCPResult writes one successful initialization-based JSON-RPC response.

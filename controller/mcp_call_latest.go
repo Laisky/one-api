@@ -77,12 +77,18 @@ func executeModernMCPTool(ctx context.Context, c *gin.Context, params modernMCPC
 //   - *modernMCPToolCallPlan: The prepared user, server, and candidate snapshot.
 //   - error: A wrapped authentication, catalog, policy, or candidate error.
 func prepareModernMCPToolCall(c *gin.Context, params modernMCPCallParams) (*modernMCPToolCallPlan, error) {
+	if err := validateMCPToolName(params.Name); err != nil {
+		return nil, errors.Wrap(err, "validate mcp tool name")
+	}
 	user, err := getUserFromContext(c)
 	if err != nil {
 		return nil, errors.Wrap(err, "get user from context")
 	}
 
-	serverLabel, toolName := resolveQualifiedToolName(params.Name)
+	serverLabel, toolName, err := resolveQualifiedToolName(c.Request.Context(), params.Name)
+	if err != nil {
+		return nil, errors.Wrap(err, "resolve qualified mcp tool name")
+	}
 	if toolName == "" {
 		toolName = strings.TrimSpace(params.Name)
 	}
