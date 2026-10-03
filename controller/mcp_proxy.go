@@ -274,9 +274,6 @@ func loadMCPCallServers(serverLabel string) ([]*model.MCPServer, map[int]*model.
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "get mcp server by name %q", serverLabel)
 		}
-		if server.Status != model.MCPServerStatusEnabled {
-			return nil, nil, errors.Errorf("mcp server %q is disabled", serverLabel)
-		}
 		serverByID[server.Id] = server
 		return []*model.MCPServer{server}, serverByID, nil
 	}
