@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"sync"
 	"time"
 )
@@ -16,12 +18,14 @@ type loginFailEntry struct {
 // or the user logs in successfully.
 var loginFailTracker = struct {
 	sync.RWMutex
-	entries map[string]*loginFailEntry
+	entries       map[string]*loginFailEntry
+	overflowUntil time.Time
 }{
 	entries: make(map[string]*loginFailEntry),
 }
 
 const loginFailExpiry = 10 * time.Minute
+const loginFailMaxEntries = 10000
 
 func init() {
 	// Background goroutine to prune expired entries every 5 minutes.
@@ -34,6 +38,7 @@ func init() {
 	}()
 }
 
+// pruneLoginFailEntries removes expired bounded records.
 func pruneLoginFailEntries() {
 	now := time.Now()
 	loginFailTracker.Lock()
@@ -45,25 +50,41 @@ func pruneLoginFailEntries() {
 	}
 }
 
-// RecordLoginFailure marks the given username as having a failed login attempt.
+// loginFailureKey hashes caller input to keep per-entry memory independent of input size.
+func loginFailureKey(username string) string {
+	digest := sha256.Sum256([]byte(username))
+	return hex.EncodeToString(digest[:])
+}
+
+// RecordLoginFailure records a bounded failed login or enables conservative overflow verification.
 func RecordLoginFailure(username string) {
+	username = loginFailureKey(username)
 	loginFailTracker.Lock()
 	defer loginFailTracker.Unlock()
-	loginFailTracker.entries[username] = &loginFailEntry{lastFailAt: time.Now()}
+	now := time.Now()
+	if _, exists := loginFailTracker.entries[username]; !exists && len(loginFailTracker.entries) >= loginFailMaxEntries {
+		// Require verification globally while full rather than evicting recent failures.
+		loginFailTracker.overflowUntil = now.Add(loginFailExpiry)
+		return
+	}
+	loginFailTracker.entries[username] = &loginFailEntry{lastFailAt: now}
 }
 
 // ClearLoginFailure removes the failed login record for the given username (after successful login).
 func ClearLoginFailure(username string) {
 	loginFailTracker.Lock()
 	defer loginFailTracker.Unlock()
-	delete(loginFailTracker.entries, username)
+	delete(loginFailTracker.entries, loginFailureKey(username))
 }
 
 // HasLoginFailure returns true if the given username has a recent failed login attempt.
 func HasLoginFailure(username string) bool {
 	loginFailTracker.RLock()
 	defer loginFailTracker.RUnlock()
-	entry, ok := loginFailTracker.entries[username]
+	if time.Now().Before(loginFailTracker.overflowUntil) {
+		return true
+	}
+	entry, ok := loginFailTracker.entries[loginFailureKey(username)]
 	if !ok {
 		return false
 	}

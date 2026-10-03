@@ -31,6 +31,12 @@ func BindAsyncTaskChannel() gin.HandlerFunc {
 		}
 
 		path := req.URL.Path
+		// Provider collections contain jobs belonging to every caller sharing a channel.
+		// Only task-specific reads with a verified local owner may reach the provider.
+		if method == http.MethodGet && strings.TrimRight(path, "/") == "/v1/videos" {
+			AbortWithError(c, http.StatusForbidden, errors.New("video collection listing is not supported; retrieve an owned task by id"))
+			return
+		}
 		if !strings.HasPrefix(path, "/v1/videos/") {
 			c.Next()
 			return

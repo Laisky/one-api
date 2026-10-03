@@ -49,6 +49,10 @@ import (
 func authHelper(c *gin.Context, minRole int) {
 	session := sessions.Default(c)
 	username := session.Get("username")
+	if username != nil && !allowSessionMutation(c) {
+		respondAuthError(c, http.StatusForbidden, "Cross-origin session mutation is not permitted")
+		return
+	}
 	role := session.Get("role")
 	id := session.Get("id")
 	status := session.Get("status")
@@ -290,7 +294,7 @@ func TokenAuth() func(c *gin.Context) {
 		identity.Bind(c, identity.Set{User: tokenInfo.User})
 
 		// Verify the token owner (user) is still enabled and not banned
-		if user.Status == model.UserStatusDisabled || ((taskRead || taskReplay) && user.Status != model.UserStatusEnabled) || blacklist.IsUserBanned(user.Id) {
+		if user.Status != model.UserStatusEnabled || blacklist.IsUserBanned(user.Id) {
 			// Disabled or blacklisted owner: an intentional denial, not a fault.
 			AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.New("User has been banned")), tokenInfo)
 			return

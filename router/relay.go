@@ -20,16 +20,14 @@ func SetRelayRouter(router *gin.Engine) {
 		middleware.RewriteClaudeMessagesPrefix("/api/v1/v1/messages", router),
 	)
 
-	// Auto-detect API format for misrouted requests (e.g., Response API sent to chat/completions).
-	// This must be placed early in the chain, before authentication and other middlewares,
-	// so that misrouted requests are redirected to the correct endpoint with all middlewares applied.
-	router.Use(middleware.APIFormatAutoDetect(router))
 	router.Use(middleware.CORS())
 	// Bound the upload before anything reads it, then bound the decompressed stream
 	// inside the gzip middleware. Order matters: the cap has to be installed on the
 	// raw body first.
 	router.Use(middleware.RequestBodyLimit())
 	router.Use(middleware.GzipDecodeMiddleware())
+	// Detection buffers the body, so both raw and expanded limits must precede it.
+	router.Use(middleware.APIFormatAutoDetect(router))
 
 	// OpenRouter provider listing endpoint. Public (no auth) since OpenRouter
 	// scrapes this during onboarding and periodic refresh. Returns the model

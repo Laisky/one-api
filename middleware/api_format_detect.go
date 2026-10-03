@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -51,8 +52,13 @@ func APIFormatAutoDetect(engine *gin.Engine) gin.HandlerFunc {
 		// Read the request body for format detection
 		bodyBytes, err := io.ReadAll(c.Request.Body)
 		if err != nil {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) || errors.Is(err, ErrRequestBodyTooLarge) {
+				AbortWithError(c, http.StatusRequestEntityTooLarge, errors.New("request body exceeds the configured size limit"))
+				return
+			}
 			lg.Warn("failed to read request body for format detection", zap.Error(err))
-			c.Next()
+			AbortWithError(c, http.StatusBadRequest, errors.New("unable to read request body"))
 			return
 		}
 

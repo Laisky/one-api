@@ -47,6 +47,7 @@ beforeEach(() => {
     return { data: { success: true, data: rows.slice(p * size, (p + 1) * size), total: 25 } };
   });
   post.mockImplementation(async (url, body) => {
+    if (url.startsWith('/api/channel/test/')) return { data: { success: true } };
     const selection = (body as { selection: TableSelectionSnapshot }).selection;
     const targets = rows.filter((row) =>
       selection.mode === 'ids' ? selection.ids.includes(row.uuid) : !selection.excluded_ids.includes(row.uuid)

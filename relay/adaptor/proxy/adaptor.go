@@ -76,6 +76,10 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	req.Header.Del("Content-Length")
 	req.Header.Del("Accept-Encoding")
 	req.Header.Del("Connection")
+	// Caller authentication belongs to this gateway, never to the upstream.
+	for _, header := range []string{"Api-Key", "X-Api-Key", "Cookie", "Proxy-Authorization", "Sec-WebSocket-Protocol"} {
+		req.Header.Del(header)
+	}
 	req.Header.Set("Authorization", meta.APIKey)
 	return nil
 }

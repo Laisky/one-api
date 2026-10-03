@@ -51,7 +51,7 @@ func Login(c *gin.Context) {
 	}
 	username := loginRequest.Username
 	password := loginRequest.Password
-	if username == "" || password == "" {
+	if username == "" || password == "" || len(username) > 254 {
 		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
@@ -92,16 +92,14 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Enforce PasswordLoginEnabled: when the admin disables password login,
-	// only root users may still authenticate with username/password (so a
-	// site operator can recover access if the SSO/IdP is unreachable).
-	// All other roles must use a third-party method such as OIDC. The check
-	// runs after ValidateAndFill so we never reveal account existence to
+	// Enforce PasswordLoginEnabled for every role, including the root operator.
+	// Disabled password authentication must not provide an implicit recovery bypass.
+	// The check runs after ValidateAndFill so we never reveal account existence to
 	// callers that supplied wrong credentials.
-	if !config.PasswordLoginEnabled && user.Role < model.RoleRootUser {
+	if !config.PasswordLoginEnabled {
 		// Global logger: no request identity is bound at this point in the login
 		// flow, so the resolved account must be named explicitly.
-		lg.Debug("password login rejected: feature disabled for non-root user",
+		lg.Debug("password login rejected: feature disabled",
 			append(user.Ref().Zap(), zap.Int("role", user.Role))...)
 		helper.RespondError(c, errkind.ForbiddenErr(errors.New("The administrator has disabled password login. Please use a third-party authentication method (e.g. OIDC) to log in.")))
 		return

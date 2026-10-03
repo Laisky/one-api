@@ -138,25 +138,14 @@ func TestLoginPasswordDisabled_BlocksAdminUser(t *testing.T) {
 	require.Contains(t, resp["message"], "disabled password login")
 }
 
-// TestLoginPasswordDisabled_AllowsRootUser confirms the recovery path: the
-// root user can still log in via password even when the toggle is off, so a
-// site operator can recover access if SSO breaks.
-func TestLoginPasswordDisabled_AllowsRootUser(t *testing.T) {
+// TestLoginPasswordDisabled_BlocksRootUser verifies that root follows the global password policy.
+func TestLoginPasswordDisabled_BlocksRootUser(t *testing.T) {
 	setupPasswordLoginDisabledTest(t)
 	createLoginUser(t, "rootuser", "rootpw1234", model.RoleRootUser)
-	defer middleware.ClearLoginFailure("rootuser")
-
 	config.PasswordLoginEnabled = false
-
 	w := postLogin(t, newLoginRouter(), "rootuser", "rootpw1234")
-
-	var resp map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	require.Equal(t, true, resp["success"], "root login must succeed; got: %v", resp["message"])
-	data, ok := resp["data"].(map[string]any)
-	require.True(t, ok, "expected user payload, got %v", resp["data"])
-	require.Equal(t, "rootuser", data["username"])
-	require.EqualValues(t, model.RoleRootUser, data["role"])
+	require.Contains(t, w.Body.String(), `"success":false`)
+	require.Empty(t, w.Header().Values("Set-Cookie"))
 }
 
 // TestLoginPasswordEnabled_AllowsRegularUser is the backward-compatibility

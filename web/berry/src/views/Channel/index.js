@@ -186,7 +186,7 @@ export default function ChannelPage() {
 
   // 处理测试所有启用渠道
   const testAllChannels = async () => {
-    const res = await API.get(`/api/channel/test`);
+    const res = await API.post(`/api/channel/test`);
     const { success, message } = res.data;
     if (success) {
       showInfo('已成功开始测试所有渠道，请刷新页面查看结果。');
@@ -211,7 +211,7 @@ export default function ChannelPage() {
   const updateAllChannelsBalance = async () => {
     try {
       setSearching(true);
-      const res = await API.get(`/api/channel/update_balance`);
+      const res = await API.post(`/api/channel/update_balance`);
       const { success, message } = res.data;
       if (success) {
         showInfo('已更新完毕所有已启用渠道余额！');
