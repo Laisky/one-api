@@ -74,6 +74,7 @@ var ChannelBaseURLConfigs = []ChannelBaseURLConfig{
 	{URL: "https://api.z.ai", Editable: false},       // 58 Zai
 	{URL: "https://api.jina.ai", Editable: true},     // 59 Jina
 	{URL: "https://api.typesafe.ai", Editable: true}, // 60 TypeSafe
+	{URL: "https://api.muapi.ai", Editable: true},    // 61 MuAPI
 }
 
 // ChannelBaseURLs provides backward compatibility by returning only the URL strings.

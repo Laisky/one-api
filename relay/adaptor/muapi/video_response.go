@@ -1,0 +1,155 @@
+package muapi
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+
+	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
+	"github.com/gin-gonic/gin"
+
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/asyncvideo"
+	"github.com/Laisky/one-api/relay/model"
+)
+
+const maxMuAPIVideoResponseBytes = 1 << 20
+
+// handleVideoResponse validates and forwards MuAPI's native task envelope.
+// Parameters: c carries the client method and task-binding context, and resp is
+// the upstream response. Return values are nil usage plus a client-facing error.
+func (a *Adaptor) handleVideoResponse(c *gin.Context, resp *http.Response) (*model.Usage, *model.ErrorWithStatusCode) {
+	if resp == nil || resp.Body == nil {
+		return nil, openai_compatible.ErrorWrapper(errors.New("MuAPI video response is empty"), "invalid_video_response", http.StatusBadGateway)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxMuAPIVideoResponseBytes+1))
+	closeErr := resp.Body.Close()
+	if err != nil {
+		return nil, openai_compatible.ErrorWrapper(errors.Wrap(err, "read MuAPI video response"), "invalid_video_response", http.StatusBadGateway)
+	}
+	if closeErr != nil {
+		return nil, openai_compatible.ErrorWrapper(errors.Wrap(closeErr, "close MuAPI video response"), "invalid_video_response", http.StatusBadGateway)
+	}
+	if len(body) > maxMuAPIVideoResponseBytes {
+		return nil, openai_compatible.ErrorWrapper(errors.New("MuAPI video response exceeds JSON size limit"), "invalid_video_response", http.StatusBadGateway)
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, openai_compatible.ErrorWrapper(errors.Errorf("MuAPI video request returned HTTP %d", resp.StatusCode), "upstream_video_error", resp.StatusCode)
+	}
+
+	var payload struct {
+		RequestID string          `json:"request_id"`
+		Status    string          `json:"status"`
+		Error     json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, openai_compatible.ErrorWrapper(errors.Wrap(err, "decode MuAPI video response"), "invalid_video_response", http.StatusBadGateway)
+	}
+
+	creating := c != nil && c.Request != nil && c.Request.Method == http.MethodPost
+	if creating {
+		if !validMuAPITaskID(payload.RequestID) || hasMuAPIError(payload.Error) {
+			return nil, openai_compatible.ErrorWrapper(errors.New("MuAPI video creation response has no valid request_id"), "invalid_video_response", http.StatusBadGateway)
+		}
+		bindingBody, err := json.Marshal(struct {
+			ID string `json:"id"`
+		}{ID: payload.RequestID})
+		if err != nil {
+			return nil, openai_compatible.ErrorWrapper(errors.Wrap(err, "encode MuAPI task binding"), "invalid_video_response", http.StatusInternalServerError)
+		}
+		c.Set(adaptor.AsyncVideoAcceptedKey, true)
+		asyncvideo.PersistTask(c, bindingBody)
+	} else if payload.Status == "" {
+		return nil, openai_compatible.ErrorWrapper(errors.New("MuAPI video polling response has no status"), "invalid_video_response", http.StatusBadGateway)
+	}
+
+	if logger := gmw.GetLogger(c); logger != nil {
+		logger.Debug("MuAPI video response", zap.Bool("creating", creating), zap.String("status", payload.Status), zap.Int("body_bytes", len(body)), zap.Bool("body_logging_suppressed", true))
+	}
+	for _, key := range []string{"Content-Type", "Retry-After", "X-Request-Id"} {
+		if value := resp.Header.Get(key); value != "" {
+			c.Header(key, value)
+		}
+	}
+	if c.Writer.Header().Get("Content-Type") == "" {
+		c.Header("Content-Type", "application/json")
+	}
+	responseBody := body
+	statusCode := resp.StatusCode
+	if creating {
+		statusCode = http.StatusAccepted
+		responseBody, err = json.Marshal(map[string]string{"id": payload.RequestID, "status": "queued"})
+	} else {
+		var provider map[string]json.RawMessage
+		if err = json.Unmarshal(body, &provider); err == nil {
+			status := normalizeMuAPIStatus(payload.Status)
+			result := map[string]json.RawMessage{}
+			for key, value := range provider {
+				if key != "status" && key != "request_id" && key != "error" {
+					result[key] = value
+				}
+			}
+			var normalized map[string]any
+			taskID := c.Param("video_id")
+			if taskID == "" && c.Request != nil && c.Request.URL != nil {
+				taskID = strings.TrimPrefix(c.Request.URL.Path, "/v1/async/videos/")
+			}
+			normalized = map[string]any{"id": taskID, "status": status}
+			if len(result) > 0 {
+				normalized["result"] = result
+			}
+			if hasMuAPIError(payload.Error) {
+				normalized["error"] = payload.Error
+			}
+			responseBody, err = json.Marshal(normalized)
+		}
+	}
+	if err != nil {
+		return nil, openai_compatible.ErrorWrapper(errors.Wrap(err, "normalize MuAPI async video response"), "invalid_video_response", http.StatusBadGateway)
+	}
+	c.Writer.WriteHeader(statusCode)
+	if _, err := c.Writer.Write(responseBody); err != nil {
+		return nil, openai_compatible.ErrorWrapper(errors.Wrap(err, "write MuAPI video response"), "write_response_body_failed", http.StatusBadGateway)
+	}
+	return nil, nil
+}
+
+// normalizeMuAPIStatus maps a MuAPI lifecycle value to the public async-job
+// contract. Parameters: status is the provider status. Return value is queued,
+// running, completed, or failed.
+func normalizeMuAPIStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "queued", "pending", "created":
+		return "queued"
+	case "processing", "running", "in_progress":
+		return "running"
+	case "completed", "succeeded", "success":
+		return "completed"
+	case "failed", "error", "cancelled", "canceled":
+		return "failed"
+	default:
+		return "running"
+	}
+}
+
+// hasMuAPIError reports whether an optional error field contains a meaningful
+// error. Parameters: raw is the provider's JSON error field. Return value is
+// true when the field indicates a failed creation; missing, null, empty, and
+// whitespace-only strings are non-errors, while other JSON values remain errors.
+func hasMuAPIError(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return false
+	}
+
+	var message string
+	if err := json.Unmarshal(trimmed, &message); err == nil {
+		return strings.TrimSpace(message) != ""
+	}
+	return true
+}

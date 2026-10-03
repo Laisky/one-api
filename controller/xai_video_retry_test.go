@@ -13,8 +13,8 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// TestXAIVideoRetrySafety ensures an ambiguous paid creation is never replayed,
-// without disabling pre-dispatch recovery or unrelated provider retry policies.
+// TestVideoRetrySafety ensures an ambiguous paid creation is never replayed,
+// without disabling pre-dispatch recovery or unrelated request retry policies.
 func TestXAIVideoRetrySafety(t *testing.T) {
 	for _, tc := range []struct {
 		name, method, path string
@@ -26,7 +26,7 @@ func TestXAIVideoRetrySafety(t *testing.T) {
 		{"not_sent", "POST", "/v1/videos", channeltype.XAI, false, true},
 		{"poll", "GET", "/v1/videos/job", channeltype.XAI, true, true},
 		{"chat", "POST", "/v1/chat/completions", channeltype.XAI, true, true},
-		{"other_provider", "POST", "/v1/videos", channeltype.OpenAI, true, true},
+		{"any_provider", "POST", "/v1/videos", channeltype.OpenAI, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())

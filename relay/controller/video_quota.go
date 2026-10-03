@@ -4,8 +4,10 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/one-api/model"
 
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 )
@@ -34,6 +36,27 @@ func videoQuota(perSecond, multiplier, duration, perImage float64, images int, g
 	cost.Add(cost, new(big.Rat).Mul(rates[3], big.NewRat(int64(images), 1)))
 	cost.Mul(cost, rates[4])
 	cost.Mul(cost, big.NewRat(billingratio.QuotaPerUsd, 1))
+	return quotaFromUsd(cost)
+}
+
+// videoQuotaFromTotalDecimal converts one exact provider USD quote directly to quota. Parameters are the original decimal quote and the channel group multiplier. It returns the rounded-up quota charge or a validation error.
+func videoQuotaFromTotalDecimal(totalUsd string, group float64) (int64, error) {
+	// Validate bounded decimal syntax before allocating arbitrary-precision
+	// integers. Rat.SetString alone also accepts fractions and huge exponents.
+	cost := strings.TrimSpace(totalUsd)
+	positive, err := model.AsyncUpstreamCostQuota("1", cost)
+	if err != nil || positive <= 0 {
+		return 0, errors.New("invalid bounded decimal video quote")
+	}
+	factor, err := model.AsyncCostMultiplier(billingratio.QuotaPerUsd, group)
+	if err != nil {
+		return 0, errors.Wrap(err, "invalid video group multiplier")
+	}
+	return model.AsyncUpstreamCostQuota(factor, cost)
+}
+
+// quotaFromUsd rounds a rational USD cost up to the next quota unit. The parameter is a nonnegative rational USD amount already multiplied by the quota rate. It returns the int64 quota charge or an overflow error.
+func quotaFromUsd(cost *big.Rat) (int64, error) {
 	quota, remainder := new(big.Int), new(big.Int)
 	quota.QuoRem(cost.Num(), cost.Denom(), remainder)
 	if remainder.Sign() != 0 {
@@ -43,4 +66,9 @@ func videoQuota(perSecond, multiplier, duration, perImage float64, images int, g
 		return 0, errors.New("video charge exceeds supported quota range")
 	}
 	return quota.Int64(), nil
+}
+
+// videoQuotaFromTotal converts a legacy floating-point whole-request quote directly to quota. Parameters are the quoted USD amount and the channel group multiplier. It returns the rounded-up quota charge or a validation error.
+func videoQuotaFromTotal(totalUsd, group float64) (int64, error) {
+	return videoQuota(totalUsd, 1, 1, 0, 0, group)
 }

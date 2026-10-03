@@ -239,12 +239,22 @@ func TokenAuth() func(c *gin.Context) {
 		)
 
 		// Validate the API token against the database
-		token, err := model.ValidateUserToken(ctx, key)
+		validator := model.ValidateUserToken
+		taskRead := c.Request.Method == http.MethodGet && strings.HasPrefix(c.Request.URL.Path, "/v1/async/videos/")
+		taskReplay := c.Request.Method == http.MethodPost && c.GetHeader("Idempotency-Key") != "" &&
+			(c.Request.URL.Path == "/v1/async/videos" || c.Request.URL.Path == "/v1/videos/generations")
+		if taskRead || taskReplay {
+			validator = model.ValidateUserTokenForTask
+		}
+		token, err := validator(ctx, key)
 		if err != nil {
 			AbortWithError(c, http.StatusUnauthorized, err)
 			return
 		}
 
+		if taskReplay && (token.Status == model.TokenStatusExhausted || (!token.UnlimitedQuota && token.RemainQuota <= 0)) {
+			c.Set("async_task_reattach_only", true)
+		}
 		// Build token info for error logging (masked key for security).
 		// OwnerRef carries the denormalised tokens.user_uuid; the username is only
 		// known after the owner row is loaded below.
@@ -280,7 +290,7 @@ func TokenAuth() func(c *gin.Context) {
 		identity.Bind(c, identity.Set{User: tokenInfo.User})
 
 		// Verify the token owner (user) is still enabled and not banned
-		if user.Status == model.UserStatusDisabled || blacklist.IsUserBanned(user.Id) {
+		if user.Status == model.UserStatusDisabled || ((taskRead || taskReplay) && user.Status != model.UserStatusEnabled) || blacklist.IsUserBanned(user.Id) {
 			// Disabled or blacklisted owner: an intentional denial, not a fault.
 			AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.New("User has been banned")), tokenInfo)
 			return

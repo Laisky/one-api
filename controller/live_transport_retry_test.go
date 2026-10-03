@@ -74,3 +74,34 @@ func TestRelayLiveOnlyRESTMismatchReturns400WhenNoBridgeExists(t *testing.T) {
 		})
 	}
 }
+
+// TestRelayDoesNotReplayPossiblyForwardedPaidVideo verifies the actual router
+// retry loop makes only one creation attempt when the first channel may already
+// have accepted and charged for the POST.
+func TestRelayDoesNotReplayPossiblyForwardedPaidVideo(t *testing.T) {
+	for _, path := range routingPaths {
+		t.Run(path.name, func(t *testing.T) {
+			modelName := "veo3-fast"
+			priorityA, priorityB := int64(10), int64(5)
+			first := &dbmodel.Channel{
+				Id: 171, Name: "first-paid-video", Type: channeltype.OpenAI,
+				Status: dbmodel.ChannelStatusEnabled, Models: modelName,
+				Group: retryOrderGroup, Priority: &priorityA,
+			}
+			second := &dbmodel.Channel{
+				Id: 172, Name: "second-paid-video", Type: channeltype.OpenAI,
+				Status: dbmodel.ChannelStatusEnabled, Models: modelName,
+				Group: retryOrderGroup, Priority: &priorityB,
+			}
+			setupRetryOrderDB(t, []*dbmodel.Channel{first, second})
+
+			result := runRelayRetryScenarioForRequest(t, first, modelName, http.MethodPost, "/v1/videos", func(channelID int) *relaymodel.ErrorWithStatusCode {
+				require.Equal(t, first.Id, channelID)
+				return serverError(channelID)
+			}, path.memoryCache, 2)
+
+			require.Equal(t, []int{first.Id}, result.order)
+			require.Equal(t, http.StatusInternalServerError, result.status)
+		})
+	}
+}
