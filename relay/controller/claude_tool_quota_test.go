@@ -122,4 +122,5 @@ func TestClaudeToolResultQuotaHTTP(t *testing.T) {
 			}
 		}
 	}
+	testClaudeToolResultBoundaries(t)
 }
