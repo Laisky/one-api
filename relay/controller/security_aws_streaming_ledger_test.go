@@ -43,24 +43,30 @@ func awsSecurityFrame(t *testing.T, event string, payload any) []byte {
 // the actual AWS SDK client, controller admission or settlement machinery.
 type awsSecurityWriter struct {
 	gin.ResponseWriter
-	notify    chan bool
-	cancel    context.CancelFunc
-	once      sync.Once
-	mode      string
-	firstStep chan struct{}
-	flushes   int
+	notify         chan bool
+	cancel         context.CancelFunc
+	once           sync.Once
+	mode           string
+	idleNotify     chan struct{}
+	firstStep      chan struct{}
+	idleFlushCount int
 }
 
 // CloseNotify is the explicit Gin streaming lifecycle boundary.
 func (w *awsSecurityWriter) CloseNotify() <-chan bool { return w.notify }
 
-// Flush reports the first SDK step after the initial header-only flush.
+// Flush signals that the first real SDK event has been processed. The idle
+// regression then closes the client while the next event is not forthcoming.
 func (w *awsSecurityWriter) Flush() {
 	w.ResponseWriter.Flush()
-	w.flushes++
-	// SetEventStreamHeaders flushes once; Gin then flushes its decoded messageStart.
-	if w.flushes == 2 && w.firstStep != nil {
-		close(w.firstStep)
+	w.idleFlushCount++
+	if w.idleFlushCount == 2 {
+		if w.firstStep != nil {
+			close(w.firstStep)
+		}
+		if w.mode == "cancel_while_idle" {
+			w.once.Do(func() { close(w.idleNotify) })
+		}
 	}
 }
 
@@ -85,7 +91,7 @@ func (w *awsSecurityWriter) WriteString(s string) (int, error) { return w.Write(
 func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 	for _, actual := range []string{"deepseek-r1", "qwen3-coder-480b"} {
 		for _, fallback := range []bool{false, true} {
-			for _, scenario := range []string{"complete", "missing", "reasoning_only", "malformed", "sdk_exception", "cancel_before_content", "cancel_before_content_delayed", "cancel_after_content", "cancel_after_metadata", "write_failure", "large_delta", "overdraft_receipt", "known_admission", "unknown_500", "complete_unlimited", "missing_unlimited"} {
+			for _, scenario := range []string{"complete", "missing", "reasoning_only", "malformed", "sdk_exception", "cancel_before_content", "cancel_before_content_delayed", "cancel_while_idle", "cancel_after_content", "cancel_after_metadata", "write_failure", "large_delta", "overdraft_receipt", "known_admission", "unknown_500", "complete_unlimited", "missing_unlimited"} {
 				t.Run(fmt.Sprintf("%s/fallback=%v/%s", actual, fallback, scenario), func(t *testing.T) {
 					unlimited := strings.HasSuffix(scenario, "_unlimited")
 					scenario = strings.TrimSuffix(scenario, "_unlimited")
@@ -117,7 +123,7 @@ func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 					if reason != "" {
 						data = append(data, awsSecurityFrame(t, "contentBlockDelta", map[string]any{"contentBlockIndex": 0, "delta": map[string]any{"reasoningContent": map[string]any{"text": reason}}})...)
 					}
-					if scenario == "cancel_before_content" || scenario == "cancel_before_content_delayed" {
+					if scenario == "cancel_before_content" || scenario == "cancel_before_content_delayed" || scenario == "cancel_while_idle" {
 						data = start
 					}
 					measured := scenario == "complete" || scenario == "cancel_after_metadata" || scenario == "overdraft_receipt"
@@ -144,6 +150,7 @@ func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 					var calls atomic.Int32
 					paths := make(chan string, 1)
 					notify := make(chan bool)
+					idleNotify := make(chan struct{})
 					firstStep := make(chan struct{})
 					cancelDownstream := make(chan context.CancelFunc, 1)
 					stopped := make(chan bool, 1)
@@ -179,13 +186,26 @@ func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 									stopped <- false
 									return
 								}
-								// Give the next Gin step a bounded chance to block on SDK content
-								// before the client disconnects; the provider sends no further frame.
 								timer := time.NewTimer(100 * time.Millisecond)
 								<-timer.C
 							}
-							// A real downstream HTTP disconnect cancels its request context as well as CloseNotify.
+							// Physical downstream disconnect and notification-only idle
+							// cancellation are independent regression contracts.
 							(<-cancelDownstream)()
+							close(notify)
+						}
+						if scenario == "cancel_while_idle" {
+							select {
+							case <-idleNotify:
+							case <-time.After(time.Second):
+								stopped <- false
+								return
+							}
+							// Give Gin time to enter the next callback. Unlike the
+							// original immediately-closed notification, this targets
+							// an already idle SDK receive. The provider deadline and
+							// actual closure assertion are unchanged.
+							time.Sleep(50 * time.Millisecond)
 							close(notify)
 						}
 						if strings.HasPrefix(scenario, "cancel_") && !(fallback && scenario == "cancel_after_metadata") {
@@ -210,7 +230,7 @@ func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 					defer cancel()
 					c.Request = c.Request.WithContext(ctx)
 					cancelDownstream <- cancel
-					c.Writer = &awsSecurityWriter{ResponseWriter: c.Writer, notify: notify, cancel: cancel, mode: scenario, firstStep: firstStep}
+					c.Writer = &awsSecurityWriter{ResponseWriter: c.Writer, notify: notify, cancel: cancel, mode: scenario, idleNotify: idleNotify, firstStep: firstStep}
 					var apiErr *relaymodel.ErrorWithStatusCode
 					if fallback {
 						apiErr = RelayResponseAPIHelper(c)
@@ -230,7 +250,7 @@ func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 					require.NotNil(t, meta)
 					quote := int64(meta.PromptTokens) + 21
 					expected := int64(meta.PromptTokens + openai.CountTokenText(plain, actual) + openai.CountTokenText(reason, actual))
-					if (scenario == "cancel_before_content" || scenario == "cancel_before_content_delayed") || scenario == "unknown_500" {
+					if scenario == "cancel_before_content" || scenario == "cancel_before_content_delayed" || scenario == "cancel_while_idle" || scenario == "unknown_500" {
 						expected = int64(meta.PromptTokens)
 					}
 					expected = max(expected, quote)

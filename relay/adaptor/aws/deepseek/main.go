@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -214,8 +215,22 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 		},
 	)
 
+	// Gin checks CloseNotify only between callbacks. A callback waiting for
+	// an SDK event must also select cancellation so idle providers are closed.
+	streamContext := gmw.Ctx(c)
+	clientClosed := c.Writer.CloseNotify()
 	disconnected := c.Stream(func(w io.Writer) bool {
-		event, ok := <-stream.Events()
+		var event types.ConverseStreamOutput
+		var ok bool
+		select {
+		case <-streamContext.Done():
+			observer.Fail(streamContext.Err())
+			return false
+		case <-clientClosed:
+			observer.Fail(context.Canceled)
+			return false
+		case event, ok = <-stream.Events():
+		}
 		if !ok {
 			observer.Fail(stream.Err())
 			if !observer.Complete() {
