@@ -49,7 +49,7 @@ func (a *ResponseUsageAccumulator) consumeOutput(root map[string]json.RawMessage
 			a.consumeBlocks(item["content"], snapshot)
 			if responseUsageString(item["type"]) == "function_call" {
 				a.appendText(responseUsageString(item["name"]), snapshot)
-				a.appendText(responseUsageString(item["arguments"]), snapshot)
+				a.appendText(responseUsageJSONText(item["arguments"]), snapshot)
 			}
 		}
 	}
@@ -66,6 +66,32 @@ func (a *ResponseUsageAccumulator) consumeOutput(root map[string]json.RawMessage
 		var block map[string]json.RawMessage
 		if json.Unmarshal(root["content_block"], &block) == nil {
 			a.consumeBlock(block, false)
+		}
+	case "response.output_json.delta":
+		if text := responseUsageString(root["delta"]); text != "" {
+			a.appendText(text, false)
+		} else {
+			var delta map[string]json.RawMessage
+			if json.Unmarshal(root["delta"], &delta) == nil {
+				for _, key := range []string{"partial_json", "json", "text"} {
+					if text := responseUsageJSONText(delta[key]); text != "" {
+						a.appendText(text, false)
+						break
+					}
+				}
+			}
+		}
+	case "response.output_json.done":
+		// Complete JSON is a snapshot, so a matching delta stream is not summed.
+		if text := responseUsageJSONText(root["json"]); text != "" {
+			a.appendText(text, true)
+			break
+		}
+		for _, key := range []string{"part", "output", "text", "delta"} {
+			if text := responseUsageJSONPayload(root[key]); text != "" {
+				a.appendText(text, true)
+				break
+			}
 		}
 	case "response.output_text.delta", "response.function_call_arguments.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.delta":
 		a.appendText(responseUsageString(root["delta"]), false)
@@ -102,13 +128,13 @@ func (a *ResponseUsageAccumulator) consumeChatContent(message map[string]json.Ra
 	if json.Unmarshal(message["tool_calls"], &calls) == nil {
 		for _, call := range calls {
 			a.appendText(responseUsageString(call.Function["name"]), snapshot)
-			a.appendText(responseUsageString(call.Function["arguments"]), snapshot)
+			a.appendText(responseUsageJSONText(call.Function["arguments"]), snapshot)
 		}
 	}
 	var function map[string]json.RawMessage
 	if json.Unmarshal(message["function_call"], &function) == nil {
 		a.appendText(responseUsageString(function["name"]), snapshot)
-		a.appendText(responseUsageString(function["arguments"]), snapshot)
+		a.appendText(responseUsageJSONText(function["arguments"]), snapshot)
 	}
 }
 
@@ -125,7 +151,11 @@ func (a *ResponseUsageAccumulator) consumeBlocks(raw json.RawMessage, snapshot b
 
 // consumeBlock extracts text, thinking, or tool-use input from one content block.
 func (a *ResponseUsageAccumulator) consumeBlock(block map[string]json.RawMessage, snapshot bool) {
-	a.appendText(responseUsageString(block["text"]), snapshot)
+	if responseUsageString(block["type"]) == "output_json" && len(block["json"]) > 0 {
+		a.appendText(responseUsageJSONText(block["json"]), snapshot)
+	} else {
+		a.appendText(responseUsageString(block["text"]), snapshot)
+	}
 	a.appendText(responseUsageString(block["thinking"]), snapshot)
 	if responseUsageString(block["type"]) == "tool_use" {
 		a.appendText(responseUsageString(block["name"]), snapshot)
@@ -133,4 +163,37 @@ func (a *ResponseUsageAccumulator) consumeBlock(block map[string]json.RawMessage
 			a.appendText(input, snapshot)
 		}
 	}
+}
+
+// responseUsageJSONText returns string content or compact structured JSON, matching
+// the converter's object argument serialization. Absent and null values add no text.
+func responseUsageJSONText(raw json.RawMessage) string {
+	var value any
+	if json.Unmarshal(raw, &value) != nil || value == nil {
+		return ""
+	}
+	if text, ok := value.(string); ok {
+		return text
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
+// responseUsageJSONPayload extracts JSON from the structured wrappers accepted
+// by Responses JSON completion events, falling back to the entire JSON value.
+func responseUsageJSONPayload(raw json.RawMessage) string {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) == nil {
+		for _, key := range []string{"json", "text", "content", "partial_json"} {
+			if nested, ok := fields[key]; ok {
+				if text := responseUsageJSONPayload(nested); text != "" {
+					return text
+				}
+			}
+		}
+	}
+	return responseUsageJSONText(raw)
 }
