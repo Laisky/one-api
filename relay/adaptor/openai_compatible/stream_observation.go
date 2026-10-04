@@ -11,7 +11,7 @@ import (
 )
 
 // ObserveStreamChunk accounts a raw chunk before presentation rewriting.
-func ObserveStreamChunk(c *gin.Context, chunk *ChatCompletionsStreamResponse) error {
+func ObserveStreamChunk(c *gin.Context, chunk *ChatCompletionsStreamResponse, counters ...func(string, string) int) error {
 	tracker := streaming.FromContext(c)
 	if tracker == nil || chunk == nil {
 		return nil
@@ -20,7 +20,7 @@ func ObserveStreamChunk(c *gin.Context, chunk *ChatCompletionsStreamResponse) er
 	for _, choice := range chunk.Choices {
 		messages = append(messages, choice.Delta)
 	}
-	return tracker.ObserveMessages(messages, chunk.Usage)
+	return tracker.ObserveMessages(messages, chunk.Usage, counters...)
 }
 
 // streamFailureHandler is an optional terminal-error extension; older bridge

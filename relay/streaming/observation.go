@@ -45,12 +45,15 @@ func (t *QuotaTracker) UsageSnapshot() *relaymodel.Usage {
 // ObserveMessages funds a complete parsed frame before delivery. A same-frame
 // cumulative receipt is authoritative; otherwise count every raw text/reasoning/
 // tool dimension once with the controller-selected tokenizer, not a byte average.
-func (t *QuotaTracker) ObserveMessages(messages []relaymodel.Message, usage *relaymodel.Usage) error {
+func (t *QuotaTracker) ObserveMessages(messages []relaymodel.Message, usage *relaymodel.Usage, counters ...func(string, string) int) error {
 	if usage != nil {
 		t.UpdateFinalUsage(usage)
 		return t.maybeFlush(true)
 	}
 	count := t.params.TokenCounter
+	if len(counters) > 0 {
+		count = counters[0]
+	}
 	if count == nil {
 		return errors.New("streaming tokenizer is not configured")
 	}

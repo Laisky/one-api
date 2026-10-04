@@ -119,7 +119,11 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 	doneRendered := false
 	var streamErr error
 	sendStreamingError := func(code, message string) {
-		failure := ErrorWrapper(errors.New(message), code, http.StatusForbidden)
+		status := http.StatusInternalServerError
+		if code == "insufficient_user_quota" {
+			status = http.StatusForbidden
+		}
+		failure := ErrorWrapper(errors.New(message), code, status)
 		if openai_compatible.FailStreamWithBridge(c, failure, usage) {
 			doneRendered = true
 			return
@@ -175,6 +179,17 @@ streamLoop:
 				if streamResponse.Usage != nil {
 					usage = streamResponse.Usage
 				}
+				if tracker != nil {
+					if err := openai_compatible.ObserveStreamChunk(c, &streamResponse, CountTokenText); err != nil {
+						trackerErr = err
+						if errors.Is(err, streaming.ErrQuotaExceeded) {
+							sendStreamingError("insufficient_user_quota", "user quota exhausted during streaming")
+						} else {
+							sendStreamingError("streaming_billing_failed", "failed to track streaming usage")
+						}
+						break streamLoop
+					}
+				}
 				for _, choice := range streamResponse.Choices {
 					currentReasoningChunk := extractReasoningContent(&choice.Delta)
 					if currentReasoningChunk != "" {
@@ -184,26 +199,6 @@ streamLoop:
 					choice.Delta.SetReasoningContent(c.Query("reasoning_format"), currentReasoningChunk)
 					responseText.WriteString(conv.AsString(choice.Delta.Content))
 
-					if tracker != nil && metaInfo != nil {
-						deltaTokens := 0
-						if chunk := conv.AsString(choice.Delta.Content); chunk != "" {
-							deltaTokens += CountTokenText(chunk, metaInfo.ActualModelName)
-						}
-						if currentReasoningChunk != "" {
-							deltaTokens += CountTokenText(currentReasoningChunk, metaInfo.ActualModelName)
-						}
-						if deltaTokens > 0 {
-							if err := tracker.RecordCompletionTokens(deltaTokens); err != nil {
-								trackerErr = err
-								if errors.Is(err, streaming.ErrQuotaExceeded) {
-									sendStreamingError("insufficient_user_quota", "user quota exhausted during streaming")
-								} else {
-									sendStreamingError("streaming_billing_failed", "failed to track streaming usage")
-								}
-								break streamLoop
-							}
-						}
-					}
 				}
 
 				handledByRewriter := false
@@ -346,6 +341,17 @@ streamLoop:
 				usage = streamResponse.Usage
 			}
 			// Process each choice in the response
+			if tracker != nil {
+				if err := openai_compatible.ObserveStreamChunk(c, &streamResponse, CountTokenText); err != nil {
+					trackerErr = err
+					if errors.Is(err, streaming.ErrQuotaExceeded) {
+						sendStreamingError("insufficient_user_quota", "user quota exhausted during streaming")
+					} else {
+						sendStreamingError("streaming_billing_failed", "failed to track streaming usage")
+					}
+					break streamLoop
+				}
+			}
 			for _, choice := range streamResponse.Choices {
 				// Extract reasoning content from different possible fields
 				currentReasoningChunk := extractReasoningContent(&choice.Delta)
@@ -361,26 +367,6 @@ streamLoop:
 				// Accumulate response content
 				responseText.WriteString(conv.AsString(choice.Delta.Content))
 
-				if tracker != nil && metaInfo != nil {
-					deltaTokens := 0
-					if chunk := conv.AsString(choice.Delta.Content); chunk != "" {
-						deltaTokens += CountTokenText(chunk, metaInfo.ActualModelName)
-					}
-					if currentReasoningChunk != "" {
-						deltaTokens += CountTokenText(currentReasoningChunk, metaInfo.ActualModelName)
-					}
-					if deltaTokens > 0 {
-						if err := tracker.RecordCompletionTokens(deltaTokens); err != nil {
-							trackerErr = err
-							if errors.Is(err, streaming.ErrQuotaExceeded) {
-								sendStreamingError("insufficient_user_quota", "user quota exhausted during streaming")
-							} else {
-								sendStreamingError("streaming_billing_failed", "failed to track streaming usage")
-							}
-							break streamLoop
-						}
-					}
-				}
 			}
 
 			handledByRewriter := false

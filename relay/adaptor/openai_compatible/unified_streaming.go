@@ -977,6 +977,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 			"unexpected_response_format", resp.StatusCode), nil
 	}
 
+	receiptComplete := false
 	tracker := streaming.FromContext(c)
 	if tracker != nil {
 		streaming.ClaimProtocolObservation(c)
@@ -1009,11 +1010,13 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 
 		if line.Oversized {
 			var streamResponse ChatCompletionsStreamResponse
-			if err := json.NewDecoder(line.Large).Decode(&streamResponse); err != nil {
+			complete, err := decodeStreamReceipt(line.Large, &streamResponse)
+			if err != nil {
 				logger.Warn("failed to parse oversized streaming chunk, skipping", zap.Error(err))
 				continue
 			}
 
+			receiptComplete = nextStreamReceiptCompleteness(receiptComplete, complete, &streamResponse)
 			streamResponse.Id = tracing.GenerateChatCompletionID(c)
 			if err := ObserveStreamChunk(c, &streamResponse); err != nil {
 				usage := tracker.UsageSnapshot()
@@ -1101,7 +1104,8 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 		// Parse the streaming chunk
 		var streamResponse ChatCompletionsStreamResponse
 		jsonData := data[DataPrefixLength:]
-		if err := json.Unmarshal([]byte(jsonData), &streamResponse); err != nil {
+		complete, err := decodeStreamReceipt(strings.NewReader(jsonData), &streamResponse)
+		if err != nil {
 			logger.Warn("failed to parse streaming chunk, skipping",
 				zap.String("chunk_data", jsonData),
 				zap.Error(err))
@@ -1109,6 +1113,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 		}
 
 		// Replace upstream ID with our trace ID
+		receiptComplete = nextStreamReceiptCompleteness(receiptComplete, complete, &streamResponse)
 		streamResponse.Id = tracing.GenerateChatCompletionID(c)
 		if err := ObserveStreamChunk(c, &streamResponse); err != nil {
 			usage := tracker.UsageSnapshot()
@@ -1177,8 +1182,19 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 
 	// Calculate final usage with unified logic before emitting terminal events so
 	// that any stream rewriter can include accurate metrics.
-	missingUsage := streamCtx.usage == nil || streamCtx.usage.CompletionTokens == 0
-	finalUsage := streamCtx.CalculateUsage(promptTokens, modelName)
+	missingUsage := !receiptComplete || streamCtx.usage == nil || (streamCtx.usage.CompletionTokens == 0 && (streamCtx.responseTextBuilder.Len() > 0 || streamCtx.toolArgsTextBuilder.Len() > 0))
+	var finalUsage *model.Usage
+	if !missingUsage {
+		// Explicit input/output counters, including zero, remain measured.
+		finalUsage = streamCtx.usage
+		if finalUsage.TotalTokens == 0 {
+			finalUsage.TotalTokens = finalUsage.PromptTokens + finalUsage.CompletionTokens
+		}
+		finalUsage.NormalizeCachedTokens()
+		finalUsage.NormalizeCacheWriteTokens()
+	} else {
+		finalUsage = streamCtx.CalculateUsage(promptTokens, modelName)
+	}
 	if tracker != nil && missingUsage {
 		finalUsage.BillingEstimateReason = "stream_usage_missing_counters"
 	}
