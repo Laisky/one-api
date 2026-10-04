@@ -19,6 +19,7 @@ import (
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/streaming"
 )
 
 // DefaultBuilderCapacity defines the initial buffer size (4KB) for strings.Builder
@@ -976,6 +977,12 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 			"unexpected_response_format", resp.StatusCode), nil
 	}
 
+	tracker := streaming.FromContext(c)
+	if tracker != nil {
+		streaming.ClaimProtocolObservation(c)
+	}
+	cleanup := watchStreamBody(c, resp)
+	defer cleanup()
 	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
@@ -1008,6 +1015,14 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 			}
 
 			streamResponse.Id = tracing.GenerateChatCompletionID(c)
+			if err := ObserveStreamChunk(c, &streamResponse); err != nil {
+				usage := tracker.UsageSnapshot()
+				failure := ErrorWrapper(err, "streaming_billing_failed", http.StatusForbidden)
+				FailStreamWithBridge(c, failure, usage)
+				streaming.StopUpstream(c)
+				return failure, usage
+			}
+
 			modifiedChunk := streamCtx.ProcessStreamChunk(&streamResponse)
 			for i := range streamResponse.Choices {
 				toolnamesafe.RestoreToolCallNames(c, streamResponse.Choices[i].Delta.ToolCalls)
@@ -1095,6 +1110,13 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 
 		// Replace upstream ID with our trace ID
 		streamResponse.Id = tracing.GenerateChatCompletionID(c)
+		if err := ObserveStreamChunk(c, &streamResponse); err != nil {
+			usage := tracker.UsageSnapshot()
+			failure := ErrorWrapper(err, "streaming_billing_failed", http.StatusForbidden)
+			FailStreamWithBridge(c, failure, usage)
+			streaming.StopUpstream(c)
+			return failure, usage
+		}
 
 		// Process chunk using unified logic
 		modifiedChunk := streamCtx.ProcessStreamChunk(&streamResponse)
@@ -1155,7 +1177,11 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 
 	// Calculate final usage with unified logic before emitting terminal events so
 	// that any stream rewriter can include accurate metrics.
+	missingUsage := streamCtx.usage == nil || streamCtx.usage.CompletionTokens == 0
 	finalUsage := streamCtx.CalculateUsage(promptTokens, modelName)
+	if tracker != nil && missingUsage {
+		finalUsage.BillingEstimateReason = "stream_usage_missing_counters"
+	}
 
 	if streamRewriter != nil {
 		streamRewriter.FinalizeUsage(finalUsage)

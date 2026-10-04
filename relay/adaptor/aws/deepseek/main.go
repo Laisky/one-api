@@ -20,6 +20,7 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/relay/adaptor/aws/internal/streamfinalizer"
+	"github.com/Laisky/one-api/relay/adaptor/aws/internal/streamusage"
 	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
@@ -127,9 +128,10 @@ func Handler(c *gin.Context, awsCli *bedrockruntime.Client, modelName string) (*
 	}
 
 	// Use Converse API to get actual token counts
-	awsResp, err := awsCli.Converse(gmw.Ctx(c), converseReq)
+	utils.MarkInvocation(c)
+	awsResp, err := awsCli.Converse(gmw.Ctx(c), converseReq, utils.NoInferenceRetry)
 	if err != nil {
-		return utils.WrapErr(errors.Wrap(err, "Converse")), nil
+		return utils.InvocationError(c, errors.Wrap(err, "Converse")), nil
 	}
 
 	// Convert Converse response to custom DeepSeek format
@@ -175,9 +177,10 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 		return utils.WrapErr(errors.Wrap(err, "convert to converse request")), nil
 	}
 
-	awsResp, err := awsCli.ConverseStream(gmw.Ctx(c), converseReq)
+	utils.MarkInvocation(c)
+	awsResp, err := awsCli.ConverseStream(gmw.Ctx(c), converseReq, utils.NoInferenceRetry)
 	if err != nil {
-		return utils.WrapErr(errors.Wrap(err, "ConverseStream")), nil
+		return utils.InvocationError(c, errors.Wrap(err, "ConverseStream")), nil
 	}
 	stream := awsResp.GetStream()
 	defer stream.Close()
@@ -186,6 +189,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 	common.SetEventStreamHeaders(c)
 
 	var usage relaymodel.Usage
+	observer := streamusage.New(c, &usage)
 	var id string
 	finalizer := streamfinalizer.NewFinalizer(
 		c.GetString(ctxkey.RequestModel),
@@ -202,7 +206,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 				lg.Error("error unmarshalling final stream response", zap.Error(err))
 				return false
 			}
-			if err := openai_compatible.RenderStreamChunkWithBridge(c, &chunk); err != nil {
+			if err := observer.Render(c, &chunk); err != nil {
 				lg.Error("error rendering final stream response", zap.Error(err))
 				return false
 			}
@@ -210,9 +214,13 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 		},
 	)
 
-	c.Stream(func(w io.Writer) bool {
+	disconnected := c.Stream(func(w io.Writer) bool {
 		event, ok := <-stream.Events()
 		if !ok {
+			observer.Fail(stream.Err())
+			if !observer.Complete() {
+				return false
+			}
 			if !finalizer.FinalizeOnClose() {
 				return false
 			}
@@ -293,18 +301,22 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 				// Responses API events instead of raw chat-completion chunks;
 				// otherwise it is emitted verbatim exactly like render.ObjectData.
 				if response != nil {
-					if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
+					if err := observer.Render(c, response); err != nil {
 						lg.Error("error rendering stream response", zap.Error(err))
-						return true
+						return false
 					}
 				}
 			}
 			return true
 
 		case *types.ConverseStreamOutputMemberMessageStop:
+			observer.RecordStop()
 			return finalizer.RecordStop(convertStopReason(string(v.Value.StopReason)))
 
 		case *types.ConverseStreamOutputMemberMetadata:
+			if !observer.RecordMetadata(v.Value.Usage) {
+				return false
+			}
 			return finalizer.RecordMetadata(v.Value.Usage)
 
 		default:
@@ -313,7 +325,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 		}
 	})
 
-	return nil, &usage
+	return observer.Finish(disconnected, stream.Err())
 }
 
 // convertStopReason converts DeepSeek stop reason to OpenAI format

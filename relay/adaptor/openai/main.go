@@ -91,6 +91,9 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 	lg := gmw.GetLogger(c)
 	metaInfo := metalib.GetByContext(c)
 	tracker := streaming.FromContext(c)
+	if tracker != nil {
+		streaming.ClaimProtocolObservation(c)
+	}
 	var trackerErr error
 	// Initialize accumulators for the response
 	var responseText strings.Builder
@@ -116,6 +119,12 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 	doneRendered := false
 	var streamErr error
 	sendStreamingError := func(code, message string) {
+		failure := ErrorWrapper(errors.New(message), code, http.StatusForbidden)
+		if openai_compatible.FailStreamWithBridge(c, failure, usage) {
+			doneRendered = true
+			return
+		}
+
 		if err := render.ObjectData(c, map[string]any{
 			"error": map[string]any{
 				"message": message,
@@ -161,6 +170,11 @@ streamLoop:
 					}
 				}
 
+				// A receipt decoded in this same frame is already observed work,
+				// even if incremental enforcement stops before it is forwarded.
+				if streamResponse.Usage != nil {
+					usage = streamResponse.Usage
+				}
 				for _, choice := range streamResponse.Choices {
 					currentReasoningChunk := extractReasoningContent(&choice.Delta)
 					if currentReasoningChunk != "" {
@@ -215,6 +229,12 @@ streamLoop:
 					usage = streamResponse.Usage
 					if tracker != nil {
 						tracker.UpdateFinalUsage(streamResponse.Usage)
+						if err := tracker.CheckAffordability(); err != nil {
+							trackerErr = err
+							sendStreamingError("insufficient_user_quota", "user quota exhausted during streaming")
+							break streamLoop
+						}
+
 					}
 				}
 
@@ -320,6 +340,11 @@ streamLoop:
 				lg.Debug("restored sanitized tool names in stream chunk")
 			}
 
+			// Preserve an already decoded same-frame receipt before any delta
+			// can trigger enforcement and exit the stream loop.
+			if streamResponse.Usage != nil {
+				usage = streamResponse.Usage
+			}
 			// Process each choice in the response
 			for _, choice := range streamResponse.Choices {
 				// Extract reasoning content from different possible fields
@@ -389,6 +414,12 @@ streamLoop:
 				usage = streamResponse.Usage
 				if tracker != nil {
 					tracker.UpdateFinalUsage(streamResponse.Usage)
+					if err := tracker.CheckAffordability(); err != nil {
+						trackerErr = err
+						sendStreamingError("insufficient_user_quota", "user quota exhausted during streaming")
+						break streamLoop
+					}
+
 				}
 			}
 
@@ -462,22 +493,22 @@ streamLoop:
 		lg.Warn("upstream chat completion stream ended without sending [DONE]")
 	}
 
+	combined := reasoningText.String() + responseText.String()
 	// Clean up resources
 	if err := resp.Body.Close(); err != nil {
-		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), "", nil
+		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), combined, usage
 	}
 
 	if trackerErr != nil {
 		if errors.Is(trackerErr, streaming.ErrQuotaExceeded) {
-			return ErrorWrapper(trackerErr, "insufficient_user_quota", http.StatusForbidden), "", usage
+			return ErrorWrapper(trackerErr, "insufficient_user_quota", http.StatusForbidden), combined, usage
 		}
-		return ErrorWrapper(trackerErr, "streaming_billing_failed", http.StatusInternalServerError), "", usage
+		return ErrorWrapper(trackerErr, "streaming_billing_failed", http.StatusInternalServerError), combined, usage
 	}
 
 	// Record when upstream streaming is completed
 	recordUpstreamCompleted(c)
 
-	combined := reasoningText.String() + responseText.String()
 	if combined != "" || usage != nil {
 		c.Set(ctxkey.ConvertedResponse, map[string]any{
 			"stream":    true,

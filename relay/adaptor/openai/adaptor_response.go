@@ -73,6 +73,7 @@ func (a *Adaptor) DoResponse(c *gin.Context,
 
 			if usage == nil || usage.TotalTokens == 0 {
 				usage = ResponseText2Usage(responseText, meta.ActualModelName, meta.PromptTokens)
+				usage.BillingEstimateReason = "stream_usage_missing_counters"
 			}
 			if usage.TotalTokens != 0 && usage.PromptTokens == 0 {
 				usage.PromptTokens = meta.PromptTokens
