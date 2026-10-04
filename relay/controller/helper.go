@@ -221,37 +221,11 @@ func preConsumeQuota(
 	channelCompletionRatio map[string]float64,
 	meta *meta.Meta,
 ) (int64, *relaymodel.ErrorWithStatusCode) {
-	ctx := gmw.Ctx(c)
-	lg := gmw.GetLogger(c)
 	if meta.ChannelType == channeltype.Jina {
 		return preConsumeJinaQuota(c, meta)
 	}
-	preConsumedQuota := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
-
-	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
-	tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
-	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
-	if err != nil {
-		return preConsumedQuota, openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
-	}
-	if userQuota-preConsumedQuota < 0 {
-		return preConsumedQuota, openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
-	}
-	if userQuota > 100*preConsumedQuota &&
-		(tokenQuotaUnlimited || tokenQuota > 100*preConsumedQuota) {
-		// in this case, we do not pre-consume quota
-		// because the user and token have enough quota
-		preConsumedQuota = 0
-		lg.Info("user has enough quota, trusted and no need to pre-consume", zap.Int64("user_quota", userQuota))
-	}
-	if preConsumedQuota > 0 {
-		err := model.PreConsumeTokenQuota(ctx, meta.TokenId, preConsumedQuota)
-		if err != nil {
-			return preConsumedQuota, openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
-		}
-		syncUserQuotaCacheAfterPreConsume(ctx, meta.UserId, preConsumedQuota, "chat_preconsume")
-	}
-	return preConsumedQuota, nil
+	quote := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
+	return reservePaidRequestQuota(c, meta, quote, "chat_preconsume")
 }
 
 // postConsumeQuota computes and records the final chat-style request charge. It

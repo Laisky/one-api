@@ -249,15 +249,13 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 	// Prepare client for SSE
 	common.SetEventStreamHeaders(c)
 
-	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
+	observer := relaymodel.NewResponseUsageAccumulator(true)
+	lineReader := commonsse.NewLineReader(&claudeUsageReader{reader: resp.Body, observer: observer}, commonsse.DefaultLineBufferSize)
 
 	// Wrap the reader with heartbeats to prevent reverse-proxy timeouts (e.g. Cloudflare 524).
 	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)
 	defer hbr.Close()
 
-	accumText := ""
-	accumThinking := ""
-	accumToolArgs := ""
 	var usage *relaymodel.Usage
 
 	// Track content blocks and indices
@@ -340,7 +338,6 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 						nextIndex++
 					}
 					thinkingDelta := *thinkingContent
-					accumThinking += thinkingDelta
 					writeClaudeSSE(map[string]any{
 						"type":  "content_block_delta",
 						"index": thinkingIndex,
@@ -376,7 +373,6 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 						textIndex = nextIndex
 						nextIndex++
 					}
-					accumText += deltaText
 					writeClaudeSSE(map[string]any{
 						"type":  "content_block_delta",
 						"index": textIndex,
@@ -428,7 +424,6 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 							}
 						}
 						if argStr != "" {
-							accumToolArgs += argStr
 							writeClaudeSSE(map[string]any{
 								"type":  "content_block_delta",
 								"index": idx,
@@ -503,7 +498,6 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 					nextIndex++
 				}
 				thinkingDelta := *thinkingContent
-				accumThinking += thinkingDelta
 				writeClaudeSSE(map[string]any{
 					"type":  "content_block_delta",
 					"index": thinkingIndex,
@@ -541,7 +535,6 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 					textIndex = nextIndex
 					nextIndex++
 				}
-				accumText += deltaText
 				writeClaudeSSE(map[string]any{
 					"type":  "content_block_delta",
 					"index": textIndex,
@@ -593,7 +586,6 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 						}
 					}
 					if argStr != "" {
-						accumToolArgs += argStr
 						writeClaudeSSE(map[string]any{
 							"type":  "content_block_delta",
 							"index": idx,
@@ -643,13 +635,21 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 		writeClaudeSSE(map[string]any{"type": "content_block_stop", "index": idx})
 	}
 
-	// Finalize usage if upstream omitted
-	if usage == nil {
-		completion := CountTokenText(accumText, modelName) + CountTokenText(accumThinking, modelName) + CountTokenText(accumToolArgs, modelName)
-		usage = &relaymodel.Usage{PromptTokens: promptTokens, CompletionTokens: completion, TotalTokens: promptTokens + completion}
-	} else if usage.TotalTokens == 0 {
-		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	// Normalize raw provider evidence with the same bounded accumulator used
+	// by converted-body fallback. Aggregate-only splits remain labelled estimates.
+	if !upstreamDone {
+		observer.MarkIncomplete()
 	}
+	usage = observer.Finish(promptTokens, func(text string) int { return CountTokenText(text, modelName) })
+	finalDelta := map[string]any{"input_tokens": usage.PromptTokens, "output_tokens": usage.CompletionTokens}
+	if usage.PromptTokensDetails != nil && usage.PromptTokensDetails.CachedTokens > 0 {
+		finalDelta["cache_read_input_tokens"] = usage.PromptTokensDetails.CachedTokens
+	}
+	if usage.CacheWrite5mTokens > 0 || usage.CacheWrite1hTokens > 0 {
+		finalDelta["cache_creation_input_tokens"] = usage.CacheWrite5mTokens + usage.CacheWrite1hTokens
+		finalDelta["cache_creation"] = map[string]any{"ephemeral_5m_input_tokens": usage.CacheWrite5mTokens, "ephemeral_1h_input_tokens": usage.CacheWrite1hTokens}
+	}
+	writeClaudeSSE(map[string]any{"type": "message_delta", "usage": finalDelta})
 
 	// Only emit terminal message_stop when the upstream completed normally.
 	// The Claude Messages API does NOT use [DONE] — the stream simply closes

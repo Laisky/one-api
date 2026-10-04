@@ -15,6 +15,7 @@ import (
 	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/cohere"
 	"github.com/Laisky/one-api/relay/adaptor/jina"
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -34,7 +35,7 @@ func shouldSkipPreConsumedRefund(c *gin.Context) bool {
 	if c == nil {
 		return false
 	}
-	if c.GetInt(ctxkey.Channel) == channeltype.Jina && jina.RejectedBeforeInference(c) {
+	if providerRejectedBeforeInference(c) {
 		return false
 	}
 	forwardedAny, exists := c.Get(ctxkey.UpstreamRequestPossiblyForwarded)
@@ -174,11 +175,14 @@ func returnPreConsumedQuotaConservative(
 		return conservativeRefundSnapshot{tokenID: tokenID, reason: reason, quota: preConsumedQuota}.refund(ctx)
 	}
 
-	if handled, refunded := refundJinaAdmission(c, preConsumedQuota, tokenID, reason); handled {
+	if handled, refunded := refundRejectedAdmission(c, preConsumedQuota, tokenID, reason); handled {
 		return refunded
 	}
 	snap := newConservativeRefundSnapshot(c, preConsumedQuota, tokenID, reason)
 	if JinaAttemptMayHaveCost(c) {
+		return false
+	}
+	if snap.skipRefund && settleRetainedRequestAdmission(c, preConsumedQuota, tokenID, reason) {
 		return false
 	}
 	// Mark reconciled on the request goroutine in both the skip and refund cases so the
@@ -263,6 +267,7 @@ func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 	// Clear the per-attempt billing markers so the next attempt starts clean and
 	// its own pre-consume/refund accounting is independent of this attempt.
 	jina.ClearRejection(c)
+	cohere.ClearRejection(c)
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, false)
 	c.Set(ctxkey.PreConsumedQuotaAmount, int64(0))
 	c.Set(ctxkey.PreConsumedQuotaRefundClaimed, false)
@@ -299,7 +304,10 @@ func scheduleConservativeRefund(c *gin.Context, preConsumedQuota int64, tokenID 
 	if JinaAttemptMayHaveCost(c) {
 		return
 	}
-	if handled, _ := refundJinaAdmission(c, preConsumedQuota, tokenID, reason); handled {
+	if handled, _ := refundRejectedAdmission(c, preConsumedQuota, tokenID, reason); handled {
+		return
+	}
+	if shouldSkipPreConsumedRefund(c) && settleRetainedRequestAdmission(c, preConsumedQuota, tokenID, reason) {
 		return
 	}
 	// Mark reconciled SYNCHRONOUSLY, before spawning (see the doc note above).
@@ -478,4 +486,20 @@ func recordProvisionalLog(c *gin.Context, meta *metalib.Meta, modelName string, 
 	}
 
 	return model.RecordProvisionalConsumeLog(gmw.Ctx(c), logEntry, estimatedQuota)
+}
+
+// providerRejectedBeforeInference resolves provider-owned receipt semantics;
+// the caller cannot set these private adaptor markers through public JSON.
+func providerRejectedBeforeInference(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	switch c.GetInt(ctxkey.Channel) {
+	case channeltype.Jina:
+		return jina.RejectedBeforeInference(c)
+	case channeltype.Cohere:
+		return cohere.RejectedBeforeInference(c)
+	default:
+		return false
+	}
 }

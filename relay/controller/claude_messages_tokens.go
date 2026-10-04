@@ -16,28 +16,12 @@ import (
 
 const claudeFileImageFallbackTokens = 853
 
-// fastTokenEstimateThreshold is the body size above which we use a fast byte-based
-// token estimation instead of full token counting. 1MB is chosen because full
-// tokenization of bodies above this size takes hundreds of milliseconds.
-const fastTokenEstimateThreshold = 1 * 1024 * 1024 // 1MB
+// fastTokenEstimateThreshold names the former shortcut boundary for compatibility regressions.
+const fastTokenEstimateThreshold = 1 * 1024 * 1024
 
-// estimateClaudeMessagesPromptTokens picks between fast byte-based estimation
-// (for large bodies) and accurate tokenizer-based counting (for small bodies).
-// The fast path uses bodySize/4 as a rough approximation (1 token ≈ 4 bytes on average).
-// This is only used for pre-consumption quota; final billing always uses upstream's actual count.
-func estimateClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest, bodySize int) int {
-	if bodySize > fastTokenEstimateThreshold {
-		estimated := bodySize / 4
-		if claudevision.IsSonnet55(claudeReservationModel(request)) {
-			estimated += countClaudeNativeImageAllowance(request)
-		}
-		gmw.GetLogger(ctx).Debug("using fast byte-based token estimation for large body",
-			zap.Int("body_size", bodySize),
-			zap.Int("estimated_tokens", estimated),
-			zap.String("model", request.Model),
-		)
-		return estimated
-	}
+// estimateClaudeMessagesPromptTokens counts the same semantic content for every serialized body size.
+// The body size does not justify a lower quote; transport limits bound accepted input separately.
+func estimateClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest, _ int) int {
 	return getClaudeMessagesPromptTokens(ctx, request)
 }
 

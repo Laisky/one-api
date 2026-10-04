@@ -135,9 +135,8 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	ratio := modelRatio * groupRatio
 
 	// pre-consume quota based on estimated input tokens.
-	// For large request bodies, use a fast byte-based estimation (body_size / 4)
-	// instead of full token counting which requires parsing all message content.
-	// The actual token count from the upstream response is used for final billing.
+	// The same canonical content quote applies to every body size.
+	// Upstream receipts reconcile the estimate through shared final billing.
 	rawBodyForEstimate, _ := common.GetRequestBody(c)
 	promptTokens := estimateClaudeMessagesPromptTokens(gmw.Ctx(c), claudeRequest, len(rawBodyForEstimate))
 	meta.PromptTokens = promptTokens
