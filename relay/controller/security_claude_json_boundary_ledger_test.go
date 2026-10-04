@@ -20,11 +20,13 @@ func TestSecurityClaudeJSONReviewBoundaryLedger(t *testing.T) {
 	payload := `{"answer":"` + text + `"}`
 	app := `{"text":"x","answer":"` + text + `"}`
 	other := `{"other":"` + strings.Repeat("distinct synthetic completion evidence ", 100) + `"}`
+	whitespace := `{"answer":` + strings.Repeat(" ", 2000) + `"` + text + `"}`
 	cases := []struct {
 		name, wire string
 		lower      int
 		measured   bool
 	}{
+		{"plain_object_whitespace", "data: " + `{"type":"response.output_json.delta","output_index":0,"delta":` + whitespace + `}` + "\n\n", openai_compatible.CountTokenText(whitespace, "gpt-4"), false},
 		{"plain_object_delta", "data: " + `{"type":"response.output_json.delta","output_index":0,"delta":` + payload + `}` + "\n\n", openai_compatible.CountTokenText(payload, "gpt-4"), false},
 		{"part_application_text", "data: " + `{"type":"response.output_json.done","output_index":0,"part":{"type":"output_json","json":` + app + `}}` + "\n\n", openai_compatible.CountTokenText(app, "gpt-4"), false},
 		{"distinct_items", "data: " + `{"type":"response.output_json.delta","item_id":"a","output_index":0,"delta":{"partial_json":` + jsonReviewQuote(payload) + `}}` + "\n\n" + "data: " + `{"type":"response.output_json.done","item_id":"b","output_index":1,"json":` + other + `}` + "\n\n", openai_compatible.CountTokenText(payload+other, "gpt-4"), false},

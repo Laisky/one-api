@@ -18,10 +18,13 @@ func TestSecurityClaudeJSONReviewBoundaryConverter(t *testing.T) {
 	app := `{"text":"x","answer":"` + text + `"}`
 	q, err := json.Marshal(payload)
 	require.NoError(t, err)
+	whitespace := `{"answer":` + strings.Repeat(" ", 2000) + `"synthetic"}`
 	cases := []struct {
 		name, wire, expected string
 		exact                bool
 	}{
+		{"plain_object_whitespace", "data: " + `{"type":"response.output_json.delta","output_index":0,"delta":` + whitespace + `}` + "\n\n", whitespace, false},
+		{"late_identity_alias", "data: " + `{"type":"response.output_json.delta","item_id":"a","delta":"{\"a\":"}` + "\n\n" + "data: " + `{"type":"response.output_json.delta","output_index":0,"delta":"1}"}` + "\n\n" + "data: " + `{"type":"response.output_json.done","item_id":"a","output_index":0,"json":{"a":1}}` + "\n\n", `{"a":1}`, true},
 		{"plain_object_delta", "data: " + `{"type":"response.output_json.delta","output_index":0,"delta":` + payload + `}` + "\n\n", payload, false},
 		{"part_application_text", "data: " + `{"type":"response.output_json.done","output_index":0,"part":{"type":"output_json","json":` + app + `}}` + "\n\n", app, false},
 		{"distinct_items", "data: " + `{"type":"response.output_json.delta","item_id":"a","output_index":0,"delta":"{\"a\":1}"}` + "\n\n" + "data: " + `{"type":"response.output_json.done","item_id":"b","output_index":1,"json":{"b":2}}` + "\n\n", `{"a":1}{"b":2}`, false},
