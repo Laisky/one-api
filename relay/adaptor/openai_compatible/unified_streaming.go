@@ -1001,6 +1001,11 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 	for {
 		line, err := lineReader.Next()
 		if err != nil {
+			// Closing a canceled body may surface as EOF. Preserve the caller's
+			// stop condition and observed receipt instead of synthesizing success.
+			if canceled := gmw.Ctx(c).Err(); canceled != nil {
+				err = canceled
+			}
 			if errors.Is(err, io.EOF) {
 				break
 			}
