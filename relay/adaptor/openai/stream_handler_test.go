@@ -301,11 +301,14 @@ func TestStreamHandler_ScannerError(t *testing.T) {
 
 	errResp, responseText, _ := StreamHandler(c, resp, relaymode.ChatCompletions)
 
-	// StreamHandler does not return the scanner error as an ErrorWithStatusCode;
-	// it just logs and continues.
-	require.Nil(t, errResp)
-	assert.Equal(t, "before_error", responseText)
+	// StreamHandler preserves the read failure and already delivered content.
+	require.NotNil(t, errResp)
+	require.Equal(t, http.StatusInternalServerError, errResp.StatusCode)
+	require.Equal(t, "read_stream_failed", errResp.Error.Code)
+	require.Contains(t, errResp.Error.Message, "simulated read error")
+	require.Equal(t, "before_error", responseText)
 
 	body := w.Body.String()
-	assert.Contains(t, body, `"content":"before_error"`)
+	require.Contains(t, body, `"content":"before_error"`)
+	require.NotContains(t, body, "[DONE]")
 }
