@@ -58,6 +58,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 	}
 
 	receiptComplete := false
+	upstreamDone := false
 	tracker := streaming.FromContext(c)
 	if tracker != nil {
 		streaming.ClaimProtocolObservation(c)
@@ -83,7 +84,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 		if err != nil {
 			// Closing a canceled body may surface as EOF. Preserve the caller's
 			// stop condition and observed receipt instead of synthesizing success.
-			if canceled := gmw.Ctx(c).Err(); canceled != nil {
+			if canceled := gmw.Ctx(c).Err(); canceled != nil && !upstreamDone && errors.Is(err, io.EOF) {
 				err = canceled
 			}
 			if errors.Is(err, io.EOF) {
@@ -175,6 +176,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 		}
 
 		if strings.HasPrefix(data[DataPrefixLength:], Done) {
+			upstreamDone = true
 			if streamRewriter != nil {
 				handled, doneRendered := streamRewriter.HandleUpstreamDone(c)
 				if handled {

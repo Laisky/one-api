@@ -43,11 +43,12 @@ func awsSecurityFrame(t *testing.T, event string, payload any) []byte {
 // the actual AWS SDK client, controller admission or settlement machinery.
 type awsSecurityWriter struct {
 	gin.ResponseWriter
-	notify     chan bool
-	cancel     context.CancelFunc
-	once       sync.Once
-	mode       string
-	idleNotify chan struct{}
+	notify         chan bool
+	cancel         context.CancelFunc
+	once           sync.Once
+	mode           string
+	idleNotify     chan struct{}
+	idleFlushCount int
 }
 
 // CloseNotify is the explicit Gin streaming lifecycle boundary.
@@ -58,7 +59,10 @@ func (w *awsSecurityWriter) CloseNotify() <-chan bool { return w.notify }
 func (w *awsSecurityWriter) Flush() {
 	w.ResponseWriter.Flush()
 	if w.mode == "cancel_while_idle" {
-		w.once.Do(func() { close(w.idleNotify) })
+		w.idleFlushCount++
+		if w.idleFlushCount == 2 {
+			w.once.Do(func() { close(w.idleNotify) })
+		}
 	}
 }
 

@@ -44,7 +44,7 @@ func (a *Adaptor) Init(meta *meta.Meta) {
 		return
 	}
 	a.Config = defaultConfig
-	a.AwsClient = bedrockruntime.NewFromConfig(defaultConfig)
+	a.AwsClient = bedrockruntime.NewFromConfig(defaultConfig, utils.PreserveRequestBodyEOF)
 }
 
 // DefaultToolingConfig returns Bedrock AgentCore tooling defaults (search, tool invocation, identity, memory fees).
@@ -94,7 +94,7 @@ func (a *Adaptor) GetModelList() (models []string) {
 	return
 }
 
-func (a *Adaptor) GetChannelName() string                      { return "aws" }
+func (a *Adaptor) GetChannelName() string                        { return "aws" }
 func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) { return "", nil }
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	return nil
