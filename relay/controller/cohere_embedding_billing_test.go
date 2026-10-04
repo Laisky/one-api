@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
 )
@@ -66,6 +67,11 @@ func TestProtocolAuditCohereLedger(t *testing.T) {
 			}
 			apiErr := RelayTextHelper(c)
 			drainCriticalTasks(t)
+			if tc.status >= 500 {
+				tc.quota = c.GetInt64(ctxkey.PreConsumedQuotaAmount)
+				require.Positive(t, tc.quota, "server failure retains an uncertain paid hold")
+				require.False(t, BillingAllowsRetry(c), "do not replay possibly purchased work")
+			}
 			require.Equal(t, balance-tc.quota, reloadUserQuota(t))
 			require.Equal(t, tc.quota, requestCostQuota(t, id))
 			var token model.Token

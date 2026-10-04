@@ -246,6 +246,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			if usage == nil || usage.TotalTokens == 0 {
 				usage = openai.ResponseText2Usage(responseText, meta.ActualModelName, meta.PromptTokens)
 			}
+			openai.AnnotateResponseStreamUsage(c, usage)
 		} else {
 			respErr, usage = openai.ResponseAPIDirectHandler(c, resp, meta.PromptTokens, meta.ActualModelName)
 		}

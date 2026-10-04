@@ -149,7 +149,7 @@ func RelayVoiceCloneHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 
-	_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile")
+	// Successful dispatch retains its hold for the single final delta settlement below.
 	markBillingReconciled(c)
 
 	runPostBillingWithTimeout(detachForBilling(c), "postBillingVoiceClone", lg, postBillingTimeoutInfo{
@@ -188,39 +188,9 @@ func getAndValidateVoiceCloneRequest(c *gin.Context) (*relaymodel.VoiceCloneRequ
 }
 
 // preConsumeVoiceCloneQuota reserves quota for a per-call voice-clone request,
-// skipping pre-consumption for trusted users with ample balance.
+// including high-balance users and unlimited tokens.
 func preConsumeVoiceCloneQuota(c *gin.Context, perCallQuota int64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
-	ctx := gmw.Ctx(c)
-	lg := gmw.GetLogger(c)
-
-	if perCallQuota < 0 {
-		perCallQuota = 0
-	}
-	if perCallQuota == 0 {
-		return 0, nil
-	}
-
-	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
-	tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
-	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
-	if err != nil {
-		return perCallQuota, openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
-	}
-	if userQuota-perCallQuota < 0 {
-		return perCallQuota, openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
-	}
-
-	if userQuota > 100*perCallQuota && (tokenQuotaUnlimited || tokenQuota > 100*perCallQuota) {
-		lg.Info("user has enough quota, trusted and no need to pre-consume", zap.Int64("user_quota", userQuota))
-		return 0, nil
-	}
-
-	if err := model.PreConsumeTokenQuota(ctx, meta.TokenId, perCallQuota); err != nil {
-		return perCallQuota, openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
-	}
-	syncUserQuotaCacheAfterPreConsume(ctx, meta.UserId, perCallQuota, "voice_clone_preconsume")
-
-	return perCallQuota, nil
+	return reservePaidRequestQuota(c, meta, max(int64(0), perCallQuota), "voice_clone_preconsume")
 }
 
 // postConsumeVoiceCloneQuota settles the per-call charge after the upstream
