@@ -8,7 +8,6 @@
       "created_at": 1730000000111,
       "created_time": 1720000001,
       "expired_time": 1990000003,
-      "key": "sk-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "models": "gpt-4o",
       "name": "behaviordiff-other-token",
       "remain_quota": 960006,
