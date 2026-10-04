@@ -144,8 +144,8 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	if request.FrequencyPenalty != nil {
 		replicateRequest.Input.FrequencyPenalty = *request.FrequencyPenalty
 	}
-	if request.MaxTokens > 0 {
-		replicateRequest.Input.MaxTokens = request.MaxTokens
+	if request.MaxCompletionTokens != nil && *request.MaxCompletionTokens > 0 {
+		replicateRequest.Input.MaxTokens = *request.MaxCompletionTokens
 	} else if request.MaxTokens == 0 {
 		replicateRequest.Input.MaxTokens = config.DefaultMaxToken
 	}

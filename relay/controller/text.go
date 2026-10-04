@@ -134,7 +134,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 	promptTokens := promptUsage.PromptTokens
 	meta.PromptTokens = promptTokens
-	preConsumedQuota, bizErr := preConsumeQuota(c, textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
+	preConsumedQuota, bizErr := preConsumeQuota(c, preparedChatQuotaRequest(c, textRequest), promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 	if bizErr != nil {
 		lg.Warn("preConsumeQuota failed",
 			zap.Error(bizErr.RawError),
