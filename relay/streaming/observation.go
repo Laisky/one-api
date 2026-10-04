@@ -43,10 +43,10 @@ func (t *QuotaTracker) UsageSnapshot() *relaymodel.Usage {
 }
 
 // ObserveMessages funds a complete parsed frame before delivery. A same-frame
-// cumulative receipt is authoritative; otherwise count every raw text/reasoning/
+// complete measured receipt is authoritative; otherwise count raw text/reasoning/
 // tool dimension once with the controller-selected tokenizer, not a byte average.
 func (t *QuotaTracker) ObserveMessages(messages []relaymodel.Message, usage *relaymodel.Usage, counters ...func(string, string) int) error {
-	if usage != nil {
+	if usage != nil && usage.BillingEstimateReason == "" {
 		t.UpdateFinalUsage(usage)
 		return t.maybeFlush(true)
 	}
@@ -85,5 +85,14 @@ func (t *QuotaTracker) ObserveMessages(messages []relaymodel.Message, usage *rel
 			}
 		}
 	}
-	return t.RecordCompletionTokens(delta)
+	// Partial receipts cannot suppress output in their own frame. Retain both
+	// observations even when enforcement fails, for final controller settlement.
+	recordErr := t.RecordCompletionTokens(delta)
+	if usage != nil {
+		t.UpdateFinalUsage(usage)
+		if recordErr == nil {
+			return t.maybeFlush(true)
+		}
+	}
+	return recordErr
 }
