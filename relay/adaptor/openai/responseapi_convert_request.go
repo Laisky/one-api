@@ -2,7 +2,6 @@ package openai
 
 import (
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -15,6 +14,9 @@ import (
 func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*model.GeneralOpenAIRequest, error) {
 	if request == nil {
 		return nil, errors.New("response api request is nil")
+	}
+	if err := ValidateResponseAPIFallbackInput(request.Input); err != nil {
+		return nil, errors.Wrap(err, "validate response fallback input")
 	}
 
 	if request.Prompt != nil {
@@ -109,6 +111,8 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 	// that ends the turn (a user/system message, a tool output) leaves it at -1 and the
 	// next function_call starts a fresh assistant message.
 	openToolCallMsgIdx := -1
+	var toolCallIDs responseToolCallIDAllocator
+	toolCallIDsMessageIdx := -1
 	// pendingToolCallIDs holds the normalized tool-call IDs from the current assistant
 	// tool-call turn that are still eligible to be answered by an adjacent tool message. It
 	// is populated by function_call items and cleared by anything that breaks the
@@ -203,8 +207,17 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					// the matching outputs.
 					emittedID := normalizedID
 					if currentToolCallMsgIdx >= 0 && chatReq.Messages[currentToolCallMsgIdx].Role == role {
-						emittedID = uniqueToolCallIDWithin(
-							chatReq.Messages[currentToolCallMsgIdx].ToolCalls, normalizedID)
+						if toolCallIDsMessageIdx != currentToolCallMsgIdx {
+							toolCallIDs = responseToolCallIDAllocator{}
+							for _, existing := range chatReq.Messages[currentToolCallMsgIdx].ToolCalls {
+								toolCallIDs.reserve(existing.Id)
+							}
+							toolCallIDsMessageIdx = currentToolCallMsgIdx
+						}
+						emittedID = toolCallIDs.allocate(normalizedID)
+					} else {
+						toolCallIDs = responseToolCallIDAllocator{}
+						emittedID = toolCallIDs.allocate(normalizedID)
 					}
 
 					toolCall := model.Tool{
@@ -255,6 +268,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					pendingReasoning = ""
 					chatReq.Messages = append(chatReq.Messages, assistantMessage)
 					openToolCallMsgIdx = len(chatReq.Messages) - 1
+					toolCallIDsMessageIdx = openToolCallMsgIdx
 					continue
 				case "function_call_output":
 					fcID, _ := v["id"].(string)
@@ -355,26 +369,15 @@ func appendReasoningContent(message *model.Message, reasoning string) {
 	message.ReasoningContent = &combined
 }
 
-// uniqueToolCallIDWithin returns an ID that no tool call in existing already uses.
-// Parameters: existing is the assistant message's current tool_calls; id is the
-// caller's preferred ID. Returns: id when it is still free, otherwise a suffixed
-// variant, because upstreams reject repeated IDs inside one tool_calls array.
+// uniqueToolCallIDWithin is a compatibility helper for a materialized message.
+// The converter itself retains a responseToolCallIDAllocator for the entire
+// assistant turn, avoiding this helper's one-time scan for every appended call.
 func uniqueToolCallIDWithin(existing []model.Tool, id string) string {
-	if !toolCallIDTaken(existing, id) {
-		return id
+	var allocator responseToolCallIDAllocator
+	for _, call := range existing {
+		allocator.reserve(call.Id)
 	}
-
-	base := id
-	if base == "" {
-		base = "tool_call"
-	}
-	// existing is finite, so a free candidate is always reached.
-	for suffix := 2; ; suffix++ {
-		candidate := base + "_" + strconv.Itoa(suffix)
-		if !toolCallIDTaken(existing, candidate) {
-			return candidate
-		}
-	}
+	return allocator.allocate(id)
 }
 
 // toolCallIDTaken reports whether any call in existing already carries id.
