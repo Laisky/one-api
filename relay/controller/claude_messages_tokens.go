@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -109,6 +108,10 @@ func countClaudeFileImageTokensFromBlocks(blocks []any) int {
 			continue
 		}
 		blockType, _ := blockMap["type"].(string)
+		if blockType == "tool_result" {
+			total += countClaudeFileImageTokensFromContent(blockMap["content"])
+			continue
+		}
 		if blockType != "image" {
 			continue
 		}
@@ -211,54 +214,8 @@ func convertClaudeToOpenAIForTokenCounting(request *ClaudeMessagesRequest) *rela
 			// Simple string content
 			openaiMessage.Content = content
 		case []any:
-			// Structured content blocks - convert to OpenAI format
-			var contentParts []relaymodel.MessageContent
-			for _, block := range content {
-				if blockMap, ok := block.(map[string]any); ok {
-					if blockType, exists := blockMap["type"]; exists {
-						switch blockType {
-						case "text":
-							if text, exists := blockMap["text"]; exists {
-								if textStr, ok := text.(string); ok {
-									contentParts = append(contentParts, relaymodel.MessageContent{
-										Type: "text",
-										Text: &textStr,
-									})
-								}
-							}
-						case "image":
-							if source, exists := blockMap["source"]; exists {
-								if sourceMap, ok := source.(map[string]any); ok {
-									imageURL := relaymodel.ImageURL{}
-									if mediaType, exists := sourceMap["media_type"]; exists {
-										if data, exists := sourceMap["data"]; exists {
-											if dataStr, ok := data.(string); ok {
-												// Convert to data URL format for token counting
-												imageURL.Url = fmt.Sprintf("data:%s;base64,%s", mediaType, dataStr)
-											}
-										}
-									} else if url, exists := sourceMap["url"]; exists {
-										if urlStr, ok := url.(string); ok {
-											imageURL.Url = urlStr
-										}
-									}
-									if detail, ok := sourceMap["detail"].(string); ok {
-										imageURL.Detail = detail
-									}
-									if imageURL.Url != "" {
-										contentParts = append(contentParts, relaymodel.MessageContent{
-											Type:     "image_url",
-											ImageURL: &imageURL,
-										})
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			if len(contentParts) > 0 {
-				openaiMessage.Content = contentParts
+			if parts := claudeContentTokenParts(content); len(parts) > 0 {
+				openaiMessage.Content = parts
 			}
 		default:
 			// Fallback: convert to string
