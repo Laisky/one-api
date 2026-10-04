@@ -85,15 +85,15 @@ func (a *ResponseUsageAccumulator) consumeOutput(root map[string]json.RawMessage
 		}
 		a.observeJSONText(root, text, false)
 	case "response.output_json.done":
-		text := responseUsageRawJSON(root["json"])
-		if text == "" {
-			for _, key := range []string{"part", "output", "text", "delta"} {
-				if text = responseUsageJSONPayload(root[key]); text != "" {
-					break
-				}
-			}
+		var part struct {
+			JSON json.RawMessage `json:"json"`
+			Text string          `json:"text"`
 		}
-		a.observeJSONText(root, text, true)
+		if err := json.Unmarshal(root["part"], &part); err != nil {
+			part.JSON, part.Text = nil, ""
+		}
+		fields := ResponseOutputJSONDoneFields{JSON: root["json"], PartJSON: part.JSON, PartText: part.Text, Output: root["output"], Text: responseUsageString(root["text"]), Delta: root["delta"]}
+		a.observeJSONText(root, string(ExtractResponseOutputJSONDone(fields)), true)
 	case "response.output_text.delta", "response.function_call_arguments.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.delta":
 		a.appendText(responseUsageString(root["delta"]), false)
 	}
@@ -187,23 +187,4 @@ func responseUsageJSONText(raw json.RawMessage) string {
 		return ""
 	}
 	return string(encoded)
-}
-
-// responseUsageJSONPayload extracts JSON from the structured wrappers accepted
-// by Responses JSON completion events, falling back to the entire JSON value.
-func responseUsageJSONPayload(raw json.RawMessage) string {
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(raw, &fields) == nil {
-		if rawJSON, ok := fields["json"]; ok {
-			return responseUsageRawJSON(rawJSON)
-		}
-		for _, key := range []string{"text", "content", "partial_json"} {
-			if nested, ok := fields[key]; ok {
-				if text := responseUsageJSONText(nested); text != "" {
-					return text
-				}
-			}
-		}
-	}
-	return responseUsageJSONText(raw)
 }
