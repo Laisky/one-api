@@ -65,17 +65,14 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	return meta.BaseURL + strings.TrimPrefix(meta.RequestURLPath, prefix), nil
 }
 
-// SetupRequestHeader clones caller headers and overrides upstream credentials.
+// SetupRequestHeader copies only forwardable caller headers before installing
+// the selected channel credential. Administrator custom headers are applied by
+// DoRequestHelper after this function returns.
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
-	for k, v := range c.Request.Header {
-		if len(v) > 0 {
-			req.Header.Set(k, v[0])
-		}
+	req.Header = adaptor.ForwardableRequestHeaders(req.Header)
+	for name, values := range adaptor.ForwardableRequestHeaders(c.Request.Header) {
+		req.Header[name] = values
 	}
-	req.Header.Del("Host")
-	req.Header.Del("Content-Length")
-	req.Header.Del("Accept-Encoding")
-	req.Header.Del("Connection")
 	req.Header.Set("Authorization", meta.APIKey)
 	return nil
 }
