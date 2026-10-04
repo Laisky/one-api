@@ -1005,6 +1005,9 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 				break
 			}
 
+			if tracker != nil {
+				return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), tracker.UsageSnapshot()
+			}
 			return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), streamCtx.usage
 		}
 
@@ -1177,6 +1180,9 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 
 	// Validate stream completion
 	if errResp, ok := streamCtx.ValidateStreamCompletion(modelName, contentType); !ok {
+		if tracker != nil {
+			return errResp, tracker.UsageSnapshot()
+		}
 		return errResp, streamCtx.usage
 	}
 
