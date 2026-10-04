@@ -395,11 +395,6 @@ streamLoop:
 		)
 	}
 
-	// Check for stream reader errors.
-	if streamErr != nil && trackerErr == nil {
-		render.LogHeartbeatLineReaderError(c, lg, streamErr, hbr)
-	}
-
 	// Use the owned receipt after later output before rewriting or final settlement.
 	// Nil receipts retain the existing adaptor fallback policy.
 	if tracker != nil && usage != nil {
@@ -414,7 +409,11 @@ streamLoop:
 
 	// Let the streamRewriter finalize if present, but do NOT fabricate a
 	// [DONE] when the upstream didn't send one — be an honest proxy.
-	if streamRewriter != nil {
+	var readFailure *model.ErrorWithStatusCode
+	if streamErr != nil && trackerErr == nil {
+		readFailure = ErrorWrapper(streamErr, "read_stream_failed", http.StatusInternalServerError)
+		openai_compatible.FailStreamWithBridge(c, readFailure, usage)
+	} else if streamRewriter != nil {
 		streamRewriter.FinalizeUsage(usage)
 		handled, handledDone := streamRewriter.HandleDone(c)
 		if handled {
@@ -439,6 +438,10 @@ streamLoop:
 			return ErrorWrapper(trackerErr, "insufficient_user_quota", http.StatusForbidden), combined, usage
 		}
 		return ErrorWrapper(trackerErr, "streaming_billing_failed", http.StatusInternalServerError), combined, usage
+	}
+
+	if readFailure != nil {
+		return readFailure, combined, usage
 	}
 
 	// Record when upstream streaming is completed

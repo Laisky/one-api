@@ -288,7 +288,11 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 	} else {
 		finalUsage = streamCtx.CalculateUsage(promptTokens, modelName)
 	}
-	if tracker != nil && missingUsage {
+	// A complete receipt may predate later output. Use the owned chronology
+	// for terminal rendering, matching the usage preserved for settlement.
+	if tracker != nil && streamCtx.usage != nil {
+		finalUsage = tracker.UsageSnapshot()
+	} else if tracker != nil && missingUsage {
 		finalUsage.BillingEstimateReason = "stream_usage_missing_counters"
 	}
 
