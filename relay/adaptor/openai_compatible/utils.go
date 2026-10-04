@@ -287,6 +287,10 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 			"no_choices_in_response", http.StatusInternalServerError), nil
 	}
 
+	fallbackCompletion := 0
+	if textResponse.Usage.CompletionTokens == 0 {
+		fallbackCompletion = estimateOriginalCompletionTokens(textResponse.Choices, modelName)
+	}
 	reasoningFormat := c.Query("reasoning_format")
 	for i := range textResponse.Choices {
 		normalizeReasoningChoice(&textResponse.Choices[i], reasoningFormat)
@@ -315,31 +319,10 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 		usage.PromptTokens = promptTokens
 	}
 	if usage.CompletionTokens == 0 {
-		// Calculate completion tokens from response text and tool call arguments
-		responseText := ""
-		toolArgsText := ""
-		for _, choice := range textResponse.Choices {
-			responseText += choice.Message.StringContent()
-			if len(choice.Message.ToolCalls) > 0 {
-				for _, tc := range choice.Message.ToolCalls {
-					if tc.Function != nil && tc.Function.Arguments != nil {
-						switch v := tc.Function.Arguments.(type) {
-						case string:
-							toolArgsText += v
-						default:
-							if b, e := json.Marshal(v); e == nil {
-								toolArgsText += string(b)
-							}
-						}
-					}
-				}
-			}
-		}
-		logger.Warn("no completion tokens provided by upstream, computing using CountTokenText fallback",
-			zap.String("model", modelName),
-			zap.Int("response_text_len", len(responseText)),
-			zap.Int("tool_args_len", len(toolArgsText)))
-		usage.CompletionTokens = CountTokenText(responseText, modelName) + CountTokenText(toolArgsText, modelName)
+		usage.CompletionTokens = max(fallbackCompletion, usage.TotalTokens-usage.PromptTokens)
+		usage.BillingEstimateReason = "response_usage_missing_completion"
+		logger.Warn("estimating completion from original billable response",
+			zap.String("model", modelName), zap.Int("completion_tokens", usage.CompletionTokens))
 	}
 	if usage.TotalTokens == 0 {
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
@@ -513,6 +496,10 @@ func HandlerWithThinking(c *gin.Context, resp *http.Response, promptTokens int, 
 			"no_choices_in_response", http.StatusInternalServerError), nil
 	}
 
+	fallbackCompletion := 0
+	if textResponse.Usage.CompletionTokens == 0 {
+		fallbackCompletion = estimateOriginalCompletionTokens(textResponse.Choices, modelName)
+	}
 	// Process response choices to extract thinking content
 	for i, choice := range textResponse.Choices {
 		messageContent := choice.Message.StringContent()
@@ -539,31 +526,10 @@ func HandlerWithThinking(c *gin.Context, resp *http.Response, promptTokens int, 
 		usage.PromptTokens = promptTokens
 	}
 	if usage.CompletionTokens == 0 {
-		// Calculate completion tokens from response text and tool call arguments
-		responseText := ""
-		toolArgsText := ""
-		for _, choice := range textResponse.Choices {
-			responseText += choice.Message.StringContent()
-			if len(choice.Message.ToolCalls) > 0 {
-				for _, tc := range choice.Message.ToolCalls {
-					if tc.Function != nil && tc.Function.Arguments != nil {
-						switch v := tc.Function.Arguments.(type) {
-						case string:
-							toolArgsText += v
-						default:
-							if b, e := json.Marshal(v); e == nil {
-								toolArgsText += string(b)
-							}
-						}
-					}
-				}
-			}
-		}
-		logger.Warn("no completion tokens provided by upstream in thinking handler, computing using CountTokenText fallback",
-			zap.String("model", modelName),
-			zap.Int("response_text_len", len(responseText)),
-			zap.Int("tool_args_len", len(toolArgsText)))
-		usage.CompletionTokens = CountTokenText(responseText, modelName) + CountTokenText(toolArgsText, modelName)
+		usage.CompletionTokens = max(fallbackCompletion, usage.TotalTokens-usage.PromptTokens)
+		usage.BillingEstimateReason = "response_usage_missing_completion"
+		logger.Warn("estimating completion from original billable response",
+			zap.String("model", modelName), zap.Int("completion_tokens", usage.CompletionTokens))
 	}
 	if usage.TotalTokens == 0 {
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
