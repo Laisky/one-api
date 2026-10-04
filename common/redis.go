@@ -90,7 +90,8 @@ func RedisSet(ctx context.Context, key string, value string, expiration time.Dur
 	}
 	err := RDB.Set(ctx, key, value, expiration).Err()
 	if err != nil {
-		return errors.Wrapf(err, "failed to set redis key: %s", key)
+		// Cache keys can contain credentials; callers may log this error.
+		return errors.Wrap(err, "failed to set redis key")
 	}
 	return nil
 }
