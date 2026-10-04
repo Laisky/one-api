@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/Laisky/errors/v2"
+
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -51,8 +53,12 @@ func APIFormatAutoDetect(engine *gin.Engine) gin.HandlerFunc {
 		// Read the request body for format detection
 		bodyBytes, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			lg.Warn("failed to read request body for format detection", zap.Error(err))
-			c.Next()
+			var limitError *http.MaxBytesError
+			if errors.As(err, &limitError) || errors.Is(err, ErrRequestBodyTooLarge) {
+				AbortWithError(c, http.StatusRequestEntityTooLarge, errors.New("request body exceeds the configured size limit"))
+				return
+			}
+			AbortWithError(c, http.StatusBadRequest, errors.Wrap(err, "read request body for format detection"))
 			return
 		}
 
@@ -137,7 +143,13 @@ func handleTransparent(c *gin.Context, engine *gin.Engine, actualFormat format.A
 	c.Request.URL.Path = targetPath
 
 	// Ensure body is available for the new handler
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	c.Request.ContentLength = int64(len(bodyBytes))
+	c.Request.Header.Del("Content-Length")
+	c.Request.TransferEncoding = nil
+	c.Request.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+	}
 
 	lg.Info("transparently routing mismatched API format",
 		zap.String("original_path", originalPath),

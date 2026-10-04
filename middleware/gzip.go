@@ -22,6 +22,11 @@ func GzipDecodeMiddleware() gin.HandlerFunc {
 			// zeros expands to ~1 GB, and downstream readers (common.GetRequestBody,
 			// the JSON decoders) read the body fully into memory.
 			c.Request.Body = newBoundedBody(io.NopCloser(gzipReader))
+			// The body now represents decoded bytes, including during transparent redispatch.
+			c.Request.Header.Del("Content-Encoding")
+			c.Request.Header.Del("Content-Length")
+			c.Request.ContentLength = -1
+			c.Request.GetBody = nil
 		}
 
 		// Continue processing the request
