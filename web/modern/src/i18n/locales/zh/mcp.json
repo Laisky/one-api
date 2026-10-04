@@ -41,8 +41,8 @@
         "tool_pricing_placeholder": "{\n  \"web_search\": { \"usd_per_call\": 0.002 },\n  \"code_interpreter\": { \"quota_per_call\": 1000 }\n}",
         "tool_search": "搜索工具...",
         "tool_whitelist": "工具白名单",
-        "tool_whitelist_empty": "未选择任何工具",
-        "tool_whitelist_help": "只有在这里列出的工具会被启用。",
+        "tool_whitelist_empty": "允许所有未被其他策略禁止的工具",
+        "tool_whitelist_help": "留空表示允许所有未被其他策略禁止的已同步工具，包括后续同步新增的工具。非空白名单只允许列出的工具；黑名单始终优先。",
         "tool_whitelist_none": "暂无同步工具",
         "tool_whitelist_placeholder": "工具名称",
         "tool_whitelist_selected": "已选工具 ({{count}})"

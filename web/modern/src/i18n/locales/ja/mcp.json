@@ -41,8 +41,8 @@
         "tool_pricing_placeholder": "{\n  \"web_search\": { \"usd_per_call\": 0.002 },\n  \"code_interpreter\": { \"quota_per_call\": 1000 }\n}",
         "tool_search": "ツールを検索...",
         "tool_whitelist": "ツールのホワイトリスト",
-        "tool_whitelist_empty": "ツールが選択されていません",
-        "tool_whitelist_help": "ここにリストされたツールのみが有効になります。",
+        "tool_whitelist_empty": "他のポリシーで許可されたすべてのツール",
+        "tool_whitelist_help": "空欄の場合、他のポリシーで許可された同期済みツールをすべて許可し、今後の同期で追加されるツールも含みます。空でないホワイトリストは記載したツールのみを許可します。ブラックリストが常に優先されます。",
         "tool_whitelist_none": "同期されたツールはありません",
         "tool_whitelist_placeholder": "ツール名",
         "tool_whitelist_selected": "選択されたツール ({{count}})"

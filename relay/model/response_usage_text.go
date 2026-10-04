@@ -75,8 +75,22 @@ func (a *ResponseUsageAccumulator) consumeOutput(root map[string]json.RawMessage
 // consumeChatContent reads OpenAI message/delta content, refusal, reasoning,
 // legacy function calls, and modern tool calls into the selected text buffer.
 func (a *ResponseUsageAccumulator) consumeChatContent(message map[string]json.RawMessage, snapshot bool) {
-	for _, key := range []string{"content", "reasoning_content", "reasoning", "refusal"} {
+	for _, key := range []string{"content", "refusal"} {
 		if text := responseUsageString(message[key]); text != "" {
+			a.appendText(text, snapshot)
+		} else {
+			a.consumeBlocks(message[key], snapshot)
+		}
+	}
+	// These are wire aliases for reasoning. Count identical aliases once,
+	// while retaining distinct pieces rather than selecting only one field.
+	seen := map[string]struct{}{}
+	for _, key := range []string{"reasoning_content", "reasoning", "thinking"} {
+		if text := responseUsageString(message[key]); text != "" {
+			if _, exists := seen[text]; exists {
+				continue
+			}
+			seen[text] = struct{}{}
 			a.appendText(text, snapshot)
 		} else {
 			a.consumeBlocks(message[key], snapshot)

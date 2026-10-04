@@ -41,8 +41,8 @@
         "tool_pricing_placeholder": "{\n  \"web_search\": { \"usd_per_call\": 0.002 },\n  \"code_interpreter\": { \"quota_per_call\": 1000 }\n}",
         "tool_search": "Rechercher des outils...",
         "tool_whitelist": "Liste blanche d'outils",
-        "tool_whitelist_empty": "Aucun outil sélectionné",
-        "tool_whitelist_help": "Seuls les outils listés ici seront activés.",
+        "tool_whitelist_empty": "Tous les outils autorisés par les autres règles",
+        "tool_whitelist_help": "Laisser vide autorise tous les outils synchronisés permis par les autres règles, y compris ceux des futures synchronisations. Une liste non vide autorise uniquement les outils indiqués. Les listes de blocage sont toujours prioritaires.",
         "tool_whitelist_none": "Aucun outil synchronisé",
         "tool_whitelist_placeholder": "nom_outil",
         "tool_whitelist_selected": "Outils sélectionnés ({{count}})"

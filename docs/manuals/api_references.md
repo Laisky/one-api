@@ -7630,7 +7630,7 @@ The persisted `MCPServer` object has the following shape (returned by the read/c
 | AuthType | `auth_type` | string | One of `none`, `bearer`, `api_key`, `custom_headers` (lowercased on save). |
 | APIKey | `api_key` | string | Upstream credential; masked as `******` (or `""` when unset) in responses. |
 | Headers | `headers` | object (string→string) | Custom request headers sent upstream; serializes as `{}` when empty. |
-| ToolWhitelist | `tool_whitelist` | array of strings | If non-empty, only these tool names are exposed; serializes as `[]` when empty. |
+| ToolWhitelist | `tool_whitelist` | array of strings | Empty means allow all otherwise-permitted synchronized tools, including future sync additions. A nonempty list restricts to those names. Server/channel/user blacklists still take precedence. |
 | ToolBlacklist | `tool_blacklist` | array of strings | Tool names to exclude; serializes as `[]` when empty. |
 | ToolPricing | `tool_pricing` | object (string→pricing) | Per-tool price overrides; serializes as `{}` when empty. Each value is `{"usd_per_call": <float>, "quota_per_call": <int>}`, where each field is omitted when zero. |
 | AutoSyncEnabled | `auto_sync_enabled` | boolean | Whether the server is synced automatically. |
@@ -7787,7 +7787,7 @@ Registers a new MCP server. The payload is normalized and validated (`NormalizeA
 | AuthType | `auth_type` | string | No | `none` | `none`, `bearer`, `api_key`, or `custom_headers`; trimmed and lowercased; empty defaults to `none`. |
 | APIKey | `api_key` | string | No | `""` | Upstream credential; stored encrypted. Sending the literal `******` is ignored (no value applied). |
 | Headers | `headers` | object (string→string) | No | `null` | Custom upstream headers. |
-| ToolWhitelist | `tool_whitelist` | array of strings | No | `null` | Allow-list of tool names. |
+| ToolWhitelist | `tool_whitelist` | array of strings | No | `null` | Empty means allow all otherwise-permitted tools, including future sync additions; nonempty restricts to listed names. Blacklists take precedence. |
 | ToolBlacklist | `tool_blacklist` | array of strings | No | `null` | Deny-list of tool names. |
 | ToolPricing | `tool_pricing` | object (string→`{usd_per_call,quota_per_call}`) | No | `null` | Per-tool price overrides; tool names must be non-empty and `usd_per_call`/`quota_per_call` must be non-negative. |
 | AutoSyncEnabled | `auto_sync_enabled` | boolean | No | `true` | Enable scheduled auto-sync. |
@@ -7882,7 +7882,7 @@ curl -s -X POST "$BASE_URL/api/mcp_servers/" \
 
 ### PUT /api/mcp_servers/:id
 
-Updates an existing MCP server. The handler tracks which JSON keys were physically present in the raw request body, so only those columns are written — including explicit zero/empty values (e.g. sending `"description": ""` or `"tool_whitelist": []` clears that column, which GORM's struct-based update would otherwise skip). Fields omitted from the body are left untouched. Sending `"api_key": "******"` leaves the stored credential unchanged (the masked-secret placeholder is dropped from the provided-fields set). The merged record is re-validated by `NormalizeAndValidate` before saving.
+Updates an existing MCP server. The handler tracks which JSON keys were physically present in the raw request body, so only those columns are written — including explicit zero/empty values (e.g. sending `"description": ""` or `"tool_whitelist": []` clears that column, which GORM's struct-based update would otherwise skip). Clearing `tool_whitelist` intentionally restores allow-all for otherwise-permitted synchronized tools, including future additions; it does not disable all tools. Blacklists remain effective. Fields omitted from the body are left untouched. Sending `"api_key": "******"` leaves the stored credential unchanged (the masked-secret placeholder is dropped from the provided-fields set). The merged record is re-validated by `NormalizeAndValidate` before saving.
 
 **Auth:** Admin access token via `Authorization: $ACCESS_TOKEN` (or admin session cookie). Requires role admin (>=10).
 

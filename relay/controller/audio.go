@@ -188,32 +188,11 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	if err != nil {
 		return openai.ErrorWrapper(err, "invalid_audio_pricing", http.StatusBadRequest)
 	}
-	preConsumedQuota := quota
-
-	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
-	tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
-	userQuota, err := model.CacheGetUserQuota(ctx, userId)
-	if err != nil {
-		return openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
-	}
-
-	// Check if user quota is enough
-	if userQuota-preConsumedQuota < 0 {
-		return openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
-	}
-	if preConsumedQuota < userQuota/100 &&
-		(tokenQuotaUnlimited || preConsumedQuota < tokenQuota/100) {
-		// in this case, we do not pre-consume quota
-		// because the user has enough quota
-		preConsumedQuota = 0
+	preConsumedQuota, reserveErr := reservePaidRequestQuota(c, meta, quota, "audio_preconsume")
+	if reserveErr != nil {
+		return reserveErr
 	}
 	if preConsumedQuota > 0 {
-		err := model.PreConsumeTokenQuota(ctx, tokenId, preConsumedQuota)
-		if err != nil {
-			return openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
-		}
-		syncUserQuotaCacheAfterPreConsume(ctx, userId, preConsumedQuota, "audio_preconsume")
-
 		// Billing audit safety net
 		markPreConsumed(c, preConsumedQuota)
 		defer billingAuditSafetyNet(c)

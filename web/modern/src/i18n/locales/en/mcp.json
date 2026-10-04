@@ -41,8 +41,8 @@
         "tool_pricing_placeholder": "{\n  \"web_search\": { \"usd_per_call\": 0.002 },\n  \"code_interpreter\": { \"quota_per_call\": 1000 }\n}",
         "tool_search": "Search tools...",
         "tool_whitelist": "Tool whitelist",
-        "tool_whitelist_empty": "No tools selected",
-        "tool_whitelist_help": "Only tools listed here will be enabled.",
+        "tool_whitelist_empty": "All otherwise-permitted tools",
+        "tool_whitelist_help": "Leave empty to allow all synchronized tools permitted by other policies, including tools added by future syncs. A nonempty whitelist permits only listed tools. Blacklists always take precedence.",
         "tool_whitelist_none": "No synced tools",
         "tool_whitelist_placeholder": "tool_name",
         "tool_whitelist_selected": "Selected Tools ({{count}})"

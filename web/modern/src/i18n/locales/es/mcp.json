@@ -41,8 +41,8 @@
         "tool_pricing_placeholder": "{\n  \"web_search\": { \"usd_per_call\": 0.002 },\n  \"code_interpreter\": { \"quota_per_call\": 1000 }\n}",
         "tool_search": "Buscar herramientas...",
         "tool_whitelist": "Lista blanca de herramientas",
-        "tool_whitelist_empty": "No se seleccionaron herramientas",
-        "tool_whitelist_help": "Solo se habilitarán las herramientas enumeradas aquí.",
+        "tool_whitelist_empty": "Todas las herramientas permitidas por otras políticas",
+        "tool_whitelist_help": "Vacío permite todas las herramientas sincronizadas autorizadas por otras políticas, incluidas las de futuras sincronizaciones. Una lista no vacía solo permite las herramientas indicadas. Las listas de bloqueo siempre tienen prioridad.",
         "tool_whitelist_none": "No hay herramientas sincronizadas",
         "tool_whitelist_placeholder": "nombre_herramienta",
         "tool_whitelist_selected": "Herramientas seleccionadas ({{count}})"

@@ -41,8 +41,17 @@ type boundedBody struct {
 //   - int: bytes read.
 //   - error: ErrRequestBodyTooLarge once the cap is exhausted, else the underlying error.
 func (b *boundedBody) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
 	if b.remaining <= 0 {
-		return 0, ErrRequestBodyTooLarge
+		// Probe one byte to distinguish an exact-size body from an oversized one.
+		var probe [1]byte
+		n, err := b.reader.Read(probe[:])
+		if n > 0 {
+			return 0, ErrRequestBodyTooLarge
+		}
+		return 0, err
 	}
 	if int64(len(p)) > b.remaining {
 		p = p[:b.remaining]

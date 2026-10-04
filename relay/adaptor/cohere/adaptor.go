@@ -209,7 +209,12 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
-	return adaptor.DoRequestHelper(a, c, meta, requestBody)
+	ClearRejection(c)
+	response, err := adaptor.DoRequestHelper(a, c, meta, requestBody)
+	if err == nil {
+		recordAdmissionRejection(c, response)
+	}
+	return response, err
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
