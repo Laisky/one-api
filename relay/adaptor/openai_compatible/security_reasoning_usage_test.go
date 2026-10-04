@@ -37,10 +37,8 @@ func TestSecurityOriginalReasoningUsage(t *testing.T) {
 			for _, specialized := range []bool{false, true} {
 				for _, measured := range []bool{false, true} {
 					t.Run(fmt.Sprintf("%s/extract=%v/specialized=%v/measured=%v", tc.name, extract, specialized, measured), func(t *testing.T) {
-						expected := 0
-						for _, piece := range tc.pieces {
-							expected += CountTokenText(piece, "gpt-4")
-						}
+						// Use the complete byte count as an independent fallback oracle.
+						expected := len(strings.Join(tc.pieces, "")) / 4
 						upstreamUsage := map[string]any{"prompt_tokens": 10}
 						if measured {
 							upstreamUsage["completion_tokens"] = 7

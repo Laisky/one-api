@@ -183,6 +183,8 @@ func TestHandleClaudeMessagesResponse_NonStream_ConvertedResponse(t *testing.T) 
 	require.NotNil(t, resp)
 }
 
+// TestHandler_NonStream_ComputeUsageFromContent verifies missing usage counts
+// visible text and structured tool arguments together before rounding.
 func TestHandler_NonStream_ComputeUsageFromContent(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -197,10 +199,10 @@ func TestHandler_NonStream_ComputeUsageFromContent(t *testing.T) {
 	require.Nil(t, errResp)
 	require.NotNil(t, usage)
 
-	// Computation with simple estimator: "Hello" (5/4=1) + {"x":1} (7/4=1) = 2; prompt=9; total=11
-	assert.Equal(t, 9, usage.PromptTokens)
-	assert.Equal(t, 2, usage.CompletionTokens)
-	assert.Equal(t, 11, usage.TotalTokens)
+	// Estimate the full 12 bytes: "Hello" (5) + {"x":1} (7) = 3 tokens.
+	require.Equal(t, 9, usage.PromptTokens)
+	require.Equal(t, 3, usage.CompletionTokens)
+	require.Equal(t, 12, usage.TotalTokens)
 }
 
 func TestConvertClaudeRequest_StructuredToolPromoted(t *testing.T) {
