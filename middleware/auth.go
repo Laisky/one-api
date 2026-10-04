@@ -29,6 +29,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common/blacklist"
 	"github.com/Laisky/one-api/common/ctxkey"
@@ -277,10 +278,15 @@ func TokenAuth() func(c *gin.Context) {
 			}
 		}
 
-		// Fetch the full user object once; downstream handlers read from context
-		// instead of making redundant DB/cache lookups.
-		user, err := model.CacheGetUserById(ctx, token.UserId)
+		// Account eligibility is durable authorization, not cacheable presentation
+		// data. Read the shared database once; stale Redis entries and a missing
+		// process-local blacklist must never restore deleted or disabled accounts.
+		user, err := model.GetUserForTokenAuthentication(ctx, token.UserId)
 		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.New("User is not enabled")), tokenInfo)
+				return
+			}
 			AbortWithTokenError(c, http.StatusInternalServerError, errors.Wrap(err, "failed to get user"), tokenInfo)
 			return
 		}
@@ -290,7 +296,7 @@ func TokenAuth() func(c *gin.Context) {
 		identity.Bind(c, identity.Set{User: tokenInfo.User})
 
 		// Verify the token owner (user) is still enabled and not banned
-		if user.Status == model.UserStatusDisabled || ((taskRead || taskReplay) && user.Status != model.UserStatusEnabled) || blacklist.IsUserBanned(user.Id) {
+		if user.Status != model.UserStatusEnabled || blacklist.IsUserBanned(user.Id) {
 			// Disabled or blacklisted owner: an intentional denial, not a fault.
 			AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.New("User has been banned")), tokenInfo)
 			return
