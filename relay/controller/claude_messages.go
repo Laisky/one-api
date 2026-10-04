@@ -525,34 +525,34 @@ handleResponse:
 							zap.Int("cache_write_1h_tokens", usage.CacheWrite1hTokens),
 						)
 					} else {
-						// No usage provided: compute completion tokens from content text
+						// No receipt provided: preserve the prepared admission quote and
+						// mark inferred completion usage so settlement cannot refund uncertain work.
 						accumulated := ""
 						for _, part := range claudeResp.Content {
 							if part.Type == "text" && part.Text != "" {
 								accumulated += part.Text
 							}
 						}
-						promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
 						completion := openai.CountTokenText(accumulated, meta.ActualModelName)
 						usage = &relaymodel.Usage{
-							PromptTokens:     promptTokens,
-							CompletionTokens: completion,
-							TotalTokens:      promptTokens + completion,
+							PromptTokens:          promptTokens,
+							CompletionTokens:      completion,
+							TotalTokens:           promptTokens + completion,
+							BillingEstimateReason: "converted_claude_usage_missing_counters",
 						}
 					}
 				} else {
 					// 2) If not Claude JSON, it may be SSE (OpenAI-compatible). Detect and compute from stream text.
 					ct := resp.Header.Get("Content-Type")
 					if strings.Contains(strings.ToLower(ct), "text/event-stream") || bytes.HasPrefix(body, []byte("data:")) || bytes.Contains(body, []byte("\ndata:")) {
-						promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
 						usage = extractConvertedClaudeSSEUsage(body, promptTokens, meta.ActualModelName)
 					} else {
 						// 3) Fallback: estimate prompt only
-						promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
 						usage = &relaymodel.Usage{
-							PromptTokens:     promptTokens,
-							CompletionTokens: 0,
-							TotalTokens:      promptTokens,
+							PromptTokens:          promptTokens,
+							CompletionTokens:      0,
+							TotalTokens:           promptTokens,
+							BillingEstimateReason: "converted_claude_usage_unknown_payload",
 						}
 					}
 				}
@@ -562,8 +562,7 @@ handleResponse:
 			if meta.IsStream {
 				respErr, usage = anthropic.ClaudeNativeStreamHandler(c, resp)
 			} else {
-				// For non-streaming, we need the prompt tokens count for usage calculation
-				promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
+				// Native fallback also reuses the prepared admission quote for usage estimates.
 				respErr, usage = anthropic.ClaudeNativeHandler(c, resp, promptTokens, meta.ActualModelName)
 			}
 		}
