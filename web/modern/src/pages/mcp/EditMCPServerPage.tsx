@@ -423,7 +423,7 @@ export function EditMCPServerPage() {
 
                 <SelectionListManager
                   label={t('mcp.edit.fields.tool_whitelist', 'Tool whitelist')}
-                  help={t('mcp.edit.fields.tool_whitelist_help', 'Only tools listed here will be enabled.')}
+                  help={t('mcp.edit.fields.tool_whitelist_help', 'Leave empty to allow all synchronized tools permitted by other policies, including tools added by future syncs. A nonempty whitelist permits only listed tools. Blacklists always take precedence.')}
                   options={toolOptions}
                   selected={form.watch('tool_whitelist') ?? []}
                   onChange={(value) => form.setValue('tool_whitelist', value)}
@@ -435,7 +435,7 @@ export function EditMCPServerPage() {
                       count,
                     })
                   }
-                  emptySelectedLabel={t('mcp.edit.fields.tool_whitelist_empty', 'No tools selected')}
+                  emptySelectedLabel={t('mcp.edit.fields.tool_whitelist_empty', 'All otherwise-permitted tools')}
                   noOptionsLabel={t('mcp.edit.fields.tool_whitelist_none', 'No synced tools')}
                 />
 
