@@ -115,7 +115,8 @@ func RedisDel(ctx context.Context, key string) error {
 	}
 	err := RDB.Del(ctx, key).Err()
 	if err != nil {
-		return errors.Wrapf(err, "failed to delete redis key: %s", key)
+		// Cache keys can contain credentials; callers may log this error.
+		return errors.Wrap(err, "failed to delete redis key")
 	}
 	return nil
 }
