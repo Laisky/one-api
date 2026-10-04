@@ -28,6 +28,7 @@ type ResponseUsageAccumulator struct {
 	text, snapshot                      strings.Builder
 	textBytes, snapshotBytes            int
 	jsonParts                           []*responseUsageJSONPart
+	jsonDeltas                          []responseUsageJSONDelta
 	jsonPartKeys                        map[string]*responseUsageJSONPart
 	jsonCaptureBytes, jsonOverflowBytes int
 }

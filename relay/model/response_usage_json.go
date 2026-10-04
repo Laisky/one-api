@@ -4,19 +4,26 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 )
 
 const responseUsageJSONPartLimit = 256
+const responseUsageJSONDeltaLimit = 1024
 
 // responseUsageJSONPart holds bounded streamed and complete evidence for one JSON content item.
 type responseUsageJSONPart struct {
-	delta         strings.Builder
 	deltaBytes    int
 	snapshot      string
 	snapshotBytes int
+}
+
+// responseUsageJSONDelta retains bounded chronological evidence for later item alias reconciliation.
+type responseUsageJSONDelta struct {
+	part *responseUsageJSONPart
+	text string
 }
 
 // jsonUsageKeys returns bounded index and hashed-ID aliases for one JSON content part.
@@ -46,8 +53,14 @@ func (a *ResponseUsageAccumulator) observeJSONText(root map[string]json.RawMessa
 	}
 	key, alias := a.jsonUsageKeys(root)
 	part := a.jsonPartKeys[key]
-	if part == nil && alias != "" {
-		part = a.jsonPartKeys[alias]
+	if alias != "" {
+		if other := a.jsonPartKeys[alias]; other != nil {
+			if part == nil {
+				part = other
+			} else if part != other {
+				part = a.mergeJSONParts(part, other)
+			}
+		}
 	}
 	if part == nil {
 		if len(a.jsonParts) == responseUsageJSONPartLimit {
@@ -80,7 +93,13 @@ func (a *ResponseUsageAccumulator) observeJSONText(root map[string]json.RawMessa
 		return
 	}
 	part.deltaBytes += len(text)
-	part.delta.WriteString(a.captureJSONPrefix(text))
+	if len(a.jsonDeltas) == responseUsageJSONDeltaLimit {
+		a.limited = true
+		return
+	}
+	if prefix := a.captureJSONPrefix(text); prefix != "" {
+		a.jsonDeltas = append(a.jsonDeltas, responseUsageJSONDelta{part: part, text: prefix})
+	}
 }
 
 // captureJSONPrefix retains at most the shared JSON text budget without splitting UTF-8.
@@ -106,19 +125,17 @@ func (a *ResponseUsageAccumulator) completionEvidence() (string, int) {
 	var combined strings.Builder
 	combined.WriteString(text)
 	for _, part := range a.jsonParts {
-		value, count := part.delta.String(), part.deltaBytes
-		if part.snapshotBytes > count {
-			value, count = part.snapshot, part.snapshotBytes
-		}
-		size += count
-		remaining := responseUsageTextLimit - combined.Len()
-		if len(value) > remaining {
-			value = value[:remaining]
-			for len(value) > 0 && !utf8.ValidString(value) {
-				value = value[:len(value)-1]
+		if part.snapshotBytes > part.deltaBytes {
+			size += part.snapshotBytes
+			appendJSONEvidence(&combined, part.snapshot)
+		} else {
+			size += part.deltaBytes
+			for _, delta := range a.jsonDeltas {
+				if delta.part == part {
+					appendJSONEvidence(&combined, delta.text)
+				}
 			}
 		}
-		combined.WriteString(value)
 	}
 	return combined.String(), size + a.jsonOverflowBytes
 }
@@ -145,4 +162,41 @@ func (a *ResponseUsageAccumulator) consumeResponseBlocks(item map[string]json.Ra
 		}
 		a.observeJSONText(fields, text, snapshot)
 	}
+}
+
+// appendJSONEvidence appends one prefix without exceeding the final tokenizer text budget.
+func appendJSONEvidence(builder *strings.Builder, text string) {
+	remaining := responseUsageTextLimit - builder.Len()
+	if len(text) > remaining {
+		text = text[:remaining]
+		for len(text) > 0 && !utf8.ValidString(text) {
+			text = text[:len(text)-1]
+		}
+	}
+	builder.WriteString(text)
+}
+
+// mergeJSONParts reconciles aliases of one item, preserving chronological deltas and counting its snapshot once.
+func (a *ResponseUsageAccumulator) mergeJSONParts(first, second *responseUsageJSONPart) *responseUsageJSONPart {
+	firstIndex, secondIndex := slices.Index(a.jsonParts, first), slices.Index(a.jsonParts, second)
+	if secondIndex < firstIndex {
+		first, second = second, first
+		firstIndex, secondIndex = secondIndex, firstIndex
+	}
+	first.deltaBytes += second.deltaBytes
+	if second.snapshotBytes > first.snapshotBytes {
+		first.snapshot, first.snapshotBytes = second.snapshot, second.snapshotBytes
+	}
+	for key, part := range a.jsonPartKeys {
+		if part == second {
+			a.jsonPartKeys[key] = first
+		}
+	}
+	for index := range a.jsonDeltas {
+		if a.jsonDeltas[index].part == second {
+			a.jsonDeltas[index].part = first
+		}
+	}
+	a.jsonParts = slices.Delete(a.jsonParts, secondIndex, secondIndex+1)
+	return first
 }

@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -79,7 +80,7 @@ func (a *ResponseUsageAccumulator) consumeOutput(root map[string]json.RawMessage
 				}
 			}
 			if text == "" {
-				text = responseUsageJSONText(root["delta"])
+				text = strings.TrimSpace(string(root["delta"]))
 			}
 		}
 		a.observeJSONText(root, text, false)
