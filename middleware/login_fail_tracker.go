@@ -1,30 +1,39 @@
 package middleware
 
 import (
+	"container/list"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
-// loginFailEntry records a failed login attempt timestamp for a username.
+const (
+	loginFailExpiry         = 10 * time.Minute
+	maxLoginFailEntries     = 10000
+	maxLoginIdentifierBytes = 254
+)
+
+// loginFailEntry records a failure timestamp and its position in the eviction queue.
 type loginFailEntry struct {
 	lastFailAt time.Time
+	position   *list.Element
 }
 
-// loginFailTracker tracks usernames that have had recent failed login attempts.
-// After a failed login, the username is recorded. Subsequent login attempts for
-// the same username will require Turnstile verification until the entry expires
-// or the user logs in successfully.
+// loginFailTracker bounds retained identifiers and maintains oldest-failure-first eviction.
 var loginFailTracker = struct {
 	sync.RWMutex
 	entries map[string]*loginFailEntry
-}{
-	entries: make(map[string]*loginFailEntry),
+	order   list.List
+}{entries: make(map[string]*loginFailEntry)}
+
+// ValidLoginIdentifier reports whether an identifier fits the bounded login contract without rewriting it.
+func ValidLoginIdentifier(username string) bool {
+	return len(username) > 0 && len(username) <= maxLoginIdentifierBytes && utf8.ValidString(username) && strings.TrimSpace(username) != ""
 }
 
-const loginFailExpiry = 10 * time.Minute
-
+// init starts the existing periodic expiry cleanup for the bounded tracker.
 func init() {
-	// Background goroutine to prune expired entries every 5 minutes.
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
@@ -34,38 +43,58 @@ func init() {
 	}()
 }
 
+// pruneLoginFailEntries removes expired records and their queue nodes under the tracker lock.
 func pruneLoginFailEntries() {
 	now := time.Now()
 	loginFailTracker.Lock()
 	defer loginFailTracker.Unlock()
 	for username, entry := range loginFailTracker.entries {
 		if now.Sub(entry.lastFailAt) > loginFailExpiry {
+			loginFailTracker.order.Remove(entry.position)
 			delete(loginFailTracker.entries, username)
 		}
 	}
 }
 
-// RecordLoginFailure marks the given username as having a failed login attempt.
+// RecordLoginFailure retains a bounded identifier and evicts the oldest failure in constant time when full.
 func RecordLoginFailure(username string) {
+	if !ValidLoginIdentifier(username) {
+		return
+	}
 	loginFailTracker.Lock()
 	defer loginFailTracker.Unlock()
-	loginFailTracker.entries[username] = &loginFailEntry{lastFailAt: time.Now()}
+	if entry, ok := loginFailTracker.entries[username]; ok {
+		entry.lastFailAt = time.Now()
+		loginFailTracker.order.MoveToBack(entry.position)
+		return
+	}
+	if len(loginFailTracker.entries) >= maxLoginFailEntries {
+		oldest := loginFailTracker.order.Front()
+		delete(loginFailTracker.entries, oldest.Value.(string))
+		loginFailTracker.order.Remove(oldest)
+	}
+	// Clone so a short identifier cannot retain a much larger caller-owned backing string.
+	username = strings.Clone(username)
+	loginFailTracker.entries[username] = &loginFailEntry{lastFailAt: time.Now(), position: loginFailTracker.order.PushBack(username)}
 }
 
-// ClearLoginFailure removes the failed login record for the given username (after successful login).
+// ClearLoginFailure removes both the identifier and its eviction node after a successful login.
 func ClearLoginFailure(username string) {
 	loginFailTracker.Lock()
 	defer loginFailTracker.Unlock()
-	delete(loginFailTracker.entries, username)
+	if entry, ok := loginFailTracker.entries[username]; ok {
+		loginFailTracker.order.Remove(entry.position)
+		delete(loginFailTracker.entries, username)
+	}
 }
 
-// HasLoginFailure returns true if the given username has a recent failed login attempt.
+// HasLoginFailure reports whether a valid identifier has a recent retained failure.
 func HasLoginFailure(username string) bool {
+	if !ValidLoginIdentifier(username) {
+		return false
+	}
 	loginFailTracker.RLock()
 	defer loginFailTracker.RUnlock()
 	entry, ok := loginFailTracker.entries[username]
-	if !ok {
-		return false
-	}
-	return time.Since(entry.lastFailAt) <= loginFailExpiry
+	return ok && time.Since(entry.lastFailAt) <= loginFailExpiry
 }

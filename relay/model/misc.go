@@ -7,6 +7,10 @@ type Usage struct {
 	// BillingEstimateReason is server-only evidence that usage was conservatively
 	// estimated rather than measured. Clients cannot supply it through JSON.
 	BillingEstimateReason string `json:"-"`
+	// BillingEstimateQuotaFloor retains the original quote for accepted but
+	// unmeasured work, independently of whether admission took a physical hold.
+	// This is server-only evidence, never a client-controlled pricing dimension.
+	BillingEstimateQuotaFloor int64 `json:"-"`
 	// Realtime is server-only accounting evidence; clients cannot inject it via JSON.
 	Realtime *realtime.Ledger `json:"-"`
 	// Omitting this field using 'omitempty' is crucial to avoid returning zero values

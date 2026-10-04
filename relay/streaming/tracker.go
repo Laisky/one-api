@@ -32,6 +32,8 @@ type QuotaTrackerParams struct {
 	ChannelModelRatio      map[string]float64
 	GroupRatio             float64
 	PreConsumedQuota       int64
+	QuotedQuota            int64
+	TokenCounter           func(string, string) int
 	ChannelModelConfigs    map[string]model.ModelConfigLocal
 	ChannelCompletionRatio map[string]float64
 	PricingAdaptor         adaptor.Adaptor
@@ -111,7 +113,7 @@ func FromContext(c *gin.Context) *QuotaTracker {
 }
 
 // RecordCompletionTokens registers newly generated completion tokens and
-// performs incremental billing when the flush interval elapses. The delta should
+// atomically funds every additional unreserved observation. The delta should
 // represent text tokens only; prompt tokens are handled via pre-consumption.
 func (t *QuotaTracker) RecordCompletionTokens(delta int) error {
 	if delta <= 0 {
@@ -120,6 +122,13 @@ func (t *QuotaTracker) RecordCompletionTokens(delta int) error {
 
 	t.mu.Lock()
 	t.completionSum += delta
+	// New output after a cumulative receipt is not covered by that receipt.
+	// Preserve its input/cache dimensions but mark the growing output estimated.
+	if t.finalUsage != nil {
+		t.finalUsage.CompletionTokens = t.completionSum
+		t.finalUsage.TotalTokens = t.finalUsage.PromptTokens + t.completionSum
+		t.finalUsage.BillingEstimateReason = "stream_output_after_last_receipt"
+	}
 	err := t.flushLocked(false)
 	t.mu.Unlock()
 	if err != nil {
@@ -135,11 +144,26 @@ func (t *QuotaTracker) UpdateFinalUsage(usage *relaymodel.Usage) {
 		return
 	}
 	t.mu.Lock()
-	t.finalUsage = usage
-	if usage.PromptTokens > 0 {
-		t.params.PromptTokens = usage.PromptTokens
+	clone := *usage
+	if usage.PromptTokensDetails != nil {
+		details := *usage.PromptTokensDetails
+		clone.PromptTokensDetails = &details
 	}
-	t.completionSum = usage.CompletionTokens
+	if usage.CompletionTokensDetails != nil {
+		details := *usage.CompletionTokensDetails
+		clone.CompletionTokensDetails = &details
+	}
+	clone.PromptTokens = max(clone.PromptTokens, 0)
+	clone.CompletionTokens = max(clone.CompletionTokens, 0)
+	if clone.BillingEstimateReason != "" {
+		clone.PromptTokens = max(clone.PromptTokens, t.params.PromptTokens)
+		clone.CompletionTokens = max(clone.CompletionTokens, t.completionSum)
+		clone.TotalTokens = max(clone.TotalTokens, clone.PromptTokens+clone.CompletionTokens)
+		clone.BillingEstimateQuotaFloor = max(clone.BillingEstimateQuotaFloor, t.params.QuotedQuota)
+	}
+	t.finalUsage = &clone
+	t.params.PromptTokens = clone.PromptTokens
+	t.completionSum = clone.CompletionTokens
 	t.mu.Unlock()
 }
 
@@ -198,9 +222,9 @@ func (t *QuotaTracker) flushLocked(force bool) error {
 	}
 
 	now := time.Now()
-	if !force && now.Sub(t.lastFlush) < t.params.FlushInterval {
-		return nil
-	}
+	// FlushInterval is retained for configuration/API compatibility, but is not
+	// permission to spend unfunded credit. Existing reserved work causes no DB
+	// debit here; every positive excess must atomically acquire owner/token funds.
 
 	targetQuota := t.computeTargetQuotaLocked()
 	delta := targetQuota - t.chargedQuota
@@ -269,12 +293,17 @@ func (t *QuotaTracker) currentUsageLocked() *relaymodel.Usage {
 	if t.finalUsage != nil {
 		// Return a defensive copy to avoid accidental mutation downstream.
 		clone := *t.finalUsage
+		if clone.BillingEstimateReason != "" {
+			clone.BillingEstimateQuotaFloor = max(clone.BillingEstimateQuotaFloor, t.params.QuotedQuota)
+		}
 		return &clone
 	}
 	total := t.params.PromptTokens + t.completionSum
 	return &relaymodel.Usage{
-		PromptTokens:     t.params.PromptTokens,
-		CompletionTokens: t.completionSum,
-		TotalTokens:      total,
+		BillingEstimateReason:     "stream_usage_not_reported",
+		BillingEstimateQuotaFloor: t.params.QuotedQuota,
+		PromptTokens:              t.params.PromptTokens,
+		CompletionTokens:          t.completionSum,
+		TotalTokens:               total,
 	}
 }

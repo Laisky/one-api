@@ -27,6 +27,7 @@ import (
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
 	"github.com/Laisky/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/streaming"
 	"github.com/Laisky/one-api/relay/tooling"
 )
 
@@ -184,6 +185,24 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	markPreConsumed(c, preConsumedQuota)
 	defer billingAuditSafetyNet(c)
 	c.Set(ctxkey.ProvisionalLogId, recordProvisionalLog(c, meta, chatRequest.Model, preConsumedQuota))
+	var tracker *streaming.QuotaTracker
+	if chatRequest.Stream && registry == nil && meta.ChannelType != channeltype.Jina {
+		tracker = streaming.NewQuotaTracker(streaming.QuotaTrackerParams{TokenCounter: openai.CountTokenText,
+			UserID: meta.UserId, TokenID: meta.TokenId, ChannelID: meta.ChannelId,
+			ModelName: chatRequest.Model, PromptTokens: promptTokens, ModelRatio: modelRatio,
+			ChannelModelRatio: channelModelRatio, GroupRatio: groupRatio, PreConsumedQuota: preConsumedQuota,
+			QuotedQuota:         estimatePreConsumedQuota(chatRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta),
+			ChannelModelConfigs: channelModelConfigs, ChannelCompletionRatio: channelCompletionRatio,
+			PricingAdaptor: pricingAdaptor, RequestTime: meta.StartTime, Ctx: gmw.Ctx(c),
+			FlushInterval: time.Duration(config.StreamingBillingIntervalSec) * time.Second,
+		})
+		streaming.StoreTracker(c, tracker)
+		upstreamCtx, cancelUpstream := context.WithCancel(gmw.Ctx(c))
+		c.Request = c.Request.WithContext(upstreamCtx)
+		streaming.BindUpstreamCancellation(c, cancelUpstream)
+		defer cancelUpstream()
+
+	}
 	requestAdaptor.Init(meta)
 	if registry != nil {
 		c.Set(ctxkey.ResponseRewriteHandler, nil)
@@ -356,13 +375,18 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		logUpstreamResponseFromBytes(lg, resp, nil, "response_api_fallback")
 	}
 	if respErr != nil {
-		if usage == nil {
+		if usage == nil && (tracker == nil || !c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded)) {
 			if refundClaudeAdmission(c, respErr, preConsumedQuota, meta.TokenId) {
 				return respErr
 			}
 			scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
 			return respErr
 		}
+	}
+
+	usage, incrementalCharged, respErr := finalizeStreamingUsage(tracker, usage, respErr)
+	if respErr != nil {
+		openai_compatible.FailStreamWithBridge(c, respErr, usage)
 	}
 
 	applyOutputImageCharges(c, &usage, meta)
@@ -470,7 +494,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		logMessage:          "CRITICAL BILLING TIMEOUT",
 		includeElapsedField: true,
 	}, func(ctx context.Context) {
-		quota := postConsumeQuota(ctx, usage, meta, chatRequest, ratio, preConsumedQuota, 0, modelRatio, channelModelRatio, groupRatio, false, channelModelConfigs, channelCompletionRatio)
+		quota := postConsumeQuota(ctx, usage, meta, chatRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, false, channelModelConfigs, channelCompletionRatio)
 		if requestId != "" {
 			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
 				lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))

@@ -74,24 +74,18 @@ func parseToolArguments(raw any) (map[string]any, error) {
 	}
 }
 
-// buildToolResultMessage converts MCP tool output into a chat tool message.
+// buildToolResultMessage converts the model-visible portion of result into a
+// chat tool message associated with callID. Nil results retain empty content;
+// projection failures are returned without exposing the raw transport envelope.
 func buildToolResultMessage(callID string, result *mcp.CallToolResult) (relaymodel.Message, error) {
 	message := relaymodel.Message{Role: "tool", ToolCallId: callID}
 	if result == nil {
 		message.Content = ""
 		return message, nil
 	}
-	if len(result.Raw) > 0 {
-		message.Content = string(result.Raw)
-		return message, nil
-	}
-	payload := map[string]any{"content": result.Content}
-	if result.IsError {
-		payload["is_error"] = true
-	}
-	encoded, err := json.Marshal(payload)
+	encoded, err := result.ModelVisibleJSON()
 	if err != nil {
-		return relaymodel.Message{}, errors.Wrap(err, "marshal mcp tool result")
+		return relaymodel.Message{}, errors.Wrap(err, "project mcp tool result for model history")
 	}
 	message.Content = string(encoded)
 	return message, nil

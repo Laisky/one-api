@@ -192,8 +192,9 @@ func TestBuildFunctionToolFromMCP_DefaultSchema(t *testing.T) {
 	require.Equal(t, "object", params["type"])
 }
 
-// TestBuildToolResultMessage_UsesRawPayload verifies full MCP payload forwarding.
-func TestBuildToolResultMessage_UsesRawPayload(t *testing.T) {
+// TestBuildToolResultMessage_ProjectsRawPayload verifies that model history excludes
+// unknown envelope extensions while direct MCP clients retain the complete result.
+func TestBuildToolResultMessage_ProjectsRawPayload(t *testing.T) {
 	raw := `{"content":[{"type":"text","text":"ok"}],"is_error":false,"results":[{"url":"https://example.com","title":"Example"}]}`
 	var result mcp.CallToolResult
 	err := json.Unmarshal([]byte(raw), &result)
@@ -205,8 +206,12 @@ func TestBuildToolResultMessage_UsesRawPayload(t *testing.T) {
 	var payload map[string]any
 	err = json.Unmarshal([]byte(msg.Content.(string)), &payload)
 	require.NoError(t, err)
-	require.Contains(t, payload, "results")
+	require.NotContains(t, payload, "results", "unknown extensions are not model-visible")
 	require.Contains(t, payload, "content")
+	wire, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.Contains(t, string(wire), `"results"`, "direct MCP clients retain extensions")
+	require.Equal(t, raw, string(result.Raw), "projection must not mutate the transport result")
 }
 
 // TestApplyMCPToolCostDelta_NewUsage verifies MCP tool costs initialize usage when nil.

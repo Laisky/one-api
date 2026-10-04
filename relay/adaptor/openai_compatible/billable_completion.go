@@ -10,12 +10,14 @@ import (
 // reasoning aliases, including a matching extracted block, count once. Distinct
 // reasoning, visible text and tool arguments remain billable. The result is a
 // local estimate, never a replacement for a nonzero authoritative receipt.
+// Aggregate all billable fragments before estimation so per-field truncation
+// cannot discard short choices, reasoning, or tool arguments.
 func estimateOriginalCompletionTokens(choices []TextResponseChoice, modelName string) int {
-	total := 0
+	var billable strings.Builder
 	for _, choice := range choices {
 		message := choice.Message
 		content := message.StringContent()
-		total += CountTokenText(content, modelName)
+		billable.WriteString(content)
 		extracted, _ := ExtractThinkingContent(content)
 		seen := map[string]struct{}{}
 		if extracted != "" {
@@ -30,18 +32,18 @@ func estimateOriginalCompletionTokens(choices []TextResponseChoice, modelName st
 				continue
 			}
 			seen[key] = struct{}{}
-			total += CountTokenText(*alias, modelName)
+			billable.WriteString(*alias)
 		}
 		for _, call := range message.ToolCalls {
 			if call.Function == nil || call.Function.Arguments == nil {
 				continue
 			}
 			if value, ok := call.Function.Arguments.(string); ok {
-				total += CountTokenText(value, modelName)
+				billable.WriteString(value)
 			} else if value, err := json.Marshal(call.Function.Arguments); err == nil {
-				total += CountTokenText(string(value), modelName)
+				billable.Write(value)
 			}
 		}
 	}
-	return total
+	return CountTokenText(billable.String(), modelName)
 }
