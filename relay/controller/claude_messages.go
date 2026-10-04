@@ -134,11 +134,21 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	ratio := modelRatio * groupRatio
 
-	// pre-consume quota based on estimated input tokens.
-	// The same canonical content quote applies to every body size.
-	// Upstream receipts reconcile the estimate through shared final billing.
-	rawBodyForEstimate, _ := common.GetRequestBody(c)
-	promptTokens := estimateClaudeMessagesPromptTokens(gmw.Ctx(c), claudeRequest, len(rawBodyForEstimate))
+	// Prepare conversion once before admission so the quote follows the representation sent to the provider.
+	adaptorInstance := relay.GetAdaptor(meta.APIType)
+	if adaptorInstance == nil {
+		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
+	}
+	adaptorInstance.Init(meta)
+	convertedRequest, err := adaptorInstance.ConvertClaudeRequest(c, claudeRequest)
+	if err != nil {
+		return wrapConvertRequestError(err)
+	}
+	convertedRequest = sanitizeConvertedChatFields(convertedRequest)
+	promptTokens, quoteErr := preparedClaudePromptTokens(ctx, claudeRequest, convertedRequest)
+	if quoteErr != nil {
+		return openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", http.StatusBadRequest)
+	}
 	meta.PromptTokens = promptTokens
 	preConsumedQuota, bizErr := preConsumeClaudeMessagesQuota(c, claudeRequest, promptTokens, ratio, completionRatio, meta)
 	if bizErr != nil {
@@ -153,12 +163,6 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	provisionalLogId := recordProvisionalLog(c, meta, claudeRequest.Model, preConsumedQuota)
 	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
-	adaptorInstance := relay.GetAdaptor(meta.APIType)
-	if adaptorInstance == nil {
-		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
-	}
-	adaptorInstance.Init(meta)
-
 	// Declare response variables early so goto postConsume does not skip over them.
 	var (
 		usage                 *relaymodel.Usage
@@ -168,7 +172,6 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		origResp              *http.Response
 		upstreamCapture       *loggingReadCloser
 		requestBody           io.Reader
-		convertedRequest      any
 		passthroughBody       []byte
 	)
 
@@ -221,11 +224,8 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 
-	// convert request using adaptor's ConvertClaudeRequest method
-	convertedRequest, err = adaptorInstance.ConvertClaudeRequest(c, claudeRequest)
-	if err != nil {
-		return wrapConvertRequestError(err)
-	}
+	// Ordinary dispatch reuses the conversion that admission quoted. The MCP branch
+	// above explicitly reconverts after it injects deferred tools and uses its own execution loop.
 
 	// Determine request body:
 	// - If adaptor marks direct pass-through, forward the Claude Messages payload
@@ -261,7 +261,6 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			lg.Debug("analyzed Claude passthrough thinking blocks", fields...)
 		}
 	} else {
-		convertedRequest = sanitizeConvertedChatFields(convertedRequest)
 		c.Set(ctxkey.ConvertedRequest, convertedRequest)
 		requestBytes, merr := json.Marshal(convertedRequest)
 		if merr != nil {
