@@ -155,6 +155,9 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 	if totalTokens == 0 && !hasBillableUsage(usage) {
 		quota = 0
 	}
+	if usage.BillingEstimateReason != "" {
+		quota = max(quota, preConsumedQuota)
+	}
 	if settledAtEstimate {
 		// Keep exactly what was already debited: a zero delta charges nothing
 		// extra and, crucially, refunds nothing.
@@ -184,7 +187,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 	traceId := billingID.traceID
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
 		toolSummary := billingID.toolSummary
-		metadata := model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
+		metadata := billingEstimateMetadata(model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens), usage.BillingEstimateReason)
 		if settledAtEstimate {
 			if metadata == nil {
 				metadata = model.LogMetadata{}

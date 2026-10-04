@@ -1031,15 +1031,26 @@ func ResponseAPIHandler(c *gin.Context, resp *http.Response, promptTokens int, m
 // ResponseAPIStreamHandler processes streaming responses from Response API format and converts them back to ChatCompletion format
 // This function follows the same pattern as StreamHandler but handles Response API streaming responses
 // Returns error (if any), accumulated response text, and token usage information
-func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.ErrorWithStatusCode, string, *model.Usage) {
+func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int) (apiErr *model.ErrorWithStatusCode, responseText string, usage *model.Usage) {
 	lg := gmw.GetLogger(c)
 	// Initialize accumulators for the response
-	responseText := ""
 	reasoningText := ""
-	var usage *model.Usage
 	var lastUsage *ResponseAPIUsage
 	webSearchSeen := make(map[string]struct{})
 	webSearchCount := 0
+	lifecycle := beginResponseStream(c, resp)
+	defer func() {
+		if derived, fallback := deriveWebSearchInvocationCount(webSearchCount, lastUsage); fallback {
+			webSearchCount = derived
+		}
+		if webSearchCount > 0 {
+			c.Set(ctxkey.WebSearchCallCount, webSearchCount)
+		}
+		lifecycle.finish(c, &apiErr)
+		if lifecycle.gap || (apiErr != nil && !lifecycle.terminalReceipt) || (usage == nil && (responseText != "" || webSearchCount > 0)) {
+			c.Set(responseStreamEstimateKey, "response_stream_incomplete_or_missing_receipt")
+		}
+	}()
 	toolStates := make(map[string]*responseStreamToolCallState)
 	flushSupported := false
 	if _, ok := any(c.Writer).(http.Flusher); ok {
@@ -1081,6 +1092,10 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 
 	// Process each line from the stream
 	for {
+		if lifecycle.writer.err != nil {
+			streamErr = lifecycle.writer.err
+			break
+		}
 		line, err := hbr.Next()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -1091,321 +1106,11 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 			break
 		}
 
-		if line.Oversized {
-			fullResponse, streamEvent, err := ParseResponseAPIStreamEventFromReader(line.Large)
-			if err != nil {
-				lg.Debug("skipping unparseable oversized stream chunk", zap.Error(err))
-				continue
-			}
-
-			var responseAPIChunk ResponseAPIResponse
-			var outputIndex *int
-			if fullResponse != nil {
-				responseAPIChunk = *fullResponse
-			} else if streamEvent != nil {
-				responseAPIChunk = ConvertStreamEventToResponse(streamEvent)
-				if streamEvent.OutputIndex >= 0 {
-					outputIndex = &streamEvent.OutputIndex
-				}
-			} else {
-				continue
-			}
-
-			if newCalls := countNewWebSearchSearchActions(responseAPIChunk.Output, webSearchSeen); newCalls > 0 {
-				webSearchCount += newCalls
-			}
-
-			if streamEvent != nil && strings.Contains(streamEvent.Type, "delta") {
-				if delta := extractStringFromRaw(streamEvent.Delta, "partial_json", "json", "text", "delta"); delta != "" {
-					if strings.Contains(streamEvent.Type, "reasoning_summary_text") {
-						reasoningText += delta
-					} else {
-						responseText += delta
-					}
-				}
-			}
-
-			eventType := ""
-			if streamEvent != nil {
-				eventType = streamEvent.Type
-			} else if fullResponse != nil {
-				if responseAPIChunk.Status != "" {
-					eventType = "response." + responseAPIChunk.Status
-				} else {
-					eventType = "response.completed"
-				}
-			}
-
-			if eventType != "" {
-				if streamEvent != nil && streamEvent.Item != nil && streamEvent.Item.Type == "function_call" {
-					if state := getToolState(streamEvent.Item.Id); state != nil {
-						if streamEvent.OutputIndex >= 0 {
-							state.setIndex(streamEvent.OutputIndex)
-						}
-						state.setName(toolnamesafe.RestoreToolName(c, streamEvent.Item.Name))
-						if streamEvent.Item.Arguments != "" {
-							state.appendArgs(streamEvent.Item.Arguments)
-						}
-					}
-				}
-				if streamEvent != nil && strings.HasPrefix(eventType, "response.function_call_arguments.delta") {
-					if state := getToolState(streamEvent.ItemId); state != nil {
-						if streamEvent.OutputIndex >= 0 {
-							state.setIndex(streamEvent.OutputIndex)
-						}
-						state.appendArgs(extractStringFromRaw(streamEvent.Delta, "partial_json", "text", "arguments", "delta"))
-					}
-				}
-				if streamEvent != nil && strings.HasPrefix(eventType, "response.function_call_arguments.done") {
-					if state := getToolState(streamEvent.ItemId); state != nil {
-						if streamEvent.OutputIndex >= 0 {
-							state.setIndex(streamEvent.OutputIndex)
-						}
-						if streamEvent.Arguments != "" {
-							state.replaceArgs(streamEvent.Arguments)
-						}
-					}
-				}
-			}
-
-			chatCompletionChunk := ConvertResponseAPIStreamToChatCompletionWithIndex(&responseAPIChunk, outputIndex)
-
-			if streamEvent != nil {
-				eventType := streamEvent.Type
-				if !strings.Contains(eventType, "delta") {
-					seen := false
-					for _, out := range responseAPIChunk.Output {
-						if out.Id != "" {
-							if _, ok := seenOutputItems[out.Id]; ok {
-								seen = true
-								break
-							}
-						}
-					}
-
-					if seen {
-						if eventType == "response.completed" {
-							if len(chatCompletionChunk.Choices) > 0 {
-								delta := &chatCompletionChunk.Choices[0].Delta
-								delta.Content = responseText
-								delta.Reasoning = nil
-								delta.ToolCalls = nil
-							}
-						} else {
-							if len(chatCompletionChunk.Choices) > 0 {
-								delta := &chatCompletionChunk.Choices[0].Delta
-								delta.Content = ""
-								delta.Reasoning = nil
-								delta.ToolCalls = nil
-							}
-						}
-					}
-				}
-			}
-
-			if len(chatCompletionChunk.Choices) > 0 {
-				delta := &chatCompletionChunk.Choices[0].Delta
-				candidateIDs := make([]string, 0, 3)
-				for _, tc := range delta.ToolCalls {
-					candidateIDs = append(candidateIDs, tc.Id)
-				}
-				if streamEvent != nil {
-					if streamEvent.Item != nil && streamEvent.Item.Type == "function_call" && streamEvent.Item.Id != "" {
-						candidateIDs = append(candidateIDs, streamEvent.Item.Id)
-					}
-					if streamEvent.ItemId != "" {
-						candidateIDs = append(candidateIDs, streamEvent.ItemId)
-					}
-				}
-
-				for idx := range delta.ToolCalls {
-					tc := &delta.ToolCalls[idx]
-					callID := tc.Id
-					if callID == "" && streamEvent != nil {
-						if streamEvent.Item != nil && streamEvent.Item.Type == "function_call" && streamEvent.Item.Id != "" {
-							callID = streamEvent.Item.Id
-							tc.Id = callID
-						} else if streamEvent.ItemId != "" {
-							callID = streamEvent.ItemId
-							tc.Id = callID
-						}
-					}
-					if state := getToolState(callID); state != nil {
-						if tc.Function == nil {
-							tc.Function = &model.Function{}
-						}
-						tc.Function.Name = state.name
-						tc.Function.Arguments = state.arguments()
-						if state.hasIndex {
-							idxCopy := state.index
-							tc.Index = &idxCopy
-						}
-					}
-				}
-
-				if len(delta.ToolCalls) == 0 && len(candidateIDs) > 0 {
-					for _, id := range candidateIDs {
-						if state := toolStates[id]; state != nil {
-							tool := model.Tool{
-								Id:   id,
-								Type: "function",
-								Function: &model.Function{
-									Name:      state.name,
-									Arguments: state.arguments(),
-								},
-							}
-							if state.hasIndex {
-								idxCopy := state.index
-								tool.Index = &idxCopy
-							}
-							delta.ToolCalls = append(delta.ToolCalls, tool)
-							break
-						}
-					}
-				}
-
-				if streamEvent != nil && strings.Contains(streamEvent.Type, "delta") {
-					itemId := streamEvent.ItemId
-					if itemId == "" && streamEvent.Item != nil {
-						itemId = streamEvent.Item.Id
-					}
-					if itemId != "" {
-						seenOutputItems[itemId] = struct{}{}
-					}
-				}
-			}
-
-			if responseAPIChunk.Usage != nil {
-				lastUsage = responseAPIChunk.Usage
-			}
-			if chatCompletionChunk.Usage != nil {
-				usage = chatCompletionChunk.Usage
-			}
-
-			if eventType != "" {
-				if strings.HasPrefix(eventType, "response.completed") && len(chatCompletionChunk.Choices) > 0 {
-					if fullResponse != nil {
-						if len(chatCompletionChunk.Choices) > 0 {
-							delta := &chatCompletionChunk.Choices[0].Delta
-							delta.Content = responseText
-							delta.Reasoning = nil
-							delta.ToolCalls = nil
-						}
-					} else {
-						delta := &chatCompletionChunk.Choices[0].Delta
-						if content, ok := delta.Content.(string); ok && content != "" {
-							delta.Content = ""
-						}
-						delta.Reasoning = nil
-						delta.ToolCalls = nil
-					}
-				}
-
-				hasMeaningfulDelta := func() bool {
-					if len(chatCompletionChunk.Choices) == 0 {
-						return false
-					}
-					delta := chatCompletionChunk.Choices[0].Delta
-					if delta.Reasoning != nil && *delta.Reasoning != "" {
-						return true
-					}
-					if len(delta.ToolCalls) > 0 {
-						return true
-					}
-					switch v := delta.Content.(type) {
-					case string:
-						return v != ""
-					case []byte:
-						return len(v) > 0
-					}
-					return false
-				}()
-
-				hasToolCalls := len(chatCompletionChunk.Choices) > 0 && len(chatCompletionChunk.Choices[0].Delta.ToolCalls) > 0
-				hasFinishReason := len(chatCompletionChunk.Choices) > 0 && chatCompletionChunk.Choices[0].FinishReason != nil
-				shouldSendChunk := false
-
-				if strings.Contains(eventType, "delta") {
-					shouldSendChunk = hasMeaningfulDelta
-				} else if hasToolCalls {
-					shouldSendChunk = true
-				} else if eventType == "response.completed" && hasFinishReason {
-					shouldSendChunk = true
-				} else if hasMeaningfulDelta &&
-					!strings.Contains(eventType, "output_text.done") &&
-					!strings.Contains(eventType, "content_part.done") &&
-					!strings.Contains(eventType, "output_item.done") &&
-					!strings.Contains(eventType, "reasoning_summary_text.done") {
-					shouldSendChunk = true
-				}
-
-				if shouldSendChunk {
-					jsonStr, err := json.Marshal(chatCompletionChunk)
-					if err != nil {
-						lg.Error("error marshalling oversized stream chunk", zap.Error(err))
-						continue
-					}
-
-					render.StringData(c, string(jsonStr))
-					forwardedChunks++
-					if forwardedChunks == 1 {
-						lg.Debug("first response api converted stream chunk flushed to client")
-					}
-				} else if eventType == "response.completed" && responseAPIChunk.Usage != nil {
-					convertedUsage := responseAPIChunk.Usage.ToModelUsage()
-					if convertedUsage != nil {
-						finalContent := ""
-						var finalFinish *string
-						if len(chatCompletionChunk.Choices) > 0 {
-							if chatCompletionChunk.Choices[0].FinishReason != nil {
-								fr := *chatCompletionChunk.Choices[0].FinishReason
-								finalFinish = &fr
-							}
-							if content, ok := chatCompletionChunk.Choices[0].Delta.Content.(string); ok && content != "" {
-								finalContent = content
-							}
-						}
-						if finalContent == "" {
-							finalContent = responseText
-						}
-						if finalFinish == nil {
-							fr := "stop"
-							finalFinish = &fr
-						}
-
-						usageChunk := ChatCompletionsStreamResponse{
-							Id:      responseAPIChunk.Id,
-							Object:  "chat.completion.chunk",
-							Created: responseAPIChunk.CreatedAt,
-							Model:   responseAPIChunk.Model,
-							Choices: []ChatCompletionsStreamResponseChoice{{
-								Index: 0,
-								Delta: model.Message{
-									Role:    "assistant",
-									Content: finalContent,
-								},
-								FinishReason: finalFinish,
-							}},
-							Usage: convertedUsage,
-						}
-
-						jsonStr, err := json.Marshal(usageChunk)
-						if err != nil {
-							lg.Error("error marshalling oversized usage chunk", zap.Error(err))
-							continue
-						}
-
-						render.StringData(c, string(jsonStr))
-						forwardedChunks++
-						if forwardedChunks == 1 {
-							lg.Debug("first response api converted stream chunk flushed to client")
-						}
-						lg.Debug("sent usage chunk from response.completed", zap.Int("chunk_bytes", len(jsonStr)))
-					}
-				}
-			}
-
-			continue
+		line, err = boundedResponseStreamLine(line)
+		if err != nil {
+			lifecycle.gap = true
+			streamErr = err
+			break
 		}
 
 		data := openai_compatible.NormalizeDataLine(line.Text())
@@ -1490,7 +1195,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 			}
 		}
 
-		if eventType != "" {
+		if eventType != "" && streamEvent != nil {
 			if streamEvent.Item != nil && streamEvent.Item.Type == "function_call" {
 				if state := getToolState(streamEvent.Item.Id); state != nil {
 					if streamEvent.OutputIndex >= 0 {
@@ -1646,6 +1351,10 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		// Accumulate usage information
 		if responseAPIChunk.Usage != nil {
 			lastUsage = responseAPIChunk.Usage
+			switch responseAPIChunk.Status {
+			case "completed", "failed", "incomplete":
+				lifecycle.terminalReceipt = true
+			}
 		}
 		if chatCompletionChunk.Usage != nil {
 			usage = chatCompletionChunk.Usage
@@ -1817,20 +1526,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		)
 	}
 
-	if err := resp.Body.Close(); err != nil {
-		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), responseText, usage
-	}
-
-	if derived, usedFallback := deriveWebSearchInvocationCount(webSearchCount, lastUsage); usedFallback {
-		gmw.GetLogger(c).Debug("web search count derived from usage details (stream)", zap.Int("web_search_requests", derived))
-		webSearchCount = derived
-	}
-	if webSearchCount > 0 {
-		c.Set(ctxkey.WebSearchCallCount, webSearchCount)
-	}
-
 	// Record when upstream streaming is completed
-	recordUpstreamCompleted(c)
 	lg.Debug("completed response api converted stream forwarding",
 		zap.Int("forwarded_chunks", forwardedChunks),
 		zap.Bool("done_rendered", doneRendered),
@@ -1945,14 +1641,25 @@ func ResponseAPIDirectHandler(c *gin.Context, resp *http.Response, promptTokens 
 // ResponseAPIDirectStreamHandler processes streaming responses from Response API format and passes them through directly
 // This function is used for direct Response API streaming requests that don't need conversion back to ChatCompletion format
 // Returns error (if any), accumulated response text, and token usage information
-func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.ErrorWithStatusCode, string, *model.Usage) {
+func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMode int) (apiErr *model.ErrorWithStatusCode, responseText string, usage *model.Usage) {
 	lg := gmw.GetLogger(c)
 	// Initialize accumulators for the response
-	responseText := ""
-	var usage *model.Usage
 	var lastUsage *ResponseAPIUsage
 	webSearchSeen := make(map[string]struct{})
 	webSearchCount := 0
+	lifecycle := beginResponseStream(c, resp)
+	defer func() {
+		if derived, fallback := deriveWebSearchInvocationCount(webSearchCount, lastUsage); fallback {
+			webSearchCount = derived
+		}
+		if webSearchCount > 0 {
+			c.Set(ctxkey.WebSearchCallCount, webSearchCount)
+		}
+		lifecycle.finish(c, &apiErr)
+		if lifecycle.gap || (apiErr != nil && !lifecycle.terminalReceipt) || (usage == nil && (responseText != "" || webSearchCount > 0)) {
+			c.Set(responseStreamEstimateKey, "response_stream_incomplete_or_missing_receipt")
+		}
+	}()
 	var lastFullResponse *ResponseAPIResponse
 	flushSupported := false
 	if _, ok := any(c.Writer).(http.Flusher); ok {
@@ -1978,29 +1685,6 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	forwardedChunks := 0
 	var streamErr error
 
-	forwardOversizedData := func(eventType string, payload io.Reader) error {
-		if eventType != "" {
-			if _, err := c.Writer.Write([]byte("event: " + eventType + "\n")); err != nil {
-				return errors.Wrap(err, "write stream event type")
-			}
-		}
-
-		if _, err := c.Writer.Write([]byte("data: ")); err != nil {
-			return errors.Wrap(err, "write stream data prefix")
-		}
-
-		if _, err := io.Copy(c.Writer, payload); err != nil {
-			return errors.Wrap(err, "copy oversized stream payload")
-		}
-
-		if _, err := c.Writer.Write([]byte("\n\n")); err != nil {
-			return errors.Wrap(err, "write stream data suffix")
-		}
-
-		c.Writer.Flush()
-		return nil
-	}
-
 	// pendingEventType tracks the SSE "event:" line that precedes each "data:" line.
 	// The Responses API uses typed SSE events (e.g. "event: response.output_text.delta")
 	// and we must forward them faithfully so the client sees the same wire format as the
@@ -2009,6 +1693,10 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 
 	// Process each line from the stream
 	for {
+		if lifecycle.writer.err != nil {
+			streamErr = lifecycle.writer.err
+			break
+		}
 		line, err := hbr.Next()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -2019,18 +1707,11 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 			break
 		}
 
-		if line.Oversized {
-			if err := forwardOversizedData(pendingEventType, line.Large); err != nil {
-				streamErr = err
-				break
-			}
-
-			pendingEventType = ""
-			forwardedChunks++
-			if forwardedChunks == 1 {
-				lg.Debug("first response api native stream chunk flushed to client")
-			}
-			continue
+		line, err = boundedResponseStreamLine(line)
+		if err != nil {
+			lifecycle.gap = true
+			streamErr = err
+			break
 		}
 
 		lineText := line.Text()
@@ -2106,9 +1787,19 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 			}
 		}
 
+		// Full snapshots are cumulative, not extra deltas. Use the larger
+		// billable view when a provider only supplies output at completion.
+		if snapshot := responseStreamSnapshotText(responseAPIChunk.Output); len(snapshot) > len(responseText) {
+			responseText = snapshot
+		}
+
 		// Accumulate usage information
 		if responseAPIChunk.Usage != nil {
 			lastUsage = responseAPIChunk.Usage
+			switch responseAPIChunk.Status {
+			case "completed", "failed", "incomplete":
+				lifecycle.terminalReceipt = true
+			}
 			if convertedUsage := responseAPIChunk.Usage.ToModelUsage(); convertedUsage != nil {
 				usage = convertedUsage
 			}
@@ -2151,20 +1842,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 		)
 	}
 
-	if err := resp.Body.Close(); err != nil {
-		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), responseText, usage
-	}
-
-	if derived, usedFallback := deriveWebSearchInvocationCount(webSearchCount, lastUsage); usedFallback {
-		gmw.GetLogger(c).Debug("web search count derived from usage details (direct stream)", zap.Int("web_search_requests", derived))
-		webSearchCount = derived
-	}
-	if webSearchCount > 0 {
-		c.Set(ctxkey.WebSearchCallCount, webSearchCount)
-	}
-
 	// Record when upstream streaming is completed
-	recordUpstreamCompleted(c)
 	lg.Debug("completed response api native stream forwarding",
 		zap.Int("forwarded_chunks", forwardedChunks),
 		zap.Bool("done_rendered", doneRendered),
