@@ -313,7 +313,7 @@
       "OidcTokenEndpoint": "URL de l'endpoint de jeton OIDC.",
       "OidcUserinfoEndpoint": "URL de l'endpoint userinfo OIDC.",
       "OidcWellKnown": "URL well-known OIDC (ex. https://issuer/.well-known/openid-configuration).",
-      "PasswordLoginEnabled": "Autoriser la connexion par e-mail et mot de passe. Désactivez pour imposer OAuth ou d'autres fournisseurs.",
+      "PasswordLoginEnabled": "Autoriser la connexion par mot de passe des comptes non-root. Sinon, ces comptes doivent utiliser un autre mode de connexion. La récupération root par mot de passe reste disponible et exige toujours le TOTP lorsqu’il est configuré.",
       "PasswordRegisterEnabled": "Autoriser les nouvelles inscriptions par e-mail/mot de passe.",
       "PreConsumedQuota": "Quota réservé au lancement de la requête pour éviter les abus. La partie non utilisée est restituée après facturation.",
       "QuotaForInvitee": "Récompense de quota accordée à l'invité une fois inscrit.",

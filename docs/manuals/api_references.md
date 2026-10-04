@@ -3209,6 +3209,8 @@ curl -X POST "$BASE_URL/api/user/register" \
 
 Authenticates a username/password (optionally TOTP) pair and, on success, issues the **session cookie** used by the web dashboard and management endpoints.
 
+**Root recovery policy:** `PasswordLoginEnabled=false` disables password login for ordinary users and non-root administrators, not root recovery. An enabled root account can still use this login API with its correct password and its configured TOTP factor. Wrong credentials and disabled/deleted accounts are rejected. The toggle is not a deployment-wide password-authentication shutdown. Keep a unique strong root password, replace any bootstrap credential immediately, and maintain tested recovery procedures; do not remove TOTP to recover from an SSO outage.
+
 **Auth:** Public - no auth. Protected by `CriticalRateLimit`. Turnstile becomes required for a username after a recent failed login when `TurnstileCheckEnabled` is set; pass the token via the `turnstile` query parameter.
 
 **Query parameters**
@@ -8319,7 +8321,7 @@ Returns application metadata and the public feature/auth toggles consumed by the
 | oidc_authorization_endpoint | `oidc_authorization_endpoint` | string | OIDC authorization endpoint |
 | oidc_token_endpoint | `oidc_token_endpoint` | string | OIDC token endpoint |
 | oidc_userinfo_endpoint | `oidc_userinfo_endpoint` | string | OIDC userinfo endpoint |
-| password_login | `password_login` | boolean | Username/password login enabled |
+| password_login | `password_login` | boolean | Non-root username/password login enabled; root password recovery remains available and configured TOTP still applies |
 | password_register | `password_register` | boolean | Username/password registration enabled |
 
 ```json
