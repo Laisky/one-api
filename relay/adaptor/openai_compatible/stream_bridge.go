@@ -8,6 +8,7 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/render"
 	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/streaming"
 )
 
 // StreamRewriterFromContext returns the Response API stream-rewrite bridge that
@@ -46,6 +47,9 @@ func RenderStreamChunkWithBridge(c *gin.Context, chunk any) error {
 	if rw := StreamRewriterFromContext(c); rw != nil {
 		if normalized, ok := normalizeStreamChunk(chunk); ok {
 			if handled, _ := rw.HandleChunk(c, normalized); handled {
+				if tracker := streaming.FromContext(c); tracker != nil {
+					return tracker.AbortError()
+				}
 				return nil
 			}
 		}

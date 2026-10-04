@@ -149,13 +149,10 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
 	var tracker *streaming.QuotaTracker
-	// Jina already reserves its full bounded input/output budget before dispatch.
-	// Its raw receipt (or labelled estimate) must go directly to exact final
-	// settlement, which can record debt. The generic incremental tracker uses an
-	// admission balance check: a larger final receipt would otherwise fail here
-	// after the work was performed and silently leave only the smaller hold paid.
+	// Jina enforces its own full-reservation provider contract. Other streams
+	// share observation, atomic incremental funding and final reconciliation.
 	if textRequest.Stream && meta.ChannelType != channeltype.Jina {
-		tracker = streaming.NewQuotaTracker(streaming.QuotaTrackerParams{
+		tracker = streaming.NewQuotaTracker(streaming.QuotaTrackerParams{TokenCounter: openai.CountTokenText,
 			UserID:                 meta.UserId,
 			TokenID:                meta.TokenId,
 			ChannelID:              meta.ChannelId,
@@ -165,6 +162,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			ChannelModelRatio:      channelModelRatio,
 			GroupRatio:             groupRatio,
 			PreConsumedQuota:       preConsumedQuota,
+			QuotedQuota:            estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta),
 			ChannelModelConfigs:    channelModelConfigs,
 			ChannelCompletionRatio: channelCompletionRatio,
 			PricingAdaptor:         pricingAdaptor,
@@ -173,6 +171,11 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			Ctx:                    gmw.Ctx(c),
 		})
 		streaming.StoreTracker(c, tracker)
+		upstreamCtx, cancelUpstream := context.WithCancel(gmw.Ctx(c))
+		c.Request = c.Request.WithContext(upstreamCtx)
+		streaming.BindUpstreamCancellation(c, cancelUpstream)
+		defer cancelUpstream()
+
 	}
 
 	if registry != nil {
@@ -334,7 +337,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		// If usage is available even though writing to client failed (e.g., client cancelled),
 		// proceed to billing to ensure forwarded requests are charged; do not refund pre-consumed quota.
 		// Otherwise, refund pre-consumed quota and return error.
-		if usage == nil {
+		if usage == nil && (tracker == nil || !c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded)) {
 			if refundClaudeAdmission(c, respErr, preConsumedQuota, meta.TokenId) {
 				return respErr
 			}
@@ -350,19 +353,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		recordChatCheckpoint(c, meta, textRequest)
 	}
 
-	var incrementalCharged int64
-	if tracker != nil {
-		var trackerErr error
-		usage, incrementalCharged, trackerErr = tracker.Finalize(usage)
-		if trackerErr != nil {
-			if errors.Is(trackerErr, streaming.ErrQuotaExceeded) {
-				_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "streaming_quota_exceeded")
-				return openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
-			}
-			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "streaming_billing_finalize_failed")
-			return openai.ErrorWrapper(trackerErr, "streaming_billing_failed", http.StatusInternalServerError)
-		}
-	}
+	// Enforcement failure stops future work but cannot discard a verified
+	// receipt or the final delta for work already bought from the provider.
+	usage, incrementalCharged, respErr := finalizeStreamingUsage(tracker, usage, respErr)
 
 	applyOutputImageCharges(c, &usage, meta)
 	applyOutputAudioCharges(c, &usage, meta)

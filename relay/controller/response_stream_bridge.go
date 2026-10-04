@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"math"
+	"net/http"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	metalib "github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/state"
+	"github.com/Laisky/one-api/relay/streaming"
 )
 
 type chatToResponseStreamBridge struct {
@@ -123,6 +125,14 @@ func (h *chatToResponseStreamBridge) commitStreamedResponse(c *gin.Context, resp
 func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_compatible.ChatCompletionsStreamResponse) (bool, bool) {
 	if h.streamDone {
 		return true, true
+	}
+
+	if tracker := streaming.FromContext(c); tracker != nil && !streaming.HasProtocolObservation(c) {
+		if err := openai_compatible.ObserveStreamChunk(c, chunk); err != nil {
+			h.FinalizeUsage(tracker.UsageSnapshot())
+			streaming.StopUpstream(c)
+			return h.HandleError(c, openai.ErrorWrapper(err, "streaming_billing_failed", http.StatusForbidden))
+		}
 	}
 
 	if !h.streamStarted {
@@ -771,4 +781,32 @@ func (h *chatToResponseStreamBridge) nextOutputIndex() int {
 	idx := h.outputIndexCounter
 	h.outputIndexCounter++
 	return idx
+}
+
+// HandleError preserves partial output as failed, never authorizing complete tool
+// calls or publishing response.completed after quota or transport exhaustion.
+func (h *chatToResponseStreamBridge) HandleError(c *gin.Context, failure *model.ErrorWithStatusCode) (bool, bool) {
+	if h.streamDone {
+		return true, true
+	}
+	h.streamDone = true
+	if !h.streamStarted {
+		h.ensureInitialized(c, &openai_compatible.ChatCompletionsStreamResponse{})
+	}
+	output := []openai.OutputItem{}
+	if text := h.textBuilder.String(); text != "" {
+		output = append(output, openai.OutputItem{Id: h.messageItemID, Type: "message", Status: "incomplete", Role: "assistant", Content: []openai.OutputContent{{Type: "output_text", Text: text}}})
+	}
+	if text := h.reasoningBuilder.String(); text != "" {
+		output = append(output, openai.OutputItem{Type: "reasoning", Status: "incomplete", Summary: []openai.OutputContent{{Type: "summary_text", Text: text}}})
+	}
+	for _, id := range h.toolOrder {
+		call := h.toolCalls[id]
+		output = append(output, openai.OutputItem{Id: id, Type: "function_call", Status: "incomplete", CallId: id, Name: call.name, Arguments: call.arguments.String()})
+	}
+	response := h.buildFinalResponse("failed", output, nil)
+	response.Error = &failure.Error
+	h.commitStreamedResponse(c, response, "failed")
+	h.emitEvent(c, "response.failed", openai.ResponseAPIStreamEvent{Type: "response.failed", Response: response})
+	return true, true
 }

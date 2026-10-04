@@ -1,0 +1,7 @@
+# Streaming funding and terminal reconciliation
+
+A flush interval is not an unbounded credit window. A streaming tracker reuses already reserved credit without another debit. When an observation exceeds funded credit, it atomically acquires owner and finite-token funds immediately; otherwise it stops further delivery/work. This deliberately prioritizes prepaid isolation over batching unfunded deltas.
+
+Stopping does not erase consumption. The final controller reconciliation includes the initial hold, successful incremental debits and the last measured or explicitly estimated usage exactly once. An authoritative receipt can produce debt for already-performed work. Estimated incomplete streams retain the original quote independently of whether admission physically held it. None of these controls promise zero upstream generation after a remote cancellation; the in-flight chunk may already have been generated.
+
+Text and Responses-to-Chat fallback share the same tracker. Jina retains its separate full-reservation contract. AWS DeepSeek/Qwen observe text, reasoning and tool arguments before client delivery, prefer complete SDK receipts and label missing/invalid receipts. Incomplete SDK streams do not emit successful terminal events. Provider invocation state is recorded at the real SDK call, not preparation. Automatic SDK inference retries are disabled, so typed admission rejection can safely release the current attempt while uncertain errors cannot replay or refund accepted work.
