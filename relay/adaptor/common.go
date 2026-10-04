@@ -35,16 +35,17 @@ type RedirectPolicyAdaptor interface {
 // Parameters: c is the incoming Gin context, req is the outbound upstream
 // request, and meta carries stream state. Return value: none.
 func SetupCommonRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) {
-	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
-	req.Header.Set("Accept", c.Request.Header.Get("Accept"))
-	for key, values := range c.Request.Header {
+	clientHeaders := ForwardableRequestHeaders(c.Request.Header)
+	req.Header.Set("Content-Type", clientHeaders.Get("Content-Type"))
+	req.Header.Set("Accept", clientHeaders.Get("Accept"))
+	for key, values := range clientHeaders {
 		if strings.HasPrefix(key, extraRequestHeaderPrefix) {
 			for _, value := range values {
 				req.Header.Add(key, value)
 			}
 		}
 	}
-	if meta.IsStream && c.Request.Header.Get("Accept") == "" {
+	if meta.IsStream && clientHeaders.Get("Accept") == "" {
 		req.Header.Set("Accept", "text/event-stream")
 	}
 }
@@ -204,7 +205,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	resp, err := doRequestWithRedirectPolicy(c, req, redirectPolicy)
 	if err != nil {
 		// Return error without logging - let the calling ErrorWrapper function handle logging
-		// This prevents duplicate logging when ErrorWrapper also logs the error
+		// This prevents duplicate logging when the ErrorWrapper function handles the error
 		return nil, identity.Tag(
 			errors.Wrapf(err, "upstream request failed for channel %s (id: %d)", a.GetChannelName(), meta.ChannelId),
 			meta.Identity().Channel)
