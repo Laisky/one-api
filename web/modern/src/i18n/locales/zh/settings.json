@@ -313,7 +313,7 @@
       "OidcTokenEndpoint": "OIDC 令牌端点 URL。",
       "OidcUserinfoEndpoint": "OIDC 用户信息端点 URL。",
       "OidcWellKnown": "OIDC well-known 发现 URL (例如 https://issuer/.well-known/openid-configuration)。",
-      "PasswordLoginEnabled": "允许用户使用邮箱和密码登录。禁用以强制使用 OAuth 或其他提供商。",
+      "PasswordLoginEnabled": "允许非 root 用户使用密码登录。关闭后，这些账户必须使用其他登录方式。root 密码恢复登录仍然可用；已配置 TOTP 时仍须完成验证。",
       "PasswordRegisterEnabled": "允许新用户使用邮箱和密码注册。",
       "PreConsumedQuota": "请求开始时预留的配额以避免滥用。未使用的部分将在计费后返还。",
       "QuotaForInvitee": "受邀者注册成功后获得的配额奖励。",

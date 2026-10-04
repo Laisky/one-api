@@ -313,7 +313,7 @@
       "OidcTokenEndpoint": "URL del endpoint de token OIDC.",
       "OidcUserinfoEndpoint": "URL del endpoint userinfo OIDC.",
       "OidcWellKnown": "URL well-known de OIDC (p. ej. https://issuer/.well-known/openid-configuration).",
-      "PasswordLoginEnabled": "Permite iniciar sesión con correo y contraseña. Desactívalo para exigir OAuth u otros proveedores.",
+      "PasswordLoginEnabled": "Permitir el acceso con contraseña a cuentas que no sean root. Al desactivarlo, esas cuentas deben usar otro método. La recuperación de root con contraseña sigue disponible y requiere TOTP cuando está configurado.",
       "PasswordRegisterEnabled": "Permite que nuevos usuarios se registren con correo y contraseña.",
       "PreConsumedQuota": "Cuota reservada al inicio de la solicitud para evitar abusos. Lo no usado se devuelve tras la facturación.",
       "QuotaForInvitee": "Recompensa de cuota otorgada al invitado después de registrarse.",

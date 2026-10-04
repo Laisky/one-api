@@ -271,7 +271,7 @@ const SystemSetting = () => {
           <Form.Group inline>
             <Form.Checkbox
               checked={inputs.PasswordLoginEnabled === 'true'}
-              label='允许通过密码进行登录'
+              label='允许非 root 用户通过密码登录（root 恢复仍可用）'
               name='PasswordLoginEnabled'
               onChange={(...uiArgs) => handleInputChange(...uiArgs).catch(reportUIError)}
             />
@@ -285,7 +285,7 @@ const SystemSetting = () => {
               >
                 <Modal.Header>警告</Modal.Header>
                 <Modal.Content>
-                  <p>取消密码登录将导致所有未绑定其他登录方式的用户（包括管理员）无法通过密码登录，确认取消？</p>
+                  <p>关闭后，普通用户和非 root 管理员必须使用其他登录方式。root 密码恢复登录仍可用，且已配置的 TOTP 验证仍然必须完成。确认关闭？</p>
                 </Modal.Content>
                 <Modal.Actions>
                   <Button onClick={() => setShowPasswordWarningModal(false)}>取消</Button>
