@@ -85,7 +85,7 @@ func (a *ResponseUsageAccumulator) consumeOutput(root map[string]json.RawMessage
 		}
 		a.observeJSONText(root, text, false)
 	case "response.output_json.done":
-		text := responseUsageJSONText(root["json"])
+		text := responseUsageRawJSON(root["json"])
 		if text == "" {
 			for _, key := range []string{"part", "output", "text", "delta"} {
 				if text = responseUsageJSONPayload(root[key]); text != "" {
@@ -153,7 +153,7 @@ func (a *ResponseUsageAccumulator) consumeBlocks(raw json.RawMessage, snapshot b
 // consumeBlock extracts text, thinking, or tool-use input from one content block.
 func (a *ResponseUsageAccumulator) consumeBlock(block map[string]json.RawMessage, snapshot bool) {
 	if responseUsageString(block["type"]) == "output_json" && len(block["json"]) > 0 {
-		a.appendText(responseUsageJSONText(block["json"]), snapshot)
+		a.appendText(responseUsageRawJSON(block["json"]), snapshot)
 	} else {
 		a.appendText(responseUsageString(block["text"]), snapshot)
 	}
@@ -164,6 +164,12 @@ func (a *ResponseUsageAccumulator) consumeBlock(block map[string]json.RawMessage
 			a.appendText(input, snapshot)
 		}
 	}
+}
+
+// responseUsageRawJSON preserves application JSON syntax at explicit JSON leaf fields.
+// Unlike protocol strings and tool arguments, quotes, null, and numeric lexemes are output text.
+func responseUsageRawJSON(raw json.RawMessage) string {
+	return strings.TrimSpace(string(raw))
 }
 
 // responseUsageJSONText returns string content or compact structured JSON, matching
@@ -188,7 +194,10 @@ func responseUsageJSONText(raw json.RawMessage) string {
 func responseUsageJSONPayload(raw json.RawMessage) string {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) == nil {
-		for _, key := range []string{"json", "text", "content", "partial_json"} {
+		if rawJSON, ok := fields["json"]; ok {
+			return responseUsageRawJSON(rawJSON)
+		}
+		for _, key := range []string{"text", "content", "partial_json"} {
 			if nested, ok := fields[key]; ok {
 				if text := responseUsageJSONText(nested); text != "" {
 					return text

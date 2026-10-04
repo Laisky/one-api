@@ -156,7 +156,7 @@ func (a *ResponseUsageAccumulator) consumeResponseBlocks(item map[string]json.Ra
 			"content_index": json.RawMessage(strconv.Itoa(contentIndex)),
 			"item_id":       item["id"],
 		}
-		text := responseUsageJSONText(block["json"])
+		text := responseUsageRawJSON(block["json"])
 		if text == "" {
 			text = responseUsageString(block["text"])
 		}
