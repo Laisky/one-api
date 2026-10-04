@@ -45,7 +45,6 @@ metadata:
   namespace: one-api
 data:
   # Basic configuration
-  SESSION_SECRET: 'your-session-secret-here'
   DEBUG: 'false'
   DEBUG_SQL: 'false'
   # Rate limiting
@@ -69,6 +68,57 @@ data:
 ```bash
 kubectl apply -f configmap.yaml
 ```
+
+### Required session Secret
+
+Provision a **unique, stable 256-bit random session key** once, before creating
+application pods. Do not put it in a ConfigMap, Git, shell history, a shared
+example, or command-line literal. The application rejects known public
+placeholders; that check cannot establish the entropy of every operator key.
+An external secret manager may create the same Secret/key instead.
+
+```bash
+# Run once after creating the one-api namespace. No key value is printed.
+set -eu
+umask 077
+secret_dir=$(mktemp -d)
+trap 'rm -rf "$secret_dir"' EXIT HUP INT TERM
+openssl rand -base64 32 > "$secret_dir/SESSION_SECRET"
+kubectl -n one-api create secret generic one-api-session \
+  --from-file=SESSION_SECRET="$secret_dir/SESSION_SECRET"
+```
+
+`create` deliberately fails if the Secret already exists: do not regenerate it
+during routine deployment or replica scaling. All replicas must use the same
+key. The non-optional `secretKeyRef` below prevents application startup when the
+Secret or its key is missing. Non-Kubernetes single-process installs may still
+use an automatically generated per-boot key, but restarting invalidates their
+sessions; it is unsuitable for load-balanced replicas.
+
+Restrict Secret read/write RBAC, use encryption at rest or external secret
+management, and keep backups encrypted. Kubernetes Secret encoding alone is not
+encryption. Changing an environment-backed Secret does not update existing pod
+environments: coordinate a rollout and expect all existing browser sessions to
+be invalidated. Do not let old-key replicas keep accepting old cookies during
+a security rotation; drain/block ingress while replacing all affected pods.
+Do not restore a compromised key as a rollback strategy.
+
+**State-encryption warning:** when `RESPONSE_STATE_ENCRYPTION_KEYS` is unset,
+Responses state encryption may derive from the explicitly configured session
+secret. Before rotation, plan the state-key migration/retention separately so
+existing encrypted records do not become unreadable. Prefer independently
+provisioned, versioned state-encryption keys for new installations; do not simply
+replace an existing derived key without preserving decryption compatibility.
+
+Dashboard requests re-read the current account state. Disabling/deleting an
+account or reducing its role revokes the corresponding access immediately;
+promotions require a fresh login. A cookie is not the source of current role or
+account status. Root recovery password/TOTP behavior is unchanged.
+
+References: [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
+and [OWASP session management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html).
+These instructions are not a claim that a cluster was deployed or a production
+key rotated during code validation.
 
 ### Deployment
 
@@ -106,6 +156,12 @@ spec:
                 name: one-api-secrets
                 optional: true
           env:
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: one-api-session
+                  key: SESSION_SECRET
+                  optional: false
             - name: SQL_DSN
               valueFrom:
                 secretKeyRef:
