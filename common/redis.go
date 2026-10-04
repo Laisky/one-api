@@ -90,7 +90,8 @@ func RedisSet(ctx context.Context, key string, value string, expiration time.Dur
 	}
 	err := RDB.Set(ctx, key, value, expiration).Err()
 	if err != nil {
-		return errors.Wrapf(err, "failed to set redis key: %s", key)
+		// Cache keys can contain credentials; callers may log this error.
+		return errors.Wrap(err, "failed to set redis key")
 	}
 	return nil
 }
@@ -103,7 +104,8 @@ func RedisGet(ctx context.Context, key string) (string, error) {
 	}
 	val, err := RDB.Get(ctx, key).Result()
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to get redis key: %s", key)
+		// Cache keys can contain credentials; callers may log this error.
+		return "", errors.Wrap(err, "failed to get redis key")
 	}
 	return val, nil
 }
@@ -115,7 +117,8 @@ func RedisDel(ctx context.Context, key string) error {
 	}
 	err := RDB.Del(ctx, key).Err()
 	if err != nil {
-		return errors.Wrapf(err, "failed to delete redis key: %s", key)
+		// Cache keys can contain credentials; callers may log this error.
+		return errors.Wrap(err, "failed to delete redis key")
 	}
 	return nil
 }
