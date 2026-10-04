@@ -313,7 +313,7 @@
       "OidcTokenEndpoint": "OIDC トークンエンドポイントの URL。",
       "OidcUserinfoEndpoint": "OIDC userinfo エンドポイントの URL。",
       "OidcWellKnown": "OIDC well-known URL（例: https://issuer/.well-known/openid-configuration）。",
-      "PasswordLoginEnabled": "メール＋パスワードでのログインを許可します。無効化すると OAuth 等が必須になります。",
+      "PasswordLoginEnabled": "root 以外のユーザーのパスワードログインを許可します。無効にすると、それらのアカウントには別のログイン方法が必要です。root のパスワードによる復旧は引き続き可能で、設定済みの TOTP 認証も必要です。",
       "PasswordRegisterEnabled": "メール＋パスワードでの新規登録を許可します。",
       "PreConsumedQuota": "リクエスト開始時に確保するクォータ。未使用分は課金後に返還されます。",
       "QuotaForInvitee": "招待されたユーザーに付与されるクォータ報酬です。",

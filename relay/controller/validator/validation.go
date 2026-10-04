@@ -20,6 +20,12 @@ func ValidateTextRequest(textRequest *model.GeneralOpenAIRequest, relayMode int)
 	if textRequest.MaxTokens < 0 || textRequest.MaxTokens > math.MaxInt32/2 {
 		return errors.New("max_tokens is invalid")
 	}
+	// Two different positive limits have provider-dependent precedence. Reject
+	// ambiguity rather than quoting one limit while forwarding the other.
+	if textRequest.MaxTokens > 0 && textRequest.MaxCompletionTokens != nil &&
+		*textRequest.MaxCompletionTokens > 0 && textRequest.MaxTokens != *textRequest.MaxCompletionTokens {
+		return errors.New("max_tokens and max_completion_tokens must agree when both are positive")
+	}
 	if textRequest.Model == "" {
 		return errors.New("model is required")
 	}

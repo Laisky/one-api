@@ -37,6 +37,9 @@ import (
 // based on per-second pricing while proxying the raw payload to the upstream channel.
 func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if c.Request.Method != http.MethodPost {
+		if strings.TrimSuffix(c.Request.URL.Path, "/") == "/v1/videos" {
+			return openai.ErrorWrapper(errors.New("owner-scoped legacy video collections are not supported"), "unsupported_video_collection", http.StatusNotImplemented)
+		}
 		// Task ownership and channel binding are checked by BindAsyncTaskChannel
 		// on the video routes. Retrieval/deletion does not create another paid job;
 		// it must not be confused with the public arbitrary-target proxy endpoint.
@@ -195,36 +198,15 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	channelId := meta.ChannelId
 	tokenName := meta.TokenName
 
-	preConsumedQuota := int64(0)
-	userQuota, err := model.CacheGetUserQuota(ctx, userId)
-	if err != nil {
-		return openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
+	preConsumedQuota, reserveErr := reservePaidRequestQuota(c, meta, usedQuota, "video_preconsume")
+	if reserveErr != nil {
+		return reserveErr
 	}
-
-	if usedQuota > 0 {
-		if userQuota-usedQuota < 0 {
-			return openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
-		}
-
-		tokenQuota := c.GetInt64(ctxkey.TokenQuota)
-		tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
-		preConsumedQuota = usedQuota
-		if usedQuota <= (userQuota-1)/100 && (tokenQuotaUnlimited || usedQuota <= (tokenQuota-1)/100) {
-			preConsumedQuota = 0
-		}
-		if preConsumedQuota > 0 {
-			if err := model.PreConsumeTokenQuota(ctx, tokenId, preConsumedQuota); err != nil {
-				return openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
-			}
-			syncUserQuotaCacheAfterPreConsume(ctx, userId, preConsumedQuota, "video_preconsume")
-
-			// Billing audit safety net
-			markPreConsumed(c, preConsumedQuota)
-			defer billingAuditSafetyNet(c)
-
-			provisionalLogId := recordProvisionalLog(c, meta, userVisibleModelName(meta, videoRequest.Model), preConsumedQuota)
-			c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
-		}
+	if preConsumedQuota > 0 {
+		markPreConsumed(c, preConsumedQuota)
+		defer billingAuditSafetyNet(c)
+		provisionalLogId := recordProvisionalLog(c, meta, userVisibleModelName(meta, videoRequest.Model), preConsumedQuota)
+		c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 	}
 
 	succeed := false

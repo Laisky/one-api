@@ -110,6 +110,19 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
 	}
 
+	// Normalize provider-visible instructions, defaults and output limits
+	// before counting or reserving. Conversion mutates the canonical chat view;
+	// retain the serialized result for the single ordinary upstream dispatch.
+	if requiresJSONSchemaDowngrade(meta, textRequest) {
+		structuredjson.EnsureInstruction(textRequest)
+		textRequest.ResponseFormat = nil
+	}
+	requestAdaptor.Init(meta)
+	requestBody, err := getRequestBody(c, meta, textRequest, requestAdaptor, systemPromptReset)
+	if err != nil {
+		return wrapConvertRequestError(err)
+	}
+
 	// pre-consume quota
 	promptUsage, bizErr := estimatePromptUsage(c, meta, textRequest)
 	if bizErr != nil {
@@ -121,7 +134,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 	promptTokens := promptUsage.PromptTokens
 	meta.PromptTokens = promptTokens
-	preConsumedQuota, bizErr := preConsumeQuota(c, textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
+	preConsumedQuota, bizErr := preConsumeQuota(c, preparedChatQuotaRequest(c, textRequest), promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 	if bizErr != nil {
 		lg.Warn("preConsumeQuota failed",
 			zap.Error(bizErr.RawError),
@@ -162,7 +175,6 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		streaming.StoreTracker(c, tracker)
 	}
 
-	requestAdaptor.Init(meta)
 	if registry != nil {
 		response, usage, mcpSummary, incrementalCharged, execErr := executeChatMCPToolLoop(c, meta, textRequest, registry, preConsumedQuota)
 		if execErr != nil {
@@ -259,17 +271,8 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		return nil
 	}
 
-	// Downgrade structured JSON schema for providers that reject response_format
-	if requiresJSONSchemaDowngrade(meta, textRequest) {
-		structuredjson.EnsureInstruction(textRequest)
-		textRequest.ResponseFormat = nil
-	}
-
-	// get request body
-	requestBody, err := getRequestBody(c, meta, textRequest, requestAdaptor, systemPromptReset)
-	if err != nil {
-		return wrapConvertRequestError(err)
-	}
+	// Reuse the exact request bytes prepared before admission. Do not repeat
+	// provider transformations after quoting, which can inject unpriced work.
 
 	// for debug
 	requestBodyBytes, _ := io.ReadAll(requestBody)

@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -120,29 +119,4 @@ func exactJinaUsageQuota(ctx context.Context, m *metalib.Meta, usage *relaymodel
 		return max(amount, reserved)
 	}
 	return amount
-}
-
-// refundJinaAdmission completes a proven pre-inference rejection refund before
-// allowing a retry. Waiting here prevents an old attempt's delayed cost=0 write
-// from erasing the next attempt's charge. Failed refunds block automatic replay.
-func refundJinaAdmission(c *gin.Context, amount int64, tokenID int, reason string) (bool, bool) {
-	if c.GetInt(ctxkey.Channel) != channeltype.Jina || !jina.RejectedBeforeInference(c) {
-		return false, false
-	}
-	markBillingReconciled(c)
-	ctx, cancel := context.WithTimeout(relayctx.Detach(c), 30*time.Second)
-	defer cancel()
-	refunded := amount == 0 || newConservativeRefundSnapshot(c, amount, tokenID, reason).refund(ctx)
-	cost := amount
-	if refunded {
-		cost = 0
-	} else {
-		c.Set(responseSettlementKey, true)
-	}
-	if requestID := c.GetString(ctxkey.RequestId); requestID != "" {
-		if err := model.UpdateUserRequestCostQuotaByRequestID(c.GetInt(ctxkey.Id), requestID, cost); err != nil {
-			gmw.GetLogger(c).Error("record jina admission refund cost failed", zap.Error(err))
-		}
-	}
-	return true, refunded
 }

@@ -1073,7 +1073,7 @@ func AdminGetAllTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    model.TokensToResponses(tokens),
+		"data":    model.TokensToAdminResponses(tokens),
 		"total":   total,
 	})
 }
@@ -1107,7 +1107,7 @@ func AdminSearchTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    model.TokensToResponses(tokens),
+		"data":    model.TokensToAdminResponses(tokens),
 		"total":   total,
 	})
 }
@@ -1127,6 +1127,6 @@ func AdminGetToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    token.ToResponse(),
+		"data":    token.ToAdminResponse(),
 	})
 }

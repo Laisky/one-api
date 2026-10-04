@@ -313,7 +313,7 @@
       "OidcTokenEndpoint": "OIDC token endpoint URL.",
       "OidcUserinfoEndpoint": "OIDC userinfo endpoint URL.",
       "OidcWellKnown": "OIDC well-known discovery URL (e.g., https://issuer/.well-known/openid-configuration).",
-      "PasswordLoginEnabled": "Allow users to sign in with email and password. Disable to require OAuth or other providers.",
+      "PasswordLoginEnabled": "Allow non-root users to sign in with a password. Disabling this requires other sign-in methods for those accounts. Root password recovery remains available and still requires TOTP when configured.",
       "PasswordRegisterEnabled": "Allow new users to register with email and password.",
       "PreConsumedQuota": "Quota reserved at request start to avoid abuse. Unused part is returned after billing.",
       "QuotaForInvitee": "Quota reward granted to the invitee upon successful registration.",

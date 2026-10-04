@@ -31,6 +31,8 @@ var (
 	GroupModelsCacheSeconds     = config.SyncFrequency
 )
 
+// CacheGetTokenByKey retrieves the token identified by key using Redis with a
+// database fallback, and returns the token or a wrapped lookup error.
 func CacheGetTokenByKey(ctx context.Context, key string) (*Token, error) {
 	lg := logger.FromContext(ctx)
 	keyCol := "`key`"
@@ -44,7 +46,7 @@ func CacheGetTokenByKey(ctx context.Context, key string) (*Token, error) {
 		}
 		err := DB.Where(keyCol+" = ?", key).First(&token).Error
 		if err != nil {
-			return nil, errors.Wrapf(err, "get token by key %s", key)
+			return nil, errors.Wrap(err, "get token by key")
 		}
 		return &token, nil
 	}
@@ -55,7 +57,7 @@ func CacheGetTokenByKey(ctx context.Context, key string) (*Token, error) {
 		}
 		err := DB.Where(keyCol+" = ?", key).First(&token).Error
 		if err != nil {
-			return nil, errors.Wrapf(err, "get token by key %s", key)
+			return nil, errors.Wrap(err, "get token by key")
 		}
 		// Cache the raw token row. With Token.MarshalJSON retired, the default
 		// serialization already keeps the raw stored key (the response-time
@@ -81,7 +83,7 @@ func CacheGetTokenByKey(ctx context.Context, key string) (*Token, error) {
 
 	err = json.Unmarshal([]byte(tokenObjectString), &token)
 	if err != nil {
-		return nil, errors.Wrapf(err, "unmarshal cached token for key %s", key)
+		return nil, errors.Wrap(err, "unmarshal cached token")
 	}
 	return &token, nil
 }

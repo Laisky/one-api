@@ -74,6 +74,7 @@ func (a *Adaptor) DoResponse(c *gin.Context,
 			if usage == nil || usage.TotalTokens == 0 {
 				usage = ResponseText2Usage(responseText, meta.ActualModelName, meta.PromptTokens)
 			}
+			AnnotateResponseStreamUsage(c, usage)
 			if usage.TotalTokens != 0 && usage.PromptTokens == 0 {
 				usage.PromptTokens = meta.PromptTokens
 				usage.CompletionTokens = usage.TotalTokens - meta.PromptTokens
