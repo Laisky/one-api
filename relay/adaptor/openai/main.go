@@ -124,6 +124,9 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 			status = http.StatusForbidden
 		}
 		failure := ErrorWrapper(errors.New(message), code, status)
+		if tracker != nil && usage != nil {
+			usage = tracker.UsageSnapshot()
+		}
 		if openai_compatible.FailStreamWithBridge(c, failure, usage) {
 			doneRendered = true
 			return
@@ -455,6 +458,12 @@ streamLoop:
 	// Check for stream reader errors.
 	if streamErr != nil && trackerErr == nil {
 		render.LogHeartbeatLineReaderError(c, lg, streamErr, hbr)
+	}
+
+	// Use the owned receipt after later output before rewriting or final settlement.
+	// Nil receipts retain the existing adaptor fallback policy.
+	if tracker != nil && usage != nil {
+		usage = tracker.UsageSnapshot()
 	}
 
 	// Promote any top-level cached_tokens into the nested
