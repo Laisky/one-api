@@ -15,8 +15,10 @@ import (
 
 // resolveDashboardUser verifies a signed session's identity against the current
 // primary account record, not a stale cache or cookie-carried authorization.
-// The signed role is an upper bound: promotions require a new login, while
-// demotions, disablement and deletion apply on the very next request.
+// Existing browser cookies remain capped at the role recorded when they were
+// issued; logging in again refreshes that cookie ceiling. Demotions, disablement
+// and deletion apply on the next request. Existing bearer credentials and
+// /api/user/token retain their current-account authorization behavior.
 func resolveDashboardUser(c *gin.Context) (*model.User, error) {
 	session := sessions.Default(c)
 	claimedUsername := session.Get("username")

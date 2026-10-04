@@ -111,9 +111,11 @@ provisioned, versioned state-encryption keys for new installations; do not simpl
 replace an existing derived key without preserving decryption compatibility.
 
 Dashboard requests re-read the current account state. Disabling/deleting an
-account or reducing its role revokes the corresponding access immediately;
-promotions require a fresh login. A cookie is not the source of current role or
-account status. Root recovery password/TOTP behavior is unchanged.
+account or reducing its role revokes the corresponding access immediately.
+Existing browser cookies remain capped at the role recorded when they were
+issued; logging in again refreshes that cookie ceiling. Existing bearer
+credentials and `/api/user/token` retain their current-account authorization
+behavior. Root recovery password/TOTP behavior is unchanged.
 
 References: [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
 and [OWASP session management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html).

@@ -13,7 +13,7 @@ import (
 func ValidateConfiguredSessionSecret(value string) error {
 	normalized := strings.ToLower(strings.TrimSpace(value))
 	switch normalized {
-	case "your-session-secret-here", "your-session-secret", "your-secret-key", "your-secret-key-here", "changeme", "change-me", "change_me", "replace-me", "session-secret", "secret":
+	case "random_string", "your-session-secret-here", "your-session-secret", "your-secret-key", "your-secret-key-here", "changeme", "change-me", "change_me", "replace-me", "session-secret", "secret":
 		return errors.New("unsafe SESSION_SECRET placeholder; provision a unique random secret")
 	default:
 		return nil
