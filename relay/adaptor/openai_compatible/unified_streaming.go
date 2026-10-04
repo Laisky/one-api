@@ -1001,10 +1001,18 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 	for {
 		line, err := lineReader.Next()
 		if err != nil {
+			// Closing a canceled body may surface as EOF. Preserve the caller's
+			// stop condition and observed receipt instead of synthesizing success.
+			if canceled := gmw.Ctx(c).Err(); canceled != nil {
+				err = canceled
+			}
 			if errors.Is(err, io.EOF) {
 				break
 			}
 
+			if tracker != nil {
+				return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), tracker.UsageSnapshot()
+			}
 			return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), streamCtx.usage
 		}
 
@@ -1177,6 +1185,9 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 
 	// Validate stream completion
 	if errResp, ok := streamCtx.ValidateStreamCompletion(modelName, contentType); !ok {
+		if tracker != nil {
+			return errResp, tracker.UsageSnapshot()
+		}
 		return errResp, streamCtx.usage
 	}
 
