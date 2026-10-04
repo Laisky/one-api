@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -59,6 +60,11 @@ func Login(c *gin.Context) {
 		} else {
 			helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		}
+		return
+	}
+	// JSON replaces malformed UTF-8; reject original bytes before authentication.
+	if !utf8.Valid(body) {
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 	var loginRequest LoginRequest
