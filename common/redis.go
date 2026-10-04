@@ -104,7 +104,8 @@ func RedisGet(ctx context.Context, key string) (string, error) {
 	}
 	val, err := RDB.Get(ctx, key).Result()
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to get redis key: %s", key)
+		// Cache keys can contain credentials; callers may log this error.
+		return "", errors.Wrap(err, "failed to get redis key")
 	}
 	return val, nil
 }
