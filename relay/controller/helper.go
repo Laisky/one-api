@@ -289,12 +289,12 @@ func postConsumeQuota(ctx context.Context,
 		quota = 0
 	}
 	if usage.BillingEstimateReason != "" {
-		quota = max(quota, preConsumedQuota+incrementallyCharged)
+		quota = max(quota, preConsumedQuota+incrementallyCharged, usage.BillingEstimateQuotaFloor)
 	}
 	if settledAtEstimate {
 		// Keep exactly what was already debited: a zero delta charges nothing
 		// extra and, crucially, refunds nothing.
-		quota = preConsumedQuota + incrementallyCharged
+		quota = max(preConsumedQuota+incrementallyCharged, usage.BillingEstimateQuotaFloor)
 		usage.BillingEstimateReason = "missing_or_zero_usage_retained_reservation"
 	}
 

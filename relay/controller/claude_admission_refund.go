@@ -14,15 +14,17 @@ import (
 	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
+	awsutils "github.com/Laisky/one-api/relay/adaptor/aws/utils"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
-// refundClaudeAdmission handles only a verified receipt-free JSON admission rejection.
+// refundClaudeAdmission retains its historical name for compatibility and handles
+// only private proof of a Claude JSON or non-retried AWS SDK admission rejection.
 // It completes an owned durable refund before allowing replay, retaining a pending
 // recovery intent and blocking replay if the database cannot confirm the credit.
 // The boolean reports whether this function owns the error's refund disposition.
 func refundClaudeAdmission(c *gin.Context, failure *relaymodel.ErrorWithStatusCode, amount int64, tokenID int) bool {
-	if c == nil || !anthropic.IsAdmissionRejection(failure) {
+	if c == nil || (!anthropic.IsAdmissionRejection(failure) && !awsutils.IsAdmissionRejection(failure)) {
 		return false
 	}
 	if c.GetBool(ctxkey.PreConsumedQuotaRefundClaimed) {
@@ -34,7 +36,10 @@ func refundClaudeAdmission(c *gin.Context, failure *relaymodel.ErrorWithStatusCo
 	timeout := time.Duration(config.BillingTimeoutSec) * time.Second
 	ctx, cancel := context.WithTimeout(relayctx.Detach(c), timeout)
 	defer cancel()
-	const reason = "claude_admission_rejected"
+	reason := "claude_admission_rejected"
+	if awsutils.IsAdmissionRejection(failure) {
+		reason = "aws_admission_rejected"
+	}
 	if amount > 0 {
 		intent := model.QuotaRefund{
 			ID: uuid.NewString(), UserID: c.GetInt(ctxkey.Id), TokenID: tokenID,
