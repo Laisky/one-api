@@ -12,7 +12,6 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
@@ -24,7 +23,7 @@ import (
 
 // preConsumeClaudeMessagesQuota reserves quota for a Claude Messages request.
 // Jina requests reject unbounded tool calls and reserve their complete prepared
-// allowance; other providers may skip the reservation for trusted balances.
+// allowance; every other paid request also reserves its complete quote.
 func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesRequest, promptTokens int, ratio float64, completionRatio float64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	if meta.ChannelType == channeltype.Jina {
 		if len(request.Tools) > 0 {
@@ -46,8 +45,6 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 		return preConsumeJinaQuota(c, meta)
 	}
 	// Use similar logic to ChatCompletion pre-consumption
-	ctx := gmw.Ctx(c)
-	lg := gmw.GetLogger(c)
 	promptQuota := float64(promptTokens) * ratio
 	completionQuota := 0.0
 	if request.MaxTokens > 0 {
@@ -59,37 +56,7 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 		baseQuota = 1
 	}
 
-	// Check user quota first
-	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
-	tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
-	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
-	if err != nil {
-		return baseQuota, openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
-	}
-	if userQuota-baseQuota < 0 {
-		return baseQuota, openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
-	}
-	if userQuota > 100*baseQuota &&
-		(tokenQuotaUnlimited || tokenQuota > 100*baseQuota) {
-		// in this case, we do not pre-consume quota
-		// because the user and token have enough quota
-		baseQuota = 0
-		lg.Info("user has enough quota, trusted and no need to pre-consume",
-			zap.Int64("user_quota", userQuota),
-		)
-	}
-	if baseQuota > 0 {
-		err := model.PreConsumeTokenQuota(ctx, meta.TokenId, baseQuota)
-		if err != nil {
-			return baseQuota, openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
-		}
-		syncUserQuotaCacheAfterPreConsume(ctx, meta.UserId, baseQuota, "claude_messages_preconsume")
-	}
-
-	lg.Debug("pre-consumed quota for Claude Messages",
-		zap.Int64("quota", baseQuota),
-		zap.Float64("ratio", ratio))
-	return baseQuota, nil
+	return reservePaidRequestQuota(c, meta, baseQuota, "claude_messages_preconsume")
 }
 
 // postConsumeClaudeMessagesQuotaWithTraceID calculates and records the final
