@@ -51,7 +51,7 @@ func TestClaudeNativePDFLinearHTTP(t *testing.T) {
 			require.NoError(t, err)
 			document := linearPDFReviewDocument(pdf)
 			documents := []any{document}
-			wantHold := int64(linearPDFReviewMetadataTokens(t, documents) + linearPDFReviewUnits(len(decoded)) + 1)
+			wantHold := int64(linearPDFReviewMetadataTokens(t, documents) + linearPDFReviewUnits(len(decoded)) + 8)
 			if tc.blocked {
 				require.Greater(t, wantHold, tc.balance, "balance must be below the independent configured policy quote")
 			} else {
@@ -80,6 +80,7 @@ func TestClaudeNativePDFLinearHTTP(t *testing.T) {
 			t.Cleanup(func() { client.HTTPClient = oldClient })
 			request := linearPDFReviewRequest(documents, false)
 			request.Model = "alias"
+			request.MaxTokens = 8
 			body, err := json.Marshal(request)
 			require.NoError(t, err)
 			c, _, id := protocolContext(t, channeltype.Anthropic, linearPDFReviewModel, "/v1/messages", string(body), server.URL,
@@ -122,7 +123,7 @@ func TestClaudeNativePDFLinearHTTP(t *testing.T) {
 			var wire map[string]any
 			require.NoError(t, json.Unmarshal(observed.body, &wire))
 			require.Equal(t, linearPDFReviewModel, wire["model"])
-			require.EqualValues(t, 1, wire["max_tokens"])
+			require.EqualValues(t, 8, wire["max_tokens"])
 			message := wire["messages"].([]any)[0].(map[string]any)
 			outgoing := message["content"].([]any)[0].(map[string]any)
 			require.Equal(t, document, outgoing, "private quote projection must preserve the provider document")
