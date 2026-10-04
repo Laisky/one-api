@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 
@@ -37,21 +38,38 @@ func jsonRawIsNull(raw json.RawMessage) bool {
 	return strings.TrimSpace(string(raw)) == "null"
 }
 
+// Login validates a bounded request before authentication, failure tracking, and session creation.
 func Login(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
 	turnstileToken := c.Query("turnstile")
 	middleware.RedactTurnstileTokenFromURL(c)
 
+	const maxLoginBodyBytes = 16 * 1024
+	if c.Request.ContentLength > maxLoginBodyBytes {
+		helper.RespondErrorWithStatus(c, http.StatusRequestEntityTooLarge, errors.New("login request body exceeds 16 KiB"))
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxLoginBodyBytes)
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		var limitError *http.MaxBytesError
+		if errors.As(err, &limitError) {
+			helper.RespondErrorWithStatus(c, http.StatusRequestEntityTooLarge, errors.New("login request body exceeds 16 KiB"))
+		} else {
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
+		}
+		return
+	}
 	var loginRequest LoginRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&loginRequest)
+	err = json.Unmarshal(body, &loginRequest)
 	if err != nil {
 		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 	username := loginRequest.Username
 	password := loginRequest.Password
-	if username == "" || password == "" {
+	if !middleware.ValidLoginIdentifier(username) || password == "" {
 		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
