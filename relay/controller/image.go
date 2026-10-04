@@ -287,7 +287,11 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 
 		// Post-billing: reconcile pre-consumed quota with actual usage
-		quotaDelta := imagePostConsumeDelta(imageModel, usedQuota, preConsumedQuota)
+		// A token-only quote is refundable prepayment, not an earned render fee.
+		quotaDelta := usedQuota - preConsumedQuota
+		if perImageBilling {
+			quotaDelta = imagePostConsumeDelta(imageModel, usedQuota, preConsumedQuota)
+		}
 		err := model.SettleConsumedTokenQuota(bgCtx, meta.TokenId, meta.UserId, quotaDelta)
 		if err != nil {
 			// Keep the provisional audit rather than claim an unpaid receipt settled.
