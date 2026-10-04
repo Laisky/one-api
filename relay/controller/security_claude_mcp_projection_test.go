@@ -66,8 +66,10 @@ func TestSecurityNativeClaudeMCPProjection(t *testing.T) {
 			t.Cleanup(mcpServer.Close)
 			stored := &model.MCPServer{Name: fmt.Sprintf("projection-fixture-%v", legacy), Status: model.MCPServerStatusEnabled, BaseURL: mcpServer.URL}
 			require.NoError(t, model.DB.Create(stored).Error)
+			t.Cleanup(func() { require.NoError(t, model.DB.Delete(stored).Error) })
 			tool := &model.MCPTool{ServerId: stored.Id, Name: "probe", InputSchema: `{"type":"object","properties":{}}`}
 			require.NoError(t, model.DB.Create(tool).Error)
+			t.Cleanup(func() { require.NoError(t, model.DB.Delete(tool).Error) })
 			registry := &claudeToolSearchMCPRegistry{candidatesByName: map[string][]mcp.ToolCandidate{"probe": {{ResolvedTool: mcp.ResolvedTool{Tool: tool, ServerID: stored.Id, ServerLabel: stored.Name, ServerURL: mcpServer.URL, Policy: mcp.ToolPolicySnapshot{Allowed: true}}}}}, requestHeaders: map[string]map[string]string{}, selectedIndex: map[string]int{}}
 			var upstreamCalls atomic.Int32
 			observed := make(chan []byte, 2)
