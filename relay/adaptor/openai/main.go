@@ -1047,7 +1047,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 			c.Set(ctxkey.WebSearchCallCount, webSearchCount)
 		}
 		lifecycle.finish(c, &apiErr)
-		if lifecycle.gap || (apiErr != nil && !lifecycle.terminalReceipt) || (usage == nil && (responseText != "" || webSearchCount > 0)) {
+		if lifecycle.gap || !lifecycle.terminalReceipt {
 			c.Set(responseStreamEstimateKey, "response_stream_incomplete_or_missing_receipt")
 		}
 	}()
@@ -1351,8 +1351,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		// Accumulate usage information
 		if responseAPIChunk.Usage != nil {
 			lastUsage = responseAPIChunk.Usage
-			switch responseAPIChunk.Status {
-			case "completed", "failed", "incomplete":
+			if responseStreamHasTerminalUsage(fullResponse, streamEvent, &responseAPIChunk) {
 				lifecycle.terminalReceipt = true
 			}
 		}
@@ -1656,7 +1655,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 			c.Set(ctxkey.WebSearchCallCount, webSearchCount)
 		}
 		lifecycle.finish(c, &apiErr)
-		if lifecycle.gap || (apiErr != nil && !lifecycle.terminalReceipt) || (usage == nil && (responseText != "" || webSearchCount > 0)) {
+		if lifecycle.gap || !lifecycle.terminalReceipt {
 			c.Set(responseStreamEstimateKey, "response_stream_incomplete_or_missing_receipt")
 		}
 	}()
@@ -1796,8 +1795,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 		// Accumulate usage information
 		if responseAPIChunk.Usage != nil {
 			lastUsage = responseAPIChunk.Usage
-			switch responseAPIChunk.Status {
-			case "completed", "failed", "incomplete":
+			if responseStreamHasTerminalUsage(fullResponse, streamEvent, &responseAPIChunk) {
 				lifecycle.terminalReceipt = true
 			}
 			if convertedUsage := responseAPIChunk.Usage.ToModelUsage(); convertedUsage != nil {

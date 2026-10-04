@@ -146,3 +146,36 @@ func responseStreamSnapshotText(outputs []OutputItem) string {
 	}
 	return text.String()
 }
+
+// responseStreamHasTerminalUsage uses provider receipt semantics, not EOF or
+// a presentation converter's synthetic item-completion status. A status-less
+// full-response envelope retains the existing legacy measured-usage contract.
+func responseStreamHasTerminalUsage(full *ResponseAPIResponse, event *ResponseAPIStreamEvent, converted *ResponseAPIResponse) bool {
+	if converted == nil || converted.Usage == nil {
+		return false
+	}
+	status := ""
+	if full != nil {
+		status = full.Status
+		if status == "" {
+			return true
+		}
+	} else if event != nil {
+		status = event.Status
+		if event.Response != nil {
+			status = event.Response.Status
+		}
+		if status == "" {
+			switch event.Type {
+			case "response.completed", "response.failed", "response.incomplete":
+				return true
+			}
+		}
+	}
+	switch status {
+	case "completed", "failed", "incomplete":
+		return true
+	default:
+		return false
+	}
+}
