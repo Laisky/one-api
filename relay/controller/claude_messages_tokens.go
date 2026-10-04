@@ -57,10 +57,14 @@ func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesR
 		promptTokens += fileImageTokens
 	}
 
+	documentTokens := countClaudeNativeDocumentAllowance(request)
+	promptTokens += documentTokens
+
 	logger.Debug("estimated prompt tokens for Claude Messages",
 		zap.Int("total", promptTokens),
 		zap.String("model", request.Model),
 		zap.Int("image_fallback", fileImageTokens),
+		zap.Int("document_allowance", documentTokens),
 	)
 	return promptTokens
 }

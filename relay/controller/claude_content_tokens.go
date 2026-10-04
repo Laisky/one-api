@@ -40,6 +40,12 @@ func claudeContentTokenParts(blocks []any) []relaymodel.MessageContent {
 					parts = appendClaudeJSONTokenPart(parts, result)
 				}
 			}
+		case "document":
+			if claudeOpaqueDocumentSource(blockMap) {
+				parts = appendClaudeJSONTokenPart(parts, claudeDocumentTextMetadata(blockMap))
+			} else {
+				parts = appendClaudeJSONTokenPart(parts, blockMap)
+			}
 		case "image":
 			if source, ok := blockMap["source"].(map[string]any); ok {
 				imageURL := relaymodel.ImageURL{}
