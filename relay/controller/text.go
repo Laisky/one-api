@@ -288,6 +288,11 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// do request
 	resp, err := requestAdaptor.DoRequest(c, meta, requestBody)
 	if err != nil {
+		// A transport error after dispatch does not prove Cohere rejected work.
+		// Settle the existing allowance once before the outer retry decision.
+		if shouldSkipPreConsumedRefund(c) {
+			settleRetainedRequestAdmission(c, preConsumedQuota, meta.TokenId, "do_request_failed")
+		}
 		// ErrorWrapper will log the error, so we don't need to log it here
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
