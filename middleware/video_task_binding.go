@@ -31,6 +31,10 @@ func BindAsyncTaskChannel() gin.HandlerFunc {
 		}
 
 		path := req.URL.Path
+		if method == http.MethodGet && strings.TrimSuffix(path, "/") == "/v1/videos" {
+			AbortWithError(c, http.StatusNotImplemented, errors.New("owner-scoped legacy video collections are not supported; retrieve a known video task instead"))
+			return
+		}
 		if !strings.HasPrefix(path, "/v1/videos/") {
 			c.Next()
 			return

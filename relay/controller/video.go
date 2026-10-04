@@ -37,6 +37,9 @@ import (
 // based on per-second pricing while proxying the raw payload to the upstream channel.
 func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if c.Request.Method != http.MethodPost {
+		if strings.TrimSuffix(c.Request.URL.Path, "/") == "/v1/videos" {
+			return openai.ErrorWrapper(errors.New("owner-scoped legacy video collections are not supported"), "unsupported_video_collection", http.StatusNotImplemented)
+		}
 		// Task ownership and channel binding are checked by BindAsyncTaskChannel
 		// on the video routes. Retrieval/deletion does not create another paid job;
 		// it must not be confused with the public arbitrary-target proxy endpoint.
