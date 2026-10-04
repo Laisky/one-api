@@ -13,20 +13,23 @@ const responseUsageTextLimit = 64 << 10
 // ResponseUsageAccumulator observes one response without retaining its entire
 // stream. It is request-local and must not be shared between goroutines.
 type ResponseUsageAccumulator struct {
-	incomplete                bool
-	stream, decided, finished bool
-	line, event, body         []byte
-	droppingLine, afterCR      bool
-	limited, malformed        bool
-	totalBytes                int
-	inputSeen, outputSeen     bool
-	input, output, total      int
-	claude                    bool
-	cacheRead, cacheWrite      int
-	cache5m, cache1h           int
-	usage                     Usage
-	text, snapshot            strings.Builder
-	textBytes, snapshotBytes  int
+	incomplete                          bool
+	stream, decided, finished           bool
+	line, event, body                   []byte
+	droppingLine, afterCR               bool
+	limited, malformed                  bool
+	totalBytes                          int
+	inputSeen, outputSeen               bool
+	input, output, total                int
+	claude                              bool
+	cacheRead, cacheWrite               int
+	cache5m, cache1h                    int
+	usage                               Usage
+	text, snapshot                      strings.Builder
+	textBytes, snapshotBytes            int
+	jsonParts                           []*responseUsageJSONPart
+	jsonPartKeys                        map[string]*responseUsageJSONPart
+	jsonCaptureBytes, jsonOverflowBytes int
 }
 
 // NewResponseUsageAccumulator creates a bounded observer. eventStream enables
@@ -169,10 +172,7 @@ func (a *ResponseUsageAccumulator) Finish(promptTokens int, countText func(strin
 	}
 	usage.CompletionTokens = a.output
 	if !a.outputSeen || a.incomplete {
-		text, size := a.text.String(), a.textBytes
-		if a.snapshotBytes > size {
-			text, size = a.snapshot.String(), a.snapshotBytes
-		}
+		text, size := a.completionEvidence()
 		if countText == nil {
 			usage.CompletionTokens = max(usage.CompletionTokens, responseUsageEstimate(size))
 		} else {

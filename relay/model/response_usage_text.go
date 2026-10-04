@@ -45,8 +45,8 @@ func (a *ResponseUsageAccumulator) consumeOutput(root map[string]json.RawMessage
 	a.consumeBlocks(root["content"], snapshot)
 	var output []map[string]json.RawMessage
 	if json.Unmarshal(root["output"], &output) == nil {
-		for _, item := range output {
-			a.consumeBlocks(item["content"], snapshot)
+		for outputIndex, item := range output {
+			a.consumeResponseBlocks(item, outputIndex, snapshot)
 			if responseUsageString(item["type"]) == "function_call" {
 				a.appendText(responseUsageString(item["name"]), snapshot)
 				a.appendText(responseUsageJSONText(item["arguments"]), snapshot)
@@ -68,31 +68,31 @@ func (a *ResponseUsageAccumulator) consumeOutput(root map[string]json.RawMessage
 			a.consumeBlock(block, false)
 		}
 	case "response.output_json.delta":
-		if text := responseUsageString(root["delta"]); text != "" {
-			a.appendText(text, false)
-		} else {
+		text := responseUsageString(root["delta"])
+		if text == "" {
 			var delta map[string]json.RawMessage
 			if json.Unmarshal(root["delta"], &delta) == nil {
 				for _, key := range []string{"partial_json", "json", "text"} {
-					if text := responseUsageJSONText(delta[key]); text != "" {
-						a.appendText(text, false)
+					if text = responseUsageJSONText(delta[key]); text != "" {
 						break
 					}
 				}
 			}
-		}
-	case "response.output_json.done":
-		// Complete JSON is a snapshot, so a matching delta stream is not summed.
-		if text := responseUsageJSONText(root["json"]); text != "" {
-			a.appendText(text, true)
-			break
-		}
-		for _, key := range []string{"part", "output", "text", "delta"} {
-			if text := responseUsageJSONPayload(root[key]); text != "" {
-				a.appendText(text, true)
-				break
+			if text == "" {
+				text = responseUsageJSONText(root["delta"])
 			}
 		}
+		a.observeJSONText(root, text, false)
+	case "response.output_json.done":
+		text := responseUsageJSONText(root["json"])
+		if text == "" {
+			for _, key := range []string{"part", "output", "text", "delta"} {
+				if text = responseUsageJSONPayload(root[key]); text != "" {
+					break
+				}
+			}
+		}
+		a.observeJSONText(root, text, true)
 	case "response.output_text.delta", "response.function_call_arguments.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.delta":
 		a.appendText(responseUsageString(root["delta"]), false)
 	}
@@ -189,7 +189,7 @@ func responseUsageJSONPayload(raw json.RawMessage) string {
 	if json.Unmarshal(raw, &fields) == nil {
 		for _, key := range []string{"json", "text", "content", "partial_json"} {
 			if nested, ok := fields[key]; ok {
-				if text := responseUsageJSONPayload(nested); text != "" {
+				if text := responseUsageJSONText(nested); text != "" {
 					return text
 				}
 			}
