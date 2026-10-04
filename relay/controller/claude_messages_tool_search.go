@@ -442,22 +442,13 @@ func executeClaudeMCPToolCalls(
 			continue
 		}
 
-		// Format result as string content
-		if result == nil {
-			results[callID] = ""
-		} else if len(result.Raw) > 0 {
-			results[callID] = string(result.Raw)
+		// Share the model-history projection with Chat orchestration. Never
+		// fall back to the lossless client envelope when projection fails.
+		message, projectionErr := buildToolResultMessage(callID, result)
+		if projectionErr != nil {
+			results[callID] = `{"error": "failed to project tool result"}`
 		} else {
-			payload := map[string]any{"content": result.Content}
-			if result.IsError {
-				payload["is_error"] = true
-			}
-			encoded, err := json.Marshal(payload)
-			if err != nil {
-				results[callID] = `{"error": "failed to marshal tool result"}`
-			} else {
-				results[callID] = string(encoded)
-			}
+			results[callID] = message.StringContent()
 		}
 
 		recordMCPToolUsage(summary, selected, call.Name)
