@@ -36,7 +36,7 @@ func checkSuccessfulRelayReconcilesOneReservation(t *testing.T, responseAPI bool
 				{name: "below reservation", input: 5, output: 8},
 				{name: "above reservation", input: 400, output: 400},
 				{name: "zero usage retains hold"},
-				{name: "trusted without reservation", input: 5, output: 8, trusted: true},
+				{name: "high balance still reserved", input: 5, output: 8, trusted: true},
 			} {
 				t.Run(fmt.Sprintf("sdk=%v/responses=%v/mcp=%v/%s", sdk, responseAPI, withMCP, receipt.name), func(t *testing.T) {
 					gin.SetMode(gin.TestMode)
@@ -133,11 +133,7 @@ func checkSuccessfulRelayReconcilesOneReservation(t *testing.T, responseAPI bool
 					drainResponseFallbackBilling(t)
 					require.Equal(t, http.StatusOK, rec.Code)
 					reserved := c.GetInt64(ctxkey.PreConsumedQuotaAmount)
-					if receipt.trusted {
-						require.Zero(t, reserved)
-					} else {
-						require.Positive(t, reserved)
-					}
+					require.Positive(t, reserved, "every paid admission reserves even at a high balance")
 					expected := int64(receipt.input + receipt.output)
 					if expected == 0 {
 						select {
