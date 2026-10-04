@@ -30,6 +30,9 @@ func TestSecuritySessionPlaceholderStartup(t *testing.T) {
 		reject      bool
 	}{
 		{"published_placeholder", "your-session-secret-here", true},
+		{"legacy_example_placeholder", "random_string", true},
+		{"uppercase_legacy_example", "RANDOM_STRING", true},
+		{"trimmed_mixed_case_legacy_example", " \tRaNdOm_StRiNg \n", true},
 		{"trimmed_placeholder", "  YOUR-SESSION-SECRET-HERE  ", true},
 		{"generated_control", "pGPVdnHEyOsM2C83t6RIpTsDvkhjaN4d", false},
 		{"legacy_key_control", "fixture-key-16ch", false},
