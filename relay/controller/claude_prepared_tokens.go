@@ -33,7 +33,7 @@ func preparedClaudePromptTokens(ctx context.Context, request *ClaudeMessagesRequ
 		}
 		return tokens, nil
 	default:
-		return getClaudeMessagesPromptTokens(ctx, request), nil
+		return getClaudeMessagesPromptTokens(ctx, request)
 	}
 }
 

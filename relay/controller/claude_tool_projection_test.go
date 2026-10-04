@@ -26,7 +26,7 @@ func TestClaudeToolBlockPromptTokens(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			request := &ClaudeMessagesRequest{Model: "claude-3-5-haiku-20241022", Messages: []relaymodel.ClaudeMessage{{Role: "user", Content: []any{tc.block}}}}
 			oracle := openai.CountTokenMessages(context.Background(), []relaymodel.Message{{Role: "user", Content: text}}, request.Model)
-			require.GreaterOrEqual(t, getClaudeMessagesPromptTokens(context.Background(), request), oracle)
+			require.GreaterOrEqual(t, requireClaudePromptTokens(t, context.Background(), request), oracle)
 		})
 	}
 }

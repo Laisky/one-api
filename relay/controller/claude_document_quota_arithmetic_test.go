@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/Laisky/one-api/model"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,21 +47,21 @@ func TestClaudeDocumentQuotaArithmetic(t *testing.T) {
 				test.prompt, test.ratio, test.completionRatio, meta)
 			t.Logf("held=%d rejected=%t", held, apiErr != nil)
 			if test.wantReject {
-				assert.NotNil(t, apiErr, "unrepresentable quota must reject rather than become a one-unit hold")
-				assert.Zero(t, held, "rejection owns no reservation")
+				require.NotNil(t, apiErr, "unrepresentable quota must reject rather than become a one-unit hold")
+				require.Zero(t, held, "rejection owns no reservation")
 			} else {
-				assert.Nil(t, apiErr)
-				assert.Equal(t, test.wantHeld, held)
+				require.Nil(t, apiErr)
+				require.Equal(t, test.wantHeld, held)
 			}
 			var afterToken model.Token
 			require.NoError(t, model.DB.First(&afterToken, fallbackTokenID).Error)
 			var afterUser model.User
 			require.NoError(t, model.DB.First(&afterUser, fallbackUserID).Error)
-			assert.Equal(t, beforeUser.Quota-test.wantHeld, afterUser.Quota)
-			assert.Equal(t, beforeUser.UsedQuota, afterUser.UsedQuota)
-			assert.Equal(t, beforeToken.RemainQuota-test.wantHeld, afterToken.RemainQuota)
-			assert.Equal(t, beforeToken.UsedQuota+test.wantHeld, afterToken.UsedQuota)
-			assert.Equal(t, rowsBefore, claudeDocumentFundingRows(t), "admission must not create settlement, log, or refund rows")
+			require.Equal(t, beforeUser.Quota-test.wantHeld, afterUser.Quota)
+			require.Equal(t, beforeUser.UsedQuota, afterUser.UsedQuota)
+			require.Equal(t, beforeToken.RemainQuota-test.wantHeld, afterToken.RemainQuota)
+			require.Equal(t, beforeToken.UsedQuota+test.wantHeld, afterToken.UsedQuota)
+			require.Equal(t, rowsBefore, claudeDocumentFundingRows(t), "admission must not create settlement, log, or refund rows")
 		})
 	}
 }

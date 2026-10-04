@@ -2,12 +2,14 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
@@ -31,12 +33,18 @@ func TestClaudeNativeDocumentEncodingQuote(t *testing.T) {
 		large := documentQuoteRequest(map[string]any{"type": "base64", "media_type": "application/pdf", "data": raw}, nested)
 		before, err := json.Marshal(large)
 		require.NoError(t, err)
-		qSmall := getClaudeMessagesPromptTokens(context.Background(), small)
-		qLarge := getClaudeMessagesPromptTokens(context.Background(), large)
+		qSmall := requireClaudePromptTokens(t, context.Background(), small)
+		qLarge := requireClaudePromptTokens(t, context.Background(), large)
 		t.Logf("PDF_QUOTE_ENCODING nested=%v compressed_bytes=%d raw_bytes=%d compressed_quote=%d raw_quote=%d", nested, len(compact), len(raw), qSmall, qLarge)
-		require.Equal(t, qSmall, qLarge, "native binary transport encoding must not determine semantic prompt cost")
+		decodedSmall, err := base64.StdEncoding.DecodeString(compact)
+		require.NoError(t, err)
+		decodedLarge, err := base64.StdEncoding.DecodeString(raw)
+		require.NoError(t, err)
+		rate := config.ClaudeNativePDFTokensPerKiB
+		wantDifference := (len(decodedLarge)*rate+1023)/1024 - (len(decodedSmall)*rate+1023)/1024
+		require.Equal(t, wantDifference, qLarge-qSmall, "size policy intentionally differs for equal rendered content under different compression")
 		require.Greater(t, qSmall, 0, "opaque source still needs an explicit allowance")
-		require.Less(t, qSmall, 65536, "default one-document allowance must not tokenize the encoded file")
+		require.Greater(t, qLarge, qSmall, "larger decoded files receive proportionally larger estimates")
 		after, err := json.Marshal(large)
 		require.NoError(t, err)
 		require.Equal(t, before, after, "counting must preserve the provider payload")
@@ -53,17 +61,17 @@ func TestClaudeNativeDocumentSourceControls(t *testing.T) {
 		{"type": "url", "url": "https://example.invalid/synthetic.pdf"},
 	} {
 		request := documentQuoteRequest(source, false)
-		one := getClaudeMessagesPromptTokens(context.Background(), request)
-		require.Greater(t, one, 1000, "opaque metadata is not a substitute for the document allowance")
+		one := requireClaudePromptTokens(t, context.Background(), request)
+		require.Positive(t, one, "document bytes and metadata both contribute to the estimate")
 		block := request.Messages[0].Content.([]any)[0].(map[string]any)
 		block["context"] = metadata
-		withContext := getClaudeMessagesPromptTokens(context.Background(), request)
+		withContext := requireClaudePromptTokens(t, context.Background(), request)
 		require.GreaterOrEqual(t, withContext-one, openai.CountTokenText(metadata, request.Model)-16)
 		request.Messages[0].Content = []any{block, block}
-		two := getClaudeMessagesPromptTokens(context.Background(), request)
+		two := requireClaudePromptTokens(t, context.Background(), request)
 		require.Greater(t, two, withContext+1000, "a second native document consumes a second allowance")
 	}
 	text := strings.Repeat("plain document text ", 3000)
 	request := documentQuoteRequest(map[string]any{"type": "text", "media_type": "text/plain", "data": text}, false)
-	require.GreaterOrEqual(t, getClaudeMessagesPromptTokens(context.Background(), request), openai.CountTokenText(text, request.Model))
+	require.GreaterOrEqual(t, requireClaudePromptTokens(t, context.Background(), request), openai.CountTokenText(text, request.Model))
 }

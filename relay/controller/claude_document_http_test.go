@@ -138,7 +138,7 @@ func runClaudeDocumentHTTP(t *testing.T, compressed bool, scenario string, conve
 	if scenario == "missing" {
 		require.NotNil(t, apiErr, "preserve native incomplete-receipt error semantics")
 		want = c.GetInt64(ctxkey.PreConsumedQuotaAmount)
-		require.Greater(t, want, int64(1000))
+		require.Positive(t, want)
 	} else {
 		require.Nil(t, apiErr)
 	}

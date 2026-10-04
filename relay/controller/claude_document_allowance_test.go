@@ -20,9 +20,9 @@ func TestClaudeNativeDocumentAllowancePolicy(t *testing.T) {
 	before, err := json.Marshal(request)
 	require.NoError(t, err)
 	config.ClaudeNativeDocumentTokenAllowance = 4096
-	first := getClaudeMessagesPromptTokens(context.Background(), request)
+	first := requireClaudePromptTokens(t, context.Background(), request)
 	config.ClaudeNativeDocumentTokenAllowance = 8192
-	second := getClaudeMessagesPromptTokens(context.Background(), request)
+	second := requireClaudePromptTokens(t, context.Background(), request)
 	require.Equal(t, 4096, second-first)
 	after, err := json.Marshal(request)
 	require.NoError(t, err)

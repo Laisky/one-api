@@ -2,7 +2,10 @@ package controller
 
 import (
 	"maps"
+	"math"
 	"strings"
+
+	"github.com/Laisky/errors/v2"
 
 	"github.com/Laisky/one-api/common/config"
 )
@@ -46,12 +49,14 @@ func claudeDocumentTextMetadata(block map[string]any) map[string]any {
 }
 
 // countClaudeNativeDocumentAllowance visits nested tool results iteratively and
-// adds one trusted allowance per opaque document. It performs no remote fetch,
+// adds a linear decoded-size PDF estimate or a separate unknown-size fallback.
+// It preserves the lazy traversal stack and performs no remote fetch,
 // PDF decompression or caller-controlled page-count interpretation. Converted
 // text requests use preparedClaudeChatTokens instead and never enter this path.
-func countClaudeNativeDocumentAllowance(request *ClaudeMessagesRequest) int {
+// It returns the total estimate or an input/arithmetic validation error.
+func countClaudeNativeDocumentAllowance(request *ClaudeMessagesRequest) (int, error) {
 	if request == nil {
-		return 0
+		return 0, nil
 	}
 	var stack [][]any
 	for _, message := range request.Messages {
@@ -76,7 +81,27 @@ func countClaudeNativeDocumentAllowance(request *ClaudeMessagesRequest) int {
 			continue
 		}
 		if claudeOpaqueDocumentSource(block) {
-			total += config.ClaudeNativeDocumentTokenAllowance
+			additional := config.ClaudeNativeDocumentTokenAllowance
+			source := block["source"].(map[string]any)
+			mediaType, _ := source["media_type"].(string)
+			if source["type"] == "base64" && strings.EqualFold(strings.TrimSpace(mediaType), "application/pdf") {
+				data, ok := source["data"].(string)
+				if !ok {
+					return 0, errors.New("native PDF source requires base64 string data")
+				}
+				decoded, err := claudePDFDecodedBytes(data)
+				if err != nil {
+					return 0, err
+				}
+				additional, err = claudePDFTokensForBytes(decoded, config.ClaudeNativePDFTokensPerKiB)
+				if err != nil {
+					return 0, err
+				}
+			}
+			if additional < 1 || additional > math.MaxInt-total {
+				return 0, errors.New("native document token sum exceeds integer range")
+			}
+			total += additional
 		}
 		if block["type"] == "tool_result" {
 			if nested, ok := block["content"].([]any); ok && len(nested) > 0 {
@@ -84,5 +109,5 @@ func countClaudeNativeDocumentAllowance(request *ClaudeMessagesRequest) int {
 			}
 		}
 	}
-	return total
+	return total, nil
 }

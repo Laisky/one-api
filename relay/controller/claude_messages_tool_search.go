@@ -241,8 +241,16 @@ func executeClaudeToolSearchMCPLoop(
 
 	for round := 0; round < maxRounds; round++ {
 		// Pre-consume quota for this round
-		promptTokens := getClaudeMessagesPromptTokens(gmw.Ctx(c), request)
-		roundQuota := int64(float64(promptTokens) * ratio)
+		promptTokens, quoteErr := getClaudeMessagesPromptTokens(gmw.Ctx(c), request)
+		if quoteErr != nil {
+			return nil, accumulated, summary, incrementalCharged,
+				openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", 400)
+		}
+		roundQuota, quoteErr := checkedClaudeQuotaEstimate(promptTokens, 0, ratio, 1)
+		if quoteErr != nil {
+			return nil, accumulated, summary, incrementalCharged,
+				openai.ErrorWrapper(quoteErr, "invalid_claude_quota_quote", 400)
+		}
 		if roundQuota > 0 {
 			if err := preConsumeQuotaForMCPRound(c, meta, roundQuota); err != nil {
 				return nil, accumulated, summary, incrementalCharged,

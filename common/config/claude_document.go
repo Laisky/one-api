@@ -13,7 +13,7 @@ import (
 const DefaultClaudeNativeDocumentTokenAllowance = 32768
 
 // ClaudeNativeDocumentTokenAllowance is a trusted startup setting. Every native
-// base64/file/URL document reserves this many input-token units in addition to
+// unknown-size file/URL or non-PDF document reserves this many input-token units in addition to
 // its textual metadata. Complete provider receipts reconcile the estimate.
 var ClaudeNativeDocumentTokenAllowance = loadClaudeNativeDocumentTokenAllowance()
 

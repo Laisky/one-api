@@ -27,7 +27,9 @@ func TestClaudeDocumentEmptyProjectionAllocation(t *testing.T) {
 				}
 			}
 			var got int
-			allocations := testing.AllocsPerRun(5, func() { got = countClaudeNativeDocumentAllowance(request) })
+			var scanErr error
+			allocations := testing.AllocsPerRun(5, func() { got, scanErr = countClaudeNativeDocumentAllowance(request) })
+			require.NoError(t, scanErr)
 			require.Zero(t, got)
 			t.Logf("DOCUMENT_EMPTY_SCAN empty_blocks=%v messages=%d allocations=%g", emptyBlocks, len(request.Messages), allocations)
 			require.Zero(t, allocations, "empty/text-only histories must not allocate a traversal stack")
@@ -45,14 +47,14 @@ func TestClaudeDocumentNestedAllowanceTraversal(t *testing.T) {
 		blocks[i] = document
 	}
 	request := &ClaudeMessagesRequest{Messages: []relaymodel.ClaudeMessage{{Role: "user", Content: blocks}}}
-	require.Equal(t, count*config.ClaudeNativeDocumentTokenAllowance, countClaudeNativeDocumentAllowance(request))
+	require.Equal(t, count*config.ClaudeNativeDocumentTokenAllowance, requireClaudeDocumentTokens(t, request))
 	var nested any = document
 	for i := 0; i < count; i++ {
 		nested = map[string]any{"type": "tool_result", "tool_use_id": "synthetic-call", "content": []any{nested}}
 	}
 	request.Messages[0].Content = []any{nested}
-	require.Equal(t, config.ClaudeNativeDocumentTokenAllowance, countClaudeNativeDocumentAllowance(request))
+	require.Equal(t, config.ClaudeNativeDocumentTokenAllowance, requireClaudeDocumentTokens(t, request))
 	request.System = []any{document}
-	require.Equal(t, 2*config.ClaudeNativeDocumentTokenAllowance, countClaudeNativeDocumentAllowance(request))
-	require.Zero(t, countClaudeNativeDocumentAllowance(nil))
+	require.Equal(t, 2*config.ClaudeNativeDocumentTokenAllowance, requireClaudeDocumentTokens(t, request))
+	require.Zero(t, requireClaudeDocumentTokens(t, nil))
 }
