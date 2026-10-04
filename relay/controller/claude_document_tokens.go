@@ -53,13 +53,13 @@ func countClaudeNativeDocumentAllowance(request *ClaudeMessagesRequest) int {
 	if request == nil {
 		return 0
 	}
-	stack := make([][]any, 0, len(request.Messages)+1)
+	var stack [][]any
 	for _, message := range request.Messages {
-		if blocks, ok := message.Content.([]any); ok {
+		if blocks, ok := message.Content.([]any); ok && len(blocks) > 0 {
 			stack = append(stack, blocks)
 		}
 	}
-	if blocks, ok := request.System.([]any); ok {
+	if blocks, ok := request.System.([]any); ok && len(blocks) > 0 {
 		stack = append(stack, blocks)
 	}
 	total := 0
@@ -79,7 +79,7 @@ func countClaudeNativeDocumentAllowance(request *ClaudeMessagesRequest) int {
 			total += config.ClaudeNativeDocumentTokenAllowance
 		}
 		if block["type"] == "tool_result" {
-			if nested, ok := block["content"].([]any); ok {
+			if nested, ok := block["content"].([]any); ok && len(nested) > 0 {
 				stack = append(stack, nested)
 			}
 		}
