@@ -200,17 +200,32 @@ func parseOCRCounter(raw json.RawMessage, limit int) (int, string) {
 	return int(value), ""
 }
 
-// maxOCRCounterDigits is the decimal width beyond which a counter certainly
-// exceeds int32; it bounds the expansion of scientific notation.
-const maxOCRCounterDigits = 10
+const (
+	// maxOCRCounterDigits is the decimal width beyond which a counter certainly
+	// exceeds int32; it bounds the expansion of scientific notation.
+	maxOCRCounterDigits = 10
+	// maxOCRCounterTextLen bounds a counter's raw JSON representation before
+	// any normalization. Real receipts use a few characters; longer forms are
+	// rejected as unsupported rather than rescaled, so no accepted value can
+	// depend on a mantissa long enough to cancel a large exponent.
+	maxOCRCounterTextLen = 32
+	// maxOCRCounterExponent bounds the exponent magnitude evaluated exactly.
+	// With at most maxOCRCounterTextLen mantissa digits, a nonzero value with a
+	// larger positive exponent is at least 10^32 (overflow) and one with a
+	// larger negative exponent lies strictly between 0 and 1 (a fraction), so
+	// classifying it needs no arithmetic and never changes its value.
+	maxOCRCounterExponent = 2 * maxOCRCounterTextLen
+)
 
 // integralJSONDigits converts a nonnegative JSON number to the plain decimal
-// digits of its exact integer value. It works on the digit string and a bounded
-// exponent, so a huge exponent never allocates a huge number.
+// digits of its exact integer value. Representations longer than
+// maxOCRCounterTextLen are rejected as unsupported before normalization, and
+// exponents beyond maxOCRCounterExponent are classified exactly instead of
+// being clamped, so an accepted result always equals the mathematical value.
 // Parameters: text is one JSON value. Returns: the digits, or a problem label
-// for a non-number, negative, fractional, malformed or out-of-range value.
+// for a non-number, negative, fractional, malformed, oversized or out-of-range value.
 func integralJSONDigits(text string) (string, string) {
-	if text == "" || text[0] == '-' {
+	if text == "" || text[0] == '-' || len(text) > maxOCRCounterTextLen {
 		return "", model.OCRReceiptInvalid
 	}
 	mantissa, exponentText, hasExponent := strings.Cut(strings.ToLower(text), "e")
@@ -218,31 +233,35 @@ func integralJSONDigits(text string) (string, string) {
 	if !isDecimalDigits(intPart) || (hasFraction && !isDecimalDigits(fracPart)) {
 		return "", model.OCRReceiptInvalid
 	}
-	exponent := int64(0)
+	digits := strings.TrimLeft(intPart+fracPart, "0")
+	scale := -int64(len(fracPart))
 	if hasExponent {
-		sign := int64(1)
+		negative := false
 		switch {
 		case strings.HasPrefix(exponentText, "+"):
 			exponentText = exponentText[1:]
 		case strings.HasPrefix(exponentText, "-"):
-			sign, exponentText = -1, exponentText[1:]
+			negative, exponentText = true, exponentText[1:]
 		}
 		if !isDecimalDigits(exponentText) {
 			return "", model.OCRReceiptInvalid
 		}
-		trimmed := strings.TrimLeft(exponentText, "0")
-		if len(trimmed) > 6 {
-			trimmed = "999999" // Clamp: any larger magnitude is out of range or fractional.
-		}
-		magnitude, err := strconv.ParseInt("0"+trimmed, 10, 64)
-		if err != nil {
+		magnitude, err := strconv.ParseInt(exponentText, 10, 64)
+		outOfRange := err != nil || magnitude > maxOCRCounterExponent
+		switch {
+		case outOfRange && digits == "":
+			return "0", ""
+		case outOfRange && negative:
 			return "", model.OCRReceiptInvalid
+		case outOfRange:
+			return "", model.OCRReceiptOverflow
+		case negative:
+			scale -= magnitude
+		default:
+			scale += magnitude
 		}
-		exponent = sign * magnitude
 	}
 
-	digits := strings.TrimLeft(intPart+fracPart, "0")
-	scale := exponent - int64(len(fracPart))
 	for strings.HasSuffix(digits, "0") {
 		digits, scale = digits[:len(digits)-1], scale+1
 	}
