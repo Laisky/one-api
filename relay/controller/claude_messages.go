@@ -156,6 +156,11 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		return wrapConvertRequestError(err)
 	}
 	convertedRequest = sanitizeConvertedChatFields(convertedRequest)
+	// Conversion may introduce built-ins; re-check them with the shared validator
+	// before any reservation or dispatch.
+	if policyErr := admitConvertedClaudeBuiltins(c, meta, convertedRequest, adaptorInstance); policyErr != nil {
+		return policyErr
+	}
 	promptTokens, quoteErr := preparedClaudePromptTokens(ctx, claudeRequest, convertedRequest)
 	if quoteErr != nil {
 		return openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", http.StatusBadRequest)
@@ -299,12 +304,6 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// no-op on the passthrough branch (no converted *ResponseAPIRequest present).
 	if newBody, matched := matchClaudeCheckpoint(c, meta, claudeRequest); matched {
 		requestBody = bytes.NewReader(newBody)
-	}
-
-	// Conversion may introduce built-ins; re-check them with the shared validator.
-	if policyErr := admitConvertedClaudeBuiltins(c, meta, convertedRequest, adaptorInstance); policyErr != nil {
-		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "converted_claude_tool_not_allowed")
-		return policyErr
 	}
 
 	// do request
