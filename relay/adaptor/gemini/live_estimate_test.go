@@ -87,7 +87,9 @@ func TestEstimateLiveClientFrameFailsClosed(t *testing.T) {
 	t.Parallel()
 	for name, frame := range map[string]string{
 		"file_reference":    `{"clientContent":{"turns":[{"parts":[{"fileData":{"fileUri":"gs://b/o","mimeType":"video/mp4"}}]}],"turnComplete":true}}`,
-		"snake_file_ref":    `{"toolResponse":{"functionResponses":[{"id":"a","name":"f","response":{"parts":[{"file_data":{"file_uri":"gs://b/o"}}]}}]}}`,
+		"snake_file_ref":    `{"clientContent":{"turns":[{"parts":[{"file_data":{"file_uri":"gs://b/o"}}]}]}}`,
+		"result_part_file":  `{"toolResponse":{"functionResponses":[{"id":"a","name":"f","response":{},"parts":[{"file_data":{"file_uri":"gs://b/o"}}]}]}}`,
+		"system_file_ref":   `{"setup":{"systemInstruction":{"parts":[{"fileData":{"fileUri":"gs://b/o"}}]}}}`,
 		"compressed_audio":  `{"realtimeInput":{"audio":{"mimeType":"audio/ogg","data":"AAAA"}}}`,
 		"invalid_rate":      `{"realtimeInput":{"audio":{"mimeType":"audio/pcm;rate=abc","data":"AAAA"}}}`,
 		"zero_rate":         `{"realtimeInput":{"audio":{"mimeType":"audio/pcm;rate=0","data":"AAAA"}}}`,
@@ -97,8 +99,58 @@ func TestEstimateLiveClientFrameFailsClosed(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := estimateLiveClientFrame([]byte(frame))
+			if strings.HasPrefix(frame, `{"setup"`) {
+				_, err = estimateLiveContent([]byte(frame))
+			}
 			require.ErrorIs(t, err, realtime.ErrUnpriceableInput)
 			require.Equal(t, liveCloseUnpriceableWork, liveSpendCloseReason(err))
+		})
+	}
+}
+
+// TestEstimateLiveContentSchemaPlacedMedia verifies media is interpreted only at
+// Google's schema-defined Part locations: lookalike keys inside free-form
+// Structs and Schemas are text, while real Part and FunctionResponse.parts
+// media keep modality pricing. Parameters: t owns the test. Returns: none.
+func TestEstimateLiveContentSchemaPlacedMedia(t *testing.T) {
+	t.Parallel()
+	small := liveTestImage(t, 10, 10, "png")
+	text := strings.Repeat("x", 40_000)
+	for _, tc := range []struct {
+		name  string
+		frame string
+		check func(t *testing.T, frame string, e realtime.Estimate)
+	}{
+		{"response_struct_lookalike_media_is_text", `{"toolResponse":{"functionResponses":[{"id":"a","name":"f","response":{"inlineData":{"mimeType":"audio/pcm;rate=16000","data":"` + text + `"},"fileData":{"fileUri":"x"}}}]}}`,
+			func(t *testing.T, frame string, e realtime.Estimate) {
+				require.Equal(t, realtime.Estimate{Text: int64(len(frame))}, e)
+			}},
+		{"call_args_and_metadata_are_text", `{"clientContent":{"turns":[{"role":"model","parts":[{"functionCall":{"name":"f","args":{"inline_data":{"mime_type":"image/png","data":"` + text + `"}}},"partMetadata":{"fileData":"x"}}]}]}}`,
+			func(t *testing.T, frame string, e realtime.Estimate) {
+				require.Equal(t, realtime.Estimate{Text: int64(len(frame))}, e)
+			}},
+		{"schema_property_names_are_text", `{"setup":{"tools":[{"functionDeclarations":[{"name":"f","parameters":{"type":"OBJECT","properties":{"inlineData":{"type":"STRING"},"fileData":{"type":"STRING"}}}}]}]}}`,
+			func(t *testing.T, frame string, e realtime.Estimate) {
+				require.Equal(t, realtime.Estimate{Text: int64(len(frame))}, e)
+			}},
+		{"result_parts_are_media", `{"toolResponse":{"functionResponses":[{"id":"a","name":"f","response":{},"parts":[{"inlineData":{"mimeType":"image/png","data":"` + small + `"}}]}]}}`,
+			func(t *testing.T, frame string, e realtime.Estimate) {
+				require.EqualValues(t, liveImageTokenFloor, e.Image)
+				require.EqualValues(t, len(frame)-len(small), e.Text)
+			}},
+		{"nested_function_response_part_is_media", `{"clientContent":{"turns":[{"role":"user","parts":[{"function_response":{"name":"f","response":{},"parts":[{"inline_data":{"mime_type":"image/png","data":"` + small + `"}}]}}]}]}}`,
+			func(t *testing.T, frame string, e realtime.Estimate) {
+				require.EqualValues(t, liveImageTokenFloor, e.Image)
+			}},
+		{"system_instruction_part_is_media", `{"setup":{"systemInstruction":{"parts":[{"inlineData":{"mimeType":"image/png","data":"` + small + `"}}]}}}`,
+			func(t *testing.T, frame string, e realtime.Estimate) {
+				require.EqualValues(t, liveImageTokenFloor, e.Image)
+			}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			estimate, err := estimateLiveContent([]byte(tc.frame))
+			require.NoError(t, err)
+			tc.check(t, tc.frame, estimate)
 		})
 	}
 }

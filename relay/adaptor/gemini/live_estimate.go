@@ -179,60 +179,131 @@ func imageTokens(data string) (int64, error) {
 	return max(tiles*liveImageTileTokens, liveImageTokenFloor), nil
 }
 
-// estimateLiveContent bounds frames whose payload is native Content: setup,
-// clientContent and toolResponse. Every byte except inline media data is priced
-// as text; inline media is priced by modality and provider-fetched file
-// references fail closed. Parameters: data is validated JSON. Returns: tokens.
+// estimateLiveContent bounds frames whose payload holds native Content: setup,
+// clientContent and toolResponse. Media is interpreted only where Google's
+// schema places it: Content.parts[] (Part.inline_data and Part.file_data) and
+// FunctionResponse.parts[].inline_data, whether a FunctionResponse is a Part or
+// a toolResponse entry. Free-form values such as FunctionResponse.response,
+// FunctionCall.args, Part.part_metadata (google.protobuf.Struct) and function
+// Schemas are application data, so keys that merely look like media there are
+// priced as text. Every byte except schema-placed media data counts as text;
+// provider-fetched file references fail closed. Schema source:
+// https://github.com/googleapis/googleapis/blob/master/google/ai/generativelanguage/v1beta/content.proto
+// Parameters: data is validated JSON. Returns: input tokens or an error.
 func estimateLiveContent(data []byte) (realtime.Estimate, error) {
-	var value any
-	if err := json.Unmarshal(data, &value); err != nil {
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
 		return realtime.Estimate{}, errors.Wrap(ErrLiveProtocol, "invalid Live content")
 	}
-	var media realtime.Estimate
-	var mediaBytes int64
-	if err := walkLiveContent(value, &media, &mediaBytes); err != nil {
-		return realtime.Estimate{}, err
+	walk := &liveMediaWalk{}
+	if setup, ok := root["setup"].(map[string]any); ok {
+		if err := walk.content(liveField(setup, "systemInstruction", "system_instruction")); err != nil {
+			return realtime.Estimate{}, err
+		}
 	}
-	media.Text += max(int64(len(data))-mediaBytes, 0)
-	return media, nil
-}
-
-// walkLiveContent visits every nested object. Parameters: value is decoded JSON,
-// media accumulates inline media tokens and mediaBytes the raw data excluded
-// from text pricing. Returns: an error for unpriceable or malformed media.
-func walkLiveContent(value any, media *realtime.Estimate, mediaBytes *int64) error {
-	switch node := value.(type) {
-	case map[string]any:
-		for key, child := range node {
-			switch key {
-			case "fileData", "file_data":
-				return errors.Wrap(realtime.ErrUnpriceableInput, "provider-fetched file references cannot be priced before forwarding")
-			case "inlineData", "inline_data":
-				object, ok := child.(map[string]any)
-				if !ok {
-					return errors.Wrap(ErrLiveProtocol, "invalid inline media")
-				}
-				blob := liveBlob{}
-				blob.MimeType, _ = object["mimeType"].(string)
-				blob.MimeSnake, _ = object["mime_type"].(string)
-				blob.Data, _ = object["data"].(string)
-				cost, err := estimateLiveBlob(blob, liveDefaultInputSampleRate)
-				if err != nil {
-					return err
-				}
-				*media = media.Add(cost)
-				*mediaBytes += int64(len(blob.Data))
-			default:
-				if err := walkLiveContent(child, media, mediaBytes); err != nil {
-					return err
-				}
+	if client, ok := root["clientContent"].(map[string]any); ok {
+		turns, _ := client["turns"].([]any)
+		for _, turn := range turns {
+			if err := walk.content(turn); err != nil {
+				return realtime.Estimate{}, err
 			}
 		}
-	case []any:
-		for _, child := range node {
-			if err := walkLiveContent(child, media, mediaBytes); err != nil {
-				return err
+	}
+	if tool, ok := root["toolResponse"].(map[string]any); ok {
+		responses, _ := liveField(tool, "functionResponses", "function_responses").([]any)
+		for _, response := range responses {
+			if err := walk.functionResponse(response); err != nil {
+				return realtime.Estimate{}, err
 			}
+		}
+	}
+	walk.media.Text += max(int64(len(data))-walk.mediaBytes, 0)
+	return walk.media, nil
+}
+
+// liveMediaWalk accumulates schema-placed inline media while pricing the rest
+// of a frame as text. Fields: media holds media tokens and mediaBytes the raw
+// base64 excluded from text pricing.
+type liveMediaWalk struct {
+	media      realtime.Estimate
+	mediaBytes int64
+}
+
+// liveField returns the first present protobuf JSON spelling of a field.
+// Parameters: object is a decoded message and names its lowerCamelCase and
+// original snake_case names. Returns: the value or nil.
+func liveField(object map[string]any, names ...string) any {
+	for _, name := range names {
+		if value, ok := object[name]; ok {
+			return value
+		}
+	}
+	return nil
+}
+
+// content visits one Content message. Parameters: value is its decoded JSON.
+// Returns: an error for unpriceable or malformed media in its parts.
+func (w *liveMediaWalk) content(value any) error {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	parts, _ := object["parts"].([]any)
+	for _, part := range parts {
+		if err := w.part(part, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// functionResponse visits one FunctionResponse. Its response Struct is text;
+// only its parts carry media. Parameters: value is decoded JSON. Returns: an
+// error for unpriceable or malformed media.
+func (w *liveMediaWalk) functionResponse(value any) error {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	parts, _ := object["parts"].([]any)
+	for _, part := range parts {
+		if err := w.part(part, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// part visits a Part (content=true) or a FunctionResponsePart. Parameters:
+// value is decoded JSON. Returns: an error for a provider-fetched file or
+// unpriceable inline media; other fields stay text.
+func (w *liveMediaWalk) part(value any, content bool) error {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if liveField(object, "fileData", "file_data") != nil {
+		return errors.Wrap(realtime.ErrUnpriceableInput, "provider-fetched file references cannot be priced before forwarding")
+	}
+	if inline := liveField(object, "inlineData", "inline_data"); inline != nil {
+		blobObject, ok := inline.(map[string]any)
+		if !ok {
+			return errors.Wrap(ErrLiveProtocol, "invalid inline media")
+		}
+		blob := liveBlob{}
+		blob.MimeType, _ = blobObject["mimeType"].(string)
+		blob.MimeSnake, _ = blobObject["mime_type"].(string)
+		blob.Data, _ = blobObject["data"].(string)
+		cost, err := estimateLiveBlob(blob, liveDefaultInputSampleRate)
+		if err != nil {
+			return err
+		}
+		w.media = w.media.Add(cost)
+		w.mediaBytes += int64(len(blob.Data))
+	}
+	if content {
+		if response := liveField(object, "functionResponse", "function_response"); response != nil {
+			return w.functionResponse(response)
 		}
 	}
 	return nil
