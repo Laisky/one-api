@@ -16,18 +16,15 @@ import (
 )
 
 // serveGatewayResponseGet attempts to satisfy a GET /v1/responses/:id from the
-// gateway state store. It returns handled=true when it has fully answered the
-// request (success or a definitive error); handled=false means the caller should
-// fall through to the legacy upstream proxy (current behavior). It never forwards
-// an unknown ID upstream when the feature is enabled and legacy passthrough is
-// off (rows R08, SEC04).
+// gateway state store. It always returns handled=true with a local response or
+// error; missing authorization storage never permits provider passthrough.
 func serveGatewayResponseGet(c *gin.Context, meta *metalib.Meta, responseID string) (bool, *relaymodel.ErrorWithStatusCode) {
 	if !state.Enabled() || state.Store() == nil {
-		return false, nil
+		return true, stateErrorf(codeStateStoreUnavailable, http.StatusServiceUnavailable, "response ownership storage is unavailable")
 	}
 	owner := stateOwnerFromMeta(meta)
 	if !owner.Valid() {
-		return false, nil
+		return true, stateErrorf("response_not_found", http.StatusNotFound, "response not found")
 	}
 	rec, err := state.Store().GetResponse(gmw.Ctx(c), owner, responseID)
 	if err == nil {
@@ -42,11 +39,11 @@ func serveGatewayResponseGet(c *gin.Context, meta *metalib.Meta, responseID stri
 // serveGatewayResponseDelete attempts to satisfy a DELETE from the gateway store.
 func serveGatewayResponseDelete(c *gin.Context, meta *metalib.Meta, responseID string) (bool, *relaymodel.ErrorWithStatusCode) {
 	if !state.Enabled() || state.Store() == nil {
-		return false, nil
+		return true, stateErrorf(codeStateStoreUnavailable, http.StatusServiceUnavailable, "response ownership storage is unavailable")
 	}
 	owner := stateOwnerFromMeta(meta)
 	if !owner.Valid() {
-		return false, nil
+		return true, stateErrorf("response_not_found", http.StatusNotFound, "response not found")
 	}
 	err := state.Store().DeleteResponse(gmw.Ctx(c), owner, responseID)
 	if err == nil {
@@ -62,16 +59,14 @@ func serveGatewayResponseDelete(c *gin.Context, meta *metalib.Meta, responseID s
 // response is not a background upstream response, so it cannot be cancelled; the
 // documented invalid-operation error is returned rather than forwarding a gateway
 // ID upstream or pretending an upstream cancellation occurred (row C12). Unknown
-// IDs follow the same passthrough/not-found policy as GET and DELETE, so a
-// gateway-minted or deleted ID is never forwarded upstream when passthrough is off
-// (rows R08, SEC04) — closing the hole where cancel skipped this check entirely.
+// IDs return a non-disclosing not-found error regardless of legacy configuration.
 func serveGatewayResponseCancel(c *gin.Context, meta *metalib.Meta, responseID string) (bool, *relaymodel.ErrorWithStatusCode) {
 	if !state.Enabled() || state.Store() == nil {
-		return false, nil
+		return true, stateErrorf(codeStateStoreUnavailable, http.StatusServiceUnavailable, "response ownership storage is unavailable")
 	}
 	owner := stateOwnerFromMeta(meta)
 	if !owner.Valid() {
-		return false, nil
+		return true, stateErrorf("response_not_found", http.StatusNotFound, "response not found")
 	}
 	_, err := state.Store().GetResponse(gmw.Ctx(c), owner, responseID)
 	if err == nil {
@@ -82,24 +77,11 @@ func serveGatewayResponseCancel(c *gin.Context, meta *metalib.Meta, responseID s
 	return handleGatewayLookupMiss(c, responseID, err)
 }
 
-// handleGatewayLookupMiss maps a store lookup error to the fall-through/not-found
-// decision shared by GET, DELETE, and cancel.
+// handleGatewayLookupMiss maps a store lookup error to a definitive local error
+// for the supplied request and identifier; it never permits upstream dispatch.
 func handleGatewayLookupMiss(c *gin.Context, responseID string, err error) (bool, *relaymodel.ErrorWithStatusCode) {
 	if errors.Is(err, state.ErrNotFound) {
-		// A tombstoned (deleted or LRU-evicted) gateway ID must never be forwarded
-		// upstream, even in legacy passthrough mode: the tombstone prevents stale
-		// fallback (row S06, ST-018).
-		if store := state.Store(); store != nil {
-			if dead, terr := store.ResponseTombstoned(gmw.Ctx(c), responseID); terr == nil && dead {
-				return true, openai.ErrorWrapper(errors.New("response not found"), codeConversationNotFoundToResponse(), http.StatusNotFound)
-			}
-		}
-		if state.LegacyPassthroughEnabled() {
-			// Rollout compatibility: forward the unknown ID to the upstream exactly
-			// as today (OpenAI-type channels only, enforced by the legacy handler).
-			return false, nil
-		}
-		// Feature enabled, passthrough off: unknown/legacy IDs are not forwarded.
+		// An owner-scoped miss never authorizes raw provider passthrough.
 		return true, openai.ErrorWrapper(errors.New("response not found"), codeConversationNotFoundToResponse(), http.StatusNotFound)
 	}
 	if errors.Is(err, state.ErrStoreUnavailable) {
@@ -111,6 +93,7 @@ func handleGatewayLookupMiss(c *gin.Context, responseID string, err error) (bool
 	return true, openai.ErrorWrapper(err, "state_lookup_failed", http.StatusInternalServerError)
 }
 
+// codeConversationNotFoundToResponse returns the stable response lookup error code.
 func codeConversationNotFoundToResponse() string { return "response_not_found" }
 
 // renderStateRecordAsResponse reconstructs and writes a stored response node as a

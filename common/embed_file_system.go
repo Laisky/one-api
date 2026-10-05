@@ -1,7 +1,6 @@
 package common
 
 import (
-	"embed"
 	"io/fs"
 	"net/http"
 
@@ -21,8 +20,8 @@ func (e embedFileSystem) Exists(prefix string, path string) bool {
 }
 
 // EmbedFolder exposes a subset of the embedded filesystem as a gin static file system rooted at targetPath.
-// It panics when the requested directory does not exist in the supplied embed.FS.
-func EmbedFolder(fsEmbed embed.FS, targetPath string) static.ServeFileSystem {
+// It panics when the requested directory does not exist in the supplied filesystem.
+func EmbedFolder(fsEmbed fs.FS, targetPath string) static.ServeFileSystem {
 	efs, err := fs.Sub(fsEmbed, targetPath)
 	if err != nil {
 		panic(err)

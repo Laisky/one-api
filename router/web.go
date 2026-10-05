@@ -1,9 +1,9 @@
 package router
 
 import (
-	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"strings"
 
@@ -30,21 +30,21 @@ const agentDiscoveryLinks = "<https://oneapi.laisky.com/llms.txt>; rel=\"describ
 // SetWebRouter registers static frontend assets and agent-readable discovery
 // endpoints. Parameters: router is the Gin engine and buildFS contains the
 // embedded frontend build. Return value: none; the function mutates router.
-func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
-	indexPageData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/index.html", config.Theme))
-	indexMarkdownData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/index.md", config.Theme))
-	agentModeData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/agent-mode.md", config.Theme))
-	apiCatalogData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/api-catalog.json", config.Theme))
-	aiCatalogData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/ai-catalog.json", config.Theme))
-	agentCardData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/agent-card.json", config.Theme))
-	agentSkillsIndexData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/agent-skills-index.json", config.Theme))
-	httpMessageSignaturesDirectoryData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/http-message-signatures-directory.json", config.Theme))
-	mcpManifestData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/mcp-manifest.json", config.Theme))
-	mcpServerCardData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/mcp-server-card.json", config.Theme))
-	openAPIData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/openapi.json", config.Theme))
-	openAPIMarkdownData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/openapi.json.md", config.Theme))
-	oauthAuthorizationServerData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/oauth-authorization-server.json", config.Theme))
-	oauthProtectedResourceData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/oauth-protected-resource.json", config.Theme))
+func SetWebRouter(router *gin.Engine, buildFS fs.FS) {
+	indexPageData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/index.html", config.Theme))
+	indexMarkdownData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/index.md", config.Theme))
+	agentModeData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/agent-mode.md", config.Theme))
+	apiCatalogData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/api-catalog.json", config.Theme))
+	aiCatalogData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/ai-catalog.json", config.Theme))
+	agentCardData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/agent-card.json", config.Theme))
+	agentSkillsIndexData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/agent-skills-index.json", config.Theme))
+	httpMessageSignaturesDirectoryData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/http-message-signatures-directory.json", config.Theme))
+	mcpManifestData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/mcp-manifest.json", config.Theme))
+	mcpServerCardData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/mcp-server-card.json", config.Theme))
+	openAPIData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/openapi.json", config.Theme))
+	openAPIMarkdownData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/openapi.json.md", config.Theme))
+	oauthAuthorizationServerData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/oauth-authorization-server.json", config.Theme))
+	oauthProtectedResourceData, _ := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/oauth-protected-resource.json", config.Theme))
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GlobalWebRateLimit())
 	router.Use(middleware.Cache())
@@ -53,18 +53,18 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	router.GET("/", func(c *gin.Context) {
 		if c.Query("mode") == "agent" && len(agentModeData) > 0 {
 			c.Header("Cache-Control", "no-cache")
-			c.Data(http.StatusOK, "text/markdown; charset=utf-8", agentModeData)
+			serveDiscoveryData(c, "text/markdown; charset=utf-8", agentModeData)
 			return
 		}
 
 		if wantsMarkdown(c) && len(indexMarkdownData) > 0 {
 			c.Header("Cache-Control", "no-cache")
-			c.Data(http.StatusOK, "text/markdown; charset=utf-8", indexMarkdownData)
+			serveDiscoveryData(c, "text/markdown; charset=utf-8", indexMarkdownData)
 			return
 		}
 
 		c.Header("Cache-Control", "no-cache")
-		c.Data(http.StatusOK, "text/html; charset=utf-8", indexPageData)
+		serveDiscoveryData(c, "text/html; charset=utf-8", indexPageData)
 	})
 	router.GET("/.well-known/api-catalog", func(c *gin.Context) {
 		if len(apiCatalogData) == 0 {
@@ -73,7 +73,7 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 		}
 
 		c.Header("Cache-Control", "max-age=604800")
-		c.Data(http.StatusOK, "application/linkset+json; charset=utf-8", apiCatalogData)
+		serveDiscoveryData(c, "application/linkset+json; charset=utf-8", apiCatalogData)
 	})
 	router.GET("/.well-known/api-catalog.json", func(c *gin.Context) {
 		if len(apiCatalogData) == 0 {
@@ -82,7 +82,7 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 		}
 
 		c.Header("Cache-Control", "max-age=604800")
-		c.Data(http.StatusOK, "application/linkset+json; charset=utf-8", apiCatalogData)
+		serveDiscoveryData(c, "application/linkset+json; charset=utf-8", apiCatalogData)
 	})
 	router.GET("/.well-known/ai-catalog.json", servePreparedAgentData(aiCatalogData, "application/json; charset=utf-8"))
 	router.GET("/.well-known/agent-card.json", servePreparedAgentData(agentCardData, "application/json; charset=utf-8"))
@@ -140,6 +140,7 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	router.POST("/sandbox/v1/responses", serveSandboxResponse)
 	router.POST("/sandbox/v1/messages", serveSandboxClaudeMessage)
 
+	router.Use(serveDiscoveryAssets(buildFS, fmt.Sprintf("web/build/%s", config.Theme)))
 	router.Use(static.Serve("/", common.EmbedFolder(buildFS, fmt.Sprintf("web/build/%s", config.Theme))))
 	router.NoRoute(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.RequestURI, "/v1") || strings.HasPrefix(c.Request.RequestURI, "/api") {
@@ -147,7 +148,7 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 			return
 		}
 		c.Header("Cache-Control", "no-cache")
-		c.Data(http.StatusOK, "text/html; charset=utf-8", indexPageData)
+		serveDiscoveryData(c, "text/html; charset=utf-8", indexPageData)
 	})
 }
 
@@ -156,7 +157,11 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 // value: a Gin middleware function.
 func addAgentDiscoveryHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Link", agentDiscoveryLinks)
+		origin := configuredDiscoveryOrigin()
+		c.Set(discoveryOriginContextKey, origin)
+		if origin != "" {
+			c.Header("Link", bindDiscoveryText(agentDiscoveryLinks, origin))
+		}
 		c.Header("RateLimit-Limit", "300")
 		c.Header("RateLimit-Remaining", "299")
 		c.Header("RateLimit-Reset", "60")
@@ -176,6 +181,13 @@ type publicMCPRequest struct {
 // agents. Parameters: c carries the JSON-RPC request. Return value: none; the
 // function writes a JSON-RPC response describing public documentation only.
 func servePublicMCPDiscovery(c *gin.Context) {
+	origin := discoveryOrigin(c)
+	if origin == "" {
+		c.Header("Cache-Control", "no-store")
+		c.AbortWithStatus(http.StatusServiceUnavailable)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
 	var req publicMCPRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, publicMCPError(nil, -32700, "invalid JSON-RPC request"))
@@ -201,7 +213,7 @@ func servePublicMCPDiscovery(c *gin.Context) {
 					"name":    "Laisky One API Public Discovery",
 					"version": "0.6",
 				},
-				"instructions": "This public MCP endpoint exposes documentation discovery only. Use Authorization: Bearer <relay-api-key> with https://oneapi.laisky.com/mcp for authenticated configured tools.",
+				"instructions": bindDiscoveryText("This public MCP endpoint exposes documentation discovery only. Use Authorization: Bearer <relay-api-key> with https://oneapi.laisky.com/mcp for authenticated configured tools.", origin),
 			},
 		})
 	case "tools/list":
@@ -241,7 +253,7 @@ func servePublicMCPDiscovery(c *gin.Context) {
 				"content": []gin.H{
 					{
 						"type": "text",
-						"text": "Laisky One API public docs: https://oneapi.laisky.com/llms.txt, https://oneapi.laisky.com/openapi.json, https://oneapi.laisky.com/auth.md, https://oneapi.laisky.com/api.md, and https://oneapi.laisky.com/.well-known/api-catalog. Authenticated MCP tools are available at https://oneapi.laisky.com/mcp with a relay API key.",
+						"text": bindDiscoveryText("Laisky One API public docs: https://oneapi.laisky.com/llms.txt, https://oneapi.laisky.com/openapi.json, https://oneapi.laisky.com/auth.md, https://oneapi.laisky.com/api.md, and https://oneapi.laisky.com/.well-known/api-catalog. Authenticated MCP tools are available at https://oneapi.laisky.com/mcp with a relay API key.", origin),
 					},
 				},
 				"isError": false,
@@ -259,7 +271,7 @@ func servePublicMCPDiscovery(c *gin.Context) {
 						"description": "MCP Apps UI resource with public documentation, sandbox, and developer links.",
 						"mimeType":    "text/html;profile=mcp-app",
 						"_meta": gin.H{
-							"openai/widgetDomain":      "https://oneapi.laisky.com",
+							"openai/widgetDomain":      origin,
 							"openai/widgetDescription": "Public Laisky One API developer resources and sandbox links.",
 						},
 					},
@@ -275,7 +287,7 @@ func servePublicMCPDiscovery(c *gin.Context) {
 					{
 						"uri":      "ui://oneapi/public-discovery.html",
 						"mimeType": "text/html;profile=mcp-app",
-						"text":     publicMCPDiscoveryHTML(),
+						"text":     bindDiscoveryText(publicMCPDiscoveryHTML(), origin),
 					},
 				},
 			},
@@ -327,11 +339,17 @@ func publicMCPDiscoveryHTML() string {
 // c carries the incoming request. Return value: none; the function writes HTML
 // with a scoped content security policy.
 func serveMCPAppPublicDiscovery(c *gin.Context) {
+	origin := discoveryOrigin(c)
+	if origin == "" {
+		c.Header("Cache-Control", "no-store")
+		c.AbortWithStatus(http.StatusServiceUnavailable)
+		return
+	}
 	c.Header(
 		"Content-Security-Policy",
-		"default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src https://oneapi.laisky.com; frame-ancestors https://chat.openai.com https://chatgpt.com https://claude.ai; form-action 'none'; base-uri 'none'",
+		"default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src "+origin+"; frame-ancestors https://chat.openai.com https://chatgpt.com https://claude.ai; form-action 'none'; base-uri 'none'",
 	)
-	c.Data(http.StatusOK, "text/html;profile=mcp-app; charset=utf-8", []byte(publicMCPDiscoveryHTML()))
+	serveDiscoveryData(c, "text/html;profile=mcp-app; charset=utf-8", []byte(publicMCPDiscoveryHTML()))
 }
 
 // publicMCPError builds a JSON-RPC error response. Parameters: id is the
@@ -352,6 +370,13 @@ func publicMCPError(id any, code int, message string) gin.H {
 // Parameters: c carries an optional q query parameter or JSON question field.
 // Return value: none; the function writes JSON or text/event-stream.
 func serveAgentAsk(c *gin.Context) {
+	origin := discoveryOrigin(c)
+	if origin == "" {
+		c.Header("Cache-Control", "no-store")
+		c.AbortWithStatus(http.StatusServiceUnavailable)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
 	question := strings.TrimSpace(c.Query("q"))
 	if question == "" && c.Request.Method == http.MethodPost {
 		var body struct {
@@ -367,7 +392,7 @@ func serveAgentAsk(c *gin.Context) {
 		}
 	}
 
-	response := agentAskResponse(trimAgentQuestion(question))
+	response := agentAskResponse(trimAgentQuestion(question), origin)
 	if strings.Contains(strings.ToLower(c.GetHeader("Accept")), "text/event-stream") {
 		payload, err := json.Marshal(response)
 		if err != nil {
@@ -397,19 +422,19 @@ func trimAgentQuestion(question string) string {
 // agentAskResponse builds the public /ask response. Parameters: question is a
 // bounded user prompt. Return value: NLWeb-style metadata, answer, citations,
 // and capability links.
-func agentAskResponse(question string) gin.H {
+func agentAskResponse(question, origin string) gin.H {
 	if question == "" {
 		question = "How do agents integrate with Laisky One API?"
 	}
 
 	return gin.H{
-		"answer":   "Laisky One API is an agent-friendly AI gateway at oneapi.laisky.com. Start with /llms.txt and /openapi.json, authenticate relay calls with Authorization: Bearer <relay-api-key>, and use /v1/chat/completions, /v1/responses, /v1/messages, or authenticated /mcp according to your client format.",
+		"answer":   bindDiscoveryText("Laisky One API is an agent-friendly AI gateway at oneapi.laisky.com. Start with /llms.txt and /openapi.json, authenticate relay calls with Authorization: Bearer <relay-api-key>, and use /v1/chat/completions, /v1/responses, /v1/messages, or authenticated /mcp according to your client format.", origin),
 		"question": question,
 		"citations": []gin.H{
-			{"title": "LLM instructions", "url": "https://oneapi.laisky.com/llms.txt"},
-			{"title": "OpenAPI", "url": "https://oneapi.laisky.com/openapi.json"},
-			{"title": "Authentication", "url": "https://oneapi.laisky.com/auth.md"},
-			{"title": "MCP manifest", "url": "https://oneapi.laisky.com/.well-known/mcp/manifest.json"},
+			{"title": "LLM instructions", "url": origin + "/llms.txt"},
+			{"title": "OpenAPI", "url": origin + "/openapi.json"},
+			{"title": "Authentication", "url": origin + "/auth.md"},
+			{"title": "MCP manifest", "url": origin + "/.well-known/mcp/manifest.json"},
 		},
 		"capabilities": []string{
 			"OpenAI Chat Completions relay",
@@ -419,7 +444,7 @@ func agentAskResponse(question string) gin.H {
 		},
 		"_meta": gin.H{
 			"schema": "nlweb",
-			"source": "oneapi.laisky.com",
+			"source": origin,
 			"type":   "agent-discovery-answer",
 		},
 	}
@@ -499,7 +524,7 @@ func serveSandboxClaudeMessage(c *gin.Context) {
 // the selected embedded frontend build. Parameters: buildFS is the embedded
 // filesystem and filename is relative to the theme build root. Return value: a
 // Gin handler that serves text/markdown or 404 when the file is absent.
-func serveMarkdownFromBuild(buildFS embed.FS, filename string) gin.HandlerFunc {
+func serveMarkdownFromBuild(buildFS fs.FS, filename string) gin.HandlerFunc {
 	return serveFileFromBuild(buildFS, filename, "text/markdown; charset=utf-8")
 }
 
@@ -508,16 +533,16 @@ func serveMarkdownFromBuild(buildFS embed.FS, filename string) gin.HandlerFunc {
 // filesystem, filename is relative to the theme build root, and contentType is
 // the HTTP Content-Type value. Return value: a Gin handler that serves bytes or
 // 404 when the file is absent.
-func serveFileFromBuild(buildFS embed.FS, filename string, contentType string) gin.HandlerFunc {
+func serveFileFromBuild(buildFS fs.FS, filename string, contentType string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		data, err := buildFS.ReadFile(fmt.Sprintf("web/build/%s/%s", config.Theme, filename))
+		data, err := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/%s", config.Theme, filename))
 		if err != nil {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
 
 		c.Header("Cache-Control", "max-age=604800")
-		c.Data(http.StatusOK, contentType, data)
+		serveDiscoveryData(c, contentType, data)
 	}
 }
 
@@ -526,16 +551,16 @@ func serveFileFromBuild(buildFS embed.FS, filename string, contentType string) g
 // filesystem, filename is relative to the theme build root, and contentType is
 // the HTTP Content-Type value. Return value: a Gin handler that serves bytes or
 // 404 when the file is absent.
-func serveNoCacheFileFromBuild(buildFS embed.FS, filename string, contentType string) gin.HandlerFunc {
+func serveNoCacheFileFromBuild(buildFS fs.FS, filename string, contentType string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		data, err := buildFS.ReadFile(fmt.Sprintf("web/build/%s/%s", config.Theme, filename))
+		data, err := fs.ReadFile(buildFS, fmt.Sprintf("web/build/%s/%s", config.Theme, filename))
 		if err != nil {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
 
 		c.Header("Cache-Control", "no-cache")
-		c.Data(http.StatusOK, contentType, data)
+		serveDiscoveryData(c, contentType, data)
 	}
 }
 
@@ -551,7 +576,7 @@ func servePreparedAgentData(data []byte, contentType string) gin.HandlerFunc {
 		}
 
 		c.Header("Cache-Control", "max-age=604800")
-		c.Data(http.StatusOK, contentType, data)
+		serveDiscoveryData(c, contentType, data)
 	}
 }
 
