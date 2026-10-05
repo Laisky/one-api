@@ -25,6 +25,7 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/cohere"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -75,6 +76,18 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 	meta.PromptTokens = promptTokens
 	totalQuota := calculateRerankQuota(promptTokens, modelRatio, groupRatio, perCallBilling)
+	if perCallBilling && meta.ChannelType == channeltype.Cohere {
+		units, quoteErr := cohere.QuoteRerankSearchUnits(rerankRequest, modelConfig.ContextLength)
+		if quoteErr != nil {
+			return openai.ErrorWrapper(quoteErr, "unbounded_cohere_rerank_request", http.StatusBadRequest)
+		}
+		var valid bool
+		totalQuota, valid = cohereSearchUnitsQuota(units, modelRatio, groupRatio)
+		if !valid {
+			return openai.ErrorWrapper(errors.New("Cohere rerank quota is not representable"), "invalid_cohere_rerank_quota", http.StatusBadRequest)
+		}
+		lg.Debug("quoted Cohere rerank aggregate allowance", zap.Int64("search_units", units), zap.Int64("quota", totalQuota))
+	}
 
 	preConsumedQuota, bizErr := preConsumeRerankQuota(c, totalQuota, meta)
 	if bizErr != nil {
