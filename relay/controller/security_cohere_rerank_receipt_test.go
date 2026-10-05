@@ -164,8 +164,9 @@ func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 }
 
 // TestSecurityCohereRerankProviderErrors pins how the aggregate allowance settles
-// when Cohere answers with an HTTP error instead of a receipt. Explicit admission
-// rejections release the complete hold and keep retry available; other statuses
+// when Cohere answers with an HTTP error instead of a receipt. Documented
+// pre-inference rejections (400, 401, 402, 403, 404, 429) release the complete
+// hold and keep retry available; client cancellation (499) and other statuses
 // follow the existing uncertain-execution policy and retain the quoted allowance
 // exactly once with estimate provenance. No status creates measured usage.
 func TestSecurityCohereRerankProviderErrors(t *testing.T) {
@@ -177,7 +178,10 @@ func TestSecurityCohereRerankProviderErrors(t *testing.T) {
 		{status: http.StatusUnauthorized, retryable: true},
 		{status: http.StatusForbidden, retryable: true},
 		{status: http.StatusTooManyRequests, retryable: true},
-		{status: http.StatusBadRequest, charge: 13000},
+		{status: http.StatusBadRequest, retryable: true},
+		{status: http.StatusPaymentRequired, retryable: true},
+		{status: http.StatusNotFound, retryable: true},
+		{status: 499, charge: 13000},
 		{status: http.StatusInternalServerError, charge: 13000},
 	} {
 		t.Run(fmt.Sprintf("status_%d", tc.status), func(t *testing.T) {
