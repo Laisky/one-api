@@ -1502,7 +1502,13 @@ func GetModelsDisplay(c *gin.Context) {
 						UsdPerThousandCalls: cfg.Ratio * 1000 / ratio.QuotaPerUsd,
 					})
 				}
-				perCallPricing, perPagePricing = applyUnitTariffDisplayOverride(converted, perCallPricing, perPagePricing)
+				var dropInheritedSchedule bool
+				perCallPricing, perPagePricing, dropInheritedSchedule = applyUnitTariffDisplayOverride(converted, perCallPricing, perPagePricing)
+				if dropInheritedSchedule {
+					// The local override replaces an inherited page tariff wholesale,
+					// so the provider's page-price schedule no longer applies.
+					timeWindows, activeTimeWindow = nil, ""
+				}
 				if converted.Audio != nil && converted.Audio.HasData() {
 					audioPricing = buildAudioDisplayPricing(converted.Audio)
 				} else if cfg.Audio == nil && cfg.Ratio != 0 {

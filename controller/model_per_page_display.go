@@ -48,10 +48,12 @@ func convertLocalPerPageDisplayConfig(local *model.PerPagePricingLocal) *adaptor
 // kept unchanged when the override declares no per-page tariff.
 // Parameters: converted is the adaptor-shaped local override, perCall and
 // perPage are the display tariffs computed so far.
-// Returns: the reconciled per-call and per-page display tariffs.
-func applyUnitTariffDisplayOverride(converted adaptorpkg.ModelConfig, perCall *PerCallDisplayPricing, _ *PerPageDisplayPricing) (*PerCallDisplayPricing, *PerPageDisplayPricing) {
+// Returns: the reconciled per-call and per-page display tariffs, and whether
+// the inherited provider schedule must be dropped because the local override
+// replaced an inherited page tariff that the schedule belonged to.
+func applyUnitTariffDisplayOverride(converted adaptorpkg.ModelConfig, perCall *PerCallDisplayPricing, perPage *PerPageDisplayPricing) (*PerCallDisplayPricing, *PerPageDisplayPricing, bool) {
 	if converted.PerPage != nil {
-		return nil, buildPerPageDisplayPricing(converted.PerPage)
+		return nil, buildPerPageDisplayPricing(converted.PerPage), perPage != nil
 	}
-	return perCall, nil
+	return perCall, nil, perPage != nil
 }

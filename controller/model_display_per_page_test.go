@@ -240,15 +240,23 @@ func TestApplyUnitTariffDisplayOverride(t *testing.T) {
 	inheritedCall := &PerCallDisplayPricing{UsdPerThousandCalls: 2, UsdPerCall: 0.002}
 	inheritedPage := &PerPageDisplayPricing{UsdPerThousandPages: 9, UsdPerPage: 0.009}
 
-	call, page := applyUnitTariffDisplayOverride(adaptorpkg.ModelConfig{PerPage: &adaptorpkg.PerPagePricingConfig{UsdPerThousandPages: 1}}, inheritedCall, inheritedPage)
+	call, page, drop := applyUnitTariffDisplayOverride(adaptorpkg.ModelConfig{PerPage: &adaptorpkg.PerPagePricingConfig{UsdPerThousandPages: 1}}, inheritedCall, inheritedPage)
 	require.Nil(t, call)
 	require.Equal(t, &PerPageDisplayPricing{UsdPerThousandPages: 1, UsdPerPage: 0.001}, page)
+	require.True(t, drop, "an inherited page schedule never applies to a local page tariff")
 
-	call, page = applyUnitTariffDisplayOverride(adaptorpkg.ModelConfig{PerCall: &adaptorpkg.PerCallPricingConfig{UsdPerThousandCalls: 4}}, inheritedCall, inheritedPage)
+	call, page, drop = applyUnitTariffDisplayOverride(adaptorpkg.ModelConfig{PerCall: &adaptorpkg.PerCallPricingConfig{UsdPerThousandCalls: 4}}, inheritedCall, inheritedPage)
 	require.Same(t, inheritedCall, call)
 	require.Nil(t, page)
+	require.True(t, drop)
 
-	call, page = applyUnitTariffDisplayOverride(adaptorpkg.ModelConfig{MaxTokens: 10}, inheritedCall, inheritedPage)
+	call, page, drop = applyUnitTariffDisplayOverride(adaptorpkg.ModelConfig{Ratio: 2}, inheritedCall, inheritedPage)
 	require.Same(t, inheritedCall, call)
 	require.Nil(t, page, "a local override without per_page bills by tokens, so the inherited page tariff is hidden")
+	require.True(t, drop, "the inherited page-price schedule must not be advertised for a local token tariff")
+
+	call, page, drop = applyUnitTariffDisplayOverride(adaptorpkg.ModelConfig{Ratio: 2}, inheritedCall, nil)
+	require.Same(t, inheritedCall, call)
+	require.Nil(t, page)
+	require.False(t, drop, "without an inherited page tariff the existing schedule rules are unchanged")
 }
