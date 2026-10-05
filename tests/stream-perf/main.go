@@ -19,6 +19,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Laisky/errors/v2"
 )
 
 type options struct {
@@ -96,13 +98,13 @@ func execute(o options) error {
 		return serveMock(o.address)
 	}
 	if o.mode != "load" {
-		return fmt.Errorf("mode must be load or mock")
+		return errors.New("mode must be load or mock")
 	}
 	if o.concurrency < 1 || o.concurrency > 4096 || o.requests < 1 || o.requests > 1000000 || math.IsNaN(o.rate) || math.IsInf(o.rate, 0) || o.rate < 0 || o.rate > 100000 || o.timeout <= 0 || o.cancelAfter < 0 || o.cancelAfter > o.chunks {
-		return fmt.Errorf("invalid concurrency, requests, rate or timeout")
+		return errors.New("invalid concurrency, requests, rate or timeout")
 	}
 	if len(o.id) > 40 || strings.ContainsAny(o.id, "\r\n") {
-		return fmt.Errorf("invalid trial id")
+		return errors.New("invalid trial id")
 	}
 	if err := validateSpec(spec{ID: o.id, Chunks: o.chunks, Bytes: o.chunkBytes, PaceMS: o.paceMS, Fault: o.fault}); err != nil {
 		return err
@@ -113,11 +115,11 @@ func execute(o options) error {
 	}
 	ip := net.ParseIP(req.URL.Hostname())
 	if req.URL.Scheme != "http" || ip == nil || !ip.IsLoopback() || req.URL.User != nil {
-		return fmt.Errorf("only literal loopback HTTP targets are permitted")
+		return errors.New("only literal loopback HTTP targets are permitted")
 	}
 	key := os.Getenv("STREAM_PERF_TOKEN")
 	if key == "" {
-		return fmt.Errorf("STREAM_PERF_TOKEN is required")
+		return errors.New("STREAM_PERF_TOKEN is required")
 	}
 	transport := &http.Transport{Proxy: nil, MaxIdleConns: o.concurrency * 2, MaxIdleConnsPerHost: o.concurrency, MaxConnsPerHost: o.concurrency, DisableCompression: true, IdleConnTimeout: 30 * time.Second}
 	defer transport.CloseIdleConnections()
@@ -140,7 +142,7 @@ func execute(o options) error {
 		return fmt.Errorf("encode result: %w", err)
 	}
 	if r.Failed+r.Dropped > 0 {
-		return fmt.Errorf("workload failed: %d requests failed and %d were dropped", r.Failed, r.Dropped)
+		return errors.Errorf("workload failed: %d requests failed and %d were dropped", r.Failed, r.Dropped)
 	}
 	return nil
 }

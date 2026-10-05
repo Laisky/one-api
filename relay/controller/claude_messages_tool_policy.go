@@ -136,6 +136,8 @@ func collectClaudeServerCapabilities(raw []byte) (map[string]int64, []string, er
 				continue
 			case tooling.ClaudeToolUnknown:
 				unknown = append(unknown, canonical)
+			case tooling.ClaudeToolServer:
+				// Server tools reserve their declared uses below.
 			}
 			uses[canonical] = saturatingQuotaAdd(uses[canonical], claudeToolUseBound(tool["max_uses"]))
 		}

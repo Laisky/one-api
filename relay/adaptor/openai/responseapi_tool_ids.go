@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/Laisky/errors/v2"
@@ -17,7 +16,7 @@ const MaxResponseAPIFallbackInputItems = 4096
 // Byte-level request limits remain the responsibility of admission middleware.
 func ValidateResponseAPIFallbackInput(input []any) error {
 	if len(input) > MaxResponseAPIFallbackInputItems {
-		return errors.WithStack(fmt.Errorf("response fallback input exceeds %d items", MaxResponseAPIFallbackInputItems))
+		return errors.Errorf("response fallback input exceeds %d items", MaxResponseAPIFallbackInputItems)
 	}
 	return nil
 }

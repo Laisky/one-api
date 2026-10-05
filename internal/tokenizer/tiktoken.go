@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/dlclark/regexp2"
 )
 
@@ -40,7 +41,7 @@ func EncodingForModel(modelName string) (*Tiktoken, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("no encoding for model %s", modelName)
+	return nil, errors.Errorf("no encoding for model %s", modelName)
 }
 
 type Tiktoken struct {

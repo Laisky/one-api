@@ -1,9 +1,10 @@
 package tiktoken
 
 import (
-	"errors"
 	"strings"
 	"sync"
+
+	"github.com/Laisky/errors/v2"
 )
 
 const ENDOFTEXT string = "<|endoftext|>"
@@ -123,7 +124,7 @@ func initEncoding(encodingName string) (*Encoding, error) {
 	case MODEL_P50K_EDIT:
 		return p50k_edit()
 	default:
-		return nil, errors.New("Unknown encoding: " + encodingName)
+		return nil, errors.Errorf("Unknown encoding: %s", encodingName)
 	}
 }
 

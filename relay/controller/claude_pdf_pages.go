@@ -224,6 +224,8 @@ func (signals *claudePDFPageSignals) handle(pass *claudePDFPass, lexer *claudePD
 		frame = &pass.frames[len(pass.frames)-1]
 	}
 	switch token.kind {
+	case claudePDFTokenArrayOpen, claudePDFTokenArrayClose:
+		// Arrays only matter inside a Kids list, which is tracked below.
 	case claudePDFTokenDictOpen:
 		if len(pass.frames) >= claudeNativePDFScanMaxFrames {
 			pass.untracked++
@@ -309,6 +311,8 @@ func (signals *claudePDFPageSignals) handleKids(pass *claudePDFPass, token *clau
 			pass.kidsDicts = max(0, pass.kidsDicts-1)
 		case claudePDFTokenKeyword:
 			entry = pass.kidsDepth == 1 && pass.kidsDicts == 0 && token.is("R")
+		case claudePDFTokenName, claudePDFTokenInteger:
+			// Names and integers never open, close or reference a Kids entry.
 		}
 		if entry {
 			if pass.kidsFrame >= 0 && pass.kidsFrame < len(pass.frames) {

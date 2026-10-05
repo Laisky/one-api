@@ -45,10 +45,11 @@ func verifyAsyncBillingAckBatchBackoff(t *testing.T, input *AsyncTask) {
 		item.RequestID = fmt.Sprintf("ack-receipt-%d", i)
 		task := reserveDurableJob(t, &item)
 		ids = append(ids, task.ID)
-		// These are due retries. A 16-second fourth-attempt delay avoids a
-		// timing race between the first and second pass on overloaded runners.
+		// These are due retries. The eighth attempt's 256-second delay keeps the
+		// failed batch blocked for the second pass even when the first pass of
+		// 32 receipts runs for tens of seconds on an overloaded -race runner.
 		require.NoError(t, DB.Model(&AsyncTask{}).Where("id = ?", task.ID).
-			Updates(map[string]any{"updated_at": int64(i + 1), "log_failures": 3}).Error)
+			Updates(map[string]any{"updated_at": int64(i + 1), "log_failures": 7}).Error)
 	}
 	const callback = "async_ack_backoff_failure"
 	require.NoError(t, DB.Callback().Update().Before("gorm:update").Register(callback, func(tx *gorm.DB) {
@@ -71,8 +72,8 @@ func verifyAsyncBillingAckBatchBackoff(t *testing.T, input *AsyncTask) {
 	require.Len(t, blocked, 32)
 	for _, item := range blocked {
 		require.False(t, item.LogRecorded)
-		require.Equal(t, 4, item.LogFailures)
-		require.GreaterOrEqual(t, item.LogNextAttemptAt, before.Add(16*time.Second).UnixMilli())
+		require.Equal(t, 8, item.LogFailures)
+		require.GreaterOrEqual(t, item.LogNextAttemptAt, before.Add(256*time.Second).UnixMilli())
 	}
 	require.NoError(t, FlushAsyncTaskLogs(ctx), "failed acknowledgements must not starve the next batch")
 	var healthy AsyncTask

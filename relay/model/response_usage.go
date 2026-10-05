@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+
+	"github.com/Laisky/errors/v2"
 )
 
 const responseUsageCaptureLimit = 2 << 20
@@ -120,7 +122,7 @@ func (a *ResponseUsageAccumulator) consumeLine() {
 		// recover at their next complete receipt without a blank separator.
 		var fragment json.RawMessage
 		err := json.NewDecoder(bytes.NewReader(data)).Decode(&fragment)
-		if err != io.ErrUnexpectedEOF && err != io.EOF {
+		if !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 			a.malformed = true
 			return
 		}

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/google/uuid"
 )
 
@@ -38,7 +39,7 @@ func readFile(blobpath string) ([]byte, error) {
 
 func readFileCached(blobpath string) ([]byte, error) {
 	if blobpath == "" {
-		return nil, fmt.Errorf("blobpath cannot be empty")
+		return nil, errors.New("blobpath cannot be empty")
 	}
 
 	cacheDir := strings.TrimSpace(os.Getenv("TIKTOKEN_CACHE_DIR"))

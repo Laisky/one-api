@@ -50,6 +50,8 @@ func (c *Core) convertFields(fields []zapcore.Field) convertedFields {
 			zapcore.Int64Type, zapcore.Uint8Type, zapcore.Uint16Type, zapcore.Uint32Type,
 			zapcore.Uint64Type, zapcore.Float32Type, zapcore.Float64Type, zapcore.DurationType:
 			allowed = append(allowed, field)
+		default:
+			// Every non-numeric field type is dropped, even under an allowed key.
 		}
 	}
 	converted := convertFields(allowed)
