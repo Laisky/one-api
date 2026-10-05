@@ -295,6 +295,9 @@ func TestAudioRejectedInputHasNoSideEffect(t *testing.T) {
 		`"input":"hello","extra_body":{"model":"other"}`, `"input":"hello","stream":true`,
 		`"input":"hello","speed":2`, `"input":"hello","response_format":"pcm"`,
 		`"input":"hello","voice_id":"different"`,
+		`"input":"hello","Extra_Body":{"input":"free replacement"}`,
+		`"input":"hello","EXTRA_BODY":{"model":"other"}`,
+		`"input":"hello","extra_body":{"seed":1},"Extra_Body":{"seed":2}`,
 	} {
 		t.Run(fields, func(t *testing.T) {
 			const balance = int64(1000)
