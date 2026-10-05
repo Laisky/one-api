@@ -162,13 +162,17 @@ The gateway recognizes **three credential types**. They are not interchangeable,
 
 Dashboard operations authenticated by a signed session cookie require trusted
 browser provenance for POST, PUT, PATCH, DELETE, and other unsafe methods. The
-server accepts an exact trusted `Origin` (scheme, host, and port); when Origin is
-absent it accepts `Sec-Fetch-Site: same-origin`, or an exact trusted `Referer` if
-Fetch Metadata is also absent. Missing, null, malformed, or untrusted provenance
-returns HTTP 403 before the action executes. Same-site sibling domains are not
-implicitly trusted. The configured `FRONTEND_BASE_URL` and public `ServerAddress`
-are explicit trusted origins; the default localhost ServerAddress placeholder is
-not a production trust grant. Forwarded headers do not expand this allowlist.
+server checks, in order: Fetch Metadata `Sec-Fetch-Site: same-origin` (set by the
+browser and correct behind Host-rewriting proxies and TLS termination); otherwise
+an exact trusted `Origin` (scheme, host, and port); and only when both headers
+are absent, an exact trusted `Referer`. Missing, null, malformed, duplicated, or
+untrusted provenance returns HTTP 403 (`Untrusted session mutation origin`)
+before the action executes. `same-site`, `cross-site`, and `none` Fetch Metadata
+are not proof; same-site sibling domains are not implicitly trusted. Trusted
+origins are the request's own origin (`https` when `ENABLE_COOKIE_SECURE` is on or
+the connection is TLS), the configured `FRONTEND_BASE_URL`, and the public
+`ServerAddress`; the default localhost ServerAddress placeholder is not a
+production trust grant. Forwarded headers do not expand this allowlist.
 
 Browsers send these headers automatically. Cookie-based command-line clients
 must also send `-H "Origin: $BASE_URL"`, where BASE_URL is the trusted origin
@@ -177,18 +181,22 @@ clients do not require browser provenance. A management request with both a
 signed session and Authorization still authenticates with the session and must
 pass the cookie checks.
 
-Password login and passkey login begin/finish apply the same protection when an
-authenticated cookie is already present. Anonymous login keeps its existing
-contract; this policy is not a claim of complete anonymous login-CSRF coverage.
+Password login, WeChat code login, and passkey login begin/finish apply the same
+protection when an authenticated cookie is already present, so a hostile page
+cannot replace a signed-in session. Anonymous login keeps its existing contract;
+this policy is not a claim of complete anonymous login-CSRF coverage.
 
 The following former GET actions now require POST: `/api/user/token`,
 `/api/user/aff`, `/api/user/totp/setup`, `/api/user/logout`,
-`/api/oauth/email/bind`, `/api/oauth/wechat/bind`, `/api/channel/test`,
-`/api/channel/test/:id`, `/api/channel/update_balance`, and
-`/api/channel/update_balance/:id`. Parameters and response envelopes are
-unchanged. GET/HEAD no longer invoke these actions; no compatibility redirect
-executes them. Modern, Air, and Berry callers use POST. State-validated OAuth
-callbacks retain GET to preserve provider redirects.
+`/api/oauth/wechat`, `/api/oauth/email/bind`, `/api/oauth/wechat/bind`,
+`/api/channel/test`, `/api/channel/test/:id`, `/api/channel/update_balance`, and
+`/api/channel/update_balance/:id`. Query parameters stay in the query string and
+response envelopes are unchanged. A legacy GET to any of these paths returns
+HTTP 405 with `Allow: POST` and `{"success": false, ...}` without authenticating
+or performing the action; HEAD does not invoke them either. Modern, Air, and
+Berry callers use POST. The GitHub, OIDC, and Lark callbacks keep GET because
+providers redirect to them; they remain protected by the session-bound,
+single-use `oauth_state`.
 
 ### 2.1 Relay API key (`sk-…`)
 
@@ -483,7 +491,7 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 | `GET` | [`/api/oauth/github`](#authentication--account-lifecycle) | Public | GitHub OAuth callback; logs in or provisions (or binds if session has username); requires oauth_state. |
 | `GET` | [`/api/oauth/oidc`](#authentication--account-lifecycle) | Public | Generic OIDC callback; username from preferred_username else oidc_<n>; login/provision/bind; requires oauth… |
 | `GET` | [`/api/oauth/lark`](#authentication--account-lifecycle) | Public | Lark/Feishu OAuth callback; login/provision/bind; requires oauth_state; no feature-disabled guard. |
-| `GET` | [`/api/oauth/wechat`](#authentication--account-lifecycle) | Public | WeChat sign-in callback; resolves WeChat id from code; login/provision; does NOT validate oauth_state. |
+| `POST` | [`/api/oauth/wechat`](#authentication--account-lifecycle) | Public | WeChat code sign-in; resolves WeChat id from code; login/provision; does NOT validate oauth_state; replacing an existing session needs trusted provenance. |
 | `GET` | [`/api/oauth/state`](#authentication--account-lifecycle) | Public | Generate and store a 12-char anti-CSRF state in the session and return it for OAuth redirects. |
 | `POST` | [`/api/oauth/wechat/bind`](#authentication--account-lifecycle) | Access token / session | Bind a WeChat identity to the authenticated account; success returns empty message. |
 | `POST` | [`/api/oauth/email/bind`](#authentication--account-lifecycle) | Access token / session | Bind/change account email gated by verification code; root also updates system root email. |
@@ -3351,7 +3359,7 @@ HTTP 200.
 
 ```bash
 curl -X POST "$BASE_URL/api/user/logout" \
-  -b cookies.txt -c cookies.txt
+  -H "Origin: $BASE_URL" -b cookies.txt -c cookies.txt
 ```
 
 ### POST /api/user/passkey/login/begin
@@ -3436,7 +3444,7 @@ HTTP 200. On success returns the same sanitized user object and `Set-Cookie` ses
 
 ```bash
 curl -X POST "$BASE_URL/api/user/passkey/login/finish" \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/json" -H "Origin: $BASE_URL" \
   -b cookies.txt -c cookies.txt \
   --data @assertion.json
 ```
@@ -3591,11 +3599,11 @@ curl -X GET "$BASE_URL/api/oauth/lark?code=LARK_CODE&state=OAUTH_STATE" \
 
 > Note: unlike the GitHub and OIDC callbacks, the Lark login path has no dedicated "feature disabled" guard before the token exchange; a misconfiguration surfaces as an upstream connect/parse error from Feishu.
 
-### GET /api/oauth/wechat
+### POST /api/oauth/wechat
 
-WeChat sign-in callback. Resolves a WeChat id from `code` via the configured WeChat auth server, then logs in or provisions the account (username defaults to `wechat_<n>`). On success it issues the **session cookie**. Unlike the GitHub/OIDC/Lark callbacks, this endpoint does not validate an `oauth_state` parameter.
+WeChat code sign-in (GET before #479; a legacy GET now returns HTTP 405). Resolves a WeChat id from `code` via the configured WeChat auth server, then logs in or provisions the account (username defaults to `wechat_<n>`). On success it issues the **session cookie**. Unlike the GitHub/OIDC/Lark callbacks, this endpoint does not validate an `oauth_state` parameter; the code stays in the query string.
 
-**Auth:** Public - no auth. Protected by `CriticalRateLimit`.
+**Auth:** Public - no auth. Protected by `CriticalRateLimit`. When the request already carries a signed dashboard session, it must pass the cookie mutation provenance checks (HTTP 403 otherwise).
 
 **Query parameters**
 
@@ -3624,8 +3632,8 @@ HTTP 200, same shape as `POST /api/user/login`.
 **Example**
 
 ```bash
-curl -X GET "$BASE_URL/api/oauth/wechat?code=WECHAT_CODE" \
-  -b cookies.txt -c cookies.txt
+curl -X POST "$BASE_URL/api/oauth/wechat?code=WECHAT_CODE" \
+  -H "Origin: $BASE_URL" -b cookies.txt -c cookies.txt
 ```
 
 **Errors**
@@ -4314,7 +4322,7 @@ Confirms TOTP enrollment by verifying a code generated from the pending secret c
 **Example**
 
 ```bash
-curl -s -X POST "$BASE_URL/api/user/totp/confirm" -b cookies.txt \
+curl -s -X POST "$BASE_URL/api/user/totp/confirm" -b cookies.txt -H "Origin: $BASE_URL" \
   -H "Content-Type: application/json" \
   -d '{"totp_code":"123456"}'
 ```
@@ -4438,7 +4446,7 @@ Starts a WebAuthn registration ceremony, returning the credential-creation optio
 **Example**
 
 ```bash
-curl -s -X POST "$BASE_URL/api/user/passkey/register/begin" -b cookies.txt
+curl -s -X POST "$BASE_URL/api/user/passkey/register/begin" -b cookies.txt -H "Origin: $BASE_URL"
 ```
 
 **Errors**
@@ -4492,7 +4500,7 @@ Completes the WebAuthn registration ceremony, verifying the authenticator's atte
 **Example**
 
 ```bash
-curl -s -X POST "$BASE_URL/api/user/passkey/register/finish?name=YubiKey%205C" -b cookies.txt \
+curl -s -X POST "$BASE_URL/api/user/passkey/register/finish?name=YubiKey%205C" -b cookies.txt -H "Origin: $BASE_URL" \
   -H "Content-Type: application/json" \
   -d @attestation.json
 ```
