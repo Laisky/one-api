@@ -51,7 +51,7 @@ func cohereAdmissionContext(ch *model.Channel, target, id, name string, count in
 // Synthetic receipts test gateway policy, not measured provider invoice amounts.
 func TestSecurityCohereRerankAggregateAdmission(t *testing.T) {
 	for _, tc := range []struct {
-		name, model, receipt               string
+		name, model, receipt, tariff       string
 		docs, cap                          int
 		owner, token, quote, charge        int64
 		group                              float64
@@ -66,6 +66,10 @@ func TestSecurityCohereRerankAggregateAdmission(t *testing.T) {
 		{name: "group_multiplier", docs: 100, owner: 100000, token: 100000, quote: 26000, charge: 6000, group: 2, receipt: `3`},
 		{name: "unlimited_token_owner_hold", docs: 100, owner: 50000, token: 0, quote: 13000, charge: 3000, group: 1, receipt: `3`, unlimited: true},
 		{name: "free_group_control", docs: 100, cap: 4096, quote: 0, charge: 0, group: 0, receipt: `3`},
+		{name: "free_operator_control", tariff: `{"ratio":0,"per_call":{"usd_per_thousand_calls":0}}`, docs: 100, cap: 4096, group: 1, receipt: `3`},
+		{name: "custom_context_control", model: "rerank-private", tariff: `{"ratio":1000,"per_call":{"usd_per_thousand_calls":2},"context_length":32768}`, docs: 100, owner: 50000, token: 50000, quote: 41000, charge: 3000, group: 1, receipt: `3`},
+		{name: "custom_context_absent", model: "rerank-private", docs: 100, owner: 50000, token: 50000, group: 1, reject: true, invalid: true},
+		{name: "known_context_cannot_shrink", tariff: `{"ratio":1000,"per_call":{"usd_per_thousand_calls":2},"context_length":2}`, docs: 100, owner: 50000, token: 50000, quote: 13000, charge: 3000, group: 1, receipt: `3`},
 		{name: "larger_document_cap_reject", docs: 100, cap: 8192, owner: 20000, token: 20000, quote: 21000, group: 1, reject: true},
 		{name: "small_cap_boundary", docs: 100, cap: 448, owner: 20000, token: 20000, quote: 5000, charge: 1000, group: 1, receipt: `1`},
 		{name: "next_chunk_boundary", docs: 100, cap: 449, owner: 20000, token: 20000, quote: 6000, charge: 1000, group: 1, receipt: `1`},
@@ -81,11 +85,20 @@ func TestSecurityCohereRerankAggregateAdmission(t *testing.T) {
 			if name == "" {
 				name = "rerank-v3.5"
 			}
-			ch := securityImageChannel(t, channeltype.Cohere, name, `{"ratio":1000,"per_call":{"usd_per_thousand_calls":2}}`)
+			tariff := tc.tariff
+			if tariff == "" {
+				tariff = `{"ratio":1000,"per_call":{"usd_per_thousand_calls":2}}`
+			}
+			ch := securityImageChannel(t, channeltype.Cohere, name, tariff)
 			cfg, ok := pricing.ResolveModelConfig(name, ch.GetModelPriceConfigs(), &cohere.Adaptor{}, time.Now())
 			require.True(t, ok)
 			require.NotNil(t, cfg.PerCall)
-			require.Equal(t, float64(1000), cfg.Ratio)
+			if tc.name == "free_operator_control" {
+				require.Zero(t, cfg.Ratio)
+				require.Zero(t, cfg.PerCall.UsdPerThousandCalls)
+			} else {
+				require.Equal(t, float64(1000), cfg.Ratio)
+			}
 			var calls atomic.Int32
 			var heldOwner, heldToken atomic.Int64
 			var sentCap atomic.Int64
