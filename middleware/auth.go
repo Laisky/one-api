@@ -27,7 +27,6 @@ import (
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -48,78 +47,32 @@ import (
 //   - c: Gin context for the HTTP request
 //   - minRole: Minimum role level required (e.g., common user, admin, root)
 func authHelper(c *gin.Context, minRole int) {
-	session := sessions.Default(c)
-	username := session.Get("username")
-	role := session.Get("role")
-	id := session.Get("id")
-	status := session.Get("status")
-	var userObj *model.User
-
-	// First, try to authenticate using session data (cookies)
-	if username == nil {
-		gmw.GetLogger(c).Info("no user session found, try to use access token")
-		// If no session exists, try to authenticate using the Authorization header
-		accessToken := c.Request.Header.Get("Authorization")
-		if accessToken == "" {
-			// No authentication method available - reject request
-			respondAuthError(c, http.StatusUnauthorized, "No permission to perform this operation, not logged in and no access token provided")
-			return
-		}
-
-		// Validate the access token against the database
-		user := model.ValidateAccessToken(accessToken)
-		if user != nil && user.Username != "" {
-			// Token is valid - use the user data from token validation
-			userObj = user
-			username = user.Username
-			role = user.Role
-			id = user.Id
-			status = user.Status
-		} else {
-			// Invalid token - reject request
-			respondAuthError(c, http.StatusUnauthorized, "No permission to perform this operation, access token is invalid")
-			return
-		}
-	}
-
-	// Check if user is disabled or banned
-	if status.(int) == model.UserStatusDisabled || blacklist.IsUserBanned(id.(int)) {
-		respondAuthError(c, http.StatusForbidden, "User has been banned")
-		// Clear session data for banned users
-		session := sessions.Default(c)
-		session.Clear()
-		_ = session.Save()
-		return
-	}
-
-	// Check if user has sufficient role permissions
-	if role.(int) < minRole {
+	// A signed session role can reject a request without database work, but can
+	// never authorize it. Every potentially permitted request still resolves the
+	// current primary account below. This preserves low-role route isolation.
+	if dashboardSessionRoleInsufficient(c, minRole) {
 		respondAuthError(c, http.StatusForbidden, "No permission to perform this operation, insufficient permissions")
 		return
 	}
-
-	// For session-based auth, fetch the full user object if not already available
-	if userObj == nil {
-		ctx := gmw.Ctx(c)
-		var err error
-		userObj, err = model.CacheGetUserById(ctx, id.(int))
-		if err != nil {
-			gmw.GetLogger(c).Warn("failed to fetch user object for context", zap.Int("user_id", id.(int)), zap.Error(err))
-			// Non-fatal: downstream handlers can still fall back to individual lookups
-		}
+	user, err := resolveDashboardUser(c)
+	if err != nil {
+		gmw.GetLogger(c).Warn("dashboard account resolution failed", zap.Error(err))
 	}
-
-	// Authentication successful - set user context and continue
-	if userObj != nil {
-		c.Set(ctxkey.UserObj, userObj)
-		c.Set(ctxkey.UserUUID, userObj.UUID)
+	if user == nil {
+		clearInvalidDashboardSession(c)
+		respondAuthError(c, http.StatusUnauthorized, "No permission to perform this operation, authentication is invalid")
+		return
 	}
-	c.Set(ctxkey.Username, username)
-	c.Set(ctxkey.Role, role)
-	c.Set(ctxkey.Id, id)
-	// Bind the resolved identity onto the request logger so every later log line
-	// of this request carries user_id + user_uuid + username with no call-site edit.
-	identity.BindFromGin(c)
+	if user.Status != model.UserStatusEnabled || blacklist.IsUserBanned(user.Id) {
+		clearInvalidDashboardSession(c)
+		respondAuthError(c, http.StatusForbidden, "User has been banned")
+		return
+	}
+	if user.Role < minRole {
+		respondAuthError(c, http.StatusForbidden, "No permission to perform this operation, insufficient permissions")
+		return
+	}
+	bindDashboardUser(c, user)
 	c.Next()
 }
 
@@ -138,49 +91,15 @@ func UserAuth() func(c *gin.Context) {
 // are populated; otherwise the request continues anonymously (Id defaults to 0).
 func OptionalUserAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		session := sessions.Default(c)
-		username := session.Get("username")
-		role := session.Get("role")
-		id := session.Get("id")
-		status := session.Get("status")
-		var userObj *model.User
-
-		if username == nil {
-			// Try Authorization header as fallback
-			accessToken := c.Request.Header.Get("Authorization")
-			if accessToken != "" {
-				if user := model.ValidateAccessToken(accessToken); user != nil && user.Username != "" {
-					userObj = user
-					username = user.Username
-					role = user.Role
-					id = user.Id
-					status = user.Status
-				}
-			}
+		user, err := resolveDashboardUser(c)
+		if err != nil {
+			gmw.GetLogger(c).Warn("optional dashboard account resolution failed", zap.Error(err))
 		}
-
-		// If we resolved a user, validate and set context
-		if username != nil && status != nil {
-			if status.(int) != model.UserStatusDisabled && !blacklist.IsUserBanned(id.(int)) {
-				if userObj == nil {
-					ctx := gmw.Ctx(c)
-					var err error
-					userObj, err = model.CacheGetUserById(ctx, id.(int))
-					if err != nil {
-						gmw.GetLogger(c).Warn("failed to fetch user object for context", zap.Int("user_id", id.(int)), zap.Error(err))
-					}
-				}
-				if userObj != nil {
-					c.Set(ctxkey.UserObj, userObj)
-					c.Set(ctxkey.UserUUID, userObj.UUID)
-				}
-				c.Set(ctxkey.Username, username)
-				c.Set(ctxkey.Role, role)
-				c.Set(ctxkey.Id, id)
-				identity.BindFromGin(c)
-			}
+		if user != nil && user.Status == model.UserStatusEnabled && !blacklist.IsUserBanned(user.Id) {
+			bindDashboardUser(c, user)
+		} else {
+			clearInvalidDashboardSession(c)
 		}
-
 		c.Next()
 	}
 }
