@@ -403,12 +403,9 @@ var (
 	// Default: "" (all)
 	ResponseStateAllowlist = strings.TrimSpace(env.String("RESPONSE_STATE_ALLOWLIST", ""))
 
-	// ResponseStateLegacyPassthrough forwards an unknown incoming response ID on
-	// GET/DELETE/cancel to the upstream exactly as today (OpenAI-type channels
-	// only). It defaults OFF: at completion, unknown IDs return the standard
-	// not-found error and are never forwarded upstream (rows R08, SEC04). It is
-	// only consulted when the feature is enabled; with the feature disabled the
-	// action handlers keep their current forwarding behavior.
+	// ResponseStateLegacyPassthrough is retained for configuration compatibility.
+	// It never bypasses owner-scoped lookup: unknown IDs are not forwarded, and
+	// unavailable ownership storage causes object operations to fail closed.
 	//
 	// Environment variable: RESPONSE_STATE_LEGACY_PASSTHROUGH
 	// Default: false

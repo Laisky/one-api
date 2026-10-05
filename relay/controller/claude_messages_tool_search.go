@@ -165,10 +165,11 @@ func injectDeferredMCPToolsForToolSearch(c *gin.Context, request *ClaudeMessages
 
 			// Inject as deferred Claude tool
 			request.Tools = append(request.Tools, relaymodel.ClaudeTool{
-				Name:         toolName,
-				Description:  entry.Tool.Description,
-				InputSchema:  inputSchema,
-				DeferLoading: &deferLoading,
+				Name:                   toolName,
+				Description:            entry.Tool.Description,
+				InputSchema:            inputSchema,
+				DeferLoading:           &deferLoading,
+				TrustedDeferredLoading: true,
 			})
 			existingTools[nameKey] = struct{}{}
 
@@ -216,6 +217,13 @@ func executeClaudeToolSearchMCPLoop(
 ) (*anthropic.Response, *relaymodel.Usage, *mcpExecutionSummary, int64, *relaymodel.ErrorWithStatusCode) {
 	if request == nil || registry == nil {
 		return nil, nil, nil, 0, nil
+	}
+	// A converted provider cannot honor native deferred-schema admission.
+	// Keep the provider hint, but revoke internal trust before every round quote.
+	if !c.GetBool(ctxkey.ClaudeDirectPassthrough) {
+		for i := range request.Tools {
+			request.Tools[i].TrustedDeferredLoading = false
+		}
 	}
 	lg := gmw.GetLogger(c)
 

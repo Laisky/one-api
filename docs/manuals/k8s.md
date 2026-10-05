@@ -8,9 +8,9 @@ This section provides comprehensive instructions for deploying One API on Kubern
 
 ## Prerequisites
 
-- Kubernetes cluster (v1.20+ or later)
+- A supported Kubernetes cluster compatible with the gateway release; see the version matrix in the gateway section below
 - [`kubectl`](https://kubernetes.io/docs/tasks/tools/) configured to communicate with your cluster
-- [`helm`](https://helm.sh/docs/intro/install/) (optional, for package management)
+- [`helm`](https://helm.sh/docs/intro/install/) with OCI support for the pinned gateway installation
 
 ## Basic Deployment
 
@@ -45,7 +45,6 @@ metadata:
   namespace: one-api
 data:
   # Basic configuration
-  SESSION_SECRET: 'your-session-secret-here'
   DEBUG: 'false'
   DEBUG_SQL: 'false'
   # Rate limiting
@@ -69,6 +68,59 @@ data:
 ```bash
 kubectl apply -f configmap.yaml
 ```
+
+### Required session Secret
+
+Provision a **unique, stable 256-bit random session key** once, before creating
+application pods. Do not put it in a ConfigMap, Git, shell history, a shared
+example, or command-line literal. The application rejects known public
+placeholders; that check cannot establish the entropy of every operator key.
+An external secret manager may create the same Secret/key instead.
+
+```bash
+# Run once after creating the one-api namespace. No key value is printed.
+set -eu
+umask 077
+secret_dir=$(mktemp -d)
+trap 'rm -rf "$secret_dir"' EXIT HUP INT TERM
+openssl rand -base64 32 > "$secret_dir/SESSION_SECRET"
+kubectl -n one-api create secret generic one-api-session \
+  --from-file=SESSION_SECRET="$secret_dir/SESSION_SECRET"
+```
+
+`create` deliberately fails if the Secret already exists: do not regenerate it
+during routine deployment or replica scaling. All replicas must use the same
+key. The non-optional `secretKeyRef` below prevents application startup when the
+Secret or its key is missing. Non-Kubernetes single-process installs may still
+use an automatically generated per-boot key, but restarting invalidates their
+sessions; it is unsuitable for load-balanced replicas.
+
+Restrict Secret read/write RBAC, use encryption at rest or external secret
+management, and keep backups encrypted. Kubernetes Secret encoding alone is not
+encryption. Changing an environment-backed Secret does not update existing pod
+environments: coordinate a rollout and expect all existing browser sessions to
+be invalidated. Do not let old-key replicas keep accepting old cookies during
+a security rotation; drain/block ingress while replacing all affected pods.
+Do not restore a compromised key as a rollback strategy.
+
+**State-encryption warning:** when `RESPONSE_STATE_ENCRYPTION_KEYS` is unset,
+Responses state encryption may derive from the explicitly configured session
+secret. Before rotation, plan the state-key migration/retention separately so
+existing encrypted records do not become unreadable. Prefer independently
+provisioned, versioned state-encryption keys for new installations; do not simply
+replace an existing derived key without preserving decryption compatibility.
+
+Dashboard requests re-read the current account state. Disabling/deleting an
+account or reducing its role revokes the corresponding access immediately.
+Existing browser cookies remain capped at the role recorded when they were
+issued; logging in again refreshes that cookie ceiling. Existing bearer
+credentials and `/api/user/token` retain their current-account authorization
+behavior. Root recovery password/TOTP behavior is unchanged.
+
+References: [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
+and [OWASP session management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html).
+These instructions are not a claim that a cluster was deployed or a production
+key rotated during code validation.
 
 ### Deployment
 
@@ -106,6 +158,12 @@ spec:
                 name: one-api-secrets
                 optional: true
           env:
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: one-api-session
+                  key: SESSION_SECRET
+                  optional: false
             - name: SQL_DSN
               valueFrom:
                 secretKeyRef:
@@ -486,477 +544,282 @@ kubectl apply -f redis.yaml
 
 > [!NOTE] > **Redis Version**: The example above uses Redis version `7-alpine`. Check the [Redis Docker Hub page](https://hub.docker.com/_/redis) for available versions and update accordingly. Consider using specific minor versions like `redis:7.4-alpine` for production environments to ensure consistency.
 
-### NGINX Ingress Controller Installation
+### Maintained Gateway API Installation
 
-Before configuring Ingress for One API, you need to install an Ingress Controller. This section covers installing NGINX Ingress Controller, which is one of the most popular choices.
+> [!WARNING]
+> Do not install the retired Kubernetes ingress-nginx controller for a new deployment.
+> Its maintenance ended in March 2026; selecting a later historical ingress-nginx
+> tag is not a maintained solution. This warning refers to the Kubernetes
+> ingress-nginx project, not every product that uses NGINX.
+>
+> Existing clusters need the staged migration below. Do not uninstall a shared
+> controller or replace provider-owned CRDs by copying a new-install command.
 
-#### For Cloud Providers
-
-###### Google Kubernetes Engine (GKE)
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.4/deploy/static/provider/cloud/deploy.yaml
-```
-
-###### Amazon EKS
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.4/deploy/static/provider/aws/deploy.yaml
-```
-
-###### Azure Kubernetes Service (AKS)
+This example selects **Envoy Gateway** and native Gateway API resources. The
+controller and CRD charts share one version, set once in the same shell used for
+all commands below:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.4/deploy/static/provider/cloud/deploy.yaml
+export ENVOY_GATEWAY_VERSION=v1.9.2
 ```
 
-###### DigitalOcean Kubernetes
+<!-- gateway-reviewed: 2026-10-04; review-before: 2027-02-14 -->
+
+The 2026-10-04 review selected the official v1.9.2 release. The v1.9 compatibility
+matrix lists Kubernetes v1.33 through v1.36 and Gateway API v1.6.1. Choose a
+Kubernetes version that is also supported by your distribution. Recheck upstream
+security advisories and the compatibility matrix before installing or upgrading;
+a fixed pin is not a promise of indefinite security. Re-review this selection
+before 2027-02-14, the published end of support for v1.9. Do not replace it with
+`latest`, a development tag, or an unreviewed data-plane image.
+
+#### Controller and CRD ownership
+
+Choose **exactly one** CRD path. Both require a cluster administrator to review
+cluster-scoped RBAC, CRD ownership and the rendered manifests. A cloud provider's
+Gateway controller is not automatically interchangeable with this controller.
+The application account must not receive cluster-admin privileges.
+
+**A. New cluster without provider-managed Gateway API CRDs:** render the pinned
+standard-channel CRDs, review the output, then apply it. The command below shows
+the apply step; first run the same `helm template` command without the pipe to
+inspect the objects. Do not use server-side force-conflicts to take ownership.
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.4/deploy/static/provider/do/deploy.yaml
+set -euo pipefail
+helm template one-api-eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
+  --version "$ENVOY_GATEWAY_VERSION" \
+  --set crds.gatewayAPI.enabled=true \
+  --set crds.gatewayAPI.channel=standard \
+  --set crds.envoyGateway.enabled=true \
+  | kubectl apply --server-side -f -
 ```
 
-###### Oracle Cloud Infrastructure (OCI)
+**B. Cluster with compatible provider-managed Gateway API CRDs:** have the
+platform owner verify the installed bundle version, channel, and served APIs
+against the v1.9 matrix. Keep that owner; install only Envoy Gateway's extension
+CRDs. Stop on incompatibility instead of layering a second Gateway API bundle.
+The following read prints metadata only, not secrets:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.4/deploy/static/provider/cloud/deploy.yaml
-```
-
-###### Scaleway
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.4/deploy/static/provider/scw/deploy.yaml
-```
-
-###### Exoscale
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.4/deploy/static/provider/exoscale/deploy.yaml
-```
-
-###### OVHcloud
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.4/deploy/static/provider/ovhcloud/deploy.yaml
-```
-
-> [!NOTE] > **NGINX Ingress Controller Version**: The examples above use version `v1.8.4`. Always check the [NGINX Ingress Controller releases page](https://github.com/kubernetes/ingress-nginx/releases) for the latest stable version and update the URLs accordingly. Replace `controller-v1.8.4` with the latest version tag (e.g., `controller-v1.11.2` or newer).
-
-#### For Bare Metal / On-Premises
-
-###### Using NodePort
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.4/deploy/static/provider/baremetal/deploy.yaml
-```
-
-###### Using MetalLB (Recommended for Bare Metal)
-
-First, install MetalLB for LoadBalancer support:
-
-```yaml
-# metallb-namespace.yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: metallb-system
-  labels:
-    name: metallb-system
+kubectl get crd gateways.gateway.networking.k8s.io \
+  -o go-template='version={{ index .metadata.annotations "gateway.networking.k8s.io/bundle-version" }} channel={{ index .metadata.annotations "gateway.networking.k8s.io/channel" }}{{ "\n" }}'
 ```
 
 ```bash
-kubectl apply -f metallb-namespace.yaml
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.12/config/manifests/metallb-native.yaml
+set -euo pipefail
+helm template one-api-eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
+  --version "$ENVOY_GATEWAY_VERSION" \
+  --set crds.gatewayAPI.enabled=false \
+  --set crds.envoyGateway.enabled=true \
+  | kubectl apply --server-side -f -
 ```
 
-> [!NOTE] > **MetalLB Version**: The example above uses MetalLB version `v0.13.12`. Check the [MetalLB releases page](https://github.com/metallb/metallb/releases) for the latest stable version and update the URL accordingly. Replace `v0.13.12` with the latest version tag (e.g., `v0.14.8` or newer).
-
-Configure MetalLB IP address pool:
-
-```yaml
-# metallb-config.yaml
-apiVersion: metallb.io/v1beta1
-kind: IPAddressPool
-metadata:
-  name: first-pool
-  namespace: metallb-system
-spec:
-  addresses:
-    - 192.168.1.240-192.168.1.250 # Adjust to your network
----
-apiVersion: metallb.io/v1beta1
-kind: L2Advertisement
-metadata:
-  name: example
-  namespace: metallb-system
-spec:
-  ipAddressPools:
-    - first-pool
-```
+After the selected CRD path, inspect the chart's rendered RBAC and admission
+resources as part of platform review. In particular, preserve externally owned
+Gateway API safe-upgrade admission policies; use the selected release's documented
+chart settings when those are managed elsewhere. The following controller
+installation is the default chart-ownership case, not an instruction to take over
+those resources. Install the controller without reapplying either CRD bundle:
 
 ```bash
-kubectl apply -f metallb-config.yaml
-```
-
-Then install NGINX Ingress Controller:
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.4/deploy/static/provider/cloud/deploy.yaml
-```
-
-#### Using Helm (Alternative Installation Method)
-
-Add the NGINX Ingress Controller Helm repository:
-
-```bash
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo update
-```
-
-Install NGINX Ingress Controller with Helm:
-
-```bash
-# For cloud providers with LoadBalancer support
-helm install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace ingress-nginx \
-  --create-namespace
-
-# For bare metal with NodePort
-helm install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace ingress-nginx \
+helm install one-api-eg oci://docker.io/envoyproxy/gateway-helm \
+  --version "$ENVOY_GATEWAY_VERSION" \
+  --namespace envoy-gateway-system \
   --create-namespace \
-  --set controller.service.type=NodePort
-
-# For bare metal with MetalLB
-helm install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace ingress-nginx \
-  --create-namespace \
-  --set controller.service.type=LoadBalancer
+  --set crds.enabled=false
+kubectl wait --timeout=5m --namespace envoy-gateway-system \
+  deployment/envoy-gateway --for=condition=Available
 ```
 
-#### Custom Configuration
+Cloud clusters need a functioning LoadBalancer implementation and reviewed
+firewall rules. Bare-metal clusters need a separately maintained load-balancer
+implementation, or an explicitly designed NodePort deployment using the selected
+release's EnvoyProxy settings. Do not install an old MetalLB bundle as an implicit
+dependency. Qualify the chosen address allocation, source IP and firewall behavior
+before publishing DNS. This example assumes the default Envoy deployment mode,
+with managed proxy pods in `envoy-gateway-system`; Gateway Namespace Mode requires
+a corresponding network-policy change.
 
-For production environments, you may want to customize the NGINX Ingress Controller:
+#### TLS and One API routes
+
+Have the platform's certificate manager provision `one-api-tls`, a
+`kubernetes.io/tls` Secret in namespace `one-api`, with a trusted certificate for
+**your** hostname. Use a maintained certificate manager and its Gateway API
+integration, or your organization's existing certificate delivery process. Do not
+copy private keys into this guide, Git, shell history, or diagnostic output. TLS
+provisioning is required before cutover; there is no plaintext backend fallback.
+
+Save the following as `gateway.yaml`. Replace `oneapi.yourdomain.com` consistently
+in both listeners and both routes. Use a unique GatewayClass name when the
+platform already owns a shared class; do not overwrite it. The HTTP listener is
+for credential-free browser redirects only. API clients must use HTTPS directly:
+a redirect cannot protect credentials already sent over HTTP.
 
 ```yaml
-# nginx-ingress-custom.yaml
-apiVersion: v1
-kind: ConfigMap
+# gateway.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
 metadata:
-  name: nginx-configuration
-  namespace: ingress-nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
-    app.kubernetes.io/part-of: ingress-nginx
-data:
-  # Increase proxy buffer sizes for large requests
-  proxy-buffer-size: '16k'
-  proxy-buffers-number: '8'
-  # Enable compression
-  use-gzip: 'true'
-  gzip-level: '6'
-  gzip-types: 'text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript'
-
-  # Security headers
-  add-base-url: 'true'
-  enable-real-ip: 'true'
-
-  # Connection settings
-  keep-alive-requests: '10000'
-  upstream-keepalive-connections: '50'
-  upstream-keepalive-requests: '100'
-
-  # Rate limiting (optional)
-  rate-limit-rpm: '300'
-  rate-limit-connections: '10'
-
-  # Client settings
-  client-max-body-size: '100m'
-  client-body-buffer-size: '1m'
-
-  # SSL settings
-  ssl-protocols: 'TLSv1.2 TLSv1.3'
-  ssl-ciphers: 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305'
-```
-
-```bash
-kubectl apply -f nginx-ingress-custom.yaml
-```
-
-#### Verify Installation
-
-Check that the NGINX Ingress Controller is running:
-
-```bash
-# Check pods
-kubectl get pods -n ingress-nginx
-
-# Check services
-kubectl get svc -n ingress-nginx
-
-# Check ingress class
-kubectl get ingressclass
-
-# For LoadBalancer service, get external IP
-kubectl get svc ingress-nginx-controller -n ingress-nginx
-```
-
-Expected output should show the controller pod running and service with an external IP (for cloud providers):
-
-```
-NAME                                      READY   STATUS    RESTARTS   AGE
-ingress-nginx-controller-xxx-xxx          1/1     Running   0          5m
-ingress-nginx-admission-create-xxx        0/1     Completed 0          5m
-ingress-nginx-admission-patch-xxx         0/1     Completed 1          5m
-```
-
-#### Test the Installation
-
-Create a simple test to verify the ingress controller is working:
-
-```yaml
-# test-app.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: test-app
-  namespace: default
+  name: one-api-envoy
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: test-app
-  template:
-    metadata:
-      labels:
-        app: test-app
-    spec:
-      containers:
-        - name: test-app
-          image: nginx:alpine
-          ports:
-            - containerPort: 80
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
 ---
-apiVersion: v1
-kind: Service
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
 metadata:
-  name: test-app-service
-  namespace: default
-spec:
-  selector:
-    app: test-app
-  ports:
-    - port: 80
-      targetPort: 80
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: test-app-ingress
-  namespace: default
-  annotations:
-    kubernetes.io/ingress.class: nginx
-spec:
-  rules:
-    - host: test.local
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: test-app-service
-                port:
-                  number: 80
-```
-
-```bash
-# Deploy test app
-kubectl apply -f test-app.yaml
-
-# Test (replace with your actual ingress IP)
-curl -H "Host: test.local" http://YOUR-INGRESS-IP
-
-# Clean up test
-kubectl delete -f test-app.yaml
-```
-
-#### SSL Certificate Management (Optional)
-
-Install cert-manager for automatic SSL certificate management:
-
-```bash
-# Install cert-manager
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
-
-# Wait for cert-manager to be ready
-kubectl wait --for=condition=ready pod -l app=cert-manager -n cert-manager --timeout=60s
-kubectl wait --for=condition=ready pod -l app=cainjector -n cert-manager --timeout=60s
-kubectl wait --for=condition=ready pod -l app=webhook -n cert-manager --timeout=60s
-```
-
-> [!NOTE] > **cert-manager Version**: The example above uses cert-manager version `v1.13.3`. Check the [cert-manager releases page](https://github.com/cert-manager/cert-manager/releases) for the latest stable version and update the URL accordingly. Replace `v1.13.3` with the latest version tag (e.g., `v1.16.1` or newer).
-
-Create a ClusterIssuer for Let's Encrypt:
-
-```yaml
-# letsencrypt-issuer.yaml
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-prod
-spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    email: your-email@example.com # Replace with your email
-    privateKeySecretRef:
-      name: letsencrypt-prod
-    solvers:
-      - http01:
-          ingress:
-            class: nginx
----
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-staging
-spec:
-  acme:
-    server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: your-email@example.com # Replace with your email
-    privateKeySecretRef:
-      name: letsencrypt-staging
-    solvers:
-      - http01:
-          ingress:
-            class: nginx
-```
-
-```bash
-kubectl apply -f letsencrypt-issuer.yaml
-```
-
-#### Troubleshooting
-
-Common issues and solutions:
-
-1. **Ingress Controller not starting**:
-
-   ```bash
-   # Check logs
-   kubectl logs -n ingress-nginx deployment/ingress-nginx-controller
-
-   # Check events
-   kubectl get events -n ingress-nginx --sort-by=.metadata.creationTimestamp
-   ```
-
-2. **External IP pending (for LoadBalancer)**:
-   - On cloud providers: Check if LoadBalancer service is supported
-   - On bare metal: Install MetalLB or use NodePort service type
-
-3. **Ingress not working**:
-
-   ```bash
-   # Check ingress resource
-   kubectl describe ingress <ingress-name> -n <namespace>
-
-   # Check service endpoints
-   kubectl get endpoints -n <namespace>
-
-   # Debug from inside cluster
-   kubectl exec -it <any-pod> -- curl http://<service-name>.<namespace>:80
-   ```
-
-4. **SSL certificate issues**:
-
-   ```bash
-   # Check certificate status
-   kubectl get certificates -A
-   kubectl describe certificate <cert-name> -n <namespace>
-   # Check cert-manager logs
-   kubectl logs -n cert-manager deployment/cert-manager
-   ```
-
-5. **Rate limiting or connection issues**:
-   - Adjust the NGINX configuration ConfigMap as shown above
-   - Monitor NGINX metrics and logs for insights
-
-Now your cluster is ready for the One API Ingress configuration!
-
-#### Ingress Configuration
-
-To expose One API to the internet, configure an Ingress:
-
-##### NGINX Ingress
-
-```yaml
-# ingress-nginx.yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: one-api-ingress
+  name: one-api-gateway
   namespace: one-api
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
-    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
-    nginx.ingress.kubernetes.io/proxy-body-size: '100m'
-    nginx.ingress.kubernetes.io/proxy-read-timeout: '300'
-    nginx.ingress.kubernetes.io/proxy-send-timeout: '300'
-    cert-manager.io/cluster-issuer: 'letsencrypt-prod' # If using cert-manager
 spec:
-  tls:
-    - hosts:
-        - oneapi.yourdomain.com
-      secretName: one-api-tls
-  rules:
-    - host: oneapi.yourdomain.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: one-api-service
-                port:
-                  number: 80
-```
-
-##### Traefik Ingress
-
-```yaml
-# ingress-traefik.yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+  gatewayClassName: one-api-envoy
+  listeners:
+    - name: http
+      hostname: oneapi.yourdomain.com
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: https
+      hostname: oneapi.yourdomain.com
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ''
+            kind: Secret
+            name: one-api-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
 metadata:
-  name: one-api-ingress
+  name: one-api-http-redirect
   namespace: one-api
-  annotations:
-    kubernetes.io/ingress.class: traefik
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls: 'true'
-    traefik.ingress.kubernetes.io/router.middlewares: default-redirect-https@kubernetescrd
 spec:
-  tls:
-    - hosts:
-        - oneapi.yourdomain.com
-      secretName: one-api-tls
+  parentRefs:
+    - name: one-api-gateway
+      sectionName: http
+  hostnames:
+    - oneapi.yourdomain.com
   rules:
-    - host: oneapi.yourdomain.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: one-api-service
-                port:
-                  number: 80
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            port: 443
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: one-api-https
+  namespace: one-api
+spec:
+  parentRefs:
+    - name: one-api-gateway
+      sectionName: https
+  hostnames:
+    - oneapi.yourdomain.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ''
+          kind: Service
+          name: one-api-service
+          port: 80
+      timeouts:
+        request: 300s
+        backendRequest: 300s
 ```
+
+The backend remains the same ClusterIP service on port 80, targeting One API on
+port 3000. These bounded **total request** timeouts are not equivalent to the old
+NGINX idle read timeout. Longer generations or realtime sessions need an
+explicitly reviewed policy. Qualify streaming and WebSocket behavior, including
+idle timeout and disconnect handling, before cutover. Do not enable retry or
+request mirroring for billable POST requests; those can duplicate paid work.
+Review any inherited platform retry policy as well.
+
+No generic response buffering, credential injection, URL rewriting or external
+authentication service is added by this example. Limit configuration rights for
+GatewayClass, Gateway, HTTPRoute and Secrets; `allowedRoutes: Same` is not a
+substitute for namespace RBAC. The example terminates public TLS at the gateway;
+backend mTLS, when required by the platform, is a separate reviewed configuration.
+
+#### Validation, migration and rollback
+
+The following steps are **acceptance work to perform in an isolated supported
+cluster**, not a claim that this guide has already passed a live cluster test.
+Use a synthetic local upstream and non-production identities for billing checks.
 
 ```bash
-kubectl apply -f ingress-nginx.yaml  # or ingress-traefik.yaml
+kubectl apply --dry-run=server -f gateway.yaml
+kubectl apply -f gateway.yaml
+kubectl wait --timeout=5m gatewayclass/one-api-envoy --for=condition=Accepted
+kubectl wait --timeout=5m --namespace one-api gateway/one-api-gateway --for=condition=Programmed
+kubectl get gateway,httproute --namespace one-api
+kubectl describe httproute one-api-https --namespace one-api
+kubectl describe httproute one-api-http-redirect --namespace one-api
+kubectl get endpointslices --namespace one-api \
+  --selector=kubernetes.io/service-name=one-api-service
 ```
+
+Require Gateway and listener conditions to be current, `Accepted` and
+`Programmed`; both route parent statuses must be `Accepted` and `ResolvedRefs`,
+with their observed generation matching the object generation. A Running pod or
+successful YAML parse is not sufficient. Verify certificate chain and hostname
+without insecure TLS flags, credential-free HTTP redirect, correct HTTPS backend,
+all three API formats, SSE delivery beyond the default request timeout,
+WebSockets, client cancellation, quota/ledger settlement and overload behavior.
+Confirm an unrelated namespace cannot attach a route, backend pods cannot be
+reached from an unauthorized namespace, and no control-plane or admission endpoint
+is reachable from the public network. Keep admission webhooks, when the platform
+uses them, reachable only from authorized API-server paths. Do not expose Envoy
+admin, xDS or metrics ports as public listeners.
+
+For migration, inventory **all** workloads using the old controller, certificate
+issuers, annotations, DNS, admission objects and network policies first. Build
+and qualify the new path in parallel on a separate address. Reconcile policy
+semantics rather than copying NGINX annotations. Record a rollback configuration
+on a maintained controller, then change traffic gradually while monitoring errors,
+latency, disconnected streams and billing. Drain old streams before removal.
+Do not describe reinstalling retired ingress-nginx as a secure rollback.
+
+Uninstall the retired controller only after every dependent route has migrated
+and platform ownership is established. Remove its controller-specific admission
+configuration only with its owner; do not delete shared Gateway API CRDs, shared
+certificates, namespaces, or policies as generic cleanup. For future Envoy
+upgrades, review release notes and CRD/storage-version migrations **before** the
+controller upgrade; test the candidate on a disposable supported cluster and
+retain a compatible rollback path. Do not force a CRD downgrade.
+
+#### Sources and offline regression checks
+
+Official references checked on 2026-10-04:
+
+- [Kubernetes ingress-nginx retirement](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/).
+- [Envoy Gateway v1.9.2 release](https://github.com/envoyproxy/gateway/releases/tag/v1.9.2), [compatibility matrix](https://gateway.envoyproxy.io/news/releases/matrix/) and [Helm/CRD ownership guide](https://gateway.envoyproxy.io/docs/install/install-helm/).
+- [TLS listeners](https://gateway.envoyproxy.io/docs/tasks/security/secure-gateways/), [request timeouts](https://gateway.envoyproxy.io/docs/tasks/traffic/http-timeouts/) and [EnvoyProxy deployment customization](https://gateway.envoyproxy.io/docs/tasks/operations/customize-envoyproxy/).
+
+From the repository root, in an isolated Python environment:
+
+```bash
+python3 -m pip install -r scripts/requirements-k8s-docs.txt
+python3 -m unittest discover -s scripts -p test_k8s_gateway_docs.py -v
+```
+
+These checks capture installer arguments with fake Helm/kubectl executables,
+check the dated pin, and inspect parsed YAML relationships and negative controls.
+They do **not** download/render the real charts, scan their images, verify live
+links, or replace the cluster acceptance matrix above. A link check and real
+chart/cluster qualification remain required before operational acceptance.
 
 #### Production Considerations
 
@@ -982,11 +845,27 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              name: ingress-nginx # Adjust based on your ingress controller
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-namespace: one-api
+              gateway.envoyproxy.io/owning-gateway-name: one-api-gateway
       ports:
         - protocol: TCP
           port: 3000
   egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
     - to:
         - podSelector:
             matchLabels:
@@ -1008,6 +887,13 @@ spec:
         - protocol: TCP
           port: 80
 ```
+
+The DNS rule selects the cluster's CoreDNS/kube-dns pods. If the distribution uses
+different labels or NodeLocal DNSCache, adapt this rule to its documented resolver
+address before applying the policy. Without DNS egress, hostname-based provider,
+database and Redis connections fail even when their TCP ports are allowed. Run
+the isolated policy-enforcement checks below against the chosen CNI; applying a
+NetworkPolicy on a CNI without enforcement does not prove isolation.
 
 2. **Pod Security Standards**: Add security context to deployments:
 
@@ -1206,8 +1092,8 @@ kubectl apply -f redis.yaml
 kubectl apply -f configmap.yaml
 kubectl apply -f deployment.yaml
 
-# 5. Deploy Ingress
-kubectl apply -f ingress-nginx.yaml  # or ingress-traefik.yaml
+# 5. After gateway-controller and TLS provisioning, deploy the reviewed routes
+kubectl apply -f gateway.yaml
 
 # 6. Production configurations
 kubectl apply -f hpa.yaml
@@ -1217,7 +1103,7 @@ kubectl apply -f network-policy.yaml
 # Check deployment status
 kubectl get pods -n one-api
 kubectl get services -n one-api
-kubectl get ingress -n one-api
+kubectl get gateway,httproute -n one-api
 ```
 
 ### Health Checks

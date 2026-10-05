@@ -80,6 +80,12 @@ func readAndRestoreResponseBody(resp *http.Response) ([]byte, error) {
 // errors with usage are returned after final settlement is scheduled.
 func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	lg := gmw.GetLogger(c)
+	// Passthrough is current-attempt authority. A retry reuses this gin context,
+	// so only the selected adaptor may establish native capability again.
+	if c.GetBool(ctxkey.ClaudeDirectPassthrough) {
+		lg.Debug("reset native Claude passthrough capability for current attempt")
+	}
+	c.Set(ctxkey.ClaudeDirectPassthrough, false)
 	ctx := gmw.Ctx(c)
 	meta := metalib.GetByContext(c)
 	if err := logClientRequestPayload(c, "claude_messages"); err != nil {

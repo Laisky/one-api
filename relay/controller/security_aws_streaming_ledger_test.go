@@ -48,6 +48,7 @@ type awsSecurityWriter struct {
 	once           sync.Once
 	mode           string
 	idleNotify     chan struct{}
+	firstStep      chan struct{}
 	idleFlushCount int
 }
 
@@ -58,9 +59,12 @@ func (w *awsSecurityWriter) CloseNotify() <-chan bool { return w.notify }
 // regression then closes the client while the next event is not forthcoming.
 func (w *awsSecurityWriter) Flush() {
 	w.ResponseWriter.Flush()
-	if w.mode == "cancel_while_idle" {
-		w.idleFlushCount++
-		if w.idleFlushCount == 2 {
+	w.idleFlushCount++
+	if w.idleFlushCount == 2 {
+		if w.firstStep != nil {
+			close(w.firstStep)
+		}
+		if w.mode == "cancel_while_idle" {
 			w.once.Do(func() { close(w.idleNotify) })
 		}
 	}
@@ -87,7 +91,7 @@ func (w *awsSecurityWriter) WriteString(s string) (int, error) { return w.Write(
 func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 	for _, actual := range []string{"deepseek-r1", "qwen3-coder-480b"} {
 		for _, fallback := range []bool{false, true} {
-			for _, scenario := range []string{"complete", "missing", "reasoning_only", "malformed", "sdk_exception", "cancel_before_content", "cancel_while_idle", "cancel_after_content", "cancel_after_metadata", "write_failure", "large_delta", "overdraft_receipt", "known_admission", "unknown_500", "complete_unlimited", "missing_unlimited"} {
+			for _, scenario := range []string{"complete", "missing", "reasoning_only", "malformed", "sdk_exception", "cancel_before_content", "cancel_before_content_delayed", "cancel_while_idle", "cancel_after_content", "cancel_after_metadata", "write_failure", "large_delta", "overdraft_receipt", "known_admission", "unknown_500", "complete_unlimited", "missing_unlimited"} {
 				t.Run(fmt.Sprintf("%s/fallback=%v/%s", actual, fallback, scenario), func(t *testing.T) {
 					unlimited := strings.HasSuffix(scenario, "_unlimited")
 					scenario = strings.TrimSuffix(scenario, "_unlimited")
@@ -119,7 +123,7 @@ func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 					if reason != "" {
 						data = append(data, awsSecurityFrame(t, "contentBlockDelta", map[string]any{"contentBlockIndex": 0, "delta": map[string]any{"reasoningContent": map[string]any{"text": reason}}})...)
 					}
-					if scenario == "cancel_before_content" || scenario == "cancel_while_idle" {
+					if scenario == "cancel_before_content" || scenario == "cancel_before_content_delayed" || scenario == "cancel_while_idle" {
 						data = start
 					}
 					measured := scenario == "complete" || scenario == "cancel_after_metadata" || scenario == "overdraft_receipt"
@@ -147,6 +151,8 @@ func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 					paths := make(chan string, 1)
 					notify := make(chan bool)
 					idleNotify := make(chan struct{})
+					firstStep := make(chan struct{})
+					cancelDownstream := make(chan context.CancelFunc, 1)
 					stopped := make(chan bool, 1)
 					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 						calls.Add(1)
@@ -172,7 +178,20 @@ func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 						w.Header().Set("Content-Type", "application/vnd.amazon.eventstream")
 						_, _ = w.Write(data)
 						w.(http.Flusher).Flush()
-						if scenario == "cancel_before_content" {
+						if scenario == "cancel_before_content" || scenario == "cancel_before_content_delayed" {
+							if scenario == "cancel_before_content_delayed" {
+								select {
+								case <-firstStep:
+								case <-time.After(time.Second):
+									stopped <- false
+									return
+								}
+								timer := time.NewTimer(100 * time.Millisecond)
+								<-timer.C
+							}
+							// Physical downstream disconnect and notification-only idle
+							// cancellation are independent regression contracts.
+							(<-cancelDownstream)()
 							close(notify)
 						}
 						if scenario == "cancel_while_idle" {
@@ -210,7 +229,8 @@ func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 					ctx, cancel := context.WithCancel(c.Request.Context())
 					defer cancel()
 					c.Request = c.Request.WithContext(ctx)
-					c.Writer = &awsSecurityWriter{ResponseWriter: c.Writer, notify: notify, cancel: cancel, mode: scenario, idleNotify: idleNotify}
+					cancelDownstream <- cancel
+					c.Writer = &awsSecurityWriter{ResponseWriter: c.Writer, notify: notify, cancel: cancel, mode: scenario, idleNotify: idleNotify, firstStep: firstStep}
 					var apiErr *relaymodel.ErrorWithStatusCode
 					if fallback {
 						apiErr = RelayResponseAPIHelper(c)
@@ -230,7 +250,7 @@ func TestSecurityAWSStreamingReceiptLedger(t *testing.T) {
 					require.NotNil(t, meta)
 					quote := int64(meta.PromptTokens) + 21
 					expected := int64(meta.PromptTokens + openai.CountTokenText(plain, actual) + openai.CountTokenText(reason, actual))
-					if scenario == "cancel_before_content" || scenario == "cancel_while_idle" || scenario == "unknown_500" {
+					if scenario == "cancel_before_content" || scenario == "cancel_before_content_delayed" || scenario == "cancel_while_idle" || scenario == "unknown_500" {
 						expected = int64(meta.PromptTokens)
 					}
 					expected = max(expected, quote)

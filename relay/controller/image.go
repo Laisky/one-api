@@ -72,6 +72,18 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
 	}
 
+	// Explicit provider output metadata is an endpoint contract, not a tariff.
+	// Unknown custom image catalogs remain compatible with operator pricing.
+	if catalog, known := adaptor.GetDefaultModelPricing()[imageRequest.Model]; known && len(catalog.OutputModalities) > 0 {
+		imageOutput := false
+		for _, output := range catalog.OutputModalities {
+			imageOutput = imageOutput || strings.EqualFold(output, "image")
+		}
+		if !imageOutput {
+			return openai.ErrorWrapper(errors.New("model does not support the image endpoint"), "model_endpoint_mismatch", http.StatusBadRequest)
+		}
+	}
+
 	imagePricingCfg, _ := pricing.ResolveImagePricing(imageRequest.Model, channelModelConfigs, adaptor, meta.StartTime)
 	imagePricingCfg = completeGPTImage25Defaults(imageRequest.Model, imagePricingCfg)
 	if err := prepareImageRequest(imageRequest, imagePricingCfg, meta); err != nil {
@@ -215,23 +227,13 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	tokenQuota := int64(0)
 	tokenQuotaFloat := 0.0
 
-	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
-	if err != nil {
-		return openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
+	// Every paid image contract shares the same atomic owner/token admission.
+	// Cached affordability alone must not authorize concurrent paid dispatch.
+	preConsumedQuota, admissionErr := reservePaidRequestQuota(c, meta, usedQuota, "image")
+	if admissionErr != nil {
+		return admissionErr
 	}
-
-	var preConsumedQuota int64
-	if userQuota < usedQuota {
-		return openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
-	}
-
-	// Pre-consume legacy render charges or the configured GPT Image 2.5 reserve.
-	if perImageBilling && usedQuota > 0 {
-		preConsumedQuota = usedQuota
-		if err := model.PreConsumeTokenQuota(ctx, meta.TokenId, preConsumedQuota); err != nil {
-			return openai.ErrorWrapper(err, "pre_consume_failed", http.StatusInternalServerError)
-		}
-
+	if preConsumedQuota > 0 {
 		// Billing audit safety net: track pre-consumed quota for audit reconciliation
 		markPreConsumed(c, preConsumedQuota)
 		defer billingAuditSafetyNet(c)
@@ -285,12 +287,22 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 
 		// Post-billing: reconcile pre-consumed quota with actual usage
-		markBillingReconciled(c)
-		quotaDelta := imagePostConsumeDelta(imageModel, usedQuota, preConsumedQuota)
-		err := model.PostConsumeTokenQuota(bgCtx, meta.TokenId, quotaDelta)
-		if err != nil {
-			lg.Error("error consuming token remain quota", zap.Error(err))
+		// A token-only quote is refundable prepayment, not an earned render fee.
+		quotaDelta := usedQuota - preConsumedQuota
+		if perImageBilling {
+			quotaDelta = imagePostConsumeDelta(imageModel, usedQuota, preConsumedQuota)
 		}
+		err := model.SettleConsumedTokenQuota(bgCtx, meta.TokenId, meta.UserId, quotaDelta)
+		if err != nil {
+			// Keep the provisional audit rather than claim an unpaid receipt settled.
+			// The existing safety net retains possibly accepted work for recovery.
+			lg.Error("CRITICAL BILLING AUDIT: image receipt settlement failed",
+				zap.String("request_id", requestId), zap.Int("user_id", meta.UserId),
+				zap.Int("token_id", meta.TokenId), zap.Int64("observed_quota", usedQuota),
+				zap.Int64("held_quota", preConsumedQuota), zap.Error(err))
+			return
+		}
+		markBillingReconciled(c)
 		err = model.CacheUpdateUserQuota(bgCtx, meta.UserId)
 		if err != nil {
 			lg.Error("error update user quota cache", zap.Error(err))

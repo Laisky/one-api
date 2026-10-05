@@ -154,13 +154,14 @@ func countClaudeFileImageTokensFromBlocks(blocks []any) int {
 }
 
 // countClaudeToolsTokens estimates tokens for Claude tools.
-// Tools with DeferLoading=true are skipped as they are not loaded into context.
+// Only server-injected native MCP tools can defer admission of their schema.
+// Caller loading hints are preserved on the wire but never establish billing trust.
 func countClaudeToolsTokens(ctx context.Context, tools []relaymodel.ClaudeTool, model string) int {
 	totalTokens := 0
 
 	for _, tool := range tools {
-		// Skip deferred tools - they are not loaded into context
-		if tool.DeferLoading != nil && *tool.DeferLoading {
+		// Provenance is internal-only; a caller cannot exempt a forwarded schema.
+		if tool.TrustedDeferredLoading && tool.DeferLoading != nil && *tool.DeferLoading {
 			continue
 		}
 
