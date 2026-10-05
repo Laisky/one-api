@@ -1,0 +1,2 @@
+# Used only by the isolated Kubernetes documentation regression suite.
+PyYAML==6.0.3
