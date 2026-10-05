@@ -461,7 +461,10 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 		meta.ChannelType != channeltype.Baichuan &&
 		meta.ForcedSystemPrompt == "" {
 		c.Set(ctxkey.ConvertedRequest, textRequest)
-		if (c.Request == nil || c.Request.URL == nil || !c.Request.URL.Query().Has("thinking")) && !bytes.Contains(originalBody, []byte(`"extra_body"`)) {
+		// Decide on decoded root keys, never on byte substrings: a JSON escape
+		// or case-folded spelling of extra_body (or of any typed field) must
+		// not bypass the allowlisted normalization below.
+		if (c.Request == nil || c.Request.URL == nil || !c.Request.URL.Query().Has("thinking")) && chatRawPassthroughSafe(originalBody) {
 			return bytes.NewBuffer(originalBody), nil
 		}
 		jsonData, err := json.Marshal(textRequest)

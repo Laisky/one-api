@@ -82,6 +82,15 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 	if err != nil {
 		originalMap = map[string]json.RawMessage{}
 	}
+	// Go's typed decoders accept any case-folded spelling of extra_body, so the
+	// raw maps must apply the same allowlisted merge to that spelling instead of
+	// preserving it verbatim as an unknown field.
+	if err := canonicalizeExtraBodyKey(originalMap); err != nil {
+		return nil, stats, false, errors.Wrap(err, "canonicalize original extra_body")
+	}
+	if err := canonicalizeExtraBodyKey(updatedMap); err != nil {
+		return nil, stats, false, errors.Wrap(err, "canonicalize updated extra_body")
+	}
 
 	var filteredFields map[string]struct{}
 	if allowUnknown {
@@ -92,15 +101,15 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 	combinedExtraBody, rejected := collectCombinedExtraBody(originalMap, updatedMap)
 	stats.ExtraBodyRejected += rejected
 	changed := false
-	if _, ok := updatedMap["extra_body"]; ok {
-		delete(updatedMap, "extra_body")
+	if _, ok := updatedMap[extraBodyKey]; ok {
+		delete(updatedMap, extraBodyKey)
 		changed = true
 	}
 
 	if allowUnknown {
 		for key, value := range originalMap {
 			_, filtered := filteredFields[key]
-			if key == "extra_body" || isAllowedExtraBodyKey(key) || filtered {
+			if key == extraBodyKey || isAllowedExtraBodyKey(key) || filtered || isNonCanonicalChatFieldSpelling(key) {
 				continue
 			}
 			if _, exists := updatedMap[key]; exists {
@@ -114,7 +123,7 @@ func mergeControlledPassthroughJSON(original, updated []byte, allowUnknown bool)
 
 	for key, value := range originalMap {
 		_, filtered := filteredFields[key]
-		if !isAllowedExtraBodyKey(key) || filtered {
+		if !isAllowedExtraBodyKey(key) || filtered || isNonCanonicalChatFieldSpelling(key) {
 			continue
 		}
 		if _, exists := updatedMap[key]; exists {
