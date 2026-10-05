@@ -16,7 +16,7 @@ export function WeChatOAuthPage() {
     async (code: string, state: string, retryCount = 0): Promise<void> => {
       try {
         // Unified API call - complete URL with /api prefix
-        const response = await api.get(`/api/oauth/wechat?code=${code}&state=${state}`);
+        const response = await api.post(`/api/oauth/wechat?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`);
         const { success, message, data } = response.data;
 
         if (success) {

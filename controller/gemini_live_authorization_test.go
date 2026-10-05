@@ -65,6 +65,9 @@ func TestGeminiLiveChannelUpdateRequiresOperator(t *testing.T) {
 			// reaches the real payload validator, but this test changes no config.
 			request := httptest.NewRequest(http.MethodPut, "/api/channel?role=100", strings.NewReader(`{"role":100,"config":{"endpoint_urls":{"realtime":"wss://attacker.invalid/live"}}}`))
 			request.Header.Set("Content-Type", "application/json")
+			// This positive operator control represents a dashboard mutation;
+			// provide browser provenance before testing its role authorization.
+			request.Header.Set("Sec-Fetch-Site", "same-origin")
 			request.Header.Set("X-Role", "100")
 			if tc.role != 0 {
 				login := httptest.NewRecorder()

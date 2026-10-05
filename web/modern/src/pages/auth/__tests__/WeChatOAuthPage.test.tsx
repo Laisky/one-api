@@ -11,6 +11,7 @@ vi.mock('@/lib/api');
 const mockLogin = vi.fn();
 const mockUseAuthStore = vi.mocked(useAuthStore);
 const mockApiGet = vi.mocked(api.get);
+const mockApiPost = vi.mocked(api.post);
 
 const renderWeChatOAuthPage = (search = '?code=abc&state=xyz') => {
   return render(
@@ -29,6 +30,7 @@ describe('WeChatOAuthPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockApiGet.mockReset();
+    mockApiPost.mockReset();
     mockUseAuthStore.mockReturnValue({
       login: mockLogin,
     } as any);
@@ -39,7 +41,7 @@ describe('WeChatOAuthPage', () => {
   });
 
   it('navigates to / on successful OAuth login', async () => {
-    mockApiGet.mockResolvedValueOnce({
+    mockApiPost.mockResolvedValueOnce({
       data: {
         success: true,
         message: '',
@@ -53,12 +55,15 @@ describe('WeChatOAuthPage', () => {
       expect(screen.getByText('home')).toBeInTheDocument();
     });
 
-    expect(mockApiGet).toHaveBeenCalledWith('/api/oauth/wechat?code=abc&state=xyz');
+    // WeChat code login is a state-changing POST; the legacy GET now returns 405.
+    expect(mockApiPost).toHaveBeenCalledTimes(1);
+    expect(mockApiPost).toHaveBeenCalledWith('/api/oauth/wechat?code=abc&state=xyz');
+    expect(mockApiGet).not.toHaveBeenCalled();
     expect(mockLogin).toHaveBeenCalledWith({ id: 1, username: 'testuser', role: 1 }, '');
   });
 
   it('navigates to /settings when message is "bind"', async () => {
-    mockApiGet.mockResolvedValueOnce({
+    mockApiPost.mockResolvedValueOnce({
       data: {
         success: true,
         message: 'bind',
@@ -77,7 +82,7 @@ describe('WeChatOAuthPage', () => {
 
   it('surfaces an error state when the OAuth call fails', async () => {
     vi.useFakeTimers();
-    mockApiGet.mockResolvedValue({
+    mockApiPost.mockResolvedValue({
       data: {
         success: false,
         message: 'oauth failed',
@@ -111,5 +116,25 @@ describe('WeChatOAuthPage', () => {
     });
 
     expect(mockLogin).not.toHaveBeenCalled();
+    expect(mockApiGet).not.toHaveBeenCalled();
+  });
+
+  it('URL-encodes the code and state query parameters', async () => {
+    mockApiPost.mockResolvedValueOnce({
+      data: {
+        success: true,
+        message: '',
+        data: { id: 1, username: 'testuser', role: 1 },
+      },
+    } as any);
+
+    renderWeChatOAuthPage('?code=a%26b%3Dc&state=x%20y%26z');
+
+    await waitFor(() => {
+      expect(screen.getByText('home')).toBeInTheDocument();
+    });
+
+    expect(mockApiPost).toHaveBeenCalledWith('/api/oauth/wechat?code=a%26b%3Dc&state=x%20y%26z');
+    expect(mockApiGet).not.toHaveBeenCalled();
   });
 });
