@@ -84,8 +84,10 @@ func TestNativeStreamReceiptFreshnessHTTP(t *testing.T) {
 					providerBody <- body
 					providerPath <- r.URL.Path
 					w.Header().Set("Content-Type", "text/event-stream")
-					if exit == "reset" {
-						// A declared length longer than the bounded frames produces a real HTTP unexpected EOF.
+					if exit == "reset" || exit == "cancel" {
+						// Interrupted-read provenance requires an unfinished HTTP body. Without
+						// this bound, the provider returning after cancellation can race body
+						// close and produce an ordinary chunked EOF; its separate control stays.
 						w.Header().Set("Content-Length", "100000")
 					}
 					_, _ = io.WriteString(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18}}\n\n")
