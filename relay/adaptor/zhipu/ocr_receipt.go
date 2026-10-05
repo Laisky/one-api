@@ -162,7 +162,8 @@ func parseOCRPages(raw json.RawMessage) (int, string) {
 
 // parseOCRCounter parses one receipt counter as an exact nonnegative JSON integer.
 // Fractions, exponents, strings, negative numbers and other JSON types are invalid;
-// values above limit, including values beyond int64, overflow.
+// values above limit, including values beyond int32, overflow. Every receipt
+// bound fits in int32, so the parsed value converts to int on any platform.
 // Parameters: raw is the JSON value and limit is the inclusive bound.
 // Returns: the counter, or zero and a problem label.
 func parseOCRCounter(raw json.RawMessage, limit int) (int, string) {
@@ -175,7 +176,7 @@ func parseOCRCounter(raw json.RawMessage, limit int) (int, string) {
 			return 0, model.OCRReceiptInvalid
 		}
 	}
-	value, err := strconv.ParseUint(text, 10, 64)
+	value, err := strconv.ParseInt(text, 10, 32)
 	if err != nil {
 		var numErr *strconv.NumError
 		if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
@@ -183,7 +184,7 @@ func parseOCRCounter(raw json.RawMessage, limit int) (int, string) {
 		}
 		return 0, model.OCRReceiptInvalid
 	}
-	if value > uint64(limit) {
+	if value > int64(limit) {
 		return 0, model.OCRReceiptOverflow
 	}
 	return int(value), ""
