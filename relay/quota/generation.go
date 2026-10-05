@@ -16,7 +16,7 @@ func computeGenerationQuota(input ComputeInput, resolved adaptor.ModelConfig) (C
 	// Preserve the token path's single pricing lookup. Only catalog generation
 	// contracts, or channel overrides that hide the catalog provenance (including
 	// metadata-only "Load Default" snapshots), need the full generation resolver.
-	candidate := resolved.PricingProvenance != nil && resolved.PricingProvenance.Unit == "generation"
+	candidate := resolved.PricingProvenance != nil && resolved.PricingProvenance.Unit == adaptor.TariffUnitGeneration
 	if _, ok := input.ChannelModelConfigs[input.ModelName]; ok {
 		candidate = true
 	}

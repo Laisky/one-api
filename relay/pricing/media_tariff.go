@@ -28,22 +28,22 @@ func ValidateTariffProvenance(cfg adaptor.ModelConfig, at time.Time) error {
 		return errors.New("media tariff expired; configure an explicit operator tariff")
 	}
 	switch p.State {
-	case "free", "promotional_free", "paid":
+	case adaptor.TariffStateFree, adaptor.TariffStatePromotionalFree, adaptor.TariffStatePaid:
 		if p.Source == "" || p.VerifiedAt == "" || p.Unit == "" {
 			return errors.New("media tariff provenance is incomplete")
 		}
-		if p.State == "free" || p.State == "promotional_free" {
+		if p.State == adaptor.TariffStateFree || p.State == adaptor.TariffStatePromotionalFree {
 			if cfg.Ratio != 0 || (cfg.PerCall != nil && cfg.PerCall.UsdPerThousandCalls != 0) || (cfg.Audio != nil && (cfg.Audio.InputPriceUsd != 0 || cfg.Audio.UsdPerSecond != 0)) {
 				return errors.New("free media provenance conflicts with a paid tariff")
 			}
 		}
-		if p.State == "paid" {
+		if p.State == adaptor.TariffStatePaid {
 			switch p.Unit {
-			case "generation":
+			case adaptor.TariffUnitGeneration:
 				if cfg.PerCall == nil || cfg.PerCall.UsdPerThousandCalls <= 0 {
 					return errors.New("paid generation tariff is missing")
 				}
-			case "characters":
+			case adaptor.TariffUnitCharacters:
 				if cfg.Audio == nil || cfg.Audio.InputUnit != "characters" || cfg.Audio.InputPriceQuantity <= 0 || cfg.Audio.InputPriceUsd <= 0 {
 					return errors.New("paid character tariff is missing")
 				}
@@ -51,7 +51,7 @@ func ValidateTariffProvenance(cfg adaptor.ModelConfig, at time.Time) error {
 				return errors.New("media tariff unit requires an explicit operator contract")
 			}
 		}
-	case "unknown", "contract":
+	case adaptor.TariffStateUnknown, adaptor.TariffStateContract:
 		return errors.New("media tariff requires an explicit operator contract")
 	default:
 		return errors.New("unrecognized media tariff state")
@@ -71,7 +71,7 @@ func ValidateTariffProvenance(cfg adaptor.ModelConfig, at time.Time) error {
 // free. A positive token ratio cannot price a generation and fails closed.
 func ResolveGenerationTariff(name string, overrides map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (*adaptor.PerCallPricingConfig, bool, error) {
 	base, known := ResolveModelConfig(name, nil, provider, at)
-	if !known || base.PricingProvenance == nil || base.PricingProvenance.Unit != "generation" {
+	if !known || base.PricingProvenance == nil || base.PricingProvenance.Unit != adaptor.TariffUnitGeneration {
 		return nil, false, nil
 	}
 	cfg, _ := ResolveModelConfig(name, overrides, provider, at)

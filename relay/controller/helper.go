@@ -14,6 +14,7 @@ import (
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
+	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	vertexaiadaptor "github.com/Laisky/one-api/relay/adaptor/vertexai"
@@ -188,7 +189,7 @@ func estimatePreConsumedQuota(
 	if meta != nil {
 		provider := resolvePricingAdaptor(meta)
 		base, known := pricing.ResolveModelConfig(textRequest.Model, nil, provider, meta.StartTime)
-		if known && base.PricingProvenance != nil && base.PricingProvenance.Unit == "generation" {
+		if known && base.PricingProvenance != nil && base.PricingProvenance.Unit == relayadaptor.TariffUnitGeneration {
 			result := quotautil.Compute(quotautil.ComputeInput{Usage: &relaymodel.Usage{},
 				ModelName: textRequest.Model, GroupRatio: groupRatio, ChannelModelConfigs: channelModelConfigs,
 				PricingAdaptor: provider, RequestTime: meta.StartTime})
