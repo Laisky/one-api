@@ -299,6 +299,40 @@ func TestSecurityClaudeNativeToolPolicyAdmission(t *testing.T) {
 			requireClaudeToolPolicyUntouched(t, result, balance)
 		})
 	}
+	// Ambiguous spellings: a case-insensitive, last-wins decoder sees the trailing
+	// empty/null variant, while an exact-key or first-wins upstream sees the paid
+	// capability that passthrough forwards verbatim.
+	searchNotAllowed := &model.ChannelToolingConfig{Whitelist: []string{"tool_search"}, Pricing: map[string]model.ToolPricingLocal{"web_search": {QuotaPerCall: claudeToolPolicyPerSearch}}}
+	webSearch := `{"type":"web_search_20250305","name":"web_search"}`
+	mcpServers := `[{"type":"url","url":"https://mcp.example.invalid/sse","name":"remote"}]`
+	for _, tc := range []struct {
+		name   string
+		fields string
+	}{
+		{name: "tools_upper_case_variant", fields: `"tools":[` + webSearch + `],"TOOLS":null`},
+		{name: "tools_title_case_variant", fields: `"tools":[` + webSearch + `],"Tools":[]`},
+		{name: "tools_unicode_fold_variant", fields: `"tools":[` + webSearch + `],"tool\u017f":null`},
+		{name: "tools_exact_duplicate", fields: `"tools":[` + webSearch + `],"tools":[]`},
+		{name: "mcp_servers_case_variant", fields: `"mcp_servers":` + mcpServers + `,"MCP_SERVERS":null`},
+		{name: "mcp_servers_unicode_fold_variant", fields: `"mcp_servers":` + mcpServers + `,"mcp_ſerverſ":[]`},
+		{name: "mcp_servers_exact_duplicate", fields: `"mcp_servers":` + mcpServers + `,"mcp_servers":[]`},
+		{name: "container_case_variant", fields: `"container":"container_synthetic","Container":null`},
+		{name: "container_exact_duplicate", fields: `"container":"container_synthetic","container":null`},
+		{name: "tool_type_exact_duplicate", fields: `"tools":[{"type":"web_search_20250305","type":"custom","name":"web_search"}]`},
+		{name: "tool_type_case_variant", fields: `"tools":[{"TYPE":"web_search_20250305","name":"web_search"}]`},
+	} {
+		t.Run("ambiguous_"+tc.name, func(t *testing.T) {
+			result := runClaudeToolPolicyCase(t, balance, claudeToolPolicyCase{
+				channel: channeltype.Anthropic, actual: "claude-sonnet-4", contentType: "application/json", response: nativeOK,
+				payload: `{"model":"alias","max_tokens":64,"messages":[{"role":"user","content":"hello"}],` + tc.fields + `}`,
+				tooling: searchNotAllowed,
+			})
+			if result.calls != 0 {
+				t.Logf("REPRODUCED_464_AMBIGUOUS_FIELD_DISPATCH case=%s calls=%d", tc.name, result.calls)
+			}
+			requireClaudeToolPolicyUntouched(t, result, balance)
+		})
+	}
 }
 
 // TestSecurityClaudeNativeToolPolicyBilling proves allowed server-tool receipts
