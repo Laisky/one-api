@@ -140,11 +140,21 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	ratio := modelRatio * groupRatio
 
-	// pre-consume quota based on estimated input tokens.
-	// The same canonical content quote applies to every body size.
-	// Upstream receipts reconcile the estimate through shared final billing.
-	rawBodyForEstimate, _ := common.GetRequestBody(c)
-	promptTokens := estimateClaudeMessagesPromptTokens(gmw.Ctx(c), claudeRequest, len(rawBodyForEstimate))
+	// Prepare conversion once before admission so the quote follows the representation sent to the provider.
+	adaptorInstance := relay.GetAdaptor(meta.APIType)
+	if adaptorInstance == nil {
+		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
+	}
+	adaptorInstance.Init(meta)
+	convertedRequest, err := adaptorInstance.ConvertClaudeRequest(c, claudeRequest)
+	if err != nil {
+		return wrapConvertRequestError(err)
+	}
+	convertedRequest = sanitizeConvertedChatFields(convertedRequest)
+	promptTokens, quoteErr := preparedClaudePromptTokens(ctx, claudeRequest, convertedRequest)
+	if quoteErr != nil {
+		return openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", http.StatusBadRequest)
+	}
 	meta.PromptTokens = promptTokens
 	preConsumedQuota, bizErr := preConsumeClaudeMessagesQuota(c, claudeRequest, promptTokens, ratio, completionRatio, meta)
 	if bizErr != nil {
@@ -159,12 +169,6 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	provisionalLogId := recordProvisionalLog(c, meta, claudeRequest.Model, preConsumedQuota)
 	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
-	adaptorInstance := relay.GetAdaptor(meta.APIType)
-	if adaptorInstance == nil {
-		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
-	}
-	adaptorInstance.Init(meta)
-
 	// Declare response variables early so goto postConsume does not skip over them.
 	var (
 		usage                 *relaymodel.Usage
@@ -174,7 +178,6 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		origResp              *http.Response
 		upstreamCapture       *loggingReadCloser
 		requestBody           io.Reader
-		convertedRequest      any
 		passthroughBody       []byte
 	)
 
@@ -227,11 +230,8 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 
-	// convert request using adaptor's ConvertClaudeRequest method
-	convertedRequest, err = adaptorInstance.ConvertClaudeRequest(c, claudeRequest)
-	if err != nil {
-		return wrapConvertRequestError(err)
-	}
+	// Ordinary dispatch reuses the conversion that admission quoted. The MCP branch
+	// above explicitly reconverts after it injects deferred tools and uses its own execution loop.
 
 	// Determine request body:
 	// - If adaptor marks direct pass-through, forward the Claude Messages payload
@@ -267,7 +267,6 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			lg.Debug("analyzed Claude passthrough thinking blocks", fields...)
 		}
 	} else {
-		convertedRequest = sanitizeConvertedChatFields(convertedRequest)
 		c.Set(ctxkey.ConvertedRequest, convertedRequest)
 		requestBytes, merr := json.Marshal(convertedRequest)
 		if merr != nil {
@@ -532,34 +531,34 @@ handleResponse:
 							zap.Int("cache_write_1h_tokens", usage.CacheWrite1hTokens),
 						)
 					} else {
-						// No usage provided: compute completion tokens from content text
+						// No receipt provided: preserve the prepared admission quote and
+						// mark inferred completion usage so settlement cannot refund uncertain work.
 						accumulated := ""
 						for _, part := range claudeResp.Content {
 							if part.Type == "text" && part.Text != "" {
 								accumulated += part.Text
 							}
 						}
-						promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
 						completion := openai.CountTokenText(accumulated, meta.ActualModelName)
 						usage = &relaymodel.Usage{
-							PromptTokens:     promptTokens,
-							CompletionTokens: completion,
-							TotalTokens:      promptTokens + completion,
+							PromptTokens:          promptTokens,
+							CompletionTokens:      completion,
+							TotalTokens:           promptTokens + completion,
+							BillingEstimateReason: "converted_claude_usage_missing_counters",
 						}
 					}
 				} else {
 					// 2) If not Claude JSON, it may be SSE (OpenAI-compatible). Detect and compute from stream text.
 					ct := resp.Header.Get("Content-Type")
 					if strings.Contains(strings.ToLower(ct), "text/event-stream") || bytes.HasPrefix(body, []byte("data:")) || bytes.Contains(body, []byte("\ndata:")) {
-						promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
 						usage = extractConvertedClaudeSSEUsage(body, promptTokens, meta.ActualModelName)
 					} else {
 						// 3) Fallback: estimate prompt only
-						promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
 						usage = &relaymodel.Usage{
-							PromptTokens:     promptTokens,
-							CompletionTokens: 0,
-							TotalTokens:      promptTokens,
+							PromptTokens:          promptTokens,
+							CompletionTokens:      0,
+							TotalTokens:           promptTokens,
+							BillingEstimateReason: "converted_claude_usage_unknown_payload",
 						}
 					}
 				}
@@ -569,8 +568,7 @@ handleResponse:
 			if meta.IsStream {
 				respErr, usage = anthropic.ClaudeNativeStreamHandler(c, resp)
 			} else {
-				// For non-streaming, we need the prompt tokens count for usage calculation
-				promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
+				// Native fallback also reuses the prepared admission quote for usage estimates.
 				respErr, usage = anthropic.ClaudeNativeHandler(c, resp, promptTokens, meta.ActualModelName)
 			}
 		}
