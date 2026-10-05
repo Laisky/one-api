@@ -29,6 +29,7 @@ vi.mock('@/lib/api', () => {
   return {
     api: {
       get,
+      post: vi.fn(),
       defaults: { withCredentials: true },
       interceptors: {
         request: { use: vi.fn() },
@@ -79,7 +80,9 @@ describe('Header logout UX', () => {
     localStorage.clear();
     localStorage.setItem('system_name', 'OneAPI Test');
     (api.get as any).mockReset();
+    (api.post as any).mockReset();
     (api.get as any).mockResolvedValue({ data: { success: true } });
+    (api.post as any).mockResolvedValue({ data: { success: true } });
   });
 
   it('hides the logout action by default', () => {
@@ -104,7 +107,7 @@ describe('Header logout UX', () => {
     await user.click(confirmButton);
 
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith('/api/user/logout');
+      expect(api.post).toHaveBeenCalledWith('/api/user/logout');
     });
     expect(logoutMock).toHaveBeenCalled();
   });
@@ -137,7 +140,7 @@ describe('Header logout UX', () => {
     await user.click(confirmButton);
 
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith('/api/user/logout');
+      expect(api.post).toHaveBeenCalledWith('/api/user/logout');
     });
     expect(logoutMock).toHaveBeenCalled();
   });
@@ -169,7 +172,9 @@ describe('Header anonymous mobile layout', () => {
     localStorage.clear();
     localStorage.setItem('system_name', 'OneAPI Test');
     (api.get as any).mockReset();
+    (api.post as any).mockReset();
     (api.get as any).mockResolvedValue({ data: { success: true } });
+    (api.post as any).mockResolvedValue({ data: { success: true } });
   });
 
   it('hides inline Register/Login on mobile so the header fits 320px viewports', () => {

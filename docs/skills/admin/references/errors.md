@@ -23,7 +23,8 @@ The server frequently returns **HTTP 200 with `"success": false`** for validatio
 | 200  | Everything — check `.success` in the body              |
 | 400  | Malformed JSON body (`invalidParameterMessage`)        |
 | 401  | Auth header missing / invalid access token             |
-| 403  | User disabled or banned, or root-only endpoint hit by admin |
+| 403  | User disabled or banned, root-only endpoint hit by admin, or a session-cookie mutation without a trusted `Origin` (see [auth.md](auth.md)) |
+| 405  | Legacy `GET` on a `POST`-only action route (`Allow: POST`) |
 | 5xx  | Database / panic — capture `.message` and report       |
 
 The golden rule: **always parse the body and branch on `.success`** before declaring success. HTTP 200 alone proves nothing.
@@ -51,7 +52,7 @@ echo "$resp" | jq '.data'
 | Message                                                            | Cause                                              | Fix |
 |--------------------------------------------------------------------|----------------------------------------------------|-----|
 | `not logged in and no access token provided`                        | `Authorization` header missing                     | Export `ONEAPI_ADMIN_TOKEN` and include header    |
-| `access token is invalid`                                           | Token rotated, mistyped, or user deleted          | Re-mint via UI or `/api/user/token`               |
+| `access token is invalid`                                           | Token rotated, mistyped, or user deleted          | Re-mint via UI or `POST /api/user/token`          |
 | `User has been banned`                                              | Caller's user row `status=2`                       | Re-enable via another admin / unbanning           |
 | `No permission to perform this operation`                           | Insufficient role                                  | Use root token for `/api/option/*`                |
 
@@ -72,7 +73,7 @@ echo "$resp" | jq '.data'
 | `invalid parameters` / `invalid input`                              | JSON body failed struct validation                 |
 | `resource uuid is required`                                         | `PUT` body lacks `uuid` (sending integer `id` instead) — [controller/id_refs.go](../../../../controller/id_refs.go) `preferUUIDRef` |
 | `channel not found`                                                 | `:uuid` doesn't exist or is not a uuid             |
-| upstream error strings (`auth`, `rate limit`, `model not found`)    | `GET /test/:id` — issue is on upstream side        |
+| upstream error strings (`auth`, `rate limit`, `model not found`)    | `POST /test/:id` — issue is on upstream side       |
 
 ### Tokens
 

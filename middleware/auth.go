@@ -54,6 +54,9 @@ func authHelper(c *gin.Context, minRole int) {
 		respondAuthError(c, http.StatusForbidden, "No permission to perform this operation, insufficient permissions")
 		return
 	}
+	if !allowSessionMutation(c) {
+		return
+	}
 	user, err := resolveDashboardUser(c)
 	if err != nil {
 		gmw.GetLogger(c).Warn("dashboard account resolution failed", zap.Error(err))

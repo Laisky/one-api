@@ -536,7 +536,7 @@ Based on `/home/laisky/repo/laisky/one-api/router/api.go`, here are the key endp
 ```
 POST /api/user/register
 POST /api/user/login
-GET  /api/user/logout
+POST /api/user/logout (GET before #479)
 GET  /api/user/self
 PUT  /api/user/self
 DELETE /api/user/self
@@ -556,7 +556,7 @@ GET  /api/channel/:id
 POST /api/channel/
 PUT  /api/channel/
 DELETE /api/channel/:id
-GET  /api/channel/test/:id
+POST /api/channel/test/:id (GET before #479)
 GET  /api/channel/models
 GET  /api/channel/pricing/:id
 PUT  /api/channel/pricing/:id

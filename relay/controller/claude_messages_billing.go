@@ -44,14 +44,10 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 		meta.PromptTokens = promptUsage.PromptTokens
 		return preConsumeJinaQuota(c, meta)
 	}
-	// Use similar logic to ChatCompletion pre-consumption
-	promptQuota := float64(promptTokens) * ratio
-	completionQuota := 0.0
-	if request.MaxTokens > 0 {
-		completionQuota = float64(request.MaxTokens) * ratio * completionRatio
+	baseQuota, err := checkedClaudeQuotaEstimate(promptTokens, request.MaxTokens, ratio, completionRatio)
+	if err != nil {
+		return 0, openai.ErrorWrapper(err, "invalid_claude_quota_quote", http.StatusBadRequest)
 	}
-
-	baseQuota := int64(promptQuota + completionQuota)
 	if ratio != 0 && baseQuota <= 0 {
 		baseQuota = 1
 	}
