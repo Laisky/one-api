@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -40,8 +41,9 @@ func OCRHandler(c *gin.Context, resp *http.Response, _ string) (*model.ErrorWith
 
 // forwardOCRResponse reads the upstream layout_parsing body once, extracts its
 // typed billing receipt, and forwards the body to the client unchanged. The
-// receipt is always returned, including when delivery to the client fails after
-// the provider accepted the work, so the caller can settle exactly once.
+// receipt is always returned, including when a transport error follows a
+// complete body or delivery to the client fails after the provider accepted
+// the work, so the caller can settle exactly once.
 // Parameters: c is the client request and resp is the upstream response.
 // Returns: the receipt evidence and an API error when reading or delivery failed.
 func forwardOCRResponse(c *gin.Context, resp *http.Response) (*model.OCRReceipt, *model.ErrorWithStatusCode) {
@@ -50,12 +52,20 @@ func forwardOCRResponse(c *gin.Context, resp *http.Response) (*model.OCRReceipt,
 	if closeErr := resp.Body.Close(); closeErr != nil {
 		lg.Warn("close upstream OCR response body failed", zap.Error(closeErr))
 	}
+	// A transport error can follow a complete body (for example an overstated
+	// Content-Length). A complete JSON receipt still proves the accepted work,
+	// while a truncated body fails to decode and stays unreadable. The body is
+	// never forwarded after a read error.
+	receipt := ParseOCRReceipt(body)
 	if readErr != nil {
-		return model.UnreadableOCRReceipt(), openai.ErrorWrapper(
+		lg.Debug("upstream OCR response read failed",
+			zap.Error(readErr),
+			zap.Int("body_bytes", len(body)),
+			zap.String("usage_problem", receipt.UsageProblem))
+		return receipt, openai.ErrorWrapper(
 			errors.Wrap(readErr, "read upstream OCR response"), "read_response_body_failed", http.StatusInternalServerError)
 	}
 
-	receipt := ParseOCRReceipt(body)
 	lg.Debug("parsed upstream OCR receipt",
 		zap.Bool("usage_valid", receipt.UsageProblem == ""),
 		zap.String("usage_problem", receipt.UsageProblem),
@@ -160,23 +170,23 @@ func parseOCRPages(raw json.RawMessage) (int, string) {
 	return parseOCRCounter(wire.NumPages, model.MaxOCRReceiptPages)
 }
 
-// parseOCRCounter parses one receipt counter as an exact nonnegative JSON integer.
-// Fractions, exponents, strings, negative numbers and other JSON types are invalid;
-// values above limit, including values beyond int32, overflow. Every receipt
-// bound fits in int32, so the parsed value converts to int on any platform.
+// parseOCRCounter parses one receipt counter as an exact nonnegative integer.
+// Counters are JSON numbers, so mathematically integral decimal or scientific
+// notation (100.0, 1e2, 400e-1) is accepted exactly, without float rounding.
+// Fractions, negative numbers and non-number JSON types are invalid; values
+// above limit, including any value beyond int32, overflow. Every receipt bound
+// fits in int32, so the parsed value converts to int on any platform.
 // Parameters: raw is the JSON value and limit is the inclusive bound.
 // Returns: the counter, or zero and a problem label.
 func parseOCRCounter(raw json.RawMessage, limit int) (int, string) {
 	if isAbsentJSON(raw) {
 		return 0, model.OCRReceiptMissing
 	}
-	text := string(bytes.TrimSpace(raw))
-	for _, ch := range text {
-		if ch < '0' || ch > '9' {
-			return 0, model.OCRReceiptInvalid
-		}
+	digits, problem := integralJSONDigits(string(bytes.TrimSpace(raw)))
+	if problem != "" {
+		return 0, problem
 	}
-	value, err := strconv.ParseInt(text, 10, 32)
+	value, err := strconv.ParseInt(digits, 10, 32)
 	if err != nil {
 		var numErr *strconv.NumError
 		if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
@@ -188,6 +198,76 @@ func parseOCRCounter(raw json.RawMessage, limit int) (int, string) {
 		return 0, model.OCRReceiptOverflow
 	}
 	return int(value), ""
+}
+
+// maxOCRCounterDigits is the decimal width beyond which a counter certainly
+// exceeds int32; it bounds the expansion of scientific notation.
+const maxOCRCounterDigits = 10
+
+// integralJSONDigits converts a nonnegative JSON number to the plain decimal
+// digits of its exact integer value. It works on the digit string and a bounded
+// exponent, so a huge exponent never allocates a huge number.
+// Parameters: text is one JSON value. Returns: the digits, or a problem label
+// for a non-number, negative, fractional, malformed or out-of-range value.
+func integralJSONDigits(text string) (string, string) {
+	if text == "" || text[0] == '-' {
+		return "", model.OCRReceiptInvalid
+	}
+	mantissa, exponentText, hasExponent := strings.Cut(strings.ToLower(text), "e")
+	intPart, fracPart, hasFraction := strings.Cut(mantissa, ".")
+	if !isDecimalDigits(intPart) || (hasFraction && !isDecimalDigits(fracPart)) {
+		return "", model.OCRReceiptInvalid
+	}
+	exponent := int64(0)
+	if hasExponent {
+		sign := int64(1)
+		switch {
+		case strings.HasPrefix(exponentText, "+"):
+			exponentText = exponentText[1:]
+		case strings.HasPrefix(exponentText, "-"):
+			sign, exponentText = -1, exponentText[1:]
+		}
+		if !isDecimalDigits(exponentText) {
+			return "", model.OCRReceiptInvalid
+		}
+		trimmed := strings.TrimLeft(exponentText, "0")
+		if len(trimmed) > 6 {
+			trimmed = "999999" // Clamp: any larger magnitude is out of range or fractional.
+		}
+		magnitude, err := strconv.ParseInt("0"+trimmed, 10, 64)
+		if err != nil {
+			return "", model.OCRReceiptInvalid
+		}
+		exponent = sign * magnitude
+	}
+
+	digits := strings.TrimLeft(intPart+fracPart, "0")
+	scale := exponent - int64(len(fracPart))
+	for strings.HasSuffix(digits, "0") {
+		digits, scale = digits[:len(digits)-1], scale+1
+	}
+	switch {
+	case digits == "":
+		return "0", ""
+	case scale < 0:
+		return "", model.OCRReceiptInvalid
+	case int64(len(digits))+scale > maxOCRCounterDigits:
+		return "", model.OCRReceiptOverflow
+	}
+	return digits + strings.Repeat("0", int(scale)), ""
+}
+
+// isDecimalDigits reports whether s is a non-empty run of ASCII digits.
+func isDecimalDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // isAbsentJSON reports whether raw is an omitted or explicit null JSON value.

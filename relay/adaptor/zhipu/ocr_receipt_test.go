@@ -14,9 +14,9 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// TestParseOCRReceipt verifies that only exact nonnegative integer counters
-// within bounds become measured evidence, and that every other shape is
-// labelled per dimension instead of being coerced to zero.
+// TestParseOCRReceipt verifies that only exact nonnegative integral counters
+// within bounds become measured evidence (in any JSON number notation), and
+// that every other shape is labelled per dimension instead of being coerced.
 func TestParseOCRReceipt(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -37,7 +37,14 @@ func TestParseOCRReceipt(t *testing.T) {
 		{name: "null_counter", body: `{"usage":{"prompt_tokens":null,"completion_tokens":2}}`, usageProblem: model.OCRReceiptMissing, pagesProblem: model.OCRReceiptMissing},
 		{name: "negative", body: `{"usage":{"prompt_tokens":-1,"completion_tokens":2}}`, usageProblem: model.OCRReceiptInvalid, pagesProblem: model.OCRReceiptMissing},
 		{name: "fraction", body: `{"usage":{"prompt_tokens":1.5,"completion_tokens":2}}`, usageProblem: model.OCRReceiptInvalid, pagesProblem: model.OCRReceiptMissing},
-		{name: "exponent", body: `{"usage":{"prompt_tokens":1e3,"completion_tokens":2}}`, usageProblem: model.OCRReceiptInvalid, pagesProblem: model.OCRReceiptMissing},
+		{name: "exponent_integral", body: `{"usage":{"prompt_tokens":1e3,"completion_tokens":2.0,"total_tokens":1.002E3}}`, prompt: 1000, completion: 2, pagesProblem: model.OCRReceiptMissing},
+		{name: "scaled_fraction_integral", body: `{"usage":{"prompt_tokens":0.25e2,"completion_tokens":300e-2},"data_info":{"num_pages":2.0}}`, prompt: 25, completion: 3, pages: 2},
+		{name: "zero_with_huge_exponent", body: `{"usage":{"prompt_tokens":0e-999999999,"completion_tokens":0.000}}`, pagesProblem: model.OCRReceiptMissing},
+		{name: "negative_exponent_fraction", body: `{"usage":{"prompt_tokens":15e-1,"completion_tokens":2}}`, usageProblem: model.OCRReceiptInvalid, pagesProblem: model.OCRReceiptMissing},
+		{name: "huge_exponent", body: `{"usage":{"prompt_tokens":1e999999999999,"completion_tokens":2}}`, usageProblem: model.OCRReceiptOverflow, pagesProblem: model.OCRReceiptMissing},
+		{name: "beyond_int32_scientific", body: `{"usage":{"prompt_tokens":3e9,"completion_tokens":2}}`, usageProblem: model.OCRReceiptOverflow, pagesProblem: model.OCRReceiptMissing},
+		{name: "negative_zero", body: `{"usage":{"prompt_tokens":-0,"completion_tokens":2}}`, usageProblem: model.OCRReceiptInvalid, pagesProblem: model.OCRReceiptMissing},
+		{name: "boolean_counter", body: `{"usage":{"prompt_tokens":true,"completion_tokens":2}}`, usageProblem: model.OCRReceiptInvalid, pagesProblem: model.OCRReceiptMissing},
 		{name: "string", body: `{"usage":{"prompt_tokens":"10","completion_tokens":2}}`, usageProblem: model.OCRReceiptInvalid, pagesProblem: model.OCRReceiptMissing},
 		{name: "usage_not_object", body: `{"usage":[1,2]}`, usageProblem: model.OCRReceiptInvalid, pagesProblem: model.OCRReceiptMissing},
 		{name: "beyond_uint64", body: `{"usage":{"prompt_tokens":99999999999999999999999,"completion_tokens":2}}`, usageProblem: model.OCRReceiptOverflow, pagesProblem: model.OCRReceiptMissing},
@@ -98,8 +105,9 @@ type ocrFailingWriter struct{ *httptest.ResponseRecorder }
 func (w ocrFailingWriter) Write([]byte) (int, error) { return 0, errors.New("client connection reset") }
 
 // TestForwardOCRResponseEvidence verifies the receipt survives transport faults:
-// a failed client write still returns the measured receipt, a close fault after
-// a complete read is not an error, and an interrupted read is unreadable.
+// a failed client write or a read error after a complete body still returns the
+// measured receipt, a close fault after a complete read is not an error, and a
+// truncated body is unreadable.
 func TestForwardOCRResponseEvidence(t *testing.T) {
 	t.Parallel()
 	const measured = `{"usage":{"prompt_tokens":800,"completion_tokens":400,"total_tokens":1200},"data_info":{"num_pages":1}}`
@@ -124,14 +132,26 @@ func TestForwardOCRResponseEvidence(t *testing.T) {
 		require.Equal(t, 1200, receipt.Usage.TotalTokens)
 		require.JSONEq(t, measured, w.Body.String())
 	})
-	t.Run("interrupted_read_is_unreadable", func(t *testing.T) {
+	t.Run("complete_body_then_read_error_keeps_receipt", func(t *testing.T) {
 		t.Parallel()
 		c, w := newTestGinContext()
 		resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header),
-			Body: &ocrFaultBody{Reader: strings.NewReader(measured), readErr: errors.New("connection reset")}}
+			Body: &ocrFaultBody{Reader: strings.NewReader(measured), readErr: io.ErrUnexpectedEOF}}
+		receipt, apiErr := forwardOCRResponse(c, resp)
+		require.NotNil(t, apiErr, "the transport error is still reported")
+		require.Empty(t, receipt.UsageProblem)
+		require.Equal(t, 1200, receipt.Usage.TotalTokens)
+		require.Empty(t, w.Body.String(), "nothing is forwarded after a read error")
+	})
+	t.Run("truncated_body_read_error_is_unreadable", func(t *testing.T) {
+		t.Parallel()
+		c, w := newTestGinContext()
+		resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header),
+			Body: &ocrFaultBody{Reader: strings.NewReader(measured[:len(measured)-10]), readErr: errors.New("connection reset")}}
 		receipt, apiErr := forwardOCRResponse(c, resp)
 		require.NotNil(t, apiErr)
 		require.Equal(t, model.OCRReceiptUnreadable, receipt.UsageProblem)
+		require.Nil(t, receipt.Usage)
 		require.Empty(t, w.Body.String(), "a partial body is never forwarded")
 	})
 }
