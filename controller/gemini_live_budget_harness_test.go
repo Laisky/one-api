@@ -240,6 +240,24 @@ func (e *liveBudgetEnv) connect() *websocket.Conn {
 	return conn
 }
 
+// connectSetup opens one downstream session with a caller-chosen native setup.
+// Parameters: setup is the first client frame. Returns: the client socket.
+func (e *liveBudgetEnv) connectSetup(setup string) *websocket.Conn {
+	e.t.Helper()
+	conn, response, err := websocket.DefaultDialer.Dial(e.gateway, http.Header{"Authorization": []string{"Bearer caller-fixture"}})
+	if response != nil && response.Body != nil {
+		_ = response.Body.Close()
+	}
+	require.NoError(e.t, err)
+	e.t.Cleanup(func() { _ = conn.Close() })
+	require.NoError(e.t, conn.SetReadDeadline(time.Now().Add(time.Minute)))
+	require.NoError(e.t, conn.WriteMessage(websocket.TextMessage, []byte(setup)))
+	_, ack, err := conn.ReadMessage()
+	require.NoError(e.t, err)
+	require.JSONEq(e.t, `{"setupComplete":{}}`, string(ack))
+	return conn
+}
+
 // awaitClose reads until the gateway closes the session or wait elapses.
 // Parameters: conn is a client socket and wait bounds a quiet session. Returns:
 // the gateway close reason, or "" when the client had to close the socket itself.
