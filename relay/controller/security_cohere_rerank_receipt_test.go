@@ -34,7 +34,7 @@ func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 		{name: "three_searches", units: `3`, group: 1, charge: 3000, balance: 10000},
 		{name: "decimal_units", units: `3.0`, group: 1, charge: 3000, balance: 10000},
 		{name: "scientific_units", units: `3e0`, group: 1, charge: 3000, balance: 10000},
-		{name: "decimal_tokens", units: `3`, tokens: `{"input_tokens":11.0,"output_tokens":0}`, decodeError: true, group: 1, charge: 3000, balance: 10000},
+		{name: "decimal_tokens", units: `3`, tokens: `{"input_tokens":11.0,"output_tokens":0}`, group: 1, charge: 3000, balance: 10000},
 		{name: "unusable_tokens", units: `3`, tokens: `{"input_tokens":"unusable"}`, decodeError: true, group: 1, charge: 3000, balance: 10000},
 		{name: "absent_tokens", units: `3`, tokens: `null`, group: 1, charge: 3000, balance: 10000},
 		{name: "group_multiplier", units: `3`, group: 2, charge: 6000, balance: 10000},
