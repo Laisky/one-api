@@ -2,6 +2,7 @@ package cohere
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"io"
 	"math"
 	"net/http"
@@ -36,7 +37,8 @@ type RerankTokenUsage struct {
 }
 
 type RerankBilledUnits struct {
-	SearchUnits int `json:"search_units"`
+	SearchUnits   int `json:"search_units"`
+	receiptReason string
 }
 
 type RerankAPIVersion struct {
@@ -92,26 +94,43 @@ func ConvertRerankRequest(request model.RerankRequest) (*RerankRequest, error) {
 	}, nil
 }
 
-// RerankHandler adapts Cohere rerank responses to the unified API response format.
+// RerankHandler adapts Cohere rerank responses and preserves accounting evidence
+// after accepted work, including failed transport, decoding, or client delivery.
 func RerankHandler(c *gin.Context, resp *http.Response, meta *meta.Meta) (*model.ErrorWithStatusCode, *model.Usage) {
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
-	}
-	if closeErr := resp.Body.Close(); closeErr != nil {
-		return openai.ErrorWrapper(closeErr, "close_response_body_failed", http.StatusInternalServerError), nil
-	}
+	body, readErr := io.ReadAll(resp.Body)
+	closeErr := resp.Body.Close()
+	transportErr := stderrors.Join(readErr, closeErr)
 
 	if resp.StatusCode != http.StatusOK {
+		if transportErr != nil {
+			return openai.ErrorWrapper(errors.WithStack(transportErr), "read_response_body_failed", http.StatusInternalServerError), nil
+		}
 		return buildRerankError(body, resp.StatusCode), nil
 	}
 
 	var cohereResponse RerankResponse
-	if err := json.Unmarshal(body, &cohereResponse); err != nil {
-		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
+	if decodeErr := json.Unmarshal(body, &cohereResponse); decodeErr != nil {
+		envelope, receiptErr := decodeRerankBillingEnvelope(body)
+		usage := deriveRerankUsage(meta, envelope)
+		if usage.BilledSearchUnits == nil || *usage.BilledSearchUnits <= 0 {
+			usage.BillingEstimateReason = "cohere_rerank_response_incomplete"
+		}
+		return openai.ErrorWrapper(errors.WithStack(stderrors.Join(decodeErr, transportErr, receiptErr)), "unmarshal_response_body_failed", http.StatusInternalServerError), usage
 	}
 
 	usage := deriveRerankUsage(meta, &cohereResponse)
+	if transportErr != nil {
+		code := "close_response_body_failed"
+		if readErr != nil {
+			code = "read_response_body_failed"
+		}
+		return openai.ErrorWrapper(errors.WithStack(transportErr), code, http.StatusInternalServerError), usage
+	}
+	// Do not turn a malformed or absent receipt into a fabricated measured zero
+	// in the public response. The internal usage retains its missing/invalid state.
+	if cohereResponse.Meta != nil && (usage.BilledSearchUnits == nil || *usage.BilledSearchUnits <= 0) {
+		cohereResponse.Meta.BilledUnits = nil
+	}
 	cohereResponse.Usage = usage
 	if meta != nil {
 		cohereResponse.Model = meta.ActualModelName
@@ -122,7 +141,7 @@ func RerankHandler(c *gin.Context, resp *http.Response, meta *meta.Meta) (*model
 
 	responseBytes, err := json.Marshal(cohereResponse)
 	if err != nil {
-		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), usage
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -134,6 +153,8 @@ func RerankHandler(c *gin.Context, resp *http.Response, meta *meta.Meta) (*model
 	return nil, usage
 }
 
+// buildRerankError returns the provider's error without creating usage evidence
+// for a request that the provider rejected.
 func buildRerankError(body []byte, statusCode int) *model.ErrorWithStatusCode {
 	var errResp RerankErrorResponse
 	_ = json.Unmarshal(body, &errResp)
@@ -167,6 +188,9 @@ func buildRerankError(body []byte, statusCode int) *model.ErrorWithStatusCode {
 	}
 }
 
+// deriveRerankUsage keeps the search meter independent from token usage. A nil
+// search pointer means missing, zero means invalid, and only a positive count is
+// billable. The controller applies this dimension only to search-priced requests.
 func deriveRerankUsage(meta *meta.Meta, resp *RerankResponse) *model.Usage {
 	promptTokens := 0
 	if meta != nil {
@@ -177,6 +201,12 @@ func deriveRerankUsage(meta *meta.Meta, resp *RerankResponse) *model.Usage {
 		TotalTokens:  promptTokens,
 	}
 
+	if resp != nil && resp.Meta != nil {
+		if units := resp.Meta.BilledUnits; units != nil && units.receiptReason != cohereSearchUnitsMissing {
+			count := int64(units.SearchUnits)
+			usage.BilledSearchUnits = &count
+		}
+	}
 	if resp != nil && resp.Meta != nil && resp.Meta.Tokens != nil {
 		tokens := resp.Meta.Tokens
 		if tokens.InputTokens > 0 {
