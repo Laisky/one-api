@@ -69,9 +69,13 @@ func nextStreamReceiptCompleteness(previous, complete bool, chunk *ChatCompletio
 	return previous
 }
 
-// DecodeStreamReceipt preserves receipt counter presence for native chat streams.
+// DecodeStreamReceipt preserves counter presence and the existing native partial-receipt fallback policy.
 func DecodeStreamReceipt(reader io.Reader, chunk *ChatCompletionsStreamResponse) (bool, error) {
-	return decodeStreamReceipt(reader, chunk)
+	complete, err := decodeStreamReceipt(reader, chunk)
+	if err == nil && !complete && chunk.Usage != nil && chunk.Usage.BillingEstimateReason == "stream_usage_missing_counters" {
+		chunk.Usage.BillingEstimateReason = ""
+	}
+	return complete, err
 }
 
 // NextStreamReceiptCompleteness preserves measured-receipt chronology for native chat streams.
