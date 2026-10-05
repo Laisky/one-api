@@ -162,32 +162,15 @@ func CountTokenMessages(ctx context.Context,
 					imageURL = content.ImageURL.Url
 					detail = content.ImageURL.Detail
 				}
+				detail = imageDetailForProvider(ctx, detail)
 				imageTokens, err := countImageTokens(imageURL, detail, actualModel)
 				if err != nil {
-					// Provide structured diagnostics without dumping full base64 content
-					isDataURL := strings.HasPrefix(imageURL, "data:image/")
-					b64Len := 0
-					sample := ""
-					if isDataURL {
-						// Extract after comma
-						if idx := strings.Index(imageURL, ","); idx >= 0 && idx+1 < len(imageURL) {
-							raw := imageURL[idx+1:]
-							b64Len = len(raw)
-							if b64Len > 48 {
-								sample = raw[:48]
-							} else {
-								sample = raw
-							}
-						}
-					}
-					lg.Error("error counting image tokens",
-						zap.Error(err),
-						zap.String("model", actualModel),
-						zap.Bool("data_url", isDataURL),
-						zap.Int("base64_len", b64Len),
-						zap.String("detail", detail),
-						zap.String("base64_sample", sample),
-					)
+					// Metadata failure must not erase the image from admission. Keep a
+					// conservative model allowance and log only content-free diagnostics.
+					fallback := imageEstimationFallback(actualModel)
+					tokenNum += fallback
+					lg.Warn("using conservative image token allowance",
+						zap.Error(err), zap.String("model", actualModel), zap.Int("reserved_tokens", fallback))
 				} else {
 					tokenNum += imageTokens
 				}
@@ -373,6 +356,17 @@ func countImageTokens(url string, detail string, model string) (_ int, err error
 		return deepseekFlashMaxImageTokens, nil
 	}
 
+	// Gemini and native Claude do not consume the OpenAI image detail hint.
+	// Their adapters send the same complete image for low, high, and auto.
+	if strings.HasPrefix(model, "gemini-3") {
+		// The adapter does not set media_resolution; Gemini 3 defaults to 1120.
+		// https://ai.google.dev/gemini-api/docs/media-resolution#token-counts
+		return 1120, nil
+	}
+	if strings.HasPrefix(model, "gemini-") || isClaudeVisionModel(model) {
+		detail = "high"
+	}
+
 	var fetchSize = true
 	var width, height int
 
@@ -401,10 +395,7 @@ func countImageTokens(url string, detail string, model string) (_ int, err error
 		}
 		// Claude-specific: cap long edge at 1568 then approx tokens by area/750
 		// We detect Claude via model prefix to avoid importing meta here
-		if strings.HasPrefix(model, "claude-") ||
-			strings.HasPrefix(model, "sonnet") ||
-			strings.HasPrefix(model, "haiku") ||
-			strings.HasPrefix(model, "opus") {
+		if isClaudeVisionModel(model) {
 			// Cap long edge to 1568 while preserving aspect ratio
 			maxEdge := 1568.0
 			w := float64(width)
@@ -422,7 +413,7 @@ func countImageTokens(url string, detail string, model string) (_ int, err error
 					h *= scale
 				}
 			}
-			tokens := max(int(math.Round((w*h)/750.0)), 0)
+			tokens := max(int(math.Round((w*h)/750.0)), 1)
 			return tokens, nil
 		}
 		if width > 2048 || height > 2048 { // max(width, height) > 2048

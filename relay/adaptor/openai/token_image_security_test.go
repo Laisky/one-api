@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/apitype"
+	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/stretchr/testify/require"
 )
@@ -45,5 +48,21 @@ func TestImageEstimationFailureRetainsAdmissionCost(t *testing.T) {
 		base := CountTokenMessages(context.Background(), plain, name)
 		quoted := CountTokenMessages(context.Background(), imaged, name)
 		require.Greater(t, quoted-base, 1000, "failed metadata must not admit a billable image for free")
+	}
+}
+
+// TestMappedProviderImageDetailUsesAdapterPolicy proves deployment aliases cannot restore an ineffective low-detail discount.
+func TestMappedProviderImageDetailUsesAdapterPolicy(t *testing.T) {
+	previous := getImageSizeFn
+	getImageSizeFn = func(string) (int, int, error) { return 1024, 1024, nil }
+	t.Cleanup(func() { getImageSizeFn = previous })
+	for _, kind := range []int{apitype.Gemini, apitype.VertexAI, apitype.Anthropic, apitype.AwsClaude} {
+		ctx := context.WithValue(context.Background(), ctxkey.Meta, &meta.Meta{APIType: kind, ActualModelName: "deployment"})
+		makeMessages := func(detail string) []model.Message {
+			return []model.Message{{Role: "user", Content: []model.MessageContent{{Type: model.ContentTypeImageURL, ImageURL: &model.ImageURL{Url: "fixture", Detail: detail}}}}}
+		}
+		high := CountTokenMessages(ctx, makeMessages("high"), "deployment")
+		low := CountTokenMessages(ctx, makeMessages("low"), "deployment")
+		require.Equal(t, high, low)
 	}
 }
