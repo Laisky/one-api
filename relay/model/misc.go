@@ -4,6 +4,9 @@ import "github.com/Laisky/one-api/relay/realtime"
 
 // Usage is the token usage information returned by OpenAI API.
 type Usage struct {
+	// BilledSearchUnits is an adaptor-validated non-token receipt. Nil means that
+	// no valid search-unit count was received; public JSON cannot set this field.
+	BilledSearchUnits *int64 `json:"-"`
 	// BillingEstimateReason is server-only evidence that usage was conservatively
 	// estimated rather than measured. Clients cannot supply it through JSON.
 	BillingEstimateReason string `json:"-"`
