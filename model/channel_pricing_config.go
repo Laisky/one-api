@@ -20,6 +20,7 @@ type ModelConfigLocal struct {
 	CacheWrite1hRatio float64                `json:"cache_write_1h_ratio,omitempty"`
 	Tiers             []ModelRatioTierLocal  `json:"tiers,omitempty"`
 	MaxTokens         int32                  `json:"max_tokens,omitempty"`
+	ContextLength     int32                  `json:"context_length,omitempty"`
 	Video             *VideoPricingLocal     `json:"video,omitempty"`
 	Audio             *AudioPricingLocal     `json:"audio,omitempty"`
 	Image             *ImagePricingLocal     `json:"image,omitempty"`
@@ -103,6 +104,9 @@ type EmbeddingPricingLocal struct {
 
 // normalizeModelConfigLocal trims whitespace and validates numeric fields.
 func normalizeModelConfigLocal(cfg ModelConfigLocal) (ModelConfigLocal, error) {
+	if cfg.ContextLength < 0 {
+		return ModelConfigLocal{}, errors.WithStack(errors.New("model context_length must be nonnegative"))
+	}
 	perCall, err := normalizePerCallPricingLocal(cfg.PerCall)
 	if err != nil {
 		return ModelConfigLocal{}, errors.Wrap(err, "normalize per-call pricing")
@@ -132,6 +136,7 @@ func normalizeModelConfigLocal(cfg ModelConfigLocal) (ModelConfigLocal, error) {
 		CacheWrite5mRatio: cfg.CacheWrite5mRatio,
 		CacheWrite1hRatio: cfg.CacheWrite1hRatio,
 		MaxTokens:         cfg.MaxTokens,
+		ContextLength:     cfg.ContextLength,
 	}
 	if len(cfg.Tiers) > 0 {
 		normalized.Tiers = append([]ModelRatioTierLocal(nil), cfg.Tiers...)
