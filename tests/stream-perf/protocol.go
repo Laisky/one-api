@@ -12,8 +12,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-
-	"github.com/Laisky/errors/v2"
 )
 
 type spec struct {
@@ -29,12 +27,12 @@ type counters struct{ active, started, completed, cancelled atomic.Int64 }
 // validateSpec rejects unbounded fixture dimensions and unknown fault injection modes.
 func validateSpec(s spec) error {
 	if len(s.ID) > 64 || s.Chunks < 1 || s.Chunks > 16384 || s.Bytes < 96 || s.Bytes > 16384 || s.Chunks*s.Bytes > 64<<20 || s.PaceMS < 0 || s.PaceMS > 1000 {
-		return errors.New("invalid fixture bounds")
+		return fmt.Errorf("invalid fixture bounds")
 	}
 	switch s.Fault {
 	case "", "missing-done", "duplicate-done", "wrong-content", "no-usage", "malformed", "error", "crlf", "fragmented":
 	default:
-		return errors.New("unknown fixture fault")
+		return fmt.Errorf("unknown fixture fault")
 	}
 	return nil
 }
@@ -53,11 +51,11 @@ func serveMock(address string) error {
 	}
 	ip := net.ParseIP(host)
 	if ip == nil || !ip.IsLoopback() {
-		return errors.New("mock must bind a literal loopback address")
+		return fmt.Errorf("mock must bind a literal loopback address")
 	}
 	key := os.Getenv("STREAM_PERF_UPSTREAM_TOKEN")
 	if key == "" {
-		return errors.New("STREAM_PERF_UPSTREAM_TOKEN is required")
+		return fmt.Errorf("STREAM_PERF_UPSTREAM_TOKEN is required")
 	}
 	stats := &counters{}
 	mux := http.NewServeMux()
@@ -116,7 +114,7 @@ func writeFixture(w http.ResponseWriter, r *http.Request, s spec, model string) 
 	w.Header().Set("Cache-Control", "no-cache")
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		return errors.New("missing HTTP flusher")
+		return fmt.Errorf("missing HTTP flusher")
 	}
 	ending := "\n\n"
 	if s.Fault == "crlf" {
@@ -228,7 +226,7 @@ func validateStreamWithClock(body io.Reader, spec spec, cancelAfter int, start t
 		data = data[:0]
 		eventBytes = 0
 		if done > 0 {
-			return errors.New("frame after DONE")
+			return fmt.Errorf("frame after DONE")
 		}
 		if payload == "[DONE]" {
 			done++
@@ -254,15 +252,15 @@ func validateStreamWithClock(body io.Reader, spec spec, cancelAfter int, start t
 			return fmt.Errorf("invalid SSE JSON: %w", err)
 		}
 		if len(event.Error) > 0 && string(event.Error) != "null" {
-			return errors.New("in-band stream error")
+			return fmt.Errorf("in-band stream error")
 		}
 		for _, choice := range event.Choices {
 			if choice.Index != 0 {
-				return errors.New("unexpected choice index")
+				return fmt.Errorf("unexpected choice index")
 			}
 			if choice.Delta.Content != "" {
 				if chunks >= spec.Chunks || choice.Delta.Content != contentChunk(spec, chunks) {
-					return errors.Errorf("content mismatch at chunk %d", chunks)
+					return fmt.Errorf("content mismatch at chunk %d", chunks)
 				}
 				observed := now()
 				if chunks == 0 {
@@ -276,7 +274,7 @@ func validateStreamWithClock(body io.Reader, spec spec, cancelAfter int, start t
 			}
 			if choice.Finish != nil {
 				if *choice.Finish != "stop" {
-					return errors.New("unexpected finish reason")
+					return fmt.Errorf("unexpected finish reason")
 				}
 				stops++
 			}
@@ -284,7 +282,7 @@ func validateStreamWithClock(body io.Reader, spec spec, cancelAfter int, start t
 		if event.Usage != nil {
 			usages++
 			if event.Usage.Prompt != 16 || event.Usage.Completion != spec.Chunks*16 || event.Usage.Total != 16+spec.Chunks*16 {
-				return errors.New("usage mismatch")
+				return fmt.Errorf("usage mismatch")
 			}
 		}
 		return nil
@@ -303,7 +301,7 @@ func validateStreamWithClock(body io.Reader, spec spec, cancelAfter int, start t
 			value = strings.TrimPrefix(value, " ")
 			eventBytes += len(value)
 			if len(data) >= 1024 || eventBytes > 1<<20 {
-				return errors.New("too many SSE data lines")
+				return fmt.Errorf("too many SSE data lines")
 			}
 			data = append(data, value)
 		}
@@ -312,10 +310,10 @@ func validateStreamWithClock(body io.Reader, spec spec, cancelAfter int, start t
 		return fmt.Errorf("read SSE: %w", err)
 	}
 	if len(data) > 0 {
-		return errors.New("unterminated SSE event")
+		return fmt.Errorf("unterminated SSE event")
 	}
 	if chunks != spec.Chunks || done != 1 || stops != 1 || usages != 1 {
-		return errors.Errorf("incomplete stream: chunks=%d/%d done=%d stop=%d usage=%d", chunks, spec.Chunks, done, stops, usages)
+		return fmt.Errorf("incomplete stream: chunks=%d/%d done=%d stop=%d usage=%d", chunks, spec.Chunks, done, stops, usages)
 	}
 	return nil
 }

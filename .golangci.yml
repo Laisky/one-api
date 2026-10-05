@@ -101,6 +101,11 @@ linters:
         linters: [lll]
       - path: model/.*\.go
         linters: [lll]
+      # The stream-perf driver builds standalone from stdlib only, and
+      # correlation_build.py byte-pins main.go and protocol.go, so they
+      # keep plain fmt.Errorf errors.
+      - path: tests/stream-perf/(main|protocol)\.go
+        linters: [err113]
       - linters: [gosec]
         text: G402
       - linters: [gosec]
