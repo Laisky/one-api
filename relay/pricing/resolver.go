@@ -109,6 +109,9 @@ func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 	if local.PerCall != nil {
 		cfg.PerCall = &adaptor.PerCallPricingConfig{UsdPerThousandCalls: local.PerCall.UsdPerThousandCalls}
 	}
+	if local.PerPage != nil {
+		cfg.PerPage = &adaptor.PerPagePricingConfig{UsdPerThousandPages: local.PerPage.UsdPerThousandPages}
+	}
 	if local.Video != nil {
 		cfg.Video = convertLocalVideo(local.Video)
 	}

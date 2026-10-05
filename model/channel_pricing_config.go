@@ -13,6 +13,7 @@ import (
 // This should match the structure in relay/adaptor/interface.go
 type ModelConfigLocal struct {
 	PerCall           *PerCallPricingLocal   `json:"per_call,omitempty"`
+	PerPage           *PerPagePricingLocal   `json:"per_page,omitempty"`
 	Ratio             float64                `json:"ratio"`
 	CompletionRatio   float64                `json:"completion_ratio,omitempty"`
 	CachedInputRatio  float64                `json:"cached_input_ratio,omitempty"`
@@ -107,6 +108,10 @@ func normalizeModelConfigLocal(cfg ModelConfigLocal) (ModelConfigLocal, error) {
 	if err != nil {
 		return ModelConfigLocal{}, errors.Wrap(err, "normalize per-call pricing")
 	}
+	perPage, err := normalizePerPagePricingLocal(cfg.PerPage)
+	if err != nil {
+		return ModelConfigLocal{}, errors.Wrap(err, "normalize per-page pricing")
+	}
 	video, err := normalizeVideoPricingLocal(cfg.Video)
 	if err != nil {
 		return ModelConfigLocal{}, errors.Wrap(err, "normalize video pricing")
@@ -126,6 +131,7 @@ func normalizeModelConfigLocal(cfg ModelConfigLocal) (ModelConfigLocal, error) {
 
 	normalized := ModelConfigLocal{
 		PerCall:           perCall,
+		PerPage:           perPage,
 		Ratio:             cfg.Ratio,
 		CompletionRatio:   cfg.CompletionRatio,
 		CachedInputRatio:  cfg.CachedInputRatio,
@@ -292,8 +298,8 @@ func (channel *Channel) validateModelPriceConfigs(configs map[string]ModelConfig
 			return errors.Errorf("negative MaxTokens for model %s: %d", modelName, config.MaxTokens)
 		}
 
-		if _, err := normalizePerCallPricingLocal(config.PerCall); err != nil {
-			return errors.Wrapf(err, "validate per-call pricing for %s", modelName)
+		if err := validateUnitTariffsLocal(config, modelName); err != nil {
+			return errors.Wrap(err, "validate unit pricing")
 		}
 		hasVideoData, err := validateVideoPricingLocal(config.Video, modelName)
 		if err != nil {
@@ -324,7 +330,7 @@ func (channel *Channel) validateModelPriceConfigs(configs map[string]ModelConfig
 			config.CacheWrite1hRatio == 0 &&
 			len(config.Tiers) == 0 &&
 			config.MaxTokens == 0 &&
-			config.PerCall == nil &&
+			config.PerCall == nil && config.PerPage == nil &&
 			!hasVideoData &&
 			!hasAudioData &&
 			!hasImageData &&
@@ -430,8 +436,8 @@ func validateTimeWindowOverlayLocal(overlay ModelConfigLocal, modelName string, 
 			return errors.Errorf("model %s time window %d overlay tier cache_write_1h_ratio cannot be negative", modelName, windowIdx)
 		}
 	}
-	if _, err := normalizePerCallPricingLocal(overlay.PerCall); err != nil {
-		return errors.Wrapf(err, "validate per-call overlay for %s", modelName)
+	if err := validateUnitTariffsLocal(overlay, modelName); err != nil {
+		return errors.Wrap(err, "validate unit pricing overlay")
 	}
 	hasVideoData, err := validateVideoPricingLocal(overlay.Video, modelName)
 	if err != nil {
@@ -459,7 +465,7 @@ func validateTimeWindowOverlayLocal(overlay ModelConfigLocal, modelName string, 
 // Parameters: cfg is the normalized local model config.
 // Returns: true when token, tier, or nested pricing fields are present.
 func hasOverlayPricingData(cfg ModelConfigLocal) bool {
-	return cfg.PerCall != nil || cfg.Ratio != 0 ||
+	return cfg.PerCall != nil || cfg.PerPage != nil || cfg.Ratio != 0 ||
 		cfg.CompletionRatio != 0 ||
 		cfg.CachedInputRatio != 0 ||
 		cfg.CacheWrite5mRatio != 0 ||

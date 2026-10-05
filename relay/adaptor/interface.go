@@ -55,6 +55,10 @@ type ModelConfig struct {
 	// is billed and displayed as flat per call rather than per token, regardless
 	// of model type (rerank is the canonical example, but the schema is generic).
 	PerCall *PerCallPricingConfig `json:"per_call,omitempty"`
+	// PerPage captures flat per-processed-document-page pricing metadata. It is
+	// disjoint from PerCall and from token pricing: a model carrying it is billed
+	// by the provider's typed page count, never by tokens or invocations.
+	PerPage *PerPagePricingConfig `json:"per_page,omitempty"`
 	// TimeWindows holds time-of-day pricing overlays applied above Tiers.
 	// Empty means pricing is invariant across the request start time.
 	TimeWindows []TimeWindow `json:"time_windows,omitempty"`
@@ -118,6 +122,9 @@ func (cfg ModelConfig) Clone() ModelConfig {
 	}
 	if cfg.PerCall != nil {
 		clone.PerCall = cfg.PerCall.Clone()
+	}
+	if cfg.PerPage != nil {
+		clone.PerPage = cfg.PerPage.Clone()
 	}
 	if len(cfg.TimeWindows) > 0 {
 		clone.TimeWindows = make([]TimeWindow, 0, len(cfg.TimeWindows))
@@ -237,6 +244,31 @@ func (cfg *PerCallPricingConfig) HasData() bool {
 
 // Clone returns a copy of the per-call pricing configuration.
 func (cfg *PerCallPricingConfig) Clone() *PerCallPricingConfig {
+	if cfg == nil {
+		return nil
+	}
+	clone := *cfg
+	return &clone
+}
+
+// PerPagePricingConfig captures flat per-page pricing for document models whose
+// provider bills each processed page (for example a layout-parsing OCR service
+// priced per page). The canonical unit is USD per 1000 processed pages. A present
+// configuration with a zero price is an explicit free tariff; nil means the model
+// is not page-priced.
+type PerPagePricingConfig struct {
+	// UsdPerThousandPages is the USD price per 1000 processed document pages.
+	UsdPerThousandPages float64 `json:"usd_per_thousand_pages"`
+}
+
+// HasData reports whether the per-page pricing configuration is present. A
+// present tariff may intentionally be free, so presence alone carries meaning.
+func (cfg *PerPagePricingConfig) HasData() bool {
+	return cfg != nil
+}
+
+// Clone returns a copy of the per-page pricing configuration, or nil for nil.
+func (cfg *PerPagePricingConfig) Clone() *PerPagePricingConfig {
 	if cfg == nil {
 		return nil
 	}

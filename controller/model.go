@@ -447,6 +447,7 @@ type ModelDisplayInfo struct {
 	ImagePricing              *ImageDisplayPricing     `json:"image_pricing,omitempty"`                 // Detailed image pricing with size/quality multipliers
 	EmbeddingPricing          *EmbeddingDisplayPricing `json:"embedding_pricing,omitempty"`             // Embedding pricing by modality
 	PerCallPricing            *PerCallDisplayPricing   `json:"per_call_pricing,omitempty"`              // Flat per-invocation pricing (mutually exclusive with token pricing)
+	PerPagePricing            *PerPageDisplayPricing   `json:"per_page_pricing,omitempty"`              // Flat per-processed-page pricing (mutually exclusive with token and per-call pricing)
 	TimeWindows               []TimeWindowDisplay      `json:"time_windows,omitempty"`                  // Time-of-day pricing windows
 	ActiveTimeWindow          string                   `json:"active_time_window,omitempty"`            // First active window name at display time
 }
@@ -481,6 +482,7 @@ type TimeWindowOverlayDisplay struct {
 	ImagePricing      *ImageDisplayPricing     `json:"image_pricing,omitempty"`
 	EmbeddingPricing  *EmbeddingDisplayPricing `json:"embedding_pricing,omitempty"`
 	PerCallPricing    *PerCallDisplayPricing   `json:"per_call_pricing,omitempty"`
+	PerPagePricing    *PerPageDisplayPricing   `json:"per_page_pricing,omitempty"`
 }
 
 // ModelDisplayTier represents a single tier in volume-based pricing
@@ -686,6 +688,7 @@ func buildTimeWindowOverlayDisplayWithBase(overlay adaptorpkg.ModelConfig, baseI
 	display.ImagePricing = buildAdaptorImageDisplayPricing(overlay.Image)
 	display.EmbeddingPricing = buildEmbeddingDisplayPricing(overlay.Embedding, convertRatioToPrice)
 	display.PerCallPricing = buildPerCallDisplayPricing(overlay.PerCall)
+	display.PerPagePricing = buildPerPageDisplayPricing(overlay.PerPage)
 	return display
 }
 
@@ -774,6 +777,7 @@ func convertLocalDisplayConfig(cfg model.ModelConfigLocal) adaptorpkg.ModelConfi
 	if cfg.PerCall != nil {
 		converted.PerCall = &adaptorpkg.PerCallPricingConfig{UsdPerThousandCalls: cfg.PerCall.UsdPerThousandCalls}
 	}
+	converted.PerPage = convertLocalPerPageDisplayConfig(cfg.PerPage)
 	if cfg.Video != nil {
 		converted.Video = &adaptorpkg.VideoPricingConfig{
 			PerSecondUsd:          cfg.Video.PerSecondUsd,
@@ -1273,6 +1277,7 @@ func GetModelsDisplay(c *gin.Context) {
 			var description string
 			var videoPricing *VideoDisplayPricing
 			var perCallPricing *PerCallDisplayPricing
+			var perPagePricing *PerPageDisplayPricing
 			var audioPricing *AudioDisplayPricing
 			var imagePricing *ImageDisplayPricing
 			var embeddingPricing *EmbeddingDisplayPricing
@@ -1335,6 +1340,7 @@ func GetModelsDisplay(c *gin.Context) {
 			if cfg, ok := defaultPricing[actual]; ok {
 				timeWindows, activeTimeWindow = buildTimeWindowDisplays(cfg.TimeWindows, convertRatioToPrice(cfg.Ratio), cfg.CompletionRatio, displayNow, convertRatioToPrice)
 				perCallPricing = buildPerCallDisplayPricing(cfg.PerCall)
+				perPagePricing = buildPerPageDisplayPricing(cfg.PerPage)
 				inputPrice = convertRatioToPrice(cfg.Ratio)
 				cachedInputPrice = inputPrice
 				if cfg.CachedInputRatio != 0 {
@@ -1496,15 +1502,16 @@ func GetModelsDisplay(c *gin.Context) {
 						UsdPerThousandCalls: cfg.Ratio * 1000 / ratio.QuotaPerUsd,
 					})
 				}
+				perCallPricing, perPagePricing = applyUnitTariffDisplayOverride(converted, perCallPricing, perPagePricing)
 				if converted.Audio != nil && converted.Audio.HasData() {
 					audioPricing = buildAudioDisplayPricing(converted.Audio)
 				} else if cfg.Audio == nil && cfg.Ratio != 0 {
 					audioPricing = buildLegacyAudioTariffDisplay(audioPricing, cfg.Ratio)
 				}
-				if converted.PerCall != nil || (converted.Audio != nil && converted.Audio.HasData()) || cfg.Ratio != 0 {
+				if converted.PerCall != nil || converted.PerPage != nil || (converted.Audio != nil && converted.Audio.HasData()) || cfg.Ratio != 0 {
 					// Explicit local native tariffs do not inherit provider date
 					// schedules in the billing resolvers. Do not advertise them.
-					if perCallPricing != nil || audioPricing != nil {
+					if perCallPricing != nil || perPagePricing != nil || audioPricing != nil {
 						timeWindows, activeTimeWindow = nil, ""
 					}
 				}
@@ -1524,7 +1531,7 @@ func GetModelsDisplay(c *gin.Context) {
 				}
 			}
 
-			if perCallPricing != nil {
+			if perCallPricing != nil || perPagePricing != nil {
 				inputPrice, outputPrice, cachedInputPrice = 0, 0, 0
 				cacheWrite5mPrice, cacheWrite1hPrice = 0, 0
 				tiers = nil
@@ -1554,6 +1561,7 @@ func GetModelsDisplay(c *gin.Context) {
 				VideoPricing:              videoPricing,
 				AudioPricing:              audioPricing,
 				PerCallPricing:            perCallPricing,
+				PerPagePricing:            perPagePricing,
 				ImagePricing:              imagePricing,
 				EmbeddingPricing:          embeddingPricing,
 				TimeWindows:               timeWindows,
