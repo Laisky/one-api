@@ -68,7 +68,7 @@ func terminalWSEvent(t *testing.T, eventType, status, id string, output int) []b
 
 // startTerminalWSFixture starts bounded local sockets and the production Responses controller with real SQLite billing.
 // It returns the authenticated client and observations without invoking any external provider.
-func startTerminalWSFixture(t *testing.T, firstEvents [][]byte, closeAfterEvents, continueSession bool) *terminalWSFixture {
+func startTerminalWSFixture(t *testing.T, firstEvents [][]byte, closeAfterEvents, continueSession bool, secondEvents ...[][]byte) *terminalWSFixture {
 	t.Helper()
 	xaiVideoSetup(t, terminalWSBalance, false)
 	canonicalAdmissionConfiguration(t)
@@ -113,6 +113,9 @@ func startTerminalWSFixture(t *testing.T, firstEvents [][]byte, closeAfterEvents
 			events := firstEvents
 			if count > 1 {
 				events = [][]byte{child}
+				if len(secondEvents) > 0 {
+					events = secondEvents[0]
+				}
 			}
 			for _, event := range events {
 				if writeErr := conn.WriteMessage(websocket.TextMessage, event); writeErr != nil {
@@ -120,7 +123,7 @@ func startTerminalWSFixture(t *testing.T, firstEvents [][]byte, closeAfterEvents
 					return
 				}
 			}
-			if closeAfterEvents {
+			if closeAfterEvents || (count > 1 && len(secondEvents) > 0 && len(events) == 0) {
 				providerDone <- conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "fixture ended before terminal receipt"), time.Now().Add(time.Second))
 				return
 			}
