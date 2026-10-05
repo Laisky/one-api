@@ -16,10 +16,10 @@ func TestSecurityLargeClaudeCanonicalQuote(t *testing.T) {
 		require.NoError(t, err)
 		var request ClaudeMessagesRequest
 		require.NoError(t, json.Unmarshal(raw, &request))
-		expected := getClaudeMessagesPromptTokens(context.Background(), &request)
+		expected := requireClaudePromptTokens(t, context.Background(), &request)
 		require.Positive(t, expected)
 		for _, size := range []int{len(raw), len(raw) + (1 << 20)} {
-			require.Equal(t, expected, estimateClaudeMessagesPromptTokens(context.Background(), &request, size), "JSON whitespace/size must not lower a semantic quote")
+			require.Equal(t, expected, requireClaudePromptEstimate(t, context.Background(), &request, size), "JSON whitespace/size must not lower a semantic quote")
 		}
 	}
 }
@@ -34,6 +34,6 @@ func BenchmarkSecurityLargeClaudeCanonicalQuote(b *testing.B) {
 	b.SetBytes(int64(len(raw)))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		estimateClaudeMessagesPromptTokens(context.Background(), &request, len(raw))
+		requireClaudePromptEstimate(b, context.Background(), &request, len(raw))
 	}
 }

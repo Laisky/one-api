@@ -21,7 +21,7 @@ func TestClaude431NativeImageReservation(t *testing.T) {
 			request.CompatibilityModel = "claude-sonnet-5-5"
 			plain.CompatibilityModel = "claude-sonnet-5-5"
 			for _, size := range []int{0, fastTokenEstimateThreshold + 100} {
-				require.Equal(t, 4784, estimateClaudeMessagesPromptTokens(context.Background(), &request, size)-estimateClaudeMessagesPromptTokens(context.Background(), &plain, size))
+				require.Equal(t, 4784, requireClaudePromptEstimate(t, context.Background(), &request, size)-requireClaudePromptEstimate(t, context.Background(), &plain, size))
 			}
 		}
 	}

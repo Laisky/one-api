@@ -51,7 +51,7 @@ func TestClaudeImageDetailAdmissionAndConversion(t *testing.T) {
 			require.NoError(t, err)
 			chat := converted.(*relaymodel.GeneralOpenAIRequest)
 			require.Equal(t, detail, chat.Messages[0].ParseContent()[0].ImageURL.Detail, "the outbound image must retain the same detail used for admission")
-			require.Positive(t, getClaudeMessagesPromptTokens(context.Background(), request))
+			require.Positive(t, requireClaudePromptTokens(t, context.Background(), request))
 		})
 	}
 }
@@ -123,7 +123,7 @@ func TestSecurityClaudeToolResultImagesAreAdmitted(t *testing.T) {
 	inline := map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": "image/png", "data": providerImageFixture(t)}}
 	file := map[string]any{"type": "image", "source": map[string]any{"type": "file", "file_id": "file-fixture"}}
 	quote := func(model string, content any) int {
-		return getClaudeMessagesPromptTokens(ctx, &ClaudeMessagesRequest{Model: model, MaxTokens: 16, Messages: []relaymodel.ClaudeMessage{{Role: "user", Content: content}}})
+		return requireClaudePromptTokens(t, ctx, &ClaudeMessagesRequest{Model: model, MaxTokens: 16, Messages: []relaymodel.ClaudeMessage{{Role: "user", Content: content}}})
 	}
 	toolResult := func(blocks ...any) []any {
 		return []any{map[string]any{"type": "tool_result", "tool_use_id": "toolu_fixture", "content": blocks}}
