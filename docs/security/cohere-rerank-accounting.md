@@ -64,8 +64,10 @@ not converted into successful billable usage. Final cost and the consumption log
 are reconciled once through the shared billing path.
 
 Provider HTTP errors never create measured usage. Cohere's explicit admission
-rejections (401, 403 and 429) release the complete hold and leave the request
-retryable. Every other error status follows the existing Cohere
+rejections (400 invalid body, 401/403 authentication, 402 billing limit, 404
+unknown resource and 429 rate limit) release the complete hold and leave the
+request retryable. Client cancellation (499) and every other error status
+follows the existing Cohere
 uncertain-execution policy: the quoted allowance is retained once with
 `uncertain_upstream_admission_upstream_http_error` provenance and the request is
 not replayed. Because the allowance is aggregate, that retained amount scales

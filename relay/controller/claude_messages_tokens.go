@@ -109,6 +109,10 @@ func countClaudeFileImageTokensFromBlocks(blocks []any) int {
 			continue
 		}
 		blockType, _ := blockMap["type"].(string)
+		if blockType == "tool_result" || blockType == "search_result" {
+			total += countClaudeFileImageTokensFromContent(blockMap["content"])
+			continue
+		}
 		if blockType != "image" {
 			continue
 		}
@@ -212,52 +216,9 @@ func convertClaudeToOpenAIForTokenCounting(request *ClaudeMessagesRequest) *rela
 			// Simple string content
 			openaiMessage.Content = content
 		case []any:
-			// Structured content blocks - convert to OpenAI format
-			var contentParts []relaymodel.MessageContent
-			for _, block := range content {
-				if blockMap, ok := block.(map[string]any); ok {
-					if blockType, exists := blockMap["type"]; exists {
-						switch blockType {
-						case "text":
-							if text, exists := blockMap["text"]; exists {
-								if textStr, ok := text.(string); ok {
-									contentParts = append(contentParts, relaymodel.MessageContent{
-										Type: "text",
-										Text: &textStr,
-									})
-								}
-							}
-						case "image":
-							if source, exists := blockMap["source"]; exists {
-								if sourceMap, ok := source.(map[string]any); ok {
-									imageURL := relaymodel.ImageURL{}
-									if mediaType, exists := sourceMap["media_type"]; exists {
-										if data, exists := sourceMap["data"]; exists {
-											if dataStr, ok := data.(string); ok {
-												// Convert to data URL format for token counting
-												imageURL.Url = fmt.Sprintf("data:%s;base64,%s", mediaType, dataStr)
-											}
-										}
-									} else if url, exists := sourceMap["url"]; exists {
-										if urlStr, ok := url.(string); ok {
-											imageURL.Url = urlStr
-										}
-									}
-									if detail, ok := sourceMap["detail"].(string); ok {
-										imageURL.Detail = detail
-									}
-									if imageURL.Url != "" {
-										contentParts = append(contentParts, relaymodel.MessageContent{
-											Type:     "image_url",
-											ImageURL: &imageURL,
-										})
-									}
-								}
-							}
-						}
-					}
-				}
-			}
+			// Structured content blocks - convert to OpenAI format, including the
+			// text and images nested in tool results that are forwarded upstream.
+			contentParts := appendClaudeCountingParts(nil, content)
 			if len(contentParts) > 0 {
 				openaiMessage.Content = contentParts
 			}
@@ -272,6 +233,65 @@ func convertClaudeToOpenAIForTokenCounting(request *ClaudeMessagesRequest) *rela
 	}
 
 	return openaiRequest
+}
+
+// appendClaudeCountingParts appends the countable text and image parts of
+// Claude content (a string or block list) to parts, descending into
+// tool_result and search_result content. It returns the extended parts.
+func appendClaudeCountingParts(parts []relaymodel.MessageContent, content any) []relaymodel.MessageContent {
+	switch value := content.(type) {
+	case string:
+		if value != "" {
+			text := value
+			parts = append(parts, relaymodel.MessageContent{Type: relaymodel.ContentTypeText, Text: &text})
+		}
+	case []any:
+		for _, block := range value {
+			parts = appendClaudeCountingParts(parts, block)
+		}
+	case map[string]any:
+		switch value["type"] {
+		case "text":
+			if text, ok := value["text"].(string); ok {
+				parts = append(parts, relaymodel.MessageContent{Type: relaymodel.ContentTypeText, Text: &text})
+			}
+		case "image":
+			if imageURL, ok := claudeImageCountingURL(value); ok {
+				parts = append(parts, relaymodel.MessageContent{Type: relaymodel.ContentTypeImageURL, ImageURL: imageURL})
+			}
+		case "tool_result", "search_result":
+			parts = appendClaudeCountingParts(parts, value["content"])
+		}
+	}
+	return parts
+}
+
+// claudeImageCountingURL converts an inline or URL Claude image block into the
+// image URL and detail used for estimation. It reports false for file-backed
+// or malformed sources, which countClaudeFileImageTokens handles separately.
+func claudeImageCountingURL(block map[string]any) (*relaymodel.ImageURL, bool) {
+	source, ok := block["source"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	imageURL := &relaymodel.ImageURL{}
+	sourceType, _ := source["type"].(string)
+	data, hasData := source["data"].(string)
+	url, hasURL := source["url"].(string)
+	switch {
+	case sourceType == "url" && hasURL:
+		imageURL.Url = url
+	case hasData && data != "":
+		// Convert to data URL format for token counting. A missing or malformed
+		// media type fails measurement and keeps the conservative allowance.
+		imageURL.Url = fmt.Sprintf("data:%v;base64,%s", source["media_type"], data)
+	case hasURL:
+		imageURL.Url = url
+	}
+	if detail, ok := source["detail"].(string); ok {
+		imageURL.Detail = detail
+	}
+	return imageURL, imageURL.Url != ""
 }
 
 // convertClaudeToolsToOpenAI converts Claude tools to OpenAI format for token counting.
