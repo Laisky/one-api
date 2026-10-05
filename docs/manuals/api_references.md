@@ -3655,7 +3655,7 @@ curl -X POST "$BASE_URL/api/oauth/wechat?code=WECHAT_CODE" \
 | Empty / invalid code | `Verification code error or expired` |
 | New user but registration disabled | `The administrator has turned off new user registration` |
 | Account banned | `User has been banned` |
-| Account has TOTP (2FA) enabled | HTTP 200, `{"success": false, "message": "totp_required", "data": {"totp_required": true}}`; no session is issued until [`POST /api/oauth/totp`](#post-apioauthtotp) succeeds. Do not retry the callback: the code and state are consumed. |
+| Account has TOTP (2FA) enabled | HTTP 200, `{"success": false, "message": "totp_required", "data": {"totp_required": true}}`; no session is issued until [`POST /api/oauth/totp`](#post-apioauthtotp) succeeds. Do not retry the callback: the WeChat code is consumed. |
 
 ### GET /api/oauth/state
 

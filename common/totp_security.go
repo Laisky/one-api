@@ -59,24 +59,31 @@ func MarkTotpCodeAsUsed(ctx context.Context, userId int, totpCode string) error 
 // ConsumeTotpCode atomically records totpCode as used by userId. It returns
 // true only for the first caller within TotpCodeCacheDuration, so concurrent
 // logins cannot accept the same code twice. Redis uses SET NX; the in-memory
-// fallback checks and records under one lock. An empty code is never accepted.
-// A Redis failure is returned with false; the caller decides how to degrade.
+// store checks and records under one lock. An empty code is never accepted.
+//
+// When Redis is configured but fails, the code is consumed in the node-local
+// in-memory store instead, so an outage neither locks TOTP users out nor lets a
+// captured code be replayed on this node. The returned bool is then the
+// node-local result, and the non-nil error reports the degraded replay store so
+// the caller can log it; the bool remains authoritative in every case.
 func ConsumeTotpCode(ctx context.Context, userId int, totpCode string) (bool, error) {
 	if totpCode == "" {
 		return false, nil
 	}
 	key := totpCodeKey(userId, totpCode)
-	if IsRedisEnabled() {
-		if RDB == nil {
-			return false, errors.New("redis not initialized")
-		}
-		first, err := RDB.SetNX(ctx, key, "1", TotpCodeCacheDuration).Result()
-		if err != nil {
-			return false, errors.Wrap(err, "record TOTP code use in redis")
-		}
-		return first, nil
+	if !IsRedisEnabled() {
+		return consumeMemoryKey(key, TotpCodeCacheDuration), nil
 	}
-	return consumeMemoryKey(key, TotpCodeCacheDuration), nil
+	if RDB == nil {
+		return consumeMemoryKey(key, TotpCodeCacheDuration),
+			errors.New("redis not initialized; TOTP replay check used the node-local store")
+	}
+	first, err := RDB.SetNX(ctx, key, "1", TotpCodeCacheDuration).Result()
+	if err != nil {
+		return consumeMemoryKey(key, TotpCodeCacheDuration),
+			errors.Wrap(err, "record TOTP code use in redis; replay check used the node-local store")
+	}
+	return first, nil
 }
 
 // isRedisKeyExists checks if a key exists in Redis

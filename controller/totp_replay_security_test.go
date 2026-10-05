@@ -9,6 +9,8 @@ import (
 
 	gcrypto "github.com/Laisky/go-utils/v6/crypto"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/common"
 )
 
 // TestSecurityTotpCodeSingleUseUnderConcurrency proves a valid TOTP code is
@@ -47,4 +49,31 @@ func TestSecurityTotpCodeSingleUseUnderConcurrency(t *testing.T) {
 		return
 	}
 	t.Fatal("TOTP window rolled over on every attempt")
+}
+
+// TestSecurityTotpReplayStoreOutage proves a Redis outage in the replay store
+// neither locks TOTP users out nor lets a captured code be replayed: the first
+// use of a valid code is accepted, and replaying the same code is rejected.
+func TestSecurityTotpReplayStoreOutage(t *testing.T) {
+	_, cleanup := setupTestEnvironment(t)
+	t.Cleanup(cleanup)
+	oldRDB, oldRedis := common.RDB, common.IsRedisEnabled()
+	common.RDB = nil // Redis is configured but unavailable.
+	common.SetRedisEnabled(true)
+	t.Cleanup(func() {
+		common.RDB = oldRDB
+		common.SetRedisEnabled(oldRedis)
+	})
+	const secret = "JBSWY3DPEHPK3PXP"
+	const step, margin = int64(30), int64(5)
+	if remaining := step - time.Now().UTC().Unix()%step; remaining <= margin {
+		time.Sleep(time.Duration(remaining)*time.Second + 100*time.Millisecond)
+	}
+	totp, err := gcrypto.NewTOTP(gcrypto.OTPArgs{Base32Secret: secret})
+	require.NoError(t, err)
+	code := totp.Key()
+	uid := int(time.Now().UTC().UnixNano()%1_000_000_000) + 6_000_000
+
+	require.True(t, verifyTotpCode(context.Background(), uid, secret, code), "an outage must not lock a valid first use out")
+	require.False(t, verifyTotpCode(context.Background(), uid, secret, code), "an outage must not allow replaying the same code")
 }

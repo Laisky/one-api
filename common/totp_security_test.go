@@ -73,7 +73,10 @@ func TestConsumeTotpCodeRedis(t *testing.T) {
 	require.True(t, IsTotpCodeUsed(ctx, 7, "654321"))
 
 	server.Close()
-	failed, err := ConsumeTotpCode(ctx, 8, "654321")
+	degraded, err := ConsumeTotpCode(ctx, 8, "654321")
+	require.Error(t, err, "a Redis failure must be reported as a degraded replay store")
+	require.True(t, degraded, "the node-local store accepts the first use during an outage")
+	replayed, err := ConsumeTotpCode(ctx, 8, "654321")
 	require.Error(t, err)
-	require.False(t, failed)
+	require.False(t, replayed, "the node-local store rejects a replay during an outage")
 }

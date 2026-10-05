@@ -231,8 +231,9 @@ func DisableTotp(c *gin.Context) {
 // verifyTotpCode reports whether code is the current TOTP code for secret and
 // has not been accepted for uid before. The comparison is constant time, and a
 // valid code is consumed atomically, so concurrent requests cannot replay it.
-// When the replay store fails the code is still accepted (logged at ERROR), so
-// a Redis outage never locks every 2FA account out.
+// When Redis fails, common.ConsumeTotpCode falls back to the node-local replay
+// store (logged at ERROR here), so an outage neither locks 2FA accounts out nor
+// accepts a replayed code on this node.
 func verifyTotpCode(ctx context.Context, uid int, secret, code string) bool {
 	if ctx == nil {
 		ctx = context.Background()
@@ -257,8 +258,8 @@ func verifyTotpCode(ctx context.Context, uid int, secret, code string) bool {
 
 	first, err := common.ConsumeTotpCode(ctx, uid, code)
 	if err != nil {
-		lg.Error("Failed to mark TOTP code as used", zap.Error(err))
-		return true
+		// The replay check still ran against the node-local store; first is authoritative.
+		lg.Error("TOTP replay store degraded to node-local", zap.Error(err))
 	}
 	if !first {
 		// ctx may be a bare background context here (TOTP is also verified off the
