@@ -20,7 +20,7 @@ import (
 // quote remains free; failures return no held quota and an API error.
 func reservePaidRequestQuota(c *gin.Context, meta *metalib.Meta, quote int64, stage string) (int64, *relaymodel.ErrorWithStatusCode) {
 	var tariffErr *relaymodel.ErrorWithStatusCode
-	quote, tariffErr = mediaTariffAdmission(c, meta, quote)
+	quote, tariffErr = mediaTariffAdmission(c, meta, quote, stage)
 	if tariffErr != nil {
 		return 0, tariffErr
 	}

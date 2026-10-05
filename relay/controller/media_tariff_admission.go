@@ -14,11 +14,22 @@ import (
 	"github.com/Laisky/one-api/relay/pricing"
 )
 
+// generationSettlementStages lists the reservation stages whose final settlement
+// re-prices the request through quota.Compute, which applies the same flat
+// per-generation tariff reserved here. Other endpoints settle their own unit
+// (characters, seconds, images) and would silently refund the generation hold.
+var generationSettlementStages = map[string]struct{}{
+	"chat_preconsume":            {},
+	"claude_messages_preconsume": {},
+}
+
 // mediaTariffAdmission resolves catalog media contracts before quota reservation.
-// Parameters: c and info identify the authenticated request and fallback is its
-// existing token/input quote. Returns: the correct single-generation quote, the
-// unchanged quote for other units, or an error before any paid provider dispatch.
-func mediaTariffAdmission(c *gin.Context, info *meta.Meta, fallback int64) (int64, *relaymodel.ErrorWithStatusCode) {
+// Parameters: c and info identify the authenticated request, fallback is its
+// existing token/input quote and stage names the reserving endpoint. Returns: the
+// correct single-generation quote, the unchanged quote for other units, or an
+// error before any paid provider dispatch, including for an endpoint that cannot
+// settle a per-generation tariff.
+func mediaTariffAdmission(c *gin.Context, info *meta.Meta, fallback int64, stage string) (int64, *relaymodel.ErrorWithStatusCode) {
 	provider := resolvePricingAdaptor(info)
 	base, found := pricing.ResolveModelConfig(info.ActualModelName, nil, provider, info.StartTime)
 	if !found || base.PricingProvenance == nil {
@@ -35,6 +46,9 @@ func mediaTariffAdmission(c *gin.Context, info *meta.Meta, fallback int64) (int6
 	}
 	if !generation {
 		return fallback, nil
+	}
+	if _, ok := generationSettlementStages[stage]; !ok {
+		return 0, openai.ErrorWrapper(errors.Errorf("generation tariff for %q is only supported through chat-style endpoints", info.ActualModelName), "unsupported_generation_endpoint", http.StatusBadRequest)
 	}
 	if err := validateSingleGenerationRequest(c); err != nil {
 		return 0, openai.ErrorWrapper(err, "unbounded_generation_request", http.StatusBadRequest)

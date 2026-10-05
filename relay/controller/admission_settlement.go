@@ -15,6 +15,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// upstreamHTTPErrorReason labels refunds triggered by an explicit provider error
+// status; generation admissions treat it as a definitive, retryable failure.
+const upstreamHTTPErrorReason = "upstream_http_error"
+
 // settleRetainedRequestAdmission labels an uncertain Cohere or admitted generation attempt and
 // reconciles its existing hold without another debit. Cohere's explicit
 // pre-inference rejection statuses are handled separately. Generic relay retry
@@ -32,7 +36,11 @@ func settleRetainedRequestAdmission(c *gin.Context, amount int64, tokenID int, r
 	if !ok || m == nil || m.UserId <= 0 || m.ChannelId <= 0 || m.ActualModelName == "" || tokenID != m.TokenId {
 		return false
 	}
-	if c.GetInt(ctxkey.Channel) != channeltype.Cohere && !isRetainedGenerationAdmission(c, m, amount) {
+	// An explicit provider error response is not uncertain generation work: it
+	// keeps the generic retained hold so the shared retry loop can refund it and
+	// fail over instead of finalizing a charge and vetoing the retry.
+	if c.GetInt(ctxkey.Channel) != channeltype.Cohere &&
+		(reason == upstreamHTTPErrorReason || !isRetainedGenerationAdmission(c, m, amount)) {
 		return false
 	}
 	c.Set(responseSettlementKey, true)
