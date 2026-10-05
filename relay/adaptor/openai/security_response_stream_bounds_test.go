@@ -3,9 +3,6 @@ package openai
 import (
 	"context"
 	"fmt"
-	"github.com/Laisky/one-api/relay/model"
-	"github.com/Laisky/one-api/relay/relaymode"
-	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"strings"
@@ -13,6 +10,11 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // TestSecurityResponseExactEventBoundary pins below/at/above the documented

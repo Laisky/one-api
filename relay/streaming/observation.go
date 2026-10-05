@@ -3,9 +3,11 @@ package streaming
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/Laisky/errors/v2"
-	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/gin-gonic/gin"
+
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 const protocolObserverKey = "one_api.streaming.protocol_observer"

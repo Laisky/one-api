@@ -4,8 +4,9 @@ import (
 	"math"
 	"testing"
 
-	"github.com/Laisky/one-api/model"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/model"
 )
 
 // TestClaudeDocumentQuotaArithmetic rejects unrepresentable paid reservations

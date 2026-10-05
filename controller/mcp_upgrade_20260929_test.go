@@ -11,10 +11,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/relay/mcp"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/mcp"
 )
 
 // TestMCP20260929GatewayMetadataErrors verifies required metadata uses Invalid params, not a header error.

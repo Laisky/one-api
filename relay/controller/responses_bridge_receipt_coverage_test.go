@@ -12,13 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
-	"github.com/stretchr/testify/require"
 )
 
 // TestResponsesBridgeReceiptCoverageHTTP verifies real registered adapters, transport,

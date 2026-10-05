@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/relay/mcp"
 	relaymodel "github.com/Laisky/one-api/relay/model"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSecurityMCPModelProjection separates model history from the lossless MCP
@@ -27,7 +28,7 @@ func TestSecurityMCPModelProjection(t *testing.T) {
 		require.Equal(t, "tool", message.Role)
 		require.Equal(t, "call-fixture", message.ToolCallId)
 		outbound, err := json.Marshal(relaymodel.GeneralOpenAIRequest{
-			Model: "fixture-model",
+			Model:    "fixture-model",
 			Messages: []relaymodel.Message{message},
 		})
 		require.NoError(t, err)

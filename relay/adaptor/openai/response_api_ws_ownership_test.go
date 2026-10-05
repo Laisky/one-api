@@ -8,13 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
+	"github.com/stretchr/testify/require"
+
 	rmeta "github.com/Laisky/one-api/relay/meta"
 	rmodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
 	"github.com/Laisky/one-api/relay/state"
-	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
-	"github.com/stretchr/testify/require"
 )
 
 // TestResponseAPIWSOwnership checks real socket dispatch for owner bindings and rejects alternate-path background work.

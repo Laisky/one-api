@@ -8,8 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Laisky/one-api/relay/meta"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/meta"
 )
 
 // TestAsyncBillingHTTPErrorCannotAuthorizeRefund checks every post-dispatch HTTP

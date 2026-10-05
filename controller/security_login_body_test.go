@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSecurityLoginBodyAdmission verifies fixed-length and chunked login input is bounded before tracking.

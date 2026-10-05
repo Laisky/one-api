@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Laisky/one-api/model"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/model"
 )
 
 // TestMCP433ReviewLegacyReplay exercises real legacy executions, not synthetic retry errors.

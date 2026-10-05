@@ -10,7 +10,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(1.25),
 			CompletionRatio:  2,
 			CachedInputRatio: nativeRate(0.19999999999999998),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(2.5),
 				CompletionRatio:     2,
 				CachedInputRatio:    nativeRate(0.39999999999999997),
@@ -29,7 +29,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(1.25),
 			CompletionRatio:  2,
 			CachedInputRatio: nativeRate(0.19999999999999998),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(2.5),
 				CompletionRatio:     2,
 				CachedInputRatio:    nativeRate(0.39999999999999997),
@@ -50,7 +50,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(1.25),
 			CompletionRatio:  2,
 			CachedInputRatio: nativeRate(0.19999999999999998),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(2.5),
 				CompletionRatio:     2,
 				CachedInputRatio:    nativeRate(0.39999999999999997),
@@ -71,7 +71,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(2),
 			CompletionRatio:  3,
 			CachedInputRatio: nativeRate(0.3),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4),
 				CompletionRatio:     3,
 				CachedInputRatio:    nativeRate(0.6),
@@ -92,7 +92,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(2),
 			CompletionRatio:  3,
 			CachedInputRatio: nativeRate(0.5),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4),
 				CompletionRatio:     3,
 				CachedInputRatio:    nativeRate(1),
@@ -113,7 +113,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(1.5999999999999999),
 			CompletionRatio:  3,
 			CachedInputRatio: nativeRate(0.39999999999999997),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(3.1999999999999997),
 				CompletionRatio:     3,
 				CachedInputRatio:    nativeRate(0.7999999999999999),
@@ -134,7 +134,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(1),
 			CompletionRatio:  2,
 			CachedInputRatio: nativeRate(0.19999999999999998),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(2),
 				CompletionRatio:     2,
 				CachedInputRatio:    nativeRate(0.39999999999999997),
@@ -153,7 +153,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(1.5999999999999999),
 			CompletionRatio:  3,
 			CachedInputRatio: nativeRate(0.39999999999999997),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(3.1999999999999997),
 				CompletionRatio:     3,
 				CachedInputRatio:    nativeRate(0.7999999999999999),

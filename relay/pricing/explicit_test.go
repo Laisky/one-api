@@ -14,9 +14,9 @@ import (
 // numerically invalid rates from reaching an exceptional model's upstream.
 func TestExplicitTokenTariffValidation(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name          string
 		input, output float64
-		valid bool
+		valid         bool
 	}{
 		{"valid", 0.15, 4, true},
 		{"free", 0, 4, false},

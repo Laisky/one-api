@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Laisky/one-api/common/config"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
@@ -30,6 +29,8 @@ import (
 	collectormetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/Laisky/one-api/common/config"
 )
 
 // TestEdgeResourcePrivacyAndIdentity checks automatic resource detection with

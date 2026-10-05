@@ -499,7 +499,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(2.5),
 			CompletionRatio:  6,
 			CachedInputRatio: nativeRate(0.25),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(5),
 				CompletionRatio:     4.5,
 				CachedInputRatio:    nativeRate(0.5),
@@ -559,7 +559,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 		"openai/gpt-5.4-pro": {
 			Ratio:           nativeRate(3e+01),
 			CompletionRatio: 6,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(6e+01),
 				CompletionRatio:     4.5,
 				InputTokenThreshold: 272000,
@@ -579,7 +579,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(5),
 			CompletionRatio:  6,
 			CachedInputRatio: nativeRate(0.5),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1e+01),
 				CompletionRatio:     4.5,
 				CachedInputRatio:    nativeRate(1),
@@ -599,7 +599,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 		"openai/gpt-5.5-pro": {
 			Ratio:           nativeRate(3e+01),
 			CompletionRatio: 6,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(6e+01),
 				CompletionRatio:     4.5,
 				InputTokenThreshold: 272000,
@@ -620,7 +620,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			CompletionRatio:   6,
 			CachedInputRatio:  nativeRate(0.02),
 			CacheWrite5mRatio: nativeRate(0.25),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.39999999999999997),
 				CompletionRatio:     4.5,
 				CachedInputRatio:    nativeRate(0.04),
@@ -643,7 +643,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			CompletionRatio:   6,
 			CachedInputRatio:  nativeRate(0.02),
 			CacheWrite5mRatio: nativeRate(0.25),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.39999999999999997),
 				CompletionRatio:     4.5,
 				CachedInputRatio:    nativeRate(0.04),
@@ -666,7 +666,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			CompletionRatio:   5,
 			CachedInputRatio:  nativeRate(0.19999999999999998),
 			CacheWrite5mRatio: nativeRate(2.5),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4),
 				CompletionRatio:     3.75,
 				CachedInputRatio:    nativeRate(0.39999999999999997),
@@ -689,7 +689,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			CompletionRatio:   5,
 			CachedInputRatio:  nativeRate(0.19999999999999998),
 			CacheWrite5mRatio: nativeRate(2.5),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4),
 				CompletionRatio:     3.75,
 				CachedInputRatio:    nativeRate(0.39999999999999997),

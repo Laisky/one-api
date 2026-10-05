@@ -1,9 +1,10 @@
 package model
 
 import (
-	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestResponseUsageJSONRawSnapshot preserves the exact application JSON bytes for done-only fallback usage.

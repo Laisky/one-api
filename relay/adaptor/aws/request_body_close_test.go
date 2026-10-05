@@ -14,14 +14,15 @@ import (
 	"testing"
 	"time"
 
-	channelmodel "github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
-	"github.com/Laisky/one-api/relay/meta"
 	awsdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/stretchr/testify/require"
+
+	channelmodel "github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
+	"github.com/Laisky/one-api/relay/meta"
 )
 
 // requestCloseBarrier preserves the real SDK body's optional WriterTo method,

@@ -2,13 +2,14 @@ package openai_compatible
 
 import (
 	"encoding/json"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSecurityClaudeJSONRawSnapshotConverter compares actual delivered JSON with an independent tokenizer oracle.

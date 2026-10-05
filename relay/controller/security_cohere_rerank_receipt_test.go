@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/cohere"
@@ -17,7 +19,6 @@ import (
 	metalib "github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/pricing"
 	"github.com/Laisky/one-api/relay/relaymode"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSecurityCohereRerankReceiptLedger exercises real HTTP adaptation and all

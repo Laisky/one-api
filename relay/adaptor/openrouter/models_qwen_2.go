@@ -24,7 +24,7 @@ func qwen_2Models() map[string]adaptor.ModelConfig {
 			CompletionRatio:   4,
 			CachedInputRatio:  nativeRate(0.064),
 			CacheWrite5mRatio: nativeRate(0.39999999999999997),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.96),
 				CompletionRatio:     4,
 				CachedInputRatio:    nativeRate(0.192),

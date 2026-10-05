@@ -1,9 +1,10 @@
 package streaming
 
 import (
-	relaymodel "github.com/Laisky/one-api/relay/model"
 	"strings"
 	"testing"
+
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // TestObserveMessagesPartialReceiptCountsSameFrame preserves observed content

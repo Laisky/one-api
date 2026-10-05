@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/state"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
 )
 
 // unavailableResponseStore returns storage failures from authorization operations while retaining the store interface.

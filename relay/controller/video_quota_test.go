@@ -1,9 +1,10 @@
 package controller
 
 import (
-	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestVideoQuotaDecimal verifies exact decimal pricing and rejects unsafe rates.

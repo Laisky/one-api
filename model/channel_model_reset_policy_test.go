@@ -67,13 +67,13 @@ func TestPlanChannelModelResetRejectsUnsafeConfigurations(t *testing.T) {
 // providers using an OpenAI protocol are not confused with custom compatible types.
 func TestPlanChannelModelResetPreservesCompatibleOverrides(t *testing.T) {
 	channel := Channel{
-		Type:                  channeltype.GeminiOpenAICompatible,
-		Models:                "Retired,Foo",
-		HiddenModels:          resetTestString(`["Foo"]`),
-		ModelMapping:          resetTestString(`{"Foo":"Bar"}`),
-		ModelConfigs:          resetTestString(`{"Foo":{"ratio":2,"completion_ratio":3}}`),
-		ModelRatio:            resetTestString(`{"Foo":2}`),
-		CompletionRatio:       resetTestString(`{"Bar":3}`),
+		Type:                   channeltype.GeminiOpenAICompatible,
+		Models:                 "Retired,Foo",
+		HiddenModels:           resetTestString(`["Foo"]`),
+		ModelMapping:           resetTestString(`{"Foo":"Bar"}`),
+		ModelConfigs:           resetTestString(`{"Foo":{"ratio":2,"completion_ratio":3}}`),
+		ModelRatio:             resetTestString(`{"Foo":2}`),
+		CompletionRatio:        resetTestString(`{"Bar":3}`),
 		InferenceProfileArnMap: resetTestString(`{"Foo":"private-arn"}`),
 	}
 	defaults := []string{" Foo ", "Bar", "foo", "Foo", ""}

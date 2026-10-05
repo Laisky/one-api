@@ -11,9 +11,10 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/Laisky/one-api/common/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/common/config"
 )
 
 // discoveryTestBuild loads the shipped public assets into the production build

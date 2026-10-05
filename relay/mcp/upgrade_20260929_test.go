@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Laisky/one-api/model"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/model"
 )
 
 // TestMCP20260929RequestMetadata verifies caller capabilities and opaque metadata survive without mutation.

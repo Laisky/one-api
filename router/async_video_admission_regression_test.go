@@ -7,13 +7,15 @@ import (
 	"testing"
 
 	"encoding/json"
-	"github.com/Laisky/one-api/common/client"
-	"github.com/Laisky/one-api/model"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
+
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+
+	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/model"
 )
 
 // TestAsyncVideoRejectedAdmissionHasNoPhantomTask drives shipped authentication,

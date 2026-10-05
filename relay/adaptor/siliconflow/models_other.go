@@ -488,10 +488,10 @@ func otherModels() map[string]adaptor.ModelConfig {
 		"tencent/Hunyuan-A13B-Instruct": {
 			Ratio:           nativeRate(1),
 			CompletionRatio: 4,
-			TimeWindows: []adaptor.TimeWindow{adaptor.TimeWindow{
+			TimeWindows: []adaptor.TimeWindow{{
 				Name:     "siliconflow-daypart",
 				TimeZone: "Asia/Shanghai",
-				Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+				Ranges: []adaptor.ClockRange{{
 					Start: "09:00",
 					End:   "18:00",
 				},
@@ -501,14 +501,14 @@ func otherModels() map[string]adaptor.ModelConfig {
 					CompletionRatio: 4,
 				},
 			},
-				adaptor.TimeWindow{
+				{
 					Name:     "siliconflow-daypart",
 					TimeZone: "Asia/Shanghai",
-					Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+					Ranges: []adaptor.ClockRange{{
 						Start: "00:00",
 						End:   "09:00",
 					},
-						adaptor.ClockRange{
+						{
 							Start: "18:00",
 							End:   "00:00",
 						},

@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/render"
@@ -15,7 +17,6 @@ import (
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/model"
-	"github.com/gin-gonic/gin"
 )
 
 // maxClaudeHTTPPayload bounds each decoded upstream JSON object, not the overall SSE stream.

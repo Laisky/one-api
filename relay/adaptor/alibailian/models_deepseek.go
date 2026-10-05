@@ -83,10 +83,10 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		"deepseek-v4-flash-0731": {
 			Ratio:           nativeRate(1.5),
 			CompletionRatio: 3,
-			TimeWindows: []adaptor.TimeWindow{adaptor.TimeWindow{
+			TimeWindows: []adaptor.TimeWindow{{
 				Name:     "beijing-peak",
 				TimeZone: "Asia/Shanghai",
-				Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+				Ranges: []adaptor.ClockRange{{
 					Start: "08:00",
 					End:   "22:00",
 				},
@@ -107,10 +107,10 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		"deepseek-v4-pro-0813": {
 			Ratio:           nativeRate(4.5),
 			CompletionRatio: 3,
-			TimeWindows: []adaptor.TimeWindow{adaptor.TimeWindow{
+			TimeWindows: []adaptor.TimeWindow{{
 				Name:     "beijing-peak",
 				TimeZone: "Asia/Shanghai",
-				Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+				Ranges: []adaptor.ClockRange{{
 					Start: "08:00",
 					End:   "22:00",
 				},
@@ -126,10 +126,10 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		"deepseek-v4.1-flash": {
 			Ratio:           nativeRate(1),
 			CompletionRatio: 4,
-			TimeWindows: []adaptor.TimeWindow{adaptor.TimeWindow{
+			TimeWindows: []adaptor.TimeWindow{{
 				Name:     "beijing-peak",
 				TimeZone: "Asia/Shanghai",
-				Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+				Ranges: []adaptor.ClockRange{{
 					Start: "08:00",
 					End:   "22:00",
 				},

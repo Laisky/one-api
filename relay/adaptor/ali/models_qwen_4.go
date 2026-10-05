@@ -10,7 +10,7 @@ func qwen_4Models() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(1.2),
 			CompletionRatio:  6,
 			CachedInputRatio: nativeRate(0.24000000000000002),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4.8),
 				CompletionRatio:     6,
 				InputTokenThreshold: 256001,
@@ -27,7 +27,7 @@ func qwen_4Models() map[string]adaptor.ModelConfig {
 		"qwen3.6-flash-2026-04-16": {
 			Ratio:           nativeRate(1.2),
 			CompletionRatio: 6,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4.8),
 				CompletionRatio:     6,
 				InputTokenThreshold: 256001,
@@ -39,7 +39,7 @@ func qwen_4Models() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(9),
 			CompletionRatio:  6,
 			CachedInputRatio: nativeRate(1.8),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(15),
 				CompletionRatio:     6,
 				InputTokenThreshold: 128001,
@@ -58,7 +58,7 @@ func qwen_4Models() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(2),
 			CompletionRatio:  6,
 			CachedInputRatio: nativeRate(0.4),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(8),
 				CompletionRatio:     6,
 				InputTokenThreshold: 256001,
@@ -75,7 +75,7 @@ func qwen_4Models() map[string]adaptor.ModelConfig {
 		"qwen3.6-plus-2026-04-02": {
 			Ratio:           nativeRate(2),
 			CompletionRatio: 6,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(8),
 				CompletionRatio:     6,
 				InputTokenThreshold: 256001,
@@ -86,12 +86,12 @@ func qwen_4Models() map[string]adaptor.ModelConfig {
 		"qwen3.7-flash": {
 			Ratio:           nativeRate(0.2),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.6),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
 			},
-				adaptor.ModelRatioTier{
+				{
 					Ratio:               nativeRate(1.2),
 					CompletionRatio:     4,
 					InputTokenThreshold: 256001,
@@ -102,12 +102,12 @@ func qwen_4Models() map[string]adaptor.ModelConfig {
 		"qwen3.7-flash-2026-07-15": {
 			Ratio:           nativeRate(0.2),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.6),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
 			},
-				adaptor.ModelRatioTier{
+				{
 					Ratio:               nativeRate(1.2),
 					CompletionRatio:     4,
 					InputTokenThreshold: 256001,
@@ -163,7 +163,7 @@ func qwen_4Models() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(1.6),
 			CompletionRatio:  4,
 			CachedInputRatio: nativeRate(0.4),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4.8),
 				CompletionRatio:     4,
 				InputTokenThreshold: 256001,
@@ -180,7 +180,7 @@ func qwen_4Models() map[string]adaptor.ModelConfig {
 		"qwen3.7-plus-2026-05-26": {
 			Ratio:           nativeRate(2),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(6),
 				CompletionRatio:     4,
 				InputTokenThreshold: 256001,

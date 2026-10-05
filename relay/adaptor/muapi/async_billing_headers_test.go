@@ -10,8 +10,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/Laisky/one-api/relay/meta"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/meta"
 )
 
 // TestAsyncBillingResponseHeadersPreserveCharge verifies actual HTTP submit/poll

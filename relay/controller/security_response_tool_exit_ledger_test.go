@@ -3,13 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/Laisky/one-api/common/client"
-	"github.com/Laisky/one-api/common/ctxkey"
-	"github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/relay/channeltype"
-	metalib "github.com/Laisky/one-api/relay/meta"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +10,15 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/channeltype"
+	metalib "github.com/Laisky/one-api/relay/meta"
 )
 
 // responseSecurityCancelWriter cancels a synthetic client only after the real

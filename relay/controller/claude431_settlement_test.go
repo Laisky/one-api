@@ -3,6 +3,15 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
@@ -11,13 +20,6 @@ import (
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
-	"github.com/stretchr/testify/require"
-	"io"
-	"math"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
 )
 
 // TestClaude431HTTPSettlement verifies actual database debits for native and converted HTTP receipts.

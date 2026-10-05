@@ -6,10 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSecurityRootPolicyDisclosure checks the shipped operator/login copy and

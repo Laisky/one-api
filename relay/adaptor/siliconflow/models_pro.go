@@ -41,7 +41,7 @@ func proModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(6),
 			CompletionRatio:  4,
 			CachedInputRatio: nativeRate(1.3),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(8),
 				CompletionRatio:     3.5,
 				CachedInputRatio:    nativeRate(2),

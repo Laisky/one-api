@@ -9,9 +9,10 @@ import (
 	"sync"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/gin-gonic/gin"
+
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/relay/model"
-	"github.com/gin-gonic/gin"
 )
 
 // MaxResponseStreamEventBytes bounds a supported Responses data payload before

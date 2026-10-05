@@ -10,10 +10,10 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(8),
 			CompletionRatio:  3.5,
 			CachedInputRatio: nativeRate(2),
-			TimeWindows: []adaptor.TimeWindow{adaptor.TimeWindow{
+			TimeWindows: []adaptor.TimeWindow{{
 				Name:     "qianfan-holiday-peak",
 				TimeZone: "Asia/Shanghai",
-				Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+				Ranges: []adaptor.ClockRange{{
 					Start: "08:00",
 					End:   "22:00",
 				},
@@ -26,10 +26,10 @@ func otherModels() map[string]adaptor.ModelConfig {
 					CachedInputRatio: nativeRate(1.2),
 				},
 			},
-				adaptor.TimeWindow{
+				{
 					Name:     "qianfan-holiday-offpeak",
 					TimeZone: "Asia/Shanghai",
-					Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+					Ranges: []adaptor.ClockRange{{
 						Start: "22:00",
 						End:   "08:00",
 					},
@@ -42,10 +42,10 @@ func otherModels() map[string]adaptor.ModelConfig {
 						CachedInputRatio: nativeRate(1.2),
 					},
 				},
-				adaptor.TimeWindow{
+				{
 					Name:     "qianfan-peak",
 					TimeZone: "Asia/Shanghai",
-					Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+					Ranges: []adaptor.ClockRange{{
 						Start: "08:00",
 						End:   "22:00",
 					},

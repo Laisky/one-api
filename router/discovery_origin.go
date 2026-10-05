@@ -10,8 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Laisky/one-api/common/config"
 	"github.com/gin-gonic/gin"
+
+	"github.com/Laisky/one-api/common/config"
 )
 
 const discoveryTemplateOrigin = "https://oneapi.laisky.com"

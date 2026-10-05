@@ -2,15 +2,17 @@ package openai
 
 import (
 	"context"
+	"strings"
+
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/common/claudevision"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
-	"github.com/gin-gonic/gin"
-	"strings"
 )
 
 // claudeImageReservationModel resolves an Azure deployment alias for admission only.

@@ -66,10 +66,10 @@ func deepseek_aiModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(1.5),
 			CompletionRatio:  3,
 			CachedInputRatio: nativeRate(0.15),
-			TimeWindows: []adaptor.TimeWindow{adaptor.TimeWindow{
+			TimeWindows: []adaptor.TimeWindow{{
 				Name:     "siliconflow-daypart",
 				TimeZone: "Asia/Shanghai",
-				Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+				Ranges: []adaptor.ClockRange{{
 					Start: "02:00",
 					End:   "08:00",
 				},
@@ -80,14 +80,14 @@ func deepseek_aiModels() map[string]adaptor.ModelConfig {
 					CachedInputRatio: nativeRate(0.15),
 				},
 			},
-				adaptor.TimeWindow{
+				{
 					Name:     "siliconflow-daypart",
 					TimeZone: "Asia/Shanghai",
-					Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+					Ranges: []adaptor.ClockRange{{
 						Start: "00:00",
 						End:   "02:00",
 					},
-						adaptor.ClockRange{
+						{
 							Start: "08:00",
 							End:   "00:00",
 						},

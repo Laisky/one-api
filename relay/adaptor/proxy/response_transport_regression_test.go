@@ -15,9 +15,9 @@ import (
 
 // proxyObservedBody records closure and can assert behavior before a later read.
 type proxyObservedBody struct {
-	reader io.Reader
-	closed bool
-	reads int
+	reader     io.Reader
+	closed     bool
+	reads      int
 	beforeRead func(int)
 }
 
@@ -45,7 +45,7 @@ type proxyBrokenWriter struct {
 // Write deterministically fails without retaining response bytes.
 func (w proxyBrokenWriter) Write(p []byte) (int, error) {
 	if w.short {
-		return len(p)-1, nil
+		return len(p) - 1, nil
 	}
 	return 0, io.ErrClosedPipe
 }

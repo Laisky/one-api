@@ -11,11 +11,12 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
 	relaymodel "github.com/Laisky/one-api/relay/model"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSecurityDeferredToolProvenance keeps trust out of caller JSON, including

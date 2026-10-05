@@ -12,11 +12,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/relaymode"
-	"github.com/stretchr/testify/require"
 )
 
 // TestProtocolAuditZhipuVideoLedger proves per-call and explicit free tariffs,

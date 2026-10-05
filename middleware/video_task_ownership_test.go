@@ -20,7 +20,7 @@ import (
 func TestXAIVideoTaskOwner(t *testing.T) {
 	for _, tc := range []struct {
 		name, id, allowed string
-		user, want       int
+		user, want        int
 	}{
 		{"owner", "xai-job", "", 10, http.StatusNoContent},
 		{"other_user", "xai-job", "", 11, http.StatusNotFound},

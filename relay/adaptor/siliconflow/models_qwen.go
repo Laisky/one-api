@@ -87,7 +87,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		"Qwen/Qwen3.5-122B-A10B": {
 			Ratio:           nativeRate(0.8),
 			CompletionRatio: 8,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(2),
 				CompletionRatio:     8,
 				InputTokenThreshold: 128000,
@@ -106,7 +106,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		"Qwen/Qwen3.5-27B": {
 			Ratio:           nativeRate(0.6),
 			CompletionRatio: 8,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1.8),
 				CompletionRatio:     8,
 				InputTokenThreshold: 128000,
@@ -125,7 +125,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		"Qwen/Qwen3.5-35B-A3B": {
 			Ratio:           nativeRate(0.4),
 			CompletionRatio: 8,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1.6),
 				CompletionRatio:     8,
 				InputTokenThreshold: 128000,

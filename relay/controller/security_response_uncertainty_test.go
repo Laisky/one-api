@@ -3,12 +3,14 @@ package controller
 import (
 	"context"
 	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
-	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 // TestSecurityResponseUnknownUsageRetainsHold checks the existing settlement

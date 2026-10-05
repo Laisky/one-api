@@ -47,43 +47,43 @@ var ModelRatios = adaptor.JoinModelCatalogs(
 // OpenRouterToolingDefaults retains this provider's separately metered tool defaults.
 var OpenRouterToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{
-		"openai_mini_native_search_high": adaptor.ToolPricingConfig{
+		"openai_mini_native_search_high": {
 			UsdPerCall: 0.03,
 		},
-		"openai_mini_native_search_low": adaptor.ToolPricingConfig{
+		"openai_mini_native_search_low": {
 			UsdPerCall: 0.025,
 		},
-		"openai_mini_native_search_medium": adaptor.ToolPricingConfig{
+		"openai_mini_native_search_medium": {
 			UsdPerCall: 0.0275,
 		},
-		"openai_native_search_high": adaptor.ToolPricingConfig{
+		"openai_native_search_high": {
 			UsdPerCall: 0.05,
 		},
-		"openai_native_search_low": adaptor.ToolPricingConfig{
+		"openai_native_search_low": {
 			UsdPerCall: 0.03,
 		},
-		"openai_native_search_medium": adaptor.ToolPricingConfig{
+		"openai_native_search_medium": {
 			UsdPerCall: 0.035,
 		},
-		"perplexity_native_search_high": adaptor.ToolPricingConfig{
+		"perplexity_native_search_high": {
 			UsdPerCall: 0.012,
 		},
-		"perplexity_native_search_low": adaptor.ToolPricingConfig{
+		"perplexity_native_search_low": {
 			UsdPerCall: 0.005,
 		},
-		"perplexity_native_search_medium": adaptor.ToolPricingConfig{
+		"perplexity_native_search_medium": {
 			UsdPerCall: 0.008,
 		},
-		"perplexity_pro_native_search_high": adaptor.ToolPricingConfig{
+		"perplexity_pro_native_search_high": {
 			UsdPerCall: 0.014,
 		},
-		"perplexity_pro_native_search_low": adaptor.ToolPricingConfig{
+		"perplexity_pro_native_search_low": {
 			UsdPerCall: 0.006,
 		},
-		"perplexity_pro_native_search_medium": adaptor.ToolPricingConfig{
+		"perplexity_pro_native_search_medium": {
 			UsdPerCall: 0.01,
 		},
-		"web_plugin_exa": adaptor.ToolPricingConfig{
+		"web_plugin_exa": {
 			UsdPerCall: 0.02,
 		},
 	},

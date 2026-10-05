@@ -1,8 +1,9 @@
 package model
 
 import (
-	"github.com/Laisky/errors/v2"
 	"math"
+
+	"github.com/Laisky/errors/v2"
 )
 
 // PerCallPricingLocal stores an explicit USD-per-thousand-invocations tariff.

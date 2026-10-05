@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
-	"github.com/stretchr/testify/require"
 )
 
 // providerCopyTransport confines all provider and polling requests to the local fixture.

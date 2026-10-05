@@ -11,14 +11,15 @@ import (
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	glog "github.com/Laisky/go-utils/v6/log"
-	"github.com/Laisky/one-api/common/client"
-	"github.com/Laisky/one-api/common/config"
-	"github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/zap"
 	"github.com/Laisky/zap/zapcore"
 	"github.com/Laisky/zap/zaptest/observer"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 // TestReviewChannelProbeURLPrivacy exercises the actual operator probe, including

@@ -9,11 +9,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/relay/meta"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
 )
 
 // TestReviewEndpointCredentialDispatch exercises real HTTP dispatch and captured

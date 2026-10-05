@@ -1,12 +1,13 @@
 package relay_test
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestProductionCatalogSources checks that maintaining models requires Go code

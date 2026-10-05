@@ -643,7 +643,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(5),
 			CompletionRatio:  6,
 			CachedInputRatio: nativeRate(0.5),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1e+01),
 				CompletionRatio:     4.5,
 				CachedInputRatio:    nativeRate(1),
@@ -664,7 +664,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(5),
 			CompletionRatio:  6,
 			CachedInputRatio: nativeRate(0.5),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1e+01),
 				CompletionRatio:     4.5,
 				CachedInputRatio:    nativeRate(1),

@@ -15,8 +15,9 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/zap"
+
+	"github.com/Laisky/one-api/common/logger"
 )
 
 const (

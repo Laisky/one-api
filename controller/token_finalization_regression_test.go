@@ -3,14 +3,16 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/Laisky/one-api/common/helper"
-	"github.com/Laisky/one-api/model"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/model"
 )
 
 // seedFinalizationReservation reserves 100 units through production admission.

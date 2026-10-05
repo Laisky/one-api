@@ -3,6 +3,7 @@ package anthropic
 import (
 	"bytes"
 	"encoding/json"
+
 	"github.com/Laisky/errors/v2"
 )
 

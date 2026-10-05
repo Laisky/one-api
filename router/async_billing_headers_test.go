@@ -11,11 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/asyncvideo"
 	relaycontroller "github.com/Laisky/one-api/relay/controller"
-	"github.com/stretchr/testify/require"
 )
 
 // TestAsyncBillingHeaderChargeReachesWallet exercises the shipped synchronous

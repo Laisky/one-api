@@ -3,8 +3,9 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestClaude431NativeImageReservation checks URL, file and nested images at both estimation sizes.

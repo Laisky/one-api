@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Laisky/one-api/relay/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/mcp"
 )
 
 // TestMCP433ReviewGatewayMetadataCopy verifies bounded-size copies, capability filtering and caller immutability.

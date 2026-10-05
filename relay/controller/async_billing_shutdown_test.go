@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/asyncvideo"
 	"github.com/Laisky/one-api/relay/meta"
-	"github.com/stretchr/testify/require"
 )
 
 // shutdownReceiptProvider cancels the process operation after the upstream has

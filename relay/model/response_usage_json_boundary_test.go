@@ -2,9 +2,10 @@ package model
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestResponseUsageJSONReviewBoundary retains independent JSON byte oracles for raw deltas, application keys, and separate items.

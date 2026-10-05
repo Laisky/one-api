@@ -19,8 +19,8 @@ import (
 func TestSystematicImageResolutionBilling(t *testing.T) {
 	for _, tc := range []struct {
 		name, size, resolution, wantSize string
-		wantMultiplier                  float64
-		wantError                       bool
+		wantMultiplier                   float64
+		wantError                        bool
 	}{
 		{"native_2k", "", "2k", "2048x2048", 2, false},
 		{"native_normalized", "", " 2K ", "2048x2048", 2, false},

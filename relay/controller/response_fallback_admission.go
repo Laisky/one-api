@@ -5,10 +5,11 @@ import (
 	"net/http"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
-	"github.com/gin-gonic/gin"
 )
 
 // prepareResponseFallbackInput validates caller input before snapshotting or

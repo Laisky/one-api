@@ -18,7 +18,7 @@ func TestGPT6SolLunaEffectivePricing(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name                        string
+		name                         string
 		input, cached, write, output float64
 	}{
 		{"gpt-6-sol", 2, 0.2, 2.5, 10},

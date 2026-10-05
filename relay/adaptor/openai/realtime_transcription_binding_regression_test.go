@@ -8,11 +8,12 @@ import (
 	"testing"
 	"time"
 
-	rmeta "github.com/Laisky/one-api/relay/meta"
-	"github.com/Laisky/one-api/relay/relaymode"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
+
+	rmeta "github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // TestRealtimeTranscriptionBindingWire drives the real handler against a local

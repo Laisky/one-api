@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Laisky/one-api/relay/meta"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/meta"
 )
 
 // TestSecurityProxyCredentialsNeverReachUpstream exercises the actual header
@@ -19,8 +20,8 @@ func TestSecurityProxyCredentialsNeverReachUpstream(t *testing.T) {
 	const gatewayKey = "sk-gateway-security-fixture"
 	const upstreamKey = "Bearer upstream-security-fixture"
 	cases := []struct {
-		name string
-		headers http.Header
+		name     string
+		headers  http.Header
 		protocol string
 	}{
 		{"authorization", http.Header{"Authorization": {"Bearer " + gatewayKey}}, ""},
@@ -29,10 +30,10 @@ func TestSecurityProxyCredentialsNeverReachUpstream(t *testing.T) {
 		{"cookie", http.Header{"Cookie": {"session=" + gatewayKey}}, ""},
 		{"websocket", http.Header{"Sec-Websocket-Protocol": {"realtime, openai-insecure-api-key." + gatewayKey + ", openai-beta.realtime-v1"}}, "realtime, openai-beta.realtime-v1"},
 		{"mixed-and-repeated", http.Header{
-			"Authorization": {"Bearer " + gatewayKey},
-			"X-Api-Key": {gatewayKey, gatewayKey + "-second"},
-			"Api-Key": {gatewayKey},
-			"Cookie": {"session=" + gatewayKey},
+			"Authorization":       {"Bearer " + gatewayKey},
+			"X-Api-Key":           {gatewayKey, gatewayKey + "-second"},
+			"Api-Key":             {gatewayKey},
+			"Cookie":              {"session=" + gatewayKey},
 			"Proxy-Authorization": {"Bearer " + gatewayKey},
 		}, ""},
 		{"noncanonical-header-map", http.Header{"x-api-key": {gatewayKey}, "aPi-KeY": {gatewayKey}, "cookie": {"session=" + gatewayKey}}, ""},

@@ -1,11 +1,13 @@
 package deepseek
 
 import (
-	"github.com/Laisky/one-api/relay/billing/ratio"
-	"github.com/Laisky/one-api/relay/pricing"
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/pricing"
 )
 
 // TestProContinuesAfterSeptember14 checks the revised official service notice

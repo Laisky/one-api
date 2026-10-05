@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"encoding/json"
+
 	"github.com/Laisky/one-api/relay/model"
 )
 

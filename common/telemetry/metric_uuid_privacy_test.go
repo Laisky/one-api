@@ -11,13 +11,14 @@ import (
 	"testing"
 	"time"
 
-	recorder "github.com/Laisky/one-api/monitor/otel"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	apimetric "go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+
+	recorder "github.com/Laisky/one-api/monitor/otel"
 )
 
 // TestPrivateUUIDMetricsPreserveDistinctOperationalSeries uses the real recorder,

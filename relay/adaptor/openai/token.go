@@ -12,8 +12,9 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
-	"github.com/Laisky/one-api/internal/tokenizer"
 	"github.com/Laisky/zap"
+
+	tiktoken "github.com/Laisky/one-api/internal/tokenizer"
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"

@@ -18,8 +18,8 @@ func TestResponseUsageFramingAndProvisionalInput(t *testing.T) {
 		estimated     bool
 	}{
 		{
-			name: "multiline object value is not an independent event",
-			body: "data: {\"usage\":\ndata: {\"prompt_tokens\":7,\"completion_tokens\":11}\ndata: }\n\n",
+			name:  "multiline object value is not an independent event",
+			body:  "data: {\"usage\":\ndata: {\"prompt_tokens\":7,\"completion_tokens\":11}\ndata: }\n\n",
 			input: 7, output: 11,
 		},
 		{
@@ -35,8 +35,8 @@ func TestResponseUsageFramingAndProvisionalInput(t *testing.T) {
 			input: 29, output: 11, estimated: true,
 		},
 		{
-			name: "final Responses zero remains authoritative",
-			body: "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":0,\"output_tokens\":11}}}\n\n",
+			name:  "final Responses zero remains authoritative",
+			body:  "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":0,\"output_tokens\":11}}}\n\n",
 			input: 0, output: 11,
 		},
 		{

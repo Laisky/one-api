@@ -5,11 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	"net/http"
+
+	"github.com/stretchr/testify/require"
+
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
 	relaymodel "github.com/Laisky/one-api/relay/model"
-	"github.com/stretchr/testify/require"
-	"net/http"
 )
 
 // TestAsyncVideo413CannotReopenPaidReplay drives the outer capacity-budget

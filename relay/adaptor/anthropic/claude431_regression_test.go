@@ -5,9 +5,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Laisky/one-api/relay/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // TestClaude431ThinkingConversion checks mode, effort, limits, and caller ownership at the public converter.

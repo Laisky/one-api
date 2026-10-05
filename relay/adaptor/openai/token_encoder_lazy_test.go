@@ -4,8 +4,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Laisky/one-api/internal/tokenizer"
 	"github.com/stretchr/testify/require"
+
+	tiktoken "github.com/Laisky/one-api/internal/tokenizer"
 )
 
 // encodingLoadedForTest reports whether an encoding has already been built and

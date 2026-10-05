@@ -8,10 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Laisky/one-api/relay/adaptor/openai"
-	"github.com/Laisky/one-api/relay/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // TestClaude431ResponsesControls verifies actual Responses-to-Chat-to-Claude conversion for all five effort levels.

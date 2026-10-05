@@ -14,8 +14,9 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
-	"github.com/Laisky/one-api/model"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/model"
 )
 
 // TestMCPProgressStreaming verifies live request-correlated progress, compact/multiline events and terminal delivery.

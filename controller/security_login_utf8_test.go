@@ -7,10 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSecurityLoginRejectsInvalidWireUTF8 exercises the real login route and

@@ -2,10 +2,12 @@ package mcp
 
 import (
 	"encoding/json"
-	"github.com/Laisky/one-api/model"
-	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/model"
 )
 
 // TestSecurityWhitelistPolicyDisclosure verifies translated effective-policy

@@ -245,7 +245,7 @@ func anthropicModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio:  nativeRate(0.3),
 			CacheWrite5mRatio: nativeRate(3.75),
 			CacheWrite1hRatio: nativeRate(6),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(6),
 				CompletionRatio:     3.75,
 				CachedInputRatio:    nativeRate(0.6),
@@ -268,7 +268,7 @@ func anthropicModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio:  nativeRate(0.3),
 			CacheWrite5mRatio: nativeRate(3.75),
 			CacheWrite1hRatio: nativeRate(6),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(6),
 				CompletionRatio:     3.75,
 				CachedInputRatio:    nativeRate(0.6),

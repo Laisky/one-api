@@ -7,10 +7,11 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/model"
-	"github.com/gin-gonic/gin"
 )
 
 type httpContentBlock struct {

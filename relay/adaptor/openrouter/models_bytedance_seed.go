@@ -9,7 +9,7 @@ func bytedance_seedModels() map[string]adaptor.ModelConfig {
 		"bytedance-seed/seed-1.6": {
 			Ratio:           nativeRate(0.25),
 			CompletionRatio: 8,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.5),
 				CompletionRatio:     8,
 				InputTokenThreshold: 128000,
@@ -26,7 +26,7 @@ func bytedance_seedModels() map[string]adaptor.ModelConfig {
 		"bytedance-seed/seed-1.6-flash": {
 			Ratio:           nativeRate(0.075),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.09999999999999999),
 				CompletionRatio:     8,
 				InputTokenThreshold: 128000,
@@ -54,7 +54,7 @@ func bytedance_seedModels() map[string]adaptor.ModelConfig {
 		"bytedance-seed/seed-2.0-code": {
 			Ratio:           nativeRate(0.5),
 			CompletionRatio: 6,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1),
 				CompletionRatio:     6,
 				InputTokenThreshold: 128000,
@@ -73,7 +73,7 @@ func bytedance_seedModels() map[string]adaptor.ModelConfig {
 		"bytedance-seed/seed-2.0-lite": {
 			Ratio:           nativeRate(0.25),
 			CompletionRatio: 8,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.5),
 				CompletionRatio:     8,
 				InputTokenThreshold: 128000,
@@ -92,7 +92,7 @@ func bytedance_seedModels() map[string]adaptor.ModelConfig {
 		"bytedance-seed/seed-2.0-mini": {
 			Ratio:           nativeRate(0.09999999999999999),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.19999999999999998),
 				CompletionRatio:     4,
 				InputTokenThreshold: 128000,

@@ -2,11 +2,13 @@ package controller
 
 import (
 	"context"
-	"github.com/Laisky/one-api/model"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	"net/http"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+
+	"github.com/Laisky/one-api/model"
 )
 
 // TestExternalFinalizationFailedWritesRetainPending verifies ordinary balance

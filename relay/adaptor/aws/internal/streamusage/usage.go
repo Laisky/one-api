@@ -3,16 +3,18 @@ package streamusage
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+
 	"github.com/Laisky/errors/v2"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
-	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
-	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
 // Observer keeps billable SDK evidence independently of successful SSE delivery.

@@ -2,12 +2,14 @@ package openai_compatible
 
 import (
 	"encoding/json"
-	"github.com/Laisky/errors/v2"
-	"github.com/Laisky/go-utils/v6/log"
-	"github.com/Laisky/one-api/relay/model"
-	"github.com/Laisky/zap"
 	"net/http"
 	"strings"
+
+	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/go-utils/v6/log"
+	"github.com/Laisky/zap"
+
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // StreamingContext holds shared streaming state for unified architecture and provides

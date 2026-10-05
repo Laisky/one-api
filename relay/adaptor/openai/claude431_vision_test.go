@@ -2,15 +2,17 @@ package openai
 
 import (
 	"context"
+	"net/http/httptest"
+	"testing"
+
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
-	"net/http/httptest"
-	"testing"
 )
 
 // TestClaude431ImageReservation verifies documented image allowances without network fetches.

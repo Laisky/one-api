@@ -39,10 +39,12 @@
 package zai
 
 import (
-	"github.com/Laisky/errors/v2"
-	"github.com/Laisky/one-api/relay/relaymode"
 	"io"
 	"net/http"
+
+	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/relay/relaymode"
 
 	"github.com/gin-gonic/gin"
 

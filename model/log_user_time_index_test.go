@@ -9,12 +9,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Laisky/one-api/common"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
+
+	"github.com/Laisky/one-api/common"
 )
 
 const userTimeIndex = "idx_logs_user_created_at_id"

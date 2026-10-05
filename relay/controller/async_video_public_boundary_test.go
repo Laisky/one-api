@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Laisky/one-api/model"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/model"
 )
 
 // TestAsyncVideoPublicResultRequiresSettlement validates the public serializer,

@@ -1,9 +1,11 @@
 package stepfun
 
 import (
-	"github.com/Laisky/one-api/relay/billing/ratio"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 // TestStep5PublishedCatalog pins the domestic tariff and API capabilities with

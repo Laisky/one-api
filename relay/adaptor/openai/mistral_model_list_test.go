@@ -3,9 +3,10 @@ package openai
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/relay/adaptor/mistral"
 	"github.com/Laisky/one-api/relay/channeltype"
-	"github.com/stretchr/testify/require"
 )
 
 // TestPR421MistralAudioListings checks every audio alias in the dynamic catalog,

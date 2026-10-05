@@ -10,13 +10,14 @@ import (
 	"testing"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSecurityDeferredToolNativeToConvertedRetry verifies the current provider determines schema admission after a real failed native attempt.

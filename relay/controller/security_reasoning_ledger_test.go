@@ -8,12 +8,13 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/channeltype"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSecurityReasoningHTTPSettlement reaches the production relay, adaptor and durable owner/token ledger.

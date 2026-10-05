@@ -8,10 +8,11 @@ import (
 	"testing"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
-	"github.com/Laisky/one-api/common/ctxkey"
-	"github.com/Laisky/one-api/relay/streaming"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/streaming"
 )
 
 // canceledEOFWriter makes cancellation occur after actual delta delivery. Its

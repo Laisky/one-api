@@ -9,9 +9,10 @@ import (
 	"testing"
 
 	"github.com/Laisky/errors/v2"
-	metalib "github.com/Laisky/one-api/relay/meta"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	metalib "github.com/Laisky/one-api/relay/meta"
 )
 
 // TestCohereSearchReceiptDecode checks presence, invalid numbers, and reused receivers.

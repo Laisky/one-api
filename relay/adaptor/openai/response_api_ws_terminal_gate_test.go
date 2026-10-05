@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	rmodel "github.com/Laisky/one-api/relay/model"
 	"github.com/stretchr/testify/require"
+
+	rmodel "github.com/Laisky/one-api/relay/model"
 )
 
 // TestResponseWSTerminalGateRejectsProvisional checks existing extraction,

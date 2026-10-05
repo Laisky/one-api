@@ -82,7 +82,7 @@ func minimaxModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(0.3),
 			CompletionRatio:  4,
 			CachedInputRatio: nativeRate(0.06),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.6),
 				CompletionRatio:     4,
 				CachedInputRatio:    nativeRate(0.12),

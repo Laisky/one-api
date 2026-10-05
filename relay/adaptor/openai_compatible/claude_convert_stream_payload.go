@@ -2,10 +2,12 @@ package openai_compatible
 
 import (
 	"encoding/json"
-	"github.com/Laisky/errors/v2"
-	relaymodel "github.com/Laisky/one-api/relay/model"
 	"strconv"
 	"strings"
+
+	"github.com/Laisky/errors/v2"
+
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // parseStreamChunk decodes Chat or Responses stream payloads.

@@ -3,16 +3,18 @@ package anthropic
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/model"
-	"github.com/Laisky/zap"
-	"github.com/gin-gonic/gin"
-	"time"
 )
 
 // stopReasonClaude2OpenAI translates an Anthropic termination reason without losing unknown reasons.

@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Laisky/one-api/model"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/model"
 )
 
 // TestMCP433ReviewMetadataCopy verifies nil, empty, populated and large parameter copies on the HTTP wire.

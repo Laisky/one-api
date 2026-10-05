@@ -6,8 +6,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Laisky/one-api/internal/tokenizer"
 	"github.com/stretchr/testify/require"
+
+	tiktoken "github.com/Laisky/one-api/internal/tokenizer"
 
 	"github.com/Laisky/one-api/common/config"
 )

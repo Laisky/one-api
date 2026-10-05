@@ -45,7 +45,7 @@ func TestSystematicImageDefaultsPreserveDatedTariff(t *testing.T) {
 	const name = "grok-imagine-image-quality"
 	original := xai.ModelRatios[name].Image.Clone()
 	for _, tc := range []struct {
-		at string
+		at  string
 		usd float64
 	}{
 		{"2026-11-01T23:59:59Z", 0.07},

@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/asyncvideo"
 	"github.com/Laisky/one-api/relay/meta"
-	"github.com/stretchr/testify/require"
 )
 
 // auditPartialProvider models a second provider that returns an early preview

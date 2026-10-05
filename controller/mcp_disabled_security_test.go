@@ -2,9 +2,11 @@ package controller
 
 import (
 	"context"
-	"github.com/Laisky/one-api/model"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/model"
 )
 
 // TestMCPDisabledServersFailClosed checks both protocol paths, upstream isolation,

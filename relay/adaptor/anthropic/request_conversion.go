@@ -3,16 +3,18 @@ package anthropic
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"strings"
+
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/image"
 	"github.com/Laisky/one-api/relay/model"
-	"github.com/Laisky/zap"
-	"github.com/gin-gonic/gin"
-	"math"
-	"strings"
 )
 
 // isModelSupportThinking is used to check if the model supports extended thinking

@@ -4,15 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Laisky/one-api/common/client"
-	"github.com/Laisky/one-api/common/config"
-	"github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/relay/channeltype"
-	metalib "github.com/Laisky/one-api/relay/meta"
-	relaymodel "github.com/Laisky/one-api/relay/model"
-	"github.com/Laisky/one-api/relay/streaming"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +11,17 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/channeltype"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/streaming"
 )
 
 // TestSecurityStreamFundsEveryObservation verifies real atomic debits, not a

@@ -1,9 +1,10 @@
 package controller
 
 import (
+	"github.com/gin-gonic/gin"
+
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
-	"github.com/gin-gonic/gin"
 )
 
 // RelayResponseAPIGetHelper retrieves an owner-bound response for c and returns any authorization or storage error.

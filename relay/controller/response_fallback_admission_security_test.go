@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 )
 
 // TestSecurityResponseFallbackRejectsBeforeStateAccess supplies nil state/context

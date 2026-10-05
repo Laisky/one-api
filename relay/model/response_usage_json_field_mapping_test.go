@@ -2,9 +2,10 @@ package model
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestResponseUsageJSONFieldMapping preserves the exact application JSON bytes for done-only fallback usage.

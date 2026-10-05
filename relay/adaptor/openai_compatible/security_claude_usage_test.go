@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // TestSecurityClaudeStreamUsageNormalization compares the actual converter with the shared evidence normalizer.

@@ -2,8 +2,9 @@ package model
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestReviewLogEndpointFailsClosed exercises credential-bearing URL forms rather

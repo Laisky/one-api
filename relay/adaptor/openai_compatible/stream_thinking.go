@@ -1,7 +1,5 @@
 package openai_compatible
 
-import ()
-
 // DefaultBuilderCapacity defines the initial buffer size (4KB) for strings.Builder
 // instances handling typical streaming responses.
 //

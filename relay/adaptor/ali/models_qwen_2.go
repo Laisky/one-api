@@ -659,12 +659,12 @@ func qwen_2Models() map[string]adaptor.ModelConfig {
 		"qwen3-coder-30b-a3b-instruct": {
 			Ratio:           nativeRate(1.5),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(2.25),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
 			},
-				adaptor.ModelRatioTier{
+				{
 					Ratio:               nativeRate(3.75),
 					CompletionRatio:     4,
 					InputTokenThreshold: 128001,
@@ -683,12 +683,12 @@ func qwen_2Models() map[string]adaptor.ModelConfig {
 		"qwen3-coder-480b-a35b-instruct": {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(9),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
 			},
-				adaptor.ModelRatioTier{
+				{
 					Ratio:               nativeRate(15),
 					CompletionRatio:     4,
 					InputTokenThreshold: 128001,

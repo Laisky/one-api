@@ -10,10 +10,11 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSecurityLargeClaudeHTTPAdmission quotes the actual mapped request before the real HTTP dispatch and quota ledger.

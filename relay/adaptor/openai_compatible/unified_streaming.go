@@ -2,8 +2,15 @@ package openai_compatible
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/render"
@@ -12,11 +19,6 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
-	"github.com/Laisky/zap"
-	"github.com/gin-gonic/gin"
-	"io"
-	"net/http"
-	"strings"
 )
 
 // UnifiedStreamProcessing handles the core streaming logic shared between handlers

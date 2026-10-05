@@ -1,9 +1,11 @@
 package adaptor_test
 
 import (
-	"github.com/Laisky/one-api/relay/adaptor"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/adaptor"
 )
 
 // TestJoinModelCatalogs checks disjoint assembly, duplicate rejection and explicit

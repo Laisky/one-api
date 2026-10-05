@@ -5,8 +5,9 @@ import (
 	"math"
 	"testing"
 
-	"github.com/Laisky/one-api/relay/model"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // TestCohereRerankSearchBudget covers billing chunk boundaries, model-specific

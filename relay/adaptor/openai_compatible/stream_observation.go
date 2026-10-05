@@ -2,12 +2,14 @@ package openai_compatible
 
 import (
 	"context"
-	"github.com/Laisky/one-api/relay/model"
-	"github.com/Laisky/one-api/relay/streaming"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"sync"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/streaming"
 )
 
 // ObserveStreamChunk accounts a raw chunk before presentation rewriting.

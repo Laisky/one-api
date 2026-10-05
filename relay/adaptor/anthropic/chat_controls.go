@@ -3,9 +3,11 @@ package anthropic
 import (
 	"bytes"
 	"encoding/json"
+
 	"github.com/Laisky/errors/v2"
-	"github.com/Laisky/one-api/relay/model"
 	"github.com/gin-gonic/gin"
+
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // decodeClaudeJSON decodes complete JSON while keeping numeric tool arguments exact.

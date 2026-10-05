@@ -5,10 +5,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Laisky/one-api/relay/meta"
-	"github.com/Laisky/one-api/relay/relaymode"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // TestGeminiImageUsageEstimateKeepsReservation checks missing-receipt provenance while authoritative stream receipts replace the image estimate.

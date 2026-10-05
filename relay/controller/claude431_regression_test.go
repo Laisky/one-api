@@ -2,8 +2,9 @@ package controller
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestClaude431NativeThinking checks final native rewriting with immutable signed history and opaque integers.

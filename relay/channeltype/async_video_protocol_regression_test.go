@@ -3,8 +3,9 @@ package channeltype
 import (
 	"testing"
 
-	"github.com/Laisky/one-api/relay/relaymode"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // TestMuAPINativeVideoCapabilityIsIsolated verifies native capability never

@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Laisky/one-api/model"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+
+	"github.com/Laisky/one-api/model"
 )
 
 // TestMCPResolutionBoundsDatabaseWork checks that separators and oversized raw

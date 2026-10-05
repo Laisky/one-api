@@ -1,11 +1,13 @@
 package openai
 
 import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/relaymode"
-	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 // TestReviewGitHubProxyURLDoesNotNormalize preserves proxy paths while the

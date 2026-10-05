@@ -9,13 +9,14 @@ import (
 	"testing"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 )
 
 // TestAsyncVideoGlobalRateLimitCoversPrepaidReads verifies the limiter executes

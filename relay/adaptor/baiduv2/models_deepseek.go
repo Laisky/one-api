@@ -10,10 +10,10 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(4.5),
 			CompletionRatio:  3,
 			CachedInputRatio: nativeRate(0.15),
-			TimeWindows: []adaptor.TimeWindow{adaptor.TimeWindow{
+			TimeWindows: []adaptor.TimeWindow{{
 				Name:     "qianfan-holiday-peak",
 				TimeZone: "Asia/Shanghai",
-				Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+				Ranges: []adaptor.ClockRange{{
 					Start: "08:00",
 					End:   "22:00",
 				},
@@ -26,10 +26,10 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 					CachedInputRatio: nativeRate(0.18000000000000002),
 				},
 			},
-				adaptor.TimeWindow{
+				{
 					Name:     "qianfan-holiday-offpeak",
 					TimeZone: "Asia/Shanghai",
-					Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+					Ranges: []adaptor.ClockRange{{
 						Start: "22:00",
 						End:   "08:00",
 					},
@@ -42,10 +42,10 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 						CachedInputRatio: nativeRate(0.09000000000000001),
 					},
 				},
-				adaptor.TimeWindow{
+				{
 					Name:     "qianfan-peak",
 					TimeZone: "Asia/Shanghai",
-					Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+					Ranges: []adaptor.ClockRange{{
 						Start: "08:00",
 						End:   "22:00",
 					},
@@ -63,10 +63,10 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(1),
 			CompletionRatio:  4,
 			CachedInputRatio: nativeRate(0.02),
-			TimeWindows: []adaptor.TimeWindow{adaptor.TimeWindow{
+			TimeWindows: []adaptor.TimeWindow{{
 				Name:     "qianfan-holiday-peak",
 				TimeZone: "Asia/Shanghai",
-				Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+				Ranges: []adaptor.ClockRange{{
 					Start: "08:00",
 					End:   "22:00",
 				},
@@ -79,10 +79,10 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 					CachedInputRatio: nativeRate(0.024),
 				},
 			},
-				adaptor.TimeWindow{
+				{
 					Name:     "qianfan-holiday-offpeak",
 					TimeZone: "Asia/Shanghai",
-					Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+					Ranges: []adaptor.ClockRange{{
 						Start: "22:00",
 						End:   "08:00",
 					},
@@ -95,10 +95,10 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 						CachedInputRatio: nativeRate(0.012),
 					},
 				},
-				adaptor.TimeWindow{
+				{
 					Name:     "qianfan-peak",
 					TimeZone: "Asia/Shanghai",
-					Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+					Ranges: []adaptor.ClockRange{{
 						Start: "08:00",
 						End:   "22:00",
 					},
@@ -171,7 +171,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(2),
 			CompletionRatio:  1.5,
 			CachedInputRatio: nativeRate(0.4),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4),
 				CompletionRatio:     1.5,
 				CachedInputRatio:    nativeRate(0.4),

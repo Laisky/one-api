@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Laisky/one-api/relay/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // claude431Recorder supplies the close notification used by streaming responses in tests.

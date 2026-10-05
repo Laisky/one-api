@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
-	"github.com/stretchr/testify/require"
 )
 
 // TestImageDetailCannotDiscountUnchangedProviderInput compares provider image quotes using a fixed local geometry fixture.

@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/asyncvideo"
 	"github.com/Laisky/one-api/relay/meta"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 // otherVideoProvider exercises the public interface without MuAPI HTTP, fields

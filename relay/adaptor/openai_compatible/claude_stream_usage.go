@@ -1,8 +1,9 @@
 package openai_compatible
 
 import (
-	relaymodel "github.com/Laisky/one-api/relay/model"
 	"io"
+
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // claudeUsageReader observes bytes before presentation parsing and downstream

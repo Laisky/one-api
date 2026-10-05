@@ -174,12 +174,12 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		"qwen/qwen3-max": {
 			Ratio:           nativeRate(0.845),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1.4),
 				CompletionRatio:     4.0285714285714285,
 				InputTokenThreshold: 32768,
 			},
-				adaptor.ModelRatioTier{
+				{
 					Ratio:               nativeRate(2.11),
 					CompletionRatio:     4.004739336492891,
 					InputTokenThreshold: 131072,

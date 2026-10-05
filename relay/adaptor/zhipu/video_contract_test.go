@@ -1,10 +1,12 @@
 package zhipu
 
 import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/relaymode"
-	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 // TestProtocolAuditVideoLookup verifies both creation aliases and exact native

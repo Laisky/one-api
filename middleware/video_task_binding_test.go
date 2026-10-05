@@ -7,11 +7,12 @@ import (
 	"time"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
-	"github.com/Laisky/one-api/common/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/Laisky/one-api/common/logger"
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	dbmodel "github.com/Laisky/one-api/model"

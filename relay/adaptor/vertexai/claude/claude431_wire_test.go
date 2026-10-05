@@ -2,10 +2,11 @@ package vertexai
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestClaude431VertexPreparedWire verifies only transport-owned fields change in native bodies.

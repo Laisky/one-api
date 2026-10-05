@@ -3,11 +3,13 @@ package aws
 import (
 	"bytes"
 	"encoding/json"
-	relaymodel "github.com/Laisky/one-api/relay/model"
-	"github.com/Laisky/one-api/relay/relaymode"
-	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // TestClaude431AWSBetweenTools verifies valid small-output requests through the real SDK serializer.

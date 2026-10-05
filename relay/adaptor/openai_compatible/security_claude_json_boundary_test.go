@@ -2,13 +2,14 @@ package openai_compatible
 
 import (
 	"encoding/json"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSecurityClaudeJSONReviewBoundaryConverter checks actual delivered text and independent token oracles for reviewer JSON shapes.

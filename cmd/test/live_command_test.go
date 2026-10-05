@@ -11,9 +11,10 @@ import (
 	"time"
 
 	glog "github.com/Laisky/go-utils/v6/log"
-	sharedconfig "github.com/Laisky/one-api/common/config"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
+
+	sharedconfig "github.com/Laisky/one-api/common/config"
 )
 
 // TestRunLiveRESTGuardScenarioRequiresExactTransportError verifies that the

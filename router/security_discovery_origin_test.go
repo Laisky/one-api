@@ -12,9 +12,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/Laisky/one-api/common/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/common/config"
 )
 
 // discoveryTransport restricts the synthetic metadata-following client to local fixtures.

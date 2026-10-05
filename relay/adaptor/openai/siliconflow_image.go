@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
-	"github.com/gin-gonic/gin"
 )
 
 const siliconFlowImagePayloadKey = "relay.siliconflow_image_payload"

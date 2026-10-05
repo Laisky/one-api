@@ -39,7 +39,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 		"ERNIE-5.0": {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1e+01),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
@@ -50,7 +50,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 		"ERNIE-5.0-Thinking-Exp": {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1e+01),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
@@ -61,7 +61,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 		"ERNIE-5.0-Thinking-Latest": {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1e+01),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
@@ -72,7 +72,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 		"ERNIE-5.0-Thinking-Preview": {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1e+01),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
@@ -83,7 +83,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 		"ERNIE-5.1": {
 			Ratio:           nativeRate(4),
 			CompletionRatio: 4.5,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(6),
 				CompletionRatio:     3.6666666666666665,
 				InputTokenThreshold: 32001,
@@ -262,7 +262,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 		"ernie-5.0": {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               0.7142857142857143,
 				CompletionRatio:     4,
 				InputTokenThreshold: 32768,
@@ -279,7 +279,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 		"ernie-5.1": {
 			Ratio:           nativeRate(4),
 			CompletionRatio: 4.5,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(6),
 				CompletionRatio:     3.6666666666666665,
 				InputTokenThreshold: 32768,

@@ -3,9 +3,10 @@ package anthropic
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
-	"io"
 )
 
 // PrepareRequestBody applies known-model compatibility at the final prepared HTTP boundary.

@@ -4,6 +4,7 @@ import (
 	"net/url"
 
 	"github.com/Laisky/errors/v2"
+
 	"github.com/Laisky/one-api/model"
 )
 

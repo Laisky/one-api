@@ -3,6 +3,7 @@ package openai
 import (
 	"bytes"
 	"encoding/json"
+
 	"github.com/Laisky/errors/v2"
 )
 

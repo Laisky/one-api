@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Laisky/one-api/controller"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/controller"
 )
 
 // TestReviewRealtimeRoutesRejectCredentialMinting exercises the actual relay

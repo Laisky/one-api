@@ -1,9 +1,10 @@
 package model
 
 import (
-	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestVideoInputImagePriceRoundTrip verifies storage normalizes and retains image fees.

@@ -6,10 +6,11 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
-	"github.com/gin-gonic/gin"
 )
 
 // IsClaudeSonnet55 matches the published native ID, not third-party model namespaces.

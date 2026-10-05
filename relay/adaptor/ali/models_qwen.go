@@ -131,12 +131,12 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(0.15),
 			CompletionRatio:  10,
 			CachedInputRatio: nativeRate(0.030000000000000002),
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.6),
 				CompletionRatio:     10,
 				InputTokenThreshold: 128001,
 			},
-				adaptor.ModelRatioTier{
+				{
 					Ratio:               nativeRate(1.2),
 					CompletionRatio:     10,
 					InputTokenThreshold: 256001,
@@ -153,12 +153,12 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		"qwen-flash-2025-07-28": {
 			Ratio:           nativeRate(0.15),
 			CompletionRatio: 10,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.6),
 				CompletionRatio:     10,
 				InputTokenThreshold: 128001,
 			},
-				adaptor.ModelRatioTier{
+				{
 					Ratio:               nativeRate(1.2),
 					CompletionRatio:     10,
 					InputTokenThreshold: 256001,

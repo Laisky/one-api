@@ -99,7 +99,7 @@ func TestMCPReservationTerminalStates(t *testing.T) {
 					}
 				})
 			user, loadErr := model.GetUserById(fx.user.Id, true)
-				require.NoError(t, loadErr)
+			require.NoError(t, loadErr)
 			if outcome == "pre_canceled" {
 				require.Error(t, err)
 				require.Zero(t, calls)

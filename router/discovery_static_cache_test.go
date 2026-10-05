@@ -12,9 +12,10 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/Laisky/one-api/common/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/common/config"
 )
 
 // TestDiscoveryStaticAssetCachePolicy checks the production router's cache and

@@ -2,17 +2,19 @@ package controller
 
 import (
 	"encoding/json"
-	"github.com/Laisky/one-api/common/client"
-	"github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
-	"github.com/Laisky/one-api/relay/channeltype"
-	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 // TestSecurityClaudeJSONRawSnapshotLedger checks delivered raw JSON and durable owner/token/log accounting through local HTTP.

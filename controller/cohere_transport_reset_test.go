@@ -13,6 +13,9 @@ import (
 	"time"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/config"
@@ -23,8 +26,6 @@ import (
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
 	rcontroller "github.com/Laisky/one-api/relay/controller"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
 )
 
 // cohereDispatchObservation captures a complete provider request and both

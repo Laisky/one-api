@@ -64,10 +64,10 @@ func baichuanModels() map[string]adaptor.ModelConfig {
 		"Baichuan2-53B": {
 			Ratio:           nativeRate(2e+01),
 			CompletionRatio: 1,
-			TimeWindows: []adaptor.TimeWindow{adaptor.TimeWindow{
+			TimeWindows: []adaptor.TimeWindow{{
 				Name:     "baichuan-daypart",
 				TimeZone: "Asia/Shanghai",
-				Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+				Ranges: []adaptor.ClockRange{{
 					Start: "00:00",
 					End:   "08:00",
 				},
@@ -77,10 +77,10 @@ func baichuanModels() map[string]adaptor.ModelConfig {
 					CompletionRatio: 1,
 				},
 			},
-				adaptor.TimeWindow{
+				{
 					Name:     "baichuan-daypart",
 					TimeZone: "Asia/Shanghai",
-					Ranges: []adaptor.ClockRange{adaptor.ClockRange{
+					Ranges: []adaptor.ClockRange{{
 						Start: "08:00",
 						End:   "00:00",
 					},

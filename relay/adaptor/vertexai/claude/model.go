@@ -2,6 +2,7 @@ package vertexai
 
 import (
 	"encoding/json"
+
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/model"
 )

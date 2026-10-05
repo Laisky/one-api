@@ -225,7 +225,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		"xiaomi/mimo-v2.5-pro": {
 			Ratio:           nativeRate(7),
 			CompletionRatio: 3,
-			Tiers: []adaptor.ModelRatioTier{adaptor.ModelRatioTier{
+			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(14),
 				CompletionRatio:     3,
 				InputTokenThreshold: 256001,

@@ -9,9 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Laisky/one-api/common/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Laisky/one-api/common/config"
 )
 
 // securityBodyReader records actual source consumption and supports deterministic read failures.
