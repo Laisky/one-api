@@ -293,3 +293,71 @@ func TestSecurityGenerationTariffNativeResponsesFailsClosed(t *testing.T) {
 	require.Zero(t, calls.Load(), "an unreserved generation must not reach the provider")
 	require.Equal(t, balance, reloadUserQuota(t))
 }
+
+// TestSecurityLyriaUnpricedReceiptRetainsGeneration verifies a provider receipt
+// that the generation contract cannot price (an invalid or overflowing tools_cost
+// beside ordinary token counters) retains the full reservation with explicit
+// uncertainty instead of settling an authoritative free generation. Parameters: t
+// owns the fixture. Returns: none; valid and missing receipts are controls.
+func TestSecurityLyriaUnpricedReceiptRetainsGeneration(t *testing.T) {
+	for _, protocol := range []string{"chat", "responses", "messages"} {
+		for _, tc := range []struct {
+			name, usage string
+			uncertain   bool
+		}{
+			{name: "negative_tools_cost", usage: `,"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30,"tools_cost":-1}`, uncertain: true},
+			{name: "overflowing_tools_cost", usage: `,"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30,"tools_cost":9223372036854775807}`, uncertain: true},
+			{name: "zero_tools_cost", usage: `,"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30,"tools_cost":0}`},
+			{name: "missing_receipt"},
+		} {
+			t.Run(protocol+"/"+tc.name, func(t *testing.T) {
+				const balance = int64(100000)
+				xaiVideoSetup(t, balance, false)
+				audioData := base64.StdEncoding.EncodeToString(silentWAV(t, 1))
+				var calls atomic.Int32
+				reserved := make(chan int64, 1)
+				upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					calls.Add(1)
+					var user model.User
+					if err := model.DB.First(&user, fallbackUserID).Error; err == nil {
+						reserved <- user.Quota
+					}
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = io.WriteString(w, `{"id":"generation-fixture","object":"chat.completion","model":"`+lyriaClipModel+`","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Generated music","audio":{"id":"audio-fixture","data":"`+audioData+`","transcript":"Music"}}}]`+tc.usage+`}`)
+				}))
+				t.Cleanup(upstream.Close)
+				previous := client.HTTPClient
+				client.HTTPClient = upstream.Client()
+				t.Cleanup(func() { client.HTTPClient = previous })
+
+				path, body := lyriaProtocolRequest(protocol, false)
+				c, _, id := protocolContext(t, channeltype.OpenRouter, lyriaClipModel, path, body, upstream.URL+"/v1", balance, 1, false, nil)
+				apiErr := relayLyriaProtocol(c, protocol)
+				drainCriticalTasks(t)
+				require.Nil(t, apiErr)
+				require.EqualValues(t, 1, calls.Load())
+				require.Equal(t, balance-20000, <-reserved, "the generation must be reserved before provider work")
+				require.Equal(t, balance-20000, reloadUserQuota(t), "an unpriceable receipt must not refund the generation")
+				var token model.Token
+				require.NoError(t, model.DB.First(&token, fallbackTokenID).Error)
+				require.Equal(t, balance-20000, token.RemainQuota)
+				if protocol != "messages" {
+					require.Equal(t, int64(20000), requestCostQuota(t, id))
+				}
+				var logs []model.Log
+				require.NoError(t, model.LOG_DB.Where("request_id = ? AND type = ?", id, model.LogTypeConsume).Find(&logs).Error)
+				require.Len(t, logs, 1)
+				require.EqualValues(t, 20000, logs[0].Quota)
+				reason, _ := logs[0].Metadata["billing_estimate_reason"].(string)
+				switch {
+				case tc.uncertain && protocol != "messages":
+					// Claude Messages conversion rebuilds usage without tools_cost, so
+					// only the OpenAI-shaped receipts carry the unpriceable value.
+					require.NotEmpty(t, reason, "a retained unpriced receipt must be marked as an estimate")
+				case tc.name == "zero_tools_cost":
+					require.Empty(t, reason, "a valid receipt settles authoritatively")
+				}
+			})
+		}
+	}
+}
