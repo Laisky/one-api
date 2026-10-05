@@ -26,7 +26,7 @@ func TestSecurityResponseWSAmbiguousGuardedKeys(t *testing.T) {
 	cases := map[string]string{
 		"model-exact-duplicate":         `{"type":"response.create","model":"gpt-5","model":"gpt-4o-mini","input":"hi"}`,
 		"model-case-folded":             `{"type":"response.create","model":"gpt-4o-mini","Model":"gpt-5","input":"hi"}`,
-		"model-escaped-duplicate":       `{"type":"response.create","model":"gpt-5","model":"gpt-4o-mini","input":"hi"}`,
+		"model-escaped-duplicate":       `{"type":"response.create","model":"gpt-5","\u006dodel":"gpt-4o-mini","input":"hi"}`,
 		"type-duplicate":                `{"type":"response.cancel","type":"response.create","model":"gpt-4o-mini","input":"hi"}`,
 		"conversation-duplicate":        `{"type":"response.create","model":"gpt-4o-mini","conversation":"conv_x","conversation":null,"input":"hi"}`,
 		"previous-response-case-folded": `{"type":"response.create","model":"gpt-4o-mini","previous_response_id":"resp_gateway","Previous_Response_Id":"resp_foreign_provider","input":"hi"}`,

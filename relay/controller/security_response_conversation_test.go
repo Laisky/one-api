@@ -317,7 +317,8 @@ func TestSecurityResponseNativePreviousResponseQueryBoundRequest(t *testing.T) {
 	enableStateForTest(t)
 	upstream := newSecurityBackgroundUpstream(t, `{"id":"resp_query_bound","object":"response","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}`)
 	apiErr := runNativeResponseRelayAs(t, upstream, `{"model":"gpt-4o-mini","input":"hello","previous_response_id":"resp_foreign_provider_handle"}`, "text/plain", "Model=gpt-4o-mini&Version=1")
-	t.Logf("query-bound relay error: %v", apiErr)
+	require.Nil(t, apiErr, "the typed request names no parent, so the native call proceeds")
+	require.Len(t, upstream.forwarded(), 1, "the body check below must observe a dispatched request")
 	for _, body := range upstream.forwarded() {
 		require.NotContains(t, body, "resp_foreign_provider_handle", "an unresolved raw-body parent must never reach the provider")
 	}
