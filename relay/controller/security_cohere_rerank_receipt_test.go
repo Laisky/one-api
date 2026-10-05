@@ -162,3 +162,62 @@ func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 		})
 	}
 }
+
+// TestSecurityCohereRerankProviderErrors pins how the aggregate allowance settles
+// when Cohere answers with an HTTP error instead of a receipt. Explicit admission
+// rejections release the complete hold and keep retry available; other statuses
+// follow the existing uncertain-execution policy and retain the quoted allowance
+// exactly once with estimate provenance. No status creates measured usage.
+func TestSecurityCohereRerankProviderErrors(t *testing.T) {
+	for _, tc := range []struct {
+		status    int
+		charge    int64
+		retryable bool
+	}{
+		{status: http.StatusUnauthorized, retryable: true},
+		{status: http.StatusTooManyRequests, retryable: true},
+		{status: http.StatusBadRequest, charge: 13000},
+		{status: http.StatusInternalServerError, charge: 13000},
+	} {
+		t.Run(fmt.Sprintf("status_%d", tc.status), func(t *testing.T) {
+			securityImageAccount(t, 50000, 50000, false)
+			ch := securityImageChannel(t, channeltype.Cohere, "rerank-v3.5", `{"ratio":1000,"per_call":{"usd_per_thousand_calls":2}}`)
+			var calls atomic.Int32
+			var heldOwner, heldToken atomic.Int64
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				var user model.User
+				var token model.Token
+				if model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil {
+					heldOwner.Store(user.Quota)
+					heldToken.Store(token.RemainQuota)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = fmt.Fprint(w, `{"message":"synthetic provider error"}`)
+			}))
+			securityImageClient(t, server)
+			id := fmt.Sprintf("cohere-provider-error-%d", tc.status)
+			c := cohereAdmissionContext(ch, server.URL, id, "rerank-v3.5", 100, nil, 1)
+			c.Set(ctxkey.Channel, channeltype.Cohere)
+			apiErr := RelayRerankHelper(c)
+			drainCriticalTasks(t)
+
+			require.NotNil(t, apiErr, "a provider error must not be reported as success")
+			require.EqualValues(t, 1, calls.Load())
+			require.EqualValues(t, 50000-13000, heldOwner.Load(), "the aggregate allowance is reserved before dispatch")
+			require.EqualValues(t, 50000-13000, heldToken.Load())
+			securityImageLedger(t, id, 50000-tc.charge, 50000-tc.charge, tc.charge)
+			var entry model.Log
+			require.NoError(t, model.LOG_DB.Where("request_id = ?", id).First(&entry).Error)
+			encoded, err := json.Marshal(entry.Metadata)
+			require.NoError(t, err)
+			if tc.charge > 0 {
+				require.Contains(t, string(encoded), "uncertain_upstream_admission_upstream_http_error")
+			} else {
+				require.NotContains(t, string(encoded), "billing_estimated")
+			}
+			require.Equal(t, tc.retryable, BillingAllowsRetry(c), "only a released hold may be retried")
+		})
+	}
+}

@@ -14,11 +14,11 @@ import (
 // TestCohereSearchUnitsQuota checks exact decimal rounding and bounded arithmetic.
 func TestCohereSearchUnitsQuota(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		units      int64
+		name        string
+		units       int64
 		rate, group float64
-		want       int64
-		valid      bool
+		want        int64
+		valid       bool
 	}{
 		{name: "measured", units: 3, rate: 1000, group: 2, want: 6000, valid: true},
 		{name: "single_ceiling", units: 3, rate: 0.1, group: 2, want: 1, valid: true},
