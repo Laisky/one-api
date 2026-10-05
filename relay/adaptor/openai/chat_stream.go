@@ -24,10 +24,14 @@ import (
 	"github.com/Laisky/one-api/relay/streaming"
 )
 
+const nativeChatReceiptCompleteKey = "one_api.native_chat_receipt_complete"
+
 // StreamHandler processes streaming responses from OpenAI API
 // It handles incremental content delivery and accumulates the final response text
 // Returns error (if any), accumulated response text, and token usage information
 func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.ErrorWithStatusCode, string, *model.Usage) {
+	c.Set(nativeChatReceiptCompleteKey, false)
+	receiptComplete := false
 	lg := gmw.GetLogger(c)
 	metaInfo := metalib.GetByContext(c)
 	tracker := streaming.FromContext(c)
@@ -102,7 +106,8 @@ streamLoop:
 			switch relayMode {
 			case relaymode.ChatCompletions:
 				var streamResponse openai_compatible.ChatCompletionsStreamResponse
-				if err := json.NewDecoder(line.Large).Decode(&streamResponse); err != nil {
+				complete, err := openai_compatible.DecodeStreamReceipt(line.Large, &streamResponse)
+				if err != nil {
 					lg.Error("unmarshalling oversized stream data", zap.Error(err))
 					continue
 				}
@@ -110,6 +115,7 @@ streamLoop:
 				if len(streamResponse.Choices) == 0 && streamResponse.Usage == nil {
 					continue
 				}
+				receiptComplete = openai_compatible.NextStreamReceiptCompleteness(receiptComplete, complete, &streamResponse)
 
 				for i := range streamResponse.Choices {
 					if toolnamesafe.RestoreToolCallNames(c, streamResponse.Choices[i].Delta.ToolCalls) {
@@ -251,7 +257,7 @@ streamLoop:
 			var streamResponse openai_compatible.ChatCompletionsStreamResponse
 
 			// Parse the JSON response
-			err := json.Unmarshal([]byte(data[dataPrefixLength:]), &streamResponse)
+			complete, err := openai_compatible.DecodeStreamReceipt(strings.NewReader(data[dataPrefixLength:]), &streamResponse)
 			if err != nil {
 				lg.Error("unmarshalling stream data",
 					zap.String("data", data),
@@ -264,6 +270,7 @@ streamLoop:
 			if len(streamResponse.Choices) == 0 && streamResponse.Usage == nil {
 				continue
 			}
+			receiptComplete = openai_compatible.NextStreamReceiptCompleteness(receiptComplete, complete, &streamResponse)
 
 			// Restore any sanitized tool names back to client-facing originals
 			// before forwarding. The normal path emits raw upstream JSON, so we
@@ -399,6 +406,11 @@ streamLoop:
 	// Nil receipts retain the existing adaptor fallback policy.
 	if tracker != nil && usage != nil {
 		usage = tracker.UsageSnapshot()
+	}
+	completeNativeReceipt := relayMode == relaymode.ChatCompletions && receiptComplete && usage != nil && usage.BillingEstimateReason == ""
+	c.Set(nativeChatReceiptCompleteKey, completeNativeReceipt)
+	if completeNativeReceipt && usage.TotalTokens == 0 {
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
 
 	// Promote any top-level cached_tokens into the nested

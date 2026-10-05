@@ -3,9 +3,10 @@ package openai_compatible
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/one-api/relay/model"
-	"io"
 )
 
 // decodeStreamReceipt decodes the ordinary stream DTO while retaining presence
@@ -66,4 +67,14 @@ func nextStreamReceiptCompleteness(previous, complete bool, chunk *ChatCompletio
 		}
 	}
 	return previous
+}
+
+// DecodeStreamReceipt preserves receipt counter presence for native chat streams.
+func DecodeStreamReceipt(reader io.Reader, chunk *ChatCompletionsStreamResponse) (bool, error) {
+	return decodeStreamReceipt(reader, chunk)
+}
+
+// NextStreamReceiptCompleteness preserves measured-receipt chronology for native chat streams.
+func NextStreamReceiptCompleteness(previous, complete bool, chunk *ChatCompletionsStreamResponse) bool {
+	return nextStreamReceiptCompleteness(previous, complete, chunk)
 }
