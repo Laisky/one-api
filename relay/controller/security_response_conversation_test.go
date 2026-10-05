@@ -307,3 +307,18 @@ func TestSecurityResponseNativeConversationQueryBoundRequest(t *testing.T) {
 		require.NotContains(t, body, `"conversation"`)
 	}
 }
+
+// TestSecurityResponseNativePreviousResponseQueryBoundRequest proves the same
+// typed/raw split cannot smuggle an unowned previous_response_id past
+// resolveNativePreviousResponse: the typed request (bound from the query) names
+// no parent, so the raw body's parent must not reach the provider either.
+func TestSecurityResponseNativePreviousResponseQueryBoundRequest(t *testing.T) {
+	securityAdmissionSetup(t, 1_000_000)
+	enableStateForTest(t)
+	upstream := newSecurityBackgroundUpstream(t, `{"id":"resp_query_bound","object":"response","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}`)
+	apiErr := runNativeResponseRelayAs(t, upstream, `{"model":"gpt-4o-mini","input":"hello","previous_response_id":"resp_foreign_provider_handle"}`, "text/plain", "Model=gpt-4o-mini&Version=1")
+	t.Logf("query-bound relay error: %v", apiErr)
+	for _, body := range upstream.forwarded() {
+		require.NotContains(t, body, "resp_foreign_provider_handle", "an unresolved raw-body parent must never reach the provider")
+	}
+}
