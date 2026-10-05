@@ -25,12 +25,16 @@ type livePumpOptions struct {
 	writeTimeout time.Duration
 	drainTimeout time.Duration
 	lifetime     time.Duration
+	inputBudget  *liveInputBudget
 }
 
 // defaultLivePumpOptions returns production safety bounds. Parameters: none.
 // Returns: bounded options; each connection is limited to fifteen minutes.
 func defaultLivePumpOptions() livePumpOptions {
-	return livePumpOptions{writeTimeout: 10 * time.Second, drainTimeout: 2 * time.Second, lifetime: 15 * time.Minute}
+	return livePumpOptions{
+		writeTimeout: 10 * time.Second, drainTimeout: 2 * time.Second, lifetime: 15 * time.Minute,
+		inputBudget: &liveInputBudget{byteLimit: liveSessionInputBytes, frameLimit: liveSessionInputFrames},
+	}
 }
 
 // LiveTransport carries provider-owned connection settings into the shared
@@ -115,6 +119,11 @@ func LiveHandlerWithTransport(c *gin.Context, m *meta.Meta, transport LiveTransp
 		liveClose(client, websocket.ClosePolicyViolation, "gemini_live_invalid_setup")
 		return nil, liveLedgerUsage(realtime.NewLedger())
 	}
+	options := defaultLivePumpOptions()
+	if !options.inputBudget.reserve(len(setup)) {
+		liveClose(client, websocket.ClosePolicyViolation, "gemini_live_input_budget_exhausted")
+		return nil, liveLedgerUsage(realtime.NewLedger())
+	}
 	if err := liveWrite(upstream, websocket.TextMessage, setup, 10*time.Second); err != nil {
 		liveClose(client, websocket.CloseTryAgainLater, "gemini_live_setup_failed")
 		return nil, liveLedgerUsage(realtime.NewLedger())
@@ -135,9 +144,11 @@ func LiveHandlerWithTransport(c *gin.Context, m *meta.Meta, transport LiveTransp
 	}
 	_ = client.SetReadDeadline(time.Time{})
 	_ = upstream.SetReadDeadline(time.Time{})
-	usage := runLivePump(client, upstream, defaultLivePumpOptions())
+	usage := runLivePump(client, upstream, options)
 	lg.Debug("Gemini Live session finished", zap.Int("receipts", len(usage.Realtime.Records)),
-		zap.Bool("usage_gap", usage.Realtime.HasUsageGap()), zap.Int("billing_issues", len(usage.Realtime.Issues)))
+		zap.Bool("usage_gap", usage.Realtime.HasUsageGap()), zap.Int("billing_issues", len(usage.Realtime.Issues)),
+		zap.Int64("input_bytes", options.inputBudget.bytes), zap.Int64("input_frames", options.inputBudget.frames),
+		zap.Bool("input_budget_exhausted", options.inputBudget.exhausted))
 	return nil, usage
 }
 

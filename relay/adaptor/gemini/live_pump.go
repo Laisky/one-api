@@ -83,6 +83,12 @@ func copyLiveClient(client, upstream *websocket.Conn, state *livePumpState, opti
 		if toolResponse {
 			work = false
 		}
+		// Every native operation consumes the same resource allowance. Controls
+		// can trigger generation, and function results can contain large payloads.
+		if !options.inputBudget.reserve(len(data)) {
+			liveClose(client, websocket.ClosePolicyViolation, "gemini_live_input_budget_exhausted")
+			return
+		}
 		// Count before the write: a failed write can still have reached Google.
 		// This is a pending-evidence marker, not a client-supplied usage amount.
 		if work {

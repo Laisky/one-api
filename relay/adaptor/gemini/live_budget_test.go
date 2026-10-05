@@ -28,6 +28,9 @@ func TestGeminiLiveAggregateInputBoundary(t *testing.T) {
 			frame := liveBudgetFixtureFrame(t, operation, frameBytes)
 			observed := make(chan int, 1)
 			endpoint, results := liveFixture(t, channeltype.Gemini, "gemini-3.8-live", func(up *websocket.Conn) error {
+				if err := up.SetReadDeadline(time.Now().Add(time.Minute)); err != nil {
+					return errors.Wrap(err, "set aggregate fixture deadline")
+				}
 				if err := acknowledgeLiveFixture(up, "gemini-3.8-live"); err != nil {
 					return errors.Wrap(err, "acknowledge aggregate fixture")
 				}
@@ -46,13 +49,13 @@ func TestGeminiLiveAggregateInputBoundary(t *testing.T) {
 				liveClose(up, websocket.CloseNormalClosure, "fixture_complete")
 				return nil
 			})
-			client := connectLiveFixture(t, endpoint)
+			client := connectLiveFixture(t, endpoint, time.Minute)
 			for range 9 {
 				if err := client.WriteMessage(websocket.TextMessage, []byte(frame)); err != nil {
 					break // A bounded gateway may close before the final write.
 				}
 			}
-			usage := receiveLiveFixture(t, results)
+			usage := receiveLiveFixture(t, results, time.Minute)
 			select {
 			case count := <-observed:
 				// Setup consumes part of the same eight-MiB budget.
@@ -114,4 +117,109 @@ func liveBudgetVisualData(t *testing.T) string {
 	var encoded bytes.Buffer
 	require.NoError(t, jpeg.Encode(&encoded, picture, &jpeg.Options{Quality: 95}))
 	return base64.StdEncoding.EncodeToString(encoded.Bytes())
+}
+
+// TestGeminiLiveFunctionResponseBudget verifies genuine function results share
+// the aggregate allowance. Parameters: t owns the test. Returns: none; accepted
+// server calls retain their response bytes until the next result exceeds budget.
+func TestGeminiLiveFunctionResponseBudget(t *testing.T) {
+	const prefix = `{"toolResponse":{"functionResponses":[{"id":"call","name":"lookup","response":{"text":"`
+	const suffix = `"}}]}}`
+	frame := prefix + strings.Repeat("x", (1<<20)-len(prefix)-len(suffix)) + suffix
+	observed := make(chan int, 1)
+	endpoint, results := liveFixture(t, channeltype.Gemini, "gemini-3.8-live", func(up *websocket.Conn) error {
+		if err := up.SetReadDeadline(time.Now().Add(time.Minute)); err != nil {
+			return errors.Wrap(err, "set aggregate fixture deadline")
+		}
+		if err := acknowledgeLiveFixture(up, "gemini-3.8-live"); err != nil {
+			return errors.Wrap(err, "acknowledge function budget fixture")
+		}
+		count := 0
+		defer func() { observed <- count }()
+		for count < 9 {
+			if err := liveWrite(up, websocket.TextMessage, []byte(`{"toolCall":{"functionCalls":[{"id":"call","name":"lookup","args":{}}]}}`), time.Second); err != nil {
+				return errors.Wrap(err, "write fixture function call")
+			}
+			_, raw, err := up.ReadMessage()
+			if err != nil {
+				return nil // Budget exhaustion tears down the paid provider socket.
+			}
+			if string(raw) != frame {
+				return errors.New("function result changed")
+			}
+			count++
+		}
+		return nil
+	})
+	client := connectLiveFixture(t, endpoint, time.Minute)
+	for range 9 {
+		if _, _, err := client.ReadMessage(); err != nil {
+			break // The boundary must terminate, not forward, the excess result.
+		}
+		if err := client.WriteMessage(websocket.TextMessage, []byte(frame)); err != nil {
+			break
+		}
+	}
+	usage := receiveLiveFixture(t, results, time.Minute)
+	require.Equal(t, 7, <-observed)
+	require.True(t, usage.Realtime.HasUsageGap())
+}
+
+// TestGeminiLiveBudgetBoundaries checks fail-closed arithmetic and independent
+// frame/byte allowances. Parameters: t owns assertions. Returns: none; an exact
+// boundary is accepted and exhausted reservations can never be reused.
+func TestGeminiLiveBudgetBoundaries(t *testing.T) {
+	t.Parallel()
+	bytes := &liveInputBudget{byteLimit: 32, frameLimit: 3}
+	require.True(t, bytes.reserve(16))
+	require.True(t, bytes.reserve(16))
+	require.False(t, bytes.reserve(1))
+	require.False(t, bytes.reserve(0))
+	require.EqualValues(t, 32, bytes.bytes)
+	require.EqualValues(t, 2, bytes.frames)
+	frames := &liveInputBudget{byteLimit: 32, frameLimit: 2}
+	require.True(t, frames.reserve(1))
+	require.True(t, frames.reserve(1))
+	require.False(t, frames.reserve(1))
+	require.EqualValues(t, 2, frames.bytes)
+	require.False(t, (&liveInputBudget{}).reserve(1))
+	require.False(t, (*liveInputBudget)(nil).reserve(1))
+	require.False(t, (&liveInputBudget{byteLimit: 32, frameLimit: 2}).reserve(-1))
+}
+
+// TestGeminiLiveActivityControlBudget verifies no-payload control frames cannot
+// bypass the aggregate frame limit. Parameters: t owns the test. Returns: none;
+// all valid controls below the bound retain their original wire representation.
+func TestGeminiLiveActivityControlBudget(t *testing.T) {
+	const frame = `{"realtimeInput":{"activityEnd":{}}}`
+	observed := make(chan int, 1)
+	endpoint, results := liveFixture(t, channeltype.Gemini, "gemini-3.8-live", func(up *websocket.Conn) error {
+		if err := up.SetReadDeadline(time.Now().Add(time.Minute)); err != nil {
+			return errors.Wrap(err, "set aggregate fixture deadline")
+		}
+		if err := acknowledgeLiveFixture(up, "gemini-3.8-live"); err != nil {
+			return errors.Wrap(err, "acknowledge control budget fixture")
+		}
+		count := 0
+		defer func() { observed <- count }()
+		for count < liveSessionInputFrames {
+			_, raw, err := up.ReadMessage()
+			if err != nil {
+				return nil // Closing at the configured boundary is expected.
+			}
+			if string(raw) != frame {
+				return errors.New("activity control changed")
+			}
+			count++
+		}
+		return nil
+	})
+	client := connectLiveFixture(t, endpoint, time.Minute)
+	for range liveSessionInputFrames {
+		if err := client.WriteMessage(websocket.TextMessage, []byte(frame)); err != nil {
+			break
+		}
+	}
+	receiveLiveFixture(t, results, time.Minute)
+	require.Equal(t, liveSessionInputFrames-1, <-observed, "setup must share the frame allowance")
 }

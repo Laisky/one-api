@@ -93,8 +93,9 @@ func acknowledgeLiveFixture(conn *websocket.Conn, name string) error {
 }
 
 // connectLiveFixture opens the gateway and completes setup. Parameters: t and
-// endpoint identify the fixture. Returns: a socket with a bounded read deadline.
-func connectLiveFixture(t *testing.T, endpoint string) *websocket.Conn {
+// endpoint identify the fixture; timeouts optionally extends its read deadline
+// for large race-instrumented payloads. Returns: a connected socket.
+func connectLiveFixture(t *testing.T, endpoint string, timeouts ...time.Duration) *websocket.Conn {
 	t.Helper()
 	conn, response, err := websocket.DefaultDialer.Dial(endpoint, http.Header{"Authorization": []string{"Bearer downstream-fixture"}})
 	if response != nil && response.Body != nil {
@@ -102,7 +103,11 @@ func connectLiveFixture(t *testing.T, endpoint string) *websocket.Conn {
 	}
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
-	require.NoError(t, conn.SetReadDeadline(time.Now().Add(8*time.Second)))
+	timeout := 8 * time.Second
+	if len(timeouts) > 0 {
+		timeout = timeouts[0]
+	}
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(timeout)))
 	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte(`{"setup":{"model":"friendly","inputAudioTranscription":{},"outputAudioTranscription":{},"tools":[{"functionDeclarations":[{"name":"lookup","parameters":{"type":"OBJECT"}}]}]}}`)))
 	_, ack, err := conn.ReadMessage()
 	require.NoError(t, err)
@@ -111,16 +116,21 @@ func connectLiveFixture(t *testing.T, endpoint string) *websocket.Conn {
 }
 
 // receiveLiveFixture waits for the handler and both pump readers to finish.
-// Parameters: t and results select the session. Returns: its settled usage.
-func receiveLiveFixture(t *testing.T, results <-chan liveFixtureResult) *model.Usage {
+// Parameters: t and results select the session; timeouts optionally extends the
+// bounded wait for large race-instrumented payloads. Returns: its settled usage.
+func receiveLiveFixture(t *testing.T, results <-chan liveFixtureResult, timeouts ...time.Duration) *model.Usage {
 	t.Helper()
+	timeout := 8 * time.Second
+	if len(timeouts) > 0 {
+		timeout = timeouts[0]
+	}
 	select {
 	case result := <-results:
 		require.Nil(t, result.biz)
 		require.NotNil(t, result.usage)
 		require.NotContains(t, result.endpoint, "provider-fixture")
 		return result.usage
-	case <-time.After(8 * time.Second):
+	case <-time.After(timeout):
 		t.Fatal("Live handler did not join its pumps")
 		return nil
 	}

@@ -461,3 +461,16 @@ Official source record:
 - [Google Go SDK Live transport and authentication](https://github.com/googleapis/go-genai/blob/main/live.go)
 - [Google ADK native Live event handling](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py)
 - [Browser WebSocket handshake rules](https://websockets.spec.whatwg.org/)
+
+## Aggregate transport allowance
+
+Each native Live session accepts at most 8 MiB of encoded client JSON and 32,768
+client data frames, including setup, function results and activity controls.
+The next frame is rejected before upstream forwarding if it exceeds either
+allowance. The close reason is `gemini_live_input_budget_exhausted`; already
+forwarded input retains the normal bounded receipt drain and settlement.
+These limits can end an active session before its duration limit.
+
+These are resource limits, **not a prepaid monetary ceiling**. Context re-billing,
+reasoning, transcripts and asynchronous outputs still require the monetary
+contract described in [the #462 acceptance ledger](audits/live-aggregate-boundary-20261004.md).
