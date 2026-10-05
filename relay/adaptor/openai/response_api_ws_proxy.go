@@ -27,9 +27,10 @@ type responseAPIWebSocketEvent struct {
 }
 
 type responseAPIEventResponse struct {
-	ID    string                 `json:"id,omitempty"`
-	Model string                 `json:"model,omitempty"`
-	Usage *responseAPIEventUsage `json:"usage,omitempty"`
+	ID     string                 `json:"id,omitempty"`
+	Status string                 `json:"status,omitempty"`
+	Model  string                 `json:"model,omitempty"`
+	Usage  *responseAPIEventUsage `json:"usage,omitempty"`
 }
 
 type responseAPIEventUsage struct {
@@ -189,6 +190,9 @@ func (c *responseAPIWSStoreCollector) collect(msg []byte) {
 	if err := json.Unmarshal(probe.Response, &resp); err != nil || resp.Id == "" {
 		return
 	}
+	if !isResponseAPIWSTerminalReceipt(probe.Type, resp.Status) {
+		return
+	}
 	if c.ownership != nil {
 		c.ownership.observe(resp.Id)
 	}
@@ -310,7 +314,8 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 // them to the gateway store (proposal ST-011). Collection happens after usage
 // accounting and never alters the forwarded frame.
 func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage, stored *responseAPIWSStoreCollector) error {
-	countedResponseIDs := map[string]struct{}{}
+	receipts := &responseAPIWSUsageCollector{usage: usage}
+	defer receipts.finish()
 
 	for {
 		mt, msg, err := src.ReadMessage()
@@ -328,7 +333,7 @@ func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.U
 		}
 
 		if mt == websocket.TextMessage {
-			accumulateResponseAPIUsage(msg, usage, countedResponseIDs)
+			receipts.collect(msg)
 			if stored != nil {
 				stored.collect(msg)
 			}
@@ -341,7 +346,7 @@ func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.U
 }
 
 // accumulateResponseAPIUsage parses one websocket text event and updates usage once
-// per response ID to avoid double counting created/updated/completed snapshots.
+// per response ID to avoid double counting qualified terminal receipts.
 func accumulateResponseAPIUsage(msg []byte, usage *rmodel.Usage, countedResponseIDs map[string]struct{}) {
 	if usage == nil || len(msg) == 0 {
 		return
@@ -385,7 +390,8 @@ func extractResponseAPIUsage(msg []byte) (string, *rmodel.Usage, bool) {
 		return "", nil, false
 	}
 
-	if event.Response == nil || event.Response.Usage == nil || event.Response.ID == "" {
+	if event.Response == nil || event.Response.Usage == nil || event.Response.ID == "" ||
+		!isResponseAPIWSTerminalReceipt(event.Type, event.Response.Status) {
 		return "", nil, false
 	}
 
