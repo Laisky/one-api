@@ -85,10 +85,7 @@ func TestResponseStateCancelGatewayResolution(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, gwErr.StatusCode)
 }
 
-// TestResponseStateCancelLegacyPassthrough covers the R08 passthrough-on half plus
-// the ST-018 tombstone rule: an unknown id is forwarded upstream when passthrough
-// is on, but a DELETED gateway id is tombstoned and must never be forwarded
-// (row S06).
+// TestResponseStateCancelLegacyPassthrough verifies that legacy configuration cannot bypass ownership for unknown or deleted IDs.
 func TestResponseStateCancelLegacyPassthrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := state.NewMemoryStore(state.DefaultLimits())
@@ -96,14 +93,15 @@ func TestResponseStateCancelLegacyPassthrough(t *testing.T) {
 	t.Cleanup(func() { state.SetForTest(nil) })
 	meta := testMeta()
 
-	// R08: unknown id, passthrough ON → fall through to the legacy upstream forward.
+	// Unknown IDs fail closed even when legacy passthrough is configured.
 	unknown := "resp_" + strings.Repeat("b", 32)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Params = gin.Params{{Key: "response_id", Value: unknown}}
 	handled, gwErr := serveGatewayResponseCancel(c, meta, unknown)
-	require.False(t, handled)
-	require.Nil(t, gwErr)
+	require.True(t, handled)
+	require.NotNil(t, gwErr)
+	require.Equal(t, http.StatusNotFound, gwErr.StatusCode)
 
 	// S06/ST-018: a deleted gateway id is tombstoned; even with passthrough ON it is
 	// answered locally as not-found and never forwarded upstream.

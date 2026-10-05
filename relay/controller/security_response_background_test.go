@@ -23,6 +23,8 @@ func TestSecurityResponseBackgroundAdmission(t *testing.T) {
 		t.Run("stream="+streaming, func(t *testing.T) {
 			securityAdmissionSetup(t, 1_000_000)
 			before := fallbackUserQuota(t)
+			var beforeToken model.Token
+			require.NoError(t, model.DB.First(&beforeToken, fallbackTokenID).Error)
 			var calls atomic.Int32
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls.Add(1)
@@ -47,6 +49,10 @@ func TestSecurityResponseBackgroundAdmission(t *testing.T) {
 			require.Equal(t, "background_not_supported", err.Code)
 			require.Zero(t, calls.Load())
 			require.Equal(t, before, fallbackUserQuota(t))
+			var afterToken model.Token
+			require.NoError(t, model.DB.First(&afterToken, fallbackTokenID).Error)
+			require.Equal(t, beforeToken.RemainQuota, afterToken.RemainQuota)
+			require.Equal(t, beforeToken.UsedQuota, afterToken.UsedQuota)
 		})
 	}
 }

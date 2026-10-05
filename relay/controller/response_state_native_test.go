@@ -81,9 +81,8 @@ func TestResolveNativePreviousResponseDifferentProviderDiverts(t *testing.T) {
 	require.Equal(t, parentGw, *req.PreviousResponseId, "selector unchanged so the fallback hydrator can resolve it")
 }
 
-// TestResolveNativePreviousResponseRawIDUntouched covers row B07: a non-gateway
-// (raw/legacy) previous_response_id is forwarded verbatim.
-func TestResolveNativePreviousResponseRawIDUntouched(t *testing.T) {
+// TestResolveNativePreviousResponseRawIDRejected verifies that unbound provider IDs cannot bypass owner lookup.
+func TestResolveNativePreviousResponseRawIDRejected(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	enableStateForTest(t)
 	meta := testMeta()
@@ -94,7 +93,8 @@ func TestResolveNativePreviousResponseRawIDUntouched(t *testing.T) {
 	req := &openai.ResponseAPIRequest{Model: "gpt-5", PreviousResponseId: &prev, Input: openai.ResponseAPIInput{"hi"}}
 
 	divert, gwErr := resolveNativePreviousResponse(c, meta, req)
-	require.Nil(t, gwErr)
+	require.NotNil(t, gwErr)
+	require.Equal(t, "previous_response_not_found", gwErr.Code)
 	require.False(t, divert)
 	require.Equal(t, "resp_raw_from_before_the_feature", *req.PreviousResponseId)
 }

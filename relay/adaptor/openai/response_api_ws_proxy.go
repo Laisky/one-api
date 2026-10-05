@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -118,24 +119,35 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 	// stored collects the store!=false completed response objects observed on the
 	// upstream->client leg. It is written only by that single goroutine and read
 	// only after both legs drain below, so no further synchronization is needed.
-	stored := &responseAPIWSStoreCollector{}
+	ownership := &responseWSSessionOwnership{}
+	stored := &responseAPIWSStoreCollector{ownership: ownership}
 	errc := make(chan error, 2)
 	go func() {
-		errc <- copyResponseAPIClientToUpstream(clientConn, upstreamConn, meta.OriginModelName, meta.ActualModelName)
+		errc <- copyResponseAPIClientToUpstream(c.Request.Context(), clientConn, upstreamConn, meta, ownership)
 	}()
 	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, usage, stored) }()
 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
-	if proxyErr := <-errc; proxyErr != nil {
-		gmw.GetLogger(c).Debug("response websocket proxy first direction closed", zap.Error(proxyErr))
+	firstErr := <-errc
+	lg := gmw.GetLogger(c)
+	if closeErr := clientConn.Close(); closeErr != nil {
+		lg.Debug("close response client socket", zap.Error(closeErr))
 	}
-	_ = clientConn.Close()
-	_ = upstreamConn.Close()
-
-	// Drain the second goroutine to avoid data race on usage.
-	if proxyErr := <-errc; proxyErr != nil {
-		gmw.GetLogger(c).Debug("response websocket proxy second direction closed", zap.Error(proxyErr))
+	if closeErr := upstreamConn.Close(); closeErr != nil {
+		lg.Debug("close response upstream socket", zap.Error(closeErr))
+	}
+	secondErr := <-errc
+	// An admission failure before any execution must release the handshake hold.
+	// If an earlier frame was dispatched, preserve its billing reconciliation.
+	if ownership.denied.Load() && !ownership.dispatched.Load() {
+		return ErrorWrapper(errors.New("response websocket request was rejected before execution"), "response_websocket_request_rejected", http.StatusBadRequest), nil, nil
+	}
+	if firstErr != nil {
+		lg.Debug("response websocket first direction closed", zap.Error(firstErr))
+	}
+	if secondErr != nil {
+		lg.Debug("response websocket second direction closed", zap.Error(secondErr))
 	}
 
 	if usage.TotalTokens == 0 {
@@ -150,6 +162,7 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 // responses are connection-local upstream state and are intentionally excluded
 // (proposal Section 5.9, SEC06).
 type responseAPIWSStoreCollector struct {
+	ownership *responseWSSessionOwnership
 	responses []*ResponseAPIResponse
 	seen      map[string]struct{}
 }
@@ -174,6 +187,9 @@ func (c *responseAPIWSStoreCollector) collect(msg []byte) {
 	var resp ResponseAPIResponse
 	if err := json.Unmarshal(probe.Response, &resp); err != nil || resp.Id == "" {
 		return
+	}
+	if c.ownership != nil {
+		c.ownership.observe(resp.Id)
 	}
 	// store defaults to true; only an explicit store=false is connection-local.
 	if resp.Store != nil && !*resp.Store {
@@ -224,21 +240,20 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 //   - emits a `model_switch_denied` error event back to the client
 //   - returns ErrModelSwitchDenied (wrapped) so the caller closes both legs
 //
-// Text frames that are not `response.create` events are forwarded unchanged.
-// Binary frames are forwarded unchanged.
+// Ownership is checked for both text and binary JSON frames before dispatch.
 //
 // Parameters:
 //   - src: client WebSocket connection (reader).
 //   - dst: upstream WebSocket connection (writer).
-//   - boundOriginModel: user-facing model bound at WS handshake; may be empty
-//     when the proxy could not resolve a user-facing model.
-//   - boundActualModel: upstream model bound at WS handshake; enforcement is
-//     skipped when this is empty (backward compat for legacy no-model handshakes).
+//   - ctx: request cancellation context.
+//   - meta: authenticated owner and handshake-bound provider/model.
+//   - ownership: response IDs confirmed on this connection.
 //
 // Returns:
 //   - error: nil on clean close; ErrModelSwitchDenied (wrapped) on rejected
 //     model switch; other errors propagate underlying I/O failures.
-func copyResponseAPIClientToUpstream(src, dst *websocket.Conn, boundOriginModel, boundActualModel string) error {
+func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Conn, meta *rmeta.Meta, ownership *responseWSSessionOwnership) error {
+	boundOriginModel, boundActualModel := meta.OriginModelName, meta.ActualModelName
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {
@@ -254,9 +269,17 @@ func copyResponseAPIClientToUpstream(src, dst *websocket.Conn, boundOriginModel,
 			return errors.WithStack(err)
 		}
 
-		outbound := msg
-		if mt == websocket.TextMessage && boundActualModel != "" {
-			rewritten, guardErr := enforceResponseCreateModel(msg, boundOriginModel, boundActualModel)
+		outbound, authorizationErr := ownership.authorize(ctx, meta, msg)
+		if authorizationErr != nil {
+			ownership.denied.Store(true)
+			// Control writes are safe alongside the upstream-to-client writer.
+			if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "response authorization denied"), time.Now().Add(time.Second)); closeErr != nil {
+				return errors.Wrap(closeErr, "close unauthorized response websocket")
+			}
+			return errors.WithStack(authorizationErr)
+		}
+		if (mt == websocket.TextMessage || mt == websocket.BinaryMessage) && boundActualModel != "" {
+			rewritten, guardErr := enforceResponseCreateModel(outbound, boundOriginModel, boundActualModel)
 			if guardErr != nil {
 				// Reject: notify the client with an error event and close the
 				// upstream side so billing reconciliation runs without any
@@ -276,6 +299,7 @@ func copyResponseAPIClientToUpstream(src, dst *websocket.Conn, boundOriginModel,
 		if werr := dst.WriteMessage(mt, outbound); werr != nil {
 			return errors.WithStack(werr)
 		}
+		ownership.dispatched.Store(true)
 	}
 }
 

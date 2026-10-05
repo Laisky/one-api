@@ -39,6 +39,9 @@ func getChannelModelConfigs(c *gin.Context) map[string]model.ModelConfigLocal {
 	return channel.GetModelPriceConfigsWithContext(gmw.Ctx(c))
 }
 
+// errResponseBackgroundUnsupported marks jobs without a durable terminal billing lifecycle.
+var errResponseBackgroundUnsupported = errors.New("background responses are unavailable until durable terminal billing is supported")
+
 // errStateSelectorsMutuallyExclusive marks the dual-selector validation failure
 // (both conversation and previous_response_id supplied) so RelayResponseAPIHelper
 // can map it to the stable invalid_state_selector code (Section 6, E01). Its
@@ -51,6 +54,10 @@ func getAndValidateResponseAPIRequest(c *gin.Context) (*openai.ResponseAPIReques
 	err := common.UnmarshalBodyReusable(c, responseAPIRequest)
 	if err != nil {
 		return nil, errors.Wrap(err, "unmarshal Response API request")
+	}
+
+	if responseAPIRequest.Background != nil && *responseAPIRequest.Background {
+		return nil, errors.WithStack(errResponseBackgroundUnsupported)
 	}
 
 	// Basic validation
