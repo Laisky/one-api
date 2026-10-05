@@ -84,8 +84,10 @@ func TestNativeStreamReceiptFreshnessHTTP(t *testing.T) {
 					providerBody <- body
 					providerPath <- r.URL.Path
 					w.Header().Set("Content-Type", "text/event-stream")
-					if exit == "reset" {
-						// A declared length longer than the bounded frames produces a real HTTP unexpected EOF.
+					if exit == "reset" || exit == "cancel" {
+						// Interrupted-read provenance requires an unfinished HTTP body. Without
+						// this bound, the provider returning after cancellation can race body
+						// close and produce an ordinary chunked EOF; its separate control stays.
 						w.Header().Set("Content-Length", "100000")
 					}
 					_, _ = io.WriteString(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18}}\n\n")
@@ -188,11 +190,7 @@ func TestNativeStreamReceiptFreshnessHTTP(t *testing.T) {
 				require.EqualValues(t, 11, logs[0].PromptTokens)
 				require.EqualValues(t, floor-11, logs[0].CompletionTokens)
 				require.Equal(t, true, logs[0].Metadata["billing_estimated"])
-				reason := "stream_output_after_last_receipt"
-				if strings.HasPrefix(route.name, "shared/") && exit == "eof" {
-					reason = "stream_usage_missing_counters"
-				}
-				require.Equal(t, reason, logs[0].Metadata["billing_estimate_reason"])
+				require.Equal(t, "stream_output_after_last_receipt", logs[0].Metadata["billing_estimate_reason"])
 			})
 		}
 	}
