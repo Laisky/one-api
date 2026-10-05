@@ -339,6 +339,9 @@ func doClaudeRequestOnce(
 	if err := json.Unmarshal(body, &claudeResp); err != nil {
 		return nil, nil, openai.ErrorWrapper(err, "parse_claude_response_failed", 500)
 	}
+	if err := anthropic.RecordServerToolUseFromJSON(c, body); err != nil {
+		lg.Warn("malformed Claude server tool receipt in tool search round; billing observed invocations", zap.Error(err))
+	}
 
 	usage := &relaymodel.Usage{
 		PromptTokens:     claudeResp.Usage.InputTokens,

@@ -128,6 +128,11 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// verbatim; SDK/rebuilding paths use this normalized struct.
 	mergeMidArraySystemMessages(claudeRequest)
 
+	// Apply the shared built-in tool policy before any reservation or dispatch.
+	if admissionErr := admitClaudeMessagesTools(c, meta); admissionErr != nil {
+		return admissionErr
+	}
+
 	// get channel model ratio
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
 	channelModelConfigs := getChannelModelConfigs(c)
@@ -295,6 +300,12 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// no-op on the passthrough branch (no converted *ResponseAPIRequest present).
 	if newBody, matched := matchClaudeCheckpoint(c, meta, claudeRequest); matched {
 		requestBody = bytes.NewReader(newBody)
+	}
+
+	// Conversion may introduce built-ins; re-check them with the shared validator.
+	if policyErr := admitConvertedClaudeBuiltins(c, meta, convertedRequest, adaptorInstance); policyErr != nil {
+		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "converted_claude_tool_not_allowed")
+		return policyErr
 	}
 
 	// do request
@@ -593,6 +604,7 @@ handleResponse:
 	}
 
 postConsume:
+	applyClaudeServerToolCharges(c, &usage, meta, adaptorInstance)
 
 	// post-consume quota
 	quotaId := c.GetInt(ctxkey.Id)

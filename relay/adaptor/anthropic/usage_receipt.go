@@ -20,6 +20,8 @@ type httpUsageReceipt struct {
 	creation    *int
 	write5m     *int
 	write1h     *int
+	// tools tracks provider-executed tool invocations for the same message.
+	tools serverToolTally
 }
 
 type httpUsageUpdate struct {
@@ -32,6 +34,7 @@ type httpUsageUpdate struct {
 		Write5m *int `json:"ephemeral_5m_input_tokens"`
 		Write1h *int `json:"ephemeral_1h_input_tokens"`
 	} `json:"cache_creation"`
+	ServerToolUse json.RawMessage `json:"server_tool_use"`
 }
 
 // apply validates and atomically merges an upstream cumulative usage object.
@@ -43,6 +46,10 @@ func (r *httpUsageReceipt) apply(raw json.RawMessage) error {
 	var update httpUsageUpdate
 	if err := json.Unmarshal(raw, &update); err != nil {
 		return errors.Wrap(err, "decode Claude usage receipt")
+	}
+	toolCounters, err := parseServerToolUse(update.ServerToolUse)
+	if err != nil {
+		return err
 	}
 	next := *r
 	if update.ServiceTier != nil {
@@ -93,6 +100,7 @@ func (r *httpUsageReceipt) apply(raw json.RawMessage) error {
 			return errors.New("Claude cache creation total contradicts its TTL split")
 		}
 	}
+	next.tools = next.tools.withReceipts(toolCounters)
 	*r = next
 	return nil
 }

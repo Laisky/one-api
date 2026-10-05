@@ -141,6 +141,7 @@ func (s *httpStreamState) consume(c *gin.Context, raw []byte) error {
 			Index *int `json:"index"`
 			Block *struct {
 				Type string `json:"type"`
+				Name string `json:"name"`
 			} `json:"content_block"`
 			Delta *struct {
 				Type        string `json:"type"`
@@ -164,6 +165,7 @@ func (s *httpStreamState) consume(c *gin.Context, raw []byte) error {
 			if block.kind == "tool_use" {
 				s.tools++
 			}
+			s.receipt.tools.observeBlock(content.Block.Type, content.Block.Name)
 			s.blocks[index] = block
 		case "content_block_delta":
 			if block == nil || block.closed || content.Delta == nil {

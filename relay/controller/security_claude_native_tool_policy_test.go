@@ -10,11 +10,13 @@ import (
 	"sync/atomic"
 	"testing"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
@@ -74,6 +76,20 @@ const claudeToolPolicyResponsesJSON = `{"id":"resp_tool","object":"response","st
 	`{"type":"web_search_call","id":"ws_2","status":"completed","action":{"type":"search","query":"b"}},` +
 	`{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ok"}]}],` +
 	`"usage":{"input_tokens":11,"output_tokens":7,"total_tokens":18}}`
+
+// claudeToolPolicyResponsesSSE is a converted Responses stream with two searches
+// reported both as output items and again in the terminal response.
+const claudeToolPolicyResponsesSSE = "event: response.created\n" +
+	`data: {"type":"response.created","response":{"id":"resp_tool","object":"response","status":"in_progress","model":"claude-sonnet-4","output":[]}}` + "\n\n" +
+	"event: response.output_item.done\n" +
+	`data: {"type":"response.output_item.done","output_index":0,"item":{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"a"}}}` + "\n\n" +
+	"event: response.output_item.done\n" +
+	`data: {"type":"response.output_item.done","output_index":1,"item":{"type":"web_search_call","id":"ws_2","status":"completed","action":{"type":"search","query":"b"}}}` + "\n\n" +
+	"event: response.output_text.delta\n" +
+	`data: {"type":"response.output_text.delta","output_index":2,"content_index":0,"delta":"ok"}` + "\n\n" +
+	"event: response.completed\n" +
+	`data: {"type":"response.completed","response":` + claudeToolPolicyResponsesJSON + `}` + "\n\n" +
+	"data: [DONE]\n\n"
 
 // claudeToolPolicyCase describes one Claude Messages request through the real controller.
 type claudeToolPolicyCase struct {
@@ -330,6 +346,11 @@ func TestSecurityClaudeNativeToolPolicyBilling(t *testing.T) {
 			payload: claudeToolPolicyPayload(t, false, []any{map[string]any{"type": "web_search", "name": "web_search"}}, nil), tooling: claudeToolPolicyAllowSearch(),
 			config: &model.ChannelConfig{APIFormat: channeltype.OpenAICompatibleAPIFormatResponse},
 		}},
+		{name: "converted_responses_sse_receipt", charge: twoSearches, run: claudeToolPolicyCase{
+			channel: channeltype.OpenAICompatible, actual: "claude-sonnet-4", contentType: "text/event-stream", response: claudeToolPolicyResponsesSSE,
+			payload: claudeToolPolicyPayload(t, true, []any{map[string]any{"type": "web_search", "name": "web_search"}}, nil), tooling: claudeToolPolicyAllowSearch(),
+			config: &model.ChannelConfig{APIFormat: channeltype.OpenAICompatibleAPIFormatResponse},
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result := runClaudeToolPolicyCase(t, balance, tc.run)
@@ -451,4 +472,29 @@ func TestSecurityClaudeNativeToolPolicyTrustedToolSearchLoop(t *testing.T) {
 		t.Logf("REPRODUCED_464_TOOL_SEARCH_LOOP_RECEIPT actual=%d expected=%d", actual, charge)
 	}
 	requireClaudeToolPolicyLedger(t, result, balance, charge)
+}
+
+// TestSecurityClaudeNativeToolPolicyRetryReset proves a cross-channel retry
+// cannot bill the abandoned attempt's built-in tool receipts a second time.
+func TestSecurityClaudeNativeToolPolicyRetryReset(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ensureResponseFallbackFixtures(t)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader("{}"))
+	gmw.SetLogger(c, logger.Logger)
+	c.Set(ctxkey.TokenId, fallbackTokenID)
+	c.Set(ctxkey.Id, fallbackUserID)
+	c.Set(ctxkey.PreConsumedQuotaAmount, int64(0))
+	c.Set(ctxkey.ToolInvocationCounts, map[string]int{"web_search": 3})
+	c.Set(ctxkey.WebSearchCallCount, 3)
+	c.Set(ctxkey.ToolInvocationSummary, &model.ToolUsageSummary{Counts: map[string]int{"web_search": 3}})
+	ResetPerAttemptBillingForRetry(gmw.Ctx(c), c)
+	drainCriticalTasks(t)
+	counts, ok := c.Get(ctxkey.ToolInvocationCounts)
+	require.True(t, ok)
+	require.Empty(t, counts)
+	require.Zero(t, c.GetInt(ctxkey.WebSearchCallCount))
+	summary, ok := c.Get(ctxkey.ToolInvocationSummary)
+	require.True(t, ok)
+	require.Nil(t, summary.(*model.ToolUsageSummary))
 }
