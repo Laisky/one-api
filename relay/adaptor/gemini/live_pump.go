@@ -20,17 +20,26 @@ type livePumpState struct {
 	inputs     atomic.Int64
 	receipted  atomic.Int64
 	tools      liveToolState
+	coverage   *liveToolCoverage
 	spend      *liveSpend
 }
 
+// hasPendingInput reports forwarded client work without a covering receipt.
+// Parameters: none. Returns: true for user input or function results that no
+// receipt provably covers (see liveToolCoverage).
+func (s *livePumpState) hasPendingInput() bool {
+	return s.inputs.Load() > s.receipted.Load() || s.coverage.pending()
+}
+
 // runLivePump joins both directional readers before exposing billing state.
-// Parameters: client/upstream are acknowledged sockets, options bounds work and
-// spend funds every forwarded operation. Returns: sealed usage. A lost
-// downstream drains late upstream receipts for a bounded interval, without
-// replaying input or keeping an unbounded or unfunded paid session.
-func runLivePump(client, upstream *websocket.Conn, options livePumpOptions, spend *liveSpend) *model.Usage {
+// Parameters: client/upstream are acknowledged sockets, options bounds work,
+// spend funds every forwarded operation and blocking lists the functions the
+// provider awaits. Returns: sealed usage. A lost downstream drains late
+// upstream receipts for a bounded interval, without replaying input or keeping
+// an unbounded or unfunded paid session.
+func runLivePump(client, upstream *websocket.Conn, options livePumpOptions, spend *liveSpend, blocking map[string]bool) *model.Usage {
 	collector := realtime.NewGeminiLedger()
-	state := &livePumpState{spend: spend}
+	state := &livePumpState{spend: spend, coverage: newLiveToolCoverage(blocking)}
 	clientDone, serverDone := make(chan struct{}), make(chan struct{})
 	go func() { defer close(clientDone); copyLiveClient(client, upstream, state, options) }()
 	go func() { defer close(serverDone); copyLiveServer(upstream, client, state, collector, options) }()
@@ -55,7 +64,7 @@ func runLivePump(client, upstream *websocket.Conn, options livePumpOptions, spen
 	_ = client.Close()
 	<-clientDone
 	<-serverDone
-	return liveLedgerUsage(collector.Finish(state.inputs.Load() > state.receipted.Load()))
+	return liveLedgerUsage(collector.Finish(state.hasPendingInput()))
 }
 
 // copyLiveClient validates client operations before forwarding them. Parameters:
@@ -77,11 +86,12 @@ func copyLiveClient(client, upstream *websocket.Conn, state *livePumpState, opti
 			liveClose(client, websocket.ClosePolicyViolation, "gemini_live_invalid_client_frame")
 			return
 		}
-		toolResponse, err := state.tools.accept(data)
+		calls, err := state.tools.accept(data)
 		if err != nil {
 			liveClose(client, websocket.ClosePolicyViolation, "gemini_live_unrequested_tool_response")
 			return
 		}
+		toolResponse := calls != nil
 		if toolResponse {
 			work = false
 		}
@@ -101,6 +111,9 @@ func copyLiveClient(client, upstream *websocket.Conn, state *livePumpState, opti
 		if work {
 			state.inputs.Add(1)
 		}
+		if toolResponse {
+			state.coverage.admit(calls)
+		}
 		if err := liveWrite(upstream, kind, data, options.writeTimeout); err != nil {
 			return
 		}
@@ -114,6 +127,9 @@ func copyLiveClient(client, upstream *websocket.Conn, state *livePumpState, opti
 func copyLiveServer(upstream, client *websocket.Conn, state *livePumpState, collector *realtime.GeminiLedger, options livePumpOptions) {
 	var turnInputs int64
 	turnStarted := false
+	// endedUnreceipted marks a turn that ended without its usage receipt until
+	// a late receipt commits it or the next turn's model work starts.
+	endedUnreceipted := false
 	for {
 		kind, data, err := upstream.ReadMessage()
 		if err != nil {
@@ -140,28 +156,60 @@ func copyLiveServer(upstream, client *websocket.Conn, state *livePumpState, coll
 		var event struct {
 			Usage   json.RawMessage `json:"usageMetadata"`
 			Content *struct {
-				Model  json.RawMessage `json:"modelTurn"`
-				Output json.RawMessage `json:"outputTranscription"`
+				Model       json.RawMessage `json:"modelTurn"`
+				Output      json.RawMessage `json:"outputTranscription"`
+				Complete    bool            `json:"turnComplete"`
+				Interrupted bool            `json:"interrupted"`
+				Status      string          `json:"interactionStatus"`
 			} `json:"serverContent"`
-			Tool json.RawMessage `json:"toolCall"`
+			Tool   json.RawMessage `json:"toolCall"`
+			Cancel json.RawMessage `json:"toolCallCancellation"`
+			Status string          `json:"interactionStatus"`
 		}
 		if err := json.Unmarshal(data, &event); err != nil {
 			_ = collector.MarkIncomplete("invalid Gemini server envelope")
 			return
 		}
-		if !turnStarted && (event.Usage != nil || event.Tool != nil || (event.Content != nil && event.Content.Model != nil)) {
+		// Any model work starts a turn, including an output transcription that
+		// arrives before the model's own frames, so the boundary is never late.
+		if !turnStarted && (event.Usage != nil || event.Tool != nil || (event.Content != nil && (event.Content.Model != nil || event.Content.Output != nil))) {
 			turnInputs = state.inputs.Load()
+			state.coverage.turnStarted()
 			turnStarted = true
 		}
-		if err := state.tools.observe(data); err != nil {
+		if err := state.tools.observe(data, state.coverage.currentTurn()); err != nil {
 			_ = collector.MarkIncomplete("Gemini function protocol limit")
 			return
 		}
+		if event.Cancel != nil || (event.Content != nil && event.Content.Interrupted) {
+			state.coverage.interrupt()
+		}
+		if event.Content != nil && event.Content.Model != nil {
+			state.coverage.modelOutput()
+		}
+		if endedUnreceipted && (event.Tool != nil || (event.Content != nil && event.Content.Model != nil)) {
+			// The previous turn ended without usage and this frame starts the
+			// next one: its incurred work must survive the next turn's receipt.
+			state.spend.rolloverUnreceiptedTurn()
+			endedUnreceipted = false
+		}
+		awaitingReceipt := collector.AwaitingReceipt()
 		before := len(collector.Ledger.Records)
 		meterErr := collector.Observe(data)
 		if len(collector.Ledger.Records) > before {
+			endedUnreceipted = false
+		} else if !awaitingReceipt && collector.AwaitingReceipt() {
+			endedUnreceipted = true
+		}
+		if len(collector.Ledger.Records) > before {
 			state.receipted.Store(turnInputs)
+			state.coverage.receipted()
+			state.coverage.turnEnded()
 			turnStarted = false
+		} else if event.Status == "IDLE" || (event.Content != nil && (event.Content.Complete || event.Content.Status == "IDLE")) {
+			// The turn ended before its receipt: results for its calls that
+			// arrive from now on can only be consumed by a later turn.
+			state.coverage.turnEnded()
 		}
 		// Stop paid generation that the reservation no longer covers. The frame
 		// is withheld; already committed receipts stay authoritative.
@@ -187,8 +235,8 @@ func copyLiveServer(upstream, client *websocket.Conn, state *livePumpState, coll
 			liveClose(client, websocket.ClosePolicyViolation, "gemini_live_billing_capacity")
 			return
 		}
-		if state.clientGone.Load() && state.inputs.Load() <= state.receipted.Load() && !collector.Ledger.HasUsageGap() {
-			return
-		}
+		// A lost downstream keeps draining until the upstream closes or the
+		// bounded drain ends: a generation the provider starts for work that a
+		// receipt seemed to cover is still observed and billed, never cut off.
 	}
 }

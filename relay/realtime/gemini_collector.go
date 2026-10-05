@@ -26,6 +26,11 @@ type GeminiLedger struct {
 // an idle ledger, for which connecting without sending work incurs no charge.
 func NewGeminiLedger() *GeminiLedger { return &GeminiLedger{Ledger: NewLedger()} }
 
+// AwaitingReceipt reports whether a turn ended without its usage receipt.
+// Parameters: none. Returns: true from that turn boundary until a receipt
+// commits it or new model work starts the next turn without one.
+func (g *GeminiLedger) AwaitingReceipt() bool { return g.waiting }
+
 // Observe accepts only a trusted upstream JSON frame. Parameters: message is the
 // frame. Returns: a classifiable error; valid earlier records remain billable.
 // Input/output transcription deltas are never separately tokenized or charged.
@@ -81,7 +86,9 @@ func (g *GeminiLedger) Observe(message []byte) error {
 	if event.Content != nil && (event.Content.Input != nil || event.Content.Output != nil || event.Content.Interim != nil || event.Content.Interrupted) {
 		// Transcriptions can arrive out of order. They indicate work, but not a
 		// new charge or a turn boundary. The provider's TEXT receipt pays them.
-		if g.last == nil {
+		// A turn that ended without usage stays waiting: activating here would
+		// let the next turn's receipt pass as the ended turn's late receipt.
+		if g.last == nil && !g.waiting {
 			g.active = true
 		}
 	}

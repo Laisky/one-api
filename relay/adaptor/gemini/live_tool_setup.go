@@ -52,3 +52,56 @@ func prepareLiveTools(raw json.RawMessage, model string) (json.RawMessage, error
 	result, err := json.Marshal(tools)
 	return result, errors.Wrap(err, "encode Live tools")
 }
+
+// liveBlockingFunctions lists the functions the provider waits for before it
+// continues the requesting turn. Parameters: setup is the model-pinned setup
+// frame forwarded upstream. Returns: names explicitly declared BLOCKING. Keys
+// are read exactly, as the provider reads them. Any other declaration (absent,
+// UNSPECIFIED, NON_BLOCKING, an unknown value, or a name declared twice with
+// different behaviors) is non-blocking, so its result is never assumed to be
+// consumed by the turn that requested it: the default differs by model
+// (Gemini 3.8 Live defaults to NON_BLOCKING, the API reference to BLOCKING).
+func liveBlockingFunctions(setup []byte) map[string]bool {
+	blocking, nonBlocking := make(map[string]bool), make(map[string]bool)
+	var root, frame map[string]json.RawMessage
+	if json.Unmarshal(setup, &root) != nil || json.Unmarshal(root["setup"], &frame) != nil {
+		return blocking
+	}
+	var tools []map[string]json.RawMessage
+	if json.Unmarshal(frame["tools"], &tools) != nil {
+		return blocking
+	}
+	for _, tool := range tools {
+		var functions []map[string]json.RawMessage
+		if json.Unmarshal(tool["functionDeclarations"], &functions) != nil {
+			continue
+		}
+		for _, function := range functions {
+			var name string
+			if json.Unmarshal(function["name"], &name) != nil || name == "" {
+				continue
+			}
+			if liveBehaviorBlocks(function["behavior"]) {
+				blocking[name] = true
+			} else {
+				nonBlocking[name] = true
+			}
+		}
+	}
+	for name := range nonBlocking {
+		delete(blocking, name)
+	}
+	return blocking
+}
+
+// liveBehaviorBlocks reports whether a FunctionDeclaration behavior value is
+// explicitly blocking. Parameters: raw is the exact "behavior" value, nil when
+// absent. Returns: true only for the BLOCKING enum name or its number (1).
+func liveBehaviorBlocks(raw json.RawMessage) bool {
+	var name string
+	if json.Unmarshal(raw, &name) == nil {
+		return name == "BLOCKING"
+	}
+	var number json.Number
+	return json.Unmarshal(raw, &number) == nil && number.String() == "1"
+}

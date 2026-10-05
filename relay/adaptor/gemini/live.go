@@ -146,7 +146,7 @@ func LiveHandlerWithTransport(c *gin.Context, m *meta.Meta, transport LiveTransp
 	}
 	_ = client.SetReadDeadline(time.Time{})
 	_ = upstream.SetReadDeadline(time.Time{})
-	usage := runLivePump(client, upstream, defaultLivePumpOptions(), spend)
+	usage := runLivePump(client, upstream, defaultLivePumpOptions(), spend, liveBlockingFunctions(setup))
 	spend.finish()
 	lg.Debug("Gemini Live session finished", zap.Int("receipts", len(usage.Realtime.Records)),
 		zap.Bool("usage_gap", usage.Realtime.HasUsageGap()), zap.Int("billing_issues", len(usage.Realtime.Issues)),

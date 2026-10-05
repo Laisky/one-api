@@ -58,6 +58,7 @@ type liveSpend struct {
 	inflightContext int64
 	inflightInput   realtime.Estimate
 	inflightOutput  realtime.Estimate
+	unreceipted     realtime.Estimate
 	exhausted       bool
 }
 
@@ -89,12 +90,14 @@ func (s *liveSpend) refuse(err error) string {
 // pending and pendingWork describe client work forwarded since the in-flight
 // turn started. Returns: an estimate; the caller holds s.mu.
 func (s *liveSpend) exposureLocked(pending realtime.Estimate, pendingWork bool) realtime.Estimate {
-	var exposure realtime.Estimate
+	// Turns that ended without a receipt are incurred work no receipt will
+	// ever commit, so they stay funded until settlement.
+	exposure := s.unreceipted
 	nextContext := s.carried
 	if s.inflight {
 		turn := s.inflightInput.Add(realtime.Estimate{Context: s.inflightContext, Output: s.allowance,
 			OutputText: s.inflightOutput.OutputText, OutputAudio: s.inflightOutput.OutputAudio})
-		exposure = turn
+		exposure = exposure.Add(turn)
 		nextContext = turn.TotalTokens()
 	}
 	if pendingWork {
@@ -156,16 +159,42 @@ func (s *liveSpend) observe(data []byte, modelWork bool, receipts []realtime.Rec
 	return nil
 }
 
+// rolloverUnreceiptedTurn keeps the evidence of a turn the provider ended
+// without a usage receipt when the next turn starts, so a later receipt for
+// that next turn cannot erase it. Parameters: none. Returns: none. The ended
+// turn's context, inputs and streamed output become permanent evidence and
+// the next turn's context.
+func (s *liveSpend) rolloverUnreceiptedTurn() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.inflight {
+		return
+	}
+	turn := s.inflightEvidenceLocked()
+	s.unreceipted = s.unreceipted.Add(turn)
+	s.carried = turn.TotalTokens()
+	s.inflight, s.inflightContext = false, 0
+	s.inflightInput, s.inflightOutput = realtime.Estimate{}, realtime.Estimate{}
+}
+
+// inflightEvidenceLocked returns the work the in-flight turn demonstrably
+// incurred: its context, inputs and streamed output, without the allowance.
+// Parameters: none. Returns: the estimate; the caller holds s.mu.
+func (s *liveSpend) inflightEvidenceLocked() realtime.Estimate {
+	return s.inflightInput.Add(realtime.Estimate{Context: s.inflightContext,
+		OutputText: s.inflightOutput.OutputText, OutputAudio: s.inflightOutput.OutputAudio})
+}
+
 // finish reports the unreceipted work the provider demonstrably received.
 // Parameters: none. Returns: none. Allowances for turns that never started are
-// excluded; an in-flight turn keeps its context, inputs and streamed output.
+// excluded; an in-flight turn keeps its context, inputs and streamed output,
+// and turns that ended without a receipt keep theirs.
 func (s *liveSpend) finish() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	evidence := s.pending
+	evidence := s.pending.Add(s.unreceipted)
 	if s.inflight {
-		evidence = evidence.Add(s.inflightInput).Add(realtime.Estimate{Context: s.inflightContext,
-			OutputText: s.inflightOutput.OutputText, OutputAudio: s.inflightOutput.OutputAudio})
+		evidence = evidence.Add(s.inflightEvidenceLocked())
 	}
 	s.gate.Finish(evidence)
 }

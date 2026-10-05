@@ -203,7 +203,9 @@ func TestGeminiLiveBidirectionalFramesAndReceipts(t *testing.T) {
 				require.NoError(t, client.Close())
 				usage := receiveLiveFixture(t, results)
 				require.Len(t, usage.Realtime.Records, 1)
-				require.False(t, usage.Realtime.HasUsageGap())
+				// lookup declares no behavior, which Gemini 3.8 Live treats as
+				// NON_BLOCKING, so no receipted turn provably consumed its result.
+				require.True(t, usage.Realtime.HasUsageGap(), "an unconsumed function result stays pending")
 				require.Equal(t, 200, usage.PromptTokens)
 				require.Equal(t, 110, usage.CompletionTokens)
 			})
@@ -304,17 +306,17 @@ func TestGeminiLiveSetupAndURLPolicy(t *testing.T) {
 func TestGeminiLiveToolStateIsConnectionBound(t *testing.T) {
 	t.Parallel()
 	first, second := &liveToolState{}, &liveToolState{}
-	require.NoError(t, first.observe([]byte(`{"toolCall":{"functionCalls":[{"id":"a","name":"lookup"}]}}`)))
+	require.NoError(t, first.observe([]byte(`{"toolCall":{"functionCalls":[{"id":"a","name":"lookup"}]}}`), 0))
 	response := []byte(`{"toolResponse":{"functionResponses":[{"id":"a","name":"lookup","response":{}}]}}`)
 	_, err := second.accept(response)
 	require.Error(t, err)
-	isTool, err := first.accept(response)
+	calls, err := first.accept(response)
 	require.NoError(t, err)
-	require.True(t, isTool)
+	require.Equal(t, []liveCall{{name: "lookup", turn: 0}}, calls)
 	_, err = first.accept(response)
 	require.Error(t, err)
-	require.NoError(t, first.observe([]byte(`{"toolCall":{"functionCalls":[{"id":"b","name":"lookup"}]}}`)))
-	require.NoError(t, first.observe([]byte(`{"toolCallCancellation":{"ids":["b"]}}`)))
+	require.NoError(t, first.observe([]byte(`{"toolCall":{"functionCalls":[{"id":"b","name":"lookup"}]}}`), 1))
+	require.NoError(t, first.observe([]byte(`{"toolCallCancellation":{"ids":["b"]}}`), 1))
 	raw := strings.Replace(string(response), `"a"`, `"b"`, 1)
 	_, err = first.accept([]byte(raw))
 	require.Error(t, err)
