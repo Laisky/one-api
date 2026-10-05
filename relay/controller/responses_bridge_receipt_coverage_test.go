@@ -40,6 +40,8 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 			{name: "partial_receipt_canceled_ordinary_eof", receiptKind: "partial", later: true, failure: true, cancelEvent: "response.output_text.delta"},
 			{name: "partial_receipt_truncated_transport", receiptKind: "partial", later: true, failure: true, truncate: true},
 			{name: "partial_same_frame_truncated", receiptKind: "partial_same_frame", later: true, failure: true, truncate: true},
+			{name: "partial_cache_before_output_truncated", receiptKind: "partial_cache", later: true, failure: true, truncate: true},
+			{name: "partial_cache_same_frame_truncated", receiptKind: "partial_cache_same_frame", later: true, failure: true, truncate: true},
 			{name: "measured_done_control", done: true},
 			{name: "measured_cancel_control", failure: true, cancelEvent: "response.created"},
 			{name: "omitted_total_done", receiptKind: "omitted_total", done: true},
@@ -54,6 +56,9 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 			{name: "top_level_combined_cache_done", receiptKind: "combined", done: true},
 			{name: "nested_cache_buckets_control", receiptKind: "nested", done: true},
 		} {
+			if route.name != "native_adapter" && strings.HasPrefix(tc.receiptKind, "partial_cache") {
+				continue
+			}
 			t.Run(route.name+"/"+tc.name, func(t *testing.T) {
 				balance := int64(1_000_000)
 				xaiVideoSetup(t, balance, false)
@@ -81,6 +86,14 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				case "partial", "partial_same_frame":
 					input, output = 11, int64(len(later)*38/100)
 					rawUsage = `{"prompt_tokens":11}`
+				case "partial_cache", "partial_cache_same_frame":
+					input, output, cached = 11, int64(len(later)*38/100), 4
+					rawUsage = `{"prompt_tokens":11,"cached_tokens":4}`
+					if route.name == "native_adapter" && tc.receiptKind == "partial_cache_same_frame" {
+						// Native incomplete same-frame receipts retain the existing
+						// text fallback: the controller keeps input 11, without cache buckets.
+						cached = 0
+					}
 				case "omitted_total":
 					rawUsage = `{"prompt_tokens":11,"completion_tokens":7}`
 				case "zero_total":
@@ -114,6 +127,12 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				// Distinct configured prices: ordinary input/output 1, cache hit
 				// 1/4 and cache write 2, with writes included in input tokens.
 				expected := input - cached - written + cached/4 + 2*written + output
+				if strings.HasPrefix(tc.receiptKind, "partial_cache") {
+					// Raw partial counters fund observed input/output at ordinary
+					// prices before cache normalization. Estimated settlement
+					// retains that independently quoted floor: 11 + 144 = 155.
+					expected = input + output
+				}
 				const reservedQuote int64 = 20 + 8 + 1 // buffer + known prompt + max_output_tokens, all prices 1.
 				if tc.receiptKind == "all_zero" {
 					// The existing postConsumeQuota zero-usage safety policy
@@ -128,7 +147,7 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				if tc.later {
 					raw, err := json.Marshal(map[string]any{"choices": []any{map[string]any{"index": 0, "delta": map[string]any{"content": later}}}})
 					require.NoError(t, err)
-					if tc.receiptKind == "partial_same_frame" || tc.receiptKind == "zero_output_same_frame" {
+					if tc.receiptKind == "partial_same_frame" || tc.receiptKind == "partial_cache_same_frame" || tc.receiptKind == "zero_output_same_frame" {
 						raw = []byte(strings.TrimSuffix(string(raw), "}") + `,"usage":` + rawUsage + `}`)
 						wire = ""
 					}
@@ -286,6 +305,13 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				require.Equal(t, estimated, logs[0].Metadata["billing_estimated"] == true)
 				if tc.receiptKind == "all_zero" {
 					require.Equal(t, "missing_or_zero_usage_retained_reservation", logs[0].Metadata["billing_estimate_reason"])
+				}
+				if tc.receiptKind == "partial_cache" {
+					require.Equal(t, "stream_output_after_last_receipt", logs[0].Metadata["billing_estimate_reason"])
+				}
+				if tc.receiptKind == "partial_cache_same_frame" {
+					require.Equal(t, "stream_usage_missing_counters", logs[0].Metadata["billing_estimate_reason"])
+					require.Nil(t, terminalUsage["input_tokens_details"], "native partial fallback preserves its original cache shape")
 				}
 				if estimated {
 					require.NotEmpty(t, logs[0].Metadata["billing_estimate_reason"])
