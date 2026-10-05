@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
@@ -155,6 +156,7 @@ func runVertexLiveNativeFixture(t *testing.T, name string) {
 	engine := gin.New()
 	engine.GET("/v1/realtime", func(c *gin.Context) {
 		gmw.SetLogger(c, logger.Logger)
+		gemini.SetLiveSpendGate(c, unmeteredLiveGate{})
 		if err := validateGeminiRealtimeTransport(m); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
