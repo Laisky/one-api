@@ -2,7 +2,7 @@ import { showError as reportUIError } from '../../../utils/common';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { showError } from 'utils/common';
-import useLogin from 'hooks/useLogin';
+import useLogin, { isTotpRequired } from 'hooks/useLogin';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
@@ -11,6 +11,7 @@ import { Grid, Stack, Typography, useMediaQuery, CircularProgress } from '@mui/m
 // project imports
 import AuthWrapper from '../AuthWrapper';
 import AuthCardWrapper from '../AuthCardWrapper';
+import OAuthTotpForm from '../AuthForms/OAuthTotpForm';
 import Logo from 'ui-component/Logo';
 
 // assets
@@ -23,13 +24,20 @@ const GitHubOAuth = () => {
 
   const [searchParams] = useSearchParams();
   const [prompt, setPrompt] = useState('处理中...');
+  const [totpRequired, setTotpRequired] = useState(false);
   const { githubLogin } = useLogin();
 
   let navigate = useNavigate();
 
   const sendCode = async (code, state, count) => {
-    const { success, message } = await githubLogin(code, state);
+    const { success, message, data } = await githubLogin(code, state);
     if (!success) {
+      if (isTotpRequired(message, data)) {
+        // The OAuth code and state are consumed by now, so never retry; finish
+        // the sign-in with the TOTP code instead.
+        setTotpRequired(true);
+        return;
+      }
       if (message) {
         showError(message);
       }
@@ -76,12 +84,18 @@ const GitHubOAuth = () => {
                       </Grid>
                     </Grid>
                   </Grid>
-                  <Grid item xs={12} container direction="column" justifyContent="center" alignItems="center" style={{ height: '200px' }}>
-                    <CircularProgress />
-                    <Typography variant="h3" paddingTop={'20px'}>
-                      {prompt}
-                    </Typography>
-                  </Grid>
+                  {totpRequired ? (
+                    <Grid item xs={12}>
+                      <OAuthTotpForm onBack={() => navigate('/login')} />
+                    </Grid>
+                  ) : (
+                    <Grid item xs={12} container direction="column" justifyContent="center" alignItems="center" style={{ height: '200px' }}>
+                      <CircularProgress />
+                      <Typography variant="h3" paddingTop={'20px'}>
+                        {prompt}
+                      </Typography>
+                    </Grid>
+                  )}
                 </Grid>
               </AuthCardWrapper>
             </Grid>

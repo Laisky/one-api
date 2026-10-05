@@ -348,11 +348,20 @@ func (user *User) ValidateAndFill() (err error) {
 	return nil
 }
 
+// FillUserById loads the active (non-deleted) account whose id is user.Id into
+// user. It returns an error when the id is empty, a NotFound-kind error when no
+// such account exists, and a wrapped database error otherwise, so callers never
+// act on a zero-valued account.
 func (user *User) FillUserById() error {
 	if user.Id == 0 {
 		return errors.New("id is empty!")
 	}
-	DB.Where(User{Id: user.Id}).First(user)
+	if err := DB.Where(User{Id: user.Id}).First(user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errkind.NotFoundErr(errors.Wrapf(err, "user %d not found", user.Id))
+		}
+		return errors.Wrapf(err, "load user %d", user.Id)
+	}
 	return nil
 }
 

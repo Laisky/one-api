@@ -47,15 +47,34 @@ import (
 //   - c: Gin context for the HTTP request
 //   - minRole: Minimum role level required (e.g., common user, admin, root)
 func authHelper(c *gin.Context, minRole int) {
+	if !AuthenticateDashboardUser(c, minRole) {
+		return
+	}
+	c.Next()
+}
+
+// AuthenticateDashboardUser applies the dashboard authentication checks to c
+// without continuing the handler chain, so a handler reached through a public
+// route (such as an OAuth bind callback) can require the same account state
+// as UserAuth. It resolves the signed session (or bearer access token) against
+// the current account, rejects missing, malformed, deleted, disabled, banned
+// and under-privileged identities, and clears a rejected browser session.
+// Parameters:
+//   - c: Gin context for the HTTP request.
+//   - minRole: minimum role level required.
+//
+// It returns true after binding the effective user into c (ctxkey.Id and
+// friends); otherwise it has already written a 401/403 response and aborted c.
+func AuthenticateDashboardUser(c *gin.Context, minRole int) bool {
 	// A signed session role can reject a request without database work, but can
 	// never authorize it. Every potentially permitted request still resolves the
 	// current primary account below. This preserves low-role route isolation.
 	if dashboardSessionRoleInsufficient(c, minRole) {
 		respondAuthError(c, http.StatusForbidden, "No permission to perform this operation, insufficient permissions")
-		return
+		return false
 	}
 	if !allowSessionMutation(c) {
-		return
+		return false
 	}
 	user, err := resolveDashboardUser(c)
 	if err != nil {
@@ -64,19 +83,19 @@ func authHelper(c *gin.Context, minRole int) {
 	if user == nil {
 		clearInvalidDashboardSession(c)
 		respondAuthError(c, http.StatusUnauthorized, "No permission to perform this operation, authentication is invalid")
-		return
+		return false
 	}
 	if user.Status != model.UserStatusEnabled || blacklist.IsUserBanned(user.Id) {
 		clearInvalidDashboardSession(c)
 		respondAuthError(c, http.StatusForbidden, "User has been banned")
-		return
+		return false
 	}
 	if user.Role < minRole {
 		respondAuthError(c, http.StatusForbidden, "No permission to perform this operation, insufficient permissions")
-		return
+		return false
 	}
 	bindDashboardUser(c, user)
-	c.Next()
+	return true
 }
 
 // UserAuth returns a middleware function that requires basic user authentication.

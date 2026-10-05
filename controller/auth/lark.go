@@ -80,6 +80,10 @@ func getLarkUserInfoByCode(code string) (*LarkUser, error) {
 	return &larkUser, nil
 }
 
+// LarkOAuth handles the Lark OAuth callback. After the session state check it
+// binds the Lark open id to the signed-in account, or signs in (provisioning
+// when registration is open) the linked account, requiring its TOTP code
+// through controller.CompleteOAuthLogin when 2FA is enabled.
 func LarkOAuth(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	session := sessions.Default(c)
@@ -140,41 +144,26 @@ func LarkOAuth(c *gin.Context) {
 		helper.RespondError(c, errors.New("User has been banned"))
 		return
 	}
-	controller.SetupLogin(&user, c)
+	controller.CompleteOAuthLogin(&user, c)
 }
 
+// LarkBind attaches the Lark open id resolved from the callback code to the
+// account of the current dashboard session. The account must pass the
+// dashboard checks before Lark is contacted, and only the lark_id column is
+// written. It returns no value and always writes a response.
 func LarkBind(c *gin.Context) {
-	code := c.Query("code")
-	larkUser, err := getLarkUserInfoByCode(code)
+	userID, ok := resolveBindingUserID(c)
+	if !ok {
+		return
+	}
+	larkUser, err := getLarkUserInfoByCode(c.Query("code"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
 	}
-	user := model.User{
-		LarkId: larkUser.OpenID,
-	}
-	if model.IsLarkIdAlreadyTaken(user.LarkId) {
+	if model.IsLarkIdAlreadyTaken(larkUser.OpenID) {
 		helper.RespondError(c, errors.New("This Lark account has already been bound"))
 		return
 	}
-	session := sessions.Default(c)
-	id := session.Get("id")
-	// id := c.GetInt("id")  // critical bug!
-	user.Id = id.(int)
-	err = user.FillUserById()
-	if err != nil {
-		helper.RespondError(c, err)
-		return
-	}
-	user.LarkId = larkUser.OpenID
-	err = user.Update(false)
-	if err != nil {
-		helper.RespondError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "bind",
-	})
-	return
+	bindOAuthIdentity(c, userID, model.OAuthIdentityLark, larkUser.OpenID, "bind")
 }

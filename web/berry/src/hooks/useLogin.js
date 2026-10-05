@@ -10,6 +10,16 @@ const normalizeUser = (user) => {
   return uuid ? { ...user, uuid, id: uuid } : user;
 };
 
+/**
+ * isTotpRequired reports whether a login response (password, OAuth, or WeChat)
+ * asks the user for a TOTP code before the session is created.
+ *
+ * @param {string|undefined} message is the `message` field of the login response.
+ * @param {object|null|undefined} data is the `data` field of the login response.
+ * @returns {boolean} true when the server answered with the `totp_required` challenge.
+ */
+export const isTotpRequired = (message, data) => message === 'totp_required' || data?.totp_required === true;
+
 const useLogin = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -51,7 +61,7 @@ const useLogin = () => {
           navigate('/panel');
         }
       }
-      return { success, message };
+      return { success, message, data };
     } catch (err) {
       // 请求失败，设置错误信息
       return { success: false, message: '' };
@@ -74,7 +84,7 @@ const useLogin = () => {
           navigate('/panel');
         }
       }
-      return { success, message };
+      return { success, message, data };
     } catch (err) {
       // 请求失败，设置错误信息
       return { success: false, message: '' };
@@ -97,7 +107,7 @@ const useLogin = () => {
           navigate('/panel');
         }
       }
-      return { success, message };
+      return { success, message, data };
     } catch (err) {
       // 请求失败，设置错误信息
       return { success: false, message: '' };
@@ -115,9 +125,36 @@ const useLogin = () => {
         showSuccess('登录成功！');
         navigate('/panel');
       }
-      return { success, message };
+      return { success, message, data };
     } catch (err) {
       // 请求失败，设置错误信息
+      return { success: false, message: '' };
+    }
+  };
+
+  /**
+   * oauthTotpLogin completes an OAuth or WeChat login that the server paused
+   * with the `totp_required` challenge by posting the TOTP code to
+   * /api/oauth/totp; on success it runs the regular login-success path.
+   *
+   * @param {string} totpCode is the 6-digit TOTP code entered by the user.
+   * @returns {Promise<{success: boolean, message: string, data: any}>} the server
+   * verdict; `data.totp_expired` is true when the pending sign-in expired.
+   */
+  const oauthTotpLogin = async (totpCode) => {
+    try {
+      const res = await API.post('/api/oauth/totp', { totp_code: totpCode });
+      const { success, message, data } = res.data;
+      if (success) {
+        const user = normalizeUser(data);
+        dispatch({ type: LOGIN, payload: user });
+        localStorage.setItem('user', JSON.stringify(user));
+        showSuccess('登录成功！');
+        navigate('/panel');
+      }
+      return { success, message, data };
+    } catch (err) {
+      // The API interceptor already reported the failure (e.g. HTTP 429).
       return { success: false, message: '' };
     }
   };
@@ -129,7 +166,7 @@ const useLogin = () => {
     navigate('/');
   };
 
-  return { login, logout, githubLogin, wechatLogin, larkLogin,oidcLogin };
+  return { login, logout, githubLogin, wechatLogin, larkLogin, oidcLogin, oauthTotpLogin };
 };
 
 export default useLogin;

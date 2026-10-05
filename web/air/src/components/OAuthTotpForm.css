@@ -1,0 +1,18 @@
+.oauth-totp-segment {
+  min-height: 300px;
+}
+
+.oauth-totp-form {
+  max-width: 400px;
+  margin: 24px auto;
+}
+
+.oauth-totp-form__hint {
+  display: block;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.oauth-totp-form__cancel {
+  margin-top: 10px;
+}

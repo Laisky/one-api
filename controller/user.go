@@ -136,13 +136,7 @@ func Login(c *gin.Context) {
 		// TOTP is enabled, check if code is provided
 		if loginRequest.TotpCode == "" {
 			// Return special response indicating TOTP is required
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "totp_required",
-				"data": gin.H{
-					"totp_required": true,
-				},
-			})
+			respondTotpRequired(c)
 			return
 		}
 
@@ -164,7 +158,9 @@ func Login(c *gin.Context) {
 	SetupLogin(&user, c)
 }
 
-// setup session & cookies and then return user info
+// SetupLogin creates the authenticated dashboard session for user on c,
+// clearing any pending OAuth TOTP login, and writes the public user payload.
+// It returns no value; a session save failure is written as an error response.
 func SetupLogin(user *model.User, c *gin.Context) {
 	// BUG: 如果用户发送了一段不合法的 session cookie，因为 gorilla 对无法识别的 session 会默认返回 nil，
 	// 导致 session.Set 中会出现 panic
@@ -183,6 +179,9 @@ func SetupLogin(user *model.User, c *gin.Context) {
 	// BUG: https://github.com/gin-contrib/sessions/issues/287
 	// github.com/gin-contrib/sessions 不要使用 v1.0.3
 	session := sessions.Default(c)
+	// An authenticated session supersedes any pending OAuth TOTP login.
+	session.Delete(oauthTotpPendingUserKey)
+	session.Delete(oauthTotpPendingExpiresKey)
 	session.Set("id", user.Id)
 	session.Set("username", user.Username)
 	session.Set("role", user.Role)
