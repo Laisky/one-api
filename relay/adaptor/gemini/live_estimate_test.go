@@ -126,4 +126,6 @@ func TestLiveTurnOutputAllowance(t *testing.T) {
 	require.EqualValues(t, 90000, liveTurnOutputAllowance([]byte(`{"setup":{"generationConfig":{"maxOutputTokens":90000}}}`)))
 	require.EqualValues(t, liveDefaultTurnOutputTokens, liveTurnOutputAllowance([]byte(`{"setup":{"generationConfig":{"maxOutputTokens":0}}}`)))
 	require.EqualValues(t, liveDefaultTurnOutputTokens, liveTurnOutputAllowance([]byte(`{"setup":{"generationConfig":{"maxOutputTokens":-4}}}`)))
+	require.EqualValues(t, 100000, liveTurnOutputAllowance([]byte(`{"setup":{"generationConfig":{"maxOutputTokens":1e5}}}`)))
+	require.EqualValues(t, 501, liveTurnOutputAllowance([]byte(`{"setup":{"generationConfig":{"maxOutputTokens":500.5}}}`)))
 }

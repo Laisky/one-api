@@ -303,5 +303,10 @@ func liveTurnOutputAllowance(setup []byte) int64 {
 	if value, err := frame.Setup.Generation.MaxOutputTokens.Int64(); err == nil && value > 0 {
 		return value
 	}
+	// A fractional or exponent form still caps the provider; round it up so the
+	// allowance never understates that cap.
+	if value, err := frame.Setup.Generation.MaxOutputTokens.Float64(); err == nil && value > 0 && !math.IsInf(value, 0) {
+		return int64(min(math.Ceil(value), float64(math.MaxInt32)))
+	}
 	return liveDefaultTurnOutputTokens
 }
