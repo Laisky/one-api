@@ -20,20 +20,26 @@ import (
 	"github.com/Laisky/one-api/relay/state"
 )
 
-// TestResponseStateBehaviorNativeRawForwardingPreservesSelectors verifies that
-// the native Responses path retains state selectors from the raw request even
-// though conversation is absent from the typed request DTO.
-func TestResponseStateBehaviorNativeRawForwardingPreservesSelectors(t *testing.T) {
+// TestResponseStateBehaviorNativeWireSelectors verifies the native Responses wire
+// builder's state-selector contract. previous_response_id is forwarded because
+// resolveNativePreviousResponse has already owner-resolved it (and rewritten it to
+// the bound upstream handle). conversation is never forwarded in either selector
+// form: gateway conversations are served by the hydrating fallback and every other
+// conversation ID lacks an owner binding, so the provider must not receive one
+// even if a caller reached the wire builder without resolution.
+func TestResponseStateBehaviorNativeWireSelectors(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		selector string
-		key      string
+		name      string
+		selector  string
+		key       string
+		forwarded bool
 	}{
-		{name: "previous response", selector: `"previous_response_id":"resp_123"`, key: "previous_response_id"},
+		{name: "previous response", selector: `"previous_response_id":"resp_123"`, key: "previous_response_id", forwarded: true},
 		{name: "conversation id", selector: `"conversation":"conv_123"`, key: "conversation"},
 		{name: "conversation object", selector: `"conversation":{"id":"conv_123"}`, key: "conversation"},
+		{name: "empty conversation", selector: `"conversation":""`, key: "conversation"},
 	}
 
 	for _, tt := range tests {
@@ -50,7 +56,11 @@ func TestResponseStateBehaviorNativeRawForwardingPreservesSelectors(t *testing.T
 
 			var forwarded map[string]any
 			require.NoError(t, json.Unmarshal(patched, &forwarded))
-			require.Contains(t, forwarded, tt.key)
+			if tt.forwarded {
+				require.Contains(t, forwarded, tt.key)
+				return
+			}
+			require.NotContains(t, forwarded, tt.key, "the native wire must never carry a conversation selector")
 		})
 	}
 }

@@ -286,6 +286,11 @@ func WithShadow(on bool) Option { return func() { shadow = on } }
 // WithLegacyPassthrough toggles legacy passthrough for tests.
 func WithLegacyPassthrough(on bool) Option { return func() { legacyPassthrough = on } }
 
+// WithAllowlist installs an owner/channel allowlist for tests. The parameter
+// spec uses the RESPONSE_STATE_ALLOWLIST syntax ("user:1,token:2,channel:3").
+// It returns an Option for SetForTest.
+func WithAllowlist(spec string) Option { return func() { allowlist = parseAllowlist(spec) } }
+
 // allowlistSet holds the parsed allowlist scopes.
 type allowlistSet struct {
 	users    map[int]struct{}
