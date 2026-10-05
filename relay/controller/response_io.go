@@ -168,9 +168,12 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 	if root == nil {
 		return nil, stats, false, errors.New("Response API request body must be a JSON object")
 	}
-	changed := false
+	// Never forward any spelling of the background flag (#483). Stripping here
+	// also forces a re-marshal, so exact duplicate keys in the raw body cannot
+	// survive on the unchanged-raw passthrough path below.
+	changed := openai.StripResponseBackgroundKeys(root)
 	for key := range root {
-		if !nativeResponseRootAllowed(key) {
+		if nativeResponseRootDenied(key) || !nativeResponseRootAllowed(key) {
 			delete(root, key)
 			changed = true
 		}

@@ -150,10 +150,11 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 	// the entire upstream request FREE — which is incorrect.
 	//
 	// Therefore: when usage is zero, we SKIP post-billing entirely and
-	// let the pre-consumed quota stand as the final charge. The provisional
-	// log entry remains with the estimated amount for audit visibility.
+	// let the pre-consumed quota stand as the final charge. Explicitly incomplete
+	// receipts instead use post-billing to finalize the estimated charge and its
+	// provenance in the consume log and request-cost record.
 	//
-	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
+	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && usage.BillingEstimateReason == "" {
 		lg.Warn("response api websocket returned zero usage, keeping pre-consumed quota as-is",
 			zap.Int64("pre_consumed_quota", preConsumedQuota),
 			zap.String("model", meta.ActualModelName),

@@ -45,7 +45,12 @@ func normalizeAudioWire(c *gin.Context, mode, channel int, actualModel string, t
 		if fields == nil {
 			return nil, "", errors.New("speech body must be a JSON object")
 		}
-		if raw, ok := fields["extra_body"]; ok {
+		// A case-folded spelling of extra_body gets the same protected-field
+		// policy instead of reaching the provider verbatim.
+		if err := canonicalizeExtraBodyKey(fields); err != nil {
+			return nil, "", errors.Wrap(err, "normalize audio extra_body")
+		}
+		if raw, ok := fields[extraBodyKey]; ok {
 			var extra map[string]json.RawMessage
 			if err := json.Unmarshal(raw, &extra); err != nil {
 				return nil, "", errors.Wrap(err, "decode audio extra_body")
@@ -58,7 +63,7 @@ func normalizeAudioWire(c *gin.Context, mode, channel int, actualModel string, t
 					fields[key] = value
 				}
 			}
-			delete(fields, "extra_body")
+			delete(fields, extraBodyKey)
 		}
 		modelJSON, err := json.Marshal(actualModel)
 		if err != nil {

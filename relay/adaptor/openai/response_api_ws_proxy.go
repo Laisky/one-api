@@ -27,9 +27,10 @@ type responseAPIWebSocketEvent struct {
 }
 
 type responseAPIEventResponse struct {
-	ID    string                 `json:"id,omitempty"`
-	Model string                 `json:"model,omitempty"`
-	Usage *responseAPIEventUsage `json:"usage,omitempty"`
+	ID     string                 `json:"id,omitempty"`
+	Status string                 `json:"status,omitempty"`
+	Model  string                 `json:"model,omitempty"`
+	Usage  *responseAPIEventUsage `json:"usage,omitempty"`
 }
 
 type responseAPIEventUsage struct {
@@ -126,7 +127,8 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 	go func() {
 		errc <- copyResponseAPIClientToUpstream(requestContext, clientConn, upstreamConn, meta, ownership)
 	}()
-	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, usage, stored) }()
+	receipts := &responseAPIWSUsageCollector{usage: usage}
+	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, receipts, stored) }()
 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
@@ -139,6 +141,8 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 		lg.Debug("close response upstream socket", zap.Error(closeErr))
 	}
 	secondErr := <-errc
+	// Both legs have drained, so the collector and dispatch counter are stable.
+	receipts.finish(ownership.creates.Load())
 	// An admission failure before any execution must release the handshake hold.
 	// If an earlier frame was dispatched, preserve its billing reconciliation.
 	if ownership.denied.Load() && !ownership.dispatched.Load() {
@@ -187,6 +191,9 @@ func (c *responseAPIWSStoreCollector) collect(msg []byte) {
 	}
 	var resp ResponseAPIResponse
 	if err := json.Unmarshal(probe.Response, &resp); err != nil || resp.Id == "" {
+		return
+	}
+	if !isResponseAPIWSTerminalReceipt(probe.Type, resp.Status) {
 		return
 	}
 	if c.ownership != nil {
@@ -301,16 +308,19 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 			return errors.WithStack(werr)
 		}
 		ownership.dispatched.Store(true)
+		if isResponseCreateFrame(outbound) {
+			ownership.creates.Add(1)
+		}
 	}
 }
 
 // copyResponseAPIWSUpstreamToClient forwards upstream frames to the client and
-// extracts best-effort usage metrics from response events. It also records
-// store!=false completed response objects into stored so the caller can commit
-// them to the gateway store (proposal ST-011). Collection happens after usage
-// accounting and never alters the forwarded frame.
-func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage, stored *responseAPIWSStoreCollector) error {
-	countedResponseIDs := map[string]struct{}{}
+// feeds response events to receipts, which extracts usage from qualified
+// terminal receipts; the caller finishes receipts after both legs drain. It
+// also records store!=false completed response objects into stored so the
+// caller can commit them to the gateway store (proposal ST-011). Collection
+// happens after usage accounting and never alters the forwarded frame.
+func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, receipts *responseAPIWSUsageCollector, stored *responseAPIWSStoreCollector) error {
 
 	for {
 		mt, msg, err := src.ReadMessage()
@@ -328,7 +338,7 @@ func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.U
 		}
 
 		if mt == websocket.TextMessage {
-			accumulateResponseAPIUsage(msg, usage, countedResponseIDs)
+			receipts.collect(msg)
 			if stored != nil {
 				stored.collect(msg)
 			}
@@ -341,7 +351,7 @@ func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.U
 }
 
 // accumulateResponseAPIUsage parses one websocket text event and updates usage once
-// per response ID to avoid double counting created/updated/completed snapshots.
+// per response ID to avoid double counting qualified terminal receipts.
 func accumulateResponseAPIUsage(msg []byte, usage *rmodel.Usage, countedResponseIDs map[string]struct{}) {
 	if usage == nil || len(msg) == 0 {
 		return
@@ -385,7 +395,8 @@ func extractResponseAPIUsage(msg []byte) (string, *rmodel.Usage, bool) {
 		return "", nil, false
 	}
 
-	if event.Response == nil || event.Response.Usage == nil || event.Response.ID == "" {
+	if event.Response == nil || event.Response.Usage == nil || event.Response.ID == "" ||
+		!isResponseAPIWSTerminalReceipt(event.Type, event.Response.Status) {
 		return "", nil, false
 	}
 

@@ -248,8 +248,9 @@ func fingerprintID(id string) string {
 // leaves connection-local store=false state to the upstream; only store=true
 // responses reach this function. Each record is keyed by (and idempotent on) the
 // raw upstream response ID, so a reconnect that re-observes the same response does
-// not create a duplicate node. Commit failures are logged, never fatal to the
-// already-completed socket session.
+// not create a duplicate node. Non-terminal (queued/in_progress) responses are
+// skipped. Commit failures are logged, never fatal to the already-completed
+// socket session.
 func commitWebSocketObservedResponses(c *gin.Context, meta *metalib.Meta, responses []*openai.ResponseAPIResponse) {
 	if len(responses) == 0 || !responseStateActive(meta) {
 		return
@@ -272,6 +273,15 @@ func commitWebSocketObservedResponses(c *gin.Context, meta *metalib.Meta, respon
 
 	for _, resp := range responses {
 		if resp == nil || resp.Id == "" {
+			continue
+		}
+		if openai.IsResponseStatusNonTerminal(resp.Status) {
+			// A completion event that still reports unfinished work must not
+			// become a continuation binding (#483).
+			lg.Warn("skipping gateway state commit for non-terminal websocket response",
+				zap.String("status", resp.Status),
+				zap.String("response_id", resp.Id),
+			)
 			continue
 		}
 

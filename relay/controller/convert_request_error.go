@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
@@ -19,6 +22,9 @@ var convertRequestBadRequestHints = []string{
 func shouldTreatConvertRequestErrorAsBadRequest(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, common.ErrAmbiguousJSONKey) {
+		return true
 	}
 
 	msg := strings.ToLower(err.Error())

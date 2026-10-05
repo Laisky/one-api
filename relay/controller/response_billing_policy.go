@@ -26,13 +26,22 @@ func validateNativeResponseToolBilling(tools []openai.ResponseAPITool) error {
 	return nil
 }
 
+// nativeResponseRootDenied lists reviewed typed fields that are never forwarded
+// to a provider. The parameter key is a root request key. It returns true for
+// any spelling of "background": background execution has no durable terminal
+// settlement (#483), so normalizeResponseAPIRawBody always strips the flag.
+func nativeResponseRootDenied(key string) bool {
+	return openai.IsResponseBackgroundKey(key)
+}
+
 // nativeResponseRootAllowed is an explicit protocol admission manifest. New
 // typed fields require review instead of automatically enabling paid features.
 // Provider extensions still use the shared controlled extra_body policy.
+// Reviewed but denied fields live in nativeResponseRootDenied instead.
 func nativeResponseRootAllowed(key string) bool {
 	switch key {
 	case "thinking", "output_config", "input", "model", "extra_body",
-		"background", "conversation", "include", "instructions", "max_output_tokens",
+		"conversation", "include", "instructions", "max_output_tokens",
 		"metadata", "parallel_tool_calls", "previous_response_id", "prompt",
 		"reasoning", "service_tier", "store", "stream", "temperature", "text",
 		"tool_choice", "tools", "top_p", "top_logprobs", "truncation", "user":

@@ -24,7 +24,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 	}
 
 	if request.Background != nil && *request.Background {
-		return nil, errors.New("background responses are not supported for this channel")
+		return nil, errors.Wrap(ErrResponseBackgroundUnsupported, "convert Response API request to chat completion")
 	}
 
 	if normalized, changed := NormalizeToolChoice(request.ToolChoice); changed {

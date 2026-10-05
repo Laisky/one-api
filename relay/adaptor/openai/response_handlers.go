@@ -112,10 +112,14 @@ func ResponseAPIHandler(c *gin.Context, resp *http.Response, promptTokens int, m
 		lg.Debug("restored sanitized tool names in Response API non-stream response")
 	}
 
-	// Set usage - prioritize API-provided usage, but fallback to calculation if needed
+	// Set usage - prioritize API-provided usage, but fallback to calculation if needed.
+	// An unfinished (queued/in_progress) reply has no authoritative receipt, so it
+	// never synthesizes prompt-only usage that would release the reservation.
 	var finalUsage *model.Usage
 
-	if responseAPIResp.Usage != nil {
+	if IsResponseStatusNonTerminal(responseAPIResp.Status) {
+		finalUsage = nonTerminalResponseUsage(c, &responseAPIResp)
+	} else if responseAPIResp.Usage != nil {
 		if convertedUsage := responseAPIResp.Usage.ToModelUsage(); convertedUsage != nil {
 			// Check if the converted usage has meaningful token counts
 			if convertedUsage.PromptTokens > 0 || convertedUsage.CompletionTokens > 0 {
@@ -177,6 +181,7 @@ func ResponseAPIHandler(c *gin.Context, resp *http.Response, promptTokens int, m
 // This function is used for direct Response API requests that don't need conversion back to ChatCompletion format
 // Returns error (if any) and token usage information
 func ResponseAPIDirectHandler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
+	lg := gmw.GetLogger(c)
 	// Read the entire response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -191,7 +196,7 @@ func ResponseAPIDirectHandler(c *gin.Context, resp *http.Response, promptTokens 
 		fields = append(fields, zap.String("content_type", contentType))
 	}
 	fields = append(fields, zap.Bool("body_logging_suppressed", true))
-	gmw.GetLogger(c).Debug("got response from upstream", fields...)
+	lg.Debug("got response from upstream", fields...)
 
 	// Close the original response body
 	if err = resp.Body.Close(); err != nil {
@@ -214,16 +219,20 @@ func ResponseAPIDirectHandler(c *gin.Context, resp *http.Response, promptTokens 
 
 	calls := countWebSearchSearchActions(responseAPIResp.Output)
 	if derived, usedFallback := deriveWebSearchInvocationCount(calls, responseAPIResp.Usage); usedFallback {
-		gmw.GetLogger(c).Debug("web search count derived from usage details", zap.Int("web_search_requests", derived))
+		lg.Debug("web search count derived from usage details", zap.Int("web_search_requests", derived))
 		calls = derived
 	}
 	if calls > 0 {
 		c.Set(ctxkey.WebSearchCallCount, calls)
 	}
 
-	// Extract usage information for billing
+	// Extract usage information for billing. An unfinished (queued/in_progress)
+	// reply has no authoritative receipt, so it never synthesizes prompt-only
+	// usage that would release the reservation before the work completes.
 	var finalUsage *model.Usage
-	if responseAPIResp.Usage != nil {
+	if IsResponseStatusNonTerminal(responseAPIResp.Status) {
+		finalUsage = nonTerminalResponseUsage(c, &responseAPIResp)
+	} else if responseAPIResp.Usage != nil {
 		if convertedUsage := responseAPIResp.Usage.ToModelUsage(); convertedUsage != nil {
 			// Check if the converted usage has meaningful token counts
 			if convertedUsage.PromptTokens > 0 || convertedUsage.CompletionTokens > 0 {
@@ -264,7 +273,7 @@ func ResponseAPIDirectHandler(c *gin.Context, resp *http.Response, promptTokens 
 	c.Writer.Header().Set("Content-Length", newLength)
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(resp.StatusCode)
-	gmw.GetLogger(c).Debug("adjusted response content length", zap.String("original_content_length", resp.Header.Get("Content-Length")), zap.String("rewritten_content_length", newLength))
+	lg.Debug("adjusted response content length", zap.String("original_content_length", resp.Header.Get("Content-Length")), zap.String("rewritten_content_length", newLength))
 	if _, err = c.Writer.Write(responseBody); err != nil {
 		// Return usage even on write failure so billing can proceed for forwarded requests
 		return ErrorWrapper(err, "write_response_body_failed", http.StatusInternalServerError), finalUsage
