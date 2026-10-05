@@ -105,7 +105,8 @@ func TestSecurityLyriaSingleGenerationWireLedger(t *testing.T) {
 							body = strings.Replace(body, `"model":"alias"`, `"model":"`+lyriaClipModel+`"`, 1)
 						}
 						// A body exists, so a query cannot override the billable count or model.
-						c, _, id := protocolContext(t, channeltype.OpenRouter, lyriaClipModel, path+"?n=2&N=2&model=not-the-body", body, upstream.URL+"/v1", balance, 1, false, nil)
+						// The adaptor appends /v1 itself; its base is the provider origin.
+						c, _, id := protocolContext(t, channeltype.OpenRouter, lyriaClipModel, path+"?n=2&N=2&model=not-the-body", body, upstream.URL, balance, 1, false, nil)
 						c.Request.Header.Set("Content-Type", ct)
 						c.Set(ctxkey.ContentType, ct)
 						if !mapped {
