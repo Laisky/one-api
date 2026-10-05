@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -54,6 +55,9 @@ type ocrSettlementCase struct {
 	userQuota    int64
 	tokenQuota   int64
 	failDelivery bool
+	// upstreamContentLength, when positive, overstates the upstream
+	// Content-Length so the gateway observes a transport error after the body.
+	upstreamContentLength int
 }
 
 // ocrSettlementResult captures every externally observable effect of one case.
@@ -127,6 +131,9 @@ func runOCRSettlementCase(t *testing.T, tc ocrSettlementCase) ocrSettlementResul
 			held.Store(tc.userQuota - user.Quota)
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if tc.upstreamContentLength > 0 {
+			w.Header().Set("Content-Length", strconv.Itoa(tc.upstreamContentLength))
+		}
 		_, _ = w.Write([]byte(tc.upstreamBody))
 	}))
 	t.Cleanup(upstream.Close)
