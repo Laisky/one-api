@@ -92,6 +92,7 @@ describe('PersonalSettings', () => {
     (api.get as any).mockReset();
     (api.put as any).mockReset();
     (api.post as any).mockReset();
+    (api.post as any).mockImplementation((url: string) => api.get(url));
 
     (api.get as any).mockImplementation((url: string) => {
       if (url === '/api/user/self') {
@@ -200,7 +201,7 @@ describe('PersonalSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'personal_settings.profile_info.bind_email' }));
 
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith('/api/oauth/email/bind?email=new%40example.com&code=123456');
+      expect(api.post).toHaveBeenCalledWith('/api/oauth/email/bind?email=new%40example.com&code=123456');
     });
 
     await waitFor(() => {
@@ -213,25 +214,9 @@ describe('PersonalSettings', () => {
   });
 
   it('shows an error notification when generate access token returns success false', async () => {
-    (api.get as any).mockImplementation((url: string) => {
-      if (url === '/api/user/self') {
-        return Promise.resolve({
-          data: {
-            success: true,
-            data: {
-              ...currentProfile,
-            },
-          },
-        });
-      }
-      if (url === '/api/user/totp/status') {
-        return Promise.resolve({
-          data: {
-            success: true,
-            data: { totp_enabled: false },
-          },
-        });
-      }
+    // /api/user/token is a state-changing POST (CSRF hardening); serve it only from the
+    // POST mock so a regression back to GET cannot reach the rejection response.
+    (api.post as any).mockImplementation((url: string) => {
       if (url === '/api/user/token') {
         return Promise.resolve({ data: { success: false, message: 'token rejected' } });
       }
@@ -250,28 +235,15 @@ describe('PersonalSettings', () => {
         })
       );
     });
+
+    expect(api.post).toHaveBeenCalledWith('/api/user/token');
+    expect(api.get).not.toHaveBeenCalledWith('/api/user/token');
   });
 
   it('shows an error notification when getting the invite link returns success false', async () => {
-    (api.get as any).mockImplementation((url: string) => {
-      if (url === '/api/user/self') {
-        return Promise.resolve({
-          data: {
-            success: true,
-            data: {
-              ...currentProfile,
-            },
-          },
-        });
-      }
-      if (url === '/api/user/totp/status') {
-        return Promise.resolve({
-          data: {
-            success: true,
-            data: { totp_enabled: false },
-          },
-        });
-      }
+    // /api/user/aff is a state-changing POST (CSRF hardening); serve it only from the
+    // POST mock so a regression back to GET cannot reach the rejection response.
+    (api.post as any).mockImplementation((url: string) => {
       if (url === '/api/user/aff') {
         return Promise.resolve({ data: { success: false, message: 'invite rejected' } });
       }
@@ -290,5 +262,8 @@ describe('PersonalSettings', () => {
         })
       );
     });
+
+    expect(api.post).toHaveBeenCalledWith('/api/user/aff');
+    expect(api.get).not.toHaveBeenCalledWith('/api/user/aff');
   });
 });

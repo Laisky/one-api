@@ -56,12 +56,14 @@ For the complete list, read [relay/channeltype/define.go](../../../../relay/chan
 | DELETE | `/api/channel/disabled`       | Delete all status-2 and status-3         |
 | GET    | `/api/channel/models`         | All model ids supported across channels  |
 | GET    | `/api/channel/metadata`       | Channel-building metadata (types, defaults) |
-| GET    | `/api/channel/test`           | Test multiple channels (async)           |
-| GET    | `/api/channel/test/:uuid`     | Test one channel synchronously           |
-| GET    | `/api/channel/update_balance` | Refresh balance for all (async)          |
-| GET    | `/api/channel/update_balance/:uuid` | Refresh balance for one               |
+| POST   | `/api/channel/test`           | Test multiple channels (async)           |
+| POST   | `/api/channel/test/:uuid`     | Test one channel synchronously           |
+| POST   | `/api/channel/update_balance` | Refresh balance for all (async)          |
+| POST   | `/api/channel/update_balance/:uuid` | Refresh balance for one               |
 | GET    | `/api/channel/pricing/:uuid`  | Fetch per-channel pricing config         |
 | PUT    | `/api/channel/pricing/:uuid`  | Replace per-channel pricing config       |
+
+The test and balance-refresh routes are `POST`-only (parameters stay in the query string, no body); a legacy `GET` returns `405` with `Allow: POST` and does nothing.
 
 Every `:uuid` segment is the channel's `uuid` string; the server resolves it via `resolveChannelRef` ([controller/id_refs.go](../../../../controller/id_refs.go)) and returns `channel not found` for anything else.
 | GET    | `/api/channel/default-pricing`| System default pricing                   |
@@ -150,7 +152,7 @@ jq -nc --arg uuid "$CHANNEL_UUID" '{uuid: $uuid, status: 1}' \
       -H "Content-Type: application/json" \
       -X PUT -d @- "$ONEAPI_BASE_URL/api/channel/"
 ```
-**Do this only after fixing the root cause.** A test call (`GET /api/channel/test/$CHANNEL_UUID`) before re-enabling is mandatory.
+**Do this only after fixing the root cause.** A test call (`POST /api/channel/test/$CHANNEL_UUID`) before re-enabling is mandatory.
 
 ## Disable / delete
 
@@ -182,7 +184,7 @@ Removes every channel with `status` in `{2, 3}`. Require explicit user confirmat
 Single, synchronous:
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/channel/test/$CHANNEL_UUID?model=gpt-4o-mini" \
+  -X POST "$ONEAPI_BASE_URL/api/channel/test/$CHANNEL_UUID?model=gpt-4o-mini" \
   | jq '{success, message, time, modelName}'
 ```
 Response:
@@ -193,7 +195,7 @@ Response:
 All at once, async (fire-and-forget):
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/channel/test?scope=enabled"
+  -X POST "$ONEAPI_BASE_URL/api/channel/test?scope=enabled"
 ```
 `scope`: `all` | `enabled` | `<group-name>`. Results appear in channel rows (`test_time`, `response_time`) — poll with list.
 
@@ -266,12 +268,12 @@ enabled through the periodic sweep.
 ```bash
 # Single
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/channel/update_balance/$CHANNEL_UUID" \
+  -X POST "$ONEAPI_BASE_URL/api/channel/update_balance/$CHANNEL_UUID" \
   | jq '{success, balance, message}'
 
 # All (async)
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-  "$ONEAPI_BASE_URL/api/channel/update_balance"
+  -X POST "$ONEAPI_BASE_URL/api/channel/update_balance"
 ```
 Not all providers expose balance APIs. `success=false` with `"not supported"` is normal for those.
 

@@ -1,14 +1,47 @@
 package router
 
 import (
+	"net/http"
+
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
+	"github.com/gin-contrib/gzip"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/controller"
 	"github.com/Laisky/one-api/controller/auth"
 	"github.com/Laisky/one-api/middleware"
-
-	"github.com/gin-contrib/gzip"
-	"github.com/gin-gonic/gin"
 )
 
+// postOnlyActionPaths lists state-changing actions, relative to /api, that
+// accepted GET before issue #479 and now require POST.
+var postOnlyActionPaths = []string{
+	"/oauth/wechat",
+	"/oauth/wechat/bind",
+	"/oauth/email/bind",
+	"/user/logout",
+	"/user/token",
+	"/user/aff",
+	"/user/totp/setup",
+	"/channel/test",
+	"/channel/test/:id",
+	"/channel/update_balance",
+	"/channel/update_balance/:id",
+}
+
+// rejectLegacyActionGET answers a GET to a POST-only action with 405 and an
+// Allow header so legacy clients learn the migration. It performs no
+// authentication, session write or other side effect.
+func rejectLegacyActionGET(c *gin.Context) {
+	gmw.GetLogger(c).Debug("rejected legacy GET to POST-only action", zap.String("route", c.FullPath()))
+	c.Header("Allow", http.MethodPost)
+	c.JSON(http.StatusMethodNotAllowed, gin.H{
+		"success": false,
+		"message": "This endpoint requires POST; GET no longer performs this action",
+	})
+}
+
+// SetApiRouter registers the management and dashboard API routes on router.
 func SetApiRouter(router *gin.Engine) {
 	apiRouter := router.Group("/api")
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -34,18 +67,23 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/oauth/oidc", middleware.CriticalRateLimit(), auth.OidcAuth)
 		apiRouter.GET("/oauth/lark", middleware.CriticalRateLimit(), auth.LarkOAuth)
 		apiRouter.GET("/oauth/state", middleware.CriticalRateLimit(), auth.GenerateOAuthCode)
-		apiRouter.GET("/oauth/wechat", middleware.CriticalRateLimit(), auth.WeChatAuth)
-		apiRouter.GET("/oauth/wechat/bind", middleware.CriticalRateLimit(), middleware.UserAuth(), auth.WeChatBind)
-		apiRouter.GET("/oauth/email/bind", middleware.CriticalRateLimit(), middleware.UserAuth(), controller.EmailBind)
+		apiRouter.POST("/oauth/wechat", middleware.CriticalRateLimit(), middleware.SessionMutationGuard(), auth.WeChatAuth)
+		apiRouter.POST("/oauth/wechat/bind", middleware.CriticalRateLimit(), middleware.UserAuth(), auth.WeChatBind)
+		apiRouter.POST("/oauth/email/bind", middleware.CriticalRateLimit(), middleware.UserAuth(), controller.EmailBind)
 		apiRouter.POST("/topup", middleware.AdminAuth(), controller.AdminTopUp)
+		// Former GET actions answer GET with 405 before any authentication or
+		// side effect, instead of falling through to parameterized read routes.
+		for _, path := range postOnlyActionPaths {
+			apiRouter.GET(path, rejectLegacyActionGET)
+		}
 
 		userRoute := apiRouter.Group("/user")
 		{
 			userRoute.POST("/register", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.Register)
-			userRoute.POST("/login", middleware.CriticalRateLimit(), controller.Login)
-			userRoute.POST("/passkey/login/begin", middleware.CriticalRateLimit(), controller.PasskeyLoginBegin)
-			userRoute.POST("/passkey/login/finish", middleware.CriticalRateLimit(), controller.PasskeyLoginFinish)
-			userRoute.GET("/logout", controller.Logout)
+			userRoute.POST("/login", middleware.CriticalRateLimit(), middleware.SessionMutationGuard(), controller.Login)
+			userRoute.POST("/passkey/login/begin", middleware.CriticalRateLimit(), middleware.SessionMutationGuard(), controller.PasskeyLoginBegin)
+			userRoute.POST("/passkey/login/finish", middleware.CriticalRateLimit(), middleware.SessionMutationGuard(), controller.PasskeyLoginFinish)
+			userRoute.POST("/logout", middleware.SessionMutationGuard(), controller.Logout)
 
 			selfRoute := userRoute.Group("/")
 			selfRoute.Use(middleware.UserAuth())
@@ -55,15 +93,15 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/self", controller.GetSelf)
 				selfRoute.PUT("/self", controller.UpdateSelf)
 				selfRoute.DELETE("/self", controller.DeleteSelf)
-				selfRoute.GET("/token", controller.GenerateAccessToken)
-				selfRoute.GET("/aff", controller.GetAffCode)
+				selfRoute.POST("/token", controller.GenerateAccessToken)
+				selfRoute.POST("/aff", controller.GetAffCode)
 				selfRoute.POST("/topup", controller.TopUp)
 				selfRoute.POST("/topup/stripe", controller.CreateStripeCheckout)
 				selfRoute.GET("/topup/stripe/orders", controller.ListStripePaymentOrders)
 				selfRoute.GET("/topup/stripe/orders/:session_id", controller.GetStripePaymentOrder)
 				selfRoute.GET("/available_models", controller.GetUserAvailableModels)
 				selfRoute.GET("/totp/status", controller.GetTotpStatus)
-				selfRoute.GET("/totp/setup", controller.SetupTotp)
+				selfRoute.POST("/totp/setup", controller.SetupTotp)
 				selfRoute.POST("/totp/confirm", controller.ConfirmTotp)
 				selfRoute.POST("/totp/disable", controller.DisableTotp)
 
@@ -103,10 +141,10 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/models", controller.ListAllModels)
 			channelRoute.GET("/metadata", controller.GetChannelMetadata)
 			channelRoute.GET("/:id", controller.GetChannel)
-			channelRoute.GET("/test", controller.TestChannels)
-			channelRoute.GET("/test/:id", controller.TestChannel)
-			channelRoute.GET("/update_balance", controller.UpdateAllChannelsBalance)
-			channelRoute.GET("/update_balance/:id", controller.UpdateChannelBalance)
+			channelRoute.POST("/test", controller.TestChannels)
+			channelRoute.POST("/test/:id", controller.TestChannel)
+			channelRoute.POST("/update_balance", controller.UpdateAllChannelsBalance)
+			channelRoute.POST("/update_balance/:id", controller.UpdateChannelBalance)
 			channelRoute.GET("/pricing/:id", controller.GetChannelPricing)
 			channelRoute.GET("/default-pricing", controller.GetChannelDefaultPricing)
 			channelRoute.POST("/", controller.AddChannel)
