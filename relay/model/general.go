@@ -276,6 +276,9 @@ type ClaudeTool struct {
 	Description  string `json:"description,omitempty"`
 	InputSchema  any    `json:"input_schema,omitempty"`
 	DeferLoading *bool  `json:"defer_loading,omitempty"`
+	// TrustedDeferredLoading is set only for server-injected native MCP tools.
+	// Caller JSON cannot establish provenance or change admission authority.
+	TrustedDeferredLoading bool `json:"-"`
 }
 
 // Claude Messages API Response Types
