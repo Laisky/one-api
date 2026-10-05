@@ -40,14 +40,20 @@ const (
 // cross-reference stream (PDF 1.5); otherwise a classic xref table is used.
 // EscapedNames writes /Type /Page with #xx name escapes and interleaved comments.
 // SharedKids omits /Type from one page object and references it Pages times.
+// OutlineCount adds a document outline whose /Count is not a page count.
+// ObjectStreamPadding appends a comment of that many bytes to the object stream;
+// PlainObjectStream stores the object stream without a filter.
 type claudePDFPageFixtureOptions struct {
-	Pages        int
-	LineText     string
-	Lines        int
-	ObjectStream bool
-	EscapedNames bool
-	SharedKids   bool
-	OmitCount    bool
+	Pages               int
+	LineText            string
+	Lines               int
+	ObjectStream        bool
+	PlainObjectStream   bool
+	EscapedNames        bool
+	SharedKids          bool
+	OmitCount           bool
+	OutlineCount        int
+	ObjectStreamPadding int
 }
 
 // claudePDFPageFixture builds a structurally valid PDF whose pages all share one
@@ -82,8 +88,14 @@ func claudePDFPageFixture(t testing.TB, options claudePDFPageFixtureOptions) []b
 	if options.OmitCount {
 		count = ""
 	}
+	catalog := "<< /Type /Catalog /Pages 2 0 R >>"
+	if options.OutlineCount > 0 {
+		// The outline dictionary follows the page objects; content moves up by one.
+		catalog = fmt.Sprintf("<< /Type /Catalog /Pages 2 0 R /Outlines %d 0 R >>", contentNumber)
+		contentNumber++
+	}
 	dictionaries := []string{
-		"<< /Type /Catalog /Pages 2 0 R >>",
+		catalog,
 		fmt.Sprintf("<< /Type /Pages /Kids [%s]%s >>", strings.Join(kids, " "), count),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 	}
@@ -98,6 +110,9 @@ func claudePDFPageFixture(t testing.TB, options claudePDFPageFixtureOptions) []b
 		dictionaries = append(dictionaries, fmt.Sprintf(
 			"<< %s/Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents %d 0 R >>",
 			pageType, contentNumber))
+	}
+	if options.OutlineCount > 0 {
+		dictionaries = append(dictionaries, fmt.Sprintf("<< /Type /Outlines /Count %d >>", options.OutlineCount))
 	}
 
 	var pdf bytes.Buffer
@@ -138,10 +153,19 @@ func claudePDFPageFixture(t testing.TB, options claudePDFPageFixtureOptions) []b
 		objects.WriteString(dictionary)
 		objects.WriteString("\n")
 	}
+	if options.ObjectStreamPadding > 0 {
+		objects.WriteString("%")
+		objects.Write(bytes.Repeat([]byte{'x'}, options.ObjectStreamPadding))
+		objects.WriteString("\n")
+	}
 	packed := append(header.Bytes(), objects.Bytes()...)
 	objectStreamNumber := contentNumber + 1
-	writeObject(objectStreamNumber, streamBody(fmt.Sprintf("/Type /ObjStm /N %d /First %d /Filter /FlateDecode",
-		len(dictionaries), header.Len()), claudePDFPageFixtureDeflate(t, packed)))
+	objectStream := fmt.Sprintf("/Type /ObjStm /N %d /First %d", len(dictionaries), header.Len())
+	if options.PlainObjectStream {
+		writeObject(objectStreamNumber, streamBody(objectStream, packed))
+	} else {
+		writeObject(objectStreamNumber, streamBody(objectStream+" /Filter /FlateDecode", claudePDFPageFixtureDeflate(t, packed)))
+	}
 
 	xrefNumber := objectStreamNumber + 1
 	size := xrefNumber + 1

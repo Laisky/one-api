@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ func TestClaudeDocumentEmptyProjectionAllocation(t *testing.T) {
 			}
 			var got int
 			var scanErr error
-			allocations := testing.AllocsPerRun(5, func() { got, scanErr = countClaudeNativeDocumentAllowance(request) })
+			allocations := testing.AllocsPerRun(5, func() { got, scanErr = countClaudeNativeDocumentAllowance(context.Background(), request) })
 			require.NoError(t, scanErr)
 			require.Zero(t, got)
 			t.Logf("DOCUMENT_EMPTY_SCAN empty_blocks=%v messages=%d allocations=%g", emptyBlocks, len(request.Messages), allocations)

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"maps"
 	"math"
 	"strings"
@@ -49,12 +50,15 @@ func claudeDocumentTextMetadata(block map[string]any) map[string]any {
 }
 
 // countClaudeNativeDocumentAllowance visits nested tool results iteratively and
-// adds a linear decoded-size PDF estimate or a separate unknown-size fallback.
-// It preserves the lazy traversal stack and performs no remote fetch,
-// PDF decompression or caller-controlled page-count interpretation. Converted
-// text requests use preparedClaudeChatTokens instead and never enter this path.
-// It returns the total estimate or an input/arithmetic validation error.
-func countClaudeNativeDocumentAllowance(request *ClaudeMessagesRequest) (int, error) {
+// returns the native document estimate: base64 PDFs contribute their
+// conservative page estimates (summed, capped at the documented per-request page
+// limit, priced at the trusted per-page estimate and capped at the largest
+// documented context window), while unknown-size file/URL and non-PDF sources
+// keep the separate operator allowance. It preserves the lazy traversal stack,
+// performs no remote fetch and never trusts caller-supplied page counts.
+// Converted text requests use preparedClaudeChatTokens instead and never enter
+// this path. It returns the total estimate or an input/arithmetic error.
+func countClaudeNativeDocumentAllowance(ctx context.Context, request *ClaudeMessagesRequest) (int, error) {
 	if request == nil {
 		return 0, nil
 	}
@@ -67,7 +71,8 @@ func countClaudeNativeDocumentAllowance(request *ClaudeMessagesRequest) (int, er
 	if blocks, ok := request.System.([]any); ok && len(blocks) > 0 {
 		stack = append(stack, blocks)
 	}
-	total := 0
+	total, pdfPages := 0, 0
+	var budget *claudePDFScanBudget
 	for len(stack) > 0 {
 		i := len(stack) - 1
 		if len(stack[i]) == 0 {
@@ -81,7 +86,6 @@ func countClaudeNativeDocumentAllowance(request *ClaudeMessagesRequest) (int, er
 			continue
 		}
 		if claudeOpaqueDocumentSource(block) {
-			additional := config.ClaudeNativeDocumentTokenAllowance
 			source := block["source"].(map[string]any)
 			mediaType, _ := source["media_type"].(string)
 			if source["type"] == "base64" && strings.EqualFold(strings.TrimSpace(mediaType), "application/pdf") {
@@ -89,25 +93,37 @@ func countClaudeNativeDocumentAllowance(request *ClaudeMessagesRequest) (int, er
 				if !ok {
 					return 0, errors.New("native PDF source requires base64 string data")
 				}
-				decoded, err := claudePDFDecodedBytes(data)
+				if budget == nil {
+					budget = newClaudePDFScanBudget()
+				}
+				pages, err := claudeNativePDFPages(ctx, data, budget, pdfPages >= claudeNativePDFMaxPagesPerRequest)
 				if err != nil {
 					return 0, err
 				}
-				additional, err = claudePDFTokensForBytes(decoded, config.ClaudeNativePDFTokensPerKiB)
-				if err != nil {
-					return 0, err
+				pdfPages = min(pdfPages+pages, claudeNativePDFMaxPagesPerRequest)
+			} else {
+				additional := config.ClaudeNativeDocumentTokenAllowance
+				if additional < 1 || additional > math.MaxInt-total {
+					return 0, errors.New("native document token sum exceeds integer range")
 				}
+				total += additional
 			}
-			if additional < 1 || additional > math.MaxInt-total {
-				return 0, errors.New("native document token sum exceeds integer range")
-			}
-			total += additional
 		}
 		if block["type"] == "tool_result" {
 			if nested, ok := block["content"].([]any); ok && len(nested) > 0 {
 				stack = append(stack, nested)
 			}
 		}
+	}
+	if pdfPages > 0 {
+		pdfTokens, err := claudeNativePDFPageTokens(pdfPages, config.ClaudeNativePDFTokensPerPage)
+		if err != nil {
+			return 0, err
+		}
+		if pdfTokens > math.MaxInt-total {
+			return 0, errors.New("native document token sum exceeds integer range")
+		}
+		total += pdfTokens
 	}
 	return total, nil
 }

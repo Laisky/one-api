@@ -71,12 +71,15 @@ func claudeContentTokenParts(blocks []any) []relaymodel.MessageContent {
 	return parts
 }
 
-// appendClaudeJSONTokenPart appends a JSON-decoded native block as one private text part without changing the block.
+// appendClaudeJSONTokenPart appends a JSON-decoded native block as one private
+// text part without changing the block, and returns the extended parts.
 func appendClaudeJSONTokenPart(parts []relaymodel.MessageContent, value any) []relaymodel.MessageContent {
-	// Request blocks originate from JSON decoding and contain only JSON-serializable values.
-	if encoded, err := json.Marshal(value); err == nil {
-		text := string(encoded)
-		return append(parts, relaymodel.MessageContent{Type: "text", Text: &text})
+	encoded, err := json.Marshal(value)
+	text := string(encoded)
+	if err != nil {
+		// Request blocks come from JSON decoding, so this is unreachable in
+		// practice; still charge the value's printed form instead of dropping it.
+		text = fmt.Sprint(value)
 	}
-	return parts
+	return append(parts, relaymodel.MessageContent{Type: "text", Text: &text})
 }

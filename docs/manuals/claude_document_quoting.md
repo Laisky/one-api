@@ -1,84 +1,88 @@
 # Native Claude document quota estimates
 
-Native base64 PDF admission counts the decoded file size at a configurable linear
-rate, plus the document's textual metadata. It does not tokenize the encoded
-binary transport as literal prompt text. The provider payload is unchanged.
+Native Claude Messages requests (Anthropic, AWS Bedrock and Vertex passthrough)
+can carry `document` blocks. Before dispatch, one-api reserves quota for them
+with a gateway estimate; complete provider usage receipts settle the real cost
+afterwards. The provider payload is never modified by the estimate.
 
-`CLAUDE_NATIVE_PDF_TOKENS_PER_KIB` is a trusted positive integer startup rate.
-For each native `application/pdf` base64 source the estimate is:
+## Provider facts (verified 2026-10)
+
+- [PDF support](https://platform.claude.com/docs/en/build-with-claude/pdf-support):
+  every page is rasterized to an image and its text is extracted; text
+  "typically uses 1,500-3,000 tokens per page depending on content density",
+  and the page image is billed like any image. Limits: 600 pages per request
+  (100 when the context window is under 1M tokens) and 32 MB per request
+  ([Bedrock 20 MB, Google Cloud 30 MB](https://platform.claude.com/docs/en/api/overview)).
+- [Vision](https://platform.claude.com/docs/en/build-with-claude/vision): one
+  image costs at most 4,784 tokens on the high-resolution tier (Claude 4.7 and
+  later) and 1,568 tokens on the standard tier.
+- [Token counting](https://platform.claude.com/docs/en/build-with-claude/token-counting):
+  the Claude 4.7+ tokenizer produces about 30 percent more tokens.
+- [Context windows](https://platform.claude.com/docs/en/build-with-claude/context-windows):
+  the largest window is 1M tokens; an input larger than the model's window is
+  rejected, not billed.
+
+## Native base64 PDFs: page-based estimate
 
 ```
-ceil(decoded_bytes * tokens_per_KiB / 1024)
+pages_per_document = conservative page signal (see below), 1..600
+request_pages      = min(sum(pages_per_document), 600)
+pdf_tokens         = min(request_pages * CLAUDE_NATIVE_PDF_TOKENS_PER_PAGE, 1,000,000)
 ```
 
-There is **no policy cap on estimated tokens**. The result increases with file
-size at the configured ratio; integer token units are rounded up separately for
-each PDF. Multiple documents add their estimates, including nested tool results.
-ASCII space, tab, CR and LF in base64 transport do not increase decoded size or
-change the provider payload. Missing/non-string/empty or malformed PDF base64
-rejects before provider dispatch. Decoding streams into bounded discard storage;
-no second decoded document buffer, parser or decompressor is introduced.
+`CLAUDE_NATIVE_PDF_TOKENS_PER_PAGE` (operator-only, integer 1..1048576,
+default **8,684** = 3,000 text tokens x 1.3 tokenizer growth + 4,784 for the
+largest page image) prices one page. Deployments that only serve
+standard-resolution models may lower it (for example 3,900 + 1,568 = 5,468).
+Document titles, context and citations are still counted as text.
 
-The **tentative default for review is 64 tokens/KiB**, equivalent to one token per
-16 decoded bytes. Examples at that proposed rate:
+The page signal is a bounded lexical scan of the decoded bytes, without
+rendering or following references:
 
-| Decoded size | Estimated document tokens |
-| --- | ---: |
-| 1 byte | 1 |
-| 16 bytes | 1 |
-| 17 bytes | 2 |
-| 64 KiB | 4096 |
-| 64 KiB + 1 byte | 4097 |
-| 128 KiB | 8192 |
-| 1 MiB | 65536 |
-| 32 MiB | 2097152 |
+- structural `/Type /Page` dictionaries (with `#xx` name escapes and comments
+  handled as PDF readers do);
+- the largest `/Count` of a page-tree dictionary (outline counts are ignored);
+- every reference in page-tree `/Kids` arrays, so one page object referenced
+  many times counts once per reference (name-tree and form-field `/Kids` are
+  excluded unless the dictionary also looks like a page tree);
+- compressed object streams (PDF 1.5) are inflated with zlib under a shared
+  per-request budget (16 MiB output, 4,096 streams).
 
-The user approved the linear policy shape; this numerical default remains a
-**calibration choice awaiting review**, not an empirically measured rate or a
-hard funding upper bound. Keep the PR in draft and settle the default rate before
-merge. Operators can configure another positive representable integer rate;
-there is no arbitrary maximum rate. Invalid explicit syntax, zero, negative,
-fractional or unrepresentable integers fail startup rather than silently falling
-back. Request-supplied page/token hints cannot change the trusted rate.
+The estimate is the maximum of these signals. A document is treated as using
+the full 600-page limit when the scan cannot see its page objects: encryption,
+object streams with other filters or predictors, an object stream that cannot be
+decoded or was not inspected, an indirect `/Kids` array, an exhausted
+decompression budget, more than 32 MiB of decoded bytes, or no page evidence at
+all. Malformed, empty or non-string base64 rejects before dispatch.
 
-Existing request-body/resource limits remain separate from quotation. The relay
-body budget (`MAX_REQUEST_BODY_SIZE_MB`, default 128) controls accepted request
-and decompressed-body bytes; an operator can configure that limit. No extra PDF
-size cap or estimate clamp is added here. If an estimate, aggregate token count
-or priced quota cannot be represented, admission returns an error before
-reservation/dispatch. Representability checks reject; they never clamp to a
-smaller estimate or turn overflow into a one-unit paid hold.
+Calibration against `pdfinfo` page counts on 54 real PDFs (papers, slides,
+reports, a 758-page book capped at 600): no under-estimate, no false fallback,
+median page ratio 1.15, maximum 2.46 (incrementally updated files whose page
+objects appear in two revisions); the scan took at most 0.2 s per file. A
+valid 1.6 KB PDF declaring 100 text-dense pages, which the former
+64 tokens/KiB rule quoted at 155 tokens, now reserves 868,457 tokens. Raw and
+compressed encodings of the same page now reserve the same amount.
 
-Unknown-size URL/file-ID sources are **not fetched**. They retain the separate
-`CLAUDE_NATIVE_DOCUMENT_TOKEN_ALLOWANCE` fallback (default 32768, startup range
-1..1048576). Non-PDF opaque sources also retain that existing fallback. Its range
-limits the configurable unknown-size fallback, not the linear PDF estimate.
-Titles, context, citations and other textual metadata remain charged. Text
-documents remain text. Converted routes that actually serialize documents or
-base64 into prompt text retain quotation of that literal outgoing text.
+## Other document sources
+
+Unknown-size URL and file-ID sources are not fetched, and non-PDF binary
+documents are not parsed. They keep the separate
+`CLAUDE_NATIVE_DOCUMENT_TOKEN_ALLOWANCE` (default 32,768, range 1..1048576)
+per document. Text documents remain text. Converted routes that actually
+serialize documents or base64 into prompt text keep quoting that literal
+outgoing text.
+
+## Settlement and residual risk
 
 Complete measured upstream usage remains authoritative and reconciles the hold
-once, including a smaller measured receipt. Missing/invalid usage retains the
-existing estimated hold and provenance; the native incomplete-receipt response
-contract remains unchanged. Existing explicit-free tariffs stay free. Ordinary
-paid admission keeps its existing truncation/minimum behavior; native MCP rounds
-keep their existing truncation without introducing a new minimum.
+once, including a smaller receipt. Missing or invalid usage keeps the estimated
+hold with estimate provenance. Existing free tariffs stay free; unrepresentable
+token or quota sums reject before reservation.
 
-FIXME: Decoded PDF size is an imperfect content proxy. Compression, image/page
-content, density and inert padding can cause both under- and overestimation.
-Equal rendered pages can intentionally receive different size-based estimates.
-Replace or calibrate this heuristic with capability-aware provider counting or
-bounded extraction and model-specific page accounting when available. It is not
-a guaranteed cost ceiling for all PDFs. No provider counting request or local
-PDF executable is introduced by this change.
-
-References for native processing and optional provider counting:
-
-- https://platform.claude.com/docs/en/build-with-claude/pdf-support
-- https://platform.claude.com/docs/en/build-with-claude/token-counting
-
-Retained regressions use independent byte/rate arithmetic, valid raw/Flate PDFs,
-actual bounded local HTTP dispatch and isolated SQLite settlement. They verify
-policy behavior, rounding, overflow, payload preservation and receipt authority;
-they do not assert live provider invoice equivalence. The earlier lazy traversal
-and zero-allocation empty-document scan regressions remain retained.
+The estimate is not a guaranteed bound. Pages denser than the documented
+typical text cost, and PDFs crafted to exploit reader-specific leniency (for
+example stream-length mismatches or page trees disguised as name trees), can
+still cost more than the reservation. That exposure is bounded per request by
+the provider's context window, and complete receipts still bill the real
+usage. File-ID and URL PDFs can reach the page limit while reserving only the
+fallback allowance.

@@ -2,8 +2,9 @@ package controller
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // requireClaudePromptTokens returns a checked native quote for valid test inputs
@@ -28,7 +29,7 @@ func requireClaudePromptEstimate(t testing.TB, ctx context.Context, request *Cla
 // traversal fixtures and fails the test on an unexpected validation error.
 func requireClaudeDocumentTokens(t testing.TB, request *ClaudeMessagesRequest) int {
 	t.Helper()
-	tokens, err := countClaudeNativeDocumentAllowance(request)
+	tokens, err := countClaudeNativeDocumentAllowance(context.Background(), request)
 	require.NoError(t, err)
 	return tokens
 }

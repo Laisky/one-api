@@ -2,14 +2,12 @@ package controller
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
@@ -24,7 +22,8 @@ func documentQuoteRequest(source map[string]any, nested bool) *ClaudeMessagesReq
 }
 
 // TestClaudeNativeDocumentEncodingQuote compares two valid encodings of the
-// same rendered PDF, not arbitrary bytes or a synthetic tokenizer substitute.
+// same rendered PDF page: the page-based estimate must not depend on how the
+// page image is compressed.
 func TestClaudeNativeDocumentEncodingQuote(t *testing.T) {
 	compact, raw := claudeDocumentQuotePDF(t, true), claudeDocumentQuotePDF(t, false)
 	require.Greater(t, len(raw), 100*len(compact))
@@ -36,15 +35,8 @@ func TestClaudeNativeDocumentEncodingQuote(t *testing.T) {
 		qSmall := requireClaudePromptTokens(t, context.Background(), small)
 		qLarge := requireClaudePromptTokens(t, context.Background(), large)
 		t.Logf("PDF_QUOTE_ENCODING nested=%v compressed_bytes=%d raw_bytes=%d compressed_quote=%d raw_quote=%d", nested, len(compact), len(raw), qSmall, qLarge)
-		decodedSmall, err := base64.StdEncoding.DecodeString(compact)
-		require.NoError(t, err)
-		decodedLarge, err := base64.StdEncoding.DecodeString(raw)
-		require.NoError(t, err)
-		rate := config.ClaudeNativePDFTokensPerKiB
-		wantDifference := (len(decodedLarge)*rate+1023)/1024 - (len(decodedSmall)*rate+1023)/1024
-		require.Equal(t, wantDifference, qLarge-qSmall, "size policy intentionally differs for equal rendered content under different compression")
+		require.Equal(t, qSmall, qLarge, "equal rendered pages receive equal page-based estimates regardless of compression")
 		require.Greater(t, qSmall, 0, "opaque source still needs an explicit allowance")
-		require.Greater(t, qLarge, qSmall, "larger decoded files receive proportionally larger estimates")
 		after, err := json.Marshal(large)
 		require.NoError(t, err)
 		require.Equal(t, before, after, "counting must preserve the provider payload")

@@ -63,7 +63,7 @@ func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesR
 		promptTokens += fileImageTokens
 	}
 
-	documentTokens, err := countClaudeNativeDocumentAllowance(request)
+	documentTokens, err := countClaudeNativeDocumentAllowance(ctx, request)
 	if err != nil {
 		return 0, err
 	}
