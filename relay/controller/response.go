@@ -12,6 +12,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
@@ -177,6 +178,9 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// but ensure mapped model is used in the outgoing JSON
 	requestBody, err := getResponseAPIRequestBody(c, meta, responseAPIRequest, requestAdaptor)
 	if err != nil {
+		if errors.Is(err, common.ErrAmbiguousJSONKey) {
+			return openai.ErrorWrapper(err, "invalid_request_error", http.StatusBadRequest)
+		}
 		return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
 	}
 

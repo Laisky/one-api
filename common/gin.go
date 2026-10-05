@@ -51,6 +51,12 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 	contentType := c.Request.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "application/json") {
 		err = json.Unmarshal(requestBody, v)
+		if err == nil {
+			// encoding/json folds key case and keeps the last duplicate, while
+			// raw-forwarding paths and upstreams read exact keys. Reject bodies
+			// where those two readings of one typed parameter can differ.
+			err = validateDecodedJSONRootKeys(requestBody, v)
+		}
 	} else {
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 		err = c.ShouldBind(v)
