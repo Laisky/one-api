@@ -25,10 +25,73 @@ func SessionMutationGuard() gin.HandlerFunc {
 	}
 }
 
+// PendingLoginMutationGuard returns middleware that requires trustworthy
+// browser provenance for every unsafe request, even before a dashboard session
+// exists. It protects endpoints whose credential is a pre-authentication marker
+// in the signed session cookie, such as completing a pending OAuth login with
+// a TOTP code, using the same Fetch Metadata, Origin and Referer rules as
+// SessionMutationGuard.
+func PendingLoginMutationGuard() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if isSafeMethod(c.Request.Method) || trustedSessionMutation(c.Request) {
+			c.Next()
+			return
+		}
+		lg := gmw.GetLogger(c)
+		lg.Debug("rejected pending login mutation provenance", zap.String("method", c.Request.Method), zap.String("route", c.FullPath()))
+		respondAuthError(c, http.StatusForbidden, "Untrusted session mutation origin")
+	}
+}
+
+// SessionWriteNavigationGuard returns middleware for safe-method endpoints that
+// still write the signed session, such as OAuth state issuance. A hostile
+// top-level navigation carries the Lax session cookie and its response may set
+// a new one, so requests that Fetch Metadata marks as cross-site or same-site
+// are rejected unless their Origin is a trusted dashboard origin (a configured
+// external frontend). Same-origin requests, user-initiated navigations
+// ("none") and clients that send no Fetch Metadata keep working.
+func SessionWriteNavigationGuard() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if trustedSessionWrite(c.Request) {
+			c.Next()
+			return
+		}
+		lg := gmw.GetLogger(c)
+		lg.Debug("rejected cross-site session write", zap.String("method", c.Request.Method), zap.String("route", c.FullPath()))
+		respondAuthError(c, http.StatusForbidden, "Untrusted session request origin")
+	}
+}
+
+// trustedSessionWrite reports whether request may write the session from a
+// safe-method endpoint. It returns false for duplicated Fetch Metadata and for
+// cross-site or same-site requests without a trusted Origin header.
+func trustedSessionWrite(request *http.Request) bool {
+	sites := request.Header.Values("Sec-Fetch-Site")
+	if len(sites) > 1 {
+		return false
+	}
+	switch request.Header.Get("Sec-Fetch-Site") {
+	case "", "same-origin", "none":
+		return true
+	}
+	origins := request.Header.Values("Origin")
+	if len(origins) != 1 || origins[0] == "" {
+		return false
+	}
+	origin := sessionOrigin(origins[0], false)
+	return origin != "" && trustedSessionOrigin(request, origin)
+}
+
+// isSafeMethod reports whether method is a read-only HTTP method that never
+// carries a dashboard mutation.
+func isSafeMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
+}
+
 // allowSessionMutation validates cookie-authorized mutation provenance for c,
 // writes a forbidden response on rejection and returns whether to proceed.
 func allowSessionMutation(c *gin.Context) bool {
-	if c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead || c.Request.Method == http.MethodOptions || sessions.Default(c).Get("username") == nil {
+	if isSafeMethod(c.Request.Method) || sessions.Default(c).Get("username") == nil {
 		return true
 	}
 	if trustedSessionMutation(c.Request) {

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -227,7 +228,12 @@ func DisableTotp(c *gin.Context) {
 	})
 }
 
-// verifyTotpCode verifies a TOTP code against a secret with rate limiting and replay protection
+// verifyTotpCode reports whether code is the current TOTP code for secret and
+// has not been accepted for uid before. The comparison is constant time, and a
+// valid code is consumed atomically, so concurrent requests cannot replay it.
+// When Redis fails, common.ConsumeTotpCode falls back to the node-local replay
+// store (logged at ERROR here), so an outage neither locks 2FA accounts out nor
+// accepts a replayed code on this node.
 func verifyTotpCode(ctx context.Context, uid int, secret, code string) bool {
 	if ctx == nil {
 		ctx = context.Background()
@@ -240,36 +246,28 @@ func verifyTotpCode(ctx context.Context, uid int, secret, code string) bool {
 		return false
 	}
 
-	// Check if this TOTP code has been used recently (replay protection)
-	if common.IsTotpCodeUsed(ctx, uid, code) {
-		// ctx may be a bare background context here (TOTP is also verified off the
-		// request goroutine), so resolve the account explicitly. This branch only
-		// fires on a detected replay, never on the normal login path.
-		lg.Warn("TOTP code replay attempt detected", model.LookupUserRef(ctx, uid).Zap()...)
-		return false
-	}
-
 	totp, err := gcrypto.NewTOTP(gcrypto.OTPArgs{
 		Base32Secret: secret,
 	})
 	if err != nil {
 		return false
 	}
-
-	// Verify the code
-	verified := totp.Key() == code
-	if !verified {
+	if subtle.ConstantTimeCompare([]byte(totp.Key()), []byte(code)) != 1 {
 		return false
 	}
 
-	// Mark the code as used to prevent replay attacks
-	err = common.MarkTotpCodeAsUsed(ctx, uid, code)
+	first, err := common.ConsumeTotpCode(ctx, uid, code)
 	if err != nil {
-		lg.Error("Failed to mark TOTP code as used", zap.Error(err))
-		// Don't fail the verification if we can't mark it as used
-		// This ensures the system remains functional even if Redis/cache fails
+		// The replay check still ran against the node-local store; first is authoritative.
+		lg.Error("TOTP replay store degraded to node-local", zap.Error(err))
 	}
-
+	if !first {
+		// ctx may be a bare background context here (TOTP is also verified off the
+		// request goroutine), so resolve the account explicitly. This branch only
+		// fires on a detected replay, never on the normal login path.
+		lg.Warn("TOTP code replay attempt detected", model.LookupUserRef(ctx, uid).Zap()...)
+		return false
+	}
 	return true
 }
 

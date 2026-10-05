@@ -2,8 +2,9 @@ import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserContext } from '../context/User';
-import { API, getLogo, normalizeUser, showError, showInfo, showSuccess } from '../helpers';
+import { API, getLogo, isTotpRequired, normalizeUser, showError, showInfo, showSuccess } from '../helpers';
 import { onGitHubOAuthClicked } from './utils';
+import OAuthTotpForm from './OAuthTotpForm';
 import Turnstile from 'react-turnstile';
 import { Button, Card, Divider, Form, Icon, Layout, Modal } from '@douyinfe/semi-ui';
 import Title from '@douyinfe/semi-ui/lib/es/typography/title';
@@ -48,6 +49,7 @@ const LoginForm = () => {
   }, []);
 
   const [showWeChatLoginModal, setShowWeChatLoginModal] = useState(false);
+  const [weChatTotpRequired, setWeChatTotpRequired] = useState(false);
 
   const onWeChatLoginClicked = () => {
     setShowWeChatLoginModal(true);
@@ -69,6 +71,11 @@ const LoginForm = () => {
       navigate('/');
       showSuccess('登录成功！');
       setShowWeChatLoginModal(false);
+    } else if (isTotpRequired(message, data)) {
+      // The WeChat code is consumed by now; finish the sign-in with TOTP.
+      setShowWeChatLoginModal(false);
+      setWeChatTotpRequired(true);
+      showInfo('请输入您的TOTP验证码');
     } else {
       showError(message);
     }
@@ -270,6 +277,17 @@ const LoginForm = () => {
                       onChange={(value) => handleChange('wechat_verification_code', value)}
                     />
                   </Form>
+                </Modal>
+                <Modal
+                  title="双因子认证 (TOTP)"
+                  visible={weChatTotpRequired}
+                  maskClosable={false}
+                  onCancel={() => setWeChatTotpRequired(false)}
+                  footer={null}
+                  size={'small'}
+                  centered={true}
+                >
+                  {weChatTotpRequired && <OAuthTotpForm onBack={() => setWeChatTotpRequired(false)} />}
                 </Modal>
               </Card>
               {turnstileEnabled ? (

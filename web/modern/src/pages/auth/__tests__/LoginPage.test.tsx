@@ -1,8 +1,8 @@
 import { api } from '@/lib/api';
 import * as oauth from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
 import { LoginPage } from '../LoginPage.impl';
 
@@ -347,5 +347,101 @@ describe('LoginPage', () => {
     // WeChat code login is a state-changing POST; the legacy GET now returns 405.
     expect(mockApiPost).toHaveBeenCalledWith('/api/oauth/wechat?code=a%26b%3Dc');
     expect(mockApiGet).not.toHaveBeenCalledWith(expect.stringContaining('/api/oauth/wechat'));
+  });
+
+  it('prompts for TOTP in the WeChat modal and completes the login without resending the consumed code', async () => {
+    const mockApiPost = vi.mocked(api.post);
+    mockApiPost.mockReset();
+    mockApiGet.mockReset();
+    mockApiGet.mockResolvedValue({
+      data: {
+        success: true,
+        data: { system_name: 'Test API', turnstile_check: false, wechat_login: true },
+      },
+    } as any);
+    mockLocalStorage.getItem.mockReturnValue(JSON.stringify({ system_name: 'Test API', wechat_login: true }));
+    const user = { id: 9, username: 'wechat-2fa', role: 1 };
+    mockApiPost.mockImplementation(async (url: string, body?: any) => {
+      if (url.startsWith('/api/oauth/wechat?')) {
+        return { data: { success: false, message: 'totp_required', data: { totp_required: true } } } as any;
+      }
+      if (url === '/api/oauth/totp') {
+        return body?.totp_code === '123456'
+          ? ({ data: { success: true, message: '', data: user } } as any)
+          : ({ data: { success: false, message: 'Invalid TOTP code' } } as any);
+      }
+      throw new Error(`unexpected POST ${url}`);
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/dashboard" element={<div>dashboard-page</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'WeChat' }));
+    const codeInput = await screen.findByPlaceholderText('Verification code');
+    fireEvent.change(codeInput, { target: { value: 'wx-code' } });
+    fireEvent.keyDown(codeInput, { key: 'Enter' });
+
+    // The modal swaps the consumed WeChat code input for the TOTP prompt.
+    expect(await screen.findByTestId('oauth-totp-prompt')).toBeInTheDocument();
+    expect(screen.getByText('Two-Factor Authentication')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Verification code')).not.toBeInTheDocument();
+    expect(mockLogin).not.toHaveBeenCalled();
+
+    const totpInput = screen.getByLabelText('TOTP Code');
+    fireEvent.change(totpInput, { target: { value: '000000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify TOTP' }));
+    expect(await screen.findByText('Invalid TOTP code')).toBeInTheDocument();
+    expect(screen.getByTestId('oauth-totp-prompt')).toBeInTheDocument();
+    expect(mockLogin).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('TOTP Code'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify TOTP' }));
+
+    expect(await screen.findByText('dashboard-page')).toBeInTheDocument();
+    expect(mockLogin).toHaveBeenCalledWith(user, '');
+    const wechatCalls = mockApiPost.mock.calls.filter(([url]) => String(url).startsWith('/api/oauth/wechat'));
+    expect(wechatCalls).toEqual([['/api/oauth/wechat?code=wx-code']]);
+    const totpBodies = mockApiPost.mock.calls.filter(([url]) => url === '/api/oauth/totp').map(([, body]) => body);
+    expect(totpBodies).toEqual([{ totp_code: '000000' }, { totp_code: '123456' }]);
+  });
+
+  it('still logs in directly from the WeChat modal when the account has no TOTP', async () => {
+    const mockApiPost = vi.mocked(api.post);
+    mockApiPost.mockReset();
+    mockApiGet.mockReset();
+    mockApiGet.mockResolvedValue({
+      data: {
+        success: true,
+        data: { system_name: 'Test API', turnstile_check: false, wechat_login: true },
+      },
+    } as any);
+    mockLocalStorage.getItem.mockReturnValue(JSON.stringify({ system_name: 'Test API', wechat_login: true }));
+    const user = { id: 10, username: 'wechat-plain', role: 1 };
+    mockApiPost.mockResolvedValueOnce({ data: { success: true, message: '', data: user } } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/dashboard" element={<div>dashboard-page</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'WeChat' }));
+    const codeInput = await screen.findByPlaceholderText('Verification code');
+    fireEvent.change(codeInput, { target: { value: 'wx-code' } });
+    fireEvent.keyDown(codeInput, { key: 'Enter' });
+
+    expect(await screen.findByText('dashboard-page')).toBeInTheDocument();
+    expect(mockLogin).toHaveBeenCalledWith(user, '');
+    expect(screen.queryByTestId('oauth-totp-prompt')).not.toBeInTheDocument();
+    expect(mockApiPost).toHaveBeenCalledTimes(1);
   });
 });

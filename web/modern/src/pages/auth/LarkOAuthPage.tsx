@@ -1,58 +1,74 @@
+import { OAuthTotpPrompt } from '@/components/auth/OAuthTotpPrompt';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { api, isSafeInternalPath } from '@/lib/api';
+import { api } from '@/lib/api';
+import { isTotpRequiredResponse, resolveOAuthStateRedirect, type OAuthLoginUser } from '@/lib/oauth-totp';
 import { useAuthStore } from '@/lib/stores/auth';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+/**
+ * LarkOAuthPage handles the Lark login callback: it exchanges the code and state with the backend, retries
+ * transient failures, prompts for a TOTP code when the account has two-factor authentication enabled, and returns
+ * the callback card.
+ */
 export function LarkOAuthPage() {
   const [searchParams] = useSearchParams();
   const { t } = useTranslation();
   const [prompt, setPrompt] = useState(() => t('auth.oauth.lark.prompt.processing'));
+  const [totpRequired, setTotpRequired] = useState(false);
+  // The callback code/state are single-use; remember which pair was sent so a re-run of the effect
+  // (for example React StrictMode's double invocation) never consumes or retries it twice.
+  const sentRequestRef = useRef('');
   const navigate = useNavigate();
   const { login } = useAuthStore();
 
+  /**
+   * completeLogin stores the authenticated user and navigates to the safe `redirect_to` target carried in the
+   * OAuth state, falling back to the home page. It takes the user payload and raw state and returns nothing.
+   */
+  const completeLogin = useCallback(
+    (user: OAuthLoginUser, state: string | null) => {
+      login(user, '');
+      navigate(resolveOAuthStateRedirect(state), {
+        state: { message: t('auth.oauth.lark.login_success') },
+      });
+    },
+    [login, navigate, t]
+  );
+
+  /**
+   * sendCode exchanges the callback code and state with the backend and routes on the answer. It takes the code,
+   * the state, and the current retry count, retries transient failures with linear backoff up to three times,
+   * stops without retrying on a TOTP challenge, and resolves once the attempt has been handled.
+   */
   const sendCode = useCallback(
     async (code: string, state: string, retryCount = 0): Promise<void> => {
       try {
         // Unified API call - complete URL with /api prefix
         const response = await api.get(`/api/oauth/lark?code=${code}&state=${state}`);
+        // Two-factor accounts get the password-login challenge. The code/state are already consumed, so
+        // stop here (no retry) and let the user finish with POST /api/oauth/totp.
+        if (isTotpRequiredResponse(response.data)) {
+          setTotpRequired(true);
+          return;
+        }
+
         const { success, message, data } = response.data;
 
         if (success) {
           if (message === 'bind') {
-            // Show success toast
             navigate('/settings', {
               state: { message: t('auth.oauth.lark.bind_success') },
             });
           } else {
-            login(data, '');
-
-            // Check for redirect_to parameter in the state
-            const redirectTo = state && state.includes('redirect_to=') ? state.split('redirect_to=')[1] : null;
-
-            if (redirectTo) {
-              try {
-                const decodedPath = decodeURIComponent(redirectTo);
-                if (isSafeInternalPath(decodedPath) && !decodedPath.startsWith('/login')) {
-                  navigate(decodedPath, {
-                    state: { message: t('auth.oauth.lark.login_success') },
-                  });
-                  return;
-                }
-              } catch (error) {
-                console.error('Invalid redirect_to parameter:', error);
-              }
-            }
-
-            navigate('/', {
-              state: { message: t('auth.oauth.lark.login_success') },
-            });
+            completeLogin(data, state);
           }
         } else {
           throw new Error(message || t('auth.oauth.lark.failed'));
         }
       } catch (error) {
+        console.warn(`Lark OAuth callback attempt ${retryCount + 1} failed: ${error instanceof Error ? error.message : String(error)}`);
         if (retryCount >= 3) {
           setPrompt(t('auth.oauth.lark.prompt.failed'));
           setTimeout(() => {
@@ -73,7 +89,7 @@ export function LarkOAuthPage() {
         }, delay);
       }
     },
-    [login, navigate, t]
+    [completeLogin, navigate, t]
   );
 
   useEffect(() => {
@@ -87,6 +103,10 @@ export function LarkOAuthPage() {
       return;
     }
 
+    const requestKey = `${code}\n${state}`;
+    if (sentRequestRef.current === requestKey) return;
+    sentRequestRef.current = requestKey;
+
     sendCode(code, state);
   }, [searchParams, navigate, sendCode, t]);
 
@@ -94,14 +114,21 @@ export function LarkOAuthPage() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">{t('auth.oauth.lark.title')}</CardTitle>
-          <CardDescription>{t('auth.oauth.lark.description')}</CardDescription>
+          <CardTitle className="text-2xl">{totpRequired ? t('auth.oauth.totp.title') : t('auth.oauth.lark.title')}</CardTitle>
+          <CardDescription>{totpRequired ? t('auth.oauth.totp.description') : t('auth.oauth.lark.description')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            <span className="ml-3 text-sm text-muted-foreground">{prompt}</span>
-          </div>
+          {totpRequired ? (
+            <OAuthTotpPrompt
+              onSuccess={(user) => completeLogin(user, searchParams.get('state'))}
+              onBackToLogin={() => navigate('/login')}
+            />
+          ) : (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <span className="ml-3 text-sm text-muted-foreground">{prompt}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

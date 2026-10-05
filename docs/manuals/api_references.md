@@ -492,7 +492,8 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 | `GET` | [`/api/oauth/oidc`](#authentication--account-lifecycle) | Public | Generic OIDC callback; username from preferred_username else oidc_<n>; login/provision/bind; requires oauth… |
 | `GET` | [`/api/oauth/lark`](#authentication--account-lifecycle) | Public | Lark/Feishu OAuth callback; login/provision/bind; requires oauth_state; no feature-disabled guard. |
 | `POST` | [`/api/oauth/wechat`](#authentication--account-lifecycle) | Public | WeChat code sign-in; resolves WeChat id from code; login/provision; does NOT validate oauth_state; replacing an existing session needs trusted provenance. |
-| `GET` | [`/api/oauth/state`](#authentication--account-lifecycle) | Public | Generate and store a 12-char anti-CSRF state in the session and return it for OAuth redirects. |
+| `GET` | [`/api/oauth/state`](#authentication--account-lifecycle) | Public | Generate and store a 12-char anti-CSRF state in the session and return it for OAuth redirects; cross-site/same-site navigations are rejected. |
+| `POST` | [`/api/oauth/totp`](#authentication--account-lifecycle) | Public (pending login) | Complete a GitHub/OIDC/Lark/WeChat login of a TOTP-enabled account with `{"totp_code"}`; issues the session cookie. |
 | `POST` | [`/api/oauth/wechat/bind`](#authentication--account-lifecycle) | Access token / session | Bind a WeChat identity to the authenticated account; success returns empty message. |
 | `POST` | [`/api/oauth/email/bind`](#authentication--account-lifecycle) | Access token / session | Bind/change account email gated by verification code; root also updates system root email. |
 | `GET` | [`/api/verification`](#authentication--account-lifecycle) | Public | Issue an email verification code; uniform success after ~1s delay, async whitelist/occupancy check and send. |
@@ -3510,6 +3511,7 @@ curl -X GET "$BASE_URL/api/oauth/github?code=GITHUB_CODE&state=OAUTH_STATE" \
 | GitHub login disabled | `The administrator did not turn on login and registration via GitHub` |
 | New user but registration disabled | `The administrator has turned off new user registration` |
 | Account banned | `User has been banned` |
+| Account has TOTP (2FA) enabled | HTTP 200, `{"success": false, "message": "totp_required", "data": {"totp_required": true}}`; no session is issued until [`POST /api/oauth/totp`](#post-apioauthtotp) succeeds. Do not retry the callback: the code and state are consumed. |
 
 ### GET /api/oauth/oidc
 
@@ -3557,6 +3559,7 @@ curl -X GET "$BASE_URL/api/oauth/oidc?code=OIDC_CODE&state=OAUTH_STATE" \
 | OIDC disabled | `Administrator has not enabled OIDC Log in and Sign up` |
 | New user but registration disabled | `The administrator has turned off new user registration` |
 | Account banned | `User has been banned` |
+| Account has TOTP (2FA) enabled | HTTP 200, `{"success": false, "message": "totp_required", "data": {"totp_required": true}}`; no session is issued until [`POST /api/oauth/totp`](#post-apioauthtotp) succeeds. Do not retry the callback: the code and state are consumed. |
 
 ### GET /api/oauth/lark
 
@@ -3603,6 +3606,7 @@ curl -X GET "$BASE_URL/api/oauth/lark?code=LARK_CODE&state=OAUTH_STATE" \
 | Missing/mismatched `state` | HTTP 403, `state is empty or not same` |
 | New user but registration disabled | `The administrator has turned off new user registration` |
 | Account banned | `User has been banned` |
+| Account has TOTP (2FA) enabled | HTTP 200, `{"success": false, "message": "totp_required", "data": {"totp_required": true}}`; no session is issued until [`POST /api/oauth/totp`](#post-apioauthtotp) succeeds. Do not retry the callback: the code and state are consumed. |
 
 > Note: unlike the GitHub and OIDC callbacks, the Lark login path has no dedicated "feature disabled" guard before the token exchange; a misconfiguration surfaces as an upstream connect/parse error from Feishu.
 
@@ -3651,12 +3655,13 @@ curl -X POST "$BASE_URL/api/oauth/wechat?code=WECHAT_CODE" \
 | Empty / invalid code | `Verification code error or expired` |
 | New user but registration disabled | `The administrator has turned off new user registration` |
 | Account banned | `User has been banned` |
+| Account has TOTP (2FA) enabled | HTTP 200, `{"success": false, "message": "totp_required", "data": {"totp_required": true}}`; no session is issued until [`POST /api/oauth/totp`](#post-apioauthtotp) succeeds. Do not retry the callback: the WeChat code is consumed. |
 
 ### GET /api/oauth/state
 
 Generates a random anti-CSRF `state` value, stores it in the session, and returns it. Call this before redirecting the user to a GitHub / OIDC / Lark authorization URL, then pass the returned value back as the `state` query parameter on the corresponding callback.
 
-**Auth:** Public - no auth. Protected by `CriticalRateLimit`. Sets a session cookie that the callback must later present.
+**Auth:** Public - no auth. Protected by `CriticalRateLimit`. Sets a session cookie that the callback must later present. Requests that Fetch Metadata marks as `cross-site` or `same-site` (for example a hostile top-level navigation) are rejected with HTTP 403 and leave the session untouched, unless their `Origin` is the API origin or a configured frontend origin; same-origin fetches, user-initiated navigations and clients without `Sec-Fetch-Site` are unaffected.
 
 **Response**
 
@@ -3676,6 +3681,41 @@ HTTP 200. `data` is the opaque 12-character state string.
 curl -X GET "$BASE_URL/api/oauth/state" \
   -c cookies.txt
 ```
+
+### POST /api/oauth/totp
+
+Completes a GitHub, OIDC, Lark or WeChat login for an account with TOTP (2FA) enabled. When such an account signs in through one of those callbacks, the callback answers the same `totp_required` challenge as `POST /api/user/login` and stores only a pending-login marker (account and UTC expiry, valid for 5 minutes) in the session cookie; it does not authenticate the session. This endpoint verifies the account's current TOTP code with the shared single-use verifier and per-account rate limit, then issues the **session cookie**.
+
+**Auth:** Public - no auth, but requires the pending-login session cookie from the preceding callback. Protected by `CriticalRateLimit`, and always requires trusted browser provenance (same-origin `Sec-Fetch-Site`, or a trusted `Origin`/`Referer`); HTTP 403 otherwise.
+
+**Request body**
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `totp_code` | string | yes | - | The account's current 6-digit TOTP code. |
+
+**Response**
+
+HTTP 200, same shape as `POST /api/user/login`. The pending-login marker is cleared.
+
+**Example**
+
+```bash
+curl -X POST "$BASE_URL/api/oauth/totp" \
+  -H "Content-Type: application/json" -H "Origin: $BASE_URL" \
+  -b cookies.txt -c cookies.txt \
+  --data '{"totp_code":"123456"}'
+```
+
+**Errors**
+
+| Condition | Behavior |
+|---|---|
+| Wrong or already-used code | `Invalid TOTP code`; the pending login stays valid for another attempt |
+| More than one attempt per second for the account | HTTP 429, `Too many TOTP verification attempts. Please wait before trying again.` |
+| No pending login, expired (5 minutes), or TOTP disabled meanwhile | `{"success": false, "message": "Two-factor sign-in has expired or was not started. Please sign in again.", "data": {"totp_expired": true}}` |
+| Account disabled or banned meanwhile | `User has been banned`; the pending login is cleared |
+| Untrusted provenance | HTTP 403, `Untrusted session mutation origin` |
 
 ### POST /api/oauth/wechat/bind
 
@@ -3879,7 +3919,7 @@ curl -X POST "$BASE_URL/api/user/reset" \
 
 ---
 
-**Binding identities via the OAuth callbacks.** `GET /api/oauth/github`, `/api/oauth/oidc`, and `/api/oauth/lark` double as bind endpoints: when the active **session cookie** already identifies a logged-in user (the session carries a `username`), the same callback links the external identity to that account instead of logging in, returning `{"success": true, "message": "bind"}`. (The GitHub/OIDC callbacks still validate `oauth_state` before dispatching to the bind path.) Binding fails with the corresponding "account has been bound" / "already been bound" message (`The GitHub account has been bound`, `This OIDC account has already been bound`, `This Lark account has already been bound`) if the external identity is already linked elsewhere. WeChat and email use dedicated bind endpoints (`/api/oauth/wechat/bind`, `/api/oauth/email/bind`) which require UserAuth rather than reusing the login callback; on success `/api/oauth/wechat/bind` returns an empty `message` (not `"bind"`).
+**Binding identities via the OAuth callbacks.** `GET /api/oauth/github`, `/api/oauth/oidc`, and `/api/oauth/lark` double as bind endpoints: when the active **session cookie** already identifies a logged-in user (the session carries a `username`), the same callback links the external identity to that account instead of logging in, returning `{"success": true, "message": "bind"}`. (The callbacks still validate `oauth_state` before dispatching to the bind path.) Before the provider is contacted, the session account must pass the same checks as UserAuth: a malformed session or a missing account gets HTTP 401, a disabled, deleted or banned account gets HTTP 403 (`User has been banned`), and the rejected session is cleared. A bind writes only the identity column. Binding fails with the corresponding "account has been bound" / "already been bound" message (`The GitHub account has been bound`, `This OIDC account has already been bound`, `This Lark account has already been bound`) if the external identity is already linked elsewhere. WeChat and email use dedicated bind endpoints (`/api/oauth/wechat/bind`, `/api/oauth/email/bind`) which require UserAuth rather than reusing the login callback; on success `/api/oauth/wechat/bind` returns an empty `message` (not `"bind"`).
 
 Relevant source files (absolute paths):
 - `/home/laisky/repo/laisky/one-api/controller/user.go` (Register, Login, SetupLogin, Logout, EmailBind)

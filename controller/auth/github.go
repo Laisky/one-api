@@ -93,6 +93,10 @@ func getGitHubUserInfoByCode(ctx context.Context, code string) (*GitHubUser, err
 	return &githubUser, nil
 }
 
+// GitHubOAuth handles the GitHub OAuth callback. After the session state check
+// it binds the GitHub login to the signed-in account, or signs in (provisioning
+// when registration is open) the linked account, requiring its TOTP code
+// through controller.CompleteOAuthLogin when 2FA is enabled.
 func GitHubOAuth(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	session := sessions.Default(c)
@@ -154,49 +158,37 @@ func GitHubOAuth(c *gin.Context) {
 		helper.RespondError(c, errors.New("User has been banned"))
 		return
 	}
-	controller.SetupLogin(&user, c)
+	controller.CompleteOAuthLogin(&user, c)
 }
 
+// GitHubBind attaches the GitHub login resolved from the callback code to the
+// account of the current dashboard session. The account must pass the
+// dashboard checks before GitHub is contacted, and only the github_id column
+// is written. It returns no value and always writes a response.
 func GitHubBind(c *gin.Context) {
 	if !config.GitHubOAuthEnabled {
 		helper.RespondError(c, errors.New("The administrator did not turn on login and registration via GitHub"))
 		return
 	}
-	code := c.Query("code")
-	githubUser, err := getGitHubUserInfoByCode(gmw.Ctx(c), code)
+	userID, ok := resolveBindingUserID(c)
+	if !ok {
+		return
+	}
+	githubUser, err := getGitHubUserInfoByCode(gmw.Ctx(c), c.Query("code"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
 	}
-	user := model.User{
-		GitHubId: githubUser.Login,
-	}
-	if model.IsGitHubIdAlreadyTaken(user.GitHubId) {
+	if model.IsGitHubIdAlreadyTaken(githubUser.Login) {
 		helper.RespondError(c, errors.New("The GitHub account has been bound"))
 		return
 	}
-	session := sessions.Default(c)
-	id := session.Get("id")
-	// id := c.GetInt("id")  // critical bug!
-	user.Id = id.(int)
-	err = user.FillUserById()
-	if err != nil {
-		helper.RespondError(c, err)
-		return
-	}
-	user.GitHubId = githubUser.Login
-	err = user.Update(false)
-	if err != nil {
-		helper.RespondError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "bind",
-	})
-	return
+	bindOAuthIdentity(c, userID, model.OAuthIdentityGitHub, githubUser.Login, "bind")
 }
 
+// GenerateOAuthCode issues a fresh OAuth state, stores it in the session and
+// returns it. The route is guarded against cross-site navigations so a hostile
+// page cannot replace the state of an in-progress login.
 func GenerateOAuthCode(c *gin.Context) {
 	session := sessions.Default(c)
 	state := random.GetRandomString(12)
