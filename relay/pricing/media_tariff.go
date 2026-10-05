@@ -63,7 +63,12 @@ func ValidateTariffProvenance(cfg adaptor.ModelConfig, at time.Time) error {
 // provider catalog explicitly declares that billing unit. Parameters: name,
 // overrides, provider and at select the normal pricing layers. Returns: the flat
 // tariff, whether the generation contract applies, and an error if unresolved.
-// Explicit per-call zero and ratio-zero/completion overrides preserve free policy.
+// An explicit channel per_call (including a present zero) is authoritative. A
+// channel override that sets no per-call, token or media tariff, such as the
+// {ratio:0, completion_ratio:1} snapshot written by the admin "Load Default"
+// action, is metadata only: zero ratios mean "unset" throughout channel
+// model_configs, so it inherits the verified catalog tariff instead of becoming
+// free. A positive token ratio cannot price a generation and fails closed.
 func ResolveGenerationTariff(name string, overrides map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (*adaptor.PerCallPricingConfig, bool, error) {
 	base, known := ResolveModelConfig(name, nil, provider, at)
 	if !known || base.PricingProvenance == nil || base.PricingProvenance.Unit != "generation" {
@@ -76,10 +81,23 @@ func ResolveGenerationTariff(name string, overrides map[string]model.ModelConfig
 	if cfg.PerCall != nil {
 		return cfg.PerCall, true, nil
 	}
-	if local, ok := overrides[name]; ok && local.Ratio == 0 && local.CompletionRatio > 0 && local.Audio == nil && len(local.Tiers) == 0 && len(local.TimeWindows) == 0 {
-		return &adaptor.PerCallPricingConfig{}, true, nil
+	if local, ok := overrides[name]; ok && isTariffFreeOverride(local) {
+		if err := ValidateTariffProvenance(base, at); err != nil {
+			return nil, true, err
+		}
+		if base.PerCall != nil {
+			return base.PerCall, true, nil
+		}
 	}
 	return nil, true, errors.New("generation billing requires per_call pricing; token ratios cannot price songs")
+}
+
+// isTariffFreeOverride reports whether a channel override carries no billing
+// tariff of its own. Parameters: local is the persisted channel model config.
+// Returns: true when it sets no ratio, per-call, media, tier or time-window price.
+func isTariffFreeOverride(local model.ModelConfigLocal) bool {
+	return local.Ratio == 0 && local.PerCall == nil && local.Audio == nil && local.Image == nil &&
+		local.Video == nil && local.Embedding == nil && len(local.Tiers) == 0 && len(local.TimeWindows) == 0
 }
 
 // GenerationQuota prices one generation using exact decimal arithmetic.

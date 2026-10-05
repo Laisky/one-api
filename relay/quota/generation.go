@@ -13,14 +13,12 @@ import (
 // Returns: the flat quota and true when applicable, retaining an explicit billing
 // issue for an invalid tariff so callers cannot mistake unknown pricing for free.
 func computeGenerationQuota(input ComputeInput, resolved adaptor.ModelConfig) (ComputeResult, bool) {
-	// Preserve the token path's single pricing lookup. Only explicit flat-rate
-	// candidates need the full generation contract and its media metadata.
+	// Preserve the token path's single pricing lookup. Only catalog generation
+	// contracts, or channel overrides that hide the catalog provenance (including
+	// metadata-only "Load Default" snapshots), need the full generation resolver.
 	candidate := resolved.PricingProvenance != nil && resolved.PricingProvenance.Unit == "generation"
-	if local, ok := input.ChannelModelConfigs[input.ModelName]; ok {
-		candidate = candidate || local.PerCall != nil
-		for _, window := range local.TimeWindows {
-			candidate = candidate || window.Overlay.PerCall != nil
-		}
+	if _, ok := input.ChannelModelConfigs[input.ModelName]; ok {
+		candidate = true
 	}
 	if !candidate {
 		return ComputeResult{}, false
