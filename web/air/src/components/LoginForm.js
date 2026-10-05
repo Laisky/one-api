@@ -58,8 +58,8 @@ const LoginForm = () => {
       showInfo('请稍后几秒重试，Turnstile 正在检查用户环境！');
       return;
     }
-    const res = await API.get(
-      `/api/oauth/wechat?code=${inputs.wechat_verification_code}`
+    const res = await API.post(
+      `/api/oauth/wechat?code=${encodeURIComponent(inputs.wechat_verification_code)}`
     );
     const { success, message, data } = res.data;
     if (success) {

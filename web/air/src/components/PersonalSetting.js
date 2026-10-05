@@ -95,7 +95,7 @@ const PersonalSetting = () => {
   };
 
   const generateAccessToken = async () => {
-    const res = await API.get('/api/user/token');
+    const res = await API.post('/api/user/token');
     const { success, message, data } = res.data;
     if (success) {
       setSystemToken(data);
@@ -107,7 +107,7 @@ const PersonalSetting = () => {
   };
 
   const getAffLink = async () => {
-    const res = await API.get('/api/user/aff');
+    const res = await API.post('/api/user/aff');
     const { success, message, data } = res.data;
     if (success) {
       let link = `${window.location.origin}/register?aff=${data}`;
@@ -163,7 +163,7 @@ const PersonalSetting = () => {
 
     if (success) {
       showSuccess('账户已删除！');
-      await API.get('/api/user/logout');
+      await API.post('/api/user/logout');
       userDispatch({ type: 'logout' });
       localStorage.removeItem('user');
       navigate('/login');
@@ -174,8 +174,8 @@ const PersonalSetting = () => {
 
   const bindWeChat = async () => {
     if (inputs.wechat_verification_code === '') return;
-    const res = await API.get(
-      `/api/oauth/wechat/bind?code=${inputs.wechat_verification_code}`
+    const res = await API.post(
+      `/api/oauth/wechat/bind?code=${encodeURIComponent(inputs.wechat_verification_code)}`
     );
     const { success, message } = res.data;
     if (success) {
@@ -265,8 +265,8 @@ const PersonalSetting = () => {
         return;
       }
       setLoading(true);
-      const res = await API.get(
-        `/api/oauth/email/bind?email=${inputs.email}&code=${inputs.email_verification_code}`
+      const res = await API.post(
+        `/api/oauth/email/bind?email=${encodeURIComponent(inputs.email)}&code=${encodeURIComponent(inputs.email_verification_code)}`
       );
       const { success, message } = res.data;
       if (success) {

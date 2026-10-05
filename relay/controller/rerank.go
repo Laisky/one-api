@@ -25,6 +25,7 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/cohere"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -62,6 +63,11 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	modelRatio := pricing.ResolveModelRatioAt(rerankRequest.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	modelConfig, hasModelConfig := pricing.ResolveModelConfig(rerankRequest.Model, channelModelConfigs, pricingAdaptor, meta.StartTime)
 	perCallBilling := hasModelConfig && modelConfig.PerCall != nil && modelConfig.PerCall.HasData()
+	// A present operator free-search contract must not fall through the legacy
+	// nonzero-ratio resolver to the provider's paid catalog default.
+	if perCallBilling && meta.ChannelType == channeltype.Cohere && modelConfig.Ratio == 0 && modelConfig.PerCall.UsdPerThousandCalls == 0 {
+		modelRatio = 0
+	}
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 
 	promptTokens := countRerankPromptTokens(ctx, rerankRequest)
@@ -75,6 +81,18 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 	meta.PromptTokens = promptTokens
 	totalQuota := calculateRerankQuota(promptTokens, modelRatio, groupRatio, perCallBilling)
+	if perCallBilling && meta.ChannelType == channeltype.Cohere {
+		units, quoteErr := cohere.QuoteRerankSearchUnits(rerankRequest, modelConfig.ContextLength)
+		if quoteErr != nil {
+			return openai.ErrorWrapper(quoteErr, "unbounded_cohere_rerank_request", http.StatusBadRequest)
+		}
+		var valid bool
+		totalQuota, valid = cohereSearchUnitsQuota(units, modelRatio, groupRatio)
+		if !valid {
+			return openai.ErrorWrapper(errors.New("Cohere rerank quota is not representable"), "invalid_cohere_rerank_quota", http.StatusBadRequest)
+		}
+		lg.Debug("quoted Cohere rerank aggregate allowance", zap.Int64("search_units", units), zap.Int64("quota", totalQuota))
+	}
 
 	preConsumedQuota, bizErr := preConsumeRerankQuota(c, totalQuota, meta)
 	if bizErr != nil {
@@ -341,7 +359,7 @@ func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Met
 }
 
 // postConsumeRerankQuota computes and records the final rerank charge, using
-// measured token usage when applicable and retaining Jina estimates. It returns
+// measured token or Cohere search usage and retaining uncertain estimates. It returns
 // the total quota submitted for settlement.
 func postConsumeRerankQuota(ctx context.Context,
 	usage *relaymodel.Usage,
@@ -357,6 +375,9 @@ func postConsumeRerankQuota(ctx context.Context,
 		quota = calculateRerankQuota(usage.PromptTokens, modelRatio, groupRatio, false)
 	}
 
+	if perCallBilling && meta.ChannelType == channeltype.Cohere {
+		quota = reconcileCohereSearchUnits(usage, quota, modelRatio, groupRatio)
+	}
 	if usage != nil {
 		quota = exactJinaUsageQuota(ctx, meta, usage, quota, preConsumedQuota, modelRatio, 0, groupRatio)
 	}
@@ -381,6 +402,13 @@ func postConsumeRerankQuota(ctx context.Context,
 	billingMode := "token"
 	if perCallBilling {
 		billingMode = "per-call"
+		if meta.ChannelType == channeltype.Cohere {
+			billingMode = "search-unit"
+		}
+	}
+	billingContent := fmt.Sprintf("rerank %s billing, base unit %.6f, group rate %.2f", billingMode, modelRatio, groupRatio)
+	if perCallBilling && meta.ChannelType == channeltype.Cohere && usage != nil && usage.BilledSearchUnits != nil && *usage.BilledSearchUnits > 0 {
+		billingContent += fmt.Sprintf(", measured search units %d", *usage.BilledSearchUnits)
 	}
 
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
@@ -391,7 +419,7 @@ func postConsumeRerankQuota(ctx context.Context,
 			CompletionTokens: completionTokens,
 			ModelName:        request.Model,
 			TokenName:        meta.TokenName,
-			Content:          fmt.Sprintf("rerank %s billing, base unit %.6f, group rate %.2f", billingMode, modelRatio, groupRatio),
+			Content:          billingContent,
 			IsStream:         false,
 			ElapsedTime:      helper.CalcElapsedTime(meta.StartTime),
 			RequestId:        requestId,
