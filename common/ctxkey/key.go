@@ -379,6 +379,11 @@ const (
 	// Read in: billing audit defer in relay handlers.
 	PreConsumedQuotaAmount = "pre_consumed_quota_amount"
 
+	// RealtimeSpendGate stores the prepaid realtime.SpendGate of a native Live
+	// session. Set in: RelayRealtime after the admission reservation.
+	// Read in: the Gemini Live transport before forwarding any billable frame.
+	RealtimeSpendGate = "realtime_spend_gate"
+
 	// PreConsumedQuotaRefundClaimed means an explicit media rollback already owns
 	// this attempt's refund, including while its detached write is pending. A
 	// cross-channel retry must not schedule a second refund of the same hold.

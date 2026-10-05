@@ -15,10 +15,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/realtime"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
+
+// unmeteredLiveGate funds all work; transport-denial tests never forward any.
+type unmeteredLiveGate struct{}
+
+// Commit ignores receipts. Parameters: record is unused. Returns: none.
+func (unmeteredLiveGate) Commit(realtime.Record) {}
+
+// Ensure funds everything. Parameters: pending is unused. Returns: nil.
+func (unmeteredLiveGate) Ensure(realtime.Estimate) error { return nil }
+
+// Finish ignores evidence. Parameters: evidence is unused. Returns: none.
+func (unmeteredLiveGate) Finish(realtime.Estimate) {}
 
 // vertexLiveTestMeta builds syntactically valid operator settings. Parameters:
 // none. Returns: metadata without performing credential or entitlement discovery.
@@ -103,6 +117,7 @@ func TestVertexLiveUpstreamDenialsAreNotLocalModelRestrictions(t *testing.T) {
 			engine := gin.New()
 			engine.GET("/v1/realtime", func(c *gin.Context) {
 				gmw.SetLogger(c, logger.Logger)
+				gemini.SetLiveSpendGate(c, unmeteredLiveGate{})
 				biz, usage := LiveHandler(c, m)
 				if biz == nil || usage != nil {
 					t.Error("denial was not returned before downstream upgrade")
