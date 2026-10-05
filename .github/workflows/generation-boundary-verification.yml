@@ -1,0 +1,78 @@
+name: Generation boundary verification
+
+on:
+  push:
+    branches:
+      - 'security/543-verify-*'
+
+permissions:
+  contents: read
+
+jobs:
+  generation_boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CGO_ENABLED: '1'
+    steps:
+      - name: Checkout pinned verification revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Install media test dependency
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg
+      - name: Run generation behavioral regressions with race detection
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          go version
+          go test -race -count=1 -timeout=15m ./relay/controller -run '^TestSecurityLyria' -json > generation-boundary.jsonl
+      - name: Summarize exact test outcomes
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import collections
+          import json
+          from pathlib import Path
+          path = Path('generation-boundary.jsonl')
+          if not path.exists():
+              raise SystemExit('No test result file: setup or compilation did not reach the test command.')
+          outcomes = collections.Counter()
+          outputs = collections.defaultdict(list)
+          report = []
+          for line in path.read_text().splitlines():
+              event = json.loads(line)
+              test = event.get('Test', '')
+              action = event.get('Action')
+              if action == 'output':
+                  outputs[test].append(event.get('Output', '').rstrip())
+              if test and action in ('pass', 'fail', 'skip'):
+                  outcomes[action] += 1
+                  report.append(f'{action.upper()} {test}')
+                  if action == 'fail':
+                      report.extend(outputs[test][-20:])
+          if not outcomes:
+              report.extend(outputs[''][-40:])
+              report.append('NO TEST OUTCOMES: inspect compilation/setup errors; this is not behavioral evidence.')
+          report.insert(0, 'TEST NODE OUTCOMES ' + json.dumps(dict(outcomes), sort_keys=True))
+          summary = '\n'.join(report) + '\n'
+          Path('generation-boundary-summary.txt').write_text(summary)
+          print(summary)
+          PY
+      - name: Archive revision-specific evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: generation-boundary-${{ github.sha }}
+          path: |
+            generation-boundary.jsonl
+            generation-boundary-summary.txt
+          retention-days: 14
