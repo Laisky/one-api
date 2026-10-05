@@ -341,7 +341,7 @@ func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Met
 }
 
 // postConsumeRerankQuota computes and records the final rerank charge, using
-// measured token usage when applicable and retaining Jina estimates. It returns
+// measured token or Cohere search usage and retaining uncertain estimates. It returns
 // the total quota submitted for settlement.
 func postConsumeRerankQuota(ctx context.Context,
 	usage *relaymodel.Usage,
@@ -357,6 +357,9 @@ func postConsumeRerankQuota(ctx context.Context,
 		quota = calculateRerankQuota(usage.PromptTokens, modelRatio, groupRatio, false)
 	}
 
+	if perCallBilling && meta.ChannelType == channeltype.Cohere {
+		quota = reconcileCohereSearchUnits(usage, quota, modelRatio, groupRatio)
+	}
 	if usage != nil {
 		quota = exactJinaUsageQuota(ctx, meta, usage, quota, preConsumedQuota, modelRatio, 0, groupRatio)
 	}
@@ -381,6 +384,13 @@ func postConsumeRerankQuota(ctx context.Context,
 	billingMode := "token"
 	if perCallBilling {
 		billingMode = "per-call"
+		if meta.ChannelType == channeltype.Cohere {
+			billingMode = "search-unit"
+		}
+	}
+	billingContent := fmt.Sprintf("rerank %s billing, base unit %.6f, group rate %.2f", billingMode, modelRatio, groupRatio)
+	if perCallBilling && meta.ChannelType == channeltype.Cohere && usage != nil && usage.BilledSearchUnits != nil && *usage.BilledSearchUnits > 0 {
+		billingContent += fmt.Sprintf(", measured search units %d", *usage.BilledSearchUnits)
 	}
 
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
@@ -391,7 +401,7 @@ func postConsumeRerankQuota(ctx context.Context,
 			CompletionTokens: completionTokens,
 			ModelName:        request.Model,
 			TokenName:        meta.TokenName,
-			Content:          fmt.Sprintf("rerank %s billing, base unit %.6f, group rate %.2f", billingMode, modelRatio, groupRatio),
+			Content:          billingContent,
 			IsStream:         false,
 			ElapsedTime:      helper.CalcElapsedTime(meta.StartTime),
 			RequestId:        requestId,
