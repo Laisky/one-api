@@ -48,6 +48,11 @@ func TestModelConfigUsesChatFormat(t *testing.T) {
 	require.False(t, modelConfigUsesChatFormat(adaptor.ModelConfig{
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"text"},
+		PerPage:          &adaptor.PerPagePricingConfig{UsdPerThousandPages: 1},
+	}), "a page-priced document model is not a chat surface")
+	require.False(t, modelConfigUsesChatFormat(adaptor.ModelConfig{
+		InputModalities:  []string{"text"},
+		OutputModalities: []string{"text"},
 		Description:      "A multilingual text embeddings model.",
 	}))
 	require.False(t, modelConfigUsesChatFormat(adaptor.ModelConfig{

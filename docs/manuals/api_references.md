@@ -375,7 +375,7 @@ quota = ceil( (prompt_tokens * model_ratio
               * group_ratio )
 ```
 
-where `model_ratio` is expressed in milli-token-USD units (a model priced at $2.50 / 1M tokens has `model_ratio = 1.25`), `completion_ratio` scales output tokens, and `group_ratio` is the user's group multiplier (default `1`). Per-call / per-second models (rerank, OCR, image, video) charge a fixed quota instead of counting tokens. Full pricing rules, cached-token discounts, and the 4-layer pricing fallback (channel override → provider default → global pricing → safe default) are in [`billing.md`](billing.md).
+where `model_ratio` is expressed in milli-token-USD units (a model priced at $2.50 / 1M tokens has `model_ratio = 1.25`), `completion_ratio` scales output tokens, and `group_ratio` is the user's group multiplier (default `1`). Per-call / per-second models (rerank, image, video) charge a fixed quota instead of counting tokens; OCR bills the unit its model declares (tokens by default, or a `per_page` / `per_call` tariff). Full pricing rules, cached-token discounts, and the 4-layer pricing fallback (channel override → provider default → global pricing → safe default) are in [`billing.md`](billing.md).
 
 ### Two-balance enforcement
 
@@ -2221,7 +2221,7 @@ This section documents the auxiliary relay and discovery surfaces: the Zhipu-com
 
 ### POST /api/paas/v4/layout_parsing
 
-Performs document OCR / layout parsing on a single file using the Zhipu `/api/paas/v4` `layout_parsing` request schema. The request is auto-detected as OCR mode by path, converted by the channel adaptor, billed per call, and the upstream OCR response body is forwarded verbatim to the caller.
+Performs document OCR / layout parsing on a single file using the Zhipu `/api/paas/v4` `layout_parsing` request schema. The request is auto-detected as OCR mode by path, converted by the channel adaptor, billed by the model's declared unit (see *Billing* below), and the upstream OCR response body is forwarded verbatim to the caller.
 
 **Auth:** Relay API KEY. Header `Authorization: Bearer $API_KEY` (or `X-Api-Key: $API_KEY` / `Api-Key: $API_KEY`).
 
@@ -2235,8 +2235,8 @@ Performs document OCR / layout parsing on a single file using the Zhipu `/api/pa
 | UserID | `user_id` | string | No | omitted | Optional end-user identifier, forwarded upstream. |
 | ReturnCropImages | `return_crop_images` | boolean | No | omitted (upstream default) | Whether the upstream should return cropped region images. |
 | NeedLayoutVisualization | `need_layout_visualization` | boolean | No | omitted (upstream default) | Whether the upstream should return a layout visualization. |
-| StartPageID | `start_page_id` | integer | No | omitted (upstream default) | First page (inclusive) to parse. |
-| EndPageID | `end_page_id` | integer | No | omitted (upstream default) | Last page (inclusive) to parse. |
+| StartPageID | `start_page_id` | integer | No | omitted (upstream default) | First page (inclusive) to parse. Must be nonnegative. |
+| EndPageID | `end_page_id` | integer | No | omitted (upstream default) | Last page (inclusive) to parse. Must be nonnegative and not less than `start_page_id`. Sending both bounds lets the gateway reserve only the selected pages (see *Billing*). |
 
 ```json
 {
@@ -2266,7 +2266,13 @@ Performs document OCR / layout parsing on a single file using the Zhipu `/api/pa
 | RequestID | `request_id` | string | Echoes the client/upstream request id. |
 | Usage | `usage` | object | Token accounting reported by upstream (`prompt_tokens`, `completion_tokens`, `total_tokens`). |
 
-Billing is per-call: a flat model unit (`modelRatio`) times the group ratio, rounded up to at least 1 quota when the model unit is non-zero. It is settled asynchronously after the response is sent.
+**Billing.** Each OCR model has exactly one pricing contract, resolved from the channel `model_configs` override, then the provider catalog:
+
+- **Token** (default; GLM-OCR on BigModel and Z.ai): the receipt's `usage.prompt_tokens` and `usage.completion_tokens` are priced by the common token calculator (input ratio, completion ratio, group ratio, tiers, and time windows). Reported cached tokens are billed as ordinary input because GLM-OCR has no cache-hit tariff.
+- **Per page** (`"per_page": {"usd_per_thousand_pages": N}`): the receipt's `data_info.num_pages` is billed per page, capped at the explicitly selected page range.
+- **Per call** (`"per_call": {"usd_per_thousand_calls": N}`): one flat charge per request, regardless of the receipt.
+
+A zero `per_page` / `per_call` price, or a zero group ratio, is an explicit free tariff. Before dispatch the gateway reserves a conservative allowance against both the user and the API key: the explicit `start_page_id`..`end_page_id` range when both are sent (capped at 100 pages), one page for an inline base64 PNG/JPEG, and otherwise the 100-page provider document limit, at 16,384 input + 4,096 output tokens per page for token-priced models. After the provider accepts the work, the request is settled exactly once from the receipt, including when the response can no longer be delivered to the client. A receipt larger than the allowance is still billed as measured. When the receipt is missing, malformed, overflowing, or inconsistent, the allowance is kept and the consume log is labelled `billing_estimated` with an `ocr_receipt_*` reason.
 
 ```json
 {
@@ -2307,9 +2313,10 @@ curl -X POST "$BASE_URL/api/paas/v4/layout_parsing" \
 
 | Status | `code` | Meaning |
 |--------|--------|---------|
-| 400 | `invalid_ocr_request` | Body is not valid JSON, or required `model` / `file` is missing. |
+| 400 | `invalid_ocr_request` | Body is not valid JSON, required `model` / `file` is missing, or the page range is negative or reversed. |
 | 400 | `ocr_not_supported` | The routed channel's adaptor does not implement OCR. |
-| 403 | `insufficient_user_quota` | The per-call quota exceeds the user's remaining balance. |
+| 403 | `insufficient_user_quota` / `pre_consume_token_quota_failed` | The conservative allowance exceeds the user's or the API key's remaining balance; nothing is sent upstream. |
+| 500 | `invalid_ocr_pricing` | The model's tariff is ambiguous (both `per_call` and `per_page`) or its allowance cannot be represented. |
 | 500 | `convert_request_failed` / `do_request_failed` | The adaptor failed to convert the request or reach upstream. |
 | 4xx/5xx | (upstream `code`) | Upstream OCR errors are surfaced with the upstream status. |
 
@@ -8517,6 +8524,7 @@ All filters are optional; CSV and repeated parameters are both accepted. Boolean
 | supported_features | `supported_features` | string[] | Capability flags (omitted if empty) |
 | image_price | `image_price` | number | USD per image, image models only (omitted if 0) |
 | per_call_pricing | `per_call_pricing` | object | Flat per-invocation pricing `{usd_per_thousand_calls, usd_per_call}` (mutually exclusive with token pricing; omitted if absent) |
+| per_page_pricing | `per_page_pricing` | object | Flat per-processed-page pricing `{usd_per_thousand_pages, usd_per_page}` for page-priced document models (mutually exclusive with token and per-call pricing; omitted if absent) |
 | time_windows | `time_windows` | object[] | Ordered time-of-day pricing windows. Each item contains `name`, `timezone`, `ranges`, optional `days_of_week`/`date_from`/`date_to`, and an `overlay` object rendered as display prices. |
 | active_time_window | `active_time_window` | string | Name of the first window matching server display time. Historical billing still uses the request's own start time. |
 

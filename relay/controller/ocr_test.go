@@ -72,7 +72,7 @@ type mockOCRAdaptor struct {
 	converted    any
 	doRequestErr error
 	doRequestFn  func() (*http.Response, error)
-	doOCRRespFn  func(c *gin.Context, resp *http.Response, meta *metalib.Meta) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode)
+	doOCRRespFn  func(c *gin.Context, resp *http.Response, meta *metalib.Meta) (*relaymodel.OCRReceipt, *relaymodel.ErrorWithStatusCode)
 }
 
 func (m *mockOCRAdaptor) Init(_ *metalib.Meta) {}
@@ -121,11 +121,11 @@ func (m *mockOCRAdaptor) ConvertOCRRequest(_ *gin.Context, req *relaymodel.OCRRe
 	}
 	return req, nil
 }
-func (m *mockOCRAdaptor) DoOCRResponse(c *gin.Context, resp *http.Response, meta *metalib.Meta) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
+func (m *mockOCRAdaptor) DoOCRResponse(c *gin.Context, resp *http.Response, meta *metalib.Meta) (*relaymodel.OCRReceipt, *relaymodel.ErrorWithStatusCode) {
 	if m.doOCRRespFn != nil {
 		return m.doOCRRespFn(c, resp, meta)
 	}
-	return &relaymodel.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30}, nil
+	return &relaymodel.OCRReceipt{Usage: &relaymodel.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30}, Pages: 1}, nil
 }
 
 // plainAdaptor implements adaptor.Adaptor but NOT adaptor.OCRAdaptor.
@@ -328,46 +328,27 @@ func TestPreConsumeOCRQuota(t *testing.T) {
 
 func TestPostConsumeOCRQuota(t *testing.T) {
 	t.Parallel()
+	plan := ocrBillingPlan{unit: ocrUnitToken, quote: 500, allowance: ocrAllowance{pages: 1, source: ocrAllowanceFromPageRange}}
 
-	t.Run("returns totalQuota as final quota", func(t *testing.T) {
-		usage := &relaymodel.Usage{PromptTokens: 50, CompletionTokens: 100, TotalTokens: 150}
+	t.Run("returns the settled charge", func(t *testing.T) {
 		meta := &metalib.Meta{UserId: 1, ChannelId: 1, TokenId: 0, TokenName: "unit-test", StartTime: time.Now()}
-		request := &relaymodel.OCRRequest{Model: "glm-ocr"}
-
-		got := postConsumeOCRQuota(context.Background(), usage, meta, request, 100, 500, 0.5, 1.0)
-		require.Equal(t, int64(500), got)
+		got := postConsumeOCRQuota(context.Background(), meta, "glm-ocr", 100, plan, ocrSettlement{quota: 320, promptTokens: 50, completionTokens: 100})
+		require.Equal(t, int64(320), got)
 	})
 
-	t.Run("zero totalQuota returns zero", func(t *testing.T) {
+	t.Run("negative settlement clamped to zero", func(t *testing.T) {
 		meta := &metalib.Meta{UserId: 1, ChannelId: 1, TokenId: 0, StartTime: time.Now()}
-		got := postConsumeOCRQuota(context.Background(), &relaymodel.Usage{}, meta, &relaymodel.OCRRequest{Model: "glm-ocr"}, 0, 0, 0, 1)
+		got := postConsumeOCRQuota(context.Background(), meta, "glm-ocr", 0, plan, ocrSettlement{quota: -10})
 		require.Equal(t, int64(0), got)
-	})
-
-	t.Run("negative totalQuota clamped to zero", func(t *testing.T) {
-		meta := &metalib.Meta{UserId: 1, ChannelId: 1, TokenId: 0, StartTime: time.Now()}
-		got := postConsumeOCRQuota(context.Background(), nil, meta, &relaymodel.OCRRequest{Model: "glm-ocr"}, 0, -10, 1.0, 1.0)
-		require.Equal(t, int64(0), got)
-	})
-
-	t.Run("nil usage does not panic", func(t *testing.T) {
-		meta := &metalib.Meta{UserId: 1, ChannelId: 1, TokenId: 0, StartTime: time.Now()}
-		require.NotPanics(t, func() {
-			postConsumeOCRQuota(context.Background(), nil, meta, &relaymodel.OCRRequest{Model: "glm-ocr"}, 0, 100, 1.0, 1.0)
-		})
 	})
 
 	t.Run("incomplete meta logs error but does not panic", func(t *testing.T) {
 		// With TokenId == 0, postConsumeOCRQuota takes the "incomplete meta" error
 		// log branch and does not attempt DB operations.
-		meta := &metalib.Meta{
-			UserId: 1, ChannelId: 2, TokenId: 0,
-			TokenName: "test-token", StartTime: time.Now(),
-		}
-		usage := &relaymodel.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30}
+		meta := &metalib.Meta{UserId: 1, ChannelId: 2, TokenId: 0, TokenName: "test-token", StartTime: time.Now()}
 		require.NotPanics(t, func() {
-			got := postConsumeOCRQuota(context.Background(), usage, meta, &relaymodel.OCRRequest{Model: "glm-ocr"}, 50, 100, 1.0, 1.0)
-			assert.Equal(t, int64(100), got)
+			got := postConsumeOCRQuota(context.Background(), meta, "glm-ocr", 50, plan, ocrSettlement{quota: 500, estimateReason: relaymodel.OCRReceiptMissing})
+			require.Equal(t, int64(500), got)
 		})
 	})
 }
@@ -498,51 +479,6 @@ func TestOCRModelMapping(t *testing.T) {
 	// No mapping entry: model unchanged
 	actualModel2 := metalib.GetMappedModelName("glm-ocr", mapping)
 	assert.Equal(t, "glm-ocr", actualModel2)
-}
-
-// ===========================================================================
-// 9. totalQuota calculation edge cases
-// ===========================================================================
-
-func TestOCRTotalQuotaCalculation(t *testing.T) {
-	t.Parallel()
-	// Mirrors the logic in RelayOCRHelper:
-	//   totalQuota = int64(math.Ceil(modelRatio * groupRatio))
-	//   if modelRatio > 0 && totalQuota == 0 { totalQuota = 1 }
-
-	t.Run("normal calculation", func(t *testing.T) {
-		// 1.5 * 2.0 = 3.0 → 3
-		import_math_ceil := func(f float64) int64 {
-			return int64(f + 0.999999)
-		}
-		_ = import_math_ceil
-		// Just verify the logic inline
-		modelRatio := 1.5
-		groupRatio := 2.0
-		totalQuota := int64(modelRatio * groupRatio)
-		assert.Equal(t, int64(3), totalQuota)
-	})
-
-	t.Run("fractional rounds up to minimum 1", func(t *testing.T) {
-		modelRatio := 0.001
-		groupRatio := 0.001
-		product := modelRatio * groupRatio // 0.000001
-		totalQuota := int64(product)       // 0 due to truncation
-		if modelRatio > 0 && totalQuota == 0 {
-			totalQuota = 1
-		}
-		assert.Equal(t, int64(1), totalQuota)
-	})
-
-	t.Run("zero model ratio", func(t *testing.T) {
-		modelRatio := 0.0
-		groupRatio := 1.0
-		totalQuota := int64(modelRatio * groupRatio)
-		if modelRatio > 0 && totalQuota == 0 {
-			totalQuota = 1
-		}
-		assert.Equal(t, int64(0), totalQuota)
-	})
 }
 
 // ===========================================================================

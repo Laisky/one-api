@@ -372,8 +372,11 @@ func (a *Adaptor) ConvertOCRRequest(_ *gin.Context, request *model.OCRRequest) (
 	}, nil
 }
 
-// DoOCRResponse handles the upstream OCR response and writes the result to the client.
-func (a *Adaptor) DoOCRResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
-	err, usage = OCRHandler(c, resp, meta.ActualModelName)
-	return
+// DoOCRResponse forwards the upstream layout_parsing response to the client and
+// returns its typed billing receipt. The receipt is returned even when client
+// delivery fails, because the provider has already accepted the paid work.
+// Parameters: c is the client request, resp is the upstream response, and meta is unused.
+// Returns: the receipt evidence and an API error when reading or delivery failed.
+func (a *Adaptor) DoOCRResponse(c *gin.Context, resp *http.Response, _ *meta.Meta) (*model.OCRReceipt, *model.ErrorWithStatusCode) {
+	return forwardOCRResponse(c, resp)
 }
