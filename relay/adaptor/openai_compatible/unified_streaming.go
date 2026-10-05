@@ -280,11 +280,6 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 	if !missingUsage {
 		// Explicit input/output counters, including zero, remain measured.
 		finalUsage = streamCtx.usage
-		if finalUsage.TotalTokens == 0 {
-			finalUsage.TotalTokens = finalUsage.PromptTokens + finalUsage.CompletionTokens
-		}
-		finalUsage.NormalizeCachedTokens()
-		finalUsage.NormalizeCacheWriteTokens()
 	} else {
 		finalUsage = streamCtx.CalculateUsage(promptTokens, modelName)
 	}
@@ -294,6 +289,15 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 		finalUsage = tracker.UsageSnapshot()
 	} else if tracker != nil && missingUsage {
 		finalUsage.BillingEstimateReason = "stream_usage_missing_counters"
+	}
+	// Normalize the final owned snapshot, including provider cache fields,
+	// before terminal rendering and controller settlement consume it.
+	if finalUsage != nil {
+		if finalUsage.TotalTokens == 0 {
+			finalUsage.TotalTokens = finalUsage.PromptTokens + finalUsage.CompletionTokens
+		}
+		finalUsage.NormalizeCachedTokens()
+		finalUsage.NormalizeCacheWriteTokens()
 	}
 
 	if streamRewriter != nil {

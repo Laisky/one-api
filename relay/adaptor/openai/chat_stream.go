@@ -412,7 +412,6 @@ streamLoop:
 	var readFailure *model.ErrorWithStatusCode
 	if streamErr != nil && trackerErr == nil {
 		readFailure = ErrorWrapper(streamErr, "read_stream_failed", http.StatusInternalServerError)
-		openai_compatible.FailStreamWithBridge(c, readFailure, usage)
 	} else if streamRewriter != nil {
 		streamRewriter.FinalizeUsage(usage)
 		handled, handledDone := streamRewriter.HandleDone(c)
