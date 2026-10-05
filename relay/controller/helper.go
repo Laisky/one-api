@@ -296,6 +296,7 @@ func postConsumeQuota(ctx context.Context,
 		PricingAdaptor:         pricingAdaptor,
 		RequestTime:            meta.StartTime,
 	})
+	retainUnpricedUsage(ctx, usage, computeResult)
 
 	quota = exactJinaUsageQuota(ctx, meta, usage, computeResult.TotalQuota, preConsumedQuota+incrementallyCharged,
 		computeResult.UsedModelRatio, computeResult.UsedCompletionRatio, groupRatio)

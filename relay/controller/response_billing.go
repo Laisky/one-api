@@ -154,6 +154,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		PricingAdaptor:         pricingAdaptor,
 		RequestTime:            meta.StartTime,
 	})
+	retainUnpricedUsage(ctx, usage, computeResult)
 
 	quota = computeResult.TotalQuota
 	totalTokens := computeResult.PromptTokens + computeResult.CompletionTokens

@@ -80,6 +80,7 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		PricingAdaptor:         pricingAdaptor,
 		RequestTime:            meta.StartTime,
 	})
+	retainUnpricedUsage(ctx, usage, computeResult)
 
 	quota := exactJinaUsageQuota(ctx, meta, usage, computeResult.TotalQuota, preConsumedQuota+incrementalCharged,
 		computeResult.UsedModelRatio, computeResult.UsedCompletionRatio, groupRatio)
