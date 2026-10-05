@@ -194,7 +194,7 @@ export function LoginPage() {
     setWechatLoading(true);
     setWechatError('');
     try {
-      const response = await api.get(`/api/oauth/wechat?code=${encodeURIComponent(code)}`);
+      const response = await api.post(`/api/oauth/wechat?code=${encodeURIComponent(code)}`);
       const { success, message, data } = response.data;
       if (!success) {
         setWechatError(message || t('auth.login.wechat_failed'));

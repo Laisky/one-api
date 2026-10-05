@@ -175,7 +175,7 @@ const PersonalSetting = () => {
   const bindWeChat = async () => {
     if (inputs.wechat_verification_code === '') return;
     const res = await API.post(
-      `/api/oauth/wechat/bind?code=${inputs.wechat_verification_code}`
+      `/api/oauth/wechat/bind?code=${encodeURIComponent(inputs.wechat_verification_code)}`
     );
     const { success, message } = res.data;
     if (success) {
@@ -266,7 +266,7 @@ const PersonalSetting = () => {
       }
       setLoading(true);
       const res = await API.post(
-        `/api/oauth/email/bind?email=${inputs.email}&code=${inputs.email_verification_code}`
+        `/api/oauth/email/bind?email=${encodeURIComponent(inputs.email)}&code=${encodeURIComponent(inputs.email_verification_code)}`
       );
       const { success, message } = res.data;
       if (success) {

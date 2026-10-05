@@ -520,7 +520,7 @@ const ChannelsTable = () => {
   };
 
   const updateChannelBalance = async (record) => {
-    const res = await API.post(`/api/channel/update_balance/${channelRef(record)}/`);
+    const res = await API.post(`/api/channel/update_balance/${channelRef(record)}`);
     const { success, message, balance } = res.data;
     if (success) {
       record.balance = balance;

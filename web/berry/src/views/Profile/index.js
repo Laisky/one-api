@@ -75,7 +75,7 @@ export default function Profile() {
   const bindWeChat = async (code) => {
     if (code === '') return;
     try {
-      const res = await API.post(`/api/oauth/wechat/bind?code=${code}`);
+      const res = await API.post(`/api/oauth/wechat/bind?code=${encodeURIComponent(code)}`);
       const { success, message } = res.data;
       if (success) {
         showSuccess('微信账户绑定成功！');

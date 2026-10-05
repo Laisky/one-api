@@ -151,7 +151,7 @@ export default function ChannelPage() {
         }
         break;
       case 'test':
-        res = await API.get(url + `test/${id}`);
+        res = await API.post(url + `test/${id}`);
         break;
       default:
         showError(`未知操作类型: ${action}`);
