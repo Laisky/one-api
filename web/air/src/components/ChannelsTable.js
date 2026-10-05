@@ -484,7 +484,7 @@ const ChannelsTable = () => {
     // which it rejects as unsupported. Omitting it lets the server apply the
     // channel's own testing-model setting.
     const query = model ? `?model=${encodeURIComponent(model)}` : '';
-    const res = await API.get(`/api/channel/test/${channelRef(record)}${query}`);
+    const res = await API.post(`/api/channel/test/${channelRef(record)}${query}`);
     const { success, message, time, skipped } = res.data;
     if (success) {
       record.response_time = time * 1000;
@@ -499,7 +499,7 @@ const ChannelsTable = () => {
   };
 
   const testChannels = async (scope) => {
-    const res = await API.get(`/api/channel/test?scope=${scope}`);
+    const res = await API.post(`/api/channel/test?scope=${scope}`);
     const { success, message } = res.data;
     if (success) {
       showInfo('已成功开始测试渠道，请刷新页面查看结果。');
@@ -520,7 +520,7 @@ const ChannelsTable = () => {
   };
 
   const updateChannelBalance = async (record) => {
-    const res = await API.get(`/api/channel/update_balance/${channelRef(record)}/`);
+    const res = await API.post(`/api/channel/update_balance/${channelRef(record)}/`);
     const { success, message, balance } = res.data;
     if (success) {
       record.balance = balance;
@@ -533,7 +533,7 @@ const ChannelsTable = () => {
 
   const updateAllChannelsBalance = async () => {
     setUpdatingBalance(true);
-    const res = await API.get(`/api/channel/update_balance`);
+    const res = await API.post(`/api/channel/update_balance`);
     const { success, message } = res.data;
     if (success) {
       showInfo('已更新完毕所有已启用渠道余额！');

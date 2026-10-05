@@ -13,6 +13,7 @@ vi.mock('@/components/ui/notifications', () => ({
 vi.mock('@/lib/api', () => ({
   api: {
     get: vi.fn(),
+    post: vi.fn(),
     delete: vi.fn(),
     put: vi.fn(),
   },
@@ -31,6 +32,7 @@ vi.mock('react-router-dom', async () => {
 });
 
 const mockApiGet = vi.mocked(api.get);
+const mockApiPost = vi.mocked(api.post);
 
 const channelRow = {
   id: 3,
@@ -49,6 +51,7 @@ const channelRow = {
 describe('ChannelsPage balance refresh', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockApiPost.mockImplementation((url) => mockApiGet(url));
     localStorage.clear();
     // Default behavior: list-load returns single channel.
     mockApiGet.mockImplementation((url: string) => {
@@ -83,7 +86,7 @@ describe('ChannelsPage balance refresh', () => {
     await user.click(refreshBtn);
 
     await waitFor(() => {
-      expect(mockApiGet).toHaveBeenCalledWith('/api/channel/update_balance/3');
+      expect(mockApiPost).toHaveBeenCalledWith('/api/channel/update_balance/3');
     });
   });
 

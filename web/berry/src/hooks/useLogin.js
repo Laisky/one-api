@@ -123,7 +123,7 @@ const useLogin = () => {
   };
 
   const logout = async () => {
-    await API.get('/api/user/logout');
+    await API.post('/api/user/logout');
     localStorage.removeItem('user');
     dispatch({ type: LOGIN, payload: null });
     navigate('/');

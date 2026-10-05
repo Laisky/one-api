@@ -75,7 +75,7 @@ export default function Profile() {
   const bindWeChat = async (code) => {
     if (code === '') return;
     try {
-      const res = await API.get(`/api/oauth/wechat/bind?code=${code}`);
+      const res = await API.post(`/api/oauth/wechat/bind?code=${code}`);
       const { success, message } = res.data;
       if (success) {
         showSuccess('微信账户绑定成功！');
@@ -88,7 +88,7 @@ export default function Profile() {
   };
 
   const generateAccessToken = async () => {
-    const res = await API.get('/api/user/token');
+    const res = await API.post('/api/user/token');
     const { success, message, data } = res.data;
     if (success) {
       setInputs((inputs) => ({ ...inputs, access_token: data }));

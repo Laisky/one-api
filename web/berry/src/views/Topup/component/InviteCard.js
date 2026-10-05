@@ -16,7 +16,7 @@ const InviteCard = () => {
       copy(inviteUl, '邀请链接');
       return;
     }
-    const res = await API.get('/api/user/aff');
+    const res = await API.post('/api/user/aff');
     const { success, message, data } = res.data;
     if (success) {
       let link = `${window.location.origin}/register?aff=${data}`;

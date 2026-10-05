@@ -92,6 +92,7 @@ describe('PersonalSettings', () => {
     (api.get as any).mockReset();
     (api.put as any).mockReset();
     (api.post as any).mockReset();
+    (api.post as any).mockImplementation((url: string) => api.get(url));
 
     (api.get as any).mockImplementation((url: string) => {
       if (url === '/api/user/self') {
@@ -200,7 +201,7 @@ describe('PersonalSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'personal_settings.profile_info.bind_email' }));
 
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith('/api/oauth/email/bind?email=new%40example.com&code=123456');
+      expect(api.post).toHaveBeenCalledWith('/api/oauth/email/bind?email=new%40example.com&code=123456');
     });
 
     await waitFor(() => {

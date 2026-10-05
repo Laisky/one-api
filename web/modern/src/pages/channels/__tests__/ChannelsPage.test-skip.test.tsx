@@ -15,6 +15,7 @@ vi.mock('@/components/ui/notifications', () => ({
 vi.mock('@/lib/api', () => ({
   api: {
     get: vi.fn(),
+    post: vi.fn(),
     delete: vi.fn(),
     put: vi.fn(),
   },
@@ -33,6 +34,7 @@ vi.mock('react-router-dom', async () => {
 });
 
 const mockApiGet = vi.mocked(api.get);
+const mockApiPost = vi.mocked(api.post);
 
 const channelRow = {
   id: 7,
@@ -58,6 +60,7 @@ const channelRow = {
 describe('ChannelsPage skipped channel test', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockApiPost.mockImplementation((url) => mockApiGet(url));
     localStorage.clear();
     mockApiGet.mockImplementation((url: string) => {
       if (url.startsWith('/api/channel/?')) {
@@ -93,7 +96,7 @@ describe('ChannelsPage skipped channel test', () => {
     await user.click(await screen.findByRole('button', { name: /^test$/i }));
 
     await waitFor(() => {
-      expect(mockApiGet).toHaveBeenCalledWith('/api/channel/test/7');
+      expect(mockApiPost).toHaveBeenCalledWith('/api/channel/test/7');
     });
 
     await waitFor(() => expect(notify).toHaveBeenCalled());

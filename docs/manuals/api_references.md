@@ -125,7 +125,7 @@ This is the headless flow that GitHub issue #349 asks about — create a key pur
 # Requires an existing session OR a previously issued access token.
 # (First-time bootstrap: log in via POST /api/user/login to get a session cookie,
 #  then call this with that cookie. Each call ROTATES the access token.)
-curl -s "$BASE_URL/api/user/token" \
+curl -X POST -s "$BASE_URL/api/user/token" \
   -H "Authorization: $ACCESS_TOKEN"
 # -> {"success":true,"message":"","data":"<new 32-char access token>"}
 
@@ -158,6 +158,34 @@ The gateway recognizes **three credential types**. They are not interchangeable,
 | **Management access token** | bare 32-char UUID (no prefix) | The management/admin API under `/api` | `Authorization: <token>` | `ValidateAccessToken` (session fallback) |
 | **Session cookie** | HTTP cookie | The same management API, from the web dashboard | browser `Cookie` header | `UserAuth`/`AdminAuth`/`RootAuth` |
 
+### Cookie mutation protection and method migration
+
+Dashboard operations authenticated by a signed session cookie require trusted
+browser provenance for POST, PUT, PATCH, DELETE, and other unsafe methods. The
+server accepts an exact trusted `Origin` (scheme, host, and port); when Origin is
+absent it accepts `Sec-Fetch-Site: same-origin`, or an exact trusted `Referer` if
+Fetch Metadata is also absent. Missing, null, malformed, or untrusted provenance
+returns HTTP 403 before the action executes. Same-site sibling domains are not
+implicitly trusted. The configured `FRONTEND_BASE_URL` and public `ServerAddress`
+are explicit trusted origins; the default localhost ServerAddress placeholder is
+not a production trust grant. Forwarded headers do not expand this allowlist.
+
+Browsers send these headers automatically. Cookie-based command-line clients
+must also send `-H "Origin: $BASE_URL"`, where BASE_URL is the trusted origin
+without a trailing slash. Bearer-only management clients and relay API-key
+clients do not require browser provenance. A management request with both a
+signed session and Authorization still authenticates with the session and must
+pass the cookie checks.
+
+The following former GET actions now require POST: `/api/user/token`,
+`/api/user/aff`, `/api/user/totp/setup`, `/api/user/logout`,
+`/api/oauth/email/bind`, `/api/oauth/wechat/bind`, `/api/channel/test`,
+`/api/channel/test/:id`, `/api/channel/update_balance`, and
+`/api/channel/update_balance/:id`. Parameters and response envelopes are
+unchanged. GET/HEAD no longer invoke these actions; no compatibility redirect
+executes them. Modern, Air, and Berry callers use POST. State-validated OAuth
+callbacks retain GET to preserve provider redirects.
+
 ### 2.1 Relay API key (`sk-…`)
 
 The credential your applications use for AI calls. It is a **token resource** owned by a user, created via [`POST /api/token`](#api-key-token-management). It carries its own controls: optional model allow-list, IP subnet restriction, expiry, and quota.
@@ -175,16 +203,16 @@ The `sk-` prefix is presentation only — it is configurable (`TOKEN_KEY_PREFIX`
 
 ### 2.2 Management access token
 
-A bare 32-character UUID stored on the **user** record (one per user). It is the credential for the management API when you are not in a browser session. Obtain or rotate it with [`GET /api/user/token`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost):
+A bare 32-character UUID stored on the **user** record (one per user). It is the credential for the management API when you are not in a browser session. Obtain or rotate it with [`POST /api/user/token`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost):
 
 ```bash
-curl -s "$BASE_URL/api/user/token" -H "Authorization: $ACCESS_TOKEN"
+curl -X POST -s "$BASE_URL/api/user/token" -H "Authorization: $ACCESS_TOKEN"
 # -> {"success":true,"message":"","data":"<32-char uuid>"}
 ```
 
-Send it on subsequent management calls as `Authorization: <token>`. An exact, case-sensitive leading `Bearer ` is stripped if present (so the bare UUID and `Bearer <uuid>` both work, but a lowercase `bearer ` would not be stripped); no `sk-` prefix applies. **Each call to `GET /api/user/token` overwrites the previous access token** — rotating it invalidates the old value everywhere.
+Send it on subsequent management calls as `Authorization: <token>`. An exact, case-sensitive leading `Bearer ` is stripped if present (so the bare UUID and `Bearer <uuid>` both work, but a lowercase `bearer ` would not be stripped); no `sk-` prefix applies. **Each call to `POST /api/user/token` overwrites the previous access token** — rotating it invalidates the old value everywhere.
 
-> The access token is *not* an `sk-` key and cannot call `/v1/*`; conversely an `sk-` key cannot call the management API. To bootstrap the very first access token without any existing credential, log in via [`POST /api/user/login`](#authentication--account-lifecycle) (which sets a session cookie) and call `GET /api/user/token` with that cookie.
+> The access token is *not* an `sk-` key and cannot call `/v1/*`; conversely an `sk-` key cannot call the management API. To bootstrap the very first access token without any existing credential, log in via [`POST /api/user/login`](#authentication--account-lifecycle) (which sets a session cookie) and call `POST /api/user/token` with that cookie.
 
 ### 2.3 Roles
 
@@ -211,7 +239,7 @@ The gateway distinguishes these deliberately:
 - Always use **HTTPS**; a bearer credential grants full access to whoever holds it.
 - Mint **one relay key per application/teammate** for blast-radius isolation and clean audit logs; scope keys with `models`, `subnet`, `expired_time`, and `remain_quota`.
 - Store credentials in environment variables or a secrets manager; never commit them.
-- Rotate the management access token (re-`GET /api/user/token`) if it may have leaked, and disable/delete compromised relay keys via the token management API.
+- Rotate the management access token (re-`POST /api/user/token`) if it may have leaked, and disable/delete compromised relay keys via the token management API.
 
 
 ## 3. Conventions
@@ -445,7 +473,7 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 |---|---|---|---|
 | `POST` | [`/api/user/register`](#authentication--account-lifecycle) | Public | Create a local account (username+password, optional email verification code); common-user role. |
 | `POST` | [`/api/user/login`](#authentication--account-lifecycle) | Public | Password (+optional TOTP) login; issues the session cookie and returns the sanitized user object. |
-| `GET` | [`/api/user/logout`](#authentication--account-lifecycle) | Public | Clear the current browser session (server store + cookie); missing session is a no-op success. |
+| `POST` | [`/api/user/logout`](#authentication--account-lifecycle) | Public | Clear the current browser session (server store + cookie); missing session is a no-op success. |
 | `POST` | [`/api/user/passkey/login/begin`](#authentication--account-lifecycle) | Public | Begin a discoverable WebAuthn passkey login; returns PublicKeyCredentialRequestOptions, stores ceremony in… |
 | `POST` | [`/api/user/passkey/login/finish`](#authentication--account-lifecycle) | Public | Finish passkey login by verifying the assertion; resolves user from userHandle and issues the session cookie. |
 | `GET` | [`/api/oauth/github`](#authentication--account-lifecycle) | Public | GitHub OAuth callback; logs in or provisions (or binds if session has username); requires oauth_state. |
@@ -453,8 +481,8 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 | `GET` | [`/api/oauth/lark`](#authentication--account-lifecycle) | Public | Lark/Feishu OAuth callback; login/provision/bind; requires oauth_state; no feature-disabled guard. |
 | `GET` | [`/api/oauth/wechat`](#authentication--account-lifecycle) | Public | WeChat sign-in callback; resolves WeChat id from code; login/provision; does NOT validate oauth_state. |
 | `GET` | [`/api/oauth/state`](#authentication--account-lifecycle) | Public | Generate and store a 12-char anti-CSRF state in the session and return it for OAuth redirects. |
-| `GET` | [`/api/oauth/wechat/bind`](#authentication--account-lifecycle) | Access token / session | Bind a WeChat identity to the authenticated account; success returns empty message. |
-| `GET` | [`/api/oauth/email/bind`](#authentication--account-lifecycle) | Access token / session | Bind/change account email gated by verification code; root also updates system root email. |
+| `POST` | [`/api/oauth/wechat/bind`](#authentication--account-lifecycle) | Access token / session | Bind a WeChat identity to the authenticated account; success returns empty message. |
+| `POST` | [`/api/oauth/email/bind`](#authentication--account-lifecycle) | Access token / session | Bind/change account email gated by verification code; root also updates system root email. |
 | `GET` | [`/api/verification`](#authentication--account-lifecycle) | Public | Issue an email verification code; uniform success after ~1s delay, async whitelist/occupancy check and send. |
 | `GET` | [`/api/reset_password`](#authentication--account-lifecycle) | Public | Send a password-reset link if email registered; uniform success, async registration check and send. |
 | `POST` | [`/api/user/reset`](#authentication--account-lifecycle) | Public | Complete password reset by validating the emailed token; returns effective password; token single-use. |
@@ -468,12 +496,12 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 | `DELETE` | [`/api/user/self`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Delete own account (root cannot self-delete). |
 | `GET` | [`/api/user/dashboard`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Per-day usage breakdowns plus quota/status; root may target a user or all. |
 | `GET` | [`/api/user/dashboard/users`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Root | User-selector list for the dashboard (root only). |
-| `GET` | [`/api/user/aff`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Get/lazily generate the 4-char affiliate code. |
+| `POST` | [`/api/user/aff`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Get/lazily generate the 4-char affiliate code. |
 | `POST` | [`/api/user/topup`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Redeem a redemption code; returns credited quota. |
 | `GET` | [`/api/user/available_models`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Sorted list of model names the user may call. |
-| `GET` | [`/api/user/token`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Mint/rotate the 32-char management access token. |
+| `POST` | [`/api/user/token`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Mint/rotate the 32-char management access token. |
 | `GET` | [`/api/user/totp/status`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Report whether TOTP 2FA is enabled. |
-| `GET` | [`/api/user/totp/setup`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Begin TOTP enrollment; returns secret + otpauth URI (temp secret in session). |
+| `POST` | [`/api/user/totp/setup`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Begin TOTP enrollment; returns secret + otpauth URI (temp secret in session). |
 | `POST` | [`/api/user/totp/confirm`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Confirm TOTP code and activate 2FA; rate-limited. |
 | `POST` | [`/api/user/totp/disable`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | Disable TOTP after verifying a current code; rate-limited. |
 | `GET` | [`/api/user/passkey`](#self-service-account-access-token-2fa-passkeys-logs-trace--cost) | Access token / session | List the user's WebAuthn passkey credentials. |
@@ -522,10 +550,10 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 | `GET` | [`/api/channel/models`](#channel-administration--diagnostics) | Admin | Admin catalog of all known models in OpenAI list shape (NOT management envelope). |
 | `GET` | [`/api/channel/metadata`](#channel-administration--diagnostics) | Admin | Type metadata: default base URL, editability, default/all endpoints. |
 | `GET` | [`/api/channel/:id`](#channel-administration--diagnostics) | Admin | Get one channel by ID (secrets masked, optional tooling string). |
-| `GET` | [`/api/channel/test`](#channel-administration--diagnostics) | Admin | Start async background test sweep across channels; one at a time. |
-| `GET` | [`/api/channel/test/:id`](#channel-administration--diagnostics) | Admin | Synchronously probe one channel; flat {success,message,time,modelName} (no data envelope). |
-| `GET` | [`/api/channel/update_balance`](#channel-administration--diagnostics) | Admin | All-channel balance refresh trigger; inline body disabled, returns success immediately. |
-| `GET` | [`/api/channel/update_balance/:id`](#channel-administration--diagnostics) | Admin | Query upstream billing for one channel; flat balance field (USD), supported types only. |
+| `POST` | [`/api/channel/test`](#channel-administration--diagnostics) | Admin | Start async background test sweep across channels; one at a time. |
+| `POST` | [`/api/channel/test/:id`](#channel-administration--diagnostics) | Admin | Synchronously probe one channel; flat {success,message,time,modelName} (no data envelope). |
+| `POST` | [`/api/channel/update_balance`](#channel-administration--diagnostics) | Admin | All-channel balance refresh trigger; inline body disabled, returns success immediately. |
+| `POST` | [`/api/channel/update_balance/:id`](#channel-administration--diagnostics) | Admin | Query upstream billing for one channel; flat balance field (USD), supported types only. |
 | `GET` | [`/api/channel/pricing/:id`](#channel-administration--diagnostics) | Admin | Effective pricing: derived ratios, unified model_configs, tooling. |
 | `GET` | [`/api/channel/default-pricing`](#channel-administration--diagnostics) | Admin | Adapter default pricing for a type; fields are JSON-encoded strings. |
 | `POST` | [`/api/channel/`](#channel-administration--diagnostics) | Admin | Create one or more channels (newline-split key = bulk create). |
@@ -3298,7 +3326,7 @@ curl -X POST "$BASE_URL/api/user/login" \
 | Too many TOTP attempts | HTTP 429, `Too many TOTP verification attempts. Please wait before trying again.` |
 | Password login disabled for non-root | `The administrator has disabled password login. Please use a third-party authentication method (e.g. OIDC) to log in.` |
 
-### GET /api/user/logout
+### POST /api/user/logout
 
 Clears the current browser session (server-side session store and cookie).
 
@@ -3318,7 +3346,7 @@ HTTP 200.
 **Example**
 
 ```bash
-curl -X GET "$BASE_URL/api/user/logout" \
+curl -X POST "$BASE_URL/api/user/logout" \
   -b cookies.txt -c cookies.txt
 ```
 
@@ -3630,7 +3658,7 @@ curl -X GET "$BASE_URL/api/oauth/state" \
   -c cookies.txt
 ```
 
-### GET /api/oauth/wechat/bind
+### POST /api/oauth/wechat/bind
 
 Binds a WeChat identity to the currently authenticated account. Resolves the WeChat id from `code` and attaches it to the caller's user record.
 
@@ -3656,7 +3684,7 @@ HTTP 200, no payload.
 **Example**
 
 ```bash
-curl -X GET "$BASE_URL/api/oauth/wechat/bind?code=WECHAT_CODE" \
+curl -X POST "$BASE_URL/api/oauth/wechat/bind?code=WECHAT_CODE" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -3668,7 +3696,7 @@ curl -X GET "$BASE_URL/api/oauth/wechat/bind?code=WECHAT_CODE" \
 | WeChat login disabled | `The administrator has not enabled login and registration via WeChat` |
 | WeChat id already linked to another account | `The WeChat account has been bound` |
 
-### GET /api/oauth/email/bind
+### POST /api/oauth/email/bind
 
 Binds (or changes) the email address on the currently authenticated account, gated by a verification code previously sent to that address. When the caller is the root user, the system's root email is also updated.
 
@@ -3695,7 +3723,7 @@ HTTP 200, no payload.
 **Example**
 
 ```bash
-curl -X GET "$BASE_URL/api/oauth/email/bind?email=alice%40example.com&code=123456" \
+curl -X POST "$BASE_URL/api/oauth/email/bind?email=alice%40example.com&code=123456" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -3708,7 +3736,7 @@ curl -X GET "$BASE_URL/api/oauth/email/bind?email=alice%40example.com&code=12345
 
 ### GET /api/verification
 
-Issues an email verification code for the supplied address (used for registration and for `GET /api/oauth/email/bind`). To resist user enumeration and timing attacks the response is always a uniform success (after a fixed ~1s delay) and the actual whitelist/occupancy check plus email delivery happen asynchronously; a code is only generated when the address passes the domain whitelist and is not already taken.
+Issues an email verification code for the supplied address (used for registration and for `POST /api/oauth/email/bind`). To resist user enumeration and timing attacks the response is always a uniform success (after a fixed ~1s delay) and the actual whitelist/occupancy check plus email delivery happen asynchronously; a code is only generated when the address passes the domain whitelist and is not already taken.
 
 **Auth:** Public - no auth. Protected by `CriticalRateLimit` and `TurnstileCheck`.
 
@@ -3847,7 +3875,7 @@ Relevant source files (absolute paths):
 
 ## Self-Service Account, Access Token, 2FA, Passkeys, Logs, Trace & Cost
 
-This section documents the endpoints a signed-in user calls to manage their own account: reading and updating the profile, deleting the account, minting the management access token, viewing dashboards and affiliate codes, redeeming top-up keys, enrolling 2FA (TOTP) and passkeys, querying their own request logs and usage statistics, and inspecting per-request traces and costs. Every endpoint here is reached under `/api` and—except for `GET /api/cost/request/:request_id`—is protected by `UserAuth` (role >= 1). When there is no browser session, authenticate these calls with the management **access token** in the `Authorization` header (see `GET /api/user/token` below for how to mint it). Unless stated otherwise, responses use the management envelope `{"success": bool, "message": string, "data": ...}` returned with HTTP 200; error bodies from these handlers are also HTTP 200 with `{"success": false, "message": "<reason>"}` unless a specific status code is called out.
+This section documents the endpoints a signed-in user calls to manage their own account: reading and updating the profile, deleting the account, minting the management access token, viewing dashboards and affiliate codes, redeeming top-up keys, enrolling 2FA (TOTP) and passkeys, querying their own request logs and usage statistics, and inspecting per-request traces and costs. Every endpoint here is reached under `/api` and—except for `GET /api/cost/request/:request_id`—is protected by `UserAuth` (role >= 1). When there is no browser session, authenticate these calls with the management **access token** in the `Authorization` header (see `POST /api/user/token` below for how to mint it). Unless stated otherwise, responses use the management envelope `{"success": bool, "message": string, "data": ...}` returned with HTTP 200; error bodies from these handlers are also HTTP 200 with `{"success": false, "message": "<reason>"}` unless a specific status code is called out.
 
 > **Quota unit reminder:** quota is an internal integer where `500000 quota = 1 USD` (1 quota = $0.000002).
 
@@ -4069,7 +4097,7 @@ curl -s "$BASE_URL/api/user/dashboard/users" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
-### GET /api/user/aff
+### POST /api/user/aff
 
 Returns the user's affiliate (invitation) code, lazily generating a 4-character code on first call.
 
@@ -4088,7 +4116,7 @@ Returns the user's affiliate (invitation) code, lazily generating a 4-character 
 **Example**
 
 ```bash
-curl -s "$BASE_URL/api/user/aff" \
+curl -X POST -s "$BASE_URL/api/user/aff" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -4162,7 +4190,7 @@ curl -s "$BASE_URL/api/user/available_models" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
-### GET /api/user/token
+### POST /api/user/token
 
 Mints (and rotates) the management **access token** — the 32-character UUID credential used to authenticate the management/admin REST API headlessly when there is no browser session. **Each call generates a brand-new token and overwrites the previous one**, immediately invalidating any access token issued earlier. Because this endpoint itself requires `UserAuth`, the very first token must be obtained via a logged-in web session (cookie) from `POST /api/user/login`; thereafter the returned token authenticates subsequent management calls.
 
@@ -4182,7 +4210,7 @@ Mints (and rotates) the management **access token** — the 32-character UUID cr
 
 ```bash
 # 1) Mint/rotate the access token (authenticated by the dashboard session cookie).
-ACCESS_TOKEN=$(curl -s "$BASE_URL/api/user/token" -b cookies.txt \
+ACCESS_TOKEN=$(curl -X POST -s "$BASE_URL/api/user/token" -b cookies.txt -H "Origin: $BASE_URL" \
   | sed -n 's/.*"data":"\([^"]*\)".*/\1/p')
 
 # 2) Use the returned token to authenticate a headless management call.
@@ -4217,7 +4245,7 @@ curl -s "$BASE_URL/api/user/totp/status" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
-### GET /api/user/totp/setup
+### POST /api/user/totp/setup
 
 Begins TOTP enrollment: generates a fresh Base32 secret and an `otpauth://` provisioning URI (for rendering a QR code in an authenticator app). The secret is stored in the server-side session (`temp_totp_secret`) pending confirmation; enrollment is not active until `POST /api/user/totp/confirm` succeeds. The route is guarded by `UserAuth`, but because the pending secret lives in the session this step in practice relies on the **web session cookie**.
 
@@ -4243,7 +4271,7 @@ Begins TOTP enrollment: generates a fresh Base32 secret and an `otpauth://` prov
 **Example**
 
 ```bash
-curl -s "$BASE_URL/api/user/totp/setup" -b cookies.txt
+curl -X POST -s "$BASE_URL/api/user/totp/setup" -b cookies.txt -H "Origin: $BASE_URL"
 ```
 
 **Errors**
@@ -4927,7 +4955,7 @@ curl -s "$BASE_URL/api/cost/request/2026060812000042-aBcD"
 
 ## API Key (Token) Management
 
-This section covers the management endpoints that create and administer **relay API keys** — the `sk-`-prefixed credentials your applications send to the inference endpoints (`/v1/chat/completions`, `/v1/responses`, `/v1/messages`, etc.). These are **not** the same as the management access token. To call any endpoint in this section you must authenticate as a logged-in user, using either a **management access token** (the 32-char UUID from `GET /api/user/token`, sent as `Authorization: $ACCESS_TOKEN`) or a browser session cookie. The relay API key these endpoints mint is a distinct, 48-character credential (16 random characters followed by a 32-character UUID-derived tail), returned with the configured prefix (default `sk-`). The two are easy to confuse: the **access token** lets you *manage* tokens via this REST API; the **relay API key** is what an end user puts in their OpenAI/Anthropic SDK to *make inference calls*. The full quick-start flow (mint a key, then use it) is at the end of `POST /api/token/`.
+This section covers the management endpoints that create and administer **relay API keys** — the `sk-`-prefixed credentials your applications send to the inference endpoints (`/v1/chat/completions`, `/v1/responses`, `/v1/messages`, etc.). These are **not** the same as the management access token. To call any endpoint in this section you must authenticate as a logged-in user, using either a **management access token** (the 32-char UUID from `POST /api/user/token`, sent as `Authorization: $ACCESS_TOKEN`) or a browser session cookie. The relay API key these endpoints mint is a distinct, 48-character credential (16 random characters followed by a 32-character UUID-derived tail), returned with the configured prefix (default `sk-`). The two are easy to confuse: the **access token** lets you *manage* tokens via this REST API; the **relay API key** is what an end user puts in their OpenAI/Anthropic SDK to *make inference calls*. The full quick-start flow (mint a key, then use it) is at the end of `POST /api/token/`.
 
 All routes below are registered under the `/api/token` group guarded by `UserAuth` (role >= common user, 1). Each operates only on tokens owned by the authenticated caller: `user_id` is always taken from the caller's identity, never from the request. Responses use the management envelope `{"success": bool, "message": string, "data": ...}` with HTTP 200; on failure the envelope is `{"success": false, "message": "<reason>"}`, also with HTTP 200. The `key` field, wherever a token object is serialized, is rewritten at response time by a custom `MarshalJSON` to strip any stored legacy prefix (`sk-`/`laisky-`) and apply the configured prefix — so it always comes back as `<prefix><48 chars>` (e.g. `sk-...`).
 
@@ -5163,10 +5191,10 @@ Fields you cannot set: `user_uuid` is forced to the caller; `key` is server-gene
 
 **Example (full quick-start: mint a key and use it)**
 
-Step 1 — obtain a management access token (`GET /api/user/token` returns the freshly (re)generated 32-char UUID in `data`; this endpoint is itself guarded by `UserAuth`, so it requires an existing session cookie or a prior access token):
+Step 1 — obtain a management access token (`POST /api/user/token` returns the freshly (re)generated 32-char UUID in `data`; this endpoint is itself guarded by `UserAuth`, so it requires an existing session cookie or a prior access token):
 
 ```bash
-curl -s "$BASE_URL/api/user/token" \
+curl -X POST -s "$BASE_URL/api/user/token" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -5820,7 +5848,7 @@ curl -sS -X POST "$BASE_URL/api/topup" \
 
 ## Channel Administration & Diagnostics
 
-This section documents the management endpoints that create, inspect, test, price, and repair upstream provider channels. Every route here is mounted under `/api/channel` or `/api/debug` and is protected by `AdminAuth` (role >= 10): pass the management **access token** as `Authorization: $ACCESS_TOKEN` (a leading `Bearer ` is also accepted), or rely on a logged-in session cookie. These are management-API endpoints, so most use the management envelope (`{"success": ..., "message": ..., "data": ...}` with HTTP 200); the few that deviate (`GET /api/channel/models`, `GET /api/channel/test/:id`, `GET /api/channel/update_balance/:id`) are called out explicitly. A channel record is a large object; the create/update entries below document the operationally important fields and defer to `docs/manuals/channels.md` for the exhaustive schema. Channel `status` values are: `1` = enabled, `2` = manually disabled, `3` = auto-disabled. Quota fields are internal integers (500000 quota = 1 USD).
+This section documents the management endpoints that create, inspect, test, price, and repair upstream provider channels. Every route here is mounted under `/api/channel` or `/api/debug` and is protected by `AdminAuth` (role >= 10): pass the management **access token** as `Authorization: $ACCESS_TOKEN` (a leading `Bearer ` is also accepted), or rely on a logged-in session cookie. These are management-API endpoints, so most use the management envelope (`{"success": ..., "message": ..., "data": ...}` with HTTP 200); the few that deviate (`GET /api/channel/models`, `POST /api/channel/test/:id`, `POST /api/channel/update_balance/:id`) are called out explicitly. A channel record is a large object; the create/update entries below document the operationally important fields and defer to `docs/manuals/channels.md` for the exhaustive schema. Channel `status` values are: `1` = enabled, `2` = manually disabled, `3` = auto-disabled. Quota fields are internal integers (500000 quota = 1 USD).
 
 Note on HTTP status: the channel and most debug handlers report errors via `helper.RespondError`, which returns HTTP 200 with `{"success": false, "message": ...}`. The debug handlers that use `helper.RespondErrorWithStatus` (the `/api/debug/*` routes) return real 4xx/5xx codes; those are noted per endpoint.
 
@@ -6292,7 +6320,7 @@ curl -sS -X DELETE "$BASE_URL/api/channel/disabled" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
-### GET /api/channel/test
+### POST /api/channel/test
 
 Starts a background test sweep across a set of channels. Returns immediately; results are applied asynchronously (channels may be auto-disabled or re-enabled depending on server configuration, e.g. `AutomaticDisableChannelEnabled`). Only one sweep runs at a time.
 
@@ -6316,7 +6344,7 @@ Starts a background test sweep across a set of channels. Returns immediately; re
 **Example**
 
 ```bash
-curl -sS "$BASE_URL/api/channel/test?scope=all" \
+curl -X POST -sS "$BASE_URL/api/channel/test?scope=all" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -6326,7 +6354,7 @@ curl -sS "$BASE_URL/api/channel/test?scope=all" \
 |--------|---------|
 | 200 `{"success": false, "message": "Test is already running"}` | A sweep is already in progress. |
 
-### GET /api/channel/test/:id
+### POST /api/channel/test/:id
 
 Synchronously runs one live chat-completion request against a single channel to verify availability, and returns the upstream reply text plus elapsed time. Records a test log and updates the channel's stored response time.
 
@@ -6365,11 +6393,11 @@ Synchronously runs one live chat-completion request against a single channel to 
 **Example**
 
 ```bash
-curl -sS "$BASE_URL/api/channel/test/018f0000-0000-7000-8000-000000000012?model=gpt-4o-mini" \
+curl -X POST -sS "$BASE_URL/api/channel/test/018f0000-0000-7000-8000-000000000012?model=gpt-4o-mini" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
-### GET /api/channel/update_balance
+### POST /api/channel/update_balance
 
 Triggers a refresh of all channel balances. Note: in the current implementation the synchronous body is disabled (commented out), so this returns success immediately without performing the refresh inline; the periodic background updater handles balances.
 
@@ -6387,11 +6415,11 @@ Triggers a refresh of all channel balances. Note: in the current implementation 
 **Example**
 
 ```bash
-curl -sS "$BASE_URL/api/channel/update_balance" \
+curl -X POST -sS "$BASE_URL/api/channel/update_balance" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
-### GET /api/channel/update_balance/:id
+### POST /api/channel/update_balance/:id
 
 Refreshes the remaining balance for one channel by querying the upstream provider's billing API, then returns the resolved balance in USD. Only certain provider types support balance queries (OpenAI and OpenAI-compatible / Custom, CloseAI, OpenAI-SB, AIProxy, API2GPT, AIGC2D, SiliconFlow, DeepSeek, OpenRouter); others (e.g. Azure) return "Not yet implemented".
 
@@ -6422,7 +6450,7 @@ Refreshes the remaining balance for one channel by querying the upstream provide
 **Example**
 
 ```bash
-curl -sS "$BASE_URL/api/channel/update_balance/018f0000-0000-7000-8000-000000000012" \
+curl -X POST -sS "$BASE_URL/api/channel/update_balance/018f0000-0000-7000-8000-000000000012" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -7610,7 +7638,7 @@ curl -s "$BASE_URL/api/models" \
 
 These endpoints let administrators register and manage the upstream Model Context Protocol (MCP) servers that One API aggregates, and to inspect the catalogue of tools synchronized from them. One API acts as an MCP aggregator: each registered MCP server is polled (via "sync") for its tool list, and the union of enabled tools is exposed to downstream inference requests as built-in tools (see `docs/manuals/mcp_aggregator.md` for the aggregator concept, tool routing, priority, and billing semantics).
 
-All routes in this section are mounted under `/api/mcp_servers` and `/api/mcp_tools`, and every route is guarded by `AdminAuth` — they require an **admin-or-higher** credential (role >= 10). Authenticate with the management **access token** (`Authorization: $ACCESS_TOKEN`; a leading `Bearer ` is also accepted) obtained from `GET /api/user/token`, or with an active admin **session cookie**. A relay API key (`sk-...`) is NOT accepted here.
+All routes in this section are mounted under `/api/mcp_servers` and `/api/mcp_tools`, and every route is guarded by `AdminAuth` — they require an **admin-or-higher** credential (role >= 10). Authenticate with the management **access token** (`Authorization: $ACCESS_TOKEN`; a leading `Bearer ` is also accepted) obtained from `POST /api/user/token`, or with an active admin **session cookie**. A relay API key (`sk-...`) is NOT accepted here.
 
 All routes follow the management API envelope: `{"success": true, "message": "", "data": <payload>}` on success (HTTP 200). Errors are also returned with **HTTP 200** and `{"success": false, "message": "<reason>"}` (the controllers use `helper.RespondError`, which always writes status 200). List endpoints additionally include a top-level `"total"` count.
 
@@ -8173,7 +8201,7 @@ curl -s "$BASE_URL/api/mcp_tools/?server_id=018f0000-0000-7000-8000-000000000001
 
 This section documents the root-only system configuration endpoints and the public/optional-auth endpoints that power the web dashboard (status banner, model catalog, MCP tools catalog, notice, about, and homepage content). The two `/api/option/` endpoints require a root-level credential (the management access token under `Authorization`, or a root session cookie) and read/write the server's key/value option store. The remaining endpoints are public (or never-reject optional auth) and return management-style envelopes `{"success", "message", "data"}` with HTTP 200. Sensitive option keys (any key ending in `Token`, `Secret`, `SecretKey`, `Password`, or `APIKey`) are stripped from reads and protected from accidental empty-value overwrites on writes.
 
-> Auth note: none of the endpoints in this section accept the relay API key (`sk-...`). The two write/read option endpoints use the management **access token** (32-char UUID from `GET /api/user/token`) or a session cookie; `GET /api/models/display` optionally accepts the same access token / session but never the relay key; the rest are fully public.
+> Auth note: none of the endpoints in this section accept the relay API key (`sk-...`). The two write/read option endpoints use the management **access token** (32-char UUID from `POST /api/user/token`) or a session cookie; `GET /api/models/display` optionally accepts the same access token / session but never the relay key; the rest are fully public.
 
 ### GET /api/option/
 
@@ -8435,7 +8463,7 @@ curl -s "$BASE_URL/api/status/channel?p=0&size=6"
 
 Returns the model catalog grouped by channel, with per-model pricing and capability metadata, for the web UI's model browser. Anonymous callers see all models across all enabled channels; authenticated callers see only the models their user group is allowed to use.
 
-**Auth:** Optional auth (`OptionalUserAuth` never rejects). Authentication, when present, is by **management access token or session cookie** - NOT the relay API key. To authenticate non-interactively, send the access token (the 32-char UUID from `GET /api/user/token`) as `Authorization: $ACCESS_TOKEN` (a leading `Bearer ` is also accepted). Anonymous requests (no header, no cookie) are allowed and return the full catalog. Note: `X-Api-Key` / `Api-Key` headers are NOT consulted by this endpoint.
+**Auth:** Optional auth (`OptionalUserAuth` never rejects). Authentication, when present, is by **management access token or session cookie** - NOT the relay API key. To authenticate non-interactively, send the access token (the 32-char UUID from `POST /api/user/token`) as `Authorization: $ACCESS_TOKEN` (a leading `Bearer ` is also accepted). Anonymous requests (no header, no cookie) are allowed and return the full catalog. Note: `X-Api-Key` / `Api-Key` headers are NOT consulted by this endpoint.
 
 **Query parameters**
 
@@ -8515,7 +8543,7 @@ Other optional nested fields present where applicable (all `omitempty`): `cache_
 curl -s "$BASE_URL/api/models/display?input_modality=text&has_tools=true"
 
 # Authenticated: only models the caller's user group may use
-# (management access token from GET /api/user/token, NOT the relay sk- key)
+# (management access token from POST /api/user/token, NOT the relay sk- key)
 curl -s "$BASE_URL/api/models/display" \
   -H "Authorization: $ACCESS_TOKEN"
 ```

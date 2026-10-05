@@ -246,7 +246,7 @@ export function ChannelsPage() {
 
       if (action === 'test') {
         // Unified API call - complete URL with /api prefix
-        const res = await api.get(`/api/channel/test/${id}`);
+        const res = await api.post(`/api/channel/test/${id}`);
         const { success, time, message, skipped } = res.data;
         // A skipped channel was never probed (it serves no chat-capable
         // endpoint), so leave its recorded latency untouched rather than
@@ -395,7 +395,7 @@ export function ChannelsPage() {
       return next;
     });
     try {
-      const res = await api.get(`/api/channel/update_balance/${ref}`);
+      const res = await api.post(`/api/channel/update_balance/${ref}`);
       const { success, message, balance, balance_updated_time } = res.data || {};
       if (success) {
         setData((prev) =>

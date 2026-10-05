@@ -38,7 +38,7 @@ const EmailModal = ({ open, handleClose, turnstileToken }) => {
     setLoading(true);
     setSubmitting(true);
     try {
-      const res = await API.get(
+      const res = await API.post(
         `/api/oauth/email/bind?email=${values.email}&code=${values.email_verification_code}`
       );
       // The shared axios interceptor resolves to undefined on error; bail out before

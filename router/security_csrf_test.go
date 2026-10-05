@@ -157,7 +157,7 @@ func TestSecurityCSRFBalanceNavigation(t *testing.T) {
 	t.Cleanup(upstream.Close)
 	base := upstream.URL
 	require.NoError(t, db.Create(&model.Channel{Id: 972, UUID: "018f0000-0000-7000-8000-000000000972", Name: "local-balance", Type: channeltype.CloseAI, Key: "fixture-only-key", BaseURL: &base, Status: model.ChannelStatusEnabled, Balance: 1}).Error)
-	control := csrfRequest(engine, saved, http.MethodGet, "/api/channel/update_balance/018f0000-0000-7000-8000-000000000972", "", "https://gateway.test", "same-origin")
+	control := csrfRequest(engine, saved, http.MethodPost, "/api/channel/update_balance/018f0000-0000-7000-8000-000000000972", "", "https://gateway.test", "same-origin")
 	require.Equal(t, http.StatusOK, control.Code)
 	require.Contains(t, control.Body.String(), `"success":true`)
 	require.Equal(t, int32(1), calls.Load())
