@@ -313,6 +313,8 @@ func TestSecurityClaudeNativeToolPolicyAdmission(t *testing.T) {
 		{name: "tools_title_case_variant", fields: `"tools":[` + webSearch + `],"Tools":[]`},
 		{name: "tools_unicode_fold_variant", fields: `"tools":[` + webSearch + `],"tool\u017f":null`},
 		{name: "tools_exact_duplicate", fields: `"tools":[` + webSearch + `],"tools":[]`},
+		{name: "tools_variant_only", fields: `"Tools":[` + webSearch + `]`},
+		{name: "container_variant_only", fields: `"CONTAINER":"container_synthetic"`},
 		{name: "mcp_servers_case_variant", fields: `"mcp_servers":` + mcpServers + `,"MCP_SERVERS":null`},
 		{name: "mcp_servers_unicode_fold_variant", fields: `"mcp_servers":` + mcpServers + `,"mcp_ſerverſ":[]`},
 		{name: "mcp_servers_exact_duplicate", fields: `"mcp_servers":` + mcpServers + `,"mcp_servers":[]`},

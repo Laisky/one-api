@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -30,13 +31,12 @@ import (
 // receipt settles the actual invocation count and refunds the rest.
 const claudeServerToolDefaultReservedUses = int64(10)
 
-// claudeToolRequestFields is the subset of a raw Claude Messages body that can
-// opt into provider-executed capabilities.
-type claudeToolRequestFields struct {
-	Tools      json.RawMessage `json:"tools"`
-	MCPServers json.RawMessage `json:"mcp_servers"`
-	Container  json.RawMessage `json:"container"`
-}
+// claudeCapabilityRootFields are the root fields of a Claude Messages body that
+// can opt into provider-executed capabilities.
+var claudeCapabilityRootFields = []string{"tools", "mcp_servers", "container"}
+
+// claudeToolPolicyFields are the tool-object fields admission classifies.
+var claudeToolPolicyFields = []string{"type", "max_uses"}
 
 // resetClaudeToolAttemptState clears tool counters a previous attempt may have
 // left on a reused gin context, so only this attempt's receipts are billed.
@@ -108,18 +108,22 @@ func admitClaudeMessagesTools(c *gin.Context, meta *metalib.Meta) *relaymodel.Er
 // reservation use bound per canonical capability, the unknown tool types, or a
 // validation error for malformed tool declarations.
 func collectClaudeServerCapabilities(raw []byte) (map[string]int64, []string, error) {
-	var fields claudeToolRequestFields
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return nil, nil, errors.Wrap(err, "decode Claude tool fields")
+	fields, err := scanExactJSONFields(raw, claudeCapabilityRootFields)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Claude request")
 	}
 	uses := make(map[string]int64)
 	var unknown []string
-	if hasJSONValue(fields.Tools) {
-		var tools []map[string]json.RawMessage
-		if err := json.Unmarshal(fields.Tools, &tools); err != nil {
+	if hasJSONValue(fields["tools"]) {
+		var rawTools []json.RawMessage
+		if err := json.Unmarshal(fields["tools"], &rawTools); err != nil {
 			return nil, nil, errors.Wrap(err, "tools must be an array of objects")
 		}
-		for i, tool := range tools {
+		for i, rawTool := range rawTools {
+			tool, err := scanExactJSONFields(rawTool, claudeToolPolicyFields)
+			if err != nil {
+				return nil, nil, errors.Wrapf(err, "tools[%d]", i)
+			}
 			toolType := ""
 			if value, ok := tool["type"]; ok && hasJSONValue(value) {
 				if err := json.Unmarshal(value, &toolType); err != nil {
@@ -136,13 +140,80 @@ func collectClaudeServerCapabilities(raw []byte) (map[string]int64, []string, er
 			uses[canonical] = saturatingQuotaAdd(uses[canonical], claudeToolUseBound(tool["max_uses"]))
 		}
 	}
-	if hasJSONValue(fields.MCPServers) && !bytes.Equal(bytes.TrimSpace(fields.MCPServers), []byte("[]")) {
+	if hasJSONValue(fields["mcp_servers"]) && !bytes.Equal(bytes.TrimSpace(fields["mcp_servers"]), []byte("[]")) {
 		uses[tooling.BuiltinMCPConnector] = max(uses[tooling.BuiltinMCPConnector], claudeServerToolDefaultReservedUses)
 	}
-	if hasJSONValue(fields.Container) {
+	if hasJSONValue(fields["container"]) {
 		uses[tooling.BuiltinCodeExecution] = max(uses[tooling.BuiltinCodeExecution], claudeServerToolDefaultReservedUses)
 	}
 	return uses, unknown, nil
+}
+
+// scanExactJSONFields token-scans one JSON object and returns the raw values of
+// the policy fields under their exact spelling. Passthrough forwards raw bytes,
+// so admission must not rely on encoding/json, which matches names
+// case-insensitively (including Unicode folds such as U+017F) and keeps the
+// last duplicate while other parsers read the exact or first key. Parameters:
+// raw is the object JSON and fields the exact policy field names. Returns: the
+// values found, or an error when a policy field is duplicated or another key
+// folds to it (case-insensitively, ignoring '_' and '-').
+func scanExactJSONFields(raw []byte, fields []string) (map[string]json.RawMessage, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	opening, err := decoder.Token()
+	if err != nil {
+		return nil, errors.Wrap(err, "decode JSON object")
+	}
+	if delim, ok := opening.(json.Delim); !ok || delim != '{' {
+		return nil, errors.New("expected a JSON object")
+	}
+	values := make(map[string]json.RawMessage, len(fields))
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, errors.Wrap(err, "decode JSON object key")
+		}
+		key, ok := token.(string)
+		if !ok {
+			return nil, errors.New("invalid JSON object key")
+		}
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return nil, errors.Wrapf(err, "decode JSON field %q", key)
+		}
+		field := foldedPolicyField(key, fields)
+		if field == "" {
+			continue
+		}
+		if key != field {
+			return nil, errors.Errorf("field %q is an ambiguous spelling of %q", key, field)
+		}
+		if _, duplicate := values[field]; duplicate {
+			return nil, errors.Errorf("duplicate field %q", field)
+		}
+		values[field] = value
+	}
+	if _, err := decoder.Token(); err != nil {
+		return nil, errors.Wrap(err, "decode JSON object end")
+	}
+	return values, nil
+}
+
+// foldedPolicyField returns the policy field that key would match under
+// case-insensitive matching that also ignores '_' and '-', or "" when none does.
+func foldedPolicyField(key string, fields []string) string {
+	strip := func(r rune) rune {
+		if r == '_' || r == '-' {
+			return -1
+		}
+		return r
+	}
+	folded := strings.Map(strip, key)
+	for _, field := range fields {
+		if strings.EqualFold(folded, strings.Map(strip, field)) {
+			return field
+		}
+	}
+	return ""
 }
 
 // claudeToolUseBound returns the invocation bound reserved for one declaration.
