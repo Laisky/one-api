@@ -175,6 +175,7 @@ func TestSecurityCohereRerankProviderErrors(t *testing.T) {
 		retryable bool
 	}{
 		{status: http.StatusUnauthorized, retryable: true},
+		{status: http.StatusForbidden, retryable: true},
 		{status: http.StatusTooManyRequests, retryable: true},
 		{status: http.StatusBadRequest, charge: 13000},
 		{status: http.StatusInternalServerError, charge: 13000},
