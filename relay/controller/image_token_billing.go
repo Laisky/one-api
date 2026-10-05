@@ -219,7 +219,8 @@ func finalizeImageQuota(baseQuota int64, perImageBilling bool, imageModel string
 		BaseQuota:  baseQuota,
 		TotalQuota: baseQuota,
 	}
-	if usage == nil {
+	// A trusted zero group multiplier makes all usage dimensions free.
+	if usage == nil || groupRatio == 0 {
 		return summary
 	}
 
