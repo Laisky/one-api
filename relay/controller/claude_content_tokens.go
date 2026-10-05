@@ -47,19 +47,9 @@ func claudeContentTokenParts(blocks []any) []relaymodel.MessageContent {
 				parts = appendClaudeJSONTokenPart(parts, blockMap)
 			}
 		case "image":
-			if source, ok := blockMap["source"].(map[string]any); ok {
-				imageURL := relaymodel.ImageURL{}
-				if mediaType, exists := source["media_type"]; exists {
-					if data, ok := source["data"].(string); ok {
-						imageURL.Url = fmt.Sprintf("data:%s;base64,%s", mediaType, data)
-					}
-				} else if url, ok := source["url"].(string); ok {
-					imageURL.Url = url
-				}
-				imageURL.Detail, _ = source["detail"].(string)
-				if imageURL.Url != "" {
-					parts = append(parts, relaymodel.MessageContent{Type: "image_url", ImageURL: &imageURL})
-				}
+			// Share the converter's URL-versus-base64 source precedence with Chat counting.
+			if imageURL, ok := claudeImageCountingURL(blockMap); ok {
+				parts = append(parts, relaymodel.MessageContent{Type: relaymodel.ContentTypeImageURL, ImageURL: imageURL})
 			}
 		case "thinking", "redacted_thinking":
 			// Keep the native replay policy: opaque thinking signatures are not ordinary prompt text.

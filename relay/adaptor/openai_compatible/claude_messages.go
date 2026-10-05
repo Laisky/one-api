@@ -285,6 +285,9 @@ func convertClaudeBlocks(role string, blocks []any) []model.Message {
 						if data, ok := source["data"].(string); ok {
 							url := fmt.Sprintf("data:%s;base64,%s", mt, data)
 							imageURL := model.ImageURL{Url: url}
+							if detail, ok := source["detail"].(string); ok {
+								imageURL.Detail = detail
+							}
 							msg.contentParts = append(msg.contentParts, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &imageURL})
 						}
 					}

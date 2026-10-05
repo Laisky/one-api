@@ -85,6 +85,7 @@ func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 		CacheWrite5mRatio: local.CacheWrite5mRatio,
 		CacheWrite1hRatio: local.CacheWrite1hRatio,
 		MaxTokens:         local.MaxTokens,
+		ContextLength:     local.ContextLength,
 	}
 	if len(local.Tiers) > 0 {
 		cfg.Tiers = make([]adaptor.ModelRatioTier, 0, len(local.Tiers))

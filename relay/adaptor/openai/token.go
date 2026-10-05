@@ -162,35 +162,7 @@ func CountTokenMessages(ctx context.Context,
 					imageURL = content.ImageURL.Url
 					detail = content.ImageURL.Detail
 				}
-				imageTokens, err := countImageTokens(imageURL, detail, actualModel)
-				if err != nil {
-					// Provide structured diagnostics without dumping full base64 content
-					isDataURL := strings.HasPrefix(imageURL, "data:image/")
-					b64Len := 0
-					sample := ""
-					if isDataURL {
-						// Extract after comma
-						if idx := strings.Index(imageURL, ","); idx >= 0 && idx+1 < len(imageURL) {
-							raw := imageURL[idx+1:]
-							b64Len = len(raw)
-							if b64Len > 48 {
-								sample = raw[:48]
-							} else {
-								sample = raw
-							}
-						}
-					}
-					lg.Error("error counting image tokens",
-						zap.Error(err),
-						zap.String("model", actualModel),
-						zap.Bool("data_url", isDataURL),
-						zap.Int("base64_len", b64Len),
-						zap.String("detail", detail),
-						zap.String("base64_sample", sample),
-					)
-				} else {
-					tokenNum += imageTokens
-				}
+				tokenNum += EstimateImageTokens(ctx, imageURL, detail, actualModel)
 			case model.ContentTypeInputAudio:
 				audioData, err := base64.StdEncoding.DecodeString(content.InputAudio.Data)
 				if err != nil {
@@ -361,6 +333,11 @@ func getVisionBaseTile(model string) (base int, tile int) {
 	return additionalCost, highDetailCostPerTile
 }
 
+// countImageTokens estimates the prompt tokens of one image forwarded to model.
+// url is the image URL or data URL (empty for an uninspectable file reference)
+// and detail is the effective detail hint. It returns an error when the image
+// cannot be measured or detail is unsupported, so callers can reserve a
+// conservative allowance instead of admitting the image for free.
 func countImageTokens(url string, detail string, model string) (_ int, err error) {
 	if claudevision.IsSonnet55(model) {
 		return claudevision.Sonnet55MaxImageTokens, nil
@@ -372,9 +349,31 @@ func countImageTokens(url string, detail string, model string) (_ int, err error
 	if deepseekcompat.IsFlashVisionModel(model) {
 		return deepseekFlashMaxImageTokens, nil
 	}
+	// Gemini 3 ignores the OpenAI detail hint, and the adapters never set
+	// media_resolution, so every image receives the default allocation.
+	if strings.HasPrefix(model, "gemini-3") {
+		return gemini3DefaultImageTokens, nil
+	}
 
-	var fetchSize = true
-	var width, height int
+	// OpenAI patch-based models: detail selects documented resize limits, and
+	// low or auto can cost as much as, or more than, high.
+	if profile, ok := resolveOpenAIPatchProfile(model); ok {
+		if _, err := profile.sizing(detail); err != nil {
+			return 0, errors.Wrap(err, "invalid detail option")
+		}
+		width, height, err := measureImage(url)
+		if err != nil {
+			return 0, errors.Wrap(err, "failed to get image size")
+		}
+		return countPatchImageTokens(width, height, detail, profile)
+	}
+
+	// Only OpenAI tile models document a cheaper low detail. Every other
+	// provider (Gemini, Claude, and generic OpenAI-compatible models) processes
+	// the complete image at its default resolution whatever the hint says.
+	if !isOpenAITileVisionModel(model) {
+		detail = "high"
+	}
 
 	// However, in my test, it seems to be always the same as "high".
 	// The following image, which is 125x50, is still treated as high-res, taken
@@ -393,37 +392,14 @@ func countImageTokens(url string, detail string, model string) (_ int, err error
 		base, _ := getVisionBaseTile(model)
 		return base, nil
 	case "high":
-		if fetchSize {
-			width, height, err = getImageSizeFn(url)
-			if err != nil {
-				return 0, errors.Wrap(err, "failed to get image size")
-			}
+		width, height, err := measureImage(url)
+		if err != nil {
+			return 0, errors.Wrap(err, "failed to get image size")
 		}
-		// Claude-specific: cap long edge at 1568 then approx tokens by area/750
-		// We detect Claude via model prefix to avoid importing meta here
-		if strings.HasPrefix(model, "claude-") ||
-			strings.HasPrefix(model, "sonnet") ||
-			strings.HasPrefix(model, "haiku") ||
-			strings.HasPrefix(model, "opus") {
-			// Cap long edge to 1568 while preserving aspect ratio
-			maxEdge := 1568.0
-			w := float64(width)
-			h := float64(height)
-			if w > h {
-				if w > maxEdge {
-					scale := maxEdge / w
-					w *= scale
-					h *= scale
-				}
-			} else {
-				if h > maxEdge {
-					scale := maxEdge / h
-					w *= scale
-					h *= scale
-				}
-			}
-			tokens := max(int(math.Round((w*h)/750.0)), 0)
-			return tokens, nil
+		// Claude-specific: cap the long edge, then approximate tokens by area/750.
+		// We detect Claude via model prefix to avoid importing meta here.
+		if isClaudeVisionModel(model) {
+			return countClaudeImageTokens(width, height, model), nil
 		}
 		if width > 2048 || height > 2048 { // max(width, height) > 2048
 			ratio := float64(2048) / math.Max(float64(width), float64(height))
@@ -445,6 +421,22 @@ func countImageTokens(url string, detail string, model string) (_ int, err error
 	default:
 		return 0, errors.New("invalid detail option")
 	}
+}
+
+// measureImage returns the dimensions of the image at url. An empty url (an
+// uninspectable file reference) and non-positive dimensions are errors.
+func measureImage(url string) (width int, height int, err error) {
+	if strings.TrimSpace(url) == "" {
+		return 0, 0, errors.New("image has no inspectable url")
+	}
+	width, height, err = getImageSizeFn(url)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "measure image")
+	}
+	if width <= 0 || height <= 0 {
+		return 0, 0, errors.Errorf("invalid image dimensions %dx%d", width, height)
+	}
+	return width, height, nil
 }
 
 // CountImageTokens counts token usage for an image URL in vision-capable prompts.

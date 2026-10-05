@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"strings"
 
@@ -124,7 +125,7 @@ func countClaudeFileImageTokensFromBlocks(blocks []any) int {
 			continue
 		}
 		blockType, _ := blockMap["type"].(string)
-		if blockType == "tool_result" {
+		if blockType == "tool_result" || blockType == "search_result" {
 			total += countClaudeFileImageTokensFromContent(blockMap["content"])
 			continue
 		}
@@ -231,6 +232,8 @@ func convertClaudeToOpenAIForTokenCounting(request *ClaudeMessagesRequest) *rela
 			// Simple string content
 			openaiMessage.Content = content
 		case []any:
+			// Structured content blocks: text, images (including those nested in
+			// tool results) and every other forwarded block are projected for counting.
 			if parts := claudeContentTokenParts(content); len(parts) > 0 {
 				openaiMessage.Content = parts
 			}
@@ -245,6 +248,34 @@ func convertClaudeToOpenAIForTokenCounting(request *ClaudeMessagesRequest) *rela
 	}
 
 	return openaiRequest
+}
+
+// claudeImageCountingURL converts an inline or URL Claude image block into the
+// image URL and detail used for estimation. It reports false for file-backed
+// or malformed sources, which countClaudeFileImageTokens handles separately.
+func claudeImageCountingURL(block map[string]any) (*relaymodel.ImageURL, bool) {
+	source, ok := block["source"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	imageURL := &relaymodel.ImageURL{}
+	sourceType, _ := source["type"].(string)
+	data, hasData := source["data"].(string)
+	url, hasURL := source["url"].(string)
+	switch {
+	case sourceType == "url" && hasURL:
+		imageURL.Url = url
+	case hasData && data != "":
+		// Convert to data URL format for token counting. A missing or malformed
+		// media type fails measurement and keeps the conservative allowance.
+		imageURL.Url = fmt.Sprintf("data:%v;base64,%s", source["media_type"], data)
+	case hasURL:
+		imageURL.Url = url
+	}
+	if detail, ok := source["detail"].(string); ok {
+		imageURL.Detail = detail
+	}
+	return imageURL, imageURL.Url != ""
 }
 
 // convertClaudeToolsToOpenAI converts Claude tools to OpenAI format for token counting.
