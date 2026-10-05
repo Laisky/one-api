@@ -214,6 +214,10 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				t.Logf("BRIDGE_PROTOCOL case=%s expected=%d expected_total=%d request=%d owner=%d token=%d log=%d complete=%d failed=%d terminal_status=%v terminal_usage=%v cached_log=%d input_log=%d output_log=%d log_meta=%v estimated=%v api_error=%v canceled=%v ordinary_eof=%v truncated=%v api_code=%v terminal_error=%v", tc.name, expected, total, charge, balance-reloadUserQuota(t), balance-token.RemainQuota, logs[0].Quota, completed, failed, response["status"], terminalUsage, logs[0].CachedPromptTokens, logs[0].PromptTokens, logs[0].CompletionTokens, logs[0].Metadata, logs[0].Metadata["billing_estimated"], apiErr != nil, ctx.Err() != nil, rawEOF.Load(), rawTruncated.Load(), apiCode, response["error"])
 				if tc.failure {
 					require.NotNil(t, apiErr)
+					require.Equal(t, "read_stream_failed", apiErr.Error.Code)
+					terminalError, ok := response["error"].(map[string]any)
+					require.True(t, ok)
+					require.Equal(t, "read_stream_failed", terminalError["code"])
 					require.Zero(t, completed, "cancellation before upstream DONE or a real error must not fabricate success")
 					require.Zero(t, sentinels, "failed streams must not synthesize a successful sentinel")
 					require.Equal(t, 1, failed, "the real bridge emits exactly one failed terminal")
