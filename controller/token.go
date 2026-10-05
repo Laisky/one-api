@@ -25,17 +25,23 @@ import (
 	"github.com/Laisky/one-api/model"
 )
 
+// GetRequestCost answers the public per-request cost lookup for the
+// request_id path parameter. It writes exactly one response: the cost record,
+// or a single error envelope (an unknown id is a client-side NotFound).
 func GetRequestCost(c *gin.Context) {
 	reqId := c.Param("request_id")
 	if reqId == "" {
 		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("request_id should not be empty")))
-
+		return
 	}
 
 	docu, err := model.GetCostByRequestId(reqId)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = errkind.NotFoundErr(err)
+		}
 		helper.RespondError(c, err)
-
+		return
 	}
 
 	c.JSON(http.StatusOK, docu)

@@ -1,3 +1,4 @@
+import { OAuthTotpPrompt } from '@/components/auth/OAuthTotpPrompt';
 import Turnstile from '@/components/Turnstile';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { useSystemStatus } from '@/hooks/useSystemStatus';
 import { api, isSafeInternalPath } from '@/lib/api';
 import { buildGitHubOAuthUrl, buildLarkOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
+import { isTotpRequiredResponse, type OAuthLoginUser } from '@/lib/oauth-totp';
 import { useAuthStore } from '@/lib/stores/auth';
 import { zodResolver } from '@/lib/zod-resolver';
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
@@ -62,6 +64,9 @@ export function LoginPage() {
   const [wechatCode, setWechatCode] = useState('');
   const [wechatLoading, setWechatLoading] = useState(false);
   const [wechatError, setWechatError] = useState('');
+  // Set when the WeChat code resolved to a two-factor account; the code is consumed, so the modal
+  // switches to the TOTP prompt instead of letting the user resend it.
+  const [wechatTotpRequired, setWechatTotpRequired] = useState(false);
 
   const onPasskeyLogin = async () => {
     setPasskeyLoading(true);
@@ -132,7 +137,7 @@ export function LoginPage() {
       // Clear the state to prevent showing the message on refresh
       window.history.replaceState({}, document.title);
     }
-  }, [searchParams, location.state]);
+  }, [searchParams, location.state, t]);
 
   const onGitHubOAuth = async () => {
     if (!systemStatus.github_client_id) return;
@@ -182,7 +187,39 @@ export function LoginPage() {
   const onWeChatOpen = () => {
     setWechatCode('');
     setWechatError('');
+    setWechatTotpRequired(false);
     setWechatOpen(true);
+  };
+
+  /** closeWeChat closes the WeChat modal and discards any pending TOTP step so the next attempt starts fresh. */
+  const closeWeChat = () => {
+    setWechatOpen(false);
+    setWechatTotpRequired(false);
+    setWechatCode('');
+    setWechatError('');
+  };
+
+  /**
+   * completeWeChatLogin stores the authenticated user, closes the modal, and navigates to the safe `redirect_to`
+   * target from the login URL or the dashboard. It takes the user payload and returns nothing.
+   */
+  const completeWeChatLogin = (user: OAuthLoginUser) => {
+    login(user, '');
+    closeWeChat();
+
+    const redirectTo = searchParams.get('redirect_to');
+    if (redirectTo) {
+      try {
+        const decodedPath = decodeURIComponent(redirectTo);
+        if (isSafeInternalPath(decodedPath) && !decodedPath.startsWith('/login')) {
+          navigate(decodedPath);
+          return;
+        }
+      } catch (err) {
+        console.error(`Invalid redirect_to parameter: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    navigate('/dashboard');
   };
 
   const onWeChatSubmit = async () => {
@@ -195,6 +232,11 @@ export function LoginPage() {
     setWechatError('');
     try {
       const response = await api.post(`/api/oauth/wechat?code=${encodeURIComponent(code)}`);
+      if (isTotpRequiredResponse(response.data)) {
+        setWechatCode('');
+        setWechatTotpRequired(true);
+        return;
+      }
       const { success, message, data } = response.data;
       if (!success) {
         setWechatError(message || t('auth.login.wechat_failed'));
@@ -207,22 +249,7 @@ export function LoginPage() {
         return;
       }
 
-      login(data, '');
-      setWechatOpen(false);
-
-      const redirectTo = searchParams.get('redirect_to');
-      if (redirectTo) {
-        try {
-          const decodedPath = decodeURIComponent(redirectTo);
-          if (isSafeInternalPath(decodedPath) && !decodedPath.startsWith('/login')) {
-            navigate(decodedPath);
-            return;
-          }
-        } catch (err) {
-          console.error('Invalid redirect_to parameter:', err);
-        }
-      }
-      navigate('/dashboard');
+      completeWeChatLogin(data);
     } catch (error) {
       setWechatError(error instanceof Error ? error.message : t('auth.login.wechat_failed'));
     } finally {
@@ -573,42 +600,52 @@ export function LoginPage() {
       <Dialog
         open={wechatOpen}
         onOpenChange={(open) => {
-          if (!wechatLoading) setWechatOpen(open);
+          if (wechatLoading) return;
+          if (open) setWechatOpen(true);
+          else closeWeChat();
         }}
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>{t('auth.login.wechat_modal_title')}</DialogTitle>
-            <DialogDescription>{t('auth.login.wechat_modal_description')}</DialogDescription>
+            <DialogTitle>{wechatTotpRequired ? t('auth.oauth.totp.title') : t('auth.login.wechat_modal_title')}</DialogTitle>
+            <DialogDescription>
+              {wechatTotpRequired ? t('auth.oauth.totp.description') : t('auth.login.wechat_modal_description')}
+            </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col items-center gap-3">
-            {systemStatus.wechat_qrcode && (
-              <img src={systemStatus.wechat_qrcode} alt={t('auth.login.wechat_qr_alt')} className="max-h-64 w-auto rounded-md border" />
-            )}
-            <Input
-              type="text"
-              autoFocus
-              value={wechatCode}
-              placeholder={t('auth.login.wechat_code_placeholder')}
-              disabled={wechatLoading}
-              onChange={(e) => {
-                setWechatCode(e.target.value);
-                if (wechatError) setWechatError('');
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  void onWeChatSubmit();
-                }
-              }}
-            />
-            {wechatError && <p className="text-sm text-destructive w-full">{wechatError}</p>}
-          </div>
-          <DialogFooter>
-            <Button type="button" onClick={() => void onWeChatSubmit()} disabled={wechatLoading}>
-              {wechatLoading ? t('auth.login.signing_in') : t('auth.login.title')}
-            </Button>
-          </DialogFooter>
+          {wechatTotpRequired ? (
+            <OAuthTotpPrompt onSuccess={completeWeChatLogin} onBackToLogin={closeWeChat} />
+          ) : (
+            <>
+              <div className="flex flex-col items-center gap-3">
+                {systemStatus.wechat_qrcode && (
+                  <img src={systemStatus.wechat_qrcode} alt={t('auth.login.wechat_qr_alt')} className="max-h-64 w-auto rounded-md border" />
+                )}
+                <Input
+                  type="text"
+                  autoFocus
+                  value={wechatCode}
+                  placeholder={t('auth.login.wechat_code_placeholder')}
+                  disabled={wechatLoading}
+                  onChange={(e) => {
+                    setWechatCode(e.target.value);
+                    if (wechatError) setWechatError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void onWeChatSubmit();
+                    }
+                  }}
+                />
+                {wechatError && <p className="text-sm text-destructive w-full">{wechatError}</p>}
+              </div>
+              <DialogFooter>
+                <Button type="button" onClick={() => void onWeChatSubmit()} disabled={wechatLoading}>
+                  {wechatLoading ? t('auth.login.signing_in') : t('auth.login.title')}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

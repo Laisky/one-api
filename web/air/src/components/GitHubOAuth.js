@@ -2,8 +2,9 @@ import { showError as reportUIError } from '../helpers/utils';
 import React, { useContext, useEffect, useState } from 'react';
 import { Dimmer, Loader, Segment } from 'semantic-ui-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { API, normalizeUser, showError, showSuccess } from '../helpers';
+import { API, isTotpRequired, normalizeUser, showError, showInfo, showSuccess } from '../helpers';
 import { UserContext } from '../context/User';
+import OAuthTotpForm from './OAuthTotpForm';
 
 const GitHubOAuth = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -11,6 +12,7 @@ const GitHubOAuth = () => {
   const [userState, userDispatch] = useContext(UserContext);
   const [prompt, setPrompt] = useState('处理中...');
   const [processing, setProcessing] = useState(true);
+  const [totpRequired, setTotpRequired] = useState(false);
 
   let navigate = useNavigate();
 
@@ -28,6 +30,11 @@ const GitHubOAuth = () => {
         showSuccess('登录成功！');
         navigate('/');
       }
+    } else if (isTotpRequired(message, data)) {
+      // The OAuth code and state are consumed by now, so never retry; finish
+      // the sign-in with the TOTP code instead.
+      setTotpRequired(true);
+      showInfo('请输入您的TOTP验证码');
     } else {
       showError(message);
       if (count === 0) {
@@ -47,6 +54,14 @@ const GitHubOAuth = () => {
     let state = searchParams.get('state');
     sendCode(code, state, 0).then().catch(reportUIError);
   }, []);
+
+  if (totpRequired) {
+    return (
+      <Segment className="oauth-totp-segment">
+        <OAuthTotpForm onBack={() => navigate('/login')} />
+      </Segment>
+    );
+  }
 
   return (
     <Segment style={{ minHeight: '300px' }}>

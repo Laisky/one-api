@@ -66,8 +66,11 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/oauth/github", middleware.CriticalRateLimit(), auth.GitHubOAuth)
 		apiRouter.GET("/oauth/oidc", middleware.CriticalRateLimit(), auth.OidcAuth)
 		apiRouter.GET("/oauth/lark", middleware.CriticalRateLimit(), auth.LarkOAuth)
-		apiRouter.GET("/oauth/state", middleware.CriticalRateLimit(), auth.GenerateOAuthCode)
+		apiRouter.GET("/oauth/state", middleware.CriticalRateLimit(), middleware.SessionWriteNavigationGuard(), auth.GenerateOAuthCode)
 		apiRouter.POST("/oauth/wechat", middleware.CriticalRateLimit(), middleware.SessionMutationGuard(), auth.WeChatAuth)
+		// Completes an OAuth/WeChat login of a TOTP-enabled account; the pending
+		// marker lives in the session cookie, so provenance is always required.
+		apiRouter.POST("/oauth/totp", middleware.CriticalRateLimit(), middleware.PendingLoginMutationGuard(), controller.OAuthTotpLogin)
 		apiRouter.POST("/oauth/wechat/bind", middleware.CriticalRateLimit(), middleware.UserAuth(), auth.WeChatBind)
 		apiRouter.POST("/oauth/email/bind", middleware.CriticalRateLimit(), middleware.UserAuth(), controller.EmailBind)
 		apiRouter.POST("/topup", middleware.AdminAuth(), controller.AdminTopUp)

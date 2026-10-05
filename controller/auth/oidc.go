@@ -81,6 +81,10 @@ func getOidcUserInfoByCode(code string) (*OidcUser, error) {
 	return &oidcUser, nil
 }
 
+// OidcAuth handles the OIDC callback. After the session state check it binds
+// the OIDC subject to the signed-in account, or signs in (provisioning when
+// registration is open) the linked account, requiring its TOTP code through
+// controller.CompleteOAuthLogin when 2FA is enabled.
 func OidcAuth(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	session := sessions.Default(c)
@@ -143,45 +147,30 @@ func OidcAuth(c *gin.Context) {
 		helper.RespondError(c, errors.New("User has been banned"))
 		return
 	}
-	controller.SetupLogin(&user, c)
+	controller.CompleteOAuthLogin(&user, c)
 }
 
+// OidcBind attaches the OIDC subject resolved from the callback code to the
+// account of the current dashboard session. The account must pass the
+// dashboard checks before the provider is contacted, and only the oidc_id
+// column is written. It returns no value and always writes a response.
 func OidcBind(c *gin.Context) {
 	if !config.OidcEnabled {
 		helper.RespondError(c, errors.New("The administrator has turned off new user registration"))
 		return
 	}
-	code := c.Query("code")
-	oidcUser, err := getOidcUserInfoByCode(code)
+	userID, ok := resolveBindingUserID(c)
+	if !ok {
+		return
+	}
+	oidcUser, err := getOidcUserInfoByCode(c.Query("code"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
 	}
-	user := model.User{
-		OidcId: oidcUser.OpenID,
-	}
-	if model.IsOidcIdAlreadyTaken(user.OidcId) {
+	if model.IsOidcIdAlreadyTaken(oidcUser.OpenID) {
 		helper.RespondError(c, errors.New("This OIDC account has already been bound"))
 		return
 	}
-	session := sessions.Default(c)
-	id := session.Get("id")
-	// id := c.GetInt("id")  // critical bug!
-	user.Id = id.(int)
-	err = user.FillUserById()
-	if err != nil {
-		helper.RespondError(c, err)
-		return
-	}
-	user.OidcId = oidcUser.OpenID
-	err = user.Update(false)
-	if err != nil {
-		helper.RespondError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "bind",
-	})
-	return
+	bindOAuthIdentity(c, userID, model.OAuthIdentityOidc, oidcUser.OpenID, "bind")
 }

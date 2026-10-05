@@ -61,8 +61,10 @@ func getWeChatIdByCode(code string) (string, error) {
 }
 
 // WeChatAuth logs in or provisions the account linked to the WeChat code in
-// the query string. It is served on POST behind the session mutation guard so a
-// cross-site navigation cannot replace an existing dashboard session.
+// the query string, requiring the account's TOTP code through
+// controller.CompleteOAuthLogin when 2FA is enabled. It is served on POST
+// behind the session mutation guard so a cross-site navigation cannot replace
+// an existing dashboard session.
 func WeChatAuth(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	if !config.WeChatAuthEnabled {
@@ -109,11 +111,12 @@ func WeChatAuth(c *gin.Context) {
 		helper.RespondError(c, errors.New("User has been banned"))
 		return
 	}
-	controller.SetupLogin(&user, c)
+	controller.CompleteOAuthLogin(&user, c)
 }
 
 // WeChatBind attaches the WeChat id resolved from the query-string code to the
-// authenticated account. It is served on POST behind dashboard authentication.
+// authenticated account, writing only the wechat_id column. It is served on
+// POST behind dashboard authentication.
 func WeChatBind(c *gin.Context) {
 	if !config.WeChatAuthEnabled {
 		helper.RespondError(c, errors.New("The administrator has not enabled login and registration via WeChat"))
@@ -129,24 +132,5 @@ func WeChatBind(c *gin.Context) {
 		helper.RespondError(c, errors.New("The WeChat account has been bound"))
 		return
 	}
-	id := c.GetInt(ctxkey.Id)
-	user := model.User{
-		Id: id,
-	}
-	err = user.FillUserById()
-	if err != nil {
-		helper.RespondError(c, err)
-		return
-	}
-	user.WeChatId = wechatId
-	err = user.Update(false)
-	if err != nil {
-		helper.RespondError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
-	return
+	bindOAuthIdentity(c, c.GetInt(ctxkey.Id), model.OAuthIdentityWeChat, wechatId, "")
 }

@@ -121,7 +121,7 @@ describe('LoginPage Turnstile integration', () => {
         data: { turnstile_check: true, turnstile_site_key: 'site-key' },
       },
     } as any);
-    const postSpy = vi.spyOn(api, 'post').mockResolvedValue({
+    vi.spyOn(api, 'post').mockResolvedValue({
       data: {
         success: false,
         message: 'Invalid credentials',

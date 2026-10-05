@@ -44,8 +44,9 @@ GET  /api/reset_password            - Password reset email (CriticalRateLimit + 
 GET  /api/oauth/github              - GitHub OAuth (CriticalRateLimit)
 GET  /api/oauth/oidc                - OIDC authentication (CriticalRateLimit)
 GET  /api/oauth/lark                - Lark OAuth (CriticalRateLimit)
-GET  /api/oauth/state               - OAuth state generation (CriticalRateLimit)
+GET  /api/oauth/state               - OAuth state generation (CriticalRateLimit + SessionWriteNavigationGuard)
 POST /api/oauth/wechat              - WeChat authentication (CriticalRateLimit; GET before #479)
+POST /api/oauth/totp                - Complete a pending OAuth/WeChat login with TOTP (CriticalRateLimit + PendingLoginMutationGuard)
 POST /api/oauth/wechat/bind         - WeChat binding (CriticalRateLimit + UserAuth; GET before #479)
 POST /api/oauth/email/bind          - Email binding (CriticalRateLimit + UserAuth; GET before #479)
 ```
