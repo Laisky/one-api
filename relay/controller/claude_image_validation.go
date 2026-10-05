@@ -28,10 +28,10 @@ func validateClaudeImageDetails(content any) error {
 				return errors.New("image source.detail must be a string")
 			}
 			switch detail {
-			case "", "auto", "low", "high":
+			case "", "auto", "low", "high", "original":
 				return nil
 			default:
-				return errors.New("image source.detail must be auto, low, or high")
+				return errors.New("image source.detail must be auto, low, high, or original")
 			}
 		case "tool_result", "search_result":
 			if err := validateClaudeImageDetails(value["content"]); err != nil {

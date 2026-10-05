@@ -33,7 +33,7 @@ func providerImageFixture(t *testing.T) string {
 
 // TestClaudeImageDetailAdmissionAndConversion rejects invalid hints and keeps valid base64 semantics identical in quoting and provider conversion.
 func TestClaudeImageDetailAdmissionAndConversion(t *testing.T) {
-	for _, detail := range []string{"low", "high", "auto", "invalid-detail"} {
+	for _, detail := range []string{"low", "high", "auto", "original", "invalid-detail"} {
 		t.Run(detail, func(t *testing.T) {
 			payload, err := json.Marshal(map[string]any{"model": "gpt-4o", "max_tokens": 16, "messages": []any{map[string]any{"role": "user", "content": []any{map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": "image/png", "data": providerImageFixture(t), "detail": detail}}}}}})
 			require.NoError(t, err)
@@ -132,6 +132,9 @@ func TestSecurityClaudeToolResultImagesAreAdmitted(t *testing.T) {
 	require.GreaterOrEqual(t, quote("gpt-4o", toolResult(inline))-empty, 765, "a nested inline image must be quoted like a top-level one")
 	require.GreaterOrEqual(t, quote("gpt-4o", toolResult(file))-empty, claudeFileImageFallbackTokens, "a nested file image must keep its allowance")
 	require.Greater(t, quote("gpt-4o", toolResult(map[string]any{"type": "text", "text": strings.Repeat("hello world ", 200)}))-empty, 300, "nested tool-result text is forwarded and billable")
+	// A URL source is forwarded by URL even when it also carries a stray media_type.
+	urlSource := map[string]any{"type": "image", "source": map[string]any{"type": "url", "url": "data:image/png;base64," + providerImageFixture(t), "media_type": "image/png"}}
+	require.GreaterOrEqual(t, quote("gpt-4o", []any{urlSource})-quote("gpt-4o", []any{}), 765, "a forwarded URL image must be quoted")
 
 	// Sonnet 5.5 keeps exactly one network-free allowance per image wherever it is nested.
 	top := quote("claude-sonnet-5-5", []any{inline})
