@@ -122,8 +122,9 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 	ownership := &responseWSSessionOwnership{}
 	stored := &responseAPIWSStoreCollector{ownership: ownership}
 	errc := make(chan error, 2)
+	requestContext := c.Request.Context()
 	go func() {
-		errc <- copyResponseAPIClientToUpstream(c.Request.Context(), clientConn, upstreamConn, meta, ownership)
+		errc <- copyResponseAPIClientToUpstream(requestContext, clientConn, upstreamConn, meta, ownership)
 	}()
 	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, usage, stored) }()
 
