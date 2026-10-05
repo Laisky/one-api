@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"encoding/base64"
 	"strings"
 	"sync"
 	"testing"
@@ -174,6 +175,10 @@ func TestLiveSpendGatesEveryClientOperation(t *testing.T) {
 	setupTokens := liveSpendSetupTokens(t)
 	headroom := setupTokens + liveDefaultTurnOutputTokens
 	text := `{"realtimeInput":{"text":"` + strings.Repeat("x", 1000) + `"}}`
+	pcm := base64.StdEncoding.EncodeToString(make([]byte, 32000)) // 1 s at 16 kHz
+	audio := `{"realtimeInput":{"audio":{"mimeType":"audio/pcm;rate=16000","data":"` + pcm + `"}}}`
+	audioTokens := pcmTokens(base64DecodedBound(pcm), liveDefaultInputSampleRate)
+	video := `{"realtimeInput":{"video":{"mimeType":"image/png","data":"` + liveTestImage(t, 10, 10, "png") + `"}}}`
 	for _, tc := range []struct {
 		name, frame string
 		limit       int64
@@ -182,6 +187,8 @@ func TestLiveSpendGatesEveryClientOperation(t *testing.T) {
 		gap         bool
 	}{
 		{"text_burst", text, headroom + 3000, 10, 3, liveCloseQuotaExhausted, true},
+		{"audio_burst_faster_than_real_time", audio, headroom + 3*audioTokens, 10, 3, liveCloseQuotaExhausted, true},
+		{"visual_burst", video, headroom + 2*liveImageTokenFloor, 10, 2, liveCloseQuotaExhausted, true},
 		{"controls_are_free_but_gated", `{"realtimeInput":{"activityEnd":{}}}`, headroom, 50, 50, "", false},
 		{"controls_cannot_start_unfunded_turns", `{"realtimeInput":{"activityEnd":{}}}`, headroom - 1, 5, 0, liveCloseQuotaExhausted, false},
 		{"file_reference_fails_closed", `{"clientContent":{"turns":[{"role":"user","parts":[{"fileData":{"fileUri":"https://example.invalid/f","mimeType":"video/mp4"}}]}],"turnComplete":true}}`, -1, 1, 0, liveCloseUnpriceableWork, false},
