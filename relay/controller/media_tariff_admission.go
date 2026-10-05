@@ -7,6 +7,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/meta"
@@ -21,6 +22,25 @@ import (
 var generationSettlementStages = map[string]struct{}{
 	"chat_preconsume":            {},
 	"claude_messages_preconsume": {},
+}
+
+// generationControlKeys indexes the admission policy's wire names independently
+// of the client DTO. Responses and Messages do not declare every Chat count
+// field, and extra_body is decoded as a map, so DTO-only validation cannot reject
+// all ambiguous controls. RawMessage fields are an index, not another decoder.
+// Only the request root and its transport-level extra_body are inspected; keys
+// inside prompts, metadata and other user data are not generation controls.
+type generationControlKeys struct {
+	N                   json.RawMessage `json:"n"`
+	CandidateCount      json.RawMessage `json:"candidate_count"`
+	CandidateCountCamel json.RawMessage `json:"candidateCount"`
+	NumOutputs          json.RawMessage `json:"num_outputs"`
+	NumGenerations      json.RawMessage `json:"num_generations"`
+	FunctionCall        json.RawMessage `json:"function_call"`
+	ToolChoice          json.RawMessage `json:"tool_choice"`
+	Tools               json.RawMessage `json:"tools"`
+	Functions           json.RawMessage `json:"functions"`
+	ExtraBody           json.RawMessage `json:"extra_body"`
 }
 
 // mediaTariffAdmission resolves catalog media contracts before quota reservation.
@@ -64,7 +84,9 @@ func mediaTariffAdmission(c *gin.Context, info *meta.Meta, fallback int64, stage
 // validateSingleGenerationRequest rejects caller batching and tool loops for a
 // one-generation tariff. Parameters: c retains the original bounded JSON body.
 // Returns: an error for unsupported multiplicity, or nil for an ordinary single
-// generation. Both root and extra_body are checked before provider conversion.
+// generation. Root and extra_body keys are checked before lossy map decoding,
+// independently of the client DTO and any prepared provider conversion. This
+// runs before quota reservation and provider dispatch.
 func validateSingleGenerationRequest(c *gin.Context) error {
 	value, ok := c.Get(ctxkey.KeyRequestBody)
 	if !ok {
@@ -74,12 +96,18 @@ func validateSingleGenerationRequest(c *gin.Context) error {
 	if !ok {
 		return errors.New("generation request body has an invalid type")
 	}
+	if err := common.ValidateUnambiguousJSONRootKeys(raw, &generationControlKeys{}); err != nil {
+		return errors.Wrap(err, "ambiguous generation parameters")
+	}
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &root); err != nil {
 		return errors.Wrap(err, "decode generation request")
 	}
 	objects := []map[string]json.RawMessage{root}
 	if raw := root["extra_body"]; len(raw) > 0 {
+		if err := common.ValidateUnambiguousJSONRootKeys(raw, &generationControlKeys{}); err != nil {
+			return errors.Wrap(err, "ambiguous generation extra body")
+		}
 		var extra map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &extra); err != nil {
 			return errors.Wrap(err, "decode generation extra body")
