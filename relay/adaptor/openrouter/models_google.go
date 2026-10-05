@@ -357,6 +357,8 @@ func googleModels() map[string]adaptor.ModelConfig {
 			Description:                 "google/gemma-4-31b-it:free on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"google/lyria-3-clip-preview": {
+			PricingProvenance:           &adaptor.PricingProvenance{State: "paid", Unit: "generation", Source: "https://openrouter.ai/google/lyria-3-clip-preview", VerifiedAt: "2026-10-04"},
+			PerCall:                     &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 40},
 			Ratio:                       0,
 			CompletionRatio:             1,
 			ContextLength:               1048576,
@@ -368,6 +370,8 @@ func googleModels() map[string]adaptor.ModelConfig {
 			Description:                 "30 second duration clips are priced at $0.04 per clip. Lyria 3 is Google's family of music generation models, available through the Gemini API. With Lyria 3, you can generate...",
 		},
 		"google/lyria-3-pro-preview": {
+			PricingProvenance:           &adaptor.PricingProvenance{State: "paid", Unit: "generation", Source: "https://openrouter.ai/google/lyria-3-pro-preview", VerifiedAt: "2026-10-04"},
+			PerCall:                     &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 80},
 			Ratio:                       0,
 			CompletionRatio:             1,
 			ContextLength:               1048576,

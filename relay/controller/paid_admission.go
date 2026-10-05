@@ -19,6 +19,11 @@ import (
 // never authorize spending or replace the shared database reservation. A zero
 // quote remains free; failures return no held quota and an API error.
 func reservePaidRequestQuota(c *gin.Context, meta *metalib.Meta, quote int64, stage string) (int64, *relaymodel.ErrorWithStatusCode) {
+	var tariffErr *relaymodel.ErrorWithStatusCode
+	quote, tariffErr = mediaTariffAdmission(c, meta, quote)
+	if tariffErr != nil {
+		return 0, tariffErr
+	}
 	if quote < 0 {
 		return 0, openai.ErrorWrapper(errors.New("request quota must be nonnegative"), "invalid_request_quota", http.StatusBadRequest)
 	}

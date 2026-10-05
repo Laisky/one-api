@@ -15,13 +15,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// settleRetainedRequestAdmission labels an uncertain Cohere attempt and
+// settleRetainedRequestAdmission labels an uncertain Cohere or admitted generation attempt and
 // reconciles its existing hold without another debit. Cohere's explicit
 // pre-inference rejection statuses are handled separately. Generic relay retry
 // policy is deliberately unchanged by the atomic-admission repair; Jina keeps
 // its existing provider lifecycle. All asynchronous inputs are value snapshots.
 func settleRetainedRequestAdmission(c *gin.Context, amount int64, tokenID int, reason string) bool {
-	if c == nil || c.GetInt(ctxkey.Channel) != channeltype.Cohere || amount <= 0 || c.GetBool(ctxkey.BillingReconciled) {
+	if c == nil || amount <= 0 || c.GetBool(ctxkey.BillingReconciled) {
 		return false
 	}
 	value, ok := c.Get(ctxkey.Meta)
@@ -30,6 +30,9 @@ func settleRetainedRequestAdmission(c *gin.Context, amount int64, tokenID int, r
 	}
 	m, ok := value.(*metalib.Meta)
 	if !ok || m == nil || m.UserId <= 0 || m.ChannelId <= 0 || m.ActualModelName == "" || tokenID != m.TokenId {
+		return false
+	}
+	if c.GetInt(ctxkey.Channel) != channeltype.Cohere && !isRetainedGenerationAdmission(c, m, amount) {
 		return false
 	}
 	c.Set(responseSettlementKey, true)
