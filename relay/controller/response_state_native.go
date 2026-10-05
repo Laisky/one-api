@@ -32,8 +32,8 @@ const ctxNativeGatewayParent = "response_state_native_parent"
 // It returns divert=true when the referenced state cannot be honored on the
 // currently selected native provider, so the caller must fall back to the
 // hydrating Chat/Claude path (canonical replay). Behavior:
-//   - previous_response_id is not a gateway record (a raw/legacy upstream id):
-//     leave it untouched and forward verbatim exactly as today.
+//   - missing, foreign, expired, or deleted IDs fail closed; raw provider IDs
+//     without a gateway owner binding are never forwarded.
 //   - gateway record bound to the SAME native provider with an upstream handle:
 //     rewrite previous_response_id to that upstream handle so only the incremental
 //     input is sent (rows M05, PERF02) — one bounded binding lookup, no full-chain
@@ -41,24 +41,27 @@ const ctxNativeGatewayParent = "response_state_native_parent"
 //   - gateway record bound to a DIFFERENT provider (or with no usable handle):
 //     divert to the hydrating fallback so canonical items are replayed (row C08).
 func resolveNativePreviousResponse(c *gin.Context, meta *metalib.Meta, req *openai.ResponseAPIRequest) (bool, *relaymodel.ErrorWithStatusCode) {
-	if !responseStateActive(meta) || req == nil || req.PreviousResponseId == nil {
+	if req == nil || req.PreviousResponseId == nil {
 		return false, nil
 	}
 	prevID := strings.TrimSpace(*req.PreviousResponseId)
 	if prevID == "" {
 		return false, nil
 	}
+	if !state.Enabled() || state.Store() == nil {
+		return false, stateErrorf(codeStateStoreUnavailable, http.StatusServiceUnavailable, "response ownership storage is unavailable")
+	}
 	owner := stateOwnerFromMeta(meta)
 	if !owner.Valid() {
-		return false, nil
+		return false, stateErrorf(codePreviousResponseMissing, http.StatusNotFound, "previous response not found")
 	}
 
 	binding, err := state.Store().GetResponseBinding(gmw.Ctx(c), owner, prevID)
 	if err != nil {
 		if errors.Is(err, state.ErrNotFound) {
-			// Not a gateway record: a raw/legacy upstream id the client already holds.
-			// Forward it verbatim as today (row B07).
-			return false, nil
+			// A miss deliberately does not distinguish foreign, expired, deleted,
+			// and unknown IDs. None establishes authorization to an upstream object.
+			return false, stateErrorf(codePreviousResponseMissing, http.StatusNotFound, "previous response not found")
 		}
 		// A required state lookup failed: fail closed with a retryable 503 rather than
 		// forwarding a possibly-gateway id upstream (row R05/E06).

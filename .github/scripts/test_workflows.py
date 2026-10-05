@@ -63,6 +63,15 @@ class WorkflowTests(unittest.TestCase):
         files = {p.name for p in WORKFLOWS.iterdir() if p.suffix in {".yml", ".yaml"}}
         self.assertEqual(files, {"ci.yml", "lint.yml"})
 
+    def test_kubernetes_gateway_documentation_contracts(self) -> None:
+        """test_kubernetes_gateway_documentation_contracts runs the shipped guide regressions."""
+        result = subprocess.run(
+            [sys.executable, "-m", "unittest", "discover", "-s", str(ROOT / "scripts"),
+             "-p", "test_k8s_gateway_docs.py", "-v"],
+            cwd=ROOT, capture_output=True, text=True, timeout=120, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_ci_events_are_not_path_filtered(self) -> None:
         """test_ci_events_are_not_path_filtered keeps the required check reachable."""
         self.assertEqual(set(self.ci["on"]), {"push", "pull_request", "merge_group", "workflow_dispatch"})

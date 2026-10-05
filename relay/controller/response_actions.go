@@ -1,154 +1,25 @@
 package controller
 
 import (
-	"io"
-	"net/http"
-
-	"github.com/Laisky/errors/v2"
-	"github.com/gin-gonic/gin"
-
-	"github.com/Laisky/one-api/relay"
-	"github.com/Laisky/one-api/relay/adaptor/openai"
-	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/gin-gonic/gin"
 )
 
-// RelayResponseAPIGetHelper handles GET /v1/responses/:response_id requests
+// RelayResponseAPIGetHelper retrieves an owner-bound response for c and returns any authorization or storage error.
 func RelayResponseAPIGetHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
-	meta := metalib.GetByContext(c)
-
-	// Resolve gateway-stored (including fallback-generated) responses first. When
-	// the feature is disabled this is a no-op and the legacy upstream proxy below
-	// runs exactly as before (closes B14).
-	if handled, gwErr := serveGatewayResponseGet(c, meta, c.Param("response_id")); handled {
-		return gwErr
-	}
-
-	if meta.ChannelType != channeltype.OpenAI {
-		return openai.ErrorWrapper(errors.New("Response API is only supported for OpenAI channels"), "unsupported_channel", http.StatusBadRequest)
-	}
-
-	if err := applyResponseAPIStreamParams(c, meta); err != nil {
-		return openai.ErrorWrapper(err, "invalid_query_parameter", http.StatusBadRequest)
-	}
-	metalib.Set2Context(c, meta)
-
-	adaptor := relay.GetAdaptor(meta.APIType)
-	if adaptor == nil {
-		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
-	}
-	adaptor.Init(meta)
-
-	resp, err := adaptor.DoRequest(c, meta, nil)
-	if err != nil {
-		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return RelayErrorHandlerWithContext(c, resp)
-	}
-
-	_, respErr := adaptor.DoResponse(c, resp, meta)
-	if respErr != nil {
-		return respErr
-	}
-
-	return nil
+	_, err := serveGatewayResponseGet(c, metalib.GetByContext(c), c.Param("response_id"))
+	return err
 }
 
-// RelayResponseAPIDeleteHelper handles DELETE /v1/responses/:response_id requests
+// RelayResponseAPIDeleteHelper tombstones an owner-bound response for c and returns any authorization or storage error.
 func RelayResponseAPIDeleteHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
-	meta := metalib.GetByContext(c)
-	meta.IsStream = false
-	metalib.Set2Context(c, meta)
-
-	// Delete/tombstone gateway-stored responses first (closes B14). No-op when the
-	// feature is disabled.
-	if handled, gwErr := serveGatewayResponseDelete(c, meta, c.Param("response_id")); handled {
-		return gwErr
-	}
-
-	if meta.ChannelType != channeltype.OpenAI {
-		return openai.ErrorWrapper(errors.New("Response API is only supported for OpenAI channels"), "unsupported_channel", http.StatusBadRequest)
-	}
-
-	adaptor := relay.GetAdaptor(meta.APIType)
-	if adaptor == nil {
-		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
-	}
-	adaptor.Init(meta)
-
-	resp, err := adaptor.DoRequest(c, meta, nil)
-	if err != nil {
-		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return RelayErrorHandlerWithContext(c, resp)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
-	}
-	if err = resp.Body.Close(); err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError)
-	}
-
-	for key, values := range resp.Header {
-		for _, value := range values {
-			c.Writer.Header().Add(key, value)
-		}
-	}
-	if resp.Header.Get("Content-Type") == "" {
-		c.Writer.Header().Set("Content-Type", "application/json")
-	}
-	c.Writer.WriteHeader(resp.StatusCode)
-	if _, err = c.Writer.Write(body); err != nil {
-		return openai.ErrorWrapper(err, "write_response_body_failed", http.StatusInternalServerError)
-	}
-
-	return nil
+	_, err := serveGatewayResponseDelete(c, metalib.GetByContext(c), c.Param("response_id"))
+	return err
 }
 
-// RelayResponseAPICancelHelper handles POST /v1/responses/:response_id/cancel requests
+// RelayResponseAPICancelHelper validates ownership for c and returns the unsupported cancellation or lookup error.
 func RelayResponseAPICancelHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
-	meta := metalib.GetByContext(c)
-	meta.IsStream = false
-	metalib.Set2Context(c, meta)
-
-	// Resolve gateway-stored responses first so a gateway-minted or deleted ID is
-	// never forwarded upstream when legacy passthrough is off, and a fallback
-	// response returns the documented invalid-operation error (ST-017: C12, R08,
-	// SEC04). No-op when the feature is disabled.
-	if handled, gwErr := serveGatewayResponseCancel(c, meta, c.Param("response_id")); handled {
-		return gwErr
-	}
-
-	if meta.ChannelType != channeltype.OpenAI {
-		return openai.ErrorWrapper(errors.New("Response API is only supported for OpenAI channels"), "unsupported_channel", http.StatusBadRequest)
-	}
-
-	adaptor := relay.GetAdaptor(meta.APIType)
-	if adaptor == nil {
-		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
-	}
-	adaptor.Init(meta)
-
-	resp, err := adaptor.DoRequest(c, meta, nil)
-	if err != nil {
-		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return RelayErrorHandlerWithContext(c, resp)
-	}
-
-	_, respErr := adaptor.DoResponse(c, resp, meta)
-	if respErr != nil {
-		return respErr
-	}
-
-	return nil
+	_, err := serveGatewayResponseCancel(c, metalib.GetByContext(c), c.Param("response_id"))
+	return err
 }
