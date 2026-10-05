@@ -1,0 +1,131 @@
+package pricing
+
+import (
+	"math"
+	"math/big"
+	"strconv"
+	"time"
+
+	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/billing/ratio"
+)
+
+// ValidateTariffProvenance rejects explicitly unresolved or expired catalog
+// contracts. Parameters: cfg is the effective tariff and at is the request UTC
+// time. Returns: an error before dispatch, or nil for legacy/verified contracts.
+func ValidateTariffProvenance(cfg adaptor.ModelConfig, at time.Time) error {
+	p := cfg.PricingProvenance
+	if p == nil {
+		return nil
+	}
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	if !p.ValidUntil.IsZero() && !at.Before(p.ValidUntil) {
+		return errors.New("media tariff expired; configure an explicit operator tariff")
+	}
+	switch p.State {
+	case adaptor.TariffStateFree, adaptor.TariffStatePromotionalFree, adaptor.TariffStatePaid:
+		if p.Source == "" || p.VerifiedAt == "" || p.Unit == "" {
+			return errors.New("media tariff provenance is incomplete")
+		}
+		if p.State == adaptor.TariffStateFree || p.State == adaptor.TariffStatePromotionalFree {
+			if cfg.Ratio != 0 || (cfg.PerCall != nil && cfg.PerCall.UsdPerThousandCalls != 0) || (cfg.Audio != nil && (cfg.Audio.InputPriceUsd != 0 || cfg.Audio.UsdPerSecond != 0)) {
+				return errors.New("free media provenance conflicts with a paid tariff")
+			}
+		}
+		if p.State == adaptor.TariffStatePaid {
+			switch p.Unit {
+			case adaptor.TariffUnitGeneration:
+				if cfg.PerCall == nil || cfg.PerCall.UsdPerThousandCalls <= 0 {
+					return errors.New("paid generation tariff is missing")
+				}
+			case adaptor.TariffUnitCharacters:
+				if cfg.Audio == nil || cfg.Audio.InputUnit != "characters" || cfg.Audio.InputPriceQuantity <= 0 || cfg.Audio.InputPriceUsd <= 0 {
+					return errors.New("paid character tariff is missing")
+				}
+			default:
+				return errors.New("media tariff unit requires an explicit operator contract")
+			}
+		}
+	case adaptor.TariffStateUnknown, adaptor.TariffStateContract:
+		return errors.New("media tariff requires an explicit operator contract")
+	default:
+		return errors.New("unrecognized media tariff state")
+	}
+	return nil
+}
+
+// ResolveGenerationTariff resolves single-generation prices for models whose
+// provider catalog explicitly declares that billing unit. Parameters: name,
+// overrides, provider and at select the normal pricing layers. Returns: the flat
+// tariff, whether the generation contract applies, and an error if unresolved.
+// An explicit channel per_call (including a present zero) is authoritative. A
+// channel override that sets no per-call, token or media tariff, such as the
+// {ratio:0, completion_ratio:1} snapshot written by the admin "Load Default"
+// action, is metadata only: zero ratios mean "unset" throughout channel
+// model_configs, so it inherits the verified catalog tariff instead of becoming
+// free. A positive token ratio cannot price a generation and fails closed.
+func ResolveGenerationTariff(name string, overrides map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (*adaptor.PerCallPricingConfig, bool, error) {
+	base, known := ResolveModelConfig(name, nil, provider, at)
+	if !known || base.PricingProvenance == nil || base.PricingProvenance.Unit != adaptor.TariffUnitGeneration {
+		return nil, false, nil
+	}
+	cfg, _ := ResolveModelConfig(name, overrides, provider, at)
+	if err := ValidateTariffProvenance(cfg, at); err != nil {
+		return nil, true, err
+	}
+	if cfg.PerCall != nil {
+		return cfg.PerCall, true, nil
+	}
+	if local, ok := overrides[name]; ok && isTariffFreeOverride(local) {
+		if err := ValidateTariffProvenance(base, at); err != nil {
+			return nil, true, err
+		}
+		if base.PerCall != nil {
+			return base.PerCall, true, nil
+		}
+	}
+	return nil, true, errors.New("generation billing requires per_call pricing; token ratios cannot price songs")
+}
+
+// isTariffFreeOverride reports whether a channel override carries no billing
+// tariff of its own. Parameters: local is the persisted channel model config.
+// Returns: true when it sets no ratio, per-call, media, tier or time-window price.
+func isTariffFreeOverride(local model.ModelConfigLocal) bool {
+	return local.Ratio == 0 && local.PerCall == nil && local.Audio == nil && local.Image == nil &&
+		local.Video == nil && local.Embedding == nil && len(local.Tiers) == 0 && len(local.TimeWindows) == 0
+}
+
+// GenerationQuota prices one generation using exact decimal arithmetic.
+// Parameters: tariff is USD per thousand generations and group is the operator
+// multiplier. Returns: a quota rounded up once, or an error for invalid/overflowing
+// prices. A verified free tariff or explicit free group returns zero.
+func GenerationQuota(tariff *adaptor.PerCallPricingConfig, group float64) (int64, error) {
+	if tariff == nil {
+		return 0, errors.New("generation tariff is missing")
+	}
+	cost := big.NewRat(ratio.QuotaPerUsd, 1000)
+	for _, value := range []float64{tariff.UsdPerThousandCalls, group} {
+		if value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+			return 0, errors.New("generation tariff must be finite and nonnegative")
+		}
+		decimal, ok := new(big.Rat).SetString(strconv.FormatFloat(value, 'f', -1, 64))
+		if !ok {
+			return 0, errors.New("invalid generation tariff decimal")
+		}
+		cost.Mul(cost, decimal)
+	}
+	quotient, remainder := new(big.Int), new(big.Int)
+	quotient.QuoRem(cost.Num(), cost.Denom(), remainder)
+	if remainder.Sign() != 0 {
+		quotient.Add(quotient, big.NewInt(1))
+	}
+	if !quotient.IsInt64() {
+		return 0, errors.New("generation tariff exceeds quota range")
+	}
+	return quotient.Int64(), nil
+}

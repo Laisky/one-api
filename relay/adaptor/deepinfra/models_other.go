@@ -244,26 +244,38 @@ func otherModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
 			Description:                 "MiMo V2.5 Pro long-context reasoning model.",
 		},
+		// DeepInfra lists all three MiMo V2.5 speech models at $0.00 per 1M input
+		// characters, "Free for a limited time" (model pages and
+		// https://api.deepinfra.com/models/list: cents_per_input_chars 0,
+		// discount_ends_at null), verified 2026-10-05. No end date is published, so
+		// ValidUntil stays unset rather than inventing one; replace this explicit
+		// promotional zero with the paid character tariff when the promotion ends.
 		"XiaomiMiMo/MiMo-V2.5-tts": {
-			Ratio:            0,
-			CompletionRatio:  1,
-			InputModalities:  []string{"text"},
-			OutputModalities: []string{"audio"},
-			Description:      "MiMo V2.5 text-to-speech model.",
+			PricingProvenance: &adaptor.PricingProvenance{State: adaptor.TariffStatePromotionalFree, Unit: adaptor.TariffUnitCharacters, Source: "https://deepinfra.com/XiaomiMiMo/MiMo-V2.5-tts", VerifiedAt: "2026-10-05"},
+			Audio:             &adaptor.AudioPricingConfig{InputUnit: "characters", InputPriceQuantity: 1e6, InputPriceUsd: 0},
+			Ratio:             0,
+			CompletionRatio:   1,
+			InputModalities:   []string{"text"},
+			OutputModalities:  []string{"audio"},
+			Description:       "MiMo V2.5 text-to-speech model.",
 		},
 		"XiaomiMiMo/MiMo-V2.5-tts-voiceclone": {
-			Ratio:            0,
-			CompletionRatio:  1,
-			InputModalities:  []string{"text"},
-			OutputModalities: []string{"audio"},
-			Description:      "MiMo V2.5 voice-cloning speech model.",
+			PricingProvenance: &adaptor.PricingProvenance{State: adaptor.TariffStatePromotionalFree, Unit: adaptor.TariffUnitCharacters, Source: "https://deepinfra.com/XiaomiMiMo/MiMo-V2.5-tts-voiceclone", VerifiedAt: "2026-10-05"},
+			Audio:             &adaptor.AudioPricingConfig{InputUnit: "characters", InputPriceQuantity: 1e6, InputPriceUsd: 0},
+			Ratio:             0,
+			CompletionRatio:   1,
+			InputModalities:   []string{"text"},
+			OutputModalities:  []string{"audio"},
+			Description:       "MiMo V2.5 voice-cloning speech model.",
 		},
 		"XiaomiMiMo/MiMo-V2.5-tts-voicedesign": {
-			Ratio:            0,
-			CompletionRatio:  1,
-			InputModalities:  []string{"text"},
-			OutputModalities: []string{"audio"},
-			Description:      "MiMo V2.5 voice-design speech model.",
+			PricingProvenance: &adaptor.PricingProvenance{State: adaptor.TariffStatePromotionalFree, Unit: adaptor.TariffUnitCharacters, Source: "https://deepinfra.com/XiaomiMiMo/MiMo-V2.5-tts-voicedesign", VerifiedAt: "2026-10-05"},
+			Audio:             &adaptor.AudioPricingConfig{InputUnit: "characters", InputPriceQuantity: 1e6, InputPriceUsd: 0},
+			Ratio:             0,
+			CompletionRatio:   1,
+			InputModalities:   []string{"text"},
+			OutputModalities:  []string{"audio"},
+			Description:       "MiMo V2.5 voice-design speech model.",
 		},
 		"black-forest-labs/FLUX-1.1-pro": {
 			Ratio:           0,
