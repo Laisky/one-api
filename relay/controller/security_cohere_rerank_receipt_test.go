@@ -25,13 +25,18 @@ import (
 // settlement, not a claim that the existing admission estimate bounds long jobs.
 func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 	for _, tc := range []struct {
-		name, units, reason string
-		group               float64
-		charge, balance     int64
-		unlimited, truncate bool
+		name, units, reason, tokens      string
+		group                            float64
+		charge, balance                  int64
+		unlimited, truncate, decodeError bool
 	}{
 		{name: "one_search_control", units: `1`, group: 1, charge: 1000, balance: 10000},
 		{name: "three_searches", units: `3`, group: 1, charge: 3000, balance: 10000},
+		{name: "decimal_units", units: `3.0`, group: 1, charge: 3000, balance: 10000},
+		{name: "scientific_units", units: `3e0`, group: 1, charge: 3000, balance: 10000},
+		{name: "decimal_tokens", units: `3`, tokens: `{"input_tokens":11.0,"output_tokens":0}`, decodeError: true, group: 1, charge: 3000, balance: 10000},
+		{name: "unusable_tokens", units: `3`, tokens: `{"input_tokens":"unusable"}`, decodeError: true, group: 1, charge: 3000, balance: 10000},
+		{name: "absent_tokens", units: `3`, tokens: `null`, group: 1, charge: 3000, balance: 10000},
 		{name: "group_multiplier", units: `3`, group: 2, charge: 6000, balance: 10000},
 		{name: "unlimited_token", units: `3`, group: 1, charge: 3000, balance: 10000, unlimited: true},
 		{name: "measured_debt", units: `3`, group: 1, charge: 3000, balance: 2000},
@@ -77,7 +82,11 @@ func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 				if tc.units != "" {
 					billed = `,"billed_units":{"search_units":` + tc.units + `}`
 				}
-				body := `{"id":"synthetic-rerank","results":[{"index":0,"relevance_score":0.9}],"meta":{"tokens":{"input_tokens":11,"output_tokens":0}` + billed + `}}`
+				tokens := tc.tokens
+				if tokens == "" {
+					tokens = `{"input_tokens":11,"output_tokens":0}`
+				}
+				body := `{"id":"synthetic-rerank","results":[{"index":0,"relevance_score":0.9}],"meta":{"tokens":` + tokens + billed + `}}`
 				w.Header().Set("Content-Type", "application/json")
 				if tc.truncate {
 					w.Header().Set("Content-Length", "9999")
@@ -90,6 +99,7 @@ func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 			securityImageClient(t, server)
 			id := "cohere-units-" + tc.name
 			c := securityImageContext(ch, "rerank-v3.5", server.URL, id, 1, tc.group)
+			c.Set(ctxkey.Channel, channeltype.Cohere)
 			c.Request = httptest.NewRequest(http.MethodPost, "/v1/rerank", strings.NewReader(
 				`{"model":"rerank-v3.5","query":"synthetic query","documents":["first","second","third"]}`))
 			c.Request.Header.Set("Content-Type", "application/json")
@@ -123,7 +133,7 @@ func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 				tc.name, calls.Load(), user.Quota, token.RemainQuota, cost.Quota, logQuota, metadata)
 			require.EqualValues(t, 1, calls.Load())
 			require.False(t, invalidRequest.Load())
-			if tc.truncate {
+			if tc.truncate || tc.decodeError {
 				require.NotNil(t, apiErr, "real upstream transport failure must not be hidden")
 			} else {
 				require.Nil(t, apiErr)
