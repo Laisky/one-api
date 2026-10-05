@@ -30,6 +30,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/blacklist"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/errkind"
@@ -245,8 +246,9 @@ func TokenAuth() func(c *gin.Context) {
 
 		// Extract and validate the requested model (for AI/ML API endpoints)
 		requestModel, err := getRequestModel(c)
-		if err != nil && shouldCheckModel(c) {
-			// Unparsable body or missing `model` on an endpoint that requires it.
+		if err != nil && (shouldCheckModel(c) || common.IsAmbiguousRequestError(err)) {
+			// Unparsable body or missing `model` on an endpoint that requires it,
+			// or a body no endpoint may read because parsers disagree about it.
 			AbortWithTokenError(c, http.StatusBadRequest, errkind.InvalidRequestErr(err), tokenInfo)
 			return
 		}

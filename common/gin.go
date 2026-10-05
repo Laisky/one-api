@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"mime"
+	"net/http"
 	"reflect"
 	"strings"
 
@@ -11,6 +13,7 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 
 	"github.com/Laisky/one-api/common/ctxkey"
 )
@@ -31,8 +34,83 @@ func GetRequestBody(c *gin.Context) (requestBody []byte, err error) {
 	return requestBody, nil
 }
 
+// ErrAmbiguousRequestBody marks a JSON object body labeled as a urlencoded form.
+// Such a body can be valid both ways, and the provider receives the client's
+// Content-Type, so the gateway refuses to pick one reading for it.
+var ErrAmbiguousRequestBody = errors.New("request body is a JSON object labeled application/x-www-form-urlencoded; send it as application/json")
+
+// requestBodyFormat names the reader UnmarshalBodyReusable uses for a request body.
+type requestBodyFormat int
+
+const (
+	// requestBodyQueryForm keeps gin's default binding, whose form reader also
+	// reads the URL query. It is used for GET requests, which relay paths never
+	// forward with a metered body, and for POST requests without a body.
+	requestBodyQueryForm requestBodyFormat = iota
+	// requestBodyJSON decodes the body as a JSON object.
+	requestBodyJSON
+	// requestBodyMultipart binds multipart/form-data fields from the body only.
+	requestBodyMultipart
+	// requestBodyPostForm binds urlencoded fields from the body only.
+	requestBodyPostForm
+	// requestBodyAmbiguous is a JSON object labeled as a urlencoded form.
+	requestBodyAmbiguous
+)
+
+// classifyRequestBody picks how body is read into a typed request for c.
+// Relay paths forward the raw body upstream, so whenever a body exists the typed
+// request must come from that body alone: a JSON object is decoded as JSON when
+// the Content-Type is JSON in any casing, missing, or names a type no form
+// parser reads, and form payloads never read the URL query. It returns the
+// chosen format.
+func classifyRequestBody(c *gin.Context, body []byte) requestBodyFormat {
+	mediaType := requestMediaType(c)
+	switch {
+	case mediaType == binding.MIMEJSON || strings.HasSuffix(mediaType, "+json"):
+		return requestBodyJSON
+	case mediaType == binding.MIMEMultipartPOSTForm:
+		return requestBodyMultipart
+	case c.Request.Method == http.MethodGet:
+		return requestBodyQueryForm
+	}
+
+	trimmed := bytes.TrimLeft(body, " \t\r\n")
+	switch {
+	case len(trimmed) == 0:
+		return requestBodyQueryForm
+	case trimmed[0] != '{':
+		return requestBodyPostForm
+	case mediaType == binding.MIMEPOSTForm:
+		return requestBodyAmbiguous
+	default:
+		return requestBodyJSON
+	}
+}
+
+// requestMediaType returns the lower-cased media type of c's Content-Type header
+// without parameters, or an empty string when the header is absent.
+func requestMediaType(c *gin.Context) string {
+	raw := c.Request.Header.Get("Content-Type")
+	if mediaType, _, err := mime.ParseMediaType(raw); err == nil {
+		return mediaType
+	}
+
+	mediaType, _, _ := strings.Cut(raw, ";")
+	return strings.ToLower(strings.TrimSpace(mediaType))
+}
+
+// IsJSONRequestBody reports whether UnmarshalBodyReusable reads body as JSON for c.
+// Paths that rewrite the forwarded body must use this same decision so the typed
+// request and the forwarded bytes always come from one reading of the body.
+func IsJSONRequestBody(c *gin.Context, body []byte) bool {
+	return classifyRequestBody(c, body) == requestBodyJSON
+}
+
 // UnmarshalBodyReusable unmarshals the request body into the provided pointer while keeping the body reusable.
-// It supports JSON and form payloads based on the Content-Type header.
+// It picks the reader with classifyRequestBody, so typed fields never come from
+// the URL query while a body exists, and returns any read, decode or validation
+// error, including ErrAmbiguousRequestBody, ErrAmbiguousJSONKey and
+// ErrAmbiguousFormKey.
 func UnmarshalBodyReusable(c *gin.Context, v any) error {
 	requestBody, err := GetRequestBody(c)
 	if err != nil {
@@ -48,8 +126,8 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 		return errors.Errorf("UnmarshalBodyReusable only accept pointer, got %v", reflect.TypeOf(v))
 	}
 
-	contentType := c.Request.Header.Get("Content-Type")
-	if strings.HasPrefix(contentType, "application/json") {
+	switch classifyRequestBody(c, requestBody) {
+	case requestBodyJSON:
 		err = json.Unmarshal(requestBody, v)
 		if err == nil {
 			// encoding/json folds key case and keeps the last duplicate, while
@@ -57,7 +135,19 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 			// where those two readings of one typed parameter can differ.
 			err = validateDecodedJSONRootKeys(requestBody, v)
 		}
-	} else {
+	case requestBodyMultipart:
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
+		if err = c.ShouldBindWith(v, binding.FormMultipart); err == nil {
+			err = validateParsedFormKeys(c.Request, requestBody)
+		}
+	case requestBodyPostForm:
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
+		if err = c.ShouldBindWith(v, binding.FormPost); err == nil {
+			err = validateParsedFormKeys(c.Request, requestBody)
+		}
+	case requestBodyAmbiguous:
+		err = ErrAmbiguousRequestBody
+	default:
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 		err = c.ShouldBind(v)
 	}

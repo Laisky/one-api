@@ -268,8 +268,9 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	bodyBytes := rawBody
-	contentType := strings.ToLower(c.GetHeader("Content-Type"))
-	if meta.OriginModelName != meta.ActualModelName && strings.HasPrefix(contentType, "application/json") {
+	// Map the forwarded body exactly when the typed request was decoded from it as JSON.
+	jsonBody := common.IsJSONRequestBody(c, rawBody)
+	if meta.OriginModelName != meta.ActualModelName && jsonBody {
 		var payload map[string]json.RawMessage
 		if err := json.Unmarshal(rawBody, &payload); err != nil {
 			return openai.ErrorWrapper(errors.Wrap(err, "unmarshal video request for model mapping"), "invalid_video_request", http.StatusBadRequest)
@@ -285,8 +286,8 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 		c.Set(ctxkey.KeyRequestBody, bodyBytes)
 		rawBody = bodyBytes
-	} else if meta.OriginModelName != meta.ActualModelName && !strings.HasPrefix(contentType, "application/json") {
-		lg.Warn("model mapping for non-JSON video request not applied", zap.String("content_type", contentType))
+	} else if meta.OriginModelName != meta.ActualModelName {
+		lg.Warn("model mapping for non-JSON video request not applied", zap.String("content_type", c.GetHeader("Content-Type")))
 	}
 
 	requestBody := bytes.NewBuffer(bodyBytes)

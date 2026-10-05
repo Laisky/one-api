@@ -196,7 +196,7 @@ func TestValidateUnambiguousJSONRootKeys(t *testing.T) {
 }
 
 // TestUnmarshalBodyReusableRejectsAmbiguousKeys checks the shared request
-// decoder enforces the rule for JSON bodies and keeps form binding unchanged.
+// decoder enforces the rule for JSON bodies and for repeated form fields.
 func TestUnmarshalBodyReusableRejectsAmbiguousKeys(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -227,7 +227,8 @@ func TestUnmarshalBodyReusableRejectsAmbiguousKeys(t *testing.T) {
 		Model string `form:"model"`
 	}
 	var form formTarget
-	require.NoError(t, UnmarshalBodyReusable(newContext("application/x-www-form-urlencoded", "model=a&model=b"), &form))
+	err = UnmarshalBodyReusable(newContext("application/x-www-form-urlencoded", "model=a&model=b"), &form)
+	require.ErrorIs(t, err, ErrAmbiguousFormKey)
 }
 
 // referenceRootKeys lists root keys with encoding/json's tokenizer; it is the

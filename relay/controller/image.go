@@ -15,6 +15,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/tracing"
@@ -106,8 +107,15 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	visibleModelName := userVisibleModelName(meta, imageRequest.Model)
 	c.Set(ctxkey.ResponseFormat, imageRequest.ResponseFormat)
 
+	rawBody, err := common.GetRequestBody(c)
+	if err != nil {
+		return openai.ErrorWrapper(err, "get_request_body_failed", http.StatusInternalServerError)
+	}
+
 	var requestBody io.Reader
-	if strings.ToLower(c.GetString(ctxkey.ContentType)) == "application/json" &&
+	// Re-encode a mapped request whenever the typed request was decoded from the
+	// body as JSON, so the provider renders the model that billing priced.
+	if common.IsJSONRequestBody(c, rawBody) &&
 		isModelMapped || meta.ChannelType == channeltype.Azure { // make Azure channel request body
 		requestToMarshal := any(imageRequest)
 		if meta.Mode != relaymode.ImagesEdits &&

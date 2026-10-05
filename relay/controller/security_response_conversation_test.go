@@ -290,36 +290,36 @@ func TestSecurityResponseNativeConversationResolver(t *testing.T) {
 }
 
 // TestSecurityResponseNativeConversationQueryBoundRequest proves a non-JSON
-// Content-Type cannot bind a conversation-free typed request (so resolution sees
-// no selector) while the raw JSON body, which the native path forwards, still
-// names another owner's conversation: the wire builder never forwards one.
+// Content-Type cannot bind a conversation-free typed request from the query
+// while the raw JSON body, which the native path forwards, names another
+// owner's conversation: the typed request is read from that same body, so the
+// foreign selector is resolved, refused, and never dispatched.
 func TestSecurityResponseNativeConversationQueryBoundRequest(t *testing.T) {
 	securityAdmissionSetup(t, 1_000_000)
 	store := enableStateForTest(t)
 	foreign := seedSecurityConversation(t, store, state.OwnerScope{UserID: fallbackUserID + 1, TokenID: fallbackTokenID})
 	upstream := newSecurityBackgroundUpstream(t, `{"id":"resp_query_bound","object":"response","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}`)
-	// Version (not Id) binds a prompt without also binding a conversation Id.
+	// Version (not Id) would bind a prompt without also binding a conversation Id.
 	apiErr := runNativeResponseRelayAs(t, upstream, `{"model":"gpt-4o-mini","input":"hello","conversation":"`+foreign+`"}`, "text/plain", "Model=gpt-4o-mini&Version=1")
-	require.Nil(t, apiErr, "the typed request names no conversation, so the native call proceeds")
-	require.Len(t, upstream.forwarded(), 1)
-	for _, body := range upstream.forwarded() {
-		require.NotContains(t, body, foreign, "a raw-body conversation must never reach the provider")
-		require.NotContains(t, body, `"conversation"`)
-	}
+	require.NotNil(t, apiErr, "the typed request is read from the body, so it names the foreign conversation")
+	require.Equal(t, http.StatusNotFound, apiErr.StatusCode)
+	require.Equal(t, codeConversationNotFound, apiErr.Code)
+	require.Empty(t, upstream.forwarded(), "a raw-body conversation must never reach the provider")
 }
 
 // TestSecurityResponseNativePreviousResponseQueryBoundRequest proves the same
-// typed/raw split cannot smuggle an unowned previous_response_id past
-// resolveNativePreviousResponse: the typed request (bound from the query) names
-// no parent, so the raw body's parent must not reach the provider either.
+// mislabeled body cannot smuggle an unowned previous_response_id past
+// resolveNativePreviousResponse: the typed request is read from the forwarded
+// body, so the foreign parent is resolved, refused, and never dispatched.
+// TestNativeResponseWireBoundaryDropsUnresolvedPreviousResponse keeps the wire
+// builder's own guard covered for a parent the typed request does not carry.
 func TestSecurityResponseNativePreviousResponseQueryBoundRequest(t *testing.T) {
 	securityAdmissionSetup(t, 1_000_000)
 	enableStateForTest(t)
 	upstream := newSecurityBackgroundUpstream(t, `{"id":"resp_query_bound","object":"response","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}`)
 	apiErr := runNativeResponseRelayAs(t, upstream, `{"model":"gpt-4o-mini","input":"hello","previous_response_id":"resp_foreign_provider_handle"}`, "text/plain", "Model=gpt-4o-mini&Version=1")
-	require.Nil(t, apiErr, "the typed request names no parent, so the native call proceeds")
-	require.Len(t, upstream.forwarded(), 1, "the body check below must observe a dispatched request")
-	for _, body := range upstream.forwarded() {
-		require.NotContains(t, body, "resp_foreign_provider_handle", "an unresolved raw-body parent must never reach the provider")
-	}
+	require.NotNil(t, apiErr, "the typed request is read from the body, so it names the foreign parent")
+	require.Equal(t, http.StatusNotFound, apiErr.StatusCode)
+	require.Equal(t, codePreviousResponseMissing, apiErr.Code)
+	require.Empty(t, upstream.forwarded(), "an unresolved raw-body parent must never reach the provider")
 }

@@ -54,6 +54,32 @@ func TestNativeResponseWireBoundaryFiltersUnknownRoots(t *testing.T) {
 	require.JSONEq(t, `"hello"`, string(root["input"]))
 }
 
+// TestNativeResponseWireBoundaryDropsUnresolvedPreviousResponse verifies that a
+// raw previous_response_id the typed request does not carry, and which
+// resolveNativePreviousResponse therefore never owner-resolved, is removed
+// instead of forwarded, while a typed parent still reaches the provider.
+func TestNativeResponseWireBoundaryDropsUnresolvedPreviousResponse(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`{"model":"gpt-4o","input":"hello","previous_response_id":"resp_foreign_provider_handle"}`)
+
+	var unresolved openai.ResponseAPIRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"model":"gpt-4o","input":"hello"}`), &unresolved))
+	wire, _, changed, err := normalizeResponseAPIRawBody(raw, &unresolved, channeltype.OpenAI)
+	require.NoError(t, err)
+	require.True(t, changed)
+	var root map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(wire, &root))
+	require.NotContains(t, root, "previous_response_id")
+
+	var resolved openai.ResponseAPIRequest
+	require.NoError(t, json.Unmarshal(raw, &resolved))
+	wire, _, _, err = normalizeResponseAPIRawBody(raw, &resolved, channeltype.OpenAI)
+	require.NoError(t, err)
+	root = nil
+	require.NoError(t, json.Unmarshal(wire, &root))
+	require.JSONEq(t, `"resp_foreign_provider_handle"`, string(root["previous_response_id"]))
+}
+
 // TestNativeResponseWireBoundaryPreservesLocalToolGrammar verifies that
 // deny-by-default hosted-tool admission does not break locally executed custom tools.
 func TestNativeResponseWireBoundaryPreservesLocalToolGrammar(t *testing.T) {
