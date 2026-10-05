@@ -46,7 +46,7 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 			{name: "zero_total_done", receiptKind: "zero_total", done: true},
 			{name: "zero_input_done", receiptKind: "zero_input", done: true},
 			{name: "zero_output_done", receiptKind: "zero_output", done: true},
-			{name: "all_zero_done", receiptKind: "all_zero", done: true},
+			{name: "all_zero_retains_reserved_quote", receiptKind: "all_zero", done: true},
 			{name: "zero_output_same_frame_done", receiptKind: "zero_output_same_frame", later: true, done: true},
 			{name: "cached_top_level_done", receiptKind: "cached", done: true},
 			{name: "deepseek_cache_hit_done", receiptKind: "deepseek_cached", done: true},
@@ -114,6 +114,12 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				// Distinct configured prices: ordinary input/output 1, cache hit
 				// 1/4 and cache write 2, with writes included in input tokens.
 				expected := input - cached - written + cached/4 + 2*written + output
+				const reservedQuote int64 = 20 + 8 + 1 // buffer + known prompt + max_output_tokens, all prices 1.
+				if tc.receiptKind == "all_zero" {
+					// The existing postConsumeQuota zero-usage safety policy
+					// retains its funded quote while preserving measured zeros.
+					expected, estimated = reservedQuote, true
+				}
 				receipt := ""
 				if rawUsage != "" {
 					receipt = "data: {\"choices\":[],\"usage\":" + rawUsage + "}\n\n"
@@ -137,11 +143,24 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				providerPath := make(chan string, 1)
 				providerWritten := make(chan int, 1)
 				providerFailure := make(chan error, 1)
+				providerHold := make(chan [2]int64, 1)
+				providerHoldError := make(chan error, 1)
 				server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					calls.Add(1)
 					body, err := io.ReadAll(io.LimitReader(r.Body, 16<<10))
 					providerBody <- body
 					providerPath <- r.URL.Path
+
+					// Observe the actual physical hold before sending any
+					// receipt bytes; no assertion derives expected money from final settlement.
+					var heldOwner model.User
+					var heldToken model.Token
+					holdErr := model.DB.First(&heldOwner, fallbackUserID).Error
+					if holdErr == nil {
+						holdErr = model.DB.First(&heldToken, fallbackTokenID).Error
+					}
+					providerHold <- [2]int64{balance - heldOwner.Quota, balance - heldToken.RemainQuota}
+					providerHoldError <- holdErr
 					if err != nil {
 						providerFailure <- err
 						providerWritten <- 0
@@ -172,6 +191,8 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				drainCriticalTasks(t)
 				require.EqualValues(t, 1, calls.Load(), "one genuine local provider dispatch")
 				require.Equal(t, "/v1/chat/completions", <-providerPath)
+				require.NoError(t, <-providerHoldError)
+				require.Equal(t, [2]int64{reservedQuote, reservedQuote}, <-providerHold, "funded owner/token quote before any real provider receipt")
 				require.Equal(t, len(wire), <-providerWritten, "the full configured provider bytes were actually written")
 				require.NoError(t, <-providerFailure)
 				var sent map[string]any
@@ -263,6 +284,9 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				}
 
 				require.Equal(t, estimated, logs[0].Metadata["billing_estimated"] == true)
+				if tc.receiptKind == "all_zero" {
+					require.Equal(t, "missing_or_zero_usage_retained_reservation", logs[0].Metadata["billing_estimate_reason"])
+				}
 				if estimated {
 					require.NotEmpty(t, logs[0].Metadata["billing_estimate_reason"])
 				}
