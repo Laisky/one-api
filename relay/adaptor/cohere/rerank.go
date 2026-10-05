@@ -110,9 +110,12 @@ func RerankHandler(c *gin.Context, resp *http.Response, meta *meta.Meta) (*model
 
 	var cohereResponse RerankResponse
 	if decodeErr := json.Unmarshal(body, &cohereResponse); decodeErr != nil {
-		usage := deriveRerankUsage(meta, nil)
-		usage.BillingEstimateReason = "cohere_rerank_response_incomplete"
-		return openai.ErrorWrapper(errors.WithStack(stderrors.Join(decodeErr, transportErr)), "unmarshal_response_body_failed", http.StatusInternalServerError), usage
+		envelope, receiptErr := decodeRerankBillingEnvelope(body)
+		usage := deriveRerankUsage(meta, envelope)
+		if usage.BilledSearchUnits == nil || *usage.BilledSearchUnits <= 0 {
+			usage.BillingEstimateReason = "cohere_rerank_response_incomplete"
+		}
+		return openai.ErrorWrapper(errors.WithStack(stderrors.Join(decodeErr, transportErr, receiptErr)), "unmarshal_response_body_failed", http.StatusInternalServerError), usage
 	}
 
 	usage := deriveRerankUsage(meta, &cohereResponse)

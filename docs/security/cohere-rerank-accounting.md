@@ -92,3 +92,29 @@ Reviewed on 2026-10-05:
   `max_tokens_per_doc` truncation, default 4096, and `top_n` result selection.
 - [Cohere reranking best practices](https://docs.cohere.com/docs/reranking-best-practices):
   10,000-document limit, model context sizes and half-context query truncation.
+
+## Numeric receipts and independent billing evidence
+
+Search counts are parsed as exact bounded decimal integers: `3`, `3.0` and `3e0`
+represent the same three searches. Fractional, nonpositive, out-of-range and
+non-numeric values remain invalid. Parsing bounds the input and exponent before
+allocating, and never rounds through floating point. Integral token counters also
+accept decimal/scientific notation, matching Cohere's numeric metadata schema.
+
+A complete JSON response can contain a valid search receipt alongside unusable
+optional token/result fields. Those unrelated decoding errors are still returned,
+but the search receipt is independently retained and settled exactly once. A
+truncated or malformed JSON response cannot establish this independent receipt.
+
+The retained HTTP/SQLite regression at test-only commit `192c0d77` reproduced four
+failures: decimal and scientific search counts charged 1,000 rather than 3,000
+fixture units, decimal token counters rejected an otherwise valid response, and
+unusable token metadata erased a separately valid three-search receipt. Fourteen
+other cases passed, including one-search, free-group, absent-token and genuine
+transport-failure controls. The corrected transport fixture sets the same channel
+context as production middleware and drains critical tasks before inspecting all
+four final ledgers. This evidence uses only loopback fixtures, not live invoices.
+
+Primary numeric contracts checked during review:
+[ApiMetaBilledUnits](https://github.com/cohere-ai/cohere-python/blob/main/src/cohere/types/api_meta_billed_units.py)
+and [ApiMetaTokens](https://github.com/cohere-ai/cohere-python/blob/main/src/cohere/types/api_meta_tokens.py).
