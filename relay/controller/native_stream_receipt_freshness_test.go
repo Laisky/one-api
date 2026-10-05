@@ -190,11 +190,7 @@ func TestNativeStreamReceiptFreshnessHTTP(t *testing.T) {
 				require.EqualValues(t, 11, logs[0].PromptTokens)
 				require.EqualValues(t, floor-11, logs[0].CompletionTokens)
 				require.Equal(t, true, logs[0].Metadata["billing_estimated"])
-				reason := "stream_output_after_last_receipt"
-				if strings.HasPrefix(route.name, "shared/") && exit == "eof" {
-					reason = "stream_usage_missing_counters"
-				}
-				require.Equal(t, reason, logs[0].Metadata["billing_estimate_reason"])
+				require.Equal(t, "stream_output_after_last_receipt", logs[0].Metadata["billing_estimate_reason"])
 			})
 		}
 	}
