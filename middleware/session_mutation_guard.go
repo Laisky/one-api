@@ -40,23 +40,27 @@ func allowSessionMutation(c *gin.Context) bool {
 	return false
 }
 
-// trustedSessionMutation reports whether request provenance names the effective
-// API origin or an explicitly configured public API/frontend origin. Missing
-// Origin falls back to same-origin Fetch Metadata or an exact trusted Referer.
-// Untrusted forwarding headers never define an allowed origin.
+// trustedSessionMutation reports whether request provenance proves a
+// same-origin browser request or names an explicitly trusted origin. Fetch
+// Metadata is checked first, as the OWASP CSRF guidance recommends: browsers
+// set Sec-Fetch-Site themselves and pages cannot forge it, and same-origin
+// stays correct when a proxy rewrites Host or terminates TLS. Otherwise the
+// Origin must be the effective API origin or a configured public API/frontend
+// origin. Only when both headers are absent does an exact trusted Referer
+// count. Untrusted forwarding headers never define an allowed origin.
 func trustedSessionMutation(request *http.Request) bool {
 	origins := request.Header.Values("Origin")
 	sites := request.Header.Values("Sec-Fetch-Site")
 	if len(origins) > 1 || len(sites) > 1 {
 		return false
 	}
-	if len(origins) == 1 && origins[0] != "" {
-		origin := sessionOrigin(origins[0], false)
-		return origin != "" && trustedSessionOrigin(request, origin)
-	}
 	site := request.Header.Get("Sec-Fetch-Site")
 	if site == "same-origin" {
 		return true
+	}
+	if len(origins) == 1 && origins[0] != "" {
+		origin := sessionOrigin(origins[0], false)
+		return origin != "" && trustedSessionOrigin(request, origin)
 	}
 	// Same-site is weaker than same-origin; none and cross-site are not proof
 	// of an intentional dashboard action. Configured external frontends must

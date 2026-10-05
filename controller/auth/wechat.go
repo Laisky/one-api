@@ -2,8 +2,8 @@ package auth
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -23,11 +23,17 @@ type wechatLoginResponse struct {
 	Data    string `json:"data"`
 }
 
+// getWeChatIdByCode exchanges a user-supplied WeChat verification code for the
+// WeChat id at the configured WeChat server. The code is query-escaped so it
+// cannot inject extra parameters into the authenticated verifier request. It
+// returns the WeChat id, or an error when the code is empty, rejected or the
+// verifier cannot be reached.
 func getWeChatIdByCode(code string) (string, error) {
 	if code == "" {
 		return "", errors.New("Invalid parameter")
 	}
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/wechat/user?code=%s", config.WeChatServerAddress, code), nil)
+	verifierURL := config.WeChatServerAddress + "/api/wechat/user?" + url.Values{"code": {code}}.Encode()
+	req, err := http.NewRequest(http.MethodGet, verifierURL, nil)
 	if err != nil {
 		return "", errors.Wrap(err, "create wechat request")
 	}
@@ -54,6 +60,9 @@ func getWeChatIdByCode(code string) (string, error) {
 	return res.Data, nil
 }
 
+// WeChatAuth logs in or provisions the account linked to the WeChat code in
+// the query string. It is served on POST behind the session mutation guard so a
+// cross-site navigation cannot replace an existing dashboard session.
 func WeChatAuth(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	if !config.WeChatAuthEnabled {
@@ -103,6 +112,8 @@ func WeChatAuth(c *gin.Context) {
 	controller.SetupLogin(&user, c)
 }
 
+// WeChatBind attaches the WeChat id resolved from the query-string code to the
+// authenticated account. It is served on POST behind dashboard authentication.
 func WeChatBind(c *gin.Context) {
 	if !config.WeChatAuthEnabled {
 		helper.RespondError(c, errors.New("The administrator has not enabled login and registration via WeChat"))

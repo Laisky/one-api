@@ -119,13 +119,13 @@ func TestSetupTotp(t *testing.T) {
 	defer cleanup()
 
 	router := setupTestRouter()
-	router.GET("/totp/setup", func(c *gin.Context) {
+	router.POST("/totp/setup", func(c *gin.Context) {
 		// Mock user ID in context
 		c.Set(ctxkey.Id, 1)
 		SetupTotp(c)
 	})
 
-	req, _ := http.NewRequest("GET", "/totp/setup", nil)
+	req, _ := http.NewRequest(http.MethodPost, "/totp/setup", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -179,7 +179,7 @@ func TestTotpSetupRequest(t *testing.T) {
 	router := setupTestRouter()
 
 	// First, set up TOTP to get a secret in session
-	router.GET("/totp/setup", func(c *gin.Context) {
+	router.POST("/totp/setup", func(c *gin.Context) {
 		c.Set(ctxkey.Id, 1)
 		SetupTotp(c)
 	})
@@ -190,7 +190,7 @@ func TestTotpSetupRequest(t *testing.T) {
 	})
 
 	// Step 1: Call setup to get secret and store it in session
-	setupReq, _ := http.NewRequest("GET", "/totp/setup", nil)
+	setupReq, _ := http.NewRequest(http.MethodPost, "/totp/setup", nil)
 	setupW := httptest.NewRecorder()
 	router.ServeHTTP(setupW, setupReq)
 

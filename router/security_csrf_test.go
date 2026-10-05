@@ -109,7 +109,8 @@ func TestSecurityCSRFProfileMutation(t *testing.T) {
 		{"cross_site", "https://evil.test", "cross-site", false, 403},
 		{"sibling_site", "https://sibling.gateway.test", "same-site", false, 403},
 		{"missing_provenance", "", "", false, 403},
-		{"null_origin", "null", "same-origin", false, 403},
+		{"null_origin", "null", "cross-site", false, 403},
+		{"null_origin_without_metadata", "null", "", false, 403},
 		{"wrong_scheme", "http://gateway.test", "same-site", false, 403},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
