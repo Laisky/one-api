@@ -82,7 +82,7 @@ says so.
 | `RESPONSE_STATE_ENABLED` | `false` (or auto-`true` when Redis + a stable key are both present) | Master switch. Explicit value wins over auto-enable. Startup errors if forced on without prerequisites. |
 | `RESPONSE_STATE_SHADOW` | `false` | Shadow mode: compute hydration/portability and emit mismatch metrics, but do **not** alter routing or upstream payloads (row O02). |
 | `RESPONSE_STATE_ALLOWLIST` | `""` (all identities in scope) | Comma-separated scope filter. Entries are `user:<id>`, `token:<id>`, `channel:<id>`; a bare number is treated as a user ID (row O03). |
-| `RESPONSE_STATE_LEGACY_PASSTHROUGH` | `false` | When on, an **unknown** incoming response ID on GET/DELETE/cancel is forwarded upstream exactly as today (OpenAI-type channels only). When off (default), unknown IDs return the standard not-found error and are never forwarded (rows R08, SEC04). |
+| `RESPONSE_STATE_LEGACY_PASSTHROUGH` | `false` | Deprecated compatibility setting; it never bypasses response ownership. Unknown, foreign, expired, and deleted IDs return not-found regardless of this value. |
 | `RESPONSE_STATE_ENCRYPTION_KEYS` | `""` (falls back to an explicit `SESSION_SECRET`; else feature cannot enable) | Versioned AES-256 keys, **newest first**, as `<version>:<base64-key>` entries separated by commas or whitespace. See §3 for rotation (SEC02, O06). |
 | `RESPONSE_STATE_MAX_CHAIN_DEPTH` | `64` | Max `previous_response_id` chain depth before `state_limit_exceeded`. Non-positive disables. |
 | `RESPONSE_STATE_MAX_ITEM_COUNT` | `2048` | Max hydrated item count per turn / per conversation. Non-positive disables. |
@@ -309,19 +309,28 @@ IDs usable until they expire**. It does not mean deleting data.
 
 ### Valid rollback
 
-1. Set `RESPONSE_STATE_ENABLED=false` (or move the allowlist back to a narrow
-   scope to shrink the blast radius).
-2. Keep Redis and the encryption keys **in place and unchanged**. Reads,
-   deletion, and continuation for IDs already issued continue to work until each
-   record's TTL expires (`RESPONSE_STATE_RESPONSE_TTL_DAYS`, and conversation
-   idle TTL where configured).
-3. Let the TTL window drain naturally before decommissioning the store.
+1. Keep `RESPONSE_STATE_ENABLED=true`, Redis, and the encryption keys available
+   while issued response IDs remain in use. Narrow the allowlist to stop new
+   state writes outside the retained scope.
+2. Let the TTL window drain before decommissioning storage. Disabling state or
+   removing its store makes object operations and native continuations return
+   `state_store_unavailable` (503); it never enables raw provider passthrough.
+3. Missing, foreign, expired, and deleted IDs always return a non-disclosing
+   not-found error. `RESPONSE_STATE_LEGACY_PASSTHROUGH=true` cannot override this
+   requirement. Old raw provider IDs without an owner binding cannot continue.
 
-Because `RESPONSE_STATE_LEGACY_PASSTHROUGH` defaults **off**, an unknown ID is
-never forwarded upstream during or after rollback — it returns the standard
-not-found error. If you need old raw upstream IDs to keep working on OpenAI-type
-channels during a transition, set `RESPONSE_STATE_LEGACY_PASSTHROUGH=true`
-deliberately and only for the transition window.
+Native HTTP continuations with a valid same-provider binding remain incremental;
+cross-provider requests use the existing canonical replay path. GET and DELETE
+operate on the gateway record. Cancellation of gateway records remains unsupported.
+WebSocket continuation accepts a persisted same-owner/channel/provider binding or
+an ID observed completing on that authenticated connection. Connection-local IDs
+are bounded to 1,024 per socket; persistent bindings remain usable after reconnect.
+
+Background creation is temporarily unavailable: HTTP requests with
+`background=true` fail before quota reservation or dispatch, and WebSocket frames
+requesting background execution are rejected before provider execution. This is
+containment for issue #483, not a durable asynchronous settlement implementation.
+Synchronous requests and foreground streaming remain supported.
 
 ### NOT a valid rollback
 
@@ -331,8 +340,8 @@ deliberately and only for the transition window.
   IDs are in flight. The two ID schemes are not interchangeable.
 - **Rotating away the only encryption key** — that orphans all ciphertext.
 
-Row O04: disabling new writes must leave already-issued gateway IDs readable
-until their retention window expires.
+Keep authorization storage enabled throughout the retention window to preserve
+access to already-issued IDs. Disabling it intentionally fails closed.
 
 ---
 
