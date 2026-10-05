@@ -126,6 +126,10 @@ const (
 	// ToolInvocationSummary captures per-request built-in tool usage, including counts and billed quota.
 	// Populated by tooling.ApplyBuiltinToolCharges and consumed by billing metadata generation.
 	ToolInvocationSummary = "tool_invocation_summary"
+	// ClaudeToolAllowanceQuota stores the conservative paid server-tool allowance (int64 quota)
+	// admitted for the current Claude Messages attempt. Set by Claude tool admission and added
+	// to the attempt's reservation so a missing upstream tool receipt is never read as free.
+	ClaudeToolAllowanceQuota = "claude_tool_allowance_quota"
 
 	// Group is the user group resolved for the current user (affects routing & ratios).
 	// Set in: middleware/distributor (via model.CacheGetUserGroup).
@@ -374,6 +378,11 @@ const (
 	// Set in: preConsumeQuota, preConsumeResponseAPIQuota, preConsumeClaudeMessagesQuota.
 	// Read in: billing audit defer in relay handlers.
 	PreConsumedQuotaAmount = "pre_consumed_quota_amount"
+
+	// RealtimeSpendGate stores the prepaid realtime.SpendGate of a native Live
+	// session. Set in: RelayRealtime after the admission reservation.
+	// Read in: the Gemini Live transport before forwarding any billable frame.
+	RealtimeSpendGate = "realtime_spend_gate"
 
 	// PreConsumedQuotaRefundClaimed means an explicit media rollback already owns
 	// this attempt's refund, including while its detached write is pending. A

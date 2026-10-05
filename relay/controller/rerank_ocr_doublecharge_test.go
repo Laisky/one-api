@@ -175,8 +175,9 @@ func TestRelayRerankHelper_SuccessDoesNotDoubleCharge(t *testing.T) {
 
 // TestRelayOCRHelper_SuccessDoesNotDoubleCharge drives RelayOCRHelper for a
 // NON-TRUSTED token against an httptest upstream returning a valid Zhipu OCR
-// success body. On success the user must be charged for exactly ONE settled
-// request (totalQuota), not 2x.
+// success body. On success the user must be charged exactly ONE settlement of
+// the measured receipt (80 + 150 tokens at ratio 1 = 230), not the reservation
+// plus the settlement.
 func TestRelayOCRHelper_SuccessDoesNotDoubleCharge(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ensureResponseFallbackFixtures(t)
@@ -214,7 +215,7 @@ func TestRelayOCRHelper_SuccessDoesNotDoubleCharge(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 
 	const modelOCR = "glm-ocr"
-	requestPayload := `{"model":"` + modelOCR + `","file":"https://example.com/test.pdf"}`
+	requestPayload := `{"model":"` + modelOCR + `","file":"https://example.com/test.pdf","start_page_id":1,"end_page_id":1}`
 	req := httptest.NewRequest(http.MethodPost, "/api/paas/v4/layout_parsing", strings.NewReader(requestPayload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer zhipu-key")
@@ -224,7 +225,11 @@ func TestRelayOCRHelper_SuccessDoesNotDoubleCharge(t *testing.T) {
 
 	c.Set(ctxkey.Channel, channeltype.Zhipu)
 	c.Set(ctxkey.ChannelId, fallbackChannelID)
-	c.Set(ctxkey.ChannelModel, newDoubleChargeChannel(t, fallbackChannelID, channeltype.Zhipu, modelOCR))
+	ocrChannel := &model.Channel{Id: fallbackChannelID, Type: channeltype.Zhipu}
+	require.NoError(t, ocrChannel.SetModelPriceConfigs(map[string]model.ModelConfigLocal{
+		modelOCR: {Ratio: 1, CompletionRatio: 1},
+	}))
+	c.Set(ctxkey.ChannelModel, ocrChannel)
 	c.Set(ctxkey.TokenId, fallbackTokenID)
 	c.Set(ctxkey.TokenName, "fallback-token")
 	c.Set(ctxkey.Id, fallbackUserID)
@@ -255,12 +260,13 @@ func TestRelayOCRHelper_SuccessDoesNotDoubleCharge(t *testing.T) {
 	endQuota := reloadUserQuota(t)
 	decremented := startQuota - endQuota
 
-	require.EqualValues(t, doubleChargeTotalQuota, decremented,
-		"successful OCR must charge for exactly ONE settled request; "+
-			"totalQuota=%d actual_decrement=%d (a ~2x decrement indicates the "+
-			"pre-consumed quota stayed deducted AND postConsume recharged full totalQuota)",
-		doubleChargeTotalQuota, decremented)
+	const measuredOCRQuota = int64(80 + 150)
+	require.EqualValues(t, measuredOCRQuota, decremented,
+		"successful OCR must charge exactly ONE settlement of the measured receipt; "+
+			"want=%d actual_decrement=%d (a larger decrement indicates the reservation "+
+			"stayed deducted AND postConsume recharged the full amount)",
+		measuredOCRQuota, decremented)
 
-	require.EqualValues(t, doubleChargeTotalQuota, requestCostQuota(t, "req_ocr_doublecharge"),
-		"settled request cost must equal one totalQuota")
+	require.EqualValues(t, measuredOCRQuota, requestCostQuota(t, "req_ocr_doublecharge"),
+		"settled request cost must equal one measured settlement")
 }

@@ -48,7 +48,17 @@ func (a *Adaptor) DoResponse(c *gin.Context,
 			if isClaudeConversion, exists := c.Get(ctxkey.ClaudeMessagesConversion); exists && isClaudeConversion.(bool) {
 				handledClaudeStream = true
 				var convErr *model.ErrorWithStatusCode
+				// The Claude SSE rendering drops web_search_call items; count them
+				// on the wire so the shared tooling billing sees the paid searches.
+				var counter *webSearchStreamCounter
+				if resp != nil && resp.Body != nil {
+					counter = newWebSearchStreamCounter(resp.Body)
+					resp.Body = counter
+				}
 				usage, convErr = openai_compatible.ConvertOpenAIStreamToClaudeSSE(c, resp, meta.PromptTokens, meta.ActualModelName)
+				if counter != nil {
+					counter.record(c)
+				}
 				if convErr != nil {
 					return nil, convErr
 				}
@@ -255,6 +265,17 @@ func (a *Adaptor) ConvertResponseAPIToClaudeResponse(c *gin.Context, resp *http.
 	// Surface the upstream Responses id for a stateless-client checkpoint (ST-022).
 	if c != nil && responseAPIResp.Id != "" {
 		c.Set(ctxkey.ResponseAPIUpstreamID, responseAPIResp.Id)
+	}
+	// The Claude rendering drops web_search_call items, so record the paid
+	// searches for the shared tooling billing exactly as ResponseAPIHandler does.
+	if c != nil {
+		calls := countWebSearchSearchActions(responseAPIResp.Output)
+		if derived, usedFallback := deriveWebSearchInvocationCount(calls, responseAPIResp.Usage); usedFallback {
+			calls = derived
+		}
+		if calls > 0 {
+			c.Set(ctxkey.WebSearchCallCount, calls)
+		}
 	}
 	claudeResp := model.ClaudeResponse{
 		ID:         responseAPIResp.Id,

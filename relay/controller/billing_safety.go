@@ -273,6 +273,11 @@ func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 	c.Set(ctxkey.PreConsumedQuotaRefundClaimed, false)
 	c.Set(ctxkey.ProvisionalLogId, 0)
 	c.Set(ctxkey.BillingReconciled, false)
+	// Built-in tool counters describe the abandoned attempt's upstream receipts;
+	// the retry must bill only the invocations its own provider reports.
+	c.Set(ctxkey.ToolInvocationCounts, map[string]int{})
+	c.Set(ctxkey.WebSearchCallCount, 0)
+	c.Set(ctxkey.ToolInvocationSummary, (*model.ToolUsageSummary)(nil))
 }
 
 // refundGoroutineReleaseForTest, when non-nil, blocks the asynchronous refund

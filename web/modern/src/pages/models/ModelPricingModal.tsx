@@ -17,6 +17,9 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ModelApiExamples } from './ModelApiExamples';
 import { AudioTariffDetails, type AudioInputTariff } from './AudioTariffDetails';
+import { PerPagePricingSection, PerPageWindowCell, type PerPagePricingData } from './PerPagePricing';
+import { formatUsd, formatUsdRaw, type TrFn } from './pricing-format';
+import { PriceCell, PriceGrid, PricingSection } from './PricingPrimitives';
 
 // ---- Types matching the backend ModelDisplayInfo ----
 
@@ -46,6 +49,7 @@ export interface ModelDisplayData {
   image_pricing?: ImagePricingData;
   embedding_pricing?: EmbeddingPricingData;
   per_call_pricing?: PerCallPricingData;
+  per_page_pricing?: PerPagePricingData;
   time_windows?: TimeWindowData[];
   active_time_window?: string;
 }
@@ -125,6 +129,7 @@ interface TimeWindowOverlayData {
   image_pricing?: ImagePricingData;
   embedding_pricing?: EmbeddingPricingData;
   per_call_pricing?: PerCallPricingData;
+  per_page_pricing?: PerPagePricingData;
 }
 
 // ---- Active time window tracking ----
@@ -393,8 +398,6 @@ function MobileBottomSheet({
 
 // ---- Internal components ----
 
-type TrFn = (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
-
 function PricingContent({
   modelName: _modelName,
   data,
@@ -531,8 +534,8 @@ function PricingContent({
         </PricingSection>
       )}
 
-      {/* Base text token pricing — hidden for flat per-call billing models */}
-      {!data.per_call_pricing && (
+      {/* Base text token pricing — hidden for flat per-call and per-page billing models */}
+      {!data.per_call_pricing && !data.per_page_pricing && (
         <PricingSection title={tr('text_tokens', 'Text Token Pricing')} icon="text">
           <PriceGrid>
             <PriceCell label={tr('input', 'Input')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.input_price} tr={tr} />
@@ -566,6 +569,9 @@ function PricingContent({
           </PriceGrid>
         </PricingSection>
       ) : null}
+
+      {/* Per-page pricing — flat per-processed-page billing (e.g. OCR) */}
+      <PerPagePricingSection pricing={data.per_page_pricing} tr={tr} />
 
       {/* Cache pricing */}
       {hasCache && (
@@ -701,6 +707,7 @@ function PricingContent({
                             raw
                           />
                         )}
+                      <PerPageWindowCell pricing={window.overlay.per_page_pricing} tr={tr} />
                       {window.overlay.image_pricing?.price_per_image_usd !== undefined &&
                         window.overlay.image_pricing.price_per_image_usd > 0 && (
                           <PriceCell
@@ -1063,46 +1070,6 @@ function PricingContent({
 
 // ---- Reusable sub-components ----
 
-const sectionIcons: Record<string, string> = {
-  profile: '\u{1F9ED}',
-  text: '\u{1F4DD}',
-  cache: '\u{1F4BE}',
-  tiers: '\u{1F4CA}',
-  time: '\u{23F1}',
-  image: '\u{1F5BC}',
-  video: '\u{1F3AC}',
-  audio: '\u{1F3B5}',
-  embedding: '\u{1F9E9}',
-};
-
-function PricingSection({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-base" role="img">
-          {sectionIcons[icon] || ''}
-        </span>
-        <h3 className="text-sm font-semibold tracking-wide text-foreground">{title}</h3>
-      </div>
-      <div className="rounded-xl border bg-card p-4">{children}</div>
-    </div>
-  );
-}
-
-function PriceGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{children}</div>;
-}
-
-function PriceCell({ label, sublabel, value, tr, raw }: { label: string; sublabel?: string; value: number; tr: TrFn; raw?: boolean }) {
-  return (
-    <div className="rounded-lg border bg-muted/30 p-3">
-      <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</div>
-      {sublabel && <div className="text-[10px] text-muted-foreground/70">{sublabel}</div>}
-      <div className="mt-1 text-lg font-semibold tabular-nums">{raw ? formatUsdRaw(value) : formatUsdForTokens(value, tr)}</div>
-    </div>
-  );
-}
-
 function TagRow({ label, values }: { label: string; values: string[] }) {
   const normalized = values.map((value) => value.trim()).filter((value, idx, arr) => value.length > 0 && arr.indexOf(value) === idx);
   if (normalized.length === 0) {
@@ -1226,25 +1193,6 @@ function SimpleMultiplierTable({
 /** Round any number to at most 4 decimal places, stripping trailing zeros. */
 function fmtNum(n: number): string {
   return parseFloat(n.toFixed(4)).toString();
-}
-
-function formatUsd(price: number): string {
-  if (price === 0) return '$0';
-  if (price < 0.001) return `$${parseFloat(price.toFixed(6))}`;
-  if (price < 1) return `$${parseFloat(price.toFixed(4))}`;
-  return `$${price.toFixed(2)}`;
-}
-
-function formatUsdRaw(price: number): string {
-  if (price === 0) return '$0';
-  if (price < 0.0001) return `$${parseFloat(price.toFixed(6))}`;
-  if (price < 0.01) return `$${parseFloat(price.toFixed(4))}`;
-  return `$${price.toFixed(2)}`;
-}
-
-function formatUsdForTokens(price: number, tr: TrFn): string {
-  if (price === 0) return tr('free', 'Free');
-  return formatUsd(price);
 }
 
 function formatTokenCount(count: number): string {

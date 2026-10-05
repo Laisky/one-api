@@ -20,15 +20,17 @@ type livePumpState struct {
 	inputs     atomic.Int64
 	receipted  atomic.Int64
 	tools      liveToolState
+	spend      *liveSpend
 }
 
 // runLivePump joins both directional readers before exposing billing state.
-// Parameters: client/upstream are acknowledged sockets and options bounds work.
-// Returns: sealed usage. A lost downstream drains late upstream receipts for a
-// bounded interval, without replaying input or keeping an unbounded paid session.
-func runLivePump(client, upstream *websocket.Conn, options livePumpOptions) *model.Usage {
+// Parameters: client/upstream are acknowledged sockets, options bounds work and
+// spend funds every forwarded operation. Returns: sealed usage. A lost
+// downstream drains late upstream receipts for a bounded interval, without
+// replaying input or keeping an unbounded or unfunded paid session.
+func runLivePump(client, upstream *websocket.Conn, options livePumpOptions, spend *liveSpend) *model.Usage {
 	collector := realtime.NewGeminiLedger()
-	state := &livePumpState{}
+	state := &livePumpState{spend: spend}
 	clientDone, serverDone := make(chan struct{}), make(chan struct{})
 	go func() { defer close(clientDone); copyLiveClient(client, upstream, state, options) }()
 	go func() { defer close(serverDone); copyLiveServer(upstream, client, state, collector, options) }()
@@ -83,6 +85,17 @@ func copyLiveClient(client, upstream *websocket.Conn, state *livePumpState, opti
 		if toolResponse {
 			work = false
 		}
+		// Fund every operation before it can reach the provider: inputs are
+		// bounded from the wire, and controls or function results may start a
+		// turn that re-bills the context. Unfunded work is never forwarded.
+		input, err := estimateLiveClientFrame(data)
+		if err == nil {
+			err = state.spend.admit(input)
+		}
+		if err != nil {
+			liveClose(client, websocket.ClosePolicyViolation, state.spend.refuse(err))
+			return
+		}
 		// Count before the write: a failed write can still have reached Google.
 		// This is a pending-evidence marker, not a client-supplied usage amount.
 		if work {
@@ -127,7 +140,8 @@ func copyLiveServer(upstream, client *websocket.Conn, state *livePumpState, coll
 		var event struct {
 			Usage   json.RawMessage `json:"usageMetadata"`
 			Content *struct {
-				Model json.RawMessage `json:"modelTurn"`
+				Model  json.RawMessage `json:"modelTurn"`
+				Output json.RawMessage `json:"outputTranscription"`
 			} `json:"serverContent"`
 			Tool json.RawMessage `json:"toolCall"`
 		}
@@ -148,6 +162,19 @@ func copyLiveServer(upstream, client *websocket.Conn, state *livePumpState, coll
 		if len(collector.Ledger.Records) > before {
 			state.receipted.Store(turnInputs)
 			turnStarted = false
+		}
+		// Stop paid generation that the reservation no longer covers. The frame
+		// is withheld; already committed receipts stay authoritative.
+		modelWork := event.Usage != nil || event.Tool != nil ||
+			(event.Content != nil && (event.Content.Model != nil || event.Content.Output != nil))
+		if err := state.spend.observe(data, modelWork, collector.Ledger.Records[before:]); err != nil {
+			if meterErr != nil {
+				_ = collector.MarkIncomplete("Gemini metering stopped the session")
+			}
+			if !state.clientGone.Load() {
+				liveClose(client, websocket.ClosePolicyViolation, liveSpendCloseReason(err))
+			}
+			return
 		}
 		if !state.clientGone.Load() {
 			if err := liveWrite(client, kind, data, options.writeTimeout); err != nil {

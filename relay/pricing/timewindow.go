@@ -182,6 +182,7 @@ func mergePricingRatioOnly(base adaptor.ModelConfig, overlay adaptor.ModelConfig
 	merged.Audio = nil
 	merged.Image = nil
 	merged.PerCall = nil
+	merged.PerPage = nil
 	merged.TimeWindows = nil
 	return merged
 }
@@ -197,6 +198,7 @@ func mergePricing(base adaptor.ModelConfig, overlay adaptor.ModelConfig) adaptor
 	merged.Image = mergeImagePricing(merged.Image, overlay.Image)
 	merged.Embedding = mergeEmbeddingPricing(merged.Embedding, overlay.Embedding)
 	merged.PerCall = mergePerCallPricing(merged.PerCall, overlay.PerCall)
+	merged.PerPage = mergePerPagePricing(merged.PerPage, overlay.PerPage)
 	merged.TimeWindows = nil
 	return merged
 }
@@ -374,6 +376,16 @@ func mergePerCallPricing(base *adaptor.PerCallPricingConfig, overlay *adaptor.Pe
 	merged := base.Clone()
 	merged.UsdPerThousandCalls = overlay.UsdPerThousandCalls
 	return merged
+}
+
+// mergePerPagePricing returns base with overlay's per-page price applied.
+// Parameters: base is the effective tariff and overlay is a sparse window override.
+// Returns: a cloned tariff, or base unchanged when overlay is nil.
+func mergePerPagePricing(base *adaptor.PerPagePricingConfig, overlay *adaptor.PerPagePricingConfig) *adaptor.PerPagePricingConfig {
+	if overlay == nil {
+		return base
+	}
+	return overlay.Clone()
 }
 
 func mergeFloatMap(base map[string]float64, overlay map[string]float64) map[string]float64 {

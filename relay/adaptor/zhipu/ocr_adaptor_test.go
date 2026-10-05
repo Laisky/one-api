@@ -212,8 +212,11 @@ func TestAdaptorDoOCRResponse(t *testing.T) {
 		}
 
 		m := &meta.Meta{ActualModelName: "glm-ocr"}
-		usage, errResp := a.DoOCRResponse(c, resp, m)
+		receipt, errResp := a.DoOCRResponse(c, resp, m)
 		require.Nil(t, errResp)
+		require.NotNil(t, receipt)
+		require.Empty(t, receipt.UsageProblem)
+		usage := receipt.Usage
 		require.NotNil(t, usage)
 		assert.Equal(t, 80, usage.PromptTokens)
 		assert.Equal(t, 150, usage.CompletionTokens)
@@ -240,9 +243,11 @@ func TestAdaptorDoOCRResponse(t *testing.T) {
 		}
 
 		m := &meta.Meta{ActualModelName: "glm-ocr"}
-		usage, errResp := a.DoOCRResponse(c, resp, m)
+		receipt, errResp := a.DoOCRResponse(c, resp, m)
 		require.NotNil(t, errResp)
-		assert.Nil(t, usage)
+		require.NotNil(t, receipt, "a receipt is always returned so accepted work settles once")
+		require.Nil(t, receipt.Usage)
+		require.Equal(t, model.OCRReceiptUnreadable, receipt.UsageProblem)
 		assert.Equal(t, http.StatusInternalServerError, errResp.StatusCode)
 	})
 }

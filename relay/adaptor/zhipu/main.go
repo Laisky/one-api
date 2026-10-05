@@ -339,33 +339,6 @@ func ConvertOCRRequest(request model.GeneralOpenAIRequest) (*OCRRequest, error) 
 	return ocrReq, nil
 }
 
-// OCRHandler passes through the native Zhipu layout_parsing response,
-// extracting usage for billing purposes.
-func OCRHandler(c *gin.Context, resp *http.Response, _ string) (*model.ErrorWithStatusCode, *model.Usage) {
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
-	}
-	err = resp.Body.Close()
-	if err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
-	}
-
-	// Decode only to extract usage for billing; the full body is forwarded as-is.
-	var ocrResponse OCRResponse
-	if err = json.Unmarshal(responseBody, &ocrResponse); err != nil {
-		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
-	}
-
-	c.Writer.Header().Set("Content-Type", "application/json")
-	c.Writer.WriteHeader(resp.StatusCode)
-	_, err = c.Writer.Write(responseBody)
-	if err != nil {
-		return openai.ErrorWrapper(err, "write_response_body_failed", http.StatusInternalServerError), nil
-	}
-	return nil, &ocrResponse.Usage
-}
-
 func embeddingResponseZhipu2OpenAI(response *EmbeddingResponse) *openai.EmbeddingResponse {
 	openAIEmbeddingResponse := openai.EmbeddingResponse{
 		Object: "list",

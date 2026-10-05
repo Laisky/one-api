@@ -305,6 +305,18 @@ func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return VertexAIToolingDefaults
 }
 
+// DefaultToolingConfigForModel returns Vertex AI tooling defaults for one model.
+// Claude partner models also price Anthropic's canonical web_search capability so
+// native Messages requests are admitted and billed at Vertex's published rate;
+// other models keep the channel-wide defaults. Parameters: modelName is the
+// upstream model. Returns: the effective provider tooling configuration.
+func (a *Adaptor) DefaultToolingConfigForModel(modelName string) adaptor.ChannelToolConfig {
+	if getModelEndpointType(modelName) != EndpointTypeClaude {
+		return VertexAIToolingDefaults
+	}
+	return VertexAIClaudeToolingDefaults
+}
+
 // ModelEndpointType represents different endpoint types for VertexAI models
 type ModelEndpointType int
 

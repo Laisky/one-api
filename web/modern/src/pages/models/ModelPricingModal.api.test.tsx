@@ -219,3 +219,42 @@ describe('PR421 explicit free per-call tariffs', () => {
     expect(screen.getByText('$0')).toBeInTheDocument();
   });
 });
+
+// Page-priced document models (for example OCR) must render page tariffs, never token prices.
+describe('per-page tariffs', () => {
+  beforeEach(() => { mocks.mobile = false; });
+  afterEach(cleanup);
+  it.each([false, true])('renders base and scheduled per-page rates (mobile=%s)', (mobile) => {
+    mocks.mobile = mobile;
+    render(modal('custom-ocr', {
+      input_price: 0, output_price: 0,
+      per_page_pricing: { usd_per_thousand_pages: 5, usd_per_page: 0.005 },
+      time_windows: [{ name: 'off-peak', timezone: 'UTC', ranges: [{ start: '00:00', end: '08:00' }],
+        overlay: { per_page_pricing: { usd_per_thousand_pages: 2, usd_per_page: 0.002 } } }],
+    }));
+    expect(screen.getAllByText('Per-Page Pricing')).toHaveLength(2);
+    expect(screen.getByText('Base Rate')).toBeInTheDocument();
+    expect(screen.getByText('Per Page')).toBeInTheDocument();
+    expect(screen.getAllByText('per 1K pages')).toHaveLength(2);
+    expect(screen.getByText('$5.00')).toBeInTheDocument();
+    expect(screen.getByText('$0.005')).toBeInTheDocument();
+    expect(screen.getByText('$2.00')).toBeInTheDocument();
+    expect(screen.getByText('off-peak')).toBeInTheDocument();
+    expect(screen.queryByText('Text Token Pricing')).not.toBeInTheDocument();
+    expect(screen.queryByText('Per-Call Pricing')).not.toBeInTheDocument();
+  });
+  it('keeps an explicit free per-page tariff visible', () => {
+    render(modal('custom-ocr-free', { input_price: 0, output_price: 0, per_page_pricing: { usd_per_thousand_pages: 0, usd_per_page: 0 } }));
+    expect(screen.getByText('Per-Page Pricing')).toBeInTheDocument();
+    expect(screen.getAllByText('$0')).toHaveLength(2);
+    expect(screen.queryByText('Text Token Pricing')).not.toBeInTheDocument();
+  });
+  it.each(['en', 'es', 'fr', 'ja', 'zh'])('provides per-page model labels for %s', async (language) => {
+    const { default: locale } = await import(`@/i18n/locales/${language}/models.json`);
+    const detail = locale.models.detail as Record<string, string>;
+    for (const key of ['per_1k_pages', 'per_page', 'per_page_label', 'per_page_pricing']) {
+      expect(detail[key]).toBeTruthy();
+    }
+    expect((locale.models.labels as Record<string, string>).per_page).toBeTruthy();
+  });
+});

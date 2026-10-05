@@ -71,6 +71,11 @@ func LiveHandlerWithTransport(c *gin.Context, m *meta.Meta, transport LiveTransp
 	if !websocket.IsWebSocketUpgrade(c.Request) {
 		return openai.ErrorWrapper(errors.Wrap(ErrLiveProtocol, "WebSocket upgrade required"), "gemini_live_upgrade", http.StatusBadRequest), nil
 	}
+	// Fail closed: without a prepaid budget no billable frame may be forwarded.
+	gate := liveSpendGateFrom(c)
+	if gate == nil {
+		return openai.ErrorWrapper(errors.Wrap(ErrLiveProtocol, "missing Live session budget"), "gemini_live_configuration", http.StatusInternalServerError), nil
+	}
 	// Never copy caller headers, authentication subprotocols, or query values.
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second, Proxy: http.ProxyFromEnvironment}
 	upstream, response, err := dialer.DialContext(c.Request.Context(), transport.Endpoint, transport.Headers.Clone())
@@ -115,6 +120,12 @@ func LiveHandlerWithTransport(c *gin.Context, m *meta.Meta, transport LiveTransp
 		liveClose(client, websocket.ClosePolicyViolation, "gemini_live_invalid_setup")
 		return nil, liveLedgerUsage(realtime.NewLedger())
 	}
+	spend, err := newLiveSpend(gate, setup, lg)
+	if err != nil {
+		lg.Warn("Gemini Live setup cannot be priced before forwarding", zap.Error(err))
+		liveClose(client, websocket.ClosePolicyViolation, liveSpendCloseReason(err))
+		return nil, liveLedgerUsage(realtime.NewLedger())
+	}
 	if err := liveWrite(upstream, websocket.TextMessage, setup, 10*time.Second); err != nil {
 		liveClose(client, websocket.CloseTryAgainLater, "gemini_live_setup_failed")
 		return nil, liveLedgerUsage(realtime.NewLedger())
@@ -135,9 +146,11 @@ func LiveHandlerWithTransport(c *gin.Context, m *meta.Meta, transport LiveTransp
 	}
 	_ = client.SetReadDeadline(time.Time{})
 	_ = upstream.SetReadDeadline(time.Time{})
-	usage := runLivePump(client, upstream, defaultLivePumpOptions())
+	usage := runLivePump(client, upstream, defaultLivePumpOptions(), spend)
+	spend.finish()
 	lg.Debug("Gemini Live session finished", zap.Int("receipts", len(usage.Realtime.Records)),
-		zap.Bool("usage_gap", usage.Realtime.HasUsageGap()), zap.Int("billing_issues", len(usage.Realtime.Issues)))
+		zap.Bool("usage_gap", usage.Realtime.HasUsageGap()), zap.Int("billing_issues", len(usage.Realtime.Issues)),
+		zap.Bool("budget_exhausted", spend.isExhausted()))
 	return nil, usage
 }
 

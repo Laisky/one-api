@@ -388,8 +388,9 @@ func lookupModelConfig(configs map[string]adaptor.ModelConfig, modelName string)
 // Returns: true when nothing in the metadata marks the model as a non-chat surface.
 func modelConfigUsesChatFormat(cfg adaptor.ModelConfig) bool {
 	// A billing-shape pointer is the reliable non-chat signal: it marks a model
-	// priced per embedding, per call (rerank), per image or per second of video.
-	if cfg.Embedding != nil || cfg.PerCall != nil || cfg.Image != nil || cfg.Video != nil {
+	// priced per embedding, per call (rerank), per processed page (document OCR),
+	// per image or per second of video.
+	if cfg.Embedding != nil || cfg.PerCall != nil || cfg.PerPage != nil || cfg.Image != nil || cfg.Video != nil {
 		return false
 	}
 	if !modalitiesContainTextOrDefault(cfg.InputModalities) || !modalitiesContainTextOrDefault(cfg.OutputModalities) {

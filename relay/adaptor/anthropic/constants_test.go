@@ -18,7 +18,14 @@ func TestClaudeWebSearchPricingApplied(t *testing.T) {
 	for name := range AnthropicToolingDefaults.Pricing {
 		keys = append(keys, name)
 	}
-	require.ElementsMatch(t, []string{"web_search"}, keys, "expected pricing map to enumerate anthropic built-in tools")
+	require.ElementsMatch(t, []string{"web_search", "web_fetch", "tool_search"}, keys, "expected pricing map to enumerate anthropic built-in tools")
+	// Web fetch and Tool Search carry no fee beyond tokens and are priced explicitly at zero.
+	require.Zero(t, AnthropicToolingDefaults.Pricing["web_fetch"].UsdPerCall)
+	require.Zero(t, AnthropicToolingDefaults.Pricing["tool_search"].UsdPerCall)
+	// Code execution bills per container-hour and the MCP connector reaches
+	// caller-chosen servers; both stay unpriced so they fail closed by default.
+	require.NotContains(t, AnthropicToolingDefaults.Pricing, "code_execution")
+	require.NotContains(t, AnthropicToolingDefaults.Pricing, "mcp_connector")
 }
 
 func TestClaudeOpus47PricingMatchesPublishedRatios(t *testing.T) {

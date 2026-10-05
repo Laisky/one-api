@@ -128,6 +128,11 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// verbatim; SDK/rebuilding paths use this normalized struct.
 	mergeMidArraySystemMessages(claudeRequest)
 
+	// Apply the shared built-in tool policy before any reservation or dispatch.
+	if admissionErr := admitClaudeMessagesTools(c, meta); admissionErr != nil {
+		return admissionErr
+	}
+
 	// get channel model ratio
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
 	channelModelConfigs := getChannelModelConfigs(c)
@@ -151,6 +156,11 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		return wrapConvertRequestError(err)
 	}
 	convertedRequest = sanitizeConvertedChatFields(convertedRequest)
+	// Conversion may introduce built-ins; re-check them with the shared validator
+	// before any reservation or dispatch.
+	if policyErr := admitConvertedClaudeBuiltins(c, meta, convertedRequest, adaptorInstance); policyErr != nil {
+		return policyErr
+	}
 	promptTokens, quoteErr := preparedClaudePromptTokens(ctx, claudeRequest, convertedRequest)
 	if quoteErr != nil {
 		return openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", http.StatusBadRequest)
@@ -591,6 +601,7 @@ handleResponse:
 	}
 
 postConsume:
+	applyClaudeServerToolCharges(c, &usage, meta, adaptorInstance)
 
 	// post-consume quota
 	quotaId := c.GetInt(ctxkey.Id)

@@ -406,8 +406,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 				var slim openai_compatible.SlimTextResponse
 				if err := json.Unmarshal(body, &slim); err == nil && len(slim.Choices) > 0 {
 					if err := renderChatResponseAsResponseAPI(c, statusCode, &slim, responseAPIRequest, meta); err != nil {
-						_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "response_rewrite_failed")
-						return openai.ErrorWrapper(err, "response_rewrite_failed", http.StatusInternalServerError)
+						respErr = openai.ErrorWrapper(err, "response_rewrite_failed", http.StatusInternalServerError)
+						goto settleResponseUsage
 					}
 				} else {
 					if statusCode > 0 {
@@ -415,8 +415,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 					}
 					if len(body) > 0 {
 						if _, err := c.Writer.Write(body); err != nil {
-							_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "write_response_failed")
-							return openai.ErrorWrapper(err, "write_response_body_failed", http.StatusInternalServerError)
+							respErr = openai.ErrorWrapper(err, "write_response_body_failed", http.StatusInternalServerError)
+							goto settleResponseUsage
 						}
 					}
 					c.Set(ctxkey.ResponseRewriteApplied, true)
@@ -430,6 +430,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		}
 	}
 
+settleResponseUsage:
+	// Delivery failures do not erase provider work or bypass the final ledger.
 	// Preserve the reservation for the single final delta settlement below.
 
 	if usage != nil {
