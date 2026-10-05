@@ -127,7 +127,8 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 	go func() {
 		errc <- copyResponseAPIClientToUpstream(requestContext, clientConn, upstreamConn, meta, ownership)
 	}()
-	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, usage, stored) }()
+	receipts := &responseAPIWSUsageCollector{usage: usage}
+	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, receipts, stored) }()
 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
@@ -140,6 +141,8 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 		lg.Debug("close response upstream socket", zap.Error(closeErr))
 	}
 	secondErr := <-errc
+	// Both legs have drained, so the collector and dispatch counter are stable.
+	receipts.finish(ownership.creates.Load())
 	// An admission failure before any execution must release the handshake hold.
 	// If an earlier frame was dispatched, preserve its billing reconciliation.
 	if ownership.denied.Load() && !ownership.dispatched.Load() {
@@ -305,17 +308,19 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 			return errors.WithStack(werr)
 		}
 		ownership.dispatched.Store(true)
+		if isResponseCreateFrame(outbound) {
+			ownership.creates.Add(1)
+		}
 	}
 }
 
 // copyResponseAPIWSUpstreamToClient forwards upstream frames to the client and
-// extracts best-effort usage metrics from response events. It also records
-// store!=false completed response objects into stored so the caller can commit
-// them to the gateway store (proposal ST-011). Collection happens after usage
-// accounting and never alters the forwarded frame.
-func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage, stored *responseAPIWSStoreCollector) error {
-	receipts := &responseAPIWSUsageCollector{usage: usage}
-	defer receipts.finish()
+// feeds response events to receipts, which extracts usage from qualified
+// terminal receipts; the caller finishes receipts after both legs drain. It
+// also records store!=false completed response objects into stored so the
+// caller can commit them to the gateway store (proposal ST-011). Collection
+// happens after usage accounting and never alters the forwarded frame.
+func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, receipts *responseAPIWSUsageCollector, stored *responseAPIWSStoreCollector) error {
 
 	for {
 		mt, msg, err := src.ReadMessage()

@@ -18,6 +18,9 @@ type responseWSSessionOwnership struct {
 	ids        map[string]struct{}
 	denied     atomic.Bool
 	dispatched atomic.Bool
+	// creates counts response.create frames forwarded upstream, so settlement can
+	// tell when dispatched work never produced an authoritative terminal receipt.
+	creates atomic.Int64
 }
 
 // observe records a provider-confirmed response ID before forwarding it to the client and returns no value.

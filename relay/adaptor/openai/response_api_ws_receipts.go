@@ -53,9 +53,26 @@ func (c *responseAPIWSUsageCollector) collect(msg []byte) {
 }
 
 // finish preserves the reservation when any observed response still lacks an
-// authoritative usage receipt, even if a different response completed.
-func (c *responseAPIWSUsageCollector) finish() {
-	if c.usage != nil && len(c.pending) > 0 {
+// authoritative usage receipt, even if a different response completed. The
+// parameter dispatchedCreates is the number of response.create frames forwarded
+// upstream: when it exceeds the measured terminal receipts, some dispatched work
+// ended without any receipt (for example the provider closed before emitting a
+// response ID), so the usage is labelled as an estimate instead of refunding.
+// It must be called only after both proxy legs have drained.
+func (c *responseAPIWSUsageCollector) finish(dispatchedCreates int64) {
+	if c.usage == nil {
+		return
+	}
+	if len(c.pending) > 0 || dispatchedCreates > int64(len(c.counted)) {
 		c.usage.BillingEstimateReason = "response_stream_incomplete_or_missing_receipt"
 	}
+}
+
+// isResponseCreateFrame reports whether msg is a response.create client event.
+// The parameter msg is the forwarded client frame. Malformed frames return false.
+func isResponseCreateFrame(msg []byte) bool {
+	var event struct {
+		Type string `json:"type"`
+	}
+	return json.Unmarshal(msg, &event) == nil && event.Type == "response.create"
 }

@@ -302,3 +302,52 @@ func TestSecurityResponseWSNonTerminalOwnership(t *testing.T) {
 		})
 	}
 }
+
+// TestSecurityResponseWSDispatchedCreateWithoutReceipt proves that a
+// response.create dispatched upstream but never answered by a terminal receipt
+// keeps the reservation with explicit estimate provenance. That holds even when
+// no response-ID event arrived at all, and when an earlier response on the same
+// socket already settled measured usage, so the unanswered work is not refunded.
+func TestSecurityResponseWSDispatchedCreateWithoutReceipt(t *testing.T) {
+	const create = `{"type":"response.create","model":"gpt-4o-mini","input":"hello"}`
+	cases := []struct {
+		name   string
+		script [][]string
+	}{
+		{name: "single_create_closed_before_any_event", script: [][]string{{}}},
+		{name: "completed_then_unanswered_create", script: [][]string{{wsEvent("response.completed", "resp_ws_first", "completed", 3, 100)}, {}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			settlements := wsSettlementSetup(t)
+			upstream := newWSScriptedUpstream(t, tc.script, true)
+			gateway, requestID, done := wsSettlementGateway(t, upstream)
+			conn, resp, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(gateway.URL, "http")+"/v1/responses", nil)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			defer func() { _ = conn.Close() }()
+			for index, events := range tc.script {
+				require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte(create)))
+				if index < len(tc.script)-1 {
+					wsReadN(t, conn, len(events))
+				}
+			}
+			wsReadUntilClosed(t, conn)
+			require.Nil(t, wsAwaitHandler(t, done))
+			require.Len(t, upstream.received(), len(tc.script), "every create reached the provider")
+
+			got := settlements()
+			require.Len(t, got, 1, "a dispatched create without a terminal receipt must still settle once")
+			settled := got[0]
+			t.Logf("settled prompt=%d completion=%d total=%d delta=%d", settled.PromptTokens, settled.CompletionTokens, settled.TotalQuota, settled.QuotaDelta)
+			require.GreaterOrEqual(t, settled.QuotaDelta, int64(0), "unanswered upstream work must not refund the reservation")
+			require.Equal(t, wsSettlementBalance-settled.TotalQuota, reloadUserQuota(t), "user debit must equal the settlement")
+			require.Equal(t, settled.TotalQuota, requestCostQuota(t, requestID), "request cost must equal the settlement")
+			var logs []model.Log
+			require.NoError(t, model.LOG_DB.Where("request_id = ? AND type = ?", requestID, model.LogTypeConsume).Find(&logs).Error)
+			require.Len(t, logs, 1, "one settled consume row")
+			require.Equal(t, true, logs[0].Metadata["billing_estimated"])
+			require.NotEmpty(t, logs[0].Metadata["billing_estimate_reason"])
+		})
+	}
+}
