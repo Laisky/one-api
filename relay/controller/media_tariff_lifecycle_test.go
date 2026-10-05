@@ -232,3 +232,31 @@ func TestSecurityLyriaNonChatEndpointFailsClosed(t *testing.T) {
 	require.Zero(t, calls.Load(), "an unsupported generation endpoint must fail before provider work")
 	require.Equal(t, balance, reloadUserQuota(t))
 }
+
+// TestSecurityLyriaTokenRatioOverrideFailsClosed verifies a channel token-ratio
+// override cannot silently re-price a per-generation contract. Parameters: t owns
+// the fixture. Returns: none; the operator must configure per_call pricing instead.
+func TestSecurityLyriaTokenRatioOverrideFailsClosed(t *testing.T) {
+	const balance = int64(100000)
+	xaiVideoSetup(t, balance, false)
+	var calls atomic.Int32
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, lyriaChatReply(t))
+	}))
+	t.Cleanup(upstream.Close)
+	previous := client.HTTPClient
+	client.HTTPClient = upstream.Client()
+	t.Cleanup(func() { client.HTTPClient = previous })
+
+	path, body := lyriaProtocolRequest("chat", false)
+	local := &model.ModelConfigLocal{Ratio: 2, CompletionRatio: 1}
+	c, _, _ := protocolContext(t, channeltype.OpenRouter, lyriaClipModel, path, body, upstream.URL+"/v1", balance, 1, false, local)
+	apiErr := RelayTextHelper(c)
+	drainCriticalTasks(t)
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	require.Zero(t, calls.Load())
+	require.Equal(t, balance, reloadUserQuota(t))
+}

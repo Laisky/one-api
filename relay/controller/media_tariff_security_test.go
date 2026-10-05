@@ -40,7 +40,10 @@ func TestSecurityLyriaGenerationTariff(t *testing.T) {
 			{name: "missing_receipt", actual: "google/lyria-3-clip-preview", balance: 100000, charge: 20000, group: 1, receipt: "missing"},
 			{name: "write_failure", actual: "google/lyria-3-clip-preview", balance: 100000, charge: 20000, group: 1, writeFail: true},
 			{name: "operator_paid", actual: "google/lyria-3-clip-preview", balance: 100000, charge: 30000, group: 1, local: &model.ModelConfigLocal{PerCall: &model.PerCallPricingLocal{UsdPerThousandCalls: 60}}},
-			{name: "operator_ratio_free", actual: "google/lyria-3-clip-preview", balance: 100000, group: 1, local: &model.ModelConfigLocal{CompletionRatio: 1}},
+			// The admin "Load Default" action persists exactly {ratio:0, completion_ratio:1}
+			// for Lyria (GetChannelDefaultPricing omits per_call). Zero ratios mean "unset"
+			// across channel model_configs, so the snapshot must inherit the catalog tariff.
+			{name: "default_pricing_snapshot", actual: "google/lyria-3-clip-preview", balance: 100000, charge: 20000, group: 1, local: &model.ModelConfigLocal{CompletionRatio: 1}},
 			{name: "free_group", actual: "google/lyria-3-clip-preview", balance: 100000, group: 0},
 			{name: "operator_free", actual: "google/lyria-3-clip-preview", balance: 100000, group: 1, local: &model.ModelConfigLocal{PerCall: &model.PerCallPricingLocal{}}},
 		} {
