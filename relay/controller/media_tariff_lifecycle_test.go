@@ -18,6 +18,8 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/xai"
 	"github.com/Laisky/one-api/relay/channeltype"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
@@ -258,5 +260,36 @@ func TestSecurityLyriaTokenRatioOverrideFailsClosed(t *testing.T) {
 	require.NotNil(t, apiErr)
 	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
 	require.Zero(t, calls.Load())
+	require.Equal(t, balance, reloadUserQuota(t))
+}
+
+// TestSecurityGenerationTariffNativeResponsesFailsClosed verifies the native
+// Responses reservation, which prices tokens itself, cannot dispatch a catalog
+// per-generation contract without reserving it. Parameters: t owns the fixture.
+// Returns: none; a provider catalog fixture is restored after the test.
+func TestSecurityGenerationTariffNativeResponsesFailsClosed(t *testing.T) {
+	const name = "generation-tariff-fixture"
+	xai.ModelRatios[name] = adaptor.ModelConfig{CompletionRatio: 1, PerCall: &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 40},
+		PricingProvenance: &adaptor.PricingProvenance{State: adaptor.TariffStatePaid, Unit: adaptor.TariffUnitGeneration, Source: "https://example.test/tariff", VerifiedAt: "2026-10-05"}}
+	t.Cleanup(func() { delete(xai.ModelRatios, name) })
+	const balance = int64(100000)
+	xaiVideoSetup(t, balance, false)
+	var calls atomic.Int32
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(upstream.Close)
+	previous := client.HTTPClient
+	client.HTTPClient = upstream.Client()
+	t.Cleanup(func() { client.HTTPClient = previous })
+
+	path, body := lyriaProtocolRequest("responses", false)
+	c, _, _ := protocolContext(t, channeltype.XAI, name, path, body, upstream.URL, balance, 1, false, nil)
+	apiErr := RelayResponseAPIHelper(c)
+	drainCriticalTasks(t)
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	require.Zero(t, calls.Load(), "an unreserved generation must not reach the provider")
 	require.Equal(t, balance, reloadUserQuota(t))
 }
