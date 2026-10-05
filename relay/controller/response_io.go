@@ -192,9 +192,17 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 
 	// Sync previous_response_id from the typed request so the same-provider handle
 	// rewrite (ST-021) actually reaches the upstream. In the common case the typed
-	// value equals the raw value and this is a no-op; it never invents a selector
-	// the client did not send (a nil pointer leaves the raw body untouched).
-	if request.PreviousResponseId != nil {
+	// value equals the raw value and this is a no-op. The typed value is the only
+	// one resolveNativePreviousResponse owner-resolved, so a raw parent the typed
+	// request does not carry (for example a JSON body sent with a non-JSON
+	// Content-Type, whose typed view is bound from the query) was never authorized
+	// and is removed instead of forwarded.
+	if request.PreviousResponseId == nil {
+		if _, ok := root["previous_response_id"]; ok {
+			delete(root, "previous_response_id")
+			changed = true
+		}
+	} else {
 		prevBytes, err := json.Marshal(*request.PreviousResponseId)
 		if err != nil {
 			return nil, stats, false, errors.Wrap(err, "marshal previous_response_id")
