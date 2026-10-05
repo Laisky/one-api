@@ -44,6 +44,10 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 			{name: "measured_cancel_control", failure: true, cancelEvent: "response.created"},
 			{name: "omitted_total_done", receiptKind: "omitted_total", done: true},
 			{name: "zero_total_done", receiptKind: "zero_total", done: true},
+			{name: "zero_input_done", receiptKind: "zero_input", done: true},
+			{name: "zero_output_done", receiptKind: "zero_output", done: true},
+			{name: "all_zero_done", receiptKind: "all_zero", done: true},
+			{name: "zero_output_same_frame_done", receiptKind: "zero_output_same_frame", later: true, done: true},
 			{name: "cached_top_level_done", receiptKind: "cached", done: true},
 			{name: "deepseek_cache_hit_done", receiptKind: "deepseek_cached", done: true},
 			{name: "cache_write_top_level_done", receiptKind: "write", done: true},
@@ -67,7 +71,7 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				// 3 message framing + 1 hello + 1 user + 3 assistant framing = 8.
 				// Count the provider output independently from tracker/finalization.
 				input, output := int64(11), int64(7)
-				estimated := tc.later
+				estimated := tc.later && tc.receiptKind != "zero_output_same_frame"
 				rawUsage := `{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}`
 				cached, written := int64(0), int64(0)
 				switch tc.receiptKind {
@@ -81,6 +85,15 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 					rawUsage = `{"prompt_tokens":11,"completion_tokens":7}`
 				case "zero_total":
 					rawUsage = `{"prompt_tokens":11,"completion_tokens":7,"total_tokens":0}`
+				case "zero_input":
+					input, output = 0, 7
+					rawUsage = `{"prompt_tokens":0,"completion_tokens":7}`
+				case "zero_output", "zero_output_same_frame":
+					input, output = 11, 0
+					rawUsage = `{"prompt_tokens":11,"completion_tokens":0}`
+				case "all_zero":
+					input, output = 0, 0
+					rawUsage = `{"prompt_tokens":0,"completion_tokens":0}`
 				case "cached":
 					cached = 4
 					rawUsage = `{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18,"cached_tokens":4}`
@@ -109,8 +122,8 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				if tc.later {
 					raw, err := json.Marshal(map[string]any{"choices": []any{map[string]any{"index": 0, "delta": map[string]any{"content": later}}}})
 					require.NoError(t, err)
-					if tc.receiptKind == "partial_same_frame" {
-						raw = []byte(strings.TrimSuffix(string(raw), "}") + `,"usage":{"prompt_tokens":11}}`)
+					if tc.receiptKind == "partial_same_frame" || tc.receiptKind == "zero_output_same_frame" {
+						raw = []byte(strings.TrimSuffix(string(raw), "}") + `,"usage":` + rawUsage + `}`)
 						wire = ""
 					}
 					wire += "data: " + string(raw) + "\n\n"
