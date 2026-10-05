@@ -82,7 +82,6 @@ func doResponseAPIRequestViaWebSocket(
 	}
 
 	streamingRequested, _ := requestMap["stream"].(bool)
-	backgroundRequested, _ := requestMap["background"].(bool)
 	if !streamingRequested {
 		lg.Debug("openai response api websocket skipped",
 			zap.String("reason", "non_stream_requires_http"),
@@ -90,12 +89,11 @@ func doResponseAPIRequestViaWebSocket(
 		)
 		return nil, false, nil
 	}
-	if backgroundRequested {
-		lg.Debug("openai response api websocket skipped",
-			zap.String("reason", "background_true_requires_http"),
-			zap.String("model", metaInfo.ActualModelName),
-		)
-		return nil, false, nil
+	// The controller strips background before dispatch (#483); fail closed if a
+	// truthy or ambiguous flag still reaches this transport rather than
+	// downgrading to an HTTP request that would carry it.
+	if err := ValidateResponseBackgroundPayload(payload); err != nil {
+		return nil, true, err
 	}
 
 	fullRequestURL, err := requestAdaptor.GetRequestURL(metaInfo)
@@ -132,7 +130,7 @@ func doResponseAPIRequestViaWebSocket(
 
 	requestMap["type"] = "response.create"
 	delete(requestMap, "stream")
-	delete(requestMap, "background")
+	StripResponseBackgroundKeys(requestMap)
 
 	eventBody, err := json.Marshal(requestMap)
 	if err != nil {

@@ -45,7 +45,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// get & validate Response API request
 	responseAPIRequest, err := getAndValidateResponseAPIRequest(c)
 	if err != nil {
-		if errors.Is(err, errResponseBackgroundUnsupported) {
+		if errors.Is(err, openai.ErrResponseBackgroundUnsupported) {
 			return openai.ErrorWrapper(err, "background_not_supported", http.StatusBadRequest)
 		}
 		if errors.Is(err, errStateSelectorsMutuallyExclusive) {

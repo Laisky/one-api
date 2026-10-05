@@ -46,18 +46,23 @@ func (s *responseWSSessionOwnership) authorize(ctx context.Context, meta *rmeta.
 	if eventType != "response.create" {
 		return nil, errors.New("unsupported response websocket event")
 	}
-	if background, ok := raw["background"]; ok {
-		var requested bool
-		if err := json.Unmarshal(background, &requested); err != nil {
-			return nil, errors.Wrap(err, "invalid background flag")
+	// Scan the raw frame rather than the decoded map: map decoding keeps only the
+	// last duplicate and exact-key lookups miss case-folded spellings (#483).
+	if err := ValidateResponseBackgroundPayload(frame); err != nil {
+		return nil, err
+	}
+	outbound := frame
+	if StripResponseBackgroundKeys(raw) {
+		// Even an explicit false is removed so the provider never sees the flag.
+		stripped, err := json.Marshal(raw)
+		if err != nil {
+			return nil, errors.Wrap(err, "encode response frame without background flag")
 		}
-		if requested {
-			return nil, errors.New("background responses are unavailable until durable terminal billing is supported")
-		}
+		outbound = stripped
 	}
 	previous, ok := raw["previous_response_id"]
 	if !ok || string(previous) == "null" {
-		return frame, nil
+		return outbound, nil
 	}
 	var id string
 	if err := json.Unmarshal(previous, &id); err != nil {
@@ -65,13 +70,13 @@ func (s *responseWSSessionOwnership) authorize(ctx context.Context, meta *rmeta.
 	}
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return frame, nil
+		return outbound, nil
 	}
 	s.mu.RLock()
 	_, local := s.ids[id]
 	s.mu.RUnlock()
 	if local {
-		return frame, nil
+		return outbound, nil
 	}
 	if meta == nil || !state.Enabled() || state.Store() == nil {
 		return nil, errors.New("response ownership storage is unavailable")

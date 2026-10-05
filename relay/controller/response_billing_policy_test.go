@@ -22,6 +22,10 @@ func TestNativeResponseRootManifestCoversTypedProtocol(t *testing.T) {
 		if key == "" || key == "-" {
 			continue
 		}
+		if nativeResponseRootDenied(key) {
+			require.False(t, nativeResponseRootAllowed(key), "denied typed field %s must not be admitted", key)
+			continue
+		}
 		require.True(t, nativeResponseRootAllowed(key), "review admission policy for typed field %s", key)
 	}
 }

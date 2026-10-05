@@ -95,7 +95,8 @@ func resolveNativePreviousResponse(c *gin.Context, meta *metalib.Meta, req *open
 // idempotent on) the raw upstream response id, and its binding carries that id as
 // the upstream handle. It is a no-op when the feature is inactive, store=false, or
 // the completed response object is unavailable. Commit failures are logged, never
-// fatal to the already-billed request.
+// fatal to the already-billed request. Non-terminal (queued/in_progress) results
+// are never committed, so unfinished work cannot back a continuation.
 func commitNativeResponseState(c *gin.Context, meta *metalib.Meta) {
 	commit := pendingCommitFromContext(c)
 	if commit == nil || !commit.storeMode || !state.Enabled() || state.Store() == nil {
@@ -111,6 +112,16 @@ func commitNativeResponseState(c *gin.Context, meta *metalib.Meta) {
 	}
 
 	lg := gmw.GetLogger(c)
+	if openai.IsResponseStatusNonTerminal(resp.Status) {
+		// Unfinished provider work must never become a continuation binding: a
+		// later previous_response_id would pull in output whose terminal usage
+		// was never settled (#483).
+		lg.Warn("skipping gateway state commit for non-terminal native response",
+			zap.String("status", resp.Status),
+			zap.String("response_id", resp.Id),
+		)
+		return
+	}
 	store := state.Store()
 
 	outEnvs := make([]state.ItemEnvelope, 0, len(resp.Output))
