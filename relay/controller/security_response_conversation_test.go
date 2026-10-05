@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/channeltype"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/state"
@@ -243,4 +245,65 @@ func TestSecurityResponseNativeConversationStateDisabled(t *testing.T) {
 		require.Len(t, calls, 1)
 		require.True(t, strings.HasSuffix(calls[0].path, "/v1/responses"), "a selector-free request stays on the native route")
 	})
+}
+
+// TestSecurityResponseNativeConversationResolver pins the resolver contract at
+// its own boundary: an invalid owner, unowned IDs (which must not rely on the
+// fallback hydrator's second lookup), empty selectors, and the owner's divert.
+func TestSecurityResponseNativeConversationResolver(t *testing.T) {
+	store := enableStateForTest(t)
+	convID := seedSecurityConversation(t, store, testOwner())
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	invalid := testMeta()
+	invalid.UserId = 0
+	divert, apiErr := resolveNativeConversation(c, invalid, &openai.ResponseAPIRequest{Conversation: &openai.ResponseAPIConversation{Id: convID}})
+	require.False(t, divert)
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusNotFound, apiErr.StatusCode)
+	require.Equal(t, codeConversationNotFound, apiErr.Code)
+
+	for _, req := range []*openai.ResponseAPIRequest{
+		nil,
+		{},
+		{Conversation: &openai.ResponseAPIConversation{}},
+		{Conversation: &openai.ResponseAPIConversation{Id: "  "}},
+	} {
+		divert, apiErr := resolveNativeConversation(c, testMeta(), req)
+		require.False(t, divert)
+		require.Nil(t, apiErr, "an empty selector names nothing to authorize")
+	}
+
+	foreignID := seedSecurityConversation(t, store, state.OwnerScope{UserID: 2, TokenID: 2})
+	for _, id := range []string{foreignID, "conv_" + strings.Repeat("0123456789abcdef", 3)} {
+		divert, apiErr = resolveNativeConversation(c, testMeta(), &openai.ResponseAPIRequest{Conversation: &openai.ResponseAPIConversation{Id: id}})
+		require.False(t, divert, "the resolver itself must not divert an unowned conversation")
+		require.NotNil(t, apiErr)
+		require.Equal(t, http.StatusNotFound, apiErr.StatusCode)
+		require.Equal(t, codeConversationNotFound, apiErr.Code)
+	}
+
+	divert, apiErr = resolveNativeConversation(c, testMeta(), &openai.ResponseAPIRequest{Conversation: &openai.ResponseAPIConversation{Id: convID}})
+	require.Nil(t, apiErr)
+	require.True(t, divert, "an owned gateway conversation diverts to the hydrating fallback")
+}
+
+// TestSecurityResponseNativeConversationQueryBoundRequest proves a non-JSON
+// Content-Type cannot bind a conversation-free typed request (so resolution sees
+// no selector) while the raw JSON body, which the native path forwards, still
+// names another owner's conversation: the wire builder never forwards one.
+func TestSecurityResponseNativeConversationQueryBoundRequest(t *testing.T) {
+	securityAdmissionSetup(t, 1_000_000)
+	store := enableStateForTest(t)
+	foreign := seedSecurityConversation(t, store, state.OwnerScope{UserID: fallbackUserID + 1, TokenID: fallbackTokenID})
+	upstream := newSecurityBackgroundUpstream(t, `{"id":"resp_query_bound","object":"response","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}`)
+	// Version (not Id) binds a prompt without also binding a conversation Id.
+	apiErr := runNativeResponseRelayAs(t, upstream, `{"model":"gpt-4o-mini","input":"hello","conversation":"`+foreign+`"}`, "text/plain", "Model=gpt-4o-mini&Version=1")
+	require.Nil(t, apiErr, "the typed request names no conversation, so the native call proceeds")
+	require.Len(t, upstream.forwarded(), 1)
+	for _, body := range upstream.forwarded() {
+		require.NotContains(t, body, foreign, "a raw-body conversation must never reach the provider")
+		require.NotContains(t, body, `"conversation"`)
+	}
 }

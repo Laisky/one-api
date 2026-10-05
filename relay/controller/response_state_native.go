@@ -88,6 +88,66 @@ func resolveNativePreviousResponse(c *gin.Context, meta *metalib.Meta, req *open
 	return true, nil
 }
 
+// resolveNativeConversation authorizes a Responses `conversation` selector for a
+// request routed to a native Responses upstream, next to the previous_response_id
+// resolution above. Gateway conversations live only in the owner-scoped state
+// store and carry no provider-side handle, so a native provider can never
+// continue one, and a provider conversation ID has no owner binding at all. No
+// conversation selector is therefore ever forwarded upstream:
+//   - an empty selector names nothing; the wire builder strips it.
+//   - state disabled or no store: fail closed with a 503, mirroring
+//     previous_response_id, because ownership cannot be proven.
+//   - invalid owner, an owner/channel outside the state allowlist (the fallback
+//     could not hydrate it), or an unknown, foreign, expired, deleted, or
+//     provider-created ID: one non-disclosing 404 conversation_not_found.
+//   - a store failure: a retryable 503.
+//   - the caller's own conversation: divert=true, so the caller routes through
+//     the hydrating fallback, which replays the stored items and appends the turn.
+//
+// Parameters: c carries the request context; meta supplies the owner and
+// channel; req is the parsed request. It returns divert=true when the request
+// must take the fallback path, or a typed state error. Done before pre-consume
+// so a rejection never reserves quota and a divert bills once, on the path that
+// actually runs.
+func resolveNativeConversation(c *gin.Context, meta *metalib.Meta, req *openai.ResponseAPIRequest) (bool, *relaymodel.ErrorWithStatusCode) {
+	if req == nil {
+		return false, nil
+	}
+	// Use the exact ID the fallback hydrator looks up, so a selector authorized
+	// here is the same one that is later replayed.
+	convID := req.Conversation.ConversationID()
+	if strings.TrimSpace(convID) == "" {
+		return false, nil
+	}
+	if !state.Enabled() || state.Store() == nil {
+		return false, stateErrorf(codeStateStoreUnavailable, http.StatusServiceUnavailable, "conversation ownership storage is unavailable")
+	}
+	owner := stateOwnerFromMeta(meta)
+	if !owner.Valid() || !responseStateActive(meta) {
+		metrics.RecordStateEvent(metrics.StateCategoryMiss, metrics.StateOutcomeNotFound)
+		return false, stateErrorf(codeConversationNotFound, http.StatusNotFound, "conversation not found")
+	}
+
+	if _, err := state.Store().GetConversation(gmw.Ctx(c), owner, convID); err != nil {
+		if errors.Is(err, state.ErrNotFound) {
+			// A miss deliberately does not distinguish foreign, expired, deleted,
+			// unknown, and provider-created IDs (V10).
+			metrics.RecordStateEvent(metrics.StateCategoryMiss, metrics.StateOutcomeNotFound)
+			return false, stateErrorf(codeConversationNotFound, http.StatusNotFound, "conversation not found")
+		}
+		metrics.RecordStateEvent(metrics.StateCategoryMiss, metrics.StateOutcomeStoreError)
+		return false, stateErrorf(codeStateStoreUnavailable, http.StatusServiceUnavailable, "resolve conversation: %v", err)
+	}
+
+	// The owner's gateway conversation: the native provider cannot continue it,
+	// so hydrate + replay on the fallback path.
+	gmw.GetLogger(c).Debug("diverting owned gateway conversation from native responses to hydrating fallback",
+		zap.String("conversation_fingerprint", fingerprintID(convID)),
+	)
+	metrics.RecordStateEvent(metrics.StateCategoryAffinity, metrics.StateOutcomeUnpinned)
+	return true, nil
+}
+
 // commitNativeResponseState commits the result of a native Responses upstream call
 // to gateway state so its upstream id is retrievable over HTTP and can back a
 // same-provider continuation or a stateless-client checkpoint (ST-021: STR01, M05,

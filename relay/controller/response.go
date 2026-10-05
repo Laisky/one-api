@@ -110,6 +110,15 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	metalib.Set2Context(c, meta)
 	c.Set(ctxkey.ConvertedRequest, responseAPIRequest)
 
+	// Resolve a conversation selector under owner scope before the native call. A
+	// native provider can never continue a gateway conversation, so the owner's
+	// conversation diverts to the hydrating fallback and every other selector
+	// fails closed; no conversation ID is ever forwarded upstream.
+	if divert, gwErr := resolveNativeConversation(c, meta, responseAPIRequest); gwErr != nil {
+		return gwErr
+	} else if divert {
+		return relayResponseAPIThroughChat(c, meta, responseAPIRequest)
+	}
 	// Resolve a gateway previous_response_id against provider affinity before the
 	// native call (ST-021, Section 5.6 step 4). Same-provider continuations are
 	// rewritten to the upstream handle in place; a gateway parent that cannot be

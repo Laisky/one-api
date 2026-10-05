@@ -29,9 +29,13 @@ func validateNativeResponseToolBilling(tools []openai.ResponseAPITool) error {
 // nativeResponseRootDenied lists reviewed typed fields that are never forwarded
 // to a provider. The parameter key is a root request key. It returns true for
 // any spelling of "background": background execution has no durable terminal
-// settlement (#483), so normalizeResponseAPIRawBody always strips the flag.
+// settlement (#483), so normalizeResponseAPIRawBody always strips the flag. It
+// also returns true for "conversation": resolveNativeConversation diverts the
+// owner's gateway conversation to the hydrating fallback and rejects every other
+// selector, so the provider must never receive a conversation ID (only empty
+// selectors reach the wire builder, and those name nothing).
 func nativeResponseRootDenied(key string) bool {
-	return openai.IsResponseBackgroundKey(key)
+	return openai.IsResponseBackgroundKey(key) || key == "conversation"
 }
 
 // nativeResponseRootAllowed is an explicit protocol admission manifest. New
@@ -41,7 +45,7 @@ func nativeResponseRootDenied(key string) bool {
 func nativeResponseRootAllowed(key string) bool {
 	switch key {
 	case "thinking", "output_config", "input", "model", "extra_body",
-		"conversation", "include", "instructions", "max_output_tokens",
+		"include", "instructions", "max_output_tokens",
 		"metadata", "parallel_tool_calls", "previous_response_id", "prompt",
 		"reasoning", "service_tier", "store", "stream", "temperature", "text",
 		"tool_choice", "tools", "top_p", "top_logprobs", "truncation", "user":

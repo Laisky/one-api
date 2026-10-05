@@ -281,7 +281,8 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 		if authorizationErr != nil {
 			ownership.denied.Store(true)
 			// Control writes are safe alongside the upstream-to-client writer.
-			if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "response authorization denied"), time.Now().Add(time.Second)); closeErr != nil {
+			reason := responseWSAuthorizationCloseReason(authorizationErr)
+			if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason), time.Now().Add(time.Second)); closeErr != nil {
 				return errors.Wrap(closeErr, "close unauthorized response websocket")
 			}
 			return errors.WithStack(authorizationErr)
