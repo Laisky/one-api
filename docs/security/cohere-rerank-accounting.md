@@ -63,24 +63,13 @@ real transport error and any available billing evidence. A provider rejection is
 not converted into successful billable usage. Final cost and the consumption log
 are reconciled once through the shared billing path.
 
-## Retained validation
-
-The receipt suite checks actual local HTTP dispatch and owner, finite-token,
-request-cost and consumption-log records. The aggregate suite additionally
-observes balances while the provider is blocked, checks the exact outgoing cap,
-and covers user/token insufficiency, mapped models, free groups, unlimited tokens,
-chunk boundaries, invalid/overflowing inputs and shared-balance concurrency.
-Parser, delivery-error, decimal-arithmetic and non-Cohere isolation controls remain
-separate from the HTTP ledger matrix.
-
-```sh
-go test -p 2 -race -count=1 -timeout=5m ./relay/controller ./relay/adaptor/cohere ./relay/model \
-  -run '^(TestSecurityCohereRerank.*|TestCohereSearch.*|TestCohereRerank.*|TestSearchReceiptIsServerOnly)$'
-```
-
-These tests use synthetic credentials, loopback providers and isolated SQLite, not
-paid provider requests. Normal repository CI remains required for the final PR
-head; a focused pass is not a whole-repository qualification.
+Provider HTTP errors never create measured usage. Cohere's explicit admission
+rejections (401, 403 and 429) release the complete hold and leave the request
+retryable. Every other error status follows the existing Cohere
+uncertain-execution policy: the quoted allowance is retained once with
+`uncertain_upstream_admission_upstream_http_error` provenance and the request is
+not replayed. Because the allowance is aggregate, that retained amount scales
+with the submitted documents rather than one call.
 
 ## Primary provider references
 
@@ -106,15 +95,6 @@ optional token/result fields. Those unrelated decoding errors are still returned
 but the search receipt is independently retained and settled exactly once. A
 truncated or malformed JSON response cannot establish this independent receipt.
 
-The retained HTTP/SQLite regression at test-only commit `192c0d77` reproduced four
-failures: decimal and scientific search counts charged 1,000 rather than 3,000
-fixture units, decimal token counters rejected an otherwise valid response, and
-unusable token metadata erased a separately valid three-search receipt. Fourteen
-other cases passed, including one-search, free-group, absent-token and genuine
-transport-failure controls. The corrected transport fixture sets the same channel
-context as production middleware and drains critical tasks before inspecting all
-four final ledgers. This evidence uses only loopback fixtures, not live invoices.
-
 Primary numeric contracts checked during review:
 [ApiMetaBilledUnits](https://github.com/cohere-ai/cohere-python/blob/main/src/cohere/types/api_meta_billed_units.py)
 and [ApiMetaTokens](https://github.com/cohere-ai/cohere-python/blob/main/src/cohere/types/api_meta_tokens.py).
@@ -133,10 +113,3 @@ An explicit free-search contract (`ratio: 0` together with
 zero-balance owners and finite tokens. The Cohere path recognizes this resolved
 contract without falling back through the legacy nonzero-ratio resolver to a
 paid provider default. Other provider and generic token pricing are unchanged.
-
-Test-only commit `0446d83c` reproduced both advertised compatibility failures
-through persisted channel JSON, the production resolver and actual HTTP/ledger
-paths: explicit free requests rejected with 403, and declared custom contexts
-rejected with 400. Nineteen other admission controls passed, including missing
-custom-contract rejection and refusal to shrink known model bounds. The fixes
-retain this full matrix as regression coverage.
