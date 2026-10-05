@@ -37,6 +37,11 @@ func preConsumeResponseAPIQuota(
 ) (int64, *relaymodel.ErrorWithStatusCode) {
 	ctx := gmw.Ctx(c)
 	baseQuota := calculateResponseAPIPreconsumeQuota(promptTokens, responseAPIRequest.MaxOutputTokens, inputRatio, outputRatio, background)
+	// This reservation prices tokens itself, so validate catalog media contracts
+	// here too: unresolved tariffs and per-generation models fail before dispatch.
+	if _, tariffErr := mediaTariffAdmission(c, meta, baseQuota, "response_api_preconsume"); tariffErr != nil {
+		return 0, tariffErr
+	}
 
 	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
 	tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
