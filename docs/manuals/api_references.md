@@ -864,7 +864,7 @@ curl -sS $BASE_URL/v1/edits \
 
 ### POST /v1/responses
 
-Creates a model response using the OpenAI Response API shape. For channels with native Response API support, the body is passed through and upstream Responses state features such as `previous_response_id`, `conversation`, and persisted `store` can be honored by that upstream. Channels without native support, and requests that must use the MCP execution loop, are served through a Chat Completions fallback that rewrites the current request/response shape but does not hydrate OpenAI-managed state.
+Creates a model response using the OpenAI Response API shape. For channels with native Response API support, the body is passed through and upstream Responses state features such as `previous_response_id` and persisted `store` can be honored by that upstream. A `conversation` selector is never forwarded to a provider: with gateway Responses state enabled, a conversation the caller created through `POST /v1/conversations` is served by replaying its stored items on the Chat Completions fallback, and any other conversation ID (another caller's, deleted, or created directly at a provider) is rejected with `404 conversation_not_found` before quota is reserved; with gateway Responses state disabled, a `conversation` selector is rejected with `503 state_store_unavailable`. The Responses WebSocket transport rejects `conversation` in `response.create` frames; send such turns over HTTP. Channels without native support, and requests that must use the MCP execution loop, are served through a Chat Completions fallback that rewrites the current request/response shape but does not hydrate OpenAI-managed state.
 
 **Auth:** Relay API Key - `Authorization: Bearer $API_KEY`.
 
@@ -880,6 +880,7 @@ Creates a model response using the OpenAI Response API shape. For channels with 
 | Max output tokens | `max_output_tokens` | int | No | - | Upper bound on generated tokens. |
 | Background | `background` | bool | No | `false` | Run the response asynchronously in the background. |
 | Previous response id | `previous_response_id` | string | No | - | Chain onto a prior stored upstream Responses object when native Responses state is available. |
+| Conversation | `conversation` | string/object | No | - | Gateway conversation ID (`conv_...` from `POST /v1/conversations`), as a string or `{"id": "..."}`. Mutually exclusive with `previous_response_id`; never forwarded upstream. |
 | Store | `store` | bool | No | - | Whether the native upstream should persist the generated response. Fallback paths may pass or echo the field but cannot provide OpenAI-managed persistence. |
 | Tools | `tools` | array | No | - | Tools (including built-ins) the model may call. |
 | Tool choice | `tool_choice` | string/object | No | - | How tools are selected. |

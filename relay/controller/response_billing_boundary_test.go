@@ -35,7 +35,9 @@ func TestNativeResponseWireBoundaryRejectsUnmeteredTools(t *testing.T) {
 }
 
 // TestNativeResponseWireBoundaryFiltersUnknownRoots verifies that raw extension
-// fields cannot bypass the controlled passthrough policy or erase conversation state.
+// fields cannot bypass the controlled passthrough policy and that a conversation
+// selector, which only the owner-scoped gateway store can resolve, never reaches
+// the provider.
 func TestNativeResponseWireBoundaryFiltersUnknownRoots(t *testing.T) {
 	t.Parallel()
 	raw := []byte(`{"model":"gpt-4o","input":"hello","conversation":"conv_test","max_tool_calls":100,"vendor_extra":true}`)
@@ -48,7 +50,8 @@ func TestNativeResponseWireBoundaryFiltersUnknownRoots(t *testing.T) {
 	require.NoError(t, json.Unmarshal(wire, &root))
 	require.NotContains(t, root, "max_tool_calls")
 	require.NotContains(t, root, "vendor_extra")
-	require.JSONEq(t, `"conv_test"`, string(root["conversation"]))
+	require.NotContains(t, root, "conversation")
+	require.JSONEq(t, `"hello"`, string(root["input"]))
 }
 
 // TestNativeResponseWireBoundaryPreservesLocalToolGrammar verifies that

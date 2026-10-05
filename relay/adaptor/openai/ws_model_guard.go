@@ -63,6 +63,10 @@ func buildModelSwitchErrorEvent(message string) []byte {
 //     actual due to model mapping) are rewritten to `boundActualModel`
 //   - frames whose `model` differs from both bound names return ErrModelSwitchDenied
 //     so the caller can emit an error event and close the connection
+//   - frames naming `type` or `model` more than once or in non-canonical case
+//     return ErrModelSwitchDenied: the decoded map keeps only the last exact key,
+//     so validating it and forwarding the raw bytes would let a provider that
+//     reads another copy act on an unchecked model
 //
 // Parameters:
 //   - frame: raw text frame bytes received from the client.
@@ -84,6 +88,9 @@ func enforceResponseCreateModel(frame []byte, boundOriginModel, boundActualModel
 		// malformed frames on its side and a malformed frame cannot itself
 		// switch the model.
 		return frame, nil
+	}
+	if err := validateWSFrameGuardedKeys(frame, "type", "model"); err != nil {
+		return frame, errors.Wrapf(ErrModelSwitchDenied, "ambiguous response.create frame: %v", err)
 	}
 
 	eventType, _ := raw["type"].(string)
@@ -134,6 +141,8 @@ func enforceResponseCreateModel(frame []byte, boundOriginModel, boundActualModel
 //   - model == meta.ActualModelName -> forward as-is
 //   - model == meta.OriginModelName (alias) -> rewrite to meta.ActualModelName
 //   - any other value -> return a 400 error and do NOT forward upstream
+//   - model named more than once or in non-canonical case -> 400, because the
+//     body is forwarded raw after checking only the last decoded copy
 //
 // When meta is nil or meta.ActualModelName is empty (legacy code path where
 // the proxy could not resolve a bound model) the function is a no-op and
@@ -178,6 +187,17 @@ func enforceRealtimeSessionsBodyModel(body []byte, meta *rmeta.Meta) ([]byte, *r
 				Type:     rmodel.ErrorTypeOneAPI,
 				Code:     "invalid_request_body",
 				RawError: errors.Wrap(err, "unmarshal realtime sessions body"),
+			},
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	if err := validateWSFrameGuardedKeys(body, "model"); err != nil {
+		return nil, &rmodel.ErrorWithStatusCode{
+			Error: rmodel.Error{
+				Message:  "invalid realtime sessions body: " + err.Error(),
+				Type:     rmodel.ErrorTypeOneAPI,
+				Code:     "model_switch_denied",
+				RawError: errors.Wrap(ErrModelSwitchDenied, err.Error()),
 			},
 			StatusCode: http.StatusBadRequest,
 		}

@@ -12,6 +12,10 @@ import (
 // frame is the original JSON, boundModel is the upstream model, and originModel
 // is its authorized public alias. It returns an unchanged or normalized frame,
 // or ErrModelSwitchDenied without forwarding any part of a conflicting update.
+// Frames that name a guarded key (the event type, the session objects, or any
+// key on a model path) more than once or in non-canonical case are denied too:
+// the guard checks the last decoded copy and may forward the original bytes, so
+// an ambiguous frame could carry a model or event type the guard never saw.
 func enforceRealtimeSessionUpdate(frame []byte, boundModel, originModel string, transcription bool) ([]byte, error) {
 	if len(frame) == 0 || boundModel == "" {
 		return frame, nil
@@ -19,6 +23,9 @@ func enforceRealtimeSessionUpdate(frame []byte, boundModel, originModel string, 
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(frame, &raw); err != nil {
 		return frame, nil
+	}
+	if err := validateWSFrameGuardedKeys(frame, realtimeWSGuardedRootKeys...); err != nil {
+		return frame, errors.Wrapf(ErrModelSwitchDenied, "ambiguous realtime event: %v", err)
 	}
 	var eventType string
 	if err := json.Unmarshal(raw["type"], &eventType); err != nil {
@@ -35,6 +42,9 @@ func enforceRealtimeSessionUpdate(frame []byte, boundModel, originModel string, 
 	}
 	var session map[string]json.RawMessage
 	if err := json.Unmarshal(raw["session"], &session); err == nil {
+		if err := validateWSFrameGuardedKeys(raw["session"], "type"); err != nil {
+			return frame, errors.Wrapf(ErrModelSwitchDenied, "ambiguous realtime session: %v", err)
+		}
 		if value, exists := session["type"]; exists {
 			var requested string
 			expected := "realtime"
@@ -82,6 +92,11 @@ func enforceBoundRealtimeModelAtPath(object map[string]json.RawMessage, path []s
 		return false, nil
 	}
 	if len(path) > 1 {
+		// The parent level owns the duplicate check for the next path key,
+		// because decoding value into a map would silently keep the last copy.
+		if err := validateWSFrameGuardedKeys(value, path[1]); err != nil {
+			return false, errors.Wrapf(ErrModelSwitchDenied, "ambiguous realtime configuration: %v", err)
+		}
 		var child map[string]json.RawMessage
 		if err := json.Unmarshal(value, &child); err != nil || child == nil {
 			return false, nil
