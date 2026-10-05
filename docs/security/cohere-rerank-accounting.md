@@ -118,3 +118,25 @@ four final ledgers. This evidence uses only loopback fixtures, not live invoices
 Primary numeric contracts checked during review:
 [ApiMetaBilledUnits](https://github.com/cohere-ai/cohere-python/blob/main/src/cohere/types/api_meta_billed_units.py)
 and [ApiMetaTokens](https://github.com/cohere-ai/cohere-python/blob/main/src/cohere/types/api_meta_tokens.py).
+
+## Persisted operator contracts
+
+A custom Cohere-compatible rerank model can declare `context_length` in its
+persisted channel model configuration. This field survives JSON normalization
+and the shared model resolver. It is used only for otherwise unknown models;
+an override cannot shrink the published bound for a known Cohere model. The
+operator must verify the same query-truncation contract before configuring a
+custom context. An absent contract still rejects before a provider call.
+
+An explicit free-search contract (`ratio: 0` together with
+`per_call.usd_per_thousand_calls: 0`) remains free at group ratio one, including
+zero-balance owners and finite tokens. The Cohere path recognizes this resolved
+contract without falling back through the legacy nonzero-ratio resolver to a
+paid provider default. Other provider and generic token pricing are unchanged.
+
+Test-only commit `0446d83c` reproduced both advertised compatibility failures
+through persisted channel JSON, the production resolver and actual HTTP/ledger
+paths: explicit free requests rejected with 403, and declared custom contexts
+rejected with 400. Nineteen other admission controls passed, including missing
+custom-contract rejection and refusal to shrink known model bounds. The fixes
+retain this full matrix as regression coverage.

@@ -63,6 +63,11 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	modelRatio := pricing.ResolveModelRatioAt(rerankRequest.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	modelConfig, hasModelConfig := pricing.ResolveModelConfig(rerankRequest.Model, channelModelConfigs, pricingAdaptor, meta.StartTime)
 	perCallBilling := hasModelConfig && modelConfig.PerCall != nil && modelConfig.PerCall.HasData()
+	// A present operator free-search contract must not fall through the legacy
+	// nonzero-ratio resolver to the provider's paid catalog default.
+	if perCallBilling && meta.ChannelType == channeltype.Cohere && modelConfig.Ratio == 0 && modelConfig.PerCall.UsdPerThousandCalls == 0 {
+		modelRatio = 0
+	}
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 
 	promptTokens := countRerankPromptTokens(ctx, rerankRequest)
