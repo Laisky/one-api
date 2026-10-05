@@ -52,6 +52,10 @@ func TestProtocolAuditAudioHTTP(t *testing.T) {
 		low, unlimited, writeFail bool
 		override                  *model.ModelConfigLocal
 	}{
+		{name: "mimo_promotion", actual: "XiaomiMiMo/MiMo-V2.5-tts", text: "Hello", channel: channeltype.DeepInfra, status: 200, charge: 0, group: 1},
+		{name: "mimo_clone_promotion", actual: "XiaomiMiMo/MiMo-V2.5-tts-voiceclone", text: "Hello", channel: channeltype.DeepInfra, status: 200, charge: 0, group: 1},
+		{name: "mimo_design_promotion", actual: "XiaomiMiMo/MiMo-V2.5-tts-voicedesign", text: "Hello", channel: channeltype.DeepInfra, status: 200, charge: 0, group: 1},
+		{name: "mimo_operator_characters", actual: "XiaomiMiMo/MiMo-V2.5-tts", text: "Hello", channel: channeltype.DeepInfra, status: 200, charge: 25, group: 1, override: &model.ModelConfigLocal{Audio: &model.AudioPricingLocal{InputUnit: "characters", InputPriceQuantity: 1e6, InputPriceUsd: 10}}},
 		{name: "mistral_chars", actual: "voxtral-mini-tts-2603", text: "你é🙂", channel: channeltype.Mistral, status: 200, charge: 24, group: 1},
 		{name: "mistral_legacy_alias", actual: "voxtral-tts-2603", text: "hello", channel: channeltype.Mistral, status: 200, charge: 40, group: 1},
 		{name: "mistral_latest", actual: "voxtral-mini-tts-latest", text: "hello", channel: channeltype.Mistral, status: 200, charge: 40, group: 1},

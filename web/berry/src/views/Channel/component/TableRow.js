@@ -103,7 +103,7 @@ export default function ChannelTableRow({
   };
 
   const updateChannelBalance = async () => {
-    const res = await API.get(`/api/channel/update_balance/${ref}`);
+    const res = await API.post(`/api/channel/update_balance/${ref}`);
     const { success, message, balance } = res.data;
     if (success) {
       setItemBalance(balance);

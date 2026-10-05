@@ -32,7 +32,7 @@ GET  /cost/request/:request_id      - Request cost lookup (⚠️ SECURITY RISK)
 ```
 POST /api/user/register             - User registration (CriticalRateLimit + Turnstile)
 POST /api/user/login                - User login (CriticalRateLimit)
-GET  /api/user/logout               - User logout
+POST /api/user/logout               - User logout (GET before #479)
 POST /api/user/reset                - Password reset (CriticalRateLimit)
 GET  /api/verification              - Email verification (CriticalRateLimit + Turnstile)
 GET  /api/reset_password            - Password reset email (CriticalRateLimit + Turnstile)
@@ -45,9 +45,9 @@ GET  /api/oauth/github              - GitHub OAuth (CriticalRateLimit)
 GET  /api/oauth/oidc                - OIDC authentication (CriticalRateLimit)
 GET  /api/oauth/lark                - Lark OAuth (CriticalRateLimit)
 GET  /api/oauth/state               - OAuth state generation (CriticalRateLimit)
-GET  /api/oauth/wechat              - WeChat authentication (CriticalRateLimit)
-GET  /api/oauth/wechat/bind         - WeChat binding (CriticalRateLimit + UserAuth)
-GET  /api/oauth/email/bind          - Email binding (CriticalRateLimit + UserAuth)
+POST /api/oauth/wechat              - WeChat authentication (CriticalRateLimit; GET before #479)
+POST /api/oauth/wechat/bind         - WeChat binding (CriticalRateLimit + UserAuth; GET before #479)
+POST /api/oauth/email/bind          - Email binding (CriticalRateLimit + UserAuth; GET before #479)
 ```
 
 ### User-Level Endpoints (UserAuth Required)
@@ -60,12 +60,12 @@ GET  /api/user/dashboard/users      - User list (⚠️ ROOT ONLY)
 GET  /api/user/self                 - User profile
 PUT  /api/user/self                 - Update profile
 DELETE /api/user/self               - Delete account
-GET  /api/user/token                - Generate access token
-GET  /api/user/aff                  - Affiliate code
+POST /api/user/token                - Generate access token (GET before #479)
+POST /api/user/aff                  - Affiliate code (GET before #479)
 POST /api/user/topup                - User top-up
 GET  /api/user/available_models     - Available models
 GET  /api/user/totp/status          - TOTP status
-GET  /api/user/totp/setup           - TOTP setup
+POST /api/user/totp/setup           - TOTP setup (GET before #479)
 POST /api/user/totp/confirm         - TOTP confirmation
 POST /api/user/totp/disable         - TOTP disable
 ```
@@ -115,8 +115,8 @@ GET  /api/channel/                  - List channels
 GET  /api/channel/search            - Search channels
 GET  /api/channel/models            - List all models
 GET  /api/channel/:id               - Get channel
-GET  /api/channel/test              - Test all channels
-GET  /api/channel/test/:id          - Test specific channel
+POST /api/channel/test              - Test all channels (GET before #479)
+POST /api/channel/test/:id          - Test specific channel (GET before #479)
 GET  /api/channel/pricing/:id       - Get channel pricing
 GET  /api/channel/default-pricing   - Get default pricing
 POST /api/channel/                  - Add channel
@@ -248,6 +248,7 @@ RoleRootUser    = 100 (Super administrators)
 
 **Risk**: Session fixation, insufficient session security
 **Details**: Session handling could be strengthened with additional security measures.
+**Update (#479)**: State-changing dashboard actions are now `POST`-only (legacy `GET` returns `405`), and session-cookie `POST`/`PUT`/`PATCH`/`DELETE` requests must carry same-origin provenance (`Sec-Fetch-Site: same-origin`, a trusted `Origin`, or an exact trusted `Referer`), closing the cross-site request forgery path.
 
 ## Billing Security Analysis
 

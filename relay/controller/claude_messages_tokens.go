@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 
@@ -21,12 +23,16 @@ const fastTokenEstimateThreshold = 1 * 1024 * 1024
 
 // estimateClaudeMessagesPromptTokens counts the same semantic content for every serialized body size.
 // The body size does not justify a lower quote; transport limits bound accepted input separately.
-func estimateClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest, _ int) int {
+func estimateClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest, _ int) (int, error) {
 	return getClaudeMessagesPromptTokens(ctx, request)
 }
 
-// getClaudeMessagesPromptTokens estimates the number of prompt tokens for Claude Messages API.
-func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest) int {
+// getClaudeMessagesPromptTokens returns a native prompt estimate or an error
+// for malformed PDF sources or unrepresentable document and prompt token sums.
+func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest) (int, error) {
+	if request == nil {
+		return 0, errors.New("nil native Claude prompt quote")
+	}
 	logger := gmw.GetLogger(ctx)
 
 	// Convert Claude Messages to OpenAI format for accurate token counting
@@ -58,12 +64,22 @@ func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesR
 		promptTokens += fileImageTokens
 	}
 
+	documentTokens, err := countClaudeNativeDocumentAllowance(ctx, request)
+	if err != nil {
+		return 0, err
+	}
+	if promptTokens < 0 || documentTokens > math.MaxInt-promptTokens {
+		return 0, errors.New("native Claude prompt token sum exceeds integer range")
+	}
+	promptTokens += documentTokens
+
 	logger.Debug("estimated prompt tokens for Claude Messages",
 		zap.Int("total", promptTokens),
 		zap.String("model", request.Model),
 		zap.Int("image_fallback", fileImageTokens),
+		zap.Int("document_allowance", documentTokens),
 	)
-	return promptTokens
+	return promptTokens, nil
 }
 
 // countClaudeFileImageTokens estimates tokens for image blocks that reference file-based sources.
@@ -216,11 +232,10 @@ func convertClaudeToOpenAIForTokenCounting(request *ClaudeMessagesRequest) *rela
 			// Simple string content
 			openaiMessage.Content = content
 		case []any:
-			// Structured content blocks - convert to OpenAI format, including the
-			// text and images nested in tool results that are forwarded upstream.
-			contentParts := appendClaudeCountingParts(nil, content)
-			if len(contentParts) > 0 {
-				openaiMessage.Content = contentParts
+			// Structured content blocks: text, images (including those nested in
+			// tool results) and every other forwarded block are projected for counting.
+			if parts := claudeContentTokenParts(content); len(parts) > 0 {
+				openaiMessage.Content = parts
 			}
 		default:
 			// Fallback: convert to string
@@ -233,37 +248,6 @@ func convertClaudeToOpenAIForTokenCounting(request *ClaudeMessagesRequest) *rela
 	}
 
 	return openaiRequest
-}
-
-// appendClaudeCountingParts appends the countable text and image parts of
-// Claude content (a string or block list) to parts, descending into
-// tool_result and search_result content. It returns the extended parts.
-func appendClaudeCountingParts(parts []relaymodel.MessageContent, content any) []relaymodel.MessageContent {
-	switch value := content.(type) {
-	case string:
-		if value != "" {
-			text := value
-			parts = append(parts, relaymodel.MessageContent{Type: relaymodel.ContentTypeText, Text: &text})
-		}
-	case []any:
-		for _, block := range value {
-			parts = appendClaudeCountingParts(parts, block)
-		}
-	case map[string]any:
-		switch value["type"] {
-		case "text":
-			if text, ok := value["text"].(string); ok {
-				parts = append(parts, relaymodel.MessageContent{Type: relaymodel.ContentTypeText, Text: &text})
-			}
-		case "image":
-			if imageURL, ok := claudeImageCountingURL(value); ok {
-				parts = append(parts, relaymodel.MessageContent{Type: relaymodel.ContentTypeImageURL, ImageURL: imageURL})
-			}
-		case "tool_result", "search_result":
-			parts = appendClaudeCountingParts(parts, value["content"])
-		}
-	}
-	return parts
 }
 
 // claudeImageCountingURL converts an inline or URL Claude image block into the

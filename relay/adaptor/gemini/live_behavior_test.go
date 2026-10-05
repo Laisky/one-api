@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/realtime"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
@@ -30,10 +31,19 @@ type liveFixtureResult struct {
 	endpoint string
 }
 
-// liveFixture creates a real upstream and downstream WebSocket pair. Parameters:
-// t, channel and name configure the session; serve runs after upstream upgrade.
-// Returns: the gateway URL and joined handler result. No paid provider is called.
+// liveFixture creates a real upstream and downstream WebSocket pair with an
+// unlimited session budget. Parameters: t, channel and name configure the
+// session; serve runs after upstream upgrade. Returns: the gateway URL and
+// joined handler result. No paid provider is called.
 func liveFixture(t *testing.T, channel int, name string, serve func(*websocket.Conn) error) (string, <-chan liveFixtureResult) {
+	t.Helper()
+	return liveFixtureWithGate(t, channel, name, newTestLiveGate(-1), serve)
+}
+
+// liveFixtureWithGate is liveFixture with an explicit session budget.
+// Parameters: gate funds every forwarding decision; the rest as liveFixture.
+// Returns: the gateway URL and joined handler result.
+func liveFixtureWithGate(t *testing.T, channel int, name string, gate realtime.SpendGate, serve func(*websocket.Conn) error) (string, <-chan liveFixtureResult) {
 	t.Helper()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Goog-Api-Key") != "provider-fixture" || r.Header.Get("Authorization") != "" || r.URL.RawQuery != "" {
@@ -62,6 +72,7 @@ func liveFixture(t *testing.T, channel int, name string, serve func(*websocket.C
 	engine := gin.New()
 	engine.GET("/v1/realtime", func(c *gin.Context) {
 		gmw.SetLogger(c, logger.Logger)
+		SetLiveSpendGate(c, gate)
 		m := &meta.Meta{ChannelType: channel, Mode: relaymode.Realtime, ActualModelName: name, OriginModelName: "friendly", BaseURL: upstream.URL, APIKey: "provider-fixture"}
 		biz, usage := LiveHandler(c, m)
 		if biz != nil {

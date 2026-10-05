@@ -1,11 +1,16 @@
 package controller
 
 import (
+	"context"
+
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/model"
 	relaymodel "github.com/Laisky/one-api/relay/model"
+	quotautil "github.com/Laisky/one-api/relay/quota"
 )
 
 const responseSettlementKey = "billing_response_settlement_started"
@@ -46,6 +51,27 @@ func hasBillableUsage(usage *relaymodel.Usage) bool {
 		return d.AudioTokens > 0 || d.TextTokens > 0 || d.ReasoningTokens > 0
 	}
 	return false
+}
+
+// unpricedUsageEstimateReason marks a settlement that retained its reservation
+// because the tariff could not authoritatively price the receipt.
+const unpricedUsageEstimateReason = "unpriced_usage_retained_reservation"
+
+// retainUnpricedUsage flags a receipt the tariff could not fully price so the
+// caller's estimate floor keeps at least the reservation instead of trusting a
+// partial or zero total. Parameters: ctx carries the request logger, usage is the
+// settled receipt and result is its computed price. Returns: true when flagged.
+func retainUnpricedUsage(ctx context.Context, usage *relaymodel.Usage, result quotautil.ComputeResult) bool {
+	if usage == nil || !result.UnpricedUsage {
+		return false
+	}
+	if usage.BillingEstimateReason == "" {
+		usage.BillingEstimateReason = unpricedUsageEstimateReason
+	}
+	gmw.GetLogger(ctx).Warn("settlement could not price the receipt; retaining the reservation",
+		zap.Int64("priced_quota", result.TotalQuota),
+		zap.Strings("billing_issues", result.BillingIssues))
+	return true
 }
 
 // billingEstimateMetadata adds an explicit estimation label without mutating an

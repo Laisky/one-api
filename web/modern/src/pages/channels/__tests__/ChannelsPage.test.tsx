@@ -246,7 +246,7 @@ describe('ChannelsPage Pagination', () => {
           data: url === '/api/channel/test/1' ? { success: false, message: 'selected test rejected' } : mockChannelsData,
         }) as any
     );
-    mockApiPost.mockResolvedValue({ data: { success: true, data: [{ uuid: '1', name: 'Channel 1' }] } });
+    mockApiPost.mockImplementation((url: string) => Promise.resolve({ data: url === '/api/channel/test/1' ? { success: false, message: 'selected test rejected' } : { success: true, data: [{ uuid: '1', name: 'Channel 1' }] } }) as any);
     renderChannelsPage();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('checkbox', { name: 'Select Channel 1' }));
@@ -254,8 +254,8 @@ describe('ChannelsPage Pagination', () => {
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
     await screen.findByText(/selected test rejected/);
-    expect(mockApiGet).toHaveBeenCalledWith('/api/channel/test/1');
-    expect(mockApiGet).not.toHaveBeenCalledWith('/api/channel/test');
+    expect(mockApiPost).toHaveBeenCalledWith('/api/channel/test/1');
+    expect(mockApiPost).not.toHaveBeenCalledWith('/api/channel/test');
   });
 
   it('only offers text-compatible testing models and clears to CHEAPEST', async () => {

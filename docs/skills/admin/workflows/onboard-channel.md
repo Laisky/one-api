@@ -49,7 +49,7 @@ Add a fresh upstream (OpenAI / Azure / Anthropic / Gemini / ...) safely, from ze
 - [ ] **3. Test the disabled channel.** `/test/:uuid` works regardless of status:
   ```bash
   curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-    "$ONEAPI_BASE_URL/api/channel/test/$CHANNEL_UUID" \
+    -X POST "$ONEAPI_BASE_URL/api/channel/test/$CHANNEL_UUID" \
     | jq '{success, message, time, modelName}'
   ```
   - `success: true`, `time < 10` → proceed.
@@ -58,7 +58,7 @@ Add a fresh upstream (OpenAI / Azure / Anthropic / Gemini / ...) safely, from ze
 - [ ] **4. Pull balance** (if provider supports it):
   ```bash
   curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-    "$ONEAPI_BASE_URL/api/channel/update_balance/$CHANNEL_UUID" \
+    -X POST "$ONEAPI_BASE_URL/api/channel/update_balance/$CHANNEL_UUID" \
     | jq '{success, balance, message}'
   ```
   `success: false, message: not supported` is fine for providers without a balance API (Anthropic, Gemini, etc).

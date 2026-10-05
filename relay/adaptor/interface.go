@@ -21,7 +21,9 @@ import (
 // TimeWindows are applied above Tiers: a matching time-of-day overlay is merged
 // into the base config before tier resolution.
 type ModelConfig struct {
-	Ratio float64 `json:"ratio"`
+	// PricingProvenance distinguishes reviewed media tariffs from missing prices.
+	PricingProvenance *PricingProvenance `json:"pricing_provenance,omitempty"`
+	Ratio             float64            `json:"ratio"`
 	// CompletionRatio represents the output rate / input rate
 	//
 	// The upstream channel applies distinct pricing for cache‑hit and cache‑miss inputs,
@@ -101,6 +103,10 @@ type ModelConfig struct {
 // Returns: a copied ModelConfig whose slices, maps, and pricing blocks can be mutated safely.
 func (cfg ModelConfig) Clone() ModelConfig {
 	clone := cfg
+	if cfg.PricingProvenance != nil {
+		provenance := *cfg.PricingProvenance
+		clone.PricingProvenance = &provenance
+	}
 	if len(cfg.Tiers) > 0 {
 		clone.Tiers = append([]ModelRatioTier(nil), cfg.Tiers...)
 	}
