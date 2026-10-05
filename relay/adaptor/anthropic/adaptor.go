@@ -45,6 +45,10 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	req.Header.Set("anthropic-version", anthropicVersion)
 
 	// Start with any inbound beta headers to preserve explicit caller configuration.
+	// Caller betas are not an admission path: every paid or provider-executed
+	// capability they unlock (server tools, mcp_servers, containers) must also be
+	// declared in the body, which the Claude Messages tool policy gates before
+	// reservation and dispatch.
 	var betaHeaders []string
 	if c != nil && c.Request != nil {
 		betaHeaders = append(betaHeaders, strings.Split(c.Request.Header.Get("anthropic-beta"), ",")...)

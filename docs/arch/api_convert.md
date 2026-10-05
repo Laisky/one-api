@@ -185,7 +185,7 @@ The Claude Messages path now supports Anthropic Tool Search in both northbound a
   - `tool_search_tool_regex`
   - `tool_search_tool_bm25`
   - versioned forms such as `tool_search_tool_regex_20251119` and `tool_search_tool_bm25_20251119`
-- During Claude -> OpenAI-compatible conversion, Tool Search built-ins are normalized to canonical `web_search` tool type so policy validation and billing remain consistent across providers.
+- During Claude -> OpenAI-compatible conversion, Tool Search built-ins are converted to the `web_search` tool type. Because that makes the upstream run a paid search, the converted request is re-validated with the shared Chat/Responses tool policy before dispatch, so the channel must allow and price `web_search` (Tool Search itself is the free `tool_search` capability on native routes).
 - Structured-output promotion is explicitly blocked when Claude messages already contain tool activity blocks, including `server_tool_use` and `tool_search_tool_result`.
 - Southbound native Anthropic passthrough sets `ctxkey.ClaudeToolSearchEnabled` whenever Tool Search tools are present; `SetupRequestHeader` then adds `advanced-tool-use-2025-11-20` to `anthropic-beta` while preserving caller-provided beta tokens and model-specific beta headers.
 

@@ -51,6 +51,8 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 	if ratio != 0 && baseQuota <= 0 {
 		baseQuota = 1
 	}
+	// Admitted paid server tools reserve their bounded allowance with the tokens.
+	baseQuota = withClaudeToolAllowance(c, baseQuota)
 
 	return reservePaidRequestQuota(c, meta, baseQuota, "claude_messages_preconsume")
 }

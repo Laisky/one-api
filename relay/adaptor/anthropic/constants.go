@@ -17,6 +17,14 @@ const (
 	ToolTypeWebSearch = "web_search"
 	// ToolTypeWebSearchPreview is an alias used by some OpenAI-compatible providers.
 	ToolTypeWebSearchPreview = "web_search_preview"
+	// ToolTypeWebFetch is the canonical server-side web fetch capability.
+	ToolTypeWebFetch = "web_fetch"
+	// ToolTypeCodeExecution is the canonical server-side code execution capability.
+	ToolTypeCodeExecution = "code_execution"
+	// ToolTypeToolSearch is the canonical, unmetered Tool Search capability.
+	ToolTypeToolSearch = "tool_search"
+	// ToolTypeMCPConnector is the canonical provider-side MCP connector capability.
+	ToolTypeMCPConnector = "mcp_connector"
 
 	// ToolTypeToolSearchRegex is Anthropic Tool Search regex tool identifier.
 	ToolTypeToolSearchRegex = "tool_search_tool_regex"
@@ -387,10 +395,26 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 const anthropicWebSearchUsdPerCall = 10.0 / 1000.0
 
-// AnthropicToolingDefaults represents Anthropic's published built-in tool pricing (2026-04-16).
-// Source: https://r.jina.ai/https://docs.claude.com/en/docs/build-with-claude/tool-use/web-search-tool
+// AnthropicToolingDefaults represents Anthropic's published server-tool pricing (verified 2026-10-05).
+//
+//   - web_search: $10 per 1,000 searches; failed searches are not billed.
+//     https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
+//   - web_fetch: "no additional charges beyond standard token costs", so it is
+//     priced explicitly at zero instead of being left unpriced.
+//     https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool
+//   - tool_search: not metered as a server tool; loaded definitions bill as input tokens.
+//     https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool
+//
+// Code execution is intentionally absent: it is billed per container-hour
+// ($0.05/hour after a monthly free allowance, 5-minute minimum) and has no
+// per-call tariff the gateway can meter, so it fails closed until an operator
+// configures a channel price. The MCP connector (mcp_servers) is likewise absent
+// because it lets the provider reach caller-chosen remote servers.
+// https://platform.claude.com/docs/en/about-claude/pricing
 var AnthropicToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{
-		ToolTypeWebSearch: {UsdPerCall: anthropicWebSearchUsdPerCall},
+		ToolTypeWebSearch:  {UsdPerCall: anthropicWebSearchUsdPerCall},
+		ToolTypeWebFetch:   {},
+		ToolTypeToolSearch: {},
 	},
 }

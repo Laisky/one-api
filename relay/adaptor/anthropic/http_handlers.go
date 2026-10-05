@@ -84,6 +84,9 @@ func handleClaudeHTTPStream(c *gin.Context, resp *http.Response, native bool) (r
 		if result != nil && !state.finished {
 			usage.BillingEstimateReason = "incomplete_stream_usage_after_accepted_claude_http"
 		}
+		// Server-tool work already performed upstream stays billable even when
+		// the stream later fails; the tally never sums repeated receipts.
+		RecordServerToolInvocations(c, state.receipt.tools.counts())
 	}()
 	if resp == nil || resp.Body == nil {
 		return claudeHTTPError(errors.New("missing Claude response body")), nil
@@ -205,6 +208,9 @@ func handleClaudeHTTPJSON(c *gin.Context, resp *http.Response, modelName string,
 		if usage == nil && !admissionRejected {
 			usage = retainedHTTPUsage(&receipt)
 		}
+		if !admissionRejected {
+			RecordServerToolInvocations(c, receipt.tools.counts())
+		}
 	}()
 	if resp == nil || resp.Body == nil {
 		return claudeHTTPError(errors.New("missing Claude response body")), nil
@@ -218,10 +224,11 @@ func handleClaudeHTTPJSON(c *gin.Context, resp *http.Response, modelName string,
 		return claudeHTTPError(errors.New("Claude response exceeds gateway 32 MiB limit")), nil
 	}
 	var envelope struct {
-		Type  string          `json:"type"`
-		Model string          `json:"model"`
-		Usage json.RawMessage `json:"usage"`
-		Error Error           `json:"error"`
+		Type    string          `json:"type"`
+		Model   string          `json:"model"`
+		Usage   json.RawMessage `json:"usage"`
+		Content json.RawMessage `json:"content"`
+		Error   Error           `json:"error"`
 	}
 	if err := decodeClaudeJSON(raw, &envelope); err != nil {
 		return claudeHTTPError(err), nil
@@ -229,6 +236,7 @@ func handleClaudeHTTPJSON(c *gin.Context, resp *http.Response, modelName string,
 	if err := receipt.apply(envelope.Usage); err != nil {
 		return claudeHTTPError(err), nil
 	}
+	receipt.tools.observeContent(envelope.Content)
 	if closeErr != nil {
 		return claudeHTTPError(errors.Wrap(closeErr, "close Claude response")), nil
 	}
