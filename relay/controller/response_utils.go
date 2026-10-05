@@ -285,16 +285,17 @@ func countResponseAPIContentPartTokens(ctx context.Context, partMap map[string]a
 	case "input_image":
 		url, _ := partMap["image_url"].(string)
 		detail, _ := partMap["detail"].(string)
-		if url == "" && deepseekcompat.IsFlashVisionModel(model) {
+		if strings.TrimSpace(url) == "" {
 			fileID, _ := partMap["file_id"].(string)
 			fileData, _ := partMap["file_data"].(string)
-			if strings.TrimSpace(fileID) != "" || strings.TrimSpace(fileData) != "" {
-				// CountImageTokens uses DeepSeek's fixed upper bound and does not
-				// inspect the sentinel because the model is handled specially.
-				url = "deepseek-file-input"
+			if strings.TrimSpace(fileID) == "" && strings.TrimSpace(fileData) == "" {
+				return 0
 			}
+			// The provider resolves file-backed images that the gateway cannot
+			// inspect; they still receive a conservative image allowance.
+			url = ""
 		}
-		return countResponseAPIImageTokens(ctx, url, detail, model)
+		return openai.EstimateImageTokens(ctx, url, detail, model)
 	case "input_audio":
 		if inputAudio, ok := partMap["input_audio"].(map[string]any); ok {
 			if data, ok := inputAudio["data"].(string); ok && data != "" {
@@ -306,37 +307,6 @@ func countResponseAPIContentPartTokens(ctx context.Context, partMap map[string]a
 		return openai.CountTokenText(text, model)
 	}
 	return countResponseAPIValueTokens(ctx, partMap, model)
-}
-
-// countResponseAPIImageTokens counts tokens for an input image.
-// Parameters: ctx is the request context; url is the image URL; detail is the image detail level; model is the target model name.
-// Returns: the estimated token count for the image input.
-func countResponseAPIImageTokens(ctx context.Context, url string, detail string, model string) int {
-	if url == "" {
-		return 0
-	}
-	lg := gmw.GetLogger(ctx)
-	tokens, err := openai.CountImageTokens(url, detail, model)
-	if err != nil {
-		isDataURL := strings.HasPrefix(url, "data:image/")
-		b64Len := 0
-		if isDataURL {
-			if idx := strings.Index(url, ","); idx >= 0 && idx+1 < len(url) {
-				b64Len = len(url[idx+1:])
-			}
-		}
-		if lg != nil {
-			lg.Debug("response api image token count failed",
-				zap.Error(err),
-				zap.String("model", model),
-				zap.Bool("data_url", isDataURL),
-				zap.Int("base64_len", b64Len),
-				zap.String("detail", detail),
-			)
-		}
-		return 0
-	}
-	return tokens
 }
 
 // countResponseAPIAudioTokens counts tokens for base64 audio inputs.

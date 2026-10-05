@@ -731,7 +731,7 @@ export const useChannelForm = () => {
 
     try {
       setIsSubmitting(true);
-      const response = await api.get(`/api/channel/test/${channelId}`);
+      const response = await api.post(`/api/channel/test/${channelId}`);
       const { success, message, skipped } = response.data;
 
       if (success) {

@@ -110,20 +110,20 @@ cmd_channel() {
       if (( $# >= 2 )) && [[ "$1" == --model ]]; then
         qs="?model=$(jq -rn --arg v "$2" '$v|@uri')"; shift 2
       fi
-      oneapi_get "/api/channel/test/$uuid$qs" | jq '{success, message, time, modelName}'
+      oneapi_request POST "/api/channel/test/$uuid$qs" | jq '{success, message, time, modelName}'
       ;;
     test-all)
       local scope=enabled
       while (( $# > 0 )); do
         case "$1" in --scope) scope="$2"; shift 2 ;; *) die "unknown flag $1" ;; esac
       done
-      oneapi_get "/api/channel/test?scope=$(jq -rn --arg v "$scope" '$v|@uri')" | jq '{success, message}'
+      oneapi_request POST "/api/channel/test?scope=$(jq -rn --arg v "$scope" '$v|@uri')" | jq '{success, message}'
       ;;
     balance)
       if (( $# >= 1 )); then
-        oneapi_get "/api/channel/update_balance/$1" | jq '{success, balance, message}'
+        oneapi_request POST "/api/channel/update_balance/$1" | jq '{success, balance, message}'
       else
-        oneapi_get "/api/channel/update_balance" | jq '{success, message}'
+        oneapi_request POST "/api/channel/update_balance" | jq '{success, message}'
       fi
       ;;
     disable)

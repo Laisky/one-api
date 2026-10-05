@@ -281,6 +281,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 			usage = streamUsage
 		} else {
 			usage = openai.ResponseText2Usage(responseText, meta.ActualModelName, meta.PromptTokens)
+			usage.BillingEstimateReason = "gemini_stream_missing_usage_receipt"
 		}
 	} else {
 		switch meta.Mode {

@@ -14,7 +14,7 @@ Drive the one-api admin HTTP API from the command line. Every admin operation in
 1. **Install tooling** — `curl` and `jq` must be on PATH. If missing, install with `sudo apt-get install -y curl jq` (Debian/Ubuntu) or the platform equivalent.
 2. **Mint an admin access token** via the UI:
    - Log in as an admin (role ≥ 10) or root (role = 100).
-   - Go to Profile → "Generate System Access Token" (calls `GET /api/user/token`).
+   - Go to Profile → "Generate System Access Token" (calls `POST /api/user/token`).
    - The returned UUID is your `ONEAPI_ADMIN_TOKEN`. It lives in `users.access_token` and stays valid until regenerated.
 3. **Export env vars** in the shell you'll work from:
    ```bash
@@ -87,7 +87,7 @@ Step-by-step guides with validation gates. Follow the checkboxes in order — th
 1. **Auth header format is `Authorization: <uuid>`, NOT `Authorization: Bearer <uuid>`.** The server strips a `Bearer ` prefix if present ([model/user.go:410](../../../model/user.go#L410)), so Bearer-form also works — but stay consistent with the raw UUID form to match other examples in this skill.
 2. **Role matters.** Admin routes (`role >= 10`) cover everything in this skill except `/api/option/` (model/group ratios, system toggles) which is **Root-only (`role == 100`)**. If a ratio PUT fails with 403, your token is admin-not-root — ask a root user to run it.
 3. **Quota is a 64-bit integer in internal "quota units", NOT dollars.** 1 USD ≈ `QuotaPerUnit` units (default 500000). Always fetch `QuotaPerUnit` from `/api/option/` before converting, and present both unit and USD forms when talking to humans. A carelessly typed extra zero grants 10× intended credit.
-4. **Channel `status` values:** `1=enabled`, `2=manually disabled`, `3=automatically disabled` (by health check / balance check). Setting `status=2` by PUT is the admin kill-switch. Do **not** overwrite `3` → `1` without understanding *why* it was auto-disabled (check `response_time`, `balance`, or run `GET /api/channel/test/:id`).
+4. **Channel `status` values:** `1=enabled`, `2=manually disabled`, `3=automatically disabled` (by health check / balance check). Setting `status=2` by PUT is the admin kill-switch. Do **not** overwrite `3` → `1` without understanding *why* it was auto-disabled (check `response_time`, `balance`, or run `POST /api/channel/test/:id`).
 5. **Never delete a channel/user/token as a first step.** Disable first (`status=2` for channels; `POST /api/user/manage` with `action=disable`; or `PUT /api/token/?status_only=1`). Delete only after downstream usage has stopped — logs and billing rows reference `channel_uuid` / `user_uuid`.
 6. **Ratio changes are system-wide and take effect immediately.** The server reloads option JSON on the next request. Validate your JSON with `jq -e` before PUT. Never hand-edit `ModelRatio` JSON in-place in the UI — copy-modify-paste so you have a rollback copy.
 7. **Pagination is zero-indexed (`p=0` is the first page).** `size` is capped at `MaxItemsPerPage` (from config). Always read `total` from the response envelope and loop `while p*size < total`. See [scripts/lib.sh](scripts/lib.sh) `oneapi_paginate`.

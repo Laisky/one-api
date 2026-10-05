@@ -106,7 +106,7 @@ const useLogin = () => {
 
   const wechatLogin = async (code) => {
     try {
-      const res = await API.get(`/api/oauth/wechat?code=${code}`);
+      const res = await API.post(`/api/oauth/wechat?code=${encodeURIComponent(code)}`);
       const { success, message, data } = res.data;
       if (success) {
         const user = normalizeUser(data);
@@ -123,7 +123,7 @@ const useLogin = () => {
   };
 
   const logout = async () => {
-    await API.get('/api/user/logout');
+    await API.post('/api/user/logout');
     localStorage.removeItem('user');
     dispatch({ type: LOGIN, payload: null });
     navigate('/');

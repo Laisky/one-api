@@ -108,7 +108,7 @@ export function Header() {
     setIsLoggingOut(true);
     try {
       // Unified API call - complete URL with /api prefix
-      await api.get('/api/user/logout');
+      await api.post('/api/user/logout');
     } catch (error) {
       console.error('Logout failed:', error);
     } finally {
