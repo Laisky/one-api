@@ -8,11 +8,14 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/cohere"
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/pricing"
 	"github.com/Laisky/one-api/relay/relaymode"
 	"github.com/stretchr/testify/require"
 )
@@ -22,9 +25,9 @@ import (
 // settlement, not a claim that the existing admission estimate bounds long jobs.
 func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 	for _, tc := range []struct {
-		name, units, reason  string
-		group                float64
-		charge, balance      int64
+		name, units, reason string
+		group               float64
+		charge, balance     int64
 		unlimited, truncate bool
 	}{
 		{name: "one_search_control", units: `1`, group: 1, charge: 1000, balance: 10000},
@@ -43,7 +46,11 @@ func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			securityImageAccount(t, tc.balance, tc.balance, tc.unlimited)
-			ch := securityImageChannel(t, channeltype.Cohere, "rerank-v3.5", `{"ratio":1000}`)
+			ch := securityImageChannel(t, channeltype.Cohere, "rerank-v3.5", `{"ratio":1000,"per_call":{"usd_per_thousand_calls":2}}`)
+			cfg, ok := pricing.ResolveModelConfig("rerank-v3.5", ch.GetModelPriceConfigs(), &cohere.Adaptor{}, time.Now())
+			require.True(t, ok)
+			require.NotNil(t, cfg.PerCall, "fixture must select the actual search tariff")
+			require.Equal(t, float64(1000), cfg.Ratio)
 			var calls atomic.Int32
 			var invalidRequest atomic.Bool
 			var heldOwner, heldToken atomic.Int64
@@ -76,7 +83,9 @@ func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 					w.Header().Set("Content-Length", "9999")
 					body = `{"id":"synthetic-rerank","results":[`
 				}
-				_, _ = fmt.Fprint(w, body)
+				if _, err := fmt.Fprint(w, body); err != nil {
+					invalidRequest.Store(true)
+				}
 			}))
 			securityImageClient(t, server)
 			id := "cohere-units-" + tc.name
@@ -89,6 +98,7 @@ func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 			meta.RequestURLPath = "/v1/rerank"
 			metalib.Set2Context(c, meta)
 			apiErr := RelayRerankHelper(c)
+			drainCriticalTasks(t)
 
 			// Collect physical balances, request cost, and both log types before
 			// asserting the price so a failure retains evidence from every ledger.
@@ -133,7 +143,7 @@ func TestSecurityCohereRerankReceiptLedger(t *testing.T) {
 				require.Contains(t, metadata, tc.reason)
 			}
 			// Admission must still physically reserve the existing one-call floor;
-			// aggregate document/chunk budgeting has a separate regression matrix.
+			// aggregate document/chunk budgeting is outside this settlement matrix.
 			floor := int64(1000 * tc.group)
 			require.Equal(t, tc.balance-floor, heldOwner.Load())
 			if !tc.unlimited {
