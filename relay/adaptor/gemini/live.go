@@ -25,16 +25,12 @@ type livePumpOptions struct {
 	writeTimeout time.Duration
 	drainTimeout time.Duration
 	lifetime     time.Duration
-	inputBudget  *liveInputBudget
 }
 
 // defaultLivePumpOptions returns production safety bounds. Parameters: none.
 // Returns: bounded options; each connection is limited to fifteen minutes.
 func defaultLivePumpOptions() livePumpOptions {
-	return livePumpOptions{
-		writeTimeout: 10 * time.Second, drainTimeout: 2 * time.Second, lifetime: 15 * time.Minute,
-		inputBudget: &liveInputBudget{byteLimit: liveSessionInputBytes, frameLimit: liveSessionInputFrames},
-	}
+	return livePumpOptions{writeTimeout: 10 * time.Second, drainTimeout: 2 * time.Second, lifetime: 15 * time.Minute}
 }
 
 // LiveTransport carries provider-owned connection settings into the shared
@@ -74,6 +70,11 @@ func LiveHandlerWithTransport(c *gin.Context, m *meta.Meta, transport LiveTransp
 	}
 	if !websocket.IsWebSocketUpgrade(c.Request) {
 		return openai.ErrorWrapper(errors.Wrap(ErrLiveProtocol, "WebSocket upgrade required"), "gemini_live_upgrade", http.StatusBadRequest), nil
+	}
+	// Fail closed: without a prepaid budget no billable frame may be forwarded.
+	gate := liveSpendGateFrom(c)
+	if gate == nil {
+		return openai.ErrorWrapper(errors.Wrap(ErrLiveProtocol, "missing Live session budget"), "gemini_live_configuration", http.StatusInternalServerError), nil
 	}
 	// Never copy caller headers, authentication subprotocols, or query values.
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second, Proxy: http.ProxyFromEnvironment}
@@ -119,9 +120,10 @@ func LiveHandlerWithTransport(c *gin.Context, m *meta.Meta, transport LiveTransp
 		liveClose(client, websocket.ClosePolicyViolation, "gemini_live_invalid_setup")
 		return nil, liveLedgerUsage(realtime.NewLedger())
 	}
-	options := defaultLivePumpOptions()
-	if !options.inputBudget.reserve(len(setup)) {
-		liveClose(client, websocket.ClosePolicyViolation, "gemini_live_input_budget_exhausted")
+	spend, err := newLiveSpend(gate, setup, lg)
+	if err != nil {
+		lg.Warn("Gemini Live setup cannot be priced before forwarding", zap.Error(err))
+		liveClose(client, websocket.ClosePolicyViolation, liveSpendCloseReason(err))
 		return nil, liveLedgerUsage(realtime.NewLedger())
 	}
 	if err := liveWrite(upstream, websocket.TextMessage, setup, 10*time.Second); err != nil {
@@ -144,11 +146,11 @@ func LiveHandlerWithTransport(c *gin.Context, m *meta.Meta, transport LiveTransp
 	}
 	_ = client.SetReadDeadline(time.Time{})
 	_ = upstream.SetReadDeadline(time.Time{})
-	usage := runLivePump(client, upstream, options)
+	usage := runLivePump(client, upstream, defaultLivePumpOptions(), spend)
+	spend.finish()
 	lg.Debug("Gemini Live session finished", zap.Int("receipts", len(usage.Realtime.Records)),
 		zap.Bool("usage_gap", usage.Realtime.HasUsageGap()), zap.Int("billing_issues", len(usage.Realtime.Issues)),
-		zap.Int64("input_bytes", options.inputBudget.bytes), zap.Int64("input_frames", options.inputBudget.frames),
-		zap.Bool("input_budget_exhausted", options.inputBudget.exhausted))
+		zap.Bool("budget_exhausted", spend.isExhausted()))
 	return nil, usage
 }
 

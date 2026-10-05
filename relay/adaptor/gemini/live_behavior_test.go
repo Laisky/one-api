@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/realtime"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
@@ -30,10 +31,19 @@ type liveFixtureResult struct {
 	endpoint string
 }
 
-// liveFixture creates a real upstream and downstream WebSocket pair. Parameters:
-// t, channel and name configure the session; serve runs after upstream upgrade.
-// Returns: the gateway URL and joined handler result. No paid provider is called.
+// liveFixture creates a real upstream and downstream WebSocket pair with an
+// unlimited session budget. Parameters: t, channel and name configure the
+// session; serve runs after upstream upgrade. Returns: the gateway URL and
+// joined handler result. No paid provider is called.
 func liveFixture(t *testing.T, channel int, name string, serve func(*websocket.Conn) error) (string, <-chan liveFixtureResult) {
+	t.Helper()
+	return liveFixtureWithGate(t, channel, name, newTestLiveGate(-1), serve)
+}
+
+// liveFixtureWithGate is liveFixture with an explicit session budget.
+// Parameters: gate funds every forwarding decision; the rest as liveFixture.
+// Returns: the gateway URL and joined handler result.
+func liveFixtureWithGate(t *testing.T, channel int, name string, gate realtime.SpendGate, serve func(*websocket.Conn) error) (string, <-chan liveFixtureResult) {
 	t.Helper()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Goog-Api-Key") != "provider-fixture" || r.Header.Get("Authorization") != "" || r.URL.RawQuery != "" {
@@ -62,6 +72,7 @@ func liveFixture(t *testing.T, channel int, name string, serve func(*websocket.C
 	engine := gin.New()
 	engine.GET("/v1/realtime", func(c *gin.Context) {
 		gmw.SetLogger(c, logger.Logger)
+		SetLiveSpendGate(c, gate)
 		m := &meta.Meta{ChannelType: channel, Mode: relaymode.Realtime, ActualModelName: name, OriginModelName: "friendly", BaseURL: upstream.URL, APIKey: "provider-fixture"}
 		biz, usage := LiveHandler(c, m)
 		if biz != nil {
@@ -93,9 +104,8 @@ func acknowledgeLiveFixture(conn *websocket.Conn, name string) error {
 }
 
 // connectLiveFixture opens the gateway and completes setup. Parameters: t and
-// endpoint identify the fixture; timeouts optionally extends its read deadline
-// for large race-instrumented payloads. Returns: a connected socket.
-func connectLiveFixture(t *testing.T, endpoint string, timeouts ...time.Duration) *websocket.Conn {
+// endpoint identify the fixture. Returns: a socket with a bounded read deadline.
+func connectLiveFixture(t *testing.T, endpoint string) *websocket.Conn {
 	t.Helper()
 	conn, response, err := websocket.DefaultDialer.Dial(endpoint, http.Header{"Authorization": []string{"Bearer downstream-fixture"}})
 	if response != nil && response.Body != nil {
@@ -103,11 +113,7 @@ func connectLiveFixture(t *testing.T, endpoint string, timeouts ...time.Duration
 	}
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
-	timeout := 8 * time.Second
-	if len(timeouts) > 0 {
-		timeout = timeouts[0]
-	}
-	require.NoError(t, conn.SetReadDeadline(time.Now().Add(timeout)))
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(8*time.Second)))
 	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte(`{"setup":{"model":"friendly","inputAudioTranscription":{},"outputAudioTranscription":{},"tools":[{"functionDeclarations":[{"name":"lookup","parameters":{"type":"OBJECT"}}]}]}}`)))
 	_, ack, err := conn.ReadMessage()
 	require.NoError(t, err)
@@ -116,21 +122,16 @@ func connectLiveFixture(t *testing.T, endpoint string, timeouts ...time.Duration
 }
 
 // receiveLiveFixture waits for the handler and both pump readers to finish.
-// Parameters: t and results select the session; timeouts optionally extends the
-// bounded wait for large race-instrumented payloads. Returns: its settled usage.
-func receiveLiveFixture(t *testing.T, results <-chan liveFixtureResult, timeouts ...time.Duration) *model.Usage {
+// Parameters: t and results select the session. Returns: its settled usage.
+func receiveLiveFixture(t *testing.T, results <-chan liveFixtureResult) *model.Usage {
 	t.Helper()
-	timeout := 8 * time.Second
-	if len(timeouts) > 0 {
-		timeout = timeouts[0]
-	}
 	select {
 	case result := <-results:
 		require.Nil(t, result.biz)
 		require.NotNil(t, result.usage)
 		require.NotContains(t, result.endpoint, "provider-fixture")
 		return result.usage
-	case <-time.After(timeout):
+	case <-time.After(8 * time.Second):
 		t.Fatal("Live handler did not join its pumps")
 		return nil
 	}

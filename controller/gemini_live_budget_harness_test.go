@@ -28,6 +28,7 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai"
 	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/realtime"
 )
 
 // liveBudgetModel is the documented Developer API Live model whose bundled
@@ -48,12 +49,25 @@ type liveBudgetEnv struct {
 	tokenID   int
 	channelID int
 	gateway   string
+	model     string
 	logs      *observer.ObservedLogs
 	handlers  sync.WaitGroup
 	requests  atomic.Int64
 	requestMu sync.Mutex
 	requestID []string
 }
+
+// unmeteredLiveGate funds all work for transport tests that bypass admission.
+type unmeteredLiveGate struct{}
+
+// Commit ignores receipts. Parameters: record is unused. Returns: none.
+func (unmeteredLiveGate) Commit(realtime.Record) {}
+
+// Ensure funds everything. Parameters: pending is unused. Returns: nil.
+func (unmeteredLiveGate) Ensure(realtime.Estimate) error { return nil }
+
+// Finish ignores evidence. Parameters: evidence is unused. Returns: none.
+func (unmeteredLiveGate) Finish(realtime.Estimate) {}
 
 // liveBudgetServe scripts one provider session after setupComplete. Parameters:
 // conn is the provider-side socket. Returns: an error for fixture violations.
@@ -66,6 +80,7 @@ type liveBudgetOptions struct {
 	UserQuota, TokenQuota int64
 	Unlimited, Vertex     bool
 	Group                 float64
+	Model                 string
 }
 
 // newLiveBudgetEnv provisions the user/token/channel ledger and both sockets.
@@ -75,6 +90,10 @@ type liveBudgetOptions struct {
 func newLiveBudgetEnv(t *testing.T, opts liveBudgetOptions, serve liveBudgetServe) *liveBudgetEnv {
 	t.Helper()
 	userQuota, tokenQuota, unlimited := opts.UserQuota, opts.TokenQuota, opts.Unlimited
+	modelName := opts.Model
+	if modelName == "" {
+		modelName = liveBudgetModel
+	}
 	gin.SetMode(gin.TestMode)
 	setupTokenAuthListModelsEnv(t)
 	sqlDB, err := model.DB.DB()
@@ -109,10 +128,13 @@ func newLiveBudgetEnv(t *testing.T, opts liveBudgetOptions, serve liveBudgetServ
 		channelType = channeltype.VertextAI
 	}
 	channel := &model.Channel{Id: env.channelID, UUID: channelUUID, Type: channelType, Name: "live-budget-channel",
-		Status: model.ChannelStatusEnabled, Group: "default", Models: liveBudgetModel}
+		Status: model.ChannelStatusEnabled, Group: "default", Models: modelName}
 	channelConfig := model.ChannelConfig{}
+	if opts.Vertex || modelName != liveBudgetModel {
+		// Vertex and operator-configured models require explicit channel prices.
+		require.NoError(t, channel.SetModelPriceConfigs(map[string]model.ModelConfigLocal{modelName: vertexLivePrices()}))
+	}
 	if opts.Vertex {
-		require.NoError(t, channel.SetModelPriceConfigs(map[string]model.ModelConfigLocal{liveBudgetModel: vertexLivePrices()}))
 		channelConfig = model.ChannelConfig{VertexAIProjectID: "operator-project", Region: "europe-west4",
 			VertexAIADC: `{"type":"service_account","client_email":"fixture@example.invalid"}`}
 		cacheKey := fmt.Sprintf("vertexai-token-%d", env.channelID)
@@ -190,12 +212,13 @@ func newLiveBudgetEnv(t *testing.T, opts liveBudgetOptions, serve liveBudgetServ
 		c.Set(ctxkey.ChannelModel, channel)
 		c.Set(ctxkey.ChannelRatio, opts.Group)
 		c.Set(ctxkey.BaseURL, upstream.URL)
-		c.Set(ctxkey.RequestModel, liveBudgetModel)
+		c.Set(ctxkey.RequestModel, modelName)
 		RelayRealtime(c)
 	})
 	gateway := httptest.NewServer(engine)
 	t.Cleanup(gateway.Close)
-	env.gateway = "ws" + strings.TrimPrefix(gateway.URL, "http") + "/v1/realtime?model=" + liveBudgetModel
+	env.gateway = "ws" + strings.TrimPrefix(gateway.URL, "http") + "/v1/realtime?model=" + modelName
+	env.model = modelName
 	return env
 }
 
@@ -210,7 +233,7 @@ func (e *liveBudgetEnv) connect() *websocket.Conn {
 	require.NoError(e.t, err)
 	e.t.Cleanup(func() { _ = conn.Close() })
 	require.NoError(e.t, conn.SetReadDeadline(time.Now().Add(time.Minute)))
-	require.NoError(e.t, conn.WriteMessage(websocket.TextMessage, []byte(`{"setup":{"model":"`+liveBudgetModel+`"}}`)))
+	require.NoError(e.t, conn.WriteMessage(websocket.TextMessage, []byte(`{"setup":{"model":"`+e.model+`"}}`)))
 	_, ack, err := conn.ReadMessage()
 	require.NoError(e.t, err)
 	require.JSONEq(e.t, `{"setupComplete":{}}`, string(ack))

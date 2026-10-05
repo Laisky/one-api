@@ -104,6 +104,10 @@ func TestSecurityGeminiLiveLowBalanceInputBurst(t *testing.T) {
 				require.Len(t, rows, 1, "a session settles exactly once")
 				require.EqualValues(t, charged, rows[0].Quota)
 				require.Equal(t, true, rows[0].Metadata[model.LogMetadataKeyEstimatedCharge], "missing receipts stay an explicit estimate")
+				require.Equal(t, true, rows[0].Metadata["realtime_budget_exhausted"])
+				reserved, ok := rows[0].Metadata["realtime_budget_reserved"].(float64)
+				require.True(t, ok)
+				require.Greater(t, reserved, float64(charged), "headroom for turns that never started is refunded")
 			}
 			requireLiveBudgetWarning(t, env)
 		})

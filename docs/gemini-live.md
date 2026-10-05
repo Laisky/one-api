@@ -333,8 +333,10 @@ reconciliation instead of continuing unpriced work indefinitely.
 Both readers join before settlement. After downstream loss, the upstream reader
 has a bounded two-second drain for final usage. Already measured partial work is
 retained. Known idle/zero sessions refund the reservation. Unresolved work keeps
-`max(reservation, observed charge)` as an explicitly labeled **estimate**, not an
-invented exact bill. Concurrent input after the start of a final response can
+`max(observed charge, estimate floor)` as an explicitly labeled **estimate**, not
+an invented exact bill. The floor is at least the admission reservation and the
+priced work the provider demonstrably received, but never more than the prepaid
+reservation; unused funding for turns that never started is refunded. Concurrent input after the start of a final response can
 remain unresolved without a later receipt; clients should end input and wait
 for the final usage/turn boundary before closing. Inspect
 `realtime_billing_complete`, billing issues and estimated-charge metadata.
@@ -361,6 +363,27 @@ directions, priced by the actual resolver. This is not a minimum session fee.
 Unlike the historical trusted-user optimization, Live retains this reservation
 so missing evidence does not become a fabricated free session. Invalid or
 unpriceable reservation configurations are rejected before provider work.
+
+### Prepaid session budget
+
+The admission reservation is the first slice of a per-session budget that every
+forwarding decision consults. Before a client operation reaches Google, the
+gateway bounds its tokens from the wire (text at one token per UTF-8 byte, PCM
+audio at 32 tokens per second of its declared sample rate, images per 768-pixel
+tile with a 2,240-token floor) and requires the reservation to cover all
+receipted spend, the in-flight turn and the next turn. Each turn is assumed to
+re-bill the whole context at the most expensive input rate, plus a per-turn
+output allowance (`generationConfig.maxOutputTokens` when set, otherwise 3,000
+tokens) at the most expensive output rate. Streamed output and per-turn receipts
+update the same budget. When it falls short, the user and finite-token balances
+are debited atomically for the increment; if that fails, the operation is not
+forwarded, the session closes with `gemini_live_quota_exhausted`, and any
+unfunded provider generation is stopped. File references, compressed audio and
+other media that cannot be bounded locally close with
+`gemini_live_unpriceable_input`. Free groups are never reserved or refused.
+Hidden thinking beyond the allowance in one turn is the only work a receipt can
+report above the reservation; it is charged as measured, and no further turn is
+funded.
 
 ## Explicit boundaries
 
@@ -461,16 +484,3 @@ Official source record:
 - [Google Go SDK Live transport and authentication](https://github.com/googleapis/go-genai/blob/main/live.go)
 - [Google ADK native Live event handling](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py)
 - [Browser WebSocket handshake rules](https://websockets.spec.whatwg.org/)
-
-## Aggregate transport allowance
-
-Each native Live session accepts at most 8 MiB of encoded client JSON and 32,768
-client data frames, including setup, function results and activity controls.
-The next frame is rejected before upstream forwarding if it exceeds either
-allowance. The close reason is `gemini_live_input_budget_exhausted`; already
-forwarded input retains the normal bounded receipt drain and settlement.
-These limits can end an active session before its duration limit.
-
-These are resource limits, **not a prepaid monetary ceiling**. Context re-billing,
-reasoning, transcripts and asynchronous outputs still require the monetary
-contract described in [the #462 acceptance ledger](audits/live-aggregate-boundary-20261004.md).

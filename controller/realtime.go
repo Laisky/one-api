@@ -17,6 +17,7 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/meta"
@@ -87,6 +88,18 @@ func RelayRealtime(c *gin.Context) {
 	preConsumedQuota, reserveErr := estimateRealtimeSessionReservation(
 		relayMeta, modelRatio, groupRatio, channelModelConfigs, pricingAdaptor)
 
+	// Native Live sessions also need every modality priceable up front: the
+	// session budget funds each forwarded operation with the settlement prices.
+	var spendGate *liveSpendGate
+	if reserveErr == nil && isGeminiLiveRequest(relayMeta) {
+		spendGate, reserveErr = newLiveSpendGate(c, relayMeta, quotautil.ComputeInput{
+			ModelName: modelName, ModelRatio: modelRatio, ChannelModelRatio: channelModelRatio,
+			GroupRatio: groupRatio, ChannelModelConfigs: channelModelConfigs,
+			ChannelCompletionRatio: channelCompletionRatio, PricingAdaptor: pricingAdaptor,
+			RequestTime: relayMeta.StartTime,
+		}, preConsumedQuota)
+	}
+
 	if reserveErr != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": reserveErr.Error(), "type": "invalid_realtime_pricing"}})
 		PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, false, 0, 0, 0)
@@ -144,19 +157,29 @@ func RelayRealtime(c *gin.Context) {
 	// Mark that we are about to forward upstream — prevents refund after this point
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 
+	// Native Live funds every later operation from this shared, durable budget.
+	reservation := realtimeReservation{Reserved: preConsumedQuota, EstimateFloor: preConsumedQuota}
+	if spendGate != nil {
+		gemini.SetLiveSpendGate(c, spendGate)
+	}
+
 	// ── Step 4: Run WebSocket session ───────────────────────────────────
 	bizErr, usage := runRealtimeProviderWithGemini(c, relayMeta)
+	if spendGate != nil {
+		reservation = spendGate.settlement()
+		rtMarkPreConsumed(c, reservation.Reserved)
+	}
 	if bizErr != nil {
 		// Handshake/connection error — upstream was NOT reached, safe to refund
 		c.Set(ctxkey.UpstreamRequestPossiblyForwarded, false)
-		rtReturnPreConsumedQuota(ctx, c, preConsumedQuota, relayMeta.TokenId, "realtime_connect_failed")
+		rtReturnPreConsumedQuota(ctx, c, reservation.Reserved, relayMeta.TokenId, "realtime_connect_failed")
 		c.JSON(bizErr.StatusCode, gin.H{"error": bizErr.Error})
 		PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, false, 0, 0, 0)
 		return
 	}
 
 	// ── Step 5: Post-consume quota (reconcile) ──────────────────────────
-	quotaUsed := postConsumeRealtimeQuota(c, relayMeta, usage, preConsumedQuota,
+	quotaUsed := settleRealtimeQuota(c, relayMeta, usage, reservation,
 		modelRatio, groupRatio, channelModelRatio, channelModelConfigs,
 		channelCompletionRatio, pricingAdaptor, provisionalLogId)
 
@@ -178,6 +201,7 @@ func RelayRealtime(c *gin.Context) {
 // after a realtime WebSocket session ends. OpenAI receipt paths persist either
 // measured usage or a labeled estimate; authoritative idle/zero usage refunds
 // the reservation. Providers without receipt accounting retain legacy behavior.
+// The whole reservation is also the floor kept when receipts are missing.
 func postConsumeRealtimeQuota(
 	c *gin.Context,
 	relayMeta *meta.Meta,
@@ -191,7 +215,32 @@ func postConsumeRealtimeQuota(
 	pricingAdaptor adaptor.Adaptor,
 	provisionalLogId int,
 ) float64 {
+	return settleRealtimeQuota(c, relayMeta, usage,
+		realtimeReservation{Reserved: preConsumedQuota, EstimateFloor: preConsumedQuota},
+		modelRatio, groupRatio, channelModelRatio, channelModelConfigs, channelCompletionRatio,
+		pricingAdaptor, provisionalLogId)
+}
+
+// settleRealtimeQuota settles a finished session exactly once against its
+// durable reservation. Parameters: reservation carries the quota debited before
+// and during the session, the estimate floor kept when receipts are missing and
+// audit metadata; the remaining parameters select prices and the provisional
+// log. Returns: the final charged quota. A negative delta refunds unused funding.
+func settleRealtimeQuota(
+	c *gin.Context,
+	relayMeta *meta.Meta,
+	usage *rmodel.Usage,
+	reservation realtimeReservation,
+	modelRatio float64,
+	groupRatio float64,
+	channelModelRatio map[string]float64,
+	channelModelConfigs map[string]model.ModelConfigLocal,
+	channelCompletionRatio map[string]float64,
+	pricingAdaptor adaptor.Adaptor,
+	provisionalLogId int,
+) float64 {
 	lg := gmw.GetLogger(c)
+	preConsumedQuota := reservation.Reserved
 
 	if relayMeta.TokenId <= 0 || relayMeta.UserId <= 0 || relayMeta.ChannelId <= 0 {
 		// The request-scoped logger already carries user/token/channel identity.
@@ -226,7 +275,15 @@ func postConsumeRealtimeQuota(
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
 		RequestTime:            relayMeta.StartTime,
-	}, preConsumedQuota, lg)
+	}, reservation.EstimateFloor, lg)
+	if len(reservation.Metadata) > 0 {
+		if metadata == nil {
+			metadata = model.LogMetadata{}
+		}
+		for key, value := range reservation.Metadata {
+			metadata[key] = value
+		}
+	}
 
 	totalQuota := computeResult.TotalQuota
 	if len(computeResult.BillingIssues) > 0 {
