@@ -177,6 +177,10 @@ clients do not require browser provenance. A management request with both a
 signed session and Authorization still authenticates with the session and must
 pass the cookie checks.
 
+Password login and passkey login begin/finish apply the same protection when an
+authenticated cookie is already present. Anonymous login keeps its existing
+contract; this policy is not a claim of complete anonymous login-CSRF coverage.
+
 The following former GET actions now require POST: `/api/user/token`,
 `/api/user/aff`, `/api/user/totp/setup`, `/api/user/logout`,
 `/api/oauth/email/bind`, `/api/oauth/wechat/bind`, `/api/channel/test`,

@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -58,4 +59,33 @@ func TestSessionMutationProvenance(t *testing.T) {
 	request.Header.Set("X-Forwarded-Host", "evil.test")
 	request.Header.Set("X-Forwarded-Proto", "https")
 	require.False(t, trustedSessionMutation(request))
+}
+
+// TestSessionMutationConcurrentServerAddress verifies origin checks can run while
+// an administrator updates the public URL using the option writer's lock.
+func TestSessionMutationConcurrentServerAddress(t *testing.T) {
+	config.OptionMapRWMutex.Lock()
+	previous := config.ServerAddress
+	config.ServerAddress = "https://first.test"
+	config.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		config.OptionMapRWMutex.Lock()
+		config.ServerAddress = previous
+		config.OptionMapRWMutex.Unlock()
+	})
+	var workers sync.WaitGroup
+	workers.Go(func() {
+		for range 1000 {
+			config.OptionMapRWMutex.Lock()
+			config.ServerAddress = "https://second.test"
+			config.ServerAddress = "https://first.test"
+			config.OptionMapRWMutex.Unlock()
+		}
+	})
+	request := httptest.NewRequest(http.MethodPost, "https://gateway.test/api/user/token", nil)
+	request.Header.Set("Origin", "https://attacker.test")
+	for range 1000 {
+		require.False(t, trustedSessionMutation(request))
+	}
+	workers.Wait()
 }

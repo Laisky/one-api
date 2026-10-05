@@ -28,6 +28,10 @@ Dashboard authentication requires trustworthy provenance before authorizing
 unsafe cookie requests. It preserves the existing session-first identity
 contract, current-account validation, signed role ceiling, and bearer-only
 clients. Logout applies the same provenance check separately.
+Password login and passkey login begin/finish also require this check when an
+authenticated cookie already exists, protecting session replacement and pending
+challenge state. Anonymous login retains its existing authentication contract;
+this change does not claim comprehensive anonymous login-CSRF protection.
 
 Trusted origins include scheme and port. An explicitly configured separate
 frontend remains supported. Missing provenance fails closed; same-origin
@@ -74,3 +78,7 @@ The package race run initially exposed unregistered asynchronous channel-log
 and latency writes outliving fixture cleanup. The retained fixture now observes
 their completed database transactions explicitly before restoring globals;
 production worker behavior was not changed as part of this CSRF fix.
+Follow-up regressions cover concurrent public-URL option writes against origin
+checks and existing-cookie login protection with successful login/challenge
+controls. The public URL snapshot uses the option writer's read lock; the
+separate frontend URL is startup-only configuration.

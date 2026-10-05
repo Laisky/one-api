@@ -81,10 +81,13 @@ func trustedSessionOrigin(request *http.Request, origin string) bool {
 		scheme = "https"
 	}
 	candidates := []string{scheme + "://" + request.Host, config.FrontendBaseURL}
+	config.OptionMapRWMutex.RLock()
+	serverAddress := config.ServerAddress
+	config.OptionMapRWMutex.RUnlock()
 	// ServerAddress has a development placeholder, which is not an explicit
 	// trust grant to a localhost website on a production user's machine.
-	if config.ServerAddress != "http://localhost:3000" {
-		candidates = append(candidates, config.ServerAddress)
+	if serverAddress != "http://localhost:3000" {
+		candidates = append(candidates, serverAddress)
 	}
 	for _, candidate := range candidates {
 		if normalized := sessionOrigin(candidate, true); normalized != "" && normalized == origin {
