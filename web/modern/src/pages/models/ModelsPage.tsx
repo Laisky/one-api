@@ -224,12 +224,14 @@ export function ModelsPage() {
 
   /**
    * True when the model carries pricing that isn't priced per input/output token —
-   * e.g. flat per-call, per-image, per-second, or per-document-page billing.
+   * e.g. flat per-call, per-processed-page, per-image, per-second, or per-document-page billing.
    * Used to distinguish "truly free" from "non-token billed" when token-price columns
    * would otherwise show $0 → "Free".
    */
   const hasNonTokenPricing = (data: ModelDisplayData): boolean => {
     if (data.per_call_pricing && ((data.per_call_pricing.usd_per_thousand_calls ?? 0) > 0 || (data.per_call_pricing.usd_per_call ?? 0) > 0))
+      return true;
+    if (data.per_page_pricing && ((data.per_page_pricing.usd_per_thousand_pages ?? 0) > 0 || (data.per_page_pricing.usd_per_page ?? 0) > 0))
       return true;
     if ((data.image_price ?? 0) > 0) return true;
     if (data.image_pricing && (data.image_pricing.price_per_image_usd ?? 0) > 0) return true;
@@ -313,6 +315,7 @@ export function ModelsPage() {
       data.image_pricing ||
       data.embedding_pricing ||
       data.per_call_pricing ||
+      data.per_page_pricing ||
       (data.cache_write_5m_price && data.cache_write_5m_price > 0) ||
       (data.cache_write_1h_price && data.cache_write_1h_price > 0) ||
       (data.cached_input_price !== undefined && data.cached_input_price !== data.input_price)
@@ -356,6 +359,11 @@ export function ModelsPage() {
       {data.per_call_pricing && (
         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
           {tr('labels.per_call', 'Per Call')}
+        </Badge>
+      )}
+      {data.per_page_pricing && (
+        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+          {tr('labels.per_page', 'Per Page')}
         </Badge>
       )}
       {hasReasoning(data) && (

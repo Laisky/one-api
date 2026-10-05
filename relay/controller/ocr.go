@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -28,11 +27,16 @@ import (
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
-	"github.com/Laisky/one-api/relay/pricing"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-// RelayOCRHelper handles POST /v1/layout_parsing and /api/paas/v4/layout_parsing requests.
+// RelayOCRHelper handles POST /v1/layout_parsing and /api/paas/v4/layout_parsing
+// requests. Before dispatch it resolves the model's single pricing contract
+// (token, page or per-call) and reserves a conservative allowance derived from
+// the validated document selection; after the provider accepts the work it
+// settles exactly once from the provider's typed receipt, keeping the allowance
+// as a labelled estimate when the receipt is missing or unusable.
+// Parameters: c is the request context. Returns: an API error, or nil on success.
 func RelayOCRHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)
@@ -53,24 +57,20 @@ func RelayOCRHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	ocrRequest.Model = meta.ActualModelName
 	metalib.Set2Context(c, meta)
 
-	channelModelRatio, _ := getChannelRatios(c)
-	channelModelConfigs := getChannelModelConfigs(c)
-	pricingAdaptor := resolvePricingAdaptor(meta)
-	modelRatio := pricing.ResolveModelRatioAt(ocrRequest.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
-	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
-	totalQuota := int64(math.Ceil(modelRatio * groupRatio))
-	if modelRatio > 0 && totalQuota == 0 {
-		totalQuota = 1
+	plan, bizErr := prepareOCRBillingPlan(c, meta, ocrRequest)
+	if bizErr != nil {
+		return bizErr
 	}
+	lg.Debug("prepared OCR billing plan",
+		zap.String("billing_unit", string(plan.unit)),
+		zap.Int("allowance_pages", plan.allowance.pages),
+		zap.String("allowance_source", plan.allowance.source),
+		zap.Int64("quote", plan.quote))
 
 	meta.PromptTokens = 0
 
-	preConsumedQuota, bizErr := preConsumeOCRQuota(c, totalQuota, meta)
+	preConsumedQuota, bizErr := preConsumeOCRQuota(c, plan.quote, meta)
 	if bizErr != nil {
-		lg.Warn("preConsumeOCRQuota failed",
-			zap.Error(bizErr.RawError),
-			zap.Int("status_code", bizErr.StatusCode),
-			zap.String("err_msg", bizErr.Message))
 		return bizErr
 	}
 	markPreConsumed(c, preConsumedQuota)
@@ -85,17 +85,24 @@ func RelayOCRHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
 	}
 	adaptorImpl.Init(meta)
+	ocrAdaptor, ok := adaptorImpl.(adaptor.OCRAdaptor)
+	if !ok {
+		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "ocr_not_supported")
+		return openai.ErrorWrapper(errors.Errorf("OCR requests are not supported by adaptor %s", adaptorImpl.GetChannelName()), "ocr_not_supported", http.StatusBadRequest)
+	}
 
 	requestBody, err := prepareOCRRequestBody(c, meta, adaptorImpl, ocrRequest)
 	if err != nil {
 		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "convert_request_failed")
 		return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
 	}
+	requestBodyBytes, err := io.ReadAll(requestBody)
+	if err != nil {
+		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "read_request_failed")
+		return openai.ErrorWrapper(errors.Wrap(err, "read converted OCR request"), "read_request_failed", http.StatusInternalServerError)
+	}
 
-	requestBodyBytes, _ := io.ReadAll(requestBody)
-	requestBody = bytes.NewBuffer(requestBodyBytes)
-
-	resp, err := adaptorImpl.DoRequest(c, meta, requestBody)
+	resp, err := adaptorImpl.DoRequest(c, meta, bytes.NewReader(requestBodyBytes))
 	if err != nil {
 		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "do_request_failed")
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
@@ -105,12 +112,8 @@ func RelayOCRHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	quotaId := c.GetInt(ctxkey.Id)
 	requestId := c.GetString(ctxkey.RequestId)
-	provisionalQuota := preConsumedQuota
-	if provisionalQuota == 0 && totalQuota > 0 {
-		provisionalQuota = totalQuota
-	}
 	if requestId != "" {
-		if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, provisionalQuota); err != nil {
+		if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, plan.quote); err != nil {
 			lg.Warn("record provisional user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}
 	}
@@ -118,93 +121,37 @@ func RelayOCRHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if isErrorHappened(meta, resp) {
 		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		if requestId != "" {
-			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
+			if err := recordZeroCostAfterFailure(c, quotaId, requestId); err != nil {
 				lg.Warn("update user request cost to zero failed", zap.Error(err))
 			}
 		}
 		return RelayErrorHandlerWithContext(c, resp)
 	}
 
-	ocrAdaptor, ok := adaptorImpl.(adaptor.OCRAdaptor)
-	if !ok {
-		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "ocr_not_supported")
-		return openai.ErrorWrapper(errors.New("adaptor does not support OCR"), "ocr_not_supported", http.StatusBadRequest)
-	}
-
+	// From here the provider accepted the work: the receipt is settled exactly
+	// once, including when it is missing or the client can no longer be reached.
 	c.Set(ctxkey.SkipAdaptorResponseBodyLog, true)
-	usage, respErr := ocrAdaptor.DoOCRResponse(c, resp, meta)
+	receipt, respErr := ocrAdaptor.DoOCRResponse(c, resp, meta)
 	if upstreamCapture != nil {
 		logUpstreamResponseFromCapture(lg, resp, upstreamCapture, "ocr")
 	} else {
 		logUpstreamResponseFromBytes(lg, resp, nil, "ocr")
 	}
-	if respErr != nil {
-		if usage == nil {
-			scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
-			if requestId != "" {
-				if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
-					lg.Warn("update user request cost to zero failed", zap.Error(err))
-				}
-			}
-			return respErr
-		}
+	settlement := plan.settle(receipt)
+	if settlement.reconcileErr != nil {
+		lg.Error("OCR receipt cannot be priced; conservative allowance retained, manual reconciliation required",
+			zap.Error(settlement.reconcileErr),
+			zap.String("billing_unit", string(plan.unit)),
+			zap.Int64("retained_quota", settlement.quota))
+	} else if settlement.estimateReason != "" {
+		lg.Warn("OCR receipt is not verifiable; settling the conservative allowance as an estimate",
+			zap.String("estimate_reason", settlement.estimateReason),
+			zap.String("billing_unit", string(plan.unit)),
+			zap.Int64("estimated_quota", settlement.quota))
 	}
-
-	// Refund any pre-consumed quota that is safe to return (no-op on the
-	// forwarded success path). Do NOT zero preConsumedQuota here: postConsume
-	// settles via delta (quotaDelta = totalQuota - preConsumedQuota), so the
-	// kept pre-consume plus the delta equals exactly one charge. Zeroing it
-	// would make postConsume recharge the full totalQuota on top of the
-	// still-deducted pre-consume, double charging the user. Mirrors text.go.
-	// Successful dispatch retains its hold for the single final delta settlement below.
-
-	if usage != nil {
-		userIdStr := strconv.Itoa(meta.UserId)
-		username := c.GetString(ctxkey.Username)
-		if username == "" {
-			username = "unknown"
-		}
-		group := meta.Group
-		if group == "" {
-			group = "default"
-		}
-
-		apiFormat := c.GetString(ctxkey.APIFormat)
-		if apiFormat == "" {
-			apiFormat = "unknown"
-		}
-		apiType := relaymode.String(meta.Mode)
-		tokenId := strconv.Itoa(meta.TokenId)
-
-		metrics.Recorder().RecordRelayRequest(
-			meta.StartTime,
-			meta.ChannelId,
-			channeltype.IdToName(meta.ChannelType),
-			meta.ActualModelName,
-			userIdStr,
-			group,
-			tokenId,
-			apiFormat,
-			apiType,
-			true,
-			usage.PromptTokens,
-			usage.CompletionTokens,
-			0,
-		)
-
-		userBalance := float64(getUserQuotaFromContext(c))
-		metrics.Recorder().RecordUserMetrics(
-			userIdStr,
-			username,
-			group,
-			0,
-			usage.PromptTokens,
-			usage.CompletionTokens,
-			userBalance,
-		)
-
-		metrics.Recorder().RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
-	}
+	// An error after accepted work must never be replayed on another channel.
+	markResponseSettlement(c, &relaymodel.Usage{BillingEstimateReason: settlement.estimateReason}, respErr)
+	recordOCRUsageMetrics(c, meta, settlement, respErr == nil)
 
 	markBillingReconciled(c)
 	runPostBillingWithTimeout(detachForBilling(c), "postBillingOCR", lg, postBillingTimeoutInfo{
@@ -213,12 +160,12 @@ func RelayOCRHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		model:               ocrRequest.Model,
 		requestID:           requestId,
 		startTime:           meta.StartTime,
-		estimatedQuota:      func() float64 { return float64(totalQuota) },
-		guardTimeoutLog:     func() bool { return usage != nil },
+		estimatedQuota:      func() float64 { return float64(settlement.quota) },
+		guardTimeoutLog:     func() bool { return true },
 		logMessage:          "CRITICAL BILLING TIMEOUT",
 		includeElapsedField: true,
 	}, func(ctx context.Context) {
-		quota := postConsumeOCRQuota(ctx, usage, meta, ocrRequest, preConsumedQuota, totalQuota, modelRatio, groupRatio)
+		quota := postConsumeOCRQuota(ctx, meta, ocrRequest.Model, preConsumedQuota, plan, settlement)
 		if requestId != "" {
 			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
 				lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
@@ -226,9 +173,40 @@ func RelayOCRHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	})
 
-	return nil
+	return respErr
 }
 
+// recordOCRUsageMetrics records relay, user and model metrics for one settled
+// OCR request using the validated receipt counters.
+// Parameters: c is the request context, meta is the relay metadata, settlement
+// carries the measured counters, and delivered reports whether the response
+// reached the client. It returns no value.
+func recordOCRUsageMetrics(c *gin.Context, meta *metalib.Meta, settlement ocrSettlement, delivered bool) {
+	userIdStr := strconv.Itoa(meta.UserId)
+	username := c.GetString(ctxkey.Username)
+	if username == "" {
+		username = "unknown"
+	}
+	group := meta.Group
+	if group == "" {
+		group = "default"
+	}
+	apiFormat := c.GetString(ctxkey.APIFormat)
+	if apiFormat == "" {
+		apiFormat = "unknown"
+	}
+	channelName := channeltype.IdToName(meta.ChannelType)
+	metrics.Recorder().RecordRelayRequest(meta.StartTime, meta.ChannelId, channelName, meta.ActualModelName,
+		userIdStr, group, strconv.Itoa(meta.TokenId), apiFormat, relaymode.String(meta.Mode), delivered,
+		settlement.promptTokens, settlement.completionTokens, 0)
+	metrics.Recorder().RecordUserMetrics(userIdStr, username, group, 0,
+		settlement.promptTokens, settlement.completionTokens, float64(getUserQuotaFromContext(c)))
+	metrics.Recorder().RecordModelUsage(meta.ActualModelName, channelName, time.Since(meta.StartTime))
+}
+
+// getAndValidateOCRRequest decodes the OCR request body of c and checks that
+// the required model and file fields are present.
+// Parameters: c is the request context. Returns: the request or a wrapped validation error.
 func getAndValidateOCRRequest(c *gin.Context) (*relaymodel.OCRRequest, error) {
 	rawBody, err := common.GetRequestBody(c)
 	if err != nil {
@@ -251,6 +229,11 @@ func getAndValidateOCRRequest(c *gin.Context) (*relaymodel.OCRRequest, error) {
 	return ocrRequest, nil
 }
 
+// prepareOCRRequestBody converts request through adaptorImpl's native OCR
+// conversion, stores the converted payload on c, and returns its JSON body.
+// Parameters: c is the request context, meta is unused relay metadata, adaptorImpl
+// is the selected adaptor, and request is the mapped OCR request.
+// Returns: the serialized body, or an error when conversion is unsupported or fails.
 func prepareOCRRequestBody(c *gin.Context, meta *metalib.Meta, adaptorImpl adaptor.Adaptor, request *relaymodel.OCRRequest) (io.Reader, error) {
 	if request == nil {
 		return nil, errors.New("OCR request is nil")
@@ -277,19 +260,31 @@ func prepareOCRRequestBody(c *gin.Context, meta *metalib.Meta, adaptorImpl adapt
 	return nil, errors.Errorf("OCR requests are not supported by adaptor %s", channelName)
 }
 
-func preConsumeOCRQuota(c *gin.Context, perCallQuota int64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
-	return reservePaidRequestQuota(c, meta, max(int64(0), perCallQuota), "ocr_preconsume")
+// preConsumeOCRQuota reserves the plan's conservative quote against the durable
+// user and token balances before dispatch. A zero quote (an explicit free tariff)
+// reserves nothing.
+// Parameters: c is the request context, quote is the planned allowance, and meta
+// is the relay metadata. Returns: the reserved quota or an admission error.
+func preConsumeOCRQuota(c *gin.Context, quote int64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
+	return reservePaidRequestQuota(c, meta, max(int64(0), quote), "ocr_preconsume")
 }
 
+// postConsumeOCRQuota records the single final OCR charge: it moves the ledger
+// by the difference between the settled charge and the reservation, and
+// reconciles the provisional consume log with the billing unit, allowance and
+// receipt provenance. It runs on a detached billing context and never reads a
+// live *gin.Context.
+// Parameters: ctx is the detached billing context, meta is the relay metadata,
+// modelName is the billed model, preConsumedQuota is the reservation, plan is
+// the pre-dispatch billing plan, and settlement is the receipt-derived charge.
+// Returns: the final charge submitted for settlement.
 func postConsumeOCRQuota(ctx context.Context,
-	usage *relaymodel.Usage,
 	meta *metalib.Meta,
-	request *relaymodel.OCRRequest,
+	modelName string,
 	preConsumedQuota int64,
-	totalQuota int64,
-	modelRatio float64,
-	groupRatio float64) (quota int64) {
-	quota = max(totalQuota, 0)
+	plan ocrBillingPlan,
+	settlement ocrSettlement) int64 {
+	quota := max(settlement.quota, 0)
 
 	// Resolve identifiers from the detached billing snapshot (or, for a synchronous
 	// caller, from the embedded gin context). NEVER read them off a live *gin.Context
@@ -299,29 +294,7 @@ func postConsumeOCRQuota(ctx context.Context,
 	provLogID := billingID.provisionalLogID
 	traceId := billingID.traceID
 
-	var promptTokens, completionTokens int
-	if usage != nil {
-		promptTokens = usage.PromptTokens
-		completionTokens = usage.CompletionTokens
-	}
-
-	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
-		logEntry := &model.Log{
-			UserId:           meta.UserId,
-			ChannelId:        meta.ChannelId,
-			PromptTokens:     promptTokens,
-			CompletionTokens: completionTokens,
-			ModelName:        request.Model,
-			TokenName:        meta.TokenName,
-			Content:          fmt.Sprintf("OCR per-call billing, base unit %.2f, group rate %.2f", modelRatio, groupRatio),
-			IsStream:         false,
-			ElapsedTime:      helper.CalcElapsedTime(meta.StartTime),
-			RequestId:        requestId,
-			TraceId:          traceId,
-		}
-		model.SetLogExternalUUIDs(logEntry, meta.UserUUID, meta.ChannelUUID, meta.TokenUUID)
-		billing.PostConsumeQuotaWithLog(ctx, meta.TokenId, quota-preConsumedQuota, quota, logEntry, provLogID)
-	} else {
+	if meta.TokenId <= 0 || meta.UserId <= 0 || meta.ChannelId <= 0 {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume OCR quota",
 			zap.Int("meta_token_id", meta.TokenId),
 			zap.Int("meta_user_id", meta.UserId),
@@ -329,7 +302,38 @@ func postConsumeOCRQuota(ctx context.Context,
 			zap.String("request_id", requestId),
 			zap.String("trace_id", traceId),
 		)
+		return quota
 	}
 
+	metadata := model.LogMetadata{
+		"ocr_billing_unit":     string(plan.unit),
+		"ocr_allowance_pages":  plan.allowance.pages,
+		"ocr_allowance_source": plan.allowance.source,
+		"ocr_allowance_quota":  plan.quote,
+	}
+	if settlement.pages > 0 {
+		metadata["ocr_receipt_pages"] = settlement.pages
+	}
+	if settlement.exceedsAllowance {
+		metadata["ocr_receipt_exceeds_allowance"] = true
+	}
+	logEntry := &model.Log{
+		UserId:             meta.UserId,
+		ChannelId:          meta.ChannelId,
+		PromptTokens:       settlement.promptTokens,
+		CompletionTokens:   settlement.completionTokens,
+		CachedPromptTokens: settlement.cachedTokens,
+		ModelName:          modelName,
+		TokenName:          meta.TokenName,
+		Content: fmt.Sprintf("OCR %s billing, %d admitted page(s), group rate %.2f",
+			plan.unit, plan.allowance.pages, plan.groupRatio),
+		Metadata:    billingEstimateMetadata(metadata, settlement.estimateReason),
+		IsStream:    false,
+		ElapsedTime: helper.CalcElapsedTime(meta.StartTime),
+		RequestId:   requestId,
+		TraceId:     traceId,
+	}
+	model.SetLogExternalUUIDs(logEntry, meta.UserUUID, meta.ChannelUUID, meta.TokenUUID)
+	billing.PostConsumeQuotaWithLog(ctx, meta.TokenId, quota-preConsumedQuota, quota, logEntry, provLogID)
 	return quota
 }

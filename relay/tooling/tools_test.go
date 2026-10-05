@@ -568,8 +568,14 @@ func TestNormalizeBuiltinType_ToolSearchAliases(t *testing.T) {
 		{name: "canonical web search", input: "web_search", expect: "web_search"},
 		{name: "preview alias", input: "web_search_preview", expect: "web_search"},
 		{name: "dash alias", input: "web-search", expect: "web_search"},
-		{name: "regex tool search", input: "tool_search_tool_regex_20251119", expect: "web_search"},
-		{name: "bm25 tool search", input: "tool_search_tool_bm25_20251119", expect: "web_search"},
+		{name: "regex tool search is not web search", input: "tool_search_tool_regex_20251119", expect: "tool_search"},
+		{name: "bm25 tool search is not web search", input: "tool_search_tool_bm25_20251119", expect: "tool_search"},
+		{name: "undated tool search alias", input: "tool_search_tool_regex", expect: "tool_search"},
+		{name: "anthropic dated web search", input: "web_search_20250305", expect: "web_search"},
+		{name: "anthropic dated web fetch", input: "web_fetch_20250910", expect: "web_fetch"},
+		{name: "anthropic dated code execution", input: "code_execution_20250825", expect: "code_execution"},
+		{name: "openai preview tier keeps own key", input: "web_search_preview_reasoning", expect: ""},
+		{name: "undated provider code execution untouched", input: "code_execution", expect: ""},
 		{name: "unknown stays empty", input: "tool_search_custom", expect: ""},
 	}
 
@@ -582,12 +588,15 @@ func TestNormalizeBuiltinType_ToolSearchAliases(t *testing.T) {
 	}
 }
 
+// TestApplyBuiltinToolCharges_ToolSearchCountsCanonicalized verifies Tool Search
+// counters canonicalize to the free tool_search capability and never pick up the
+// web search tariff, while real web search counters keep their price.
 func TestApplyBuiltinToolCharges_ToolSearchCountsCanonicalized(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Set(ctxkey.ToolInvocationCounts, map[string]int{"tool_search_tool_regex_20251119": 2})
+	c.Set(ctxkey.ToolInvocationCounts, map[string]int{"tool_search_tool_regex_20251119": 2, "web_search_20250305": 1})
 
 	meta := &metalib.Meta{ActualModelName: "claude-sonnet-4-5"}
 	usage := &relaymodel.Usage{PromptTokens: 10, CompletionTokens: 5}
@@ -606,11 +615,13 @@ func TestApplyBuiltinToolCharges_ToolSearchCountsCanonicalized(t *testing.T) {
 	ApplyBuiltinToolCharges(c, &usage, meta, nil, provider)
 
 	expectedPerCall := int64(math.Ceil(0.01 * float64(ratio.QuotaPerUsd)))
-	require.Equal(t, expectedPerCall*2, usage.ToolsCost)
+	require.Equal(t, expectedPerCall, usage.ToolsCost, "only the real web search is billed")
 
 	summaryAny, exists := c.Get(ctxkey.ToolInvocationSummary)
 	require.True(t, exists)
 	summary := summaryAny.(*model.ToolUsageSummary)
-	require.Equal(t, 2, summary.Counts["web_search"])
-	require.Equal(t, expectedPerCall*2, summary.CostByTool["web_search"])
+	require.Equal(t, 2, summary.Counts["tool_search"])
+	require.Equal(t, 1, summary.Counts["web_search"])
+	require.Zero(t, summary.CostByTool["tool_search"])
+	require.Equal(t, expectedPerCall, summary.CostByTool["web_search"])
 }

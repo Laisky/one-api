@@ -5,7 +5,6 @@ import (
 	"math"
 	"strings"
 
-	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -285,21 +284,28 @@ func CollectResponseBuiltins(request *openai.ResponseAPIRequest) map[string]stru
 }
 
 // NormalizeBuiltinType normalizes known built-in tool identifiers (case-insensitive). Unknown tools return "".
+// Anthropic's dated server-tool types (web_search_20250305, web_fetch_20250910,
+// code_execution_20250825) map to their canonical capability. Tool Search
+// (tool_search_tool_regex/bm25) maps to the distinct, unmetered "tool_search"
+// capability rather than to paid web search.
 func NormalizeBuiltinType(toolType string) string {
 	normalized := strings.ToLower(strings.TrimSpace(toolType))
 	switch normalized {
 	case "web_search":
-		return "web_search"
+		return BuiltinWebSearch
 	case "web_search_preview":
-		return "web_search"
+		return BuiltinWebSearch
 	case "web-search":
-		return "web_search"
+		return BuiltinWebSearch
 	case "tool_search_tool_regex", "tool_search_tool_bm25":
-		return "web_search"
+		return BuiltinToolSearch
 	}
 
 	if strings.HasPrefix(normalized, "tool_search_tool_regex_") || strings.HasPrefix(normalized, "tool_search_tool_bm25_") {
-		return "web_search"
+		return BuiltinToolSearch
+	}
+	if match := anthropicDatedServerTool.FindStringSubmatch(normalized); len(match) == 2 {
+		return match[1]
 	}
 
 	return ""
@@ -349,27 +355,8 @@ func validateRequestedBuiltinsWithContext(ctx context.Context, modelName string,
 		return nil
 	}
 
-	effectiveModel := resolveModelName(meta, modelName)
-	effectiveProvider := provider
-	if channel != nil {
-		switch channel.Type {
-		case channeltype.Azure:
-			effectiveProvider = nil
-		}
-	} else if meta != nil {
-		switch meta.ChannelType {
-		case channeltype.Azure:
-			effectiveProvider = nil
-		}
-	}
-	policy := buildToolPolicyWithContext(ctx, channel, effectiveProvider, effectiveModel)
-	for toolName := range requested {
-		if !policy.isAllowed(toolName) {
-			return errors.Errorf("tool %s is not allowed on this channel (model=%s); update the tooling whitelist or pricing", toolName, effectiveModel)
-		}
-	}
-
-	return nil
+	_, err := BuiltinToolQuotes(ctx, modelName, meta, channel, provider, requested)
+	return err
 }
 
 // IsBuiltinToolAllowed reports whether a single built-in tool is allowed by policy.
@@ -521,6 +508,15 @@ func buildToolPolicyWithContext(ctx context.Context, channel *model.Channel, pro
 			setWhitelist(providerTooling.Whitelist)
 		}
 		applyProviderPricing(providerTooling.Pricing)
+	}
+	// Documented zero-cost capabilities are admitted at a zero tariff on every
+	// provider; channel pricing below may still override, and a channel whitelist
+	// may still exclude them.
+	for _, name := range zeroCostBuiltins {
+		if _, ok := policy.pricing[name]; !ok {
+			policy.pricing[name] = 0
+			policy.providerPricing[name] = struct{}{}
+		}
 	}
 
 	var channelTooling *model.ChannelToolingConfig

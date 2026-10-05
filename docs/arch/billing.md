@@ -432,15 +432,21 @@ graph LR
 
 ### Built-in Tool Alias Normalization (Anthropic Tool Search)
 
-Built-in tool charging and allowlist checks use canonical tool names. For Anthropic Tool Search,
-the following aliases are normalized to `web_search` before policy checks and cost calculation:
+Built-in tool charging and allowlist checks use canonical tool names (`relay/tooling`):
 
-- `tool_search_tool_regex`
-- `tool_search_tool_bm25`
-- versioned variants such as `tool_search_tool_regex_20251119` and `tool_search_tool_bm25_20251119`
+- Anthropic dated server tools map to their capability: `web_search_YYYYMMDD` -> `web_search`,
+  `web_fetch_YYYYMMDD` -> `web_fetch`, `code_execution_YYYYMMDD` -> `code_execution`;
+  `mcp_servers` / `mcp_toolset` -> `mcp_connector`.
+- Tool Search (`tool_search_tool_regex`, `tool_search_tool_bm25` and versioned variants such as
+  `tool_search_tool_regex_20251119`) maps to the distinct `tool_search` capability. Anthropic does not
+  meter it, so it is admitted at a zero tariff and is never billed as `web_search`.
 
-This ensures one-api applies a single pricing and permission policy for search calls regardless of
-the upstream provider-specific identifier format.
+The Claude Messages route applies the same policy as Chat/Responses before reservation and dispatch
+(`relay/controller/claude_messages_tool_policy.go`): every provider-executed capability must be
+whitelisted and priced for the channel, unknown typed tools fail closed, and caller/client tools pass.
+Paid tools reserve `max_uses` (default bound 10) x per-call price; native `usage.server_tool_use`
+receipts (cumulative, merged by maximum) or, when absent, observed `server_tool_use` blocks are billed
+once through `tooling.ApplyBuiltinToolCharges`.
 
 ### Pricing Hierarchy
 

@@ -29,7 +29,7 @@ type ComputeInput struct {
 // normalized ratios used and cached token details.
 type ComputeResult struct {
 	// UnpricedUsage distinguishes a partial price from an authoritative zero.
-	// It is only set by receipt-based Realtime billing.
+	// Realtime and generation contracts set it when their tariff is unresolved.
 	UnpricedUsage bool
 	// BillingIssues marks unresolved Realtime receipts; never silently treat them as fully settled.
 	BillingIssues       []string
@@ -59,6 +59,9 @@ func Compute(input ComputeInput) ComputeResult {
 
 	pricingAdaptor := input.PricingAdaptor
 	resolvedModelCfg, hasResolvedModelCfg := pricing.ResolveModelConfigRatioOnly(input.ModelName, input.ChannelModelConfigs, pricingAdaptor, input.RequestTime)
+	if result, applies := computeGenerationQuota(input, resolvedModelCfg); applies {
+		return result
+	}
 	hasChannelModelRatioOverride := hasModelRatioFlatOverride(input.ModelName, input.ChannelModelRatio, input.ChannelModelConfigs)
 	baseRatio := input.ModelRatio
 	completionRatioResolved := resolveCompletionRatio(input.ModelName, resolvedModelCfg, hasResolvedModelCfg, input.ChannelCompletionRatio, input.ChannelModelConfigs, pricingAdaptor, input.RequestTime)

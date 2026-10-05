@@ -14,6 +14,7 @@ import (
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
+	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	vertexaiadaptor "github.com/Laisky/one-api/relay/adaptor/vertexai"
@@ -25,6 +26,7 @@ import (
 	"github.com/Laisky/one-api/relay/controller/validator"
 	"github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 	quotautil "github.com/Laisky/one-api/relay/quota"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
@@ -182,6 +184,18 @@ func estimatePreConsumedQuota(
 	channelCompletionRatio map[string]float64,
 	meta *meta.Meta,
 ) int64 {
+	// A generation is priced once regardless of token estimates or receipts.
+	// Admission rejects unresolved contracts before this estimate can authorize work.
+	if meta != nil {
+		provider := resolvePricingAdaptor(meta)
+		base, known := pricing.ResolveModelConfig(textRequest.Model, nil, provider, meta.StartTime)
+		if known && base.PricingProvenance != nil && base.PricingProvenance.Unit == relayadaptor.TariffUnitGeneration {
+			result := quotautil.Compute(quotautil.ComputeInput{Usage: &relaymodel.Usage{},
+				ModelName: textRequest.Model, GroupRatio: groupRatio, ChannelModelConfigs: channelModelConfigs,
+				PricingAdaptor: provider, RequestTime: meta.StartTime})
+			return result.TotalQuota
+		}
+	}
 	promptTokens := 0
 	if promptUsage != nil {
 		promptTokens = promptUsage.PromptTokens
@@ -282,6 +296,7 @@ func postConsumeQuota(ctx context.Context,
 		PricingAdaptor:         pricingAdaptor,
 		RequestTime:            meta.StartTime,
 	})
+	retainUnpricedUsage(ctx, usage, computeResult)
 
 	quota = exactJinaUsageQuota(ctx, meta, usage, computeResult.TotalQuota, preConsumedQuota+incrementallyCharged,
 		computeResult.UsedModelRatio, computeResult.UsedCompletionRatio, groupRatio)
