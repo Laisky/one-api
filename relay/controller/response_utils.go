@@ -39,9 +39,6 @@ func getChannelModelConfigs(c *gin.Context) map[string]model.ModelConfigLocal {
 	return channel.GetModelPriceConfigsWithContext(gmw.Ctx(c))
 }
 
-// errResponseBackgroundUnsupported marks jobs without a durable terminal billing lifecycle.
-var errResponseBackgroundUnsupported = errors.New("background responses are unavailable until durable terminal billing is supported")
-
 // errStateSelectorsMutuallyExclusive marks the dual-selector validation failure
 // (both conversation and previous_response_id supplied) so RelayResponseAPIHelper
 // can map it to the stable invalid_state_selector code (Section 6, E01). Its
@@ -50,14 +47,25 @@ var errStateSelectorsMutuallyExclusive = errors.New("conversation and previous_r
 
 // getAndValidateResponseAPIRequest gets and validates Response API request
 func getAndValidateResponseAPIRequest(c *gin.Context) (*openai.ResponseAPIRequest, error) {
-	responseAPIRequest := &openai.ResponseAPIRequest{}
-	err := common.UnmarshalBodyReusable(c, responseAPIRequest)
+	// Background execution has no durable terminal settlement (#483). The typed
+	// field alone is not enough: case-insensitive struct decoding lets a later
+	// "Background":false hide an earlier "background":true that a provider would
+	// honor, and non-JSON content types bind the typed request from elsewhere.
+	// Inspect every raw root key, independent of how the typed request is bound.
+	rawBody, err := common.GetRequestBody(c)
 	if err != nil {
-		return nil, errors.Wrap(err, "unmarshal Response API request")
+		return nil, errors.Wrap(err, "get raw Response API request body")
+	}
+	if err := openai.ValidateResponseBackgroundPayload(rawBody); err != nil {
+		return nil, err
 	}
 
+	responseAPIRequest := &openai.ResponseAPIRequest{}
+	if err := common.UnmarshalBodyReusable(c, responseAPIRequest); err != nil {
+		return nil, errors.Wrap(err, "unmarshal Response API request")
+	}
 	if responseAPIRequest.Background != nil && *responseAPIRequest.Background {
-		return nil, errors.WithStack(errResponseBackgroundUnsupported)
+		return nil, errors.WithStack(openai.ErrResponseBackgroundUnsupported)
 	}
 
 	// Basic validation

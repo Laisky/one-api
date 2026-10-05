@@ -57,6 +57,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 
 	chatRequest, err := openai.ConvertResponseAPIToChatCompletionRequest(responseAPIRequest)
 	if err != nil {
+		if errors.Is(err, openai.ErrResponseBackgroundUnsupported) {
+			return openai.ErrorWrapper(err, "background_not_supported", http.StatusBadRequest)
+		}
 		return openai.ErrorWrapper(err, "convert_response_api_request_failed", http.StatusBadRequest)
 	}
 	downstreamStream := chatRequest.Stream
