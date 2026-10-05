@@ -566,10 +566,12 @@ type Adaptor interface {
 
 // OCRAdaptor represents adaptors that can natively consume the dedicated OCR / layout-parsing DTO.
 // Adaptors must implement this interface to accept /v1/layout_parsing requests; otherwise the
-// controller will reject the call as unsupported.
+// controller will reject the call as unsupported. DoOCRResponse returns the provider's typed
+// billing receipt (token and page dimensions validated separately) even when it also returns
+// an error, so accepted work is settled exactly once.
 type OCRAdaptor interface {
 	ConvertOCRRequest(c *gin.Context, request *model.OCRRequest) (any, error)
-	DoOCRResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode)
+	DoOCRResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (*model.OCRReceipt, *model.ErrorWithStatusCode)
 }
 
 // RerankAdaptor represents adaptors that can natively consume the dedicated rerank DTO.

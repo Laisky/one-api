@@ -433,7 +433,8 @@ func TestOCRHandler(t *testing.T) {
 
 		errResp, usage := OCRHandler(c, resp, "glm-ocr")
 		require.NotNil(t, errResp)
-		assert.Nil(t, usage)
+		require.NotNil(t, usage, "unreadable evidence is labelled, never a free zero-token receipt")
+		require.Equal(t, model.OCRReceiptUnreadable, usage.BillingEstimateReason)
 		assert.Equal(t, http.StatusInternalServerError, errResp.StatusCode)
 	})
 
