@@ -572,8 +572,15 @@ func getAndValidateClaudeMessagesRequest(c *gin.Context) (*ClaudeMessagesRequest
 		return nil, errors.New("messages array cannot be empty")
 	}
 
+	if err := validateClaudeImageDetails(claudeRequest.System); err != nil {
+		return nil, errors.Wrap(err, "validate system images")
+	}
+
 	// Validate messages
 	for i, message := range claudeRequest.Messages {
+		if err := validateClaudeImageDetails(message.Content); err != nil {
+			return nil, errors.Wrapf(err, "validate message[%d] images", i)
+		}
 		if message.Role == "" {
 			return nil, errors.Errorf("message[%d].role is required", i)
 		}
