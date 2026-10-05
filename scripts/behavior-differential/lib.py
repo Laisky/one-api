@@ -11,6 +11,7 @@ See README.md for how the pieces fit together.
 import json
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 
 # Keys whose concrete values legitimately differ between two independently seeded
@@ -46,6 +47,15 @@ class Client:
     from Set-Cookie and replayed in an explicit Cookie header. Without this the
     whole journey silently runs unauthenticated and every step 401s — which
     compares "equal" between two builds while proving nothing.
+
+    Whenever the session cookie is replayed, the request also carries
+    `Origin: <scheme>://<host>[:<port>]` of the server under test. Since #479
+    one-api rejects cookie-authenticated POST/PUT/PATCH/DELETE requests that lack
+    trusted browser provenance with HTTP 403, and a browser sends exactly this
+    Origin on its own same-origin mutations. Older builds ignore the header, so
+    both sides of the A/B differential still see equivalent requests. Requests
+    whose Authorization header suppresses the cookie get no Origin, matching a
+    bearer-only API client.
     """
 
     def __init__(self, base_url):
@@ -55,6 +65,9 @@ class Client:
           - base_url: server root, e.g. http://127.0.0.1:3000
         """
         self.base = base_url.rstrip("/")
+        parts = urllib.parse.urlsplit(self.base)
+        # An Origin header is scheme://host[:port] only; any path is dropped.
+        self.origin = f"{parts.scheme}://{parts.netloc}"
         self.session = None
         self.steps = []
 
@@ -73,7 +86,8 @@ class Client:
           - method: HTTP verb.
           - path: path beginning with '/'.
           - body: JSON-serializable request body, or None.
-          - headers: extra headers; an Authorization header suppresses the cookie.
+          - headers: extra headers; an Authorization header suppresses the
+            cookie and its accompanying Origin header.
 
         Return values:
           - dict | None: the parsed JSON body, so callers can chain on it.
@@ -84,6 +98,7 @@ class Client:
         req.add_header("Content-Type", "application/json")
         if self.session and not (headers or {}).get("Authorization"):
             req.add_header("Cookie", f"session={self.session}")
+            req.add_header("Origin", self.origin)
         for key, value in (headers or {}).items():
             req.add_header(key, value)
 

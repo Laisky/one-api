@@ -49,10 +49,16 @@ state matters — leftover rows change list lengths and produce false diffs):
 
 ```sh
 # candidate (this tree)
-SQLITE_PATH=/tmp/after.db  SESSION_SECRET=213 go run main.go --port 3000 &
+SQLITE_PATH=/tmp/after.db  SESSION_SECRET=213 ENABLE_COOKIE_SECURE=false go run main.go --port 3000 &
 # baseline (the "before" tree)
-cd /tmp/before && SQLITE_PATH=/tmp/before.db SESSION_SECRET=213 go run main.go --port 3001 &
+cd /tmp/before && SQLITE_PATH=/tmp/before.db SESSION_SECRET=213 ENABLE_COOKIE_SECURE=false go run main.go --port 3001 &
 ```
+
+`ENABLE_COOKIE_SECURE=false` is required for plain-HTTP servers. `lib.Client`
+sends `Origin: http://127.0.0.1:<port>` with every cookie-authenticated request,
+the provenance a browser sends; with secure cookies enabled the server treats
+its own origin as `https://...`, so builds that enforce session provenance
+(#479 and later) would answer every cookie-authenticated mutation with 403.
 
 Both must still have the bootstrap `root` / `123456` account, which one-api
 creates automatically on an empty database.

@@ -81,7 +81,7 @@ export function useSelectedChannelActions(selection: TableSelection, keyword: st
             try {
               const result = changesStatus
                 ? (await api.put('/api/channel/?status_only=1', { uuid: target.uuid, status: action === 'enable' ? 1 : 2 })).data
-                : (await api.get(`/api/channel/test/${encodeURIComponent(target.uuid)}`)).data;
+                : (await api.post(`/api/channel/test/${encodeURIComponent(target.uuid)}`)).data;
               return {
                 ...target,
                 success: Boolean(result?.success) && !result?.skipped,

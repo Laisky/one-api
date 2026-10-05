@@ -181,7 +181,7 @@ export function PersonalSettings() {
     setTotpLoading(true);
     setSetupTotpError('');
     try {
-      const res = await api.get('/api/user/totp/setup');
+      const res = await api.post('/api/user/totp/setup');
       if (res.data.success) {
         setTotpSecret(res.data.data.secret);
         const qrCodeDataURL = await QRCode.toDataURL(res.data.data.qr_code, {
@@ -414,7 +414,7 @@ export function PersonalSettings() {
 
   const generateAccessToken = async () => {
     try {
-      const res = await api.get('/api/user/token');
+      const res = await api.post('/api/user/token');
       const { success, message, data } = res.data;
       if (success) {
         setSystemToken(data);
@@ -436,7 +436,7 @@ export function PersonalSettings() {
 
   const getAffLink = async () => {
     try {
-      const res = await api.get('/api/user/aff');
+      const res = await api.post('/api/user/aff');
       const { success, message, data } = res.data;
       if (success) {
         const link = `${window.location.origin}/register?aff=${data}`;
@@ -528,7 +528,7 @@ export function PersonalSettings() {
     setEmailVerificationError('');
 
     try {
-      const response = await api.get(
+      const response = await api.post(
         `/api/oauth/email/bind?email=${encodeURIComponent(email)}&code=${encodeURIComponent(emailVerificationCode.trim())}`
       );
       const { success, message } = response.data;
