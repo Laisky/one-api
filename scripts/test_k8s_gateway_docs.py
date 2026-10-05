@@ -297,6 +297,16 @@ class KubernetesGatewayGuide(unittest.TestCase):
                          {"gateway.envoyproxy.io/owning-gateway-namespace": "one-api",
                           "gateway.envoyproxy.io/owning-gateway-name": "one-api-gateway"})
 
+    def test_policy_preserves_cluster_dns(self) -> None:
+        """test_policy_preserves_cluster_dns retains the cluster-confirmed resolver fix."""
+        policy = next(obj for obj in gateway_objects(self.markdown) if obj.get("kind") == "NetworkPolicy")
+        dns = [rule for rule in policy["spec"]["egress"]
+               if {("UDP", 53), ("TCP", 53)} <= {(port.get("protocol"), port["port"]) for port in rule.get("ports", [])}]
+        self.assertEqual(len(dns), 1)
+        peer = dns[0]["to"][0]
+        self.assertEqual(peer["namespaceSelector"]["matchLabels"], {"kubernetes.io/metadata.name": "kube-system"})
+        self.assertEqual(peer["podSelector"]["matchLabels"], {"k8s-app": "kube-dns"})
+
     def test_resource_mutations_are_rejected(self) -> None:
         """test_resource_mutations_are_rejected keeps the YAML validator from passing vacuously."""
         objects = gateway_objects(self.markdown)

@@ -6,6 +6,7 @@ kubeconfig, installs a real One API deployment, or calls paid providers.
 """
 
 import base64
+import http.client
 import json
 import os
 from pathlib import Path
@@ -65,14 +66,14 @@ class GatewayClusterTests(unittest.TestCase):
         cls.apply({"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "gateway-fixture", "namespace": "one-api"},
                    "spec": {"replicas": 1, "selector": {"matchLabels": {"app": "one-api"}},
                             "template": {"metadata": {"labels": {"app": "one-api"}}, "spec": {
-                                "containers": [{"name": "fixture", "image": "python:3.13-alpine", "command": ["python", "/fixture/server.py"],
+                                "containers": [{"name": "fixture", "image": "python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a", "command": ["python", "/fixture/server.py"],
                                                 "volumeMounts": [{"name": "script", "mountPath": "/fixture", "readOnly": True}],
                                                 "resources": {"limits": {"cpu": "200m", "memory": "64Mi"}}}],
                                 "volumes": [{"name": "script", "configMap": {"name": "gateway-fixture"}}]}}}})
         cls.apply({"apiVersion": "v1", "kind": "Service", "metadata": {"name": "one-api-service", "namespace": "one-api"},
                    "spec": {"selector": {"app": "one-api"}, "ports": [{"port": 80, "targetPort": 3000}]}})
         cls.apply({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "network-control", "namespace": "one-api"},
-                   "spec": {"containers": [{"name": "control", "image": "python:3.13-alpine", "command": ["sleep", "3600"],
+                   "spec": {"containers": [{"name": "control", "image": "python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a", "command": ["sleep", "3600"],
                                              "resources": {"limits": {"cpu": "100m", "memory": "32Mi"}}}]}})
         for example in blocks(DOC.read_text(), "yaml"):
             if example.startswith(("# gateway.yaml", "# network-policy.yaml")):
@@ -145,6 +146,67 @@ class GatewayClusterTests(unittest.TestCase):
         result = subprocess.run(["kubectl", "--kubeconfig", CONFIG, "-n", "one-api", "exec",
                                  "deployment/gateway-fixture", "--", *probe], capture_output=True, text=True, timeout=15)
         self.assertEqual(0, result.returncode, result.stderr)
+
+    def request(self, method, endpoint, body=b""):
+        """request returns a parsed synthetic HTTP response through verified local TLS."""
+        with self.connect() as connection:
+            headers = f"{method} {endpoint} HTTP/1.1\r\nHost: oneapi.yourdomain.com\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n"
+            connection.sendall(headers.encode() + body)
+            with http.client.HTTPResponse(connection) as response:
+                response.begin()
+                return response.status, response.read()
+
+    def test_untrusted_pod_cannot_reach_backend(self):
+        """test_untrusted_pod_cannot_reach_backend proves the CNI enforces the ingress selector."""
+        service = json.loads(self.command("-n", "one-api", "get", "service/one-api-service", "-o", "json"))
+        address = service["spec"]["clusterIP"]
+        probe = f"import urllib.request; urllib.request.urlopen('http://{address}/',timeout=2).read()"
+        result = subprocess.run(["kubectl", "--kubeconfig", CONFIG, "-n", "one-api", "exec", "network-control", "--",
+                                 "python", "-c", probe], capture_output=True, text=True, timeout=15)
+        self.assertNotEqual(0, result.returncode, "untrusted pod reached the protected backend")
+        self.assertIn("timed out", result.stderr)
+        self.assertEqual(200, self.request("GET", "/")[0], "authorized proxy must still reach backend")
+
+    def test_post_once_and_stream_cancellation(self):
+        """test_post_once_and_stream_cancellation checks no duplicate POST and upstream disconnect."""
+        _, before = self.request("GET", "/")
+        before = json.loads(before)
+        self.assertEqual(200, self.request("POST", "/", b"{}")[0])
+        _, after = self.request("GET", "/")
+        self.assertEqual(before["posts"] + 1, json.loads(after)["posts"])
+        with self.connect() as connection:
+            connection.sendall(b"GET /sse HTTP/1.1\r\nHost: oneapi.yourdomain.com\r\nConnection: close\r\n\r\n")
+            with http.client.HTTPResponse(connection) as response:
+                response.begin()
+                self.assertEqual(200, response.status)
+                self.assertIn(b"data:", response.read(16))
+        for _ in range(50):
+            _, after = self.request("GET", "/")
+            if json.loads(after)["cancelled"] > before["cancelled"]:
+                break
+            time.sleep(0.1)
+        else:
+            self.fail("client cancellation did not reach the synthetic backend")
+
+    def test_cross_namespace_attachment_rejected(self):
+        """test_cross_namespace_attachment_rejected verifies the guide's Same namespace contract."""
+        self.apply({"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": "one-api-outsider"}})
+        self.apply({"apiVersion": "gateway.networking.k8s.io/v1", "kind": "HTTPRoute",
+                    "metadata": {"name": "unauthorized", "namespace": "one-api-outsider"},
+                    "spec": {"parentRefs": [{"name": "one-api-gateway", "namespace": "one-api", "sectionName": "https"}],
+                             "hostnames": ["oneapi.yourdomain.com"], "rules": [{"filters": [{"type": "RequestRedirect",
+                                 "requestRedirect": {"hostname": "attacker.invalid"}}]}]}})
+        for _ in range(50):
+            route = json.loads(self.command("-n", "one-api-outsider", "get", "httproute/unauthorized", "-o", "json"))
+            conditions = [condition for parent in route.get("status", {}).get("parents", []) for condition in parent.get("conditions", [])]
+            rejected = [condition for condition in conditions if condition["type"] == "Accepted" and condition["status"] == "False"]
+            if rejected:
+                self.assertEqual("NotAllowedByListeners", rejected[0]["reason"])
+                break
+            time.sleep(0.2)
+        else:
+            self.fail("cross-namespace route was not explicitly rejected")
+        self.assertEqual(200, self.request("GET", "/")[0])
 
 
 if __name__ == "__main__":

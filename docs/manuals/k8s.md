@@ -855,6 +855,18 @@ spec:
           port: 3000
   egress:
     - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
         - podSelector:
             matchLabels:
               app: postgresql # or mysql
@@ -875,6 +887,13 @@ spec:
         - protocol: TCP
           port: 80
 ```
+
+The DNS rule selects the cluster's CoreDNS/kube-dns pods. If the distribution uses
+different labels or NodeLocal DNSCache, adapt this rule to its documented resolver
+address before applying the policy. Without DNS egress, hostname-based provider,
+database and Redis connections fail even when their TCP ports are allowed. Run
+the isolated policy-enforcement checks below against the chosen CNI; applying a
+NetworkPolicy on a CNI without enforcement does not prove isolation.
 
 2. **Pod Security Standards**: Add security context to deployments:
 

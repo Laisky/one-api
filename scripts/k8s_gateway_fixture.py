@@ -30,7 +30,7 @@ class Handler(BaseHTTPRequestHandler):
         """do_GET returns fixture state or exercises streaming and upgrade transport."""
         if self.path == "/ws":
             key = self.headers["Sec-WebSocket-Key"]
-            digest = hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()
+            digest = hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode(), usedforsecurity=False).digest()
             self.send_response(101)
             self.send_header("Upgrade", "websocket")
             self.send_header("Connection", "Upgrade")
