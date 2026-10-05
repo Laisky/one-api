@@ -459,6 +459,9 @@ func (r *ValidationResult) Error() string {
 // Returns a ValidationResult containing any errors found.
 func ValidateAllEnvVars() *ValidationResult {
 	result := &ValidationResult{}
+	if err := ValidateConfiguredSessionSecret(SessionSecretEnvValue); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
 
 	// String enumeration validators
 	if err := ValidateGinMode(GinMode); err != nil {
