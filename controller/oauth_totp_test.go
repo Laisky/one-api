@@ -94,9 +94,15 @@ func (h *oauthTotpHarness) whoami() string {
 	return h.do(http.MethodGet, "/whoami", "").Body.String()
 }
 
-// code returns the current TOTP code for the fixture secret.
+// code returns the current TOTP code for the fixture secret. The server
+// accepts only the current 30-second step, so it first waits out the final
+// seconds of a step to keep the code current until verification.
 func (h *oauthTotpHarness) code(t *testing.T) string {
 	t.Helper()
+	const step, margin = int64(30), int64(5)
+	if remaining := step - time.Now().UTC().Unix()%step; remaining <= margin {
+		time.Sleep(time.Duration(remaining)*time.Second + 100*time.Millisecond)
+	}
 	totp, err := gcrypto.NewTOTP(gcrypto.OTPArgs{Base32Secret: oauthTotpTestSecret})
 	require.NoError(t, err)
 	return totp.Key()

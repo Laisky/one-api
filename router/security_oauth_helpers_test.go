@@ -228,9 +228,13 @@ func oauthFixtureUser(username string) model.User {
 	}
 }
 
-// fixtureTotpCode returns the current TOTP code for the fixture secret.
+// fixtureTotpCode returns the current TOTP code for the fixture secret. The
+// server accepts only the current 30-second step, so the helper first waits out
+// the final seconds of a step; otherwise a step boundary between generating and
+// verifying the code makes the test flaky under load.
 func fixtureTotpCode(t *testing.T) string {
 	t.Helper()
+	waitForStableTotpStep()
 	totp, err := gcrypto.NewTOTP(gcrypto.OTPArgs{Base32Secret: oauthFixtureTotpSecret})
 	require.NoError(t, err)
 	return totp.Key()
@@ -242,4 +246,14 @@ func wrongTotpCode(code string) string {
 		return "111111"
 	}
 	return "000000"
+}
+
+// waitForStableTotpStep sleeps until at least five seconds remain in the
+// current 30-second TOTP step, so a freshly generated code is still current
+// when the server verifies it.
+func waitForStableTotpStep() {
+	const step, margin = int64(30), int64(5)
+	if remaining := step - time.Now().UTC().Unix()%step; remaining <= margin {
+		time.Sleep(time.Duration(remaining)*time.Second + 100*time.Millisecond)
+	}
 }
