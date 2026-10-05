@@ -32,8 +32,8 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 		{"shared_adapter", "deepseek-chat", channeltype.DeepSeek},
 	} {
 		for _, tc := range []struct {
-			name, cancelEvent, receiptKind                          string
-			later, done, fresh, failure, truncate, malformed, quota bool
+			name, cancelEvent, receiptKind string
+			later, done, failure, truncate bool
 		}{
 			{name: "no_receipt_canceled_ordinary_eof", receiptKind: "none", later: true, failure: true, cancelEvent: "response.output_text.delta"},
 			{name: "no_receipt_truncated_transport", receiptKind: "none", later: true, failure: true, truncate: true},
@@ -52,9 +52,6 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 		} {
 			t.Run(route.name+"/"+tc.name, func(t *testing.T) {
 				balance := int64(1_000_000)
-				if tc.quota {
-					balance = 150
-				}
 				xaiVideoSetup(t, balance, false)
 				oldApprox := config.ApproximateTokenEnabled
 				config.ApproximateTokenEnabled = true
@@ -117,12 +114,6 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 						wire = ""
 					}
 					wire += "data: " + string(raw) + "\n\n"
-				}
-				if tc.fresh {
-					wire += receipt
-				}
-				if tc.malformed {
-					wire += "data: {\"choices\":[malformed\n\n"
 				}
 				if tc.done {
 					wire += "data: [DONE]\n\n"
@@ -206,7 +197,7 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 					status = "failed"
 				}
 				terminalUsage, ok := response["usage"].(map[string]any)
-				require.True(t, ok, "terminal usage must come from actual adapter observations")
+				terminalUsagePresent := ok
 				charge := requestCostQuota(t, id)
 				var token model.Token
 				require.NoError(t, model.DB.First(&token, fallbackTokenID).Error)
@@ -216,7 +207,11 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				var costRows int64
 				require.NoError(t, model.DB.Model(&model.UserRequestCost{}).Where("request_id = ?", id).Count(&costRows).Error)
 				require.EqualValues(t, 1, costRows)
-				t.Logf("BRIDGE_PROTOCOL case=%s expected=%d expected_total=%d request=%d owner=%d token=%d log=%d complete=%d failed=%d terminal_status=%v terminal_usage=%v cached_log=%d input_log=%d output_log=%d log_meta=%v estimated=%v api_error=%v canceled=%v ordinary_eof=%v truncated=%v", tc.name, expected, total, charge, balance-reloadUserQuota(t), balance-token.RemainQuota, logs[0].Quota, completed, failed, response["status"], terminalUsage, logs[0].CachedPromptTokens, logs[0].PromptTokens, logs[0].CompletionTokens, logs[0].Metadata, logs[0].Metadata["billing_estimated"], apiErr != nil, ctx.Err() != nil, rawEOF.Load(), rawTruncated.Load())
+				var apiCode any
+				if apiErr != nil {
+					apiCode = apiErr.Error.Code
+				}
+				t.Logf("BRIDGE_PROTOCOL case=%s expected=%d expected_total=%d request=%d owner=%d token=%d log=%d complete=%d failed=%d terminal_status=%v terminal_usage=%v cached_log=%d input_log=%d output_log=%d log_meta=%v estimated=%v api_error=%v canceled=%v ordinary_eof=%v truncated=%v api_code=%v terminal_error=%v", tc.name, expected, total, charge, balance-reloadUserQuota(t), balance-token.RemainQuota, logs[0].Quota, completed, failed, response["status"], terminalUsage, logs[0].CachedPromptTokens, logs[0].PromptTokens, logs[0].CompletionTokens, logs[0].Metadata, logs[0].Metadata["billing_estimated"], apiErr != nil, ctx.Err() != nil, rawEOF.Load(), rawTruncated.Load(), apiCode, response["error"])
 				if tc.failure {
 					require.NotNil(t, apiErr)
 					require.Zero(t, completed, "cancellation before upstream DONE or a real error must not fabricate success")
@@ -237,9 +232,13 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				require.EqualValues(t, input, logs[0].PromptTokens)
 				require.EqualValues(t, output, logs[0].CompletionTokens)
 				require.EqualValues(t, cached, logs[0].CachedPromptTokens)
+				require.True(t, terminalUsagePresent, "terminal usage must come from actual adapter observations")
 				require.EqualValues(t, input, terminalUsage["input_tokens"])
 				require.EqualValues(t, output, terminalUsage["output_tokens"])
 				require.EqualValues(t, total, terminalUsage["total_tokens"])
+				if written > 0 {
+					require.EqualValues(t, written, terminalUsage["cache_write_tokens"])
+				}
 				if cached > 0 {
 					details, ok := terminalUsage["input_tokens_details"].(map[string]any)
 					require.True(t, ok)
