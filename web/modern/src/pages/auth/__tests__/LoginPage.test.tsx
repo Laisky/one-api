@@ -318,4 +318,34 @@ describe('LoginPage', () => {
     });
     expect(mockGetOAuthState).toHaveBeenCalledTimes(1);
   });
+
+  it('submits the WeChat verification code with POST and an encoded query string', async () => {
+    const mockApiPost = vi.mocked(api.post);
+    mockApiGet.mockReset();
+    mockApiGet.mockResolvedValue({
+      data: {
+        success: true,
+        data: { system_name: 'Test API', turnstile_check: false, wechat_login: true },
+      },
+    } as any);
+    mockLocalStorage.getItem.mockReturnValue(JSON.stringify({ system_name: 'Test API', wechat_login: true }));
+    mockApiPost.mockResolvedValueOnce({
+      data: { success: false, message: 'wechat rejected' },
+    } as any);
+
+    renderLoginPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'WeChat' }));
+    const codeInput = await screen.findByPlaceholderText('Verification code');
+    fireEvent.change(codeInput, { target: { value: 'a&b=c' } });
+    fireEvent.keyDown(codeInput, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(screen.getByText('wechat rejected')).toBeInTheDocument();
+    });
+
+    // WeChat code login is a state-changing POST; the legacy GET now returns 405.
+    expect(mockApiPost).toHaveBeenCalledWith('/api/oauth/wechat?code=a%26b%3Dc');
+    expect(mockApiGet).not.toHaveBeenCalledWith(expect.stringContaining('/api/oauth/wechat'));
+  });
 });

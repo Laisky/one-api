@@ -735,9 +735,10 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 		// Fall back to manual calculation if usageMetadata is unavailable or zero
 		completionTokens := openai.CountTokenText(geminiResponse.GetResponseText(), modelName)
 		usage = model.Usage{
-			PromptTokens:     promptTokens,
-			CompletionTokens: completionTokens,
-			TotalTokens:      promptTokens + completionTokens,
+			BillingEstimateReason: "gemini_response_missing_usage_receipt",
+			PromptTokens:          promptTokens,
+			CompletionTokens:      completionTokens,
+			TotalTokens:           promptTokens + completionTokens,
 		}
 	}
 

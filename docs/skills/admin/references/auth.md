@@ -40,10 +40,13 @@ curl -fsS --cookie-jar /tmp/oneapi.cookies \
   -d '{"username":"<admin-user>","password":"<password>"}' \
   "$ONEAPI_BASE_URL/api/user/login" > /dev/null
 
-curl -fsS --cookie /tmp/oneapi.cookies \
+curl -fsS -X POST --cookie /tmp/oneapi.cookies \
+  -H "Origin: $ONEAPI_BASE_URL" \
   "$ONEAPI_BASE_URL/api/user/token" \
   | jq -r '.data'
 ```
+`/api/user/token` is `POST`-only (a legacy `GET` returns `405` with `Allow: POST` and mints nothing). Any `POST`/`PUT`/`PATCH`/`DELETE` that authenticates with the dashboard session cookie must also prove browser provenance, so cookie-jar scripts send `Origin: <scheme>://<host>[:<port>]` (no path, no trailing slash) matching the server's public origin, `ServerAddress`, or `FRONTEND_BASE_URL`; without it the server answers `403 Untrusted session mutation origin`. Requests authenticated only by `Authorization: <access token>` (no session cookie) need no `Origin`.
+
 Handler: [controller/user.go:619](../../../../controller/user.go#L619) `GenerateAccessToken`. The returned UUID is stored in `users.access_token` (unique-indexed). **Generating again rotates the token** — do this intentionally if you suspect leakage.
 
 ## Header format
@@ -76,10 +79,10 @@ curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
 
 ## Rotating an access token
 
-Regenerating via `GET /api/user/token` invalidates the old UUID immediately. Steps for a safe rotation:
+Regenerating via `POST /api/user/token` invalidates the old UUID immediately. Steps for a safe rotation:
 
 1. Notify anyone sharing the token (if it's a shared ops credential — **don't share**; issue per-admin tokens).
-2. Hit `GET /api/user/token` to mint the new one. The old becomes invalid on commit.
+2. Hit `POST /api/user/token` to mint the new one. The old becomes invalid on commit.
 3. Update `ONEAPI_ADMIN_TOKEN` in any `.env` / secret manager.
 4. Verify with the check from "Verifying a token" above.
 
@@ -88,9 +91,11 @@ Regenerating via `GET /api/user/token` invalidates the old UUID immediately. Ste
 | HTTP / envelope                                   | Cause                                        | Fix                                                        |
 |---------------------------------------------------|----------------------------------------------|------------------------------------------------------------|
 | `401` with `message: "not logged in and no access token provided"` | `Authorization` header missing / empty | Set the header; check your shell exported `ONEAPI_ADMIN_TOKEN` |
-| `401` with `message: "access token is invalid"` | Token was rotated, user deleted, or token mistyped | Re-mint via UI or `GET /api/user/token`                      |
+| `401` with `message: "access token is invalid"` | Token was rotated, user deleted, or token mistyped | Re-mint via UI or `POST /api/user/token`                     |
 | `403` with `message: "User has been banned"`    | User row `status=2` (disabled)               | Re-enable via `POST /api/user/manage` `action=enable`         |
 | `403` from `/api/option/*`                      | Token belongs to admin (role=10), not root   | Use a root token or have root run the call                  |
+| `403` with `message: "Untrusted session mutation origin"` | Session-cookie `POST`/`PUT`/`PATCH`/`DELETE` without trusted `Origin` | Add `-H "Origin: $ONEAPI_BASE_URL"`, or use the `Authorization` header without the cookie |
+| `405` with `Allow: POST`                        | Legacy `GET` on a migrated action route (`/api/user/token`, `/api/channel/test`, `/api/channel/update_balance`, ...) | Resend as `POST` with the same query string |
 | `200` + `{success:false, message:"..."}`        | Request reached handler but validation failed | Read `.message`; see [errors.md](errors.md)                  |
 
 ## Security notes

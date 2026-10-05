@@ -36,7 +36,7 @@ Swap a channel's upstream API key with zero downtime and no billing loss.
 - [ ] **4. Immediately test:**
   ```bash
   curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
-    "$ONEAPI_BASE_URL/api/channel/test/$CHANNEL_UUID" \
+    -X POST "$ONEAPI_BASE_URL/api/channel/test/$CHANNEL_UUID" \
     | jq '{success, message, time}'
   ```
   Red: `.success: false` → step 6 rollback.

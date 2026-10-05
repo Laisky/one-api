@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 
@@ -21,12 +23,16 @@ const fastTokenEstimateThreshold = 1 * 1024 * 1024
 
 // estimateClaudeMessagesPromptTokens counts the same semantic content for every serialized body size.
 // The body size does not justify a lower quote; transport limits bound accepted input separately.
-func estimateClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest, _ int) int {
+func estimateClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest, _ int) (int, error) {
 	return getClaudeMessagesPromptTokens(ctx, request)
 }
 
-// getClaudeMessagesPromptTokens estimates the number of prompt tokens for Claude Messages API.
-func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest) int {
+// getClaudeMessagesPromptTokens returns a native prompt estimate or an error
+// for malformed PDF sources or unrepresentable document and prompt token sums.
+func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest) (int, error) {
+	if request == nil {
+		return 0, errors.New("nil native Claude prompt quote")
+	}
 	logger := gmw.GetLogger(ctx)
 
 	// Convert Claude Messages to OpenAI format for accurate token counting
@@ -58,12 +64,22 @@ func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesR
 		promptTokens += fileImageTokens
 	}
 
+	documentTokens, err := countClaudeNativeDocumentAllowance(ctx, request)
+	if err != nil {
+		return 0, err
+	}
+	if promptTokens < 0 || documentTokens > math.MaxInt-promptTokens {
+		return 0, errors.New("native Claude prompt token sum exceeds integer range")
+	}
+	promptTokens += documentTokens
+
 	logger.Debug("estimated prompt tokens for Claude Messages",
 		zap.Int("total", promptTokens),
 		zap.String("model", request.Model),
 		zap.Int("image_fallback", fileImageTokens),
+		zap.Int("document_allowance", documentTokens),
 	)
-	return promptTokens
+	return promptTokens, nil
 }
 
 // countClaudeFileImageTokens estimates tokens for image blocks that reference file-based sources.
@@ -109,6 +125,10 @@ func countClaudeFileImageTokensFromBlocks(blocks []any) int {
 			continue
 		}
 		blockType, _ := blockMap["type"].(string)
+		if blockType == "tool_result" || blockType == "search_result" {
+			total += countClaudeFileImageTokensFromContent(blockMap["content"])
+			continue
+		}
 		if blockType != "image" {
 			continue
 		}
@@ -212,54 +232,10 @@ func convertClaudeToOpenAIForTokenCounting(request *ClaudeMessagesRequest) *rela
 			// Simple string content
 			openaiMessage.Content = content
 		case []any:
-			// Structured content blocks - convert to OpenAI format
-			var contentParts []relaymodel.MessageContent
-			for _, block := range content {
-				if blockMap, ok := block.(map[string]any); ok {
-					if blockType, exists := blockMap["type"]; exists {
-						switch blockType {
-						case "text":
-							if text, exists := blockMap["text"]; exists {
-								if textStr, ok := text.(string); ok {
-									contentParts = append(contentParts, relaymodel.MessageContent{
-										Type: "text",
-										Text: &textStr,
-									})
-								}
-							}
-						case "image":
-							if source, exists := blockMap["source"]; exists {
-								if sourceMap, ok := source.(map[string]any); ok {
-									imageURL := relaymodel.ImageURL{}
-									if mediaType, exists := sourceMap["media_type"]; exists {
-										if data, exists := sourceMap["data"]; exists {
-											if dataStr, ok := data.(string); ok {
-												// Convert to data URL format for token counting
-												imageURL.Url = fmt.Sprintf("data:%s;base64,%s", mediaType, dataStr)
-											}
-										}
-									} else if url, exists := sourceMap["url"]; exists {
-										if urlStr, ok := url.(string); ok {
-											imageURL.Url = urlStr
-										}
-									}
-									if detail, ok := sourceMap["detail"].(string); ok {
-										imageURL.Detail = detail
-									}
-									if imageURL.Url != "" {
-										contentParts = append(contentParts, relaymodel.MessageContent{
-											Type:     "image_url",
-											ImageURL: &imageURL,
-										})
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			if len(contentParts) > 0 {
-				openaiMessage.Content = contentParts
+			// Structured content blocks: text, images (including those nested in
+			// tool results) and every other forwarded block are projected for counting.
+			if parts := claudeContentTokenParts(content); len(parts) > 0 {
+				openaiMessage.Content = parts
 			}
 		default:
 			// Fallback: convert to string
@@ -272,6 +248,34 @@ func convertClaudeToOpenAIForTokenCounting(request *ClaudeMessagesRequest) *rela
 	}
 
 	return openaiRequest
+}
+
+// claudeImageCountingURL converts an inline or URL Claude image block into the
+// image URL and detail used for estimation. It reports false for file-backed
+// or malformed sources, which countClaudeFileImageTokens handles separately.
+func claudeImageCountingURL(block map[string]any) (*relaymodel.ImageURL, bool) {
+	source, ok := block["source"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	imageURL := &relaymodel.ImageURL{}
+	sourceType, _ := source["type"].(string)
+	data, hasData := source["data"].(string)
+	url, hasURL := source["url"].(string)
+	switch {
+	case sourceType == "url" && hasURL:
+		imageURL.Url = url
+	case hasData && data != "":
+		// Convert to data URL format for token counting. A missing or malformed
+		// media type fails measurement and keeps the conservative allowance.
+		imageURL.Url = fmt.Sprintf("data:%v;base64,%s", source["media_type"], data)
+	case hasURL:
+		imageURL.Url = url
+	}
+	if detail, ok := source["detail"].(string); ok {
+		imageURL.Detail = detail
+	}
+	return imageURL, imageURL.Url != ""
 }
 
 // convertClaudeToolsToOpenAI converts Claude tools to OpenAI format for token counting.
