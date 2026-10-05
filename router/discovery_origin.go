@@ -119,6 +119,14 @@ func serveDiscoveryAssets(buildFS fs.FS, prefix string) gin.HandlerFunc {
 			if path.Ext(name) == "" && (strings.HasPrefix(name, "well-known/") || strings.HasPrefix(name, ".well-known/")) {
 				contentType = "application/json; charset=utf-8"
 			} else {
+				// Existing ordinary assets and directory redirects remain cacheable,
+				// so they must not carry deployment-dependent discovery links.
+				// Missing paths keep the Link for the no-store SPA fallback.
+				if _, err := fs.Stat(buildFS, path.Join(prefix, name)); err != nil {
+					c.Next()
+					return
+				}
+				c.Header("Link", "")
 				c.Next()
 				return
 			}

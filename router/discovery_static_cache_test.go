@@ -82,6 +82,14 @@ func TestDiscoveryStaticAssetCachePolicy(t *testing.T) {
 				})
 			}
 		}
+		t.Run(origin+"/assets-directory", func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets", nil))
+			require.Equal(t, http.StatusMovedPermanently, w.Code)
+			require.Equal(t, "assets/", w.Header().Get("Location"))
+			require.Equal(t, "max-age=604800", w.Header().Get("Cache-Control"))
+			require.Empty(t, w.Header().Get("Link"))
+		})
 		for _, control := range []struct{ endpoint, accept string }{
 			{"/", "text/html"}, {"/", "text/markdown"}, {"/?mode=agent", "text/html"},
 			{"/llms.txt", "*/*"}, {"/openapi.json", "application/json"},
