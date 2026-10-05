@@ -311,7 +311,11 @@ func TestResponsesBridgeReceiptCoverageHTTP(t *testing.T) {
 				}
 				if tc.receiptKind == "partial_cache_same_frame" {
 					require.Equal(t, "stream_usage_missing_counters", logs[0].Metadata["billing_estimate_reason"])
-					require.Nil(t, terminalUsage["input_tokens_details"], "native partial fallback preserves its original cache shape")
+					if details, ok := terminalUsage["input_tokens_details"].(map[string]any); ok {
+						require.Zero(t, details["cached_tokens"], "native partial fallback must not retain stale cache counters")
+					} else {
+						require.Nil(t, terminalUsage["input_tokens_details"])
+					}
 				}
 				if estimated {
 					require.NotEmpty(t, logs[0].Metadata["billing_estimate_reason"])
