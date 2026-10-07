@@ -63,6 +63,9 @@ func exerciseCompactFallbackMetricFixture(t *testing.T, mismatch, delayedSetup b
 	t.Helper()
 	fixture := prepareCompactFallbackFixture(t, mismatch, delayedSetup)
 	before := gatherCompactMetrics(t)
+	// Real preparation and a full scrape can outlive the compressed 100 ms health TTL.
+	// Publish the intended healthy test state after both, immediately before the lookup.
+	enableCompactReadsForTest(t, uuidRolePrimary)
 	id, err := resolveIDByUUID(fixture.ctx, fixture.db, fixture.target, compactUUIDTextFor(1))
 	require.NoError(t, err)
 	require.Equal(t, int64(1), id, "corrupt derived shadows must still resolve through authoritative text")
