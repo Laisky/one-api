@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+
+	"github.com/Laisky/one-api/common/config"
 )
 
 // compactFallbackFixture holds the real database and lookup target after shadow corruption.
@@ -63,6 +65,11 @@ func exerciseCompactFallbackMetricFixture(t *testing.T, mismatch, delayedSetup b
 	t.Helper()
 	fixture := prepareCompactFallbackFixture(t, mismatch, delayedSetup)
 	compressedHealthTTL := compactHealthTTL()
+	// Migration keeps its compressed intervals; only the healthy metric assertion gets a
+	// one-minute lease so a runner pause at the lookup boundary cannot select expired health.
+	originalIdle := config.CompactUUIDIdleInterval
+	config.CompactUUIDIdleInterval = 30 * time.Second
+	t.Cleanup(func() { config.CompactUUIDIdleInterval = originalIdle })
 	before := gatherCompactMetrics(t)
 	// Real preparation and a full scrape can outlive the compressed 100 ms health TTL.
 	// Publish the intended healthy test state after both, immediately before the lookup.
