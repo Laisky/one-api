@@ -61,6 +61,7 @@ func TestCompactFileFixtureRestoresDialect(t *testing.T) {
 		require.NoError(t, pool.PingContext(t.Context()))
 	}))
 	require.Zero(t, pool.Stats().OpenConnections)
+	require.ErrorContains(t, pool.PingContext(context.Background()), "database is closed")
 	require.False(t, common.UsingSQLite.Load(), "file fixture must restore the caller's dialect")
 	require.True(t, common.UsingMySQL.Load())
 	require.False(t, common.UsingPostgreSQL.Load())
