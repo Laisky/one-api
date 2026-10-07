@@ -23,12 +23,26 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// setupMigrationTestDB opens a real in-memory SQLite fixture and restores its
+// resources and dialect flags when the owning test completes.
+// Parameters: t owns the database and cleanup assertions. Returns: the fixture handle.
 func setupMigrationTestDB(t *testing.T) *gorm.DB {
-	// Create in-memory SQLite database for testing
+	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err, "Failed to create test database")
+	pool, err := db.DB()
+	require.NoError(t, err, "Failed to access test database pool")
 
-	// Set database type flags
+	originalSQLite := common.UsingSQLite.Load()
+	originalMySQL := common.UsingMySQL.Load()
+	originalPostgres := common.UsingPostgreSQL.Load()
+	t.Cleanup(func() {
+		common.UsingSQLite.Store(originalSQLite)
+		common.UsingMySQL.Store(originalMySQL)
+		common.UsingPostgreSQL.Store(originalPostgres)
+		require.NoError(t, pool.Close(), "Failed to close test database pool")
+	})
+
 	common.UsingSQLite.Store(true)
 	common.UsingMySQL.Store(false)
 	common.UsingPostgreSQL.Store(false)
