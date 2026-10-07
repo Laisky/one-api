@@ -57,15 +57,23 @@ func prepareCompactFallbackFixture(t *testing.T, mismatch, delayedSetup bool) co
 }
 
 // exerciseCompactFallbackMetricFixture verifies the intended fallback counter and authoritative answer.
-// Parameters: t owns assertions, mismatch chooses corruption, and delayedSetup simulates a busy SQL pool.
+// Parameters: t owns assertions, mismatch chooses corruption, delayedSetup stalls preparation, and optional delayedLookup stalls after health publication.
 // Returns: none.
-func exerciseCompactFallbackMetricFixture(t *testing.T, mismatch, delayedSetup bool) {
+func exerciseCompactFallbackMetricFixture(t *testing.T, mismatch, delayedSetup bool, delayedLookup ...bool) {
 	t.Helper()
 	fixture := prepareCompactFallbackFixture(t, mismatch, delayedSetup)
+	compressedHealthTTL := compactHealthTTL()
 	before := gatherCompactMetrics(t)
 	// Real preparation and a full scrape can outlive the compressed 100 ms health TTL.
 	// Publish the intended healthy test state after both, immediately before the lookup.
 	enableCompactReadsForTest(t, uuidRolePrimary)
+	if len(delayedLookup) > 0 && delayedLookup[0] {
+		// Block a real SQL operation at the lookup boundary for the original compressed lease.
+		// The delay stays fixed if the healthy-path fixture later adopts a longer lease.
+		finishDelay := blockCompactFixturePool(t, fixture.db, compressedHealthTTL, false)
+		require.NoError(t, fixture.db.WithContext(fixture.ctx).Exec("SELECT 1").Error)
+		finishDelay()
+	}
 	id, err := resolveIDByUUID(fixture.ctx, fixture.db, fixture.target, compactUUIDTextFor(1))
 	require.NoError(t, err)
 	require.Equal(t, int64(1), id, "corrupt derived shadows must still resolve through authoritative text")
@@ -84,6 +92,14 @@ func exerciseCompactFallbackMetricFixture(t *testing.T, mismatch, delayedSetup b
 // Parameters: t owns cleanup and assertions, and db is the isolated fixture handle.
 // Returns: a join function proving actual connection contention and health expiry before corruption continues.
 func blockCompactPreparationUntilAuditExpires(t *testing.T, db *gorm.DB) func() {
+	t.Helper()
+	return blockCompactFixturePool(t, db, 0, true)
+}
+
+// blockCompactFixturePool occupies the SQLite pool until an actual SQL wait satisfies the requested delay condition.
+// Parameters: t owns cleanup, db is isolated, minimumWait is a fixed stall duration, and awaitExpiry selects the real expired-health control.
+// Returns: a join function proving actual pool contention and the chosen release condition.
+func blockCompactFixturePool(t *testing.T, db *gorm.DB, minimumWait time.Duration, awaitExpiry bool) func() {
 	t.Helper()
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
@@ -105,13 +121,24 @@ func blockCompactPreparationUntilAuditExpires(t *testing.T, db *gorm.DB) func() 
 		defer closeBlocker()
 		ticker := time.NewTicker(time.Millisecond)
 		defer ticker.Stop()
+		var waitingSince time.Time
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				readsEnabled, _ := compactReadsEnabled(uuidRolePrimary)
-				if sqlDB.Stats().WaitCount > initialWaits && !readsEnabled {
+				if sqlDB.Stats().WaitCount <= initialWaits {
+					continue
+				}
+				if waitingSince.IsZero() {
+					waitingSince = time.Now()
+				}
+				ready := time.Since(waitingSince) >= minimumWait
+				if awaitExpiry {
+					readsEnabled, _ := compactReadsEnabled(uuidRolePrimary)
+					ready = ready && !readsEnabled
+				}
+				if ready {
 					observedDelay = true
 					return
 				}
@@ -127,7 +154,7 @@ func blockCompactPreparationUntilAuditExpires(t *testing.T, db *gorm.DB) func() 
 	return func() {
 		<-done
 		require.NoError(t, closeErr)
-		require.True(t, observedDelay, "setup SQL must have waited for its connection until the audit expired")
+		require.True(t, observedDelay, "real SQL must wait for its connection until the requested release condition holds")
 	}
 }
 
@@ -136,6 +163,13 @@ func blockCompactPreparationUntilAuditExpires(t *testing.T, db *gorm.DB) func() 
 func TestCompactFallbackMetricsSurviveSlowPreparation(t *testing.T) {
 	t.Run("missing shadow", func(t *testing.T) { exerciseCompactFallbackMetricFixture(t, false, true) })
 	t.Run("mismatched shadow", func(t *testing.T) { exerciseCompactFallbackMetricFixture(t, true, true) })
+}
+
+// TestCompactFallbackMetricsSurviveLookupBoundaryDelay verifies the healthy-path counter remains stable when the runner stalls after publication.
+// Parameters: t owns real SQLite contention and before/after Prometheus scrapes. Returns: none.
+func TestCompactFallbackMetricsSurviveLookupBoundaryDelay(t *testing.T) {
+	t.Run("missing shadow", func(t *testing.T) { exerciseCompactFallbackMetricFixture(t, false, false, true) })
+	t.Run("mismatched shadow", func(t *testing.T) { exerciseCompactFallbackMetricFixture(t, true, false, true) })
 }
 
 // TestCompactFallbackMetricsPreserveExpiredHealth verifies real audit expiry still selects the legacy path and its own metric reason.
