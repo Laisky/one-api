@@ -233,7 +233,18 @@ func newCompactFileTestTopology(t *testing.T) (*gorm.DB, *databaseTopology) {
 	path := filepath.Join(t.TempDir(), "compact.db")
 	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
 	require.NoError(t, err)
+	pool, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, pool.Close()) })
 
+	originalSQLite := common.UsingSQLite.Load()
+	originalMySQL := common.UsingMySQL.Load()
+	originalPostgres := common.UsingPostgreSQL.Load()
+	t.Cleanup(func() {
+		common.UsingSQLite.Store(originalSQLite)
+		common.UsingMySQL.Store(originalMySQL)
+		common.UsingPostgreSQL.Store(originalPostgres)
+	})
 	common.UsingSQLite.Store(true)
 	common.UsingMySQL.Store(false)
 	common.UsingPostgreSQL.Store(false)
@@ -245,11 +256,6 @@ func newCompactFileTestTopology(t *testing.T) (*gorm.DB, *databaseTopology) {
 	require.NoError(t, err)
 	requireV3Markers(t, topology)
 
-	t.Cleanup(func() {
-		if pool, err := db.DB(); err == nil {
-			_ = pool.Close()
-		}
-	})
 	return db, topology
 }
 
@@ -276,7 +282,8 @@ func requireV3Markers(t *testing.T, topology *databaseTopology) {
 //   - compactCycleResult: the cycle's result.
 func runCompactCycleForTest(t *testing.T, coordinator *compactCoordinator) compactCycleResult {
 	t.Helper()
-	ctx := compactTestContext(t)
+	ctx, cancel := context.WithTimeout(withCompactLogger(t.Context()), compactTestBudget(t))
+	defer cancel()
 	ownership, acquired, err := acquireCompactOwnership(ctx, coordinator.topology)
 	require.NoError(t, err)
 	require.True(t, acquired, "test cycle must obtain ownership")
