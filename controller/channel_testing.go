@@ -386,7 +386,7 @@ func TestChannel(c *gin.Context) {
 		milliseconds = 0
 	}
 
-	go channel.UpdateResponseTimeWithContext(ctx, milliseconds)
+	go persistChannelTestResponseTime(ctx, channel, milliseconds)
 	consumedTime := float64(milliseconds) / 1000.0
 	if err != nil || openaiErr != nil {
 		c.JSON(http.StatusOK, gin.H{
