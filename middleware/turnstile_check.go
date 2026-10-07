@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 )
 
@@ -21,7 +22,7 @@ type turnstileCheckResponse struct {
 // Returns nil on success, or an error describing the failure.
 func VerifyTurnstileToken(token, clientIP string) error {
 	if token == "" {
-		return errors.New("Turnstile token is empty")
+		return errkind.InvalidRequestErr(errors.New("Turnstile token is empty"))
 	}
 	rawRes, err := http.PostForm("https://challenges.cloudflare.com/turnstile/v0/siteverify", url.Values{
 		"secret":   {config.TurnstileSecretKey},
