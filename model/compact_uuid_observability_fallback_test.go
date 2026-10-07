@@ -19,64 +19,15 @@ import (
 	"github.com/Laisky/one-api/common/idresolve"
 )
 
+// TestCompactUUIDObservabilityFallbackEmission verifies real corruption emits each promised metric reason.
+// Parameters: t owns the isolated database and real Prometheus recorder. Returns: none.
 func TestCompactUUIDObservabilityFallbackEmission(t *testing.T) {
 	t.Run("a shadow gap emits the missing fallback", func(t *testing.T) {
-		withCompactPrometheusRecorder(t)
-		db, topology := newCompactTestTopology(t)
-		ctx := compactTestContext(t)
-		seedCompactUser(t, db, 1, compactUUIDTextFor(1))
-		driveCompactToReady(t, newCompactCoordinator(topology))
-		enableCompactReadsForTest(t, uuidRolePrimary)
-
-		// The trigger self-heals a direct corruption, so it must go first — exactly the
-		// missing-trigger state section 7 names.
-		dropCompactSyncTriggers(t, db, "users")
-		require.NoError(t, db.Exec("UPDATE users SET uuid_compact = NULL WHERE id = 1").Error)
-
-		target, err := compactLookupTarget("users")
-		require.NoError(t, err)
-		before := gatherCompactMetrics(t)
-		id, err := resolveIDByUUID(ctx, db, target, compactUUIDTextFor(1))
-		require.NoError(t, err)
-		require.Equal(t, int64(1), id, "the fallback must still answer from authoritative text")
-		after := gatherCompactMetrics(t)
-
-		requireCompactSeriesGrew(t, before, after, compactMetricFallback, map[string]string{
-			"role": string(uuidRolePrimary), "reason": compactFallbackMissing})
+		exerciseCompactFallbackMetricFixture(t, false, false)
 	})
 
 	t.Run("a wrong shadow emits the mismatch fallback and the mismatch backlog", func(t *testing.T) {
-		withCompactPrometheusRecorder(t)
-		db, topology := newCompactTestTopology(t)
-		ctx := compactTestContext(t)
-		seedCompactUser(t, db, 1, compactUUIDTextFor(1))
-		seedCompactUser(t, db, 2, compactUUIDTextFor(2))
-		driveCompactToReady(t, newCompactCoordinator(topology))
-		enableCompactReadsForTest(t, uuidRolePrimary)
-
-		// Row 1's shadow is cleared first so pointing row 2's shadow at row 1's identifier
-		// does not collide with the unique compact index.
-		dropCompactSyncTriggers(t, db, "users")
-		require.NoError(t, db.Exec("UPDATE users SET uuid_compact = NULL WHERE id = 1").Error)
-		wrong, err := parseCompactUUID(compactUUIDTextFor(1))
-		require.NoError(t, err)
-		require.NoError(t, db.Exec("UPDATE users SET uuid_compact = ? WHERE id = 2",
-			compactBindValue(dialectName(db), wrong)).Error)
-
-		target, err := compactLookupTarget("users")
-		require.NoError(t, err)
-		before := gatherCompactMetrics(t)
-		id, err := resolveIDByUUID(ctx, db, target, compactUUIDTextFor(1))
-		require.NoError(t, err)
-		require.Equal(t, int64(1), id, "a candidate whose text disagrees must never be returned")
-		after := gatherCompactMetrics(t)
-
-		requireCompactSeriesGrew(t, before, after, compactMetricFallback, map[string]string{
-			"role": string(uuidRolePrimary), "reason": compactFallbackMismatch})
-		value, found := compactSampleValue(after, compactMetricBacklog, map[string]string{
-			"role": string(uuidRolePrimary), "target": "users.uuid", "kind": compactBacklogMismatch})
-		require.True(t, found, "the mismatch backlog gauge must be published")
-		require.Equal(t, 1.0, value, "the gauge reports the bounded observation, one mismatched row")
+		exerciseCompactFallbackMetricFixture(t, true, false)
 	})
 
 	t.Run("a vanished shadow column emits the capability fallback and disables compact reads", func(t *testing.T) {
