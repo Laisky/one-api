@@ -61,8 +61,8 @@ func responseContinuationTierPrompt(c *gin.Context, meta *metalib.Meta, request 
 		binding.UpstreamResponseID == "" || binding.UpstreamResponseID != *request.PreviousResponseId {
 		return incremental, nil
 	}
-	// Pointers distinguish an authoritative zero from an absent counter. Native
-	// state commits preserve the provider receipt without synthetic billing usage.
+	// Pointers distinguish missing saved fields from saved zeros. Typed native
+	// persistence loses wire-field presence; a saved zero may be an omitted value.
 	var usage struct {
 		InputTokens  *int `json:"input_tokens"`
 		OutputTokens *int `json:"output_tokens"`
