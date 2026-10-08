@@ -162,7 +162,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			ChannelModelRatio:      channelModelRatio,
 			GroupRatio:             groupRatio,
 			PreConsumedQuota:       preConsumedQuota,
-			QuotedQuota:            estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta, tierAdmissionPreparedPayload(c, textRequest)),
+			QuotedQuota:            estimatePreConsumedQuota(preparedChatQuotaRequest(c, textRequest), promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta, tierAdmissionPreparedPayload(c, textRequest)),
 			ChannelModelConfigs:    channelModelConfigs,
 			ChannelCompletionRatio: channelCompletionRatio,
 			PricingAdaptor:         pricingAdaptor,

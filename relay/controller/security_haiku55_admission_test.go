@@ -196,3 +196,65 @@ func TestSecurityHaiku55PassthroughCacheAdmission(t *testing.T) {
 		})
 	}
 }
+
+// TestSecurityHaiku55DefaultStreamRetainsPreparedQuote verifies missing usage
+// retains the actual converted default allowance rather than the catalog output
+// ceiling. Parameters: t owns local TLS and SQLite fixtures. Returns: none; the
+// provider-visible limit, physical hold and final estimated ledger charge agree.
+func TestSecurityHaiku55DefaultStreamRetainsPreparedQuote(t *testing.T) {
+	const balance = int64(300000)
+	xaiVideoSetup(t, balance, false)
+	previousDefault, previousEnforcement := config.DefaultMaxToken, config.EnforceIncludeUsage
+	config.DefaultMaxToken = 128
+	config.EnforceIncludeUsage = false
+	t.Cleanup(func() { config.DefaultMaxToken = previousDefault; config.EnforceIncludeUsage = previousEnforcement })
+	observed := make(chan haikuAdmissionObservation, 1)
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got := haikuAdmissionObservation{}
+		got.Err = json.NewDecoder(r.Body).Decode(&got.Body)
+		var user model.User
+		if got.Err == nil {
+			got.Err = model.DB.First(&user, fallbackUserID).Error
+		}
+		got.User = user.Quota
+		observed <- got
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, event := range []string{
+			`{"type":"message_start","message":{"id":"fixture-default","type":"message","role":"assistant","model":"claude-haiku-5-5","content":[]}}`,
+			`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+			`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`,
+			`{"type":"content_block_stop","index":0}`,
+			`{"type":"message_delta","delta":{"stop_reason":"end_turn"}}`,
+			`{"type":"message_stop"}`,
+		} {
+			if _, err := io.WriteString(w, "data: "+event+"\n\n"); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(upstream.Close)
+	previousClient := client.HTTPClient
+	client.HTTPClient = upstream.Client()
+	t.Cleanup(func() { client.HTTPClient = previousClient })
+	content, err := json.Marshal(strings.Repeat("test ", 56000))
+	require.NoError(t, err)
+	body := fmt.Sprintf(`{"model":"alias","stream":true,"messages":[{"role":"user","content":%s}]}`, content)
+	c, _, id := protocolContext(t, channeltype.Anthropic, "claude-haiku-5-5", "/v1/chat/completions", body, upstream.URL, balance, 1, false, nil)
+	apiErr := RelayTextHelper(c)
+	drainCriticalTasks(t)
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
+	got := <-observed
+	require.NoError(t, got.Err)
+	require.Equal(t, float64(128), got.Body["max_tokens"])
+	held := balance - got.User
+	require.Positive(t, held)
+	require.Less(t, held, int64(30000))
+	require.Equal(t, got.User, reloadUserQuota(t), "missing usage must retain the prepared quote without raising it to the catalog maximum")
+	require.Equal(t, held, requestCostQuota(t, id))
+	require.Equal(t, held, consumeLogQuota(t, id))
+	var token model.Token
+	require.NoError(t, model.DB.First(&token, fallbackTokenID).Error)
+	require.Equal(t, got.User, token.RemainQuota)
+	require.Equal(t, held, token.UsedQuota)
+}

@@ -120,3 +120,29 @@ func TestTierAdmissionOverridesAndArithmetic(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, quota.Compute(input).TotalQuota, quote)
 }
+
+// TestTierAdmissionFreeGroupNeedsNoOutputBound preserves free admission for an
+// unknown configured tier model whose output limit is omitted. Parameters: t
+// owns assertions. Returns: none; a zero group rate needs no spending bound,
+// while invalid token estimates still fail before the free-group shortcut.
+func TestTierAdmissionFreeGroupNeedsNoOutputBound(t *testing.T) {
+	t.Parallel()
+	const name = "free-group-custom-tier"
+	input := quota.ComputeInput{
+		Usage: &relaymodel.Usage{PromptTokens: 100}, ModelName: name,
+		ModelRatio: 1, GroupRatio: 0,
+		ChannelModelConfigs: map[string]model.ModelConfigLocal{name: {
+			Ratio: 1, CompletionRatio: 2,
+			Tiers: []model.ModelRatioTierLocal{{InputTokenThreshold: 100, Ratio: 5, CompletionRatio: 3}},
+		}},
+	}
+	quote, applies, err := quota.EstimateTierAdmission(input, 0, 0, quota.AdmissionOptions{})
+	require.NoError(t, err)
+	require.True(t, applies)
+	require.Zero(t, quote)
+
+	input.Usage = &relaymodel.Usage{PromptTokens: -1}
+	_, applies, err = quota.EstimateTierAdmission(input, 0, 0, quota.AdmissionOptions{})
+	require.True(t, applies)
+	require.ErrorContains(t, err, "invalid tier admission token estimate")
+}

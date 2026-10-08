@@ -28,6 +28,10 @@ func EstimateTierAdmission(input ComputeInput, maxOutputTokens int, bufferTokens
 	if input.Usage == nil || input.Usage.PromptTokens < 0 || maxOutputTokens < 0 || bufferTokens < 0 {
 		return 0, true, errors.New("invalid tier admission token estimate")
 	}
+	// An authoritative free group cannot consume quota at any output bound.
+	if input.GroupRatio == 0 {
+		return 0, true, nil
+	}
 	if maxOutputTokens == 0 {
 		full, _ := pricing.ResolveModelConfig(input.ModelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime)
 		maxOutputTokens = int(full.MaxOutputTokens)
