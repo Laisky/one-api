@@ -238,6 +238,8 @@ func executeClaudeToolSearchMCPLoop(
 	modelRatio := pricing.ResolveModelRatioAt(request.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 	ratio := modelRatio * groupRatio
+	tierConfig, _ := pricing.ResolveModelConfigRatioOnly(request.Model, channelModelConfigs, pricingAdaptor, meta.StartTime)
+	tiered := len(tierConfig.Tiers) > 0
 
 	var accumulated *relaymodel.Usage
 	var incrementalCharged int64
@@ -254,21 +256,42 @@ func executeClaudeToolSearchMCPLoop(
 			return nil, accumulated, summary, incrementalCharged,
 				openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", 400)
 		}
-		roundQuota, quoteErr := checkedClaudeQuotaEstimate(promptTokens, 0, ratio, 1)
-		if quoteErr != nil {
-			return nil, accumulated, summary, incrementalCharged,
-				openai.ErrorWrapper(quoteErr, "invalid_claude_quota_quote", 400)
-		}
-		if roundQuota > 0 {
-			if err := preConsumeQuotaForMCPRound(c, meta, roundQuota); err != nil {
-				return nil, accumulated, summary, incrementalCharged,
-					openai.ErrorWrapper(err, "pre_consume_tool_search_round_failed", 403)
+		var prepared []byte
+		var roundQuota int64
+		if tiered {
+			var marshalErr error
+			prepared, marshalErr = json.Marshal(request)
+			if marshalErr != nil {
+				return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(marshalErr, "marshal_claude_request_failed", 500)
 			}
-			incrementalCharged += roundQuota
+			quote, totalQuote, tierErr := quoteMCPTierRoundQuota(c, meta, request.Model, promptTokens, request.MaxTokens, 1, prepared, accumulated)
+			if tierErr != nil {
+				return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(tierErr, "invalid_mcp_tier_quote", 400)
+			}
+			credit := int64(0)
+			if round == 0 {
+				credit = preConsumedQuota
+			}
+			var reservationErr *relaymodel.ErrorWithStatusCode
+			roundQuota, reservationErr = reserveMCPTierRoundQuota(c, meta, quote, totalQuote, preConsumedQuota, incrementalCharged, credit)
+			if reservationErr != nil {
+				return nil, accumulated, summary, incrementalCharged, reservationErr
+			}
+		} else {
+			roundQuota, quoteErr = checkedClaudeQuotaEstimate(promptTokens, 0, ratio, 1)
+			if quoteErr != nil {
+				return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(quoteErr, "invalid_claude_quota_quote", 400)
+			}
+			if roundQuota > 0 {
+				if err := preConsumeQuotaForMCPRound(c, meta, roundQuota); err != nil {
+					return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(err, "pre_consume_tool_search_round_failed", 403)
+				}
+			}
 		}
+		incrementalCharged += roundQuota
 
 		// Send request to upstream
-		claudeResp, usage, respErr := doClaudeRequestOnce(c, meta, adaptorInstance, request)
+		claudeResp, usage, respErr := doClaudeRequestOnce(c, meta, adaptorInstance, request, prepared)
 		if respErr != nil {
 			if roundQuota > 0 {
 				billing.ReturnPreConsumedQuota(gmw.Ctx(c), roundQuota, meta.TokenId)
@@ -314,13 +337,20 @@ func doClaudeRequestOnce(
 	meta *metalib.Meta,
 	adaptorInstance adaptor.Adaptor,
 	request *ClaudeMessagesRequest,
+	preparedBody ...[]byte,
 ) (*anthropic.Response, *relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
 	lg := gmw.GetLogger(c)
 
-	// Marshal the request
-	requestBytes, err := json.Marshal(request)
-	if err != nil {
-		return nil, nil, openai.ErrorWrapper(err, "marshal_claude_request_failed", 500)
+	// Tier admission already serialized the exact round sent to the provider.
+	var requestBytes []byte
+	if len(preparedBody) > 0 && len(preparedBody[0]) > 0 {
+		requestBytes = preparedBody[0]
+	} else {
+		var err error
+		requestBytes, err = json.Marshal(request)
+		if err != nil {
+			return nil, nil, openai.ErrorWrapper(err, "marshal_claude_request_failed", 500)
+		}
 	}
 
 	// Do the upstream request
