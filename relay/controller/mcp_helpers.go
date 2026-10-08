@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -12,10 +13,12 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/mcp"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 	quotautil "github.com/Laisky/one-api/relay/quota"
 )
 
@@ -353,4 +356,101 @@ func normalizeMCPToolChoiceForResponse(choice any, mcpNames map[string]struct{})
 		"type": "function",
 		"name": name,
 	}
+}
+
+// quoteMCPTierRoundQuota prices a prepared dispatch and the aggregate settlement
+// allowance. Parameters: c and meta supply effective pricing; promptTokens,
+// maxOutput, and count bound this dispatch; payload is its exact provider body;
+// accumulated is already measured usage. Returns: the independent round quote,
+// the cumulative allowance, and an error for unsafe arithmetic or pricing.
+func quoteMCPTierRoundQuota(c *gin.Context, meta *metalib.Meta, modelName string, promptTokens, maxOutput, count int, payload []byte, accumulated *relaymodel.Usage) (int64, int64, error) {
+	if c == nil || meta == nil {
+		return 0, 0, errors.WithStack(errors.New("MCP tier quote requires request metadata"))
+	}
+	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
+	configs := getChannelModelConfigs(c)
+	provider := resolvePricingAdaptor(meta)
+	write5m, write1h, err := tierAdmissionCacheWrites(json.RawMessage(payload))
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "inspect prepared MCP cache controls")
+	}
+	modelRatio := pricing.ResolveModelRatioAt(modelName, configs, channelModelRatio, provider, meta.StartTime)
+	input := quotautil.ComputeInput{
+		Usage: &relaymodel.Usage{PromptTokens: promptTokens}, ModelName: modelName,
+		ModelRatio: modelRatio, ChannelModelRatio: channelModelRatio, GroupRatio: c.GetFloat64(ctxkey.ChannelRatio),
+		ChannelModelConfigs: configs, ChannelCompletionRatio: channelCompletionRatio,
+		PricingAdaptor: provider, RequestTime: meta.StartTime,
+	}
+	options := quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h, OutputCount: count}
+	roundQuote, _, err := quotautil.EstimateTierAdmission(input, maxOutput, 0, options)
+	if err != nil || accumulated == nil {
+		return roundQuote, roundQuote, errors.Wrap(err, "quote prepared MCP tier round")
+	}
+	if accumulated.PromptTokens < 0 || accumulated.CompletionTokens < 0 || accumulated.ToolsCost < 0 ||
+		accumulated.CacheWrite5mTokens < 0 || accumulated.CacheWrite1hTokens < 0 ||
+		(accumulated.PromptTokensDetails != nil && accumulated.PromptTokensDetails.CachedTokens < 0) ||
+		promptTokens > math.MaxInt-accumulated.PromptTokens {
+		return 0, 0, errors.WithStack(errors.New("invalid accumulated MCP tier usage"))
+	}
+	// Validate separate cache-bucket sums before the shared tier selector adds
+	// them. This also bounds settlement's arithmetic for malformed receipts.
+	promptBound := accumulated.PromptTokens + promptTokens
+	cached := 0
+	if accumulated.PromptTokensDetails != nil {
+		cached = accumulated.PromptTokensDetails.CachedTokens
+	}
+	for _, bucket := range []int{cached, accumulated.CacheWrite5mTokens, accumulated.CacheWrite1hTokens} {
+		if bucket > math.MaxInt-promptBound {
+			return 0, 0, errors.WithStack(errors.New("accumulated MCP prompt exceeds integer range"))
+		}
+		promptBound += bucket
+	}
+	// The shared quote resolves a missing cap from the same pricing metadata.
+	// Resolve it here only to add actual previous output, never previous caps.
+	if maxOutput == 0 && input.GroupRatio != 0 {
+		full, _ := pricing.ResolveModelConfig(modelName, configs, provider, meta.StartTime)
+		maxOutput = int(full.MaxOutputTokens)
+		if maxOutput <= 0 {
+			maxOutput = int(full.MaxTokens)
+		}
+		if maxOutput <= 0 {
+			full, _ = pricing.ResolveModelConfig(modelName, nil, provider, meta.StartTime)
+			maxOutput = int(full.MaxOutputTokens)
+		}
+	}
+	if count == 0 {
+		count = 1
+	}
+	if count < 1 || maxOutput < 0 || maxOutput > math.MaxInt/count ||
+		maxOutput*count > math.MaxInt-accumulated.CompletionTokens {
+		return 0, 0, errors.WithStack(errors.New("accumulated MCP output exceeds integer range"))
+	}
+	usage := *accumulated
+	usage.PromptTokens += promptTokens
+	input.Usage = &usage
+	options.OutputCount = 1
+	totalQuote, _, err := quotautil.EstimateTierAdmission(input, accumulated.CompletionTokens+maxOutput*count, 0, options)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "quote accumulated MCP tier allowance")
+	}
+	if accumulated.ToolsCost > math.MaxInt64-totalQuote {
+		return 0, 0, errors.WithStack(errors.New("accumulated MCP cost exceeds integer range"))
+	}
+	return roundQuote, totalQuote + accumulated.ToolsCost, nil
+}
+
+// reserveMCPTierRoundQuota holds the larger independent-round delta and
+// cumulative-settlement delta. Parameters: roundQuote and totalQuote are the
+// allowances; baseHold and incremental are outstanding holds; credit is the base
+// hold on the first dispatch only. Returns: newly held quota or an admission error.
+func reserveMCPTierRoundQuota(c *gin.Context, meta *metalib.Meta, roundQuote, totalQuote, baseHold, incremental, credit int64) (int64, *relaymodel.ErrorWithStatusCode) {
+	if roundQuote < 0 || totalQuote < 0 || baseHold < 0 || incremental < 0 || credit < 0 ||
+		incremental > math.MaxInt64-baseHold {
+		return 0, openai.ErrorWrapper(errors.WithStack(errors.New("invalid MCP tier reservation")), "invalid_mcp_tier_quote", 400)
+	}
+	delta := max(roundQuote-credit, totalQuote-(baseHold+incremental), 0)
+	if delta > math.MaxInt64-baseHold-incremental {
+		return 0, openai.ErrorWrapper(errors.WithStack(errors.New("MCP hold exceeds integer range")), "invalid_mcp_tier_quote", 400)
+	}
+	return reservePaidRequestQuota(c, meta, delta, "mcp_tier_round_preconsume")
 }
