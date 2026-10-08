@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/one-api/common/ctxkey"
 	"math"
+	"net/http"
 	"testing"
 
 	"github.com/Laisky/one-api/model"
@@ -22,6 +25,7 @@ type continuationLookupStore struct {
 	bounded       bool
 	owner         state.OwnerScope
 	usageOverride json.RawMessage
+	lookupErr     error
 }
 
 // GetResponse records its context deadline and owner, then returns the underlying
@@ -30,6 +34,9 @@ func (s *continuationLookupStore) GetResponse(ctx context.Context, owner state.O
 	s.reads++
 	_, s.bounded = ctx.Deadline()
 	s.owner = owner
+	if s.lookupErr != nil {
+		return nil, errors.WithStack(s.lookupErr)
+	}
 	record, err := s.ResponseStateStore.GetResponse(ctx, owner, id)
 	if err == nil && record != nil && len(s.usageOverride) > 0 {
 		record.Usage = s.usageOverride
@@ -45,7 +52,7 @@ func TestSecurityResponseContinuationTierCounters(t *testing.T) {
 	const name = "native-continuation-counter-fixture"
 	for _, scenario := range []string{
 		"known", "zero", "zero_output", "missing_usage", "null_usage", "malformed", "malformed_json", "negative_incremental",
-		"missing_input", "missing_output", "negative_input", "negative_output",
+		"store_failure", "free_group", "missing_input", "missing_output", "negative_input", "negative_output",
 		"unrepresentable", "parent_overflow", "incremental_overflow", "different_model",
 		"different_current_model", "different_channel", "different_api", "different_handle",
 		"missing_handle", "missing_binding", "nonterminal", "incomplete", "cancelled", "failed",
@@ -75,6 +82,13 @@ func TestSecurityResponseContinuationTierCounters(t *testing.T) {
 			expected, expectedReads, expectError := 486, 1, false
 			incremental := 10
 			switch scenario {
+			case "store_failure":
+				observed.lookupErr = errors.New("local parent read outage")
+				expectError = true
+			case "free_group":
+				c.Set(ctxkey.ChannelRatio, 0.0)
+				observed.lookupErr = errors.New("unused parent read outage")
+				expectedReads = 0
 			case "zero":
 				record.Usage = json.RawMessage(`{"input_tokens":0,"output_tokens":0}`)
 				expected = 10
@@ -167,14 +181,22 @@ func TestSecurityResponseContinuationTierCounters(t *testing.T) {
 			}
 			_, err := memory.CreateResponse(context.Background(), record, "fixture_parent")
 			require.NoError(t, err)
-			if scenario == "flat" {
-				_, applies, quoteErr := quoteResponseTierAdmission(c, meta, request, 10, nil)
+			if scenario == "flat" || scenario == "free_group" {
+				quote, applies, quoteErr := quoteResponseTierAdmission(c, meta, request, 10, nil)
 				require.NoError(t, quoteErr)
-				require.False(t, applies)
+				if scenario == "flat" {
+					require.False(t, applies)
+				} else {
+					require.True(t, applies)
+					require.Zero(t, quote, "free continuation needs no new parent usage lookup")
+				}
 			} else {
 				prompt, quoteErr := responseContinuationTierPrompt(c, meta, request, incremental)
 				if expectError {
 					require.Error(t, quoteErr)
+					if scenario == "store_failure" {
+						require.ErrorIs(t, quoteErr, errResponseContinuationStoreUnavailable)
+					}
 				} else {
 					require.NoError(t, quoteErr)
 					require.Equal(t, expected, prompt)
@@ -184,6 +206,17 @@ func TestSecurityResponseContinuationTierCounters(t *testing.T) {
 			if expectedReads > 0 {
 				require.True(t, observed.bounded)
 				require.Equal(t, owner, observed.owner)
+			}
+			if expectError {
+				held, apiErr := preConsumeResponseAPIQuota(c, request, incremental, 1, 2, false, meta)
+				require.Zero(t, held)
+				require.NotNil(t, apiErr)
+				status := http.StatusBadRequest
+				if scenario == "store_failure" {
+					status = http.StatusServiceUnavailable
+				}
+				require.Equal(t, status, apiErr.StatusCode, "operational state failure survives quote wrapping")
+				require.Zero(t, c.GetInt64(ctxkey.PreConsumedQuotaAmount))
 			}
 			if scenario == "known" {
 				body, marshalErr := json.Marshal(request)

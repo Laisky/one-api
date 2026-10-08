@@ -16,6 +16,10 @@ import (
 	"github.com/Laisky/one-api/relay/state"
 )
 
+// errResponseContinuationStoreUnavailable classifies operational parent reads
+// through quote wrappers without changing legacy not-found compatibility.
+var errResponseContinuationStoreUnavailable = errors.New("owned Responses parent storage is unavailable")
+
 // responseContinuationTierPrompt augments a tier allowance with known inherited
 // provider context. Parameters: c identifies the owner-resolved gateway parent,
 // meta supplies the current provider/model, request holds the prepared upstream
@@ -41,7 +45,7 @@ func responseContinuationTierPrompt(c *gin.Context, meta *metalib.Meta, request 
 		if errors.Is(err, state.ErrNotFound) {
 			return incremental, nil
 		}
-		return 0, errors.Wrap(err, "load owned Responses parent usage")
+		return 0, errors.Wrap(errors.Join(errResponseContinuationStoreUnavailable, err), "load owned Responses parent usage")
 	}
 	if parent == nil || parent.Owner != owner || parent.Binding == nil {
 		return incremental, nil

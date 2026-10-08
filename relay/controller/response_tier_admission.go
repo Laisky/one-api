@@ -76,14 +76,20 @@ func quoteResponseTierAdmission(c *gin.Context, meta *metalib.Meta, request *ope
 	if err != nil {
 		return 0, true, errors.Wrap(err, "inspect prepared Responses cache controls")
 	}
-	budgetPromptTokens, err := responseContinuationTierPrompt(c, meta, quoted, promptTokens)
-	if err != nil {
-		return 0, true, errors.Wrap(err, "budget owned Responses continuation")
+	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
+	budgetPromptTokens := promptTokens
+	// An authoritative free group needs no inherited token allowance. Ordinary
+	// owner-binding authorization has already completed before this quote.
+	if groupRatio != 0 {
+		budgetPromptTokens, err = responseContinuationTierPrompt(c, meta, quoted, promptTokens)
+		if err != nil {
+			return 0, true, errors.Wrap(err, "budget owned Responses continuation")
+		}
 	}
 	modelRatio := pricing.ResolveModelRatioAt(quoted.Model, configs, channelRatios, provider, meta.StartTime)
 	quote, applies, err := quotautil.EstimateTierAdmission(quotautil.ComputeInput{
 		Usage: &relaymodel.Usage{PromptTokens: budgetPromptTokens}, ModelName: quoted.Model,
-		ModelRatio: modelRatio, ChannelModelRatio: channelRatios, GroupRatio: c.GetFloat64(ctxkey.ChannelRatio),
+		ModelRatio: modelRatio, ChannelModelRatio: channelRatios, GroupRatio: groupRatio,
 		ChannelModelConfigs: configs, ChannelCompletionRatio: completionRatios,
 		PricingAdaptor: provider, RequestTime: meta.StartTime,
 	}, maxOutput, 0, quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h})

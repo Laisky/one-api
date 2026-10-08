@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Laisky/errors/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -42,7 +43,7 @@ func TestSecurityNativeResponseOwnedContinuationAdmission(t *testing.T) {
 	config := model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2, Tiers: []model.ModelRatioTierLocal{{
 		InputTokenThreshold: 100, Ratio: 5, CompletionRatio: 100,
 	}}}
-	for _, scenario := range []string{"owner_low", "token_low", "funded"} {
+	for _, scenario := range []string{"owner_low", "token_low", "funded", "store_failure"} {
 		t.Run(scenario, func(t *testing.T) {
 			userBalance, tokenBalance := int64(10000), int64(10000)
 			if scenario == "owner_low" {
@@ -184,6 +185,11 @@ func TestSecurityNativeResponseOwnedContinuationAdmission(t *testing.T) {
 			secondCtx.Set(ctxkey.TokenQuota, beforeToken.RemainQuota)
 			secondMeta := metalib.GetByContext(secondCtx)
 			secondMeta.OriginModelName, secondMeta.ActualModelName = name, name
+			var failedStore *continuationLookupStore
+			if scenario == "store_failure" {
+				failedStore = &continuationLookupStore{ResponseStateStore: store, lookupErr: errors.New("local second parent read outage")}
+				state.SetForTest(failedStore)
+			}
 			apiErr := RelayResponseAPIHelper(secondCtx)
 			drainCriticalTasks(t)
 			var finalToken model.Token
@@ -220,7 +226,13 @@ func TestSecurityNativeResponseOwnedContinuationAdmission(t *testing.T) {
 			if scenario != "funded" {
 				require.EqualValues(t, 1, calls.Load(), "unaffordable owned continuation must reject before second provider I/O")
 				require.NotNil(t, apiErr)
-				require.Equal(t, http.StatusForbidden, apiErr.StatusCode)
+				status := http.StatusForbidden
+				if scenario == "store_failure" {
+					status = http.StatusServiceUnavailable
+					require.Equal(t, 1, failedStore.reads, "existing provider binding lookup succeeds; only the additional usage read fails")
+					require.True(t, failedStore.bounded)
+				}
+				require.Equal(t, status, apiErr.StatusCode)
 				require.Zero(t, held)
 				require.Equal(t, userBalance-firstCharge, reloadUserQuota(t))
 				require.Equal(t, tokenBalance-firstCharge, finalToken.RemainQuota)
