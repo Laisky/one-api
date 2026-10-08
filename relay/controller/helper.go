@@ -183,6 +183,7 @@ func estimatePreConsumedQuota(
 	channelModelConfigs map[string]model.ModelConfigLocal,
 	channelCompletionRatio map[string]float64,
 	meta *meta.Meta,
+	providerPayload ...any,
 ) int64 {
 	// A generation is priced once regardless of token estimates or receipts.
 	// Admission rejects unresolved contracts before this estimate can authorize work.
@@ -217,6 +218,39 @@ func estimatePreConsumedQuota(
 		return computeResult.TotalQuota + bufferQuota
 	}
 
+	if meta != nil {
+		cfg, _ := pricing.ResolveModelConfigRatioOnly(textRequest.Model, channelModelConfigs, resolvePricingAdaptor(meta), meta.StartTime)
+		if len(cfg.Tiers) > 0 {
+			maxOutput := textRequest.MaxTokens
+			if textRequest.MaxCompletionTokens != nil && *textRequest.MaxCompletionTokens > 0 {
+				maxOutput = *textRequest.MaxCompletionTokens
+			}
+			count := 1
+			if textRequest.N != nil {
+				count = *textRequest.N
+			}
+			payload := any(textRequest)
+			if len(providerPayload) > 0 {
+				payload = providerPayload[0]
+			}
+			write5m, write1h, cacheErr := tierAdmissionCacheWrites(payload)
+			if cacheErr != nil {
+				return -1
+			}
+			quote, applies, err := quotautil.EstimateTierAdmission(quotautil.ComputeInput{
+				Usage: promptUsage, ModelName: textRequest.Model, ModelRatio: modelRatio,
+				ChannelModelRatio: channelModelRatio, GroupRatio: groupRatio,
+				ChannelModelConfigs: channelModelConfigs, ChannelCompletionRatio: channelCompletionRatio,
+				PricingAdaptor: resolvePricingAdaptor(meta), RequestTime: meta.StartTime,
+			}, maxOutput, config.PreConsumedQuota, quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h, OutputCount: count})
+			if applies {
+				if err != nil {
+					return -1
+				}
+				return quote
+			}
+		}
+	}
 	return getPreConsumedQuota(textRequest, promptTokens, modelRatio*groupRatio, completionRatio)
 }
 
@@ -238,7 +272,7 @@ func preConsumeQuota(
 	if meta.ChannelType == channeltype.Jina {
 		return preConsumeJinaQuota(c, meta)
 	}
-	quote := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
+	quote := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta, tierAdmissionPreparedPayload(c, textRequest))
 	return reservePaidRequestQuota(c, meta, quote, "chat_preconsume")
 }
 
