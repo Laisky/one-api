@@ -52,8 +52,15 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 	if err != nil {
 		return 0, openai.ErrorWrapper(err, "invalid_claude_quota_quote", http.StatusBadRequest)
 	}
-	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
-	channelModelConfigs := getChannelModelConfigs(c)
+	var channelModelRatio, channelCompletionRatio map[string]float64
+	var channelModelConfigs map[string]model.ModelConfigLocal
+	// The scalar helper contract also supports callers without channel metadata.
+	if stored, exists := c.Get(ctxkey.ChannelModel); exists {
+		if channel, ok := stored.(*model.Channel); ok && channel != nil {
+			channelModelRatio, channelCompletionRatio = getChannelRatios(c)
+			channelModelConfigs = getChannelModelConfigs(c)
+		}
+	}
 	provider := resolvePricingAdaptor(meta)
 	modelRatio := pricing.ResolveModelRatioAt(request.Model, channelModelConfigs, channelModelRatio, provider, meta.StartTime)
 	cfg, _ := pricing.ResolveModelConfigRatioOnly(request.Model, channelModelConfigs, provider, meta.StartTime)
