@@ -1,5 +1,13 @@
 # Go test efficiency and integrity
 
+The full-suite rules below now apply to **manual full qualification**. The owner
+authorized formatting plus the smallest essential unit gate for automatic
+push/PR/merge-group testing on 2026-10-08. See [the current CI policy](../ci-testing.md)
+for the focused selection and the optional `qualification` workflow dispatch.
+All full-suite behavior assertions, race instrumentation, database no-skip
+guards, and completeness checks below are retained; their historical timings
+are not claimed as current quick-gate measurements.
+
 ## Measured baseline
 
 The starting point is commit `5770e82` (the merge of PR #404). Its tree is identical
@@ -97,7 +105,7 @@ perform time-budgeted fuzz campaigns.
 Each model shard instruments the same statement blocks. The coverage merger
 sums atomic execution counters while keeping each statement block only once;
 it rejects conflicting statement counts and incompatible modes. The existing
-coverage reporter receives one complete profile, not four profiles with an
+manual coverage artifact receives one complete profile, not four profiles with an
 inflated denominator or a last-writer-wins overwrite.
 
 ## Reproduce and validate
