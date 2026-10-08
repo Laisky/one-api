@@ -162,10 +162,24 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	outputRatio := ratio * completionRatio
 	backgroundEnabled := responseAPIRequest.Background != nil && *responseAPIRequest.Background
 
+	// Tiered native requests quote and dispatch the same normalized bytes.
+	// Flat pricing retains its existing preparation and reservation order.
+	var preparedBody []byte
+	tierConfig, _ := pricing.ResolveModelConfigRatioOnly(responseAPIRequest.Model, channelModelConfigs, pricingAdaptor, meta.StartTime)
+	if len(tierConfig.Tiers) > 0 {
+		preparedBody, err = prepareResponseTierBody(c, meta, responseAPIRequest, requestAdaptor)
+		if err != nil {
+			if errors.Is(err, common.ErrAmbiguousJSONKey) {
+				return openai.ErrorWrapper(err, "invalid_request_error", http.StatusBadRequest)
+			}
+			return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
+		}
+	}
+
 	// pre-consume quota based on estimated input tokens
 	promptTokens := getResponseAPIPromptTokens(gmw.Ctx(c), responseAPIRequest)
 	meta.PromptTokens = promptTokens
-	preConsumedQuota, bizErr := preConsumeResponseAPIQuota(c, responseAPIRequest, promptTokens, ratio, outputRatio, backgroundEnabled, meta)
+	preConsumedQuota, bizErr := preConsumeResponseAPIQuota(c, responseAPIRequest, promptTokens, ratio, outputRatio, backgroundEnabled, meta, preparedBody)
 	if bizErr != nil {
 		lg.Warn("preConsumeResponseAPIQuota failed",
 			zap.Error(bizErr.RawError),
@@ -185,12 +199,17 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	// get request body - for Response API, we pass through directly without conversion,
 	// but ensure mapped model is used in the outgoing JSON
-	requestBody, err := getResponseAPIRequestBody(c, meta, responseAPIRequest, requestAdaptor)
-	if err != nil {
-		if errors.Is(err, common.ErrAmbiguousJSONKey) {
-			return openai.ErrorWrapper(err, "invalid_request_error", http.StatusBadRequest)
+	var requestBody io.Reader
+	if len(preparedBody) > 0 {
+		requestBody = bytes.NewReader(preparedBody)
+	} else {
+		requestBody, err = getResponseAPIRequestBody(c, meta, responseAPIRequest, requestAdaptor)
+		if err != nil {
+			if errors.Is(err, common.ErrAmbiguousJSONKey) {
+				return openai.ErrorWrapper(err, "invalid_request_error", http.StatusBadRequest)
+			}
+			return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
 		}
-		return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
 	}
 
 	// for debug
@@ -226,6 +245,9 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			completionQuota = float64(*responseAPIRequest.MaxOutputTokens) * outputRatio
 		}
 		estimated := int64(promptQuota + completionQuota)
+		if len(preparedBody) > 0 {
+			estimated = max(estimated, preConsumedQuota)
+		}
 		if estimated <= 0 {
 			estimated = preConsumedQuota
 		}
