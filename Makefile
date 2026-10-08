@@ -56,8 +56,18 @@ lint-entity-response:
 # buried in relay/billing log output (see common/logger.defaultLevel); set
 # LOG_LEVEL=debug|info|warn|error for a run that needs it, e.g.
 # `LOG_LEVEL=info make test-race`.
-.PHONY: test test-race
+.PHONY: test test-race test-quick test-qualification
 GOTEST_FLAGS ?= -count=1 -timeout 20m
+
+# Automatic pre-merge selection. Full race/database qualification remains explicit.
+test-quick:
+	python3 .github/scripts/format_check.py
+	python3 .github/scripts/quick_tests.py --output .test-results/quick
+
+# Run on local development/staging with the documented isolated DB prerequisites.
+test-qualification:
+	ONEAPI_REQUIRE_DB_BACKENDS=1 $(MAKE) test-race GOTEST_FLAGS="-count=1 -timeout 45m"
+	$(MAKE) build-all-templates
 
 test:
 	go test $(GOTEST_FLAGS) ./...

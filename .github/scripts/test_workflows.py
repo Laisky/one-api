@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 THEMES = ("modern", "air", "berry")
 MANDATORY = {
-    "changes", "go_tests", "goroutine_context_guard",
+    "changes", "quick_tests", "goroutine_context_guard",
     "entity_response_guard", "vulnerability_scan",
 }
 
@@ -86,7 +86,7 @@ class WorkflowTests(unittest.TestCase):
     def test_go_shards_preserve_fresh_race_coverage_and_complete_inventory(self) -> None:
         """test_go_shards_preserve_fresh_race_coverage_and_complete_inventory protects selection."""
         job = self.ci["jobs"]["go_test_shards"]
-        self.assertNotIn("if", job)
+        self.assertEqual(job["if"], "github.event_name == 'workflow_dispatch' && inputs.qualification")
         self.assertGreaterEqual(int(job["timeout-minutes"]), 90)
         self.assertEqual(job["strategy"]["fail-fast"], "false")
         self.assertEqual(job["strategy"]["matrix"]["shard"], list(shards.SHARDS))
@@ -102,7 +102,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(evidence["with"]["retention-days"], "14")
         aggregate = self.ci["jobs"]["go_tests"]
         self.assertEqual(aggregate["needs"], "go_test_shards")
-        self.assertEqual(aggregate["if"], "always()")
+        self.assertEqual(aggregate["if"], "always() && github.event_name == 'workflow_dispatch' && inputs.qualification")
         self.assertIn("go_test_shards.py merge", commands(aggregate))
         download = next(step for step in aggregate["steps"] if step.get("uses", "").startswith("actions/download-artifact@"))
         self.assertEqual(download["with"]["pattern"], "go-tests-*-${{ github.sha }}")
@@ -110,7 +110,7 @@ class WorkflowTests(unittest.TestCase):
         artifact = aggregate["steps"][-1]["with"]
         self.assertEqual(artifact["name"], "code-coverage")
         self.assertEqual(artifact["if-no-files-found"], "error")
-        self.assertEqual(self.ci["jobs"]["code_coverage"]["needs"], "go_tests")
+        self.assertNotIn("code_coverage", self.ci["jobs"])
         for candidate in (job, aggregate):
             self.assertNotIn("continue-on-error", candidate)
             for step in candidate["steps"]:
@@ -144,7 +144,7 @@ class WorkflowTests(unittest.TestCase):
     def test_static_and_security_guards_remain(self) -> None:
         """test_static_and_security_guards_remain protects non-test validation without duplication."""
         jobs = self.ci["jobs"]
-        for name in MANDATORY - {"changes", "go_tests"}:
+        for name in MANDATORY - {"changes", "quick_tests"}:
             self.assertNotIn("if", jobs[name])
         self.assertIn("ast-grep test --skip-snapshot-tests", commands(jobs["goroutine_context_guard"]))
         self.assertIn("ast-grep scan", commands(jobs["goroutine_context_guard"]))
@@ -168,8 +168,10 @@ class WorkflowTests(unittest.TestCase):
             for path in (f"web/{theme}/**", ".github/**", "Makefile", "Dockerfile", ".dockerignore", "VERSION"):
                 self.assertIn(path, filters[theme])
             job = self.ci["jobs"][f"{theme}_frontend_tests"]
-            self.assertIn("workflow_dispatch", job["if"])
-            self.assertIn(f"needs.changes.outputs.{theme} == 'true'", job["if"])
+            self.assertEqual(job["if"], "github.event_name == 'workflow_dispatch' && inputs.qualification")
+            audit = self.ci["jobs"][f"{theme}_dependency_audit"]
+            self.assertIn(f"needs.changes.outputs.{theme} == 'true'", audit["if"])
+            self.assertIn("workflow_dispatch", audit["if"])
             self.assertIn("yarn install --frozen-lockfile", commands(job))
             self.assertIn("yarn test", commands(job))
         self.assertIn("yarn build", commands(self.ci["jobs"]["modern_frontend_tests"]))
@@ -181,15 +183,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn("secrets.", (WORKFLOWS / "lint.yml").read_text())
         for name, job in self.ci["jobs"].items():
             for permission in job.get("permissions", {}).values():
-                if name != "code_coverage":
-                    self.assertNotEqual(permission, "write")
+                self.assertNotEqual(permission, "write")
             for step in job.get("steps", []):
                 if step.get("uses", "").startswith("actions/checkout@"):
                     self.assertEqual(step["with"]["persist-credentials"], "false")
-        reporter = self.ci["jobs"]["code_coverage"]
-        self.assertIn("head.repo.full_name == github.repository", reporter["if"])
-        self.assertIn("github.actor != 'dependabot[bot]'", reporter["if"])
-        self.assertNotIn("code_coverage", self.ci["jobs"]["required"]["needs"])
 
     def test_historical_replay_is_manual_and_still_checks_the_assertion(self) -> None:
         """test_historical_replay_is_manual_and_still_checks_the_assertion preserves evidence."""
@@ -315,53 +312,85 @@ class WorkflowTests(unittest.TestCase):
                         result = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True, check=False)
                         self.assertEqual(result.returncode, 0, f"{step.get('name')}: {result.stderr}")
 
+    def test_quick_gate_has_no_service_or_full_qualification_dependencies(self) -> None:
+        """test_quick_gate_has_no_service_or_full_qualification_dependencies enforces the small gate."""
+        job = self.ci["jobs"]["quick_tests"]
+        self.assertNotIn("if", job)
+        self.assertNotIn("services", job)
+        self.assertNotIn("needs", job)
+        self.assertLessEqual(int(job["timeout-minutes"]), 5)
+        self.assertIn("format_check.py", commands(job))
+        self.assertIn("quick_tests.py", commands(job))
+        self.assertNotIn("-race", commands(job))
+        self.assertNotIn("go_test_shards.py", commands(job))
+        for name in ("go_test_shards", "modern_frontend_tests", "air_frontend_tests", "berry_frontend_tests"):
+            self.assertEqual(self.ci["jobs"][name]["if"],
+                             "github.event_name == 'workflow_dispatch' && inputs.qualification")
+        self.assertEqual(self.ci["on"]["workflow_dispatch"]["inputs"]["qualification"]["default"], "false")
+
     def test_required_gate_success_failure_cancellation_and_skips(self) -> None:
-        """test_required_gate_success_failure_cancellation_and_skips executes the actual gate."""
+        """test_required_gate_success_failure_cancellation_and_skips executes both policy modes."""
         gate = self.ci["jobs"]["required"]
         self.assertEqual(gate["if"], "always()")
-        expected = MANDATORY | {f"{theme}_frontend_tests" for theme in THEMES} | {"historical_control"}
+        audits = {f"{theme}_dependency_audit" for theme in THEMES}
+        frontends = {f"{theme}_frontend_tests" for theme in THEMES}
+        expected = MANDATORY | audits | frontends | {"go_tests", "historical_control"}
         self.assertEqual(set(gate["needs"]), expected)
         script = gate["steps"][0]["run"].split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
         baseline = {name: {"result": "success"} for name in expected}
         baseline["changes"]["outputs"] = {theme: "false" for theme in THEMES}
         for name in expected - MANDATORY:
             baseline[name]["result"] = "skipped"
-        scenarios = [("unaffected frontend skips", baseline, False, False, True)]
+        scenarios = [("unaffected manual suites and audits skipped", baseline, False, False, False, True)]
         for name in expected:
             for status in ("failure", "cancelled"):
                 state = copy.deepcopy(baseline)
                 state[name]["result"] = status
-                scenarios.append((f"{name} {status}", state, False, False, False))
+                scenarios.append((f"{name} {status}", state, False, False, False, False))
         for name in MANDATORY:
             state = copy.deepcopy(baseline)
             state[name]["result"] = "skipped"
-            scenarios.append((f"mandatory {name} skipped", state, False, False, False))
+            scenarios.append((f"mandatory {name} skipped", state, False, False, False, False))
             state = copy.deepcopy(baseline)
             del state[name]
-            scenarios.append((f"mandatory {name} missing", state, False, False, False))
+            scenarios.append((f"mandatory {name} missing", state, False, False, False, False))
         for theme in THEMES:
             state = copy.deepcopy(baseline)
             state["changes"]["outputs"][theme] = "true"
-            scenarios.append((f"affected {theme} skipped", state, False, False, False))
+            scenarios.append((f"affected {theme} audit skipped", state, False, False, False, False))
             state = copy.deepcopy(state)
-            state[f"{theme}_frontend_tests"]["result"] = "success"
-            scenarios.append((f"affected {theme} passed", state, False, False, True))
+            state[f"{theme}_dependency_audit"]["result"] = "success"
+            scenarios.append((f"affected {theme} audit passed", state, False, False, False, True))
         state = copy.deepcopy(baseline)
         state["changes"]["outputs"] = {}
-        scenarios.append(("missing change outputs", state, False, False, False))
-        scenarios.append(("manual skips not allowed", baseline, True, False, False))
-        state = copy.deepcopy(baseline)
-        for theme in THEMES:
-            state[f"{theme}_frontend_tests"]["result"] = "success"
-        scenarios.append(("manual all frontends", state, True, False, True))
-        scenarios.append(("requested history skipped", state, True, True, False))
-        state = copy.deepcopy(state)
-        state["historical_control"]["result"] = "success"
-        scenarios.append(("requested history passed", state, True, True, True))
-        for label, jobs, manual, historical, success in scenarios:
+        scenarios.append(("missing change outputs", state, False, False, False, False))
+        scenarios.append(("manual audits skipped", baseline, True, False, False, False))
+        manual = copy.deepcopy(baseline)
+        for name in audits:
+            manual[name]["result"] = "success"
+        scenarios.append(("manual quick gate with all audits", manual, True, False, False, True))
+        scenarios.append(("qualification missing full suites", manual, True, True, False, False))
+        qualified = copy.deepcopy(manual)
+        for name in frontends | {"go_tests"}:
+            qualified[name]["result"] = "success"
+        scenarios.append(("complete qualification", qualified, True, True, False, True))
+        for name in frontends | {"go_tests"}:
+            state = copy.deepcopy(qualified)
+            state[name]["result"] = "skipped"
+            scenarios.append((f"qualification {name} skipped", state, True, True, False, False))
+            state = copy.deepcopy(qualified)
+            del state[name]
+            scenarios.append((f"qualification {name} missing", state, True, True, False, False))
+        scenarios.append(("requested history skipped", manual, True, False, True, False))
+        historical = copy.deepcopy(manual)
+        historical["historical_control"]["result"] = "success"
+        scenarios.append(("requested history passed", historical, True, False, True, True))
+        for label, jobs, manual_run, qualification, historical_run, success in scenarios:
             with self.subTest(label=label):
                 env = {**os.environ, "NEEDS": json.dumps(jobs),
-                       "MANUAL_RUN": str(manual).lower(), "HISTORICAL_CONTROL": str(historical).lower()}
+                       "MANUAL_RUN": str(manual_run).lower(),
+                       "QUALIFICATION": str(qualification).lower(),
+                       "HISTORICAL_CONTROL": str(historical_run).lower()}
                 result = subprocess.run([sys.executable, "-c", script], env=env, text=True, capture_output=True, check=False)
                 self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
 
