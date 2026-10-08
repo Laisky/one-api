@@ -76,9 +76,13 @@ func quoteResponseTierAdmission(c *gin.Context, meta *metalib.Meta, request *ope
 	if err != nil {
 		return 0, true, errors.Wrap(err, "inspect prepared Responses cache controls")
 	}
+	budgetPromptTokens, err := responseContinuationTierPrompt(c, meta, quoted, promptTokens)
+	if err != nil {
+		return 0, true, errors.Wrap(err, "budget owned Responses continuation")
+	}
 	modelRatio := pricing.ResolveModelRatioAt(quoted.Model, configs, channelRatios, provider, meta.StartTime)
 	quote, applies, err := quotautil.EstimateTierAdmission(quotautil.ComputeInput{
-		Usage: &relaymodel.Usage{PromptTokens: promptTokens}, ModelName: quoted.Model,
+		Usage: &relaymodel.Usage{PromptTokens: budgetPromptTokens}, ModelName: quoted.Model,
 		ModelRatio: modelRatio, ChannelModelRatio: channelRatios, GroupRatio: c.GetFloat64(ctxkey.ChannelRatio),
 		ChannelModelConfigs: configs, ChannelCompletionRatio: completionRatios,
 		PricingAdaptor: provider, RequestTime: meta.StartTime,
