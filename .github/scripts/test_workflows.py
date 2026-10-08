@@ -83,6 +83,20 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.ci["concurrency"]["cancel-in-progress"], "true")
         self.assertEqual(self.ci["on"]["workflow_dispatch"]["inputs"]["historical_control"]["default"], "false")
 
+    def test_go_validation_uses_patched_compiler_independently_of_module_floor(self) -> None:
+        """test_go_validation_uses_patched_compiler_independently_of_module_floor pins every Go job."""
+        expected = {"quick_tests", "go_test_shards", "entity_response_guard",
+                    "vulnerability_scan", "historical_control"}
+        setups = {
+            name: [step for step in job.get("steps", [])
+                   if step.get("uses", "").startswith("actions/setup-go@")]
+            for name, job in self.ci["jobs"].items()
+        }
+        self.assertEqual({name for name, steps in setups.items() if steps}, expected)
+        for name in expected:
+            self.assertEqual(len(setups[name]), 1, name)
+            self.assertEqual(setups[name][0]["with"], {"go-version": "1.27.2"}, name)
+
     def test_go_shards_preserve_fresh_race_coverage_and_complete_inventory(self) -> None:
         """test_go_shards_preserve_fresh_race_coverage_and_complete_inventory protects selection."""
         job = self.ci["jobs"]["go_test_shards"]
