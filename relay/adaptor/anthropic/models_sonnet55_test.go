@@ -23,7 +23,7 @@ func TestClaudeSeptember2026PublicPricing(t *testing.T) {
 		model                           string
 		input, output, read, five, hour float64
 	}{
-		{"claude-sonnet-5-5", 2, 10, 0.2, 2.5, 4},
+		{"claude-sonnet-5-5", 2, 10, 0.1, 2.5, 4},
 		{"claude-sonnet-5", 2, 10, 0.2, 2.5, 4},
 		{"claude-opus-5-5", 4, 20, 0.2, 5, 8},
 		{"claude-opus-5", 5, 25, 0.5, 6.25, 10},

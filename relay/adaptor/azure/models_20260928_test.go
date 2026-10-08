@@ -28,7 +28,10 @@ func TestFoundrySeptember2026Catalog(t *testing.T) {
 		id                              string
 		input, output, read, five, hour float64
 	}{
-		{"claude-sonnet-5-5", 2, 10, 0.2, 2.5, 4},
+		// Verified 2026-10-08: Foundry uses the same standard token tariffs as
+		// the Claude API; Sonnet 5.5 cache reads cost $0.10/MTok (5% of input).
+		// https://platform.claude.com/docs/en/about-claude/pricing#claude-in-microsoft-foundry-pricing
+		{"claude-sonnet-5-5", 2, 10, 0.1, 2.5, 4},
 		{"claude-opus-5-5", 4, 20, 0.2, 5, 8},
 		{"claude-opus-5", 5, 25, 0.5, 6.25, 10},
 		{"claude-fable-5-1", 10, 50, 0.25, 12.5, 20},

@@ -13,7 +13,7 @@ import (
 // Unknown models keep their original reader, and no retry or second inference is introduced.
 func PrepareRequestBody(c *gin.Context, name string, reader io.Reader) (io.Reader, error) {
 	name = CompatibilityModel(c, name)
-	if !IsClaudeSonnet55(name) {
+	if !IsClaudeSonnet55(name) && !IsClaudeHaiku55(name) {
 		return reader, nil
 	}
 	if reader == nil {
@@ -31,6 +31,9 @@ func PrepareRequestBody(c *gin.Context, name string, reader io.Reader) (io.Reade
 		return nil, errors.Wrap(err, "validation failed: invalid Claude JSON")
 	}
 	if err := NormalizeSonnet55Controls(name, fields); err != nil {
+		return nil, err
+	}
+	if err := NormalizeHaiku55Controls(name, fields); err != nil {
 		return nil, err
 	}
 	var out bytes.Buffer

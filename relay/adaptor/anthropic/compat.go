@@ -22,9 +22,12 @@ var claudeAdaptiveThinkingPrefixes = []string{
 
 // IsClaudeAdaptiveThinkingModel reports whether modelName targets a Claude release that
 // follows the Opus 4.7 adaptive-thinking compatibility profile (currently Opus 4.7/4.8,
-// Opus 5, Sonnet 5, Fable 5, and Mythos 5). It normalizes whitespace and casing.
+// Opus 5, Sonnet 5, Haiku 5.5, Fable 5, and Mythos 5). It normalizes whitespace and casing.
 func IsClaudeAdaptiveThinkingModel(modelName string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(modelName))
+	if IsClaudeHaiku55(normalized) {
+		return true
+	}
 	for _, prefix := range claudeAdaptiveThinkingPrefixes {
 		if strings.HasPrefix(normalized, prefix) {
 			return true
@@ -78,6 +81,13 @@ func NormalizeModelCompatibility(modelName string, temperature **float64, topP *
 			copy.Type = "adaptive"
 			copy.BudgetTokens = nil
 		}
+		return
+	}
+	if IsClaudeHaiku55(modelName) {
+		if copy.Type == "enabled" {
+			copy.Type = "adaptive"
+		}
+		copy.BudgetTokens = nil
 		return
 	}
 	// Sonnet 5 can disable thinking; unlike always-thinking Opus/Fable profiles.
