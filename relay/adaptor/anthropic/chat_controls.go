@@ -75,7 +75,7 @@ func prepareClaudeChatControls(c *gin.Context, request model.GeneralOpenAIReques
 			}
 		}
 	}
-	if !IsClaudeSonnet55(name) {
+	if !IsClaudeSonnet55(name) && !IsClaudeHaiku55(name) {
 		return request, nil
 	}
 	controls := map[string]json.RawMessage{}
@@ -97,6 +97,9 @@ func prepareClaudeChatControls(c *gin.Context, request model.GeneralOpenAIReques
 		controls["tool_choice"] = raw
 	}
 	if err := NormalizeSonnet55Controls(name, controls); err != nil {
+		return request, err
+	}
+	if err := NormalizeHaiku55Controls(name, controls); err != nil {
 		return request, err
 	}
 	if raw, exists := controls["thinking"]; exists {

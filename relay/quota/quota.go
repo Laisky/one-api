@@ -83,7 +83,8 @@ func Compute(input ComputeInput) ComputeResult {
 		}
 	}
 
-	eff := pricing.ResolveEffectivePricingForUsageFromConfig(promptTokens, completionTokens, resolvedModelCfg)
+	tierPromptTokens := promptTokensForTier(input.ModelName, usage)
+	eff := pricing.ResolveEffectivePricingForUsageFromConfig(tierPromptTokens, completionTokens, resolvedModelCfg)
 
 	usedModelRatio := baseRatio
 	usedCompletionRatio := completionRatioResolved
@@ -98,7 +99,7 @@ func Compute(input ComputeInput) ComputeResult {
 			completionBaseRatio = usedModelRatio
 			baseComp = usedModelRatio * completionRatioResolved
 			for _, tier := range resolvedModelCfg.Tiers {
-				if !pricing.TierApplies(promptTokens, completionTokens, tier) {
+				if !pricing.TierApplies(tierPromptTokens, completionTokens, tier) {
 					continue
 				}
 				if tier.CompletionRatio != 0 {
