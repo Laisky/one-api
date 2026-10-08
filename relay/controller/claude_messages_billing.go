@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/Laisky/one-api/relay/adaptor/jina"
@@ -12,12 +13,15 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/billing"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 	quotautil "github.com/Laisky/one-api/relay/quota"
 )
 
@@ -47,6 +51,48 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 	baseQuota, err := checkedClaudeQuotaEstimate(promptTokens, request.MaxTokens, ratio, completionRatio)
 	if err != nil {
 		return 0, openai.ErrorWrapper(err, "invalid_claude_quota_quote", http.StatusBadRequest)
+	}
+	var channelModelRatio, channelCompletionRatio map[string]float64
+	var channelModelConfigs map[string]model.ModelConfigLocal
+	// The scalar helper contract also supports callers without channel metadata.
+	if stored, exists := c.Get(ctxkey.ChannelModel); exists {
+		if channel, ok := stored.(*model.Channel); ok && channel != nil {
+			channelModelRatio, channelCompletionRatio = getChannelRatios(c)
+			channelModelConfigs = getChannelModelConfigs(c)
+		}
+	}
+	provider := resolvePricingAdaptor(meta)
+	modelRatio := pricing.ResolveModelRatioAt(request.Model, channelModelConfigs, channelModelRatio, provider, meta.StartTime)
+	cfg, _ := pricing.ResolveModelConfigRatioOnly(request.Model, channelModelConfigs, provider, meta.StartTime)
+	if len(cfg.Tiers) > 0 {
+		payload := tierAdmissionPreparedPayload(c, request)
+		if c.GetBool(ctxkey.ClaudeDirectPassthrough) {
+			raw, rawErr := common.GetRequestBody(c)
+			if rawErr != nil {
+				return 0, openai.ErrorWrapper(rawErr, "invalid_claude_quota_quote", http.StatusBadRequest)
+			}
+			sanitized, _, sanitizeErr := rewriteAndSanitizeClaudeRequestBody(raw, request)
+			if sanitizeErr != nil {
+				return 0, openai.ErrorWrapper(sanitizeErr, "invalid_claude_quota_quote", http.StatusBadRequest)
+			}
+			payload = json.RawMessage(sanitized)
+		}
+		write5m, write1h, cacheErr := tierAdmissionCacheWrites(payload)
+		if cacheErr != nil {
+			return 0, openai.ErrorWrapper(cacheErr, "invalid_claude_quota_quote", http.StatusBadRequest)
+		}
+		tierQuote, applies, quoteErr := quotautil.EstimateTierAdmission(quotautil.ComputeInput{
+			Usage: &relaymodel.Usage{PromptTokens: promptTokens}, ModelName: request.Model,
+			ModelRatio: modelRatio, ChannelModelRatio: channelModelRatio,
+			GroupRatio: c.GetFloat64(ctxkey.ChannelRatio), ChannelModelConfigs: channelModelConfigs,
+			ChannelCompletionRatio: channelCompletionRatio, PricingAdaptor: provider, RequestTime: meta.StartTime,
+		}, request.MaxTokens, 0, quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h})
+		if applies {
+			if quoteErr != nil {
+				return 0, openai.ErrorWrapper(quoteErr, "invalid_claude_quota_quote", http.StatusBadRequest)
+			}
+			baseQuota = tierQuote
+		}
 	}
 	if ratio != 0 && baseQuota <= 0 {
 		baseQuota = 1

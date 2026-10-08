@@ -15,6 +15,7 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/mcp"
@@ -368,6 +369,8 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 	modelRatio := pricing.ResolveModelRatioAt(request.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 	ratio := modelRatio * groupRatio
+	tierConfig, _ := pricing.ResolveModelConfigRatioOnly(request.Model, channelModelConfigs, pricingAdaptor, meta.StartTime)
+	tiered := len(tierConfig.Tiers) > 0
 
 	var accumulated *relaymodel.Usage
 	var incrementalCharged int64
@@ -375,17 +378,68 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 	summary := &mcpExecutionSummary{summary: &model.ToolUsageSummary{Counts: map[string]int{}, CostByTool: map[string]int64{}}}
 
 	for round := 0; round < maxRounds; round++ {
-		promptTokens := getPromptTokens(gmw.Ctx(c), request, meta.Mode)
-		roundQuota, err := preConsumeMCPRoundQuota(c, meta, request, promptTokens, ratio)
-		if err != nil {
-			return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(err, "pre_consume_mcp_round_failed", 403)
+		var prepared []byte
+		var roundQuota int64
+		if tiered {
+			var preparationErr *relaymodel.ErrorWithStatusCode
+			prepared, preparationErr = prepareMCPChatRound(c, meta, adaptorInstance, request)
+			if preparationErr != nil {
+				return nil, accumulated, summary, incrementalCharged, preparationErr
+			}
+			quoted := preparedChatQuotaRequest(c, request)
+			maxOutput := quoted.MaxTokens
+			if quoted.MaxCompletionTokens != nil && *quoted.MaxCompletionTokens > 0 {
+				maxOutput = *quoted.MaxCompletionTokens
+			}
+			count := 1
+			if quoted.N != nil {
+				count = *quoted.N
+			}
+			var promptTokens int
+			// Anthropic rebuilds Chat history and tools. Count that exact payload,
+			// including injected tool results, and its single returned completion.
+			converted, _ := c.Get(ctxkey.ConvertedRequest)
+			if _, ok := converted.(*anthropic.Request); ok {
+				var native ClaudeMessagesRequest
+				if err := json.Unmarshal(prepared, &native); err != nil {
+					return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(errors.Wrap(err, "parse prepared MCP Claude prompt"), "invalid_mcp_tier_quote", 400)
+				}
+				var err error
+				promptTokens, err = getClaudeMessagesPromptTokens(gmw.Ctx(c), &native)
+				if err != nil {
+					return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(err, "invalid_mcp_tier_quote", 400)
+				}
+				count = 1
+			} else {
+				promptTokens = getPromptTokens(gmw.Ctx(c), request, meta.Mode)
+			}
+			quote, totalQuote, quoteErr := quoteMCPTierRoundQuota(c, meta, request.Model, promptTokens, maxOutput, count, prepared, accumulated)
+			if quoteErr != nil {
+				return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(quoteErr, "invalid_mcp_tier_quote", 400)
+			}
+			credit := int64(0)
+			if round == 0 {
+				credit = basePreConsumedQuota
+			}
+			var reservationErr *relaymodel.ErrorWithStatusCode
+			roundQuota, reservationErr = reserveMCPTierRoundQuota(c, meta, quote, totalQuote, basePreConsumedQuota, incrementalCharged, credit)
+			if reservationErr != nil {
+				return nil, accumulated, summary, incrementalCharged, reservationErr
+			}
+		} else {
+			promptTokens := getPromptTokens(gmw.Ctx(c), request, meta.Mode)
+			var err error
+			roundQuota, err = preConsumeMCPRoundQuota(c, meta, request, promptTokens, ratio)
+			if err != nil {
+				return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(err, "pre_consume_mcp_round_failed", 403)
+			}
 		}
 		if roundQuota > 0 {
 			incrementalCharged += roundQuota
 			updateMCPRequestCostProvisional(c, meta, basePreConsumedQuota+incrementalCharged)
 		}
 
-		response, usage, respErr := doChatRequestOnce(c, meta, adaptorInstance, request)
+		response, usage, respErr := doChatRequestOnce(c, meta, adaptorInstance, request, prepared)
 		if respErr != nil {
 			if roundQuota > 0 {
 				billing.ReturnPreConsumedQuota(gmw.Ctx(c), roundQuota, meta.TokenId)
@@ -458,16 +512,21 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 }
 
 // doChatRequestOnce executes one upstream chat request and captures the response.
-func doChatRequestOnce(c *gin.Context, meta *metalib.Meta, adaptorInstance adaptor.Adaptor, request *relaymodel.GeneralOpenAIRequest) (*openai.TextResponse, *relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
+func doChatRequestOnce(c *gin.Context, meta *metalib.Meta, adaptorInstance adaptor.Adaptor, request *relaymodel.GeneralOpenAIRequest, preparedBody ...[]byte) (*openai.TextResponse, *relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
 	logMCPRequestToolSchemas(c, request)
-	convertedRequest, err := adaptorInstance.ConvertRequest(c, meta.Mode, request)
-	if err != nil {
-		return nil, nil, openai.ErrorWrapper(err, "convert_request_failed", 500)
-	}
-	convertedRequest = sanitizeConvertedChatFields(convertedRequest)
-	jsonData, err := json.Marshal(convertedRequest)
-	if err != nil {
-		return nil, nil, openai.ErrorWrapper(err, "marshal_converted_request_failed", 500)
+	var jsonData []byte
+	if len(preparedBody) > 0 && len(preparedBody[0]) > 0 {
+		jsonData = preparedBody[0]
+	} else {
+		convertedRequest, err := adaptorInstance.ConvertRequest(c, meta.Mode, request)
+		if err != nil {
+			return nil, nil, openai.ErrorWrapper(err, "convert_request_failed", 500)
+		}
+		convertedRequest = sanitizeConvertedChatFields(convertedRequest)
+		jsonData, err = json.Marshal(convertedRequest)
+		if err != nil {
+			return nil, nil, openai.ErrorWrapper(err, "marshal_converted_request_failed", 500)
+		}
 	}
 	resp, err := adaptorInstance.DoRequest(c, meta, strings.NewReader(string(jsonData)))
 	if err != nil {
@@ -603,4 +662,23 @@ func executeMCPToolCalls(c *gin.Context, registry *mcpToolRegistry, calls []rela
 		)
 	}
 	return results, nil
+}
+
+// prepareMCPChatRound converts and serializes one tiered Chat round before its
+// allowance is reserved. Parameters: c stores the actual converted output limit,
+// meta selects the provider, adaptorInstance performs the conversion, and request
+// is the canonical round. Returns: exact provider bytes or a preparation error;
+// dispatch reuses the bytes without repeating conversion.
+func prepareMCPChatRound(c *gin.Context, meta *metalib.Meta, adaptorInstance adaptor.Adaptor, request *relaymodel.GeneralOpenAIRequest) ([]byte, *relaymodel.ErrorWithStatusCode) {
+	converted, err := adaptorInstance.ConvertRequest(c, meta.Mode, request)
+	if err != nil {
+		return nil, openai.ErrorWrapper(err, "convert_request_failed", 500)
+	}
+	converted = sanitizeConvertedChatFields(converted)
+	c.Set(ctxkey.ConvertedRequest, converted)
+	body, err := json.Marshal(converted)
+	if err != nil {
+		return nil, openai.ErrorWrapper(err, "marshal_converted_request_failed", 500)
+	}
+	return body, nil
 }

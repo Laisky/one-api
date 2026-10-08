@@ -34,7 +34,19 @@ func preConsumeResponseAPIQuota(
 	outputRatio float64,
 	background bool,
 	meta *metalib.Meta,
+	preparedPayload ...[]byte,
 ) (int64, *relaymodel.ErrorWithStatusCode) {
+	var prepared []byte
+	if len(preparedPayload) > 0 {
+		prepared = preparedPayload[0]
+	}
+	tierQuote, tiered, tierErr := quoteResponseTierAdmission(c, meta, responseAPIRequest, promptTokens, prepared)
+	if tierErr != nil {
+		return 0, openai.ErrorWrapper(tierErr, "invalid_response_tier_quote", http.StatusBadRequest)
+	}
+	if tiered {
+		return reservePaidRequestQuota(c, meta, tierQuote, "response_api_preconsume")
+	}
 	ctx := gmw.Ctx(c)
 	baseQuota := calculateResponseAPIPreconsumeQuota(promptTokens, responseAPIRequest.MaxOutputTokens, inputRatio, outputRatio, background)
 	// This reservation prices tokens itself, so validate catalog media contracts

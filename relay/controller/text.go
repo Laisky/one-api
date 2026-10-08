@@ -162,7 +162,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			ChannelModelRatio:      channelModelRatio,
 			GroupRatio:             groupRatio,
 			PreConsumedQuota:       preConsumedQuota,
-			QuotedQuota:            estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta),
+			QuotedQuota:            estimatePreConsumedQuota(preparedChatQuotaRequest(c, textRequest), promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta, tierAdmissionPreparedPayload(c, textRequest)),
 			ChannelModelConfigs:    channelModelConfigs,
 			ChannelCompletionRatio: channelCompletionRatio,
 			PricingAdaptor:         pricingAdaptor,
@@ -448,6 +448,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 // getRequestBody constructs the mapped provider payload while preserving explicit raw passthrough.
 // Shared Chat DTOs exclude Claude-only controls without mutating caller-owned request fields.
 func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.GeneralOpenAIRequest, adaptor adaptor.Adaptor, systemPromptReset bool) (io.Reader, error) {
+	c.Set(tierAdmissionProviderBodyKey, []byte(nil))
 	originalBody, err := common.GetRequestBody(c)
 	if err != nil {
 		return nil, errors.Wrap(err, "get raw request body")
@@ -465,6 +466,7 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 		// or case-folded spelling of extra_body (or of any typed field) must
 		// not bypass the allowlisted normalization below.
 		if (c.Request == nil || c.Request.URL == nil || !c.Request.URL.Query().Has("thinking")) && chatRawPassthroughSafe(originalBody) {
+			c.Set(tierAdmissionProviderBodyKey, originalBody)
 			return bytes.NewBuffer(originalBody), nil
 		}
 		jsonData, err := json.Marshal(textRequest)
@@ -485,6 +487,7 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 				zap.Int("extra_body_rejected", stats.ExtraBodyRejected),
 			)
 		}
+		c.Set(tierAdmissionProviderBodyKey, merged)
 		return bytes.NewBuffer(merged), nil
 	}
 
@@ -525,6 +528,7 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 
 	lg := gmw.GetLogger(c)
 	lg.Debug("converted request", zap.ByteString("json", jsonData))
+	c.Set(tierAdmissionProviderBodyKey, jsonData)
 	return bytes.NewBuffer(jsonData), nil
 }
 

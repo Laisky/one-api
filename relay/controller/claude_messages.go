@@ -166,6 +166,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		return openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", http.StatusBadRequest)
 	}
 	meta.PromptTokens = promptTokens
+	c.Set(ctxkey.ConvertedRequest, convertedRequest)
 	preConsumedQuota, bizErr := preConsumeClaudeMessagesQuota(c, claudeRequest, promptTokens, ratio, completionRatio, meta)
 	if bizErr != nil {
 		lg.Warn("preConsumeClaudeMessagesQuota failed",
