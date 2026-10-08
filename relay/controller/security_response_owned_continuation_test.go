@@ -195,6 +195,11 @@ func TestSecurityNativeResponseOwnedContinuationAdmission(t *testing.T) {
 			var finalToken model.Token
 			require.NoError(t, model.DB.First(&finalToken, fallbackTokenID).Error)
 			held := secondCtx.GetInt64(ctxkey.PreConsumedQuotaAmount)
+			if scenario == "funded" {
+				require.Nil(t, apiErr, "funded continuation must complete")
+				require.EqualValues(t, 2, calls.Load(), "funded control must reach both provider rounds")
+				require.EqualValues(t, 4942, finalToken.UsedQuota, "both funded rounds must settle exactly once")
+			}
 			if calls.Load() == 2 {
 				second := <-observed
 				require.NoError(t, second.Err)
@@ -214,8 +219,6 @@ func TestSecurityNativeResponseOwnedContinuationAdmission(t *testing.T) {
 					scenario, parentUsage.InputTokens, parentUsage.OutputTokens, second.Incremental, second.FullPrompt, c.GetInt64(ctxkey.PreConsumedQuotaAmount), firstCharge, held, secondCharge, calls.Load(), reloadUserQuota(t), finalToken.RemainQuota, apiErr)
 				if scenario == "funded" {
 					require.Equal(t, held, secondCharge, "known inherited context must be held exactly once")
-					require.Nil(t, apiErr)
-					require.EqualValues(t, 2, calls.Load())
 					require.Equal(t, second.Incremental, secondMeta.PromptTokens, "fallback usage remains the current-body estimate")
 					require.Equal(t, firstCharge+secondCharge, finalToken.UsedQuota)
 					child, childErr := store.GetResponse(context.Background(), owner, "resp_owned_second")
