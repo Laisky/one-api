@@ -99,7 +99,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: '1.27.2'
       - name: Require Go formatting and execute essential unit tests
         run: |
           python3 .github/scripts/format_check.py
@@ -186,7 +186,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: '1.27.2'
       - name: Verify orchestration against the real Go toolchain
         if: matrix.shard == 'packages'
         run: python3 .github/scripts/test_go_test_shards_integration.py
@@ -292,7 +292,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: '1.27.2'
       - name: Lint GitHub Actions workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
       - name: Run go vet once for the complete repository
@@ -300,7 +300,7 @@ jobs:
       - name: Run noentityresponse analyzer
         run: go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
       - name: Check realtime sentinel error convention
-        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2 run --no-config --enable-only err113 --timeout=5m ./relay/realtime
+        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --no-config --enable-only err113 --timeout=5m ./relay/realtime
 
   vulnerability_scan:
     name: Dependency vulnerability scan
@@ -314,7 +314,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: '1.27.2'
       - name: Run govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -578,7 +578,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: '1.27.2'
       - name: Checkout reviewed baseline for the negative control
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
