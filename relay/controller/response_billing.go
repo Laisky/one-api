@@ -42,6 +42,9 @@ func preConsumeResponseAPIQuota(
 	}
 	tierQuote, tiered, tierErr := quoteResponseTierAdmission(c, meta, responseAPIRequest, promptTokens, prepared)
 	if tierErr != nil {
+		if errors.Is(tierErr, errResponseContinuationStoreUnavailable) {
+			return 0, openai.ErrorWrapper(tierErr, codeStateStoreUnavailable, http.StatusServiceUnavailable)
+		}
 		return 0, openai.ErrorWrapper(tierErr, "invalid_response_tier_quote", http.StatusBadRequest)
 	}
 	if tiered {
