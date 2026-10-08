@@ -166,6 +166,11 @@ class WorkflowTests(unittest.TestCase):
         static = commands(jobs["entity_response_guard"])
         self.assertIn("./tools/analyzers/noentityresponse/cmd/noentityresponse ./...", static)
         self.assertIn("--enable-only err113", static)
+        sentinel = next(step for step in jobs["entity_response_guard"]["steps"]
+                        if step.get("name") == "Check realtime sentinel error convention")
+        self.assertEqual(sentinel["run"],
+                         "go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 "
+                         "run --no-config --enable-only err113 --timeout=5m ./relay/realtime")
         self.assertIn("actionlint@v1.7.12", static)
         self.assertIn("go vet ./...", static)
         self.assertEqual("\n".join(commands(job) for job in jobs.values()).count("go vet ./..."), 1)

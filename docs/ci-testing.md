@@ -43,6 +43,8 @@ compiler independently of the minimum Go 1.27.1 requirement in `go.mod`. This
 compiler selection does not change deployment/build toolchains or the module
 compatibility floor. Earlier runtime measurements retain their original
 compiler provenance and are not measurements of Go 1.27.2.
+The sentinel-error guard uses golangci-lint v2.14.0, whose importer supports
+Go 1.27 export data V5; its `err113` rule and failure behavior remain unchanged.
 
 ```sh
 make test-quick
