@@ -1,6 +1,6 @@
 module github.com/Laisky/one-api
 
-go 1.27.1
+go 1.27.2
 
 require (
 	cloud.google.com/go/iam v1.14.0
@@ -54,6 +54,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/crypto v0.57.0
 	golang.org/x/image v0.46.0
+	golang.org/x/net v0.60.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/tools v0.50.0
@@ -174,7 +175,6 @@ require (
 	golang.org/x/arch v0.31.0 // indirect
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067 // indirect
 	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
