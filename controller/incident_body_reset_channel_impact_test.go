@@ -2,10 +2,13 @@ package controller
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -19,7 +22,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/middleware"
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	relaymodel "github.com/Laisky/one-api/relay/model"
@@ -42,6 +50,8 @@ func incidentChannelImpactHandlerError(t *testing.T, raw error) *relaymodel.Erro
 	require.NotNil(t, failure)
 	require.Nil(t, usage)
 	require.False(t, c.Writer.Written())
+	require.Equal(t, errkind.Upstream, errkind.Of(failure.RawError))
+	require.Equal(t, errkind.Upstream, relayFailureKind(failure))
 	return failure
 }
 
@@ -75,7 +85,7 @@ func incidentChannelImpactProcess(ctx context.Context, failure *relaymodel.Error
 	processChannelRelayError(ctx, processChannelRelayErrorParams{RequestID: "incident-channel-impact", UserId: 92001, TokenId: 92002, ChannelId: 94003, ChannelName: "channel-impact.invalid", Group: "default", OriginalModel: incidentBodyResetModel, ActualModel: incidentBodyResetModel, RequestURL: "/v1/chat/completions", Err: *failure})
 }
 
-// TestIncidentBodyResetChannelImpact proves whether a classified read reset changes routing even when automatic disabling and metric monitoring are off.
+// TestIncidentBodyResetChannelImpact preserves legacy read-failure availability while exercising existing provider-fault suspension controls.
 func TestIncidentBodyResetChannelImpact(t *testing.T) {
 	for _, scenario := range []struct {
 		name              string
@@ -84,12 +94,13 @@ func TestIncidentBodyResetChannelImpact(t *testing.T) {
 		kind              string
 		counted, mutation bool
 	}{
-		{"reset_metrics_off_auto_off", 30 * time.Second, false, "reset", true, true},
-		{"reset_metrics_off_auto_on", 30 * time.Second, true, "reset", true, true},
-		{"reset_zero_duration", 0, false, "reset", true, true},
+		{"reset_metrics_off_auto_off", 30 * time.Second, false, "reset", false, false},
+		{"reset_metrics_off_auto_on", 30 * time.Second, true, "reset", false, false},
+		{"reset_zero_duration", 0, false, "reset", false, false},
 		{"caller_cancel", 30 * time.Second, false, "cancel", false, false},
 		{"caller_deadline", 30 * time.Second, false, "deadline", false, false},
 		{"local_conversion", 30 * time.Second, false, "conversion", false, false},
+		{"internal_infrastructure", 30 * time.Second, false, "infra", false, false},
 		{"provider_500", 30 * time.Second, false, "provider", true, true},
 		{"provider_retry_hint", 30 * time.Second, false, "hint", true, false},
 	} {
@@ -105,6 +116,8 @@ func TestIncidentBodyResetChannelImpact(t *testing.T) {
 				failure = incidentChannelImpactHandlerError(t, context.DeadlineExceeded)
 			case "conversion":
 				failure = openai_compatible.ErrorWrapper(&strconv.NumError{Func: "Atoi", Num: "synthetic", Err: strconv.ErrSyntax}, "convert_request_failed", http.StatusInternalServerError)
+			case "infra":
+				failure = openai_compatible.ErrorWrapper(helper.ErrFFProbeUnavailable, "count_audio_tokens_failed", http.StatusInternalServerError)
 			case "provider", "hint":
 				message := "synthetic provider failure"
 				if scenario.kind == "hint" {
@@ -146,39 +159,141 @@ func TestIncidentBodyResetChannelImpact(t *testing.T) {
 				entries := logs.FilterMessage("relay error").All()
 				require.Len(t, entries, 1)
 				require.Equal(t, scenario.counted, entries[0].ContextMap()["channel_health_counted"])
+				if scenario.kind == "reset" {
+					require.Equal(t, errkind.Upstream.String(), entries[0].ContextMap()["error_kind"], "upstream diagnostics must remain visible despite health exclusion")
+				}
 			}
 			if scenario.mutation {
 				require.Len(t, logs.FilterMessage("ability suspended due to server error (5xx)").All(), 1)
+			} else {
+				require.Empty(t, logs.FilterMessage("ability suspended due to server error (5xx)").All())
 			}
 			t.Logf("metric_enabled=false automatic_disable=%t duration=%s counted=%t suspension_written=%t available=%d channel_enabled=true", scenario.automaticDisable, scenario.duration, scenario.counted, scenario.mutation, available)
 		})
 	}
 }
 
-// TestIncidentBodyResetChannelImpactCacheRefresh exposes existing cache timing without sleeping, background consumers or changing suspension policy.
+// TestIncidentBodyResetChannelImpactCacheRefresh proves a legacy read failure does not remove singleton availability before or after cache rebuilding.
 func TestIncidentBodyResetChannelImpactCacheRefresh(t *testing.T) {
 	ctx, _ := incidentChannelImpactFixture(t, 30*time.Second, false)
 	config.MemoryCacheEnabled = true // The fixture restores the original setting after this test.
 	failure := incidentChannelImpactHandlerError(t, &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET})
-	require.True(t, countsAgainstChannelHealth(failure))
+	require.False(t, countsAgainstChannelHealth(failure))
 	incidentChannelImpactProcess(ctx, failure)
 	available, err := dbmodel.CountAvailableChannels(ctx, "default", incidentBodyResetModel)
 	require.NoError(t, err)
-	require.Zero(t, available)
-	_, err = dbmodel.CacheGetRandomSatisfiedChannelWithContext(ctx, "default", incidentBodyResetModel, false)
-	require.NoError(t, err, "the current cache keeps serving an ability until its next refresh")
-	dbmodel.InitChannelCache()
-	_, err = dbmodel.CacheGetRandomSatisfiedChannelWithContext(ctx, "default", incidentBodyResetModel, false)
-	require.Error(t, err, "a refresh during the suspension removes the only model ability")
-	// Expire the synthetic suspension deterministically instead of waiting 30 seconds.
-	require.NoError(t, dbmodel.DB.Exec("UPDATE abilities SET suspend_until = ? WHERE channel_id = ? AND model = ?", time.Now().UTC().Add(-time.Second), 94003, incidentBodyResetModel).Error)
-	available, err = dbmodel.CountAvailableChannels(ctx, "default", incidentBodyResetModel)
-	require.NoError(t, err)
 	require.Equal(t, 1, available)
 	_, err = dbmodel.CacheGetRandomSatisfiedChannelWithContext(ctx, "default", incidentBodyResetModel, false)
-	require.Error(t, err, "the cache remains empty after expiration until another refresh")
+	require.NoError(t, err, "the singleton remains available before refresh")
 	dbmodel.InitChannelCache()
 	_, err = dbmodel.CacheGetRandomSatisfiedChannelWithContext(ctx, "default", incidentBodyResetModel, false)
-	require.NoError(t, err)
-	t.Log("database: pause immediate/recovery on expiry; memory: pause and recovery require refresh")
+	require.NoError(t, err, "refresh must preserve availability without a suspension")
+	t.Log("database and memory routes remain available; no new cooldown or cache recovery gap")
+}
+
+// TestIncidentBodyResetChannelImpactRouting exercises the real Relay, async error processor and accounting in singleton and alternative synthetic pools.
+func TestIncidentBodyResetChannelImpactRouting(t *testing.T) {
+	for _, memory := range []bool{false, true} {
+		for _, alternative := range []bool{false, true} {
+			name := "singleton/database"
+			if alternative {
+				name = "alternative/database"
+			}
+			if memory {
+				name = strings.ReplaceAll(name, "database", "memory")
+			}
+			t.Run(name, func(t *testing.T) {
+				ctx, logs := incidentChannelImpactFixture(t, 30*time.Second, false)
+				config.MemoryCacheEnabled = memory
+				processChannelRelayErrorForTest = nil // Exercise the real tracked processor; the base fixture restores its original hook.
+				var first dbmodel.Channel
+				require.NoError(t, dbmodel.DB.First(&first, 94003).Error)
+				if alternative {
+					second := incidentBodyResetChannel(94004, "alternative-impact.invalid", 5)
+					require.NoError(t, dbmodel.DB.Create(second).Error)
+					require.NoError(t, second.AddAbilities())
+				}
+				dbmodel.InitChannelCache()
+				var firstCalls, secondCalls atomic.Int32
+				var hold int64
+				client.HTTPClient = &http.Client{Transport: incidentBodyResetRoundTripper(func(r *http.Request) (*http.Response, error) {
+					_, err := io.Copy(io.Discard, r.Body)
+					require.NoError(t, err)
+					var body io.ReadCloser
+					switch r.URL.Host {
+					case "channel-impact.invalid":
+						firstCalls.Add(1)
+						var user dbmodel.User
+						require.NoError(t, dbmodel.DB.First(&user, 92001).Error)
+						hold = incidentBodyResetBalance - user.Quota
+						body = incidentBodyResetReader{}
+					case "alternative-impact.invalid":
+						secondCalls.Add(1)
+						body = io.NopCloser(strings.NewReader(`{"id":"fixture","object":"chat.completion","model":"deepseek-flash","choices":[{"index":0,"message":{"role":"assistant","content":"fixture answer"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`))
+					default:
+						t.Fatalf("unexpected synthetic destination %q", r.URL.Host)
+					}
+					return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: body, Request: r}, nil
+				})}
+				recorder := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(recorder)
+				gmw.SetLogger(c, gmw.GetLogger(ctx))
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-flash","stream":false,"max_tokens":1000,"messages":[{"role":"user","content":"synthetic impact fixture"}]}`))
+				c.Request.Header.Set("Content-Type", "application/json")
+				for key, value := range map[string]any{ctxkey.Id: 92001, ctxkey.TokenId: 92002, ctxkey.TokenName: "incident-fixture-token", ctxkey.Group: "default", ctxkey.RequestModel: incidentBodyResetModel, ctxkey.RequestId: "incident-impact-routing", ctxkey.TokenQuota: incidentBodyResetBalance, ctxkey.TokenQuotaUnlimited: false, ctxkey.UserObj: &dbmodel.User{Id: 92001, Quota: incidentBodyResetBalance}, ctxkey.Username: "incident-fixture-owner"} {
+					c.Set(key, value)
+				}
+				middleware.SetupContextForSelectedChannel(c, &first, incidentBodyResetModel)
+				Relay(c)
+				incidentBodyResetDrain(t)
+				require.EqualValues(t, 1, firstCalls.Load())
+				require.Positive(t, hold)
+				entries := logs.FilterMessage("relay error").All()
+				require.Len(t, entries, 1)
+				require.Equal(t, "upstream", entries[0].ContextMap()["error_kind"])
+				require.Equal(t, false, entries[0].ContextMap()["channel_health_counted"])
+				require.Empty(t, logs.FilterMessage("ability suspended due to server error (5xx)").All())
+				var abilities []dbmodel.Ability
+				require.NoError(t, dbmodel.DB.Find(&abilities).Error)
+				for _, ability := range abilities {
+					require.Nil(t, ability.SuspendUntil)
+				}
+				available, err := dbmodel.CountAvailableChannels(ctx, "default", incidentBodyResetModel)
+				require.NoError(t, err)
+				expectedAvailable := 1
+				if alternative {
+					expectedAvailable = 2
+				}
+				require.Equal(t, expectedAvailable, available)
+				dbmodel.InitChannelCache()
+				route, err := dbmodel.CacheGetRandomSatisfiedChannelWithContext(ctx, "default", incidentBodyResetModel, false)
+				require.NoError(t, err)
+				require.Equal(t, 94003, route.Id, "the original highest-priority channel remains eligible after the failed request")
+				var owner dbmodel.User
+				var token dbmodel.Token
+				require.NoError(t, dbmodel.DB.First(&owner, 92001).Error)
+				require.NoError(t, dbmodel.DB.First(&token, 92002).Error)
+				require.Equal(t, owner.Quota, token.RemainQuota)
+				var rows []dbmodel.Log
+				require.NoError(t, dbmodel.LOG_DB.Where("request_id = ?", "incident-impact-routing").Find(&rows).Error)
+				if alternative {
+					require.EqualValues(t, 1, secondCalls.Load())
+					require.Equal(t, http.StatusOK, recorder.Code)
+					require.Equal(t, incidentBodyResetBalance-15, owner.Quota)
+					require.Len(t, rows, 2)
+					for _, row := range rows {
+						require.Equal(t, dbmodel.LogTypeConsume, row.Type)
+					}
+				} else {
+					require.Zero(t, secondCalls.Load())
+					require.Equal(t, http.StatusInternalServerError, recorder.Code)
+					require.Contains(t, recorder.Body.String(), "read_response_body_failed")
+					require.Equal(t, incidentBodyResetBalance-hold, owner.Quota)
+					require.Len(t, rows, 1)
+					require.Equal(t, dbmodel.LogTypeProvisional, rows[0].Type)
+					require.EqualValues(t, hold, rows[0].Quota)
+				}
+			})
+		}
+	}
 }

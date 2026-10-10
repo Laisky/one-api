@@ -167,14 +167,11 @@ func isInternalInfraError(rawErr error) bool {
 	return false
 }
 
-// isAdaptorInternalError reports whether err is a gateway-side adaptor fault.
-// Explicit upstream attribution takes precedence over the legacy ErrorTypeOneAPI
-// wire type; unclassified one-api 5xx failures retain their existing exclusion.
+// isAdaptorInternalError reports whether err is an internal one-api adaptor error (a 5xx
+// of type ErrorTypeOneAPI), which signals a gateway-side bug rather than an upstream
+// channel fault, so the channel must not be suspended/disabled for it.
 func isAdaptorInternalError(err *model.ErrorWithStatusCode) bool {
 	if err == nil {
-		return false
-	}
-	if errkind.Of(err.RawError) == errkind.Upstream {
 		return false
 	}
 	if err.StatusCode >= http.StatusInternalServerError && err.Type == model.ErrorTypeOneAPI {
