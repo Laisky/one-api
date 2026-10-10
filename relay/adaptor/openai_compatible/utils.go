@@ -2,7 +2,6 @@ package openai_compatible
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"strings"
 
@@ -132,7 +131,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelN
 // EmbeddingHandler processes embedding responses from OpenAI-compatible APIs
 func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	logger := gmw.GetLogger(c)
-	responseBody, err := io.ReadAll(resp.Body)
+	responseBody, err, closeErr := readAndCloseResponseBody(c, resp.Body)
 	if err != nil {
 		return ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
 	}
@@ -146,8 +145,8 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStat
 	}
 	fields = append(fields, zap.Bool("body_logging_suppressed", true))
 	logger.Debug("receive embedding response from upstream channel", fields...)
-	if err = resp.Body.Close(); err != nil {
-		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+	if closeErr != nil {
+		return ErrorWrapper(closeErr, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
 
 	// Check if response body is empty
@@ -226,7 +225,7 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStat
 // Handler processes non-streaming responses from OpenAI-compatible APIs
 func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 	logger := gmw.GetLogger(c)
-	responseBody, err := io.ReadAll(resp.Body)
+	responseBody, err, closeErr := readAndCloseResponseBody(c, resp.Body)
 	if err != nil {
 		return ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
 	}
@@ -240,8 +239,8 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	}
 	fields = append(fields, zap.Bool("body_logging_suppressed", true))
 	logger.Debug("receive from upstream channel", fields...)
-	if err = resp.Body.Close(); err != nil {
-		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+	if closeErr != nil {
+		return ErrorWrapper(closeErr, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
 
 	// Check if response body is empty
@@ -441,7 +440,7 @@ func StreamHandlerWithThinking(c *gin.Context, resp *http.Response, promptTokens
 // This handler uses high-performance string parsing to extract thinking content from Other provider responses
 func HandlerWithThinking(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 	logger := gmw.GetLogger(c)
-	responseBody, err := io.ReadAll(resp.Body)
+	responseBody, err, closeErr := readAndCloseResponseBody(c, resp.Body)
 	if err != nil {
 		return ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
 	}
@@ -449,8 +448,8 @@ func HandlerWithThinking(c *gin.Context, resp *http.Response, promptTokens int, 
 	logger.Debug("receive from upstream channel",
 		zap.Int("body_bytes", len(responseBody)),
 		zap.Bool("body_logging_suppressed", true))
-	if err = resp.Body.Close(); err != nil {
-		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+	if closeErr != nil {
+		return ErrorWrapper(closeErr, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
 
 	// Check if response body is empty

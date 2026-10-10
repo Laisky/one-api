@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
@@ -23,11 +24,14 @@ import (
 // ConvertOpenAIResponseToClaudeResponse converts an OpenAI-compatible response
 // (Chat Completions or Response API) into Claude Messages JSON http.Response.
 func ConvertOpenAIResponseToClaudeResponse(c *gin.Context, resp *http.Response) (*http.Response, *relaymodel.ErrorWithStatusCode) {
-	body, err := io.ReadAll(resp.Body)
+	body, err, closeErr := readAndCloseResponseBody(c, resp.Body)
 	if err != nil {
 		return nil, ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 	}
-	_ = resp.Body.Close()
+	if closeErr != nil {
+		logger := gmw.GetLogger(c)
+		logger.Debug("failed to close upstream response body after buffered conversion read", zap.Error(closeErr))
+	}
 
 	// 1) Try Response API format first
 	var responseAPIResp responseAPIResponse

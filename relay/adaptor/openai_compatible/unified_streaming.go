@@ -36,9 +36,12 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 			zap.Int("status_code", resp.StatusCode))
 
 		// Read response as potential error
-		responseBody, err := io.ReadAll(resp.Body)
+		responseBody, err, closeErr := readAndCloseResponseBody(c, resp.Body)
 		if err != nil {
 			return ErrorWrapper(err, "read_error_response_failed", http.StatusInternalServerError), nil
+		}
+		if closeErr != nil {
+			logger.Debug("failed to close upstream non-streaming error response body", zap.Error(closeErr))
 		}
 
 		logger.Error("received error response in stream handler",
