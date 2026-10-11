@@ -39,13 +39,13 @@ until reliable counter-presence provenance is available. It does not claim that
 all zero receipts are malicious or invalid provider responses.
 
 First requests remain accepted, including responses with incomplete usage receipts;
-existing settlement retains the appropriate reservation when usage is absent.
-Continuations with matching positive parent counters preserve the existing quote.
-Authoritative free groups bypass the extra parent usage lookup. Non-tier contracts
-retain their existing path. Provider-visible request bytes, output bounds, final
-settlement, refunds, debt recording and the original request's consume log are
-unchanged. There is no schema migration, new configuration switch or deployment
-change. Reverting this repair restores the former under-reservation exposure.
+their existing settlement policy is unchanged. Continuations with matching positive
+parent counters preserve the existing quote. Authoritative free groups bypass the
+extra parent usage lookup. Non-tier contracts retain their existing path.
+Provider-visible request bytes, output bounds, final settlement, refunds, debt
+recording and the original request's consume log are unchanged. There is no schema
+migration, new configuration switch or deployment change. Reverting this repair
+restores the former under-reservation exposure.
 
 ## Retained regressions
 
@@ -53,8 +53,9 @@ change. Reverting this repair restores the former under-reservation exposure.
 response against a loopback TLS provider, persists its incomplete receipt, and
 checks that both streaming and nonstreaming continuations reject before a second
 provider call. It checks unchanged durable user/token balances, no second hold,
-and preservation of the first consume log. No paid upstream or production state
-is used.
+and preservation of the first consume log. The fixture funds the first request but
+leaves less than the full second quote, while still covering the legacy allowance.
+No paid upstream or production state is used.
 
 `TestSecurityResponseContinuationTierCounters` covers receipt validation,
 owner/binding identity, bounded store reads, overflow, free groups and non-tier
@@ -66,11 +67,12 @@ Run the focused acceptance selection under the repository-supported Go toolchain
 
 ```sh
 go test -race ./relay/controller -run '^(TestSecurityNativeResponse(Unknown|Owned)ContinuationAdmission|TestSecurityResponseContinuationTierCounters)$' -count=1 -timeout=10m -v
-go test -race ./relay/quota ./relay/pricing -count=1
+# Broader qualification of all three affected packages:
+go test -race ./relay/controller ./relay/quota ./relay/pricing -count=1 -timeout=10m
 go vet ./relay/controller
 ```
 
 These are ordinary retained Go tests, not replacements for the existing assertions
 or security gates. Follow `docs/ci-testing.md` for manual qualification and the
-small automatic test budget; a focused pass is not a full-repository or production
-qualification claim.
+small automatic test budget; an affected-package pass is not a full-repository or
+production qualification claim.
