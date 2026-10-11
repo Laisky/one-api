@@ -42,6 +42,15 @@ First requests remain accepted, including responses with incomplete usage receip
 their existing settlement policy is unchanged. Continuations with matching positive
 parent counters preserve the existing quote. Authoritative free groups bypass the
 extra parent usage lookup. Non-tier contracts retain their existing path.
+
+Do not infer a free tariff from a zero `Ratio` in a modern `ModelConfig`: that value
+is omitted by channel ratio extraction and can inherit a paid provider/global
+fallback. This native quote path reads unified `ModelConfigs`, not the deprecated
+`ModelRatio` field. A zero in that legacy field does not establish a free override
+for this path either. The retained zero-configuration control checks actual quotes
+on both sides of the input tier before checking continuation behavior; only an
+authoritative zero group rate bypasses the additional parent lookup in this policy.
+
 Provider-visible request bytes, output bounds, final settlement, refunds, debt
 recording and the original request's consume log are unchanged. There is no schema
 migration, new configuration switch or deployment change. Reverting this repair
@@ -62,11 +71,17 @@ owner/binding identity, bounded store reads, overflow, free groups and non-tier
 controls. `TestSecurityNativeResponseOwnedContinuationAdmission` retains fully
 funded, underfunded owner, underfunded finite-token and operational-outage controls,
 including exact-once settlement of a funded two-turn conversation.
+`TestSecurityResponseZeroRatioConfiguration` preserves the distinction between
+omitted modern ratios, ignored legacy zero fields and authoritative free groups.
 
 Run the focused acceptance selection under the repository-supported Go toolchain:
 
 ```sh
-go test -race ./relay/controller -run '^(TestSecurityNativeResponse(Unknown|Owned)ContinuationAdmission|TestSecurityResponseContinuationTierCounters)$' -count=1 -timeout=10m -v
+go test -race ./relay/controller -run '^(TestSecurityNativeResponse(Unknown|Owned)ContinuationAdmission|TestSecurityResponseContinuationTierCounters|TestSecurityResponseZeroRatioConfiguration)$' -count=1 -timeout=10m -v
+# The complete controller package includes physical audio and failover fixtures.
+# Install FFmpeg first; both commands must resolve before broader qualification.
+command -v ffmpeg
+command -v ffprobe
 # Broader qualification of all three affected packages:
 go test -race ./relay/controller ./relay/quota ./relay/pricing -count=1 -timeout=10m
 go vet ./relay/controller
