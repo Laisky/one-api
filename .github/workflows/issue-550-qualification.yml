@@ -1,0 +1,50 @@
+name: Issue 550 isolated qualification
+
+on:
+  push:
+    branches: [fix/security-550-unknown-continuation]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-550-isolated-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  continuation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CGO_ENABLED: '1'
+    steps:
+      - name: Checkout exact repair revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Setup repository Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Run owner-scoped local provider regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/issue-550"
+          git rev-parse HEAD | tee "$RUNNER_TEMP/issue-550/revision.txt"
+          go version | tee "$RUNNER_TEMP/issue-550/toolchain.txt"
+          go test -race ./relay/controller -run '^(TestSecurityNativeResponse(Unknown|Owned)ContinuationAdmission|TestSecurityResponseContinuationTierCounters)$' -count=1 -timeout=10m -v 2>&1 | tee "$RUNNER_TEMP/issue-550/controller.log"
+      - name: Run shared pricing and quota regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -race ./relay/quota ./relay/pricing -count=1 -timeout=5m -v 2>&1 | tee "$RUNNER_TEMP/issue-550/pricing-quota.log"
+          go vet ./relay/controller
+      - name: Retain exact revision and test outcomes
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: issue-550-${{ github.sha }}
+          path: ${{ runner.temp }}/issue-550
+          if-no-files-found: error
+          retention-days: 14
