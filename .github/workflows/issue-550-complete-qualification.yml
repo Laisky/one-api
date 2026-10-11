@@ -1,0 +1,88 @@
+name: Issue 550 complete affected qualification
+
+on:
+  push:
+    branches: [fix/security-550-unknown-continuation]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-550-complete-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  affected:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CGO_ENABLED: '1'
+    steps:
+      - name: Checkout exact delivered repair revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 835135d6b8f28d08b8561ced0f1d9a15e1807877
+          persist-credentials: false
+      - name: Setup repository Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Install existing physical audio test prerequisite
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg
+          mkdir -p "$RUNNER_TEMP/issue-550-complete"
+          git rev-parse HEAD | tee "$RUNNER_TEMP/issue-550-complete/revision.txt"
+          go version | tee "$RUNNER_TEMP/issue-550-complete/toolchain.txt"
+          ffprobe -version | tee "$RUNNER_TEMP/issue-550-complete/ffprobe.txt"
+      - name: Run every affected controller, pricing and quota test
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -race ./relay/controller ./relay/quota ./relay/pricing -count=1 -timeout=10m -json > "$RUNNER_TEMP/issue-550-complete/affected.json"
+      - name: Repeat security acceptance to check fixture isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -race ./relay/controller -run '^(TestSecurityNativeResponse(Unknown|Owned)ContinuationAdmission|TestSecurityResponseContinuationTierCounters)$' -count=3 -timeout=10m -json > "$RUNNER_TEMP/issue-550-complete/security-repeated.json"
+      - name: Validate formatting and controller vet
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/format_check.py
+          go vet ./relay/controller
+          git diff --exit-code
+      - name: Summarize actual outcomes including every failure
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import collections, json, os, pathlib
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'issue-550-complete'
+          for path in sorted(root.glob('*.json')):
+              print('RESULTS', path.name)
+              rows = [json.loads(line) for line in path.read_text().splitlines()]
+              failures = {row.get('Test', '') for row in rows if row.get('Action') == 'fail'}
+              counts = collections.Counter()
+              for row in rows:
+                  action, test = row.get('Action'), row.get('Test', '')
+                  if action in ('pass', 'fail', 'skip'):
+                      if '/' not in test:
+                          counts[(row['Package'], action, 'test' if test else 'package')] += 1
+                      if action != 'pass' or not test:
+                          print(json.dumps(row))
+                  if action == 'output' and test in failures:
+                      print(row.get('Output', ''), end='')
+              for key, count in sorted(counts.items()):
+                  print(*key, count)
+          PY
+      - name: Retain complete qualification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: issue-550-complete-835135d6
+          path: ${{ runner.temp }}/issue-550-complete
+          if-no-files-found: error
+          retention-days: 14
