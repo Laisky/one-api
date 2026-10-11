@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Laisky/errors/v2"
-	"github.com/Laisky/one-api/common/ctxkey"
 	"math"
 	"net/http"
 	"testing"
 
+	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// continuationLookupStore observes the candidate's single bounded owner lookup.
+// continuationLookupStore observes the single bounded owner lookup.
 type continuationLookupStore struct {
 	state.ResponseStateStore
 	reads         int
@@ -45,9 +45,9 @@ func (s *continuationLookupStore) GetResponse(ctx context.Context, owner state.O
 }
 
 // TestSecurityResponseContinuationTierCounters retains known-counter arithmetic,
-// bounded owner lookup, matching metadata, and the explicitly unresolved legacy
-// receipt policy. Parameters: t owns isolated memory state. Returns: none;
-// known counters augment only the quote and malformed legacy data remains legacy.
+// bounded owner lookup, matching metadata, and fail-closed receipt validation.
+// Parameters: t owns isolated memory state. Returns: none; known counters augment
+// only the quote and unpriceable continuations never create a quota reservation.
 func TestSecurityResponseContinuationTierCounters(t *testing.T) {
 	const name = "native-continuation-counter-fixture"
 	for _, scenario := range []string{
@@ -79,82 +79,66 @@ func TestSecurityResponseContinuationTierCounters(t *testing.T) {
 				StoreMode: true, Usage: json.RawMessage(`{"input_tokens":456,"output_tokens":20}`),
 				Binding: &state.ProviderBinding{ChannelID: meta.ChannelId, APIType: meta.APIType, ActualModel: name, UpstreamResponseID: previous},
 			}
-			expected, expectedReads, expectError := 486, 1, false
+			expected, expectedReads := 486, 1
 			incremental := 10
+			expectError, expectUnpriceable := true, true
+			switch scenario {
+			case "known", "incomplete", "cancelled", "failed", "no_handle", "flat", "free_group":
+				expectError, expectUnpriceable = false, false
+			case "store_failure", "negative_incremental", "parent_overflow", "incremental_overflow":
+				expectUnpriceable = false
+			}
 			switch scenario {
 			case "store_failure":
 				observed.lookupErr = errors.New("local parent read outage")
-				expectError = true
 			case "free_group":
 				c.Set(ctxkey.ChannelRatio, 0.0)
 				observed.lookupErr = errors.New("unused parent read outage")
 				expectedReads = 0
 			case "zero":
 				record.Usage = json.RawMessage(`{"input_tokens":0,"output_tokens":0}`)
-				expected = 10
 			case "zero_output":
 				record.Usage = json.RawMessage(`{"input_tokens":456,"output_tokens":0}`)
-				expected = 466
 			case "missing_usage":
 				record.Usage = nil
-				expected = 10
 			case "null_usage":
 				record.Usage = json.RawMessage("null")
-				expected = 10
 			case "malformed":
 				record.Usage = json.RawMessage(`{"input_tokens":"invalid","output_tokens":20}`)
-				expected = 10
 			case "malformed_json":
 				observed.usageOverride = json.RawMessage("{")
-				expected = 10
 			case "negative_incremental":
 				incremental = -1
-				expectError = true
 			case "missing_input":
 				record.Usage = json.RawMessage(`{"output_tokens":20}`)
-				expected = 10
 			case "missing_output":
 				record.Usage = json.RawMessage(`{"input_tokens":456}`)
-				expected = 10
 			case "negative_input":
 				record.Usage = json.RawMessage(`{"input_tokens":-1,"output_tokens":20}`)
-				expected = 10
 			case "negative_output":
 				record.Usage = json.RawMessage(`{"input_tokens":456,"output_tokens":-1}`)
-				expected = 10
 			case "unrepresentable":
 				record.Usage = json.RawMessage(`{"input_tokens":999999999999999999999999,"output_tokens":20}`)
-				expected = 10
 			case "parent_overflow":
 				record.Usage = json.RawMessage(fmt.Sprintf(`{"input_tokens":%d,"output_tokens":1}`, math.MaxInt))
-				expectError = true
 			case "incremental_overflow":
-				record.Usage = json.RawMessage(fmt.Sprintf(`{"input_tokens":%d,"output_tokens":0}`, math.MaxInt))
-				expectError = true
+				record.Usage = json.RawMessage(fmt.Sprintf(`{"input_tokens":%d,"output_tokens":1}`, math.MaxInt-1))
 			case "different_model":
 				record.Binding.ActualModel = "other-model"
-				expected = 10
 			case "different_current_model":
 				meta.ActualModelName = "other-model"
-				expected = 10
 			case "different_channel":
 				record.Binding.ChannelID++
-				expected = 10
 			case "different_api":
 				record.Binding.APIType++
-				expected = 10
 			case "different_handle":
 				record.Binding.UpstreamResponseID = "another_handle"
-				expected = 10
 			case "missing_handle":
 				record.Binding.UpstreamResponseID = ""
-				expected = 10
 			case "missing_binding":
 				record.Binding = nil
-				expected = 10
 			case "nonterminal":
 				record.Status = state.StatusInProgress
-				expected = 10
 			case "incomplete":
 				record.Status = state.StatusIncomplete
 			case "cancelled":
@@ -163,19 +147,17 @@ func TestSecurityResponseContinuationTierCounters(t *testing.T) {
 				record.Status = state.StatusFailed
 			case "no_parent":
 				c.Set(ctxNativeGatewayParent, "")
-				expected, expectedReads = 10, 0
+				expectedReads = 0
 			case "no_handle":
 				request.PreviousResponseId = nil
 				expected, expectedReads = 10, 0
 			case "foreign_owner":
 				record.Owner.UserID++
-				expected = 10
 			case "missing_parent":
 				c.Set(ctxNativeGatewayParent, "missing_parent")
-				expected = 10
 			case "disabled":
 				state.SetForTest(nil)
-				expected, expectedReads = 10, 0
+				expectedReads = 0
 			case "flat":
 				expectedReads = 0
 			}
@@ -194,6 +176,10 @@ func TestSecurityResponseContinuationTierCounters(t *testing.T) {
 				prompt, quoteErr := responseContinuationTierPrompt(c, meta, request, incremental)
 				if expectError {
 					require.Error(t, quoteErr)
+					require.Zero(t, prompt, "invalid inherited context must not return an incremental budget")
+					if expectUnpriceable {
+						require.ErrorIs(t, quoteErr, errResponseContinuationUnpriceable)
+					}
 					if scenario == "store_failure" {
 						require.ErrorIs(t, quoteErr, errResponseContinuationStoreUnavailable)
 					}
