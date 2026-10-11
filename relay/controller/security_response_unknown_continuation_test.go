@@ -27,13 +27,18 @@ import (
 func TestSecurityNativeResponseUnknownContinuationAdmission(t *testing.T) {
 	const name = "native-unknown-continuation-fixture"
 	const output = 20
-	const balance = int64(4000)
 	local := model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2, Tiers: []model.ModelRatioTierLocal{{
 		InputTokenThreshold: 100, Ratio: 5, CompletionRatio: 100,
 	}}}
 	for _, stream := range []bool{false, true} {
 		for _, scenario := range []string{"missing_usage", "empty_usage", "missing_input", "missing_output", "zero_input", "zero_output"} {
 			t.Run(fmt.Sprintf("%s/stream=%t", scenario, stream), func(t *testing.T) {
+				// Fund the first request, but leave less than the complete second
+				// quote. The legacy incremental allowance still fits this balance.
+				balance := int64(2500)
+				if scenario == "missing_output" || scenario == "zero_output" {
+					balance = 2930
+				}
 				xaiVideoSetup(t, balance, false)
 				store := enableStateForTest(t)
 				var calls atomic.Int32
