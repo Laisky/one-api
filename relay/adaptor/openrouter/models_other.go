@@ -567,7 +567,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"prism-ml/ternary-bonsai-2-27b": {
 			Ratio:                       nativeRate(0.075),
-			CompletionRatio:             6.666666666666667,
+			CompletionRatio:             (0.5 * 1.0) / 0.075,
+			CachedInputRatio:            nativeRate(0.0375),
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text", "image"},
@@ -577,7 +578,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"xhigh", "medium"},
 			DefaultReasoningEffort:      "xhigh",
 			HuggingFaceID:               "prism-ml/Ternary-Bonsai-2-27B-gguf",
-			Description:                 "prism-ml/ternary-bonsai-2-27b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "prism-ml/ternary-bonsai-2-27b on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified.",
 		},
 		"rekaai/reka-edge": {
 			Ratio:                       nativeRate(0.09999999999999999),

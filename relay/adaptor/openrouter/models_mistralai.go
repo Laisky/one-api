@@ -186,8 +186,8 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "mistralai/mistral-medium-3.1 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"mistralai/mistral-nemo": {
-			Ratio:                       nativeRate(0.019000000000000003),
-			CompletionRatio:             1.5789473684210524,
+			Ratio:                       nativeRate(0.029),
+			CompletionRatio:             (0.03 * 1.0) / 0.029,
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text"},
@@ -195,7 +195,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "logprobs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "mistralai/Mistral-Nemo-Instruct-2407",
-			Description:                 "mistralai/mistral-nemo on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "mistralai/mistral-nemo on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified.",
 		},
 		"mistralai/mistral-saba": {
 			Ratio:                       nativeRate(0.19999999999999998),

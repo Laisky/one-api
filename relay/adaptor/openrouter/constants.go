@@ -12,6 +12,7 @@ import (
 // Source: https://openrouter.ai/api/v1/models
 // ModelRatios contains each provider model exactly once, with no patch overlays.
 var ModelRatios = adaptor.JoinModelCatalogs(
+	octoberChatModels(),
 	aion_labsModels(),
 	anthropicModels(),
 	sonnet55Models(),
