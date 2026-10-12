@@ -31,7 +31,8 @@ func TestAdapterPricingImplementations(t *testing.T) {
 		// so the sample probes hunyuan-turbos which carries a non-zero ratio.
 		{"Tencent", apitype.Tencent, "hunyuan-turbos", false},
 		{"Gemini", apitype.Gemini, "gemini-2.5-flash", false},
-		{"Xunfei", apitype.Xunfei, "Spark-Lite", false},
+		// Spark-Lite is explicitly free; keep this paid-price smoke test on Spark-Pro.
+		{"Xunfei", apitype.Xunfei, "Spark-Pro", false},
 		{"VertexAI", apitype.VertexAI, "gemini-2.5-flash", false},
 		{"xAI", apitype.XAI, "grok-3", false},
 		{"AWS Bedrock/Mistral AI", apitype.AwsClaude, "mistral-pixtral-large-2502", false},
