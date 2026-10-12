@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   model-metadata:
-    name: Mistral and Cohere catalogue regressions
+    name: Affected provider catalogue regressions
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -35,15 +35,4 @@ jobs:
         with:
           go-version: '1.27.2'
       - name: Run affected adaptor packages
-        run: go test -count=1 -timeout=5m ./relay/adaptor/mistral ./relay/adaptor/cohere
-      - name: Archive tracked catalogue audit inputs
-        run: |
-          git archive --format=tar.gz --output="$RUNNER_TEMP/adaptor-audit-inputs.tar.gz" HEAD \
-            relay/adaptor relay/billing/ratio AGENTS.md go.mod go.sum
-      - name: Retain scoped audit inputs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: adaptor-audit-inputs
-          path: ${{ runner.temp }}/adaptor-audit-inputs.tar.gz
-          retention-days: 1
-          if-no-files-found: error
+        run: go test -count=1 -timeout=5m ./relay/adaptor/mistral ./relay/adaptor/cohere ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/gemini ./relay/adaptor/vertexai
