@@ -56,19 +56,21 @@ func deepseek_aiModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek-ai/DeepSeek-V4-Pro-0813": {
 			Ratio:             nativeRate(1.32),
-			CompletionRatio:   3,
+			CompletionRatio:   (3.96 * 1.0) / 1.32,
 			CachedInputRatio:  nativeRate(0.13),
 			ContextLength:     1048576,
 			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs"},
-			Description:       "deepseek-ai/DeepSeek-V4-Pro-0813 on togetherai; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:       "deepseek-ai/DeepSeek-V4-Pro-0813 on Together's public serverless API; verified 2026-10-12. Token tariffs are USD per million. Omitted source fields retain prior metadata rather than becoming invented limits or free prices. Host quantization: NVFP4; represented by the generic fp4 metadata label.",
+			Quantization:      "fp4",
 		},
 		"deepseek-ai/DeepSeek-V4.1-Flash": {
 			Ratio:             nativeRate(0.3),
-			CompletionRatio:   4,
+			CompletionRatio:   (1.2 * 1.0) / 0.3,
 			CachedInputRatio:  nativeRate(0.006),
 			ContextLength:     1000000,
 			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs"},
-			Description:       "deepseek-ai/DeepSeek-V4.1-Flash on togetherai; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:       "deepseek-ai/DeepSeek-V4.1-Flash on Together's public serverless API; verified 2026-10-12. Token tariffs are USD per million. Omitted source fields retain prior metadata rather than becoming invented limits or free prices.",
+			Quantization:      "fp8",
 		},
 	}
 }
