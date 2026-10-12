@@ -17,6 +17,7 @@ var ModelRatios = adaptor.JoinModelCatalogs(
 	proModels(),
 	qwenModels(),
 	zai_orgModels(),
+	glm53FlashModels(),
 )
 
 // ModelList retains the existing channel discovery interface.
