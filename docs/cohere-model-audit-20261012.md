@@ -34,10 +34,13 @@ unknown-model fallback. It also checks there are no cached or tiered residual
 prices. `TestCommandResearchPricingDoesNotChangePaidModels` independently pins
 six neighboring paid models, preventing a blanket free-Command regression.
 
-Both files were gofmt-formatted. Package tests have not been executed in this
-container; run `go test ./relay/adaptor/cohere` with the repository toolchain and
-required CI gates before merging. No live-provider or complete billing-pipeline
-qualification is claimed.
+Both files were gofmt-formatted. The complete Cohere package suite passed with
+Go 1.27.2, most recently in the five-package check recorded at:
+https://github.com/Laisky/one-api/actions/runs/38272009063/job/114888567875
+
+See `adaptor-model-refresh-20261012.md` for the exact tested commit and command.
+No live-provider or complete billing-pipeline qualification is claimed. Confirm
+required automatic CI on the final PR head before merging.
 
 ## Remaining catalogue work
 

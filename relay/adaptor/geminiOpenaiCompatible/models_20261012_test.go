@@ -15,7 +15,7 @@ import (
 func TestGeminiOctoberLifecycle(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		id, replacement, date  string
+		id, replacement, date string
 		input, cached, output float64
 	}{
 		{"gemini-3.7-flash", "gemini-3.8-flash", "2026-10-08", 0.75, 0.075, 3.75},
