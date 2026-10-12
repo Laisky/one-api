@@ -11,9 +11,11 @@ import (
 // Last updated: 2026-08-26.
 var flagshipTextModels = map[string]adaptor.ModelConfig{
 	// GLM-5.3: same base model as GLM-5.2 with post-training improvements.
+	// Metadata audited 2026-10-12; see docs/zhipu-model-catalog.md.
+	// JSON mode is documented; provider-enforced JSON Schema is not.
 	// Official pricing is now published on the flagship table (verified 2026-08-26):
 	// ¥8 input / ¥2 cached input / ¥28 output per 1M tokens, no tiers. The z.ai
-	// international list quotes the same tier ($1.4 / $0.26 / $4.4).
+	// international list is independently priced at $1.4 / $0.26 / $4.4.
 	"glm-5.3": {
 		Ratio:                       8 * ratio.MilliTokensRmb,
 		CompletionRatio:             28.0 / 8.0,
@@ -22,10 +24,11 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		MaxOutputTokens:             131_072,
 		InputModalities:             textInput(),
 		OutputModalities:            textOutput(),
-		SupportedFeatures:           reasoningChatFeatures(),
-		SupportedSamplingParameters: chatSamplingParameters(),
+		SupportedFeatures:           []string{"tools", "json_mode", "web_search", "reasoning"},
+		SupportedSamplingParameters: []string{"temperature", "top_p", "max_tokens", "stop", "reasoning_effort"},
 		SupportedReasoningEfforts:   []string{"low", "high", "max"},
 		DefaultReasoningEffort:      "max",
+		HuggingFaceID:               "zai-org/GLM-5.3",
 		Description:                 "GLM-5.3: latest flagship text model built on the GLM-5.2 base; 1M context, 128K max output, always-on thinking with reasoning_effort low/high/max (thinking cannot be disabled); coding SOTA and emergent cybersecurity capabilities. Official pricing ¥8/¥28 per 1M input/output, ¥2 cached-input.",
 	},
 	// GLM-5-Turbo: input [0,32K) ¥5/¥22, input [32K+) ¥7/¥26

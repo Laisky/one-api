@@ -25,7 +25,7 @@ func publishedCatalogs() map[string]catalogView {
 	cn, international := &zhipu.Adaptor{}, &zai.Adaptor{}
 	return map[string]catalogView{
 		"bigmodel": {models: cn.GetModelList(), configs: cn.GetDefaultModelPricing()},
-		"zai":     {models: international.GetModelList(), configs: international.GetDefaultModelPricing()},
+		"zai":      {models: international.GetModelList(), configs: international.GetDefaultModelPricing()},
 	}
 }
 
