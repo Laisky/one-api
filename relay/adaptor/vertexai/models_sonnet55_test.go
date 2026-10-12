@@ -25,7 +25,7 @@ func TestClaudeSonnet55VertexPublicCatalog(t *testing.T) {
 	require.True(t, ok)
 	require.InDelta(t, 2*ratio.MilliTokensUsd, a.GetModelRatio(modelID), 1e-12)
 	require.InDelta(t, 10*ratio.MilliTokensUsd, config.Ratio*a.GetCompletionRatio(modelID), 1e-12)
-	require.InDelta(t, 0.2*ratio.MilliTokensUsd, config.CachedInputRatio, 1e-12)
+	require.InDelta(t, 0.1*ratio.MilliTokensUsd, config.CachedInputRatio, 1e-12)
 	require.InDelta(t, 2.5*ratio.MilliTokensUsd, config.CacheWrite5mRatio, 1e-12)
 	require.InDelta(t, 4*ratio.MilliTokensUsd, config.CacheWrite1hRatio, 1e-12)
 	require.EqualValues(t, 1000000, config.ContextLength)
