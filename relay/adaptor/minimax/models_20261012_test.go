@@ -14,14 +14,14 @@ func TestMiniMaxOctoberCatalogue(t *testing.T) {
 	t.Parallel()
 	a := &Adaptor{}
 	for id, prices := range map[string][3]float64{
-		"MiniMax-M3":              {2.1, 0.42, 8.4},
-		"MiniMax-M2.7":            {2.1, 0.42, 8.4},
-		"MiniMax-M2.7-highspeed":  {4.2, 0.42, 16.8},
-		"MiniMax-M2.5":            {2.1, 0.21, 8.4},
-		"MiniMax-M2.5-highspeed":  {4.2, 0.21, 16.8},
-		"MiniMax-M2.1":            {2.1, 0.21, 8.4},
-		"MiniMax-M2.1-highspeed":  {4.2, 0.21, 16.8},
-		"MiniMax-M2":              {2.1, 0.21, 8.4},
+		"MiniMax-M3":             {2.1, 0.42, 8.4},
+		"MiniMax-M2.7":           {2.1, 0.42, 8.4},
+		"MiniMax-M2.7-highspeed": {4.2, 0.42, 16.8},
+		"MiniMax-M2.5":           {2.1, 0.21, 8.4},
+		"MiniMax-M2.5-highspeed": {4.2, 0.21, 16.8},
+		"MiniMax-M2.1":           {2.1, 0.21, 8.4},
+		"MiniMax-M2.1-highspeed": {4.2, 0.21, 16.8},
+		"MiniMax-M2":             {2.1, 0.21, 8.4},
 	} {
 		cfg, ok := a.GetDefaultModelPricing()[id]
 		require.True(t, ok)

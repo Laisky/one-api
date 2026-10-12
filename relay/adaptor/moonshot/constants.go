@@ -19,14 +19,14 @@ import (
 const moonshotRetiredNotice = " Retired on 2026-08-31; no longer supported by the Kimi API. Use kimi-k3. This entry retains historical pricing for existing configurations, not current upstream availability."
 
 var (
-	moonshotTextInputs             = []string{"text"}
-	moonshotVisionInputs           = []string{"text", "image"}
-	moonshotMultimodalInputs       = []string{"text", "image", "video"}
-	moonshotTextOutputs            = []string{"text"}
-	moonshotChatFeatures           = []string{"tools", "json_mode", "structured_outputs"}
-	moonshotReasoningFeatures      = []string{"tools", "json_mode", "structured_outputs", "reasoning"}
-	moonshotMultimodalFeatures     = []string{"tools", "json_mode", "structured_outputs", "reasoning", "web_search"}
-	moonshotSamplingParams         = []string{"temperature", "top_p", "max_tokens", "stop", "frequency_penalty", "presence_penalty", "seed"}
+	moonshotTextInputs              = []string{"text"}
+	moonshotVisionInputs            = []string{"text", "image"}
+	moonshotMultimodalInputs        = []string{"text", "image", "video"}
+	moonshotTextOutputs             = []string{"text"}
+	moonshotChatFeatures            = []string{"tools", "json_mode", "structured_outputs"}
+	moonshotReasoningFeatures       = []string{"tools", "json_mode", "structured_outputs", "reasoning"}
+	moonshotMultimodalFeatures      = []string{"tools", "json_mode", "structured_outputs", "reasoning", "web_search"}
+	moonshotSamplingParams          = []string{"temperature", "top_p", "max_tokens", "stop", "frequency_penalty", "presence_penalty", "seed"}
 	moonshotReasoningSamplingParams = []string{"temperature", "top_p", "max_tokens", "stop", "seed"}
 	// K3 fixes temperature/top_p/penalties; they are not effective controls.
 	moonshotK3SamplingParams   = []string{"max_tokens", "max_completion_tokens", "stop", "reasoning_effort"}
@@ -39,7 +39,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"kimi-k3": {
 		Ratio: 20.0 * ratio.MilliTokensRmb, CompletionRatio: 100.0 / 20.0,
 		CachedInputRatio: 2.0 * ratio.MilliTokensRmb,
-		ContextLength: 1048576, MaxOutputTokens: 1048576,
+		ContextLength:    1048576, MaxOutputTokens: 1048576,
 		InputModalities: moonshotMultimodalInputs, OutputModalities: moonshotTextOutputs,
 		SupportedFeatures: moonshotReasoningFeatures, SupportedSamplingParameters: moonshotK3SamplingParams,
 		SupportedReasoningEfforts: moonshotK3ReasoningEfforts, DefaultReasoningEffort: "max",
@@ -48,7 +48,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"kimi-k2.7-code": {
 		Ratio: 6.5 * ratio.MilliTokensRmb, CompletionRatio: 27.0 / 6.5,
 		CachedInputRatio: 1.3 * ratio.MilliTokensRmb,
-		ContextLength: 262144, MaxOutputTokens: 32768,
+		ContextLength:    262144, MaxOutputTokens: 32768,
 		InputModalities: moonshotMultimodalInputs, OutputModalities: moonshotTextOutputs,
 		SupportedFeatures: moonshotReasoningFeatures, SupportedSamplingParameters: moonshotReasoningSamplingParams,
 		MaxReasoningTokens: 49152, HuggingFaceID: "moonshotai/Kimi-K2.7-Code",
@@ -57,7 +57,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"kimi-k2.7-code-highspeed": {
 		Ratio: 13.0 * ratio.MilliTokensRmb, CompletionRatio: 54.0 / 13.0,
 		CachedInputRatio: 2.6 * ratio.MilliTokensRmb,
-		ContextLength: 262144, MaxOutputTokens: 32768,
+		ContextLength:    262144, MaxOutputTokens: 32768,
 		InputModalities: moonshotMultimodalInputs, OutputModalities: moonshotTextOutputs,
 		SupportedFeatures: moonshotReasoningFeatures, SupportedSamplingParameters: moonshotReasoningSamplingParams,
 		MaxReasoningTokens: 49152, HuggingFaceID: "moonshotai/Kimi-K2.7-Code",
@@ -66,7 +66,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"kimi-k2.6": {
 		Ratio: 6.5 * ratio.MilliTokensRmb, CompletionRatio: 27.0 / 6.5,
 		CachedInputRatio: 1.1 * ratio.MilliTokensRmb,
-		ContextLength: 262144, MaxOutputTokens: 32768,
+		ContextLength:    262144, MaxOutputTokens: 32768,
 		InputModalities: moonshotMultimodalInputs, OutputModalities: moonshotTextOutputs,
 		SupportedFeatures: moonshotMultimodalFeatures, SupportedSamplingParameters: moonshotSamplingParams,
 		MaxReasoningTokens: 49152, HuggingFaceID: "moonshotai/Kimi-K2.6",
@@ -75,7 +75,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"kimi-k2.5": {
 		Ratio: 4.0 * ratio.MilliTokensRmb, CompletionRatio: 21.0 / 4.0,
 		CachedInputRatio: 0.7 * ratio.MilliTokensRmb,
-		ContextLength: 262144, MaxOutputTokens: 32768,
+		ContextLength:    262144, MaxOutputTokens: 32768,
 		InputModalities: moonshotMultimodalInputs, OutputModalities: moonshotTextOutputs,
 		SupportedFeatures: moonshotMultimodalFeatures, SupportedSamplingParameters: moonshotSamplingParams,
 		MaxReasoningTokens: 49152, HuggingFaceID: "moonshotai/Kimi-K2.5",

@@ -19,7 +19,7 @@ import (
 func large4ModelConfig() adaptor.ModelConfig {
 	return adaptor.ModelConfig{
 		Ratio:                     1.36 * ratio.MilliTokensUsd,
-		CachedInputRatio:           0.14 * ratio.MilliTokensUsd,
+		CachedInputRatio:          0.14 * ratio.MilliTokensUsd,
 		CompletionRatio:           4.18 / 1.36,
 		ContextLength:             1_000_000,
 		InputModalities:           []string{"text", "image"},

@@ -24,7 +24,7 @@ func minimaxCurrentModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 			SupportedSamplingParameters: minimaxCurrentSamplingParameters(),
 			HuggingFaceID:               "MiniMaxAI/MiniMax-M3",
-			Description: "MiniMax M3 multimodal pay-as-you-go model with 1M context. Thinking defaults on and can be disabled; reasoning_effort does not tune this model. Standard CNY/M input/cache/output is 2.10/0.42/8.40, doubled above 512K input. The published 50% discount is permanent. Priority requests cost 1.5 times Standard and require separate effective pricing; these defaults are Standard only. Native transport is not implemented by this catalogue adaptor.",
+			Description:                 "MiniMax M3 multimodal pay-as-you-go model with 1M context. Thinking defaults on and can be disabled; reasoning_effort does not tune this model. Standard CNY/M input/cache/output is 2.10/0.42/8.40, doubled above 512K input. The published 50% discount is permanent. Priority requests cost 1.5 times Standard and require separate effective pricing; these defaults are Standard only. Native transport is not implemented by this catalogue adaptor.",
 		},
 	}
 	for _, spec := range []struct {

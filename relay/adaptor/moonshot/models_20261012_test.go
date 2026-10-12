@@ -15,10 +15,10 @@ func TestMoonshotOctoberLifecycle(t *testing.T) {
 	t.Parallel()
 	a := &Adaptor{}
 	for id, prices := range map[string][2]float64{
-		"kimi-k2.5":                      {4, 21},
-		"moonshot-v1-8k":                 {2, 10},
-		"moonshot-v1-32k":                {5, 20},
-		"moonshot-v1-128k":               {10, 30},
+		"kimi-k2.5":                       {4, 21},
+		"moonshot-v1-8k":                  {2, 10},
+		"moonshot-v1-32k":                 {5, 20},
+		"moonshot-v1-128k":                {10, 30},
 		"moonshot-v1-8k-vision-preview":   {2, 10},
 		"moonshot-v1-32k-vision-preview":  {5, 20},
 		"moonshot-v1-128k-vision-preview": {10, 30},
@@ -46,14 +46,16 @@ func TestKimiK3PublishedControlsReachRequest(t *testing.T) {
 	require.Contains(t, cfg.SupportedSamplingParameters, "reasoning_effort")
 	require.Contains(t, cfg.Description, "5m/1h")
 	require.Contains(t, cfg.Description, "not yet represented")
-	effort := "max"
-	req := &model.GeneralOpenAIRequest{Model: "kimi-k3", MaxCompletionTokens: 777, ReasoningEffort: &effort}
+	effort, outputLimit := "max", 777
+	req := &model.GeneralOpenAIRequest{Model: "kimi-k3", MaxCompletionTokens: &outputLimit, ReasoningEffort: &effort}
 	converted, err := a.ConvertRequest(nil, 0, req)
 	require.NoError(t, err)
 	wire, ok := converted.(*model.GeneralOpenAIRequest)
 	require.True(t, ok)
 	require.Equal(t, "kimi-k3", wire.Model)
-	require.EqualValues(t, 777, wire.MaxCompletionTokens)
+	require.NotNil(t, wire.MaxCompletionTokens)
+	require.EqualValues(t, 777, *wire.MaxCompletionTokens)
+	require.NotNil(t, wire.ReasoningEffort)
 	require.Equal(t, "max", *wire.ReasoningEffort)
 	require.InDelta(t, 20.0, cfg.Ratio/ratio.MilliTokensRmb, 1e-12)
 	require.InDelta(t, 2.0, cfg.CachedInputRatio/ratio.MilliTokensRmb, 1e-12)
