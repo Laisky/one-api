@@ -187,7 +187,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// the promotion is a time window, so quota reverts to list automatically the
 	// moment the promotion lapses.
 	"glm-5.3-flash": derive("glm-5.3-flash", usdPrice{Input: 0.15, Cached: 0.03, Output: 0.50},
-		describe("GLM-5.3-Flash on Z.AI: native multimodal Flash sibling of GLM-5.3, 1M context, 128K max output, always-on thinking. List pricing $0.15/$0.50 per 1M input/output, $0.03 cached input, with a 50% launch promotion applied as a time-window discount until 2026-09-09 24:00 UTC+8."),
+		describe("GLM-5.3-Flash on Z.AI: native multimodal Flash sibling of GLM-5.3, 1M context, 128K max output, always-on thinking with reasoning_effort low/high/max (default max). List pricing $0.15/$0.50 per 1M input/output, $0.03 cached input, the historical 50% launch promotion expired after 2026-09-09 24:00 UTC+8."),
 		launchPromoUsd("glm-5.3-flash-launch-promo", "2026-09-10", usdPrice{Input: 0.075, Cached: 0.015, Output: 0.25})),
 	"glm-5v-turbo": derive("glm-5v-turbo", usdPrice{Input: 1.20, Cached: 0.24, Output: 4.00},
 		describe("GLM-5V-Turbo on Z.AI: 744B MoE native multimodal agent for visual programming and GUI automation, 200K context. Flat $1.20/$4.00 per 1M input/output, $0.24 cached input.")),

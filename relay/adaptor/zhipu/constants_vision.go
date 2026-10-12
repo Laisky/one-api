@@ -26,6 +26,7 @@ var flagshipVisionModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: chatSamplingParameters(),
 		Description:                 "AutoGLM-Phone: vision-language AI phone assistant that understands screens and drives Android devices via ADB; 20K context, 2048 max output; free for a limited time.",
 	},
+	// Metadata audited 2026-10-12; see docs/zhipu-model-catalog.md.
 	// GLM-5.3-Flash: launched 2026-08-26 with a two-week 50% launch promotion
 	// (「5折限时两周」, promo ¥0.4/¥0.115/¥1.4 per 1M input/cached input/output).
 	// The base rates below are the standard list prices — ¥0.8/¥0.23/¥2.8 — and
@@ -39,9 +40,12 @@ var flagshipVisionModels = map[string]adaptor.ModelConfig{
 		MaxOutputTokens:             131_072,
 		InputModalities:             textImageVideoFileInput(),
 		OutputModalities:            textOutput(),
-		SupportedFeatures:           reasoningChatFeatures(),
-		SupportedSamplingParameters: chatSamplingParameters(),
-		Description:                 "GLM-5.3-Flash: native multimodal Flash sibling of GLM-5.3 with 1M context and 128K max output; list pricing ¥0.8/¥2.8 per 1M input/output, ¥0.23 cached-input, with a 50% launch promotion applied as a time-window discount through 2026-09-09 24:00 (UTC+8).",
+		SupportedFeatures:           []string{"tools", "json_mode", "web_search", "reasoning"},
+		SupportedSamplingParameters: []string{"temperature", "top_p", "max_tokens", "stop", "reasoning_effort"},
+		SupportedReasoningEfforts:   []string{"low", "high", "max"},
+		DefaultReasoningEffort:      "max",
+		HuggingFaceID:               "zai-org/GLM-5.3-Flash",
+		Description:                 "GLM-5.3-Flash: native multimodal Flash sibling of GLM-5.3 with 1M context and 128K max output; always-on thinking with reasoning_effort low/high/max (default max); list pricing ¥0.8/¥2.8 per 1M input/output, ¥0.23 cached-input, the historical 50% launch promotion expired after 2026-09-09 24:00 (UTC+8).",
 		// The promotion ends at 24:00 on 2026-09-09 Asia/Shanghai. DateTo is
 		// exclusive, so 2026-09-10 keeps the whole of 2026-09-09 discounted.
 		// CompletionRatio is inherited (2.8/0.8 == 1.4/0.4 == 3.5) because the
