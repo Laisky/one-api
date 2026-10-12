@@ -530,14 +530,14 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "microsoft/phi-4 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"mistralai/Mistral-Nemo-Instruct-2407": {
-			Ratio:                       nativeRate(0.019),
-			CompletionRatio:             1.5789473684210529,
+			Ratio:                       nativeRate(0.029),
+			CompletionRatio:             (0.03 * 1.0) / 0.029,
 			ContextLength:               131072,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "mistralai/Mistral-Nemo-Instruct-2407 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "mistralai/Mistral-Nemo-Instruct-2407 on DeepInfra; host token prices verified 2026-10-12. Existing capability metadata is retained. A direct-creator redirect or another provider's tariff is not a DeepInfra price change.",
 		},
 		"mistralai/Mistral-Small-24B-Instruct-2501": {
 			Ratio:                       nativeRate(0.05),
