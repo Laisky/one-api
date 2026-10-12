@@ -1,12 +1,10 @@
+# Temporary audit runner; remove after recording verification receipts.
 name: Adaptor catalogue checks
 
 on:
   pull_request:
     paths:
-      - 'relay/adaptor/cohere/**'
-      - 'relay/adaptor/mistral/**'
-      - 'relay/adaptor/interface.go'
-      - 'relay/adaptor/catalog.go'
+      - 'relay/adaptor/**'
       - 'relay/billing/ratio/**'
       - 'go.mod'
       - 'go.sum'
@@ -38,3 +36,14 @@ jobs:
           go-version: '1.27.2'
       - name: Run affected adaptor packages
         run: go test -count=1 -timeout=5m ./relay/adaptor/mistral ./relay/adaptor/cohere
+      - name: Archive tracked catalogue audit inputs
+        run: |
+          git archive --format=tar.gz --output="$RUNNER_TEMP/adaptor-audit-inputs.tar.gz" HEAD \
+            relay/adaptor relay/billing/ratio AGENTS.md go.mod go.sum
+      - name: Retain scoped audit inputs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: adaptor-audit-inputs
+          path: ${{ runner.temp }}/adaptor-audit-inputs.tar.gz
+          retention-days: 1
+          if-no-files-found: error
