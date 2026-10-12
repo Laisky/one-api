@@ -1,0 +1,35 @@
+name: Zhipu catalogue one-time qualification
+
+on:
+  push:
+    branches: [fix/zhipu-model-metadata-20261012]
+    paths: [.github/workflows/zhipu-catalog-qualification.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Reproduce, fix, qualify and commit the scoped catalogue changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GOFLAGS: -mod=readonly
+        run: python3 .github/scripts/qualify_zhipu_catalog.py
+      - name: Retain complete qualification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: zhipu-catalog-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/zhipu-catalog-evidence
+          retention-days: 14
+          if-no-files-found: error
