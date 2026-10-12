@@ -8,7 +8,8 @@ import (
 // init registers Opus 5.5 standard global-inference pricing, not a regional
 // contract quote. AWS's model card does not support native structured outputs,
 // so that first-party capability is deliberately not inherited.
-// Sources (2026-09-24): https://aws.amazon.com/bedrock/pricing/ and
+// Prices verified 2026-09-24; effort controls rechecked 2026-10-12.
+// Sources: https://aws.amazon.com/bedrock/pricing/ and
 // https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5-5.html
 func init() {
 	awsBedrockModelPricing["claude-opus-5-5"] = adaptor.ModelConfig{
@@ -19,6 +20,8 @@ func init() {
 		InputModalities: []string{"text", "image", "file"}, OutputModalities: []string{"text"},
 		SupportedFeatures:           []string{"tools", "reasoning"},
 		SupportedSamplingParameters: []string{"max_tokens", "stop"},
+		SupportedReasoningEfforts:   []string{"low", "medium", "high", "xhigh", "max"},
+		DefaultReasoningEffort:      "medium",
 		Description:                 "Claude Opus 5.5 on Amazon Bedrock; always-on adaptive thinking, 1M context and 128K output. Standard global inference $4/$20 input/output per million tokens, $0.20 cache reads, $5/$8 5-minute/1-hour cache writes. Regional or contracted prices require operator overrides. Native structured outputs are not supported on this Bedrock model card.",
 	}
 }

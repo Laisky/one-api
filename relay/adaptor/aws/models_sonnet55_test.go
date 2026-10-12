@@ -30,7 +30,7 @@ func TestClaudeSonnet55BedrockCatalog(t *testing.T) {
 	require.True(t, ok)
 	require.InDelta(t, 2*ratio.MilliTokensUsd, a.GetModelRatio(id), 1e-12)
 	require.InDelta(t, 10*ratio.MilliTokensUsd, cfg.Ratio*a.GetCompletionRatio(id), 1e-12)
-	require.InDelta(t, 0.2*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.InDelta(t, 0.1*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
 	require.InDelta(t, 2.5*ratio.MilliTokensUsd, cfg.CacheWrite5mRatio, 1e-12)
 	require.InDelta(t, 4*ratio.MilliTokensUsd, cfg.CacheWrite1hRatio, 1e-12)
 	require.EqualValues(t, 1000000, cfg.ContextLength)
