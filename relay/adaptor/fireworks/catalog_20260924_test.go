@@ -23,7 +23,7 @@ func TestSeptemberCatalog(t *testing.T) {
 		vision                bool
 	}{
 		{"accounts/fireworks/models/ember-1", 3, 0.3, 15, 1048576, true},
-		{"accounts/fireworks/models/deepseek-v4p1-flash", 0.22, 0.007, 0.66, 1048576, true},
+		{"accounts/fireworks/models/deepseek-v4p1-flash", 0.30, 0.006, 1.20, 1048576, true},
 	} {
 		t.Run(tc.id, func(t *testing.T) {
 			t.Parallel()

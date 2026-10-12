@@ -11,6 +11,10 @@ import (
 //   - https://fireworks.ai/models?modelTypes=Serverless
 //   - https://fireworks.ai/models/fireworks/ember-1
 //   - https://fireworks.ai/models/deepseek-ai/deepseek-v4p1-flash
+//
+// DeepSeek V4.1 Flash pricing rechecked 2026-10-12 against the dedicated
+// https://docs.fireworks.ai/serverless/pricing table and main model-card price.
+// The older FAQ tariff on that card disagrees with both current price tables.
 func init() {
 	for id, cfg := range map[string]adaptor.ModelConfig{
 		"accounts/fireworks/models/ember-1": {
@@ -23,12 +27,12 @@ func init() {
 			HuggingFaceID:               "",
 		},
 		"accounts/fireworks/models/deepseek-v4p1-flash": {
-			Ratio: 0.22 * ratio.MilliTokensUsd, CachedInputRatio: 0.007 * ratio.MilliTokensUsd, CompletionRatio: 0.66 / 0.22,
+			Ratio: 0.30 * ratio.MilliTokensUsd, CachedInputRatio: 0.006 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.30,
 			ContextLength:   1048576,
 			InputModalities: []string{"text", "image"}, OutputModalities: []string{"text"},
 			SupportedFeatures:           []string{"tools", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "max_tokens", "max_completion_tokens", "stop", "tools", "tool_choice", "response_format"},
-			Description:                 "DeepSeek V4.1 Flash hosted by Fireworks, with native text and image input. Uses Fireworks rates, not the first-party daypart tariff.",
+			Description:                 "DeepSeek V4.1 Flash hosted by Fireworks, with native text and image input. Uses Fireworks Standard serverless rates verified 2026-10-12: USD 0.30 input, 0.006 cached input and 1.20 output per million tokens. Priority, US-only and first-party daypart tariffs do not apply to this default.",
 			HuggingFaceID:               "deepseek-ai/DeepSeek-V4.1-Flash",
 		},
 	} {
