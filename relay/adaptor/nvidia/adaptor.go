@@ -61,17 +61,15 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	return nil
 }
 
-// ConvertRequest passes OpenAI-style chat requests through with a single
-// normalization: NVIDIA's chat completions endpoint does not accept OpenAI's
-// `reasoning_effort` parameter (Nemotron reasoning models are tuned via the
-// provider-specific chat_template_kwargs/reasoning_budget extra-body fields
-// instead), so it is dropped to avoid upstream 400s. This mirrors the
-// SiliconFlow / Novita / xAI adaptors.
+// ConvertRequest preserves native GLM 5.3 effort controls while retaining the
+// preceding normalization for other NVIDIA models. Parameters are the request
+// context, relay mode and chat request; it returns the normalized request or an
+// error for nil input. The GLM model cards explicitly support reasoning_effort.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	if request.ReasoningEffort != nil {
+	if request.ReasoningEffort != nil && request.Model != "z-ai/glm-5.3" && request.Model != "z-ai/glm-5.3-flash" {
 		request.ReasoningEffort = nil
 	}
 	return request, nil
