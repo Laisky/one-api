@@ -14,6 +14,7 @@ var ModelRatios = adaptor.JoinModelCatalogs(
 	deepseekModels(),
 	ernieModels(),
 	otherModels(),
+	publishedChatModels(),
 )
 
 // ModelList retains the existing channel discovery interface.
