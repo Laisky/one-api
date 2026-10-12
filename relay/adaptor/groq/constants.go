@@ -10,13 +10,15 @@ import (
 // quantization label, so the Quantization field is intentionally left empty
 // (omitempty) for those models.
 //
-// Sources (last audited 2026-09-24):
+// Sources (last audited 2026-10-12):
 //   - https://console.groq.com/docs/models
 //   - https://console.groq.com/docs/deprecations
 //   - https://console.groq.com/docs/reasoning
 //   - https://console.groq.com/docs/prompt-caching
 //   - https://console.groq.com/docs/api-reference
 //   - https://console.groq.com/docs/structured-outputs
+//   - https://console.groq.com/docs/speech-to-text
+//   - https://console.groq.com/docs/text-to-speech/orpheus
 //   - Per-model pages under https://console.groq.com/docs/model/<id>
 var (
 	// groqTextOnlyModalities advertises a chat model that consumes and emits text only.
@@ -27,6 +29,21 @@ var (
 	groqAudioInModalities = []string{"audio"}
 	// groqAudioOutModalities advertises audio-only output (TTS).
 	groqAudioOutModalities = []string{"audio"}
+
+	// groqTranscriptionParams describes Whisper transcription controls. Metadata
+	// uses the SDK parameter name; multipart requests use timestamp_granularities[].
+	// Word/segment timestamps require response_format=verbose_json.
+	// Source: https://console.groq.com/docs/speech-to-text
+	groqTranscriptionParams = []string{
+		"language", "prompt", "response_format", "temperature", "timestamp_granularities",
+	}
+
+	// groqSpeechParams follows the Orpheus-specific API contract rather than the
+	// generic speech reference that still describes retired PlayAI models.
+	// Voice is required, and response_format supports only wav. Do not infer
+	// speed or sample_rate support from another model's API documentation.
+	// Source: https://console.groq.com/docs/text-to-speech/orpheus
+	groqSpeechParams = []string{"voice", "response_format"}
 
 	// groqChatSamplingParams enumerates the OpenAI-compatible sampling parameters
 	// accepted by Groq chat completions. n is restricted to 1; max_tokens is a
@@ -119,24 +136,24 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             1,
 		InputModalities:             groqAudioInModalities,
 		OutputModalities:            groqTextOnlyModalities,
-		SupportedSamplingParameters: []string{"language", "prompt", "response_format", "temperature"},
+		SupportedSamplingParameters: groqTranscriptionParams,
 		// Groq publishes Whisper pricing as $0.111 per audio-hour (=$0.111/3600 USD/sec).
 		// Source: https://console.groq.com/docs/speech-to-text
 		Audio:         &adaptor.AudioPricingConfig{InputUnit: "seconds", InputPriceUsd: 0.111, InputPriceQuantity: 3600, UsdPerSecond: 0.111 / 3600, MinimumBillableSeconds: 10},
 		HuggingFaceID: "openai/whisper-large-v3",
-		Description:   "OpenAI Whisper large-v3 speech-to-text model (audio input, text output) with 99+ language support.",
+		Description:   "OpenAI Whisper large-v3 multilingual speech-to-text model with transcription and translation to English. Transcription supports word/segment timestamps with response_format=verbose_json; audio billing has a 10-second minimum.",
 	},
 	"whisper-large-v3-turbo": {
 		Ratio:                       0,
 		CompletionRatio:             1,
 		InputModalities:             groqAudioInModalities,
 		OutputModalities:            groqTextOnlyModalities,
-		SupportedSamplingParameters: []string{"language", "prompt", "response_format", "temperature"},
+		SupportedSamplingParameters: groqTranscriptionParams,
 		// Groq publishes Whisper Turbo pricing as $0.04 per audio-hour.
 		// Source: https://console.groq.com/docs/speech-to-text
 		Audio:         &adaptor.AudioPricingConfig{InputUnit: "seconds", InputPriceUsd: 0.04, InputPriceQuantity: 3600, UsdPerSecond: 0.04 / 3600, MinimumBillableSeconds: 10},
 		HuggingFaceID: "openai/whisper-large-v3-turbo",
-		Description:   "Whisper large-v3 turbo multilingual speech-to-text model (audio input, text output). Supports transcription, not translation; audio billing has a 10-second minimum.",
+		Description:   "Whisper large-v3 turbo multilingual speech-to-text model. Supports transcription, not translation. Transcription supports word/segment timestamps with response_format=verbose_json; audio billing has a 10-second minimum.",
 	},
 	"openai/gpt-oss-120b": {
 		Ratio:                       0.15 * ratio.MilliTokensUsd,
@@ -290,27 +307,31 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "MiniMax M2.7 enterprise preview reasoning model with 196K context and 131K maximum output. Pricing is contact-sales only: the zero placeholder is not a free tariff. Configure contract rates before use.",
 	},
 
-	// Current preview text-to-speech models.
+	// Current preview text-to-speech models. Catalog token limits below are not
+	// the speech endpoint input limit: Orpheus accepts at most 200 characters.
+	// Source: https://console.groq.com/docs/text-to-speech/orpheus
 	"canopylabs/orpheus-arabic-saudi": {
-		Audio:            &adaptor.AudioPricingConfig{InputUnit: "characters", InputPriceUsd: 40, InputPriceQuantity: 1e6},
-		Ratio:            40.0 * ratio.MilliTokensUsd, // per 1M characters
-		CompletionRatio:  1,
-		ContextLength:    4000,
-		MaxOutputTokens:  50000,
-		InputModalities:  groqTextOnlyModalities,
-		OutputModalities: groqAudioOutModalities,
-		Description:      "Canopy Labs Orpheus text-to-speech model (Saudi Arabic). Output is rendered audio billed per character.",
+		Audio:                       &adaptor.AudioPricingConfig{InputUnit: "characters", InputPriceUsd: 40, InputPriceQuantity: 1e6},
+		Ratio:                       40.0 * ratio.MilliTokensUsd, // per 1M characters
+		CompletionRatio:             1,
+		ContextLength:               4000,
+		MaxOutputTokens:             50000,
+		InputModalities:             groqTextOnlyModalities,
+		OutputModalities:            groqAudioOutModalities,
+		SupportedSamplingParameters: groqSpeechParams,
+		Description:                 "Canopy Labs Orpheus Saudi Arabic text-to-speech preview. Requires a Saudi Arabic voice, accepts a 200-character maximum input, and returns WAV audio only. Bracketed vocal directions are not supported. Billed per character.",
 	},
 	"canopylabs/orpheus-v1-english": {
-		Audio:            &adaptor.AudioPricingConfig{InputUnit: "characters", InputPriceUsd: 22, InputPriceQuantity: 1e6},
-		Ratio:            22.0 * ratio.MilliTokensUsd, // per 1M characters
-		CompletionRatio:  1,
-		ContextLength:    4000,
-		MaxOutputTokens:  50000,
-		InputModalities:  groqTextOnlyModalities,
-		OutputModalities: groqAudioOutModalities,
-		HuggingFaceID:    "canopylabs/orpheus-3b-0.1-ft",
-		Description:      "Canopy Labs Orpheus v1 English text-to-speech (Llama-3.2-3B backbone) with bracketed vocal direction tags.",
+		Audio:                       &adaptor.AudioPricingConfig{InputUnit: "characters", InputPriceUsd: 22, InputPriceQuantity: 1e6},
+		Ratio:                       22.0 * ratio.MilliTokensUsd, // per 1M characters
+		CompletionRatio:             1,
+		ContextLength:               4000,
+		MaxOutputTokens:             50000,
+		InputModalities:             groqTextOnlyModalities,
+		OutputModalities:            groqAudioOutModalities,
+		SupportedSamplingParameters: groqSpeechParams,
+		HuggingFaceID:               "canopylabs/orpheus-3b-0.1-ft",
+		Description:                 "Canopy Labs Orpheus v1 English text-to-speech preview with bracketed vocal direction tags. Requires an English voice, accepts a 200-character maximum input, and returns WAV audio only. Billed per character.",
 	},
 	// Decommissioned systems. Keep historical metadata, but do not advertise
 	// these IDs: Groq returns errors for them starting 2026-09-21.
@@ -338,7 +359,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 }
 
-// ModelList mirrors Groq's supported catalog as of 2026-09-24, including
+// ModelList mirrors Groq's supported catalog as of 2026-10-12, including
 // enterprise-only models. Account permissions belong to channel administrators.
 // Legacy IDs not listed here remain configurable through their retained metadata.
 var ModelList = []string{
