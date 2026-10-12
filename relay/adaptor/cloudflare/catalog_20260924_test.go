@@ -22,8 +22,8 @@ func TestSeptemberCatalog(t *testing.T) {
 		context               int32
 		vision                bool
 	}{
-		{"@cf/zai-org/glm-5.3", 1.4, 0.26, 4.4, 1310720, false},
-		{"@cf/zai-org/glm-5.3-flash", 0.15, 0.03, 0.5, 1310720, true},
+		{"@cf/zai-org/glm-5.3", 1.4, 0.26, 4.4, 1048576, false},
+		{"@cf/zai-org/glm-5.3-flash", 0.15, 0.03, 0.5, 1048576, true},
 	} {
 		t.Run(tc.id, func(t *testing.T) {
 			t.Parallel()
@@ -37,7 +37,8 @@ func TestSeptemberCatalog(t *testing.T) {
 			require.Equal(t, tc.context, cfg.ContextLength)
 			require.Zero(t, cfg.MaxOutputTokens)
 			require.Zero(t, cfg.MaxTokens)
-			require.Empty(t, cfg.SupportedReasoningEfforts)
+			require.Equal(t, []string{"low", "high", "max"}, cfg.SupportedReasoningEfforts)
+			require.Equal(t, "max", cfg.DefaultReasoningEffort)
 			if tc.vision {
 				require.Contains(t, cfg.InputModalities, "image")
 			} else {
