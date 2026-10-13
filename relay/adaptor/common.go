@@ -183,6 +183,17 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	ctx := gmw.Ctx(c)
 	ctx = gmw.SetLogger(ctx, lg)
 
+	// Reject cancellation before attributing a possible upstream write. A custom
+	// transport may ignore the context once invoked, so Client.Do must not run.
+	// Existing forwarding evidence from earlier work remains untouched.
+	if err = req.Context().Err(); err != nil {
+		if req.Body != nil {
+			err = errors.Join(err, req.Body.Close())
+		}
+		lg.Debug("request cancelled before upstream dispatch")
+		return nil, errors.Wrap(err, "request cancelled before upstream dispatch")
+	}
+
 	// Log upstream request for billing tracking
 	fields := []zap.Field{
 		zap.String("method", req.Method),
