@@ -7,8 +7,8 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/Laisky/errors/v2 v2.0.1
 	github.com/Laisky/gin-middlewares/v7 v7.0.3-0.20260320133617-ccf155d4ffea
-	github.com/Laisky/go-utils/v6 v6.3.0
-	github.com/Laisky/zap v1.27.1-0.20260318034917-6e5a9fb2b3d1
+	github.com/Laisky/go-utils/v6 v6.4.0
+	github.com/Laisky/zap v1.27.1-0.20261006114731-55f41c2b5061
 	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20
@@ -101,6 +101,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.7 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/emmansun/gmsm v0.45.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.4 // indirect
