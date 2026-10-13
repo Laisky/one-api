@@ -1,0 +1,154 @@
+# Temporary read-only acceptance harness. Never merge into the application.
+name: Gemini review acceptance
+on:
+  push:
+    branches: [qualification/sentry-561-20261013]
+    paths: [.github/workflows/gemini-review-acceptance.yml]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - source: 5e9c245e24bf8a040b633dabad82202f7b171083
+            prior: eed2a6d02e5392f24197f49a70af3ba2ba22f212
+            name: test-only
+          - source: 4082041192b3a2d52fff8c9dfd75360a06b2ab16
+            prior: 2c47db3ab0fcd23bf9f8d217b458a82a539d8da2
+            name: combined-sentry
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports: [3306:3306]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12 --health-start-period=20s
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports: [5432:5432]
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s --health-timeout=5s --health-retries=12 --health-start-period=10s
+    env:
+      SOURCE_SHA: ${{ matrix.source }}
+      PRIOR_SHA: ${{ matrix.prior }}
+      GOMAXPROCS: '2'
+      CGO_ENABLED: '1'
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      MYSQL_LOG_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      PG_LOG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.source }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Prepare disposable fixtures
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg mysql-client postgresql-client
+          mysql -h 127.0.0.1 -P 3306 -uroot -e "CREATE DATABASE IF NOT EXISTS oneapi_log CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'oneapi_log'" | grep -q 1 || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE oneapi_log;"
+          python3 tests/stream-perf/cache_tokens.py --cache "$RUNNER_TEMP/tokenizer-cache"
+          python3 tests/stream-perf/cache_tokens.py --cache "$RUNNER_TEMP/tokenizer-cache" --check-only
+          echo "TIKTOKEN_CACHE_DIR=$RUNNER_TEMP/tokenizer-cache" >> "$GITHUB_ENV"
+      - name: Verify source, positive and negative controls, then complete controller inventory
+        run: |
+          python3 -u - <<'PY'
+          import collections,hashlib,json,os,pathlib,subprocess
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'review-acceptance';root.mkdir()
+          path=pathlib.Path('controller/gemini_live_budget_security_test.go');gatepath=pathlib.Path('relay/adaptor/gemini/live_spend.go')
+          original=path.read_bytes();gate=gatepath.read_bytes()
+          streams={'TestSecurityGeminiLiveOutputStreamCannotOutrunReservation','TestSecurityGeminiLiveBufferedOutputPreservesReservation'}
+          timeout_test='TestSecurityGeminiLiveProviderReadTimeoutIsNotClosure'
+          all_tests=streams|{timeout_test}
+          stream_pattern='^TestSecurityGeminiLive(OutputStreamCannotOutrunReservation|BufferedOutputPreservesReservation)$'
+          all_pattern='^TestSecurityGeminiLive(OutputStreamCannotOutrunReservation|BufferedOutputPreservesReservation|ProviderReadTimeoutIsNotClosure)$'
+          report={'source':os.environ['SOURCE_SHA'],'prior':os.environ['PRIOR_SHA'],'test_blob':'d5e1084763e204724bd45075330260b8e5b1eb0c','experiments':{}}
+          def git(*args):return subprocess.check_output(['git',*args],text=True).strip()
+          def run(label,args,selected=all_tests):
+              with (root/(label+'.jsonl')).open('w') as output:
+                  p=subprocess.run(['go','test','-json','-race','-p','1',*args,'./controller'],stdout=output,stderr=subprocess.STDOUT,timeout=1400)
+              events=[]
+              for line in (root/(label+'.jsonl')).read_text().splitlines():
+                  try:events.append(json.loads(line))
+                  except ValueError:pass
+              terminal=[e for e in events if e.get('Test') and e['Action'] in ('pass','fail','skip')]
+              result={'exit_code':p.returncode,'selected':{name:[e['Action'] for e in terminal if e['Test']==name] for name in selected},'top_level':dict(collections.Counter(e['Action'] for e in terminal if '/' not in e['Test'])),'skips':[e['Test'] for e in terminal if e['Action']=='skip'],'counters':[e['Output'].strip() for e in events if 'client_chunks=' in e.get('Output','')]}
+              report['experiments'][label]=result;print(label,json.dumps(result),flush=True)
+              (root/'report.json').write_text(json.dumps(report,indent=2))
+              return result,terminal,events
+          try:
+              assert git('rev-parse','HEAD')==os.environ['SOURCE_SHA']
+              assert git('diff','--name-only',os.environ['PRIOR_SHA'],'HEAD').splitlines()==[str(path)]
+              assert git('hash-object',str(path))==report['test_blob']
+              assert hashlib.sha256(original).hexdigest()=='17d6eb14022b50c8620416d09741d85e0cb7a5cf4069a8512504411a042e2db5'
+              assert not subprocess.check_output(['gofmt','-l',str(path)],text=True).strip()
+              report['tree']=git('rev-parse','HEAD^{tree}')
+              positive,_,_=run('positive',['-count=3','-timeout=180s','-run',all_pattern])
+              assert positive['exit_code']==0 and all(v==['pass']*3 for v in positive['selected'].values())
+              statement='if err := s.gate.Ensure(s.exposureLocked(s.pending, s.pendingWork)); err != nil {'
+              text=gate.decode();assert text.count(statement)==1
+              try:
+                  gatepath.write_text(text.replace(statement,statement.replace('err != nil {','false && err != nil {')))
+                  negative,_,_=run('output_funding_rejection_disabled',['-count=1','-timeout=180s','-run',stream_pattern],streams)
+                  assert negative['exit_code']!=0 and all(v==['fail'] for v in negative['selected'].values())
+                  assert len(negative['counters'])==2 and all('client_chunks=100' in s for s in negative['counters'])
+              finally:gatepath.write_bytes(gate)
+              try:
+                  text=original.decode();needle='providerReadResult <- err';assert text.count(needle)==1
+                  path.write_text(text.replace(needle,'providerReadResult <- errors.Wrap(os.ErrDeadlineExceeded, "synthetic read timeout")'))
+                  negative,_,events=run('observed_read_timeout_injected',['-count=1','-timeout=180s','-run',stream_pattern],streams)
+                  assert negative['exit_code']!=0 and all(v==['fail'] for v in negative['selected'].values())
+                  assert sum('a provider read deadline is not evidence of peer closure' in e.get('Output','') for e in events)>=2
+              finally:path.write_bytes(original)
+              try:
+                  text=original.decode();needle='var timeout interface{ Timeout() bool }\n\treturn !errors.As(err, &timeout) || !timeout.Timeout()';assert text.count(needle)==1
+                  path.write_text(text.replace(needle,'return true'))
+                  negative,_,_=run('deadline_classification_relaxed',['-count=1','-timeout=180s','-run','^'+timeout_test+'$'],{timeout_test})
+                  assert negative['exit_code']!=0 and negative['selected'][timeout_test]==['fail']
+              finally:path.write_bytes(original)
+              assert not git('status','--porcelain','--untracked-files=no')
+              # Keep the race build mode for inventory and vet so dependencies are not compiled twice.
+              inventory={line for line in subprocess.check_output(['go','test','-race','-p','1','-list','^Test','./controller'],text=True).splitlines() if line.startswith('Test') and ' ' not in line}
+              (root/'controller-inventory.json').write_text(json.dumps(sorted(inventory),indent=2))
+              complete,terminal,_=run('complete_controller',['-count=1','-timeout=20m'])
+              assert complete['exit_code']==0 and all(e['Action']!='fail' for e in terminal)
+              assert {e['Test'] for e in terminal if '/' not in e['Test']}==inventory
+              assert all(v==['pass'] for v in complete['selected'].values())
+              subprocess.run(['go','vet','-race','-p','1','./controller'],check=True,timeout=300)
+              assert not git('status','--porcelain','--untracked-files=no')
+              report['passed']=True
+          finally:
+              path.write_bytes(original);gatepath.write_bytes(gate)
+              (root/'report.json').write_text(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: gemini-review-${{ matrix.name }}
+          path: ${{ runner.temp }}/review-acceptance
+          retention-days: 14
+          if-no-files-found: error
