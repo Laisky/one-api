@@ -22,7 +22,6 @@ import (
 	"github.com/Laisky/zap/zaptest/observer"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
@@ -75,25 +74,22 @@ func billingTransportAuditChannel(id int, base string, priority int64) *model.Ch
 		Priority: &priority, BaseURL: &base, ModelConfigs: &pricing, Key: "synthetic-fixture-key"}
 }
 
-// billingTransportAuditFixture adapts the existing incident SQLite fixture to the real outer Relay without internal test seams.
-func billingTransportAuditFixture(t *testing.T, first *model.Channel, second *model.Channel) (*gin.Context, *httptest.ResponseRecorder, *observer.ObservedLogs) {
+// billingTransportAuditFixture uses disposable primary/log stores for actual Relay accounting on the selected backend.
+func billingTransportAuditFixture(t *testing.T, backend string, first *model.Channel, second *model.Channel) (*gin.Context, *httptest.ResponseRecorder, *observer.ObservedLogs) {
 	t.Helper()
 	billingTransportAuditDrain(t)
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}, &model.Log{}, &model.UserRequestCost{}, &model.QuotaRefund{}, &model.MCPServer{}, &model.MCPTool{}, &model.Trace{}))
+	db, logDB := billingTransportAuditStores(t, backend)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}, &model.UserRequestCost{}, &model.QuotaRefund{}, &model.MCPServer{}, &model.MCPTool{}, &model.Trace{}))
+	require.NoError(t, logDB.AutoMigrate(&model.Log{}))
 	oldDB, oldLogDB := model.DB, model.LOG_DB
 	oldSQLite, oldMySQL, oldPostgres := common.UsingSQLite.Load(), common.UsingMySQL.Load(), common.UsingPostgreSQL.Load()
 	oldRedis, oldConsume := common.IsRedisEnabled(), config.IsLogConsumeEnabled()
 	oldBatch, oldMemory, oldApproximate, oldMetric := config.BatchUpdateEnabled, config.MemoryCacheEnabled, config.ApproximateTokenEnabled, config.EnableMetric
 	oldRetry, oldPre, oldClient, oldGin := config.RetryTimes, config.PreConsumedQuota, client.HTTPClient, gin.Mode()
-	model.DB, model.LOG_DB = db, db
-	common.UsingSQLite.Store(true)
-	common.UsingMySQL.Store(false)
-	common.UsingPostgreSQL.Store(false)
+	model.DB, model.LOG_DB = db, logDB
+	common.UsingSQLite.Store(backend == "sqlite")
+	common.UsingMySQL.Store(backend == "mysql")
+	common.UsingPostgreSQL.Store(backend == "postgres")
 	common.SetRedisEnabled(false)
 	config.SetLogConsumeEnabled(true)
 	config.BatchUpdateEnabled, config.MemoryCacheEnabled, config.ApproximateTokenEnabled, config.EnableMetric = false, false, true, false
@@ -113,7 +109,6 @@ func billingTransportAuditFixture(t *testing.T, first *model.Channel, second *mo
 		config.BatchUpdateEnabled, config.MemoryCacheEnabled, config.ApproximateTokenEnabled, config.EnableMetric = oldBatch, oldMemory, oldApproximate, oldMetric
 		config.RetryTimes, config.PreConsumedQuota, client.HTTPClient = oldRetry, oldPre, oldClient
 		gin.SetMode(oldGin)
-		require.NoError(t, sqlDB.Close())
 	})
 	for _, channel := range []*model.Channel{first, second} {
 		if channel == nil {
@@ -254,160 +249,168 @@ func billingTransportAuditHTTPClient(t *testing.T, allowed []string, refused str
 
 // TestBillingTransportAuditIntegration exercises actual DeepSeek dispatch, strict-priority retries and physical quota accounting.
 func TestBillingTransportAuditIntegration(t *testing.T) {
-	for _, kind := range []string{"invalid_header", "invalid_url", "custom_dial_refused", "after_write_close", "success"} {
-		for _, retry := range []bool{false, true} {
-			if kind == "success" && retry {
-				continue
-			}
-			name := kind + "/terminal"
-			if retry {
-				name = kind + "/selected_retry"
-			}
-			t.Run(name, func(t *testing.T) {
-				var received, bodyBytes, secondReceived, secondBytes, refused, getConn, gotConn, wrote atomic.Int64
-				mode := "success"
-				if kind == "after_write_close" {
-					mode = "close_after_read"
+	billingTransportAuditBackends(t, func(t *testing.T, backend string) {
+		for _, kind := range []string{"invalid_header", "invalid_url", "custom_dial_refused", "after_write_close", "success"} {
+			for _, retry := range []bool{false, true} {
+				if kind == "success" && retry {
+					continue
 				}
-				firstServer := billingTransportAuditServer(t, mode, &received, &bodyBytes)
-				base := firstServer.URL
-				if kind == "invalid_url" {
-					base = "http://%zz"
-				}
-				if kind == "custom_dial_refused" {
-					base = "http://billing-prewrite-refused.invalid"
-				}
-				first := billingTransportAuditChannel(billingTransportAuditFirst, base, 10)
-				if kind == "invalid_header" {
-					encoded, err := json.Marshal(model.ChannelConfig{CustomHeaders: map[string]string{"bad\nname": "synthetic"}})
-					require.NoError(t, err)
-					first.Config = string(encoded)
-				}
-				var second *model.Channel
-				allowed := []string{firstServer.Listener.Addr().String()}
+				name := kind + "/terminal"
 				if retry {
-					server := billingTransportAuditServer(t, "success", &secondReceived, &secondBytes)
-					second = billingTransportAuditChannel(billingTransportAuditSecond, server.URL, 5)
-					allowed = append(allowed, server.Listener.Addr().String())
+					name = kind + "/selected_retry"
 				}
-				c, response, logs := billingTransportAuditFixture(t, first, second)
-				billingTransportAuditTrace(c, &getConn, &gotConn, &wrote)
-				billingTransportAuditHTTPClient(t, allowed, "billing-prewrite-refused.invalid:80", &refused)
-				entrycontroller.Relay(c)
-				billingTransportAuditDrain(t)
-				hold := billingTransportAuditHold(t, logs)
-				if kind == "invalid_header" || kind == "invalid_url" {
-					require.Zero(t, received.Load())
-					require.Zero(t, refused.Load())
-				}
-				if kind == "custom_dial_refused" {
-					require.EqualValues(t, 1, refused.Load())
-					require.Zero(t, received.Load())
-					require.Positive(t, getConn.Load())
-					if !retry {
-						require.Zero(t, gotConn.Load())
-						require.Zero(t, wrote.Load())
+				t.Run(name, func(t *testing.T) {
+					var received, bodyBytes, secondReceived, secondBytes, refused, getConn, gotConn, wrote atomic.Int64
+					mode := "success"
+					if kind == "after_write_close" {
+						mode = "close_after_read"
 					}
-				}
-				if kind == "after_write_close" || kind == "success" {
-					require.EqualValues(t, 1, received.Load())
-					require.Positive(t, bodyBytes.Load())
-					require.Positive(t, wrote.Load())
-				}
-				if retry {
-					require.EqualValues(t, 1, secondReceived.Load())
-					require.Positive(t, secondBytes.Load())
-					require.Equal(t, http.StatusOK, response.Code)
-					billingTransportAuditAssert(t, logs, 15, 2, false, kind == "custom_dial_refused" || kind == "after_write_close")
-				} else if kind == "success" {
-					require.Equal(t, http.StatusOK, response.Code)
-					billingTransportAuditAssert(t, logs, 15, 1, false, false)
-				} else if kind == "after_write_close" || kind == "custom_dial_refused" {
-					require.Equal(t, http.StatusInternalServerError, response.Code)
-					billingTransportAuditAssert(t, logs, hold, 1, true, true)
-				} else {
-					require.Equal(t, http.StatusInternalServerError, response.Code)
-					billingTransportAuditAssert(t, logs, 0, 1, false, false)
-				}
-			})
+					firstServer := billingTransportAuditServer(t, mode, &received, &bodyBytes)
+					base := firstServer.URL
+					if kind == "invalid_url" {
+						base = "http://%zz"
+					}
+					if kind == "custom_dial_refused" {
+						base = "http://billing-prewrite-refused.invalid"
+					}
+					first := billingTransportAuditChannel(billingTransportAuditFirst, base, 10)
+					if kind == "invalid_header" {
+						encoded, err := json.Marshal(model.ChannelConfig{CustomHeaders: map[string]string{"bad\nname": "synthetic"}})
+						require.NoError(t, err)
+						first.Config = string(encoded)
+					}
+					var second *model.Channel
+					allowed := []string{firstServer.Listener.Addr().String()}
+					if retry {
+						server := billingTransportAuditServer(t, "success", &secondReceived, &secondBytes)
+						second = billingTransportAuditChannel(billingTransportAuditSecond, server.URL, 5)
+						allowed = append(allowed, server.Listener.Addr().String())
+					}
+					c, response, logs := billingTransportAuditFixture(t, backend, first, second)
+					billingTransportAuditTrace(c, &getConn, &gotConn, &wrote)
+					billingTransportAuditHTTPClient(t, allowed, "billing-prewrite-refused.invalid:80", &refused)
+					entrycontroller.Relay(c)
+					billingTransportAuditDrain(t)
+					hold := billingTransportAuditHold(t, logs)
+					if kind == "invalid_header" || kind == "invalid_url" {
+						require.Zero(t, received.Load())
+						require.Zero(t, refused.Load())
+					}
+					if kind == "custom_dial_refused" {
+						require.EqualValues(t, 1, refused.Load())
+						require.Zero(t, received.Load())
+						require.Positive(t, getConn.Load())
+						if !retry {
+							require.Zero(t, gotConn.Load())
+							require.Zero(t, wrote.Load())
+						}
+					}
+					if kind == "after_write_close" || kind == "success" {
+						require.EqualValues(t, 1, received.Load())
+						require.Positive(t, bodyBytes.Load())
+						require.Positive(t, wrote.Load())
+					}
+					if retry {
+						require.EqualValues(t, 1, secondReceived.Load())
+						require.Positive(t, secondBytes.Load())
+						require.Equal(t, http.StatusOK, response.Code)
+						billingTransportAuditAssert(t, logs, 15, 2, false, kind == "custom_dial_refused" || kind == "after_write_close")
+					} else if kind == "success" {
+						require.Equal(t, http.StatusOK, response.Code)
+						billingTransportAuditAssert(t, logs, 15, 1, false, false)
+					} else if kind == "after_write_close" || kind == "custom_dial_refused" {
+						require.Equal(t, http.StatusInternalServerError, response.Code)
+						billingTransportAuditAssert(t, logs, hold, 1, true, true)
+					} else {
+						require.Equal(t, http.StatusInternalServerError, response.Code)
+						billingTransportAuditAssert(t, logs, 0, 1, false, false)
+					}
+				})
+			}
 		}
-	}
+	})
 }
 
 // TestBillingTransportAuditOpaqueDialErrorRetainsHold prevents error-shape inference for a custom transport with unknown write semantics.
 func TestBillingTransportAuditOpaqueDialErrorRetainsHold(t *testing.T) {
-	first := billingTransportAuditChannel(billingTransportAuditFirst, "http://billing-opaque.invalid", 10)
-	c, response, logs := billingTransportAuditFixture(t, first, nil)
-	transport := &billingTransportAuditOpaque{}
-	client.HTTPClient = &http.Client{Transport: transport}
-	entrycontroller.Relay(c)
-	billingTransportAuditDrain(t)
-	require.EqualValues(t, 1, transport.calls.Load())
-	require.Equal(t, http.StatusInternalServerError, response.Code)
-	billingTransportAuditAssert(t, logs, billingTransportAuditHold(t, logs), 1, true, true)
+	billingTransportAuditBackends(t, func(t *testing.T, backend string) {
+		first := billingTransportAuditChannel(billingTransportAuditFirst, "http://billing-opaque.invalid", 10)
+		c, response, logs := billingTransportAuditFixture(t, backend, first, nil)
+		transport := &billingTransportAuditOpaque{}
+		client.HTTPClient = &http.Client{Transport: transport}
+		entrycontroller.Relay(c)
+		billingTransportAuditDrain(t)
+		require.EqualValues(t, 1, transport.calls.Load())
+		require.Equal(t, http.StatusInternalServerError, response.Code)
+		billingTransportAuditAssert(t, logs, billingTransportAuditHold(t, logs), 1, true, true)
+	})
 }
 
 // TestBillingTransportAuditRedirectThenDialFailureRetainsHold proves an earlier written request remains ambiguous despite a later connection refusal.
 func TestBillingTransportAuditRedirectThenDialFailureRetainsHold(t *testing.T) {
-	var received, bodyBytes, refused, getConn, gotConn, wrote atomic.Int64
-	server := billingTransportAuditServer(t, "redirect_after_read", &received, &bodyBytes)
-	c, response, logs := billingTransportAuditFixture(t, billingTransportAuditChannel(billingTransportAuditFirst, server.URL, 10), nil)
-	billingTransportAuditTrace(c, &getConn, &gotConn, &wrote)
-	billingTransportAuditHTTPClient(t, []string{server.Listener.Addr().String()}, "billing-redirect-refused.invalid:80", &refused)
-	entrycontroller.Relay(c)
-	billingTransportAuditDrain(t)
-	require.EqualValues(t, 1, received.Load())
-	require.Positive(t, bodyBytes.Load())
-	require.EqualValues(t, 1, refused.Load())
-	require.Positive(t, gotConn.Load())
-	require.Positive(t, wrote.Load())
-	require.Equal(t, http.StatusInternalServerError, response.Code)
-	billingTransportAuditAssert(t, logs, billingTransportAuditHold(t, logs), 1, true, true)
+	billingTransportAuditBackends(t, func(t *testing.T, backend string) {
+		var received, bodyBytes, refused, getConn, gotConn, wrote atomic.Int64
+		server := billingTransportAuditServer(t, "redirect_after_read", &received, &bodyBytes)
+		c, response, logs := billingTransportAuditFixture(t, backend, billingTransportAuditChannel(billingTransportAuditFirst, server.URL, 10), nil)
+		billingTransportAuditTrace(c, &getConn, &gotConn, &wrote)
+		billingTransportAuditHTTPClient(t, []string{server.Listener.Addr().String()}, "billing-redirect-refused.invalid:80", &refused)
+		entrycontroller.Relay(c)
+		billingTransportAuditDrain(t)
+		require.EqualValues(t, 1, received.Load())
+		require.Positive(t, bodyBytes.Load())
+		require.EqualValues(t, 1, refused.Load())
+		require.Positive(t, gotConn.Load())
+		require.Positive(t, wrote.Load())
+		require.Equal(t, http.StatusInternalServerError, response.Code)
+		billingTransportAuditAssert(t, logs, billingTransportAuditHold(t, logs), 1, true, true)
+	})
 }
 
 // TestBillingTransportAuditCancelledBeforeDoRefunds reserves real quota before cancellation and prevents both standard and context-ignoring opaque transport dispatch.
 func TestBillingTransportAuditCancelledBeforeDoRefunds(t *testing.T) {
-	for _, opaque := range []bool{false, true} {
-		name := "standard_transport"
-		if opaque {
-			name = "opaque_transport_ignores_context"
-		}
-		t.Run(name, func(t *testing.T) {
-			first := billingTransportAuditChannel(billingTransportAuditFirst, "http://billing-prewrite-refused.invalid", 10)
-			c, response, logs := billingTransportAuditFixture(t, first, nil)
-			ctx, cancel := context.WithCancel(c.Request.Context())
-			defer cancel()
-			c.Request = c.Request.WithContext(ctx)
-			var cancelled, refused, getConn, gotConn, wrote atomic.Int64
-			require.NoError(t, model.LOG_DB.Callback().Create().After("gorm:commit_or_rollback_transaction").Register("billing_transport_cancel_after_provisional_commit", func(tx *gorm.DB) {
-				if row, ok := tx.Statement.Dest.(*model.Log); ok && row.Type == model.LogTypeProvisional {
-					cancelled.Add(1)
-					cancel()
-				}
-			}))
-			billingTransportAuditTrace(c, &getConn, &gotConn, &wrote)
-			var opaqueTransport *billingTransportAuditOpaque
+	billingTransportAuditBackends(t, func(t *testing.T, backend string) {
+		for _, opaque := range []bool{false, true} {
+			name := "standard_transport"
 			if opaque {
-				// The fixture RoundTrip intentionally never reads Request.Context:
-				// the request helper must prevent invocation before handing it work.
-				opaqueTransport = &billingTransportAuditOpaque{}
-				client.HTTPClient = &http.Client{Transport: opaqueTransport}
-			} else {
-				billingTransportAuditHTTPClient(t, nil, "billing-prewrite-refused.invalid:80", &refused)
+				name = "opaque_transport_ignores_context"
 			}
-			entrycontroller.Relay(c)
-			billingTransportAuditDrain(t)
-			require.EqualValues(t, 1, cancelled.Load())
-			require.ErrorIs(t, c.Request.Context().Err(), context.Canceled)
-			if opaqueTransport != nil {
-				require.Zero(t, opaqueTransport.calls.Load(), "pre-cancelled work must never reach an opaque RoundTripper that ignores cancellation")
-			}
-			require.Zero(t, refused.Load())
-			require.Zero(t, gotConn.Load())
-			require.Zero(t, wrote.Load())
-			require.NotEqual(t, http.StatusOK, response.Code)
-			require.Positive(t, billingTransportAuditHold(t, logs))
-			billingTransportAuditAssert(t, logs, 0, 1, false, false)
-		})
-	}
+			t.Run(name, func(t *testing.T) {
+				first := billingTransportAuditChannel(billingTransportAuditFirst, "http://billing-prewrite-refused.invalid", 10)
+				c, response, logs := billingTransportAuditFixture(t, backend, first, nil)
+				ctx, cancel := context.WithCancel(c.Request.Context())
+				defer cancel()
+				c.Request = c.Request.WithContext(ctx)
+				var cancelled, refused, getConn, gotConn, wrote atomic.Int64
+				require.NoError(t, model.LOG_DB.Callback().Create().After("gorm:commit_or_rollback_transaction").Register("billing_transport_cancel_after_provisional_commit", func(tx *gorm.DB) {
+					if row, ok := tx.Statement.Dest.(*model.Log); ok && row.Type == model.LogTypeProvisional {
+						cancelled.Add(1)
+						cancel()
+					}
+				}))
+				billingTransportAuditTrace(c, &getConn, &gotConn, &wrote)
+				var opaqueTransport *billingTransportAuditOpaque
+				if opaque {
+					// The fixture RoundTrip intentionally never reads Request.Context:
+					// the request helper must prevent invocation before handing it work.
+					opaqueTransport = &billingTransportAuditOpaque{}
+					client.HTTPClient = &http.Client{Transport: opaqueTransport}
+				} else {
+					billingTransportAuditHTTPClient(t, nil, "billing-prewrite-refused.invalid:80", &refused)
+				}
+				entrycontroller.Relay(c)
+				billingTransportAuditDrain(t)
+				require.EqualValues(t, 1, cancelled.Load())
+				require.ErrorIs(t, c.Request.Context().Err(), context.Canceled)
+				if opaqueTransport != nil {
+					require.Zero(t, opaqueTransport.calls.Load(), "pre-cancelled work must never reach an opaque RoundTripper that ignores cancellation")
+				}
+				require.Zero(t, refused.Load())
+				require.Zero(t, gotConn.Load())
+				require.Zero(t, wrote.Load())
+				require.NotEqual(t, http.StatusOK, response.Code)
+				require.Positive(t, billingTransportAuditHold(t, logs))
+				billingTransportAuditAssert(t, logs, 0, 1, false, false)
+			})
+		}
+	})
 }

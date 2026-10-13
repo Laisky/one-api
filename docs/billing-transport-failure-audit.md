@@ -4,7 +4,9 @@
 
 The regressions exercise the actual DeepSeek adaptor and outer Relay retry loop
 with fake loopback upstreams, opaque synthetic transports, and a disposable
-SQLite database. No live provider, customer account, or production ledger is
+SQLite database. The follow-up matrix adds uniquely owned, separate primary/log
+MySQL 8.4 and PostgreSQL 17 databases on literal loopback endpoints.
+No live provider, customer account, or production ledger is
 involved. Fixture tariffs use the existing channel ratio contract and a
 successful synthetic receipt settles exactly 15 quota units.
 
@@ -18,7 +20,10 @@ At base `aeb09a014dcbef23495da75070228e8701ed18d0`, the focused suite exited 1:
   1120-unit hold. A custom transport that ignores context was also invoked.
 
 The repaired focused suite exits 0: all 20 leaf scenarios pass across 6
-top-level tests, with no skipped cases.
+top-level tests, with no skipped cases. The follow-up required-backend matrix
+passes all 46 leaf scenarios: 39 controller cases across the three engines and
+7 unchanged adaptor cases. Its original-admin connections only create/drop
+generated fixture databases; they never read, migrate or remove original tables.
 
 The complete affected-package race suites also pass: 769 top-level tests,
 zero failures and zero skipped cases. The full repository/database qualification
@@ -60,6 +65,7 @@ Test files:
 
 - `relay/adaptor/billing_transport_precancel_test.go`
 - `relay/controller/billing_transport_audit_integration_test.go`
+- `relay/controller/billing_transport_audit_database_test.go`
 
 ## Evidence limits and follow-up
 
@@ -76,3 +82,7 @@ estimates are insufficient evidence of a terminal financial outcome.
 [Issue #562](https://github.com/Laisky/one-api/issues/562) tracks read-only
 log/trace/ledger correlation, delivery/retention limits, failed durable-operation
 visibility, and any future trusted dispatch-evidence contract.
+
+The complete repository qualification uses the five documented race/atomic-coverage
+shards with both required-backend guards enabled. The unchanged UUID scale and
+replication/restore opt-ins remain separate feature-specific manual suites.
