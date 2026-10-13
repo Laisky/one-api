@@ -1,0 +1,76 @@
+# Temporary QA-branch-only launcher. Do not merge into a delivery branch.
+name: OneAPI maintenance qualification 20261013
+on:
+  push:
+    branches: [qa/oneapi-release-20261013]
+    paths: [.github/workflows/maintenance-qualification-20261013.yml]
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: oneapi-maintenance-qualification-20261013
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reuse or launch existing read-only CI qualification at verified PR heads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+
+          repository = os.environ['REPOSITORY']
+          if repository != 'Laisky/one-api':
+              raise SystemExit('Unexpected repository; no dispatch performed')
+          base = 'https://api.github.com/repos/' + repository
+          headers = {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+              'X-GitHub-Api-Version': '2026-03-10',
+              'Content-Type': 'application/json',
+          }
+          def api(path, payload=None):
+              request = urllib.request.Request(
+                  base + path, headers=headers,
+                  data=None if payload is None else json.dumps(payload).encode(),
+                  method='GET' if payload is None else 'POST',
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  raw = response.read()
+                  return json.loads(raw) if raw else {}
+
+          targets = (
+              (565, 'fix/billing-transport-audit-20261013', 'c29bcec98c024096d25123b89abe2f334845ab09'),
+              (561, 'feat/browser-sentry-20261012-08', '83652c1d6ad0044f9343bad9f11659667d557f1e'),
+          )
+          for number, branch, expected in targets:
+              actual = api('/git/ref/heads/' + urllib.parse.quote(branch, safe=''))['object']['sha']
+              if actual != expected:
+                  raise SystemExit(f'PR #{number} head changed; review before qualification')
+              query = urllib.parse.urlencode({'branch': branch, 'event': 'workflow_dispatch', 'per_page': 100})
+              runs = api('/actions/workflows/lint.yml/runs?' + query)['workflow_runs']
+              active = [run for run in runs if run['status'] != 'completed']
+              if active:
+                  for run in active:
+                      print(f'Existing qualification retained: {run["html_url"]} head={run["head_sha"]}')
+                  continue
+              passed = [run for run in runs if run['head_sha'] == expected and run['conclusion'] == 'success']
+              if passed:
+                  print(f'Existing successful exact-head run retained: {passed[0]["html_url"]}')
+                  continue
+              result = api('/actions/workflows/lint.yml/dispatches', {
+                  'ref': branch,
+                  'inputs': {'qualification': True, 'historical_control': False},
+              })
+              print(f'PR #{number}: qualification requested for {expected}')
+              if result.get('html_url'):
+                  print(result['html_url'])
+          PY
