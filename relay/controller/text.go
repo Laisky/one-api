@@ -295,6 +295,10 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		// Settle the existing allowance once before the outer retry decision.
 		if shouldSkipPreConsumedRefund(c) {
 			settleRetainedRequestAdmission(c, preConsumedQuota, meta.TokenId, "do_request_failed")
+		} else {
+			// Own both the refund and ledger reconciliation before the deferred audit.
+			// The detached lifecycle survives cancellation without duplicate credits.
+			scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "do_request_failed")
 		}
 		// ErrorWrapper will log the error, so we don't need to log it here
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
