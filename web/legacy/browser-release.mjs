@@ -134,9 +134,10 @@ export function releaseInputGuard(theme, snapshot = captureInputs(theme, {}, rea
       verifySnapshot();
     },
     /** resolveId validates resolved modules before their source is loaded, including aliases and canonicalized symlink targets. */
-    async resolveId(source, importer) {
+    async resolveId(source, importer, options = {}) {
       if (source.startsWith('\0')) return null;
-      const resolved = await this.resolve(source, importer, { skipSelf: true });
+      // Preserve require/import conditions and custom resolver metadata before checking the result.
+      const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
       if (!resolved) return null;
       if (resolved.external) throw new Error('External browser module input is not approved');
       verifyResolved(resolved.id);

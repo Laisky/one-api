@@ -482,3 +482,46 @@ test('native timer fallback owns mount errors when microtask scheduling is absen
     globalThis.setTimeout = original;
   }
 });
+
+// Resolver context must survive the guard: require() and import select different package exports.
+test('release input guard preserves resolver kind, custom options and entry context without weakening verification', async () => {
+  const guard = releaseInputGuard('berry');
+  const approved = new URL('../../web/berry/src/index.js', import.meta.url).pathname;
+  const caller = new URL('../../web/berry/src/App.js', import.meta.url).pathname;
+  for (const kind of ['require-call', 'import-statement', 'dynamic-import']) {
+    const custom = Object.freeze({ fixtureResolver: Object.freeze({ condition: kind }) });
+    const options = Object.freeze({ kind, custom, isEntry: false });
+    const resolved = { id: approved, moduleSideEffects: false, meta: { fixture: kind } };
+    let calls = 0;
+    const context = {
+      async resolve(source, importer, forwarded) {
+        calls++;
+        assert.equal(source, 'synthetic-dual-package');
+        assert.equal(importer, caller);
+        assert.deepEqual(forwarded, { ...options, skipSelf: true });
+        assert.equal(forwarded.custom, custom);
+        return resolved;
+      },
+    };
+    assert.equal(await guard.resolveId.call(context, 'synthetic-dual-package', caller, options), resolved);
+    assert.equal(calls, 1);
+    assert.deepEqual(options, { kind, custom, isEntry: false });
+    await assert.rejects(
+      guard.resolveId.call({ resolve: async () => ({ id: approved, external: true }) }, 'synthetic-dual-package', caller, options),
+      /External browser module input is not approved/
+    );
+    await assert.rejects(
+      guard.resolveId.call({ resolve: async () => ({ id: '/synthetic-private-outside-repository.js' }) }, 'synthetic-dual-package', caller, options),
+      /Unlisted browser build input/
+    );
+  }
+  const entryOptions = Object.freeze({ kind: 'import-statement', isEntry: true });
+  assert.equal(
+    await guard.resolveId.call({ resolve: async (_source, _importer, options) => {
+      assert.deepEqual(options, { ...entryOptions, skipSelf: true });
+      return { id: approved };
+    } }, approved, undefined, entryOptions).then((resolved) => resolved.id),
+    approved
+  );
+  assert.equal(await guard.resolveId.call({ resolve: async () => null }, './missing', caller, { kind: 'require-call' }), null);
+});
