@@ -11,6 +11,7 @@ import (
 // Source: https://help.aliyun.com/zh/model-studio/model-pricing
 // ModelRatios contains each provider model exactly once, with no patch overlays.
 var ModelRatios = adaptor.JoinModelCatalogs(
+	octoberOCRModels(),
 	deepseekModels(),
 	glmModels(),
 	otherModels(),

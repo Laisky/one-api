@@ -37,21 +37,24 @@ var xunfeiv2SamplingParams = []string{
 	"stop",
 }
 
-// ModelRatios contains all supported models and their pricing ratios
+// ModelRatios contains provider defaults. Lite and transport-specific metadata
+// were rechecked on 2026-10-12; paid compatibility tariffs are preserved.
+// Sources: https://www.xfyun.cn/doc/spark/Web.html and
+// https://www.xfyun.cn/doc/spark/HTTP%E8%B0%83%E7%94%A8%E6%96%87%E6%A1%A3.html
 // Model list is derived from the keys of this map, eliminating redundancy
 // Based on Xunfei pricing: https://www.xfyun.cn/doc/spark/HTTP%E8%B0%83%E7%94%A8%E6%96%87%E6%A1%A3.html#_3-%E8%AF%B7%E6%B1%82%E8%AF%B4%E6%98%8E
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Xunfei Spark Models - Based on https://www.xfyun.cn/doc/spark/
 	"lite": {
-		Ratio:                       0.3 * ratio.MilliTokensRmb,
+		Ratio:                       0,
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             4096,
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
-		SupportedFeatures:           xunfeiv2BasicFeatures,
-		SupportedSamplingParameters: xunfeiv2SamplingParams,
-		Description:                 "iFlytek Spark Lite (HTTP API domain `lite`) cost-optimized closed-weight chat model (free tier).",
+		SupportedFeatures:           []string{"json_mode"},
+		SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "max_tokens", "presence_penalty", "frequency_penalty"},
+		Description:                 "Spark Lite public API is explicitly free; no nominal paid input or output tariff is applied. Account concurrency and negotiated service terms remain upstream-controlled.",
 	},
 	"generalv3": {
 		Ratio:                       2.0 * ratio.MilliTokensRmb,
@@ -60,8 +63,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		MaxOutputTokens:             8192,
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
-		SupportedFeatures:           xunfeiv2BasicFeatures,
-		SupportedSamplingParameters: xunfeiv2SamplingParams,
+		SupportedFeatures:           []string{"json_mode"},
+		SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "max_tokens", "presence_penalty", "frequency_penalty"},
 		Description:                 "iFlytek Spark Pro (HTTP API domain `generalv3`) closed-weight chat model (HTTP doc: no FunctionCall on Pro tier).",
 	},
 	"pro-128k": {
@@ -71,8 +74,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		MaxOutputTokens:             32768,
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
-		SupportedFeatures:           xunfeiv2BasicFeatures,
-		SupportedSamplingParameters: xunfeiv2SamplingParams,
+		SupportedFeatures:           []string{"json_mode"},
+		SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "max_tokens", "presence_penalty", "frequency_penalty"},
 		Description:                 "iFlytek Spark Pro long-context (HTTP API domain `pro-128k`) with 128k context window.",
 	},
 	"generalv3.5": {
@@ -83,7 +86,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
 		SupportedFeatures:           xunfeiv2ChatFeatures,
-		SupportedSamplingParameters: xunfeiv2SamplingParams,
+		SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "max_tokens", "presence_penalty", "frequency_penalty"},
 		Description:                 "iFlytek Spark Max (HTTP API domain `generalv3.5`) closed-weight chat model with FunctionCall; package retired 2026-03-10 (backend upgraded to Spark 4.0 Ultra / domain `4.0Ultra`, quota merged into Ultra). Kept for backward compatibility.",
 	},
 	"max-32k": {
@@ -94,7 +97,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
 		SupportedFeatures:           xunfeiv2ChatFeatures,
-		SupportedSamplingParameters: xunfeiv2SamplingParams,
+		SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "max_tokens", "presence_penalty", "frequency_penalty"},
 		Description:                 "iFlytek Spark Max long-context (HTTP API domain `max-32k`) with 32k context window and FunctionCall; package retired 2026-03-10 (backend upgraded to Spark 4.0 Ultra, quota merged into Ultra). Kept for backward compatibility.",
 	},
 	"4.0Ultra": {
@@ -105,7 +108,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
 		SupportedFeatures:           xunfeiv2ChatFeatures,
-		SupportedSamplingParameters: xunfeiv2SamplingParams,
+		SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "max_tokens", "presence_penalty", "frequency_penalty"},
 		Description:                 "iFlytek Spark 4.0 Ultra (HTTP API domain `4.0Ultra`) flagship closed-weight chat model with FunctionCall.",
 	},
 	// Spark X2 deep-reasoning model (marketed X2 / X1.5, successor to Spark X1).

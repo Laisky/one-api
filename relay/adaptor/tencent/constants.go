@@ -62,8 +62,8 @@ var (
 // Notes:
 //   - hunyuan-lite is offered free of charge per the May 2026 pricing page; we keep Ratio at 0.
 //   - Legacy hunyuan-standard, hunyuan-standard-256K, and hunyuan-pro entries are retained even
-//     though they no longer appear on the current pricing page — Tencent has not announced
-//     deprecation, and channels with grandfathered access continue to bill at the previous rates.
+//     though the affected legacy models retired on 2026-06-22. These are historical
+//     rates, not promises of grandfathered public access or current TokenHub billing.
 //   - hunyuan-t1 exposes reasoning via a binary thinking mode; MaxReasoningTokens is intentionally
 //     left at zero per the project-wide guidance that Tencent thinking is not tunable by budget.
 var ModelRatios = map[string]adaptor.ModelConfig{
@@ -77,7 +77,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanLiteFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Lite: lightweight closed-weight chat model with a 256K context window, offered free of charge. (RETIRING 2026-06-22; use hy3-preview)",
+		Description:                 "Tencent Hunyuan Lite: lightweight closed-weight chat model with a 256K context window, offered free of charge. (Retired on the Hunyuan platform and TokenHub on 2026-06-22. Historical tariff only; migrate explicitly to the current TokenHub Hy3 model.)",
 	},
 
 	// Hunyuan Standard family — retained for backward compatibility with channels grandfathered
@@ -91,7 +91,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Standard: legacy closed-weight general-purpose chat model with a 32K context window. (RETIRING 2026-06-22; use hy3-preview)",
+		Description:                 "Tencent Hunyuan Standard: legacy closed-weight general-purpose chat model with a 32K context window. (Retired on the Hunyuan platform and TokenHub on 2026-06-22. Historical tariff only; migrate explicitly to the current TokenHub Hy3 model.)",
 	},
 	"hunyuan-standard-256K": {
 		Ratio:                       15 * ratio.MilliTokensRmb,
@@ -102,7 +102,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Standard 256K: legacy long-context closed-weight chat model with a 256K context window. (RETIRING 2026-06-22; use hy3-preview)",
+		Description:                 "Tencent Hunyuan Standard 256K: legacy long-context closed-weight chat model with a 256K context window. (Retired on the Hunyuan platform and TokenHub on 2026-06-22. Historical tariff only; migrate explicitly to the current TokenHub Hy3 model.)",
 	},
 	"hunyuan-pro": {
 		Ratio:                       30 * ratio.MilliTokensRmb,
@@ -113,7 +113,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Pro: legacy flagship closed-weight chat model targeted at complex reasoning and agent tasks. (RETIRING 2026-06-22; use hy3-preview)",
+		Description:                 "Tencent Hunyuan Pro: legacy flagship closed-weight chat model targeted at complex reasoning and agent tasks. (Retired on the Hunyuan platform and TokenHub on 2026-06-22. Historical tariff only; migrate explicitly to the current TokenHub Hy3 model.)",
 	},
 
 	// Hunyuan Turbo family — current flagship balanced-cost tier per the May 2026 pricing page.
@@ -126,7 +126,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Turbo: closed-weight balanced-cost chat tier; predecessor of hunyuan-turbos. (RETIRING 2026-06-22; use hy3-preview)",
+		Description:                 "Tencent Hunyuan Turbo: closed-weight balanced-cost chat tier; predecessor of hunyuan-turbos. (Retired on the Hunyuan platform and TokenHub on 2026-06-22. Historical tariff only; migrate explicitly to the current TokenHub Hy3 model.)",
 	},
 	"hunyuan-turbos": {
 		Ratio:                       0.8 * ratio.MilliTokensRmb,
@@ -137,7 +137,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan TurboS: Mamba-Transformer hybrid closed-weight chat model with a 256K context window. (RETIRING 2026-06-22; use hy3-preview)",
+		Description:                 "Tencent Hunyuan TurboS: Mamba-Transformer hybrid closed-weight chat model with a 256K context window. (Retired on the Hunyuan platform and TokenHub on 2026-06-22. Historical tariff only; migrate explicitly to the current TokenHub Hy3 model.)",
 	},
 
 	// Hunyuan T1 reasoning family — exposes a binary thinking mode (no tunable budget).
@@ -150,7 +150,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanReasoningFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan T1: closed-weight deep-thinking reasoning chat model with a 256K context window. (RETIRING 2026-06-22; use hy3-preview)",
+		Description:                 "Tencent Hunyuan T1: closed-weight deep-thinking reasoning chat model with a 256K context window. (Retired on the Hunyuan platform and TokenHub on 2026-06-22. Historical tariff only; migrate explicitly to the current TokenHub Hy3 model.)",
 	},
 
 	// Hunyuan A13B — open-weight (HuggingFace tencent/Hunyuan-A13B-Instruct).
@@ -177,7 +177,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Large Role: closed-weight role-play chat model derived from Hunyuan-Large. (RETIRING 2026-06-22; use hunyuan-role-latest)",
+		Description:                 "Tencent Hunyuan Large Role: closed-weight role-play chat model derived from Hunyuan-Large. (Retired on the Hunyuan platform and TokenHub on 2026-06-22. Historical tariff only; verify the current role-model migration on TokenHub.)",
 	},
 
 	// Hunyuan Role Latest — current role-play / character-chat tier; successor to hunyuan-large-role.
@@ -296,7 +296,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		// rather than the shared hunyuanChatFeatures slice.
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan 3 Preview (hy3-preview): new MoE flagship model with 262K context, $0.167/$0.556 per 1M. Successor to retired hunyuan-t1/turbos/turbo/pro/standard/lite family.",
+		Description:                 "Hy3 preview retired on TokenHub, Agent Platform and CloudBase on 2026-08-31 at 00:00 Beijing time. Pay-as-you-go calls on those platforms automatically switch to Hy3 and its rates. This legacy Tencent adaptor retains historical preview pricing only; configure Hy3 explicitly on a qualified TokenHub connection. The separate Hy Token Plan routing change on July 24 does not establish pay-as-you-go pricing.",
 	},
 
 	// Hunyuan 3 (hy3) — GA flagship reasoning chat model, flat (non-tiered) pricing.
@@ -325,7 +325,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanVisionFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Vision 1.5 Instruct: updated multimodal vision model, 24K context. Replaces hunyuan-vision (retiring 2026-06-22).",
+		Description:                 "Tencent Hunyuan Vision 1.5 Instruct: updated multimodal vision model, 24K context. Replaces hunyuan-vision (retired 2026-06-22).",
 	},
 }
 

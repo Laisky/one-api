@@ -8,7 +8,8 @@ import (
 // init registers Claude Opus 5.5, released on 2026-09-22. It takes no
 // parameters and returns no values. Existing model IDs and prices are retained.
 //
-// Sources (verified 2026-09-22):
+// Prices verified 2026-09-22; effort metadata rechecked 2026-10-12:
+//   - https://platform.claude.com/docs/en/build-with-claude/effort
 //   - https://platform.claude.com/docs/en/models/opus-5-5/overview
 //   - https://platform.claude.com/docs/en/about-claude/pricing
 //   - https://platform.claude.com/docs/en/models/opus-5-5/migration-guide
@@ -26,6 +27,8 @@ func init() {
 		OutputModalities:            claudeTextOutputs,
 		SupportedFeatures:           claudeFeaturesWithReasoning,
 		SupportedSamplingParameters: claudeAdaptiveOnlySamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high", "xhigh", "max"},
+		DefaultReasoningEffort:      "medium",
 		Description:                 "Claude Opus 5.5 for agentic coding and knowledge work with 1M-token context, 128K output, and always-on adaptive thinking (default effort: medium). Standard input/output pricing is $4/$20 per million tokens; cache reads are $0.20 per million tokens (5% of input pricing).",
 	}
 }

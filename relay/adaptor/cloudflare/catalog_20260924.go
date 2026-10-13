@@ -14,21 +14,27 @@ func init() {
 	for id, cfg := range map[string]adaptor.ModelConfig{
 		"@cf/zai-org/glm-5.3": {
 			Ratio: 1.4 * ratio.MilliTokensUsd, CachedInputRatio: 0.26 * ratio.MilliTokensUsd, CompletionRatio: 4.4 / 1.4,
-			ContextLength:   1310720,
+			ContextLength:   1048576,
 			InputModalities: []string{"text"}, OutputModalities: []string{"text"},
 			SupportedFeatures:           []string{"tools", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "max_tokens", "max_completion_tokens", "stop", "tools", "tool_choice", "response_format"},
-			Description:                 "GLM 5.3 on Cloudflare Workers AI. Context follows the model card's exact 1,310,720-token field rather than its rounded 1M prose. Paid-plan eligibility is configured upstream.",
+			Description:                 "GLM 5.3 on Workers AI with the current 1,048,576-token context limit and low/high/max reasoning (default max). Reasoning cannot be disabled; upstream maps none/minimal/medium/xhigh to max. Paid-plan eligibility is controlled upstream.",
 			HuggingFaceID:               "",
+			MaxOutputTokens:             0,
+			SupportedReasoningEfforts:   []string{"low", "high", "max"},
+			DefaultReasoningEffort:      "max",
 		},
 		"@cf/zai-org/glm-5.3-flash": {
 			Ratio: 0.15 * ratio.MilliTokensUsd, CachedInputRatio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.15,
-			ContextLength:   1310720,
+			ContextLength:   1048576,
 			InputModalities: []string{"text", "image"}, OutputModalities: []string{"text"},
 			SupportedFeatures:           []string{"tools", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "max_tokens", "max_completion_tokens", "stop", "tools", "tool_choice", "response_format"},
-			Description:                 "GLM 5.3 Flash on Cloudflare Workers AI with native vision. Context follows the published 1,310,720-token model-info field. No upstream account eligibility check is added.",
+			Description:                 "GLM 5.3 Flash on Workers AI with native vision, the current 1,048,576-token context limit, and low/high/max reasoning (default max). Reasoning cannot be disabled; upstream maps none/minimal/medium/xhigh to max.",
 			HuggingFaceID:               "",
+			MaxOutputTokens:             0,
+			SupportedReasoningEfforts:   []string{"low", "high", "max"},
+			DefaultReasoningEffort:      "max",
 		},
 	} {
 		if _, exists := ModelRatios[id]; exists {

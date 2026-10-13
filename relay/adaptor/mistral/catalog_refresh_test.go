@@ -58,7 +58,11 @@ func TestNewMistralChatModels(t *testing.T) {
 			cfg, exists := a.GetDefaultModelPricing()[id]
 			require.True(t, exists)
 			require.EqualValues(t, 128_000, cfg.MaxOutputTokens)
-			require.Empty(t, cfg.SupportedReasoningEfforts)
+			if id == "zai-glm-5-3" {
+				require.Equal(t, []string{"low", "high", "max"}, cfg.SupportedReasoningEfforts)
+			} else {
+				require.Empty(t, cfg.SupportedReasoningEfforts)
+			}
 			require.Equal(t, []string{"text"}, cfg.InputModalities)
 			if id == "labs-leanstral-1-5" {
 				require.Zero(t, a.GetModelRatio(id))

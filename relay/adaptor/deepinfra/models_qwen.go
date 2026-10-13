@@ -308,13 +308,14 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"Qwen/Qwen3.6-35B-A3B": {
 			Ratio:                       nativeRate(0.1),
-			CompletionRatio:             9.5,
+			CompletionRatio:             (0.95 * 1.0) / 0.1,
 			ContextLength:               262144,
 			InputModalities:             []string{"text", "image", "video"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3.6-35B-A3B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3.6-35B-A3B on DeepInfra; host token prices verified 2026-10-12. Existing capability metadata is retained. A direct-creator redirect or another provider's tariff is not a DeepInfra price change.",
+			CachedInputRatio:            nativeRate(0.1),
 		},
 		"Qwen/Qwen3.7-Max": {
 			Ratio:                       nativeRate(2.5),

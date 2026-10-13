@@ -110,15 +110,16 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			Description:                 "x-ai/grok-4.6 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"x-ai/grok-4.7": {
-			Ratio:            nativeRate(1.5999999999999999),
-			CompletionRatio:  3,
-			CachedInputRatio: nativeRate(0.39999999999999997),
-			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(3.1999999999999997),
-				CompletionRatio:     3,
-				CachedInputRatio:    nativeRate(0.7999999999999999),
-				InputTokenThreshold: 200000,
-			},
+			Ratio:            nativeRate(2),
+			CompletionRatio:  (6 * 1.0) / 2,
+			CachedInputRatio: nativeRate(0.5),
+			Tiers: []adaptor.ModelRatioTier{
+				{
+					Ratio:               nativeRate(4),
+					CompletionRatio:     (12 * 1.0) / 4,
+					CachedInputRatio:    nativeRate(1),
+					InputTokenThreshold: 200000,
+				},
 			},
 			ContextLength:               500000,
 			MaxOutputTokens:             450000,
@@ -128,7 +129,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "reasoning_effort", "response_format", "seed", "structured_outputs", "temperature", "tool_choice", "tools", "top_logprobs", "top_p"},
 			SupportedReasoningEfforts:   []string{"xhigh", "high", "medium", "low"},
 			DefaultReasoningEffort:      "high",
-			Description:                 "x-ai/grok-4.7 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "x-ai/grok-4.7 on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified. Reasoning is mandatory.",
 		},
 		"x-ai/grok-build-0.1": {
 			Ratio:            nativeRate(1),
@@ -150,15 +151,16 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			Description:                 "x-ai/grok-build-0.1 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"~x-ai/grok-latest": {
-			Ratio:            nativeRate(1.5999999999999999),
-			CompletionRatio:  3,
-			CachedInputRatio: nativeRate(0.39999999999999997),
-			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(3.1999999999999997),
-				CompletionRatio:     3,
-				CachedInputRatio:    nativeRate(0.7999999999999999),
-				InputTokenThreshold: 200000,
-			},
+			Ratio:            nativeRate(2),
+			CompletionRatio:  (6 * 1.0) / 2,
+			CachedInputRatio: nativeRate(0.5),
+			Tiers: []adaptor.ModelRatioTier{
+				{
+					Ratio:               nativeRate(4),
+					CompletionRatio:     (12 * 1.0) / 4,
+					CachedInputRatio:    nativeRate(1),
+					InputTokenThreshold: 200000,
+				},
 			},
 			ContextLength:               500000,
 			MaxOutputTokens:             450000,
@@ -168,7 +170,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "reasoning_effort", "response_format", "seed", "structured_outputs", "temperature", "tool_choice", "tools", "top_logprobs", "top_p"},
 			SupportedReasoningEfforts:   []string{"xhigh", "high", "medium", "low"},
 			DefaultReasoningEffort:      "high",
-			Description:                 "~x-ai/grok-latest on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "~x-ai/grok-latest on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified. OpenRouter alias; do not infer a native provider ID. Reasoning is mandatory.",
 		},
 	}
 }

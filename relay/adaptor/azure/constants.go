@@ -39,6 +39,8 @@ import "github.com/Laisky/one-api/relay/adaptor/openai"
 // First-party pricing applies to Foundry standard/global usage; regional/data-zone
 // or negotiated prices require channel overrides. Legacy entries are retained.
 var FoundryClaudeModels = []string{
+	// Verified 2026-10-12: GA on both Foundry hosting versions.
+	"claude-haiku-5-5",
 	// Generally available; Sonnet 5.5 is Global Standard at launch.
 	"claude-sonnet-5-5",
 	"claude-opus-5-5",

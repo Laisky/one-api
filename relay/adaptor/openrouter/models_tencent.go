@@ -70,19 +70,41 @@ func tencentModels() map[string]adaptor.ModelConfig {
 			Description:                 "tencent/hy3-preview on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"tencent/hy4-preview": {
-			Ratio:                       nativeRate(0.834),
-			CompletionRatio:             2.998800959232614,
-			CachedInputRatio:            nativeRate(0.041999999999999996),
+			Ratio:            nativeRate(0.7506),
+			CompletionRatio:  (2.2509 * 1.0) / 0.7506,
+			CachedInputRatio: nativeRate(0.0378),
+			TimeWindows: []adaptor.TimeWindow{
+				{
+					Name:     "openrouter-1",
+					TimeZone: "UTC",
+					Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "16:00"}},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.834),
+						CompletionRatio:  (2.501 * 1.0) / 0.834,
+						CachedInputRatio: nativeRate(0.042),
+					},
+				},
+				{
+					Name:     "openrouter-2",
+					TimeZone: "UTC",
+					Ranges:   []adaptor.ClockRange{{Start: "16:00", End: "00:00"}},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.7506),
+						CompletionRatio:  (2.2509 * 1.0) / 0.7506,
+						CachedInputRatio: nativeRate(0.0378),
+					},
+				},
+			},
 			ContextLength:               1048576,
 			MaxOutputTokens:             64000,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_completion_tokens", "max_tokens", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "max_completion_tokens", "max_tokens", "min_p", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
 			SupportedReasoningEfforts:   []string{"high", "low", "none"},
 			DefaultReasoningEffort:      "high",
 			HuggingFaceID:               "tencent/Hy4-preview",
-			Description:                 "tencent/hy4-preview on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "tencent/hy4-preview on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified.",
 		},
 	}
 }

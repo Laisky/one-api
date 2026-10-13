@@ -41,7 +41,9 @@ var (
 // ModelRatios contains all supported models and their pricing/configuration metadata.
 // Model list is derived from the keys of this map, eliminating redundancy.
 //
-// Pricing sources (verified 2026-05-18):
+// Endpoint lifecycle verified 2026-10-12:
+// https://cloud.baidu.com/doc/qianfan/s/rmse4vxp8
+// Historical pricing sources (verified 2026-05-18):
 //   - https://cloud.baidu.com/doc/WENXINWORKSHOP/s/hlrk4akp7 (legacy ERNIE v1 inference pricing)
 //   - https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya (Qianfan inference pricing, cross-checked)
 //
@@ -67,7 +69,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieChatFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE 4.0 8K: closed-weight flagship chat model on the Qianfan v1 API. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
+		Description:                 "Baidu ERNIE 4.0 8K: closed-weight flagship chat model on the Qianfan v1 API. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 
 	// ERNIE 3.5 Models
@@ -80,7 +82,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieChatFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE 3.5 8K: closed-weight general-purpose chat model on the Qianfan v1 API. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
+		Description:                 "Baidu ERNIE 3.5 8K: closed-weight general-purpose chat model on the Qianfan v1 API. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 	"ERNIE-3.5-8K-0205": {
 		Ratio:                       1.2 * ratio.MilliTokensRmb,
@@ -91,7 +93,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieChatFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE 3.5 8K (2024-02-05 snapshot): pinned closed-weight chat model.",
+		Description:                 "Baidu ERNIE 3.5 8K (2024-02-05 snapshot): pinned closed-weight chat model. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 	"ERNIE-3.5-8K-1222": {
 		Ratio:                       1.2 * ratio.MilliTokensRmb,
@@ -102,7 +104,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieChatFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE 3.5 8K (2023-12-22 snapshot): pinned closed-weight chat model. Deprecated: retired 2024-05-30 (registered 2024-05-08), replacement ERNIE-3.5-8K (itself now also retiring 2026-06-30).",
+		Description:                 "Baidu ERNIE 3.5 8K (2023-12-22 snapshot): pinned closed-weight chat model. Deprecated: retired 2024-05-30 (registered 2024-05-08), replacement ERNIE-3.5-8K (itself now also retiring 2026-06-30). Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 	"ERNIE-Bot-8K": {
 		Ratio:                       1.2 * ratio.MilliTokensRmb,
@@ -113,7 +115,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieChatFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE-Bot 8K: legacy alias for the ERNIE 3.5 8K chat model.",
+		Description:                 "Baidu ERNIE-Bot 8K: legacy alias for the ERNIE 3.5 8K chat model. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 	"ERNIE-3.5-4K-0205": {
 		Ratio:                       1.2 * ratio.MilliTokensRmb,
@@ -124,7 +126,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieChatFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE 3.5 4K (2024-02-05 snapshot): short-context closed-weight chat model. Deprecated: retired 2024-05-30 (registered 2024-05-08), replacement ERNIE-3.5-8K.",
+		Description:                 "Baidu ERNIE 3.5 4K (2024-02-05 snapshot): short-context closed-weight chat model. Deprecated: retired 2024-05-30 (registered 2024-05-08), replacement ERNIE-3.5-8K. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 
 	// ERNIE Speed Models
@@ -137,7 +139,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieSpeedFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE Speed 8K: throughput-optimized closed-weight chat tier.",
+		Description:                 "Baidu ERNIE Speed 8K: throughput-optimized closed-weight chat tier. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 	"ERNIE-Speed-128K": {
 		Ratio:                       0.4 * ratio.MilliTokensRmb,
@@ -148,7 +150,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieSpeedFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE Speed 128K: long-context throughput-optimized closed-weight chat tier.",
+		Description:                 "Baidu ERNIE Speed 128K: long-context throughput-optimized closed-weight chat tier. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 
 	// ERNIE Lite Models
@@ -161,7 +163,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieSpeedFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE Lite 8K (2023-09-22 snapshot): cost-efficient closed-weight chat tier.",
+		Description:                 "Baidu ERNIE Lite 8K (2023-09-22 snapshot): cost-efficient closed-weight chat tier. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 	"ERNIE-Lite-8K-0308": {
 		Ratio:                       0.8 * ratio.MilliTokensRmb,
@@ -172,7 +174,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieSpeedFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE Lite 8K (2024-03-08 snapshot): cost-efficient closed-weight chat tier.",
+		Description:                 "Baidu ERNIE Lite 8K (2024-03-08 snapshot): cost-efficient closed-weight chat tier. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 
 	// ERNIE Tiny Models
@@ -185,7 +187,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            ernieTextOutputs,
 		SupportedFeatures:           ernieSpeedFeatures,
 		SupportedSamplingParameters: ernieSamplingParameters,
-		Description:                 "Baidu ERNIE Tiny 8K: ultra low-cost closed-weight chat tier.",
+		Description:                 "Baidu ERNIE Tiny 8K: ultra low-cost closed-weight chat tier. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 
 	// Other Models
@@ -199,7 +201,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: ernieSamplingParameters,
 		HuggingFaceID:               "bigscience/bloomz-7b1",
 		Quantization:                "fp16",
-		Description:                 "BLOOMZ-7B: open-weight multilingual instruction-tuned model hosted on Qianfan.",
+		Description:                 "BLOOMZ-7B: open-weight multilingual instruction-tuned model hosted on Qianfan. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 
 	// Embedding Models
@@ -209,7 +211,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:    384,
 		InputModalities:  ernieTextInputs,
 		OutputModalities: ernieTextOutputs,
-		Description:      "Baidu Embedding-V1: closed-weight text embedding model on the Qianfan v1 API.",
+		Description:      "Baidu Embedding-V1: closed-weight text embedding model on the Qianfan v1 API. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 	"bge-large-zh": {
 		Ratio:            0.2 * ratio.MilliTokensRmb,
@@ -219,7 +221,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities: ernieTextOutputs,
 		HuggingFaceID:    "BAAI/bge-large-zh-v1.5",
 		Quantization:     "fp16",
-		Description:      "BAAI BGE Large ZH v1.5: open-weight Chinese text embedding model hosted on Qianfan.",
+		Description:      "BAAI BGE Large ZH v1.5: open-weight Chinese text embedding model hosted on Qianfan. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 	"bge-large-en": {
 		Ratio:            0.2 * ratio.MilliTokensRmb,
@@ -229,7 +231,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities: ernieTextOutputs,
 		HuggingFaceID:    "BAAI/bge-large-en-v1.5",
 		Quantization:     "fp16",
-		Description:      "BAAI BGE Large EN v1.5: open-weight English text embedding model hosted on Qianfan.",
+		Description:      "BAAI BGE Large EN v1.5: open-weight English text embedding model hosted on Qianfan. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 
 	// TAO Models
@@ -239,7 +241,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:    8192,
 		InputModalities:  ernieTextInputs,
 		OutputModalities: ernieTextOutputs,
-		Description:      "Baidu TAO 8K: closed-weight long-text embedding model on the Qianfan v1 API.",
+		Description:      "Baidu TAO 8K: closed-weight long-text embedding model on the Qianfan v1 API. Qianfan v1 endpoint retired on 2026-08-31. Historical configuration only; migrate to the separate Qianfan v2 adaptor and verify its model ID and tariff. Endpoint retirement does not imply that all corresponding models are retired on v2.",
 	},
 }
 

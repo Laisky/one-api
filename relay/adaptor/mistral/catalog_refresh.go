@@ -7,11 +7,13 @@ import (
 
 // init installs verified public chat models and cached-input rates. It takes no
 // parameters and returns no values. Legacy IDs and ordinary token prices remain
-// unchanged. Sources audited 2026-09-24:
+// unchanged. Prices audited 2026-09-24; lifecycle rechecked 2026-10-12:
 //   - https://docs.mistral.ai/inference/pricing
 //   - https://docs.mistral.ai/models/zai-glm-5-2
 //   - https://docs.mistral.ai/models/zai-glm-5-3
 //   - https://docs.mistral.ai/models/leanstral-1-5
+//   - https://docs.mistral.ai/resources/changelogs
+//   - https://docs.mistral.ai/studio/conversations/reasoning
 func init() {
 	for name, cachedUSD := range map[string]float64{
 		"mistral-medium-latest": 0.15,
@@ -39,7 +41,10 @@ func init() {
 		ModelRatios[name] = cfg
 	}
 
-	for _, name := range []string{"zai-glm-5-2", "zai-glm-5-3"} {
+	for name, lifecycle := range map[string]string{
+		"zai-glm-5-2": "Deprecated; scheduled to retire on 2026-10-31. Use zai-glm-5-3 at the same tariff.",
+		"zai-glm-5-3": "Generally Available since 2026-09-28.",
+	} {
 		if _, exists := ModelRatios[name]; exists {
 			panic("mistral: duplicate hosted model " + name)
 		}
@@ -55,7 +60,15 @@ func init() {
 			SupportedSamplingParameters: []string{
 				"temperature", "top_p", "max_tokens", "stop", "response_format", "tools", "tool_choice",
 			},
-			Description: "Public-preview GLM model hosted by Mistral with 1M context and 128K maximum output. Uses Mistral's model ID and USD tariff: $1.40 input, $0.14 cached input, and $4.40 output per million tokens; not Z.AI's cached-input price. No provider-specific reasoning-effort vocabulary is inferred.",
+			Description: lifecycle + " Mistral-hosted GLM model with 1M context and 128K maximum output. Uses Mistral's model ID and USD tariff: $1.40 input, $0.14 cached input, and $4.40 output per million tokens; not Z.AI's cached-input price. Reasoning controls are advertised only when documented for this hosted model.",
+		}
+		if name == "zai-glm-5-3" {
+			cfg := ModelRatios[name]
+			cfg.SupportedFeatures = append(cfg.SupportedFeatures, "reasoning")
+			cfg.SupportedReasoningEfforts = []string{"low", "high", "max"}
+			cfg.SupportedSamplingParameters = append(cfg.SupportedSamplingParameters, "reasoning_effort")
+			cfg.Description += " Mistral supports low/high/max reasoning_effort; none is not supported."
+			ModelRatios[name] = cfg
 		}
 	}
 	ModelRatios["labs-leanstral-1-5"] = adaptor.ModelConfig{
@@ -69,7 +82,13 @@ func init() {
 		SupportedSamplingParameters: []string{
 			"temperature", "top_p", "max_tokens", "stop", "response_format", "tools", "tool_choice",
 		},
-		Description: "Leanstral 1.5 public-preview code agent for Lean 4 formal proof engineering. Mistral lists both input and output as free; 256K context and 128K maximum output. Preview availability remains controlled by the upstream account.",
+		Description: "Retired on 2026-09-30. Leanstral 1.5 was a Labs code agent for Lean 4 formal proof engineering with 256K context and 128K maximum output. The historical free tariff is retained for existing configurations, not a promise of current upstream availability.",
+	}
+	for _, id := range []string{"mistral-large-4", "mistral-large-4-0"} {
+		if _, exists := ModelRatios[id]; exists {
+			panic("mistral: duplicate Large 4 model " + id)
+		}
+		ModelRatios[id] = large4ModelConfig()
 	}
 	ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 }

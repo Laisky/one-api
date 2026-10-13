@@ -19,7 +19,7 @@ func TestOpenRouterSonnet55Catalog(t *testing.T) {
 	require.True(t, ok)
 	require.InDelta(t, 2*ratio.MilliTokensUsd, a.GetModelRatio(id), 1e-12)
 	require.InDelta(t, 10*ratio.MilliTokensUsd, cfg.Ratio*a.GetCompletionRatio(id), 1e-12)
-	require.InDelta(t, 0.2*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.InDelta(t, 0.1*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
 	require.InDelta(t, 2.5*ratio.MilliTokensUsd, cfg.CacheWrite5mRatio, 1e-12)
 	require.InDelta(t, 4*ratio.MilliTokensUsd, cfg.CacheWrite1hRatio, 1e-12)
 	require.EqualValues(t, 1000000, cfg.ContextLength)
@@ -28,7 +28,7 @@ func TestOpenRouterSonnet55Catalog(t *testing.T) {
 	require.Equal(t, []string{"text"}, cfg.OutputModalities)
 	require.ElementsMatch(t, []string{"max", "xhigh", "high", "medium", "low"}, cfg.SupportedReasoningEfforts)
 	require.Equal(t, "high", cfg.DefaultReasoningEffort)
-	require.Contains(t, cfg.SupportedSamplingParameters, "temperature", "OpenRouter's contract differs from the native Anthropic wire contract")
+	require.NotContains(t, cfg.SupportedSamplingParameters, "temperature", "the current OpenRouter catalogue no longer advertises this control")
 	for _, excluded := range []string{"claude-sonnet-5-5", "anthropic/claude-sonnet-5-5", id + "-20260928", id + ":batch"} {
 		require.NotContains(t, a.GetModelList(), excluded)
 	}

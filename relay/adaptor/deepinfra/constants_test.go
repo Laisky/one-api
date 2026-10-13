@@ -88,6 +88,6 @@ func TestGetModelListIsSorted(t *testing.T) {
 	t.Parallel()
 
 	models := (&Adaptor{}).GetModelList()
-	require.Len(t, models, 196)
+	require.Len(t, models, 200)
 	require.True(t, sort.StringsAreSorted(models))
 }

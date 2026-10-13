@@ -40,7 +40,7 @@ func deepseekPricingWindows(dateFrom, dateTo string, input, cachedInput, output 
 // rewrite or Flash discount is applied to requests for Pro.
 // Source: https://api-docs.deepseek.com/updates/ (verified 2026-09-24).
 func deepseekProPricingWindows() []adaptor.TimeWindow {
-	return deepseekPricingWindows("", "", deepseekProInputPrice, deepseekProCachedInputPrice, deepseekProOutputPrice)
+	return deepseekPricingWindowsWithHolidays("", "", deepseekProInputPrice, deepseekProCachedInputPrice, deepseekProOutputPrice)
 }
 
 // deepseekFlashPricingWindows applies the announced Flash price change at
@@ -51,12 +51,12 @@ func deepseekFlashPricingWindows() []adaptor.TimeWindow {
 	const switchDate = "2026-09-10"
 	// Preserve the preceding defaults from e000b8eb for in-flight requests whose
 	// request start time is before the new prices become effective.
-	windows := deepseekPricingWindows("", switchDate, 0.22, 0.007, 0.66)
+	windows := deepseekPricingWindowsWithHolidays("", switchDate, 0.22, 0.007, 0.66)
 	bridge := deepseekPricingWindows(switchDate, "2026-09-11", 0.22, 0.007, 0.66)
 	bridge[0].Name = "deepseek-flash-final-old-peak"
 	bridge[0].Ranges = []adaptor.ClockRange{{Start: "01:00", End: "04:00"}}
 	bridge[1].Name = "deepseek-flash-final-old-offpeak"
 	bridge[1].Ranges = []adaptor.ClockRange{{Start: "00:00", End: "01:00"}}
 	windows = append(windows, bridge...)
-	return append(windows, deepseekPricingWindows(switchDate, "", deepseekFlashInputPrice, deepseekFlashCachedInputPrice, deepseekFlashOutputPrice)...)
+	return append(windows, deepseekPricingWindowsWithHolidays(switchDate, "", deepseekFlashInputPrice, deepseekFlashCachedInputPrice, deepseekFlashOutputPrice)...)
 }
