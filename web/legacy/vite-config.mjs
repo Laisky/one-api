@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { browserBuildContract } from './browser-release.mjs';
 
 /** removeInvalidSemanticRule removes browser-discarded rules from Semantic UI 2.5. */
 export function removeInvalidSemanticRule(rule) {
@@ -8,8 +9,7 @@ export function removeInvalidSemanticRule(rule) {
     '[data-tooltip][data-inverted]:after.header',
     '.ui.labels a.active.label:ActiveHover:before,a.ui.active.label:ActiveHover:before'.replaceAll(' ', ''),
   ]);
-  if (file.includes('/node_modules/semantic-ui-css/') &&
-      invalidSelectors.has(rule.selector.replace(/\s+/g, ''))) {
+  if (file.includes('/node_modules/semantic-ui-css/') && invalidSelectors.has(rule.selector.replace(/\s+/g, ''))) {
     // These selectors are already discarded by browsers. Keep strict CSS
     // processing and leave first-party CSS and all valid vendor rules intact.
     rule.remove();
@@ -22,7 +22,7 @@ export function legacyConfig({ root, mode, react, svgr, transformWithOxc, public
   if (!['air', 'berry'].includes(theme)) throw new Error(`Unsupported legacy theme: ${theme}`);
   const manifest = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
   const src = path.join(root, 'src');
-  const alias = readdirSync(src, { withFileTypes: true }).map(entry => ({
+  const alias = readdirSync(src, { withFileTypes: true }).map((entry) => ({
     find: entry.isDirectory() ? entry.name : entry.name.replace(/\.[^.]+$/, ''),
     replacement: path.join(src, entry.name),
   }));
@@ -34,13 +34,20 @@ export function legacyConfig({ root, mode, react, svgr, transformWithOxc, public
   const port = Number(runtime.PORT || (theme === 'air' ? 3002 : 3003));
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535');
   const publicURL = runtime.PUBLIC_URL || '/';
-  const defines = Object.fromEntries(['REACT_APP_SERVER', 'REACT_APP_VERSION'].map(name => [
-    `process.env.${name}`, JSON.stringify(runtime[name] ?? publicEnv[name] ?? ''),
-  ]));
+  const defines = Object.fromEntries(
+    ['REACT_APP_SERVER', 'REACT_APP_VERSION'].map((name) => [`process.env.${name}`, JSON.stringify(runtime[name] ?? publicEnv[name] ?? '')])
+  );
+  const browserBuild = browserBuildContract(theme, {
+    mode,
+    publicURL,
+    server: runtime.REACT_APP_SERVER ?? publicEnv.REACT_APP_SERVER ?? '',
+    version: runtime.REACT_APP_VERSION ?? publicEnv.REACT_APP_VERSION ?? '',
+  });
   return {
     root,
     base: publicURL,
     plugins: [
+      browserBuild.plugin,
       {
         name: 'legacy-jsx-source',
         enforce: 'pre',
@@ -55,7 +62,11 @@ export function legacyConfig({ root, mode, react, svgr, transformWithOxc, public
       svgr(),
     ],
     resolve: { alias, dedupe: ['react', 'react-dom', 'react-router', 'react-router-dom'] },
-    define: { ...defines, 'process.env.PUBLIC_URL': JSON.stringify(publicURL.replace(/\/$/, '')) },
+    define: {
+      ...defines,
+      'process.env.PUBLIC_URL': JSON.stringify(publicURL.replace(/\/$/, '')),
+      __ONEAPI_BROWSER_RELEASE__: JSON.stringify(browserBuild.release),
+    },
     css: { postcss: { plugins: [{ postcssPlugin: 'semantic-ui-invalid-selector', Rule: removeInvalidSemanticRule }] } },
     build: {
       outDir: path.resolve(root, '../build', theme),
