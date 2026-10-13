@@ -34,7 +34,7 @@ Projection retains only bounded known exception categories, a fixed redacted err
 
 Static frame filenames must be HTTPS first-party assets, have a known generated filename shape, and exactly match an immutable snapshot of at most 40 module/script/preload asset URLs loaded at initialization. Queries/fragments are removed; credentials and unsafe source/third-party paths are rejected. Later lazy-loaded chunks are deliberately omitted from stack diagnostics unless already preloaded. Exception text and component stacks are never sent. These constraints reduce issue detail/grouping; changing the allowlist requires privacy tests and review.
 
-Network ingestion necessarily exposes the connection IP to the receiving service. Before any real event, the project owner must verify Sentry-side IP/PII handling, retention, access control and server-side scrubbing. Browser code does not set user identity/IP, but cannot guarantee the service's retention policy.
+Network ingestion necessarily exposes the connection IP to the receiving service. Before any real event, the project owner must approve and verify effective OneAPI project IP/PII handling, retention, access control and server-side scrubbing. Preventing IP storage alone is insufficient: Sentry still derives geographic data from the connection IP. Require the approved project-level Advanced Data Scrubbing rule `[Remove] [Anything] from [$user.geo.**]` before ingestion, and verify that no user geo fields survive. See [Sentry's server-side scrubbing guidance](https://docs.sentry.io/security-legal-pii/scrubbing/server-side-scrubbing/#geographic-information), checked 2026-10-13. Do not change organization-wide or blog settings; any such change requires separate authorization. Browser code does not set user identity/IP and cannot enforce collector-side policy.
 
 ## Private source maps and release correlation: separate approval gate
 
@@ -54,11 +54,26 @@ Only the feature branch is pushed for a separate Draft PR. main/master/test/ci p
 
 Rollback capture by clearing BrowserSentryConfig through the root-admin option API/UI, allowing runtime option propagation, and reloading existing pages. Existing pages keep their immutable configuration until reload. Revert the feature through a reviewed code release if needed. Preserve the normal application behavior and existing telemetry allowlists.
 
+## Deployment resume readiness
+
+The 2026-10-13 read-only audit found protected GitHub main and the anonymous production version both identifying base `aeb09a014dcbef23495da75070228e8701ed18d0`. Its [delivery run](https://github.com/Laisky/one-api/actions/runs/38325120650) recorded a successful deploy; the new public configuration endpoint still returned 404. Saved dev primary `8fe3c1` is stale and must not define the release or rollback source. The fully qualified Sentry source `0d8324c6ee774568525b051ba550262f0f2e2e6b` is based on that deployed base, excludes billing [Draft #565](https://github.com/Laisky/one-api/pull/565), and leaves the Go dependency graph unchanged from main. Dependency [Draft #567](https://github.com/Laisky/one-api/pull/567) remains separate. A Sentry-only release can therefore proceed independently at the source level if the intended base remains unchanged and its own review and rollout gates pass; do not combine independently held changes implicitly.
+
+The existing delivery workflow publishes on main/master/test/ci, and a qualifying main push deploys without waiting for the independent lint workflow. Master and test/ci also update mutable image tags, so they are not staging shortcuts. Integrating onto main triggers production delivery; obtain explicit rollout authorization and retain existing protected review and release controls.
+
+Resume through these separately approved gates:
+
+1. Freeze the intended Sentry-only source and review any integration changes. Qualify an immutable staging artifact using the actual supported Node24/Docker build inputs; record source SHA, image digest, exact artifact bytes and each emitted theme release. Dev Node22 release identities are not deployment identities. Verify map exclusion before publication; optional private map upload retains its separate credential and privacy gate.
+2. Obtain an approved operator view of the currently running image/digest and its rollback image, plus the exact deployment helper version and configuration/volume preservation gates. These were unavailable on saved dev: no OneAPI container/tagged image was present and the referenced `observability/deploy_oneapi.py` was absent. Do not infer those production facts from a successful historical workflow alone.
+3. Authorize the protected code deployment with the runtime setting blank, then verify application health, disabled behavior and the no-store public endpoint. Only after correct project/public configuration and collector IP/geo/privacy approvals, save the single `BrowserSentryConfig` setting, allow propagation, reload and perform an explicitly approved benign smoke check. No enabled flag or configuration rebuild is needed. The release and project owners hold these approvals and actions; they remain pending.
+
+Capture rollback remains a clear of the runtime option followed by propagation and page reload; existing tabs retain their frozen settings until reload. A code rollback must use the recorded approved image and preservation process, not the stale dev checkout. This readiness note changes no deployment, project, setting, credential or telemetry state. Full acceptance at `0d8324c` covers the unchanged implementation; this documentation-only update does not claim a new build or live qualification.
+
 ## Official references checked 2026-10-13
 
 - [React setup](https://docs.sentry.io/platforms/javascript/guides/react/)
 - [React error hooks and boundaries](https://docs.sentry.io/platforms/javascript/guides/react/features/error-boundary/)
 - [SDK configuration and dataCollection](https://docs.sentry.io/platforms/javascript/guides/react/configuration/options/)
+- [Server-side IP and geo scrubbing](https://docs.sentry.io/security-legal-pii/scrubbing/server-side-scrubbing/)
 - [Vite private source-map upload](https://docs.sentry.io/platforms/javascript/guides/react/sourcemaps/uploading/vite/)
 
 The installed 11.7.0 types/source and real SDK mock-transport tests confirm behavior. SDK11 removed legacy sendDefaultPii/autoSessionTracking/enableLogs flags; this implementation uses supported dataCollection, integration selection and final sending guards instead.
