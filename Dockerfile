@@ -13,6 +13,17 @@ ARG FFMPEG_IMAGE=linuxserver/ffmpeg:latest
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web-builder
 WORKDIR /web
 
+# Public browser configuration only; absent values keep Sentry disabled.
+# Never pass source-map upload credentials through these build arguments.
+ARG VITE_SENTRY_ENABLED=false
+ARG VITE_SENTRY_DSN
+ARG VITE_SENTRY_ENVIRONMENT
+ARG VITE_SENTRY_RELEASE
+ENV VITE_SENTRY_ENABLED=${VITE_SENTRY_ENABLED} \
+    VITE_SENTRY_DSN=${VITE_SENTRY_DSN} \
+    VITE_SENTRY_ENVIRONMENT=${VITE_SENTRY_ENVIRONMENT} \
+    VITE_SENTRY_RELEASE=${VITE_SENTRY_RELEASE}
+
 # Copy sources (place themes directly under /web)
 COPY web/ ./
 
