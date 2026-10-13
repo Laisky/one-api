@@ -1,0 +1,71 @@
+# Temporary read-only diagnostic; no production traffic, publication or application changes.
+name: Sentry Berry artifact diagnostic
+on:
+  push:
+    branches: [qualification/sentry-561-20261013]
+    paths: [.github/workflows/sentry-berry-diagnostic.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 995e4c8d767a495b3f15c397218f8d26922984c3
+          persist-credentials: false
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: frontend-berry-995e4c8d
+          run-id: 38439437547
+          github-token: ${{ github.token }}
+          path: retained
+      - name: Prepare existing pinned browser tools
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Diagnose exact retained bundles on loopback only
+        run: |
+          python3 - <<'PY'
+          import functools,hashlib,importlib.util,json,pathlib,re,sys,threading
+          from http.server import ThreadingHTTPServer
+          from playwright.sync_api import sync_playwright
+          source=pathlib.Path('.github/scripts/legacy-browser.py').resolve()
+          sys.path.insert(0,str(source.parent))
+          spec=importlib.util.spec_from_file_location('legacy',source);legacy=importlib.util.module_from_spec(spec);spec.loader.exec_module(legacy)
+          root=pathlib.Path('retained/one-api/one-api/web/build/berry').resolve()
+          assert root.is_dir()
+          report={'source':'995e4c8d767a495b3f15c397218f8d26922984c3','artifact':11834506688,'assets':{str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*.js')},'cases':[]}
+          server=ThreadingHTTPServer(('127.0.0.1',0),functools.partial(legacy.FixtureHandler,directory=str(root)))
+          server.reset_calls=0;server.token_calls=0;server.token_fail=True;server.user_calls=0
+          thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+          base='http://127.0.0.1:'+str(server.server_port)
+          try:
+              with sync_playwright() as p:
+                  browser=p.chromium.launch(chromium_sandbox=True)
+                  try:
+                      for path in ('/reset','/'):
+                          context=browser.new_context()
+                          context.route('**/*',lambda route: route.continue_() if route.request.url.startswith(base+'/') else route.abort())
+                          page=context.new_page();errors=[];failed=[]
+                          page.on('pageerror',lambda e:errors.append({'message':e.message,'stack':e.stack}))
+                          page.on('requestfailed',lambda r:failed.append({'url':r.url,'error':r.failure}))
+                          page.goto(base+path,wait_until='networkidle',timeout=60000)
+                          page.wait_for_timeout(1000)
+                          report['cases'].append({'path':path,'errors':errors,'requests_failed':failed,'body_text':page.locator('body').inner_text(),'root_children':page.locator('#root').evaluate('(e)=>e.childElementCount'),'reset_inputs':page.locator('input[name="email"]').count()})
+                          context.close()
+                  finally: browser.close()
+          finally: server.shutdown();server.server_close();thread.join(timeout=5)
+          pathlib.Path('berry-diagnostic.json').write_text(json.dumps(report,indent=2))
+          print(json.dumps({k:v for k,v in report.items() if k!='assets'},indent=2))
+          assert all(case['errors'] for case in report['cases']), 'Original startup failure did not reproduce; investigate before attributing a cause'
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: berry-startup-diagnostic-995e4c8d
+          path: berry-diagnostic.json
+          retention-days: 14
+          if-no-files-found: error
