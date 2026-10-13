@@ -118,3 +118,22 @@ export function loadBrowserReporter(loadSDK, release, target, theme, entryURL, t
   ready.set(target, promise);
   return promise;
 }
+
+/** mountBrowserApp owns readiness/mount rejections and rethrows the original failure through the native browser error path without swallowing errors or retrying rendering. */
+export function mountBrowserApp(readiness, mount, target) {
+  return readiness.then(mount).catch((error) => {
+    /** rethrow preserves the original mount error for the browser's native error dispatcher. */
+    function rethrow() {
+      throw error;
+    }
+    try {
+      if (typeof target?.queueMicrotask === 'function') {
+        target.queueMicrotask(rethrow);
+        return;
+      }
+    } catch {
+      /* Fall back to the native timer path if the optional microtask scheduler fails. */
+    }
+    setTimeout(rethrow, 0);
+  });
+}

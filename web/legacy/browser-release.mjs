@@ -101,7 +101,7 @@ export function releaseInputGuard(theme, snapshot = captureInputs(theme, {}, rea
     if (!inputs.has(name)) throw new Error('Unlisted browser build input; update the reviewed release manifest');
     readReleaseInput(name);
   }
-  /** publicFiles verifies all files served from the theme public directory without following symbolic links. */
+  /** sourceFiles verifies complete source and public file lists without reading unlisted files or following symbolic links. */
   function sourceFiles(directory) {
     const full = path.join(repository, directory);
     if (lstatSync(full).isSymbolicLink()) throw new Error('Symbolic browser release input is not allowed');

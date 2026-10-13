@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import { createBrowserReporter } from '../../web/legacy/browser-sentry.mjs';
+import { mountBrowserApp } from '../../web/legacy/browser-sentry-runtime.mjs';
 
 const require = createRequire(path.join(process.cwd(), 'package.json'));
 const { JSDOM } = require('jsdom');
@@ -28,6 +29,36 @@ test('actual SDK11 catches globals/rejections and sanitizes internal-event bypas
       };
     },
   };
+  const disabledReporter = createBrowserReporter(
+    sdk,
+    null,
+    { location: dom.window.location },
+    theme,
+    undefined,
+    'one-api-' + theme + '@sha256:' + 'a'.repeat(64)
+  );
+  const disabledFailure = new Error('synthetic-private-disabled-mount-secret');
+  const disabledNative = [];
+  await mountBrowserApp(
+    Promise.resolve(disabledReporter),
+    () => {
+      throw disabledFailure;
+    },
+    {
+      queueMicrotask(callback) {
+        queueMicrotask(() => {
+          try {
+            callback();
+          } catch (error) {
+            disabledNative.push(error);
+          }
+        });
+      },
+    }
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(disabledNative, [disabledFailure]);
+  assert.equal(envelopes.length, 0);
   const reporter = createBrowserReporter(
     sdk,
     {
@@ -41,6 +72,31 @@ test('actual SDK11 catches globals/rejections and sanitizes internal-event bypas
   );
   assert.equal(reporter.enabled, true);
   assert.equal(envelopes.length, 0);
+  const mountFailure = new Error('synthetic-private-mount-secret');
+  const nativeErrors = [];
+  const target = {
+    queueMicrotask(callback) {
+      queueMicrotask(() => {
+        try {
+          callback();
+        } catch (error) {
+          nativeErrors.push(error);
+          globalThis.onerror(error.message, 'https://oneapi.laisky.com/assets/index-Abcd1234.js', 1, 1, error);
+        }
+      });
+    },
+  };
+  await mountBrowserApp(
+    Promise.resolve(reporter),
+    () => {
+      throw mountFailure;
+    },
+    target
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  await Sentry.flush(1000);
+  assert.deepEqual(nativeErrors, [mountFailure]);
+  assert.equal(envelopes.length, 1);
   Sentry.setUser({ id: 'secret', email: 'private@example.test', ip_address: '127.0.0.1' });
   Sentry.setExtra('prompt', 'secret completion history tool arguments results');
   Sentry.setTag('api_key', 'secret');
@@ -53,7 +109,7 @@ test('actual SDK11 catches globals/rejections and sanitizes internal-event bypas
   assert.equal(typeof globalThis.onunhandledrejection, 'function');
   globalThis.onunhandledrejection({ reason: new Error('secret rejected tool result') });
   await Sentry.flush(1000);
-  assert.equal(envelopes.length, 4);
+  assert.equal(envelopes.length, 5);
   for (const envelope of envelopes) {
     assert.equal(envelope[1].length, 1);
     assert.deepEqual(envelope[1][0][0], { type: 'event' });

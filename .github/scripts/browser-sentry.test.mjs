@@ -275,9 +275,9 @@ test('all shipped themes settle shared runtime readiness before mounting and use
   for (const theme of ['modern', 'air', 'berry']) {
     const base = new URL('../../web/' + theme + '/src/', import.meta.url);
     const entry = readFileSync(new URL(theme === 'modern' ? 'main.tsx' : 'index.js', base), 'utf8');
-    assert.match(entry, /browserReporterReady\.then/);
+    assert.match(entry, /mountBrowserApp\(\s*browserReporterReady/);
     assert.match(entry, /<SentryBoundary>/);
-    assert.ok(entry.indexOf('browserReporterReady.then') < entry.indexOf('createRoot('));
+    assert.ok(/mountBrowserApp\(\s*browserReporterReady/.exec(entry).index < entry.indexOf('createRoot('));
     const instrument = readFileSync(new URL(theme === 'modern' ? 'browser-sentry.ts' : 'browser-sentry.js', base), 'utf8');
     assert.match(instrument, /legacy\/browser-sentry-runtime\.mjs/);
     assert.match(instrument, new RegExp("window,\\s*'" + theme + "'"));

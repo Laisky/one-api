@@ -3,7 +3,7 @@ import test from 'node:test';
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { loadBrowserReporter } from '../../web/legacy/browser-sentry-runtime.mjs';
+import { loadBrowserReporter, mountBrowserApp } from '../../web/legacy/browser-sentry-runtime.mjs';
 import { createBrowserReporter } from '../../web/legacy/browser-sentry.mjs';
 import { browserRelease, readReleaseInput, releaseInputGuard, browserBuildContract } from '../../web/legacy/browser-release.mjs';
 
@@ -368,5 +368,70 @@ test('abort and cleanup exceptions cannot reject or leave timed-out readiness pe
     assert.equal(fixture.calls, 0);
   } finally {
     globalThis.AbortController = original;
+  }
+});
+
+test('mount rejection owner redispatches the original error once and never retries mounting for active or disabled reporting', async () => {
+  for (const enabled of [false, true]) {
+    const error = new Error('synthetic-private-mount-error');
+    const nativeErrors = [];
+    let mounts = 0;
+    const readiness = Promise.resolve({ enabled, capture() {} });
+    const target = {
+      queueMicrotask(callback) {
+        queueMicrotask(() => {
+          try {
+            callback();
+          } catch (failure) {
+            nativeErrors.push(failure);
+          }
+        });
+      },
+    };
+    await mountBrowserApp(
+      readiness,
+      () => {
+        mounts++;
+        throw error;
+      },
+      target
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(mounts, 1);
+    assert.deepEqual(nativeErrors, [error]);
+  }
+});
+
+test('native timer fallback owns mount errors when microtask scheduling is absent or throws', async () => {
+  const original = globalThis.setTimeout;
+  try {
+    for (const target of [
+      {},
+      {
+        queueMicrotask() {
+          throw new Error('synthetic-scheduler-error');
+        },
+      },
+    ]) {
+      const error = new Error('synthetic-private-mount-error');
+      const nativeErrors = [];
+      globalThis.setTimeout = (callback) => {
+        try {
+          callback();
+        } catch (failure) {
+          nativeErrors.push(failure);
+        }
+      };
+      await mountBrowserApp(
+        Promise.resolve({ enabled: false, capture() {} }),
+        () => {
+          throw error;
+        },
+        target
+      );
+      assert.deepEqual(nativeErrors, [error]);
+    }
+  } finally {
+    globalThis.setTimeout = original;
   }
 });

@@ -1,4 +1,5 @@
 import { browserReporterReady } from './browser-sentry';
+import { mountBrowserApp } from '../../legacy/browser-sentry-runtime.mjs';
 import { createErrorBoundary } from '../../legacy/browser-sentry.mjs';
 import { initVChartSemiTheme } from '@visactor/vchart-semi-theme';
 import React from 'react';
@@ -18,47 +19,51 @@ import { Layout } from '@douyinfe/semi-ui';
 import SiderBar from './components/SiderBar';
 
 // Runtime configuration is bounded and settles before React mounts; early module errors are not buffered.
-browserReporterReady.then((browserReporter) => {
-  const SentryBoundary = createErrorBoundary(React, browserReporter);
+mountBrowserApp(
+  browserReporterReady,
+  (browserReporter) => {
+    const SentryBoundary = createErrorBoundary(React, browserReporter);
 
-  // initialization
-  initVChartSemiTheme({
-    isWatchingThemeSwitch: true,
-  });
+    // initialization
+    initVChartSemiTheme({
+      isWatchingThemeSwitch: true,
+    });
 
-  const root = ReactDOM.createRoot(document.getElementById('root'));
-  const { Sider, Content, Header } = Layout;
-  root.render(
-    <SentryBoundary>
-      <React.StrictMode>
-        <StatusProvider>
-          <UserProvider>
-            <BrowserRouter>
-              <Layout>
-                <Sider>
-                  <SiderBar />
-                </Sider>
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    const { Sider, Content, Header } = Layout;
+    root.render(
+      <SentryBoundary>
+        <React.StrictMode>
+          <StatusProvider>
+            <UserProvider>
+              <BrowserRouter>
                 <Layout>
-                  <Header>
-                    <HeaderBar />
-                  </Header>
-                  <Content
-                    style={{
-                      padding: '24px',
-                    }}
-                  >
-                    <App />
-                  </Content>
-                  <Layout.Footer>
-                    <Footer></Footer>
-                  </Layout.Footer>
+                  <Sider>
+                    <SiderBar />
+                  </Sider>
+                  <Layout>
+                    <Header>
+                      <HeaderBar />
+                    </Header>
+                    <Content
+                      style={{
+                        padding: '24px',
+                      }}
+                    >
+                      <App />
+                    </Content>
+                    <Layout.Footer>
+                      <Footer></Footer>
+                    </Layout.Footer>
+                  </Layout>
+                  <ToastContainer />
                 </Layout>
-                <ToastContainer />
-              </Layout>
-            </BrowserRouter>
-          </UserProvider>
-        </StatusProvider>
-      </React.StrictMode>
-    </SentryBoundary>,
-  );
-});
+              </BrowserRouter>
+            </UserProvider>
+          </StatusProvider>
+        </React.StrictMode>
+      </SentryBoundary>,
+    );
+  },
+  window,
+);
