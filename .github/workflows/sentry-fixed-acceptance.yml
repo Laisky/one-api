@@ -1,0 +1,252 @@
+# Temporary qualification branch only. Do not merge this harness into the application.
+name: Sentry fixed candidate acceptance
+on:
+  push:
+    branches: [qualification/sentry-561-20261013]
+    paths: [.github/workflows/sentry-fixed-acceptance.yml]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: sentry-fixed-candidate-20261013
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+env:
+  CANDIDATE_SHA: 2c47db3ab0fcd23bf9f8d217b458a82a539d8da2
+  CANDIDATE_TREE: 2364054e328709aa62d7c2dfb7e82caada01b8ac
+  BACKEND_SHA: 995e4c8d767a495b3f15c397218f8d26922984c3
+jobs:
+  backend_evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 2c47db3ab0fcd23bf9f8d217b458a82a539d8da2
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact tree and unchanged backend before reusing completed evidence
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$CANDIDATE_TREE"
+          mkdir -p "$RUNNER_TEMP/acceptance-evidence"
+          python3 - <<'PY'
+          import json,os,pathlib,subprocess
+          changed=set(subprocess.check_output(['git','diff','--name-only',os.environ['BACKEND_SHA'],os.environ['CANDIDATE_SHA']],text=True).splitlines())
+          assert changed=={'.github/scripts/browser-sentry-runtime.test.mjs','web/legacy/browser-release.mjs'}, changed
+          evidence={'candidate':os.environ['CANDIDATE_SHA'],'tree':os.environ['CANDIDATE_TREE'],'backend_test_source':os.environ['BACKEND_SHA'],'backend_run':38439437547,'changed_files':sorted(changed),'new_backend_execution':False}
+          pathlib.Path(os.environ['RUNNER_TEMP'],'acceptance-evidence','source-parity.json').write_text(json.dumps(evidence,indent=2))
+          PY
+          git archive --format=tar HEAD | gzip > "$RUNNER_TEMP/acceptance-evidence/candidate.tar.gz"
+          python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
+          python3 .github/scripts/test_workflows.py
+          python3 .github/scripts/test_frontend_contracts.py
+          python3 .github/scripts/test_go_test_shards.py
+          python3 .github/scripts/test_quick_tests.py
+          python3 .github/scripts/test_format_check.py
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: go-tests-*-995e4c8d
+          run-id: 38439437547
+          github-token: ${{ github.token }}
+          path: retained-backend
+      - name: Verify retained five-shard completeness without relabeling test revisions
+        run: |
+          set -euo pipefail
+          GITHUB_SHA="$BACKEND_SHA" python3 .github/scripts/go_test_shards.py merge --input retained-backend --output "$RUNNER_TEMP/acceptance-evidence/backend-coverage.txt"
+          cp -R retained-backend "$RUNNER_TEMP/acceptance-evidence/"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: backend-evidence-2c47db3a
+          path: ${{ runner.temp }}/acceptance-evidence
+          retention-days: 14
+          if-no-files-found: error
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [modern, air, berry]
+    env:
+      THEME: ${{ matrix.theme }}
+      CI: 'true'
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 2c47db3ab0fcd23bf9f8d217b458a82a539d8da2
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.21.0'
+          cache: yarn
+          cache-dependency-path: web/${{ matrix.theme }}/yarn.lock
+      - name: Install only this theme's locked dependencies
+        working-directory: web/${{ matrix.theme }}
+        run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+      - name: Run full theme and SDK tests plus lint
+        working-directory: web/${{ matrix.theme }}
+        run: |
+          set -euo pipefail
+          if [ "$THEME" = modern ]; then yarn test --run; else yarn test; fi
+          yarn lint
+          node --test ../../.github/scripts/browser-sentry.test.mjs ../../.github/scripts/browser-sentry-runtime.test.mjs ../../.github/scripts/browser-sentry-react.test.mjs ../../.github/scripts/browser-sentry-sdk.test.mjs
+      - name: Audit all dependencies
+        run: node .github/scripts/frontend-audit.mjs "$THEME"
+      - name: Build complete theme and verify translations
+        working-directory: web/${{ matrix.theme }}
+        run: |
+          yarn build
+          if [ "$THEME" = modern ]; then yarn check:i18n; fi
+      - name: Install the existing pinned browser tools
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Execute unchanged real-page browser acceptance
+        run: |
+          set -euo pipefail
+          if [ "$THEME" = modern ]; then
+            (cd web/modern && python3 scripts/test-mobile-list-browser.py && python3 scripts/test-table-toolbar-browser.py)
+          else
+            python3 .github/scripts/legacy-browser.py "$THEME"
+          fi
+      - name: Record exact artifacts and verify map absence
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,subprocess
+          theme=os.environ['THEME']; root=pathlib.Path('web/build')/theme
+          assert root.is_dir() and not list(root.rglob('*.map'))
+          assets={}; releases=set()
+          for p in root.rglob('*.js'):
+              raw=p.read_bytes(); text=raw.decode('utf-8')
+              assert 'sourceMappingURL=data:' not in text
+              assets[str(p.relative_to(root))]=hashlib.sha256(raw).hexdigest()
+              releases.update(re.findall(r'one-api-(?:modern|air|berry)@sha256:[a-f0-9]{64}',text))
+          assert assets and any(x.startswith('one-api-'+theme+'@') for x in releases)
+          assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==os.environ['CANDIDATE_SHA']
+          assert not subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],text=True)
+          report={'source':os.environ['CANDIDATE_SHA'],'tree':os.environ['CANDIDATE_TREE'],'theme':theme,'node':subprocess.check_output(['node','--version'],text=True).strip(),'releases':sorted(releases),'assets':assets,'public_maps':0}
+          pathlib.Path(os.environ['RUNNER_TEMP'],'frontend-identity.json').write_text(json.dumps(report,indent=2))
+          print(json.dumps({k:v for k,v in report.items() if k!='assets'},indent=2))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: frontend-${{ matrix.theme }}-2c47db3a
+          path: |
+            web/build
+            web/modern/test-results
+            ${{ runner.temp }}/legacy-browser-${{ matrix.theme }}
+            ${{ runner.temp }}/frontend-identity.json
+            ${{ runner.temp }}/*-audit.jsonl
+          retention-days: 14
+          if-no-files-found: error
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 2c47db3ab0fcd23bf9f8d217b458a82a539d8da2
+          persist-credentials: false
+      - name: Build the existing Dockerfile without publication
+        env:
+          DOCKER_BUILDKIT: '1'
+        run: |
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$CANDIDATE_TREE"
+          docker build --build-arg TARGETARCH=amd64 --build-arg TARGETOS=linux \
+            --label "org.opencontainers.image.revision=$CANDIDATE_SHA" \
+            --iidfile "$RUNNER_TEMP/candidate-image-id" --tag oneapi-acceptance:2c47db3a .
+      - name: Prepare documented content-verified tokenizer assets before offline startup
+        run: |
+          python3 tests/stream-perf/cache_tokens.py --cache "$RUNNER_TEMP/tokenizer-cache"
+          python3 tests/stream-perf/cache_tokens.py --cache "$RUNNER_TEMP/tokenizer-cache" --check-only
+          chmod -R a+rX "$RUNNER_TEMP/tokenizer-cache"
+      - name: Smoke all themes in network-disabled disposable containers
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,subprocess,time,uuid
+          def command(args, timeout=15):
+              return subprocess.check_output(args,timeout=timeout,stderr=subprocess.DEVNULL)
+          output=pathlib.Path(os.environ['RUNNER_TEMP'],'image-acceptance.json')
+          image_id=pathlib.Path(os.environ['RUNNER_TEMP'],'candidate-image-id').read_text().strip()
+          image=json.loads(command(['docker','image','inspect',image_id]))[0]
+          assert image['Architecture']=='amd64' and image['Config']['Labels']['org.opencontainers.image.revision']==os.environ['CANDIDATE_SHA']
+          report={'source':os.environ['CANDIDATE_SHA'],'tree':os.environ['CANDIDATE_TREE'],'image_id':image_id,'published':False,'themes':{}}
+          try:
+              for theme in ('modern','air','berry','default'):
+                  name='sentry-acceptance-'+uuid.uuid4().hex
+                  try:
+                      mount=os.environ['RUNNER_TEMP']+'/tokenizer-cache:/tokenizer-cache:ro'
+                      command(['docker','run','-d','--network','none','--memory','2g','--pids-limit','256','--name',name,'-v',mount,'-e','TIKTOKEN_CACHE_DIR=/tokenizer-cache','-e','THEME='+theme,image_id])
+                      deadline=time.monotonic()+180; status=None
+                      while time.monotonic()<deadline:
+                          try:
+                              status=json.loads(command(['docker','exec',name,'curl','-fsS','--max-time','3','http://127.0.0.1:3000/api/status']))
+                              if status.get('success') is True: break
+                          except (subprocess.SubprocessError,json.JSONDecodeError): pass
+                          state=json.loads(command(['docker','inspect',name]))[0]['State']
+                          if not state['Running']: break
+                          time.sleep(2)
+                      state=json.loads(command(['docker','inspect',name]))[0]
+                      report['themes'][theme]={'running':state['State']['Running'],'exit_code':state['State']['ExitCode'],'oom':state['State']['OOMKilled'],'restarts':state['RestartCount']}
+                      assert status and status.get('success') is True, 'Image did not become ready for '+theme
+                      raw=command(['docker','exec',name,'curl','-fsS','-D','-','--max-time','5','http://127.0.0.1:3000/api/browser-config'])
+                      headers,body=raw.split(b'\r\n\r\n',1)
+                      assert b'cache-control: no-store' in headers.lower()
+                      assert b'x-content-type-options: nosniff' in headers.lower()
+                      assert json.loads(body)=={'sentry':None}, 'Fresh reporting must be inactive'
+                      html=command(['docker','exec',name,'curl','-fsS','--max-time','5','http://127.0.0.1:3000/']).decode()
+                      entries=re.findall(r'<script[^>]+src="([^"]+)"',html)
+                      assert entries, 'Missing embedded application entry'
+                      identities=set(); assets={}
+                      for entry in entries:
+                          assert entry.startswith('/') and not entry.startswith('//')
+                          raw=command(['docker','exec',name,'curl','-fsS','--max-time','5','http://127.0.0.1:3000'+entry])
+                          assert b'sourceMappingURL=data:' not in raw
+                          identities.update(re.findall(r'one-api-(?:modern|air|berry)@sha256:[a-f0-9]{64}',raw.decode()))
+                          assets[entry]=hashlib.sha256(raw).hexdigest()
+                      expected='modern' if theme=='default' else theme
+                      assert any(x.startswith('one-api-'+expected+'@') for x in identities), 'Missing theme release identity'
+                      assert state['State']['Running'] and not state['State']['OOMKilled'] and state['RestartCount']==0
+                      assert state['HostConfig']['NetworkMode']=='none'
+                      report['themes'][theme].update({'status':True,'browser_config':None,'releases':sorted(identities),'entry_assets':assets})
+                  finally:
+                      subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30,check=False)
+              report['passed']=True
+          finally:
+              output.write_text(json.dumps(report,indent=2))
+              print(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: image-acceptance-2c47db3a
+          path: |
+            ${{ runner.temp }}/candidate-image-id
+            ${{ runner.temp }}/image-acceptance.json
+          retention-days: 14
+          if-no-files-found: error
+  acceptance:
+    if: always()
+    needs: [backend_evidence, frontend, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every applicable gate to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          results=json.loads(os.environ['RESULTS'])
+          assert set(results)=={'backend_evidence','frontend','image'}
+          assert all(value['result']=='success' for value in results.values()),results
+          print('Fixed frontend/image passed; original backend test revisions are retained with verified source parity.')
+          PY
