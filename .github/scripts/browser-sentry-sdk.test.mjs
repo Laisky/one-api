@@ -31,13 +31,13 @@ test('actual SDK11 catches globals/rejections and sanitizes internal-event bypas
   const reporter = createBrowserReporter(
     sdk,
     {
-      VITE_SENTRY_ENABLED: 'true',
-      VITE_SENTRY_DSN: 'https://0123456789abcdef0123456789abcdef@o123.ingest.sentry.io/456',
-      VITE_SENTRY_ENVIRONMENT: 'production',
-      VITE_SENTRY_RELEASE: 'one-api@' + 'a'.repeat(40),
+      dsn: 'https://0123456789abcdef0123456789abcdef@o123.ingest.sentry.io/456',
+      environment: 'production',
     },
     { location: dom.window.location },
-    theme
+    theme,
+    undefined,
+    'one-api-' + theme + '@sha256:' + 'a'.repeat(64)
   );
   assert.equal(reporter.enabled, true);
   assert.equal(envelopes.length, 0);

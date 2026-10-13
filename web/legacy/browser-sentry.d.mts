@@ -5,7 +5,7 @@ export interface BrowserReporter {
   capture(error: unknown): void;
 }
 /** createBrowserReporter validates public configuration and initializes at most one reporter per window. */
-export function createBrowserReporter(sdk: unknown, env: unknown, target: unknown, theme: string, entryURL: string): BrowserReporter;
+export function createBrowserReporter(sdk: unknown, settings: unknown, target: unknown, theme: string, entryURL: string, release: string): BrowserReporter;
 /** reactRootOptions returns enabled React19 root callbacks while preserving disabled defaults. */
 export function reactRootOptions(reporter: BrowserReporter): {
   onUncaughtError?: (error: unknown) => void;

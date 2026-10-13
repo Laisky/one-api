@@ -18,10 +18,8 @@ const { BrowserRouter, Routes, Route } = require('react-router-dom');
 const act = React.act || require('react-dom/test-utils').act;
 const theme = path.basename(process.cwd());
 const env = {
-  VITE_SENTRY_ENABLED: 'true',
-  VITE_SENTRY_DSN: 'https://0123456789abcdef0123456789abcdef@o123.ingest.sentry.io/456',
-  VITE_SENTRY_ENVIRONMENT: 'production',
-  VITE_SENTRY_RELEASE: 'one-api@' + 'a'.repeat(40),
+  dsn: 'https://0123456789abcdef0123456789abcdef@o123.ingest.sentry.io/456',
+  environment: 'production',
 };
 /** setup supplies a mock SDK that runs the actual final privacy policy without networking. */
 function setup(config = env) {
@@ -43,7 +41,14 @@ function setup(config = env) {
       if (clean) events.push(clean);
     },
   };
-  const reporter = createBrowserReporter(sdk, config, { location: dom.window.location }, theme);
+  const reporter = createBrowserReporter(
+    sdk,
+    config,
+    { location: dom.window.location },
+    theme,
+    undefined,
+    'one-api-' + theme + '@sha256:' + 'a'.repeat(64)
+  );
   return { reporter, events, options };
 }
 /** Broken simulates a rendering error whose message contains user content. */

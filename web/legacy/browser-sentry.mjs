@@ -4,13 +4,23 @@ const boundaryMarker = Symbol('OneAPI reporting boundary');
 const TYPES = new Set(['Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'URIError', 'EvalError', 'AggregateError']);
 const THEMES = new Set(['modern', 'air', 'berry']);
 
-/** readConfig validates explicit public build configuration and returns it, or null. */
-export function readConfig(env, location, theme, assets = []) {
+/** readConfig validates public runtime settings and immutable built release identity, returning a frozen snapshot or null. */
+export function readConfig(settings, location, theme, assets = [], release) {
   if (location?.hostname !== HOST || location?.protocol !== 'https:' || Boolean(location?.port) || !THEMES.has(theme)) return null;
-  if (env?.VITE_SENTRY_ENABLED !== 'true' || !['production', 'staging', 'development'].includes(env.VITE_SENTRY_ENVIRONMENT)) return null;
-  if (typeof env.VITE_SENTRY_RELEASE !== 'string' || !/^one-api@[a-f0-9]{40}$/.test(env.VITE_SENTRY_RELEASE)) return null;
+  if (
+    !settings ||
+    typeof settings !== 'object' ||
+    Array.isArray(settings) ||
+    Object.keys(settings).length !== 2 ||
+    !Object.hasOwn(settings, 'dsn') ||
+    !Object.hasOwn(settings, 'environment') ||
+    !['production', 'staging', 'development'].includes(settings.environment)
+  )
+    return null;
+  if (typeof release !== 'string' || !new RegExp('^one-api-' + theme + '@sha256:[a-f0-9]{64}$').test(release)) return null;
+  if (typeof settings.dsn !== 'string' || settings.dsn.length > 256) return null;
   try {
-    const dsn = new URL(env.VITE_SENTRY_DSN);
+    const dsn = new URL(settings.dsn);
     if (
       dsn.protocol !== 'https:' ||
       dsn.password ||
@@ -19,11 +29,12 @@ export function readConfig(env, location, theme, assets = []) {
       dsn.hash ||
       !/^[a-f0-9]{32}$/.test(dsn.username) ||
       !/^o[0-9]+\.ingest(?:\.[a-z]+)?\.sentry\.io$/.test(dsn.hostname) ||
-      !/^\/[0-9]+$/.test(dsn.pathname)
+      !/^\/[0-9]{1,20}$/.test(dsn.pathname) ||
+      dsn.href !== settings.dsn
     )
       return null;
     const assetURLs = Object.freeze(assets.slice(0, 40).map(safeAssetURL).filter(Boolean));
-    return Object.freeze({ dsn: dsn.href, environment: env.VITE_SENTRY_ENVIRONMENT, release: env.VITE_SENTRY_RELEASE, theme, assetURLs });
+    return Object.freeze({ dsn: dsn.href, environment: settings.environment, release, theme, assetURLs });
   } catch {
     return null;
   }
@@ -107,7 +118,7 @@ export function sanitizeEnvelope(envelope, config) {
 }
 
 /** createBrowserReporter initializes one errors-only SDK per window; SDK failures return a disabled reporter. */
-export function createBrowserReporter(sdk, env, target, theme, entryURL) {
+export function createBrowserReporter(sdk, settings, target, theme, entryURL, release) {
   const disabled = { enabled: false, capture() {} };
   if (!target || (typeof target !== 'object' && typeof target !== 'function')) return disabled;
   if (reporters.has(target)) return reporters.get(target);
@@ -118,7 +129,7 @@ export function createBrowserReporter(sdk, env, target, theme, entryURL) {
     for (let index = 0; nodes && index < Math.min(nodes.length, 39); index++) {
       assets.push(nodes[index].src || nodes[index].href);
     }
-    const config = readConfig(env, target.location, theme, assets);
+    const config = readConfig(settings, target.location, theme, assets, release);
     if (!config) return disabled;
     const seen = new WeakSet();
     let initialized = false;

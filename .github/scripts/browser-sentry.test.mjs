@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
-  createBrowserReporter,
-  readConfig,
+  createBrowserReporter as initializeBrowserReporter,
+  readConfig as readPublicConfig,
   reactRootOptions,
   safeAssetURL,
   sanitizeEnvelope,
@@ -11,12 +11,21 @@ import {
 } from '../../web/legacy/browser-sentry.mjs';
 
 const env = {
-  VITE_SENTRY_ENABLED: 'true',
-  VITE_SENTRY_DSN: 'https://0123456789abcdef0123456789abcdef@o123.ingest.sentry.io/456',
-  VITE_SENTRY_ENVIRONMENT: 'production',
-  VITE_SENTRY_RELEASE: 'one-api@' + 'a'.repeat(40),
+  dsn: 'https://0123456789abcdef0123456789abcdef@o123.ingest.sentry.io/456',
+  environment: 'production',
 };
 const location = { hostname: 'oneapi.laisky.com', protocol: 'https:' };
+/** release supplies synthetic immutable build identity for privacy tests. */
+const release = (theme) => 'one-api-' + theme + '@sha256:' + 'a'.repeat(64);
+/** createBrowserReporter exercises the real factory with independent immutable build identity. */
+function createBrowserReporter(sdk, settings, target, theme, entryURL) {
+  return initializeBrowserReporter(sdk, settings, target, theme, entryURL, release(theme));
+}
+/** readConfig exercises the real configuration validator with a synthetic build release. */
+function readConfig(settings, location, theme, assets = []) {
+  return readPublicConfig(settings, location, theme, assets, release(theme));
+}
+
 /** fixture returns a synthetic exception containing intentionally sensitive content. */
 function fixture() {
   return {
@@ -101,7 +110,7 @@ test('valid errors retain bounded static diagnostic fields and deployment identi
     platform: 'javascript',
     level: 'error',
     environment: 'production',
-    release: env.VITE_SENTRY_RELEASE,
+    release: release('modern'),
     tags: { site: 'one-api', theme: 'modern' },
     event_id: 'b'.repeat(32),
     timestamp: 1234,
@@ -134,15 +143,13 @@ test('unsupported full hosts, protocol, themes and missing or malformed configur
     assert.equal(sdk.calls, 0);
   }
   for (const change of [
-    { VITE_SENTRY_ENABLED: undefined },
-    { VITE_SENTRY_DSN: '' },
-    { VITE_SENTRY_ENVIRONMENT: '' },
-    { VITE_SENTRY_RELEASE: '' },
-    { VITE_SENTRY_RELEASE: 'one-api@secret' },
-    { VITE_SENTRY_ENVIRONMENT: 'production\nsecret' },
-    { VITE_SENTRY_DSN: env.VITE_SENTRY_DSN.replace('@', ':secret@') },
-    { VITE_SENTRY_DSN: env.VITE_SENTRY_DSN + '?token=secret' },
-    { VITE_SENTRY_DSN: env.VITE_SENTRY_DSN.replace('sentry.io', 'evil.test') },
+    { enabled: true },
+    { dsn: '' },
+    { environment: '' },
+    { environment: 'production\nsecret' },
+    { dsn: env.dsn.replace('@', ':secret@') },
+    { dsn: env.dsn + '?token=secret' },
+    { dsn: env.dsn.replace('sentry.io', 'evil.test') },
   ]) {
     assert.equal(readConfig({ ...env, ...change }, location, 'modern'), null);
   }
@@ -257,21 +264,22 @@ test('configuration snapshot cannot acquire sensitive values after initializatio
   const sdk = mockSDK();
   const mutable = { ...env };
   const reporter = createBrowserReporter(sdk, mutable, { location }, 'air');
-  mutable.VITE_SENTRY_ENVIRONMENT = 'secret';
-  mutable.VITE_SENTRY_RELEASE = 'prompt-secret';
+  mutable.environment = 'secret';
+  mutable.release = 'prompt-secret';
   reporter.capture(new Error('secret'));
   assert.equal(sdk.events[0].environment, 'production');
-  assert.equal(sdk.events[0].release, env.VITE_SENTRY_RELEASE);
+  assert.equal(sdk.events[0].release, release('air'));
 });
 
-test('all shipped themes use the shared policy before application imports', () => {
+test('all shipped themes settle shared runtime readiness before mounting and use the shared privacy policy', () => {
   for (const theme of ['modern', 'air', 'berry']) {
     const base = new URL('../../web/' + theme + '/src/', import.meta.url);
     const entry = readFileSync(new URL(theme === 'modern' ? 'main.tsx' : 'index.js', base), 'utf8');
-    assert.ok(entry.indexOf("'./browser-sentry'") < entry.indexOf("'./App'") || theme === 'berry');
+    assert.match(entry, /browserReporterReady\.then/);
     assert.match(entry, /<SentryBoundary>/);
+    assert.ok(entry.indexOf('browserReporterReady.then') < entry.indexOf('createRoot('));
     const instrument = readFileSync(new URL(theme === 'modern' ? 'browser-sentry.ts' : 'browser-sentry.js', base), 'utf8');
-    assert.match(instrument, /legacy\/browser-sentry\.mjs/);
+    assert.match(instrument, /legacy\/browser-sentry-runtime\.mjs/);
     assert.match(instrument, new RegExp("window,\\s*'" + theme + "'"));
   }
   const modern = readFileSync(new URL('../../web/modern/src/main.tsx', import.meta.url), 'utf8');
@@ -437,19 +445,18 @@ test('loaded page asset snapshot is bounded and transport explicitly omits crede
   assert.deepEqual(fetchOptions, { credentials: 'omit', referrerPolicy: 'no-referrer' });
 });
 
-test('theme shims project exactly the four public settings instead of inlining the entire Vite environment', () => {
+test('theme shims embed only immutable release identity, never runtime configuration or arbitrary environment values', () => {
   for (const theme of ['modern', 'air', 'berry']) {
     const file = new URL('../../web/' + theme + '/src/browser-sentry.' + (theme === 'modern' ? 'ts' : 'js'), import.meta.url);
     const source = readFileSync(file, 'utf8');
-    assert.doesNotMatch(source, /import\.meta\.env\s*[,)]/);
-    const fields = [...source.matchAll(/(VITE_[A-Z_]+):\s*import\.meta\.env\.(VITE_[A-Z_]+)/g)];
-    assert.equal(fields.length, 4);
-    assert.deepEqual(fields.map((match) => match[1]).sort(), [
-      'VITE_SENTRY_DSN',
-      'VITE_SENTRY_ENABLED',
-      'VITE_SENTRY_ENVIRONMENT',
-      'VITE_SENTRY_RELEASE',
-    ]);
-    assert.ok(fields.every((match) => match[1] === match[2]));
+    assert.doesNotMatch(source, /import\.meta\.env|VITE_SENTRY|enabled:/);
+    assert.doesNotMatch(source, /@sentry\/react/);
+    assert.match(source, /await import\('\.\/browser-sentry-sdk'\)/);
+    assert.match(source, /__ONEAPI_BROWSER_RELEASE__/);
   }
+});
+test('runtime settings cannot provide or replace immutable build release identity', () => {
+  assert.equal(readPublicConfig(env, location, 'modern', [], 'one-api@' + 'a'.repeat(40)), null);
+  assert.equal(readPublicConfig(env, location, 'modern', [], release('air')), null);
+  assert.equal(readConfig({ ...env, release: release('modern') }, location, 'modern'), null);
 });
