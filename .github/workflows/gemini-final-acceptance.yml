@@ -1,0 +1,144 @@
+# Temporary acceptance harness only. Never merge this workflow into the application.
+name: Gemini final acceptance
+on:
+  push:
+    branches: [qualification/sentry-561-20261013]
+    paths: [.github/workflows/gemini-final-acceptance.yml]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - source: 3f5dfb1b67e01e50b77aa023e6f9a80b9a957c87
+            prior: eed2a6d02e5392f24197f49a70af3ba2ba22f212
+            name: test-only
+          - source: c50ea6e30b638dce024a8dfd2b837175ee7b8b52
+            prior: 2c47db3ab0fcd23bf9f8d217b458a82a539d8da2
+            name: combined-sentry
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports: [3306:3306]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12 --health-start-period=20s
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports: [5432:5432]
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s --health-timeout=5s --health-retries=12 --health-start-period=10s
+    env:
+      SOURCE_SHA: ${{ matrix.source }}
+      PRIOR_SHA: ${{ matrix.prior }}
+      GOMAXPROCS: '2'
+      CGO_ENABLED: '1'
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      MYSQL_LOG_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      PG_LOG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.source }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Prepare fresh disposable services and documented offline tokenizer cache
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg mysql-client postgresql-client
+          mysql -h 127.0.0.1 -P 3306 -uroot -e "CREATE DATABASE IF NOT EXISTS oneapi_log CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'oneapi_log'" | grep -q 1 || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE oneapi_log;"
+          python3 tests/stream-perf/cache_tokens.py --cache "$RUNNER_TEMP/tokenizer-cache"
+          python3 tests/stream-perf/cache_tokens.py --cache "$RUNNER_TEMP/tokenizer-cache" --check-only
+          echo "TIKTOKEN_CACHE_DIR=$RUNNER_TEMP/tokenizer-cache" >> "$GITHUB_ENV"
+      - name: Verify final test source, positive controls, negative controls and complete controller suite
+        run: |
+          python3 -u - <<'PY'
+          import collections,hashlib,json,os,pathlib,subprocess
+          evidence=pathlib.Path(os.environ['RUNNER_TEMP'])/'final-gemini';evidence.mkdir()
+          testpath=pathlib.Path('controller/gemini_live_budget_security_test.go')
+          gatepath=pathlib.Path('relay/adaptor/gemini/live_spend.go')
+          original_test=testpath.read_bytes();original_gate=gatepath.read_bytes()
+          names={'TestSecurityGeminiLiveOutputStreamCannotOutrunReservation','TestSecurityGeminiLiveBufferedOutputPreservesReservation'}
+          pattern='^TestSecurityGeminiLive(OutputStreamCannotOutrunReservation|BufferedOutputPreservesReservation)$'
+          report={'source':os.environ['SOURCE_SHA'],'prior':os.environ['PRIOR_SHA'],'test_blob':'37e06e29022407226248a560199f7395be19dc02','experiments':{}}
+          def git(*args):return subprocess.check_output(['git',*args],text=True).strip()
+          def run(label,args,timeout=1200):
+              with (evidence/(label+'.jsonl')).open('w') as output:
+                  process=subprocess.run(['go','test','-json','-race','-p','1',*args,'./controller'],stdout=output,stderr=subprocess.STDOUT,timeout=timeout)
+              events=[]
+              for line in (evidence/(label+'.jsonl')).read_text().splitlines():
+                  try:events.append(json.loads(line))
+                  except ValueError:pass
+              terminals=[e for e in events if e.get('Test') and e.get('Action') in ('pass','fail','skip')]
+              selected={name:[e['Action'] for e in terminals if e['Test']==name] for name in names}
+              outputs=[e['Output'].strip() for e in events if 'client_chunks=' in e.get('Output','')]
+              result={'exit_code':process.returncode,'selected':selected,'counters':outputs,'top_level':dict(collections.Counter(e['Action'] for e in terminals if '/' not in e['Test'])),'skipped':[e['Test'] for e in terminals if e['Action']=='skip']}
+              report['experiments'][label]=result
+              print(label,json.dumps(result),flush=True)
+              return result,terminals
+          try:
+              assert git('rev-parse','HEAD')==os.environ['SOURCE_SHA']
+              report['tree']=git('rev-parse','HEAD^{tree}')
+              changed=git('diff','--name-only',os.environ['PRIOR_SHA'],'HEAD').splitlines()
+              assert changed==[str(testpath)],changed
+              assert git('hash-object',str(testpath))==report['test_blob']
+              assert hashlib.sha256(original_test).hexdigest()=='720a39b8c85c018397e59da995d0b0c7815e9927f42ae8b3b5c7403aeb12829d'
+              assert not subprocess.check_output(['gofmt','-l',str(testpath)],text=True).strip()
+              report['changed_files']=changed
+              positive,_=run('final_positive',['-count=3','-timeout=180s','-run',pattern])
+              assert positive['exit_code']==0 and all(v==['pass']*3 for v in positive['selected'].values())
+              text=original_gate.decode();statement='if err := s.gate.Ensure(s.exposureLocked(s.pending, s.pendingWork)); err != nil {'
+              assert text.count(statement)==1
+              try:
+                  gatepath.write_text(text.replace(statement,statement.replace('err != nil {','false && err != nil {')))
+                  negative,_=run('deliberately_disabled_output_rejection',['-count=1','-timeout=180s','-run',pattern])
+                  assert negative['exit_code']!=0 and all(v==['fail'] for v in negative['selected'].values()),negative
+                  assert len(negative['counters'])==2 and all('client_chunks=100' in value for value in negative['counters']),negative
+              finally:gatepath.write_bytes(original_gate)
+              assert not git('status','--porcelain','--untracked-files=no'),'Diagnostic mutation remained before acceptance'
+              inventory={line for line in subprocess.check_output(['go','test','-list','^Test','./controller'],text=True).splitlines() if line.startswith('Test') and ' ' not in line}
+              assert names<=inventory
+              (evidence/'controller-inventory.json').write_text(json.dumps(sorted(inventory),indent=2))
+              complete,terminals=run('complete_controller',['-count=1','-timeout=20m'],timeout=1500)
+              actual={e['Test'] for e in terminals if '/' not in e['Test']}
+              assert complete['exit_code']==0 and all(e['Action']!='fail' for e in terminals),complete
+              assert actual==inventory,{'missing':sorted(inventory-actual),'unexpected':sorted(actual-inventory)}
+              assert all(v==['pass'] for v in complete['selected'].values())
+              subprocess.run(['go','vet','./controller'],check=True,timeout=300)
+              assert not git('status','--porcelain','--untracked-files=no')
+              report['passed']=True
+          finally:
+              testpath.write_bytes(original_test);gatepath.write_bytes(original_gate)
+              (evidence/'report.json').write_text(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: gemini-final-${{ matrix.name }}
+          path: ${{ runner.temp }}/final-gemini
+          retention-days: 14
+          if-no-files-found: error
