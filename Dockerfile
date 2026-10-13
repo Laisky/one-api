@@ -13,6 +13,7 @@ ARG FFMPEG_IMAGE=linuxserver/ffmpeg:latest
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web-builder
 WORKDIR /web
 
+# Public Sentry settings are loaded from the runtime API, never embedded as build arguments.
 # Copy sources (place themes directly under /web)
 COPY web/ ./
 

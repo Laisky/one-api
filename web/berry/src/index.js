@@ -1,3 +1,7 @@
+import { browserReporterReady } from './browser-sentry';
+import { mountBrowserApp } from '../../legacy/browser-sentry-runtime.mjs';
+import React from 'react';
+import { createErrorBoundary } from '../../legacy/browser-sentry.mjs';
 import { createRoot } from 'react-dom/client';
 
 // third party
@@ -14,21 +18,32 @@ import 'assets/scss/style.scss';
 import './mobile-override.css';
 import config from './config';
 
-// ==============================|| REACT DOM RENDER  ||============================== //
+// Runtime configuration is bounded and settles before React mounts; early module errors are not buffered.
+mountBrowserApp(
+  browserReporterReady,
+  (browserReporter) => {
+    const SentryBoundary = createErrorBoundary(React, browserReporter);
 
-const container = document.getElementById('root');
-const root = createRoot(container); // createRoot(container!) if you use TypeScript
-root.render(
-  <Provider store={store}>
-    <BrowserRouter basename={config.basename}>
-      <App />
-    </BrowserRouter>
-  </Provider>
+    // ==============================|| REACT DOM RENDER  ||============================== //
+
+    const container = document.getElementById('root');
+    const root = createRoot(container); // createRoot(container!) if you use TypeScript
+    root.render(
+      <SentryBoundary>
+        <Provider store={store}>
+          <BrowserRouter basename={config.basename}>
+            <App />
+          </BrowserRouter>
+        </Provider>
+      </SentryBoundary>
+    );
+
+    // If you want your app to work offline and load faster, you can change
+    // unregister() to register() below. Note this comes with some pitfalls.
+    // Learn more about service workers: https://bit.ly/CRA-PWA
+    serviceWorker.unregister().catch(() => {
+      console.warn('Unable to retire the previous One API service worker.');
+    });
+  },
+  window
 );
-
-// If you want your app to work offline and load faster, you can change
-// unregister() to register() below. Note this comes with some pitfalls.
-// Learn more about service workers: https://bit.ly/CRA-PWA
-serviceWorker.unregister().catch(() => {
-  console.warn('Unable to retire the previous One API service worker.');
-});

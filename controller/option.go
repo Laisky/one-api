@@ -35,6 +35,16 @@ func GetOptions(c *gin.Context) {
 		if isSensitiveOptionKey(k) {
 			continue
 		}
+		if k == "BrowserSentryConfig" {
+			parsed, err := config.ParseBrowserSentryConfig(v)
+			v = ""
+			if err == nil && parsed != nil {
+				encoded, err := json.Marshal(parsed)
+				if err == nil {
+					v = string(encoded)
+				}
+			}
+		}
 		options = append(options, &model.Option{
 			Key:   k,
 			Value: helper.Interface2String(v),
@@ -80,6 +90,21 @@ func UpdateOption(c *gin.Context) {
 		return
 	}
 	switch option.Key {
+	case "BrowserSentryConfig":
+		value, err := config.ParseBrowserSentryConfig(option.Value)
+		if err != nil {
+			helper.RespondErrorWithStatus(c, http.StatusBadRequest, err)
+			return
+		}
+		option.Value = ""
+		if value != nil {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				helper.RespondError(c, errors.Wrap(err, "encode public browser configuration"))
+				return
+			}
+			option.Value = string(encoded)
+		}
 	case "Theme":
 		// Backward compatibility: redirect "default" to "modern"
 		if option.Value == "default" {

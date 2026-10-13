@@ -55,7 +55,7 @@ const OPTION_GROUPS: OptionGroup[] = [
     id: 'security',
     title: 'Anti-bot & Security',
     description: 'Configure bot protection and security checks.',
-    keys: ['TurnstileCheckEnabled', 'TurnstileSiteKey', 'TurnstileSecretKey'],
+    keys: ['TurnstileCheckEnabled', 'TurnstileSiteKey', 'TurnstileSecretKey', 'BrowserSentryConfig'],
   },
   {
     id: 'email',
@@ -159,6 +159,16 @@ const OIDC_DISCOVERY_KEY_MAP: Record<string, string> = {
   userinfo_endpoint: 'OidcUserinfoEndpoint',
 };
 
+/** persistBrowserSentryOption saves one public JSON value and returns a boolean result without retaining response bodies or caught request errors. */
+async function persistBrowserSentryOption(value: string): Promise<boolean> {
+  try {
+    const response = await api.put('/api/option/', { key: 'BrowserSentryConfig', value });
+    return response.data?.success === true;
+  } catch {
+    return false;
+  }
+}
+
 export function SystemSettings() {
   const { t } = useTranslation();
   const [options, setOptions] = useState<OptionRow[]>([]);
@@ -208,7 +218,7 @@ export function SystemSettings() {
         id: 'security',
         title: t('system_settings.groups.security.title'),
         description: t('system_settings.groups.security.description'),
-        keys: ['TurnstileCheckEnabled', 'TurnstileSiteKey', 'TurnstileSecretKey'],
+        keys: ['TurnstileCheckEnabled', 'TurnstileSiteKey', 'TurnstileSecretKey', 'BrowserSentryConfig'],
       },
       {
         id: 'email',
@@ -293,6 +303,7 @@ export function SystemSettings() {
       TurnstileCheckEnabled: t('system_settings.descriptions.TurnstileCheckEnabled'),
       TurnstileSiteKey: t('system_settings.descriptions.TurnstileSiteKey'),
       TurnstileSecretKey: t('system_settings.descriptions.TurnstileSecretKey'),
+      BrowserSentryConfig: t('system_settings.descriptions.BrowserSentryConfig'),
 
       // Email
       EmailProvider: t('system_settings.descriptions.EmailProvider'),
@@ -369,7 +380,10 @@ export function SystemSettings() {
       const valueForState = SENSITIVE_OPTION_KEYS.has(key) ? '' : serialized;
       try {
         // Unified API call - complete URL with /api prefix
-        const response = await api.put('/api/option/', { key, value: serialized });
+        const response =
+          key === 'BrowserSentryConfig'
+            ? { data: { success: await persistBrowserSentryOption(serialized) } }
+            : await api.put('/api/option/', { key, value: serialized });
         if (!response.data?.success) {
           throw new Error(response.data?.message || t('system_settings.save_failed'));
         }
@@ -386,6 +400,12 @@ export function SystemSettings() {
           message: t('system_settings.saved_message', { key }),
         });
       } catch (error: any) {
+        if (key === 'BrowserSentryConfig') {
+          const message = t('system_settings.save_failed');
+          console.error('Browser error configuration save failed.');
+          notify({ type: 'error', title: message, message });
+          throw error;
+        }
         console.error('Error saving option:', error);
         const errMsg = error?.response?.data?.message || error?.message || 'Unknown error';
         notify({
