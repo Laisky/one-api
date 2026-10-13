@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { loadBrowserReporter, mountBrowserApp } from '../../web/legacy/browser-sentry-runtime.mjs';
 import { createBrowserReporter } from '../../web/legacy/browser-sentry.mjs';
 import { browserRelease, readReleaseInput, releaseInputGuard, browserBuildContract } from '../../web/legacy/browser-release.mjs';
@@ -210,6 +211,7 @@ test('runtime SDK initialization failure remains disabled and cannot report or r
   };
   const reporter = await loadBrowserReporter(fixture.loadSDK, release('modern'), fixture.target, 'modern');
   assert.equal(reporter.enabled, false);
+  assert.equal(fixture.calls, 1);
   reporter.capture(new Error('secret'));
   assert.equal(fixture.events.length, 0);
   assert.equal(await loadBrowserReporter(fixture.loadSDK, release('modern'), fixture.target, 'modern'), reporter);
@@ -254,7 +256,7 @@ test('release input reader refuses file and ancestor symlinks before reading syn
   }
 });
 
-test('one relevant source change changes identity and virtual or external modules do not bypass local input verification', () => {
+test('one relevant source change changes identity and virtual or external modules do not bypass local input verification', async () => {
   const input = (name) => Buffer.from(name + ':synthetic-source');
   const original = browserRelease('modern', { mode: 'production' }, input);
   const changed = browserRelease('modern', { mode: 'production' }, (name) =>
@@ -263,7 +265,53 @@ test('one relevant source change changes identity and virtual or external module
   assert.notEqual(changed, original);
   const guard = releaseInputGuard('modern');
   assert.equal(guard.transform('', '\0vite/modulepreload-polyfill.js'), null);
-  assert.equal(guard.transform('', new URL('../../web/modern/node_modules/react/index.js', import.meta.url).pathname), null);
+  // Each CI theme installs only its own dependencies; never borrow another theme's node_modules.
+  for (const theme of ['modern', 'air', 'berry']) {
+    const directory = mkdtempSync(path.join(tmpdir(), 'oneapi-release-dependencies-'));
+    try {
+      const legacy = path.join(directory, 'web/legacy');
+      const source = 'web/' + theme + '/src/main.js';
+      const dependencies = path.join(directory, 'web', theme, 'node_modules');
+      mkdirSync(legacy, { recursive: true });
+      mkdirSync(path.dirname(path.join(directory, source)), { recursive: true });
+      mkdirSync(path.join(directory, 'web', theme, 'public'), { recursive: true });
+      mkdirSync(path.join(dependencies, 'react'), { recursive: true });
+      writeFileSync(path.join(directory, source), 'export const synthetic = true;\n');
+      writeFileSync(path.join(legacy, 'browser-release-inputs.json'), JSON.stringify({ [theme]: [source] }));
+      copyFileSync(new URL('../../web/legacy/browser-release.mjs', import.meta.url), path.join(legacy, 'browser-release.mjs'));
+      const { releaseInputGuard: isolatedGuard } = await import(pathToFileURL(path.join(legacy, 'browser-release.mjs')).href);
+      const guard = isolatedGuard(theme);
+      const dependency = path.join(dependencies, 'react/index.js');
+
+      assert.equal(guard.transform('', '\0vite/modulepreload-polyfill.js'), null);
+      assert.throws(() => guard.transform('', dependency), /Unreviewed browser dependency input/);
+      writeFileSync(dependency, 'export const syntheticDependency = true;\n');
+      assert.equal(guard.load(dependency), null);
+      assert.equal(guard.transform('', dependency), null);
+      assert.equal((await guard.resolveId.call({ resolve: async () => ({ id: dependency }) }, 'react', source)).id, dependency);
+      assert.throws(() => guard.load(path.join(dependencies, 'missing.js')), /Unreviewed browser dependency input/);
+      await assert.rejects(
+        guard.resolveId.call({ resolve: async () => ({ id: dependency, external: true }) }, 'react', source),
+        /External browser module input is not approved/
+      );
+
+      const privateFile = path.join(directory, 'synthetic-private.js');
+      const escape = path.join(dependencies, 'escape.js');
+      writeFileSync(privateFile, 'synthetic-private-secret');
+      symlinkSync(privateFile, escape);
+      assert.throws(() => guard.load(escape), /Unreviewed browser dependency input/);
+      assert.throws(() => guard.transform('', escape), /Unreviewed browser dependency input/);
+      await assert.rejects(
+        guard.resolveId.call({ resolve: async () => ({ id: escape }) }, './escape', source),
+        /Unreviewed browser dependency input/
+      );
+      assert.throws(() => guard.load(privateFile), /Unlisted browser build input/);
+      assert.doesNotThrow(() => guard.buildStart());
+      assert.doesNotThrow(() => guard.generateBundle());
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
 });
 
 test('resolved aliases, outside-web imports, out-of-repository source and canonical symlink targets fail before module loading', async () => {
