@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"io"
 	"math"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -276,6 +278,7 @@ func runLiveOutputReservation(t *testing.T, acknowledged bool) {
 	var written atomic.Int64
 	delivered := make(chan struct{}, 1)
 	providerClosed := make(chan struct{})
+	providerReadResult := make(chan error, 1)
 	providerDone := make(chan struct{})
 	env := newLiveBudgetEnv(t, liveBudgetOptions{UserQuota: balance, TokenQuota: balance, Group: 1},
 		func(conn *websocket.Conn) error {
@@ -289,6 +292,7 @@ func runLiveOutputReservation(t *testing.T, acknowledged bool) {
 				defer close(providerClosed)
 				for {
 					if _, _, err := conn.ReadMessage(); err != nil {
+						providerReadResult <- err
 						return
 					}
 				}
@@ -343,6 +347,17 @@ func runLiveOutputReservation(t *testing.T, acknowledged bool) {
 			delivered <- struct{}{}
 		}
 	}
+	if received >= chunks {
+		t.Logf("acknowledged=%t client_chunks=%d provider_chunks=%d close=%q", acknowledged, received, written.Load(), reason)
+		require.Less(t, received, chunks, "unfunded streamed output reached the client")
+	}
+	// Inspect the actual read result before harness cleanup can close the client.
+	select {
+	case err := <-providerReadResult:
+		require.True(t, liveOutputReadEndedWithoutTimeout(err), "a provider read deadline is not evidence of peer closure")
+	case <-time.After(30 * time.Second):
+		t.Fatal("provider did not observe closure before fixture cleanup")
+	}
 	env.finish()
 	for _, done := range []<-chan struct{}{providerClosed, providerDone} {
 		select {
@@ -380,4 +395,37 @@ func runLiveOutputReservation(t *testing.T, acknowledged bool) {
 		require.Equal(t, true, rows[0].Metadata["realtime_budget_exhausted"])
 	}
 	requireLiveBudgetWarning(t, env)
+}
+
+// liveOutputReadEndedWithoutTimeout distinguishes a non-timeout read termination
+// from a missing result or expired fixture deadline, including wrapped errors.
+// Parameters: err is the provider reader's result. Returns: non-timeout termination.
+func liveOutputReadEndedWithoutTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	var timeout interface{ Timeout() bool }
+	return !errors.As(err, &timeout) || !timeout.Timeout()
+}
+
+// TestSecurityGeminiLiveProviderReadTimeoutIsNotClosure preserves deadline
+// rejection while accepting WebSocket closes and connection teardown.
+// Parameters: t owns synthetic error controls. Returns: none.
+func TestSecurityGeminiLiveProviderReadTimeoutIsNotClosure(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		err    error
+		closed bool
+	}{
+		{name: "missing"},
+		{name: "deadline", err: os.ErrDeadlineExceeded},
+		{name: "wrapped_deadline", err: errors.Wrap(os.ErrDeadlineExceeded, "fixture read")},
+		{name: "websocket_close", err: &websocket.CloseError{Code: websocket.CloseNormalClosure}, closed: true},
+		{name: "connection_eof", err: io.EOF, closed: true},
+		{name: "wrapped_connection_eof", err: errors.Wrap(io.EOF, "fixture read"), closed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.closed, liveOutputReadEndedWithoutTimeout(tc.err))
+		})
+	}
 }
