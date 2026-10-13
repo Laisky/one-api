@@ -35,7 +35,8 @@ export function useDuplicateToken(onSuccess: () => void | Promise<void>) {
       } catch (error) {
         if (error instanceof TokenDuplicateNameError) {
           throw new Error(
-            t('token_duplicate.name_too_long', 'The new name exceeds 30 bytes. Shorten the source token name before duplicating it.')
+            t('token_duplicate.name_too_long', 'The new name exceeds 30 bytes. Shorten the source token name before duplicating it.'),
+            { cause: error }
           );
         }
         throw error;

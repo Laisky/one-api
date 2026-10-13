@@ -116,19 +116,19 @@ describe('useDuplicateToken', () => {
     expect(result.current.pending.size).toBe(0);
   });
 
-  it.each([
-    { data: { success: false, message: 'source not found' } },
-    { data: { success: true } },
-  ])('does not create or refresh when the source cannot be read: %j', async (response) => {
-    vi.mocked(api.get).mockResolvedValue(response);
-    const refresh = vi.fn();
-    const { result } = renderHook(() => useDuplicateToken(refresh));
-    await act(async () => result.current.duplicate('source-uuid'));
-    expect(api.post).not.toHaveBeenCalled();
-    expect(refresh).not.toHaveBeenCalled();
-    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
-    expect(result.current.pending.size).toBe(0);
-  });
+  it.each([{ data: { success: false, message: 'source not found' } }, { data: { success: true } }])(
+    'does not create or refresh when the source cannot be read: %j',
+    async (response) => {
+      vi.mocked(api.get).mockResolvedValue(response);
+      const refresh = vi.fn();
+      const { result } = renderHook(() => useDuplicateToken(refresh));
+      await act(async () => result.current.duplicate('source-uuid'));
+      expect(api.post).not.toHaveBeenCalled();
+      expect(refresh).not.toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+      expect(result.current.pending.size).toBe(0);
+    }
+  );
 
   it('surfaces HTTP failures and unlocks the action for retry', async () => {
     vi.mocked(api.get).mockRejectedValueOnce({ response: { data: { message: 'permission denied' } } });
@@ -163,15 +163,36 @@ describe('useDuplicateToken', () => {
     expect(result.current.pending.size).toBe(0);
   });
 
-  it('reports name length validation without submitting a create request', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { success: true, data: { ...source, name: '令'.repeat(10) } } });
-    const { result } = renderHook(() => useDuplicateToken(vi.fn()));
-    await act(async () => result.current.duplicate('source-uuid'));
-    expect(api.post).not.toHaveBeenCalled();
-    expect(notify).toHaveBeenCalledWith({
-      type: 'error',
-      message: 'The new name exceeds 30 bytes. Shorten the source token name before duplicating it.',
-    });
+  it('reports name validation safely and allows retry after the source name is shortened', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { success: true, data: { ...source, name: '令'.repeat(10) } } });
+    const refresh = vi.fn();
+    const { result } = renderHook(() => useDuplicateToken(refresh));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      await act(async () => result.current.duplicate('source-uuid'));
+      expect(api.post).not.toHaveBeenCalled();
+      expect(refresh).not.toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledExactlyOnceWith({
+        type: 'error',
+        message: 'The new name exceeds 30 bytes. Shorten the source token name before duplicating it.',
+      });
+      expect(result.current.pending.size).toBe(0);
+
+      await act(async () => result.current.duplicate('source-uuid'));
+      expect(api.get).toHaveBeenCalledTimes(2);
+      expect(api.post).toHaveBeenCalledTimes(1);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(notify).toHaveBeenNthCalledWith(2, { type: 'success', message: 'Created token "production-10".' });
+      expect(result.current.pending.size).toBe(0);
+      expect(JSON.stringify(notify.mock.calls)).not.toContain(source.key);
+      expect(JSON.stringify(notify.mock.calls)).not.toContain('令');
+      expect(consoleError).not.toHaveBeenCalled();
+      expect(consoleWarn).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+      consoleWarn.mockRestore();
+    }
   });
 
   it('refreshes the latest list context when navigation changes during creation', async () => {
