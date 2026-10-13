@@ -1,0 +1,115 @@
+# Temporary diagnostic branch only. Never merge mutated diagnostic source into the application.
+name: Gemini output buffer diagnostic
+on:
+  push:
+    branches: [qualification/sentry-561-20261013]
+    paths: [.github/workflows/gemini-buffer-diagnostic.yml]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [eed2a6d02e5392f24197f49a70af3ba2ba22f212, 2c47db3ab0fcd23bf9f8d217b458a82a539d8da2]
+    env:
+      SOURCE_SHA: ${{ matrix.source }}
+      GOMAXPROCS: '2'
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.source }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Run finite baseline, buffered and acknowledged-output experiments
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,subprocess
+          path=pathlib.Path('controller/gemini_live_budget_security_test.go')
+          gatepath=pathlib.Path('relay/adaptor/gemini/live_spend.go')
+          original=path.read_text();gate=gatepath.read_text()
+          evidence=pathlib.Path(os.environ['RUNNER_TEMP'])/'gemini-diagnostic';evidence.mkdir()
+          name='TestSecurityGeminiLiveOutputStreamCannotOutrunReservation'
+          start=original.index('func '+name+'(')
+          before=original[:start];target=original[start:]
+          assert 'const balance, chunks = 30_000, 100' in target
+          report={'source':os.environ['SOURCE_SHA'],'original_test_sha256':hashlib.sha256(original.encode()).hexdigest(),'original_gate_sha256':hashlib.sha256(gate.encode()).hexdigest(),'experiments':{}}
+          def run(label, text, count=1):
+              path.write_text(text)
+              subprocess.run(['gofmt','-w',str(path)],check=True)
+              (evidence/(label+'.test.go')).write_text(path.read_text())
+              with (evidence/(label+'.jsonl')).open('w') as output:
+                  process=subprocess.run(['go','test','-json','-race','-p','1','-count='+str(count),'-timeout=180s','-run','^'+name+'$','./controller'],stdout=output,stderr=subprocess.STDOUT,timeout=600)
+              events=[]
+              for line in (evidence/(label+'.jsonl')).read_text().splitlines():
+                  try:events.append(json.loads(line))
+                  except ValueError:pass
+              outcomes=[e['Action'] for e in events if e.get('Test')==name and e.get('Action') in ('pass','fail','skip')]
+              counters=[e['Output'].strip() for e in events if 'client_chunks=' in e.get('Output','')]
+              failures=[e['Output'].strip() for e in events if any(s in e.get('Output','') for s in ('Error:', 'Error Trace:', 'Messages:'))]
+              assert len(outcomes)==count and 'skip' not in outcomes, 'Compilation/setup failure cannot count as behavioral evidence: '+label
+              result={'exit_code':process.returncode,'outcomes':outcomes,'counters':counters,'failures':failures}
+              report['experiments'][label]=result
+              print(label,json.dumps(result))
+              return result
+          try:
+              assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==os.environ['SOURCE_SHA']
+              run('original_100',original)
+              # A shorter finite burst fits more easily in transport buffers without changing reservation/prices/frame contents.
+              buffered=target.replace('const balance, chunks = 30_000, 100','const balance, chunks = 30_000, 40',1)
+              buffered=buffered.replace('for range chunks {','frame := liveAudioOutputFrame(2)\n\t\t\tfor range chunks {',1)
+              buffered=buffered.replace('conn.WriteMessage(websocket.TextMessage, liveAudioOutputFrame(2))','conn.WriteMessage(websocket.TextMessage, frame)',1)
+              run('buffered_40',before+buffered)
+              paced=target.replace('var written atomic.Int64','var written atomic.Int64\n\tdelivered := make(chan struct{}, 1)',1)
+              marker='\t\t\tfor range chunks {'
+              setup='''\t\t\tclosed := make(chan struct{})
+          \t\t\tgo func() {
+          \t\t\t\tdefer close(closed)
+          \t\t\t\tfor {
+          \t\t\t\t\tif _, _, err := conn.ReadMessage(); err != nil { return }
+          \t\t\t\t}
+          \t\t\t}()
+          \t\t\tdeadline := time.NewTimer(30 * time.Second)
+          \t\t\tdefer deadline.Stop()
+          \t\t\tfor range chunks {'''
+              assert marker in paced
+              paced=paced.replace(marker,setup,1)
+              paced=paced.replace('written.Add(1)','''written.Add(1)
+          \t\t\t\tselect {
+          \t\t\t\tcase <-delivered:
+          \t\t\t\tcase <-closed: return nil
+          \t\t\t\tcase <-deadline.C: return errors.New("fixture received neither delivery acknowledgement nor upstream closure")
+          \t\t\t\t}''',1)
+              paced=paced.replace('_, _, _ = conn.ReadMessage()','''select {
+          \t\t\tcase <-closed:
+          \t\t\tcase <-deadline.C: return errors.New("fixture upstream did not close")
+          \t\t\t}''',1)
+              paced=paced.replace('received++','received++\n\t\tdelivered <- struct{}{}',1)
+              positive=run('acknowledged_100',before+paced,3)
+              assert positive['exit_code']==0 and positive['outcomes']==['pass']*3
+              # Deliberately break ONLY output funding in this disposable checkout; the repaired test must reject it.
+              statement='if err := s.gate.Ensure(s.exposureLocked(s.pending, s.pendingWork)); err != nil {'
+              assert gate.count(statement)==1
+              gatepath.write_text(gate.replace(statement,statement.replace('err != nil {','false && err != nil {')))
+              negative=run('output_gate_disabled',before+paced)
+              assert negative['exit_code']!=0 and negative['outcomes']==['fail'], 'Negative control must fail at the behavioral test'
+              assert any('client_chunks=100' in s for s in negative['counters']), 'Negative control did not demonstrate unfunded output forwarding'
+          finally:
+              path.write_text(original);gatepath.write_text(gate)
+              (evidence/'report.json').write_text(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: gemini-buffer-${{ matrix.source }}
+          path: ${{ runner.temp }}/gemini-diagnostic
+          retention-days: 14
+          if-no-files-found: error
