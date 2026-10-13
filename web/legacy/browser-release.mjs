@@ -123,6 +123,7 @@ export function releaseInputGuard(theme, snapshot = captureInputs(theme, {}, rea
   }
   return {
     name: 'oneapi-browser-release-inputs',
+    apply: 'build',
     enforce: 'pre',
     /** buildStart verifies source/public completeness and the initial snapshot before output is generated. */
     buildStart() {

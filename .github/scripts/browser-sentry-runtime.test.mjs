@@ -219,6 +219,7 @@ test('runtime SDK initialization failure remains disabled and cannot report or r
 test('build-input guard accepts all current public assets and blocks future unlisted bundled sources or private paths', () => {
   for (const theme of ['modern', 'air', 'berry']) {
     const guard = releaseInputGuard(theme);
+    assert.equal(guard.apply, 'build');
     assert.doesNotThrow(() => guard.buildStart());
     assert.equal(
       guard.transform(
