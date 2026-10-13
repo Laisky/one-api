@@ -1,0 +1,275 @@
+# Temporary qualification branch only. Never merge this harness into the application.
+name: Sentry candidate acceptance
+on:
+  push:
+    branches: [qualification/sentry-561-20261013]
+    paths: [.github/workflows/sentry-candidate-acceptance.yml]
+permissions:
+  contents: read
+concurrency:
+  group: sentry-candidate-acceptance-20261013
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+env:
+  CANDIDATE_SHA: 995e4c8d767a495b3f15c397218f8d26922984c3
+  CANDIDATE_TREE: 09bc0b9b0259843fe8f57ff6735da59ab0b52d7b
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 995e4c8d767a495b3f15c397218f8d26922984c3
+          persist-credentials: false
+      - name: Verify and retain the exact candidate source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$CANDIDATE_TREE"
+          mkdir -p "$RUNNER_TEMP/source-evidence"
+          git archive --format=tar HEAD | gzip > "$RUNNER_TEMP/source-evidence/candidate.tar.gz"
+          git log -1 --format='%H %T %P' > "$RUNNER_TEMP/source-evidence/source.txt"
+          sha256sum "$RUNNER_TEMP/source-evidence/candidate.tar.gz" > "$RUNNER_TEMP/source-evidence/archive.sha256"
+          python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
+          python3 .github/scripts/test_workflows.py
+          python3 .github/scripts/test_frontend_contracts.py
+          python3 .github/scripts/test_go_test_shards.py
+          python3 .github/scripts/test_quick_tests.py
+          python3 .github/scripts/test_format_check.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: candidate-source
+          path: ${{ runner.temp }}/source-evidence
+          retention-days: 14
+          if-no-files-found: error
+  go_shards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [packages, model-0, model-1, model-2, model-3]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports: [3306:3306]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12 --health-start-period=20s
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports: [5432:5432]
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s --health-timeout=5s --health-retries=12 --health-start-period=10s
+    env:
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      MYSQL_LOG_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      PG_LOG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      COMPACT_UUID_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      COMPACT_UUID_TEST_LOG_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_LOG_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      COMPACT_UUID_TEST_POSTGRES_BASE_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_workload_base?sslmode=disable
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      ONEAPI_REQUIRE_COMPACT_UUID_SUITE: '1'
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 995e4c8d767a495b3f15c397218f8d26922984c3
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source and absence of retained authentication
+        run: |
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$CANDIDATE_TREE"
+          python3 - <<'PY'
+          import subprocess
+          keys = subprocess.check_output(['git', 'config', '--local', '--name-only', '--list'], text=True).lower().splitlines()
+          if any(k.endswith('.extraheader') or k == 'core.sshcommand' or k.startswith('credential.') or (k.startswith('includeif.') and k.endswith('.path')) for k in keys):
+              raise SystemExit('Checkout retained authentication configuration')
+          PY
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Verify shard orchestration
+        if: matrix.shard == 'packages'
+        run: python3 .github/scripts/test_go_test_shards_integration.py
+      - name: Prepare disposable backend services
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg mysql-client postgresql-client
+          mysql -h 127.0.0.1 -P 3306 -uroot -e "CREATE DATABASE IF NOT EXISTS oneapi_log CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          for db in oneapi_log oneapi_workload_base; do
+            psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '${db}'" | grep -q 1 || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE ${db};"
+          done
+      - name: Run unchanged race and coverage shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: GITHUB_SHA="$CANDIDATE_SHA" python3 .github/scripts/go_test_shards.py run --shard "$SHARD" --output "$RUNNER_TEMP/go-tests"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: go-tests-${{ matrix.shard }}-995e4c8d
+          path: ${{ runner.temp }}/go-tests
+          retention-days: 14
+          if-no-files-found: error
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [modern, air, berry]
+    env:
+      THEME: ${{ matrix.theme }}
+      CI: 'true'
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 995e4c8d767a495b3f15c397218f8d26922984c3
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.21.0'
+          cache: yarn
+          cache-dependency-path: web/${{ matrix.theme }}/yarn.lock
+      - name: Install only this theme's locked dependencies
+        working-directory: web/${{ matrix.theme }}
+        run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+      - name: Run complete theme tests, lint and Sentry controls
+        working-directory: web/${{ matrix.theme }}
+        run: |
+          set -euo pipefail
+          if [ "$THEME" = modern ]; then yarn test --run; else yarn test; fi
+          yarn lint
+          node --test ../../.github/scripts/browser-sentry.test.mjs ../../.github/scripts/browser-sentry-runtime.test.mjs ../../.github/scripts/browser-sentry-react.test.mjs ../../.github/scripts/browser-sentry-sdk.test.mjs
+      - name: Audit all dependencies
+        run: |
+          node --test .github/scripts/frontend-audit.test.mjs
+          node .github/scripts/frontend-audit.mjs "$THEME"
+      - name: Build theme and verify translations
+        working-directory: web/${{ matrix.theme }}
+        run: |
+          set -euo pipefail
+          yarn build
+          if [ "$THEME" = modern ]; then yarn check:i18n; fi
+      - name: Install existing pinned browser test tools
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Execute existing browser acceptance
+        run: |
+          set -euo pipefail
+          if [ "$THEME" = modern ]; then
+            (cd web/modern && python3 scripts/test-mobile-list-browser.py && python3 scripts/test-table-toolbar-browser.py)
+          else
+            python3 .github/scripts/legacy-browser.py "$THEME"
+          fi
+      - name: Verify public map absence and record emitted release identity
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,subprocess
+          root=pathlib.Path('web/build')
+          assert root.is_dir(), 'Missing frontend output'
+          assert not list(root.rglob('*.map')), 'Public source maps present'
+          releases=set(); assets={}
+          for p in root.rglob('*.js'):
+              raw=p.read_bytes(); text=raw.decode('utf-8')
+              assert 'sourceMappingURL=data:' not in text, 'Inline source map present'
+              releases.update(re.findall(r'one-api-(?:modern|air|berry)@sha256:[a-f0-9]{64}',text))
+              assets[str(p)]=hashlib.sha256(raw).hexdigest()
+          assert assets, 'Missing JavaScript artifacts'
+          assert any(s.startswith('one-api-'+os.environ['THEME']+'@') for s in releases), 'Missing expected theme identity'
+          assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==os.environ['CANDIDATE_SHA']
+          assert not subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],text=True), 'Tracked source changed'
+          report={'source':os.environ['CANDIDATE_SHA'],'tree':os.environ['CANDIDATE_TREE'],'theme':os.environ['THEME'],'node':subprocess.check_output(['node','--version'],text=True).strip(),'releases':sorted(releases),'assets':assets,'public_maps':0}
+          path=pathlib.Path(os.environ['RUNNER_TEMP'])/'frontend-identity.json';path.write_text(json.dumps(report,indent=2))
+          print(json.dumps({k:v for k,v in report.items() if k!='assets'},indent=2))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: frontend-${{ matrix.theme }}-995e4c8d
+          path: |
+            web/build
+            web/modern/test-results
+            ${{ runner.temp }}/legacy-browser-${{ matrix.theme }}
+            ${{ runner.temp }}/frontend-identity.json
+            ${{ runner.temp }}/*-audit.jsonl
+          retention-days: 14
+          if-no-files-found: error
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 995e4c8d767a495b3f15c397218f8d26922984c3
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Format, fast tests, vet, build and module verification
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/format_check.py
+          GITHUB_SHA="$CANDIDATE_SHA" python3 .github/scripts/quick_tests.py --output "$RUNNER_TEMP/quick-tests"
+          go vet ./...
+          go build ./...
+          go mod verify
+          go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: quick-tests-995e4c8d
+          path: ${{ runner.temp }}/quick-tests
+          retention-days: 14
+  acceptance:
+    if: always()
+    needs: [source, go_shards, frontend, static]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Reject missing, skipped, failed or cancelled qualification
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          results=json.loads(os.environ['RESULTS'])
+          assert set(results)=={'source','go_shards','frontend','static'}
+          assert all(v['result']=='success' for v in results.values()), results
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 995e4c8d767a495b3f15c397218f8d26922984c3
+          persist-credentials: false
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: go-tests-*-995e4c8d
+          path: go-test-results
+      - name: Fail-closed inventory and atomic coverage merge
+        run: GITHUB_SHA="$CANDIDATE_SHA" python3 .github/scripts/go_test_shards.py merge --input go-test-results --output coverage.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: combined-coverage-995e4c8d
+          path: coverage.txt
+          if-no-files-found: error
+          retention-days: 14
