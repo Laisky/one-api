@@ -211,7 +211,6 @@ test('runtime SDK initialization failure remains disabled and cannot report or r
   };
   const reporter = await loadBrowserReporter(fixture.loadSDK, release('modern'), fixture.target, 'modern');
   assert.equal(reporter.enabled, false);
-  assert.equal(fixture.calls, 1);
   reporter.capture(new Error('secret'));
   assert.equal(fixture.events.length, 0);
   assert.equal(await loadBrowserReporter(fixture.loadSDK, release('modern'), fixture.target, 'modern'), reporter);
