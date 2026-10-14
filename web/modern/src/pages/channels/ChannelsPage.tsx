@@ -9,6 +9,7 @@ import { useNotifications } from '@/components/ui/notifications';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { type SearchOption } from '@/components/ui/searchable-dropdown';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
+import { useTableSort } from '@/hooks/useTableSort';
 import { useAuthStore } from '@/lib/stores/auth';
 import { useTableSelection } from '@/hooks/useTableSelection';
 import { useSelectedChannelActions } from './useSelectedChannelActions';
@@ -42,8 +43,7 @@ export function ChannelsPage() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [sortBy, setSortBy] = useState('id');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const { sortBy, sortOrder, setSortBy, setSortOrder } = useTableSort('channels', 'id');
   const [appliedKeyword, setAppliedKeyword] = useState('');
   const loadSequence = useRef(0);
   const latestListRefresh = useRef<(() => Promise<void>) | null>(null);

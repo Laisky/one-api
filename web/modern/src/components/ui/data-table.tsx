@@ -58,6 +58,9 @@ export function DataTable<TData extends RowData, TValue = unknown>({
 }: DataTableProps<TData, TValue>) {
   const { t } = useTranslation();
   const selectable = useSelectableTable({
+    // Paging and sort changes invalidate only the range anchor, even when the
+    // server returns identical rows. Existing ID-based selections are retained.
+    rangeContext: JSON.stringify([pageIndex, pageSize, sortBy, sortOrder]),
     columns: originalColumns,
     data,
     total,

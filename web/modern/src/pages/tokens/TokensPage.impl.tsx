@@ -14,6 +14,7 @@ import { type SearchOption } from '@/components/ui/searchable-dropdown';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
+import { useTableSort } from '@/hooks/useTableSort';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
@@ -149,8 +150,7 @@ export function TokensPage() {
   const latestListRefresh = useRef<(() => Promise<void>) | null>(null);
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [sortBy, setSortBy] = useState('id');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const { sortBy, sortOrder, setSortBy, setSortOrder } = useTableSort('tokens', 'id');
   const initializedRef = useRef(false);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const { copiedTokens, manualCopyToken, handleCopySuccess, handleCopyFailure, clearManualCopyToken } = useClipboardManager();

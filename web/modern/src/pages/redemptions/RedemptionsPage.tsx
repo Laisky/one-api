@@ -12,6 +12,7 @@ import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { SearchableDropdown } from '@/components/ui/searchable-dropdown';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
+import { useTableSort } from '@/hooks/useTableSort';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -74,8 +75,7 @@ export function RedemptionsPage() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [appliedKeyword, setAppliedKeyword] = useState('');
   const loadSequence = useRef(0);
-  const [sortBy, setSortBy] = useState('');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const { sortBy, sortOrder, setSortBy, setSortOrder } = useTableSort('redemptions');
   const [open, setOpen] = useState(false);
   const [generatedKeys, setGeneratedKeys] = useState<string[] | null>(null);
   const mounted = useRef(false);

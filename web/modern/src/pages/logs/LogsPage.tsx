@@ -12,6 +12,7 @@ import { SearchableDropdown, type SearchOption } from '@/components/ui/searchabl
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
+import { useTableSort } from '@/hooks/useTableSort';
 import { api } from '@/lib/api';
 import { LOG_TYPES, LOG_TYPE_OPTIONS } from '@/lib/constants/logs';
 import type { LogCursorFilters } from '@/lib/logCursor';
@@ -80,8 +81,7 @@ export function LogsPage() {
   const [searchLoading, setSearchLoading] = useState(false);
 
   // Sorting
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const { sortBy, sortOrder, setSortBy, setSortOrder } = useTableSort('logs', 'created_at');
 
   const selectionScope = JSON.stringify([user?.uuid || user?.username, user?.role, filters, searchKeyword.trim()]);
   const selection = useTableSelection(selectionScope);
