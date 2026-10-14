@@ -59,7 +59,7 @@ func applyOpenAIModelCatalog202610(models map[string]adaptor.ModelConfig) map[st
 		cfg = cfg.Clone()
 		cfg.Description = "chat-latest: rolling alias for the latest Instant model used in ChatGPT; snapshot updated 2026-10-07. OpenAI recommends the GPT-6 family for production API use. The alias is not version-pinned."
 		if !slices.Contains(cfg.SupportedFeatures, "web_search") {
-			cfg.SupportedFeatures = append(cfg.SupportedFeatures, "web_search")
+			cfg.SupportedFeatures = slices.Concat(cfg.SupportedFeatures, []string{"web_search"})
 		}
 		updated["chat-latest"] = cfg
 	}
