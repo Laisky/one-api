@@ -1,3 +1,5 @@
+import { isAxiosError } from 'axios';
+import { markPrivateError, privateResponseError } from '../../../../legacy/browser-sentry-privacy.mjs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNotifications } from '@/components/ui/notifications';
@@ -385,7 +387,9 @@ export function SystemSettings() {
             ? { data: { success: await persistBrowserSentryOption(serialized) } }
             : await api.put('/api/option/', { key, value: serialized });
         if (!response.data?.success) {
-          throw new Error(response.data?.message || t('system_settings.save_failed'));
+          throw response.data?.message
+            ? privateResponseError(response.data.message, 'System settings save failed')
+            : new Error(t('system_settings.save_failed'));
         }
         setOptions((prev) => {
           const index = prev.findIndex((opt) => opt.key === key);
@@ -406,6 +410,7 @@ export function SystemSettings() {
           notify({ type: 'error', title: message, message });
           throw error;
         }
+        if (isAxiosError(error) && error.response) markPrivateError(error, 'System settings save failed', true);
         console.error('Error saving option:', error);
         const errMsg = error?.response?.data?.message || error?.message || 'Unknown error';
         notify({
@@ -427,7 +432,9 @@ export function SystemSettings() {
       try {
         const response = await api.put('/api/option/', { key, value: '', clear: true });
         if (!response.data?.success) {
-          throw new Error(response.data?.message || t('system_settings.save_failed'));
+          throw response.data?.message
+            ? privateResponseError(response.data.message, 'System settings clear failed')
+            : new Error(t('system_settings.save_failed'));
         }
         setOptions((prev) => {
           const index = prev.findIndex((opt) => opt.key === key);
@@ -442,6 +449,7 @@ export function SystemSettings() {
           message: t('system_settings.saved_message', { key }),
         });
       } catch (error: any) {
+        if (isAxiosError(error) && error.response) markPrivateError(error, 'System settings clear failed', true);
         console.error('Error clearing option:', error);
         const errMsg = error?.response?.data?.message || error?.message || 'Unknown error';
         notify({
@@ -496,7 +504,9 @@ export function SystemSettings() {
         const optionKey = OIDC_DISCOVERY_KEY_MAP[sourceKey];
         const response = await api.put('/api/option/', { key: optionKey, value: String(payload[sourceKey]) });
         if (!response.data?.success) {
-          throw new Error(response.data?.message || t('system_settings.oidc_discovery.failed_title'));
+          throw response.data?.message
+            ? privateResponseError(response.data.message, 'OIDC settings save failed')
+            : new Error(t('system_settings.oidc_discovery.failed_title'));
         }
       }
 
@@ -522,6 +532,7 @@ export function SystemSettings() {
         message: t('system_settings.oidc_discovery.success_message'),
       });
     } catch (error: any) {
+      if (isAxiosError(error) && error.response) markPrivateError(error, 'OIDC settings save failed', true);
       console.error('OIDC discovery failed:', error);
       const errMsg = error?.message || 'Unknown error';
       notify({

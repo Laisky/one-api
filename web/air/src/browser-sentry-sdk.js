@@ -1,14 +1,14 @@
 import {
   captureException,
-  globalHandlersIntegration,
+  captureReactException,
   init,
-  makeFetchTransport,
+  reactErrorHandler,
 } from '@sentry/react';
 
-// Named exports keep this lazily loaded adapter limited to browser error reporting.
+// Named exports keep this lazy adapter limited to browser error reporting.
 export const errorsOnlySDK = {
   captureException,
-  globalHandlersIntegration,
+  captureReactException,
   init,
-  makeFetchTransport,
+  reactErrorHandler,
 };

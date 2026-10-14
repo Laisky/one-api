@@ -100,7 +100,7 @@ export function loadBrowserReporter(loadSDK, release, target, theme, entryURL, t
       ]);
       if (
         !sdk ||
-        !['init', 'captureException', 'globalHandlersIntegration', 'makeFetchTransport'].every((name) => typeof sdk[name] === 'function')
+        !['init', 'captureException', 'captureReactException', 'reactErrorHandler'].every((name) => typeof sdk[name] === 'function')
       )
         return disabled;
       return createBrowserReporter(sdk, publicSettings, target, theme, entryURL, release);

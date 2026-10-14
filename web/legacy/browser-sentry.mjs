@@ -1,11 +1,14 @@
+import { sanitizeEvent, sanitizeBreadcrumb } from './browser-sentry-privacy.mjs';
+import { registerRequestErrorCapture } from './browser-request-errors.mjs';
+export { sanitizeEvent } from './browser-sentry-privacy.mjs';
+
 const HOST = 'oneapi.laisky.com';
 const reporters = new WeakMap();
 const boundaryMarker = Symbol('OneAPI reporting boundary');
-const TYPES = new Set(['Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'URIError', 'EvalError', 'AggregateError']);
 const THEMES = new Set(['modern', 'air', 'berry']);
 
 /** readConfig validates public runtime settings and immutable built release identity, returning a frozen snapshot or null. */
-export function readConfig(settings, location, theme, assets = [], release) {
+export function readConfig(settings, location, theme, _assets = [], release) {
   if (location?.hostname !== HOST || location?.protocol !== 'https:' || Boolean(location?.port) || !THEMES.has(theme)) return null;
   if (
     !settings ||
@@ -33,85 +36,7 @@ export function readConfig(settings, location, theme, assets = [], release) {
       dsn.href !== settings.dsn
     )
       return null;
-    const assetURLs = Object.freeze(assets.slice(0, 40).map(safeAssetURL).filter(Boolean));
-    return Object.freeze({ dsn: dsn.href, environment: settings.environment, release, theme, assetURLs });
-  } catch {
-    return null;
-  }
-}
-
-/** safeAssetURL retains bounded first-party static JS asset paths, excluding credentials, query and fragment. */
-export function safeAssetURL(value) {
-  if (typeof value !== 'string' || value.length > 2048) return undefined;
-  try {
-    const url = new URL(value, `https://${HOST}/`);
-    if (
-      url.protocol !== 'https:' ||
-      url.hostname !== HOST ||
-      url.port ||
-      url.username ||
-      url.password ||
-      !/^\/assets\/(?:index|vendor|router|tanstack-query|tanstack-table|charts|forms|network|misc-utils)-[A-Za-z0-9_-]{8}\.js$/.test(
-        url.pathname
-      )
-    )
-      return undefined;
-    return url.origin + url.pathname;
-  } catch {
-    return undefined;
-  }
-}
-
-/** sanitizeEvent projects errors into bounded diagnostic fields and discards all arbitrary content. */
-export function sanitizeEvent(event, config) {
-  try {
-    if (event?.type || !Array.isArray(event?.exception?.values) || !event.exception.values.length) return null;
-    const values = event.exception.values.slice(-3).map((value) => {
-      const frames = Array.isArray(value?.stacktrace?.frames)
-        ? value.stacktrace.frames.slice(-30).flatMap((frame) => {
-            const filename = safeAssetURL(frame?.filename);
-            if (!filename || !config.assetURLs.includes(filename)) return [];
-            const clean = { filename, in_app: true };
-            for (const field of ['lineno', 'colno']) {
-              if (Number.isSafeInteger(frame[field]) && frame[field] > 0 && frame[field] <= 10000000) clean[field] = frame[field];
-            }
-            return [clean];
-          })
-        : [];
-      const clean = { type: TYPES.has(value?.type) ? value.type : 'Error', value: '[redacted browser error]' };
-      if (frames.length) clean.stacktrace = { frames };
-      if (typeof value?.mechanism?.handled === 'boolean') {
-        clean.mechanism = { type: 'generic', handled: value.mechanism.handled };
-      }
-      return clean;
-    });
-    const clean = {
-      platform: 'javascript',
-      level: 'error',
-      environment: config.environment,
-      release: config.release,
-      tags: { site: 'one-api', theme: config.theme },
-      exception: { values },
-    };
-    if (typeof event.event_id === 'string' && /^[a-f0-9]{32}$/.test(event.event_id)) clean.event_id = event.event_id;
-    if (typeof event.timestamp === 'number' && Number.isFinite(event.timestamp) && event.timestamp > 0) clean.timestamp = event.timestamp;
-    return clean;
-  } catch {
-    return null;
-  }
-}
-
-/** sanitizeEnvelope enforces the privacy policy at transport even for SDK internal errors that bypass beforeSend. */
-export function sanitizeEnvelope(envelope, config) {
-  try {
-    if (!Array.isArray(envelope) || !Array.isArray(envelope[1])) return null;
-    const item = envelope[1][0];
-    if (!Array.isArray(item) || item[0]?.type !== 'event') return null;
-    const event = sanitizeEvent(item[1], config);
-    if (!event) return null;
-    const headers = {};
-    if (event.event_id) headers.event_id = event.event_id;
-    return [headers, [[{ type: 'event' }, event]]];
+    return Object.freeze({ dsn: dsn.href, environment: settings.environment, release, theme });
   } catch {
     return null;
   }
@@ -119,17 +44,12 @@ export function sanitizeEnvelope(envelope, config) {
 
 /** createBrowserReporter initializes one errors-only SDK per window; SDK failures return a disabled reporter. */
 export function createBrowserReporter(sdk, settings, target, theme, entryURL, release) {
-  const disabled = { enabled: false, capture() {} };
+  const disabled = Object.freeze({ enabled: false, capture() {} });
   if (!target || (typeof target !== 'object' && typeof target !== 'function')) return disabled;
   if (reporters.has(target)) return reporters.get(target);
   reporters.set(target, disabled);
   try {
-    const assets = [entryURL];
-    const nodes = target.document?.querySelectorAll('script[src],link[rel="modulepreload"][href]');
-    for (let index = 0; nodes && index < Math.min(nodes.length, 39); index++) {
-      assets.push(nodes[index].src || nodes[index].href);
-    }
-    const config = readConfig(settings, target.location, theme, assets, release);
+    const config = readConfig(settings, target.location, theme, [], release);
     if (!config) return disabled;
     const seen = new WeakSet();
     let initialized = false;
@@ -137,41 +57,14 @@ export function createBrowserReporter(sdk, settings, target, theme, entryURL, re
       dsn: config.dsn,
       environment: config.environment,
       release: config.release,
-      transport(options) {
-        const delegate = sdk.makeFetchTransport({ ...options, fetchOptions: { credentials: 'omit', referrerPolicy: 'no-referrer' } });
-        return {
-          /** send projects the final envelope before the SDK network transport can see it. */
-          send(envelope) {
-            const clean = initialized ? sanitizeEnvelope(envelope, config) : null;
-            if (!clean) return Promise.resolve({});
-            try {
-              return Promise.resolve(delegate.send(clean)).catch(() => {
-                console.warn('One API error reporting unavailable.');
-                return {};
-              });
-            } catch {
-              console.warn('One API error reporting unavailable.');
-              return Promise.resolve({});
-            }
-          },
-          /** flush drains only the already sanitized transport queue, returning false on SDK failure. */
-          flush(timeout) {
-            try {
-              return Promise.resolve(delegate.flush(timeout)).catch(() => false);
-            } catch {
-              return Promise.resolve(false);
-            }
-          },
-        };
-      },
       debug: false,
-      defaultIntegrations: false,
-      integrations: [sdk.globalHandlersIntegration({ onerror: true, onunhandledrejection: true })],
       sendClientReports: false,
-      maxBreadcrumbs: 0,
-      beforeBreadcrumb() {
-        return null;
+      // Retain the SDK's diagnostic defaults, excluding automatic session payloads.
+      integrations(defaults) {
+        return defaults.filter((integration) => integration.name !== 'BrowserSession');
       },
+      transportOptions: { fetchOptions: { credentials: 'omit', referrerPolicy: 'no-referrer' } },
+      beforeBreadcrumb: sanitizeBreadcrumb,
       tracePropagationTargets: [],
       beforeSendLog() {
         return null;
@@ -190,13 +83,12 @@ export function createBrowserReporter(sdk, settings, target, theme, entryURL, re
         databaseQueryData: false,
         queues: false,
         stackFrameVariables: false,
-        frameContextLines: 0,
       },
       beforeSend(event, hint) {
         try {
           if (hint) hint.attachments = [];
           if (!initialized) return null;
-          const clean = sanitizeEvent(event, config);
+          const clean = sanitizeEvent(event, config, hint);
           if (!clean) return null;
           const error = hint?.originalException;
           if (error && (typeof error === 'object' || typeof error === 'function')) {
@@ -208,23 +100,26 @@ export function createBrowserReporter(sdk, settings, target, theme, entryURL, re
           return null;
         }
       },
-      beforeSendTransaction() {
-        return null;
-      },
     });
     if (!client || client.isEnabled?.() === false) return disabled;
     initialized = true;
     const reporter = {
       enabled: true,
-      /** capture reports an exception while keeping SDK failures out of the application. */
-      capture(error) {
+      /** capture uses the official React helper for component diagnostics and never throws into application code. */
+      capture(error, info) {
         try {
-          sdk.captureException(error);
+          const componentStack = typeof info?.componentStack === 'string' ? info.componentStack : undefined;
+          if (componentStack) {
+            sdk.captureReactException(error, { componentStack }, { contexts: { react: { componentStack } } });
+          } else sdk.captureException(error);
+          return true;
         } catch {
           console.warn('One API error reporting unavailable.');
+          return false;
         }
       },
     };
+    registerRequestErrorCapture((error) => reporter.capture(error));
     reporters.set(target, reporter);
     return reporter;
   } catch {
@@ -237,8 +132,8 @@ export function createBrowserReporter(sdk, settings, target, theme, entryURL, re
 export function reactRootOptions(reporter) {
   if (!reporter.enabled) return {};
   /** report captures root errors and logs only fixed, non-sensitive text. */
-  function report(error) {
-    reporter.capture(error);
+  function report(error, info) {
+    reporter.capture(error, info);
     console.error('One API UI error.');
   }
   /** reportCaught leaves this reporting boundary to componentDidCatch, including primitive throws. */
@@ -247,7 +142,7 @@ export function reactRootOptions(reporter) {
       console.error('One API UI error.');
       return;
     }
-    report(error);
+    report(error, info);
   }
   return { onUncaughtError: report, onCaughtError: reportCaught, onRecoverableError: report };
 }
@@ -263,15 +158,15 @@ export function createErrorBoundary(React, reporter) {
   return class BrowserErrorBoundary extends React.Component {
     [boundaryMarker] = true;
     state = { failed: false };
-    /** getDerivedStateFromError removes the failed root, matching the previous blank-root failure UI. */
+    /** getDerivedStateFromError preserves the previous blank-root failure UI. */
     static getDerivedStateFromError() {
       return { failed: true };
     }
-    /** componentDidCatch reports rendering errors without component props or source context. */
-    componentDidCatch(error) {
-      reporter.capture(error);
+    /** componentDidCatch reports rendering errors with the SDK's component-stack support. */
+    componentDidCatch(error, info) {
+      reporter.capture(error, info);
     }
-    /** render returns the application children until a root rendering failure. */
+    /** render returns application children until a root rendering failure. */
     render() {
       return this.state.failed ? null : this.props.children;
     }

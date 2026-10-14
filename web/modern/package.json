@@ -14,7 +14,7 @@
     "type-check": "tsc --noEmit",
     "test": "yarn test:sentry && vitest",
     "test:ui": "vitest --ui",
-    "test:sentry": "node --test ../../.github/scripts/browser-sentry.test.mjs ../../.github/scripts/browser-sentry-runtime.test.mjs ../../.github/scripts/browser-sentry-react.test.mjs ../../.github/scripts/browser-sentry-sdk.test.mjs"
+    "test:sentry": "node --test ../../.github/scripts/browser-sentry.test.mjs ../../.github/scripts/browser-sentry-diagnostics.test.mjs ../../.github/scripts/browser-sentry-privacy.test.mjs ../../.github/scripts/browser-request-errors.test.mjs ../../.github/scripts/browser-sentry-runtime.test.mjs ../../.github/scripts/browser-sentry-react.test.mjs ../../.github/scripts/browser-sentry-sdk.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

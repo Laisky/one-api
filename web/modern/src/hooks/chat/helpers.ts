@@ -1,3 +1,4 @@
+import { markPrivateError } from '../../../../legacy/browser-sentry-privacy.mjs';
 import { Message } from '@/lib/utils';
 import { ResponseStreamSummary } from './types';
 
@@ -152,3 +153,13 @@ export const convertMessageToResponseInput = (message: Message): Record<string, 
 export const buildResponseInputFromMessages = (messages: Message[]): any[] => {
   return messages.map(convertMessageToResponseInput).filter((entry): entry is Record<string, any> => entry !== null);
 };
+
+/** parsePrivateChatJSON decodes a provider frame and labels only its native JSON failure without changing the error. */
+export function parsePrivateChatJSON(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    if (error instanceof SyntaxError) markPrivateError(error, 'Chat response decoding failed');
+    throw error;
+  }
+}

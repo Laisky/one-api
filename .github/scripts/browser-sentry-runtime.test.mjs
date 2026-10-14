@@ -6,6 +6,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadBrowserReporter, mountBrowserApp } from '../../web/legacy/browser-sentry-runtime.mjs';
 import { createBrowserReporter } from '../../web/legacy/browser-sentry.mjs';
+import { markPrivateError } from '../../web/legacy/browser-sentry-privacy.mjs';
 import { browserRelease, readReleaseInput, releaseInputGuard, browserBuildContract } from '../../web/legacy/browser-release.mjs';
 
 const settings = { dsn: 'https://0123456789abcdef0123456789abcdef@o123.ingest.sentry.io/456', environment: 'production' };
@@ -18,12 +19,6 @@ function setup(fetcher) {
   const fixture = {
     target: { location: { hostname: 'oneapi.laisky.com', protocol: 'https:', port: '' }, fetch: fetcher },
     sdk: {
-      globalHandlersIntegration() {
-        return { name: 'GlobalHandlers' };
-      },
-      makeFetchTransport() {
-        return {};
-      },
       init(value) {
         calls++;
         options = value;
@@ -35,6 +30,20 @@ function setup(fetcher) {
           { originalException: error }
         );
         if (event) events.push(event);
+      },
+      captureReactException(error, info, context) {
+        const event = options.beforeSend(
+          {
+            exception: { values: [{ type: error.name, value: error.message }] },
+            contexts: context?.contexts ?? { react: { componentStack: info.componentStack } },
+          },
+          { originalException: error }
+        );
+        if (event) events.push(event);
+      },
+      reactErrorHandler() {
+        return (error, info) =>
+          fixture.sdk.captureReactException(error, info, { contexts: { react: { componentStack: info?.componentStack } } });
       },
     },
     get calls() {
@@ -71,8 +80,14 @@ for (const theme of ['modern', 'air', 'berry']) {
     assert.equal(requests[0].options.redirect, 'error');
     assert.equal(requests[0].options.cache, 'no-store');
     assert.equal(requests[0].options.mode, 'same-origin');
-    reporter.capture(new Error('synthetic-private-secret'));
+    reporter.capture(new Error('Channel dashboard failed'));
     assert.equal(fixture.events[0].release, release(theme));
+    assert.equal(fixture.events[0].exception.values[0].value, 'Channel dashboard failed');
+    reporter.capture(markPrivateError(new Error('synthetic-private-secret'), 'Private response decoding failed'), {
+      componentStack: '\n    at ChannelDashboard',
+    });
+    assert.equal(fixture.events[1].exception.values[0].value, 'Private response decoding failed');
+    assert.equal(fixture.events[1].contexts.react.componentStack, '\n    at ChannelDashboard');
     assert.doesNotMatch(JSON.stringify(fixture.events), /synthetic-private-secret/);
   });
 }
@@ -370,6 +385,20 @@ test('SDK bridge throw, rejection, missing export and stalled late module never 
   }
 });
 
+test('every standard SDK bridge export is required before any SDK initialization', async () => {
+  for (const name of ['init', 'captureException', 'captureReactException', 'reactErrorHandler']) {
+    const fixture = setup(() => response({ sentry: settings }));
+    fixture.loadSDK = () => ({ ...fixture.sdk, [name]: undefined });
+    const pending = loadBrowserReporter(fixture.loadSDK, release('modern'), fixture.target, 'modern');
+    assert.equal(loadBrowserReporter(fixture.loadSDK, release('modern'), fixture.target, 'modern'), pending);
+    const reporter = await pending;
+    assert.equal(reporter.enabled, false, name);
+    assert.equal(fixture.calls, 0, name);
+    reporter.capture(new Error('Channel dashboard failed'));
+    assert.equal(fixture.events.length, 0, name);
+  }
+});
+
 test('non-imported source input additions and concurrent source changes cannot share a previously emitted release identity', () => {
   let changed = false;
   const input = (name) => Buffer.from(name + (changed && name === 'web/modern/src/main.tsx' ? ':changed' : ':original'));
@@ -511,16 +540,30 @@ test('release input guard preserves resolver kind, custom options and entry cont
       /External browser module input is not approved/
     );
     await assert.rejects(
-      guard.resolveId.call({ resolve: async () => ({ id: '/synthetic-private-outside-repository.js' }) }, 'synthetic-dual-package', caller, options),
+      guard.resolveId.call(
+        { resolve: async () => ({ id: '/synthetic-private-outside-repository.js' }) },
+        'synthetic-dual-package',
+        caller,
+        options
+      ),
       /Unlisted browser build input/
     );
   }
   const entryOptions = Object.freeze({ kind: 'import-statement', isEntry: true });
   assert.equal(
-    await guard.resolveId.call({ resolve: async (_source, _importer, options) => {
-      assert.deepEqual(options, { ...entryOptions, skipSelf: true });
-      return { id: approved };
-    } }, approved, undefined, entryOptions).then((resolved) => resolved.id),
+    await guard.resolveId
+      .call(
+        {
+          resolve: async (_source, _importer, options) => {
+            assert.deepEqual(options, { ...entryOptions, skipSelf: true });
+            return { id: approved };
+          },
+        },
+        approved,
+        undefined,
+        entryOptions
+      )
+      .then((resolved) => resolved.id),
     approved
   );
   assert.equal(await guard.resolveId.call({ resolve: async () => null }, './missing', caller, { kind: 'require-call' }), null);
