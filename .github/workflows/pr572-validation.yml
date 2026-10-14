@@ -2,6 +2,7 @@ name: PR 572 isolated frontend qualification
 on:
   push:
     branches: [validation/pr572-frontend-20261014]
+    paths: [.github/workflows/pr572-validation.yml]
 permissions:
   contents: read
 concurrency:
@@ -16,7 +17,7 @@ jobs:
     outputs:
       source_sha: ${{ steps.publish.outputs.source_sha }}
     env:
-      EXPECTED_HEAD: ce7f53856db25421ae82eb1fb73fefa07c3646b2
+      EXPECTED_HEAD: e08f2871f1bb2608c504b16df1ac84dded594862
       TARGET_BRANCH: feat/persistent-table-sort-shift-selection-20261014
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -25,26 +26,26 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ce7f53856db25421ae82eb1fb73fefa07c3646b2
+          ref: e08f2871f1bb2608c504b16df1ac84dded594862
           path: source
           fetch-depth: 0
           persist-credentials: false
-      - name: Commit the exact reviewed regressions before their repair
+      - name: Commit the reviewed regression before its repair
         working-directory: source
         run: |
           set -euo pipefail
           test "$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | cut -f1)" = "$EXPECTED_HEAD"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git apply --check ../driver/.github/scripts/pr572-followup.patch
-          git apply --include=web/modern/src/components/ui/__tests__/table-selection-range.test.tsx --include=web/modern/src/hooks/__tests__/useTableSort.test.tsx ../driver/.github/scripts/pr572-followup.patch
-          git add web/modern/src/components/ui/__tests__/table-selection-range.test.tsx web/modern/src/hooks/__tests__/useTableSort.test.tsx
-          git commit -m 'test(frontend): reproduce obsolete sort columns and stale range anchors'
-          git apply --exclude=web/modern/src/components/ui/__tests__/table-selection-range.test.tsx --exclude=web/modern/src/hooks/__tests__/useTableSort.test.tsx ../driver/.github/scripts/pr572-followup.patch
+          git apply --check ../driver/.github/scripts/pr572-review-fixes.patch
+          git apply --include=web/modern/src/components/ui/__tests__/table-selection-range.test.tsx ../driver/.github/scripts/pr572-review-fixes.patch
+          git add web/modern/src/components/ui/__tests__/table-selection-range.test.tsx
+          git commit -m 'test(frontend): reproduce abandoned-render selection anchor loss'
+          git apply --exclude=web/modern/src/components/ui/__tests__/table-selection-range.test.tsx ../driver/.github/scripts/pr572-review-fixes.patch
           git diff --check
-          git add web/modern/src
-          git commit -m 'fix(frontend): validate saved columns and invalidate range anchors on view changes'
-      - name: Publish with the original expected-head lease
+          git add web/modern/src/components/ui/table-selection.tsx web/modern/scripts/test-table-interactions-browser.py
+          git commit -m 'fix(frontend): commit anchor resets and prevent duplicate native checkbox activation'
+      - name: Publish with an exact expected-head lease
         id: publish
         working-directory: source
         env:
@@ -77,55 +78,72 @@ jobs:
           node-version: '24'
           cache: yarn
           cache-dependency-path: web/modern/yarn.lock
-      - name: Install locked frontend dependencies
+      - name: Install locked frontend dependencies and pinned browser tools
         id: install
-        working-directory: web/modern
-        run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
-      - name: Reproduce both defects against original runtime bytes and retain final-source regressions
-        working-directory: web/modern
+        run: |
+          cd web/modern
+          yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+          python3 -m pip install --disable-pip-version-check playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Reproduce abandoned-render and native mobile failures against original selection code
         run: |
           set -euo pipefail
-          mkdir -p test-results/pr572
-          FILES='src/components/ui/data-table.tsx src/components/ui/enhanced-data-table.tsx src/components/ui/table-selection.tsx src/hooks/useTableSort.ts src/lib/table-sort-preference.ts'
-          trap 'git restore --source=HEAD -- $FILES' EXIT
-          git restore --source=f31f442cf95149352b1ef283b00e46859b1a1d84 -- $FILES
+          mkdir -p web/modern/test-results/pr572
+          FILE=web/modern/src/components/ui/table-selection.tsx
+          trap 'git restore --source=HEAD -- "$FILE"' EXIT
+          git restore --source=6ed03db89ba3760a6ac1b8ddddc70591bc555364 -- "$FILE"
+          (
+            cd web/modern
+            set +e
+            yarn vitest run --maxWorkers=2 --reporter=json --outputFile=test-results/pr572/concurrent-red.json src/components/ui/__tests__/table-selection-range.test.tsx -t 'concurrent view' > test-results/pr572/concurrent-red.log 2>&1
+            CODE=$?
+            set -e
+            test "$CODE" = 1
+            node -e 'const r=require("./test-results/pr572/concurrent-red.json"); if(r.numFailedTests!==4) process.exit(1); console.log("RED reproduced: all four concurrent-render regressions fail on the old implementation.");'
+          )
+          make build-frontend-modern > web/modern/test-results/pr572/browser-red-build.log 2>&1
           set +e
-          yarn vitest run --maxWorkers=2 --reporter=json --outputFile=test-results/pr572/edge-red.json src/hooks/__tests__/useTableSort.test.tsx src/components/ui/__tests__/table-selection-range.test.tsx > test-results/pr572/edge-red.log 2>&1
+          python3 web/modern/scripts/test-table-interactions-browser.py --table channels --width 390 --output web/modern/test-results/browser-negative-control > web/modern/test-results/pr572/browser-red.log 2>&1
           CODE=$?
           set -e
           test "$CODE" = 1
-          node -e 'const r=require("./test-results/pr572/edge-red.json"); if(r.numFailedTests!==22 || r.numPassedTests!==58) process.exit(1); console.log("RED reproduced: 22 failed, 58 passed.");'
-          git restore --source=HEAD -- $FILES
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('web/modern/test-results')
+          log = (root / 'pr572/browser-red.log').read_text()
+          assert 'ordinary click' in log, log
+          report = json.loads((root / 'browser-negative-control/failure-channels-390.json').read_text())
+          assert not report['errors'] and not report['violations'], report
+          assert report['selected'] == [], report
+          assert report['selection_clicks'], report
+          print('RED native click evidence:', json.dumps(report['selection_clicks']))
+          PY
+          git restore --source=HEAD -- "$FILE"
           git diff --exit-code
-      - name: Run complete Modern frontend suite on the exact repaired source
+      - name: Run the complete Modern frontend regression suite
         working-directory: web/modern
         run: |
           set -euo pipefail
           yarn vitest run --maxWorkers=2 2>&1 | tee test-results/pr572/full.log
-      - name: Lint and check translations
+      - name: Lint and check all translations
         if: always() && steps.install.outcome == 'success'
         working-directory: web/modern
         run: |
           set -euo pipefail
           yarn lint 2>&1 | tee test-results/pr572/lint.log
           yarn check:i18n 2>&1 | tee test-results/pr572/i18n.log
-      - name: Build production frontend with compiler and real release guard
+      - name: Build the final production frontend with compiler and release guard
         id: build
         if: always() && steps.install.outcome == 'success'
         run: |
           set -euo pipefail
           make build-frontend-modern 2>&1 | tee web/modern/test-results/pr572/build.log
-      - name: Install pinned browser test tools
+      - name: Verify the six production pages on desktop and mobile including padded touch targets
         if: steps.build.outcome == 'success'
-        run: |
-          python3 -m pip install --disable-pip-version-check playwright==1.57.0
-          python3 -m playwright install --with-deps chromium
-      - name: Verify all six actual production pages on desktop and mobile
-        if: steps.build.outcome == 'success'
-        working-directory: web/modern
         run: |
           set -euo pipefail
-          python3 scripts/test-table-interactions-browser.py 2>&1 | tee test-results/pr572/browser.log
+          python3 web/modern/scripts/test-table-interactions-browser.py 2>&1 | tee web/modern/test-results/pr572/browser.log
       - name: Preserve exact-source receipts and browser evidence
         if: always()
         run: |
@@ -139,7 +157,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: pr572-final-qualification
+          name: pr572-release-qualification
           path: evidence
           retention-days: 7
           if-no-files-found: warn
