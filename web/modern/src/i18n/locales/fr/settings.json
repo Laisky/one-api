@@ -416,6 +416,7 @@
     },
     "option_value_aria": "Valeur de {{key}}",
     "refresh": "Actualiser",
+    "invalid_json": "JSON non valide. V\u00e9rifiez les guillemets, les virgules et les crochets et les accolades avant de sauvegarder.",
     "save": "Enregistrer",
     "save_failed": "Échec de l'enregistrement",
     "saved_message": "{{key}} mis à jour avec succès.",

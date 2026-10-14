@@ -416,6 +416,7 @@
     },
     "option_value_aria": "Valor de {{key}}",
     "refresh": "Actualizar",
+    "invalid_json": "JSON no v\u00e1lido. Revisa las comillas, las comas y los corchetes antes de guardar.",
     "save": "Guardar",
     "save_failed": "Error al guardar",
     "saved_message": "{{key}} se actualizó correctamente.",

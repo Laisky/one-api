@@ -416,6 +416,7 @@
     },
     "option_value_aria": "{{key}} 的值",
     "refresh": "刷新",
+    "invalid_json": "JSON \u683c\u5f0f\u65e0\u6548\u3002\u8bf7\u68c0\u67e5\u5f15\u53f7\u3001\u9017\u53f7\u548c\u62ec\u53f7\u540e\u518d\u4fdd\u5b58\u3002",
     "save": "保存",
     "save_failed": "保存失败",
     "saved_message": "{{key}} 更新成功。",

@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNotifications } from '@/components/ui/notifications';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Info, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { AlertCircle, Info, X } from 'lucide-react';
+import { useCallback, useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 export interface OptionRow {
@@ -29,14 +30,36 @@ interface OptionItemProps {
   onClear?: (key: string) => Promise<void>;
   isSensitive?: boolean;
   isBoolean?: boolean;
+  isJson?: boolean;
   enumChoices?: EnumChoice[];
   extraAction?: ReactNode;
 }
 
-export function OptionItem({ option, description, onSave, onClear, isSensitive, isBoolean, enumChoices, extraAction }: OptionItemProps) {
+export function OptionItem({
+  option,
+  description,
+  onSave,
+  onClear,
+  isSensitive,
+  isBoolean,
+  isJson,
+  enumChoices,
+  extraAction,
+}: OptionItemProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState(option.value);
   const [isSaving, setIsSaving] = useState(false);
+  const jsonErrorId = useId();
+  // Validate strict JSON syntax; an empty value remains available to disable Sentry.
+  const hasJsonError = useMemo(() => {
+    if (!isJson || !value.trim()) return false;
+    try {
+      JSON.parse(value);
+      return false;
+    } catch {
+      return true;
+    }
+  }, [isJson, value]);
 
   useEffect(() => {
     setValue(option.value);
@@ -45,7 +68,7 @@ export function OptionItem({ option, description, onSave, onClear, isSensitive, 
   const handleSave = useCallback(
     async (overrideValue?: string) => {
       const nextValue = overrideValue ?? value;
-      if (isSaving || nextValue === option.value) return;
+      if (isSaving || hasJsonError || nextValue === option.value) return;
       setIsSaving(true);
       try {
         await onSave(option.key, nextValue);
@@ -60,13 +83,8 @@ export function OptionItem({ option, description, onSave, onClear, isSensitive, 
         setIsSaving(false);
       }
     },
-    [isSaving, isSensitive, onSave, option.key, option.value, value]
+    [hasJsonError, isSaving, isSensitive, onSave, option.key, option.value, value]
   );
-
-  const handleBlur = useCallback(async () => {
-    if (isSensitive || value === option.value) return;
-    await handleSave();
-  }, [handleSave, isSensitive, option.value, value]);
 
   const handleBooleanChange = useCallback(
     (newValue: string) => {
@@ -152,19 +170,29 @@ export function OptionItem({ option, description, onSave, onClear, isSensitive, 
               ))}
             </SelectContent>
           </Select>
+        ) : isJson ? (
+          <Textarea
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className={`flex-1 font-mono text-xs min-h-[150px] ${hasJsonError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+            aria-label={optionValueAriaLabel}
+            spellCheck={false}
+            aria-invalid={hasJsonError}
+            aria-describedby={hasJsonError ? jsonErrorId : undefined}
+            disabled={isSaving}
+          />
         ) : (
           <Input
             type={isSensitive ? 'password' : undefined}
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            onBlur={handleBlur}
             className="flex-1"
             aria-label={optionValueAriaLabel}
             placeholder={placeholder}
             disabled={isSaving}
           />
         )}
-        <Button type="button" variant="outline" onClick={() => handleSave()} disabled={isSaving}>
+        <Button type="button" variant="outline" onClick={() => handleSave()} disabled={isSaving || hasJsonError}>
           {isSaving ? t('system_settings.saving') : t('system_settings.save')}
         </Button>
         {isSensitive && onClear && (
@@ -180,6 +208,16 @@ export function OptionItem({ option, description, onSave, onClear, isSensitive, 
         )}
         {extraAction}
       </div>
+      {hasJsonError && (
+        <div
+          id={jsonErrorId}
+          role="alert"
+          className="mt-2 flex items-start gap-2 rounded-lg border border-destructive bg-destructive/10 p-3"
+        >
+          <AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <span className="text-sm text-destructive">{t('system_settings.invalid_json')}</span>
+        </div>
+      )}
       {isSensitive && <p className="text-xs text-muted-foreground">{t('system_settings.sensitive_hint')}</p>}
     </div>
   );
