@@ -17,7 +17,7 @@ jobs:
     outputs:
       source_sha: ${{ steps.publish.outputs.source_sha }}
     env:
-      EXPECTED_HEAD: e08f2871f1bb2608c504b16df1ac84dded594862
+      EXPECTED_HEAD: 409d31808861f393aff0fa108deae8cf29ae36ef
       TARGET_BRANCH: feat/persistent-table-sort-shift-selection-20261014
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -26,25 +26,23 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: e08f2871f1bb2608c504b16df1ac84dded594862
+          ref: 409d31808861f393aff0fa108deae8cf29ae36ef
           path: source
           fetch-depth: 0
           persist-credentials: false
-      - name: Commit the reviewed regression before its repair
+      - name: Commit only browser-driver lifecycle synchronization
         working-directory: source
         run: |
           set -euo pipefail
           test "$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | cut -f1)" = "$EXPECTED_HEAD"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git apply --check ../driver/.github/scripts/pr572-review-fixes.patch
-          git apply --include=web/modern/src/components/ui/__tests__/table-selection-range.test.tsx ../driver/.github/scripts/pr572-review-fixes.patch
-          git add web/modern/src/components/ui/__tests__/table-selection-range.test.tsx
-          git commit -m 'test(frontend): reproduce abandoned-render selection anchor loss'
-          git apply --exclude=web/modern/src/components/ui/__tests__/table-selection-range.test.tsx ../driver/.github/scripts/pr572-review-fixes.patch
+          git apply --check ../driver/.github/scripts/pr572-browser-lifecycle.patch
+          git apply ../driver/.github/scripts/pr572-browser-lifecycle.patch
           git diff --check
-          git add web/modern/src/components/ui/table-selection.tsx web/modern/scripts/test-table-interactions-browser.py
-          git commit -m 'fix(frontend): commit anchor resets and prevent duplicate native checkbox activation'
+          test "$(git diff --name-only)" = 'web/modern/scripts/test-table-interactions-browser.py'
+          git add web/modern/scripts/test-table-interactions-browser.py
+          git commit -m 'test(frontend): synchronize browser actions with dropdown closing transitions'
       - name: Publish with an exact expected-head lease
         id: publish
         working-directory: source
@@ -57,11 +55,11 @@ jobs:
           echo "::add-mask::$AUTH"
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push --force-with-lease="refs/heads/$TARGET_BRANCH:$EXPECTED_HEAD" origin "HEAD:refs/heads/$TARGET_BRANCH"
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          git log -2 --oneline
-  qualify:
+          git log -1 --oneline
+  browser:
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     permissions:
       contents: read
     env:
@@ -73,91 +71,48 @@ jobs:
           ref: ${{ needs.prepare.outputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Verify parity with the fully tested runtime before reusing its results
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/source-sha.txt
+          git diff --exit-code 3166fac4bf7cddcaf0d906fe021f2755c62bf490 HEAD -- . ':!docs/table-sort-and-range-selection.md' ':!web/modern/scripts/test-table-interactions-browser.py'
+          git diff --stat 3166fac4bf7cddcaf0d906fe021f2755c62bf490 HEAD > evidence/parity.txt
+          echo 'The 1063 passing tests, one existing skip, lint and translations in run38510777943 qualify byte-identical runtime/tests/configuration. This run qualifies the corrected browser driver and rebuilds production assets.' >> evidence/parity.txt
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '24'
           cache: yarn
           cache-dependency-path: web/modern/yarn.lock
-      - name: Install locked frontend dependencies and pinned browser tools
-        id: install
+      - name: Install locked dependencies and pinned browser tools
+        working-directory: web/modern
         run: |
-          cd web/modern
           yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
           python3 -m pip install --disable-pip-version-check playwright==1.57.0
           python3 -m playwright install --with-deps chromium
-      - name: Reproduce abandoned-render and native mobile failures against original selection code
+      - name: Build the production frontend with compiler and unchanged release guard
         run: |
           set -euo pipefail
           mkdir -p web/modern/test-results/pr572
-          FILE=web/modern/src/components/ui/table-selection.tsx
-          trap 'git restore --source=HEAD -- "$FILE"' EXIT
-          git restore --source=6ed03db89ba3760a6ac1b8ddddc70591bc555364 -- "$FILE"
-          (
-            cd web/modern
-            set +e
-            yarn vitest run --maxWorkers=2 --reporter=json --outputFile=test-results/pr572/concurrent-red.json src/components/ui/__tests__/table-selection-range.test.tsx -t 'concurrent view' > test-results/pr572/concurrent-red.log 2>&1
-            CODE=$?
-            set -e
-            test "$CODE" = 1
-            node -e 'const r=require("./test-results/pr572/concurrent-red.json"); if(r.numFailedTests!==4) process.exit(1); console.log("RED reproduced: all four concurrent-render regressions fail on the old implementation.");'
-          )
-          make build-frontend-modern > web/modern/test-results/pr572/browser-red-build.log 2>&1
-          set +e
-          python3 web/modern/scripts/test-table-interactions-browser.py --table channels --width 390 --output web/modern/test-results/browser-negative-control > web/modern/test-results/pr572/browser-red.log 2>&1
-          CODE=$?
-          set -e
-          test "$CODE" = 1
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          root = Path('web/modern/test-results')
-          log = (root / 'pr572/browser-red.log').read_text()
-          assert 'ordinary click' in log, log
-          report = json.loads((root / 'browser-negative-control/failure-channels-390.json').read_text())
-          assert not report['errors'] and not report['violations'], report
-          assert report['selected'] == [], report
-          assert report['selection_clicks'], report
-          print('RED native click evidence:', json.dumps(report['selection_clicks']))
-          PY
-          git restore --source=HEAD -- "$FILE"
-          git diff --exit-code
-      - name: Run the complete Modern frontend regression suite
-        working-directory: web/modern
-        run: |
-          set -euo pipefail
-          yarn vitest run --maxWorkers=2 2>&1 | tee test-results/pr572/full.log
-      - name: Lint and check all translations
-        if: always() && steps.install.outcome == 'success'
-        working-directory: web/modern
-        run: |
-          set -euo pipefail
-          yarn lint 2>&1 | tee test-results/pr572/lint.log
-          yarn check:i18n 2>&1 | tee test-results/pr572/i18n.log
-      - name: Build the final production frontend with compiler and release guard
-        id: build
-        if: always() && steps.install.outcome == 'success'
-        run: |
-          set -euo pipefail
           make build-frontend-modern 2>&1 | tee web/modern/test-results/pr572/build.log
-      - name: Verify the six production pages on desktop and mobile including padded touch targets
-        if: steps.build.outcome == 'success'
+      - name: Verify all twelve real production page and viewport cases
         run: |
           set -euo pipefail
           python3 web/modern/scripts/test-table-interactions-browser.py 2>&1 | tee web/modern/test-results/pr572/browser.log
-      - name: Preserve exact-source receipts and browser evidence
+      - name: Preserve exact source and browser receipts
         if: always()
         run: |
           set -euo pipefail
           mkdir -p evidence
-          git rev-parse HEAD > evidence/source-sha.txt
           git diff --exit-code
           git status --short > evidence/source-status.txt
           cp -r web/modern/test-results evidence/
+          tar -czf evidence/compiled-modern.tar.gz web/build/modern
           git archive HEAD web/modern/src web/modern/scripts web/legacy/browser-release-inputs.json | gzip > evidence/reviewed-source.tar.gz
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: pr572-release-qualification
+          name: pr572-browser-acceptance
           path: evidence
           retention-days: 7
           if-no-files-found: warn
