@@ -56,7 +56,7 @@ func TestGeminiOctober13ArgonPricingBoundary(t *testing.T) {
 		{"first-standard-nanosecond", boundary, 4, 20, 0.20},
 		{"same-instant-west-of-UTC", boundary.In(time.FixedZone("UTC-5", -5*60*60)), 4, 20, 0.20},
 		{"same-instant-east-of-UTC", boundary.In(time.FixedZone("UTC+8", 8*60*60)), 4, 20, 0.20},
-		{"standard-persists", time.Date(2030, time.July, 1, 12, 0, 0, 0, 0, time.UTC), 4, 20, 0.20},
+		{"standard-persists", time.Date(2030, time.July, 1, 12, 0, 0, 0, time.UTC), 4, 20, 0.20},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			resolved := pricing.ApplyTimeWindow(cfg, tt.at)
