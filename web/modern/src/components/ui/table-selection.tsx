@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useRef } from 'react';
 import { ChevronDown, ListChecks } from 'lucide-react';
 import {
   DropdownMenu,
@@ -14,6 +14,7 @@ import type { RowData } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useTableSelection, type TableSelection } from '@/hooks/useTableSelection';
+import { getSelectionRange } from '@/lib/table-selection-range';
 import type { ModernColumnDef } from '@/lib/table';
 
 /** TableSelectionOptions adds a shared, optionally controlled selection contract to both table renderers. */
@@ -64,6 +65,23 @@ export function useSelectableTable<TData extends RowData, TValue>(
   const total = options.selectionTotal === undefined ? options.total : options.selectionTotal;
   const count = selection.selectedCount(total);
   const excluded = selection.snapshot.mode === 'all_matching' ? selection.snapshot.excluded_ids.length : 0;
+  const rangeScope = JSON.stringify([
+    user?.uuid || user?.username, user?.role, options.selectionScope ?? '',
+    selection.scopeVersion, selection.snapshot.mode, ids,
+  ]);
+  const rangeAnchor = useRef<{ id: string; scope: string; order: string[] } | null>(null);
+  // Reset during render so A -> B -> A navigation cannot resurrect a stale anchor.
+  // Selection itself remains ID-based and survives ordinary page/sort changes.
+  if (disabled || !enabled || !selection.hasSelection || rangeAnchor.current?.scope !== rangeScope) {
+    rangeAnchor.current = null;
+  }
+
+  /** selectPage resets the range anchor and updates only the supplied visible IDs. */
+  const selectPage = (checked: boolean) => {
+    if (disabled) return;
+    rangeAnchor.current = null;
+    selection.setPage(ids, checked);
+  };
 
   const column: ModernColumnDef<TData, TValue> = {
     id: '__selection__',
@@ -73,18 +91,37 @@ export function useSelectableTable<TData extends RowData, TValue>(
         aria-label={t('table_selection.page')}
         checked={pageChecked}
         disabled={disabled || !ids.length}
-        onCheckedChange={(checked) => selection.setPage(ids, checked === true)}
+        onCheckedChange={(checked) => selectPage(checked === true)}
       />
     ),
-    cell: ({ row }) => {
+    cell: ({ row, table }) => {
       const id = rowId(row.original);
       return (
         <Checkbox
           aria-label={t('table_selection.row', { name: rowLabel(row.original) })}
           checked={selection.isSelected(id)}
           disabled={disabled || !id}
-          onClick={(event) => event.stopPropagation()}
-          onCheckedChange={(checked) => selection.setRow(id, checked === true)}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (disabled || !id) return;
+            // Read the rendered row model, not numeric IDs or the unsorted input.
+            const order = table.getRowModel().rows.map((visibleRow) => rowId(visibleRow.original)).filter(Boolean);
+            const previous = rangeAnchor.current;
+            const sameOrder = previous?.scope === rangeScope
+              && previous.order.length === order.length
+              && previous.order.every((visibleId, index) => visibleId === order[index]);
+            if (event.shiftKey && sameOrder && previous && order.includes(previous.id)) {
+              // Radix runs onClick before its default toggle. Prevent that second
+              // single-row update and apply the complete range atomically instead.
+              event.preventDefault();
+              selection.setPage(getSelectionRange(order, previous.id, id), !selection.isSelected(id));
+            } else {
+              rangeAnchor.current = { id, scope: rangeScope, order };
+            }
+          }}
+          onCheckedChange={(checked) => {
+            if (!disabled && id) selection.setRow(id, checked === true);
+          }}
         />
       );
     },
@@ -126,19 +163,29 @@ export function useSelectableTable<TData extends RowData, TValue>(
           <DropdownMenuItem
             className="table-toolbar-menu__item"
             disabled={disabled || !ids.length}
-            onSelect={() => selection.setPage(ids, true)}
+            onSelect={() => selectPage(true)}
           >
             {t('table_selection.page')}
           </DropdownMenuItem>
           <DropdownMenuItem
             className="table-toolbar-menu__item"
             disabled={disabled || total === 0 || (total == null && !ids.length)}
-            onSelect={selection.selectAllMatching}
+            onSelect={() => {
+              rangeAnchor.current = null;
+              selection.selectAllMatching();
+            }}
           >
             {t('table_selection.all_pages')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="table-toolbar-menu__item" disabled={disabled || !selection.hasSelection} onSelect={selection.clear}>
+          <DropdownMenuItem
+            className="table-toolbar-menu__item"
+            disabled={disabled || !selection.hasSelection}
+            onSelect={() => {
+              rangeAnchor.current = null;
+              selection.clear();
+            }}
+          >
             {t('table_selection.clear')}
           </DropdownMenuItem>
         </DropdownMenuContent>
