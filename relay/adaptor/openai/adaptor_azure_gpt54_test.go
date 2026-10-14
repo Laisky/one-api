@@ -488,11 +488,13 @@ func TestGPT54VersionExtraction(t *testing.T) {
 	}
 }
 
+// TestGPT54ReasoningEffort checks native family effort contracts used by the
+// Azure compatibility fallback. Parameter t owns assertions; no values return.
 func TestGPT54ReasoningEffort(t *testing.T) {
 	t.Parallel()
 
-	// gpt-5.4-mini is NOT a medium-only reasoning model (no "-chat" suffix),
-	// so it should allow all reasoning effort levels.
+	// Pro has a narrower effort ladder than the non-Pro GPT-5.4 variants.
+	// Source: https://developers.openai.com/api/docs/models/gpt-5.4-pro
 	gpt54Models := []string{"gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4-pro"}
 	for _, modelName := range gpt54Models {
 		t.Run(modelName, func(t *testing.T) {
@@ -500,7 +502,15 @@ func TestGPT54ReasoningEffort(t *testing.T) {
 			assert.False(t, isMediumOnlyReasoningModel(modelName),
 				"%q should not be medium-only reasoning model", modelName)
 
-			for _, effort := range []string{"low", "medium", "high"} {
+			allowed := []string{"low", "medium", "high"}
+			if modelName == "gpt-5.4-pro" {
+				allowed = []string{"medium", "high", "xhigh"}
+				for _, effort := range []string{"low", "none", "minimal", "max"} {
+					assert.False(t, isReasoningEffortAllowedForModel(modelName, effort),
+						"%q must reject unsupported reasoning effort %q", modelName, effort)
+				}
+			}
+			for _, effort := range allowed {
 				assert.True(t, isReasoningEffortAllowedForModel(modelName, effort),
 					"%q should allow reasoning effort %q", modelName, effort)
 			}
