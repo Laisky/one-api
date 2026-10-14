@@ -1,0 +1,43 @@
+# Read-only public verification. Reuse the previously qualified checker without changing production.
+name: OneAPI table release public smoke
+on:
+  push:
+    branches: [qualification/oneapi-recovery-20261014]
+    paths: [.github/workflows/recovery-pr572-public-smoke.yml]
+permissions:
+  contents: read
+jobs:
+  public_https:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      EXPECTED_SHA: 27e6a888342785660f84984f9f9a976ed25be1c7
+      EXPECTED_COMMIT_TIME: '2026-10-14T04:39:09Z'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: c9fff95dcafd558aed98e77c6e812d872bfa02ef
+          persist-credentials: false
+      - name: Reuse the exact qualified version, header and public-asset checker
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD:.github/workflows/recovery-public-smoke.yml)" = 999bda1bed7320d474aca3134a7def8368b3e8eb
+          python3 - <<'PY'
+          import pathlib,subprocess,sys,textwrap
+          content=pathlib.Path('.github/workflows/recovery-public-smoke.yml').read_text()
+          start="          python3 - <<'PY'\n"
+          end='\n          PY\n'
+          assert content.count(start)==1 and content.count(end)==1
+          script=textwrap.dedent(content.split(start,1)[1].split(end,1)[0])
+          compile(script,'qualified-public-smoke','exec')
+          # The script reads this job's pinned expected source/time from the environment.
+          # Its 13 version and 13 header controls remain unchanged. No credentials or JS execution.
+          subprocess.run([sys.executable,'-u','-c',script],check=True,timeout=1100)
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: oneapi-pr572-public-release-smoke
+          path: evidence
+          retention-days: 14
+          if-no-files-found: error
