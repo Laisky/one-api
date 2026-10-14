@@ -30,7 +30,7 @@ func TestOpenAIOctoberFeatureOwnership(t *testing.T) {
 			originalFeatures := slices.Clone(features)
 			before := map[string]adaptor.ModelConfig{
 				"chat-latest": {Ratio: 42, SupportedFeatures: features},
-				"sibling":    {Ratio: 43, SupportedFeatures: tc.storage},
+				"sibling":     {Ratio: 43, SupportedFeatures: tc.storage},
 			}
 			after := applyOpenAIModelCatalog202610(before)
 			require.Equal(t, originalStorage, tc.storage, "refresh wrote through shared feature storage")
