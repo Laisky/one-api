@@ -335,7 +335,7 @@
       "TopUpLink": "用户购买或充值配额的外部链接。",
       "TurnstileCheckEnabled": "在关键操作（注册/重置）上启用 Cloudflare Turnstile。",
       "TurnstileSecretKey": "服务器使用的 Cloudflare Turnstile 密钥。请保密。",
-      "BrowserSentryConfig": "Public browser error configuration: JSON with only dsn and environment (production, staging, or development). A valid setting activates automatically after page reload; leave empty to disable. Never enter auth tokens or other secrets.",
+      "BrowserSentryConfig": "浏览器错误报告的公开配置：JSON 仅包含 dsn 和 environment（production、staging 或 development）。有效配置会在重新加载页面后自动启用；留空即可禁用。切勿填写身份验证令牌或其他机密信息。",
       "TurnstileSiteKey": "前端使用的 Cloudflare Turnstile 站点密钥。",
       "WeChatAccountQRCodeImageURL": "向用户显示的微信公众号二维码图片 URL。",
       "WeChatAuthEnabled": "启用微信登录。需要微信服务器设置。",
