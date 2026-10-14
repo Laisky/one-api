@@ -1,0 +1,330 @@
+# Isolated acceptance harness. Do not merge into application branches.
+name: OneAPI recovery acceptance
+on:
+  push:
+    branches: [qualification/oneapi-recovery-20261014]
+    paths: [.github/workflows/recovery-acceptance.yml]
+permissions:
+  contents: read
+concurrency:
+  group: oneapi-recovery-20261014
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+env:
+  CANDIDATE_SHA: 02ce1d5da18fdfcd3ae36685a511ab0a6c6077f5
+  CANDIDATE_TREE: 433b768440845415ba6bfc20be012e58feab3231
+  MAIN_SHA: 869835afe349cccabb92cf63366d2c0b3650d13f
+  TEST_SHA: 5e9c245e24bf8a040b633dabad82202f7b171083
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 02ce1d5da18fdfcd3ae36685a511ab0a6c6077f5
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Freeze source and exact merge evidence
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$CANDIDATE_TREE"
+          test "$(git rev-parse HEAD^1)" = "$MAIN_SHA"
+          test "$(git rev-parse HEAD:controller/gemini_live_budget_security_test.go)" = d5e1084763e204724bd45075330260b8e5b1eb0c
+          mkdir -p "$RUNNER_TEMP/source"
+          git archive HEAD | gzip > "$RUNNER_TEMP/source/candidate.tar.gz"
+          git diff "$MAIN_SHA" HEAD > "$RUNNER_TEMP/source/candidate.diff"
+          git show "$TEST_SHA:controller/gemini_live_budget_security_test.go" > "$RUNNER_TEMP/source/gemini-test.go"
+          printf '{"source":"%s","tree":"%s","main":"%s","published":false}\n' "$CANDIDATE_SHA" "$CANDIDATE_TREE" "$MAIN_SHA" > "$RUNNER_TEMP/source/identity.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: recovery-source-02ce1d5
+          path: ${{ runner.temp }}/source
+          retention-days: 14
+          if-no-files-found: error
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [test-only, sentry-combined]
+    env:
+      VARIANT: ${{ matrix.variant }}
+      GOMAXPROCS: '2'
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 02ce1d5da18fdfcd3ae36685a511ab0a6c6077f5
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Run complete affected packages on exact combined source
+        run: |
+          python3 - <<'PY'
+          import collections,json,os,pathlib,subprocess
+          out=pathlib.Path(os.environ['RUNNER_TEMP'],'backend');out.mkdir()
+          def git(*args): return subprocess.check_output(['git',*args],text=True).strip()
+          variant=os.environ['VARIANT']
+          if variant=='test-only':
+              subprocess.run(['git','checkout','--detach',os.environ['MAIN_SHA']],check=True)
+              subprocess.run(['git','checkout',os.environ['TEST_SHA'],'--','controller/gemini_live_budget_security_test.go'],check=True)
+              assert git('diff','--cached','--name-only')=='controller/gemini_live_budget_security_test.go'
+          else:
+              assert git('rev-parse','HEAD')==os.environ['CANDIDATE_SHA']
+          tree=git('write-tree')
+          assert git('rev-parse',':controller/gemini_live_budget_security_test.go')=='d5e1084763e204724bd45075330260b8e5b1eb0c'
+          report={'variant':variant,'checkout':git('rev-parse','HEAD'),'tree':tree,'main':os.environ['MAIN_SHA'],'test_blob':'d5e1084763e204724bd45075330260b8e5b1eb0c','passed':False}
+          packages=['./controller'] if variant=='test-only' else ['./controller','./common/config','./router']
+          try:
+              with (out/'events.jsonl').open('w') as stream:
+                  result=subprocess.run(['go','test','-json','-race','-p','1','-count=1','-timeout=20m',*packages],stdout=stream,stderr=subprocess.STDOUT,timeout=1500)
+              events=[]
+              for line in (out/'events.jsonl').read_text().splitlines():
+                  try: events.append(json.loads(line))
+                  except ValueError: pass
+              counts=collections.Counter(e['Action'] for e in events if e.get('Test') and '/' not in e['Test'] and e['Action'] in ('pass','fail','skip'))
+              report.update(exit_code=result.returncode,top_level=dict(counts),skips=[e.get('Test') for e in events if e['Action']=='skip'])
+              assert result.returncode==0 and not counts['fail'] and counts['pass']>=502, report
+              required=['TestSecurityGeminiLiveOutputStreamCannotOutrunReservation','TestSecurityGeminiLiveBufferedOutputPreservesReservation','TestSecurityGeminiLiveProviderReadTimeoutIsNotClosure']
+              for name in required:
+                  outcomes=[e['Action'] for e in events if e.get('Test')==name and e['Action'] in ('pass','fail','skip')]
+                  assert outcomes==['pass'], (name,outcomes)
+              assert tree==git('write-tree')
+              report['passed']=True
+          finally:
+              (out/'report.json').write_text(json.dumps(report,indent=2)); print(json.dumps(report))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: recovery-backend-${{ matrix.variant }}
+          path: ${{ runner.temp }}/backend
+          retention-days: 14
+          if-no-files-found: error
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [modern, air, berry]
+    env:
+      THEME: ${{ matrix.theme }}
+      CI: 'true'
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 02ce1d5da18fdfcd3ae36685a511ab0a6c6077f5
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.21.0'
+          cache: yarn
+          cache-dependency-path: web/${{ matrix.theme }}/yarn.lock
+      - name: Install only the selected theme's locked dependencies
+        working-directory: web/${{ matrix.theme }}
+        run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+      - name: Full theme tests, SDK/privacy tests, lint and production build
+        working-directory: web/${{ matrix.theme }}
+        run: |
+          set -euo pipefail
+          if [ "$THEME" = modern ]; then yarn test --run --maxWorkers=2; else yarn test; fi
+          yarn lint
+          yarn build
+          if [ "$THEME" = modern ]; then yarn check:i18n; fi
+      - name: Audit every dependency
+        run: node .github/scripts/frontend-audit.mjs "$THEME"
+      - name: Record exact build identity and map absence
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,subprocess
+          theme=os.environ['THEME'];root=pathlib.Path('web/build')/theme
+          assert root.is_dir() and not list(root.rglob('*.map'))
+          assets={};releases=set()
+          for p in root.rglob('*'):
+              if not p.is_file(): continue
+              raw=p.read_bytes();assets[str(p.relative_to(root))]=hashlib.sha256(raw).hexdigest()
+              if p.suffix=='.js':
+                  assert b'sourceMappingURL=data:' not in raw
+                  releases.update(re.findall(r'one-api-(?:modern|air|berry)@sha256:[a-f0-9]{64}',raw.decode()))
+          assert assets and any(r.startswith('one-api-'+theme+'@') for r in releases)
+          assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==os.environ['CANDIDATE_SHA']
+          assert not subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],text=True)
+          report={'source':os.environ['CANDIDATE_SHA'],'tree':os.environ['CANDIDATE_TREE'],'theme':theme,'releases':sorted(releases),'assets':assets,'public_maps':0,'passed':True}
+          pathlib.Path(os.environ['RUNNER_TEMP'],'frontend-report.json').write_text(json.dumps(report,indent=2))
+          print(json.dumps({k:v for k,v in report.items() if k!='assets'}))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: recovery-frontend-${{ matrix.theme }}
+          path: |
+            web/build
+            ${{ runner.temp }}/frontend-report.json
+          retention-days: 14
+          if-no-files-found: error
+  image_browser:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 02ce1d5da18fdfcd3ae36685a511ab0a6c6077f5
+          persist-credentials: false
+      - name: Verify supported sandbox without weakening host policies
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+          python3 - <<'PY'
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as p:
+              browser=p.chromium.launch(chromium_sandbox=True)
+              page=browser.new_page(); page.set_content('<p>Sandbox acceptance</p>')
+              assert page.locator('p').inner_text()=='Sandbox acceptance'
+              browser.close()
+          PY
+      - name: Build original Dockerfile without publishing or deploying
+        env:
+          DOCKER_BUILDKIT: '1'
+        run: |
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$CANDIDATE_TREE"
+          docker build --build-arg TARGETARCH=amd64 --build-arg TARGETOS=linux --label "org.opencontainers.image.revision=$CANDIDATE_SHA" --iidfile "$RUNNER_TEMP/image-id" --tag oneapi-recovery:02ce1d5 .
+          python3 tests/stream-perf/cache_tokens.py --cache "$RUNNER_TEMP/tokenizer-cache"
+          python3 tests/stream-perf/cache_tokens.py --cache "$RUNNER_TEMP/tokenizer-cache" --check-only
+          chmod -R a+rX "$RUNNER_TEMP/tokenizer-cache"
+      - name: Verify actual HTTP routing and compiled browser in isolated containers
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,subprocess,time,uuid
+          from urllib.parse import urlsplit
+          from playwright.sync_api import sync_playwright
+          out=pathlib.Path(os.environ['RUNNER_TEMP'],'image-browser');out.mkdir()
+          def command(args,timeout=20): return subprocess.check_output(args,timeout=timeout,stderr=subprocess.DEVNULL)
+          image_id=pathlib.Path(os.environ['RUNNER_TEMP'],'image-id').read_text().strip()
+          image=json.loads(command(['docker','image','inspect',image_id]))[0]
+          assert image['Architecture']=='amd64' and image['Config']['Labels']['org.opencontainers.image.revision']==os.environ['CANDIDATE_SHA']
+          report={'source':os.environ['CANDIDATE_SHA'],'tree':os.environ['CANDIDATE_TREE'],'image_id':image_id,'published':False,'chromium_sandbox':True,'themes':{},'passed':False}
+          try:
+              with sync_playwright() as playwright:
+                  browser=playwright.chromium.launch(chromium_sandbox=True)
+                  try:
+                      for theme in ('modern','air','berry','default'):
+                          name='oneapi-recovery-'+uuid.uuid4().hex
+                          try:
+                              command(['docker','run','-d','--network','none','--memory','2g','--pids-limit','256','--name',name,'-v',os.environ['RUNNER_TEMP']+'/tokenizer-cache:/tokenizer-cache:ro','-e','TIKTOKEN_CACHE_DIR=/tokenizer-cache','-e','THEME='+theme,image_id])
+                              def get(path):
+                                  assert path.startswith('/') and not path.startswith('//')
+                                  raw=command(['docker','exec',name,'curl','-sS','-D','-','--max-time','5','http://127.0.0.1:3000'+path])
+                                  head,body=raw.split(b'\r\n\r\n',1);lines=head.decode().split('\r\n')
+                                  headers={k.strip().lower():v.strip() for row in lines[1:] if ':' in row for k,v in [row.split(':',1)]}
+                                  return int(lines[0].split()[1]),headers,body
+                              deadline=time.monotonic()+180
+                              while True:
+                                  try:
+                                      status,headers,body=get('/api/status')
+                                      if status==200 and json.loads(body).get('success') is True: break
+                                  except (subprocess.SubprocessError,ValueError): pass
+                                  assert time.monotonic()<deadline,'Offline application readiness failed'
+                                  time.sleep(2)
+                              status,headers,body=get('/api/browser-config')
+                              assert status==200 and json.loads(body)=={'sentry':None}
+                              assert 'no-store' in headers.get('cache-control','') and headers.get('x-content-type-options')=='nosniff'
+                              theme_report={'offline_config_disabled':True,'sessions':[]}
+                              for active in (False,True):
+                                  envelopes=[];errors=[];served={};cache={}
+                                  context=browser.new_context(service_workers='block')
+                                  def route_handler(route):
+                                      request=route.request;url=urlsplit(request.url)
+                                      if url.scheme=='https' and url.netloc=='o123.ingest.sentry.io':
+                                          envelopes.append(request.post_data_buffer or b'')
+                                          route.fulfill(status=200,content_type='application/json',body='{}');return
+                                      if url.scheme!='https' or url.netloc!='oneapi.laisky.com':
+                                          route.abort();return
+                                      if request.method!='GET':
+                                          route.fulfill(status=405,body='');return
+                                      if active and url.path=='/api/browser-config':
+                                          route.fulfill(status=200,content_type='application/json',headers={'cache-control':'no-store'},body=json.dumps({'sentry':{'dsn':'https://0123456789abcdef0123456789abcdef@o123.ingest.sentry.io/456','environment':'production'}}));return
+                                      path=url.path+('?' + url.query if url.query else '')
+                                      if path not in cache: cache[path]=get(path)
+                                      status,headers,body=cache[path]
+                                      if url.path.endswith('.js'):
+                                          assert b'sourceMappingURL=data:' not in body
+                                          served[url.path]=hashlib.sha256(body).hexdigest()
+                                      filtered={k:v for k,v in headers.items() if k not in ('content-length','transfer-encoding','content-encoding','connection')}
+                                      route.fulfill(status=status,headers=filtered,body=body)
+                                  context.route('**/*',route_handler)
+                                  page=context.new_page();page.on('pageerror',lambda e: errors.append(str(e)))
+                                  page.goto('https://oneapi.laisky.com/',wait_until='networkidle',timeout=60000)
+                                  page.wait_for_function("Boolean(document.querySelector('#root')?.childElementCount)",timeout=30000)
+                                  page.wait_for_timeout(2300)
+                                  assert not errors, 'Unexpected startup error'
+                                  assert served, 'No compiled application scripts served'
+                                  before=len(envelopes)
+                                  page.evaluate("setTimeout(() => { throw new Error('oneapi recovery diagnostic https://oneapi.laisky.com/check?token=synthetic-private-canary'); }, 0)")
+                                  until=time.monotonic()+10
+                                  while active and len(envelopes)==before and time.monotonic()<until: page.wait_for_timeout(100)
+                                  page.wait_for_timeout(500)
+                                  events=[]
+                                  for envelope in envelopes:
+                                      lines=envelope.splitlines()
+                                      for index,line in enumerate(lines[:-1]):
+                                          try: item=json.loads(line)
+                                          except ValueError: continue
+                                          if isinstance(item,dict) and item.get('type')=='event': events.append(json.loads(lines[index+1]))
+                                  if active:
+                                      assert len(events)==1,'Expected exactly one intercepted browser error'
+                                      payload=json.dumps(events[0]); assert 'oneapi recovery diagnostic' in payload
+                                      assert 'synthetic-private-canary' not in payload,'Synthetic URL credential leaked'
+                                      assert not events[0].get('user')
+                                      expected='modern' if theme=='default' else theme
+                                      assert str(events[0].get('release','')).startswith('one-api-'+expected+'@sha256:')
+                                  else:
+                                      assert not envelopes,'Disabled configuration emitted telemetry'
+                                  page.screenshot(path=str(out/(theme+('-active' if active else '-disabled')+'.png')))
+                                  theme_report['sessions'].append({'active_fixture':active,'intercepted_error_events':len(events),'entry_assets':served,'passed':True})
+                                  context.close()
+                              state=json.loads(command(['docker','inspect',name]))[0]
+                              assert state['State']['Running'] and not state['State']['OOMKilled'] and state['RestartCount']==0 and state['HostConfig']['NetworkMode']=='none'
+                              theme_report['healthy_runtime']=True;report['themes'][theme]=theme_report
+                          finally:
+                              subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30,check=False)
+                  finally: browser.close()
+              report['passed']=True
+          finally:
+              (out/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: recovery-image-browser-02ce1d5
+          path: |
+            ${{ runner.temp }}/image-id
+            ${{ runner.temp }}/image-browser
+          retention-days: 14
+          if-no-files-found: warn
+  acceptance:
+    if: always()
+    needs: [source,backend,frontend,image_browser]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all recovered-candidate gates
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          results=json.loads(os.environ['RESULTS'])
+          assert set(results)=={'source','backend','frontend','image_browser'}
+          assert all(item['result']=='success' for item in results.values()),results
+          print('Current-main candidate acceptance passed; no production publication or collector traffic occurred.')
+          PY
