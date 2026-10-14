@@ -1,0 +1,92 @@
+# Read-only qualification; never merge this harness into application branches.
+name: OneAPI final locale acceptance
+on:
+  push:
+    branches: [qualification/oneapi-recovery-20261014]
+    paths: [.github/workflows/recovery-locale-check.yml]
+permissions:
+  contents: read
+jobs:
+  modern:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      SOURCE_SHA: 3157422b13b52f70c3551e61bf47420a33fa59aa
+      SOURCE_TREE: ec8a39262cfd827aa4da505f22d4b72802cc0d63
+      ACCEPTED_RUNTIME: f83004c32d43c88e70550cf7a89cd345d2f51731
+      NODE_OPTIONS: --max-old-space-size=6144
+      CI: 'true'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 3157422b13b52f70c3551e61bf47420a33fa59aa
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.21.0'
+          cache: yarn
+          cache-dependency-path: web/modern/yarn.lock
+      - name: Verify only the four translated descriptions differ from accepted runtime
+        run: |
+          python3 - <<'PY'
+          import copy,hashlib,json,os,pathlib,subprocess
+          def git(*args):return subprocess.check_output(['git',*args],text=True).strip()
+          assert git('rev-parse','HEAD')==os.environ['SOURCE_SHA']
+          assert git('rev-parse','HEAD^{tree}')==os.environ['SOURCE_TREE']
+          blobs={'es':'c10095838d26daa3ca986cd6b57092bc9c8bb03b','fr':'f823c71a3344c53c7e3ff95d9080d182d63c3c43','ja':'7f67467e4041768ccf9407e747fc05d0de52f273','zh':'4194c376f9db15f8e84cbdeff1f0342cea37dd3f'}
+          paths={'web/modern/src/i18n/locales/'+locale+'/settings.json' for locale in blobs}
+          assert set(git('diff','--name-only',os.environ['ACCEPTED_RUNTIME'],'HEAD').splitlines())==paths
+          for locale,blob in blobs.items():
+              path='web/modern/src/i18n/locales/'+locale+'/settings.json'
+              assert git('rev-parse','HEAD:'+path)==blob
+              before=json.loads(git('show',os.environ['ACCEPTED_RUNTIME']+':'+path))
+              after=json.loads(pathlib.Path(path).read_text())
+              value=after['system_settings']['descriptions']['BrowserSentryConfig']
+              original=before['system_settings']['descriptions']['BrowserSentryConfig']
+              assert value!=original and all(word in value for word in ('dsn','environment','production','staging','development'))
+              after['system_settings']['descriptions']['BrowserSentryConfig']=original
+              assert before==after,'Unrelated locale value changed: '+locale
+          out=pathlib.Path(os.environ['RUNNER_TEMP'],'locale-check');out.mkdir()
+          (out/'source.json').write_text(json.dumps({'source':os.environ['SOURCE_SHA'],'tree':os.environ['SOURCE_TREE'],'accepted_runtime':os.environ['ACCEPTED_RUNTIME'],'locale_blobs':blobs,'scope_passed':True},indent=2))
+          PY
+      - name: Validate translations, settings behavior and rebuilt Modern artifacts
+        working-directory: web/modern
+        run: |
+          set -euo pipefail
+          yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+          yarn check:i18n
+          yarn test --run --maxWorkers=2 src/pages/settings/__tests__ 2>&1 | tee "$RUNNER_TEMP/locale-check/tests.txt"
+          yarn lint
+          yarn build
+          yarn prettier --check src/i18n/locales/{es,fr,ja,zh}/settings.json
+          test -z "$(git status --porcelain --untracked-files=no)"
+      - name: Record map-free artifacts without publication or settings changes
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re
+          root=pathlib.Path('web/build/modern');assert root.is_dir() and not list(root.rglob('*.map'))
+          assets={};releases=set()
+          for path in root.rglob('*'):
+              if not path.is_file():continue
+              raw=path.read_bytes();assets[str(path.relative_to(root))]=hashlib.sha256(raw).hexdigest()
+              if path.suffix=='.js':
+                  assert b'sourceMappingURL=data:' not in raw
+                  releases.update(re.findall(r'one-api-modern@sha256:[a-f0-9]{64}',raw.decode()))
+          assert len(releases)==1
+          out=pathlib.Path(os.environ['RUNNER_TEMP'],'locale-check')
+          (out/'report.json').write_text(json.dumps({'source':os.environ['SOURCE_SHA'],'tree':os.environ['SOURCE_TREE'],'releases':sorted(releases),'assets':assets,'passed':True,'published':False},indent=2))
+          print('Tooltip-only candidate accepted; no repository mutation, image publication or production configuration change.')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: recovery-final-locale-acceptance
+          path: |
+            ${{ runner.temp }}/locale-check
+            web/build/modern
+          retention-days: 14
+          if-no-files-found: error
