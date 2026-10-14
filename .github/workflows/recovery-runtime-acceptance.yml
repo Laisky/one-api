@@ -1,0 +1,235 @@
+name: OneAPI repaired runtime acceptance
+on:
+  push:
+    branches: [qualification/oneapi-recovery-20261014]
+    paths: [.github/workflows/recovery-runtime-acceptance.yml]
+permissions:
+  contents: read
+concurrency:
+  group: oneapi-runtime-recovery-20261014
+  cancel-in-progress: false
+env:
+  SOURCE_SHA: f83004c32d43c88e70550cf7a89cd345d2f51731
+  SOURCE_TREE: dde33bd0b0ec07ed1b7828de8688788356fe0238
+  PRIOR_SOURCE: 02ce1d5da18fdfcd3ae36685a511ab0a6c6077f5
+defaults:
+  run:
+    shell: bash
+jobs:
+  air:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: f83004c32d43c88e70550cf7a89cd345d2f51731
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.21.0'
+          cache: yarn
+          cache-dependency-path: web/air/yarn.lock
+      - name: Prove the precise repair scope and retain existing qualification provenance
+        run: |
+          python3 - <<'PY'
+          import json,os,pathlib,subprocess
+          def git(*args):return subprocess.check_output(['git',*args],text=True).strip()
+          assert git('rev-parse','HEAD')==os.environ['SOURCE_SHA']
+          assert git('rev-parse','HEAD^{tree}')==os.environ['SOURCE_TREE']
+          paths=set(git('diff','--name-only',os.environ['PRIOR_SOURCE'],'HEAD').splitlines())
+          assert paths=={'.github/scripts/legacy-build-contract.test.mjs','web/air/src/index.js','web/air/src/browser-app.js'},paths
+          for path,blob in {'web/air/src/index.js':'d08c815267a4e35f45c965d78bf3227045473f4b','web/air/src/browser-app.js':'f99d9e17ab783e0eecb02e0e32f91e98d1aec39d','.github/scripts/legacy-build-contract.test.mjs':'6231715ffe5ecb69963c021aed28887d3b4b0c5b'}.items(): assert git('rev-parse','HEAD:'+path)==blob
+          out=pathlib.Path(os.environ['RUNNER_TEMP'],'air');out.mkdir()
+          (out/'source.json').write_text(json.dumps({'source':os.environ['SOURCE_SHA'],'tree':os.environ['SOURCE_TREE'],'prior_source':os.environ['PRIOR_SOURCE'],'changed_paths':sorted(paths),'unchanged_backend_modern_berry_qualification':38502003755},indent=2))
+          PY
+      - name: Full affected theme tests, lint and build
+        working-directory: web/air
+        env:
+          CI: 'true'
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: |
+          yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+          yarn test 2>&1 | tee "$RUNNER_TEMP/air/tests.txt"
+          yarn lint
+          yarn build
+          cd ../..
+          node .github/scripts/frontend-audit.mjs air
+          test -z "$(git status --porcelain --untracked-files=no)"
+      - name: Preserve map-free rebuilt artifact identity
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re
+          root=pathlib.Path('web/build/air');assert root.is_dir() and not list(root.rglob('*.map'))
+          assets={};releases=set()
+          for p in root.rglob('*'):
+              if not p.is_file():continue
+              data=p.read_bytes();assets[str(p.relative_to(root))]=hashlib.sha256(data).hexdigest()
+              if p.suffix=='.js':
+                  assert b'sourceMappingURL=data:' not in data
+                  releases.update(re.findall(r'one-api-air@sha256:[a-f0-9]{64}',data.decode()))
+          assert len(releases)==1
+          pathlib.Path(os.environ['RUNNER_TEMP'],'air','artifact.json').write_text(json.dumps({'source':os.environ['SOURCE_SHA'],'assets':assets,'releases':sorted(releases),'maps':0,'passed':True},indent=2))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: recovery-air-fixed
+          path: |
+            ${{ runner.temp }}/air
+            web/build/air
+          retention-days: 14
+          if-no-files-found: error
+  image_browser:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: f83004c32d43c88e70550cf7a89cd345d2f51731
+          persist-credentials: false
+      - name: Install pinned sandboxed browser
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Build original Dockerfile with no registry or production access
+        env:
+          DOCKER_BUILDKIT: '1'
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$SOURCE_TREE"
+          docker build --build-arg TARGETARCH=amd64 --build-arg TARGETOS=linux --label "org.opencontainers.image.revision=$SOURCE_SHA" --iidfile "$RUNNER_TEMP/image-id" --tag oneapi-runtime-recovery:f83004c .
+          python3 tests/stream-perf/cache_tokens.py --cache "$RUNNER_TEMP/tokenizer-cache"
+          python3 tests/stream-perf/cache_tokens.py --cache "$RUNNER_TEMP/tokenizer-cache" --check-only
+          chmod -R a+rX "$RUNNER_TEMP/tokenizer-cache"
+      - name: Test all actual themes with external fonts blocked and intercepted error capture
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,subprocess,time,uuid
+          from urllib.parse import urlsplit
+          from playwright.sync_api import sync_playwright
+          out=pathlib.Path(os.environ['RUNNER_TEMP'],'image-browser');out.mkdir()
+          def command(args,timeout=20): return subprocess.check_output(args,timeout=timeout,stderr=subprocess.DEVNULL)
+          image_id=pathlib.Path(os.environ['RUNNER_TEMP'],'image-id').read_text().strip()
+          image=json.loads(command(['docker','image','inspect',image_id]))[0]
+          assert image['Architecture']=='amd64' and image['Config']['Labels']['org.opencontainers.image.revision']==os.environ['SOURCE_SHA']
+          report={'source':os.environ['SOURCE_SHA'],'tree':os.environ['SOURCE_TREE'],'image_id':image_id,'published':False,'chromium_sandbox':True,'themes':{},'passed':False}
+          try:
+              with sync_playwright() as playwright:
+                  browser=playwright.chromium.launch(chromium_sandbox=True)
+                  try:
+                      for theme in ('air','berry','modern','default'):
+                          name='oneapi-recovery-'+uuid.uuid4().hex
+                          theme_report={'sessions':[]};report['themes'][theme]=theme_report
+                          try:
+                              command(['docker','run','-d','--network','none','--memory','2g','--pids-limit','256','--name',name,'-v',os.environ['RUNNER_TEMP']+'/tokenizer-cache:/tokenizer-cache:ro','-e','TIKTOKEN_CACHE_DIR=/tokenizer-cache','-e','THEME='+theme,image_id])
+                              def get(path):
+                                  assert path.startswith('/') and not path.startswith('//')
+                                  raw=command(['docker','exec',name,'curl','-sS','-D','-','--max-time','5','http://127.0.0.1:3000'+path])
+                                  head,body=raw.split(b'\r\n\r\n',1);lines=head.decode().split('\r\n')
+                                  headers={k.strip().lower():v.strip() for row in lines[1:] if ':' in row for k,v in [row.split(':',1)]}
+                                  return int(lines[0].split()[1]),headers,body
+                              deadline=time.monotonic()+180
+                              while True:
+                                  try:
+                                      status,headers,body=get('/api/status')
+                                      if status==200 and json.loads(body).get('success') is True:break
+                                  except (subprocess.SubprocessError,ValueError):pass
+                                  assert time.monotonic()<deadline,'Offline application readiness failed'
+                                  time.sleep(2)
+                              status,headers,body=get('/api/browser-config')
+                              assert status==200 and json.loads(body)=={'sentry':None}
+                              assert 'no-store' in headers.get('cache-control','') and headers.get('x-content-type-options')=='nosniff'
+                              theme_report['offline_config_disabled']=True
+                              for active in (False,True):
+                                  envelopes=[];served={};cache={};release_ids=set()
+                                  session={'active_fixture':active,'errors':[],'blocked_hosts':[],'assets':served,'passed':False}
+                                  theme_report['sessions'].append(session)
+                                  context=browser.new_context(service_workers='block')
+                                  def route_handler(route):
+                                      request=route.request;url=urlsplit(request.url)
+                                      if url.scheme=='https' and url.netloc=='o123.ingest.sentry.io':
+                                          envelopes.append(request.post_data_buffer or b'');route.fulfill(status=200,content_type='application/json',body='{}');return
+                                      if url.scheme!='https' or url.netloc!='oneapi.laisky.com':
+                                          session['blocked_hosts'].append(url.hostname);route.abort();return
+                                      if request.method!='GET':route.fulfill(status=405,body='');return
+                                      if active and url.path=='/api/browser-config':
+                                          route.fulfill(status=200,content_type='application/json',headers={'cache-control':'no-store'},body=json.dumps({'sentry':{'dsn':'https://0123456789abcdef0123456789abcdef@o123.ingest.sentry.io/456','environment':'production'}}));return
+                                      path=url.path+('?' + url.query if url.query else '')
+                                      if path not in cache:cache[path]=get(path)
+                                      status,headers,body=cache[path]
+                                      if url.path.endswith(('.js','.css')):
+                                          assert b'sourceMappingURL=data:' not in body
+                                          served[url.path]={'sha256':hashlib.sha256(body).hexdigest(),'status':status}
+                                          if url.path.endswith('.js'):release_ids.update(re.findall(r'one-api-(?:modern|air|berry)@sha256:[a-f0-9]{64}',body.decode()))
+                                      filtered={k:v for k,v in headers.items() if k not in ('content-length','transfer-encoding','content-encoding','connection')}
+                                      route.fulfill(status=status,headers=filtered,body=body)
+                                  context.route('**/*',route_handler)
+                                  page=context.new_page();page.on('pageerror',lambda e:session['errors'].append(str(e)))
+                                  try:
+                                      page.goto('https://oneapi.laisky.com/',wait_until='networkidle',timeout=60000)
+                                      page.wait_for_function("Boolean(document.querySelector('#root')?.childElementCount)",timeout=30000)
+                                      page.wait_for_timeout(2300)
+                                      assert not session['errors'],'Unexpected startup error'
+                                      assert served and all(a['status']==200 for a in served.values())
+                                      if theme=='air':assert 'fonts.googleapis.com' in session['blocked_hosts'],'The original optional font outage must remain exercised'
+                                      before=len(envelopes)
+                                      assert before==0,'No unsolicited startup telemetry'
+                                      page.evaluate("setTimeout(() => { throw new Error('oneapi recovery diagnostic https://oneapi.laisky.com/check?token=synthetic-private-canary'); }, 0)")
+                                      until=time.monotonic()+10
+                                      while active and len(envelopes)==before and time.monotonic()<until:page.wait_for_timeout(100)
+                                      page.wait_for_timeout(500)
+                                      events=[]
+                                      for envelope in envelopes:
+                                          lines=envelope.splitlines()
+                                          for index,line in enumerate(lines[:-1]):
+                                              try:item=json.loads(line)
+                                              except ValueError:continue
+                                              if isinstance(item,dict) and item.get('type')=='event':events.append(json.loads(lines[index+1]))
+                                      if active:
+                                          assert len(events)==1,'Expected exactly one intercepted browser error'
+                                          payload=json.dumps(events[0]);assert 'oneapi recovery diagnostic' in payload
+                                          assert 'synthetic-private-canary' not in payload and not events[0].get('user')
+                                          expected='modern' if theme=='default' else theme
+                                          assert str(events[0].get('release','')).startswith('one-api-'+expected+'@sha256:')
+                                          session['event_release']=events[0]['release']
+                                      else:assert not envelopes,'Disabled configuration emitted telemetry'
+                                      session.update(passed=True,intercepted_error_events=len(events),releases=sorted(release_ids))
+                                  finally:
+                                      page.screenshot(path=str(out/(theme+('-active' if active else '-disabled')+'.png')))
+                                      if not session['passed']:(out/(theme+'-failure.html')).write_text(page.content())
+                                      context.close()
+                                      (out/'report.json').write_text(json.dumps(report,indent=2))
+                              state=json.loads(command(['docker','inspect',name]))[0]
+                              assert state['State']['Running'] and not state['State']['OOMKilled'] and state['RestartCount']==0 and state['HostConfig']['NetworkMode']=='none'
+                              theme_report['healthy_runtime']=True
+                          finally:subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30,check=False)
+                  finally:browser.close()
+              report['passed']=True
+          finally:
+              (out/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: recovery-repaired-image-browser
+          path: |
+            ${{ runner.temp }}/image-id
+            ${{ runner.temp }}/image-browser
+          retention-days: 14
+          if-no-files-found: warn
+  acceptance:
+    if: always()
+    needs: [air,image_browser]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require complete repair and native runtime evidence
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          results=json.loads(os.environ['RESULTS']);assert all(r['result']=='success' for r in results.values()),results
+          print('Repaired runtime acceptance passed. Prior unchanged-source evidence remains separately identified; no production publication or collector traffic.')
+          PY
