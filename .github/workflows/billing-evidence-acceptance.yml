@@ -1,0 +1,93 @@
+# Isolated test acceptance only; never merge this harness into application branches.
+name: Billing durable evidence acceptance
+on:
+  push:
+    branches: [qualification/oneapi-recovery-20261014]
+    paths: [.github/workflows/billing-evidence-acceptance.yml]
+permissions:
+  contents: read
+concurrency:
+  group: billing-durable-evidence-20261014
+  cancel-in-progress: false
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SOURCE_SHA: 8863aeccc934b68e900cee1c69b65cf106e43452
+      BASE_SHA: ef27439cd888c4bb5d36270b9a415cfea088d48f
+      GOMAXPROCS: '2'
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 8863aeccc934b68e900cee1c69b65cf106e43452
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Exact source, durable fault matrix, negative controls and affected package
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import collections,hashlib,json,os,pathlib,subprocess
+          out=pathlib.Path(os.environ['RUNNER_TEMP'],'billing-evidence');out.mkdir()
+          test=pathlib.Path('relay/controller/billing_refund_evidence_test.go')
+          safety=pathlib.Path('relay/controller/billing_safety.go');original=safety.read_bytes()
+          source=os.environ['SOURCE_SHA'];base=os.environ['BASE_SHA']
+          def git(*args):return subprocess.check_output(['git',*args],text=True).strip()
+          assert git('rev-parse','HEAD')==source
+          assert git('diff','--name-only',base,source)==str(test)
+          assert subprocess.check_output(['gofmt','-l',str(test)],text=True)==''
+          report={'source':source,'base':base,'tree':git('rev-parse','HEAD^{tree}'),'test_blob':git('hash-object',str(test)),'production_source_changed':False,'passed':False,'runs':{}}
+          def run(label,pattern=None,timeout='120s'):
+              command=['go','test','-json','-race','-p','1','-count=1','-timeout='+timeout]
+              if pattern:command+=['-run',pattern]
+              command+=['./relay/controller']
+              with (out/(label+'.jsonl')).open('w') as stream:
+                  process=subprocess.run(command,stdout=stream,stderr=subprocess.STDOUT,timeout=1500)
+              events=[]
+              for line in (out/(label+'.jsonl')).read_text().splitlines():
+                  try:events.append(json.loads(line))
+                  except ValueError:pass
+              actions={'pass','fail','skip'}
+              top=collections.Counter(e['Action'] for e in events if e.get('Test') and '/' not in e['Test'] and e['Action'] in actions)
+              leaves=[(e['Test'],e['Action']) for e in events if e.get('Test','').startswith('TestConservativeRefundDurableEvidence/') and e['Action'] in actions]
+              result={'exit_code':process.returncode,'top_level':dict(top),'matrix':leaves,'skips':[e.get('Test') for e in events if e['Action']=='skip']}
+              report['runs'][label]=result;print(label,json.dumps(result))
+              return result
+          try:
+              positive=run('fault_matrix','^TestConservativeRefundDurableEvidence$')
+              assert positive['exit_code']==0 and len(positive['matrix'])==8 and all(v=='pass' for _,v in positive['matrix'])
+              text=original.decode()
+              # Only mutate fixed diagnostic messages in this disposable checkout. Durable operations stay real.
+              refund='CRITICAL BILLING AUDIT: conservative refund failed to return pre-consumed quota; '
+              ledger='failed to reconcile provisional log on refund'
+              for name,message,expected_failures in [('missing_refund_audit',refund,4),('missing_ledger_audit',ledger,2)]:
+                  assert text.count(message)==1
+                  safety.write_text(text.replace(message,'deliberately changed negative-control diagnostic: '+name,1))
+                  negative=run(name,'^TestConservativeRefundDurableEvidence$')
+                  assert negative['exit_code']!=0 and len(negative['matrix'])==8
+                  assert sum(v=='fail' for _,v in negative['matrix'])==expected_failures,'Negative control must fail the intended behavior, not compilation or setup'
+                  assert all(v in ('pass','fail') for _,v in negative['matrix'])
+                  safety.write_bytes(original)
+              full=run('affected_package',timeout='20m')
+              assert full['exit_code']==0 and not full['top_level'].get('fail')
+              assert len(full['matrix'])==8 and all(v=='pass' for _,v in full['matrix'])
+              subprocess.run(['go','vet','-p','1','./relay/controller'],check=True,timeout=300)
+              assert not git('status','--porcelain','--untracked-files=no')
+              report['passed']=True
+          finally:
+              safety.write_bytes(original)
+              (out/'report.json').write_text(json.dumps(report,indent=2))
+              (out/'billing_refund_evidence_test.go').write_bytes(test.read_bytes())
+              print(json.dumps(report))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: billing-durable-evidence-8863aec
+          path: ${{ runner.temp }}/billing-evidence
+          retention-days: 14
+          if-no-files-found: error
