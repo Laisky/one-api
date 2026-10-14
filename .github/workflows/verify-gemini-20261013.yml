@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 25
     env:
       GOTOOLCHAIN: local
-      SOURCE_SHA: 3d41e392882fb381718914a748f446ee049baad0
+      SOURCE_SHA: 432d2d5d6e82cf196f0aa5d9cda7de91c3dc8e38
       BASE_SHA: eed2a6d02e5392f24197f49a70af3ba2ba22f212
     defaults:
       run:
@@ -22,7 +22,7 @@ jobs:
       - name: Checkout exact PR source, not the validation branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 3d41e392882fb381718914a748f446ee049baad0
+          ref: 432d2d5d6e82cf196f0aa5d9cda7de91c3dc8e38
           fetch-depth: 0
           persist-credentials: false
       - name: Setup repository validation compiler
@@ -99,16 +99,19 @@ jobs:
               failed = sorted({e['Test'] for e in events if e.get('Action') == 'fail' and e.get('Test')})
               skipped = sorted({e['Test'] for e in events if e.get('Action') == 'skip' and e.get('Test')})
               print(path.name, dict(counts), 'failures=', failed, 'skips=', skipped)
-          for path in sorted(root.glob('*.stderr')):
+              for event in events:
+                  if event.get('Action') == 'build-output' or event.get('Test') in failed:
+                      print(event.get('Output', '').rstrip())
+          for path in sorted(list(root.glob('*.stderr')) + list(root.glob('*.txt'))):
               text = path.read_text()
               if text:
-                  print(path.name, text[-6000:])
+                  print(path.name, text[-12000:])
           PY
       - name: Preserve raw results
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: gemini-argon-3d41e392882f
+          name: gemini-argon-432d2d5d6e82
           path: ${{ runner.temp }}/argon-evidence
           if-no-files-found: error
           retention-days: 14
