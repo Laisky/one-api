@@ -12,7 +12,7 @@ import (
 // Pricing sources verified 2026-09-03; GPT Image 2.5 additions verified 2026-09-09:
 //   - https://developers.openai.com/api/docs/pricing
 //   - https://developers.openai.com/api/docs/models
-var ModelRatios = applyOpenAIModelCatalog202609(mergeModelRatios(
+var ModelRatios = applyOpenAIModelCatalog202610(applyOpenAIModelCatalog202609(mergeModelRatios(
 	gpt35ModelRatios,
 	gpt4ModelRatios,
 	gpt4oModelRatios,
@@ -28,7 +28,7 @@ var ModelRatios = applyOpenAIModelCatalog202609(mergeModelRatios(
 	imageModelRatios,
 	image25ModelRatios,
 	videoModelRatios,
-))
+)))
 
 // ModelList derived from ModelRatios for backward compatibility.
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
