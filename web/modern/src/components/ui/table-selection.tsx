@@ -48,7 +48,7 @@ function defaultSelectionLabel(row: unknown): string {
 
 /** useSelectableTable supplies checkboxes and the same page/all-matching controls to desktop and mobile tables. */
 export function useSelectableTable<TData extends RowData, TValue>(
-  options: TableSelectionOptions<TData> & { columns: ModernColumnDef<TData, TValue>[]; data: TData[]; total: number; loading: boolean }
+  options: TableSelectionOptions<TData> & { columns: ModernColumnDef<TData, TValue>[]; data: TData[]; total: number; loading: boolean; rangeContext?: string }
 ) {
   const { t } = useTranslation();
   const statusId = useId();
@@ -67,7 +67,7 @@ export function useSelectableTable<TData extends RowData, TValue>(
   const excluded = selection.snapshot.mode === 'all_matching' ? selection.snapshot.excluded_ids.length : 0;
   const rangeScope = JSON.stringify([
     user?.uuid || user?.username, user?.role, options.selectionScope ?? '',
-    selection.scopeVersion, selection.snapshot.mode, ids,
+    selection.scopeVersion, selection.snapshot.mode, options.rangeContext, ids,
   ]);
   const rangeAnchor = useRef<{ id: string; scope: string; order: string[] } | null>(null);
   // Reset during render so A -> B -> A navigation cannot resurrect a stale anchor.

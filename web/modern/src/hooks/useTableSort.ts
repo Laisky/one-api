@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type SetStateAction } from 'react';
 import { useAuthStore } from '@/lib/stores/auth';
 import {
   getTableSortStorageKey,
+  getTableSortColumns,
   isTableSortPreference,
   readTableSortPreference,
   writeTableSortPreference,
@@ -22,9 +23,10 @@ export function useTableSort(table: string, defaultBy: string = '', defaultOrder
     state.user?.role ?? null,
   ]));
   const key = getTableSortStorageKey(table, principal);
+  const allowedColumns = getTableSortColumns(table);
   const [stored, setStored] = useState<StoredTableSort>(() => ({
     key,
-    value: readTableSortPreference(key, { sortBy: defaultBy, sortOrder: defaultOrder }),
+    value: readTableSortPreference(key, { sortBy: defaultBy, sortOrder: defaultOrder }, allowedColumns),
     dirty: false,
   }));
   // React retries this component before committing children or effects. A new
@@ -33,7 +35,7 @@ export function useTableSort(table: string, defaultBy: string = '', defaultOrder
   if (stored.key !== key) {
     current = {
       key,
-      value: readTableSortPreference(key, { sortBy: defaultBy, sortOrder: defaultOrder }),
+      value: readTableSortPreference(key, { sortBy: defaultBy, sortOrder: defaultOrder }, allowedColumns),
       dirty: false,
     };
     setStored(current);
@@ -52,9 +54,9 @@ export function useTableSort(table: string, defaultBy: string = '', defaultOrder
       const sortBy = typeof next === 'function' ? next(previous.value.sortBy) : next;
       if (previous.value.sortBy === sortBy) return previous;
       const value = { ...previous.value, sortBy };
-      return isTableSortPreference(value) ? { key, value, dirty: true } : previous;
+      return isTableSortPreference(value, allowedColumns) ? { key, value, dirty: true } : previous;
     });
-  }, [key]);
+  }, [key, allowedColumns]);
 
   /** setSortOrder accepts a direction or updater and composes it with queued column changes. */
   const setSortOrder = useCallback((next: SetStateAction<'asc' | 'desc'>) => {
@@ -63,9 +65,9 @@ export function useTableSort(table: string, defaultBy: string = '', defaultOrder
       const sortOrder = typeof next === 'function' ? next(previous.value.sortOrder) : next;
       if (previous.value.sortOrder === sortOrder) return previous;
       const value = { ...previous.value, sortOrder };
-      return isTableSortPreference(value) ? { key, value, dirty: true } : previous;
+      return isTableSortPreference(value, allowedColumns) ? { key, value, dirty: true } : previous;
     });
-  }, [key]);
+  }, [key, allowedColumns]);
 
   return { ...current.value, setSortBy, setSortOrder };
 }

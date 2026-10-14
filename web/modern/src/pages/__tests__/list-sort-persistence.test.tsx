@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
-import { getTableSortStorageKey } from '@/lib/table-sort-preference';
+import { getTableSortColumns, getTableSortStorageKey } from '@/lib/table-sort-preference';
 import { ChannelsPage } from '../channels/ChannelsPage';
 import { UsersPage } from '../users/UsersPage';
 import { TokensPage } from '../tokens/TokensPage';
@@ -14,6 +14,7 @@ import { LogsPage } from '../logs/LogsPage';
 
 /** TableProbeProps contains the boundary between each list's request state and its shared renderer. */
 interface TableProbeProps {
+  columns: { accessorKey?: unknown; enableSorting?: boolean }[];
   sortBy: string;
   sortOrder: 'asc' | 'desc';
   onSortChange: (column: string, direction: 'asc' | 'desc') => void;
@@ -21,9 +22,12 @@ interface TableProbeProps {
 }
 
 /** TableProbe drives the real page's sort callback without unrelated row action rendering. */
-function TableProbe({ sortBy, sortOrder, onSortChange, loading }: TableProbeProps) {
+function TableProbe({ columns, sortBy, sortOrder, onSortChange, loading }: TableProbeProps) {
   return (
     <div>
+      <output data-testid="sortable-columns">{JSON.stringify(columns
+        .filter((column) => typeof column.accessorKey === 'string' && column.enableSorting !== false)
+        .map((column) => column.accessorKey))}</output>
       <output data-testid="table-sort">{sortBy}:{sortOrder}</output>
       <button type="button" disabled={loading} onClick={() => onSortChange(sortBy, 'desc')}>Sort descending</button>
     </div>
@@ -93,6 +97,15 @@ describe('list sorting request persistence', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Sort descending' })).not.toBeDisabled());
     assertRequests('asc');
+    const allowedColumns = getTableSortColumns(table);
+    expect(allowedColumns).toBeDefined();
+    const visibleFields: string[] = JSON.parse(screen.getByTestId('sortable-columns').textContent || '[]');
+    for (const field of visibleFields) expect(allowedColumns).toContain(field);
+    // Preserve toolbar-only choices as well as table-header choices.
+    for (const option of document.querySelectorAll('select option')) {
+      const value = (option as HTMLOptionElement).value;
+      if (value) expect(allowedColumns).toContain(value);
+    }
     expect(screen.getByTestId('table-sort')).toHaveTextContent(`${field}:asc`);
 
     vi.mocked(api.get).mockClear();
