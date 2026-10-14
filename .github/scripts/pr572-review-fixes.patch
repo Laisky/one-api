@@ -1,0 +1,182 @@
+diff --git a/web/modern/src/components/ui/__tests__/table-selection-range.test.tsx b/web/modern/src/components/ui/__tests__/table-selection-range.test.tsx
+--- a/web/modern/src/components/ui/__tests__/table-selection-range.test.tsx
++++ b/web/modern/src/components/ui/__tests__/table-selection-range.test.tsx
+@@ -1,4 +1,5 @@
+-import { act, cleanup, render, screen } from '@testing-library/react';
++import { Suspense, startTransition, useState } from 'react';
++import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+ import userEvent from '@testing-library/user-event';
+ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+ import { useAuthStore } from '@/lib/stores/auth';
+@@ -154,6 +155,43 @@
+         rerender(<Component {...props} {...change} />);
+         await shiftClick(user, 'Echo');
+         expectSelected(['Alpha', 'Echo']);
++      });
++
++      it('preserves the committed anchor when a concurrent view change is abandoned', async () => {
++        const user = userEvent.setup();
++        const suspended = vi.fn();
++        const pending = new Promise<void>(() => {});
++
++        /** SuspendPending prevents the speculative view from committing. */
++        function SuspendPending({ active }: { active: boolean }) {
++          if (active) {
++            suspended();
++            throw pending;
++          }
++          return null;
++        }
++
++        /** ConcurrentTable starts an uncommitted page-size change after displaying the table. */
++        function ConcurrentTable() {
++          const [changing, setChanging] = useState(false);
++          return (
++            <>
++              <button onClick={() => startTransition(() => setChanging(true))}>Start pending view</button>
++              <Suspense fallback={<span>Pending view</span>}>
++                <Component columns={columns} data={rows} total={60} pageSize={changing ? 20 : 10} />
++                <SuspendPending active={changing} />
++              </Suspense>
++            </>
++          );
++        }
++
++        render(<ConcurrentTable />);
++        await user.click(checkbox('Alpha'));
++        await user.click(screen.getByRole('button', { name: 'Start pending view' }));
++        await waitFor(() => expect(suspended).toHaveBeenCalled());
++        expect(screen.queryByText('Pending view')).not.toBeInTheDocument();
++        await shiftClick(user, 'Echo');
++        expectSelected(names.slice(0, 5));
+       });
+ 
+       it('preserves ordinary keyboard checkbox activation', async () => {
+diff --git a/web/modern/src/components/ui/table-selection.tsx b/web/modern/src/components/ui/table-selection.tsx
+--- a/web/modern/src/components/ui/table-selection.tsx
++++ b/web/modern/src/components/ui/table-selection.tsx
+@@ -1,4 +1,4 @@
+-import { useId, useRef } from 'react';
++import { useId, useLayoutEffect, useRef } from 'react';
+ import { ChevronDown, ListChecks } from 'lucide-react';
+ import {
+   DropdownMenu,
+@@ -70,11 +70,13 @@
+     selection.scopeVersion, selection.snapshot.mode, options.rangeContext, ids,
+   ]);
+   const rangeAnchor = useRef<{ id: string; scope: string; order: string[] } | null>(null);
+-  // Reset during render so A -> B -> A navigation cannot resurrect a stale anchor.
+-  // Selection itself remains ID-based and survives ordinary page/sort changes.
+-  if (disabled || !enabled || !selection.hasSelection || rangeAnchor.current?.scope !== rangeScope) {
+-    rangeAnchor.current = null;
+-  }
++  // Reset only after a view commits. An abandoned concurrent render must not
++  // discard the still-visible table's anchor. The click handler also checks scope.
++  useLayoutEffect(() => {
++    if (disabled || !enabled || !selection.hasSelection || rangeAnchor.current?.scope !== rangeScope) {
++      rangeAnchor.current = null;
++    }
++  }, [disabled, enabled, selection.hasSelection, rangeScope]);
+ 
+   /** selectPage resets the range anchor and updates only the supplied visible IDs. */
+   const selectPage = (checked: boolean) => {
+@@ -103,6 +105,9 @@
+           disabled={disabled || !id}
+           onClick={(event) => {
+             event.stopPropagation();
++            // Own the toggle so a mobile label cannot activate the replacement
++            // checkbox again after this cell rerenders. Keep its padded hit area.
++            event.preventDefault();
+             if (disabled || !id) return;
+             // Read the rendered row model, not numeric IDs or the unsorted input.
+             const order = table.getRowModel().rows.map((visibleRow) => rowId(visibleRow.original)).filter(Boolean);
+@@ -111,12 +116,11 @@
+               && previous.order.length === order.length
+               && previous.order.every((visibleId, index) => visibleId === order[index]);
+             if (event.shiftKey && sameOrder && previous && order.includes(previous.id)) {
+-              // Radix runs onClick before its default toggle. Prevent that second
+-              // single-row update and apply the complete range atomically instead.
+-              event.preventDefault();
++              // Apply the entire range atomically, including all-matching exclusions.
+               selection.setPage(getSelectionRange(order, previous.id, id), !selection.isSelected(id));
+             } else {
+               rangeAnchor.current = { id, scope: rangeScope, order };
++              selection.setRow(id, !selection.isSelected(id));
+             }
+           }}
+           onCheckedChange={(checked) => {
+diff --git a/web/modern/scripts/test-table-interactions-browser.py b/web/modern/scripts/test-table-interactions-browser.py
+--- a/web/modern/scripts/test-table-interactions-browser.py
++++ b/web/modern/scripts/test-table-interactions-browser.py
+@@ -36,6 +36,12 @@
+   localStorage.setItem('i18nextLng', 'en');
+   localStorage.setItem('oneapi_page_size', '10');
+   localStorage.setItem('one-api-theme', 'light');
++  window.__fixtureSelectionClicks = [];
++  document.addEventListener('click', (event) => {
++    const checkbox = event.target instanceof Element && event.target.closest('[role="checkbox"]');
++    if (checkbox) window.__fixtureSelectionClicks.push({label: checkbox.getAttribute('aria-label'),
++      shift: event.shiftKey, trusted: event.isTrusted, detail: event.detail});
++  }, true);
+ })();"""
+ 
+ 
+@@ -175,7 +181,7 @@
+ def check_case(browser, origin: str, case: tuple, width: int, output: Path) -> dict:
+     """check_case verifies real reload, visible ordering, selection ranges, and principal isolation."""
+     table, path, endpoint, field, label, default_by = case
+-    mobile = width < 640
++    mobile = width < 768
+     calls, violations, errors = [], [], []
+     context = browser.new_context(viewport={'width': width, 'height': 1000}, has_touch=mobile)
+     context.add_init_script(INIT)
+@@ -204,6 +210,7 @@
+         expected = [f'Select Row {index:02}' for index in (range(1, 11) if chosen['sortOrder'] == 'asc' else range(15, 5, -1))]
+         assert labels == expected, (labels, expected)
+         row_checks(page).nth(0).click()
++        assert selected_names(page) == labels[:1], ('ordinary click', selected_names(page))
+         row_checks(page).nth(4).click(modifiers=['Shift'])
+         assert selected_names(page) == labels[:5]
+         assert urlsplit(page.url).path == path and 'id=' not in urlsplit(page.url).query
+@@ -217,6 +224,12 @@
+         assert selected_names(page) == labels[5:]
+         expect(page.get_by_role('status').filter(has_text='All matching pages selected')).to_contain_text('10 items (5 excluded)')
+         selection_command(page, 'Clear selection')
++        if mobile:
++            hit_area = page.locator('.mobile-record__selection').first
++            hit_area.click(position={'x': 2, 'y': 2})
++            assert selected_names(page) == labels[:1], ('padding click', selected_names(page))
++            hit_area.click(position={'x': 2, 'y': 2})
++            assert selected_names(page) == []
+         row_checks(page).nth(0).click()
+         flip_sort(page, label, mobile)
+         row_checks(page).nth(4).click(modifiers=['Shift'])
+@@ -251,7 +264,7 @@
+                 'browser_errors': errors, 'prohibited_requests': violations}
+     except Exception:
+         page.screenshot(path=str(output / f'failure-{table}-{width}.png'), full_page=True)
+-        (output / f'failure-{table}-{width}.json').write_text(json.dumps({'calls': calls, 'errors': errors, 'violations': violations}, indent=2))
++        (output / f'failure-{table}-{width}.json').write_text(json.dumps({'calls': calls, 'errors': errors, 'violations': violations, 'selection_clicks': page.evaluate('window.__fixtureSelectionClicks'), 'selected': selected_names(page)}, indent=2))
+         raise
+     finally:
+         context.close()
+@@ -261,6 +274,8 @@
+     """main serves a local compiled app, checks six lists at two widths, and closes all resources."""
+     parser = argparse.ArgumentParser(description=__doc__)
+     parser.add_argument('--browser', default=None)
++    parser.add_argument('--table', choices=[case[0] for case in CASES])
++    parser.add_argument('--width', type=int, choices=[390, 1280])
+     parser.add_argument('--output', type=Path, default=ROOT / 'test-results/table-interactions')
+     args = parser.parse_args()
+     build = ROOT.parent / 'build/modern'
+@@ -275,8 +290,8 @@
+         with sync_playwright() as playwright:
+             browser = playwright.chromium.launch(executable_path=args.browser)
+             try:
+-                for width in [1280, 390]:
+-                    for case in CASES:
++                for width in ([args.width] if args.width else [1280, 390]):
++                    for case in (case for case in CASES if not args.table or case[0] == args.table):
+                         results.append(check_case(browser, f'http://127.0.0.1:{server.server_port}', case, width, args.output))
+                         print(f'PASS {case[0]} at {width}px', flush=True)
+             finally:
