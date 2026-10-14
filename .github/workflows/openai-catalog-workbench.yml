@@ -5,125 +5,69 @@ on:
 permissions:
   contents: read
 jobs:
-  baseline:
+  qualification:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 4166a7af7dd70b0730d20221b2c9c50736f25595
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        with:
-          go-version: '1.27.2'
-      - name: Require actual baseline assertion failures
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/baseline"
-          git rev-parse HEAD > "$RUNNER_TEMP/baseline/commit.txt"
-          go version > "$RUNNER_TEMP/baseline/toolchain.txt"
-          set +e
-          go test -json -count=1 -p 2 ./relay/adaptor/openai -run '^TestOpenAIOctober' > "$RUNNER_TEMP/baseline/tests.jsonl" 2> "$RUNNER_TEMP/baseline/stderr.txt"
-          status=$?
-          set -e
-          printf '%s\n' "$status" > "$RUNNER_TEMP/baseline/exit-code.txt"
-          python3 - "$RUNNER_TEMP/baseline" <<'PY'
-          import json, pathlib, sys
-          root = pathlib.Path(sys.argv[1])
-          events = [json.loads(line) for line in (root / 'tests.jsonl').read_text().splitlines() if line.startswith('{')]
-          failures = {e.get('Test') for e in events if e.get('Action') == 'fail' and e.get('Test')}
-          expected = {'TestOpenAIOctoberProRequestNormalization', 'TestOpenAIOctoberPublishedSnapshots', 'TestOpenAIOctoberChatAlias', 'TestOpenAIOctoberLifecycleGuidance'}
-          assert (root / 'exit-code.txt').read_text().strip() == '1', 'baseline did not fail as expected'
-          assert expected <= failures, f'expected test assertions missing: {expected - failures}; check compilation/environment errors'
-          summary = {'expected_top_level_failures': sorted(expected), 'total_failed_test_outcomes': len(failures)}
-          (root / 'summary.json').write_text(json.dumps(summary, indent=2))
-          print(json.dumps(summary, indent=2))
-          PY
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: openai-october-baseline
-          path: ${{ runner.temp }}/baseline
-          if-no-files-found: error
-          retention-days: 14
-  focused:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: 4f80bea4360f8168ed00321058dac40a54bc5b37
+          ref: 52aad0a9d70235911e9a5f2d9b2a74f32d3bf253
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.2'
-      - name: Require formatting and exact-head race regressions
+      - name: Verify exact head and formatting
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/focused"
-          git rev-parse HEAD > "$RUNNER_TEMP/focused/commit.txt"
-          go version > "$RUNNER_TEMP/focused/toolchain.txt"
+          mkdir -p "$RUNNER_TEMP/qualification"
+          git rev-parse HEAD > "$RUNNER_TEMP/qualification/commit.txt"
+          test "$(git rev-parse HEAD)" = 52aad0a9d70235911e9a5f2d9b2a74f32d3bf253
+          go version > "$RUNNER_TEMP/qualification/toolchain.txt"
           git diff --check eed2a6d02e5392f24197f49a70af3ba2ba22f212 HEAD
-          git diff --name-only eed2a6d02e5392f24197f49a70af3ba2ba22f212 HEAD -- '*.go' | xargs gofmt -l > "$RUNNER_TEMP/focused/format.txt"
-          test ! -s "$RUNNER_TEMP/focused/format.txt"
-          go test -race -json -count=1 -p 2 ./relay/adaptor/openai -run '^TestOpenAIOctober' > "$RUNNER_TEMP/focused/tests.jsonl" 2> "$RUNNER_TEMP/focused/stderr.txt"
-          python3 - "$RUNNER_TEMP/focused" <<'PY'
+          git diff --name-only eed2a6d02e5392f24197f49a70af3ba2ba22f212 HEAD -- '*.go' | xargs gofmt -l > "$RUNNER_TEMP/qualification/format.txt"
+          test ! -s "$RUNNER_TEMP/qualification/format.txt"
+          git diff --stat eed2a6d02e5392f24197f49a70af3ba2ba22f212 HEAD > "$RUNNER_TEMP/qualification/diff-stat.txt"
+      - name: Execute focused regression set first
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -race -json -count=1 -p 2 ./relay/adaptor/openai -run '^(TestOpenAIOctober|TestGPT54ReasoningEffort)' > "$RUNNER_TEMP/qualification/focused.jsonl" 2> "$RUNNER_TEMP/qualification/focused-stderr.txt"
+          python3 - "$RUNNER_TEMP/qualification" <<'PY'
           import json, pathlib, sys
           root = pathlib.Path(sys.argv[1])
-          events = [json.loads(line) for line in (root / 'tests.jsonl').read_text().splitlines() if line.startswith('{')]
+          events = [json.loads(line) for line in (root / 'focused.jsonl').read_text().splitlines() if line.startswith('{')]
           passed = {e.get('Test') for e in events if e.get('Action') == 'pass' and e.get('Test')}
-          expected = {'TestOpenAIOctoberProRequestNormalization', 'TestOpenAIOctoberPublishedSnapshots', 'TestOpenAIOctoberChatAlias', 'TestOpenAIOctoberLifecycleGuidance', 'TestOpenAIOctoberPreservesCatalogPricing', 'TestOpenAIOctoberSnapshotOwnership', 'TestOpenAIOctoberLifecycleIntegrity', 'TestOpenAIOctoberSnapshotEffectivePricing'}
+          expected = {'TestOpenAIOctoberProRequestNormalization', 'TestOpenAIOctoberPublishedSnapshots', 'TestOpenAIOctoberChatAlias', 'TestOpenAIOctoberLifecycleGuidance', 'TestOpenAIOctoberPreservesCatalogPricing', 'TestOpenAIOctoberSnapshotOwnership', 'TestOpenAIOctoberLifecycleIntegrity', 'TestOpenAIOctoberSnapshotEffectivePricing', 'TestGPT54ReasoningEffort'}
           assert expected <= passed, f'missing passing tests: {expected - passed}'
           assert not any(e.get('Action') in {'fail', 'skip'} for e in events), 'failed or skipped regression'
           summary = {'top_level_tests': sorted(expected), 'passing_test_outcomes': len(passed)}
-          (root / 'summary.json').write_text(json.dumps(summary, indent=2))
+          (root / 'focused-summary.json').write_text(json.dumps(summary, indent=2))
           print(json.dumps(summary, indent=2))
           PY
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: openai-october-focused
-          path: ${{ runner.temp }}/focused
-          if-no-files-found: error
-          retention-days: 14
-  affected:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: 4f80bea4360f8168ed00321058dac40a54bc5b37
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        with:
-          go-version: '1.27.2'
-      - name: Execute affected package race suites
+      - name: Execute affected package race suites and vet
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/affected"
-          git rev-parse HEAD > "$RUNNER_TEMP/affected/commit.txt"
-          go version > "$RUNNER_TEMP/affected/toolchain.txt"
-          go test -race -json -count=1 -p 2 ./relay/adaptor/openai ./relay/adaptor/aiproxy ./relay/adaptor/openrouter ./relay/adaptor ./relay/pricing > "$RUNNER_TEMP/affected/tests.jsonl" 2> "$RUNNER_TEMP/affected/stderr.txt"
-          python3 - "$RUNNER_TEMP/affected" <<'PY'
+          go test -race -json -count=1 -p 2 ./relay/adaptor/openai ./relay/adaptor/aiproxy ./relay/adaptor/openrouter ./relay/adaptor ./relay/pricing > "$RUNNER_TEMP/qualification/affected.jsonl" 2> "$RUNNER_TEMP/qualification/affected-stderr.txt"
+          go vet ./relay/adaptor/openai ./relay/adaptor/aiproxy ./relay/adaptor/openrouter ./relay/adaptor ./relay/pricing > "$RUNNER_TEMP/qualification/vet.txt" 2>&1
+          python3 - "$RUNNER_TEMP/qualification" <<'PY'
           import json, pathlib, sys
           root = pathlib.Path(sys.argv[1])
-          events = [json.loads(line) for line in (root / 'tests.jsonl').read_text().splitlines() if line.startswith('{')]
+          events = [json.loads(line) for line in (root / 'affected.jsonl').read_text().splitlines() if line.startswith('{')]
           packages = {e['Package'] for e in events if e.get('Action') == 'pass' and not e.get('Test')}
           expected = {'github.com/Laisky/one-api/' + p for p in ['relay/adaptor/openai', 'relay/adaptor/aiproxy', 'relay/adaptor/openrouter', 'relay/adaptor', 'relay/pricing']}
           assert expected <= packages, f'missing package completion: {expected - packages}'
           assert not any(e.get('Action') == 'fail' for e in events), 'failed package tests'
-          summary = {'packages': sorted(packages), 'passing_test_outcomes': sum(e.get('Action') == 'pass' and bool(e.get('Test')) for e in events), 'skipped_tests': [e.get('Test') for e in events if e.get('Action') == 'skip' and e.get('Test')]}
-          (root / 'summary.json').write_text(json.dumps(summary, indent=2))
+          summary = {'packages': sorted(packages), 'passing_test_outcomes': sum(e.get('Action') == 'pass' and bool(e.get('Test')) for e in events), 'skipped_tests': [e.get('Test') for e in events if e.get('Action') == 'skip' and e.get('Test')], 'vet': 'passed'}
+          (root / 'affected-summary.json').write_text(json.dumps(summary, indent=2))
           print(json.dumps(summary, indent=2))
           PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: openai-october-affected
-          path: ${{ runner.temp }}/affected
+          name: openai-october-qualification
+          path: ${{ runner.temp }}/qualification
           if-no-files-found: error
           retention-days: 14
