@@ -134,4 +134,20 @@ describe('useTableSort', () => {
     expect(result.current).toMatchObject({ sortBy: 'id', sortOrder: 'desc' });
     expect(localStorage.getItem(storageKey())).toBeNull();
   });
+
+  it.each([
+    ['channels', 'id'], ['users', ''], ['tokens', 'id'],
+    ['redemptions', ''], ['mcp', 'id'], ['logs', 'created_at'],
+  ])('%s ignores a removed saved column before the initial request', (table, defaultBy) => {
+    localStorage.setItem(storageKey(table), JSON.stringify({ sortBy: 'removed_column', sortOrder: 'asc' }));
+    const requests = vi.fn();
+    const { result } = renderHook(() => {
+      const sort = useTableSort(table, defaultBy);
+      useEffect(() => { requests(sort.sortBy, sort.sortOrder); }, [sort.sortBy, sort.sortOrder]);
+      return sort;
+    });
+    expect(result.current).toMatchObject({ sortBy: defaultBy, sortOrder: 'desc' });
+    expect(requests.mock.calls).toEqual([[defaultBy, 'desc']]);
+  });
+
 });

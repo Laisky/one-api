@@ -144,6 +144,18 @@ for (const [label, Component] of [['basic', DataTable], ['enhanced', EnhancedDat
         expectSelected(['Alpha', 'Echo']);
       });
 
+      it.each([
+        { pageIndex: 1 }, { pageSize: 20 }, { sortBy: 'name' }, { sortOrder: 'asc' as const },
+      ])('invalidates the anchor when view metadata changes despite identical rows: %j', async (change) => {
+        const user = userEvent.setup();
+        const props = { columns, data: rows, total: 60, pageSize: 10, pageIndex: 0, sortBy: 'id', sortOrder: 'desc' as const };
+        const { rerender } = render(<Component {...props} />);
+        await user.click(checkbox('Alpha'));
+        rerender(<Component {...props} {...change} />);
+        await shiftClick(user, 'Echo');
+        expectSelected(['Alpha', 'Echo']);
+      });
+
       it('preserves ordinary keyboard checkbox activation', async () => {
         const user = userEvent.setup();
         render(<Component columns={columns} data={rows} total={6} />);
