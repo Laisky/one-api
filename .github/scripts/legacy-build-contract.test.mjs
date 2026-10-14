@@ -26,7 +26,7 @@ for (const theme of ['air', 'berry']) {
     const value = config(theme, { REACT_APP_VERSION: 'release-42', DATABASE_PASSWORD: 'server-only-secret', PORT: '3010' },
       { REACT_APP_SERVER: 'https://api.example.test', REACT_APP_PRIVATE: 'not-automatically-exposed' });
     assert.equal(value.define['process.env.REACT_APP_VERSION'], '"release-42"');
-    assert.equal(value.define['process.env.REACT_APP_SERVER'], '""');
+    assert.equal(value.define['process.env.REACT_APP_SERVER'], '"https://api.example.test"');
     assert.ok(!JSON.stringify(value.define).includes('server-only-secret'));
     assert.ok(!JSON.stringify(value.define).includes('not-automatically-exposed'));
     assert.equal(value.server.port, 3010);
