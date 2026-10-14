@@ -1,0 +1,20 @@
+--- a/web/modern/scripts/test-table-interactions-browser.py
++++ b/web/modern/scripts/test-table-interactions-browser.py
+@@ -146,8 +146,16 @@
+ 
+ def selection_command(page, name: str) -> None:
+     """selection_command drives a real selection menu and its requested command."""
+-    page.locator('.table-toolbar__selection button').click()
++    # The production menu animates out and restores focus after selection.
++    # Wait for its full lifecycle before the next gesture, not merely the click.
++    menu = page.locator('[role="menu"]')
++    expect(menu).to_have_count(0)
++    trigger = page.locator('.table-toolbar__selection button')
++    trigger.click()
++    expect(trigger).to_have_attribute('aria-expanded', 'true')
+     page.get_by_role('menuitem', name=name, exact=True).click()
++    expect(trigger).to_have_attribute('aria-expanded', 'false')
++    expect(menu).to_have_count(0)
+ 
+ 
+ def sort_request_check(calls: list, endpoint: str, field: str, direction: str) -> None:
