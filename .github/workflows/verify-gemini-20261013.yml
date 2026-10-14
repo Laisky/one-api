@@ -1,0 +1,114 @@
+name: Gemini Argon scoped qualification
+
+on:
+  push:
+    branches: ['verify/gemini-model-refresh-20261013']
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GOTOOLCHAIN: local
+      SOURCE_SHA: 3d41e392882fb381718914a748f446ee049baad0
+      BASE_SHA: eed2a6d02e5392f24197f49a70af3ba2ba22f212
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout exact PR source, not the validation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 3d41e392882fb381718914a748f446ee049baad0
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup repository validation compiler
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Record exact source and check formatting
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/argon-evidence"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          { git rev-parse HEAD; go version; } | tee "$RUNNER_TEMP/argon-evidence/source.txt"
+          python3 .github/scripts/format_check.py
+      - name: Reproduce missing catalogue entries on unchanged base
+        run: |
+          set -euo pipefail
+          base_dir="$RUNNER_TEMP/argon-base"
+          git worktree add --detach "$base_dir" "$BASE_SHA"
+          for package in gemini geminiOpenaiCompatible vertexai; do
+            cp "relay/adaptor/$package/models_20261013_test.go" "$base_dir/relay/adaptor/$package/models_20261013_test.go"
+          done
+          cd "$base_dir"
+          set +e
+          go test -json -count=1 -timeout=10m -run '^TestGeminiOctober13' ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/gemini ./relay/adaptor/vertexai > "$RUNNER_TEMP/argon-evidence/red.json" 2> "$RUNNER_TEMP/argon-evidence/red.stderr"
+          result=$?
+          set -e
+          printf '%s\n' "$result" > "$RUNNER_TEMP/argon-evidence/red.exit"
+          test "$result" = 1
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'argon-evidence'
+          events = [json.loads(line) for line in (root / 'red.json').read_text().splitlines() if line.strip()]
+          failed = {e['Test'] for e in events if e.get('Action') == 'fail' and e.get('Test')}
+          expected = {'TestGeminiOctober13ArgonCatalog', 'TestGeminiOctober13ArgonPricingBoundary', 'TestGeminiOctober13ArgonSystemInstructions', 'TestGeminiOctober13ArgonVertexCatalog'}
+          assert failed == expected, (failed, expected, (root / 'red.stderr').read_text()[-4000:])
+          passed = {e['Test'] for e in events if e.get('Action') == 'pass' and e.get('Test')}
+          assert 'TestGeminiOctober13PreservesExistingTariffs' in passed
+          assert not any(e.get('Action') == 'skip' for e in events)
+          print('RED verified: four expected assertion failures on the unchanged base; no compilation failure accepted.')
+          print('Expected failures:', sorted(failed))
+          PY
+      - name: Run all new regressions on the exact PR source
+        run: |
+          set -euo pipefail
+          go test -json -count=1 -timeout=10m -run '^TestGeminiOctober13' ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/gemini ./relay/adaptor/vertexai > "$RUNNER_TEMP/argon-evidence/green-focused.json" 2> "$RUNNER_TEMP/argon-evidence/green-focused.stderr"
+          python3 - <<'PY'
+          import json, os, pathlib
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'argon-evidence' / 'green-focused.json'
+          events = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+          passed = {e['Test'] for e in events if e.get('Action') == 'pass' and e.get('Test') and '/' not in e['Test']}
+          expected = {'TestGeminiOctober13ArgonCatalog', 'TestGeminiOctober13ArgonPricingBoundary', 'TestGeminiOctober13PreservesExistingTariffs', 'TestGeminiOctober13ArgonSystemInstructions', 'TestGeminiOctober13ArgonRequestURLs', 'TestGeminiOctober13ArgonVertexCatalog', 'TestGeminiOctober13ArgonVertexURLs'}
+          assert passed == expected, (passed, expected)
+          assert not any(e.get('Action') in ('fail', 'skip') for e in events)
+          print('GREEN verified: all seven new top-level regression tests and all subtests passed, none skipped.')
+          PY
+      - name: Run scoped provider and pricing race suites
+        run: |
+          set -euo pipefail
+          go test -race -json -count=1 -timeout=10m ./relay/adaptor/gemini/... ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/vertexai ./relay/pricing > "$RUNNER_TEMP/argon-evidence/race.json" 2> "$RUNNER_TEMP/argon-evidence/race.stderr"
+      - name: Run scoped Go vet
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          go vet ./relay/adaptor/gemini/... ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/vertexai ./relay/pricing > "$RUNNER_TEMP/argon-evidence/vet.txt" 2>&1
+      - name: Summarize recorded outcomes
+        if: ${{ always() }}
+        run: |
+          python3 - <<'PY'
+          import collections, json, os, pathlib
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'argon-evidence'
+          for path in sorted(root.glob('*.json')):
+              events = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+              counts = collections.Counter(e.get('Action') for e in events if e.get('Test'))
+              failed = sorted({e['Test'] for e in events if e.get('Action') == 'fail' and e.get('Test')})
+              skipped = sorted({e['Test'] for e in events if e.get('Action') == 'skip' and e.get('Test')})
+              print(path.name, dict(counts), 'failures=', failed, 'skips=', skipped)
+          for path in sorted(root.glob('*.stderr')):
+              text = path.read_text()
+              if text:
+                  print(path.name, text[-6000:])
+          PY
+      - name: Preserve raw results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: gemini-argon-3d41e392882f
+          path: ${{ runner.temp }}/argon-evidence
+          if-no-files-found: error
+          retention-days: 14
