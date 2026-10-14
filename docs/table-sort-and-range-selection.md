@@ -10,6 +10,8 @@ Click a record checkbox, then Shift-click another checkbox to select the inclusi
 
 A range never fetches or includes unseen pages. Paging, page-size, sort, filter, account, loading/disabled, and explicit selection-control changes invalidate the range anchor. Existing stable-ID selection semantics remain unchanged. Changing view metadata invalidates the anchor even when the returned row IDs happen to be identical. A Shift-click without a valid visible anchor behaves as a single checkbox activation. Checkbox interaction does not open the record.
 
+Anchor resets run after a view commits. An abandoned concurrent render must not discard the anchor belonging to the still-visible table. The click handler additionally checks the current scope and displayed ordering. Row click handlers own both single and range toggles and prevent native default activation, so a mobile label cannot toggle a newly rendered checkbox a second time. The label's padded touch target and ordinary keyboard activation remain available.
+
 ## Maintenance
 
 - Keep the supported sort-column registry in `web/modern/src/lib/table-sort-preference.ts` aligned with each page's header and toolbar choices. Page-level tests check both sources of choices. Preserve hidden default IDs and toolbar-only fields.
@@ -48,7 +50,9 @@ python3 -m playwright install chromium
 python3 web/modern/scripts/test-table-interactions-browser.py
 ```
 
-The browser regression runs the actual compiled application at a loopback origin, with every API intercepted using synthetic accounts and records. It verifies first-request sorting, real reloads, header/mobile indicators, visible order, forward/reverse ranges, all-matching exclusions, stale anchors, account isolation, and removed-column fallback on all six pages at desktop and mobile widths. It refuses external requests and API writes. It does not qualify a production backend or deployment. Browser results and screenshots are retained under `web/modern/test-results/table-interactions`.
+The browser regression runs the actual compiled application at a loopback origin, with every API intercepted using synthetic accounts and records. It verifies first-request sorting, real reloads, header/mobile indicators, visible order, single clicks, forward/reverse ranges, all-matching exclusions, stale anchors, account isolation, and removed-column fallback on all six pages at desktop and mobile widths. Mobile checks also activate the padded label area outside the checkbox. It refuses external requests and API writes. It does not qualify a production backend or deployment. Browser results and screenshots are retained under `web/modern/test-results/table-interactions`.
+
+For a focused browser iteration, run `python3 web/modern/scripts/test-table-interactions-browser.py --table channels --width 390`. Failure receipts include synthetic checkbox click events and selected identities, allowing native activation failures to be distinguished from request or JavaScript errors. Full acceptance still requires all twelve page/viewport cases.
 
 ## Release and rollback
 
