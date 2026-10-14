@@ -1,16 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import './i18n';
-import './index.css';
+import { browserReporterReady } from './browser-sentry';
+import { mountBrowserApp } from '../../legacy/browser-sentry-runtime.mjs';
 
-const qc = new QueryClient();
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <QueryClientProvider client={qc}>
-      <App />
-    </QueryClientProvider>
-  </React.StrictMode>
+// Settle bounded reporting readiness before loading application modules.
+mountBrowserApp(
+  browserReporterReady,
+  (reporter) => import('./browser-app').then(({ mountApplication }) => mountApplication(reporter)),
+  window
 );

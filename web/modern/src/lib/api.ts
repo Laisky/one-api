@@ -1,3 +1,4 @@
+import { reportUnexpectedRequestError } from '../../../legacy/browser-request-errors.mjs';
 import axios from 'axios';
 import { useAuthStore } from '@/lib/stores/auth';
 
@@ -136,6 +137,7 @@ api.interceptors.response.use(
     if (status === 401 || (status === 403 && message.includes('not logged in'))) {
       handleAuthFailure();
     }
+    if (axios.isAxiosError(error) && !error.response && error.request) reportUnexpectedRequestError(error);
     return Promise.reject(error);
   }
 );

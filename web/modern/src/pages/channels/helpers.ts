@@ -1,3 +1,4 @@
+import { isExpectedRequestError, markPrivateError } from '../../../../legacy/browser-sentry-privacy.mjs';
 import type { ChannelConfigForm, ChannelForm, NormalizedToolingConfig, ToolPricingEntry } from './schemas';
 
 export const normalizeChannelType = (value: unknown): number | null => {
@@ -193,7 +194,7 @@ export const sanitizeJsonInput = (jsonString: string): string => {
 export const isValidJSON = (jsonString: string) => {
   if (!jsonString || jsonString.trim() === '') return true;
   try {
-    JSON.parse(sanitizeJsonInput(jsonString));
+    parsePrivateChannelJSON(sanitizeJsonInput(jsonString));
     return true;
   } catch (_e) {
     return false;
@@ -203,7 +204,7 @@ export const isValidJSON = (jsonString: string) => {
 export const formatJSON = (jsonString: string) => {
   if (!jsonString || jsonString.trim() === '') return '';
   try {
-    const parsed = JSON.parse(sanitizeJsonInput(jsonString));
+    const parsed = parsePrivateChannelJSON(sanitizeJsonInput(jsonString));
     return JSON.stringify(parsed, null, 2);
   } catch (_e) {
     return jsonString;
@@ -218,7 +219,7 @@ export const formatJSON = (jsonString: string) => {
 export const sanitizeJsonField = (jsonString: string): string => {
   if (!jsonString || jsonString.trim() === '') return jsonString;
   try {
-    const parsed = JSON.parse(sanitizeJsonInput(jsonString));
+    const parsed = parsePrivateChannelJSON(sanitizeJsonInput(jsonString));
     return JSON.stringify(parsed);
   } catch (_e) {
     return jsonString;
@@ -234,7 +235,7 @@ export const validateModelConfigs = (configStr: string) => {
   }
 
   try {
-    const configs = JSON.parse(sanitizeJsonInput(configStr));
+    const configs = parsePrivateChannelJSON(sanitizeJsonInput(configStr));
 
     if (typeof configs !== 'object' || configs === null || Array.isArray(configs)) {
       return { valid: false, error: 'Model configs must be a JSON object' };
@@ -339,7 +340,7 @@ export const validateToolingConfig = (configStr: string) => {
   }
 
   try {
-    const config = JSON.parse(sanitizeJsonInput(configStr));
+    const config = parsePrivateChannelJSON(sanitizeJsonInput(configStr));
     if (typeof config !== 'object' || config === null || Array.isArray(config)) {
       return { valid: false, error: 'Tooling config must be a JSON object' };
     }
@@ -560,3 +561,34 @@ export const getKeyPrompt = (type: number) => {
       return 'Please enter your API key';
   }
 };
+
+/** parsePrivateChannelJSON decodes private channel input and preserves the original validation error and stack. */
+export function parsePrivateChannelJSON(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    if (error instanceof SyntaxError) markPrivateError(error, 'Channel configuration decoding failed', true);
+    throw error;
+  }
+}
+
+/** formatPrivateChannelJSONField formats stored channel JSON and retains the original fallback for malformed or empty input. */
+export function formatPrivateChannelJSONField(field: unknown): string {
+  if (field && typeof field === 'string' && field.trim() !== '') {
+    try {
+      return JSON.stringify(parsePrivateChannelJSON(field), null, 2);
+    } catch (_error) {
+      return field;
+    }
+  }
+  return '';
+}
+
+/** logPrivateChannelJSONError preserves ordinary parse diagnostics while excluding marked private input from console output. */
+export function logPrivateChannelJSONError(error: unknown): void {
+  console.error(
+    isExpectedRequestError(error)
+      ? 'Failed to parse config JSON.'
+      : 'Failed to parse config JSON: ' + (error instanceof Error ? error.message : String(error))
+  );
+}

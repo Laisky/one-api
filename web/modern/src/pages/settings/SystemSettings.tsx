@@ -1,3 +1,5 @@
+import { isAxiosError } from 'axios';
+import { markPrivateError, privateResponseError } from '../../../../legacy/browser-sentry-privacy.mjs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNotifications } from '@/components/ui/notifications';
@@ -55,7 +57,7 @@ const OPTION_GROUPS: OptionGroup[] = [
     id: 'security',
     title: 'Anti-bot & Security',
     description: 'Configure bot protection and security checks.',
-    keys: ['TurnstileCheckEnabled', 'TurnstileSiteKey', 'TurnstileSecretKey'],
+    keys: ['TurnstileCheckEnabled', 'TurnstileSiteKey', 'TurnstileSecretKey', 'BrowserSentryConfig'],
   },
   {
     id: 'email',
@@ -159,6 +161,16 @@ const OIDC_DISCOVERY_KEY_MAP: Record<string, string> = {
   userinfo_endpoint: 'OidcUserinfoEndpoint',
 };
 
+/** persistBrowserSentryOption saves one public JSON value and returns a boolean result without retaining response bodies or caught request errors. */
+async function persistBrowserSentryOption(value: string): Promise<boolean> {
+  try {
+    const response = await api.put('/api/option/', { key: 'BrowserSentryConfig', value });
+    return response.data?.success === true;
+  } catch {
+    return false;
+  }
+}
+
 export function SystemSettings() {
   const { t } = useTranslation();
   const [options, setOptions] = useState<OptionRow[]>([]);
@@ -208,7 +220,7 @@ export function SystemSettings() {
         id: 'security',
         title: t('system_settings.groups.security.title'),
         description: t('system_settings.groups.security.description'),
-        keys: ['TurnstileCheckEnabled', 'TurnstileSiteKey', 'TurnstileSecretKey'],
+        keys: ['TurnstileCheckEnabled', 'TurnstileSiteKey', 'TurnstileSecretKey', 'BrowserSentryConfig'],
       },
       {
         id: 'email',
@@ -293,6 +305,7 @@ export function SystemSettings() {
       TurnstileCheckEnabled: t('system_settings.descriptions.TurnstileCheckEnabled'),
       TurnstileSiteKey: t('system_settings.descriptions.TurnstileSiteKey'),
       TurnstileSecretKey: t('system_settings.descriptions.TurnstileSecretKey'),
+      BrowserSentryConfig: t('system_settings.descriptions.BrowserSentryConfig'),
 
       // Email
       EmailProvider: t('system_settings.descriptions.EmailProvider'),
@@ -369,9 +382,14 @@ export function SystemSettings() {
       const valueForState = SENSITIVE_OPTION_KEYS.has(key) ? '' : serialized;
       try {
         // Unified API call - complete URL with /api prefix
-        const response = await api.put('/api/option/', { key, value: serialized });
+        const response =
+          key === 'BrowserSentryConfig'
+            ? { data: { success: await persistBrowserSentryOption(serialized) } }
+            : await api.put('/api/option/', { key, value: serialized });
         if (!response.data?.success) {
-          throw new Error(response.data?.message || t('system_settings.save_failed'));
+          throw response.data?.message
+            ? privateResponseError(response.data.message, 'System settings save failed')
+            : new Error(t('system_settings.save_failed'));
         }
         setOptions((prev) => {
           const index = prev.findIndex((opt) => opt.key === key);
@@ -386,6 +404,13 @@ export function SystemSettings() {
           message: t('system_settings.saved_message', { key }),
         });
       } catch (error: any) {
+        if (key === 'BrowserSentryConfig') {
+          const message = t('system_settings.save_failed');
+          console.error('Browser error configuration save failed.');
+          notify({ type: 'error', title: message, message });
+          throw error;
+        }
+        if (isAxiosError(error) && error.response) markPrivateError(error, 'System settings save failed', true);
         console.error('Error saving option:', error);
         const errMsg = error?.response?.data?.message || error?.message || 'Unknown error';
         notify({
@@ -407,7 +432,9 @@ export function SystemSettings() {
       try {
         const response = await api.put('/api/option/', { key, value: '', clear: true });
         if (!response.data?.success) {
-          throw new Error(response.data?.message || t('system_settings.save_failed'));
+          throw response.data?.message
+            ? privateResponseError(response.data.message, 'System settings clear failed')
+            : new Error(t('system_settings.save_failed'));
         }
         setOptions((prev) => {
           const index = prev.findIndex((opt) => opt.key === key);
@@ -422,6 +449,7 @@ export function SystemSettings() {
           message: t('system_settings.saved_message', { key }),
         });
       } catch (error: any) {
+        if (isAxiosError(error) && error.response) markPrivateError(error, 'System settings clear failed', true);
         console.error('Error clearing option:', error);
         const errMsg = error?.response?.data?.message || error?.message || 'Unknown error';
         notify({
@@ -476,7 +504,9 @@ export function SystemSettings() {
         const optionKey = OIDC_DISCOVERY_KEY_MAP[sourceKey];
         const response = await api.put('/api/option/', { key: optionKey, value: String(payload[sourceKey]) });
         if (!response.data?.success) {
-          throw new Error(response.data?.message || t('system_settings.oidc_discovery.failed_title'));
+          throw response.data?.message
+            ? privateResponseError(response.data.message, 'OIDC settings save failed')
+            : new Error(t('system_settings.oidc_discovery.failed_title'));
         }
       }
 
@@ -502,6 +532,7 @@ export function SystemSettings() {
         message: t('system_settings.oidc_discovery.success_message'),
       });
     } catch (error: any) {
+      if (isAxiosError(error) && error.response) markPrivateError(error, 'OIDC settings save failed', true);
       console.error('OIDC discovery failed:', error);
       const errMsg = error?.message || 'Unknown error';
       notify({

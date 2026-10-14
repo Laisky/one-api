@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { browserBuildContract } from '../legacy/browser-release.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -55,60 +56,64 @@ const codeSplittingGroups = Object.entries(manualChunkGroups).map(([name, packag
 // newest published browser metadata.
 process.env.BROWSERSLIST_IGNORE_OLD_DATA ??= '1';
 
-export default defineConfig(({ mode }) => ({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-  build: {
-    outDir: '../build/modern',
-    sourcemap: mode === 'development',
-    chunkSizeWarningLimit: 500,
-    minify: 'esbuild',
-    target: 'esnext',
-    cssCodeSplit: true,
-    assetsInlineLimit: 4096,
-    reportCompressedSize: true,
-    esbuild: {
-      legalComments: 'none',
-      treeShaking: true,
-      minifyIdentifiers: true,
-      minifySyntax: true,
-      minifyWhitespace: true,
-    },
-    rolldownOptions: {
-      treeshake: {
-        moduleSideEffects: 'no-external',
-        propertyReadSideEffects: false,
+export default defineConfig(({ mode }) => {
+  const browserBuild = browserBuildContract('modern', { mode });
+  return {
+    plugins: [browserBuild.plugin, react()],
+    define: { __ONEAPI_BROWSER_RELEASE__: JSON.stringify(browserBuild.release) },
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
       },
-      external: [],
-      output: {
-        chunkFileNames: '[name].[hash].js',
-        codeSplitting: {
-          groups: codeSplittingGroups,
+    },
+    build: {
+      outDir: '../build/modern',
+      sourcemap: mode === 'development',
+      chunkSizeWarningLimit: 500,
+      minify: 'esbuild',
+      target: 'esnext',
+      cssCodeSplit: true,
+      assetsInlineLimit: 4096,
+      reportCompressedSize: true,
+      esbuild: {
+        legalComments: 'none',
+        treeShaking: true,
+        minifyIdentifiers: true,
+        minifySyntax: true,
+        minifyWhitespace: true,
+      },
+      rolldownOptions: {
+        treeshake: {
+          moduleSideEffects: 'no-external',
+          propertyReadSideEffects: false,
+        },
+        external: [],
+        output: {
+          chunkFileNames: '[name].[hash].js',
+          codeSplitting: {
+            groups: codeSplittingGroups,
+          },
         },
       },
     },
-  },
-  server: {
-    port: 3001,
-    proxy: {
-      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+    server: {
+      port: 3001,
+      proxy: {
+        '/api': { target: 'http://localhost:3000', changeOrigin: true },
+      },
     },
-  },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
-    // Vitest's 5s default is a unit-test budget. This suite renders whole pages
-    // (TanStack Table, Radix portals, react-hook-form) into jsdom and runs its 80
-    // files across every core, so the page-level tests cost far more wall clock
-    // under that contention than they do alone: the channel pagination and email
-    // whitelist cases measure ~1.3-2.1s in isolation but up to ~8.1s in a full
-    // parallel run, which used to time them out. The bound stays well above that
-    // worst case while still failing a genuinely hung test promptly.
-    testTimeout: 30000,
-  },
-}));
+    test: {
+      globals: true,
+      environment: 'jsdom',
+      setupFiles: ['./src/test/setup.ts'],
+      // Vitest's 5s default is a unit-test budget. This suite renders whole pages
+      // (TanStack Table, Radix portals, react-hook-form) into jsdom and runs its 80
+      // files across every core, so the page-level tests cost far more wall clock
+      // under that contention than they do alone: the channel pagination and email
+      // whitelist cases measure ~1.3-2.1s in isolation but up to ~8.1s in a full
+      // parallel run, which used to time them out. The bound stays well above that
+      // worst case while still failing a genuinely hung test promptly.
+      testTimeout: 30000,
+    },
+  };
+});

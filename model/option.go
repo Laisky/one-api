@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strconv"
 	"strings"
@@ -112,6 +113,7 @@ func InitOptionMap() {
 	config.OptionMap["QuotaPerUnit"] = strconv.FormatFloat(config.QuotaPerUnit, 'f', -1, 64)
 	config.OptionMap["RetryTimes"] = strconv.Itoa(config.RetryTimes)
 	config.OptionMap["Theme"] = config.Theme
+	config.OptionMap["BrowserSentryConfig"] = ""
 	config.OptionMapRWMutex.Unlock()
 	loadOptionsFromDatabase()
 }
@@ -191,6 +193,20 @@ func SyncOptionsContext(ctx context.Context, frequency int) {
 
 // UpdateOption persists an option and updates the in-memory configuration only after storage succeeds.
 func UpdateOption(key string, value string) error {
+	if key == "BrowserSentryConfig" {
+		parsed, err := config.ParseBrowserSentryConfig(value)
+		if err != nil {
+			return errors.Wrap(err, "validate public browser configuration")
+		}
+		value = ""
+		if parsed != nil {
+			encoded, err := json.Marshal(parsed)
+			if err != nil {
+				return errors.Wrap(err, "encode public browser configuration")
+			}
+			value = string(encoded)
+		}
+	}
 	// Save to database first
 	option := Option{
 		Key: key,
