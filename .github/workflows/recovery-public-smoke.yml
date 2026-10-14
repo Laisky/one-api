@@ -12,6 +12,7 @@ jobs:
     timeout-minutes: 20
     env:
       EXPECTED_SHA: ef27439cd888c4bb5d36270b9a415cfea088d48f
+      EXPECTED_COMMIT_TIME: '2026-10-14T03:32:32Z'
     steps:
       - name: Verify expected public release without changing settings or sending events
         shell: bash
@@ -20,15 +21,38 @@ jobs:
           import datetime,hashlib,json,os,pathlib,re,time,urllib.error,urllib.parse,urllib.request
           from html.parser import HTMLParser
           origin='https://oneapi.laisky.com';expected=os.environ['EXPECTED_SHA']
+          commit_time=os.environ['EXPECTED_COMMIT_TIME']
           out=pathlib.Path('evidence');out.mkdir()
-          report={'expected_source':expected,'method':'anonymous GET only; TLS verification enabled; no JavaScript execution','passed':False,'observations':[],'assets':[]}
+          report={'expected_source':expected,'expected_commit_time':commit_time,'method':'anonymous GET only; TLS verification enabled; no JavaScript execution','passed':False,'observations':[],'assets':[]}
+          def expected_display(sha,at):
+              """expected_display renders the pinned untagged Go build's public version."""
+              if not isinstance(sha,str) or re.fullmatch(r'[0-9a-f]{40}',sha) is None:raise ValueError('Invalid expected source SHA')
+              stamp=datetime.datetime.strptime(at,'%Y-%m-%dT%H:%M:%SZ')
+              return f'v0.0.0-{stamp:%Y%m%d%H%M%S}-{sha[:12]} {at} ({sha[:7]})'
+          def public_version_matches(value,sha,at):
+              """public_version_matches compares the complete display, never a substring."""
+              return isinstance(value,str) and value==expected_display(sha,at)
+          def test_version_contract():
+              """test_version_contract preserves positive, mismatch and dirty-build controls."""
+              sha='ef27439cd888c4bb5d36270b9a415cfea088d48f';at='2026-10-14T03:32:32Z'
+              displayed='v0.0.0-20261014033232-ef27439cd888 2026-10-14T03:32:32Z (ef27439)'
+              assert displayed!=sha, 'Original comparison must reproduce the false failure'
+              assert public_version_matches(displayed,sha,at)
+              invalid=[None,{},'',sha,sha[:7],displayed+'-dirty',displayed.replace('(ef27439)','(ef27439-dirty)'),displayed.replace('ef27439cd888','ef27439fffff'),displayed.replace('03:32:32Z','03:32:31Z'),displayed.replace('20261014033232','20261014033231'),'prefix '+displayed,displayed+' suffix']
+              for value in invalid:assert not public_version_matches(value,sha,at)
+              return 1+len(invalid)
+          report['version_contract_cases']=test_version_contract()
+          report['expected_public_version']=expected_display(expected,commit_time)
           class SameOriginRedirect(urllib.request.HTTPRedirectHandler):
+              """SameOriginRedirect refuses cross-origin redirects before another request."""
               def redirect_request(self,req,fp,code,msg,headers,newurl):
+                  """redirect_request follows only the approved HTTPS origin."""
                   target=urllib.parse.urlsplit(newurl)
                   if target.scheme!='https' or target.netloc!='oneapi.laisky.com':raise ValueError('Cross-origin redirect refused')
                   return super().redirect_request(req,fp,code,msg,headers,newurl)
           opener=urllib.request.build_opener(SameOriginRedirect())
           def get(path,limit=4*1024*1024):
+              """get performs one bounded anonymous same-origin request with verified TLS."""
               target=urllib.parse.urlsplit(urllib.parse.urljoin(origin,path))
               assert target.scheme=='https' and target.netloc=='oneapi.laisky.com'
               request=urllib.request.Request(target.geturl(),headers={'User-Agent':'OneAPI-release-readonly-verification/1.0','Cache-Control':'no-cache'},method='GET')
@@ -45,9 +69,9 @@ jobs:
                       status,headers,raw=get('/api/status?release_probe='+expected,256*1024)
                       body=json.loads(raw)
                       version=body.get('data',{}).get('version')
-                      observation.update(status=status,success=body.get('success'),source=version)
-                      if status==200 and body.get('success') is True and version==expected:
-                          report['observations'].append(observation);report['observed_source']=version;break
+                      observation.update(status=status,success=body.get('success'),public_version=version)
+                      if status==200 and body.get('success') is True and public_version_matches(version,expected,commit_time):
+                          report['observations'].append(observation);report['observed_public_version']=version;break
                   except (ValueError,urllib.error.URLError,TimeoutError):observation['transport_or_parse_failure']=True
                   report['observations'].append(observation)
                   assert time.monotonic()<deadline,'Expected release did not become visible within the bounded probe'
@@ -62,8 +86,12 @@ jobs:
               report['browser_config']={'status':status,'configured':setting is not None,'no_store':True,'nosniff':True}
               status,headers,raw=get('/',1024*1024);assert status==200
               class Entries(HTMLParser):
-                  def __init__(self):super().__init__();self.assets=[]
+                  """Entries collects only same-origin compiled scripts and styles."""
+                  def __init__(self):
+                      """__init__ prepares a fresh bounded entry inventory."""
+                      super().__init__();self.assets=[]
                   def handle_starttag(self,tag,attrs):
+                      """handle_starttag extracts an eligible public asset without executing it."""
                       attrs=dict(attrs)
                       value=attrs.get('src') if tag=='script' else attrs.get('href') if tag=='link' and attrs.get('rel') in ('stylesheet','modulepreload') else None
                       if value:
