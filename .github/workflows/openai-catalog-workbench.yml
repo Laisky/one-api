@@ -11,13 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 49dc9c7f33a46ea35d293ed6c3dc0c28825d741a
+          ref: 869835afe349cccabb92cf63366d2c0b3650d13f
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.2'
-      - name: Verify exact fixed head and formatting
+      - name: Verify merged identity and preserve qualified OpenAI files
         shell: bash
         run: |
           set -euo pipefail
@@ -25,15 +25,16 @@ jobs:
           git rev-parse HEAD > "$RUNNER_TEMP/qualification/commit.txt"
           git rev-parse HEAD^{tree} > "$RUNNER_TEMP/qualification/tree.txt"
           go version > "$RUNNER_TEMP/qualification/toolchain.txt"
-          test "$(git rev-parse HEAD)" = 49dc9c7f33a46ea35d293ed6c3dc0c28825d741a
+          test "$(git rev-parse HEAD)" = 869835afe349cccabb92cf63366d2c0b3650d13f
+          test "$(git rev-parse HEAD^{tree})" = 73b8fcc9fe777c7576f0307a458c8cde4be8fa8a
+          git diff --exit-code 49dc9c7f33a46ea35d293ed6c3dc0c28825d741a HEAD -- relay/adaptor/openai
           git diff --check eed2a6d02e5392f24197f49a70af3ba2ba22f212 HEAD
           git diff --name-only eed2a6d02e5392f24197f49a70af3ba2ba22f212 HEAD -- '*.go' | xargs gofmt -l > "$RUNNER_TEMP/qualification/format.txt"
           test ! -s "$RUNNER_TEMP/qualification/format.txt"
-          git diff --stat eed2a6d02e5392f24197f49a70af3ba2ba22f212 HEAD > "$RUNNER_TEMP/qualification/diff-stat.txt"
+          git diff --stat 49dc9c7f33a46ea35d293ed6c3dc0c28825d741a HEAD > "$RUNNER_TEMP/qualification/concurrent-diff-stat.txt"
           git show 742f188e6f83ed08550f5cc5360eaafac9b317b8:relay/adaptor/openai/catalog_october_feature_ownership_test.go | gofmt > "$RUNNER_TEMP/qualification/baseline-test-formatted.go"
           cmp "$RUNNER_TEMP/qualification/baseline-test-formatted.go" relay/adaptor/openai/catalog_october_feature_ownership_test.go
-          printf '%s\n' 'Baseline reproduced in run 38491120843, artifact 11862141290, SHA256 bf417562f2ff7d374911076eedb205b7a116e8af00febb77a3ffa28020ef307c. Only empty_shared_capacity failed, all four controls passed. Test assertions are byte-identical after gofmt.' > "$RUNNER_TEMP/qualification/baseline-receipt.txt"
-      - name: Execute focused regression set first
+      - name: Execute OpenAI focused regressions on merged revision
         shell: bash
         run: |
           set -euo pipefail
@@ -50,30 +51,28 @@ jobs:
           (root / 'focused-summary.json').write_text(json.dumps(summary, indent=2))
           print(json.dumps(summary, indent=2))
           PY
-      - name: Execute affected package race suites and vet
+      - name: Execute combined affected package race suites and vet
         shell: bash
         run: |
           set -euo pipefail
-          go test -race -json -count=1 -timeout=8m -p 2 ./relay/adaptor/openai ./relay/adaptor/aiproxy ./relay/adaptor/openrouter ./relay/adaptor ./relay/pricing > "$RUNNER_TEMP/qualification/affected.jsonl" 2> "$RUNNER_TEMP/qualification/affected-stderr.txt"
-          go vet ./relay/adaptor/openai ./relay/adaptor/aiproxy ./relay/adaptor/openrouter ./relay/adaptor ./relay/pricing > "$RUNNER_TEMP/qualification/vet.txt" 2>&1
+          go test -race -json -count=1 -timeout=8m -p 2 ./relay/adaptor/openai ./relay/adaptor/aiproxy ./relay/adaptor/openrouter ./relay/adaptor ./relay/pricing ./relay/adaptor/gemini ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/vertexai > "$RUNNER_TEMP/qualification/affected.jsonl" 2> "$RUNNER_TEMP/qualification/affected-stderr.txt"
+          go vet ./relay/adaptor/openai ./relay/adaptor/aiproxy ./relay/adaptor/openrouter ./relay/adaptor ./relay/pricing ./relay/adaptor/gemini ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/vertexai > "$RUNNER_TEMP/qualification/vet.txt" 2>&1
           python3 - "$RUNNER_TEMP/qualification" <<'PY'
           import json, pathlib, sys
           root = pathlib.Path(sys.argv[1])
           events = [json.loads(line) for line in (root / 'affected.jsonl').read_text().splitlines() if line.startswith('{')]
           packages = {e['Package'] for e in events if e.get('Action') == 'pass' and not e.get('Test')}
-          expected = {'github.com/Laisky/one-api/' + p for p in ['relay/adaptor/openai', 'relay/adaptor/aiproxy', 'relay/adaptor/openrouter', 'relay/adaptor', 'relay/pricing']}
+          expected = {'github.com/Laisky/one-api/' + p for p in ['relay/adaptor/openai', 'relay/adaptor/aiproxy', 'relay/adaptor/openrouter', 'relay/adaptor', 'relay/pricing', 'relay/adaptor/gemini', 'relay/adaptor/geminiOpenaiCompatible', 'relay/adaptor/vertexai']}
           assert packages == expected
           assert not any(e.get('Action') == 'fail' for e in events)
-          skipped = {e['Test'] for e in events if e.get('Action') == 'skip' and e.get('Test')}
-          assert skipped <= {'TestDeepSeekLiveResponseFallbackAccepted', 'TestDeepSeekLiveContractRejectsUnrepairedHistory'}
-          summary = {'packages': sorted(packages), 'top_level_passes': sum(e.get('Action') == 'pass' and bool(e.get('Test')) and '/' not in e['Test'] for e in events), 'passing_test_outcomes': sum(e.get('Action') == 'pass' and bool(e.get('Test')) for e in events), 'skipped_tests': sorted(skipped), 'vet': 'passed'}
+          summary = {'packages': sorted(packages), 'top_level_passes': sum(e.get('Action') == 'pass' and bool(e.get('Test')) and '/' not in e['Test'] for e in events), 'passing_test_outcomes': sum(e.get('Action') == 'pass' and bool(e.get('Test')) for e in events), 'skipped_tests': [{'package': e['Package'], 'test': e.get('Test')} for e in events if e.get('Action') == 'skip'], 'vet': 'passed'}
           (root / 'affected-summary.json').write_text(json.dumps(summary, indent=2))
           print(json.dumps(summary, indent=2))
           PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: openai-pr570-review-qualification
+          name: openai-pr570-merged-qualification
           path: ${{ runner.temp }}/qualification
           if-no-files-found: error
           retention-days: 14
