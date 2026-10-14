@@ -490,6 +490,7 @@
     "web/modern/src/pages/settings/__tests__/OtherSettings.test.tsx",
     "web/modern/src/pages/settings/__tests__/SystemSettings.browser-sentry.test.tsx",
     "web/modern/src/pages/settings/__tests__/SystemSettings.email-whitelist.test.tsx",
+    "web/modern/src/pages/settings/__tests__/SystemSettings.explicit-save.test.tsx",
     "web/modern/src/pages/settings/__tests__/SystemSettings.failure.test.tsx",
     "web/modern/src/pages/settings/__tests__/SystemSettings.oidc-discovery.test.tsx",
     "web/modern/src/pages/settings/__tests__/SystemSettings.private-errors.test.tsx",
