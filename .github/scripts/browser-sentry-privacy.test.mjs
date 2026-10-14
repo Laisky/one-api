@@ -530,3 +530,33 @@ test('cycles, getters and deep or wide metadata stay bounded and do not mutate i
   assert.equal(cursor.apiToken, privateText);
   assert.equal(Object.keys(wide).length, 2001);
 });
+
+// filtersURLPathCredentials proves URL-specific fields use credential redaction without losing ordinary source correlation.
+test('recognized credentials in URL paths are filtered while ordinary frames and Debug IDs remain intact', function filtersURLPathCredentials() {
+  const key = 'sk-abcdefabcdefabcdef';
+  const input = ordinaryEvent();
+  const ordinaryPath = 'https://oneapi.laisky.com/assets/lazy-settings-Abcd1234.js';
+  const debugId = input.debug_meta.images[0].debug_id;
+  input.request = { url: 'https://oneapi.laisky.com/api/tokens/' + key + '?secret=fixture#private' };
+  input.exception.values[0].stacktrace.frames[0].filename = '/assets/' + key + '.js';
+  input.exception.values[0].stacktrace.frames[1].filename = ordinaryPath;
+  input.extra.url = '//cdn.example.test/assets/' + key + '.js';
+  input.debug_meta.images.push({
+    type: 'sourcemap',
+    code_file: 'https://cdn.example.test/assets/' + key + '.js',
+    debug_id: '22222222-3333-4444-8555-666666666666',
+  });
+  input.message = 'Network failure at https://oneapi.laisky.com/api/tokens/' + key;
+  const clean = sanitizeFixture(input);
+  assert.ok(clean);
+  assert.ok(!JSON.stringify(clean).includes(key));
+  assert.match(clean.request.url, /\/api\/tokens\/\[Filtered\]$/);
+  assert.equal(clean.exception.values[0].stacktrace.frames[0].filename, '/assets/[Filtered].js');
+  assert.equal(clean.exception.values[0].stacktrace.frames[1].filename, ordinaryPath);
+  assert.equal(clean.extra.url, '//cdn.example.test/assets/[Filtered].js');
+  assert.equal(clean.debug_meta.images[0].code_file, ordinaryPath);
+  assert.equal(clean.debug_meta.images[0].debug_id, debugId);
+  assert.equal(clean.debug_meta.images[1].debug_id, input.debug_meta.images[1].debug_id);
+  assert.match(clean.message, /^Network failure at /);
+  assert.ok(input.request.url.includes(key));
+});

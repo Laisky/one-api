@@ -44,7 +44,11 @@ export function readConfig(settings, location, theme, _assets = [], release) {
 
 /** createBrowserReporter initializes one errors-only SDK per window; SDK failures return a disabled reporter. */
 export function createBrowserReporter(sdk, settings, target, theme, entryURL, release) {
-  const disabled = Object.freeze({ enabled: false, capture() {} });
+  const disabled = Object.freeze({
+    enabled: false,
+    /** capture leaves disabled application behavior unchanged. */
+    capture() {},
+  });
   if (!target || (typeof target !== 'object' && typeof target !== 'function')) return disabled;
   if (reporters.has(target)) return reporters.get(target);
   reporters.set(target, disabled);
@@ -59,16 +63,18 @@ export function createBrowserReporter(sdk, settings, target, theme, entryURL, re
       release: config.release,
       debug: false,
       sendClientReports: false,
-      // Retain the SDK's diagnostic defaults, excluding automatic session payloads.
+      /** integrations retains diagnostic defaults while excluding automatic session payloads. */
       integrations(defaults) {
         return defaults.filter((integration) => integration.name !== 'BrowserSession');
       },
       transportOptions: { fetchOptions: { credentials: 'omit', referrerPolicy: 'no-referrer' } },
       beforeBreadcrumb: sanitizeBreadcrumb,
       tracePropagationTargets: [],
+      /** beforeSendLog excludes log shipping from browser error capture. */
       beforeSendLog() {
         return null;
       },
+      /** beforeSendMetric excludes metric shipping from browser error capture. */
       beforeSendMetric() {
         return null;
       },
@@ -84,6 +90,7 @@ export function createBrowserReporter(sdk, settings, target, theme, entryURL, re
         queues: false,
         stackFrameVariables: false,
       },
+      /** beforeSend filters private event data and duplicate exceptions after successful initialization. */
       beforeSend(event, hint) {
         try {
           if (hint) hint.attachments = [];

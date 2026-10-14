@@ -66,6 +66,18 @@ export function isExpectedRequestError(error) {
   }
 }
 
+/** redactCredentialShapes masks recognizable credentials without parsing URLs or calling another sanitizer. */
+function redactCredentialShapes(value) {
+  return value
+    .replace(/\b(Bearer|Basic)\s+[^\s,;"']+/gi, '$1 [Filtered]')
+    .replace(/\bsk-[A-Za-z0-9_-]{6,}/g, '[Filtered]')
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[Filtered]')
+    .replace(
+      /\b((?:api|sso|session|access|refresh|id)[_-]?(?:tokens?|keys?)|token|jwt|password|secret|authorization|cookie)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+      '$1=[Filtered]'
+    );
+}
+
 /** sanitizeURL removes URL credentials, query strings and fragments while retaining useful source paths. */
 export function sanitizeURL(value) {
   if (typeof value !== 'string') return value;
@@ -84,14 +96,14 @@ export function sanitizeURL(value) {
     }
   }
   const protocolRelative = value.startsWith('//');
-  if (!protocolRelative && !/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value.split(/[?#]/, 1)[0];
+  if (!protocolRelative && !/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return redactCredentialShapes(value.split(/[?#]/, 1)[0]);
   try {
     const url = new URL(protocolRelative ? 'https:' + value : value);
     url.username = '';
     url.password = '';
     url.search = '';
     url.hash = '';
-    return protocolRelative ? url.toString().replace(/^https:/, '') : url.toString();
+    return redactCredentialShapes(protocolRelative ? url.toString().replace(/^https:/, '') : url.toString());
   } catch {
     return '[invalid URL]';
   }
@@ -99,19 +111,12 @@ export function sanitizeURL(value) {
 
 /** sanitizeText masks recognizable credential shapes while preserving ordinary diagnostic text. */
 export function sanitizeText(value) {
-  return value
-    .slice(0, MAX_STRING)
-    .replace(/\b(?:https?|wss?):\/\/[^\s"'<>]+/gi, (match) => {
+  return redactCredentialShapes(
+    value.slice(0, MAX_STRING).replace(/\b(?:https?|wss?):\/\/[^\s"'<>]+/gi, (match) => {
       const tail = match.match(/[),.;\]]+$/)?.[0] ?? '';
       return sanitizeURL(tail ? match.slice(0, -tail.length) : match) + tail;
     })
-    .replace(/\b(Bearer|Basic)\s+[^\s,;"']+/gi, '$1 [Filtered]')
-    .replace(/\bsk-[A-Za-z0-9_-]{6,}/g, '[Filtered]')
-    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[Filtered]')
-    .replace(
-      /\b((?:api|sso|session|access|refresh|id)[_-]?(?:tokens?|keys?)|token|jwt|password|secret|authorization|cookie)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
-      '$1=[Filtered]'
-    );
+  );
 }
 
 /** redactMessage replaces only specifically annotated full, prefixed or SDK-truncated private messages. */
