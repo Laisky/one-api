@@ -1,3 +1,5 @@
+import { reportUnexpectedRequestError } from '../../../legacy/browser-request-errors.mjs';
+import { markPrivateError } from '../../../legacy/browser-sentry-privacy.mjs';
 import { showError } from './common';
 import axios from 'axios';
 import { store } from 'store/index';
@@ -58,8 +60,12 @@ API.interceptors.response.use(
 
     if (error.response?.data?.message) {
       error.message = error.response.data.message;
+      const status = error.response.status;
+      const safeStatus = Number.isInteger(status) && status >= 100 && status <= 599 ? status : 'unknown';
+      markPrivateError(error, 'Request failed (HTTP ' + safeStatus + ')', true);
     }
 
+    if (axios.isAxiosError(error) && !error.response && error.request) reportUnexpectedRequestError(error);
     showError(error);
     return Promise.reject(error);
   }

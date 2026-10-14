@@ -1,3 +1,6 @@
+import { reportUnexpectedRequestError } from '../../../../legacy/browser-request-errors.mjs';
+import { markPrivateError, privateResponseError } from '../../../../legacy/browser-sentry-privacy.mjs';
+import { parsePrivateChatJSON } from '../chat/helpers';
 import { useCallback } from 'react';
 import { getModelCapabilities, isOpenAIMediumOnlyReasoningModel } from '@/lib/model-capabilities';
 import type { Message } from '@/lib/utils';
@@ -137,9 +140,11 @@ export const useChatRequest = (config: ChatRequestConfig) => {
             }
           } catch (readError) {
             // If we can't read the response body, fall back to status
+            if (readError instanceof SyntaxError) markPrivateError(readError, 'Channel error response decoding failed');
+            reportUnexpectedRequestError(readError);
             console.warn('Failed to read error response body:', readError);
           }
-          throw new Error(errorMessage);
+          throw privateResponseError(errorMessage, 'Chat request failed (HTTP ' + response.status + ')');
         }
 
         const reader = response.body?.getReader();
@@ -149,6 +154,7 @@ export const useChatRequest = (config: ChatRequestConfig) => {
           throw new Error('No response body');
         }
 
+        let reportedStreamFailure = false;
         let assistantContent = '';
         let reasoningContent = '';
 
@@ -172,11 +178,11 @@ export const useChatRequest = (config: ChatRequestConfig) => {
               }
 
               try {
-                const parsed = JSON.parse(data);
+                const parsed = parsePrivateChatJSON(data);
 
                 if (parsed.type === 'error') {
                   const errorMsg = parsed.error || 'Stream error';
-                  throw new Error(errorMsg);
+                  throw privateResponseError(errorMsg, 'Chat provider stream failed');
                 }
 
                 if (parsed.choices?.[0]?.delta) {
@@ -222,12 +228,14 @@ export const useChatRequest = (config: ChatRequestConfig) => {
                   callbacks.onUpdate(assistantContent, reasoningContent);
                 }
               } catch (parseError) {
+                if (!reportedStreamFailure) reportedStreamFailure = reportUnexpectedRequestError(parseError);
                 console.warn('Failed to parse SSE data:', parseError);
               }
             }
           }
         }
       } catch (error) {
+        reportUnexpectedRequestError(error);
         callbacks.onError(error as Error);
       }
     },

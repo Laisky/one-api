@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"io"
 	"math"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -251,31 +253,82 @@ func TestSecurityGeminiLiveConcurrentSessionsCannotOversubscribe(t *testing.T) {
 	require.Equal(t, charged, settled, "two sessions settle exactly once each")
 }
 
-// TestSecurityGeminiLiveOutputStreamCannotOutrunReservation reproduces a single
-// funded input whose long streamed response outruns the reservation before its
-// receipt. Parameters: t owns the test. Returns: none.
+// TestSecurityGeminiLiveOutputStreamCannotOutrunReservation verifies that the
+// gateway stops a funded response before another acknowledged frame can outrun
+// its reservation. Parameters: t owns the test. Returns: none.
 func TestSecurityGeminiLiveOutputStreamCannotOutrunReservation(t *testing.T) {
+	runLiveOutputReservation(t, true)
+}
+
+// TestSecurityGeminiLiveBufferedOutputPreservesReservation exercises an unpaced
+// provider burst without confusing buffered socket writes with gateway delivery.
+// Parameters: t owns the test. Returns: none.
+func TestSecurityGeminiLiveBufferedOutputPreservesReservation(t *testing.T) {
+	runLiveOutputReservation(t, false)
+}
+
+// runLiveOutputReservation checks output cutoff, upstream closure and exact
+// durable settlement using the real relay. Parameters: acknowledged bounds the
+// synthetic producer to one unacknowledged frame; false retains an unpaced burst.
+// Returns: none. The acknowledgement is fixture-only and never changes a socket
+// payload, production flow control, quota policy or timeout.
+func runLiveOutputReservation(t *testing.T, acknowledged bool) {
+	t.Helper()
 	const balance, chunks = 30_000, 100
 	var written atomic.Int64
+	delivered := make(chan struct{}, 1)
+	providerClosed := make(chan struct{})
+	providerReadResult := make(chan error, 1)
+	providerDone := make(chan struct{})
 	env := newLiveBudgetEnv(t, liveBudgetOptions{UserQuota: balance, TokenQuota: balance, Group: 1},
 		func(conn *websocket.Conn) error {
+			defer close(providerDone)
 			if _, _, err := conn.ReadMessage(); err != nil {
 				return errors.Wrap(err, "read funded input")
 			}
+			// A websocket writer must also read to observe peer close controls.
+			// Successful writes can otherwise be queued after the gateway stops.
+			go func() {
+				defer close(providerClosed)
+				for {
+					if _, _, err := conn.ReadMessage(); err != nil {
+						providerReadResult <- err
+						return
+					}
+				}
+			}()
+			deadline := time.NewTimer(30 * time.Second)
+			defer deadline.Stop()
+			frame := liveAudioOutputFrame(2)
 			for range chunks {
-				if err := conn.WriteMessage(websocket.TextMessage, liveAudioOutputFrame(2)); err != nil {
-					return nil // The gateway stopped the paid generation.
+				if err := conn.WriteMessage(websocket.TextMessage, frame); err != nil {
+					return nil // The real gateway closed the provider connection.
 				}
 				written.Add(1)
+				if acknowledged {
+					select {
+					case <-delivered:
+					case <-providerClosed:
+						return nil
+					case <-deadline.C:
+						return errors.New("fixture received neither delivery acknowledgement nor upstream closure")
+					}
+				}
 			}
-			_ = conn.WriteMessage(websocket.TextMessage, liveReceiptFrame(60, 0, 0, 0, 25*2*chunks, 0))
-			_, _, _ = conn.ReadMessage()
-			return nil
+			if err := conn.WriteMessage(websocket.TextMessage, liveReceiptFrame(60, 0, 0, 0, 25*2*chunks, 0)); err != nil {
+				return nil // Closing the exhausted session can reject its final receipt.
+			}
+			select {
+			case <-providerClosed:
+				return nil
+			case <-deadline.C:
+				return errors.New("fixture upstream did not close")
+			}
 		})
 	conn := env.connect()
 	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte(liveTextFrame(200))))
 	received, reason := 0, ""
-	_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(30*time.Second)))
 	for {
 		_, frame, err := conn.ReadMessage()
 		if err != nil {
@@ -290,20 +343,89 @@ func TestSecurityGeminiLiveOutputStreamCannotOutrunReservation(t *testing.T) {
 			break
 		}
 		received++
+		if acknowledged {
+			delivered <- struct{}{}
+		}
+	}
+	if received >= chunks {
+		t.Logf("acknowledged=%t client_chunks=%d provider_chunks=%d close=%q", acknowledged, received, written.Load(), reason)
+		require.Less(t, received, chunks, "unfunded streamed output reached the client")
+	}
+	// Inspect the actual read result before harness cleanup can close the client.
+	select {
+	case err := <-providerReadResult:
+		require.True(t, liveOutputReadEndedWithoutTimeout(err), "a provider read deadline is not evidence of peer closure")
+	case <-time.After(30 * time.Second):
+		t.Fatal("provider did not observe closure before fixture cleanup")
 	}
 	env.finish()
+	for _, done := range []<-chan struct{}{providerClosed, providerDone} {
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+			t.Fatal("provider did not observe gateway closure and terminate")
+		}
+	}
 
 	userQuota, tokenQuota := env.balances()
-	t.Logf("client_chunks=%d provider_chunks=%d user_quota=%d close=%q", received, written.Load(), userQuota, reason)
+	t.Logf("acknowledged=%t client_chunks=%d provider_chunks=%d user_quota=%d close=%q", acknowledged, received, written.Load(), userQuota, reason)
+	require.Positive(t, received, "a dropped session is not a successful funding control")
 	require.Less(t, received, chunks, "unfunded streamed output must stop the provider session")
-	require.Less(t, written.Load(), int64(chunks))
+	if acknowledged {
+		// The original stop-before-producer-completion assertion now observes
+		// delivery progress, independent of the kernel's socket-buffer capacity.
+		require.Less(t, written.Load(), int64(chunks))
+		require.EqualValues(t, received+1, written.Load(), "only the next withheld frame may be unacknowledged")
+	} else {
+		require.GreaterOrEqual(t, written.Load(), int64(received))
+	}
 	require.GreaterOrEqual(t, userQuota, int64(0))
 	require.GreaterOrEqual(t, tokenQuota, int64(0))
+	require.Equal(t, userQuota, tokenQuota, "user and token reservations must settle together")
 	require.Equal(t, liveQuotaCloseReason, reason)
-	for _, rows := range env.consumeLogs() {
+	// The fixture's independently specified audio price is 6 quota per token,
+	// with 25 tokens per second. Delivered output alone must fit its debit.
+	require.LessOrEqual(t, int64(received*2*25*6), balance-userQuota)
+	rowsByRequest := env.consumeLogs()
+	require.Len(t, rowsByRequest, 1, "the session must leave one durable settlement")
+	for _, rows := range rowsByRequest {
 		require.Len(t, rows, 1)
 		require.EqualValues(t, balance-userQuota, rows[0].Quota)
 		require.Equal(t, true, rows[0].Metadata[model.LogMetadataKeyEstimatedCharge])
+		require.Equal(t, true, rows[0].Metadata["realtime_budget_exhausted"])
 	}
 	requireLiveBudgetWarning(t, env)
+}
+
+// liveOutputReadEndedWithoutTimeout distinguishes a non-timeout read termination
+// from a missing result or expired fixture deadline, including wrapped errors.
+// Parameters: err is the provider reader's result. Returns: non-timeout termination.
+func liveOutputReadEndedWithoutTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	var timeout interface{ Timeout() bool }
+	return !errors.As(err, &timeout) || !timeout.Timeout()
+}
+
+// TestSecurityGeminiLiveProviderReadTimeoutIsNotClosure preserves deadline
+// rejection while accepting WebSocket closes and connection teardown.
+// Parameters: t owns synthetic error controls. Returns: none.
+func TestSecurityGeminiLiveProviderReadTimeoutIsNotClosure(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		err    error
+		closed bool
+	}{
+		{name: "missing"},
+		{name: "deadline", err: os.ErrDeadlineExceeded},
+		{name: "wrapped_deadline", err: errors.Wrap(os.ErrDeadlineExceeded, "fixture read")},
+		{name: "websocket_close", err: &websocket.CloseError{Code: websocket.CloseNormalClosure}, closed: true},
+		{name: "connection_eof", err: io.EOF, closed: true},
+		{name: "wrapped_connection_eof", err: errors.Wrap(io.EOF, "fixture read"), closed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.closed, liveOutputReadEndedWithoutTimeout(tc.err))
+		})
+	}
 }

@@ -10,6 +10,9 @@ import {
   buildChannelSubmitPayload,
   isValidJSON,
   normalizeChannelType,
+  parsePrivateChannelJSON,
+  formatPrivateChannelJSONField,
+  logPrivateChannelJSONError,
   sanitizeJsonInput,
   stringifyToolingConfig,
   toInt,
@@ -111,7 +114,7 @@ export const useChannelForm = () => {
       if (success) {
         if (data?.model_configs) {
           try {
-            const parsed = JSON.parse(data.model_configs);
+            const parsed = parsePrivateChannelJSON(data.model_configs);
             const formatted = JSON.stringify(parsed, null, 2);
             setDefaultPricing(formatted);
           } catch (_e) {
@@ -123,7 +126,7 @@ export const useChannelForm = () => {
 
         if (typeof data?.tooling === 'string' && data.tooling.trim() !== '') {
           try {
-            const parsedTooling = JSON.parse(data.tooling);
+            const parsedTooling = parsePrivateChannelJSON(data.tooling);
             setDefaultTooling(stringifyToolingConfig(parsedTooling));
           } catch (_e) {
             setDefaultTooling(data.tooling);
@@ -185,7 +188,7 @@ export const useChannelForm = () => {
         };
         if (data.config && typeof data.config === 'string' && data.config.trim() !== '') {
           try {
-            const parsed = JSON.parse(data.config) as Partial<ChannelConfigForm>;
+            const parsed = parsePrivateChannelJSON(data.config) as Partial<ChannelConfigForm>;
             config = {
               ...config,
               ...parsed,
@@ -211,20 +214,9 @@ export const useChannelForm = () => {
                   : {},
             };
           } catch (e) {
-            console.error(`Failed to parse config JSON: ${e instanceof Error ? e.message : String(e)}`);
+            logPrivateChannelJSONError(e);
           }
         }
-
-        const formatJsonField = (field: string) => {
-          if (field && typeof field === 'string' && field.trim() !== '') {
-            try {
-              return JSON.stringify(JSON.parse(field), null, 2);
-            } catch (_e) {
-              return field;
-            }
-          }
-          return '';
-        };
 
         const parseStringArrayField = (field: unknown): string[] => {
           if (Array.isArray(field)) {
@@ -237,7 +229,7 @@ export const useChannelForm = () => {
             return [];
           }
           try {
-            const parsed = JSON.parse(field);
+            const parsed = parsePrivateChannelJSON(field);
             if (!Array.isArray(parsed)) {
               return [];
             }
@@ -270,7 +262,7 @@ export const useChannelForm = () => {
         let toolingField = '';
         if (data.tooling && typeof data.tooling === 'string' && data.tooling.trim() !== '') {
           try {
-            const parsedTooling = JSON.parse(data.tooling);
+            const parsedTooling = parsePrivateChannelJSON(data.tooling);
             toolingField = stringifyToolingConfig(parsedTooling);
           } catch (_e) {
             toolingField = data.tooling;
@@ -285,8 +277,8 @@ export const useChannelForm = () => {
           other: data.other || '',
           models,
           hidden_models: parseStringArrayField(data.hidden_models),
-          model_mapping: formatJsonField(data.model_mapping),
-          model_configs: formatJsonField(data.model_configs),
+          model_mapping: formatPrivateChannelJSONField(data.model_mapping),
+          model_configs: formatPrivateChannelJSONField(data.model_configs),
           tooling: toolingField,
           system_prompt: data.system_prompt || '',
           groups,
@@ -294,7 +286,7 @@ export const useChannelForm = () => {
           weight: toInt(data.weight, 0),
           ratelimit: toInt(data.ratelimit, 0),
           config,
-          inference_profile_arn_map: formatJsonField(data.inference_profile_arn_map),
+          inference_profile_arn_map: formatPrivateChannelJSONField(data.inference_profile_arn_map),
         };
 
         console.debug(
@@ -443,7 +435,7 @@ export const useChannelForm = () => {
     }
     let parsed: unknown;
     try {
-      parsed = JSON.parse(sanitizeJsonInput(mappingRaw));
+      parsed = parsePrivateChannelJSON(sanitizeJsonInput(mappingRaw));
     } catch {
       return empty;
     }
@@ -553,7 +545,7 @@ export const useChannelForm = () => {
         }
 
         try {
-          const oauthConfig = JSON.parse(sanitizeJsonInput(data.key));
+          const oauthConfig = parsePrivateChannelJSON(sanitizeJsonInput(data.key));
           const requiredFields = ['client_type', 'client_id', 'coze_www_base', 'coze_api_base', 'private_key', 'public_key_id'];
 
           for (const field of requiredFields) {

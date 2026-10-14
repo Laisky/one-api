@@ -6,7 +6,7 @@ export default [{
   languageOptions: {
     ecmaVersion: 'latest', sourceType: 'module',
     parserOptions: { ecmaFeatures: { jsx: true } },
-    globals: { ...globals.browser, process: 'readonly', React: 'readonly' },
+    globals: { ...globals.browser, process: 'readonly', React: 'readonly', __ONEAPI_BROWSER_RELEASE__: 'readonly' },
   },
   plugins: { 'react-hooks': reactHooks },
   rules: {

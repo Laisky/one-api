@@ -335,6 +335,7 @@
       "TopUpLink": "ユーザーがクォータを購入・チャージするための外部リンク。",
       "TurnstileCheckEnabled": "重要操作（登録／リセット）で Cloudflare Turnstile を使用します。",
       "TurnstileSecretKey": "サーバー側で使用する Turnstile シークレットキー（厳重に管理してください）。",
+      "BrowserSentryConfig": "ブラウザーのエラー報告用公開設定です。dsn と environment（production、staging、development のいずれか）のみを含む JSON を指定してください。有効な設定はページの再読み込み後に自動的に適用されます。無効にするには空欄にしてください。認証トークンやその他の秘密情報は絶対に入力しないでください。",
       "TurnstileSiteKey": "フロントエンドで使用する Turnstile サイトキー。",
       "WeChatAccountQRCodeImageURL": "ユーザーへ表示する WeChat アカウント QR コード画像の URL。",
       "WeChatAuthEnabled": "WeChat ログインを有効化します。サーバー設定が必要です。",

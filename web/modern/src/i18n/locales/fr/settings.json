@@ -335,6 +335,7 @@
       "TopUpLink": "Lien externe permettant d'acheter ou recharger du quota.",
       "TurnstileCheckEnabled": "Activer Cloudflare Turnstile sur les actions critiques (inscription/réinitialisation).",
       "TurnstileSecretKey": "Clé secrète Turnstile utilisée côté serveur (à conserver confidentielle).",
+      "BrowserSentryConfig": "Configuration publique des erreurs du navigateur : JSON contenant uniquement dsn et environment (production, staging ou development). Une configuration valide s’active automatiquement après le rechargement de la page ; laissez le champ vide pour la désactiver. Ne saisissez jamais de jetons d’authentification ni d’autres secrets.",
       "TurnstileSiteKey": "Clé site Turnstile utilisée côté frontend.",
       "WeChatAccountQRCodeImageURL": "URL de l'image du QR code du compte WeChat affiché aux utilisateurs.",
       "WeChatAuthEnabled": "Activer la connexion WeChat. Nécessite la configuration du serveur WeChat.",

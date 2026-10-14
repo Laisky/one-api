@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { legacyConfig, removeInvalidSemanticRule } from '../../web/legacy/vite-config.mjs';
 
@@ -44,4 +45,26 @@ test('Semantic UI correction removes only the known invalid third-party rule', (
   removeInvalidSemanticRule(rule('/app/src/own.css'));
   removeInvalidSemanticRule(rule('/app/node_modules/semantic-ui-css/semantic.min.css', '[data-tooltip]:after'));
   assert.equal(removed, 1, 'Never weaken other selectors or first-party CSS validation');
+});
+
+// Remote font failure must not reject the dynamically imported application module.
+test('Air keeps startup styles in the static entry while application code waits for reporting', () => {
+  const entry = readFileSync(path.join(repository, 'web/air/src/index.js'), 'utf8');
+  const app = readFileSync(path.join(repository, 'web/air/src/browser-app.js'), 'utf8');
+  const styles = [
+    'semantic-ui-css/semantic.min.css',
+    './index.css',
+    './mobile-override.css',
+    'react-toastify/dist/ReactToastify.css',
+  ];
+  let previous = -1;
+  for (const name of styles) {
+    const statement = `import '${name}';`;
+    const position = entry.indexOf(statement);
+    assert.ok(position > previous, `Startup style must retain its static import and cascade order: ${name}`);
+    assert.ok(position < entry.indexOf('mountBrowserApp('));
+    assert.ok(!app.includes(statement), 'Do not put optional remote font loading back in the async application import');
+    previous = position;
+  }
+  assert.match(entry, /import\('\.\/browser-app'\)/, 'Application modules still initialize after reporting readiness');
 });
