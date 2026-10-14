@@ -1,0 +1,54 @@
+name: OpenAI catalogue workbench
+on:
+  push:
+    branches: [workbench/openai-catalog-20261013]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Export source for catalogue inspection
+        run: |
+          mkdir -p "$RUNNER_TEMP/openai-catalog-source"
+          git rev-parse HEAD > "$RUNNER_TEMP/openai-catalog-source/source-sha.txt"
+          git archive --format=tar.gz HEAD relay/adaptor relay/pricing relay/billing/ratio go.mod go.sum AGENTS.md docs/adaptor-model-refresh-20261012.md > "$RUNNER_TEMP/openai-catalog-source/source.tar.gz"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openai-catalog-source
+          path: ${{ runner.temp }}/openai-catalog-source
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Export compiled OpenAI catalogue
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/openai-catalog.go" <<'GO'
+          package main
+          import (
+            "encoding/json"
+            "os"
+            "github.com/Laisky/one-api/relay/adaptor/openai"
+          )
+          // main writes the actual compiled catalogue for an offline metadata audit.
+          func main() {
+            encoder := json.NewEncoder(os.Stdout)
+            encoder.SetIndent("", "  ")
+            if err := encoder.Encode(openai.ModelRatios); err != nil { panic(err) }
+          }
+          GO
+          mkdir -p "$RUNNER_TEMP/openai-catalog-result"
+          go run "$RUNNER_TEMP/openai-catalog.go" > "$RUNNER_TEMP/openai-catalog-result/catalogue.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openai-catalog-result
+          path: ${{ runner.temp }}/openai-catalog-result
+          if-no-files-found: error
+          retention-days: 7
