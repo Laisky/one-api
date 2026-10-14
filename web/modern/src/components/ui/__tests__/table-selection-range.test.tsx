@@ -1,6 +1,6 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '@/lib/stores/auth';
 import type { ModernColumnDef } from '@/lib/table';
 import { chooseTableSelection } from '@/test/table-toolbar';
@@ -12,6 +12,7 @@ vi.mock('@/hooks/useResponsive', () => ({ useResponsive: () => responsive }));
 const names = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot'];
 const rows = names.map((name) => ({ uuid: name.toLowerCase(), name }));
 const columns: ModernColumnDef<(typeof rows)[number]>[] = [{ accessorKey: 'name', header: 'Name' }];
+afterEach(() => cleanup());
 
 /** checkbox returns the accessible selection control for the supplied record name. */
 function checkbox(name: string) {
@@ -149,6 +150,7 @@ for (const [label, Component] of [['basic', DataTable], ['enhanced', EnhancedDat
         act(() => checkbox('Alpha').focus());
         await user.keyboard('[Space]');
         expectSelected(['Alpha']);
+        act(() => checkbox('Alpha').focus());
         await user.keyboard('[Space]');
         expectSelected([]);
       });
