@@ -21,7 +21,7 @@ func TestGeminiOctober13ArgonVertexCatalog(t *testing.T) {
 	cfg, exists := adapter.GetDefaultModelPricing()["gemini-4-argon"]
 	require.True(t, exists)
 	require.Equal(t, int32(1_048_576), cfg.ContextLength)
-	require.Equal(t, int32(65_536), cfg.MaxOutputTokens)
+	require.Equal(t, int32(32_768), cfg.MaxOutputTokens, "shared defaults must retain the conservative non-streaming REST limit")
 	require.InDelta(t, 2*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
 	require.InDelta(t, 10*ratio.MilliTokensUsd, cfg.Ratio*cfg.CompletionRatio, 1e-12)
 	resolved := pricing.ApplyTimeWindow(cfg, time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC))

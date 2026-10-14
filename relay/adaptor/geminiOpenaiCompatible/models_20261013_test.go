@@ -10,15 +10,16 @@ import (
 	"github.com/Laisky/one-api/relay/pricing"
 )
 
-// TestGeminiOctober13ArgonCatalog verifies published capabilities and conservative
-// synchronous limits. Parameter t is the test handle; it returns no values.
+// TestGeminiOctober13ArgonCatalog verifies published capabilities and the
+// conservative non-streaming REST limit. Parameter t is the test handle;
+// it returns no values.
 func TestGeminiOctober13ArgonCatalog(t *testing.T) {
 	const modelName = "gemini-4-argon"
 	cfg, exists := ModelRatios[modelName]
 	require.True(t, exists, "Argon must have explicit pricing, not fallback rates")
 	require.Contains(t, ModelList, modelName)
 	require.Equal(t, int32(1_048_576), cfg.ContextLength)
-	require.Equal(t, int32(65_536), cfg.MaxOutputTokens)
+	require.Equal(t, int32(32_768), cfg.MaxOutputTokens, "shared discovery must not promise the Interactions or streaming limit for non-streaming generateContent")
 	require.ElementsMatch(t, []string{"text", "image", "audio", "video", "file"}, cfg.InputModalities)
 	require.Equal(t, []string{"text"}, cfg.OutputModalities)
 	require.ElementsMatch(t, []string{"tools", "json_mode", "structured_outputs", "web_search", "reasoning"}, cfg.SupportedFeatures)
@@ -31,6 +32,8 @@ func TestGeminiOctober13ArgonCatalog(t *testing.T) {
 	require.Nil(t, cfg.Video)
 	require.Nil(t, cfg.Embedding)
 	require.Empty(t, cfg.Tiers, "do not inherit Pro's 200K long-context surcharge")
+	require.Contains(t, cfg.Description, "32,768-token non-streaming")
+	require.Contains(t, cfg.Description, "65,536-token streaming")
 	require.Contains(t, cfg.Description, "implicit only")
 	require.Contains(t, geminiWebSearchModels, modelName)
 	require.Nil(t, GetModelModalities(modelName))

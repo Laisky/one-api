@@ -14,8 +14,8 @@ import (
 )
 
 // TestGeminiOctober13ArgonSystemInstructions checks actual Chat Completions and
-// Claude Messages conversions, not only the catalogue. Parameter t is the test
-// handle; it returns no values.
+// Claude Messages conversions at both native REST hop limits. Parameter t is
+// the test handle; it returns no values and makes no provider requests.
 func TestGeminiOctober13ArgonSystemInstructions(t *testing.T) {
 	const modelName = "gemini-4-argon"
 	const systemPrompt = "Follow the configured operating policy."
@@ -24,32 +24,46 @@ func TestGeminiOctober13ArgonSystemInstructions(t *testing.T) {
 	require.Equal(t, geminiOpenaiCompatible.ModelRatios[modelName], ModelRatios[modelName])
 	require.True(t, IsModelSupportSystemInstruction(modelName))
 
-	t.Run("chat-completions", func(t *testing.T) {
-		converted := ConvertRequest(model.GeneralOpenAIRequest{
-			Model:     modelName,
-			MaxTokens: 65_536,
-			Messages: []model.Message{
-				{Role: "system", Content: systemPrompt},
-				{Role: "user", Content: userPrompt},
-			},
+	for _, tt := range []struct {
+		name      string
+		stream    bool
+		maxTokens int
+	}{
+		{"non-streaming", false, 32_768},
+		{"streaming", true, 65_536},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Run("chat-completions", func(t *testing.T) {
+				converted := ConvertRequest(model.GeneralOpenAIRequest{
+					Model:     modelName,
+					MaxTokens: tt.maxTokens,
+					Stream:    tt.stream,
+					Messages: []model.Message{
+						{Role: "system", Content: systemPrompt},
+						{Role: "user", Content: userPrompt},
+					},
+				})
+				assertOctober13ArgonSystemPrompt(t, converted, systemPrompt, userPrompt, tt.maxTokens)
+			})
+			t.Run("claude-messages", func(t *testing.T) {
+				ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+				stream := tt.stream
+				converted, err := (&Adaptor{}).ConvertClaudeRequest(ctx, &model.ClaudeRequest{
+					Model:     modelName,
+					System:    systemPrompt,
+					MaxTokens: tt.maxTokens,
+					Stream:    &stream,
+					Messages: []model.ClaudeMessage{
+						{Role: "user", Content: userPrompt},
+					},
+				})
+				require.NoError(t, err)
+				request, ok := converted.(*ChatRequest)
+				require.True(t, ok)
+				assertOctober13ArgonSystemPrompt(t, request, systemPrompt, userPrompt, tt.maxTokens)
+			})
 		})
-		assertOctober13ArgonSystemPrompt(t, converted, systemPrompt, userPrompt)
-	})
-	t.Run("claude-messages", func(t *testing.T) {
-		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-		converted, err := (&Adaptor{}).ConvertClaudeRequest(ctx, &model.ClaudeRequest{
-			Model:     modelName,
-			System:    systemPrompt,
-			MaxTokens: 65_536,
-			Messages: []model.ClaudeMessage{
-				{Role: "user", Content: userPrompt},
-			},
-		})
-		require.NoError(t, err)
-		request, ok := converted.(*ChatRequest)
-		require.True(t, ok)
-		assertOctober13ArgonSystemPrompt(t, request, systemPrompt, userPrompt)
-	})
+	}
 	for _, excluded := range []string{"gemini-4-unknown", "gemini-3.8-live", "gemini-embedding-2"} {
 		require.False(t, IsModelSupportSystemInstruction(excluded), "no family-wide allowlist expansion")
 	}
@@ -57,8 +71,8 @@ func TestGeminiOctober13ArgonSystemInstructions(t *testing.T) {
 
 // assertOctober13ArgonSystemPrompt verifies native system placement without
 // fabricated conversation turns. Parameters are the test handle, converted
-// request, and expected system/user text; it returns no values.
-func assertOctober13ArgonSystemPrompt(t *testing.T, request *ChatRequest, system, user string) {
+// request, expected system/user text, and output budget; it returns no values.
+func assertOctober13ArgonSystemPrompt(t *testing.T, request *ChatRequest, system, user string, maxTokens int) {
 	t.Helper()
 	require.NotNil(t, request.SystemInstruction)
 	require.Empty(t, request.SystemInstruction.Role)
@@ -68,7 +82,7 @@ func assertOctober13ArgonSystemPrompt(t *testing.T, request *ChatRequest, system
 	require.Equal(t, "user", request.Contents[0].Role)
 	require.Len(t, request.Contents[0].Parts, 1)
 	require.Equal(t, user, request.Contents[0].Parts[0].Text)
-	require.Equal(t, 65_536, request.GenerationConfig.MaxOutputTokens)
+	require.Equal(t, maxTokens, request.GenerationConfig.MaxOutputTokens)
 	require.Nil(t, request.GenerationConfig.ResponseModalities)
 }
 
