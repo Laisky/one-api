@@ -8,6 +8,7 @@ import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import type { SearchOption } from '@/components/ui/searchable-dropdown';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
+import { useTableSort } from '@/hooks/useTableSort';
 import { api } from '@/lib/api';
 import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { Ban, CheckCircle, FlaskConical, Plus, RefreshCw, Settings, Trash2, XCircle } from 'lucide-react';
@@ -91,8 +92,7 @@ export function MCPServersPage() {
   const loadSequence = useRef(0);
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [sortBy, setSortBy] = useState('id');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const { sortBy, sortOrder, setSortBy, setSortOrder } = useTableSort('mcp', 'id');
   const initializedRef = useRef(false);
 
   const columns = useMemo<ColumnDef<MCPServerRow>[]>(
