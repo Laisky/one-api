@@ -32,11 +32,15 @@ jobs:
           cache-dependency-path: web/modern/yarn.lock
       - name: Verify only the four translated descriptions differ from accepted runtime
         run: |
+          # GitHub-generated merge previews are not necessarily ancestors of a branch.
+          # Fetch this exact public object explicitly; do not substitute another baseline.
+          git fetch --no-tags --depth=1 origin "$ACCEPTED_RUNTIME"
           python3 - <<'PY'
           import copy,hashlib,json,os,pathlib,subprocess
           def git(*args):return subprocess.check_output(['git',*args],text=True).strip()
           assert git('rev-parse','HEAD')==os.environ['SOURCE_SHA']
           assert git('rev-parse','HEAD^{tree}')==os.environ['SOURCE_TREE']
+          assert git('rev-parse',os.environ['ACCEPTED_RUNTIME']+'^{tree}')=='dde33bd0b0ec07ed1b7828de8688788356fe0238'
           blobs={'es':'c10095838d26daa3ca986cd6b57092bc9c8bb03b','fr':'f823c71a3344c53c7e3ff95d9080d182d63c3c43','ja':'7f67467e4041768ccf9407e747fc05d0de52f273','zh':'4194c376f9db15f8e84cbdeff1f0342cea37dd3f'}
           paths={'web/modern/src/i18n/locales/'+locale+'/settings.json' for locale in blobs}
           assert set(git('diff','--name-only',os.environ['ACCEPTED_RUNTIME'],'HEAD').splitlines())==paths
