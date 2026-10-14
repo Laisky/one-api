@@ -12,6 +12,7 @@ import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { type SearchOption } from '@/components/ui/searchable-dropdown';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
+import { useTableSort } from '@/hooks/useTableSort';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
@@ -82,8 +83,7 @@ export function UsersPage() {
   const loadSequence = useRef(0);
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [sortBy, setSortBy] = useState('');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const { sortBy, sortOrder, setSortBy, setSortOrder } = useTableSort('users');
   const [openCreate, setOpenCreate] = useState(false);
   const [openTopup, setOpenTopup] = useState<{
     open: boolean;
