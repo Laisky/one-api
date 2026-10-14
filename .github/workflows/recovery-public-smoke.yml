@@ -19,6 +19,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import datetime,hashlib,json,os,pathlib,re,time,urllib.error,urllib.parse,urllib.request
+          from email.message import Message
           from html.parser import HTMLParser
           origin='https://oneapi.laisky.com';expected=os.environ['EXPECTED_SHA']
           commit_time=os.environ['EXPECTED_COMMIT_TIME']
@@ -41,7 +42,33 @@ jobs:
               invalid=[None,{},'',sha,sha[:7],displayed+'-dirty',displayed.replace('(ef27439)','(ef27439-dirty)'),displayed.replace('ef27439cd888','ef27439fffff'),displayed.replace('03:32:32Z','03:32:31Z'),displayed.replace('20261014033232','20261014033231'),'prefix '+displayed,displayed+' suffix']
               for value in invalid:assert not public_version_matches(value,sha,at)
               return 1+len(invalid)
+          def response_headers(message):
+              """response_headers retains every Cache-Control field in wire order (RFC9110 5.3)."""
+              headers={key.lower():value for key,value in message.items()}
+              headers['cache-control']=', '.join(message.get_all('Cache-Control',[]))
+              return headers
+          def forbids_storage(value):
+              """forbids_storage recognizes an exact no-store directive, excluding quoted copies."""
+              parts=[];start=0;quoted=False;escaped=False
+              for index,char in enumerate(value):
+                  if escaped:escaped=False;continue
+                  if quoted and char=='\\':escaped=True;continue
+                  if char=='"':quoted=not quoted
+                  elif char==',' and not quoted:parts.append(value[start:index].strip().lower());start=index+1
+              if quoted or escaped:return False
+              parts.append(value[start:].strip().lower())
+              return 'no-store' in parts and not any(part.partition('=')[0].strip()=='must-understand' for part in parts)
+          def test_header_contract():
+              """test_header_contract reproduces duplicate-field loss and rejects lookalike directives."""
+              message=Message();message['Cache-Control']='no-store';message['Cache-Control']='public, max-age=86400'
+              assert not forbids_storage({k.lower():v for k,v in message.items()}['cache-control'])
+              assert response_headers(message)['cache-control']=='no-store, public, max-age=86400'
+              assert forbids_storage(response_headers(message)['cache-control'])
+              cases=[('no-store',True),('public, NO-STORE',True),('no-store, public, max-age=86400',True),('public, max-age=86400',False),('x-no-store',False),('no-store=false',False),('extension="private,no-store"',False),('extension="no-store", public',False),('extension="x, y", no-store',True),('extension="no-store',False),('no-store, must-understand',False),('',False)]
+              for value,wanted in cases:assert forbids_storage(value)==wanted,(value,wanted)
+              return 1+len(cases)
           report['version_contract_cases']=test_version_contract()
+          report['header_contract_cases']=test_header_contract()
           report['expected_public_version']=expected_display(expected,commit_time)
           class SameOriginRedirect(urllib.request.HTTPRedirectHandler):
               """SameOriginRedirect refuses cross-origin redirects before another request."""
@@ -60,7 +87,7 @@ jobs:
               except urllib.error.HTTPError as error:response=error
               with response:
                   data=response.read(limit+1);assert len(data)<=limit,'Public response exceeded bound'
-                  return response.status,{k.lower():v for k,v in response.headers.items()},data
+                  return response.status,response_headers(response.headers),data
           try:
               deadline=time.monotonic()+900
               while True:
@@ -78,11 +105,13 @@ jobs:
                   time.sleep(15)
               status,headers,raw=get('/api/browser-config',4096)
               config=json.loads(raw)
-              assert status==200 and set(config)=={'sentry'}
-              assert 'no-store' in headers.get('cache-control','') and headers.get('x-content-type-options')=='nosniff'
+              assert status==200 and set(config)=={'sentry'},'Unexpected public configuration projection'
+              report['browser_headers']={name:headers.get(name) for name in ['cache-control','x-content-type-options','cf-cache-status','age']}
+              assert forbids_storage(headers.get('cache-control','')),'No valid no-store directive'
+              assert headers.get('x-content-type-options')=='nosniff','Missing nosniff protection'
               setting=config['sentry']
               assert setting is None or (isinstance(setting,dict) and set(setting)=={'dsn','environment'})
-              # Do not print or archive the DSN/environment, even though this is a public projection.
+              # Never print/archive DSN/environment values, even from this public projection.
               report['browser_config']={'status':status,'configured':setting is not None,'no_store':True,'nosniff':True}
               status,headers,raw=get('/',1024*1024);assert status==200
               class Entries(HTMLParser):
