@@ -6,10 +6,10 @@ import (
 )
 
 // gemini4ArgonConfig returns independently owned Gemini 4 Argon defaults. It
-// accepts no parameters and returns standard synchronous API pricing and metadata.
-// Sources verified 2026-10-13:
+// accepts no parameters and returns standard API pricing and conservative REST metadata.
+// Sources verified 2026-10-14:
 //   - https://ai.google.dev/gemini-api/docs/models/gemini-4-argon
-//   - https://ai.google.dev/gemini-api/docs/latest-model
+//   - https://ai.google.dev/gemini-api/docs/generate-content/latest-model
 //   - https://ai.google.dev/gemini-api/docs/pricing
 //   - https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing
 //
@@ -34,10 +34,13 @@ func gemini4ArgonConfig() adaptor.ModelConfig {
 				},
 			},
 		},
-		// The context is shared by input, thinking, and output. The larger long-
-		// decode limit needs continuation support, not just a larger max_tokens.
+		// Input, thinking, and output share one context. generateContent stops
+		// at 32K without streaming and 64K with streaming. This common field has
+		// no transport dimension, so publish the conservative non-streaming cap,
+		// not the Interactions API's uniform 64K synchronous cap. This metadata
+		// does not clamp explicit streaming requests or implement continuation.
 		ContextLength:   1_048_576,
-		MaxOutputTokens: 65_536,
+		MaxOutputTokens: 32_768,
 		InputModalities: []string{"text", "image", "audio", "video", "file"},
 		OutputModalities: []string{
 			"text",
@@ -51,7 +54,8 @@ func gemini4ArgonConfig() adaptor.ModelConfig {
 		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
 		DefaultReasoningEffort:      "medium",
 		Description: "Gemini 4 Argon stable reasoning model. Shared 1,048,576-token input/thinking/output context; " +
-			"65,536-token synchronous output limit. Caching is implicit only. " +
+			"32,768-token non-streaming and 65,536-token streaming generateContent hop limits. " +
+			"Discovery uses the conservative non-streaming limit. Caching is implicit only. " +
 			"Long decode requires continuation and is not advertised by this relay. " +
 			"Text output only; no image generation, audio generation, or Live API.",
 	}

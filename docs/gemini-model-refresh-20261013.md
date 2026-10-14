@@ -10,10 +10,12 @@ Gemini OpenAI-compatible, and Vertex model discovery receive the same entry.
 The native system-instruction allowlist adds only this exact identifier.
 
 The [Argon model reference](https://ai.google.dev/gemini-api/docs/models/gemini-4-argon)
-and [migration guide](https://ai.google.dev/gemini-api/docs/latest-model) establish:
+and [generateContent migration guide](https://ai.google.dev/gemini-api/docs/generate-content/latest-model)
+establish the following, rechecked October 14:
 
-- A unified 1,048,576-token context shared by input, thinking, and output, with
-  a 65,536-token synchronous output limit. The larger long-decode limit requires
+- A unified 1,048,576-token context shared by input, thinking, and output.
+  The native REST API stops each non-streaming request at 32,768 tokens and
+  each streaming request at 65,536 tokens. The larger long-decode limit requires
   continuation; this patch neither implements nor advertises that workflow.
 - Multimodal input and text-only output. No image/audio generation or Live API.
   The catalogue's `file` modality covers the documented PDF input, not arbitrary
@@ -24,6 +26,23 @@ and [migration guide](https://ai.google.dev/gemini-api/docs/latest-model) establ
 - Implicit caching only. No explicit-cache storage tariff or cache-write fee is
   fabricated. Capability metadata is not certification of every native tool or
   account-specific entitlement.
+
+### Transport-specific output limits
+
+The general [latest-model guide](https://ai.google.dev/gemini-api/docs/latest-model)
+describes the Interactions API and its uniform 65,536-token synchronous limit.
+The gateway's native Gemini and Vertex URLs instead call `generateContent` or
+`streamGenerateContent`, whose transport-specific guide documents 32K/64K hop
+limits. The first PR revision incorrectly treated the Interactions figure as
+uniformly applicable to these native REST routes.
+
+The common catalogue has only one `MaxOutputTokens` field, without a streaming
+or endpoint dimension. It now publishes **32,768** as a conservative discovery
+limit. This intentionally understates the upstream streaming maximum rather than
+promising 64K to non-streaming callers. Explicit 65,536-token streaming payloads
+are preserved by the existing native conversion path and covered by tests.
+This update adds no request clamping, retry, continuation, or Interactions support.
+The shared field is not an account-specific maximum certification for every backend.
 
 ## Standard token pricing
 
@@ -67,10 +86,11 @@ list. This change does not expand image generation, Live, or continuation suppor
 
 ## Regression commands
 
-The new `TestGeminiOctober13*` cases cover catalogue/list initialization, actual
-native Chat Completions and Claude Messages system-prompt conversion, synchronous
-and SSE URLs, explicit API-version overrides, Vertex global routing, and effective
-pricing. They need no provider credentials and make no paid provider requests.
+The seven `TestGeminiOctober13*` top-level cases cover catalogue/list initialization,
+actual native Chat Completions and Claude Messages system-prompt conversion at
+32K non-streaming and 64K streaming budgets, synchronous and SSE URLs, explicit
+API-version overrides, Vertex global routing, and effective pricing. They need
+no provider credentials and make no paid provider requests.
 Run with the repository's Go 1.27.2 validation compiler:
 
 ```sh
@@ -80,13 +100,22 @@ go vet ./relay/adaptor/gemini/... ./relay/adaptor/geminiOpenaiCompatible ./relay
 make test-quick
 ```
 
+Test-only checkpoint `1695e14ac29c8b4ba5844ea59a3e4d6255c7d156` retains the old
+production metadata with the corrected assertions. The expected negative control
+is exactly the shared and Vertex catalogue tests failing on 65,536 versus 32,768;
+pricing, conversion, and URL controls must still pass. Its child changes only
+production metadata and this report. Validation must run the unchanged tests on
+both checkpoints; compilation failures are not accepted as reproduction evidence.
+
 These are scoped regression commands, not evidence that live-provider, complete
 repository database/race, or frontend qualification has run. Record actual run
 results against the exact commit in the PR. Existing required CI gates remain.
 
 ## Release and rollback
 
-No deployment, migration, database write, or channel auto-enablement is included.
+No deployment, migration, database write, or channel auto-enablement is included
+in the feature code. Merging to main invokes the existing separate delivery
+workflow; this PR changes no publishing or deployment configuration.
 After review and required checks, administrators may explicitly select the new
 model and should verify their provider/account tariff. Removing the Argon entry
 and its exact system-instruction allowlist addition rolls back this change;
