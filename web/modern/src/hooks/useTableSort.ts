@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type SetStateAction } from 'react';
 import { useAuthStore } from '@/lib/stores/auth';
 import {
   getTableSortStorageKey,
@@ -45,19 +45,23 @@ export function useTableSort(table: string, defaultBy: string = '', defaultOrder
     if (stored.dirty) writeTableSortPreference(stored.key, stored.value);
   }, [stored]);
 
-  /** setSortBy updates the column while composing with any queued direction change. */
-  const setSortBy = useCallback((sortBy: string) => {
+  /** setSortBy accepts a column or updater and composes it with queued direction changes. */
+  const setSortBy = useCallback((next: SetStateAction<string>) => {
     setStored((previous) => {
-      if (previous.key !== key || previous.value.sortBy === sortBy) return previous;
+      if (previous.key !== key) return previous;
+      const sortBy = typeof next === 'function' ? next(previous.value.sortBy) : next;
+      if (previous.value.sortBy === sortBy) return previous;
       const value = { ...previous.value, sortBy };
       return isTableSortPreference(value) ? { key, value, dirty: true } : previous;
     });
   }, [key]);
 
-  /** setSortOrder updates the direction while composing with any queued column change. */
-  const setSortOrder = useCallback((sortOrder: 'asc' | 'desc') => {
+  /** setSortOrder accepts a direction or updater and composes it with queued column changes. */
+  const setSortOrder = useCallback((next: SetStateAction<'asc' | 'desc'>) => {
     setStored((previous) => {
-      if (previous.key !== key || previous.value.sortOrder === sortOrder) return previous;
+      if (previous.key !== key) return previous;
+      const sortOrder = typeof next === 'function' ? next(previous.value.sortOrder) : next;
+      if (previous.value.sortOrder === sortOrder) return previous;
       const value = { ...previous.value, sortOrder };
       return isTableSortPreference(value) ? { key, value, dirty: true } : previous;
     });
