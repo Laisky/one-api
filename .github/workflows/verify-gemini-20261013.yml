@@ -13,8 +13,9 @@ jobs:
     timeout-minutes: 25
     env:
       GOTOOLCHAIN: local
-      SOURCE_SHA: 432d2d5d6e82cf196f0aa5d9cda7de91c3dc8e38
-      BASE_SHA: eed2a6d02e5392f24197f49a70af3ba2ba22f212
+      GOMAXPROCS: '2'
+      SOURCE_SHA: e35b728f64264af85402dce93c9d4dd1f2f8340a
+      RED_SHA: 1695e14ac29c8b4ba5844ea59a3e4d6255c7d156
     defaults:
       run:
         shell: bash
@@ -22,7 +23,7 @@ jobs:
       - name: Checkout exact PR source, not the validation branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 432d2d5d6e82cf196f0aa5d9cda7de91c3dc8e38
+          ref: e35b728f64264af85402dce93c9d4dd1f2f8340a
           fetch-depth: 0
           persist-credentials: false
       - name: Setup repository validation compiler
@@ -35,18 +36,18 @@ jobs:
           mkdir -p "$RUNNER_TEMP/argon-evidence"
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           { git rev-parse HEAD; go version; } | tee "$RUNNER_TEMP/argon-evidence/source.txt"
+          git diff --exit-code "$RED_SHA" "$SOURCE_SHA" -- ':(glob)**/*_test.go'
           python3 .github/scripts/format_check.py
-      - name: Reproduce missing catalogue entries on unchanged base
+      - name: Reproduce output-limit defect at test-only checkpoint
         run: |
           set -euo pipefail
-          base_dir="$RUNNER_TEMP/argon-base"
-          git worktree add --detach "$base_dir" "$BASE_SHA"
-          for package in gemini geminiOpenaiCompatible vertexai; do
-            cp "relay/adaptor/$package/models_20261013_test.go" "$base_dir/relay/adaptor/$package/models_20261013_test.go"
-          done
+          base_dir="$RUNNER_TEMP/argon-red"
+          git worktree add --detach "$base_dir" "$RED_SHA"
           cd "$base_dir"
+          test "$(git rev-parse HEAD)" = "$RED_SHA"
+          git diff --exit-code
           set +e
-          go test -json -count=1 -timeout=10m -run '^TestGeminiOctober13' ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/gemini ./relay/adaptor/vertexai > "$RUNNER_TEMP/argon-evidence/red.json" 2> "$RUNNER_TEMP/argon-evidence/red.stderr"
+          go test -p 2 -json -count=1 -timeout=10m -run '^TestGeminiOctober13' ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/gemini ./relay/adaptor/vertexai > "$RUNNER_TEMP/argon-evidence/red.json" 2> "$RUNNER_TEMP/argon-evidence/red.stderr"
           result=$?
           set -e
           printf '%s\n' "$result" > "$RUNNER_TEMP/argon-evidence/red.exit"
@@ -56,18 +57,22 @@ jobs:
           root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'argon-evidence'
           events = [json.loads(line) for line in (root / 'red.json').read_text().splitlines() if line.strip()]
           failed = {e['Test'] for e in events if e.get('Action') == 'fail' and e.get('Test')}
-          expected = {'TestGeminiOctober13ArgonCatalog', 'TestGeminiOctober13ArgonPricingBoundary', 'TestGeminiOctober13ArgonSystemInstructions', 'TestGeminiOctober13ArgonVertexCatalog'}
-          assert failed == expected, (failed, expected, (root / 'red.stderr').read_text()[-4000:])
-          passed = {e['Test'] for e in events if e.get('Action') == 'pass' and e.get('Test')}
-          assert 'TestGeminiOctober13PreservesExistingTariffs' in passed
-          assert not any(e.get('Action') == 'skip' for e in events)
-          print('RED verified: four expected assertion failures on the unchanged base; no compilation failure accepted.')
-          print('Expected failures:', sorted(failed))
+          expected = {'TestGeminiOctober13ArgonCatalog', 'TestGeminiOctober13ArgonVertexCatalog'}
+          assert failed == expected, (failed, expected)
+          passed = {e['Test'] for e in events if e.get('Action') == 'pass' and e.get('Test') and '/' not in e['Test']}
+          controls = {'TestGeminiOctober13ArgonPricingBoundary', 'TestGeminiOctober13PreservesExistingTariffs', 'TestGeminiOctober13ArgonSystemInstructions', 'TestGeminiOctober13ArgonRequestURLs', 'TestGeminiOctober13ArgonVertexURLs'}
+          assert passed == controls, (passed, controls)
+          assert not any(e.get('Action') in ('skip', 'build-fail') for e in events)
+          for name in expected:
+              output = ''.join(e.get('Output', '') for e in events if e.get('Test') == name)
+              assert 'expected: 32768' in output and 'actual  : 65536' in output, (name, output)
+          print('RED verified: two 32768/65536 catalogue assertion failures; all five independent controls passed.')
           PY
-      - name: Run all new regressions on the exact PR source
+          git diff --exit-code
+      - name: Run all updated regressions on the exact PR source
         run: |
           set -euo pipefail
-          go test -json -count=1 -timeout=10m -run '^TestGeminiOctober13' ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/gemini ./relay/adaptor/vertexai > "$RUNNER_TEMP/argon-evidence/green-focused.json" 2> "$RUNNER_TEMP/argon-evidence/green-focused.stderr"
+          go test -p 2 -json -count=1 -timeout=10m -run '^TestGeminiOctober13' ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/gemini ./relay/adaptor/vertexai > "$RUNNER_TEMP/argon-evidence/green-focused.json" 2> "$RUNNER_TEMP/argon-evidence/green-focused.stderr"
           python3 - <<'PY'
           import json, os, pathlib
           path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'argon-evidence' / 'green-focused.json'
@@ -75,18 +80,20 @@ jobs:
           passed = {e['Test'] for e in events if e.get('Action') == 'pass' and e.get('Test') and '/' not in e['Test']}
           expected = {'TestGeminiOctober13ArgonCatalog', 'TestGeminiOctober13ArgonPricingBoundary', 'TestGeminiOctober13PreservesExistingTariffs', 'TestGeminiOctober13ArgonSystemInstructions', 'TestGeminiOctober13ArgonRequestURLs', 'TestGeminiOctober13ArgonVertexCatalog', 'TestGeminiOctober13ArgonVertexURLs'}
           assert passed == expected, (passed, expected)
-          assert not any(e.get('Action') in ('fail', 'skip') for e in events)
-          print('GREEN verified: all seven new top-level regression tests and all subtests passed, none skipped.')
+          assert not any(e.get('Action') in ('fail', 'skip', 'build-fail') for e in events)
+          print('GREEN verified: all seven top-level regressions and all subtests passed, none skipped.')
           PY
-      - name: Run scoped provider and pricing race suites
+      - name: Run provider and cross-provider pricing race suites
         run: |
           set -euo pipefail
-          go test -race -json -count=1 -timeout=10m ./relay/adaptor/gemini/... ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/vertexai ./relay/pricing > "$RUNNER_TEMP/argon-evidence/race.json" 2> "$RUNNER_TEMP/argon-evidence/race.stderr"
-      - name: Run scoped Go vet
+          go test -p 2 -race -json -count=1 -timeout=10m ./relay/adaptor/gemini/... ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/vertexai ./relay/pricing ./relay/adaptor ./relay/format ./relay ./relay/quota > "$RUNNER_TEMP/argon-evidence/race.json" 2> "$RUNNER_TEMP/argon-evidence/race.stderr"
+      - name: Run scoped Go vet and verify unchanged source
         if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
-          go vet ./relay/adaptor/gemini/... ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/vertexai ./relay/pricing > "$RUNNER_TEMP/argon-evidence/vet.txt" 2>&1
+          go vet -p 2 ./relay/adaptor/gemini/... ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/vertexai ./relay/pricing ./relay/adaptor ./relay/format ./relay ./relay/quota > "$RUNNER_TEMP/argon-evidence/vet.txt" 2>&1
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git diff --exit-code
       - name: Summarize recorded outcomes
         if: ${{ always() }}
         run: |
@@ -96,9 +103,11 @@ jobs:
           for path in sorted(root.glob('*.json')):
               events = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
               counts = collections.Counter(e.get('Action') for e in events if e.get('Test'))
+              packages = collections.Counter(e.get('Action') for e in events if not e.get('Test'))
+              top = collections.Counter(e.get('Action') for e in events if e.get('Test') and '/' not in e['Test'])
               failed = sorted({e['Test'] for e in events if e.get('Action') == 'fail' and e.get('Test')})
               skipped = sorted({e['Test'] for e in events if e.get('Action') == 'skip' and e.get('Test')})
-              print(path.name, dict(counts), 'failures=', failed, 'skips=', skipped)
+              print(path.name, 'named=', dict(counts), 'top-level=', dict(top), 'packages=', dict(packages), 'failures=', failed, 'skips=', skipped)
               for event in events:
                   if event.get('Action') == 'build-output' or event.get('Test') in failed:
                       print(event.get('Output', '').rstrip())
@@ -111,7 +120,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: gemini-argon-432d2d5d6e82
+          name: gemini-argon-e35b728f6426
           path: ${{ runner.temp }}/argon-evidence
           if-no-files-found: error
           retention-days: 14
