@@ -6,6 +6,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
+import { reportUnexpectedRequestError } from '../../web/legacy/browser-request-errors.mjs';
+import { markPrivateError } from '../../web/legacy/browser-sentry-privacy.mjs';
 
 // Exercise the real legacy helpers and installed Axios without importing their
 // UI notification libraries. Each theme runs this through its pretest hook.
@@ -30,21 +32,23 @@ async function fixture(t, pathname = '/dashboard') {
     let body = '';
     for await (const chunk of request) body += chunk;
     response.writeHead(status, { 'Content-Type': 'application/json' });
-    response.end(JSON.stringify({
-      ok: status === 200,
-      message: status === 422 ? 'validation failed' : 'authentication required',
-      method: request.method,
-      headers: request.headers,
-      query: Object.fromEntries(url.searchParams),
-      body: body ? JSON.parse(body) : null,
-    }));
+    response.end(
+      JSON.stringify({
+        ok: status === 200,
+        message: status === 422 ? 'validation failed' : 'authentication required',
+        method: request.method,
+        headers: request.headers,
+        query: Object.fromEntries(url.searchParams),
+        body: body ? JSON.parse(body) : null,
+      })
+    );
   });
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
   });
   t.after(async () => {
-    const closed = new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    const closed = new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     server.closeAllConnections();
     await closed;
   });
@@ -52,20 +56,26 @@ async function fixture(t, pathname = '/dashboard') {
   const errors = [];
   const redirects = [];
   const actions = [];
-  const storage = new Map([['user', 'user'], ['token', 'token'], ['theme', 'dark']]);
+  const storage = new Map([
+    ['user', 'user'],
+    ['token', 'token'],
+    ['theme', 'dark'],
+  ]);
   const context = createContext({
     URL,
     Date,
     console,
     process: { env: { REACT_APP_SERVER: origin } },
-    window: { location: { origin, pathname, replace: value => redirects.push(value) } },
-    localStorage: { removeItem: key => storage.delete(key) },
+    window: { location: { origin, pathname, replace: (value) => redirects.push(value) } },
+    localStorage: { removeItem: (key) => storage.delete(key) },
   });
   const imports = {
     axios: { default: axios },
-    './utils': { showError: error => errors.push(error) },
-    './common': { showError: error => errors.push(error) },
-    'store/index': { store: { dispatch: action => actions.push(action) } },
+    '../../../legacy/browser-request-errors.mjs': { reportUnexpectedRequestError },
+    '../../../legacy/browser-sentry-privacy.mjs': { markPrivateError },
+    './utils': { showError: (error) => errors.push(error) },
+    './common': { showError: (error) => errors.push(error) },
+    'store/index': { store: { dispatch: (action) => actions.push(action) } },
     'store/actions': { LOGIN: 'LOGIN' },
     config: { default: { basename: '/' } },
   };
@@ -73,12 +83,16 @@ async function fixture(t, pathname = '/dashboard') {
   // keeping the exact same installed dependency tree and test harness.
   const filename = process.env.LEGACY_API_SOURCE_FILE || path.join(root, 'web', theme, helper);
   const module = new SourceTextModule(await readFile(filename, 'utf8'), { context, identifier: filename });
-  await module.link(specifier => {
+  await module.link((specifier) => {
     assert.ok(Object.hasOwn(imports, specifier), `Unexpected helper import: ${specifier}`);
     const exports = imports[specifier];
-    return new SyntheticModule(Object.keys(exports), function () {
-      for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
-    }, { context });
+    return new SyntheticModule(
+      Object.keys(exports),
+      function () {
+        for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
+      },
+      { context }
+    );
   });
   await module.evaluate();
   const api = module.namespace.API;
@@ -88,7 +102,7 @@ async function fixture(t, pathname = '/dashboard') {
   return { api, errors, redirects, actions, storage };
 }
 
-test(`${theme}: successful JSON requests preserve responses`, async t => {
+test(`${theme}: successful JSON requests preserve responses`, async (t) => {
   const { api, errors } = await fixture(t);
   const response = await api.get('/api/ok', { params: { page: 2 } });
   assert.equal(response.status, 200);
@@ -97,10 +111,10 @@ test(`${theme}: successful JSON requests preserve responses`, async t => {
   assert.equal(errors.length, 0);
 });
 
-test(`${theme}: HTTP errors remain rejected`, async t => {
+test(`${theme}: HTTP errors remain rejected`, async (t) => {
   const { api, errors } = await fixture(t);
   let caught;
-  await assert.rejects(api.get('/api/error'), error => {
+  await assert.rejects(api.get('/api/error'), (error) => {
     caught = error;
     assert.ok(axios.isAxiosError(error));
     assert.equal(error.response.status, 422);
@@ -112,18 +126,22 @@ test(`${theme}: HTTP errors remain rejected`, async t => {
   assert.equal(errors[0], caught, 'The UI and caller receive the same Axios error');
 });
 
-test(`${theme}: cancellation remains detectable`, async t => {
+test(`${theme}: cancellation remains detectable`, async (t) => {
   const { api } = await fixture(t);
   const controller = new AbortController();
   controller.abort();
-  await assert.rejects(api.get('/api/ok', { signal: controller.signal }), error => axios.isCancel(error));
+  await assert.rejects(api.get('/api/ok', { signal: controller.signal }), (error) => axios.isCancel(error));
 });
 
-test(`${theme}: JSON writes retain payloads and caller headers`, async t => {
+test(`${theme}: JSON writes retain payloads and caller headers`, async (t) => {
   const { api } = await fixture(t);
-  const response = await api.post('/api/echo', { name: 'test', enabled: true }, {
-    headers: { Authorization: 'Bearer test-only' },
-  });
+  const response = await api.post(
+    '/api/echo',
+    { name: 'test', enabled: true },
+    {
+      headers: { Authorization: 'Bearer test-only' },
+    }
+  );
   assert.deepEqual(response.data.body, { name: 'test', enabled: true });
   assert.equal(response.data.method, 'POST');
   assert.equal(response.data.headers.authorization, 'Bearer test-only');
@@ -132,10 +150,11 @@ test(`${theme}: JSON writes retain payloads and caller headers`, async t => {
 });
 
 if (theme === 'berry') {
-  test('berry: GET cache prevention preserves existing parameters and headers', async t => {
+  test('berry: GET cache prevention preserves existing parameters and headers', async (t) => {
     const { api } = await fixture(t);
     const { data } = await api.get('/api/ok?q=a%2Bb', {
-      params: { page: 2 }, headers: { Authorization: 'Bearer test-only' },
+      params: { page: 2 },
+      headers: { Authorization: 'Bearer test-only' },
     });
     assert.equal(data.query.q, 'a+b');
     assert.equal(data.query.page, '2');
@@ -146,10 +165,10 @@ if (theme === 'berry') {
     assert.equal(data.headers.expires, '0');
   });
 
-  test('berry: parallel 401 responses reject every caller but redirect only once', async t => {
+  test('berry: parallel 401 responses reject every caller but redirect only once', async (t) => {
     const { api, redirects, actions, storage } = await fixture(t);
     const results = await Promise.allSettled([api.get('/api/private'), api.get('/api/private')]);
-    assert.ok(results.every(result => result.status === 'rejected'));
+    assert.ok(results.every((result) => result.status === 'rejected'));
     assert.deepEqual(redirects, ['/login']);
     assert.equal(actions.length, 1);
     assert.equal(actions[0].type, 'LOGIN');
@@ -159,7 +178,7 @@ if (theme === 'berry') {
     assert.equal(storage.get('theme'), 'dark');
   });
 
-  test('berry: 401 on the login page does not cause a redirect loop', async t => {
+  test('berry: 401 on the login page does not cause a redirect loop', async (t) => {
     const { api, redirects, actions } = await fixture(t, '/login');
     await assert.rejects(api.get('/api/private'));
     await assert.rejects(api.get('/api/private'));

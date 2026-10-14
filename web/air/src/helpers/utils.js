@@ -1,23 +1,34 @@
+import { markPrivateError } from '../../../legacy/browser-sentry-privacy.mjs';
 import { Toast } from '@douyinfe/semi-ui';
 import { toastConstants } from '../constants';
 import React from 'react';
-import {toast} from "react-toastify";
+import { toast } from 'react-toastify';
 
 const HTMLToastContent = ({ htmlContent }) => {
   return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
 };
 export default HTMLToastContent;
+/** isAdmin reads saved user data and returns whether its role permits administration. */
 export function isAdmin() {
   let user = localStorage.getItem('user');
   if (!user) return false;
-  user = JSON.parse(user);
+  try {
+    user = JSON.parse(user);
+  } catch (error) {
+    throw markPrivateError(error, 'Saved user data could not be parsed.');
+  }
   return user.role >= 10;
 }
 
+/** isRoot reads saved user data and returns whether its role permits root access. */
 export function isRoot() {
   let user = localStorage.getItem('user');
   if (!user) return false;
-  user = JSON.parse(user);
+  try {
+    user = JSON.parse(user);
+  } catch (error) {
+    throw markPrivateError(error, 'Saved user data could not be parsed.');
+  }
   return user.role >= 100;
 }
 
@@ -30,7 +41,7 @@ export function getSystemName() {
 export function getLogo() {
   let logo = localStorage.getItem('logo');
   if (!logo) return '/logo.png';
-  return logo
+  return logo;
 }
 
 export function getFooterHTML() {
@@ -77,11 +88,11 @@ const notifiedErrors = new WeakSet();
 
 /** showError reports failures once without logging request credentials. */
 export function showError(error) {
-    if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') return;
-    if (error && typeof error === 'object') {
-        if (notifiedErrors.has(error)) return;
-        notifiedErrors.add(error);
-    }
+  if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') return;
+  if (error && typeof error === 'object') {
+    if (notifiedErrors.has(error)) return;
+    notifiedErrors.add(error);
+  }
   if (error?.message) {
     if (error.name === 'AxiosError') {
       switch (error.response?.status) {
@@ -175,17 +186,7 @@ export function timestamp2string(timestamp) {
     second = '0' + second;
   }
   return (
-    year +
-    '-' +
-    month +
-    '-' +
-    day +
-    ' ' +
-    hour +
-    ':' +
-    minute +
-    ':' +
-    second
+    year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second
   );
 }
 
@@ -204,20 +205,20 @@ export function timestamp2string1(timestamp, dataExportDefaultTime = 'hour') {
   if (hour.length === 1) {
     hour = '0' + hour;
   }
-  let str = month + '-' + day
+  let str = month + '-' + day;
   if (dataExportDefaultTime === 'hour') {
-    str += ' ' + hour + ":00"
+    str += ' ' + hour + ':00';
   } else if (dataExportDefaultTime === 'week') {
     let nextWeek = new Date(timestamp * 1000 + 6 * 24 * 60 * 60 * 1000);
     let nextMonth = (nextWeek.getMonth() + 1).toString();
     let nextDay = nextWeek.getDate().toString();
     if (nextMonth.length === 1) {
-        nextMonth = '0' + nextMonth;
+      nextMonth = '0' + nextMonth;
     }
     if (nextDay.length === 1) {
-        nextDay = '0' + nextDay;
+      nextDay = '0' + nextDay;
     }
-    str += ' - ' + nextMonth + '-' + nextDay
+    str += ' - ' + nextMonth + '-' + nextDay;
   }
   return str;
 }
@@ -243,7 +244,6 @@ export const verifyJSON = (str) => {
 export function shouldShowPrompt(id) {
   let prompt = localStorage.getItem(`prompt-${id}`);
   return !prompt;
-
 }
 
 export function setPromptShown(id) {

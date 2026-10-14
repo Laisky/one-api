@@ -1,3 +1,4 @@
+import { reportUnexpectedRequestError } from '../../../legacy/browser-request-errors.mjs';
 import { ImageAttachment as ImageAttachmentType } from '@/components/chat/ImageAttachment';
 import { useNotifications } from '@/components/ui/notifications';
 import { getModelCapabilities, isOpenAIMediumOnlyReasoningModel } from '@/lib/model-capabilities';
@@ -176,6 +177,7 @@ export function usePlaygroundChat({
         await streamChatCompletion(requestBody, abortControllerRef.current.signal);
         addEventRef.current?.({ direction: 'in', type: 'done', payload: {}, transport: 'sse' });
       } catch (err) {
+        reportUnexpectedRequestError(err);
         const errMsg = err instanceof Error ? err.message : String(err);
         addEventRef.current?.({ direction: 'in', type: 'error', payload: { message: errMsg }, transport: 'sse' });
       }
@@ -281,6 +283,7 @@ export function usePlaygroundChat({
         await streamChatCompletion(requestBody, abortControllerRef.current.signal);
         addEventRef.current?.({ direction: 'in', type: 'done', payload: {}, transport: 'sse' });
       } catch (err) {
+        reportUnexpectedRequestError(err);
         const errMsg = err instanceof Error ? err.message : String(err);
         addEventRef.current?.({ direction: 'in', type: 'error', payload: { message: errMsg }, transport: 'sse' });
       }

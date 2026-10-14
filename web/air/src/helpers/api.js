@@ -1,3 +1,4 @@
+import { reportUnexpectedRequestError } from '../../../legacy/browser-request-errors.mjs';
 import { showError } from './utils';
 import axios from 'axios';
 
@@ -8,7 +9,9 @@ export const API = axios.create({
 API.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (axios.isAxiosError(error) && !error.response && error.request)
+      reportUnexpectedRequestError(error);
     showError(error);
     return Promise.reject(error);
-  }
+  },
 );

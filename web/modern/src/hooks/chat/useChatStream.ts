@@ -1,3 +1,6 @@
+import { reportUnexpectedRequestError } from '../../../../legacy/browser-request-errors.mjs';
+import { privateResponseError } from '../../../../legacy/browser-sentry-privacy.mjs';
+import { parsePrivateChatJSON } from './helpers';
 import { useCallback } from 'react';
 import { extractTextAndReasoningFromOutput } from './helpers';
 import { StreamResponseResult } from './types';
@@ -57,7 +60,7 @@ export const useChatStream = ({
         } catch {
           // ignore secondary errors while reading response body
         }
-        throw new Error(errorMessage);
+        throw privateResponseError(errorMessage, 'Chat request failed (HTTP ' + response.status + ')');
       }
 
       const reader = response.body?.getReader();
@@ -67,6 +70,7 @@ export const useChatStream = ({
 
       const decoder = new TextDecoder();
       let buffer = '';
+      let reportedStreamFailure = false;
       let assistantContent = '';
       let reasoningContent = '';
       let finalStatus: string | null = null;
@@ -145,8 +149,9 @@ export const useChatStream = ({
 
         let payload: any;
         try {
-          payload = JSON.parse(dataString);
+          payload = parsePrivateChatJSON(dataString);
         } catch (parseError) {
+          if (!reportedStreamFailure) reportedStreamFailure = reportUnexpectedRequestError(parseError);
           console.warn('Failed to parse SSE data:', parseError);
           return false;
         }
@@ -213,7 +218,7 @@ export const useChatStream = ({
                 : typeof payload?.error === 'string'
                   ? payload.error
                   : 'Stream error';
-            throw new Error(errorMessage);
+            throw privateResponseError(errorMessage, 'Chat provider stream failed');
           }
           default:
             if (payload?.response) {
