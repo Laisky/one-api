@@ -1,0 +1,155 @@
+name: PR 572 isolated frontend qualification
+on:
+  push:
+    branches: [validation/pr572-frontend-20261014]
+permissions:
+  contents: read
+concurrency:
+  group: pr572-isolated-qualification
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      source_sha: ${{ steps.publish.outputs.source_sha }}
+    env:
+      HEAD_SHA: 9db573aeb9969288ae8813fa106403087446f96c
+      BASE_SHA: ef27439cd888c4bb5d36270b9a415cfea088d48f
+      TARGET_BRANCH: feat/persistent-table-sort-shift-selection-20261014
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 9db573aeb9969288ae8813fa106403087446f96c
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+      - name: Integrate pinned main without overwriting concurrent work
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          test "$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | cut -f1)" = "$HEAD_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git merge --no-ff --no-edit "$BASE_SHA"
+      - name: Reproduce missing-input guard and add only the nine reviewed files
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { releaseInputGuard } from './web/legacy/browser-release.mjs';
+          assert.throws(() => releaseInputGuard('modern').buildStart(), /Unlisted browser build input/);
+          console.log('RED: unchanged production guard rejects the missing PR inputs.');
+          JS
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          added = [
+              'web/modern/src/components/ui/__tests__/table-selection-range.test.tsx',
+              'web/modern/src/components/ui/__tests__/table-sort-persistence.test.tsx',
+              'web/modern/src/hooks/__tests__/useTableSort.test.tsx',
+              'web/modern/src/hooks/useTableSort.ts',
+              'web/modern/src/lib/__tests__/table-selection-range.test.ts',
+              'web/modern/src/lib/__tests__/table-sort-preference.test.ts',
+              'web/modern/src/lib/table-selection-range.ts',
+              'web/modern/src/lib/table-sort-preference.ts',
+              'web/modern/src/pages/__tests__/list-sort-persistence.test.tsx',
+          ]
+          path = Path('web/legacy/browser-release-inputs.json')
+          manifest = json.loads(path.read_text())
+          assert len(added) == 9 and len(set(added)) == 9
+          assert all(Path(name).is_file() and name not in manifest['modern'] for name in added)
+          manifest['modern'] = sorted(manifest['modern'] + added)
+          path.write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+          node --input-type=module <<'JS'
+          import { releaseInputGuard } from './web/legacy/browser-release.mjs';
+          releaseInputGuard('modern').buildStart();
+          console.log('GREEN: unchanged production guard accepts the reviewed inventory.');
+          JS
+          test "$(git diff --name-only)" = 'web/legacy/browser-release-inputs.json'
+          git add web/legacy/browser-release-inputs.json
+          git commit -m 'fix(frontend): enumerate PR 572 inputs in the release manifest'
+      - name: Publish prepared source with an expected-head lease
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | cut -f1)" = "$HEAD_SHA"
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$AUTH"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push --force-with-lease="refs/heads/$TARGET_BRANCH:$HEAD_SHA" origin "HEAD:refs/heads/$TARGET_BRANCH"
+          SHA=$(git rev-parse HEAD)
+          echo "source_sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Prepared source: $SHA"
+          git show --stat --oneline HEAD
+  qualify:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CI: 'true'
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+          cache: yarn
+          cache-dependency-path: web/modern/yarn.lock
+      - name: Install locked frontend dependencies
+        id: install
+        working-directory: web/modern
+        run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
+      - name: Run targeted new and existing regressions
+        working-directory: web/modern
+        run: |
+          set -o pipefail
+          mkdir -p test-results/pr572
+          yarn vitest run --maxWorkers=2 src/components/ui/__tests__/table-selection.test.tsx src/components/ui/__tests__/table-selection-range.test.tsx src/components/ui/__tests__/table-sort-persistence.test.tsx src/hooks/__tests__/useTableSort.test.tsx src/lib/__tests__/table-selection-range.test.ts src/lib/__tests__/table-sort-preference.test.ts src/pages/__tests__/list-sort-persistence.test.tsx 2>&1 | tee test-results/pr572/targeted.log
+      - name: Run the complete Modern frontend test suite
+        if: always() && steps.install.outcome == 'success'
+        working-directory: web/modern
+        run: |
+          set -o pipefail
+          yarn vitest run --maxWorkers=2 2>&1 | tee test-results/pr572/full.log
+      - name: Lint and check translations
+        if: always() && steps.install.outcome == 'success'
+        working-directory: web/modern
+        run: |
+          set -o pipefail
+          yarn lint 2>&1 | tee test-results/pr572/lint.log
+          yarn check:i18n 2>&1 | tee test-results/pr572/i18n.log
+      - name: Build production Modern frontend with the real release guard
+        if: always() && steps.install.outcome == 'success'
+        run: |
+          set -o pipefail
+          make build-frontend-modern 2>&1 | tee web/modern/test-results/pr572/build.log
+      - name: Export isolated source and tooling for efficient offline iteration
+        if: always() && steps.install.outcome == 'success'
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/source-sha.txt
+          git status --short > evidence/source-status.txt
+          git archive --format=tar HEAD web/modern web/legacy .github/scripts .github/workflows AGENTS.md Makefile VERSION | gzip > evidence/source.tar.gz
+          tar -czf evidence/dependencies.tar.gz web/modern/node_modules
+          tar -C "$(dirname "$(command -v node)")" -czf evidence/node.tar.gz node
+          cp -r web/modern/test-results/pr572 evidence/results
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: pr572-qualification
+          path: evidence
+          retention-days: 7
+          if-no-files-found: warn
