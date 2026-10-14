@@ -1,4 +1,4 @@
-import { useId, useRef } from 'react';
+import { useId, useLayoutEffect, useRef } from 'react';
 import { ChevronDown, ListChecks } from 'lucide-react';
 import {
   DropdownMenu,
@@ -70,11 +70,13 @@ export function useSelectableTable<TData extends RowData, TValue>(
     selection.scopeVersion, selection.snapshot.mode, options.rangeContext, ids,
   ]);
   const rangeAnchor = useRef<{ id: string; scope: string; order: string[] } | null>(null);
-  // Reset during render so A -> B -> A navigation cannot resurrect a stale anchor.
-  // Selection itself remains ID-based and survives ordinary page/sort changes.
-  if (disabled || !enabled || !selection.hasSelection || rangeAnchor.current?.scope !== rangeScope) {
-    rangeAnchor.current = null;
-  }
+  // Reset only after a view commits. An abandoned concurrent render must not
+  // discard the still-visible table's anchor. The click handler also checks scope.
+  useLayoutEffect(() => {
+    if (disabled || !enabled || !selection.hasSelection || rangeAnchor.current?.scope !== rangeScope) {
+      rangeAnchor.current = null;
+    }
+  }, [disabled, enabled, selection.hasSelection, rangeScope]);
 
   /** selectPage resets the range anchor and updates only the supplied visible IDs. */
   const selectPage = (checked: boolean) => {
@@ -103,6 +105,9 @@ export function useSelectableTable<TData extends RowData, TValue>(
           disabled={disabled || !id}
           onClick={(event) => {
             event.stopPropagation();
+            // Own the toggle so a mobile label cannot activate the replacement
+            // checkbox again after this cell rerenders. Keep its padded hit area.
+            event.preventDefault();
             if (disabled || !id) return;
             // Read the rendered row model, not numeric IDs or the unsorted input.
             const order = table.getRowModel().rows.map((visibleRow) => rowId(visibleRow.original)).filter(Boolean);
@@ -111,12 +116,11 @@ export function useSelectableTable<TData extends RowData, TValue>(
               && previous.order.length === order.length
               && previous.order.every((visibleId, index) => visibleId === order[index]);
             if (event.shiftKey && sameOrder && previous && order.includes(previous.id)) {
-              // Radix runs onClick before its default toggle. Prevent that second
-              // single-row update and apply the complete range atomically instead.
-              event.preventDefault();
+              // Apply the entire range atomically, including all-matching exclusions.
               selection.setPage(getSelectionRange(order, previous.id, id), !selection.isSelected(id));
             } else {
               rangeAnchor.current = { id, scope: rangeScope, order };
+              selection.setRow(id, !selection.isSelected(id));
             }
           }}
           onCheckedChange={(checked) => {

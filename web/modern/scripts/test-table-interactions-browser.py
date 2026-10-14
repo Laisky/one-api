@@ -36,6 +36,12 @@ INIT = """(() => {
   localStorage.setItem('i18nextLng', 'en');
   localStorage.setItem('oneapi_page_size', '10');
   localStorage.setItem('one-api-theme', 'light');
+  window.__fixtureSelectionClicks = [];
+  document.addEventListener('click', (event) => {
+    const checkbox = event.target instanceof Element && event.target.closest('[role="checkbox"]');
+    if (checkbox) window.__fixtureSelectionClicks.push({label: checkbox.getAttribute('aria-label'),
+      shift: event.shiftKey, trusted: event.isTrusted, detail: event.detail});
+  }, true);
 })();"""
 
 
@@ -175,7 +181,7 @@ def flip_sort(page, label: str, mobile: bool) -> None:
 def check_case(browser, origin: str, case: tuple, width: int, output: Path) -> dict:
     """check_case verifies real reload, visible ordering, selection ranges, and principal isolation."""
     table, path, endpoint, field, label, default_by = case
-    mobile = width < 640
+    mobile = width < 768
     calls, violations, errors = [], [], []
     context = browser.new_context(viewport={'width': width, 'height': 1000}, has_touch=mobile)
     context.add_init_script(INIT)
@@ -204,6 +210,7 @@ def check_case(browser, origin: str, case: tuple, width: int, output: Path) -> d
         expected = [f'Select Row {index:02}' for index in (range(1, 11) if chosen['sortOrder'] == 'asc' else range(15, 5, -1))]
         assert labels == expected, (labels, expected)
         row_checks(page).nth(0).click()
+        assert selected_names(page) == labels[:1], ('ordinary click', selected_names(page))
         row_checks(page).nth(4).click(modifiers=['Shift'])
         assert selected_names(page) == labels[:5]
         assert urlsplit(page.url).path == path and 'id=' not in urlsplit(page.url).query
@@ -217,6 +224,12 @@ def check_case(browser, origin: str, case: tuple, width: int, output: Path) -> d
         assert selected_names(page) == labels[5:]
         expect(page.get_by_role('status').filter(has_text='All matching pages selected')).to_contain_text('10 items (5 excluded)')
         selection_command(page, 'Clear selection')
+        if mobile:
+            hit_area = page.locator('.mobile-record__selection').first
+            hit_area.click(position={'x': 2, 'y': 2})
+            assert selected_names(page) == labels[:1], ('padding click', selected_names(page))
+            hit_area.click(position={'x': 2, 'y': 2})
+            assert selected_names(page) == []
         row_checks(page).nth(0).click()
         flip_sort(page, label, mobile)
         row_checks(page).nth(4).click(modifiers=['Shift'])
@@ -251,7 +264,7 @@ def check_case(browser, origin: str, case: tuple, width: int, output: Path) -> d
                 'browser_errors': errors, 'prohibited_requests': violations}
     except Exception:
         page.screenshot(path=str(output / f'failure-{table}-{width}.png'), full_page=True)
-        (output / f'failure-{table}-{width}.json').write_text(json.dumps({'calls': calls, 'errors': errors, 'violations': violations}, indent=2))
+        (output / f'failure-{table}-{width}.json').write_text(json.dumps({'calls': calls, 'errors': errors, 'violations': violations, 'selection_clicks': page.evaluate('window.__fixtureSelectionClicks'), 'selected': selected_names(page)}, indent=2))
         raise
     finally:
         context.close()
@@ -261,6 +274,8 @@ def main() -> None:
     """main serves a local compiled app, checks six lists at two widths, and closes all resources."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--browser', default=None)
+    parser.add_argument('--table', choices=[case[0] for case in CASES])
+    parser.add_argument('--width', type=int, choices=[390, 1280])
     parser.add_argument('--output', type=Path, default=ROOT / 'test-results/table-interactions')
     args = parser.parse_args()
     build = ROOT.parent / 'build/modern'
@@ -275,8 +290,8 @@ def main() -> None:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(executable_path=args.browser)
             try:
-                for width in [1280, 390]:
-                    for case in CASES:
+                for width in ([args.width] if args.width else [1280, 390]):
+                    for case in (case for case in CASES if not args.table or case[0] == args.table):
                         results.append(check_case(browser, f'http://127.0.0.1:{server.server_port}', case, width, args.output))
                         print(f'PASS {case[0]} at {width}px', flush=True)
             finally:
