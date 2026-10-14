@@ -1,0 +1,91 @@
+name: Retained browser artifact diagnostic
+on:
+  push:
+    branches: [qualification/oneapi-recovery-20261014]
+    paths: [.github/workflows/recovery-browser-diagnostic.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  browser:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          repository: Laisky/one-api
+          run-id: 38502003755
+          pattern: recovery-frontend-*
+          path: retained
+      - name: Install pinned browser on supported sandbox host
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Inspect exact retained application bytes and preserve failure evidence
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,mimetypes,pathlib,time
+          from urllib.parse import urlsplit,unquote
+          from playwright.sync_api import sync_playwright
+          out=pathlib.Path('evidence');out.mkdir()
+          report={'source':'02ce1d5da18fdfcd3ae36685a511ab0a6c6077f5','kind':'retained frontend artifacts; synthetic API responses; no container rebuild','sandbox':True,'sessions':[]}
+          with sync_playwright() as p:
+              browser=p.chromium.launch(chromium_sandbox=True)
+              try:
+                  for theme in ('air','berry','modern'):
+                      roots=list(pathlib.Path('retained', 'recovery-frontend-'+theme).rglob('frontend-report.json'))
+                      assert len(roots)==1
+                      identity=json.loads(roots[0].read_text());assert identity['source']==report['source'] and identity['passed']
+                      roots=[f.parent for f in pathlib.Path('retained', 'recovery-frontend-'+theme).rglob('index.html') if f.parent.name==theme]
+                      assert len(roots)==1
+                      root=roots[0].resolve()
+                      for name,digest in identity['assets'].items():
+                          assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest
+                      for active in (False,True):
+                          result={'theme':theme,'active':active,'errors':[],'console':[],'requests':[],'envelopes':0,'mounted':False}
+                          ctx=browser.new_context(service_workers='block')
+                          def route_handler(route):
+                              req=route.request;url=urlsplit(req.url)
+                              result['requests'].append({'method':req.method,'path':url.path,'host':url.hostname})
+                              if url.hostname=='o123.ingest.sentry.io':
+                                  result['envelopes']+=1
+                                  route.fulfill(status=200,content_type='application/json',body='{}');return
+                              if url.scheme!='https' or url.netloc!='oneapi.laisky.com': route.abort();return
+                              if url.path=='/api/browser-config':
+                                  cfg={'dsn':'https://0123456789abcdef0123456789abcdef@o123.ingest.sentry.io/456','environment':'production'} if active else None
+                                  route.fulfill(status=200,content_type='application/json',body=json.dumps({'sentry':cfg}));return
+                              if url.path.startswith('/api/'):
+                                  data={'system_name':'Synthetic fixture','home_page_content':'','logo':'','footer_html':'','notice':''} if url.path=='/api/status' else ''
+                                  route.fulfill(status=200,content_type='application/json',body=json.dumps({'success':True,'data':data}));return
+                              target=(root/unquote(url.path).lstrip('/')).resolve()
+                              if not target.is_relative_to(root): route.abort();return
+                              if url.path=='/' or not target.is_file(): target=root/'index.html'
+                              content=target.read_bytes()
+                              mime='application/javascript' if target.suffix=='.js' else mimetypes.guess_type(str(target))[0] or 'application/octet-stream'
+                              route.fulfill(status=200,content_type=mime,body=content)
+                          ctx.route('**/*',route_handler)
+                          page=ctx.new_page()
+                          page.on('pageerror',lambda e:result['errors'].append(str(e)))
+                          page.on('console',lambda msg:result['console'].append({'type':msg.type,'text':msg.text[:1000]}) if msg.type in ('error','warning') else None)
+                          try:
+                              page.goto('https://oneapi.laisky.com/',wait_until='networkidle',timeout=30000)
+                              page.wait_for_function("Boolean(document.querySelector('#root')?.childElementCount)",timeout=5000)
+                              result['mounted']=True
+                          except Exception as exc: result['failure']=str(exc)[:1000]
+                          finally:
+                              result['root_children']=page.locator('#root').evaluate('(el)=>el.childElementCount') if page.locator('#root').count() else None
+                              page.screenshot(path=str(out/(theme+('-active' if active else '-disabled')+'.png')))
+                              (out/(theme+('-active' if active else '-disabled')+'.html')).write_text(page.content())
+                              ctx.close();report['sessions'].append(result)
+                              (out/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps(result))
+              finally: browser.close()
+          assert all(r['mounted'] and not r['errors'] for r in report['sessions']), 'Retained browser startup failures were captured for diagnosis'
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: retained-browser-diagnostic
+          path: evidence
+          retention-days: 14
+          if-no-files-found: error
