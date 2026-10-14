@@ -33,7 +33,7 @@ function mockSavedOptions(value = savedConfig) {
 
 // findConfigField returns the loaded configuration input and its own field container.
 async function findConfigField() {
-  const input = (await screen.findByLabelText('BrowserSentryConfig value')) as HTMLInputElement;
+  const input = (await screen.findByLabelText('BrowserSentryConfig value')) as HTMLTextAreaElement;
   const container = input.closest('.border.rounded-lg');
   expect(container).toBeInstanceOf(HTMLElement);
   return { input, field: within(container as HTMLElement) };
@@ -70,7 +70,7 @@ describe('SystemSettings browser Sentry configuration', () => {
 
     const { input, field } = await findConfigField();
     expect(input).toHaveValue(savedConfig);
-    expect(input.type).toBe('text');
+    expect(input.tagName).toBe('TEXTAREA');
     expect(getMock).toHaveBeenCalledExactlyOnceWith('/api/option/');
     expect(putMock).not.toHaveBeenCalled();
     expect(screen.getAllByLabelText(/^BrowserSentry.* value$/)).toHaveLength(1);
@@ -114,6 +114,8 @@ describe('SystemSettings browser Sentry configuration', () => {
     expect(field.queryByRole('button', { name: /clear/i })).not.toBeInTheDocument();
     await user.clear(input);
     await user.tab();
+    expect(putMock).not.toHaveBeenCalled();
+    await user.click(field.getByRole('button', { name: /^save$/i }));
 
     await waitFor(() => {
       expect(putMock).toHaveBeenCalledExactlyOnceWith('/api/option/', {

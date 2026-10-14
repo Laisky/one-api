@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -36,7 +36,8 @@ describe('SystemSettings failure handling', () => {
     const input = (await screen.findByLabelText('SystemName value')) as HTMLInputElement;
     await user.clear(input);
     await user.type(input, 'Updated Name');
-    await user.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+    const field = within(input.closest('.border.rounded-lg') as HTMLElement);
+    await user.click(field.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
       expect(putMock).toHaveBeenCalledWith('/api/option/', {

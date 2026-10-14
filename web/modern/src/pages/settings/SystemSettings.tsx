@@ -131,6 +131,9 @@ const ENUM_OPTION_KEYS: Record<string, EnumChoice[]> = {
   ],
 };
 
+// JSON_OPTION_KEYS explicitly identifies strict JSON system settings.
+const JSON_OPTION_KEYS = new Set(['BrowserSentryConfig', 'GroupRatio']);
+
 const OPTION_GROUP_KEY_SET = new Set(OPTION_GROUPS.flatMap((group) => group.keys));
 
 // BOOLEAN_OPTION_KEYS must stay aligned with backend option typing in `model/option.go` and related config defaults.
@@ -595,6 +598,7 @@ export function SystemSettings() {
                               description={descriptions[option.key]}
                               isSensitive={isSensitive}
                               isBoolean={isBooleanOptionKey(option.key)}
+                              isJson={JSON_OPTION_KEYS.has(option.key)}
                               onSave={save}
                               onClear={clearSensitive}
                               extraAction={
@@ -612,6 +616,7 @@ export function SystemSettings() {
                             description={descriptions[option.key]}
                             isSensitive={isSensitive}
                             isBoolean={isBooleanOptionKey(option.key)}
+                            isJson={JSON_OPTION_KEYS.has(option.key)}
                             enumChoices={ENUM_OPTION_KEYS[option.key]}
                             onSave={save}
                             onClear={clearSensitive}
@@ -637,6 +642,7 @@ export function SystemSettings() {
                         description={descriptions[opt.key]}
                         isSensitive={SENSITIVE_OPTION_KEYS.has(opt.key)}
                         isBoolean={isBooleanOptionKey(opt.key)}
+                        isJson={JSON_OPTION_KEYS.has(opt.key)}
                         enumChoices={ENUM_OPTION_KEYS[opt.key]}
                         onSave={save}
                         onClear={clearSensitive}

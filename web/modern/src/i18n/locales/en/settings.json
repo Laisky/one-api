@@ -416,6 +416,7 @@
     },
     "option_value_aria": "{{key}} value",
     "refresh": "Refresh",
+    "invalid_json": "Invalid JSON. Check quotes, commas, and brackets before saving.",
     "save": "Save",
     "save_failed": "Save failed",
     "saved_message": "{{key}} updated successfully.",
