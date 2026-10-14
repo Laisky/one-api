@@ -241,6 +241,28 @@ describe('SystemSettings explicit text saves and JSON validation', () => {
     expect(input).toHaveValue(corrected);
   });
 
+  it.each(['', ' \n\t '])('rejects blank GroupRatio JSON without changing the persisted ratios: %j', async (blank) => {
+    mockOptions([{ key: 'GroupRatio', value: '{"default":1}' }]);
+    const put = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } });
+    const user = userEvent.setup();
+    render(<SystemSettings />);
+    const { input, field, save } = await findField('GroupRatio');
+    expect(input).toHaveValue('{"default":1}');
+
+    await user.click(input);
+    fireEvent.change(input, { target: { value: blank } });
+    await user.tab();
+    expect(put).not.toHaveBeenCalled();
+    await user.click(save);
+
+    expect(input).toHaveValue(blank);
+    expect(put).not.toHaveBeenCalled();
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(field.getByRole('alert')).toHaveTextContent(/JSON/i);
+    expect(put).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
   it('reports malformed JSON without displaying or logging its private input or parser details', async () => {
     const put = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } });
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);

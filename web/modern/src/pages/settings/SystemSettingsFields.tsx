@@ -50,16 +50,17 @@ export function OptionItem({
   const [value, setValue] = useState(option.value);
   const [isSaving, setIsSaving] = useState(false);
   const jsonErrorId = useId();
-  // Validate strict JSON syntax; an empty value remains available to disable Sentry.
+  // Validate strict JSON syntax; only BrowserSentryConfig permits blank disabling.
   const hasJsonError = useMemo(() => {
-    if (!isJson || !value.trim()) return false;
+    if (!isJson) return false;
+    if (!value.trim()) return option.key !== 'BrowserSentryConfig';
     try {
       JSON.parse(value);
       return false;
     } catch {
       return true;
     }
-  }, [isJson, value]);
+  }, [isJson, option.key, value]);
 
   useEffect(() => {
     setValue(option.value);
