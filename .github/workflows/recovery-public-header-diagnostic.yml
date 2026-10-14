@@ -1,0 +1,52 @@
+name: OneAPI public header diagnostic
+on:
+  push:
+    branches: [qualification/oneapi-recovery-20261014]
+    paths: [.github/workflows/recovery-public-header-diagnostic.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - name: Read safe response metadata without printing public settings
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime,hashlib,json,pathlib,urllib.error,urllib.request
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              """NoRedirect prevents additional requests outside the selected endpoints."""
+              def redirect_request(self,*args,**kwargs):
+                  """redirect_request refuses every redirect in this diagnostic."""
+                  return None
+          opener=urllib.request.build_opener(NoRedirect())
+          result={'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'anonymous_get_only':True,'responses':[]}
+          for path in ['/api/status','/api/browser-config','/api/browser-config?release_probe=ef27439','/']:
+              request=urllib.request.Request('https://oneapi.laisky.com'+path,headers={'Cache-Control':'no-cache','User-Agent':'OneAPI-release-readonly-verification/1.0'})
+              try: response=opener.open(request,timeout=10)
+              except urllib.error.HTTPError as error: response=error
+              with response:
+                  raw=response.read(1024*1024+1)
+                  assert len(raw)<=1024*1024
+                  report={'path':path,'status':response.status,'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'headers':{key:response.headers.get_all(key) for key in ['Content-Type','Cache-Control','X-Content-Type-Options','CF-Cache-Status','Age','Content-Encoding']}}
+                  try: body=json.loads(raw)
+                  except ValueError: body=None
+                  report['json_object']=isinstance(body,dict)
+                  if isinstance(body,dict):
+                      report['keys']=sorted(body)
+                      if path.startswith('/api/status'):report['public_version']=body.get('data',{}).get('version')
+                      if path.startswith('/api/browser-config'):
+                          report['sentry_present']='sentry' in body
+                          report['configured']=body.get('sentry') is not None
+                          report['sentry_keys']=sorted(body['sentry']) if isinstance(body.get('sentry'),dict) else None
+                  result['responses'].append(report)
+          pathlib.Path('evidence').mkdir();pathlib.Path('evidence/report.json').write_text(json.dumps(result,indent=2));print(json.dumps(result))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: oneapi-public-header-diagnostic
+          path: evidence
+          retention-days: 14
+          if-no-files-found: error
