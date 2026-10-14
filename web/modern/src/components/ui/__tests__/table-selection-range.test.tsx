@@ -1,4 +1,5 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { Suspense, startTransition, useState } from 'react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '@/lib/stores/auth';
@@ -154,6 +155,43 @@ for (const [label, Component] of [['basic', DataTable], ['enhanced', EnhancedDat
         rerender(<Component {...props} {...change} />);
         await shiftClick(user, 'Echo');
         expectSelected(['Alpha', 'Echo']);
+      });
+
+      it('preserves the committed anchor when a concurrent view change is abandoned', async () => {
+        const user = userEvent.setup();
+        const suspended = vi.fn();
+        const pending = new Promise<void>(() => {});
+
+        /** SuspendPending prevents the speculative view from committing. */
+        function SuspendPending({ active }: { active: boolean }) {
+          if (active) {
+            suspended();
+            throw pending;
+          }
+          return null;
+        }
+
+        /** ConcurrentTable starts an uncommitted page-size change after displaying the table. */
+        function ConcurrentTable() {
+          const [changing, setChanging] = useState(false);
+          return (
+            <>
+              <button onClick={() => startTransition(() => setChanging(true))}>Start pending view</button>
+              <Suspense fallback={<span>Pending view</span>}>
+                <Component columns={columns} data={rows} total={60} pageSize={changing ? 20 : 10} />
+                <SuspendPending active={changing} />
+              </Suspense>
+            </>
+          );
+        }
+
+        render(<ConcurrentTable />);
+        await user.click(checkbox('Alpha'));
+        await user.click(screen.getByRole('button', { name: 'Start pending view' }));
+        await waitFor(() => expect(suspended).toHaveBeenCalled());
+        expect(screen.queryByText('Pending view')).not.toBeInTheDocument();
+        await shiftClick(user, 'Echo');
+        expectSelected(names.slice(0, 5));
       });
 
       it('preserves ordinary keyboard checkbox activation', async () => {
