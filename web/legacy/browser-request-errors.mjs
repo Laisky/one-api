@@ -9,11 +9,25 @@ function ownValue(value, key) {
   return descriptor && 'value' in descriptor ? descriptor.value : undefined;
 }
 
-/** errorName reads the native or custom error name without invoking prototype getters. */
+/** errorName reads data names or the trusted DOMException name getter with its native brand check. */
 function errorName(error) {
+  const original = error;
+  const nativePrototype = typeof DOMException === 'function' ? ownValue(DOMException, 'prototype') : undefined;
   for (let depth = 0; error && depth < 4; depth++, error = Object.getPrototypeOf(error)) {
     const name = ownValue(error, 'name');
     if (typeof name === 'string') return name;
+    if (nativePrototype && error === nativePrototype) {
+      const getter = Object.getOwnPropertyDescriptor(nativePrototype, 'name')?.get;
+      if (typeof getter === 'function') {
+        try {
+          // Call only the native accessor; its brand check rejects lookalikes and wrapped objects.
+          const nativeName = Reflect.apply(getter, original, []);
+          if (typeof nativeName === 'string') return nativeName;
+        } catch {
+          // Arbitrary application name accessors remain unread, including failed native lookalikes.
+        }
+      }
+    }
   }
   return undefined;
 }
