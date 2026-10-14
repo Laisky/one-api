@@ -1,0 +1,98 @@
+# Read-only post-release probe; no browser execution, credentials or telemetry events.
+name: OneAPI public release smoke
+on:
+  push:
+    branches: [qualification/oneapi-recovery-20261014]
+    paths: [.github/workflows/recovery-public-smoke.yml]
+permissions:
+  contents: read
+jobs:
+  public_https:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      EXPECTED_SHA: ef27439cd888c4bb5d36270b9a415cfea088d48f
+    steps:
+      - name: Verify expected public release without changing settings or sending events
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime,hashlib,json,os,pathlib,re,time,urllib.error,urllib.parse,urllib.request
+          from html.parser import HTMLParser
+          origin='https://oneapi.laisky.com';expected=os.environ['EXPECTED_SHA']
+          out=pathlib.Path('evidence');out.mkdir()
+          report={'expected_source':expected,'method':'anonymous GET only; TLS verification enabled; no JavaScript execution','passed':False,'observations':[],'assets':[]}
+          class SameOriginRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,headers,newurl):
+                  target=urllib.parse.urlsplit(newurl)
+                  if target.scheme!='https' or target.netloc!='oneapi.laisky.com':raise ValueError('Cross-origin redirect refused')
+                  return super().redirect_request(req,fp,code,msg,headers,newurl)
+          opener=urllib.request.build_opener(SameOriginRedirect())
+          def get(path,limit=4*1024*1024):
+              target=urllib.parse.urlsplit(urllib.parse.urljoin(origin,path))
+              assert target.scheme=='https' and target.netloc=='oneapi.laisky.com'
+              request=urllib.request.Request(target.geturl(),headers={'User-Agent':'OneAPI-release-readonly-verification/1.0','Cache-Control':'no-cache'},method='GET')
+              try:response=opener.open(request,timeout=10)
+              except urllib.error.HTTPError as error:response=error
+              with response:
+                  data=response.read(limit+1);assert len(data)<=limit,'Public response exceeded bound'
+                  return response.status,{k.lower():v for k,v in response.headers.items()},data
+          try:
+              deadline=time.monotonic()+900
+              while True:
+                  observation={'at':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+                  try:
+                      status,headers,raw=get('/api/status?release_probe='+expected,256*1024)
+                      body=json.loads(raw)
+                      version=body.get('data',{}).get('version')
+                      observation.update(status=status,success=body.get('success'),source=version)
+                      if status==200 and body.get('success') is True and version==expected:
+                          report['observations'].append(observation);report['observed_source']=version;break
+                  except (ValueError,urllib.error.URLError,TimeoutError):observation['transport_or_parse_failure']=True
+                  report['observations'].append(observation)
+                  assert time.monotonic()<deadline,'Expected release did not become visible within the bounded probe'
+                  time.sleep(15)
+              status,headers,raw=get('/api/browser-config',4096)
+              config=json.loads(raw)
+              assert status==200 and set(config)=={'sentry'}
+              assert 'no-store' in headers.get('cache-control','') and headers.get('x-content-type-options')=='nosniff'
+              setting=config['sentry']
+              assert setting is None or (isinstance(setting,dict) and set(setting)=={'dsn','environment'})
+              # Do not print or archive the DSN/environment, even though this is a public projection.
+              report['browser_config']={'status':status,'configured':setting is not None,'no_store':True,'nosniff':True}
+              status,headers,raw=get('/',1024*1024);assert status==200
+              class Entries(HTMLParser):
+                  def __init__(self):super().__init__();self.assets=[]
+                  def handle_starttag(self,tag,attrs):
+                      attrs=dict(attrs)
+                      value=attrs.get('src') if tag=='script' else attrs.get('href') if tag=='link' and attrs.get('rel') in ('stylesheet','modulepreload') else None
+                      if value:
+                          url=urllib.parse.urlsplit(urllib.parse.urljoin(origin,value))
+                          if url.scheme=='https' and url.netloc=='oneapi.laisky.com' and url.path.endswith(('.js','.css')):self.assets.append(url.path)
+              entries=Entries();entries.feed(raw.decode());assert entries.assets and len(entries.assets)<=32
+              releases=set()
+              for path in dict.fromkeys(entries.assets):
+                  status,headers,data=get(path);assert status==200
+                  assert b'sourceMappingURL=data:' not in data
+                  found=re.findall(r'one-api-(?:modern|air|berry)@sha256:[a-f0-9]{64}',data.decode())
+                  releases.update(found)
+                  asset={'path':path,'status':status,'sha256':hashlib.sha256(data).hexdigest()}
+                  if path.endswith('.js'):
+                      map_status,map_headers,map_data=get(path+'.map',4*1024*1024)
+                      try:map_json=json.loads(map_data)
+                      except ValueError:map_json=None
+                      assert not (map_status==200 and isinstance(map_json,dict) and 'sources' in map_json and 'mappings' in map_json),'Public source map was exposed'
+                      asset['source_map_exposed']=False
+                  report['assets'].append(asset)
+              assert releases,'No actual deployed browser release identity found in entry assets'
+              report.update(passed=True,releases=sorted(releases),completed_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
+          finally:
+              (out/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: oneapi-public-release-smoke
+          path: evidence
+          retention-days: 14
+          if-no-files-found: error
