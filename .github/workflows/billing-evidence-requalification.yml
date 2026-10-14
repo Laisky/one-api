@@ -1,0 +1,85 @@
+# Isolated acceptance only. Original failed run and negative-control evidence are retained.
+name: Billing evidence prerequisite recovery
+on:
+  push:
+    branches: [qualification/oneapi-recovery-20261014]
+    paths: [.github/workflows/billing-evidence-requalification.yml]
+permissions:
+  contents: read
+concurrency:
+  group: billing-durable-evidence-20261014
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SOURCE_SHA: 8863aeccc934b68e900cee1c69b65cf106e43452
+      BASE_SHA: ef27439cd888c4bb5d36270b9a415cfea088d48f
+      GOMAXPROCS: '2'
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 8863aeccc934b68e900cee1c69b65cf106e43452
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Install required physical audio metering tools without weakening tests
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffprobe -version | head -1
+      - name: Compare baseline audio controls and complete exact-candidate package
+        shell: bash
+        run: |
+          python3 -u - <<'PY'
+          import collections,json,os,pathlib,subprocess
+          source=os.environ['SOURCE_SHA'];base=os.environ['BASE_SHA']
+          out=pathlib.Path(os.environ['RUNNER_TEMP'],'billing-requalified');out.mkdir()
+          def git(*args):return subprocess.check_output(['git',*args],text=True).strip()
+          assert git('rev-parse','HEAD')==source
+          assert git('diff','--name-only',base,source)=='relay/controller/billing_refund_evidence_test.go'
+          blob=git('rev-parse','HEAD:relay/controller/billing_refund_evidence_test.go')
+          assert blob=='508cbf1fe9584f8e6bb62972530e644347c05862'
+          report={'source':source,'base':base,'tree':git('rev-parse','HEAD^{tree}'),'test_blob':blob,'passed':False,'ffprobe':subprocess.check_output(['ffprobe','-version'],text=True).splitlines()[0],'retained_fault_and_negative_control_run':38510778663,'retained_artifact_sha256':'0a4af09c13710f07e01926b12a179ef1384a8deb38b2a0f9523d9a9f9c3abfa6','runs':{}}
+          def run(label,pattern=None,timeout='120s'):
+              command=['go','test','-json','-race','-p','1','-count=1','-timeout='+timeout]
+              if pattern:command+=['-run',pattern]
+              command+=['./relay/controller']
+              with (out/(label+'.jsonl')).open('w') as stream:
+                  process=subprocess.run(command,stdout=stream,stderr=subprocess.STDOUT,timeout=1500)
+              events=[]
+              for line in (out/(label+'.jsonl')).read_text().splitlines():
+                  try:events.append(json.loads(line))
+                  except ValueError:pass
+              outcomes={'pass','fail','skip'}
+              top=collections.Counter(e['Action'] for e in events if e.get('Test') and '/' not in e['Test'] and e['Action'] in outcomes)
+              matrix=[(e['Test'],e['Action']) for e in events if e.get('Test','').startswith('TestConservativeRefundDurableEvidence/') and e['Action'] in outcomes]
+              result={'checkout':git('rev-parse','HEAD'),'exit_code':process.returncode,'top_level':dict(top),'matrix':matrix,'skips':[e.get('Test') for e in events if e['Action']=='skip'],'failures':[e.get('Test') for e in events if e['Action']=='fail']}
+              report['runs'][label]=result;print(label,json.dumps(result),flush=True)
+              return result
+          try:
+              subprocess.run(['git','checkout','--detach',base],check=True)
+              baseline=run('baseline_audio_controls','^(TestProtocolAuditTranscriptionHTTP|TestPR421AudioFailoverLedger)$')
+              assert baseline['exit_code']==0 and baseline['top_level']=={'pass':2},baseline
+              subprocess.run(['git','checkout','--detach',source],check=True)
+              full=run('candidate_affected_package',timeout='20m')
+              assert full['exit_code']==0 and not full['top_level'].get('fail'),full
+              assert len(full['matrix'])==8 and all(action=='pass' for _,action in full['matrix'])
+              subprocess.run(['go','vet','-p','1','./relay/controller'],check=True,timeout=300)
+              assert git('rev-parse','HEAD')==source and not git('status','--porcelain','--untracked-files=no')
+              report['passed']=True
+          finally:
+              (out/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report),flush=True)
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: billing-evidence-requalified-8863aec
+          path: ${{ runner.temp }}/billing-requalified
+          retention-days: 14
+          if-no-files-found: error
