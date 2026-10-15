@@ -152,6 +152,7 @@ jobs:
             ppcelery/one-api:arm64-latest
             ppcelery/one-api:arm64-${{ steps.vars.outputs.short_sha }}
           platforms: linux/arm64
+          labels: org.opencontainers.image.revision=${{ github.sha }}
           build-args: |
             TARGETARCH=arm64
           cache-from: type=gha,scope=one-api-arm64
