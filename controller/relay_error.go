@@ -616,17 +616,18 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 			return
 		}
 
-		lg.Error("ability suspended due to server error (5xx)",
-			appendRelayFailureFields(params,
-				zap.Error(params.Err.RawError),
-				zap.String("suspension_rationale", "upstream server error; suspending ability to allow recovery"),
-				zap.Duration("suspension_duration", config.ChannelSuspendSecondsFor5XX),
-			)...,
-		)
 		if suspendErr := dbmodel.SuspendAbility(ctx, params.Group, params.OriginalModel, params.ChannelId, config.ChannelSuspendSecondsFor5XX); suspendErr != nil {
 			lg.Error("failed to suspend ability for 5xx",
 				appendRelayFailureFields(params,
 					zap.Error(errors.Wrap(suspendErr, "suspend ability failed")),
+				)...,
+			)
+		} else {
+			lg.Error("ability suspended due to server error (5xx)",
+				appendRelayFailureFields(params,
+					zap.Error(params.Err.RawError),
+					zap.String("suspension_rationale", "upstream server error; suspending ability to allow recovery"),
+					zap.Duration("suspension_duration", config.ChannelSuspendSecondsFor5XX),
 				)...,
 			)
 		}
