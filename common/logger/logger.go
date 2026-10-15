@@ -357,19 +357,15 @@ func SetupEnhancedLogger(ctx context.Context) {
 			Logger.Panic("create ratelimiter", zap.Error(err))
 		}
 
-		alertPusher, err := glog.NewAlert(
-			ctx,
-			config.LogPushAPI,
-			glog.WithAlertType(config.LogPushType),
-			glog.WithAlertToken(config.LogPushToken),
-			glog.WithAlertHookLevel(zap.ErrorLevel),
-			glog.WithRateLimiter(ratelimiter),
-		)
+		_, alertOutput, err := NewAlertCore(ctx, config.LogPushAPI,
+			config.LogPushType, config.LogPushToken, ratelimiter)
 		if err != nil {
 			Logger.Panic("create AlertPusher", zap.Error(err))
 		}
 
-		opts = append(opts, zap.HooksWithFields(alertPusher.GetZapHook()))
+		opts = append(opts, zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+			return zapcore.NewTee(core, alertOutput)
+		}))
 		Logger.Info("alert pusher configured",
 			zap.String("alert_api", config.LogPushAPI),
 			zap.String("alert_type", config.LogPushType),

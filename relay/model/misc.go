@@ -147,6 +147,8 @@ type Error struct {
 	Type    ErrorType `json:"type"`
 	Param   string    `json:"param"`
 	Code    any       `json:"code"`
+	// MessageContainsRawBody identifies complete-body parser fallbacks for explicit application log redaction; API JSON stays unchanged.
+	MessageContainsRawBody bool `json:"-"`
 	// RawError preserves the original upstream or internal error for diagnostics.
 	// Omitted from JSON to avoid leaking provider internals.
 	RawError error `json:"-"`

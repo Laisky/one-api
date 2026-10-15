@@ -19,6 +19,7 @@ import (
 	"github.com/Laisky/errors/v2"
 
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 // ResendEmailRequest is the JSON body sent to POST https://api.resend.com/emails.
@@ -235,8 +236,8 @@ func postResendEmail(from string, to []string, subject, content string) error {
 	}
 	defer resp.Body.Close()
 
-	// Read the body once so we can include it in error messages even when it isn't JSON
-	// (e.g. an HTML error page from an upstream proxy or Railway edge).
+	// Read the body once; retain parsed provider reasons, but explicitly redact
+	// unparsed bodies because proxies/providers may echo email content or secrets.
 	rawBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 	if readErr != nil {
 		return errors.Wrapf(readErr, "failed to read Resend response (status %d)", resp.StatusCode)
@@ -247,15 +248,15 @@ func postResendEmail(from string, to []string, subject, content string) error {
 		if jsonErr := json.Unmarshal(rawBody, &res); jsonErr == nil && res.Message != "" {
 			return errors.Errorf("Resend API error (status %d, %s): %s", resp.StatusCode, res.Name, res.Message)
 		}
-		return errors.Errorf("Resend API returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+		return errors.Errorf("Resend API returned status %d: %s (body_bytes=%d)", resp.StatusCode, logger.Redact(rawBody), len(rawBody))
 	}
 
 	var res ResendEmailResponse
 	if err := json.Unmarshal(rawBody, &res); err != nil {
-		return errors.Wrapf(err, "failed to decode Resend success response: %s", strings.TrimSpace(string(rawBody)))
+		return errors.Wrapf(logger.RedactJSONErrorValue(err), "failed to decode Resend success response: %s (body_bytes=%d)", logger.Redact(rawBody), len(rawBody))
 	}
 	if res.ID == "" {
-		return errors.Errorf("Resend API returned success status %d but no message id; body: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+		return errors.Errorf("Resend API returned success status %d but no message id; body: %s (body_bytes=%d)", resp.StatusCode, logger.Redact(rawBody), len(rawBody))
 	}
 
 	return nil

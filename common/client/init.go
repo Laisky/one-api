@@ -88,10 +88,14 @@ func Init() {
 	}
 
 	if config.UserContentRequestProxy != "" {
-		logger.Logger.Info("using proxy to fetch user content", zap.String("proxy", config.UserContentRequestProxy))
+		logger.Logger.Info("using proxy to fetch user content", zap.String("proxy", logger.Redact(config.UserContentRequestProxy)))
 		proxyURL, err := url.Parse(config.UserContentRequestProxy)
 		if err != nil {
-			logger.Logger.Fatal(fmt.Sprintf("USER_CONTENT_REQUEST_PROXY set but invalid: %s", config.UserContentRequestProxy))
+			// The configured URL and parser error can both include proxy credentials.
+			logger.Logger.Fatal("USER_CONTENT_REQUEST_PROXY set but invalid",
+				zap.String("proxy", logger.Redact(config.UserContentRequestProxy)),
+				zap.String("error", logger.Redact(err)),
+				zap.String("error_type", fmt.Sprintf("%T", err)))
 		}
 		UserContentRequestHTTPClient = &http.Client{
 			Transport: createTransport(proxyURL, true),
@@ -123,10 +127,14 @@ func Init() {
 	}
 	var transport http.RoundTripper
 	if config.RelayProxy != "" {
-		logger.Logger.Info("using api relay proxy", zap.String("proxy", config.RelayProxy))
+		logger.Logger.Info("using api relay proxy", zap.String("proxy", logger.Redact(config.RelayProxy)))
 		proxyURL, err := url.Parse(config.RelayProxy)
 		if err != nil {
-			logger.Logger.Fatal(fmt.Sprintf("RELAY_PROXY set but invalid: %s", config.RelayProxy))
+			// The configured URL and parser error can both include proxy credentials.
+			logger.Logger.Fatal("RELAY_PROXY set but invalid",
+				zap.String("proxy", logger.Redact(config.RelayProxy)),
+				zap.String("error", logger.Redact(err)),
+				zap.String("error_type", fmt.Sprintf("%T", err)))
 		}
 		transport = createTransport(proxyURL, false)
 	} else {

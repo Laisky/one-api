@@ -14,6 +14,7 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/conv"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
@@ -108,7 +109,7 @@ streamLoop:
 				var streamResponse openai_compatible.ChatCompletionsStreamResponse
 				complete, err := openai_compatible.DecodeStreamReceipt(line.Large, &streamResponse)
 				if err != nil {
-					lg.Error("unmarshalling oversized stream data", zap.Error(err))
+					lg.Error("unmarshalling oversized stream data", zap.Error(logger.RedactJSONErrorValue(err)))
 					continue
 				}
 
@@ -189,7 +190,7 @@ streamLoop:
 			case relaymode.Completions:
 				var streamResponse CompletionsStreamResponse
 				if err := json.NewDecoder(line.Large).Decode(&streamResponse); err != nil {
-					lg.Error("error unmarshalling oversized completion stream response", zap.Error(err))
+					lg.Error("error unmarshalling oversized completion stream response", zap.Error(logger.RedactJSONErrorValue(err)))
 					continue
 				}
 
@@ -260,8 +261,10 @@ streamLoop:
 			complete, err := openai_compatible.DecodeStreamReceipt(strings.NewReader(data[dataPrefixLength:]), &streamResponse)
 			if err != nil {
 				lg.Error("unmarshalling stream data",
-					zap.String("data", data),
-					zap.Error(err))
+					// Provider chunks may contain private generated content.
+					zap.String("data", logger.Redact(data)),
+					zap.Int("data_bytes", len(data)),
+					zap.Error(logger.RedactJSONErrorValue(err)))
 				render.StringData(c, data) // Pass raw data to client if parsing fails
 				continue
 			}
@@ -370,7 +373,7 @@ streamLoop:
 			var streamResponse CompletionsStreamResponse
 			err := json.Unmarshal([]byte(data[dataPrefixLength:]), &streamResponse)
 			if err != nil {
-				lg.Error("error unmarshalling stream response", zap.Error(err))
+				lg.Error("error unmarshalling stream response", zap.Error(logger.RedactJSONErrorValue(err)))
 				continue
 			}
 

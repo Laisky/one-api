@@ -164,9 +164,9 @@ func TestIncidentBodyResetChannelImpact(t *testing.T) {
 				}
 			}
 			if scenario.mutation {
-				require.Len(t, logs.FilterMessage("ability suspended due to server error (5xx)").All(), 1)
+				require.Len(t, logs.FilterMessage("ability suspension persisted after relay failure (normalized 5xx)").All(), 1)
 			} else {
-				require.Empty(t, logs.FilterMessage("ability suspended due to server error (5xx)").All())
+				require.Empty(t, logs.FilterMessage("ability suspension persisted after relay failure (normalized 5xx)").All())
 			}
 			t.Logf("metric_enabled=false automatic_disable=%t duration=%s counted=%t suspension_written=%t available=%d channel_enabled=true", scenario.automaticDisable, scenario.duration, scenario.counted, scenario.mutation, available)
 		})
@@ -252,7 +252,7 @@ func TestIncidentBodyResetChannelImpactRouting(t *testing.T) {
 				require.Len(t, entries, 1)
 				require.Equal(t, "upstream", entries[0].ContextMap()["error_kind"])
 				require.Equal(t, false, entries[0].ContextMap()["channel_health_counted"])
-				require.Empty(t, logs.FilterMessage("ability suspended due to server error (5xx)").All())
+				require.Empty(t, logs.FilterMessage("ability suspension persisted after relay failure (normalized 5xx)").All())
 				var abilities []dbmodel.Ability
 				require.NoError(t, dbmodel.DB.Find(&abilities).Error)
 				for _, ability := range abilities {
