@@ -17,6 +17,7 @@ import (
 	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/common/helper"
+	applog "github.com/Laisky/one-api/common/logger"
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/monitor"
 	"github.com/Laisky/one-api/relay/model"
@@ -56,7 +57,7 @@ func stacklessErrorField(err error) zap.Field {
 	if err == nil {
 		return zap.Skip()
 	}
-	return zap.String("error", err.Error())
+	return zap.String("error", applog.RedactJSONErrorValue(err).Error())
 }
 
 // relayFailureKind attributes a failed relay attempt to a fault class.
@@ -368,7 +369,16 @@ func appendRelayFailureFields(params processChannelRelayErrorParams, extra ...za
 		fields = append(fields, zap.String("channel_name", params.ChannelName))
 	}
 	if params.RequestURL != "" {
-		fields = append(fields, zap.String("request_url", params.RequestURL))
+		requestURL := dbmodel.SanitizeLogUpstreamEndpoint(params.RequestURL)
+		requestURLRedacted := requestURL != params.RequestURL
+		if requestURL == "" {
+			requestURL = applog.Redact(params.RequestURL)
+			requestURLRedacted = true
+		}
+		fields = append(fields, zap.String("request_url", requestURL))
+		if requestURLRedacted {
+			fields = append(fields, zap.Bool("request_url_redacted", true))
+		}
 	}
 	if params.Group != "" {
 		fields = append(fields, zap.String("group", params.Group))
@@ -396,6 +406,9 @@ func appendRelayFailureFields(params processChannelRelayErrorParams, extra ...za
 		fields = append(fields, zap.String("quota_scope", quotaScope))
 	}
 	if upstreamError := strings.TrimSpace(params.Err.Message); upstreamError != "" {
+		if params.Err.MessageContainsRawBody {
+			upstreamError = applog.Redact(params.Err.Message)
+		}
 		if params.Err.Type == model.ErrorTypeOneAPI {
 			fields = append(fields, zap.String("one_api_error", upstreamError))
 		} else {
@@ -481,9 +494,8 @@ func goProcessChannelRelayError(ctx context.Context, bizErr *model.ErrorWithStat
 	})
 }
 
-// processChannelRelayError applies the channel-health policy for a failed relay attempt:
-// it logs the failure at the appropriate level, then decides whether to suspend the
-// ability, auto-disable the channel, or merely emit a failure metric, based on the error's
+// processChannelRelayError applies the channel-health policy and records the relay failure and any suspension result.
+// It decides whether to suspend the ability, auto-disable the channel, or merely emit a failure metric based on the error's
 // status code, type, and origin (user-originated vs upstream/infra). It runs on the
 // detached, c-free context snapshotted by goProcessChannelRelayError.
 func processChannelRelayError(ctx context.Context, params processChannelRelayErrorParams) {
@@ -504,31 +516,16 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 		}
 		monitor.Emit(params.ChannelId, false)
 	}
-	switch {
-	case isClientContextCancel(params.Err.StatusCode, params.Err.RawError):
-		lg.Warn("relay aborted by client (context canceled/deadline)",
-			appendRelayFailureFields(params, stacklessErrorField(params.Err.RawError))...,
-		)
-	case isUserError:
-		lg.Warn("user-originated request error",
-			appendRelayFailureFields(params, stacklessErrorField(params.Err.RawError))...,
-		)
-	case failureKind.IsClient():
-		lg.Warn("relay error",
-			appendRelayFailureFields(params,
-				stacklessErrorField(params.Err.RawError),
-				zap.String("error_kind", failureKind.String()),
-				zap.Bool("channel_health_counted", channelHealthCounted),
-			)...,
-		)
-	default:
-		lg.Error("relay error",
-			appendRelayFailureFields(params,
-				zap.Error(params.Err.RawError),
-				zap.String("error_kind", failureKind.String()),
-				zap.Bool("channel_health_counted", channelHealthCounted),
-			)...,
-		)
+	suspensionOutcome := ""
+	var suspensionDuration time.Duration
+	if params.Err.StatusCode >= 500 && params.Err.StatusCode <= 599 {
+		suspensionOutcome = "not_attempted"
+		// Preserve the generic record while allowing the complete outcome to reach the existing alert limiter first.
+		defer func() {
+			logInitialRelayFailure(ctx, params, isUserError, failureKind, channelHealthCounted, suspensionOutcome, suspensionDuration)
+		}()
+	} else {
+		logInitialRelayFailure(ctx, params, isUserError, failureKind, channelHealthCounted, "", 0)
 	}
 
 	if isInternalInfraError(params.Err.RawError) {
@@ -616,18 +613,21 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 			return
 		}
 
-		if suspendErr := dbmodel.SuspendAbility(ctx, params.Group, params.OriginalModel, params.ChannelId, config.ChannelSuspendSecondsFor5XX); suspendErr != nil {
-			lg.Error("failed to suspend ability for 5xx",
-				appendRelayFailureFields(params,
+		suspensionDuration = config.ChannelSuspendSecondsFor5XX
+		if suspendErr := dbmodel.SuspendAbility(ctx, params.Group, params.OriginalModel, params.ChannelId, suspensionDuration); suspendErr != nil {
+			suspensionOutcome = "failed"
+			lg.Error("ability suspension failed after relay failure (normalized 5xx)",
+				appendRelayFailureDiagnosticFields(params, failureKind, suspensionOutcome, suspensionDuration,
 					zap.Error(errors.Wrap(suspendErr, "suspend ability failed")),
 				)...,
 			)
 		} else {
-			lg.Error("ability suspended due to server error (5xx)",
-				appendRelayFailureFields(params,
-					zap.Error(params.Err.RawError),
-					zap.String("suspension_rationale", "upstream server error; suspending ability to allow recovery"),
-					zap.Duration("suspension_duration", config.ChannelSuspendSecondsFor5XX),
+			suspensionOutcome = "persisted"
+			lg.Error("ability suspension persisted after relay failure (normalized 5xx)",
+				appendRelayFailureDiagnosticFields(params, failureKind, suspensionOutcome, suspensionDuration,
+					zap.Error(applog.RedactJSONErrorValue(params.Err.RawError)),
+					zap.String("suspension_rationale", "normalized relay 5xx; applying configured ability recovery suspension"),
+					zap.Duration("suspension_duration", suspensionDuration),
 				)...,
 			)
 		}
@@ -640,7 +640,7 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 	if params.Err.StatusCode == http.StatusUnauthorized || params.Err.StatusCode == http.StatusForbidden || classifyAuthLike(&params.Err) {
 		lg.Error("ability suspended due to auth/permission error",
 			appendRelayFailureFields(params,
-				zap.Error(params.Err.RawError),
+				zap.Error(applog.RedactJSONErrorValue(params.Err.RawError)),
 				zap.String("suspension_rationale", "authentication or permission failure; suspending ability pending credential verification"),
 				zap.Duration("suspension_duration", config.ChannelSuspendSecondsForAuth),
 			)...,
@@ -656,7 +656,7 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 		if monitor.ShouldDisableChannel(&params.Err.Error, params.Err.StatusCode) {
 			lg.Error("channel disabled due to fatal auth/permission error",
 				appendRelayFailureFields(params,
-					zap.Error(params.Err.RawError),
+					zap.Error(applog.RedactJSONErrorValue(params.Err.RawError)),
 					zap.String("disable_rationale", "fatal auth error detected; channel automatically disabled"),
 				)...,
 			)
@@ -671,7 +671,7 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 	if monitor.ShouldDisableChannel(&params.Err.Error, params.Err.StatusCode) {
 		lg.Error("channel disabled due to fatal error",
 			appendRelayFailureFields(params,
-				zap.Error(params.Err.RawError),
+				zap.Error(applog.RedactJSONErrorValue(params.Err.RawError)),
 				zap.String("disable_rationale", "fatal error per auto-disable policy; channel automatically disabled"),
 			)...,
 		)

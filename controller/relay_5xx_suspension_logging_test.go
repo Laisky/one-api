@@ -25,8 +25,8 @@ import (
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
-const suspension5XXSuccess = "ability suspended due to server error (5xx)"
-const suspension5XXFailure = "failed to suspend ability for 5xx"
+const suspension5XXSuccess = "ability suspension persisted after relay failure (normalized 5xx)"
+const suspension5XXFailure = "ability suspension failed after relay failure (normalized 5xx)"
 const suspension5XXGroup = "suspension-fixture"
 const suspension5XXModel = "synthetic-requested-model"
 const suspension5XXChannel = 71001
@@ -174,7 +174,7 @@ func TestProcessChannelRelayError5XXSuccessLogFollowsCommit(t *testing.T) {
 	require.EqualValues(t, http.StatusInternalServerError, fields["status_code"])
 	require.Equal(t, fixture.params.Err.Code, fields["error_code"])
 	require.Equal(t, config.ChannelSuspendSecondsFor5XX, fields["suspension_duration"])
-	require.Equal(t, "upstream server error; suspending ability to allow recovery", fields["suspension_rationale"])
+	require.Equal(t, "normalized relay 5xx; applying configured ability recovery suspension", fields["suspension_rationale"])
 	require.Empty(t, fixture.logs.FilterMessage(suspension5XXFailure).All())
 	var rows []dbmodel.Ability
 	require.NoError(t, fixture.db.Find(&rows).Error)

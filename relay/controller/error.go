@@ -100,6 +100,7 @@ func RelayErrorHandler(resp *http.Response) (ErrorWithStatusCode *model.ErrorWit
 	err = json.Unmarshal(responseBody, &errResponse)
 	if err != nil {
 		ErrorWithStatusCode.Error.Message = fmt.Sprintf("failed to unmarshal response body: %+v\n\n", err) + ErrorWithStatusCode.Error.Message + string(responseBody)
+		ErrorWithStatusCode.Error.MessageContainsRawBody = true
 		ErrorWithStatusCode.Error.RawError = err
 		return
 	}
@@ -119,6 +120,7 @@ func RelayErrorHandler(resp *http.Response) (ErrorWithStatusCode *model.ErrorWit
 
 	if ErrorWithStatusCode.Error.Message == "" {
 		ErrorWithStatusCode.Error.Message = fmt.Sprintf("bad response [%d] %s", resp.StatusCode, string(responseBody))
+		ErrorWithStatusCode.Error.MessageContainsRawBody = true
 	}
 
 	return

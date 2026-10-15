@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -51,7 +52,11 @@ func InitRedisClient() (err error) {
 		logger.Logger.Info("Redis is enabled")
 		opt, err := redis.ParseURL(redisConnString)
 		if err != nil {
-			logger.Logger.Fatal("failed to parse Redis connection string", zap.Error(err))
+			// URI parser errors can embed the complete credential-bearing URL.
+			logger.Logger.Fatal("failed to parse Redis connection string",
+				zap.String("connection_string", logger.Redact(config.RedisConnString)),
+				zap.String("error", logger.Redact(err)),
+				zap.String("error_type", fmt.Sprintf("%T", err)))
 		}
 		RDB = redis.NewClient(opt)
 	} else {
@@ -78,7 +83,11 @@ func InitRedisClient() (err error) {
 func ParseRedisOption() *redis.Options {
 	opt, err := redis.ParseURL(config.RedisConnString)
 	if err != nil {
-		logger.Logger.Fatal("failed to parse Redis connection string", zap.Error(err))
+		// URI parser errors can embed the complete credential-bearing URL.
+		logger.Logger.Fatal("failed to parse Redis connection string",
+			zap.String("connection_string", logger.Redact(config.RedisConnString)),
+			zap.String("error", logger.Redact(err)),
+			zap.String("error_type", fmt.Sprintf("%T", err)))
 	}
 	return opt
 }
