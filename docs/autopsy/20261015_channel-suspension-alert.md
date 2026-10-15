@@ -1,7 +1,7 @@
 # Channel suspension alert investigation: 20261015-032003Z
 
-Status: incident cause and affected ability remain unverified. A separate,
-reproducible success-log ordering defect is being qualified. This record does
+Status: incident cause and affected ability remain unverified. The logging-order
+fix and requested identifier export passed local qualification. This record does
 not reopen the completed October 9 investigation.
 
 ## Report and runtime evidence
@@ -61,8 +61,8 @@ provides structured status, rationale, duration and available request context.
 Stdout retains console-encoded context. The separate OTLP path exports its
 approved fields and uses the body `application log`. The observed original
 message plus empty map is consistent with the webhook policy; it does not
-demonstrate lost inherited fields. The user subsequently requested trace ID and
-user ID in alerts. A separate, narrowly scoped candidate will export only
+demonstrate lost inherited fields. A follow-up relayed to this executor requested trace ID and
+user ID in alerts. The separately reviewable candidate exports only
 validated correlation identifiers; it will not export arbitrary structured
 fields, raw errors, payloads or credentials.
 
@@ -103,7 +103,45 @@ Controller regression qualification used Go 1.27.2 and
 - Ignored local evidence is retained in
   `.test-results/suspension-alert-20261015-032003Z/{red,green}.*`.
 
-Broader and correlation validation results will be recorded after execution.
+Correlation qualification used the real alert construction and loopback webhook:
+
+- Baseline retained the original default-empty transport options through a
+  behavior-preserving construction extraction. Seven missing-ID scenarios failed
+  as expected; negative controls remained filtered.
+- Corrected code passed all five focused diagnostic test functions with race
+  detection, including inherited fields, namespace ordering, conflicting
+  duplicates and serializer probes.
+- The legacy format follows the pinned application's 64-bit Jaeger parser:
+  `trace:span:parent:flags`, bounded to 53 characters. A nonzero 32-hex native
+  OpenTelemetry trace ID is also accepted. Values are preserved for correlation.
+- Ignored local evidence is retained in
+  `.test-results/suspension-alert/logger-{red,green}.*`.
+- Independent source review caught the inherited namespace ordering issue before
+  qualification; the final projection fails closed on any namespace.
+
+The quick gate (`make test-quick`) and full `go vet ./...` passed with
+Go 1.27.2. Complete affected-package race commands were:
+
+```sh
+go test -race -count=1 -timeout=15m -json ./controller ./common/logger
+go test -race -count=1 -timeout=15m -json ./common/logger
+```
+
+The first command passed the complete controller package and every new test
+function, but failed seven existing logger file/retention tests. Its harness had
+forced `APP_LOG_SINK=stdout`, which disables those tests' expected file sinks and
+retention workers. The second command removed only that conflicting override:
+the complete logger package then passed with identical source hashes and no
+implementation or assertion change. The optional
+`TestMeasureErrorStormContainment` measurement was skipped; no new test skipped.
+
+Both the failed initial run and corrected run are retained, respectively, in
+`.test-results/suspension-alert-20261015-032003Z/broader` and
+`.test-results/suspension-alert-20261015-032003Z/broader-corrected`.
+The quick gate took 3.454 seconds; the combined initial race run took 315.784
+seconds; the corrected logger race took 6.220 seconds; full vet took 56.068
+seconds. These are warm development measurements, not performance benchmarks.
+
 No full-repository race/database qualification is claimed by this investigation.
 
 ## Remaining incident evidence
@@ -118,4 +156,4 @@ for this event.
 
 Keep the implementation PR Draft pending review of this acceptance evidence.
 Any future production action requires a separately reviewed plan; no deployment
-or policy change is part of this investigation.
+or channel-health-policy change is part of this investigation.
