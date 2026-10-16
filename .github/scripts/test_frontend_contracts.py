@@ -26,6 +26,27 @@ class FrontendContractTests(unittest.TestCase):
             self.assertNotIn('yarn build', commands(job))
             self.assertIn(f'{theme}_dependency_audit', ci['jobs']['required']['needs'])
 
+    def test_release_input_check_is_required_without_installing_frontend_dependencies(self) -> None:
+        """test_release_input_check_is_required rejects optional or self-updating manifest checks."""
+        ci = load_workflow('lint.yml')
+        changes = ci['jobs']['changes']
+        self.assertIn('changes', ci['jobs']['required']['needs'])
+        steps = [step for step in changes['steps'] if 'browser-release-inputs.mjs check' in step.get('run', '')]
+        self.assertEqual(len(steps), 1)
+        step = steps[0]
+        self.assertNotIn('if', step)
+        self.assertNotIn('continue-on-error', step)
+        self.assertNotIn('||', step['run'])
+        self.assertIn('node --test .github/scripts/browser-release-inputs.test.mjs', step['run'])
+        self.assertNotIn('yarn install', commands(changes))
+        self.assertNotIn('browser-release-inputs.mjs add', commands(changes))
+        setup = [step for step in changes['steps'] if step.get('uses', '').startswith('actions/setup-node@')]
+        self.assertEqual(setup[0]['with']['node-version'], '24')
+        filter_step = next(step for step in changes['steps'] if step.get('id') == 'filter')
+        filters = yaml.load(filter_step['with']['filters'], Loader=UniqueKeyLoader)
+        for theme in THEMES:
+            self.assertIn('web/legacy/**', filters[theme])
+
     def test_manual_legacy_qualification_requires_real_browser_acceptance(self) -> None:
         """test_manual_legacy_qualification_requires_real_browser_acceptance prevents build-only validation."""
         ci = load_workflow('lint.yml')

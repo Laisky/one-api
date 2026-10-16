@@ -54,6 +54,14 @@ jobs:
           python3 .github/scripts/test_go_test_shards.py
           python3 .github/scripts/test_quick_tests.py
           python3 .github/scripts/test_format_check.py
+      - name: Setup Node.js for release input contracts
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+      - name: Validate reviewed browser release inputs
+        run: |
+          node --test .github/scripts/browser-release-inputs.test.mjs
+          node .github/scripts/browser-release-inputs.mjs check
       - name: Detect changed frontend paths
         if: github.event_name != 'workflow_dispatch'
         uses: dorny/paths-filter@v4.0.3
@@ -64,6 +72,7 @@ jobs:
           filters: |
             modern:
               - 'web/modern/**'
+              - 'web/legacy/**'
               - '.github/**'
               - 'Makefile'
               - 'Dockerfile'
