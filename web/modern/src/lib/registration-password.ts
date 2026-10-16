@@ -7,9 +7,9 @@ export interface RegistrationPasswordChecks {
 }
 
 export const REGISTRATION_PASSWORD_MIN_LENGTH = 10;
-// The existing registration API rejects passwords longer than 20 characters.
+// The registration API and user password validators accept up to 30 characters.
 // Keep this limit visible rather than silently truncating a generated password.
-export const REGISTRATION_PASSWORD_MAX_LENGTH = 20;
+export const REGISTRATION_PASSWORD_MAX_LENGTH = 30;
 
 /** getRegistrationPasswordChecks evaluates the supplied password without modifying it and returns each requirement's result. */
 export function getRegistrationPasswordChecks(password: string): RegistrationPasswordChecks {

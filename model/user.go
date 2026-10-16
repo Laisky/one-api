@@ -38,7 +38,7 @@ type User struct {
 	Id               int             `json:"id"`
 	UUID             string          `json:"uuid" gorm:"type:char(36);column:uuid"`
 	Username         string          `json:"username" gorm:"unique;index" validate:"max=30"`
-	Password         string          `json:"-" gorm:"not null;" validate:"min=8,max=20"`
+	Password         string          `json:"-" gorm:"not null;" validate:"min=8,max=30"`
 	DisplayName      string          `json:"display_name" gorm:"index" validate:"max=20"`
 	Role             int             `json:"role" gorm:"type:int;default:1"`   // admin, util
 	Status           int             `json:"status" gorm:"type:int;default:1"` // enabled, disabled

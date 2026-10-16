@@ -8,7 +8,10 @@ describe('Modern registration password requirements', () => {
     ['Abcdefg12', false],
     ['Abcdefgh12', true],
     ['a1' + 'x'.repeat(18), true],
-    ['a1' + 'x'.repeat(19), false],
+    ['a1' + 'x'.repeat(19), true],
+    ['a1' + 'x'.repeat(27), true],
+    ['a1' + 'x'.repeat(28), true],
+    ['a1' + 'x'.repeat(29), false],
     ['abcdefghij', false],
     ['1234567890', false],
     ['ABCDEFGHI1', true],
@@ -52,6 +55,10 @@ describe('Modern registration password requirements', () => {
       expect(Object.keys(translations).sort()).toEqual(Object.keys(english).sort());
       for (const key of Object.keys(english) as Array<keyof typeof english>) {
         expect(translations[key].trim()).not.toBe('');
+        if (key === 'length' || key === 'invalid') {
+          expect(translations[key]).toContain('30');
+          expect(translations[key]).not.toContain('20');
+        }
         expect(translations[key].match(/\{\{\w+\}\}/g)?.sort()).toEqual(english[key].match(/\{\{\w+\}\}/g)?.sort());
       }
     }

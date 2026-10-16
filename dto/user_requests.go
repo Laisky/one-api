@@ -7,7 +7,7 @@ package dto
 // inbound parsing — see docs/proposals/archive/20260714_boundary-response-dtos.md §3.2.
 //
 // The four validate-tagged fields on model.User are Username (max=30),
-// Password (min=8,max=20), DisplayName (max=20) and Email (max=50); no other
+// Password (min=8,max=30), DisplayName (max=20) and Email (max=50); no other
 // User field carries a validate tag. Each DTO below replicates exactly those
 // tags on the fields it exposes, so common.Validate.Struct behaves byte-for-byte
 // identically to validating the whole model.User (T7).
@@ -16,7 +16,7 @@ package dto
 // (controller.Register).
 type UserRegisterRequest struct {
 	Username         string `json:"username" validate:"max=30"`
-	Password         string `json:"password" validate:"min=8,max=20"`
+	Password         string `json:"password" validate:"min=8,max=30"`
 	DisplayName      string `json:"display_name" validate:"max=20"`
 	Email            string `json:"email" validate:"max=50"`
 	VerificationCode string `json:"verification_code"`
@@ -28,7 +28,7 @@ type UserRegisterRequest struct {
 // (controller.CreateUser).
 type UserCreateRequest struct {
 	Username    string `json:"username" validate:"max=30"`
-	Password    string `json:"password" validate:"min=8,max=20"`
+	Password    string `json:"password" validate:"min=8,max=30"`
 	DisplayName string `json:"display_name" validate:"max=20"`
 	Email       string `json:"email" validate:"max=50"`
 	Role        int    `json:"role"`
@@ -43,7 +43,7 @@ type UserCreateRequest struct {
 // is preserved unchanged.
 type UserSelfUpdateRequest struct {
 	Username    string `json:"username" validate:"max=30"`
-	Password    string `json:"password" validate:"min=8,max=20"`
+	Password    string `json:"password" validate:"min=8,max=30"`
 	DisplayName string `json:"display_name" validate:"max=20"`
 	Email       string `json:"email" validate:"max=50"`
 }

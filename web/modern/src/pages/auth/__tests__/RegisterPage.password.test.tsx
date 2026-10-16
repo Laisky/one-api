@@ -42,7 +42,7 @@ describe('RegisterPage live password feedback', () => {
     expect(screen.getByText('0 of 4 requirements met')).toBeInTheDocument();
     expect(password).toHaveAttribute('aria-invalid', 'false');
     expect(confirmation).toHaveAttribute('aria-invalid', 'false');
-    expect(password).toHaveAccessibleDescription(/10–20 characters/);
+    expect(password).toHaveAccessibleDescription(/10–30 characters/);
 
     await user.type(password, 'Abcdefg12');
     expect(screen.getByText('3 of 4 requirements met')).toBeInTheDocument();
@@ -98,7 +98,7 @@ describe('RegisterPage live password feedback', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  it.each(['Abcdefg12', 'abcdefghij', '1234567890', 'Abcdefg12é', 'Abcdefg12😀', 'A1' + 'x'.repeat(19)])(
+  it.each(['Abcdefg12', 'abcdefghij', '1234567890', 'Abcdefg12é', 'Abcdefg12😀', 'A1' + 'x'.repeat(29)])(
     'blocks an invalid password %j before the API call without silently truncating it', async (value) => {
       const { user, password, confirmation } = setup();
       await completeOtherFields(user);
@@ -137,7 +137,7 @@ describe('RegisterPage live password feedback', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
   });
 
-  it.each(['Abcdefgh12', 'A1' + 'x'.repeat(18), '  Abcdefg12!  '])(
+  it.each(['Abcdefgh12', 'A1' + 'x'.repeat(18), 'A1' + 'x'.repeat(19), 'A1' + 'x'.repeat(27), 'A1' + 'x'.repeat(28), '  Abcdefg12!  '])(
     'accepts pasted passwords %j unchanged and sends neither confirmation nor new payload fields', async (value) => {
       const { user, password, confirmation } = setup();
       await completeOtherFields(user);
