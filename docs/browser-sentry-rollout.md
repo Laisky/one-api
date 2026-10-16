@@ -52,3 +52,30 @@ Capture rollback clears `BrowserSentryConfig`, permits propagation and reloads p
 - [Private Vite source-map upload](https://docs.sentry.io/platforms/javascript/guides/react/sourcemaps/uploading/vite/)
 
 Compatibility is verified against the installed official 11.7.0 source/types and offline SDK tests. SDK11 uses supported dataCollection and integration selection; legacy autoSessionTracking/sendDefaultPii flags are not used. No custom envelope projection suppresses normal SDK diagnostics.
+
+## Maintaining reviewed browser release inputs
+
+Every file under each supported theme's `src` and `public` directories, including tests and JSON fixtures, must be explicitly reviewed in `web/legacy/browser-release-inputs.json`. Shared helpers and build configuration remain explicitly listed too. New file contents are never automatically approved by builds or CI.
+
+Run the dependency-free check from the repository root before opening a PR:
+
+```sh
+node .github/scripts/browser-release-inputs.mjs check
+node --test .github/scripts/browser-release-inputs.test.mjs
+```
+
+For an intentional new input, inspect the file and explicitly name it:
+
+```sh
+node .github/scripts/browser-release-inputs.mjs add modern web/modern/src/path/to/reviewed-file.ts
+```
+
+For a deleted or renamed input, explicitly remove its old path and add the new path in the same change:
+
+```sh
+node .github/scripts/browser-release-inputs.mjs remove modern web/modern/src/path/to/deleted-file.ts
+```
+
+The command changes only the selected theme's requested entries and preserves other theme lists. Name shared `web/legacy` inputs explicitly for every affected theme. It rejects private paths, traversal, cross-theme paths and symlinks when adding inputs; `check` rejects unlisted or deleted files and runs the same production guard for all three themes. Removal changes the list only, so removing a still-present source/public file continues to fail the check.
+
+Review the JSON diff, rerun `check`, and run the affected theme's tests and production build. The mandatory CI `changes` job runs this check without installing frontend dependencies. Full browser/build qualification remains available through the non-deploy CI workflow. Never regenerate approval during the Docker build or rerun delivery just to validate this manifest: delivery publishes production image tags and can deploy.

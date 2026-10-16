@@ -68,7 +68,8 @@ func TestRegistrationPasswordPolicyAPI(t *testing.T) {
 			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
 			require.Equal(t, tc.Valid, response.Success)
 			if !tc.Valid {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				// Management errors keep HTTP 200; rejection is carried by success:false.
+				require.Equal(t, http.StatusOK, recorder.Code)
 				require.NotEmpty(t, response.Message)
 				var afterUsers, afterTokens int64
 				require.NoError(t, model.DB.Model(&model.User{}).Count(&afterUsers).Error)
@@ -108,9 +109,10 @@ func TestRegistrationPasswordPolicyRecovery(t *testing.T) {
 		"verification_code": code, "password": "Abcdefgh12 ",
 	}
 	recorder := serveSignupPolicyRequest(t, f, "/api/user/register", Register, payload, false)
-	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Equal(t, http.StatusOK, recorder.Code)
 	var response signupPolicyResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.False(t, response.Success)
 	require.Equal(t, dto.RegistrationPasswordError, response.Message)
 	require.True(t, common.VerifyCodeWithKey(email, code, common.EmailVerificationPurpose))
 	payload["password"] = "Abcdefgh12!"
