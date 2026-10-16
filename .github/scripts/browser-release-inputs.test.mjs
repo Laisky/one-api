@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 const manifestPath = 'web/legacy/browser-release-inputs.json';
 const commandPath = '.github/scripts/browser-release-inputs.mjs';
@@ -39,7 +40,7 @@ function fixture(t) {
 }
 
 test('all shipped source/public inputs are reviewed and pass the unchanged production guard', () => {
-  const result = spawnSync(process.execPath, [new URL('./browser-release-inputs.mjs', import.meta.url).pathname, 'check'], {
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./browser-release-inputs.mjs', import.meta.url)), 'check'], {
     encoding: 'utf8',
   });
   assert.equal(result.status, 0, result.stderr);
@@ -159,4 +160,18 @@ test('duplicate and unsupported manifest lists fail closed without mutation', (t
     assert.equal(f.run('check').status, 1);
     assert.equal(f.bytes(), original);
   }
+});
+
+test('symlinked theme ancestors are rejected before enumerating private filenames', (t) => {
+  const f = fixture(t);
+  const original = f.bytes();
+  renameSync(path.join(f.root, 'web/modern'), path.join(f.root, 'reviewed-modern'));
+  f.write('private-theme/src/synthetic-private-filename.js', 'synthetic-private-content');
+  mkdirSync(path.join(f.root, 'private-theme/public'));
+  symlinkSync(path.join(f.root, 'private-theme'), path.join(f.root, 'web/modern'));
+  const result = f.run('check');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Symbolic browser release input/);
+  assert.doesNotMatch(result.stderr, /synthetic-private-filename|synthetic-private-content/);
+  assert.equal(f.bytes(), original);
 });

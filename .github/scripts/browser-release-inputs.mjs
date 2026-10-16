@@ -34,8 +34,11 @@ function validateThemePath(theme, name) {
 
 /** sourceInputs enumerates source/public paths without following symlinks or reading unreviewed file contents. */
 function sourceInputs(directory) {
-  const full = path.join(root, directory);
-  if (lstatSync(full).isSymbolicLink()) throw new Error('Symbolic browser release input is not allowed');
+  let full = root;
+  for (const part of directory.split('/')) {
+    full = path.join(full, part);
+    if (lstatSync(full).isSymbolicLink()) throw new Error('Symbolic browser release input is not allowed');
+  }
   return readdirSync(full, { withFileTypes: true }).flatMap((entry) => {
     if (entry.isSymbolicLink()) throw new Error('Symbolic browser release input is not allowed');
     const name = directory + '/' + entry.name;
