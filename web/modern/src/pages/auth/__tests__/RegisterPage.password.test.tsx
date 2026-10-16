@@ -98,7 +98,7 @@ describe('RegisterPage live password feedback', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  it.each(['Abcdefg12', 'abcdefghij', '1234567890', 'Abcdefg12é', 'Abcdefg12😀', 'A1' + 'x'.repeat(29)])(
+  it.each(['Abcdefg12', 'abcdefghij', '1234567890', 'Abcdefg12é', 'Abcdefg12😀', 'A1' + 'x'.repeat(29), ' Abcdefgh12', 'Abcde fgh12', 'Abcdefgh12 ', 'Abcdefgh12\t', 'Abcdefgh12\u00a0', 'Abcdefgh12\u200b'])(
     'blocks an invalid password %j before the API call without silently truncating it', async (value) => {
       const { user, password, confirmation } = setup();
       await completeOtherFields(user);
@@ -137,7 +137,7 @@ describe('RegisterPage live password feedback', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
   });
 
-  it.each(['Abcdefgh12', 'A1' + 'x'.repeat(18), 'A1' + 'x'.repeat(19), 'A1' + 'x'.repeat(27), 'A1' + 'x'.repeat(28), '  Abcdefg12!  '])(
+  it.each(['Abcdefgh12', 'A1' + 'x'.repeat(18), 'A1' + 'x'.repeat(19), 'A1' + 'x'.repeat(27), 'A1' + 'x'.repeat(28), 'Abcdefg12!@#_-', `Abcdefg12'\"\\/<>`])(
     'accepts pasted passwords %j unchanged and sends neither confirmation nor new payload fields', async (value) => {
       const { user, password, confirmation } = setup();
       await completeOtherFields(user);
@@ -154,4 +154,29 @@ describe('RegisterPage live password feedback', () => {
       });
     }
   );
+
+  it('rejects pasted spaces without trimming and recovers after an explicit correction', async () => {
+    const { user, password, confirmation } = setup();
+    await completeOtherFields(user);
+    const original = ' Abcdefgh12 ';
+    await user.click(password);
+    await user.paste(original);
+    await user.click(confirmation);
+    await user.paste(original);
+    expect(password).toHaveValue(original);
+    expect(confirmation).toHaveValue(original);
+    expect(password).toHaveAccessibleDescription(/no spaces/i);
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+    await waitFor(() => expect(password).toHaveFocus());
+    expect(api.post).not.toHaveBeenCalled();
+    await user.clear(password);
+    await user.paste('Abcdefgh12!');
+    await user.clear(confirmation);
+    await user.paste('Abcdefgh12!');
+    expect(screen.getByText('Password meets all requirements.')).toBeInTheDocument();
+    expect(screen.getByText('Passwords match.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect(api.post).toHaveBeenCalledWith('/api/user/register', expect.objectContaining({ password: 'Abcdefgh12!' }));
+  });
 });

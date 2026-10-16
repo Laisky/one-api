@@ -1,36 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import cases from './testdata/registration-passwords.json';
 import { registrationPasswordTranslations } from '../i18n/locales/registration-password';
 import { getRegistrationPasswordChecks, isRegistrationPasswordValid } from './registration-password';
 
 describe('Modern registration password requirements', () => {
-  const cases: Array<[string, boolean]> = [
-    ['', false],
-    ['Abcdefg12', false],
-    ['Abcdefgh12', true],
-    ['a1' + 'x'.repeat(18), true],
-    ['a1' + 'x'.repeat(19), true],
-    ['a1' + 'x'.repeat(27), true],
-    ['a1' + 'x'.repeat(28), true],
-    ['a1' + 'x'.repeat(29), false],
-    ['abcdefghij', false],
-    ['1234567890', false],
-    ['ABCDEFGHI1', true],
-    ['abcdefghi1', true],
-    ['  Abcdefg12!  ', true],
-    ['Abcdefg12~', true],
-    ['Abcdefg12é', false],
-    ['Abcdefg12中', false],
-    ['Abcdefg12😀', false],
-    ['Abcdefghi１', false],
-    ['Abcdefg12\u200b', false],
-    ['Abcdefg12\u00a0', false],
-    ['Abcdefg12\u007f', false],
-    ['Abcdefg12\n', false],
-    ['Abcdefg12\r', false],
-    ['Abcdefg12\t', false],
-    ['Abcdefg12\0', false],
-  ];
-  it.each(cases)('validates %j as %s without altering the input', (password, valid) => {
+  it.each(cases)('validates the shared backend fixture $name', ({ password, valid }) => {
     expect(isRegistrationPasswordValid(password)).toBe(valid);
     expect(Object.values(getRegistrationPasswordChecks(password)).every(Boolean)).toBe(valid);
   });
@@ -39,12 +13,13 @@ describe('Modern registration password requirements', () => {
     expect(getRegistrationPasswordChecks('short')).toEqual({ length: false, letter: true, number: false, ascii: true });
     expect(getRegistrationPasswordChecks('abcdefghij')).toEqual({ length: true, letter: true, number: false, ascii: true });
     expect(getRegistrationPasswordChecks('Abcdefg12é')).toEqual({ length: true, letter: true, number: true, ascii: false });
+    expect(getRegistrationPasswordChecks('Abcdefgh12 ')).toEqual({ length: true, letter: true, number: true, ascii: false });
   });
 
-  it('accepts every printable ASCII character and rejects every ASCII control character', () => {
+  it('accepts every visible ASCII character and rejects spaces and every ASCII control character', () => {
     for (let code = 0; code < 128; code += 1) {
       const password = `Abcdefg12${String.fromCharCode(code)}`;
-      expect(isRegistrationPasswordValid(password)).toBe(code >= 32 && code <= 126);
+      expect(isRegistrationPasswordValid(password)).toBe(code >= 33 && code <= 126);
     }
   });
 
