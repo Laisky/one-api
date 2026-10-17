@@ -2,6 +2,7 @@ import tableSelection from './table-selection.json';
 import { channelResetTranslations } from '../channel-reset';
 import { tokenDuplicateTranslations } from '../token-duplicate';
 import { duplicateActionTranslations } from '../duplicate-action';
+import { registrationPasswordTranslations } from '../registration-password';
 import auth from './auth.json';
 import billing from './billing.json';
 import common from './common.json';
@@ -32,6 +33,7 @@ const translations = {
   channel_reset: channelResetTranslations.es,
   token_duplicate: tokenDuplicateTranslations.es,
   duplicate_action: duplicateActionTranslations.es,
+  registration_password: registrationPasswordTranslations.es,
 };
 
 export default translations;

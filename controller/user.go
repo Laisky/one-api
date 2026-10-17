@@ -229,6 +229,7 @@ func Logout(c *gin.Context) {
 	})
 }
 
+// Register validates the signup request from c and writes the registration response.
 func Register(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	if !config.RegisterEnabled {
@@ -247,6 +248,12 @@ func Register(c *gin.Context) {
 	}
 	if err := common.Validate.Struct(&req); err != nil {
 		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidInputMessage)))
+		return
+	}
+	// Enforce the same signup policy as Modern before verification or persistence.
+	// Keep this check out of login and generic hashing to preserve legacy credentials.
+	if !dto.IsRegistrationPasswordValid(req.Password) {
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(dto.RegistrationPasswordError)))
 		return
 	}
 	if config.EmailVerificationEnabled {
