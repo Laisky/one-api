@@ -32,6 +32,11 @@ type Content struct {
 	Thinking  *string `json:"thinking,omitempty"`
 	Signature *string `json:"signature,omitempty"`
 	Data      *string `json:"data,omitempty"`
+
+	// Raw fields and an immutable typed snapshot preserve provider-owned content
+	// without allowing retained bytes to undo explicit public field mutations.
+	rawFields     map[string]json.RawMessage
+	typedSnapshot map[string]json.RawMessage
 }
 
 type Message struct {

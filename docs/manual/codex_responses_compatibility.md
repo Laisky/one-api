@@ -1,7 +1,8 @@
 # Codex Responses compatibility audit
 
-Audit date: 2026-10-17. Gateway baseline: `b47a00e6785cea8146903facd0a0e0879d318644`.
-This bounded matrix does not establish full Codex support. The urgent client tool-search patch is qualified separately against its final head.
+Audit date: 2026-10-17. Initial gateway baseline: `b47a00e6785cea8146903facd0a0e0879d318644`.
+The later client tool-search release is [PR #582](https://github.com/Laisky/one-api/pull/582), source `56291a366bd29cf0b93e2bbda3d1df8ca68a9129`, merged as `9569b56`.
+The broader fallback-fidelity changes below are **unreleased**. Local qualification is recorded below; exact-head CI and release decisions belong to the Draft PR. This matrix does not establish full Codex support.
 
 ## Version provenance and evidence limits
 
@@ -16,9 +17,10 @@ Official release tags were resolved through GitHub's Git References API. Pins id
 
 The user's last known working Codex build is **UNKNOWN**. No regression-introducing version is established.
 The investigation verified an installed 0.163.0 client and a synthetic, no-MCP local capture.
-That capture establishes only the exercised synthetic profile. The actual failed profile's execution, request sequence and tool catalog remain uncaptured.
-Local qualification below applies only to the scoped synthetic contracts in this change.
-No new real Codex/provider request was made for this follow-up.
+That initial capture establishes only the exercised synthetic profile; it did not establish the actual failed-profile request sequence or tool catalog.
+The separate PR #582 release passed one installed Codex 0.163.0 greeting using the existing profile at 16:29 UTC.
+That bounded live result does not exercise namespace continuation, compaction, structured output, or every Standard/Lite catalog.
+The broader fallback patch has no live acceptance result; its qualification is separate from the released greeting.
 
 Retained evidence (sanitized receipts, not complete failed-profile execution captures):
 
@@ -50,41 +52,57 @@ selects the request builder using `model_info.use_responses_lite`:
 
 ## Behavioral matrix
 
-**Source-derived** means source/test inspection, without a pass claim. **Locally qualified** means the scoped synthetic tests passed; actual-profile acceptance remains pending.
+**Source-derived** means source/test inspection, without a pass claim. **Locally qualified** means the scoped synthetic tests passed; the separate released greeting remains limited to that exercised scenario.
 **Unqualified** means fidelity is not established. **Explicit unsupported** means rejection or a documented limitation applies.
+**Unreleased fixture** identifies new source and synthetic controls qualified by the final local receipt below; it does not establish live acceptance or release.
 Test paths are repository-relative; existing tests express intended contracts, not a claim that every capability passed in a captured Codex session.
 
 | Capability | Existing focused coverage | State and boundary |
 | --- | --- | --- |
 | Native versus fallback routing | `relay/controller/response_support_test.go`: `TestSupportsNativeResponseAPIOpenAICompatible`, `TestSupportsNativeResponseAPIAzureGpt5`, `TestSupportsNativeResponseAPIDeepSeekV4`; `systematic_response_fallback_test.go` | **Source-derived.** Channel format, mapped model/provider contract and MCP/state diversion determine routing. A Responses URL alone does not guarantee native passthrough. |
-| Standard/Lite client-search catalogs | `relay/adaptor/openai/responseapi_tool_search_test.go`; `relay/controller/response_client_tool_search_wire_test.go`; `response_client_tool_search_http_test.go` | **Locally qualified** synthetic root/input catalogs, client-only execution, hosted/unknown rejection, ambiguous keys and native/fallback paths. External provider/Codex acceptance remains pending. |
-| Function/custom namespace identities | `response_namespace_http_test.go`: `TestResponseNamespaceHTTPNativePreservesWireAndBilling`, `TestResponseNamespaceHTTPFallbackRejectsBeforeState`; `relay/adaptor/openai/responseapi_namespace_test.go` | **Source-derived** native definitions/output calls. Namespace definitions on fallback are **explicit unsupported**. Namespace-bearing history without definitions remains **unqualified**. |
+| Standard/Lite client-search catalogs | `relay/adaptor/openai/responseapi_tool_search_test.go`; `relay/controller/response_client_tool_search_wire_test.go`; `response_client_tool_search_http_test.go` | **Locally qualified** synthetic root/input catalogs, client-only execution, hosted/unknown rejection, ambiguous keys and native/fallback paths. PR #582 has the bounded greeting result above; full catalog/profile acceptance remains unqualified. |
+| Function/custom namespace identities | `response_namespace_http_test.go`: `TestResponseNamespaceHTTPNativePreservesWireAndBilling`, `TestResponseNamespaceHTTPFallbackRejectsBeforeState`; `relay/adaptor/openai/responseapi_namespace_test.go` | **Source-derived** native definitions/output calls. Namespace definitions on fallback are **explicit unsupported**. New `TestClientCompatibilityCodexNamespaceHistory` and `TestClientCompatibilityCodexFallbackAdmission` reject namespace-bearing history without definitions on direct and hydrated fallback paths before pending state, quota or provider dispatch (**unreleased fixture**). Native `TestClientCompatibilityCodexNativeWire` preserves distinct call/item IDs and namespaces. |
 | Developer input/plaintext reasoning | `relay/adaptor/openai/responseapi_convert_request_test.go`: `TestConvertResponseAPIToChatCompletionRequestMapsDeveloperRole`, `TestConvertResponseAPIToChatCompletionRequestPreservesToolCallReasoning`; `relay/controller/response_io_reasoning_test.go` | **Source-derived.** Fallback maps developer to system and has turn/reasoning replay tests; encrypted/provider-bound reasoning is not generally portable. |
 | Previous response/state/ownership | `response_state_native_test.go`; `response_state_behavior_test.go`; `response_state_portability_test.go` | **Source-derived.** Same-provider rewrite and different-provider diversion are tested. Owner-scoped gateway IDs apply; unknown/foreign handles fail closed. Unsupported hydrated state returns `state_not_portable`; some reasoning sidecars are intentionally dropped. |
-| Compaction/context management | No compaction handler found; `router/relay.go` registers Responses create/get/delete/cancel | **Explicit unsupported / unqualified.** Compact-endpoint and compaction-item fidelity are not qualified. Add a local negative route/admission fixture. |
+| Compaction/context management | `TestClientCompatibilityCodexCompaction`, `TestClientCompatibilityCodexFallbackAdmission`, `TestClientCompatibilityCodexNativeWire` | **Unreleased fixture.** Opaque compaction input fails explicitly on fallback; native input remains provider-owned. No general `/responses/compact` endpoint or Codex compaction-session acceptance claim. |
 | SSE terminal/incomplete/errors | `relay/adaptor/openai/security_response_terminal_receipt_test.go`; `security_response_provisional_eof_test.go`; `relay/controller/responses_bridge_completion_ledger_test.go`; `security_response_ws_terminal_test.go` | **Source-derived.** Coverage distinguishes terminal completion from EOF/truncation and exercises incomplete/error/receipt settlement. Codex-version replay remains **unqualified**. |
 | Cancellation/background | `security_response_stream_exit_test.go`; `relay/controller/security_response_background_test.go`; `response_state_governance_test.go`: `TestResponseStateCancelGatewayResolution`, `TestResponseStateCancelLegacyPassthrough` | **Source-derived.** Background execution is rejected; committed gateway responses cannot be cancelled and unknown IDs fail closed. No general background-job support claim. |
-| Structured outputs/schema strictness | `relay/adaptor/openai/response_model_structured_test.go`; `response_model_structured_edge_cases_test.go` | **Source-derived** conversion coverage; fallback strict-schema fidelity **unqualified** because the converter clears strictness. |
-| Images/audio/files/video | `responseapi_convert_request_test.go`: `TestConvertResponseAPIToChatCompletionRequestPreservesDeepSeekFileImages`; `relay/controller/security_response_image_admission_test.go` | **Source-derived** image cases. Audio conversion exists; broader file/video/unknown-part fidelity and explicit unsupported behavior remain **unqualified**. |
+| Structured outputs/schema strictness | `TestClientCompatibilityCodexJSONSchemaStrict`; `responseapi_convert_legacy_contract_test.go`: `TestConvertResponseAPIToChatCompletionRequestSanitizesFunctionParameters` | **Unreleased fixture.** Explicit strict true/false preserves the complete text schema and flag in conversion, using detached maps/arrays/pointers. Absent strict retains the legacy sanitizer; tool-parameter sanitation is unchanged. Downstream channel normalization still applies. |
+| Images/audio/files/video | `responseapi_convert_request_test.go`: `TestConvertResponseAPIToChatCompletionRequestPreservesDeepSeekFileImages`; `relay/controller/security_response_image_admission_test.go` | **Source-derived** image cases. New `TestClientCompatibilityCodexMixedContent` and `TestClientCompatibilityCodexKnownContent` cover readable text aliases/refusals and explicit rejection of `input_file` ID/inline data/URLs or unknown parts before dispatch (**unreleased fixture**). This is not general video or provider file-handle acceptance. |
 | Usage/cache/reasoning accounting | `relay/adaptor/openai/response_api_stream_test.go`: `TestResponseAPIStreamUsageCachedTokens`; `response_model_usage_websearch_test.go`: `TestResponseAPIUsageRoundTripPreservesKnownDetails`; `relay/controller/security_reasoning_ledger_test.go`; `responses_bridge_receipt_coverage_test.go` | **Source-derived.** Existing tests exercise receipts, cached/reasoning counters and ledger settlement; no actual-profile financial effect is inferred from source. |
+| Accepted MCP failure settlement | `relay/controller/client_compatibility_generic_mcp_error_test.go`: `TestClientCompatibilityGenericMCPMergeErrorSettlesAcceptedHolds`, `TestClientCompatibilityGenericMCPNormalLoop`; `client_compatibility_mcp_merge_safety_test.go`: `TestClientCompatibilityMCPMergePreservesUncertainty`, `TestClientCompatibilityMCPMergeRejectsOverflow` | **Unreleased fixture / intended contract.** A later accepted body/receipt/merge failure must retain established holds, reconcile one estimated ledger, reject unsafe sums and prevent retry of accepted work. A normal measured two-round control remains exact. Normal and overflow controls pass on actual Chat, Responses fallback and converted Messages routes; each requires exactly two provider requests and one MCP call. Converted Messages ownership is detected before ordinary dispatch. |
 | Root cache hints/client metadata | `relay/controller/response_billing_policy.go`: `nativeResponseRootAllowed`; `request_passthrough.go`: `allowedExtraBodyKeys` / `isAllowedExtraBodyKey` | **Source-derived limitation.** `prompt_cache_key` and `client_metadata` are absent from both allowlists and are stripped on the native wire path. No live failure cause or cache-performance effect is established. |
 
-## Prioritized unresolved cases
+## Resolved source gaps and remaining limits
 
-1. **Namespace-bearing fallback history without definitions.** `prepareResponseFallbackInput` rejects namespace definitions in `request.Tools`,
-   but state lowering carries `function_call` items by type and `responseapi_convert_request.go` lowers name/IDs without namespace.
-   Test direct input and owner-scoped native-to-fallback continuation with two namespaces, the same leaf name and no `tools` array.
-   Require explicit rejection before reservation/upstream; do not flatten names or merge identities.
-2. **Unsupported content loss.** `responseContentItemToMessage` handles known text/image/audio forms, but unrecognized nontext parts can disappear.
-   Add file/video/unknown-part fixtures with a mixed valid-text control. Assert supported preservation or an explicit unsupported result.
-3. **Strict schema downgrade.** `ConvertResponseAPIToChatCompletionRequest` sets `ResponseFormat.JsonSchema.Strict = nil`.
-   Add strict-true/strict-false fixtures and document or reject the downgrade; do not advertise strict fidelity.
-4. **Compaction.** Add local compact-route and compaction-item fixtures, asserting the actual unsupported status/code/body without provider contact.
-   Do not silently translate encrypted compaction state into messages.
-5. **Version/profile provenance.** Keep per-version Standard/Lite fixtures separate from actual failed-profile evidence.
-   Current installed version alone establishes neither the last working version nor release causality.
-6. **Root cache hints/client metadata.** Add positive metadata controls and negative/observational fixtures for `prompt_cache_key` and `client_metadata`,
-   recording the native wire stripping behavior. Review any future admission independently; this audit does not implement or attribute the failure to these fields.
+The unreleased fallback repair addresses namespace history without `tools`, silent mixed-content loss, and explicit text-schema strictness.
+The same fidelity validator runs at converter entry and before/after owner-scoped hydration. A successful pending-state snapshot still uses
+only the original incremental input; rejected input does not stage a commit. `input_file` fallback is explicitly unsupported; native Responses forwarding is unchanged. The shared internal file fields do not establish the nested Chat file wire contract.
+Unknown message content returns `response_fallback_not_supported`/400; unsupported canonical state (including opaque compaction) retains `state_not_portable`/409. Namespace history retains its explicit 400 rejection. Nothing is dropped or converted to JSON text to bypass admission. Known refusal content remains readable.
+
+Remaining limits:
+
+1. **Downstream schema normalization.** `NormalizeStructuredJSONSchema` still removes numeric-bound keywords and applies Azure defaults.
+   Conversion preservation does not guarantee arbitrary schema fidelity through every provider. Absent strict and function-tool parameters
+   retain legacy sanitization; this repair does not broaden their contract.
+2. **Reasoning portability.** `state.FallbackLowering` intentionally drops provider-bound reasoning/thinking sidecars, including encrypted-only
+   reasoning with no summary. Direct conversion preserves replayable summaries only on their assistant turn. This is a documented lossy
+   fallback policy, not portable encrypted-state support; native passthrough is a distinct control.
+3. **Compaction and media.** Native opaque-input forwarding and fallback rejection do not qualify a compaction endpoint/session, video,
+   or external provider file handles. No live compaction or multimodal acceptance was performed.
+4. **Root cache hints/client metadata.** The audited native allowlists omit `prompt_cache_key` and `client_metadata`; the current follow-up
+   does not establish their preservation or cache-performance impact. Do not infer a failure cause from this source limitation.
+5. **File wire compatibility.** [Official Chat file inputs](https://developers.openai.com/api/docs/guides/file-inputs) use a nested `file` object, support PDFs only, and do not support Responses-only file URL/detail semantics. This bounded repair rejects new `input_file` fallback rather than changing global content serialization. Existing legacy `input_image` file handling is outside this repair.
+6. **Version/profile provenance.** The last working client version and regression-introducing version remain unknown. One released greeting
+   is not proof of all installed-profile tool flows, retry/resume behavior, or every Standard/Lite configuration.
+
+Compaction cache accounting on the native Claude/MCP path is a separate implemented source contract: cumulative
+root message counters replace the non-compaction component while compaction/cache TTL buckets remain counted once.
+`TestClientCompatibilityIterationRootCacheDeltas`, `TestClientCompatibilityIterationRootCacheHTTPBilling` and
+`TestClientCompatibilityClaudeMCPIterationUsage` provide synthetic coverage. That does not add Codex compaction
+fallback support or establish live cache effectiveness. Native accepted-work errors and the internal typed no-work
+refund proof have distinct settlement rules; see the [Claude Code matrix](claude_code_compatibility.md) for exact fixtures.
+An HTTP error status alone does not prove that no paid work occurred. See final local qualification below.
 
 ## Bounded local reproduction
 
@@ -93,10 +111,10 @@ On shared dev, use the existing nonblocking validation lease; a busy lease means
 
 ```sh
 flock -n /tmp/laisky-heavy-validation-20261008.lock go test ./relay/adaptor/openai -v -count=1 \
-  -run '^(TestClientToolSearch.*|TestResponseAPINamespace.*|TestSecurityResponseToolID.*|TestResponseAPIStreamUsageCachedTokens|TestResponseAPIUsageRoundTripPreservesKnownDetails|TestConvertResponseAPIToChatCompletionRequestMapsDeveloperRole)$'
+  -run '^(TestClientCompatibilityCodex.*|TestClientToolSearch.*|TestResponseAPINamespace.*|TestSecurityResponseToolID.*|TestResponseAPIStreamUsageCachedTokens|TestResponseAPIUsageRoundTripPreservesKnownDetails|TestConvertResponseAPIToChatCompletionRequestMapsDeveloperRole)$'
 
 flock -n /tmp/laisky-heavy-validation-20261008.lock go test ./relay/controller -v -count=1 \
-  -run '^(TestResponseClientToolSearch.*|TestResponseNamespace.*|TestSupportsNativeResponseAPI.*|TestResolveNativePreviousResponse.*|TestSecurityReasoningHTTPSettlement|TestResponseStateCancelGatewayResolution)$'
+  -run '^(TestClientCompatibilityCodex.*|TestResponseClientToolSearch.*|TestResponseNamespace.*|TestSupportsNativeResponseAPI.*|TestResolveNativePreviousResponse.*|TestSecurityReasoningHTTPSettlement|TestResponseStateCancelGatewayResolution)$'
 ```
 
 Before recording a pass, retain the exact gateway commit/tree or dirty-diff hash, toolchain version, command, exit status and sanitized output path.
@@ -107,7 +125,7 @@ sanitized model/channel-format/provider-contract metadata; request and SSE seque
 Use local mock providers and fake credentials. Include positive controls and hosted/unknown-tool negatives at every catalog location.
 Add cases for these gaps before broadening implementation scope. Capture the actual failed profile only through an authorized privacy-preserving route.
 
-## Scoped local qualification
+## Historical client-search qualification and current follow-up
 
 On Go 1.27.2/linux-amd64, this change passed 76 client-search/namespace controller race test/subtest results,
 1,713 full OpenAI adapter results and 10,715 relevant Responses/MCP/reasoning controller results.
@@ -116,3 +134,29 @@ Quick checks and `go vet ./...` passed. Exact logs and source-file hashes are re
 `/tmp/task20261017-1536/validation-receipt.json`; the corrected entity guard has its separate receipt.
 These are source qualification results, not successful acceptance of the actual failed profile.
 The separate release at b47a00e still failed that acceptance on client tool_search.
+
+The broader repair retains valid baseline RED receipts and corrected fixture provenance under
+`/tmp/task20261017-08/`. Initial integration logs are historical evidence; the final local receipt below
+qualifies the integrated source. See also [Claude Code compatibility](claude_code_compatibility.md).
+
+
+## Final local source qualification
+
+On 2026-10-17, Go 1.27.2/linux-amd64 passed the complete `TestClientCompatibility` selection
+across the Anthropic/OpenAI adapters and both controller packages with `-race -count=2`: 312 test/subtest
+PASS events, zero failures or skips. The complete four-package `-race -count=1` run passed 22,080 events
+with ten existing skips: two opt-in live DeepSeek cases and eight MySQL/PostgreSQL transport-audit cases
+requiring configured disposable backends. These are hierarchical event counts, not independent scenarios.
+
+`make test-quick`, `go vet ./...`, `make lint-entity-response`, all seven reviewed browser-input contracts
+and manifest completeness passed. The unchanged production guard passed against a Docker-shaped copy
+of actual source without Git/GitHub metadata, then rejected a newly inserted unlisted source canary.
+A fresh Docker image build was not attempted on the capacity-constrained dev filesystem. No image tag
+was published for this patch. Full database/frontend qualification and security/ordinary CI must be read
+from the exact Draft PR head; this local receipt does not substitute for them.
+
+Receipts are `/tmp/task20261017-08/final-qualification-receipt.json`, `final-source-hashes.json` and
+`docker-context-receipt.json`. All 50 touched Go files retained identical bytes throughout the run;
+this documentation-only update records those results. Every touched Go file is at most 705 lines.
+All fixtures use local providers, synthetic tools and disposable ledgers. There was no additional live
+Codex or Claude Code acceptance, production billing rewrite, merge or deployment for this broader patch.

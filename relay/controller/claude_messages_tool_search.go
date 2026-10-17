@@ -226,6 +226,14 @@ func executeClaudeToolSearchMCPLoop(
 		}
 	}
 	lg := gmw.GetLogger(c)
+	var nativeWire *claudeNativeLoopWire
+	if c.GetBool(ctxkey.ClaudeDirectPassthrough) {
+		var wireErr error
+		nativeWire, wireErr = newClaudeNativeLoopWire(c)
+		if wireErr != nil {
+			return nil, nil, nil, 0, openai.ErrorWrapper(wireErr, "invalid_claude_mcp_wire", http.StatusBadRequest)
+		}
+	}
 
 	maxRounds := config.MCPMaxToolRounds
 	if maxRounds <= 0 {
@@ -250,19 +258,28 @@ func executeClaudeToolSearchMCPLoop(
 	}}
 
 	for round := 0; round < maxRounds; round++ {
+		var prepared []byte
+		if nativeWire != nil {
+			var wireErr error
+			prepared, wireErr = nativeWire.prepare(request)
+			if wireErr != nil {
+				return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(wireErr, "invalid_claude_mcp_wire", http.StatusBadRequest)
+			}
+		}
 		// Pre-consume quota for this round
 		promptTokens, quoteErr := getClaudeMessagesPromptTokens(gmw.Ctx(c), request)
 		if quoteErr != nil {
 			return nil, accumulated, summary, incrementalCharged,
 				openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", 400)
 		}
-		var prepared []byte
 		var roundQuota int64
 		if tiered {
-			var marshalErr error
-			prepared, marshalErr = json.Marshal(request)
-			if marshalErr != nil {
-				return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(marshalErr, "marshal_claude_request_failed", 500)
+			if len(prepared) == 0 {
+				var marshalErr error
+				prepared, marshalErr = json.Marshal(request)
+				if marshalErr != nil {
+					return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(marshalErr, "marshal_claude_request_failed", 500)
+				}
 			}
 			quote, totalQuote, tierErr := quoteMCPTierRoundQuota(c, meta, request.Model, promptTokens, request.MaxTokens, 1, prepared, accumulated)
 			if tierErr != nil {
@@ -293,16 +310,43 @@ func executeClaudeToolSearchMCPLoop(
 		// Send request to upstream
 		claudeResp, usage, respErr := doClaudeRequestOnce(c, meta, adaptorInstance, request, prepared)
 		if respErr != nil {
-			if roundQuota > 0 {
+			if usage != nil {
+				// Accepted work with an incomplete receipt keeps this round's hold.
+				// A failed merge must not replace earlier valid billing evidence.
+				merged, mergeErr := mergeUsage(accumulated, usage)
+				if mergeErr == nil {
+					accumulated = merged
+				}
+				accumulated = retainMCPAcceptedUsage(accumulated, "incomplete_claude_mcp_usage_after_accepted_upstream")
+			} else if roundQuota > 0 {
 				billing.ReturnPreConsumedQuota(gmw.Ctx(c), roundQuota, meta.TokenId)
 				incrementalCharged -= roundQuota
 			}
 			return nil, accumulated, summary, incrementalCharged, respErr
 		}
-		accumulated = mergeUsage(accumulated, usage)
+		mergedUsage, mergeErr := mergeUsage(accumulated, usage)
+		if mergeErr != nil {
+			accumulated = retainMCPAcceptedUsage(accumulated, "invalid_claude_mcp_aggregate_after_accepted_upstream")
+			return nil, accumulated, summary, incrementalCharged,
+				openai.ErrorWrapper(mergeErr, "invalid_mcp_usage", http.StatusBadGateway)
+		}
+		accumulated = mergedUsage
 
+		if nativeWire == nil && claudeTurnHasOpaqueState(claudeResp) {
+			return nil, accumulated, summary, incrementalCharged,
+				openai.ErrorWrapper(errors.New("opaque Claude MCP state requires native passthrough"), "claude_mcp_state_not_portable", http.StatusBadRequest)
+		}
+		// Inspect the whole parallel turn before running any gateway-owned call.
+		// Mixed ownership yields intact to the client; no partial effects occur.
+		if claudeTurnHasClientToolCalls(claudeResp, registry) {
+			return claudeResp, accumulated, summary, incrementalCharged, nil
+		}
 		// Check if response has MCP tool calls
-		mcpToolCalls := extractMCPToolCalls(claudeResp, registry)
+		mcpToolCalls, toolInputErr := extractMCPToolCallsChecked(claudeResp, registry)
+		if toolInputErr != nil {
+			return nil, accumulated, summary, incrementalCharged,
+				openai.ErrorWrapper(toolInputErr, "invalid_claude_mcp_tool_input", http.StatusBadGateway)
+		}
 		if len(mcpToolCalls) == 0 {
 			// No MCP tool calls - return response as-is
 			return claudeResp, accumulated, summary, incrementalCharged, nil
@@ -313,6 +357,11 @@ func executeClaudeToolSearchMCPLoop(
 			zap.Int("mcp_tool_calls", len(mcpToolCalls)),
 		)
 
+		assistantMessage, reconstructionErr := buildClaudeAssistantMessageChecked(claudeResp)
+		if reconstructionErr != nil {
+			return nil, accumulated, summary, incrementalCharged,
+				openai.ErrorWrapper(reconstructionErr, "claude_mcp_content_failed", http.StatusBadGateway)
+		}
 		// Execute MCP tool calls
 		toolResults, execErr := executeClaudeMCPToolCalls(c, registry, mcpToolCalls, executedToolCalls, summary)
 		if execErr != nil {
@@ -321,7 +370,7 @@ func executeClaudeToolSearchMCPLoop(
 		}
 
 		// Build continuation: add assistant response and tool results to messages
-		request.Messages = append(request.Messages, buildClaudeAssistantMessage(claudeResp))
+		request.Messages = append(request.Messages, assistantMessage)
 		request.Messages = append(request.Messages, buildClaudeToolResultMessage(claudeResp, toolResults)...)
 
 		lg.Debug("claude tool search MCP round completed", zap.Int("round", round+1))
@@ -366,36 +415,38 @@ func doClaudeRequestOnce(
 		return nil, nil, RelayErrorHandlerWithContext(c, resp)
 	}
 
-	// Read and parse the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, openai.ErrorWrapper(err, "read_claude_response_failed", 500)
+	// Bound the accepted provider body before lossless DTOs retain snapshots.
+	if resp.Body == nil {
+		return nil, retainMCPAcceptedUsage(nil, "incomplete_claude_mcp_usage_after_accepted_upstream"), openai.ErrorWrapper(errors.New("missing Claude MCP response body"), "read_claude_response_failed", http.StatusBadGateway)
 	}
-	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxClaudeMCPLoopBody+1))
+	closeErr := resp.Body.Close()
+	if err != nil {
+		return nil, retainMCPAcceptedUsage(nil, "incomplete_claude_mcp_usage_after_accepted_upstream"), openai.ErrorWrapper(err, "read_claude_response_failed", http.StatusBadGateway)
+	}
+	if len(body) > maxClaudeMCPLoopBody {
+		return nil, retainMCPAcceptedUsage(nil, "incomplete_claude_mcp_usage_after_accepted_upstream"), openai.ErrorWrapper(errors.New("Claude MCP response exceeds 32 MiB limit"), "claude_mcp_response_too_large", http.StatusBadGateway)
+	}
+
+	if rejection := anthropic.ParseClaudeMessageAdmissionRejection(body, resp.StatusCode, closeErr); rejection != nil {
+		return nil, nil, rejection
+	}
+	if closeErr != nil {
+		return nil, retainMCPAcceptedUsage(nil, "incomplete_claude_mcp_usage_after_accepted_upstream"),
+			openai.ErrorWrapper(closeErr, "read_claude_response_failed", http.StatusBadGateway)
+	}
 
 	var claudeResp anthropic.Response
 	if err := json.Unmarshal(body, &claudeResp); err != nil {
-		return nil, nil, openai.ErrorWrapper(err, "parse_claude_response_failed", 500)
+		return nil, retainMCPAcceptedUsage(nil, "incomplete_claude_mcp_usage_after_accepted_upstream"), openai.ErrorWrapper(err, "parse_claude_response_failed", 500)
 	}
 	if err := anthropic.RecordServerToolUseFromJSON(c, body); err != nil {
 		lg.Warn("malformed Claude server tool receipt in tool search round; billing observed invocations", zap.Error(err))
 	}
 
-	usage := &relaymodel.Usage{
-		PromptTokens:     claudeResp.Usage.InputTokens,
-		CompletionTokens: claudeResp.Usage.OutputTokens,
-		TotalTokens:      claudeResp.Usage.InputTokens + claudeResp.Usage.OutputTokens,
-	}
-	if claudeResp.Usage.CacheReadInputTokens > 0 {
-		usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{
-			CachedTokens: claudeResp.Usage.CacheReadInputTokens,
-		}
-	}
-	if claudeResp.Usage.CacheCreation != nil {
-		usage.CacheWrite5mTokens = claudeResp.Usage.CacheCreation.Ephemeral5mInputTokens
-		usage.CacheWrite1hTokens = claudeResp.Usage.CacheCreation.Ephemeral1hInputTokens
-	} else if claudeResp.Usage.CacheCreationInputTokens > 0 {
-		usage.CacheWrite5mTokens = claudeResp.Usage.CacheCreationInputTokens
+	usage, usageErr := anthropic.ParseClaudeMessageUsage(body)
+	if usageErr != nil {
+		return nil, retainMCPAcceptedUsage(nil, "incomplete_claude_mcp_usage_after_accepted_upstream"), openai.ErrorWrapper(usageErr, "invalid_claude_mcp_usage", http.StatusBadGateway)
 	}
 
 	lg.Debug("claude tool search upstream response",
@@ -417,33 +468,27 @@ type claudeMCPToolCall struct {
 
 // extractMCPToolCalls finds tool_use content blocks in the Claude response that reference MCP tools.
 func extractMCPToolCalls(resp *anthropic.Response, registry *claudeToolSearchMCPRegistry) []claudeMCPToolCall {
-	if resp == nil || registry == nil {
-		return nil
-	}
-	// Only process when Claude stopped for tool use
-	if resp.StopReason == nil || *resp.StopReason != "tool_use" {
-		return nil
-	}
+	calls, _ := extractMCPToolCallsChecked(resp, registry)
+	return calls
+}
 
+// extractMCPToolCallsChecked decodes exact argument tokens only at the execution boundary.
+func extractMCPToolCallsChecked(resp *anthropic.Response, registry *claudeToolSearchMCPRegistry) ([]claudeMCPToolCall, error) {
+	if resp == nil || registry == nil || resp.StopReason == nil || *resp.StopReason != "tool_use" {
+		return nil, nil
+	}
 	var calls []claudeMCPToolCall
 	for _, block := range resp.Content {
-		if block.Type != "tool_use" {
+		if block.Type != "tool_use" || !registry.isMCPTool(block.Name) {
 			continue
 		}
-		if !registry.isMCPTool(block.Name) {
-			continue
+		args, err := claudeMCPExecutionArguments(block)
+		if err != nil {
+			return nil, err
 		}
-		args, ok := block.Input.(map[string]any)
-		if !ok {
-			args = map[string]any{}
-		}
-		calls = append(calls, claudeMCPToolCall{
-			ID:    block.Id,
-			Name:  block.Name,
-			Input: args,
-		})
+		calls = append(calls, claudeMCPToolCall{ID: block.Id, Name: block.Name, Input: args})
 	}
-	return calls
+	return calls, nil
 }
 
 // executeClaudeMCPToolCalls invokes MCP tools and returns a map of callID -> result content string.
@@ -513,52 +558,31 @@ func executeClaudeMCPToolCalls(
 
 // buildClaudeAssistantMessage converts a Claude API response into a ClaudeMessage for the assistant turn.
 func buildClaudeAssistantMessage(resp *anthropic.Response) relaymodel.ClaudeMessage {
-	// Re-serialize the content blocks to preserve all fields
-	var contentBlocks []any
-	for _, block := range resp.Content {
-		contentBlock := map[string]any{"type": block.Type}
-		switch block.Type {
-		case "text":
-			contentBlock["text"] = block.Text
-		case "tool_use":
-			contentBlock["id"] = block.Id
-			contentBlock["name"] = block.Name
-			// Anthropic requires tool_use.input to be an object. block.Input is `any`,
-			// so an upstream that omitted it would replay as `"input": null` on the
-			// next MCP round and be rejected. The default arm below already guards
-			// this; these two hot arms did not.
-			contentBlock["input"] = toolUseInputOrEmpty(block.Input)
-		case "thinking":
-			if block.Thinking != nil {
-				contentBlock["thinking"] = *block.Thinking
-			}
-			if block.Signature != nil {
-				contentBlock["signature"] = *block.Signature
-			}
-		case "server_tool_use":
-			contentBlock["id"] = block.Id
-			contentBlock["name"] = block.Name
-			contentBlock["input"] = toolUseInputOrEmpty(block.Input)
-		default:
-			// Preserve other block types as-is
-			contentBlock["text"] = block.Text
-			if block.Id != "" {
-				contentBlock["id"] = block.Id
-			}
-			if block.Name != "" {
-				contentBlock["name"] = block.Name
-			}
-			if block.Input != nil {
-				contentBlock["input"] = block.Input
-			}
-		}
-		contentBlocks = append(contentBlocks, contentBlock)
-	}
+	message, _ := buildClaudeAssistantMessageChecked(resp)
+	return message
+}
 
-	return relaymodel.ClaudeMessage{
-		Role:    "assistant",
-		Content: contentBlocks,
+// buildClaudeAssistantMessageChecked reconstructs lossless native content before any tool side effect.
+func buildClaudeAssistantMessageChecked(resp *anthropic.Response) (relaymodel.ClaudeMessage, error) {
+	// Keep the historical []any map view while preserving all opaque content
+	// fields and exact numeric tokens in newly reconstructed native turns.
+	blocks := append([]anthropic.Content(nil), resp.Content...)
+	for index := range blocks {
+		if (blocks[index].Type == "tool_use" || blocks[index].Type == "server_tool_use") && blocks[index].Input == nil {
+			blocks[index].Input = map[string]any{}
+		}
 	}
+	encoded, err := json.Marshal(blocks)
+	if err != nil {
+		return relaymodel.ClaudeMessage{}, errors.Wrap(err, "encode native Claude assistant content")
+	}
+	var contentBlocks []any
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	if err := decoder.Decode(&contentBlocks); err != nil {
+		return relaymodel.ClaudeMessage{}, errors.Wrap(err, "decode native Claude assistant content")
+	}
+	return relaymodel.ClaudeMessage{Role: "assistant", Content: contentBlocks}, nil
 }
 
 // buildClaudeToolResultMessage creates user messages containing tool_result blocks

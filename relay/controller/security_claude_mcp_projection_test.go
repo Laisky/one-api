@@ -97,6 +97,10 @@ func TestSecurityNativeClaudeMCPProjection(t *testing.T) {
 			providerAdaptor := &anthropic.Adaptor{}
 			providerAdaptor.Init(meta)
 			req := &ClaudeMessagesRequest{Model: "claude-sonnet-4", MaxTokens: 1, Messages: []relaymodel.ClaudeMessage{{Role: "user", Content: "hello"}}}
+			// Production establishes passthrough capability through the selected
+			// adaptor before entering this loop; mirror that authoritative setup.
+			_, conversionErr := providerAdaptor.ConvertClaudeRequest(c, req)
+			require.NoError(t, conversionErr)
 			final, usage, _, _, apiErr := executeClaudeToolSearchMCPLoop(c, meta, req, registry, providerAdaptor, 0)
 			require.Nil(t, apiErr)
 			require.NotNil(t, final)

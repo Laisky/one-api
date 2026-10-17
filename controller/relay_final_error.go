@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -12,6 +13,9 @@ import (
 func writeRelayFinalError(c *gin.Context, apiErr *model.ErrorWithStatusCode) bool {
 	if c == nil || apiErr == nil || c.Writer == nil || c.Writer.Written() {
 		return false
+	}
+	if anthropic.WriteNativeErrorResponse(c, apiErr) {
+		return true
 	}
 	c.JSON(apiErr.StatusCode, gin.H{"error": apiErr.Error})
 	return true
