@@ -1,6 +1,6 @@
 # DeepSeek model defaults
 
-Verified against the official documentation on **2026-10-17**. This is a source metadata update, not a live channel or billing-policy migration.
+Verified against the official documentation on **2026-10-17**. This update refreshes source metadata and preserves complete source pricing schedules when loading channel defaults. It does not migrate live channel settings or billing records.
 
 ## API names
 
@@ -31,10 +31,21 @@ The official English rate card prints **$ per million tokens** without a currenc
 | Pro | Off-peak | 0.66 | 0.022 | 1.98 |
 | Pro | Peak | 1.32 | 0.044 | 3.96 |
 
-Peak hours are **01:00–04:00 and 06:00–10:00 UTC, Monday–Friday**, with inclusive
-starts and exclusive ends, excluding Chinese public holidays. All remaining hours, including weekends and Chinese public holidays in full, are off-peak. The existing schedule contains reviewed 2026 holiday dates; later years need a fresh calendar review.
-Base ratios represent current off-peak defaults; billing resolves the schedule
-using the request start time, not the wall-clock time at settlement.
+Peak hours are **01:00–04:00 and 06:00–10:00 UTC, Monday–Friday**, excluding Chinese public holidays. All remaining hours, including every weekend and Chinese public holidays in full, are off-peak; adjusted working weekends do not become peak days.
+
+The gateway uses half-open clock/date ranges (inclusive start, exclusive end)
+and selects rates by request start time. These are existing gateway conventions;
+the inspected provider table does not specify endpoint inclusivity or whether
+request start or settlement selects a rate. Base ratios are current off-peak
+defaults.
+
+Calendar coverage is explicitly **2026 only**. The reviewed source fixture uses
+the published full holiday leave ranges. Beyond 2026, existing weekday/weekend
+pricing continues without reviewed holiday exceptions; this is an unqualified
+calendar fallback, not a claim that later years have no holidays or that their
+holiday rates are correct. A new official calendar review is required before
+claiming later-year holiday accuracy. No future dates, rates, truncation or
+request-rejection policy are invented by this cleanup.
 
 The Flash rates above take effect at **2026-09-10 04:00 UTC** (12:00 Beijing time).
 Before that instant, the immediately preceding Flash defaults are retained:
@@ -42,6 +53,32 @@ Before that instant, the immediately preceding Flash defaults are retained:
 cache-miss input / cache-hit input / output. This preserves the announced boundary
 and in-flight request accounting; it is not a complete archive of earlier prices.
 The preceding rates come from the pre-update defaults at commit `e000b8eb`.
+
+## Pricing snapshots and history
+
+The Flash cutover day is partitioned into the preceding price era before
+04:00 UTC and the current era afterward; recurring current rules begin September
+11. This removes cross-era overlap while preserving all selected prices and
+historical request-start replay. Holiday > peak > off-peak first-match ordering
+within one era is intentional; these are alternatives, not stacked discounts.
+Expired windows remain necessary historical data and must not be deleted merely
+because the wall clock has advanced.
+
+The channel Load Default response now exports all fields in the persisted
+pricing schema, including cache tariffs, tiers, unit/media prices and ordered
+nested schedules. Saving that response no longer drops the tariff's schedules.
+Provider capabilities/provenance and request-specific video quotes remain outside
+that schema. Existing saved channel snapshots and intentional custom overrides
+are not automatically refreshed: there is no provenance that safely distinguishes
+a copied default from a custom tariff. No past charge, balance or refund changes.
+
+For plain local token overrides, the Models display now follows the local cache
+and schedule selection used by billing. Native media/unit display remains on its
+existing path. Broader pre-existing inherited tier/cache-write display behavior
+for other providers is outside the four DeepSeek model cases qualified here.
+The Modern pricing modal groups valid expired schedules under a collapsed
+Historical pricing section without changing, sorting or removing rules; current,
+upcoming and unresolved/invalid schedules remain visible.
 
 ## Gateway capability boundary
 

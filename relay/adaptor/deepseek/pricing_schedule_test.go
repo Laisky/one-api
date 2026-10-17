@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	modelcfg "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/pricing"
@@ -64,5 +65,73 @@ func TestDeepSeekPricingUsesUTC(t *testing.T) {
 			require.Equal(t, pricing.ApplyTimeWindow(cfg, utc), pricing.ApplyTimeWindow(cfg, local), name)
 			require.Equal(t, pricing.ApplyTimeWindowRatioOnly(cfg, utc), pricing.ApplyTimeWindowRatioOnly(cfg, local), name)
 		}
+	}
+}
+
+// TestDeepSeekFlashCutoverHasOnePriceRegime verifies matching cutover-day
+// overlays agree with the applicable price era and both production resolvers
+// retain boundary prices. Parameters: t is the test handle. Returns: nothing.
+func TestDeepSeekFlashCutoverHasOnePriceRegime(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	cutover := start.Add(4 * time.Hour)
+	end := start.AddDate(0, 0, 1)
+	instants := make([]time.Time, 0, 1460)
+	for minute := 0; minute < 24*60; minute++ {
+		instants = append(instants, start.Add(time.Duration(minute)*time.Minute))
+	}
+	for _, hour := range []int{0, 1, 4, 6, 10, 24} {
+		for _, delta := range []time.Duration{-time.Nanosecond, 0, time.Nanosecond} {
+			instants = append(instants, start.Add(time.Duration(hour)*time.Hour+delta))
+		}
+	}
+	for _, name := range []string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			cfg := ModelRatios[name]
+			original := cfg.Clone()
+			provider := &Adaptor{}
+			for _, at := range instants {
+				input, cached, output := .15, .003, .60
+				if at.Before(cutover) {
+					input, cached, output = .22, .007, .66
+				}
+				weekday := at.Weekday() != time.Saturday && at.Weekday() != time.Sunday
+				peak := weekday && ((at.Hour() >= 1 && at.Hour() < 4) || (at.Hour() >= 6 && at.Hour() < 10))
+				if peak {
+					input, cached, output = 2*input, 2*cached, 2*output
+				}
+				// Adjacent dates retain ordinary holiday/peak/fallback priority.
+				// On the transition day no conflicting price era may also match.
+				if !at.Before(start) && at.Before(end) {
+					matched := false
+					for _, window := range cfg.TimeWindows {
+						if !pricing.MatchTimeWindow(window, at) {
+							continue
+						}
+						matched = true
+						require.InDelta(t, input, window.Overlay.Ratio/ratio.MilliTokensUsd, 1e-12,
+							"%s conflicting input era at %s", name, at)
+						require.InDelta(t, cached, window.Overlay.CachedInputRatio/ratio.MilliTokensUsd, 1e-12,
+							"%s conflicting cache era at %s", name, at)
+						require.InDelta(t, output, window.Overlay.Ratio*window.Overlay.CompletionRatio/ratio.MilliTokensUsd, 1e-12,
+							"%s conflicting output era at %s", name, at)
+					}
+					require.True(t, matched, "%s has no applicable era at %s", name, at)
+				}
+				for _, resolve := range []func(string, map[string]modelcfg.ModelConfigLocal, adaptor.Adaptor, time.Time) (adaptor.ModelConfig, bool){
+					pricing.ResolveModelConfig,
+					pricing.ResolveModelConfigRatioOnly,
+				} {
+					got, ok := resolve(name, nil, provider, at)
+					require.True(t, ok)
+					require.InDelta(t, input, got.Ratio/ratio.MilliTokensUsd, 1e-12,
+						"%s resolved input at %s", name, at)
+					require.InDelta(t, cached, got.CachedInputRatio/ratio.MilliTokensUsd, 1e-12)
+					require.InDelta(t, output, got.Ratio*got.CompletionRatio/ratio.MilliTokensUsd, 1e-12)
+				}
+			}
+			require.Equal(t, original, cfg, "resolution must not mutate shared defaults")
+		})
 	}
 }
