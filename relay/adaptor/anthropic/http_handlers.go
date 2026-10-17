@@ -105,6 +105,9 @@ func handleClaudeHTTPStream(c *gin.Context, resp *http.Response, native bool) (r
 	c.Writer = writer
 	defer func() { c.Writer = original }()
 	common.SetEventStreamHeaders(c)
+	if native {
+		CopyClaudeResponseHeaders(c.Writer.Header(), resp.Header)
+	}
 	reader := render.NewHeartbeatLineReader(c, commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize), render.DefaultHeartbeatInterval)
 	defer reader.Close()
 	eventType := ""
@@ -295,15 +298,7 @@ func handleClaudeHTTPJSON(c *gin.Context, resp *http.Response, modelName string,
 		body = encoded
 	}
 	c.Header("Content-Type", "application/json")
-	// Keep request correlation and rate limits, not hop-by-hop framing or upstream cookies.
-	for key, values := range resp.Header {
-		lower := strings.ToLower(key)
-		if lower == "apim-request-id" || lower == "request-id" || lower == "x-request-id" || lower == "retry-after" || strings.HasPrefix(lower, "anthropic-ratelimit-") {
-			for _, value := range values {
-				c.Writer.Header().Add(key, value)
-			}
-		}
-	}
+	CopyClaudeResponseHeaders(c.Writer.Header(), resp.Header)
 	c.Status(resp.StatusCode)
 	n, err := c.Writer.Write(body)
 	if err != nil {

@@ -37,13 +37,14 @@ func prepareResponseFallbackInput(ctx context.Context, c *gin.Context, meta *met
 		return nil, openai.ErrorWrapper(err, "response_fallback_input_too_large", http.StatusRequestEntityTooLarge)
 	}
 
+	if err := responseFallbackFidelityError(request.Input, true); err != nil {
+		return nil, err
+	}
+
 	if err := ctx.Err(); err != nil {
 		return nil, openai.ErrorWrapper(err, "response_fallback_cancelled", http.StatusRequestTimeout)
 	}
 
-	// Preserve the original incremental snapshot and hydration order: validation
-	// adds an admission boundary, not a second conversation or ownership model.
-	capturePendingStateCommit(c, meta, request)
 	hydrated, stateErr := hydrateResponseAPIRequestForFallback(ctx, meta, request, responseFallbackTarget(meta))
 	if stateErr != nil {
 		return nil, stateErr
@@ -57,5 +58,28 @@ func prepareResponseFallbackInput(ctx context.Context, c *gin.Context, meta *met
 	if err := openai.ValidateResponseAPIFallbackInput(hydrated.Input); err != nil {
 		return nil, openai.ErrorWrapper(err, "response_fallback_input_too_large", http.StatusRequestEntityTooLarge)
 	}
+	if err := responseFallbackFidelityError(hydrated.Input, false); err != nil {
+		return nil, err
+	}
+	// Hydration returns a clone; snapshot the original incremental request only
+	// after both input forms pass admission, avoiding pending state on rejection.
+	capturePendingStateCommit(c, meta, request)
 	return hydrated, nil
+}
+
+// responseFallbackFidelityError maps shared semantic admission errors without exposing input values.
+func responseFallbackFidelityError(input []any, allowReferences bool) *relaymodel.ErrorWithStatusCode {
+	err := openai.ValidateResponseAPIFallbackFidelity(input, allowReferences)
+	if err == nil {
+		return nil
+	}
+	code, status := "response_fallback_not_supported", http.StatusBadRequest
+	if errors.Is(err, openai.ErrResponseNamespaceUnsupported) {
+		code = "tool_namespace_not_supported"
+	} else if errors.Is(err, openai.ErrResponseFallbackStateNotPortable) {
+		// Preserve the existing canonical-state portability error contract even
+		// when admission rejects before the state hydrator runs.
+		code, status = codeStateNotPortable, http.StatusConflict
+	}
+	return openai.ErrorWrapper(err, code, status)
 }

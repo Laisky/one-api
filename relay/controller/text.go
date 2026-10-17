@@ -13,6 +13,7 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/render"
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
@@ -180,7 +181,10 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	if registry != nil {
 		response, usage, mcpSummary, incrementalCharged, execErr := executeChatMCPToolLoop(c, meta, textRequest, registry, preConsumedQuota)
-		if execErr != nil {
+		if execErr != nil && usage == nil {
+			if refundClaudeAdmission(c, execErr, preConsumedQuota, meta.TokenId) {
+				return execErr
+			}
 			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "mcp_tool_loop_failed")
 			return execErr
 		}
@@ -199,7 +203,13 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			c.Set(ctxkey.ToolInvocationSummary, merged)
 		}
 
-		c.JSON(http.StatusOK, response)
+		if execErr == nil {
+			c.Status(http.StatusOK)
+			if err := (render.JSON{Data: response}).Render(c.Writer); err != nil {
+				execErr = openai.ErrorWrapper(err, "write_mcp_response_failed", http.StatusInternalServerError)
+			}
+		}
+		markResponseSettlement(c, usage, execErr)
 
 		// Preserve the reservation for the single final delta settlement below.
 		if usage != nil {
@@ -230,7 +240,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 				tokenId,
 				apiFormat,
 				apiType,
-				true,
+				execErr == nil,
 				usage.PromptTokens,
 				usage.CompletionTokens,
 				0,
@@ -271,7 +281,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 				}
 			}
 		})
-		return nil
+		return execErr
 	}
 
 	// Reuse the exact request bytes prepared before admission. Do not repeat
@@ -536,6 +546,7 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 	return bytes.NewBuffer(jsonData), nil
 }
 
+// requiresJSONSchemaDowngrade reports whether the selected channel requires the legacy JSON-schema downgrade.
 func requiresJSONSchemaDowngrade(meta *metalib.Meta, request *relaymodel.GeneralOpenAIRequest) bool {
 	if meta == nil || request == nil {
 		return false

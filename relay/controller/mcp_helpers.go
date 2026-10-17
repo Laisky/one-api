@@ -94,20 +94,98 @@ func buildToolResultMessage(callID string, result *mcp.CallToolResult) (relaymod
 	return message, nil
 }
 
-// mergeUsage accumulates usage across tool rounds.
-func mergeUsage(base *relaymodel.Usage, next *relaymodel.Usage) *relaymodel.Usage {
-	if next == nil {
-		return base
+// mergeUsage accumulates independent upstream receipts across tool rounds.
+// Parameters: base is the owned accumulator and next is a provider snapshot.
+// Returns: merged counters or an error before mutating either operand when a
+// count is negative or unrepresentable. Established uncertainty and quote floors
+// survive later rounds; overlapping quote floors are retained by maximum.
+func mergeUsage(base *relaymodel.Usage, next *relaymodel.Usage) (*relaymodel.Usage, error) {
+	if base == nil && next == nil {
+		return nil, nil
+	}
+	var left, right relaymodel.Usage
+	if base != nil {
+		left = *base
+	}
+	if next != nil {
+		right = *next
+	}
+	merged := left
+	if base == nil {
+		merged = right
+	}
+	for _, field := range []struct {
+		name        string
+		target      *int
+		left, right int
+	}{
+		{"input", &merged.PromptTokens, left.PromptTokens, right.PromptTokens},
+		{"output", &merged.CompletionTokens, left.CompletionTokens, right.CompletionTokens},
+		{"total", &merged.TotalTokens, left.TotalTokens, right.TotalTokens},
+		{"cached", &merged.CachedTokens, left.CachedTokens, right.CachedTokens},
+		{"cache_hit", &merged.PromptCacheHitTokens, left.PromptCacheHitTokens, right.PromptCacheHitTokens},
+		{"cache_miss", &merged.PromptCacheMissTokens, left.PromptCacheMissTokens, right.PromptCacheMissTokens},
+		{"cache_write", &merged.CacheWriteTokens, left.CacheWriteTokens, right.CacheWriteTokens},
+		{"cache_write_5m", &merged.CacheWrite5mTokens, left.CacheWrite5mTokens, right.CacheWrite5mTokens},
+		{"cache_write_1h", &merged.CacheWrite1hTokens, left.CacheWrite1hTokens, right.CacheWrite1hTokens},
+	} {
+		sum, err := checkedMCPUsageSum(field.left, field.right, field.name)
+		if err != nil {
+			return nil, err
+		}
+		*field.target = sum
+	}
+	if _, err := checkedMCPUsageSum(merged.PromptTokens, merged.CompletionTokens, "input_output_total"); err != nil {
+		return nil, err
+	}
+	if left.ToolsCost < 0 || right.ToolsCost < 0 || right.ToolsCost > math.MaxInt64-left.ToolsCost {
+		return nil, errors.New("MCP tool cost is negative or overflows")
+	}
+	merged.ToolsCost = left.ToolsCost + right.ToolsCost
+	if left.BillingEstimateQuotaFloor < 0 || right.BillingEstimateQuotaFloor < 0 {
+		return nil, errors.New("MCP billing estimate floor is negative")
+	}
+	merged.BillingEstimateQuotaFloor = max(left.BillingEstimateQuotaFloor, right.BillingEstimateQuotaFloor)
+	if left.BillingEstimateReason != "" {
+		merged.BillingEstimateReason = left.BillingEstimateReason
+	} else {
+		merged.BillingEstimateReason = right.BillingEstimateReason
+	}
+	cachedLeft, cachedRight := 0, 0
+	details := left.PromptTokensDetails
+	if details == nil {
+		details = right.PromptTokensDetails
+	}
+	if left.PromptTokensDetails != nil {
+		cachedLeft = left.PromptTokensDetails.CachedTokens
+	}
+	if right.PromptTokensDetails != nil {
+		cachedRight = right.PromptTokensDetails.CachedTokens
+	}
+	cached, err := checkedMCPUsageSum(cachedLeft, cachedRight, "cache_read")
+	if err != nil {
+		return nil, err
+	}
+	if details != nil {
+		owned := *details
+		owned.CachedTokens = cached
+		merged.PromptTokensDetails = &owned
 	}
 	if base == nil {
-		clone := *next
-		return &clone
+		return &merged, nil
 	}
-	base.PromptTokens += next.PromptTokens
-	base.CompletionTokens += next.CompletionTokens
-	base.TotalTokens += next.TotalTokens
-	base.ToolsCost += next.ToolsCost
-	return base
+	*base = merged
+	return base, nil
+}
+
+// checkedMCPUsageSum adds one pair of nonnegative token counters exactly.
+// Parameters: left/right are round counts and name identifies their dimension.
+// Returns: the sum or an error without a wrapped or saturated billing quantity.
+func checkedMCPUsageSum(left, right int, name string) (int, error) {
+	if left < 0 || right < 0 || right > math.MaxInt-left {
+		return 0, errors.Errorf("MCP %s count is negative or overflows", name)
+	}
+	return left + right, nil
 }
 
 // estimateMCPRoundPreConsumeQuota calculates the quota to pre-consume for a single MCP upstream round.

@@ -19,6 +19,10 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 		return nil, errors.Wrap(err, "validate response fallback input")
 	}
 
+	if err := ValidateResponseAPIFallbackFidelity(request.Input, false); err != nil {
+		return nil, errors.Wrap(err, "validate response fallback fidelity")
+	}
+
 	if request.Prompt != nil {
 		return nil, errors.New("prompt templates are not supported for this channel")
 	}
@@ -57,14 +61,24 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 	if request.Text != nil && request.Text.Format != nil {
 		chatReq.ResponseFormat = &model.ResponseFormat{Type: request.Text.Format.Type}
 		if strings.EqualFold(request.Text.Format.Type, "json_schema") {
-			sanitized := sanitizeResponseAPIJSONSchema(request.Text.Format.Schema)
-			schemaMap, _ := sanitized.(map[string]any)
+			// Explicit strict opts into preserving the requested schema semantics.
+			// Omitted strict retains the established cross-provider sanitizer.
+			schema := any(request.Text.Format.Schema)
+			if request.Text.Format.Strict == nil {
+				schema = sanitizeResponseAPIJSONSchema(schema)
+			} else {
+				schema = cloneResponseAPIJSONValue(schema)
+			}
+			schemaMap, _ := schema.(map[string]any)
 			chatReq.ResponseFormat.JsonSchema = &model.JSONSchema{
 				Name:        request.Text.Format.Name,
 				Description: request.Text.Format.Description,
 				Schema:      schemaMap,
 			}
-			chatReq.ResponseFormat.JsonSchema.Strict = nil
+			if request.Text.Format.Strict != nil {
+				strict := *request.Text.Format.Strict
+				chatReq.ResponseFormat.JsonSchema.Strict = &strict
+			}
 		}
 	}
 
@@ -141,6 +155,10 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 		case map[string]any:
 			if typeVal, ok := v["type"].(string); ok {
 				switch strings.ToLower(typeVal) {
+				case "thinking":
+					// Signed/provider-bound thinking retains sidecar degradation.
+					openToolCallMsgIdx = currentToolCallMsgIdx
+					continue
 				case "reasoning":
 					// A reasoning item marks thinking *within* a turn, not a turn
 					// boundary, so it must not close an open assistant message. This
@@ -431,6 +449,7 @@ func extractResponseAPIReasoningContent(item map[string]any) string {
 	return ""
 }
 
+// responseContentItemToMessage converts one supported Responses input item to a Chat message or returns an error.
 func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
 	role := normalizeResponseMessageRoleForChat(item["role"], "user")
 
@@ -447,6 +466,8 @@ func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
 	message := &model.Message{Role: role, Name: namePtr}
 
 	switch content := contentVal.(type) {
+	case nil:
+		message.Content = ""
 	case string:
 		message.Content = content
 	case []any:
@@ -460,7 +481,7 @@ func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
 			}
 			typeStr, _ := partMap["type"].(string)
 			switch typeStr {
-			case "input_text", "output_text":
+			case "", "text", "input_text", "output_text":
 				if text, ok := partMap["text"].(string); ok {
 					parts = append(parts, model.MessageContent{Type: model.ContentTypeText, Text: &text})
 					textSections = append(textSections, text)
@@ -487,6 +508,10 @@ func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
 						hasNonText = true
 					}
 				}
+			case "refusal":
+				refusal, _ := partMap["refusal"].(string)
+				parts = append(parts, model.MessageContent{Type: model.ContentTypeText, Text: &refusal})
+				textSections = append(textSections, refusal)
 			case "input_audio":
 				if inputAudio, ok := partMap["input_audio"].(map[string]any); ok {
 					data, _ := inputAudio["data"].(string)

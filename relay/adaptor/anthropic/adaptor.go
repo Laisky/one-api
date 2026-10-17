@@ -20,24 +20,28 @@ import (
 type Adaptor struct {
 }
 
+// Init stores the request metadata used by this Anthropic adaptor.
 func (a *Adaptor) Init(meta *meta.Meta) {
 
 }
 
+// GetRequestURL returns the Anthropic endpoint for the supplied metadata.
 // https://docs.anthropic.com/claude/reference/messages_post
 // anthopic migrate to Message API
 func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	return fmt.Sprintf("%s/v1/messages", meta.BaseURL), nil
 }
 
+// SetupRequestHeader sets provider credentials and admitted protocol headers on the upstream request.
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	adaptor.SetupCommonRequestHeader(c, req, meta)
 	req.Header.Set("x-api-key", meta.APIKey)
 
-	var inboundVersion string
+	var callerHeaders http.Header
 	if c != nil && c.Request != nil {
-		inboundVersion = c.Request.Header.Get("anthropic-version")
+		callerHeaders = copyClaudeProtocolHeaders(req.Header, c.Request.Header)
 	}
+	inboundVersion := callerHeaders.Get("anthropic-version")
 	anthropicVersion := strings.TrimSpace(inboundVersion)
 	if anthropicVersion == "" {
 		anthropicVersion = AnthropicVersionDefault
@@ -50,8 +54,8 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	// declared in the body, which the Claude Messages tool policy gates before
 	// reservation and dispatch.
 	var betaHeaders []string
-	if c != nil && c.Request != nil {
-		betaHeaders = append(betaHeaders, strings.Split(c.Request.Header.Get("anthropic-beta"), ",")...)
+	for _, value := range callerHeaders.Values("anthropic-beta") {
+		betaHeaders = append(betaHeaders, strings.Split(value, ",")...)
 	}
 	betaHeaders = append(betaHeaders, AnthropicBetaMessages)
 
@@ -89,6 +93,7 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	return nil
 }
 
+// ConvertRequest converts the supplied request to the Anthropic format for its relay mode.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
@@ -104,6 +109,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	return ConvertRequest(c, *request)
 }
 
+// ConvertImageRequest returns the unsupported Anthropic image-request error.
 func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
@@ -182,6 +188,7 @@ func mergeAnthropicBetaHeaders(headers []string) []string {
 	return merged
 }
 
+// DoRequest dispatches the prepared Anthropic request and returns the upstream response or an error.
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
 	prepared, err := PrepareRequestBody(c, meta.ActualModelName, requestBody)
 	if err != nil {
@@ -190,6 +197,7 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 	return adaptor.DoRequestHelper(a, c, meta, prepared)
 }
 
+// DoResponse converts the Anthropic response and returns its usage or relay error.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	if meta.IsStream {
 		err, usage = StreamHandler(c, resp)
@@ -199,10 +207,12 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 	return
 }
 
+// GetModelList returns the Anthropic adaptor model identifiers.
 func (a *Adaptor) GetModelList() []string {
 	return adaptor.GetModelListFromPricing(ModelRatios)
 }
 
+// GetChannelName returns the Anthropic channel display name.
 func (a *Adaptor) GetChannelName() string {
 	return "anthropic"
 }
@@ -213,11 +223,13 @@ func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return AnthropicToolingDefaults
 }
 
+// GetDefaultModelPricing returns the default Anthropic model pricing table.
 // Pricing methods - Anthropic adapter manages its own model pricing
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return ModelRatios
 }
 
+// GetModelRatio returns the default price ratio for the supplied model.
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
 	pricing := a.GetDefaultModelPricing()
 	if price, exists := pricing[modelName]; exists {
@@ -227,6 +239,7 @@ func (a *Adaptor) GetModelRatio(modelName string) float64 {
 	return 3 * billingratio.MilliTokensUsd // Default Anthropic pricing in internal quota units
 }
 
+// GetCompletionRatio returns the output-token price ratio for the supplied model.
 func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
 	pricing := a.GetDefaultModelPricing()
 	if price, exists := pricing[modelName]; exists {

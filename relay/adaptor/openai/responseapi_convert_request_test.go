@@ -257,6 +257,7 @@ func TestConvertResponseAPIToChatCompletionRequestMergesTurnAcrossReasoningItem(
 func TestConvertResponseAPIToChatCompletionRequestKeepsMergedAssistantContentNonNull(t *testing.T) {
 	t.Parallel()
 	for name, content := range map[string]any{
+		"null_content":            nil,
 		"empty_content_array":     []any{},
 		"unrecognized_content":    []any{map[string]any{"type": "refusal", "refusal": "no"}},
 		"missing_content_entries": []any{map[string]any{"type": "output_text"}},
