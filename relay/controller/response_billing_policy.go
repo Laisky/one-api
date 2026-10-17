@@ -25,6 +25,12 @@ func validateNativeResponseToolBilling(tools []openai.ResponseAPITool) error {
 			return errors.New("native Responses children require a namespace billing path")
 		}
 
+		if kind == "tool_search" {
+			if tool.Execution != "client" {
+				return errors.New("native Responses tool_search requires explicit client execution; hosted search has no supported billing path")
+			}
+			continue
+		}
 		if kind == "function" || kind == "custom" || (kind == "" && tool.Function != nil) {
 			continue
 		}
