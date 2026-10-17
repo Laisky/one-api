@@ -56,6 +56,8 @@ type OutputItem struct {
 	// Function call fields
 	CallId    string `json:"call_id,omitempty"`   // Call ID for function calls
 	Name      string `json:"name,omitempty"`      // Function name for function calls
+	Namespace string `json:"namespace,omitempty"` // Namespace stays separate from the local tool name.
+	Input     string `json:"input,omitempty"`     // Client-side custom-tool input.
 	Arguments string `json:"arguments,omitempty"` // Function arguments for function calls
 
 	// MCP-specific fields
