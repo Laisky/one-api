@@ -5,8 +5,9 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// Prices are USD per million tokens. The base configuration uses the current
-// off-peak rate; time windows override all three prices together.
+// Existing billing defaults are denominated in USD per million tokens. This
+// metadata refresh preserves those ratios and their historical time windows;
+// upstream prices are informational and do not authorize retail policy changes.
 const (
 	deepseekFlashInputPrice       = 0.15
 	deepseekFlashCachedInputPrice = 0.003
@@ -31,8 +32,8 @@ func deepseekModelConfig(description string, vision bool) adaptor.ModelConfig {
 		InputModalities:   inputs,
 		OutputModalities:  []string{"text"},
 		SupportedFeatures: []string{"tools", "json_mode", "logprobs", "reasoning"},
-		// Temperature has no effect in thinking mode. top_p is effective there
-		// with a 0.95 floor; in non-thinking mode top_p is fixed at 1.0.
+		// Sampling behavior depends on the provider model and thinking mode.
+		// Forward supported controls without imposing a shared local policy.
 		SupportedSamplingParameters: []string{"temperature", "top_p", "stop", "max_tokens"},
 		SupportedReasoningEfforts:   []string{"low", "high", "max"},
 		DefaultReasoningEffort:      "high",
@@ -65,7 +66,8 @@ func deepseekProModelConfig() adaptor.ModelConfig {
 }
 
 // ModelRatios contains the current DeepSeek API names, including documented
-// compatibility aliases. Verified on 2026-09-10 against:
+// compatibility aliases. Verified on 2026-10-17 against:
+//   - https://api-docs.deepseek.com/updates/
 //   - https://api-docs.deepseek.com/quick_start/pricing/
 //   - https://api-docs.deepseek.com/guides/thinking_mode/
 //   - https://api-docs.deepseek.com/guides/vision/
@@ -77,15 +79,16 @@ func deepseekProModelConfig() adaptor.ModelConfig {
 // deepseek-chat and deepseek-reasoner remain excluded. Old V4 weight/quantization
 // metadata is not attached to aliases now served by the newer V4.1 model.
 var ModelRatios = map[string]adaptor.ModelConfig{
-	"deepseek-flash":               deepseekFlashModelConfig("DeepSeek-V4.1-Flash, the recommended multimodal Flash API name, with thinking and non-thinking modes, 1M context, and native Responses and Anthropic API support."),
-	"deepseek-v4-flash":            deepseekFlashModelConfig("Compatibility alias for DeepSeek-V4.1-Flash; the original V4 Flash model is retired. Supports text and image input and uses current Flash prices."),
-	"deepseek-v4-flash-vision-exp": deepseekFlashModelConfig("Compatibility alias for DeepSeek-V4.1-Flash; the experimental V4 vision model is retired. Supports text and image input and uses current Flash prices."),
+	"deepseek-flash":               deepseekFlashModelConfig("DeepSeek-V4.1-Flash-1017, the recommended multimodal Flash API name, with thinking and non-thinking modes, 1M context, and native Responses and Anthropic API support."),
+	"deepseek-v4-flash":            deepseekFlashModelConfig("Compatibility alias for DeepSeek-V4.1-Flash-1017; the original V4 Flash model is retired. Temporarily routes to the current Flash model with text and image input and current Flash prices."),
+	"deepseek-v4-flash-vision-exp": deepseekFlashModelConfig("Compatibility alias for DeepSeek-V4.1-Flash-1017; the experimental V4 vision model is retired. Temporarily routes to the current Flash model with text and image input and current Flash prices."),
 	"deepseek-v4-pro":              deepseekProModelConfig(),
 }
 
 // DeepseekToolingDefaults does not advertise a separate built-in tool policy.
-// The current Responses API ignores web_search and other built-in tool types;
-// function tools remain supported and their token usage is billed normally.
+// Flash ignores native Responses web_search; Pro supports it upstream, but this
+// gateway does not enable or price that built-in integration. Function tools
+// remain supported with the existing token accounting policy.
 var DeepseekToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{},
 }

@@ -25,6 +25,7 @@
       "document": "Documento",
       "embedding_pricing": "Precios de embedding",
       "free": "Gratis",
+      "historical_pricing": "Precios históricos",
       "hugging_face_id": "ID de Hugging Face",
       "image": "Imagen",
       "image_pricing": "Precios de imagen",

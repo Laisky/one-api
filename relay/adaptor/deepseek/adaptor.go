@@ -41,8 +41,8 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 }
 
 // DefaultToolingConfig returns DeepSeek's provider-level tooling defaults.
-// Parameters: none. Returns: no built-in tool pricing entries because the
-// current Responses API ignores web_search and other built-in tool types.
+// Parameters: none. Returns: no built-in tool pricing entries; upstream Pro
+// search support is not an enabled and priced gateway integration.
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return DeepseekToolingDefaults
 }

@@ -146,6 +146,49 @@ export function timeWindowScheduleSignature(windows: TimeWindowSchedule[] | unde
   );
 }
 
+/** TimeWindowSnapshot shares one instant for active highlighting and historical disclosure. */
+export interface TimeWindowSnapshot {
+  activeIndex: number;
+  historicalIndices: number[];
+}
+
+/** resolveTimeWindowSnapshot preserves source indices and existing first-match precedence. */
+export function resolveTimeWindowSnapshot(windows: TimeWindowSchedule[] | undefined, at: Date): TimeWindowSnapshot {
+  const historicalIndices: number[] = [];
+  windows?.forEach((window, index) => {
+    if (isHistoricalTimeWindow(window, at)) historicalIndices.push(index);
+  });
+  return { activeIndex: resolveActiveTimeWindowIndex(windows, at), historicalIndices };
+}
+
+/** isHistoricalTimeWindow hides only valid schedules whose exclusive local date_to has passed. */
+export function isHistoricalTimeWindow(window: TimeWindowSchedule, at: Date): boolean {
+  if (!Number.isFinite(at.getTime()) || !window.date_to) return false;
+  const to = parseHistoryDate(window.date_to);
+  const from = window.date_from ? parseHistoryDate(window.date_from) : null;
+  if (to === null || (window.date_from && (from === null || from >= to))) return false;
+  if (
+    !window.ranges?.length ||
+    window.ranges.some((range) => !range || parseClockMinutes(range.start) === null || parseClockMinutes(range.end) === null)
+  )
+    return false;
+  if (window.days_of_week?.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) return false;
+  const parts = getZonedParts(at, window.timezone || 'UTC');
+  return parts !== null && parts.year * 10000 + parts.month * 100 + parts.day >= to;
+}
+
+/** parseHistoryDate validates calendar dates without changing the billing-mirror matcher. */
+function parseHistoryDate(value: string): number | null {
+  const parsed = parseDateNumber(value);
+  if (parsed === null) return null;
+  const year = Math.floor(parsed / 10000);
+  const month = Math.floor(parsed / 100) % 100;
+  const day = parsed % 100;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1] ? parsed : null;
+}
+
 function getZonedParts(at: Date, timeZone: string): ZonedParts | null {
   const formatter = getZonedFormatter(timeZone);
   if (!formatter) {

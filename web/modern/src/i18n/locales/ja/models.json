@@ -25,6 +25,7 @@
       "document": "文書",
       "embedding_pricing": "埋め込み価格",
       "free": "無料",
+      "historical_pricing": "過去の料金",
       "hugging_face_id": "Hugging Face ID",
       "image": "画像",
       "image_pricing": "画像価格",

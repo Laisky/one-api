@@ -360,7 +360,7 @@ func isReasoningCapableModel(modelName string) bool {
 		return true
 	case strings.Contains(name, "deepseek-r1"):
 		return true
-	case strings.HasPrefix(name, "deepseek-v4-"):
+	case name == "deepseek-flash" || strings.HasPrefix(name, "deepseek-v4-"):
 		return true
 	case strings.Contains(name, "reasoner"):
 		return true
@@ -391,8 +391,20 @@ func normalizeReasoningEffort(modelName, effort string) string {
 	}
 
 	name := strings.ToLower(strings.TrimSpace(modelName))
-	if strings.HasPrefix(name, "deepseek-v4-") {
+	if name == "deepseek-flash" || strings.HasPrefix(name, "deepseek-v4-") {
 		switch normalized {
+		case "minimal", "ultra":
+			// Only current native IDs share these aliases; unknown V4 models
+			// retain their historical unsupported-effort fallback.
+			switch name {
+			case "deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro":
+				if normalized == "minimal" {
+					return "low"
+				}
+				return "max"
+			default:
+				return ""
+			}
 		case "medium", "xhigh":
 			return "high"
 		case "low", "high", "max":

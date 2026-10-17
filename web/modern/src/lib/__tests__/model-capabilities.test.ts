@@ -96,3 +96,54 @@ describe('Kimi K3 capabilities', () => {
     expect(getModelCapabilities('moonshotai/kimi-k2.6').supportsReasoningEffort).toBe(false);
   });
 });
+
+
+describe('current native DeepSeek API capabilities', () => {
+  for (const model of ['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro']) {
+    for (const name of [model, model.toUpperCase(), `  ${model}  `]) {
+      it(`offers gateway-supported controls for ${JSON.stringify(name)}`, () => {
+        expect(getModelCapabilities(name)).toMatchObject({
+          supportsTools: true,
+          supportsThinking: false,
+          supportsReasoningEffort: true,
+          supportsLogprobs: true,
+          supportsStop: true,
+          supportsTopP: true,
+          supportsTopK: false,
+          supportsFrequencyPenalty: false,
+          supportsPresencePenalty: false,
+          supportsMaxCompletionTokens: false,
+          supportsVision: model !== 'deepseek-v4-pro',
+          isRealtime: false,
+        });
+      });
+    }
+  }
+
+  it('preserves historical and self-hosted model handling', () => {
+    for (const model of ['deepseek-chat', 'deepseek-reasoner', 'self-hosted-deepseek-flash', 'deepseek-v4-pro-preview']) {
+      expect(getModelCapabilities(model)).toMatchObject({
+        supportsTools: false,
+        supportsThinking: false,
+        supportsReasoningEffort: false,
+        supportsLogprobs: false,
+        supportsFrequencyPenalty: true,
+        supportsPresencePenalty: true,
+        supportsVision: false,
+      });
+    }
+    expect(getModelCapabilities('deepseek-v3.1').supportsReasoningEffort).toBe(true);
+  });
+
+  it('preserves other-provider capability handling instead of matching a native suffix', () => {
+    expect(getModelCapabilities('deepseek-ai/deepseek-v4-flash')).toMatchObject({
+      supportsTools: true,
+      supportsThinking: false,
+      supportsReasoningEffort: false,
+      supportsMaxCompletionTokens: true,
+      supportsFrequencyPenalty: true,
+      supportsPresencePenalty: true,
+      supportsVision: false,
+    });
+  });
+});

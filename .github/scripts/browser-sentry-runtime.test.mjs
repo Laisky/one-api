@@ -291,7 +291,7 @@ test('one relevant source change changes identity and virtual or external module
       mkdirSync(path.join(directory, 'web', theme, 'public'), { recursive: true });
       mkdirSync(path.join(dependencies, 'react'), { recursive: true });
       writeFileSync(path.join(directory, source), 'export const synthetic = true;\n');
-      writeFileSync(path.join(legacy, 'browser-release-inputs.json'), JSON.stringify({ [theme]: [source] }));
+      writeFileSync(path.join(legacy, 'browser-release-inputs.json'), JSON.stringify(Object.fromEntries(['modern', 'air', 'berry'].map((name) => [name, { roots: ['web/' + name + '/src', 'web/' + name + '/public'], files: ['web/legacy/browser-release-inputs.json'] }]))));
       copyFileSync(new URL('../../web/legacy/browser-release.mjs', import.meta.url), path.join(legacy, 'browser-release.mjs'));
       const { releaseInputGuard: isolatedGuard } = await import(pathToFileURL(path.join(legacy, 'browser-release.mjs')).href);
       const guard = isolatedGuard(theme);
@@ -399,7 +399,7 @@ test('every standard SDK bridge export is required before any SDK initialization
   }
 });
 
-test('non-imported source input additions and concurrent source changes cannot share a previously emitted release identity', () => {
+test('concurrent source changes cannot share a previously emitted release identity', () => {
   let changed = false;
   const input = (name) => Buffer.from(name + (changed && name === 'web/modern/src/main.tsx' ? ':changed' : ':original'));
   const contract = browserBuildContract('modern', { mode: 'production' }, input);
