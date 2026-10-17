@@ -66,6 +66,12 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		responseAPIRequest.ToolChoice = normalized
 	}
 
+	// Discovery history can introduce tools independently of request.Tools.
+	// Admit it before state resolution, quota reservation or provider dispatch.
+	if err := validateResponseToolSearchInput(responseAPIRequest.Input); err != nil {
+		return openai.ErrorWrapper(err, "tool_billing_not_supported", http.StatusBadRequest)
+	}
+
 	requestAdaptor := relay.GetAdaptor(meta.APIType)
 	if requestAdaptor == nil {
 		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)

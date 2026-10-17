@@ -17,6 +17,7 @@ const MaxResponseNamespaceTools = 1024
 // This differs from the ChatCompletion tool format where function properties are nested
 // Supports both function tools and MCP tools
 type ResponseAPITool struct {
+	Execution   string          `json:"execution,omitempty"`   // Client/server discovery discriminator.
 	Type        string          `json:"type"`                  // Required: "function", "web_search", "mcp", etc.
 	Name        string          `json:"name,omitempty"`        // Legacy: function name when function block absent
 	Description string          `json:"description,omitempty"` // Legacy: function description when function block absent
@@ -119,6 +120,7 @@ func marshalResponseAPIToolPayload(payload any) ([]byte, error) {
 
 func (t *ResponseAPITool) UnmarshalJSON(data []byte) error {
 	type rawTool struct {
+		Execution         string                  `json:"execution,omitempty"`
 		Type              string                  `json:"type"`
 		Tools             []json.RawMessage       `json:"tools,omitempty"`
 		Format            json.RawMessage         `json:"format,omitempty"`
@@ -177,6 +179,7 @@ func (t *ResponseAPITool) UnmarshalJSON(data []byte) error {
 	t.Format = raw.Format
 	t.Strict = raw.Strict
 	t.DeferLoading = raw.DeferLoading
+	t.Execution = raw.Execution
 	t.Type = raw.Type
 	t.Name = raw.Name
 	t.Description = raw.Description

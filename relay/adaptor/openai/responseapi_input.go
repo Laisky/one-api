@@ -19,10 +19,22 @@ func (r *ResponseAPIInput) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
+	// Validate discovery keys before generic maps can erase duplicate fields.
+	discovery, err := InspectResponseToolSearchInput(data)
+	if err != nil {
+		return errors.Wrap(err, "validate Response API discovery input")
+	}
+
 	// If string unmarshaling fails, try as array
 	var arr []any
 	if err := json.Unmarshal(data, &arr); err != nil {
 		return errors.Wrap(err, "ResponseAPIInput.UnmarshalJSON: failed to unmarshal as array")
+	}
+	// Discovery arguments and schema literals must survive typed rebuilds and
+	// state snapshots without a float64 round trip. Ordinary messages retain
+	// their existing map representation for content normalization.
+	for _, item := range discovery {
+		arr[item.Index] = item.Raw
 	}
 	*r = ResponseAPIInput(arr)
 	return nil
