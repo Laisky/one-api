@@ -26,7 +26,7 @@ Collector IP/geo retention, allowed origins, retention/access controls and sourc
 
 ## Build identity and private maps
 
-Vite embeds `one-api-{theme}@sha256:<64 lowercase hex>` from reviewed frontend/build inputs, dependency locks, compiler runtime/platform/architecture and explicit public build values. This is an input fingerprint, not a Git SHA. The checked-in `web/legacy/browser-release-inputs.json` includes each supported theme and shared helpers. Its guard rejects unlisted resolved first-party modules, private/outside paths and symlinks before loading; it verifies the same byte snapshot again before emitting artifacts. Update and review this allowlist when adding/removing relevant source. Runtime config does not change the fingerprint. Record source SHA, compiler inputs and each emitted release together.
+Vite embeds `one-api-{theme}@sha256:<64 lowercase hex>` from declared frontend/build inputs, dependency locks, compiler runtime/platform/architecture and explicit public build values. This is an input fingerprint, not a Git SHA. The checked-in `web/legacy/browser-release-inputs.json` declares each supported theme's source/public roots, build configuration and shared helpers. Its guard rejects unlisted resolved first-party modules, private/outside paths and symlinks before loading; it verifies the same byte snapshot again before emitting artifacts. Ordinary source/public additions and removals are discovered deterministically without per-file registration or Git metadata. Review declarations when changing source roots or build configuration. Runtime config does not change the fingerprint. Record source SHA, compiler inputs and each emitted release together.
 
 Normal production builds produce no source maps. This revision preserves SDK Debug ID metadata if present; it does not claim the normal builds generate IDs or perform an upload. A future separately reviewed private-map pipeline must produce maps and the deployed JavaScript from the same build. A separate rebuilt map artifact is insufficient. Use the official Vite plugin/CLI's supported Debug ID pairing or exact release/URL correlation, validate actual pairs and byte identity, quarantine maps outside served/image paths with restrictive permissions, and fail packaging if any map or inline source map remains. Hidden maps alone are still publicly accessible if served. Keep optional source fetching under the owner's reviewed policy.
 
@@ -53,29 +53,19 @@ Capture rollback clears `BrowserSentryConfig`, permits propagation and reloads p
 
 Compatibility is verified against the installed official 11.7.0 source/types and offline SDK tests. SDK11 uses supported dataCollection and integration selection; legacy autoSessionTracking/sendDefaultPii flags are not used. No custom envelope projection suppresses normal SDK diagnostics.
 
-## Maintaining reviewed browser release inputs
+## Maintaining browser release inputs
 
-Every file under each supported theme's `src` and `public` directories, including tests and JSON fixtures, must be explicitly reviewed in `web/legacy/browser-release-inputs.json`. Shared helpers and build configuration remain explicitly listed too. New file contents are never automatically approved by builds or CI.
+`web/legacy/browser-release-inputs.json` declares the supported theme `src` and `public` roots plus explicit build configuration, dependency locks and shared helpers. Every regular file under those roots contributes its path and bytes to the release identity, including nonimported Tailwind/Sass inputs, tests, fixtures and public assets. Ordinary file additions, deletions and renames require no separate registration. New build configuration or shared helpers outside those roots must be declared explicitly.
 
-Run the dependency-free check from the repository root before opening a PR:
+The dependency-free check works from a Git checkout or the Docker `COPY web/` context:
 
 ```sh
 node .github/scripts/browser-release-inputs.mjs check
 node --test .github/scripts/browser-release-inputs.test.mjs
 ```
 
-For an intentional new input, inspect the file and explicitly name it:
+The check never rewrites declarations. The former `add` and `remove` CLI operations are retired; change the small declaration file only when changing build configuration or shared inputs. CI and production builds discover source files using the same implementation.
 
-```sh
-node .github/scripts/browser-release-inputs.mjs add modern web/modern/src/path/to/reviewed-file.ts
-```
+Discovery rejects private/hidden path segments (except public `.well-known`), credential/key files, special files and file/ancestor symlinks before reading contents. The build takes an immutable snapshot of the discovered names and bytes, rejects resolved first-party imports outside that snapshot, and rechecks membership and bytes before emitting artifacts. Adding, deleting or modifying an input during the build fails closed. Theme dependency resolution remains confined to its installed dependencies, whose package and lock bytes participate in the snapshot. No arbitrary environment values or Git metadata enter the identity.
 
-For a deleted or renamed input, explicitly remove its old path and add the new path in the same change:
-
-```sh
-node .github/scripts/browser-release-inputs.mjs remove modern web/modern/src/path/to/deleted-file.ts
-```
-
-The command changes only the selected theme's requested entries and preserves other theme lists. Name shared `web/legacy` inputs explicitly for every affected theme. It rejects private paths, traversal, cross-theme paths and symlinks when adding inputs; `check` rejects unlisted or deleted files and runs the same production guard for all three themes. Removal changes the list only, so removing a still-present source/public file continues to fail the check.
-
-Review the JSON diff, rerun `check`, and run the affected theme's tests and production build. The mandatory CI `changes` job runs this check without installing frontend dependencies. Full browser/build qualification remains available through the non-deploy CI workflow. Never regenerate approval during the Docker build or rerun delivery just to validate this manifest: delivery publishes production image tags and can deploy.
+Run the affected theme's tests and production build when changing inputs. The mandatory CI `changes` job checks declarations without installing frontend dependencies. Full browser/build qualification remains available through the non-deploy CI workflow. Never rerun delivery merely to validate discovery: delivery publishes production image tags and can deploy.
