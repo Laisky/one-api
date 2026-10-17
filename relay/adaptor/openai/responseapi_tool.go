@@ -6,18 +6,29 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
+	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/relay/model"
 )
+
+// MaxResponseNamespaceTools bounds local definitions decoded in one group.
+const MaxResponseNamespaceTools = 1024
 
 // ResponseAPITool represents the tool format for Response API requests
 // This differs from the ChatCompletion tool format where function properties are nested
 // Supports both function tools and MCP tools
 type ResponseAPITool struct {
+	Execution   string          `json:"execution,omitempty"`   // Client/server discovery discriminator.
 	Type        string          `json:"type"`                  // Required: "function", "web_search", "mcp", etc.
 	Name        string          `json:"name,omitempty"`        // Legacy: function name when function block absent
 	Description string          `json:"description,omitempty"` // Legacy: function description when function block absent
 	Parameters  map[string]any  `json:"parameters,omitempty"`  // Legacy: function parameters when function block absent
 	Function    *model.Function `json:"function,omitempty"`    // Modern function definition (preferred for Response API)
+
+	// Local namespace children and custom-tool wire metadata.
+	Tools        []ResponseAPITool `json:"tools,omitempty"`
+	Format       json.RawMessage   `json:"format,omitempty"`
+	Strict       *bool             `json:"strict,omitempty"`
+	DeferLoading *bool             `json:"defer_loading,omitempty"`
 
 	// Web-search specific configuration
 	SearchContextSize *string                 `json:"search_context_size,omitempty"`
@@ -37,6 +48,12 @@ func (t ResponseAPITool) MarshalJSON() ([]byte, error) {
 	case "function":
 		fn := sanitizeFunctionForRequest(t)
 		payload := map[string]any{"type": "function"}
+		if t.Strict != nil {
+			payload["strict"] = t.Strict
+		}
+		if t.DeferLoading != nil {
+			payload["defer_loading"] = t.DeferLoading
+		}
 		if fn != nil {
 			if name := strings.TrimSpace(fn.Name); name != "" {
 				payload["name"] = name
@@ -103,7 +120,12 @@ func marshalResponseAPIToolPayload(payload any) ([]byte, error) {
 
 func (t *ResponseAPITool) UnmarshalJSON(data []byte) error {
 	type rawTool struct {
+		Execution         string                  `json:"execution,omitempty"`
 		Type              string                  `json:"type"`
+		Tools             []json.RawMessage       `json:"tools,omitempty"`
+		Format            json.RawMessage         `json:"format,omitempty"`
+		Strict            *bool                   `json:"strict,omitempty"`
+		DeferLoading      *bool                   `json:"defer_loading,omitempty"`
 		Name              string                  `json:"name,omitempty"`
 		Description       string                  `json:"description,omitempty"`
 		Parameters        map[string]any          `json:"parameters,omitempty"`
@@ -118,11 +140,46 @@ func (t *ResponseAPITool) UnmarshalJSON(data []byte) error {
 		Headers           map[string]string       `json:"headers,omitempty"`
 	}
 
+	// Every tool is its own raw/typed admission boundary, including children.
+	if err := common.ValidateUnambiguousJSONRootKeys(data, rawTool{}); err != nil {
+		return errors.Wrap(err, "validate response tool keys")
+	}
 	var raw rawTool
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return errors.Wrap(err, "unmarshal response api tool")
 	}
 
+	// Decode at most one namespace level. Inspect children before invoking this
+	// decoder again, so malformed deep groups cannot consume recursive stacks.
+	if len(raw.Tools) > MaxResponseNamespaceTools {
+		return errors.New("response namespace tool count exceeds limit")
+	}
+	var children []ResponseAPITool
+	if len(raw.Tools) > 0 {
+		children = make([]ResponseAPITool, 0, len(raw.Tools))
+	}
+	for _, child := range raw.Tools {
+		var shape struct {
+			Type  string          `json:"type"`
+			Tools json.RawMessage `json:"tools"`
+		}
+		if err := json.Unmarshal(child, &shape); err != nil {
+			return errors.Wrap(err, "decode response namespace child")
+		}
+		if strings.EqualFold(strings.TrimSpace(shape.Type), "namespace") || len(shape.Tools) > 0 {
+			return errors.New("nested response namespace tools are not supported")
+		}
+		var decoded ResponseAPITool
+		if err := json.Unmarshal(child, &decoded); err != nil {
+			return errors.Wrap(err, "decode response namespace tool")
+		}
+		children = append(children, decoded)
+	}
+	t.Tools = children
+	t.Format = raw.Format
+	t.Strict = raw.Strict
+	t.DeferLoading = raw.DeferLoading
+	t.Execution = raw.Execution
 	t.Type = raw.Type
 	t.Name = raw.Name
 	t.Description = raw.Description

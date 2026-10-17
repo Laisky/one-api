@@ -56,7 +56,20 @@ type OutputItem struct {
 	// Function call fields
 	CallId    string `json:"call_id,omitempty"`   // Call ID for function calls
 	Name      string `json:"name,omitempty"`      // Function name for function calls
+	Namespace string `json:"namespace,omitempty"` // Namespace stays separate from the local tool name.
+	Input     string `json:"input,omitempty"`     // Client-side custom-tool input.
 	Arguments string `json:"arguments,omitempty"` // Function arguments for function calls
+
+	// Tool search uses structured arguments and Responses definitions, while
+	// ordinary function Arguments and MCP Tools retain their existing Go types.
+	Execution           string            `json:"execution,omitempty"`
+	ToolSearchArguments json.RawMessage   `json:"-"`
+	ToolSearchTools     []ResponseAPITool `json:"-"`
+
+	// Retained catalogs preserve unknown metadata and exact schema literals only
+	// while the public typed view still matches its immutable decode snapshot.
+	toolSearchToolsRaw      json.RawMessage
+	toolSearchToolsSnapshot []byte
 
 	// MCP-specific fields
 	ServerLabel       string       `json:"server_label,omitempty"`        // Label for the MCP server (for mcp_list_tools, mcp_call, mcp_approval_request)
@@ -69,6 +82,9 @@ type OutputItem struct {
 // MarshalJSON serializes the output item and always includes the required content array for message items.
 // It accepts the receiver as the item to serialize and returns its JSON representation or a wrapped error.
 func (o OutputItem) MarshalJSON() ([]byte, error) {
+	if o.Type == "tool_search_call" || o.Type == "tool_search_output" {
+		return marshalToolSearchOutputItem(o)
+	}
 	type outputItemAlias OutputItem
 	if o.Type != "message" {
 		data, err := json.Marshal(outputItemAlias(o))
