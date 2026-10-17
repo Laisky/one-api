@@ -73,7 +73,7 @@ func responseToolsForMCP(meta *metalib.Meta, request *openai.ResponseAPIRequest)
 	tools := make([]relaymodel.Tool, 0, len(request.Tools))
 	for _, tool := range request.Tools {
 		toolType := strings.TrimSpace(tool.Type)
-		if toolType == "" || strings.EqualFold(toolType, "function") {
+		if toolType == "" || strings.EqualFold(toolType, "function") || strings.EqualFold(toolType, "namespace") {
 			continue
 		}
 		if supportsDeepSeekNativeResponseAPI(meta) && tooling.NormalizeBuiltinType(toolType) == "web_search" {

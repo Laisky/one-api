@@ -417,6 +417,15 @@ func mergeResponseToolsPreservingUnknown(original json.RawMessage, sanitized []o
 		if err := json.Unmarshal(sanitizedBytes, &sanitizedObject); err != nil {
 			return nil, errors.Wrap(err, "unmarshal sanitized response tool")
 		}
+		if strings.EqualFold(strings.TrimSpace(sanitizedTool.Type), "namespace") {
+			if originalChildren, ok := rawObject["tools"]; ok {
+				children, err := mergeResponseToolsPreservingUnknown(originalChildren, sanitizedTool.Tools)
+				if err != nil {
+					return nil, errors.Wrap(err, "merge response namespace children")
+				}
+				sanitizedObject["tools"] = children
+			}
+		}
 		for _, key := range responseToolKnownJSONKeys {
 			delete(rawObject, key)
 		}
@@ -438,7 +447,7 @@ func mergeResponseToolsPreservingUnknown(original json.RawMessage, sanitized []o
 }
 
 var responseToolKnownJSONKeys = []string{
-	"type", "name", "description", "parameters", "function",
+	"type", "name", "description", "parameters", "function", "tools", "format", "strict", "defer_loading",
 	"search_context_size", "filters", "user_location",
 	"server_label", "server_url", "require_approval", "allowed_tools", "headers",
 }
