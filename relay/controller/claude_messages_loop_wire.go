@@ -94,11 +94,11 @@ func (w *claudeNativeLoopWire) prepare(request *ClaudeMessagesRequest) ([]byte, 
 
 // mergeClaudeLoopFields overlays only changed typed fields and retains unrelated raw metadata.
 func mergeClaudeLoopFields(raw, previous, current map[string]json.RawMessage) map[string]json.RawMessage {
-	result := make(map[string]json.RawMessage, len(raw)+len(current))
+	result := make(map[string]json.RawMessage, len(raw))
 	for key, value := range raw {
 		result[key] = value
 	}
-	keys := make(map[string]struct{}, len(previous)+len(current))
+	keys := make(map[string]struct{}, len(previous))
 	for key := range previous {
 		keys[key] = struct{}{}
 	}

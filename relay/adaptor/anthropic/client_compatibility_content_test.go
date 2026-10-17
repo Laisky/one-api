@@ -74,3 +74,27 @@ func TestClientCompatibilityClaudeContentLegacyConstructed(t *testing.T) {
 		require.Equal(t, content.Input, decoded.Input)
 	}
 }
+
+// TestClientCompatibilityClaudeContentTypedAdditions preserves opaque fields as typed content grows.
+// Parameters: t owns independent JSON fixtures. Returns: none; additions must not mutate raw snapshots.
+func TestClientCompatibilityClaudeContentTypedAdditions(t *testing.T) {
+	t.Parallel()
+	var content Content
+	require.NoError(t, json.Unmarshal([]byte(`{"type":"tool_use","vendor":{"exact":9007199254740993}}`), &content))
+	rawBefore, err := json.Marshal(content.rawFields)
+	require.NoError(t, err)
+	snapshotBefore, err := json.Marshal(content.typedSnapshot)
+	require.NoError(t, err)
+	content.Id, content.Name = "call_added", "probe_added"
+	content.Input = map[string]any{"query": "new"}
+	wire, err := json.Marshal(content)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"type":"tool_use","id":"call_added","name":"probe_added","input":{"query":"new"},"vendor":{"exact":9007199254740993}}`, string(wire))
+	require.Contains(t, string(wire), "9007199254740993")
+	rawAfter, err := json.Marshal(content.rawFields)
+	require.NoError(t, err)
+	snapshotAfter, err := json.Marshal(content.typedSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, rawBefore, rawAfter)
+	require.Equal(t, snapshotBefore, snapshotAfter)
+}

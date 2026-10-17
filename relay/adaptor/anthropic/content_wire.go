@@ -72,7 +72,7 @@ func (c Content) MarshalJSON() ([]byte, error) {
 	if err := json.Unmarshal(typedBytes, &typed); err != nil {
 		return nil, errors.Wrap(err, "decode typed Claude content fields")
 	}
-	merged := make(map[string]json.RawMessage, len(c.rawFields)+len(typed))
+	merged := make(map[string]json.RawMessage, len(c.rawFields))
 	for key, value := range c.rawFields {
 		merged[key] = value
 	}
