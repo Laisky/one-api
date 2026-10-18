@@ -2,7 +2,9 @@ package otelbridge
 
 import (
 	"context"
+	stderrors "errors"
 	"math"
+	"strings"
 
 	"github.com/Laisky/zap/zapcore"
 	"go.opentelemetry.io/otel/attribute"
@@ -93,7 +95,11 @@ func PrivateAttribute(kv attribute.KeyValue) bool {
 		return kv.Value.Type() == attribute.BOOL
 	case "user_id", "token_id", "channel_id", "server_id":
 		return kv.Value.Type() == attribute.INT64 && kv.Value.AsInt64() >= 0 && kv.Value.AsInt64() <= 1<<31-1
-	case "status", "status_code":
+	case "status":
+		// Channel state is 1/2/3; native provider status strings are sanitized by
+		// SanitizeLogAttribute. Only status_code specifically denotes HTTP.
+		return kv.Value.Type() == attribute.INT64 && kv.Value.AsInt64() >= 0 && kv.Value.AsInt64() <= 1<<31-1
+	case "status_code":
 		return kv.Value.Type() == attribute.INT64 && kv.Value.AsInt64() >= 100 && kv.Value.AsInt64() <= 599
 	}
 	if kv.Value.Type() == attribute.INT64 {
@@ -114,7 +120,31 @@ func privateErrorText(err error) (text string) {
 			text = "[error formatting failed]"
 		}
 	}()
-	return err.Error()
+	return privateErrorTextDepth(err, 0)
+}
+
+// privateErrorTextDepth uses an actual single-cause wrapping relationship,
+// bounded to eight edges, to keep operation/cause diagnostics distinct. Generic
+// messages and string attributes never receive this structural projection.
+func privateErrorTextDepth(err error, depth int) string {
+	raw := err.Error()
+	if depth >= 8 {
+		return SanitizeLogText(raw)
+	}
+	cause := stderrors.Unwrap(err)
+	if cause == nil {
+		return SanitizeLogText(raw)
+	}
+	causeRaw := cause.Error()
+	operation, wraps := strings.CutSuffix(raw, ": "+causeRaw)
+	if !wraps {
+		return SanitizeLogText(raw)
+	}
+	projectedCause := privateErrorTextDepth(cause, depth+1)
+	if projectedCause != causeRaw || privatePayloadPattern.MatchString(operation+": ") {
+		return SanitizeLogText(operation) + " (cause: " + projectedCause + ")"
+	}
+	return SanitizeLogText(raw)
 }
 
 // finitePrivateNumber reports whether a floating-point diagnostic is finite.

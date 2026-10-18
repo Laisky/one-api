@@ -17,6 +17,7 @@ import (
 	"github.com/Laisky/zap/zapcore"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
+	otellog "go.opentelemetry.io/otel/log"
 	sdkresource "go.opentelemetry.io/otel/sdk/resource"
 	collectorlogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
@@ -77,6 +78,14 @@ func TestOperationalLogProductionHTTPWire(t *testing.T) {
 		zap.String("prompt", "SYNTHETIC_PRIVATE_PROMPT"), zap.String("Authorization", "SYNTHETIC_PRIVATE_TOKEN"),
 		zap.String("url", "/v1/responses?unknown=SYNTHETIC_PRIVATE_QUERY"),
 		zap.String("diagnostic", "dial tcp cache.internal:6379: connection refused"))
+	native := provider.Logger(otelbridge.DefaultScopeName)
+	for _, event := range []string{"cache.refresh.completed", "cache.refresh token=SYNTHETIC_PRIVATE_EVENT"} {
+		var record otellog.Record
+		record.SetBody(attribute.StringValue("native worker completed"))
+		record.SetEventName(event)
+		record.AddAttributes(attribute.String("event.name", "attribute-only"))
+		native.Emit(ctx, record)
+	}
 	require.NoError(t, provider.ForceFlush(ctx))
 	var got capture
 	select {
@@ -90,7 +99,11 @@ func TestOperationalLogProductionHTTPWire(t *testing.T) {
 	require.Len(t, request.ResourceLogs, 1)
 	require.Len(t, request.ResourceLogs[0].ScopeLogs, 1)
 	records := request.ResourceLogs[0].ScopeLogs[0].LogRecords
-	require.Len(t, records, 1)
+	require.Len(t, records, 3)
+	require.Equal(t, "cache.refresh.completed", records[1].EventName)
+	require.Equal(t, "cache.refresh token=[REDACTED]", records[2].EventName)
+	require.Equal(t, "native worker completed", records[1].Body.GetStringValue())
+	require.Equal(t, "native worker completed", records[2].Body.GetStringValue())
 	require.Equal(t, original, records[0].Body.GetStringValue())
 	attrs := map[string]*commonpb.AnyValue{}
 	for _, kv := range records[0].Attributes {

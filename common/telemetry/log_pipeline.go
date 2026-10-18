@@ -294,6 +294,7 @@ func estimateRecordBytes(record *sdklog.Record) int64 {
 
 	size := int64(recordOverheadBytes)
 	size += int64(len(record.SeverityText()))
+	size += int64(len(record.EventName()))
 	size += attributeValueBytes(record.Body())
 	record.WalkAttributes(func(kv attribute.KeyValue) bool {
 		size += int64(len(kv.Key)) + attributeValueBytes(kv.Value)

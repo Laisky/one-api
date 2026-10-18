@@ -1,7 +1,7 @@
 # Operational log content and privacy
 
 The optional OTLP application-log sink preserves operational messages and
-ordinary scalar structured fields. It shares severity, timestamp, trace/span
+ordinary scalar structured fields, including the native SDK EventName field. It shares severity, timestamp, trace/span
 correlation and trusted Zap caller metadata with the local logger. New or dynamic
 benign messages do not require a message catalog, and new scalar keys do not
 require registration. Local stdout/file and alert sinks keep their existing
@@ -20,7 +20,9 @@ service/host/environment identity or forge trusted caller metadata.
   unknown operational keys, negative deltas, `sync_frequency`, `content_length`,
   `query_latency`, `token_count` and `password_reset_required`.
 - Existing type/range validation for status, numeric identity, usage and transport
-  counters. For example, `prompt_tokens` is a counter, not a prompt payload.
+  counters. Generic `status` preserves bounded nonnegative channel states and
+  sanitized native status strings; `status_code` keeps strict HTTP100–599
+  validation. For example, `prompt_tokens` is a counter, not a prompt payload.
 - Ordinary `error.Error()` diagnostic text after sanitization. Verbose exception
   formatting and arbitrary object/array/reflection/Stringer serializers are not
   invoked by the OTLP projection.
@@ -29,6 +31,8 @@ Unsupported or invalid fields are omitted with `log.fields_omitted=true`.
 This flag never contains the omitted value. Text is bounded before normalization
 and regular-expression work; the SDK's attribute limits, bounded record/byte
 admission, drop counters, exporter timeout and shutdown behavior still apply.
+Sanitized SDK EventName bytes participate in admission accounting, so a large
+event cannot bypass the byte ceiling; event.name attributes are separate fields.
 
 ## Targeted protection
 
@@ -38,8 +42,14 @@ field policy rather than an allowlist of operational names. Recognizable
 credential assignments, authentication values and API-key/JWT forms are removed
 from messages and scalar strings. Quoted secrets include escaped, unterminated and
 budget-truncated values. A labeled raw payload is replaced while preserving the
-diagnostic prefix. Ordinary read failures such as `read body: unexpected EOF`
-retain the useful reason.
+diagnostic prefix. This also applies to untyped text such as `read body: ...`;
+read/reading prefixes do not establish provenance or bypass redaction.
+
+For an actual typed Zap ErrorType wrapping error with an Unwrap cause, the bridge
+can separate operation and sanitized cause, e.g. `read body (cause: unexpected EOF)`.
+Traversal is bounded to eight edges. This projection never applies to message
+Body, ordinary string fields or direct SDK text, and it does not classify a
+private unlabeled cause as safe; source marking is still required.
 
 Absolute and relative URL fields retain their route while removing userinfo,
 all query values and fragments. Recognizable credential-bearing path segments

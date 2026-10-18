@@ -15,7 +15,7 @@ import (
 func TestPrivateLogTextPreservesDiagnostics(t *testing.T) {
 	cases := []struct{ name, input, expected string }{
 		{"metadata boundary", "metadata:ready, token_count=12 password_reset_required=false", "metadata:ready, token_count=12 password_reset_required=false"},
-		{"read pipe error", "failed to read response body: io: read/write on closed pipe", "failed to read response body: io: read/write on closed pipe"},
+		{"read pipe error", "failed to read response body: io: read/write on closed pipe", "failed to read response body: [REDACTED]"},
 		{"ordinary", "worker shard 7 completed 13 checks", "worker shard 7 completed 13 checks"},
 		{"error", "dial tcp cache.internal:6379: connection refused", "dial tcp cache.internal:6379: connection refused"},
 		{"auth", "upstream rejected Bearer sentinel-auth-token", "upstream rejected Bearer [REDACTED]"},
@@ -25,8 +25,8 @@ func TestPrivateLogTextPreservesDiagnostics(t *testing.T) {
 		{"payload", "decode failed: response body: sentinel-private-prompt", "decode failed: response body: [REDACTED]"},
 		{"json", `upstream failed: response body: {"error":{"message":"sentinel-private-prompt"}}`, "upstream failed: response body: [REDACTED]"},
 		{"ordinary metadata", `worker metadata {"retries":3}`, `worker metadata {"retries":3}`},
-		{"read error with payload", "failed to read response body: provider rejected prompt: SYNTHETIC_PRIVATE_PROMPT", "failed to read response body: provider rejected prompt: [REDACTED]"},
-		{"read failure", "read response body: unexpected EOF", "read response body: unexpected EOF"},
+		{"read error with payload", "failed to read response body: provider rejected prompt: SYNTHETIC_PRIVATE_PROMPT", "failed to read response body: [REDACTED]"},
+		{"read failure", "read response body: unexpected EOF", "read response body: [REDACTED]"},
 		{"quoted", `connect failed password="first \"quoted\" synthetic secret"; retries=3`, "connect failed password=[REDACTED]; retries=3"},
 		{"unterminated", `connect failed password="first synthetic secret remainder`, "connect failed password=[REDACTED]"},
 		{"versioned", "exchange failed api_key_v2=SYNTHETIC_KEY; retries=3", "exchange failed api_key_v2=[REDACTED]; retries=3"},

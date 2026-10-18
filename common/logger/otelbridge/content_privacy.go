@@ -17,15 +17,14 @@ const maxPrivateTextBytes = 4096
 const privateReplacement = "[REDACTED]"
 
 var (
-	privateReadFailurePattern = regexp.MustCompile(`(?i)\b(?:read|reading)\s*$`)
-	privateVersionPattern     = regexp.MustCompile(`v[0-9]+$`)
-	privateURLPattern         = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*://[^\s<>"']+`)
-	privateHeaderPattern      = regexp.MustCompile(`(?im)\b((?:set[-_]?cookie|cookie|authorization|proxy[-_]?authorization)\s*:\s*)[^\r\n]*`)
-	privateAuthPattern        = regexp.MustCompile(`(?i)\b(bearer|basic)\s+[a-z0-9._~+/=-]+`)
-	privateKeyPattern         = regexp.MustCompile(`\b(?:sk-[A-Za-z0-9_-]+|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|(?:AKIA|ASIA)[A-Z0-9]{16}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)`)
-	privateAssignmentPattern  = regexp.MustCompile(`(?i)(["']?(?:authorization|proxy[-_ ]?authorization|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|secret[-_ ]?key|password[-_ ]?hash|session[-_ ]?secret|password|passwd|pwd|secret|client[-_ ]?secret|access[-_ ]?token|refresh[-_ ]?token|auth[-_ ]?token|id[-_ ]?token|token|credentials|cookie|set[-_ ]?cookie)(?:[-_ ]?v[0-9]+)?["']?\s*[:=]\s*)`)
-	privatePayloadPattern     = regexp.MustCompile(`(?i)\b((?:raw[ _-]?|request[ _-]?|response[ _-]?)?(?:body|payload)|prompt|messages|input|output|content)\s*["\']?\s*[:=]\s*`)
-	privateDataPattern        = regexp.MustCompile(`(?i)\bdata:[^\s"']+`)
+	privateVersionPattern    = regexp.MustCompile(`v[0-9]+$`)
+	privateURLPattern        = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*://[^\s<>"']+`)
+	privateHeaderPattern     = regexp.MustCompile(`(?im)\b((?:set[-_]?cookie|cookie|authorization|proxy[-_]?authorization)\s*:\s*)[^\r\n]*`)
+	privateAuthPattern       = regexp.MustCompile(`(?i)\b(bearer|basic)\s+[a-z0-9._~+/=-]+`)
+	privateKeyPattern        = regexp.MustCompile(`\b(?:sk-[A-Za-z0-9_-]+|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|(?:AKIA|ASIA)[A-Z0-9]{16}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)`)
+	privateAssignmentPattern = regexp.MustCompile(`(?i)(["']?(?:authorization|proxy[-_ ]?authorization|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|secret[-_ ]?key|password[-_ ]?hash|session[-_ ]?secret|password|passwd|pwd|secret|client[-_ ]?secret|access[-_ ]?token|refresh[-_ ]?token|auth[-_ ]?token|id[-_ ]?token|token|credentials|cookie|set[-_ ]?cookie)(?:[-_ ]?v[0-9]+)?["']?\s*[:=]\s*)`)
+	privatePayloadPattern    = regexp.MustCompile(`(?i)\b((?:raw[ _-]?|request[ _-]?|response[ _-]?)?(?:body|payload)|prompt|messages|input|output|content)\s*["\']?\s*[:=]\s*`)
+	privateDataPattern       = regexp.MustCompile(`(?i)\bdata:[^\s"']+`)
 )
 
 // SanitizeLogText takes diagnostic text and returns bounded text with recognized
@@ -53,19 +52,10 @@ func SanitizeLogText(value string) string {
 	value = privateAuthPattern.ReplaceAllString(value, "$1 "+privateReplacement)
 	value = privateKeyPattern.ReplaceAllString(value, privateReplacement)
 	value = redactPrivateAssignments(value)
-	// Continue after a diagnostic read prefix so a later explicitly labeled
-	// payload in that same error is still removed.
-	for offset := 0; offset < len(value); {
-		match := privatePayloadPattern.FindStringIndex(value[offset:])
-		if match == nil {
-			break
-		}
-		start, end := offset+match[0], offset+match[1]
-		if !privateReadFailurePattern.MatchString(value[:start]) {
-			value = value[:end] + privateReplacement
-			break
-		}
-		offset = end
+	// Every labeled payload in generic text is private, including read/reading
+	// prefixes. Typed wrapping-error context is projected only by ErrorType.
+	if match := privatePayloadPattern.FindStringIndex(value); match != nil {
+		value = value[:match[1]] + privateReplacement
 	}
 
 	return value
@@ -139,6 +129,9 @@ func SanitizeLogAttribute(kv attribute.KeyValue) (attribute.KeyValue, bool) {
 			return kv, false
 		}
 		return attribute.String(key, sanitizePrivateURL(kv.Value.AsString())), true
+	}
+	if key == "status" && kv.Value.Type() == attribute.STRING {
+		return attribute.String(key, SanitizeLogText(kv.Value.AsString())), true
 	}
 	if privateNumericFields[key] {
 		return kv, PrivateAttribute(kv)

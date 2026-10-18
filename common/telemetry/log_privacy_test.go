@@ -37,7 +37,7 @@ func TestGlobalSDKLogsArePrivateBeforeAdmission(t *testing.T) {
 	var record otellog.Record
 	record.SetTimestamp(stamp)
 	record.SetBody(attribute.StringValue("cache retry 3 failed: password=sentinel-body-secret"))
-	record.SetEventName("sentinel-event-secret")
+	record.SetEventName("cache.refresh token=sentinel-event-secret")
 	record.SetSeverity(otellog.SeverityError)
 	record.SetSeverityText("sentinel-severity-secret")
 	record.AddAttributes(attribute.String("error", "dial failed: api_key=sentinel-error-secret"),
@@ -55,7 +55,7 @@ func TestGlobalSDKLogsArePrivateBeforeAdmission(t *testing.T) {
 	capture.mu.Unlock()
 	require.Equal(t, int64(1), gate.residentRecords.Load())
 	require.Equal(t, "cache retry 3 failed: password=[REDACTED]", got.Body().AsString())
-	require.Empty(t, got.EventName())
+	require.Equal(t, "cache.refresh token=[REDACTED]", got.EventName())
 	require.Equal(t, otellog.SeverityError.String(), got.SeverityText())
 	require.Equal(t, stamp, got.Timestamp())
 	require.Equal(t, sc.TraceID(), got.TraceID())

@@ -31,9 +31,9 @@ type privacyLogProcessor struct {
 	resourceSafe bool
 }
 
-// Enabled delegates the severity decision without retaining event text.
+// Enabled delegates filtering with the same bounded sanitized event as emission.
 func (p *privacyLogProcessor) Enabled(ctx context.Context, param sdklog.EnabledParameters) bool {
-	param.EventName = ""
+	param.EventName = otelbridge.SanitizeLogText(param.EventName)
 	return p.next.Enabled(ctx, param)
 }
 
@@ -61,7 +61,7 @@ func (p *privacyLogProcessor) OnEmit(ctx context.Context, record *sdklog.Record)
 	} else {
 		record.SetBody(attribute.StringValue("[unsupported log body]"))
 	}
-	record.SetEventName("")
+	record.SetEventName(otelbridge.SanitizeLogText(record.EventName()))
 	severity := record.Severity()
 	if severity < otellog.SeverityTrace || severity > otellog.SeverityFatal4 {
 		severity = otellog.SeverityInfo
