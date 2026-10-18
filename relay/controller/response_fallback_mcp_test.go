@@ -104,7 +104,7 @@ func TestRelayResponseAPIHelper_FallbackAnthropicMCPPrunesUnmatchedResponseTools
 	  "input": [{"role": "user", "content": [{"type": "input_text", "text": "Search and summarize."}]}],
 	  "tools": [
 	    {"type": "web_search"},
-	    {"type": "namespace"},
+	    {"type": "unmatched_gateway_tool"},
 	    {"type": "function", "name": "section_edit", "description": "Edit a section", "parameters": {"type": "object"}}
 	  ]
 	}`
@@ -150,7 +150,7 @@ func TestRelayResponseAPIHelper_FallbackAnthropicMCPPrunesUnmatchedResponseTools
 
 	toolNames := []string{upstreamReq.Tools[0].Name, upstreamReq.Tools[1].Name}
 	require.ElementsMatch(t, []string{"section_edit", "web_search"}, toolNames)
-	require.NotContains(t, toolNames, "namespace", "unmatched Response-only namespace tool should be pruned")
+	require.NotContains(t, toolNames, "unmatched_gateway_tool", "unmatched gateway alias should be pruned")
 
 	require.Contains(t, recorder.Header().Get("Content-Type"), "text/event-stream", "streaming Responses clients must receive SSE")
 	events := parseSSEEvents(recorder.Body.String())
