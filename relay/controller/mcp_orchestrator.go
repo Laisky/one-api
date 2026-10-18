@@ -16,6 +16,7 @@ import (
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
+	awsutils "github.com/Laisky/one-api/relay/adaptor/aws/utils"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/mcp"
@@ -441,6 +442,14 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 
 		response, usage, respErr := doChatRequestOnce(c, meta, adaptorInstance, request, prepared)
 		if respErr != nil {
+			if usage != nil {
+				// Accepted work owns this round's reservation even when its receipt fails.
+				if merged, mergeErr := mergeUsage(accumulated, usage); mergeErr == nil {
+					accumulated = merged
+				}
+				accumulated = retainMCPAcceptedUsage(accumulated, "mcp_accepted_response_failed")
+				return nil, accumulated, summary, incrementalCharged, respErr
+			}
 			if roundQuota > 0 {
 				billing.ReturnPreConsumedQuota(gmw.Ctx(c), roundQuota, meta.TokenId)
 				incrementalCharged -= roundQuota
@@ -448,7 +457,13 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 			}
 			return nil, accumulated, summary, incrementalCharged, respErr
 		}
-		accumulated = mergeUsage(accumulated, usage)
+		merged, mergeErr := mergeUsage(accumulated, usage)
+		if mergeErr != nil {
+			accumulated = retainMCPAcceptedUsage(accumulated, "invalid_mcp_aggregate_after_accepted_upstream")
+			return nil, accumulated, summary, incrementalCharged,
+				openai.ErrorWrapper(mergeErr, "invalid_mcp_usage", 502)
+		}
+		accumulated = merged
 		updateMCPRequestCostEstimate(c, meta, accumulated, request.Model, modelRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, pricingAdaptor)
 
 		choice, ok := firstChoice(response)
@@ -542,13 +557,19 @@ func doChatRequestOnce(c *gin.Context, meta *metalib.Meta, adaptorInstance adapt
 	c.Set(ctxkey.SkipAdaptorResponseBodyLog, true)
 	usage, respErr := adaptorInstance.DoResponse(c, resp, meta)
 	c.Writer = origWriter
-	if respErr != nil && usage == nil {
-		return nil, nil, respErr
+	if respErr != nil {
+		if anthropic.IsAdmissionRejection(respErr) || awsutils.IsAdmissionRejection(respErr) {
+			return nil, nil, respErr
+		}
+		return nil, retainMCPAcceptedUsage(usage, "mcp_accepted_response_failed"), respErr
+	}
+	if usage == nil {
+		usage = retainMCPAcceptedUsage(nil, "mcp_accepted_response_missing_usage")
 	}
 
 	var parsed openai.TextResponse
 	if err := json.Unmarshal(capture.BodyBytes(), &parsed); err != nil {
-		return nil, usage, openai.ErrorWrapper(err, "parse_chat_response_failed", 500)
+		return nil, retainMCPAcceptedUsage(usage, "mcp_accepted_response_invalid_body"), openai.ErrorWrapper(err, "parse_chat_response_failed", 500)
 	}
 	if len(parsed.Choices) > 0 {
 		choice := parsed.Choices[0]

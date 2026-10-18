@@ -44,9 +44,19 @@ var relayHelperForTest func(c *gin.Context, relayMode int) *model.ErrorWithStatu
 // provider handling. Parameters: c carries the request and relayMode selects the
 // endpoint family. Returns: a normalized relay error or nil on success.
 func invokeRelayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
-	return relayHelper(c, relayMode)
+	// Actual attempts cannot inherit an earlier wire error. A skipped transport
+	// candidate is not a provider attempt: Relay may select lastDispatchErr if
+	// only such candidates remain, so keep its matching capture available.
+	previous, _ := c.Get(ctxkey.ClaudeNativeErrorResponse)
+	c.Set(ctxkey.ClaudeNativeErrorResponse, nil)
+	failure := relayHelper(c, relayMode)
+	if failure != nil && adaptor.IsRESTTransportMismatch(failure.RawError) {
+		c.Set(ctxkey.ClaudeNativeErrorResponse, previous)
+	}
+	return failure
 }
 
+// relayHelper dispatches the selected API format and returns its relay error.
 func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 	// A Live-only model has no REST transport on a Google channel, and Google
 	// itself answers such a request with HTTP 400. Deciding that here, per relay
@@ -518,6 +528,7 @@ func selectRetryChannel(ctx context.Context, group string, originalModel string,
 	return channel, nil
 }
 
+// RelayNotImplemented writes the unsupported-endpoint response to the request context.
 func RelayNotImplemented(c *gin.Context) {
 	msg := "API not implemented"
 	errObj := model.Error{
@@ -532,6 +543,7 @@ func RelayNotImplemented(c *gin.Context) {
 	})
 }
 
+// RelayNotFound writes the unknown-endpoint response to the request context.
 func RelayNotFound(c *gin.Context) {
 	msg := fmt.Sprintf("Invalid URL (%s %s)", c.Request.Method, c.Request.URL.Path)
 	errObj := model.Error{
