@@ -69,8 +69,10 @@ type Core struct {
 	emitCtx context.Context
 	// err is the error latched by With from a zap.Error field.
 	err error
-	// private restricts the production export to content-free diagnostics.
+	// private sanitizes production OTLP content independently of local sinks.
 	private bool
+	// omitted tracks unsupported or invalid bound fields without retaining values.
+	omitted bool
 }
 
 // Compile-time proof that the adapter satisfies the FORK's Core interface,
@@ -124,6 +126,7 @@ func (c *Core) With(fields []zapcore.Field) zapcore.Core {
 
 	converted := c.convertFields(fields)
 	cloned.attrs = append(cloned.attrs, converted.attrs...)
+	cloned.omitted = cloned.omitted || converted.omitted
 	if converted.spanCtx.IsValid() {
 		cloned.spanCtx = converted.spanCtx
 	}
@@ -152,6 +155,7 @@ func (c *Core) clone() *Core {
 		emitCtx:      c.emitCtx,
 		err:          c.err,
 		private:      c.private,
+		omitted:      c.omitted,
 	}
 }
 
@@ -238,7 +242,7 @@ func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) log.Rec
 	var record log.Record
 	record.SetTimestamp(ent.Time)
 	if c.private {
-		record.SetBody(attribute.StringValue("application log"))
+		record.SetBody(attribute.StringValue(SanitizeLogText(ent.Message)))
 	} else {
 		record.SetBody(attribute.StringValue(ent.Message))
 	}
@@ -266,6 +270,9 @@ func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) log.Rec
 		record.AddAttributes(attribute.String(string(stackKey), ent.Stack))
 	}
 	record.AddAttributes(converted.attrs...)
+	if c.private && (c.omitted || converted.omitted) {
+		record.AddAttributes(attribute.Bool("log.fields_omitted", true))
+	}
 	if recErr != nil && !c.private {
 		record.SetErr(recErr)
 	}
@@ -324,6 +331,7 @@ type convertedFields struct {
 	spanCtx oteltrace.SpanContext
 	ctx     context.Context
 	err     error
+	omitted bool
 }
 
 // convertFields walks zap fields, separating correlation and error fields from

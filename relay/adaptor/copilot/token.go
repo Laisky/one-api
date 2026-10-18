@@ -94,7 +94,7 @@ func fetchCopilotToken(ctx context.Context, githubAccessToken string) (token str
 		return "", time.Time{}, errors.Wrap(readErr, "read response")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", time.Time{}, errors.Errorf("copilot token endpoint returned %d: %s", resp.StatusCode, string(body))
+		return "", time.Time{}, errors.Errorf("copilot token endpoint returned %d: response body omitted (body_bytes=%d)", resp.StatusCode, len(body))
 	}
 
 	// The response shape is not formally documented; accept multiple variants.
@@ -116,7 +116,7 @@ func fetchCopilotToken(ctx context.Context, githubAccessToken string) (token str
 	}
 
 	if raw.Token == "" {
-		return "", time.Time{}, errors.Errorf("missing token in response: %s", string(body))
+		return "", time.Time{}, errors.Errorf("missing token in response: body omitted (body_bytes=%d)", len(body))
 	}
 
 	now := time.Now()

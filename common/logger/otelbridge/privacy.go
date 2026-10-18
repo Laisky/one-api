@@ -8,8 +8,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// privateNumericFields lists content-free operational metadata allowed off-box.
-// Unknown keys and all string, object, error, and byte fields fail closed.
+// privateNumericFields preserves the established validation for identity, status,
+// usage and transport counters. Other scalar diagnostics are sanitized separately.
 var privateNumericFields = map[string]bool{
 	"status": true, "status_code": true, "body_size": true, "body_bytes": true,
 	"prompt_bytes": true, "prompt_tokens": true, "completion_tokens": true,
@@ -21,47 +21,53 @@ var privateNumericFields = map[string]bool{
 }
 
 // NewPrivacyCore returns a production OTLP core that exports correlation,
-// severity, caller location, and allowlisted numeric metadata.
-// Local stdout/file sinks remain unaffected. Arbitrary messages and field values
-// cannot reach the OTLP queue or edge journal through this core.
+// severity, caller location, and sanitized operational messages and scalar fields.
+// Local stdout/file sinks remain unaffected. Objects, payload fields and recognized
+// credential values cannot reach the OTLP queue through this core.
 func NewPrivacyCore(holder *ProviderHolder, scope string, enab zapcore.LevelEnabler) *Core {
 	core := NewCore(holder, scope, enab)
 	core.private = true
 	return core
 }
 
-// convertFields filters private fields before marshaling them, preserving the
+// convertFields sanitizes scalar fields before export, preserving the
 // invisible span-context carrier while avoiding arbitrary object serializers.
 func (c *Core) convertFields(fields []zapcore.Field) convertedFields {
 	if !c.private {
 		return convertFields(fields)
 	}
 	allowed := make([]zapcore.Field, 0, len(fields))
+	omitted := false
 	for _, field := range fields {
 		if _, ok := spanContextFromField(field); ok {
 			allowed = append(allowed, field)
 			continue
 		}
-		if !privateNumericFields[field.Key] {
-			continue
-		}
 		switch field.Type {
-		case zapcore.BoolType, zapcore.Int8Type, zapcore.Int16Type, zapcore.Int32Type,
+		case zapcore.StringType, zapcore.BoolType, zapcore.Int8Type, zapcore.Int16Type, zapcore.Int32Type,
 			zapcore.Int64Type, zapcore.Uint8Type, zapcore.Uint16Type, zapcore.Uint32Type,
 			zapcore.Uint64Type, zapcore.Float32Type, zapcore.Float64Type, zapcore.DurationType:
 			allowed = append(allowed, field)
+		case zapcore.ErrorType:
+			if err, ok := field.Interface.(error); ok {
+				allowed = append(allowed, zapcore.Field{Key: field.Key, Type: zapcore.StringType, String: privateErrorText(err)})
+			}
 		default:
-			// Every non-numeric field type is dropped, even under an allowed key.
+			// Do not invoke ObjectMarshaler, ArrayMarshaler, Stringer or reflection hooks.
+			omitted = true
 		}
 	}
 	converted := convertFields(allowed)
 	kept := converted.attrs[:0]
 	for _, kv := range converted.attrs {
-		if PrivateAttribute(kv) {
-			kept = append(kept, kv)
+		if safe, ok := SanitizeLogAttribute(kv); ok {
+			kept = append(kept, safe)
+		} else {
+			omitted = true
 		}
 	}
 	converted.attrs = kept
+	converted.omitted = omitted
 	return converted
 }
 
@@ -99,3 +105,17 @@ func PrivateAttribute(kv attribute.KeyValue) bool {
 	}
 	return false
 }
+
+// privateErrorText takes an error and returns its ordinary diagnostic text without
+// requesting verbose stack formatting; a broken Error method cannot panic logging.
+func privateErrorText(err error) (text string) {
+	defer func() {
+		if recover() != nil {
+			text = "[error formatting failed]"
+		}
+	}()
+	return err.Error()
+}
+
+// finitePrivateNumber reports whether a floating-point diagnostic is finite.
+func finitePrivateNumber(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }

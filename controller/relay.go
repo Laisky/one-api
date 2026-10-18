@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/middleware"
 	dbmodel "github.com/Laisky/one-api/model"
@@ -197,6 +198,9 @@ func Relay(c *gin.Context) {
 			)
 		} else {
 			errorMessagePreview := strings.TrimSpace(bizErr.Message)
+			if bizErr.MessageContainsRawBody {
+				errorMessagePreview = logger.Redact(bizErr.Message)
+			}
 			if len(errorMessagePreview) > 240 {
 				errorMessagePreview = errorMessagePreview[:240] + "..."
 			}

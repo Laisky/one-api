@@ -56,7 +56,11 @@ func (p *privacyLogProcessor) OnEmit(ctx context.Context, record *sdklog.Record)
 		metrics.RecordAppLogExport(metrics.AppLogExportOutcomeDroppedPrivacy, 1)
 		return nil
 	}
-	record.SetBody(attribute.StringValue("application log"))
+	if record.Body().Type() == attribute.STRING {
+		record.SetBody(attribute.StringValue(otelbridge.SanitizeLogText(record.Body().AsString())))
+	} else {
+		record.SetBody(attribute.StringValue("[unsupported log body]"))
+	}
 	record.SetEventName("")
 	severity := record.Severity()
 	if severity < otellog.SeverityTrace || severity > otellog.SeverityFatal4 {
@@ -65,12 +69,26 @@ func (p *privacyLogProcessor) OnEmit(ctx context.Context, record *sdklog.Record)
 	}
 	record.SetSeverityText(severity.String())
 	var kept []attribute.KeyValue
+	omitted := false
 	record.WalkAttributes(func(kv attribute.KeyValue) bool {
-		if otelbridge.PrivateAttribute(kv) || (otelbridge.IsPrivateContext(ctx) && privateCallerAttribute(kv)) {
-			kept = append(kept, kv)
+		if string(kv.Key) == "code.file.path" || string(kv.Key) == "code.function.name" || string(kv.Key) == "code.line.number" || string(kv.Key) == "log.fields_omitted" {
+			if otelbridge.IsPrivateContext(ctx) && privateCallerAttribute(kv) {
+				kept = append(kept, kv)
+			} else {
+				omitted = true
+			}
+			return true
+		}
+		if safe, ok := otelbridge.SanitizeLogAttribute(kv); ok {
+			kept = append(kept, safe)
+		} else {
+			omitted = true
 		}
 		return true
 	})
+	if omitted {
+		kept = append(kept, attribute.Bool("log.fields_omitted", true))
+	}
 	record.SetAttributes(kept...)
 	return p.next.OnEmit(ctx, record)
 }
@@ -82,6 +100,8 @@ func privateCallerAttribute(kv attribute.KeyValue) bool {
 		return kv.Value.Type() == attribute.STRING
 	case "code.line.number":
 		return kv.Value.Type() == attribute.INT64 && kv.Value.AsInt64() >= 0
+	case "log.fields_omitted":
+		return kv.Value.Type() == attribute.BOOL && kv.Value.AsBool()
 	}
 	return false
 }

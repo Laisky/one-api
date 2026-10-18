@@ -36,24 +36,25 @@ func TestGlobalSDKLogsArePrivateBeforeAdmission(t *testing.T) {
 	stamp := time.Now()
 	var record otellog.Record
 	record.SetTimestamp(stamp)
-	record.SetBody(attribute.StringValue("sentinel-body-secret"))
+	record.SetBody(attribute.StringValue("cache retry 3 failed: password=sentinel-body-secret"))
 	record.SetEventName("sentinel-event-secret")
 	record.SetSeverity(otellog.SeverityError)
 	record.SetSeverityText("sentinel-severity-secret")
-	record.AddAttributes(attribute.String("error", "sentinel-error-secret"),
+	record.AddAttributes(attribute.String("error", "dial failed: api_key=sentinel-error-secret"),
 		attribute.String("code.file.path", "sentinel-forged-caller"),
 		attribute.String("cookie", "sentinel-cookie-secret"),
 		attribute.Map("headers", attribute.String("Authorization", "sentinel-key")),
 		attribute.Int("channel_id", 7), attribute.Int("status_code", 503),
 		attribute.Int64("server_id", 1<<40), attribute.Int("token_id", -1),
-		attribute.Float64("user_id", 123), attribute.Int("body_bytes", 100))
+		attribute.Float64("user_id", 123), attribute.Int("body_bytes", 100), attribute.String("component", "native-sdk-worker"),
+		attribute.Float64("query_latency", 0.25), attribute.Bool("password_reset_required", false))
 	sc := trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{1, 2, 3}, SpanID: trace.SpanID{4, 5, 6}})
 	logger.Emit(trace.ContextWithSpanContext(context.Background(), sc), record)
 	capture.mu.Lock()
 	got := capture.last.Clone()
 	capture.mu.Unlock()
 	require.Equal(t, int64(1), gate.residentRecords.Load())
-	require.Equal(t, "application log", got.Body().AsString())
+	require.Equal(t, "cache retry 3 failed: password=[REDACTED]", got.Body().AsString())
 	require.Empty(t, got.EventName())
 	require.Equal(t, otellog.SeverityError.String(), got.SeverityText())
 	require.Equal(t, stamp, got.Timestamp())
@@ -66,7 +67,7 @@ func TestGlobalSDKLogsArePrivateBeforeAdmission(t *testing.T) {
 	require.Equal(t, 0, scope.Attributes.Len())
 	var attrs []attribute.KeyValue
 	got.WalkAttributes(func(kv attribute.KeyValue) bool { attrs = append(attrs, kv); return true })
-	require.ElementsMatch(t, []attribute.KeyValue{attribute.Int("channel_id", 7), attribute.Int("status_code", 503), attribute.Int("body_bytes", 100)}, attrs)
+	require.ElementsMatch(t, []attribute.KeyValue{attribute.Int("channel_id", 7), attribute.Int("status_code", 503), attribute.Int("body_bytes", 100), attribute.String("error", "dial failed: api_key=[REDACTED]"), attribute.String("cookie", "[REDACTED]"), attribute.String("headers", "[REDACTED]"), attribute.Bool("log.fields_omitted", true), attribute.String("component", "native-sdk-worker"), attribute.Float64("query_latency", 0.25), attribute.Bool("password_reset_required", false)}, attrs)
 	require.Equal(t, []attribute.KeyValue{attribute.String("service.name", "one-api")}, got.Resource().Attributes())
 }
 

@@ -49,6 +49,12 @@ import (
 //   - *sdklog.LoggerProvider: the configured provider.
 //   - error: a wrapped failure when the exporter cannot be created.
 func newLoggerProvider(ctx context.Context, res *sdkresource.Resource) (*sdklog.LoggerProvider, error) {
+	if err := validateLogResourceEnvironment(); err != nil {
+		return nil, err
+	}
+	if err := validateLogExporterEnvironment(); err != nil {
+		return nil, err
+	}
 	exporter, err := otlploghttp.New(ctx, buildLogExporterOptions()...)
 	if err != nil {
 		return nil, laerrors.Wrap(err, "create OTLP log exporter")

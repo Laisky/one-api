@@ -337,6 +337,9 @@ func (p *ProviderBundle) Shutdown(ctx context.Context) error {
 }
 
 func buildResource(ctx context.Context) (*sdkresource.Resource, error) {
+	if err := validateLogResourceEnvironment(); err != nil {
+		return nil, err
+	}
 	attrs := []attribute.KeyValue{
 		attribute.String("service.name", config.OpenTelemetryServiceName),
 		attribute.String("service.version", common.Version),
