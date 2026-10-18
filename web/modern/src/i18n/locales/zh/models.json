@@ -25,6 +25,7 @@
       "document": "文档",
       "embedding_pricing": "嵌入定价",
       "free": "免费",
+      "historical_pricing": "历史价格",
       "hugging_face_id": "HuggingFace ID",
       "image": "图片",
       "image_pricing": "图片定价",

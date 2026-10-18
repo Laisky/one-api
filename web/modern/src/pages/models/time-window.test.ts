@@ -4,6 +4,8 @@ import {
   NO_ACTIVE_TIME_WINDOW,
   UNRESOLVED_TIME_WINDOWS,
   matchTimeWindow,
+  isHistoricalTimeWindow,
+  resolveTimeWindowSnapshot,
   resolveActiveTimeWindowIndex,
   timeWindowScheduleSignature,
   type TimeWindowSchedule,
@@ -137,5 +139,90 @@ describe('timeWindowScheduleSignature', () => {
     clone[0].ranges[0].start = '19:00';
     expect(timeWindowScheduleSignature(clone)).not.toBe(timeWindowScheduleSignature(deepseekWindows));
     expect(timeWindowScheduleSignature(undefined)).toBe('');
+  });
+});
+
+describe('historical time windows', () => {
+  const allDay: TimeWindowSchedule = { ranges: [{ start: '00:00', end: '00:00' }] };
+
+  it('expires at exclusive midnight in the schedule timezone, defaulting to UTC', () => {
+    const local = { ...allDay, timezone: 'Asia/Shanghai', date_to: '2026-08-20' };
+    expect(isHistoricalTimeWindow(local, new Date('2026-08-19T15:59:59Z'))).toBe(false);
+    expect(isHistoricalTimeWindow(local, new Date('2026-08-19T16:00:00Z'))).toBe(true);
+    expect(isHistoricalTimeWindow({ ...allDay, date_to: '2026-08-20' }, new Date('2026-08-19T16:00:00Z'))).toBe(false);
+    expect(isHistoricalTimeWindow({ ...allDay, date_to: '2026-08-20' }, new Date('2026-08-20T00:00:00Z'))).toBe(true);
+  });
+
+  it('uses calendar dates across DST instead of a fixed timezone offset', () => {
+    const local = { ...allDay, timezone: 'America/New_York', date_to: '2026-11-02' };
+    expect(isHistoricalTimeWindow(local, new Date('2026-11-02T04:59:59Z'))).toBe(false);
+    expect(isHistoricalTimeWindow(local, new Date('2026-11-02T05:00:00Z'))).toBe(true);
+  });
+
+  it.each([
+    { date_to: '2026-02-30' },
+    { date_to: '2026-02-29' },
+    { date_to: '2026-13-01' },
+    { date_to: '2026-01-00' },
+    { date_to: '2026-8-01' },
+    { date_to: '2026-08-01T00:00:00Z' },
+    { date_from: '2026-02-30', date_to: '2026-08-20' },
+    { date_from: '2026-08-21', date_to: '2026-08-20' },
+    { date_from: '2026-08-20', date_to: '2026-08-20' },
+    { timezone: 'Not/AZone', date_to: '2026-08-20' },
+    { ranges: [], date_to: '2026-08-20' },
+    { ranges: [{ start: '24:00', end: '03:00' }], date_to: '2026-08-20' },
+    {
+      ranges: [
+        { start: '00:00', end: '00:00' },
+        { start: '00:00', end: 'bad' },
+      ],
+      date_to: '2026-08-20',
+    },
+    { days_of_week: [7], date_to: '2026-08-20' },
+  ])('keeps malformed or unresolved schedules visible: %j', (fields) => {
+    expect(isHistoricalTimeWindow({ ...allDay, ...fields }, new Date('2026-12-31T12:00:00Z'))).toBe(false);
+  });
+
+  it('accepts actual leap dates and valid overnight ranges', () => {
+    expect(isHistoricalTimeWindow({ ...allDay, date_to: '2024-02-29' }, new Date('2024-02-29T00:00:00Z'))).toBe(true);
+    expect(
+      isHistoricalTimeWindow({ ranges: [{ start: '20:00', end: '04:00' }], date_to: '2026-08-20' }, new Date('2026-08-21T12:00:00Z'))
+    ).toBe(true);
+  });
+
+  it('retains current/upcoming/open-ended schedules and does not infer history from a clock miss', () => {
+    const at = new Date('2026-08-19T12:00:00Z');
+    for (const window of [
+      allDay,
+      { ...allDay, date_from: '2026-08-21', date_to: '2026-08-22' },
+      { ...allDay, date_to: '2026-08-20' },
+      { ranges: [{ start: '01:00', end: '02:00' }] },
+    ]) {
+      expect(isHistoricalTimeWindow(window, at)).toBe(false);
+    }
+  });
+
+  it('preserves original indices, array order and first-match precedence in one snapshot', () => {
+    const windows: TimeWindowSchedule[] = [
+      { ...allDay, date_to: '2026-08-18' },
+      { ...allDay },
+      { ...allDay },
+      { ...allDay, date_to: '2026-08-19' },
+      { ...allDay, date_from: '2026-08-22' },
+    ];
+    const original = JSON.stringify(windows);
+    windows.forEach((window) => Object.freeze(window));
+    Object.freeze(windows);
+    const at = new Date('2026-08-20T00:00:00Z');
+    expect(resolveTimeWindowSnapshot(windows, at)).toEqual({ activeIndex: 1, historicalIndices: [0, 3] });
+    expect(resolveActiveTimeWindowIndex(windows, at)).toBe(1);
+    expect(JSON.stringify(windows)).toBe(original);
+  });
+
+  it('updates history when midnight passes with the first active window unchanged', () => {
+    const windows = [allDay, { ...allDay, date_to: '2026-08-20' }];
+    expect(resolveTimeWindowSnapshot(windows, new Date('2026-08-19T23:59:59Z'))).toEqual({ activeIndex: 0, historicalIndices: [] });
+    expect(resolveTimeWindowSnapshot(windows, new Date('2026-08-20T00:00:00Z'))).toEqual({ activeIndex: 0, historicalIndices: [1] });
   });
 });

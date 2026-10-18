@@ -25,6 +25,7 @@
       "document": "Document",
       "embedding_pricing": "Embedding Pricing",
       "free": "Free",
+      "historical_pricing": "Historical pricing",
       "hugging_face_id": "HuggingFace ID",
       "image": "Image",
       "image_pricing": "Image Pricing",

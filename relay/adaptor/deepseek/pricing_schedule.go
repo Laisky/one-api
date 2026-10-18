@@ -45,18 +45,31 @@ func deepseekProPricingWindows() []adaptor.TimeWindow {
 
 // deepseekFlashPricingWindows applies the announced Flash price change at
 // September 10, 2026, 12:00 Beijing time (04:00 UTC), not UTC midnight.
-// Parameters: none. Returns: first-match windows retaining the immediately
-// preceding Flash prices until the transition. Earlier price eras are not archived.
+// Parameters: none. Returns: windows with disjoint old/current price eras,
+// retaining the preceding gateway prices before the transition. Earlier
+// official price eras are not archived.
 func deepseekFlashPricingWindows() []adaptor.TimeWindow {
-	const switchDate = "2026-09-10"
+	const (
+		switchDate = "2026-09-10"
+		nextDate   = "2026-09-11"
+	)
 	// Preserve the preceding defaults from e000b8eb for in-flight requests whose
 	// request start time is before the new prices become effective.
 	windows := deepseekPricingWindowsWithHolidays("", switchDate, 0.22, 0.007, 0.66)
-	bridge := deepseekPricingWindows(switchDate, "2026-09-11", 0.22, 0.007, 0.66)
+	bridge := deepseekPricingWindows(switchDate, nextDate, 0.22, 0.007, 0.66)
 	bridge[0].Name = "deepseek-flash-final-old-peak"
 	bridge[0].Ranges = []adaptor.ClockRange{{Start: "01:00", End: "04:00"}}
 	bridge[1].Name = "deepseek-flash-final-old-offpeak"
 	bridge[1].Ranges = []adaptor.ClockRange{{Start: "00:00", End: "01:00"}}
 	windows = append(windows, bridge...)
-	return append(windows, deepseekPricingWindowsWithHolidays(switchDate, "", deepseekFlashInputPrice, deepseekFlashCachedInputPrice, deepseekFlashOutputPrice)...)
+	// Partition the remainder of the transition day explicitly. Current prices
+	// must not also match instants still covered by the preceding price era.
+	currentBridge := deepseekPricingWindows(switchDate, nextDate, deepseekFlashInputPrice, deepseekFlashCachedInputPrice, deepseekFlashOutputPrice)
+	currentBridge[0].Ranges = []adaptor.ClockRange{{Start: "06:00", End: "10:00"}}
+	currentBridge[1].Ranges = []adaptor.ClockRange{
+		{Start: "04:00", End: "06:00"},
+		{Start: "10:00", End: "00:00"},
+	}
+	windows = append(windows, currentBridge...)
+	return append(windows, deepseekPricingWindowsWithHolidays(nextDate, "", deepseekFlashInputPrice, deepseekFlashCachedInputPrice, deepseekFlashOutputPrice)...)
 }

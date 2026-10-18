@@ -20,7 +20,7 @@ describe('model profile boundaries and references', () => {
       assert.deepEqual(examples(model), []);
     });
   }
-  for (const model of ['o1', 'o3', 'o4-mini', 'deepseek-v3', 'Qwen/Qwen3-32B', 'meta-llama/Llama-4-Maverick']) {
+  for (const model of ['o1', 'o3', 'o4-mini', 'deepseek-v3', 'deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro', 'Qwen/Qwen3-32B', 'meta-llama/Llama-4-Maverick']) {
     it(`retains ordinary gateway chat formats for ${model}`, () => {
       assert.deepEqual(examples(model).map(({ id }) => id), ['chat', 'responses', 'messages']);
     });
