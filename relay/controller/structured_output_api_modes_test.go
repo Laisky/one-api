@@ -16,10 +16,12 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
+// boolPtr returns an independent pointer to the supplied boolean.
 func boolPtr(value bool) *bool {
 	return &value
 }
 
+// baseJSONSchema returns the reusable nested schema fixture for API-mode controls.
 func baseJSONSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -144,7 +146,10 @@ func TestStructuredOutputResponseAPIVariants(t *testing.T) {
 			require.Equal(t, "json_schema", chatReq.ResponseFormat.Type)
 			require.NotNil(t, chatReq.ResponseFormat.JsonSchema)
 			require.Equal(t, "structured_result", chatReq.ResponseFormat.JsonSchema.Name)
-			require.Nil(t, chatReq.ResponseFormat.JsonSchema.Strict)
+			require.NotNil(t, chatReq.ResponseFormat.JsonSchema.Strict)
+			require.True(t, *chatReq.ResponseFormat.JsonSchema.Strict)
+			require.Equal(t, req.Text.Format.Schema, chatReq.ResponseFormat.JsonSchema.Schema,
+				"explicit strict retains the complete requested text schema")
 
 			schema := chatReq.ResponseFormat.JsonSchema.Schema
 			require.NotNil(t, schema)

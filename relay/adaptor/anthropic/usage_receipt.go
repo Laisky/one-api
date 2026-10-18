@@ -14,6 +14,9 @@ import (
 // not an explicit zero-cost receipt; omitted fields in cumulative deltas must
 // not erase earlier counts. input_tokens excludes cache buckets on Claude.
 type httpUsageReceipt struct {
+	// ordinary validates root counters independently from canonical iterations.
+	ordinary    *httpUsageReceipt
+	iterations  []httpUsageIteration
 	serviceTier string
 	input       *int
 	output      *int
@@ -36,6 +39,7 @@ type httpUsageUpdate struct {
 		Write1h *int `json:"ephemeral_1h_input_tokens"`
 	} `json:"cache_creation"`
 	ServerToolUse json.RawMessage `json:"server_tool_use"`
+	Iterations    json.RawMessage `json:"iterations"`
 }
 
 // apply validates and atomically merges an upstream cumulative usage object.
@@ -48,6 +52,75 @@ func (r *httpUsageReceipt) apply(raw json.RawMessage) error {
 	if err := json.Unmarshal(raw, &update); err != nil {
 		return errors.Wrap(err, "decode Claude usage receipt")
 	}
+	// Root totals exclude compaction. Keep their validation state separate so a
+	// repeated root aggregate cannot contradict a canonical iteration TTL sum.
+	ordinary := *r
+	if r.ordinary != nil {
+		ordinary = *r.ordinary
+	}
+	ordinary.ordinary, ordinary.iterations = nil, nil
+	ordinary.tools = r.tools
+	if err := ordinary.applyCounters(update); err != nil {
+		return err
+	}
+	if len(bytes.TrimSpace(update.Iterations)) > 0 && !bytes.Equal(bytes.TrimSpace(update.Iterations), []byte("null")) {
+		baseline := ordinary
+		if r.ordinary != nil {
+			baseline = *r.ordinary
+		}
+		previous := latestHTTPUsageIterationBaseline(r.iterations, baseline)
+		canonical, iterations, err := sumHTTPUsageIterations(update.Iterations, previous)
+		if err != nil {
+			return err
+		}
+		// The official SDK excludes compaction from every root usage field.
+		// Canonical message counters seed the cumulative ordinary component;
+		// omitted indexed cache fields retain independently verified root data.
+		ordinaryComponent, err := sumHTTPUsageIterationComponent(iterations, false)
+		if err != nil {
+			return err
+		}
+		if err := applyHTTPUsageIterationComponent(&ordinary, iterations, ordinaryComponent); err != nil {
+			return err
+		}
+		compaction, err := sumHTTPUsageIterationComponent(iterations, true)
+		if err != nil {
+			return err
+		}
+		canonical, err = sumHTTPUsageReceipts([]httpUsageReceipt{compaction, ordinary})
+		if err != nil {
+			return err
+		}
+		canonical.serviceTier, canonical.tools = ordinary.serviceTier, ordinary.tools
+		canonical.ordinary, canonical.iterations = &ordinary, iterations
+		*r = canonical
+		return nil
+	}
+	if len(r.iterations) > 0 {
+		// Cumulative root counters replace only non-compaction work. Preserve
+		// compaction token/cache buckets independently, including one-hour TTLs.
+		compaction, err := sumHTTPUsageIterationComponent(r.iterations, true)
+		if err != nil {
+			return err
+		}
+		next, err := sumHTTPUsageReceipts([]httpUsageReceipt{compaction, ordinary})
+		if err != nil {
+			return err
+		}
+		next.iterations = r.iterations
+		next.serviceTier, next.tools = ordinary.serviceTier, ordinary.tools
+		next.ordinary = &ordinary
+		*r = next
+		return nil
+	}
+	*r = ordinary
+	return nil
+}
+
+// applyCounters validates one ordinary usage update without interpreting iterations.
+// Parameters: update contains optional cumulative counters. Returns: an error
+// without mutating the receiver when counters or TTL splits are invalid.
+func (r *httpUsageReceipt) applyCounters(update httpUsageUpdate) error {
 	toolCounters, err := parseServerToolUse(update.ServerToolUse)
 	if err != nil {
 		return err

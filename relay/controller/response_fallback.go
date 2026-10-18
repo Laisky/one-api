@@ -213,7 +213,10 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		response, usage, mcpSummary, incrementalCharged, execErr := executeChatMCPToolLoop(c, meta, chatRequest, registry, preConsumedQuota)
 		meta.IsStream = downstreamStream
 		metalib.Set2Context(c, meta)
-		if execErr != nil {
+		if execErr != nil && usage == nil {
+			if refundClaudeAdmission(c, execErr, preConsumedQuota, meta.TokenId) {
+				return execErr
+			}
 			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "mcp_tool_loop_failed")
 			return execErr
 		}
@@ -232,32 +235,35 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			c.Set(ctxkey.ToolInvocationSummary, merged)
 		}
 
-		choices := make([]openai_compatible.TextResponseChoice, 0, len(response.Choices))
-		for _, choice := range response.Choices {
-			choices = append(choices, openai_compatible.TextResponseChoice{
-				Index:        choice.Index,
-				Message:      choice.Message,
-				FinishReason: choice.FinishReason,
-			})
+		if execErr == nil {
+			choices := make([]openai_compatible.TextResponseChoice, 0, len(response.Choices))
+			for _, choice := range response.Choices {
+				choices = append(choices, openai_compatible.TextResponseChoice{
+					Index:        choice.Index,
+					Message:      choice.Message,
+					FinishReason: choice.FinishReason,
+				})
+			}
+			if capture != nil {
+				prevWriter := c.Writer
+				c.Writer = origWriter
+				defer func() {
+					c.Writer = prevWriter
+				}()
+			}
+			slimResponse := &openai_compatible.SlimTextResponse{Choices: choices, Usage: response.Usage}
+			var renderErr error
+			if downstreamStream {
+				renderErr = renderChatResponseAsResponseAPIStream(c, http.StatusOK, slimResponse, responseAPIRequest, meta)
+			} else {
+				renderErr = renderChatResponseAsResponseAPI(c, http.StatusOK, slimResponse, responseAPIRequest, meta)
+			}
+			if renderErr != nil {
+				execErr = openai.ErrorWrapper(renderErr, "response_rewrite_failed", http.StatusInternalServerError)
+			}
+
 		}
-		if capture != nil {
-			prevWriter := c.Writer
-			c.Writer = origWriter
-			defer func() {
-				c.Writer = prevWriter
-			}()
-		}
-		slimResponse := &openai_compatible.SlimTextResponse{Choices: choices, Usage: response.Usage}
-		var renderErr error
-		if downstreamStream {
-			renderErr = renderChatResponseAsResponseAPIStream(c, http.StatusOK, slimResponse, responseAPIRequest, meta)
-		} else {
-			renderErr = renderChatResponseAsResponseAPI(c, http.StatusOK, slimResponse, responseAPIRequest, meta)
-		}
-		if renderErr != nil {
-			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "response_rewrite_failed_mcp")
-			return openai.ErrorWrapper(renderErr, "response_rewrite_failed", http.StatusInternalServerError)
-		}
+		markResponseSettlement(c, usage, execErr)
 
 		// Preserve the reservation for the single final delta settlement below.
 
@@ -289,7 +295,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 				tokenId,
 				apiFormat,
 				apiType,
-				true,
+				execErr == nil,
 				usage.PromptTokens,
 				usage.CompletionTokens,
 				0,
@@ -332,7 +338,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 				}
 			}
 		})
-		return nil
+		return execErr
 	}
 
 	convertedRequest, err := requestAdaptor.ConvertRequest(c, relaymode.ChatCompletions, chatRequest)
