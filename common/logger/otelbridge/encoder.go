@@ -296,7 +296,12 @@ func (m *objectEncoder) AddComplex64(k string, v complex64) {
 //
 // Return values: none.
 func (m *objectEncoder) AddTime(k string, v time.Time) {
-	m.AddInt64(k, v.UnixNano())
+	ns, err := logTimeNanos(v)
+	if err != nil {
+		*m.failure = ErrLogEncoding
+		return
+	}
+	m.AddInt64(k, ns)
 }
 
 // AddFloat32 implements zapcore.ObjectEncoder for 32-bit float fields.
@@ -598,7 +603,14 @@ func (a *arrayEncoder) AppendInt8(v int8) { a.AppendInt64(int64(v)) }
 //   - v: the value to append.
 //
 // Return values: none.
-func (a *arrayEncoder) AppendTime(v time.Time) { a.AppendInt64(v.UnixNano()) }
+func (a *arrayEncoder) AppendTime(v time.Time) {
+	ns, err := logTimeNanos(v)
+	if err != nil {
+		*a.failure = ErrLogEncoding
+		return
+	}
+	a.AppendInt64(ns)
+}
 
 // AppendUint implements zapcore.ArrayEncoder for platform-sized unsigned values.
 //

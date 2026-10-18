@@ -32,7 +32,7 @@ func (p *fidelityLogProcessor) OnEmit(ctx context.Context, r *sdklog.Record) err
 	var attrs []attribute.KeyValue
 	r.WalkAttributes(func(kv attribute.KeyValue) bool { attrs = append(attrs, kv); return true })
 	scope := r.InstrumentationScope()
-	valid := utf8.ValidString(r.EventName()) && utf8.ValidString(r.SeverityText()) && utf8.ValidString(scope.Name) &&
+	valid := otelbridge.ValidateLogTimestamp(r.Timestamp()) == nil && otelbridge.ValidateLogTimestamp(r.ObservedTimestamp()) == nil && utf8.ValidString(r.EventName()) && utf8.ValidString(r.SeverityText()) && utf8.ValidString(scope.Name) &&
 		utf8.ValidString(scope.Version) && utf8.ValidString(scope.SchemaURL) &&
 		otelbridge.ValidateLogValue(r.Body()) == nil && otelbridge.ValidateLogAttributes(attrs) == nil &&
 		otelbridge.ValidateLogAttributes(scope.Attributes.ToSlice()) == nil

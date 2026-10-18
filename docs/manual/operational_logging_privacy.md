@@ -13,7 +13,9 @@ Zap Object/Array/Namespace fields retain nested maps and lists. Namespace state
 continues across With calls, and bound serializers run at binding time rather
 than being evaluated again on every log. Reflected values follow Zap's JSON
 contract, including exported fields, JSON tags, explicit marshalers and nil values.
-The original error field is retained; SDK exception metadata is additive.
+The original error field is retained; SDK exception metadata is additive. Bound
+error text/type metadata are snapshots, so later logs do not reevaluate or retain
+the original bound error. Explicit exception attributes take precedence.
 Generated caller metadata is added only when the application did not supply that
 key. Arbitrary context-valued application fields are not implicit trace carriers;
 SpanContextField/SpanContextFieldFrom are the explicit correlation API.
@@ -28,11 +30,23 @@ observable whole-record rejection rather than an implicit winner.
 OTLP represents signed int64, doubles (including NaN/Inf), booleans, strings,
 bytes, maps, lists and empty values. Native unsigned values above MaxInt64 use an
 exact decimal string because OTLP has no unsigned integer type. Zap time/duration
-fields retain the established nanosecond mapping; reflected values follow JSON.
-JSON reflection rejects values its encoder cannot represent, such as cycles,
-channels and nonfinite JSON numbers. No arbitrary Go internals are exposed through
-a formatting fallback. Invalid UTF-8 cannot be sent as a protobuf string and is
-rejected instead of replaced. Encoding recursion has a 256-edge work/stack budget;
+fields retain signed int64 nanoseconds; time values outside that exact range fail
+rather than wrapping. Native record/observed timestamps accept zero as unset and
+otherwise require nonnegative signed UnixNano values for the pinned SDK exporter;
+this is narrower than OTLP's uint64 timestamp range.
+
+Reflected JSON integers retain int64 precision or exact text. Decimal/exponent
+tokens use double64 only if its JSON round trip has the same numeric value;
+otherwise the original token is text. Large-number comparison work is bounded,
+with exact text as the fallback. JSON reflection rejects values its encoder cannot
+represent, such as cycles, channels and nonfinite JSON numbers. No arbitrary Go
+internals are exposed through a formatting fallback. Ordinary JSON-visible strings
+are checked for invalid UTF-8 before token decoding. Explicit JSON/Text marshalers
+choose their JSON projection and run once; encoding/json's own TextMarshaler
+Unicode replacement is part of that selected projection, not reinterpreted by the
+bridge. Maps with custom TextMarshaler keys likewise use the complete chosen JSON
+projection, avoiding a second key callback to reconstruct field paths. Invalid UTF-8 in native text or ordinary reflected strings, and unpaired
+surrogate escapes in explicit JSON output, fail instead of being repaired. Encoding recursion has a 256-edge work/stack budget;
 this is an application resource guard, not an OTLP protocol limit.
 
 Encoding failures reject the complete OTLP record and increment the fixed

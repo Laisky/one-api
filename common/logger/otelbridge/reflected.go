@@ -2,11 +2,11 @@ package otelbridge
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/json"
 	"io"
 	"reflect"
 	"strconv"
-	"strings"
 	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -15,18 +15,15 @@ import (
 // reflectedLogValue follows Zap's JSON reflection contract, including tags and
 // explicit MarshalJSON methods. Encoding errors never become invented log text.
 func reflectedLogValue(value any) (attribute.Value, error) {
-	if native, ok := value.(attribute.Value); ok {
-		return native, ValidateLogValue(native)
-	}
-	if err := validateReflectedUTF8(reflect.ValueOf(value), 0); err != nil {
-		return attribute.Value{}, err
-	}
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		return attribute.Value{}, ErrLogEncoding
 	}
-	if !utf8.Valid(encoded) {
+	if !utf8.Valid(encoded) || !validJSONSurrogates(encoded) {
 		return attribute.Value{}, ErrLogEncoding
+	}
+	if err := validateReflectedUTF8(reflect.ValueOf(value), encoded, 0); err != nil {
+		return attribute.Value{}, err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(encoded))
 	decoder.UseNumber()
@@ -54,18 +51,7 @@ func jsonLogValue(value any, depth int) (attribute.Value, error) {
 	case bool:
 		return attribute.BoolValue(v), nil
 	case json.Number:
-		if !strings.ContainsAny(string(v), ".eE") {
-			n, err := strconv.ParseInt(string(v), 10, 64)
-			if err == nil {
-				return attribute.Int64Value(n), nil
-			}
-			return attribute.StringValue(string(v)), nil
-		}
-		n, err := strconv.ParseFloat(string(v), 64)
-		if err != nil {
-			return attribute.Value{}, ErrLogEncoding
-		}
-		return attribute.Float64Value(n), nil
+		return jsonLogNumber(string(v)), nil
 	case []any:
 		items := make([]attribute.Value, 0, len(v))
 		for _, item := range v {
@@ -149,7 +135,7 @@ func decodeJSONLogValue(d *json.Decoder, depth int) (attribute.Value, error) {
 // validateReflectedUTF8 detects ordinary reflected invalid strings before JSON's
 // replacement behavior. Explicit JSON marshalers define their own projection;
 // their encoded result is validated separately without exposing object internals.
-func validateReflectedUTF8(v reflect.Value, depth int) error {
+func validateReflectedUTF8(v reflect.Value, projection json.RawMessage, depth int) error {
 	if depth > maxLogEncodingDepth {
 		return ErrLogEncoding
 	}
@@ -160,6 +146,17 @@ func validateReflectedUTF8(v reflect.Value, depth int) error {
 		if _, ok := v.Interface().(json.Marshaler); ok {
 			return nil
 		}
+		if _, ok := v.Interface().(encoding.TextMarshaler); ok {
+			return nil
+		}
+	}
+	if v.CanAddr() && v.Addr().CanInterface() {
+		if _, ok := v.Addr().Interface().(json.Marshaler); ok {
+			return nil
+		}
+		if _, ok := v.Addr().Interface().(encoding.TextMarshaler); ok {
+			return nil
+		}
 	}
 	switch v.Kind() {
 	case reflect.String:
@@ -168,18 +165,38 @@ func validateReflectedUTF8(v reflect.Value, depth int) error {
 		}
 	case reflect.Interface, reflect.Pointer:
 		if !v.IsNil() {
-			return validateReflectedUTF8(v.Elem(), depth+1)
+			return validateReflectedUTF8(v.Elem(), projection, depth+1)
 		}
 	case reflect.Map:
 		if v.IsNil() {
 			return nil
 		}
+		// Custom map-key text encoding determines the JSON key/value association.
+		// Treat that complete declared JSON projection as opaque; invoking its key
+		// callbacks again merely to reconstruct a path would change Zap semantics.
+		keyType := v.Type().Key()
+		textType := reflect.TypeFor[encoding.TextMarshaler]()
+		if keyType.Kind() != reflect.String && keyType.Implements(textType) {
+			return nil
+		}
+		var projected map[string]json.RawMessage
+		_ = json.Unmarshal(projection, &projected)
 		iter := v.MapRange()
 		for iter.Next() {
-			if err := validateReflectedUTF8(iter.Key(), depth+1); err != nil {
+			if err := validateReflectedUTF8(iter.Key(), nil, depth+1); err != nil {
 				return err
 			}
-			if err := validateReflectedUTF8(iter.Value(), depth+1); err != nil {
+			var childProjection json.RawMessage
+			key := iter.Key()
+			switch key.Kind() {
+			case reflect.String:
+				childProjection = projected[key.String()]
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				childProjection = projected[strconv.FormatInt(key.Int(), 10)]
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+				childProjection = projected[strconv.FormatUint(key.Uint(), 10)]
+			}
+			if err := validateReflectedUTF8(iter.Value(), childProjection, depth+1); err != nil {
 				return err
 			}
 		}
@@ -188,18 +205,27 @@ func validateReflectedUTF8(v reflect.Value, depth int) error {
 		if v.Type().Elem().Kind() == reflect.Uint8 {
 			return nil
 		}
+		var projected []json.RawMessage
+		_ = json.Unmarshal(projection, &projected)
 		for i := 0; i < v.Len(); i++ {
-			if err := validateReflectedUTF8(v.Index(i), depth+1); err != nil {
+			var childProjection json.RawMessage
+			if i < len(projected) {
+				childProjection = projected[i]
+			}
+			if err := validateReflectedUTF8(v.Index(i), childProjection, depth+1); err != nil {
 				return err
 			}
 		}
 	case reflect.Struct:
-		for i := 0; i < v.NumField(); i++ {
-			field := v.Type().Field(i)
-			if field.PkgPath != "" || field.Tag.Get("json") == "-" {
+		var projected map[string]json.RawMessage
+		_ = json.Unmarshal(projection, &projected)
+		for _, field := range jsonVisibleFields(v.Type()) {
+			child, ok := reflectedField(v, field.index)
+			childProjection, included := projected[field.name]
+			if !ok || projection != nil && !included || projection == nil && field.omitEmpty && jsonEmptyValue(child) {
 				continue
 			}
-			if err := validateReflectedUTF8(v.Field(i), depth+1); err != nil {
+			if err := validateReflectedUTF8(child, childProjection, depth+1); err != nil {
 				return err
 			}
 		}

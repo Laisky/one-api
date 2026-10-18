@@ -1,6 +1,7 @@
 package otelbridge
 
 import (
+	"time"
 	"unicode/utf8"
 
 	"github.com/Laisky/errors/v2"
@@ -112,4 +113,28 @@ func ValidateLogRecordAttributes(attrs []attribute.KeyValue) error {
 		}
 	}
 	return ValidateLogAttributes(attrs)
+}
+
+// logTimeNanos checks the established signed-nanosecond attribute projection.
+// A zero Go time is a real year-one attribute, not an unset value here.
+func logTimeNanos(value time.Time) (int64, error) {
+	ns := value.UnixNano()
+	if !time.Unix(0, ns).Equal(value) {
+		return 0, ErrLogEncoding
+	}
+	return ns, nil
+}
+
+// ValidateLogTimestamp checks the pinned exporter's signed UnixNano projection
+// before its uint64 conversion. Zero means unset; negative timestamps cannot be
+// represented by that export path. This is narrower than OTLP's uint64 range.
+func ValidateLogTimestamp(value time.Time) error {
+	if value.IsZero() {
+		return nil
+	}
+	ns, err := logTimeNanos(value)
+	if err != nil || ns < 0 {
+		return ErrLogEncoding
+	}
+	return nil
 }

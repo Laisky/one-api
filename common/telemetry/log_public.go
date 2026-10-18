@@ -38,10 +38,17 @@ func (l fidelityLogger) Emit(ctx context.Context, r otellog.Record) {
 	var attrs []attribute.KeyValue
 	r.WalkAttributes(func(kv attribute.KeyValue) bool { attrs = append(attrs, kv); return true })
 	if !l.validScope || !utf8.ValidString(r.EventName()) || !utf8.ValidString(r.SeverityText()) ||
-		otelbridge.ValidateLogValue(r.Body()) != nil || otelbridge.ValidateLogRecordAttributes(attrs) != nil {
+		otelbridge.ValidateLogValue(r.Body()) != nil || otelbridge.ValidateLogRecordAttributes(attrs) != nil ||
+		otelbridge.ValidateLogTimestamp(r.Timestamp()) != nil || otelbridge.ValidateLogTimestamp(r.ObservedTimestamp()) != nil {
 		metrics.RecordAppLogExport(metrics.AppLogExportOutcomeDroppedEncoding, 1)
 		otel.Handle(otelbridge.ErrLogEncoding)
 		return
 	}
-	l.Logger.Emit(ctx, r)
+	prepared, err := resolveNativeLogError(r, attrs)
+	if err != nil {
+		metrics.RecordAppLogExport(metrics.AppLogExportOutcomeDroppedEncoding, 1)
+		otel.Handle(otelbridge.ErrLogEncoding)
+		return
+	}
+	l.Logger.Emit(ctx, prepared)
 }

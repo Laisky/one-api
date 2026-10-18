@@ -32,6 +32,8 @@ package otelbridge
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"slices"
 	"unicode/utf8"
 
@@ -67,8 +69,9 @@ type Core struct {
 	conversionErr error
 	// spanCtx is the correlation latched by With from a SpanContextField.
 	spanCtx oteltrace.SpanContext
-	// err is the error latched by With from a zap.Error field.
-	err error
+	// exceptionAttrs snapshot derived metadata without retaining a bound error.
+	exceptionAttrs []attribute.KeyValue
+	hasError       bool
 	// private selects the explicit legacy privacy API, never the default sink.
 	private bool
 }
@@ -136,7 +139,14 @@ func (c *Core) With(fields []zapcore.Field) zapcore.Core {
 		cloned.spanCtx = converted.spanCtx
 	}
 	if converted.err != nil {
-		cloned.err = converted.err
+		attrs := append(append([]attribute.KeyValue(nil), cloned.attrs...), cloned.exceptionAttrs...)
+		derived, err := DeriveLogExceptionAttributes(converted.err, attrs, converted.errMessage)
+		if err != nil {
+			cloned.conversionErr = ErrLogEncoding
+		} else {
+			cloned.exceptionAttrs = derived
+			cloned.hasError = true
+		}
 	}
 	return cloned
 }
@@ -149,15 +159,16 @@ func (c *Core) With(fields []zapcore.Field) zapcore.Core {
 //   - *Core: a copy whose attribute slice does not alias the receiver's.
 func (c *Core) clone() *Core {
 	return &Core{
-		LevelEnabler:  c.LevelEnabler,
-		holder:        c.holder,
-		scope:         c.scope,
-		attrs:         slices.Clone(c.attrs),
-		namespacePath: slices.Clone(c.namespacePath),
-		conversionErr: c.conversionErr,
-		spanCtx:       c.spanCtx,
-		err:           c.err,
-		private:       c.private,
+		LevelEnabler:   c.LevelEnabler,
+		holder:         c.holder,
+		scope:          c.scope,
+		attrs:          slices.Clone(c.attrs),
+		namespacePath:  slices.Clone(c.namespacePath),
+		conversionErr:  c.conversionErr,
+		spanCtx:        c.spanCtx,
+		exceptionAttrs: slices.Clone(c.exceptionAttrs),
+		hasError:       c.hasError,
+		private:        c.private,
 	}
 }
 
@@ -227,11 +238,15 @@ func (c *Core) Write(ent zapcore.Entry, fields []zapcore.Field) (result error) {
 	// Walk the fields exactly once: the conversion allocates an encoder and
 	// touches every field, and both the record and its emit context need it.
 	converted := c.convertFields(fields)
-	if c.conversionErr != nil || converted.conversionErr != nil || (!c.private && !utf8.ValidString(ent.Message)) {
+	if c.conversionErr != nil || converted.conversionErr != nil || (!c.private && (!utf8.ValidString(ent.Message) || ValidateLogTimestamp(ent.Time) != nil)) {
 		metrics.RecordAppLogExport(metrics.AppLogExportOutcomeDroppedEncoding, 1)
 		return ErrLogEncoding
 	}
-	record := c.buildRecord(ent, converted)
+	record, err := c.buildRecord(ent, converted)
+	if err != nil {
+		metrics.RecordAppLogExport(metrics.AppLogExportOutcomeDroppedEncoding, 1)
+		return ErrLogEncoding
+	}
 	var attrs []attribute.KeyValue
 	record.WalkAttributes(func(kv attribute.KeyValue) bool { attrs = append(attrs, kv); return true })
 	if !c.private && ValidateLogRecordAttributes(attrs) != nil {
@@ -256,7 +271,7 @@ func (c *Core) Write(ent zapcore.Entry, fields []zapcore.Field) (result error) {
 //
 // Return values:
 //   - log.Record: the record to emit.
-func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) log.Record {
+func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) (log.Record, error) {
 	var record log.Record
 	record.SetTimestamp(ent.Time)
 	if c.private {
@@ -266,11 +281,6 @@ func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) log.Rec
 	}
 	record.SetSeverity(convertLevel(ent.Level))
 	record.SetSeverityText(ent.Level.String())
-
-	recErr := c.err
-	if converted.err != nil {
-		recErr = converted.err
-	}
 
 	appAttrs := appendNamespaced(c.attrs, c.namespacePath, converted.attrs)
 	record.AddAttributes(appAttrs...)
@@ -285,17 +295,29 @@ func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) log.Rec
 	}
 	if ent.Stack != "" && !c.private {
 		stackKey := semconv.CodeStacktraceKey
-		if recErr != nil || hasExceptionAttributes(c.attrs) || hasExceptionAttributes(converted.attrs) {
+		if c.hasError || converted.err != nil || hasExceptionAttributes(c.attrs) || hasExceptionAttributes(converted.attrs) {
 			stackKey = semconv.ExceptionStacktraceKey
 		}
 		if !hasLogKey(appAttrs, attribute.Key(stackKey)) {
 			record.AddAttributes(attribute.String(string(stackKey), ent.Stack))
 		}
 	}
-	if recErr != nil && !c.private {
-		record.SetErr(recErr)
+	if !c.private {
+		derived := c.exceptionAttrs
+		if converted.err != nil {
+			var err error
+			derived, err = DeriveLogExceptionAttributes(converted.err, appAttrs, converted.errMessage)
+			if err != nil {
+				return log.Record{}, err
+			}
+		}
+		for _, kv := range derived {
+			if !hasLogKey(appAttrs, kv.Key) {
+				record.AddAttributes(kv)
+			}
+		}
 	}
-	return record
+	return record, nil
 }
 
 // emitContext resolves the context a record is emitted with, which is what
@@ -339,9 +361,10 @@ func (c *Core) Sync() error {
 // convertedFields is the result of walking a zap field slice: the attributes to
 // attach, explicit correlation state, and additive SDK exception metadata.
 type convertedFields struct {
-	attrs   []attribute.KeyValue
-	spanCtx oteltrace.SpanContext
-	err     error
+	attrs      []attribute.KeyValue
+	spanCtx    oteltrace.SpanContext
+	err        error
+	errMessage *string
 
 	namespaces    []string
 	conversionErr error
@@ -373,7 +396,33 @@ func convertFields(fields []zapcore.Field) (out convertedFields) {
 				out.err = err
 			}
 		}
-		field.AddTo(enc)
+		start := len(enc.cur.attrs)
+		switch field.Type {
+		case zapcore.InlineMarshalerType:
+			if err := field.Interface.(zapcore.ObjectMarshaler).MarshalLogObject(enc); err != nil {
+				*enc.failure = ErrLogEncoding
+			}
+		case zapcore.StringerType:
+			value := reflect.ValueOf(field.Interface)
+			if value.Kind() == reflect.Pointer && value.IsNil() {
+				field.AddTo(enc) // Zap's declared nil-pointer Stringer projection.
+			} else {
+				enc.AddString(field.Key, field.Interface.(fmt.Stringer).String())
+			}
+		default:
+			field.AddTo(enc)
+		}
+		if field.Type == zapcore.ErrorType {
+			for _, kv := range enc.cur.attrs[start:] {
+				if string(kv.Key) == field.Key+"Error" {
+					*enc.failure = ErrLogEncoding
+				}
+				if field.Key == "error" && string(kv.Key) == field.Key && kv.Value.Type() == attribute.STRING {
+					message := kv.Value.AsString()
+					out.errMessage = &message
+				}
+			}
+		}
 	}
 
 	for node := enc.root.next; node != nil; node = node.next {
