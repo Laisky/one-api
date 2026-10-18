@@ -237,6 +237,80 @@ class WorkflowTests(unittest.TestCase):
             if not prefix:
                 self.assertIn("ignore-error=true", build["cache-to"])
 
+    def test_delivery_revision_label_matches_source_on_both_architectures(self) -> None:
+        """test_delivery_revision_label_matches_source_on_both_architectures binds each image to its source."""
+        for name in ("build_latest", "build_arm64_hash"):
+            with self.subTest(job=name):
+                build = next(step["with"] for step in self.delivery["jobs"][name]["steps"]
+                             if step.get("uses", "").startswith("docker/build-push-action@"))
+                self.assertEqual(build.get("labels"),
+                                 "org.opencontainers.image.revision=${{ github.sha }}")
+
+    @unittest.skipUnless(os.environ.get("ONEAPI_TEST_IMAGE_LABELS") == "1",
+                         "opt in to disposable local Docker metadata builds")
+    def test_delivery_revision_label_overrides_inherited_base_metadata(self) -> None:
+        """test_delivery_revision_label_overrides_inherited_base_metadata builds only local metadata fixtures."""
+        import fcntl
+        import socket
+        import uuid
+
+        with open("/tmp/laisky-heavy-validation-20261008.lock", "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.assertEqual(socket.gethostname(), "dev", "Metadata fixtures require the dev host")
+            for name in ("DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH"):
+                self.assertFalse(os.environ.get(name), f"Unset {name} before using the local daemon")
+            env = {**os.environ, "DOCKER_BUILDKIT": "0"}
+
+            def docker(*args: str, source: str | None = None) -> str:
+                """docker executes local fixture operations and returns their standard output."""
+                result = subprocess.run(["docker", *args], input=source, text=True,
+                                        capture_output=True, env=env, timeout=90, check=False)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                return result.stdout.strip()
+
+            self.assertEqual(docker("context", "show"), "default")
+            endpoint = json.loads(docker("context", "inspect", "--format", "{{json .Endpoints.docker.Host}}"))
+            self.assertEqual(endpoint, "unix:///var/run/docker.sock")
+            self.assertEqual(json.loads(docker("info", "--format", "{{json .Name}}")), "dev")
+            base = f"oneapi-label-fixture-{uuid.uuid4().hex}:base"
+            stale, release = "b" * 40, "a" * 40
+            key = "org.opencontainers.image.revision"
+            tags = []
+
+            def remove_fixtures() -> None:
+                """remove_fixtures removes only successfully created unique fixture tags."""
+                if tags:
+                    docker("image", "rm", *reversed(tags))
+
+            self.addCleanup(remove_fixtures)
+            docker("build", "--network=none", "--pull=false", "--tag", base, "-",
+                   source=f'FROM scratch\nLABEL {key}="{stale}"\n')
+            tags.append(base)
+            self.assertEqual(json.loads(docker("image", "inspect", "--format",
+                                              "{{json .Config.Labels}}", base))[key], stale)
+            control = base.replace(":base", ":unlabeled-control")
+            docker("build", "--network=none", "--pull=false", "--tag", control, "-",
+                   source=f"FROM {base}\n")
+            tags.append(control)
+            self.assertEqual(json.loads(docker("image", "inspect", "--format",
+                                              "{{json .Config.Labels}}", control))[key], stale)
+            for name in ("build_latest", "build_arm64_hash"):
+                with self.subTest(job=name):
+                    build = next(step["with"] for step in self.delivery["jobs"][name]["steps"]
+                                 if step.get("uses", "").startswith("docker/build-push-action@"))
+                    child = base.replace(":base", ":" + name.replace("_", "-"))
+                    args = ["build", "--network=none", "--pull=false", "--tag", child]
+                    for label in build.get("labels", "").splitlines():
+                        args.extend(["--label", label.replace("${{ github.sha }}", release)])
+                    docker(*args, "-", source=f"FROM {base}\n")
+                    tags.append(child)
+                    labels = json.loads(docker("image", "inspect", "--format",
+                                               "{{json .Config.Labels}}", child))
+                    print(json.dumps({"job": name, "base_revision": stale,
+                                      "expected_revision": release, "actual_revision": labels[key]}))
+                    self.assertEqual(labels[key], release,
+                                     f"{name} inherited a base-image revision instead of source SHA")
+
     def test_delivery_binds_release_to_pushed_digest(self) -> None:
         """test_delivery_binds_release_to_pushed_digest rejects mutable deployment identity."""
         build = self.delivery["jobs"]["build_latest"]
