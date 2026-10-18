@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkresource "go.opentelemetry.io/otel/sdk/resource"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/Laisky/one-api/common/metrics"
@@ -117,9 +118,12 @@ func (e *recordingExporter) only(t *testing.T) sdklog.Record {
 //   - *ProviderHolder: the holder, so a test can close or reset it.
 func newTestBridge(t *testing.T, level zapcore.LevelEnabler) (*zap.Logger, *recordingExporter, *ProviderHolder) {
 	t.Helper()
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "")
+	t.Setenv("OTEL_SERVICE_NAME", "")
 
 	exporter := &recordingExporter{}
 	provider := sdklog.NewLoggerProvider(
+		sdklog.WithResource(sdkresource.Empty()),
 		sdklog.WithProcessor(sdklog.NewSimpleProcessor(exporter)),
 	)
 	t.Cleanup(func() {
@@ -255,7 +259,7 @@ func TestBridgeCorrelatesFromSpanContextField(t *testing.T) {
 	require.Equal(t, oteltrace.FlagsSampled, record.TraceFlags())
 }
 
-// TestBridgeCorrelatesFromContextField keeps the upstream otelzap idiom
+// TestBridgeContextValuedFieldRemainsApplicationData keeps the upstream otelzap idiom
 // working, so instrumentation written against that bridge behaves identically
 // here.
 //
@@ -263,7 +267,7 @@ func TestBridgeCorrelatesFromSpanContextField(t *testing.T) {
 //   - t: the test handle.
 //
 // Return values: none.
-func TestBridgeCorrelatesFromContextField(t *testing.T) {
+func TestBridgeContextValuedFieldRemainsApplicationData(t *testing.T) {
 	logger, exporter, _ := newTestBridge(t, zapcore.DebugLevel)
 
 	traceID, err := oteltrace.TraceIDFromHex("0af7651916cd43dd8448eb211c80319c")
@@ -278,10 +282,10 @@ func TestBridgeCorrelatesFromContextField(t *testing.T) {
 	logger.Info("correlated", zap.Any("context", ctx))
 
 	record := exporter.only(t)
-	require.Equal(t, traceID, record.TraceID())
-	require.Equal(t, spanID, record.SpanID())
+	require.False(t, record.TraceID().IsValid(), "only the explicit carrier API establishes correlation")
+	require.False(t, record.SpanID().IsValid())
 	_, present := attrOf(record, "context")
-	require.False(t, present, "the context field is consumed, never emitted as an attribute")
+	require.True(t, present, "an ordinary context-valued field follows its declared Zap encoder")
 }
 
 // TestCorrelationFieldIsInvisibleToOtherEncoders is the compatibility half of
@@ -452,23 +456,26 @@ func TestBridgeNestsNamespacesAsMaps(t *testing.T) {
 	require.Equal(t, attribute.MAP, value.Type())
 }
 
-// TestConvertValueBoundsRecursionDepth proves a self-referential value cannot
-// exhaust the stack from inside the logger.
-//
-// Parameters:
-//   - t: the test handle.
-//
-// Return values: none.
-func TestConvertValueBoundsRecursionDepth(t *testing.T) {
+// TestReflectedValuesPreserveFiniteDepthAndRejectCycles keeps a finite nested
+// value intact while a real reference cycle is a fixed observable encoding error.
+func TestReflectedValuesPreserveFiniteDepthAndRejectCycles(t *testing.T) {
 	type node struct{ Next any }
-
-	var cyclic any
 	holder := &node{}
 	holder.Next = holder
-	cyclic = []any{[]any{[]any{[]any{[]any{[]any{[]any{[]any{[]any{"deep"}}}}}}}}}
-
-	require.NotPanics(t, func() { convertValue(cyclic) })
-	require.NotPanics(t, func() { convertValue(holder) })
+	var finite any = "deep"
+	for range 12 {
+		finite = []any{finite}
+	}
+	require.NotPanics(t, func() {
+		value, err := reflectedLogValue(finite)
+		require.NoError(t, err)
+		for range 12 {
+			require.Equal(t, attribute.SLICE, value.Type())
+			value = value.AsSlice()[0]
+		}
+		require.Equal(t, "deep", value.AsString())
+	})
+	require.NotPanics(t, func() { _, err := reflectedLogValue(holder); require.Error(t, err) })
 }
 
 // logExportSpy records the export outcomes the bridge reported.

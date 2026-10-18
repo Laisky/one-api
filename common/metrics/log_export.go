@@ -19,10 +19,15 @@ package metrics
 // constant so the metric stays low-cardinality; never pass a log message,
 // logger name, request id, or error string as a label.
 const (
+	// AppLogExportOutcomeDroppedEncoding counts visible whole-record encoding failures.
+	AppLogExportOutcomeDroppedEncoding = "dropped_encoding"
+	// AppLogExportOutcomeDroppedOperatorLimit counts explicit operator-cap rejections.
+	AppLogExportOutcomeDroppedOperatorLimit = "dropped_operator_limit"
+
 	// AppLogExportOutcomeDroppedPrivacy counts records with unsafe SDK metadata.
 	AppLogExportOutcomeDroppedPrivacy = "dropped_privacy"
-	// AppLogExportOutcomeEmitted counts log records admitted into the export
-	// pipeline. It is the denominator every other outcome is measured against.
+	// AppLogExportOutcomeEmitted counts local bridge-to-SDK handoffs. Later
+	// validation, overload or transport outcomes are counted independently. It is the denominator every other outcome is measured against.
 	AppLogExportOutcomeEmitted = "emitted"
 	// AppLogExportOutcomeDroppedQueueFull counts records discarded because the
 	// bridge's bounded queue was already at its record or byte limit. A

@@ -319,8 +319,8 @@ var observabilityIntSpecs = []observabilityIntSpec{
 	{name: EnvAppLogOTLPBatchSize, minValue: 1},
 	{name: EnvAppLogOTLPExportIntervalMs, minValue: 1, maxValue: maxDurationMilliseconds},
 	{name: EnvAppLogOTLPExportTimeoutMs, minValue: 1, maxValue: maxDurationMilliseconds},
-	{name: EnvAppLogOTLPMaxAttributes, minValue: 1},
-	{name: EnvAppLogOTLPMaxAttributeValueBytes, minValue: 1},
+	{name: EnvAppLogOTLPMaxAttributes, minValue: 0},
+	{name: EnvAppLogOTLPMaxAttributeValueBytes, minValue: 0},
 }
 
 // observabilityBoolNames lists every observability boolean read through

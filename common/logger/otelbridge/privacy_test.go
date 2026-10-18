@@ -33,19 +33,19 @@ func TestPrivacyCoreExportsOnlyOperationalData(t *testing.T) {
 		zap.String("prompt", "sentinel-bound-prompt"),
 		zap.String("url", "https://host/?unknown=sentinel-url-key"),
 		zap.String("cookie", "sentinel-cookie-secret"),
-		zap.Error(errors.New("cache connection refused")),
+		zap.Error(errors.New("sentinel-bound-error")),
 		zap.Int("channel_id", 42), SpanContextFieldFrom(spanCtx))
-	logger.Error("dynamic cache retry 3 failed",
+	logger.Error("sentinel-message-secret",
 		zap.String("request_body", "sentinel-request-secret"),
 		zap.String("body_bytes", "sentinel-wrong-type"),
 		zap.Int("body_bytes", 100), zap.Bool("is_error", true),
-		zap.Error(errors.New("dial failed: password=sentinel-error-secret")),
+		zap.Error(errors.New("sentinel-error-secret")),
 		zap.Any("headers", map[string]string{"Authorization": "sentinel-auth-key"}),
 		zap.Object("response", zapcore.ObjectMarshalerFunc(func(zapcore.ObjectEncoder) error {
 			return nil
 		})))
 	record := exporter.only(t)
-	require.Equal(t, "dynamic cache retry 3 failed", record.Body().AsString())
+	require.Equal(t, "application log", record.Body().AsString())
 	require.Equal(t, traceID, record.TraceID())
 	require.Equal(t, spanID, record.SpanID())
 	require.Equal(t, DefaultScopeName, record.InstrumentationScope().Name)
@@ -53,14 +53,8 @@ func TestPrivacyCoreExportsOnlyOperationalData(t *testing.T) {
 		switch string(kv.Key) {
 		case "channel_id", "body_bytes":
 			require.Equal(t, attribute.INT64, kv.Value.Type())
-		case "is_error", "log.fields_omitted":
+		case "is_error":
 			require.Equal(t, attribute.BOOL, kv.Value.Type())
-		case "prompt", "cookie", "request_body":
-			require.Equal(t, "[REDACTED]", kv.Value.AsString())
-		case "url":
-			require.Equal(t, "https://host/", kv.Value.AsString())
-		case "error":
-			require.NotContains(t, kv.Value.AsString(), "sentinel-error")
 		default:
 			t.Errorf("unexpected exported field %q", kv.Key)
 		}
@@ -70,7 +64,7 @@ func TestPrivacyCoreExportsOnlyOperationalData(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, int64(100), value.AsInt64())
 	require.Len(t, observed.All(), 1)
-	require.Equal(t, "dynamic cache retry 3 failed", observed.All()[0].Message)
+	require.Equal(t, "sentinel-message-secret", observed.All()[0].Message)
 	require.Equal(t, "sentinel-request-secret", observed.All()[0].ContextMap()["request_body"])
 }
 

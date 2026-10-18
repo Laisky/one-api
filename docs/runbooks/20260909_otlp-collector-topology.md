@@ -131,8 +131,8 @@ All **repo facts**; defaults from `common/config/config.go` and
 | `LOG_OTLP_BATCH_SIZE` | `512` | SDK default. |
 | `LOG_OTLP_EXPORT_INTERVAL_MS` | `1000` | SDK default. |
 | `LOG_OTLP_EXPORT_TIMEOUT_MS` | `30000` | The shutdown deadline must exceed this or the final drain is cut short. |
-| `LOG_OTLP_MAX_ATTRIBUTES` | `128` | |
-| `LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES` | `4096` | The SDK default is unlimited; one-api bounds it. |
+| `LOG_OTLP_MAX_ATTRIBUTES` | `0` | Unlimited by default; positive rejects the complete record observably. |
+| `LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES` | `0` | Unlimited by default; positive text/binary leaf limit rejects the complete record. |
 
 ---
 
@@ -428,9 +428,10 @@ the queue's memory footprint is `1000 × (whatever a batch happens to be)` — w
 **effectively unbounded**, because the multiplicand is not bounded.
 
 The same reasoning applies to traces, but it bites hardest on logs, where a single record
-can carry a large field. (One-api bounds its *own* side at 4 KiB per attribute value and
-64 MiB of resident queue — `LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES`, `LOG_OTLP_QUEUE_MAX_MB` —
-but that bounds the gateway's memory, not the collector's.)
+can carry a large field. One-api bounds its own resident queue at 64 MiB by default through
+`LOG_OTLP_QUEUE_MAX_MB`. It does not silently cap individual field content;
+explicit positive operator content limits reject whole records. Gateway admission
+bounds do not bound the collector's memory.
 
 Upstream's own description of the three sizers:
 
