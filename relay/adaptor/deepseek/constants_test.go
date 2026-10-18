@@ -78,3 +78,23 @@ func TestDeepSeekFlashAliasesShareCurrentConfiguration(t *testing.T) {
 		require.Equal(t, canonical, alias, name)
 	}
 }
+
+// TestDeepSeekOctober17CatalogVersion verifies the metadata exposed by the
+// adaptor identifies the current release for every Flash name while preserving
+// Pro's distinct version and compatibility aliases. Parameters: t is the test
+// handle. Returns: nothing; metadata regressions fail the test.
+func TestDeepSeekOctober17CatalogVersion(t *testing.T) {
+	t.Parallel()
+	catalog := (&Adaptor{}).GetDefaultModelPricing()
+	for _, name := range []string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"} {
+		cfg, exists := catalog[name]
+		require.True(t, exists, name)
+		require.Contains(t, cfg.Description, "DeepSeek-V4.1-Flash-1017", name)
+		if name != "deepseek-flash" {
+			require.Contains(t, cfg.Description, "Compatibility alias", name)
+			require.Contains(t, cfg.Description, "retired", name)
+		}
+	}
+	require.Contains(t, catalog["deepseek-v4-pro"].Description, "DeepSeek-V4-Pro-0813")
+	require.NotContains(t, catalog, "deepseek-flash-1017", "release labels are not new API identifiers")
+}

@@ -1,6 +1,8 @@
-/** browserRelease returns an immutable SHA256 identity of enumerated public frontend build inputs. */
+/** browserReleaseInputs returns sorted source/public paths and explicit build inputs from reviewed declarations. */
+export function browserReleaseInputs(theme: string): string[];
+/** browserRelease returns an immutable SHA256 identity of discovered public frontend build inputs. */
 export function browserRelease(theme: string, buildValues: Record<string, string>): string;
-/** readReleaseInput reads a safe enumerated regular source/build file without following symlinks. */
+/** readReleaseInput reads a safe regular source/build file without following symlinks. */
 export function readReleaseInput(name: string, inputRoot?: string): Uint8Array;
 /** releaseInputGuard returns a Vite plugin enforcing completeness of actual first-party source and public inputs. */
 export function releaseInputGuard(theme: string): { name: string; apply: 'build'; enforce: 'pre'; buildStart(): void; generateBundle(): void; load(id: string): null; transform(code: string, id: string): null };

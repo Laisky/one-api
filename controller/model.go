@@ -1514,12 +1514,12 @@ func GetModelsDisplay(c *gin.Context) {
 				} else if cfg.Audio == nil && cfg.Ratio != 0 {
 					audioPricing = buildLegacyAudioTariffDisplay(audioPricing, cfg.Ratio)
 				}
-				if converted.PerCall != nil || converted.PerPage != nil || (converted.Audio != nil && converted.Audio.HasData()) || cfg.Ratio != 0 {
-					// Explicit local native tariffs do not inherit provider date
-					// schedules in the billing resolvers. Do not advertise them.
-					if perCallPricing != nil || perPagePricing != nil || audioPricing != nil {
-						timeWindows, activeTimeWindow = nil, ""
-					}
+				dropInheritedSchedule, cachedInputPrice = applyLocalTokenDisplayOverride(
+					*cfg, converted, inputPrice, cachedInputPrice,
+					perCallPricing != nil || perPagePricing != nil || audioPricing != nil,
+					videoPricing != nil || imagePricing != nil || embeddingPricing != nil, convertRatioToPrice)
+				if dropInheritedSchedule {
+					timeWindows, activeTimeWindow = nil, ""
 				}
 				if len(cfg.TimeWindows) > 0 {
 					timeWindows, activeTimeWindow = buildTimeWindowDisplays(convertLocalDisplayTimeWindows(cfg.TimeWindows), inputPrice, baseCompletionRatio, displayNow, convertRatioToPrice)

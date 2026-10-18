@@ -25,6 +25,7 @@
       "document": "Document",
       "embedding_pricing": "Tarification embedding",
       "free": "Gratuit",
+      "historical_pricing": "Tarifs historiques",
       "hugging_face_id": "ID Hugging Face",
       "image": "Image",
       "image_pricing": "Tarification image",
