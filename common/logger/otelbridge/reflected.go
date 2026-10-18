@@ -183,7 +183,13 @@ func validateReflectedUTF8(v reflect.Value, projection json.RawMessage, depth in
 		_ = json.Unmarshal(projection, &projected)
 		iter := v.MapRange()
 		for iter.Next() {
-			if err := validateReflectedUTF8(iter.Key(), nil, depth+1); err != nil {
+			// encoding/json resolves string-kind keys before considering either
+			// marshaler interface; their underlying text is the actual projection.
+			if iter.Key().Kind() == reflect.String {
+				if !utf8.ValidString(iter.Key().String()) {
+					return ErrLogEncoding
+				}
+			} else if err := validateReflectedUTF8(iter.Key(), nil, depth+1); err != nil {
 				return err
 			}
 			var childProjection json.RawMessage

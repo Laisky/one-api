@@ -155,3 +155,35 @@ func TestLogFidelityReflectedReviewMapProjection(t *testing.T) {
 		}
 	}
 }
+
+// fidelityTextStringKey's TextMarshaler is ignored by encoding/json for map keys.
+type fidelityTextStringKey string
+
+func (fidelityTextStringKey) MarshalText() ([]byte, error) {
+	panic("string-key TextMarshaler must not execute")
+}
+
+// TestLogFidelityReflectedReviewStringMapKey checks the actual string-key path,
+// rather than wrongly treating an unused TextMarshaler as the chosen projection.
+func TestLogFidelityReflectedReviewStringMapKey(t *testing.T) {
+	lg, out, _ := newTestBridge(t, zapcore.InfoLevel)
+	require.Error(t, lg.Core().Write(zapcore.Entry{Message: "invalid key", Level: zapcore.InfoLevel}, []zap.Field{zap.Reflect("value", map[fidelityTextStringKey]string{fidelityTextStringKey(string([]byte{255})): "value"})}))
+	require.Empty(t, out.all())
+	lg, out, _ = newTestBridge(t, zapcore.InfoLevel)
+	lg.Info("valid key", zap.Reflect("value", map[fidelityTextStringKey]string{"chosen": "value"}))
+	require.Equal(t, "chosen", string(fidelityAttr(t, out.only(t), "value").AsMap()[0].Key))
+}
+
+// fidelityJSONStringKey's MarshalJSON is not part of JSON map-key encoding.
+type fidelityJSONStringKey string
+
+func (fidelityJSONStringKey) MarshalJSON() ([]byte, error) {
+	panic("string-key MarshalJSON must not execute")
+}
+
+// TestLogFidelityReflectedReviewJSONStringMapKey covers the unused JSON method.
+func TestLogFidelityReflectedReviewJSONStringMapKey(t *testing.T) {
+	lg, out, _ := newTestBridge(t, zapcore.InfoLevel)
+	require.Error(t, lg.Core().Write(zapcore.Entry{Message: "invalid key", Level: zapcore.InfoLevel}, []zap.Field{zap.Reflect("value", map[fidelityJSONStringKey]string{fidelityJSONStringKey(string([]byte{255})): "value"})}))
+	require.Empty(t, out.all())
+}

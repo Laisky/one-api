@@ -2,6 +2,7 @@ package otelbridge
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -103,4 +104,41 @@ func TestLogFidelityErrorReviewOverrides(t *testing.T) {
 	record := out.only(t)
 	require.Equal(t, "chosen field", fidelityAttr(t, record, "error").AsString())
 	require.Equal(t, "explicit message", fidelityAttr(t, record, "exception.message").AsString())
+}
+
+// TestLogFidelityErrorReviewNestedBoundSnapshots replaces inferred metadata when
+// a new nested error is bound; old derived attrs are not explicit app overrides.
+func TestLogFidelityErrorReviewNestedBoundSnapshots(t *testing.T) {
+	for _, override := range []bool{false, true} {
+		t.Run(fmt.Sprint(override), func(t *testing.T) {
+			firstErrors, firstTypes, secondErrors, secondTypes := 0, 0, 0, 0
+			first := &fidelityCountingError{errors: &firstErrors, types: &firstTypes, message: "outer failure"}
+			second := &fidelityCountingError{errors: &secondErrors, types: &secondTypes, message: "inner failure"}
+			lg, out, _ := newTestBridge(t, zapcore.InfoLevel)
+			if override {
+				lg = lg.With(zap.String("exception.message", "explicit"))
+			}
+			bound := lg.With(zap.Namespace("outer"), zap.Error(first)).With(zap.Namespace("inner"), zap.Error(second))
+			second.message = "changed later"
+			bound.Info("one")
+			bound.Info("two")
+			require.Equal(t, 1, firstErrors)
+			require.Equal(t, 1, secondErrors)
+			require.Equal(t, 1, firstTypes)
+			require.Equal(t, 1, secondTypes)
+			records := out.all()
+			require.Len(t, records, 2)
+			for _, record := range records {
+				message := "inner failure"
+				if override {
+					message = "explicit"
+				}
+				require.Equal(t, message, fidelityAttr(t, record, "exception.message").AsString())
+				require.Equal(t, "synthetic.snapshot", fidelityAttr(t, record, "exception.type").AsString())
+				outer := fidelityAttr(t, record, "outer").AsMap()
+				require.Equal(t, "outer failure", outer[0].Value.AsString())
+				require.Equal(t, "inner failure", outer[1].Value.AsMap()[0].Value.AsString())
+			}
+		})
+	}
 }

@@ -46,8 +46,9 @@ choose their JSON projection and run once; encoding/json's own TextMarshaler
 Unicode replacement is part of that selected projection, not reinterpreted by the
 bridge. Maps with custom TextMarshaler keys likewise use the complete chosen JSON
 projection, avoiding a second key callback to reconstruct field paths. Invalid UTF-8 in native text or ordinary reflected strings, and unpaired
-surrogate escapes in explicit JSON output, fail instead of being repaired. Encoding recursion has a 256-edge work/stack budget;
-this is an application resource guard, not an OTLP protocol limit.
+surrogate escapes in explicit JSON output, fail instead of being repaired. Bridge validation and decoded JSON projection have a 256-edge stack/work budget;
+this is an application guard, not an OTLP protocol limit. It does not bound arbitrary
+application marshaler execution or encoding/json's initial traversal/allocation.
 
 Encoding failures reject the complete OTLP record and increment the fixed
 dropped_encoding outcome. Bridge failures return a fixed encoding error; native

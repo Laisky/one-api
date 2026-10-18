@@ -139,7 +139,7 @@ func (c *Core) With(fields []zapcore.Field) zapcore.Core {
 		cloned.spanCtx = converted.spanCtx
 	}
 	if converted.err != nil {
-		attrs := append(append([]attribute.KeyValue(nil), cloned.attrs...), cloned.exceptionAttrs...)
+		attrs := cloned.attrs // Previously inferred metadata is not an explicit application override.
 		derived, err := DeriveLogExceptionAttributes(converted.err, attrs, converted.errMessage)
 		if err != nil {
 			cloned.conversionErr = ErrLogEncoding
