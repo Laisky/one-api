@@ -320,6 +320,28 @@ const modelSupportsVision = (modelName: string): boolean => {
 export const getModelCapabilities = (modelName: string): ModelCapabilities => {
   if (!modelName) return getDefaultCapabilities();
 
+  // Match only the current native API names. Historical, self-hosted and
+  // provider-prefixed models retain their existing capability handling.
+  const nativeDeepSeekName = modelName.trim().toLowerCase();
+  if (['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro'].includes(nativeDeepSeekName)) {
+    return {
+      supportsTools: true,
+      // The model reasons by default, but this generic Anthropic-budget toggle
+      // omits thinking when off and cannot disable DeepSeek's default mode.
+      supportsThinking: false,
+      supportsStop: true,
+      supportsReasoningEffort: true,
+      supportsLogprobs: true,
+      supportsTopK: false,
+      supportsTopP: true,
+      supportsFrequencyPenalty: false,
+      supportsPresencePenalty: false,
+      supportsMaxCompletionTokens: false,
+      supportsVision: nativeDeepSeekName !== 'deepseek-v4-pro',
+      isRealtime: false,
+    };
+  }
+
   const modelType = getModelType(modelName);
 
   switch (modelType) {

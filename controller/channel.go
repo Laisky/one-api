@@ -711,15 +711,10 @@ func GetChannelDefaultPricing(c *gin.Context) {
 		completionRatios[model] = price.CompletionRatio
 	}
 
-	// Create unified model configs format without tooling metadata
-	modelConfigs := make(map[string]model.ModelConfigLocal)
-	for modelName, price := range defaultPricing {
-		modelConfigs[modelName] = model.ModelConfigLocal{
-			Ratio:           price.Ratio,
-			CompletionRatio: price.CompletionRatio,
-			MaxTokens:       price.MaxTokens,
-			Video:           convertAdaptorVideoPricing(price.Video),
-		}
+	modelConfigs, err := exportDefaultModelPricing(defaultPricing)
+	if err != nil {
+		helper.RespondError(c, errors.Wrap(err, "export default channel pricing"))
+		return
 	}
 
 	var toolingConfigJSON string
