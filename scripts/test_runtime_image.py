@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """Exercise a built image's real entrypoint, SQLite storage and runtime UID contract.
 
-Run explicitly with ONEAPI_RUNTIME_TEST_IMAGE set to a local qualification tag.
+Run with ONEAPI_RUNTIME_TEST_IMAGE set to a local qualification tag and
+ONEAPI_RUNTIME_TIKTOKEN_CACHE pointing at a pre-populated public tokenizer cache.
 Every container uses synthetic temporary data, no published ports and no network.
 """
 import json
+from contextlib import closing
 import os
 from pathlib import Path
 import subprocess
+import sqlite3
 import tempfile
 import time
 import unittest
 import uuid
 
 IMAGE = os.environ.get("ONEAPI_RUNTIME_TEST_IMAGE")
+UID = os.environ.get("ONEAPI_RUNTIME_TEST_UID", "10001")
+GID = os.environ.get("ONEAPI_RUNTIME_TEST_GID", "10001")
 
 
 def docker(*args, check=True):
@@ -44,9 +49,14 @@ class RuntimeImageTests(unittest.TestCase):
 
     def start(self, *, user=None, theme="modern"):
         """start launches the real entrypoint and waits for its HTTP health response."""
+        cache = os.environ.get("ONEAPI_RUNTIME_TIKTOKEN_CACHE")
+        self.assertTrue(cache and Path(cache).is_dir(), "provide the offline tokenizer cache")
         args = ["run", "-d", "--name", self.name, "--network", "none",
                 "--memory", "512m", "--cpus", "1", "--pids-limit", "128",
                 "--mount", f"type=bind,src={self.data},dst=/data",
+                "--mount", f"type=bind,src={cache},dst=/tokenizer,readonly",
+                "-e", "TIKTOKEN_CACHE_DIR=/tokenizer",
+                "-e", f"ONEAPI_UID={UID}", "-e", f"ONEAPI_GID={GID}",
                 "-e", "SQLITE_PATH=/data/sqlite/qualification.db",
                 "-e", f"THEME={theme}", "-e", "TZ=Etc/UTC"]
         if user:
@@ -63,7 +73,7 @@ class RuntimeImageTests(unittest.TestCase):
             time.sleep(0.5)
         self.fail("application did not become healthy")
 
-    def assert_runtime(self, uid="10001", gid="10001"):
+    def assert_runtime(self, uid=UID, gid=GID):
         """assert_runtime checks privilege dropping, storage ownership and served UI."""
         result = docker("exec", self.name, "/bin/sh", "-c",
                         "grep '^Uid:' /proc/1/status; grep '^Gid:' /proc/1/status")
@@ -82,8 +92,19 @@ class RuntimeImageTests(unittest.TestCase):
         """test_root_entrypoint checks ownership repair and new SQLite initialization."""
         self.start()
         self.assert_runtime()
-        before = (self.data / "sqlite/qualification.db").stat().st_size
         docker("stop", "--time", "30", self.name)
+        database = self.data / "sqlite/qualification.db"
+        docker("run", "--rm", "--network", "none", "--entrypoint", "/bin/sh",
+               "--mount", f"type=bind,src={self.data},dst=/fixture", IMAGE,
+               "-c", f"chown -R {os.getuid()}:{os.getgid()} /fixture/sqlite")
+        marker = uuid.uuid4().hex
+        with closing(sqlite3.connect(database)) as connection:
+            connection.execute("CREATE TABLE image_restart_sentinel (marker TEXT NOT NULL)")
+            connection.execute("INSERT INTO image_restart_sentinel VALUES (?)", (marker,))
+            connection.commit()
+        docker("run", "--rm", "--network", "none", "--entrypoint", "/bin/sh",
+               "--mount", f"type=bind,src={self.data},dst=/fixture", IMAGE,
+               "-c", f"chown -R {UID}:{GID} /fixture/sqlite")
         docker("start", self.name)
         for _ in range(60):
             if docker("exec", self.name, "curl", "-fsS",
@@ -91,27 +112,34 @@ class RuntimeImageTests(unittest.TestCase):
                 break
             time.sleep(0.5)
         self.assert_runtime()
-        self.assertGreaterEqual((self.data / "sqlite/qualification.db").stat().st_size, before)
+        with closing(sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True)) as connection:
+            self.assertEqual(connection.execute(
+                "SELECT marker FROM image_restart_sentinel").fetchall(), [(marker,)])
 
     def test_preowned_bind_mount_runs_as_nonroot(self):
         """test_preowned_bind_mount checks an explicit non-root runtime user."""
         docker("run", "--rm", "--network", "none", "--entrypoint", "/bin/sh",
                "--mount", f"type=bind,src={self.data},dst=/fixture", IMAGE,
-               "-c", "chown 10001:10001 /fixture")
-        self.start(user="10001:10001")
+               "-c", f"chown {UID}:{GID} /fixture")
+        self.start(user=f"{UID}:{GID}")
         self.assert_runtime()
 
     def test_binary_permissions_and_native_media_tools(self):
         """test_binary_permissions checks executable ownership and retained CLI tools."""
         output = docker("run", "--rm", "--network", "none", "--read-only",
-                        "--user", "10001:10001", "--entrypoint", "/bin/sh", IMAGE,
+                        "--user", f"{UID}:{GID}", "--entrypoint", "/bin/sh", IMAGE,
                         "-c", "stat -c '%u:%g %a' /one-api; "
                         "test -x /usr/local/bin/docker-entrypoint.sh && "
                         "ffmpeg -version >/dev/null && ffprobe -version >/dev/null && "
                         "test -s /etc/ssl/certs/ca-certificates.crt && "
                         "TZ=Etc/UTC date +%Z")
-        self.assertEqual(output.stdout.splitlines()[0], "10001:10001 755")
+        self.assertEqual(output.stdout.splitlines()[0], f"{UID}:{GID} 755")
         self.assertEqual(output.stdout.splitlines()[-1], "UTC")
+
+    def test_unwritable_data_does_not_report_healthy(self):
+        """test_unwritable_data is the negative control for mounted storage access."""
+        with self.assertRaisesRegex(AssertionError, "application exited before healthy"):
+            self.start(user="10002:10002")
 
 
 if __name__ == "__main__":
