@@ -86,7 +86,7 @@ class WorkflowTests(unittest.TestCase):
     def test_go_validation_uses_patched_compiler_independently_of_module_floor(self) -> None:
         """test_go_validation_uses_patched_compiler_independently_of_module_floor pins every Go job."""
         expected = {"quick_tests", "go_test_shards", "entity_response_guard",
-                    "vulnerability_scan", "historical_control"}
+                    "vulnerability_scan", "historical_control", "native_arm64_images"}
         setups = {
             name: [step for step in job.get("steps", [])
                    if step.get("uses", "").startswith("actions/setup-go@")]
@@ -95,7 +95,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual({name for name, steps in setups.items() if steps}, expected)
         for name in expected:
             self.assertEqual(len(setups[name]), 1, name)
-            self.assertEqual(setups[name][0]["with"], {"go-version": "1.27.2"}, name)
+            wanted = {"go-version": "1.27.2"}
+            if name == "native_arm64_images":
+                wanted["cache"] = "false"
+            self.assertEqual(setups[name][0]["with"], wanted, name)
 
     def test_go_shards_preserve_fresh_race_coverage_and_complete_inventory(self) -> None:
         """test_go_shards_preserve_fresh_race_coverage_and_complete_inventory protects selection."""
@@ -427,11 +430,11 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(gate["if"], "always()")
         audits = {f"{theme}_dependency_audit" for theme in THEMES}
         frontends = {f"{theme}_frontend_tests" for theme in THEMES}
-        expected = MANDATORY | audits | frontends | {"go_tests", "historical_control"}
+        expected = MANDATORY | audits | frontends | {"go_tests", "historical_control", "native_arm64_images"}
         self.assertEqual(set(gate["needs"]), expected)
         script = gate["steps"][0]["run"].split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
         baseline = {name: {"result": "success"} for name in expected}
-        baseline["changes"]["outputs"] = {theme: "false" for theme in THEMES}
+        baseline["changes"]["outputs"] = {theme: "false" for theme in (*THEMES, "media_runtime")}
         for name in expected - MANDATORY:
             baseline[name]["result"] = "skipped"
         scenarios = [("unaffected manual suites and audits skipped", baseline, False, False, False, True)]
@@ -483,9 +486,67 @@ class WorkflowTests(unittest.TestCase):
                 env = {**os.environ, "NEEDS": json.dumps(jobs),
                        "MANUAL_RUN": str(manual_run).lower(),
                        "QUALIFICATION": str(qualification).lower(),
-                       "HISTORICAL_CONTROL": str(historical_run).lower()}
+                       "HISTORICAL_CONTROL": str(historical_run).lower(),
+                       "NATIVE_ARM64_IMAGES": "false"}
                 result = subprocess.run([sys.executable, "-c", script], env=env, text=True, capture_output=True, check=False)
                 self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
+
+        for value, selected in (("true", True), ("false", False), (None, None), ("unknown", None)):
+            for status in ("success", "skipped"):
+                for manual_run, requested in ((False, False), (True, False), (True, True)):
+                    state = copy.deepcopy(manual if manual_run else baseline)
+                    state["changes"]["outputs"]["media_runtime"] = value
+                    state["native_arm64_images"]["result"] = status
+                    env = {**os.environ, "NEEDS": json.dumps(state),
+                           "MANUAL_RUN": str(manual_run).lower(), "QUALIFICATION": "false",
+                           "HISTORICAL_CONTROL": "false", "NATIVE_ARM64_IMAGES": str(requested).lower()}
+                    result = subprocess.run([sys.executable, "-c", script], env=env,
+                                            text=True, capture_output=True, check=False)
+                    success = (manual_run or selected is not None) and (status == "success" or not (selected or requested))
+                    self.assertEqual(result.returncode == 0, success,
+                                     (value, status, manual_run, requested, result.stdout, result.stderr))
+        for status in ("skipped", "missing"):
+            state = copy.deepcopy(baseline)
+            state["changes"]["outputs"]["media_runtime"] = "true"
+            if status == "missing":
+                del state["native_arm64_images"]
+            env = {**os.environ, "NEEDS": json.dumps(state), "MANUAL_RUN": "false",
+                   "QUALIFICATION": "false", "HISTORICAL_CONTROL": "false", "NATIVE_ARM64_IMAGES": "false"}
+            result = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+
+    def test_native_arm64_qualification_uses_read_only_native_runner(self) -> None:
+        """test_native_arm64_qualification_uses_read_only_native_runner guards isolation and selection."""
+        job = self.ci["jobs"]["native_arm64_images"]
+        self.assertEqual(job["runs-on"], "ubuntu-24.04-arm")
+        self.assertEqual(job["needs"], "changes")
+        self.assertEqual(job["if"], "github.event.repository.private == false && (needs.changes.outputs.media_runtime == 'true' || (github.event_name == 'workflow_dispatch' && inputs.native_arm64_images))")
+        self.assertLessEqual(int(job["timeout-minutes"]), 120)
+        self.assertEqual(job["steps"][0]["with"], {
+            "ref": "${{ github.event.pull_request.head.sha || github.sha }}",
+            "fetch-depth": "0", "persist-credentials": "false",
+        })
+        self.assertNotIn("permissions", job)
+        self.assertNotIn("environment", job)
+        self.assertNotIn("services", job)
+        self.assertIn("scripts/qualify_native_arm64.py --evidence", commands(job))
+        for forbidden in ("setup-qemu", "setup-buildx", "login-action", "build-push-action", "sudo", "--privileged", "docker push"):
+            self.assertNotIn(forbidden, json.dumps(job))
+        archive = job["steps"][-1]
+        self.assertEqual(archive["if"], "always()")
+        self.assertEqual(archive["with"]["path"], "${{ runner.temp }}/native-arm64-evidence")
+        self.assertEqual(archive["with"]["retention-days"], "14")
+        self.assertEqual(self.ci["on"]["workflow_dispatch"]["inputs"]["native_arm64_images"]["default"], "false")
+        changes = self.ci["jobs"]["changes"]
+        self.assertIn("python3 scripts/test_qualify_native_arm64.py", commands(changes))
+        self.assertEqual(changes["outputs"]["media_runtime"], "${{ steps.filter.outputs.media_runtime }}")
+        filters = next(step["with"]["filters"] for step in changes["steps"] if step.get("id") == "filter")
+        media_paths = yaml.load(filters, Loader=UniqueKeyLoader)["media_runtime"]
+        for path in ("Dockerfile", "scripts/docker-entrypoint.sh", "scripts/collect_media_runtime.py",
+                     "scripts/qualify_native_arm64.py", "scripts/qualify_media_runtime.py",
+                     "scripts/qualify_media_transport.py", ".github/workflows/lint.yml"):
+            self.assertIn(path, media_paths)
+        self.assertNotIn("**", media_paths)
 
 
 if __name__ == "__main__":

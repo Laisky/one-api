@@ -84,3 +84,30 @@ not certify arbitrary GPU/video features, all accepted multimedia formats,
 arm64 from an amd64 run, external providers, or a changed billing policy.
 Nonroot image startup, storage ownership, CA/timezone behavior, SQLite restarts,
 and themes remain covered by scripts/test_runtime_image.py.
+
+
+## Native ARM64 qualification
+
+The existing CI workflow runs `native_arm64_images` on the public GitHub-hosted
+`ubuntu-24.04-arm` runner when image or qualification paths change. Manual runs
+opt in with `native_arm64_images`; unrelated changes may skip it. `CI required`
+requires success whenever selected, including rejecting missing change outputs.
+It retains `contents: read`, checks out the exact PR head without persisted Git
+credentials, and uses the runner's existing native Docker builder. It does not
+install QEMU, create privileged builders, publish images, or deploy.
+
+`scripts/qualify_native_arm64.py` builds the complete production Dockerfile on
+native hardware, records immutable input image identities, and compares original,
+ownership-only, and media-closure runtimes using the same actual application
+binary. Acceptance includes native ELF/platform checks, default and custom UID/GID
+runtime checks, the duration/codec/TTS/billing/cancellation corpus, retained media
+file hashes and loader closure, and the existing bounded local TLS fixture.
+The local TLS fixture proves explicit fixture-CA handling, not arbitrary remote
+endpoints or every provider's default trust configuration.
+
+The job has a fixed deadline and disk/memory floors, isolated test caches, bounded
+runtime containers, and always uploads compact evidence without images or build
+caches. Resource exhaustion is a failed qualification, not a pass or a reason to
+delete unrelated runner data. ARM64 acceptance requires a completed native run;
+AMD64 results alone do not qualify it. This check does not replace normal hosted
+CodeQL acceptance when the stacked draft progresses through its approved base.
