@@ -86,21 +86,22 @@ RUN set -e; \
         ldconfig; \
         rm -rf /var/lib/apt/lists/*
 
-COPY --from=go-builder /out/one-api /one-api
+ARG ONEAPI_UID=10001
+ARG ONEAPI_GID=10001
 
 EXPOSE 3000
 
-ARG ONEAPI_UID=10001
-ARG ONEAPI_GID=10001
 # Create dedicated user with deterministic UID/GID so host can pre‑chown bind mount.
 RUN groupadd --system --gid ${ONEAPI_GID} oneapi && \
         useradd  --system --no-create-home --home /data --uid ${ONEAPI_UID} --gid ${ONEAPI_GID} \
                         --shell /usr/sbin/nologin oneapi && \
-        mkdir -p /data && chown oneapi:oneapi /one-api /data
+        mkdir -p /data && chown oneapi:oneapi /data
 
-# Add entrypoint script
-COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Set ownership while copying so a later chown does not duplicate the binary layer.
+COPY --from=go-builder --chown=${ONEAPI_UID}:${ONEAPI_GID} /out/one-api /one-api
+
+# Add entrypoint script with its runtime mode in the same layer.
+COPY --chmod=755 scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 WORKDIR /data
 
