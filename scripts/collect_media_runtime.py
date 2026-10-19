@@ -20,6 +20,7 @@ LIB = MEDIA / "lib"
 RECORDS = []
 COPIED = {}
 ELF_FILES = {}
+DANGLING_DOC_LINKS = []
 
 
 def digest(path):
@@ -135,10 +136,24 @@ def collect_elf(path, destination, *, role):
         copy_file(source, LIB / alias, role="library")
 
 
-def copy_tree(source, destination):
+def copy_tree(source, destination, *, documentation=False):
     """copy_tree copies public runtime data and notices, dereferencing source links."""
+    def ignore_missing_docs(directory, names):
+        """ignore_missing_docs records already-broken non-license documentation links."""
+        ignored = []
+        for name in names:
+            path = Path(directory) / name
+            if not path.is_symlink() or path.exists():
+                continue
+            if any(word in name.lower() for word in ("copyright", "license", "copying", "notice")):
+                raise ValueError(f"source notice target is missing: {path}")
+            DANGLING_DOC_LINKS.append({"source": str(path), "target": os.readlink(path)})
+            ignored.append(name)
+        return ignored
+
     if source.is_dir():
-        shutil.copytree(source, destination, symlinks=False, dirs_exist_ok=True)
+        shutil.copytree(source, destination, symlinks=False, dirs_exist_ok=True,
+                        ignore=ignore_missing_docs if documentation else None)
 
 
 def wrapper(program, loader):
@@ -181,7 +196,8 @@ if __name__ == "__main__":
     copy_file(Path("/etc/ssl/openssl.cnf"), MEDIA / "openssl.cnf", role="config")
     copy_file(Path("/etc/nsswitch.conf"), ROOT / "etc/nsswitch.conf", role="config")
     for directory in ("/usr/local/share", "/usr/share/doc", "/usr/share/common-licenses"):
-        copy_tree(Path(directory), ROOT / directory.lstrip("/"))
+        copy_tree(Path(directory), ROOT / directory.lstrip("/"),
+                  documentation=directory == "/usr/share/doc")
     for program in ("ffmpeg", "ffprobe"):
         result = subprocess.check_output([str(LIB / loader.name), "--inhibit-cache",
             "--library-path", str(LIB), "--list", str(MEDIA / "bin" / program)], text=True)
@@ -190,7 +206,7 @@ if __name__ == "__main__":
             raise ValueError(f"dependencies escaped private runtime: {outside}")
     (MEDIA / "manifest.json").write_text(json.dumps({
         "machine": MACHINE, "loader": loader.name, "files": RECORDS,
-        "elf": ELF_FILES}, indent=2) + "\n")
+        "elf": ELF_FILES, "source_dangling_doc_links": DANGLING_DOC_LINKS}, indent=2) + "\n")
     print(json.dumps({"machine": MACHINE, "files": len(RECORDS),
                       "copied_bytes": sum(path.stat().st_size for path in ROOT.rglob("*")
                                           if path.is_file())}))
