@@ -203,7 +203,7 @@ if __name__ == "__main__":
     for module in glob.glob("/usr/lib/*/libnss_*.so*"):
         collect_elf(Path(module), LIB / Path(module).name, role="module")
     copy_file(Path("/etc/ssl/openssl.cnf"), MEDIA / "openssl.cnf", role="config")
-    copy_file(Path("/etc/nsswitch.conf"), ROOT / "etc/nsswitch.conf", role="config")
+    copy_file(Path("/etc/nsswitch.conf"), MEDIA / "nsswitch.conf", role="config")
     copy_tree(Path("/usr/local/share"), ROOT / "usr/local/share")
     for directory in ("/usr/share/doc", "/usr/share/common-licenses"):
         copy_tree(Path(directory), MEDIA / "notices" / directory.lstrip("/"),

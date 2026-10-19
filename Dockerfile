@@ -90,6 +90,7 @@ RUN set -e; \
         apt-get update; \
         apt-get install -y --no-install-recommends \
                 bash ca-certificates tzdata curl libsqlite3-0 gosu; \
+        cmp /etc/nsswitch.conf /opt/oneapi-media/nsswitch.conf; \
         ldconfig; \
         ffmpeg -hide_banner -version >/dev/null; \
         ffprobe -hide_banner -version >/dev/null; \
