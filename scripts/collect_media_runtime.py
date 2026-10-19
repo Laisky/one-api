@@ -19,6 +19,7 @@ MEDIA = ROOT / "opt/oneapi-media"
 LIB = MEDIA / "lib"
 RECORDS = []
 COPIED = {}
+ELF_FILES = {}
 
 
 def digest(path):
@@ -63,9 +64,24 @@ def elf_metadata(path):
                     continue
                 name = names[value:].split(b"\0")[0].decode()
                 (needed if tag == 1 else lookup_paths).append(name)
-        if any("/" in name for name in needed) or any(lookup_paths):
-            raise ValueError(f"non-relocatable dependency lookup in {path}: {lookup_paths}")
-        return {"machine": machine, "interpreter": interpreter, "needed": needed}
+        if any("/" in name for name in needed):
+            raise ValueError(f"absolute dependency lookup in {path}: {needed}")
+        return {"machine": machine, "interpreter": interpreter,
+                "needed": needed, "lookup_paths": lookup_paths}
+
+
+def validate_lookup(metadata, destination):
+    """validate_lookup permits only origin-relative paths confined to the private tree."""
+    for paths in metadata["lookup_paths"]:
+        for value in paths.split(":"):
+            if not value.startswith(("$ORIGIN", "${ORIGIN}")):
+                raise ValueError(f"non-relocatable lookup in {destination}: {value}")
+            value = value.replace("${ORIGIN}", str(destination.parent))
+            value = value.replace("$ORIGIN", str(destination.parent))
+            resolved = Path(os.path.normpath(value))
+            if "$" in value or not resolved.is_relative_to(MEDIA):
+                raise ValueError(f"dependency lookup escapes private tree: {value}")
+    ELF_FILES[str(destination.relative_to(ROOT))] = metadata
 
 
 def copy_file(source, destination, *, role):
@@ -109,11 +125,13 @@ def collect_elf(path, destination, *, role):
     metadata = elf_metadata(path)
     if metadata["machine"] != MACHINE:
         raise ValueError(f"mixed ELF architecture: {path}")
+    validate_lookup(metadata, destination)
     copy_file(path, destination, role=role)
     for alias, source in dependencies(path):
         details = elf_metadata(source)
         if details["machine"] != MACHINE:
             raise ValueError(f"mixed ELF architecture: {source}")
+        validate_lookup(details, LIB / alias)
         copy_file(source, LIB / alias, role="library")
 
 
@@ -171,7 +189,8 @@ if __name__ == "__main__":
         if outside:
             raise ValueError(f"dependencies escaped private runtime: {outside}")
     (MEDIA / "manifest.json").write_text(json.dumps({
-        "machine": MACHINE, "loader": loader.name, "files": RECORDS}, indent=2) + "\n")
+        "machine": MACHINE, "loader": loader.name, "files": RECORDS,
+        "elf": ELF_FILES}, indent=2) + "\n")
     print(json.dumps({"machine": MACHINE, "files": len(RECORDS),
                       "copied_bytes": sum(path.stat().st_size for path in ROOT.rglob("*")
                                           if path.is_file())}))
