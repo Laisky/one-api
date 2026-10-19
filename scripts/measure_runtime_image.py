@@ -112,4 +112,3 @@ if __name__ == "__main__":
     parser.add_argument("destination", type=Path)
     args = parser.parse_args()
     print(json.dumps(measure(args.image, args.destination), indent=2))
-
