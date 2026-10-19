@@ -33,7 +33,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 			webSearchCount = derived
 		}
 		if webSearchCount > 0 {
-			c.Set(ctxkey.WebSearchCallCount, webSearchCount)
+			recordWebSearchInvocationCount(c, webSearchCount)
 		}
 		lifecycle.finish(c, &apiErr)
 		if lifecycle.gap || !lifecycle.terminalReceipt {

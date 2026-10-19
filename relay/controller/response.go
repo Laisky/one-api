@@ -146,7 +146,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		lg.Debug("pruned disallowed response builtins", zap.Strings("tools", pruned), zap.String("model", responseAPIRequest.Model))
 	}
 	if err := tooling.ValidateRequestedBuiltins(responseAPIRequest.Model, meta, channelRecord, requestAdaptor, requestedBuiltins); err != nil {
-		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
+		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
 	// Validate every surviving tool, including types unknown to the builtin
 	// registry, before reserving quota. The wire boundary repeats this check.

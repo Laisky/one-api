@@ -72,7 +72,7 @@ func ResponseAPIHandler(c *gin.Context, resp *http.Response, promptTokens int, m
 		calls = derived
 	}
 	if calls > 0 {
-		c.Set(ctxkey.WebSearchCallCount, calls)
+		recordWebSearchInvocationCount(c, calls)
 	}
 
 	// Surface the upstream Responses id so the controller can record a
@@ -223,7 +223,7 @@ func ResponseAPIDirectHandler(c *gin.Context, resp *http.Response, promptTokens 
 		calls = derived
 	}
 	if calls > 0 {
-		c.Set(ctxkey.WebSearchCallCount, calls)
+		recordWebSearchInvocationCount(c, calls)
 	}
 
 	// Extract usage information for billing. An unfinished (queued/in_progress)

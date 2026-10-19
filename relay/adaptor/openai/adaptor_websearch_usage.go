@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/relaymode"
@@ -18,7 +19,7 @@ import (
 // responses omit invocation counts. It skips recording when upstream already
 // provided web search counts to avoid double billing.
 func recordWebSearchPreviewInvocation(c *gin.Context, metaInfo *meta.Meta) {
-	if c == nil || metaInfo == nil {
+	if c == nil || metaInfo == nil || deepseekcompat.UsesDeepSeekToolReceiptContract(metaInfo) {
 		return
 	}
 
@@ -128,4 +129,14 @@ func intFromAny(value any) int {
 	default:
 		return 0
 	}
+}
+
+// recordWebSearchInvocationCount publishes the existing OpenAI inference only
+// where that billing contract applies. DeepSeek items and usage extensions stay
+// on the wire but are not documented successful paid-tool receipts.
+func recordWebSearchInvocationCount(c *gin.Context, calls int) {
+	if c == nil || calls <= 0 || deepseekcompat.UsesDeepSeekToolReceiptContractFromContext(c) {
+		return
+	}
+	c.Set(ctxkey.WebSearchCallCount, calls)
 }

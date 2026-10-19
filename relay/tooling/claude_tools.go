@@ -10,6 +10,7 @@ import (
 
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 )
@@ -86,6 +87,10 @@ func ClassifyClaudeTool(toolType string) (ClaudeToolKind, string) {
 	return ClaudeToolUnknown, normalized
 }
 
+// ErrBuiltinToolBillingUnsupported identifies admitted capabilities whose
+// upstream contract has no implemented billable receipt.
+var ErrBuiltinToolBillingUnsupported = errors.New("built-in tool billing is not supported")
+
 // BuiltinToolQuotes validates requested canonical built-in tools against the
 // shared channel/provider policy and returns their per-call quota. Parameters:
 // ctx carries request correlation, modelName/meta identify the effective model,
@@ -103,6 +108,9 @@ func BuiltinToolQuotes(ctx context.Context, modelName string, meta *metalib.Meta
 		canonical := strings.ToLower(strings.TrimSpace(toolName))
 		if !policy.isAllowed(canonical) {
 			return nil, errors.Errorf("tool %s is not allowed on this channel (model=%s); update the tooling whitelist or pricing", canonical, effectiveModel)
+		}
+		if (canonical == BuiltinWebSearch || canonical == BuiltinWebFetch) && policy.pricing[canonical] != 0 && deepseekcompat.UsesDeepSeekToolReceiptContract(meta) {
+			return nil, errors.Wrapf(ErrBuiltinToolBillingUnsupported, "DeepSeek %s has no supported billable tool receipt (model=%s)", canonical, effectiveModel)
 		}
 		quotes[canonical] = policy.pricing[canonical]
 	}

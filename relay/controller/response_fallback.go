@@ -152,10 +152,10 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	}
 
 	if err := tooling.ValidateResponseBuiltinToolsWithExclusions(responseAPIRequest, meta, channelRecord, requestAdaptor, mcpToolNames); err != nil {
-		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
+		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
 	if err := tooling.ValidateChatBuiltinTools(c, chatRequest, meta, channelRecord, requestAdaptor); err != nil {
-		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
+		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
 
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)

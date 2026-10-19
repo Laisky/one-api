@@ -274,7 +274,7 @@ func (a *Adaptor) ConvertResponseAPIToClaudeResponse(c *gin.Context, resp *http.
 			calls = derived
 		}
 		if calls > 0 {
-			c.Set(ctxkey.WebSearchCallCount, calls)
+			recordWebSearchInvocationCount(c, calls)
 		}
 	}
 	claudeResp := model.ClaudeResponse{

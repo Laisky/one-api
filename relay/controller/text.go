@@ -108,7 +108,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	ratio := modelRatio * groupRatio
 	if err := tooling.ValidateChatBuiltinTools(c, textRequest, meta, channelRecord, requestAdaptor); err != nil {
-		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
+		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
 
 	// Normalize provider-visible instructions, defaults and output limits

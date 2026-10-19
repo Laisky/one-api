@@ -87,7 +87,7 @@ func admitClaudeMessagesTools(c *gin.Context, meta *metalib.Meta) *relaymodel.Er
 				break
 			}
 		}
-		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
+		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
 
 	var allowance int64
@@ -272,7 +272,7 @@ func admitConvertedClaudeBuiltins(c *gin.Context, meta *metalib.Meta, converted 
 		err = tooling.ValidateResponseBuiltinTools(request, meta, claudeChannelRecord(c), provider)
 	}
 	if err != nil {
-		return openai.ErrorWrapper(errors.Wrap(err, "converted Claude request"), "tool_not_allowed", http.StatusBadRequest)
+		return openai.ErrorWrapper(errors.Wrap(err, "converted Claude request"), builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
 	return nil
 }

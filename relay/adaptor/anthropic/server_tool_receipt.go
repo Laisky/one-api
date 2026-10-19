@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 )
 
 // serverToolTally accumulates provider-executed tool invocations for one
@@ -166,6 +167,9 @@ func RecordServerToolInvocations(c *gin.Context, counts map[string]int) {
 	}
 	recorded := false
 	for name, count := range counts {
+		if (name == "web_search" || name == "web_fetch") && deepseekcompat.UsesDeepSeekToolReceiptContractFromContext(c) {
+			continue
+		}
 		if count <= 0 {
 			continue
 		}
