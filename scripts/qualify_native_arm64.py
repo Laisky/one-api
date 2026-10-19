@@ -181,6 +181,7 @@ class Qualification:
         start = time.monotonic()
         process = subprocess.Popen(argv, cwd=cwd or self.repo, env=env or self.env,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+        record["process_group"] = process.pid
         data, count = bytearray(), [0]
         def drain():
             """drain consumes all output but stores at most four MiB."""
@@ -192,7 +193,7 @@ class Qualification:
         reader = threading.Thread(target=drain, daemon=True)
         reader.start()
         try:
-            while process.poll() is None:
+            while process.poll() is None or reader.is_alive():
                 self.guard()
                 if time.monotonic()-start > timeout:
                     raise RuntimeError(name+" command deadline exceeded")
@@ -204,24 +205,28 @@ class Qualification:
                 raise RuntimeError(f"{name} failed ({process.returncode}); see {log.name}")
             return data.decode(errors="replace")
         except BaseException as error:
-            if process.poll() is None:
+            # A finished parent can leave descendants holding its output pipe open.
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            reader.join(timeout=2)
+            if process.poll() is None or reader.is_alive():
                 try:
-                    os.killpg(process.pid, signal.SIGTERM)
+                    os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    try:
-                        os.killpg(process.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                    process.wait(timeout=10)
-            reader.join(timeout=10)
+                process.wait(timeout=5)
+                reader.join(timeout=5)
             record.update(state="failed", error=str(error), seconds=time.monotonic()-start)
             raise
         finally:
-            process.stdout.close()
+            if not reader.is_alive():
+                process.stdout.close()
             self.flush()
 
     def setup(self):

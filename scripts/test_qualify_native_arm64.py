@@ -108,10 +108,13 @@ class NativeQualificationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             qualification = native.Qualification(argparse.Namespace(evidence=Path(temporary)/"evidence", timeout=300))
             try:
-                with mock.patch.object(qualification, "guard"):
-                    with self.assertRaisesRegex(RuntimeError, "command deadline"):
-                        qualification.run([sys.executable, "-c", "import time; time.sleep(60)"],
-                                          "owned-timeout", timeout=0.05)
+                commands = ["import time; time.sleep(60)",
+                    "import subprocess,sys; subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'])",
+                    "import subprocess,sys; subprocess.Popen([sys.executable,'-c','import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)'])"]
+                for command in commands:
+                    with self.subTest(command=command), mock.patch.object(qualification, "guard"):
+                        with self.assertRaisesRegex(RuntimeError, "command deadline"):
+                            qualification.run([sys.executable, "-c", command], "owned-timeout", timeout=0.05)
                 receipt = json.loads((qualification.evidence/"summary.json").read_text())
                 self.assertEqual(receipt["commands"][-1]["state"], "failed")
                 self.assertLess(receipt["commands"][-1]["seconds"], 15)
