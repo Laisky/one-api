@@ -20,7 +20,7 @@ class MediaCollectionTests(unittest.TestCase):
                     patch.object(collect, "ELF_FILES", {}):
                 collect.validate_lookup({"lookup_paths": ["$ORIGIN:$ORIGIN/../lib"]}, destination)
                 for paths in ("$ORIGIN/../../../outside", "/usr/local/lib", "$ORIGIN:",
-                              "$ORIGIN/$PLATFORM"):
+                              "$ORIGIN/$PLATFORM", "$ORIGIN_EVIL"):
                     with self.subTest(paths=paths), self.assertRaises(ValueError):
                         collect.validate_lookup({"lookup_paths": [paths]}, destination)
 
@@ -48,7 +48,8 @@ class MediaCollectionTests(unittest.TestCase):
             (source / "notice.txt").write_text("license content")
             (source / "copyright").symlink_to("notice.txt")
             (source / "NEWS").symlink_to("absent.gz")
-            with patch.object(collect, "DANGLING_DOC_LINKS", []):
+            with patch.object(collect, "DANGLING_DOC_LINKS", []), \
+                    patch.object(collect, "ROOT", root), patch.object(collect, "DATA_FILES", []):
                 collect.copy_tree(source, root / "output", documentation=True)
                 self.assertEqual((root / "output/copyright").read_text(), "license content")
                 self.assertFalse((root / "output/NEWS").exists())

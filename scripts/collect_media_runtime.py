@@ -21,6 +21,7 @@ RECORDS = []
 COPIED = {}
 ELF_FILES = {}
 DANGLING_DOC_LINKS = []
+DATA_FILES = []
 
 
 def digest(path):
@@ -75,7 +76,7 @@ def validate_lookup(metadata, destination):
     """validate_lookup permits only origin-relative paths confined to the private tree."""
     for paths in metadata["lookup_paths"]:
         for value in paths.split(":"):
-            if not value.startswith(("$ORIGIN", "${ORIGIN}")):
+            if not re.match(r"^(?:\$ORIGIN|\$\{ORIGIN\})(?:/|$)", value):
                 raise ValueError(f"non-relocatable lookup in {destination}: {value}")
             value = value.replace("${ORIGIN}", str(destination.parent))
             value = value.replace("$ORIGIN", str(destination.parent))
@@ -154,6 +155,14 @@ def copy_tree(source, destination, *, documentation=False):
     if source.is_dir():
         shutil.copytree(source, destination, symlinks=False, dirs_exist_ok=True,
                         ignore=ignore_missing_docs if documentation else None)
+        for output in sorted(destination.rglob("*")):
+            if output.is_file():
+                original = source / output.relative_to(destination)
+                checksum = digest(original)
+                if digest(output) != checksum:
+                    raise ValueError(f"copied runtime data changed: {original}")
+                DATA_FILES.append({"source": str(original),
+                    "destination": str(output.relative_to(ROOT)), "sha256": checksum})
 
 
 def wrapper(program, loader):
@@ -195,8 +204,9 @@ if __name__ == "__main__":
         collect_elf(Path(module), LIB / Path(module).name, role="module")
     copy_file(Path("/etc/ssl/openssl.cnf"), MEDIA / "openssl.cnf", role="config")
     copy_file(Path("/etc/nsswitch.conf"), ROOT / "etc/nsswitch.conf", role="config")
-    for directory in ("/usr/local/share", "/usr/share/doc", "/usr/share/common-licenses"):
-        copy_tree(Path(directory), ROOT / directory.lstrip("/"),
+    copy_tree(Path("/usr/local/share"), ROOT / "usr/local/share")
+    for directory in ("/usr/share/doc", "/usr/share/common-licenses"):
+        copy_tree(Path(directory), MEDIA / "notices" / directory.lstrip("/"),
                   documentation=directory == "/usr/share/doc")
     for program in ("ffmpeg", "ffprobe"):
         result = subprocess.check_output([str(LIB / loader.name), "--inhibit-cache",
@@ -206,7 +216,8 @@ if __name__ == "__main__":
             raise ValueError(f"dependencies escaped private runtime: {outside}")
     (MEDIA / "manifest.json").write_text(json.dumps({
         "machine": MACHINE, "loader": loader.name, "files": RECORDS,
-        "elf": ELF_FILES, "source_dangling_doc_links": DANGLING_DOC_LINKS}, indent=2) + "\n")
+        "elf": ELF_FILES, "runtime_data": DATA_FILES,
+        "source_dangling_doc_links": DANGLING_DOC_LINKS}, indent=2) + "\n")
     print(json.dumps({"machine": MACHINE, "files": len(RECORDS),
                       "copied_bytes": sum(path.stat().st_size for path in ROOT.rglob("*")
                                           if path.is_file())}))
