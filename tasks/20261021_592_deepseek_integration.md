@@ -4,7 +4,7 @@ Date: 2026-10-21 UTC. Original task: **20261016-2010**. Implementation lane: **2
 
 Tracking: [issue #592](https://github.com/Laisky/one-api/issues/592), [PR #589](https://github.com/Laisky/one-api/pull/589). The requested PR #582 is already merged; #592 identifies #589 as the remaining integration and release handoff. This record extends the delivered containment rather than recreating #582 or the HTTP implementation.
 
-## Source identity
+## Initial source identity
 
 | Checkpoint | Identity |
 | --- | --- |
@@ -16,11 +16,12 @@ Tracking: [issue #592](https://github.com/Laisky/one-api/issues/592), [PR #589](
 | Integration commit, PR head first parent | `e4792dffc505055bd31a401ef152d8def0d54e75` |
 | WebSocket admission and behavioral regressions | `37f7c977832d8fd1cb65712f09900ddd70469590` |
 | Model precision fix and regressions | `a313fd6919351ff83a74cd3798234992ccb7f912` |
-| Qualified source tree, before documentation-only changes | `98cdb63512ecee288328a52153fa7ac4f995f050` |
+| Initial qualified source tree, before documentation-only changes | `98cdb63512ecee288328a52153fa7ac4f995f050` |
+| First published follow-up head | `2c9a73d3e53ddaafeda3f2483c4b91db033117d2` |
 
 Current main adds #586 cancellation logging and #590 Jev catalog/alias updates. They integrate without source conflicts. The live `main` branch endpoint was checked directly; the old PR base metadata was its common ancestor, not the current target tip.
 
-The local index tree exactly matches the remotely created source tree above. The final publication adds documentation only. The PR and issue maintain the final published head, subsequent exact-head CI/review links, and any separately authorized release receipts; this local qualification record does not substitute for those later checks.
+The local index tree exactly matched the remotely created source tree above. The first publication added documentation only. Its required security gate subsequently identified the toolchain issue documented below. The PR and issue maintain the final published head, subsequent exact-head CI/review links, and any separately authorized release receipts; this local qualification record does not substitute for those later checks.
 
 ## Confirmed defects and shared fixes
 
@@ -68,7 +69,7 @@ Admission itself does not rewrite frames. The model guard leaves an already-boun
 - A proposed cancellation-before-denial settlement problem is unreachable: session ownership rejects all non-`response.create` events before forwarding. No speculative settlement counter redesign was made.
 - An unused HTTP full-endpoint override is not the WebSocket dispatch target. The fix follows the actual WebSocket URL and preserves existing routing rather than applying the HTTP target-selection assumptions to this transport.
 
-## Fresh verification
+## Initial verification with Go 1.27.2
 
 Execution used Go **1.27.2 linux/amd64**, `GOTOOLCHAIN=local`, `GOMAXPROCS=4`, and test/build parallelism `-p 2`. The toolchain archive was verified against the official Go download manifest. Tests used `-count=1`; package cache hits were not treated as fresh execution.
 
@@ -138,13 +139,78 @@ Raw test output is transient execution evidence, not a committed generated test 
 | Current-main controls JSON | `034c4b8a53fd29fd0abaaaa83c43b728f5268147a311e1f56c2e0029a2b56d9b` |
 | Static-gate receipt with six source hashes | `cc74bc7c25329ba27b6d2ea9ed2a28d8304a4fe9a1fc8a6751e92c3c8cb5d3cb` |
 
+## Required security-gate follow-up with Go 1.27.3
+
+The first published head's [ordinary CI run](https://github.com/Laisky/one-api/actions/runs/39615167572) correctly failed its required vulnerability gate. Its [scanner job](https://github.com/Laisky/one-api/actions/runs/39615167572/job/119274144754) reported **GO-2026-6809 / CVE-2026-111943**, with `PasskeyRegisterFinish` reaching `webauthn.FinishRegistration` and `crypto/x509.Certificate.Verify`. The pinned Go 1.27.2 standard library was affected; Go 1.27.3 contains the fix. All other mandatory jobs passed, and [four-language CodeQL](https://github.com/Laisky/one-api/actions/runs/39615167577) completed successfully on that first head. Those results do not turn the failed aggregate gate into a pass.
+
+The [official Go advisory](https://github.com/golang/vulndb/blob/master/data/osv/GO-2026-6809.json), [release history](https://go.dev/doc/devel/release#go1.27.3), and [Go 1.27 backport](https://github.com/golang/go/commit/90617fb7ceb59cf08bee7826bb51b8c8fb8c11de) confirm the standard-library distrust change. This is a concrete newly observed required-gate finding, not a waiver or a retry of the handoff's unrelated previously restricted assessment.
+
+### Behavioral reproduction and compatible patch selection
+
+`controller/toolchain_x509_test.go` verifies a genuine signed public intermediate against its issuing root in an explicit certificate pool. Both certificate fingerprints and the intermediate SPKI hash are pinned; signatures are checked independently and the verification time is fixed inside both validity periods. Thus expiry, an invalid signature, missing system roots, or network failure cannot satisfy the distrust assertion by accident.
+
+The exact same test source demonstrates:
+
+- **RED on Go 1.27.2:** the real distrusted chain is accepted and the rejection assertion fails. The owned valid-chain and unknown-root controls pass.
+- **GREEN on Go 1.27.3:** the distrusted chain returns `x509.NoValidChains`; the valid owned chain and unknown-root controls still pass. One top-level test and two subtests pass with race enabled, with no skips.
+
+The fixture [provenance record](../controller/testdata/toolchain_x509/README.md) links the issuer's public certificates and their fingerprints. The test uses no compromised private key, mock SPKI mutation, system trust mutation, live service, or runtime network access.
+
+The shared fix selects Go **1.27.3** in all five existing CI Go jobs, the Docker builder, and the module's preferred `toolchain`. It retains the `go 1.27.2` compatibility floor, all application dependency requirements, `go.sum`, CGO, Bookworm, and target architecture arguments. The existing workflow contract now asserts alignment across CI, developer selection, and Docker, so changing only the scanner cannot leave the release compiler behind. `GOTOOLCHAIN=local` remains an explicit override and must use a patched compiler for qualified builds.
+
+The security follow-up is commit **`df12fdf25cbda7b0be4341d5cd66f0ab38d8f3d7`**, tree **`9b9b3f83f94880db5021b5081b7d60e7503cfd3b`**. The local index tree exactly matches this remote source tree. Its Go 1.27.3 linux/amd64 archive was verified against the official download manifest: SHA256 `65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40`. The official Docker image catalog lists `1.27.3-bookworm` for both amd64 and arm64v8; a release image build/publication remains part of the separately approved delivery.
+
+### Final local qualification on the patched compiler
+
+All runs used Go 1.27.3 explicitly, `GOTOOLCHAIN=local`, and fresh `-count=1` execution. The new compiler justified repeating the affected and current-main controls; the original Go 1.27.2 receipts above retain their actual provenance.
+
+| Scope | Result |
+| --- | --- |
+| Five affected packages plus middleware and Typesafe, race enabled | **21,329 passing events**, seven packages, zero failures; the same ten opt-in skips |
+| Event accounting | **1,706 top-level + 19,623 subtest** pass events; the 22 WebSocket child cases also pass and remain separately visible in child output |
+| Existing passkey response control plus new X.509 trust test, race enabled | **Four passing events**, zero failures/skips |
+| `govulncheck ./...`, scanner v1.9.0 | Exit 0; **zero reachable findings**, zero imported-package findings; one informational required-module finding is not called by this code |
+| `go vet ./...` and entity-response guard | Both pass, no findings |
+| `make test-quick` | Pass; all **17** discovered essential tests executed |
+| Python workflow contracts | **19 passed**, one existing opt-in skip for disposable Docker metadata builds |
+| Formatting, source review, and module checks | Clean; source/fixture review found no blocker; application dependency requirements and `go.sum` unchanged |
+
+The existing passkey control covers list/delete/UUID response behavior and rejection of legacy numeric IDs. No existing controller registration-ceremony test was found, so this is not a claim of complete `PasskeyRegisterFinish` ceremony coverage. The signed-chain regression directly exercises the vulnerable standard-library boundary identified by the scanner.
+
+Repeat the final application run with the seven packages listed below, then the narrow authentication selection and existing gates:
+
+```sh
+go test -race -p 2 -json -count=1 -timeout 20m \
+  ./relay/controller ./relay/adaptor/openai ./relay/adaptor/anthropic \
+  ./relay/adaptor/common/deepseekcompat ./relay/tooling \
+  ./middleware ./relay/adaptor/typesafe
+go test -race -p 2 -json -count=1 -timeout 10m \
+  -run '^(TestToolchainX509CertificateTrust|TestPasskeyStrictOutResponses)$' ./controller
+govulncheck ./...
+python3 .github/scripts/test_workflows.py
+```
+
+| Patched-compiler evidence | SHA256 |
+| --- | --- |
+| Seven-package race JSON | `6ff547ea2b908e507bb8547c68df07d7c87dcb85f53cdec4f3bd2fe2fbc4f3aa` |
+| X.509 RED JSON on Go 1.27.2 | `eaa8a1b87d981835c213a39d217db19c70f9f822fe693dc1c4ac30a7b013593b` |
+| X.509 GREEN JSON on Go 1.27.3 | `a53d14d680bc6f6cea4d599d34dfee8044763dd94c2926302a10706040273787` |
+| Passkey/X.509 controls JSON | `302ee60fb609d8d4ba70acd043ca0bcf44d3a4026fb54628627cb690c8784d3a` |
+| Vulnerability scan log | `1317ef0cabdfc5bea69eafe177f0bfdbf91fee052c95cbcdcbb88e65b04d3332` |
+| Vet log | `67f981a1dc23742fe65e2f656d341fc9ec889c4d69cdaf6798f2e44b2257ab30` |
+| Entity-response guard log | `acda4a5393e4f704b43d7e433ee94c28f5755aa8ab6836827a652cc3b64fc7a3` |
+| Quick-gate log | `78598410d42c6400630b6aed9328a647b668df33499785dda52e4a57e4406d55` |
+| Workflow-contract log | `f0ee8f8608071836361d87cf99c8b0daa52eedd54d5718c235b1b2fc4faf1549` |
+
+The compiler changes intentionally activate all three frontend dependency audits under the existing path filters. They must pass in the next exact-head CI run. Full frontend builds/browser qualification, full database/race shards, and disposable Docker metadata builds remain unqualified unless separately run. No required job, advisory, trust check, or failure condition was bypassed.
+
 ## Compatibility and review
 
 The deliberate behavior change remains rejection of positive-priced DeepSeek native tools for which OneAPI lacks an authoritative paid-operation receipt. No tariffs, currencies, effective dates, channel configuration, schema migrations, production balances, or historical ledgers were changed. Effective-zero/default/local/client behavior and unrelated providers retain their established controls.
 
 The implementation reuses pricing, discovery, ownership, and settlement boundaries. It does not introduce a parallel billing system, enable direct Search/Fetch settlement, or turn the upstream grace date into automatic pricing activation. The existing WebSocket resolver still uses `BaseURL`; full-endpoint override support remains separate routing work.
 
-Independent review of the six changed/new Go files found no further implementation blocker. Its two documentation clarifications were applied: the native WS channel is specifically an OpenAI channel, and the byte-preservation guarantee is scoped to admission/model guarding rather than the whole ownership pipeline. Old automatic review results cover the old candidate only; fresh automatic review coverage must be inspected after publication.
+Independent review of the six changed/new Go files found no further implementation blocker. Its two documentation clarifications were applied: the native WS channel is specifically an OpenAI channel, and the byte-preservation guarantee is scoped to admission/model guarding rather than the whole ownership pipeline. [Fresh CodeRabbit review](https://github.com/Laisky/one-api/pull/589#issuecomment-6274463849) covered all eight follow-up files from `e2740d6` through `2c9a73d3` and reported no actionable comments. The later toolchain update requires separate refreshed checks and review coverage.
 
 See [DeepSeek server-tool billing compatibility](../docs/manual/deepseek_tool_billing_compatibility.md) for the user-visible contract and official provider references.
 
@@ -162,4 +228,4 @@ These are observed workflow receipts, not a new live-host verification or regist
 
 This work updates the existing PR branch only. Merging to `main` invokes the repository's automatic image publication and production deployment, so the explicit merge/release approval boundary in #589/#592 remains in effect. A separately authorized release must verify immutable source/image identity, architecture publication, service health, public application/config/assets, and unchanged unrelated services before closing the handoff.
 
-Source rollback requires no migration or price/configuration rollback and does not reverse historical charges. Reverting the new follow-up restores both the WebSocket admission gap and model-rewrite precision loss; retain that tradeoff in any rollback decision.
+Source rollback requires no migration or price/configuration rollback and does not reverse historical charges. Reverting the new follow-up restores both the WebSocket admission gap and model-rewrite precision loss. Reverting the compiler to Go 1.27.2 also restores the known certificate-trust issue; retain that tradeoff in any rollback decision and keep a patched compiler when rebuilding older application source where possible.
