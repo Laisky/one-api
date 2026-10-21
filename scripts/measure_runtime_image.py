@@ -5,10 +5,14 @@ This streams Docker's uncompressed save output without retaining a second large
 archive. It never pushes or reads registry credentials. Compression uses gzip
 level 6 with a fixed timestamp; compare baseline and candidate with this script.
 Published registry compression may differ from this local OCI representation.
+Schema version 2 counts uncompressed_bytes from selected layer tar streams,
+including headers and padding. docker_inspect_size_bytes retains Docker's
+store-dependent Size metric separately; historical reports are not rewritten.
 """
 import argparse
 import gzip
 import hashlib
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -37,6 +41,7 @@ def measure(image, destination):
     configs = {}
     compressed = {}
     diffids = {}
+    uncompressed_sizes = {}
     process = subprocess.Popen(["docker", "image", "save", image], stdout=subprocess.PIPE)
     try:
         with tarfile.open(fileobj=process.stdout, mode="r|") as archive:
@@ -49,20 +54,28 @@ def measure(image, destination):
                         raise ValueError("unexpectedly large image JSON")
                     configs[entry.name] = stream.read()
                 elif entry.name.endswith("/layer.tar") or entry.name.startswith("blobs/"):
-                    prefix = stream.read(512)
-                    if entry.size < 2 * 1024 * 1024 and prefix.lstrip().startswith(b"{"):
-                        configs[entry.name] = prefix + stream.read()
-                        continue
+                    # Explicit layer paths are never metadata. Opaque blobs need
+                    # complete bounded JSON validation, not a tar filename sniff.
+                    if entry.name.startswith("blobs/") and entry.size <= 2 * 1024 * 1024:
+                        candidate = stream.read()
+                        try:
+                            metadata = json.loads(candidate)
+                        except (json.JSONDecodeError, UnicodeDecodeError):
+                            metadata = None
+                        if isinstance(metadata, dict):
+                            configs[entry.name] = candidate
+                            continue
+                        stream = io.BytesIO(candidate)
                     temporary = blobs / "layer.pending"
                     uncompressed_digest = hashlib.sha256()
+                    uncompressed_size = 0
                     with temporary.open("wb") as raw:
                         with gzip.GzipFile(filename="", mode="wb", fileobj=raw,
                                            compresslevel=6, mtime=0) as output:
-                            output.write(prefix)
-                            uncompressed_digest.update(prefix)
                             while data := stream.read(1024 * 1024):
                                 output.write(data)
                                 uncompressed_digest.update(data)
+                                uncompressed_size += len(data)
                     digest, size = digest_file(temporary)
                     temporary.rename(blobs / digest)
                     compressed[entry.name] = {
@@ -70,6 +83,7 @@ def measure(image, destination):
                         "digest": "sha256:" + digest, "size": size,
                     }
                     diffids[entry.name] = "sha256:" + uncompressed_digest.hexdigest()
+                    uncompressed_sizes[entry.name] = uncompressed_size
         if process.wait(timeout=120) != 0:
             raise RuntimeError("docker image save failed")
     finally:
@@ -98,7 +112,10 @@ def measure(image, destination):
     inspect = json.loads(subprocess.check_output(["docker", "image", "inspect", image]))[0]
     if config["digest"] != inspect["Id"]:
         raise ValueError("exported image identity changed")
-    result = {"image": image, "id": inspect["Id"], "uncompressed_bytes": inspect["Size"],
+    result = {"image": image, "id": inspect["Id"], "measurement_schema_version": 2,
+              "uncompressed_bytes": sum(uncompressed_sizes[name] for name in exported["Layers"]),
+              "uncompressed_bytes_definition": "selected layer tar streams including headers and padding",
+              "docker_inspect_size_bytes": inspect["Size"],
               "compressed_layer_bytes": sum(layer["size"] for layer in layers),
               "compression": "gzip level 6, mtime 0; local OCI, not published",
               "manifest": descriptor, "layers": layers}

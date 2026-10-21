@@ -138,6 +138,14 @@ class RuntimeImageTests(unittest.TestCase):
 
     def test_unwritable_data_does_not_report_healthy(self):
         """test_unwritable_data is the negative control for mounted storage access."""
+        self.data.chmod(0o555)
+        # Exercise the formerly failing owner collision on every host UID.
+        docker("run", "--rm", "--network", "none", "--cap-drop", "ALL",
+               "--cap-add", "CHOWN", "--memory", "128m", "--cpus", "1",
+               "--pids-limit", "64", "--entrypoint", "/bin/sh",
+               "--mount", f"type=bind,src={self.data},dst=/fixture", IMAGE,
+               "-c", "chown 10002:10002 /fixture")
+        self.assertEqual(self.data.stat().st_uid, 10002)
         with self.assertRaisesRegex(AssertionError, "application exited before healthy"):
             self.start(user="10002:10002")
 
