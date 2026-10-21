@@ -48,6 +48,12 @@ type responseAPIEventUsage struct {
 	} `json:"output_tokens_details,omitempty"`
 }
 
+// ResponseAPIWebSocketAdmission validates an original client frame before any
+// ownership or model rewrite. Its parameters are the request context, raw frame
+// bytes, and the resolved upstream WebSocket URL. It returns an error to reject
+// the frame without forwarding it and must not modify the supplied bytes.
+type ResponseAPIWebSocketAdmission func(context.Context, []byte, string) error
+
 // ResponseAPIWebSocketHandler proxies a user websocket connection from /v1/responses
 // to the upstream OpenAI /v1/responses websocket endpoint.
 //
@@ -65,6 +71,17 @@ type responseAPIEventUsage struct {
 //     HTTP afterwards. The slice is populated only after both proxy directions
 //     drain, so it is safe to read without further synchronization.
 func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusCode, *rmodel.Usage, []*ResponseAPIResponse) {
+	return ResponseAPIWebSocketHandlerWithAdmission(c, meta, nil)
+}
+
+// ResponseAPIWebSocketHandlerWithAdmission proxies a Responses WebSocket while
+// applying admission to every original text or binary client frame. c and meta
+// carry the authenticated request and upstream configuration; a nil admission
+// retains the existing passthrough policy. It returns the proxy error, aggregated
+// usage, and observed stored responses after both directions have drained. A
+// denial before any dispatch releases the handshake hold through the caller's
+// existing refund path; a later denial retains earlier accepted-work settlement.
+func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, admission ResponseAPIWebSocketAdmission) (*rmodel.ErrorWithStatusCode, *rmodel.Usage, []*ResponseAPIResponse) {
 	if meta == nil || meta.Mode != relaymode.ResponseAPI {
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "invalid mode for response websocket handler", Type: rmodel.ErrorTypeOneAPI, Code: "invalid_mode", RawError: errors.New("invalid mode for response websocket handler")},
@@ -125,7 +142,7 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 	errc := make(chan error, 2)
 	requestContext := c.Request.Context()
 	go func() {
-		errc <- copyResponseAPIClientToUpstream(requestContext, clientConn, upstreamConn, meta, ownership)
+		errc <- copyResponseAPIClientToUpstream(requestContext, clientConn, upstreamConn, meta, ownership, admission, fullRequestURL)
 	}()
 	receipts := &responseAPIWSUsageCollector{usage: usage}
 	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, receipts, stored) }()
@@ -248,7 +265,8 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 //   - emits a `model_switch_denied` error event back to the client
 //   - returns ErrModelSwitchDenied (wrapped) so the caller closes both legs
 //
-// Ownership is checked for both text and binary JSON frames before dispatch.
+// Admission sees the original text or binary frame before ownership/model
+// rewrites can collapse duplicate keys. Ownership is checked before dispatch.
 //
 // Parameters:
 //   - src: client WebSocket connection (reader).
@@ -256,11 +274,13 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 //   - ctx: request cancellation context.
 //   - meta: authenticated owner and handshake-bound provider/model.
 //   - ownership: response IDs confirmed on this connection.
+//   - admission: optional validation of the original client frame.
+//   - upstreamURL: the resolved URL used for this upstream connection.
 //
 // Returns:
 //   - error: nil on clean close; ErrModelSwitchDenied (wrapped) on rejected
 //     model switch; other errors propagate underlying I/O failures.
-func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Conn, meta *rmeta.Meta, ownership *responseWSSessionOwnership) error {
+func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Conn, meta *rmeta.Meta, ownership *responseWSSessionOwnership, admission ResponseAPIWebSocketAdmission, upstreamURL string) error {
 	boundOriginModel, boundActualModel := meta.OriginModelName, meta.ActualModelName
 	for {
 		mt, msg, err := src.ReadMessage()
@@ -275,6 +295,17 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 				return nil
 			}
 			return errors.WithStack(err)
+		}
+
+		if admission != nil && (mt == websocket.TextMessage || mt == websocket.BinaryMessage) {
+			if admissionErr := admission(ctx, msg, upstreamURL); admissionErr != nil {
+				ownership.denied.Store(true)
+				// Control writes are safe alongside the upstream-to-client writer.
+				if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "tool_billing_not_supported"), time.Now().Add(time.Second)); closeErr != nil {
+					return errors.Wrap(closeErr, "close response websocket after tool admission denial")
+				}
+				return errors.Wrap(admissionErr, "response websocket tool admission failed")
+			}
 		}
 
 		outbound, authorizationErr := ownership.authorize(ctx, meta, msg)

@@ -108,7 +108,7 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
 	// --- Execute WS proxy ---
-	bizErrResult, usage, observedResponses := openai.ResponseAPIWebSocketHandler(c, meta)
+	bizErrResult, usage, observedResponses := openai.ResponseAPIWebSocketHandlerWithAdmission(c, meta, responseWebSocketToolAdmission(c, meta))
 	if bizErrResult != nil {
 		// WS proxy failed - refund pre-consumed quota. scheduleConservativeRefund
 		// captures the token id on the request goroutine (value param) and marks
