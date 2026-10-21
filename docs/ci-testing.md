@@ -37,12 +37,16 @@ keeps only the smallest essential package instead of increasing the timeout.
 
 ## Local quick gate
 
-Use Go 1.27.2, Python 3, Git, and the matching `gofmt` for the current validation
-policy. All five Go setup steps in `lint.yml` explicitly select this patched
-compiler independently of the minimum Go 1.27.1 requirement in `go.mod`. This
-compiler selection does not change deployment/build toolchains or the module
-compatibility floor. Earlier runtime measurements retain their original
-compiler provenance and are not measurements of Go 1.27.2.
+Use Go 1.27.3, Python 3, Git, and the matching `gofmt` for the current validation
+policy. The minimum compiler in `go.mod`, all five Go setup steps in `lint.yml`,
+and the Dockerfile builder use Go 1.27.3 to address GO-2026-6809 in
+`crypto/x509.Certificate.Verify`. This raises the minimum compiler patch version
+without changing third-party module requirements or `go.sum`.
+
+Rebuild application binaries and runtime images to include the patched standard
+library; changing source pins does not update existing images. Earlier runtime
+measurements retain their original compiler provenance and do not qualify
+Go 1.27.3 images.
 The sentinel-error guard uses golangci-lint v2.14.0, whose importer supports
 Go 1.27 export data V5; its `err113` rule and failure behavior remain unchanged.
 
