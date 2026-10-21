@@ -2,6 +2,8 @@ module github.com/Laisky/one-api
 
 go 1.27.2
 
+toolchain go1.27.3
+
 require (
 	cloud.google.com/go/iam v1.14.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2

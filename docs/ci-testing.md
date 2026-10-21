@@ -37,12 +37,17 @@ keeps only the smallest essential package instead of increasing the timeout.
 
 ## Local quick gate
 
-Use Go 1.27.2, Python 3, Git, and the matching `gofmt` for the current validation
-policy. All five Go setup steps in `lint.yml` explicitly select this patched
-compiler independently of the minimum Go 1.27.1 requirement in `go.mod`. This
-compiler selection does not change deployment/build toolchains or the module
-compatibility floor. Earlier runtime measurements retain their original
-compiler provenance and are not measurements of Go 1.27.2.
+Use Go 1.27.3, Python 3, Git, and the matching `gofmt` for the current validation
+policy. All five Go setup steps in `lint.yml`, the Docker build image, and the
+preferred `toolchain` in `go.mod` select this security-patched compiler. The
+minimum `go 1.27.2` module requirement remains unchanged; the preferred toolchain
+selects the patch for normal development without raising that compatibility
+floor. Explicit `GOTOOLCHAIN=local` users must select a patched compiler themselves.
+Go 1.27.3 fixes [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) in certificate
+verification; updating only the scanner would leave release builds unpatched.
+The workflow contract verifies the CI, developer, and Docker selections together.
+Earlier runtime measurements retain their original compiler provenance and are
+not measurements of Go 1.27.3.
 The sentinel-error guard uses golangci-lint v2.14.0, whose importer supports
 Go 1.27 export data V5; its `err113` rule and failure behavior remain unchanged.
 
