@@ -28,8 +28,8 @@ const (
 	AppLogExportOutcomeDroppedPrivacy = "dropped_privacy"
 	// AppLogExportOutcomeEmitted counts local bridge-to-SDK handoffs. Later
 	// validation, overload or transport outcomes are counted independently.
-// This counts Zap-bridge handoffs, not direct native SDK log emissions; do not
-// use it as a denominator for an SDK-inclusive export success ratio.
+	// This counts Zap-bridge handoffs, not direct native SDK log emissions; do not
+	// use it as a denominator for an SDK-inclusive export success ratio.
 	AppLogExportOutcomeEmitted = "emitted"
 	// AppLogExportOutcomeDroppedQueueFull counts records discarded because the
 	// bridge's bounded queue was already at its record or byte limit. A
