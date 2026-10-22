@@ -39,9 +39,10 @@ type objectEncoder struct {
 	// root points at the outermost namespace, whose attrs are the result.
 	root *namespace
 	// cur points at the namespace currently being written to.
-	cur     *namespace
-	failure *error
-	depth   int
+	cur            *namespace
+	failure        *error
+	depth          int
+	namespaceDepth int
 }
 
 // newObjectEncoder returns an object encoder sized for n fields.
@@ -271,6 +272,13 @@ func (m *objectEncoder) AddReflected(k string, v any) error {
 //
 // Return values: none.
 func (m *objectEncoder) OpenNamespace(k string) {
+	// Fail at the boundary, not after allocating an arbitrarily long
+	// namespace chain and invoking later application field serializers.
+	if m.depth+m.namespaceDepth >= maxLogEncodingDepth {
+		*m.failure = ErrLogEncoding
+		return
+	}
+	m.namespaceDepth++
 	next := &namespace{name: k, attrs: make([]attribute.KeyValue, 0, 5)}
 	m.cur.next = next
 	m.cur = next

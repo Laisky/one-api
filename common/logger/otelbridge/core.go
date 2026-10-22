@@ -121,7 +121,9 @@ func NewCore(holder *ProviderHolder, scope string, enab zapcore.LevelEnabler) *C
 //   - zapcore.Core: a clone with the fields converted and latched.
 func (c *Core) With(fields []zapcore.Field) zapcore.Core {
 	cloned := c.clone()
-	if len(fields) == 0 {
+	if len(fields) == 0 || cloned.conversionErr != nil {
+		// Once a bound field failed encoding, later With calls cannot make
+		// its OTLP record valid. Do not invoke further OTLP serializers.
 		return cloned
 	}
 
@@ -237,8 +239,14 @@ func (c *Core) Write(ent zapcore.Entry, fields []zapcore.Field) (result error) {
 
 	// Walk the fields exactly once: the conversion allocates an encoder and
 	// touches every field, and both the record and its emit context need it.
+	// Validate known entry/bound state before calling application field
+	// serializers. Rejection must not trigger avoidable user callbacks.
+	if c.conversionErr != nil || (!c.private && (!utf8.ValidString(ent.Message) || ValidateLogTimestamp(ent.Time) != nil)) {
+		metrics.RecordAppLogExport(metrics.AppLogExportOutcomeDroppedEncoding, 1)
+		return ErrLogEncoding
+	}
 	converted := c.convertFields(fields)
-	if c.conversionErr != nil || converted.conversionErr != nil || (!c.private && (!utf8.ValidString(ent.Message) || ValidateLogTimestamp(ent.Time) != nil)) {
+	if converted.conversionErr != nil {
 		metrics.RecordAppLogExport(metrics.AppLogExportOutcomeDroppedEncoding, 1)
 		return ErrLogEncoding
 	}
@@ -387,6 +395,11 @@ func convertFields(fields []zapcore.Field) (out convertedFields) {
 	enc := newObjectEncoder(len(fields))
 
 	for _, field := range fields {
+		// An earlier serializer or namespace already doomed the complete
+		// OTLP record. Do not evaluate any remaining application callbacks.
+		if *enc.failure != nil {
+			break
+		}
 		if sc, ok := spanContextFromField(field); ok {
 			out.spanCtx = sc
 			continue
