@@ -310,3 +310,15 @@ func claudeChannelRecord(c *gin.Context) *model.Channel {
 	}
 	return nil
 }
+
+
+// admitMCPConvertedChatBuiltins checks the final Chat request selected by the
+// MCP planner. This cannot be skipped for native Claude passthrough: the MCP
+// branch executes an internal Chat round even when the initial conversion
+// had marked the Claude request as native.
+func admitMCPConvertedChatBuiltins(c *gin.Context, meta *metalib.Meta, request *relaymodel.GeneralOpenAIRequest, provider adaptor.Adaptor) *relaymodel.ErrorWithStatusCode {
+	if err := tooling.ValidateChatBuiltinTools(c, request, meta, claudeChannelRecord(c), provider); err != nil {
+		return openai.ErrorWrapper(errors.Wrap(err, "MCP Chat request"), builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
+	}
+	return nil
+}
