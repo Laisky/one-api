@@ -36,12 +36,6 @@ const (
 // a channel explicitly prices them.
 var zeroCostBuiltins = []string{BuiltinToolSearch}
 
-// anthropicDatedServerTool matches Anthropic's versioned server-tool type names
-// (for example web_search_20260209). Only dated forms are recognized so that
-// other providers' suffixed names (web_search_preview_reasoning) keep their
-// own pricing keys.
-var anthropicDatedServerTool = regexp.MustCompile(`^(web_search|web_fetch|code_execution)_\d{8}$`)
-
 // anthropicClientTool matches Anthropic tool types that are executed by the
 // caller's own client. The provider only emits tool_use blocks for them.
 var anthropicClientTool = regexp.MustCompile(`^(bash|text_editor|computer|computer_toolset|browser_toolset|memory)_\d{8}$`)
