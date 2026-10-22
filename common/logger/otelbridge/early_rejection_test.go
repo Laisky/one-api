@@ -21,7 +21,7 @@ func TestBridgeRejectsInvalidEntryBeforeSerializingFields(t *testing.T) {
 	lg, output, _ := newTestBridge(t, zapcore.InfoLevel)
 	calls := 0
 	err := lg.Core().Write(zapcore.Entry{
-		Level: zapcore.InfoLevel,
+		Level:   zapcore.InfoLevel,
 		Message: string([]byte{0xff}),
 	}, []zapcore.Field{zap.Stringer("unnecessary", countingLogStringer{&calls})})
 	require.ErrorIs(t, err, ErrLogEncoding)
@@ -33,7 +33,7 @@ func TestBridgeStopsSerializingAfterKnownFailure(t *testing.T) {
 	lg, output, _ := newTestBridge(t, zapcore.InfoLevel)
 	calls := 0
 	err := lg.Core().Write(zapcore.Entry{
-		Level: zapcore.InfoLevel,
+		Level:   zapcore.InfoLevel,
 		Message: "will be rejected",
 	}, []zapcore.Field{
 		zap.Reflect("unsupported", make(chan int)),
@@ -53,7 +53,7 @@ func TestBridgeStopsSerializingAfterNamespaceLimit(t *testing.T) {
 	}
 	fields = append(fields, zap.Stringer("unnecessary", countingLogStringer{&calls}))
 	err := lg.Core().Write(zapcore.Entry{
-		Level: zapcore.InfoLevel,
+		Level:   zapcore.InfoLevel,
 		Message: "will be rejected",
 	}, fields)
 	require.ErrorIs(t, err, ErrLogEncoding)
