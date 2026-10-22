@@ -170,3 +170,28 @@ input digests, and image IDs. The earlier successful Go 1.27.2 run at
 security baseline. Reuse those receipts as historical evidence only; changes to
 production source, dependencies, compiler, or runtime packaging require fresh
 qualification for each architecture. An AMD64 pass cannot supply ARM64 acceptance.
+
+## Shared delivery image inputs
+
+Dockerfile global image ARG defaults are the canonical immutable multiarch index
+references for Node, Go, FFmpeg and Ubuntu. Native qualification reads those same
+four declarations, verifies one Linux AMD64 and ARM64 descriptor in each index,
+and passes the exact references to its builds and donor extraction. Both existing
+delivery jobs use the Dockerfile defaults; the ARM64 TARGETARCH argument remains.
+Changing a registry tag alone cannot alter these pinned inputs. Refresh pins in a
+reviewed source change with fresh native qualification and retain rollback image
+digests. No release is triggered by the qualification jobs themselves.
+
+The source guard allows only the recorded initial floating-to-digest migration
+using the previously qualified index digests; later pinned builder digest or
+instruction changes remain visible and rejected without separate scope review.
+Receipts distinguish this reviewed declaration migration from identical builder
+text. Historical measurement references remain unchanged.
+
+This aligns image inputs, not every byte of a future release. ARM64 delivery may
+use an AMD64 BUILDPLATFORM Node stage while native ARM qualification uses ARM64
+builder children from the same indices. Package installation and network build
+dependencies remain mutable. PR qualification and a later merge/release also have
+different source revision identities; delivery source labels and normal release
+verification remain necessary. Full cross-build/bit-reproducibility or production
+deployment acceptance is not claimed by sharing these four image pins.

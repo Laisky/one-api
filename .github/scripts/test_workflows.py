@@ -18,6 +18,8 @@ import go_test_shards as shards
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
+sys.path.insert(0, str(ROOT / "scripts"))
+from image_inputs import read_image_inputs
 THEMES = ("modern", "air", "berry")
 MANDATORY = {
     "changes", "quick_tests", "goroutine_context_guard",
@@ -241,6 +243,42 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn(f"scope={scope}", build["cache-to"])
             if not prefix:
                 self.assertIn("ignore-error=true", build["cache-to"])
+
+    def test_delivery_uses_the_qualified_dockerfile_inputs(self) -> None:
+        """test_delivery_uses_the_qualified_dockerfile_inputs rejects source or image overrides in both builds."""
+        defaults = read_image_inputs((ROOT/"Dockerfile").read_text(), "1.27.3")
+        def effective(arguments):
+            """effective applies Docker build arguments to the real canonical defaults."""
+            result = dict(defaults)
+            for line in arguments.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                key, value = line.split("=", 1)
+                if key.strip() in result:
+                    result[key.strip()] = value.strip()
+            return result
+        for name in ("build_latest", "build_arm64_hash"):
+            job = self.delivery["jobs"][name]
+            checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+            self.assertEqual(checkout.get("with", {}).get("ref", "${{ github.sha }}"), "${{ github.sha }}")
+            build = next(step["with"] for step in job["steps"] if step.get("uses", "").startswith("docker/build-push-action@"))
+            self.assertEqual(build["context"], ".")
+            self.assertEqual(build.get("file", "Dockerfile"), "Dockerfile")
+            self.assertEqual(effective(build.get("build-args", "")), defaults)
+        self.assertEqual(effective("  TARGETARCH=arm64\n\n"), defaults)
+        for key, pin in defaults.items():
+            self.assertEqual(effective(key+"="+pin), defaults)
+            for value in (pin.split("@")[0], pin[:-64]+"f"*64, "${{ env.UNREVIEWED_IMAGE }}"):
+                with self.subTest(key=key, value=value):
+                    for prefix in ("", "  ", "\t"):
+                        self.assertNotEqual(effective(prefix+key+"="+value), defaults)
+        filters = commands(self.ci["jobs"]["changes"])
+        self.assertIn("python3 scripts/test_image_inputs.py", filters)
+        selection = next(step["with"]["filters"] for step in self.ci["jobs"]["changes"]["steps"]
+                         if step.get("id") == "filter")
+        self.assertIn("scripts/image_inputs.py", selection)
+        self.assertIn("scripts/test_image_inputs.py", selection)
 
     def test_delivery_revision_label_matches_source_on_both_architectures(self) -> None:
         """test_delivery_revision_label_matches_source_on_both_architectures binds each image to its source."""

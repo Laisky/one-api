@@ -3,10 +3,10 @@
 # Usage examples:
 #   docker buildx build --platform linux/amd64,linux/arm64 -t yourrepo/one-api:latest .
 
-ARG NODE_IMAGE=node:24-bookworm
-ARG GO_IMAGE=golang:1.27.3-bookworm
-ARG FFMPEG_IMAGE=linuxserver/ffmpeg:latest
-ARG RUNTIME_IMAGE=ubuntu:26.04
+ARG NODE_IMAGE=node:24-bookworm@sha256:6449e19d8184d84062525b6a7524def03146c2cb04a7f08b076680d0e8e4240a
+ARG GO_IMAGE=golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5
+ARG FFMPEG_IMAGE=linuxserver/ffmpeg:latest@sha256:742e17516dd4d7b76b939d774bd08f0f6b7cab8bce1c014b95ab2fb992fd0a1f
+ARG RUNTIME_IMAGE=ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
 
 #############################
 # Stage 1: Frontend build   #

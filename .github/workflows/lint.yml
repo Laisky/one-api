@@ -60,6 +60,7 @@ jobs:
           python3 -m pip install --disable-pip-version-check 'PyYAML==6.0.3'
           python3 .github/scripts/test_workflows.py
           python3 scripts/test_qualify_native_arm64.py
+          python3 scripts/test_image_inputs.py
           python3 .github/scripts/test_frontend_contracts.py
           python3 .github/scripts/test_go_test_shards.py
           python3 .github/scripts/test_quick_tests.py
@@ -86,6 +87,8 @@ jobs:
               - 'scripts/docker-entrypoint.sh'
               - 'scripts/collect_media_runtime.py'
               - 'scripts/qualify_native_arm64.py'
+              - 'scripts/image_inputs.py'
+              - 'scripts/test_image_inputs.py'
               - 'scripts/test_qualify_native_arm64.py'
               - 'scripts/qualify_media_runtime.py'
               - 'scripts/qualify_media_transport.py'

@@ -12,6 +12,9 @@ import types
 import unittest
 from unittest import mock
 import qualify_native_arm64 as native
+from image_inputs import read_image_inputs
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class NativeQualificationTests(unittest.TestCase):
@@ -53,7 +56,6 @@ class NativeQualificationTests(unittest.TestCase):
         current = (Path(__file__).resolve().parents[1]/"Dockerfile").read_text()
         recipe = native.builder_recipe(current)
         self.assertTrue(recipe)
-        self.assertIn('ARG GO_IMAGE=golang:'+native.GO_VERSION+'-bookworm', recipe)
         self.assertTrue(any('-ldflags "-s -w"' in line for line in recipe))
         self.assertNotEqual(native.builder_recipe(current.replace('-ldflags "-s -w"', '-ldflags "-s"')),
                             recipe)
@@ -266,6 +268,36 @@ class NativeQualificationTests(unittest.TestCase):
                 finally:
                     shutil.rmtree(q.work)
 
+    def test_source_accepts_only_reviewed_initial_pin_migration(self):
+        """test_source_accepts_only_reviewed_initial_pin_migration exercises strict guards with real Git state."""
+        for change in ("reviewed", "wrong-pin", "already-pinned-drift"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)/"repository";root.mkdir()
+                git, commit, baseline = self.production_fixture(root)
+                candidate = (ROOT/"Dockerfile").read_text()
+                if change == "already-pinned-drift":
+                    (root/"Dockerfile").write_text(candidate);baseline = commit()
+                    git("update-ref", "refs/remotes/origin/main", baseline)
+                if change != "reviewed":
+                    pin = read_image_inputs(candidate, native.GO_VERSION)["GO_IMAGE"]
+                    candidate = candidate.replace(pin, pin[:-64]+"f"*64)
+                (root/"Dockerfile").write_text(candidate);head = commit()
+                q = native.Qualification(argparse.Namespace(evidence=Path(temporary)/"evidence", timeout=300,
+                    expected_head=head, baseline_target=baseline, baseline_ref="refs/remotes/origin/main"))
+                q.repo = root
+                try:
+                    if change == "reviewed":
+                        q.source()
+                        receipt = json.loads((q.evidence/"source-receipt.json").read_text())
+                        self.assertEqual(set(receipt["builder_image_pin_migrations"]),
+                                         {"NODE_IMAGE", "GO_IMAGE", "FFMPEG_IMAGE"})
+                        self.assertEqual(receipt["production_changes_since_baseline"], [])
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "differs from approved baseline"):
+                            q.source()
+                finally:
+                    shutil.rmtree(q.work)
+
     def test_application_compiler_is_bound_to_actual_extracted_metadata(self):
         """test_application_compiler_is_bound_to_actual_extracted_metadata rejects stale or missing build data."""
         native.assert_application_compiler("/fixture/one-api: go1.27.3\n\tpath github.com/Laisky/one-api\n")
@@ -280,14 +312,15 @@ class NativeQualificationTests(unittest.TestCase):
         def run(argv, _name, *_args):
             """run records image-selection commands and returns one valid native platform descriptor."""
             calls.append(argv)
-            return json.dumps({"manifests": [{"platform": {"os": "linux", "architecture": "arm64"},
-                                              "digest": "sha256:"+"a"*64}]})
-        fake = types.SimpleNamespace(run=run, identity=lambda reference, _name: {
+            return json.dumps({"manifests": [
+                {"platform": {"os": "linux", "architecture": arch}, "digest": "sha256:"+char*64}
+                for arch, char in (("arm64", "a"), ("amd64", "d"))]})
+        fake = types.SimpleNamespace(context=ROOT, run=run, identity=lambda reference, _name: {
             "Id": "sha256:"+"b"*64, "Size": 1, "RepoDigests": [reference.split(":")[0]+"@sha256:"+"c"*64]},
             summary={}, flush=lambda: None, architecture="arm64", platform="linux/arm64")
         native.Qualification.inputs(fake)
         pulls = [argv[-1] for argv in calls if argv[:2] == ["docker", "pull"]]
-        self.assertIn("golang:1.27.3-bookworm", pulls)
+        self.assertIn(read_image_inputs((ROOT/"Dockerfile").read_text(), native.GO_VERSION)["GO_IMAGE"], pulls)
         self.assertNotIn("golang:1.27.2-bookworm", pulls)
 
     def test_actual_collector_manifest(self):
@@ -407,7 +440,7 @@ class NativeQualificationTests(unittest.TestCase):
                     {"platform": {"os": "linux", "architecture": value},
                      "digest": "sha256:"+("a" if value == "arm64" else "d")*64}
                     for value in ("arm64", "amd64")]})
-            fake = types.SimpleNamespace(architecture=arch, platform="linux/"+arch, run=run,
+            fake = types.SimpleNamespace(context=ROOT, architecture=arch, platform="linux/"+arch, run=run,
                 identity=lambda reference, _name: {"Id": "sha256:"+"b"*64, "Size": 1,
                     "RepoDigests": [reference.split(":")[0]+"@sha256:"+"c"*64]},
                 summary={"images": {}}, flush=lambda: None, token="publicfixture")
@@ -423,6 +456,9 @@ class NativeQualificationTests(unittest.TestCase):
             self.assertEqual(build[build.index("--platform")+1], "linux/"+arch)
             self.assertIn("--load", build)
             self.assertNotIn("--push", build)
+            passed = {build[index+1].split("=", 1)[0]: build[index+1].split("=", 1)[1]
+                      for index, value in enumerate(build[:-1]) if value == "--build-arg"}
+            self.assertEqual(passed, read_image_inputs((ROOT/"Dockerfile").read_text(), native.GO_VERSION))
             for os_name, image_arch in (("linux", arch), ("linux", "foreign"), ("windows", arch)):
                 image = dict(Os=os_name, Architecture=image_arch, Id="sha256:"+"d"*64)
                 fake.run = lambda *_args, item=image: json.dumps([item])

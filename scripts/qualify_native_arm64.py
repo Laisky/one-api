@@ -18,8 +18,8 @@ import time
 import urllib.request
 import uuid
 
-FFMPEG = "linuxserver/ffmpeg@sha256:742e17516dd4d7b76b939d774bd08f0f6b7cab8bce1c014b95ab2fb992fd0a1f"
-UBUNTU = "ubuntu@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944"
+from image_inputs import builder_pin_migrations, native_platform_digest, read_image_inputs
+
 ORIGINAL = "f4f26683404611c2313594e98e70ff5b36647dfd"
 OWNERSHIP = "ec72e68fc2c30363402e974d267674339159f0c2"
 # Historical measurement provenance stays immutable; live guards derive the target merge base.
@@ -332,15 +332,19 @@ class Qualification:
         if changed:
             raise RuntimeError("production application differs from approved baseline: "+repr(changed))
         baseline = self.run(["git", "show", baseline_sha+":Dockerfile"], "builder-baseline")
-        if builder_recipe((self.repo/"Dockerfile").read_text()) != builder_recipe(baseline):
-            raise RuntimeError("production frontend or Go builder recipe differs from approved baseline")
-        self.summary["checks"]["production_builder_recipe"] = "identical to approved production baseline"
+        migrations = builder_pin_migrations(builder_recipe((self.repo/"Dockerfile").read_text()),
+                                            builder_recipe(baseline))
+        self.summary["checks"]["production_builder_recipe"] = (
+            "reviewed image pin migration; other instructions identical" if migrations
+            else "identical to approved production baseline")
+        self.summary["checks"]["builder_image_pin_migrations"] = migrations
         self.summary["checks"].update(reference)
         paths = self.run(["git", "ls-files", "-z"], "source-files").split("\0")
         save(self.evidence/"source-receipt.json", {"head": head,
              "tree": self.run(["git", "rev-parse", "HEAD^{tree}"], "source-tree").strip(),
              "files": {name: sha(self.repo/name) for name in paths if name and (self.repo/name).is_file()},
-             **reference, "production_changes_since_baseline": changed})
+             **reference, "production_changes_since_baseline": changed,
+             "builder_image_pin_migrations": migrations})
         archive = self.work/"source.tar"
         self.run(["git", "archive", "--format=tar", "-o", str(archive), head], "source-archive")
         self.context = self.work/"source"
@@ -361,23 +365,17 @@ class Qualification:
         return item
 
     def inputs(self):
-        """inputs pins moving builder tags before building and records platform digests."""
-        self.pins = {}
-        for name, reference in (("FFMPEG_IMAGE", FFMPEG), ("RUNTIME_IMAGE", UBUNTU),
-                                ("NODE_IMAGE", "node:24-bookworm"), ("GO_IMAGE", "golang:"+GO_VERSION+"-bookworm")):
-            self.run(["docker", "pull", "--platform", self.platform, reference], "pull-"+name, 900)
-            item = self.identity(reference, "inspect-"+name)
-            pin = reference if "@sha256:" in reference else next(value for value in item["RepoDigests"]
-                                                               if "@sha256:" in value)
-            self.pins[name] = pin
+        """inputs consumes the same immutable Dockerfile defaults used by delivery and records child digests."""
+        self.pins = read_image_inputs((self.context/"Dockerfile").read_text(), GO_VERSION)
+        self.summary["input_source"] = "tracked Dockerfile global ARG defaults"
+        for name, pin in self.pins.items():
+            self.run(["docker", "pull", "--platform", self.platform, pin], "pull-"+name, 900)
+            item = self.identity(pin, "inspect-"+name)
             raw = json.loads(self.run(["docker", "buildx", "imagetools", "inspect", "--raw", pin],
                                       "manifest-"+name))
-            matches = [value for value in raw.get("manifests", []) if value.get("platform", {}).get("os") == "linux"
-                       and value["platform"].get("architecture") == self.architecture]
-            if "manifests" in raw and len(matches) != 1:
-                raise RuntimeError("input does not uniquely resolve "+self.platform)
-            self.summary.setdefault("inputs", {})[name] = {"pin": pin, "image_id": item["Id"], "size": item["Size"],
-                "platform_digest": matches[0]["digest"] if matches else pin.split("@")[-1]}
+            digest = native_platform_digest(raw, self.architecture)
+            self.summary.setdefault("inputs", {})[name] = {"pin": pin, "image_id": item["Id"],
+                "size": item["Size"], "platform_digest": digest}
         self.flush()
 
     def build(self, name, context, custom=False):
@@ -558,7 +556,7 @@ class Qualification:
             raise RuntimeError("actual loader resolves outside private closure")
         donor = root/"donor"
         donor.mkdir()
-        self.extract(FFMPEG, {"/usr/local/bin/ffmpeg": "ffmpeg", "/usr/local/bin/ffprobe": "ffprobe"}, donor)
+        self.extract(self.pins["FFMPEG_IMAGE"], {"/usr/local/bin/ffmpeg": "ffmpeg", "/usr/local/bin/ffprobe": "ffprobe"}, donor)
         tools = {}
         for name in ("ffmpeg", "ffprobe"):
             item = next(value for value in records
