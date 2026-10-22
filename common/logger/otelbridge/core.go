@@ -12,9 +12,10 @@ package otelbridge
 // Fields() method that go.uber.org/zap has no notion of. No amount of
 // configuration makes go.opentelemetry.io/contrib/bridges/otelzap satisfy it.
 //
-// The record mapping is deliberately identical to the upstream bridge (see
-// convert.go and encoder.go) so that a collector pipeline, dashboard, or query
-// written against otelzap works unchanged against this one.
+// The bridge adapts upstream otelzap concepts to the forked Zap core. It
+// additionally preserves application-selected Zap/JSON values and rejects
+// unrepresentable records without partial export; consumers must qualify their
+// actual OTLP collector/storage mapping rather than assume wire equivalence.
 //
 // Two things here are NOT copied from upstream, both because upstream's choice
 // is wrong for a gateway:
@@ -54,9 +55,9 @@ const DefaultScopeName = "github.com/Laisky/one-api/common/logger"
 // and emits them through an installed provider.
 //
 // A Core never blocks the caller on exporter I/O and never logs. Encoding
-// failures return a fixed error and increment a fixed outcome counter: it is the component that carries logs, so a failure it
-// reports through the logger would be able to feed itself. Every loss is
-// counted through common/metrics instead.
+// failures return a fixed error and increment a fixed outcome counter. The
+// core never logs its own failures: doing so would recursively invoke itself.
+// Every loss is counted through common/metrics instead.
 type Core struct {
 	zapcore.LevelEnabler
 

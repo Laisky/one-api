@@ -11,10 +11,10 @@ package config
 // legacy behavior. APP_LOG_SINK keeps its meaning byte for byte: without the
 // new token, this file changes nothing at all and no log exporter is built.
 //
-// Second, a setting whose ABSENCE is a defect defaults to enabled and
-// generously sized. Every bound below is on rather than unlimited, sized so it
-// does not engage in healthy operation, because the deployment running pure
-// defaults is the least able to discover an unbounded queue.
+// Second, queue admission is bounded by record count and estimated bytes on
+// every deployment that opts into OTLP. Content limits instead default to zero
+// (unlimited): setting a positive limit explicitly rejects the entire OTLP
+// record without silently changing the application's chosen representation.
 
 import (
 	"strings"

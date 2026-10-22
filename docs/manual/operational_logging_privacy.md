@@ -54,6 +54,11 @@ Encoding failures reject the complete OTLP record and increment the fixed
 dropped_encoding outcome. Bridge failures return a fixed encoding error; native
 SDK processor failures use the SDK error handler. Diagnostics contain no failed
 field value. A serializer failure never exports the successfully encoded subset.
+Once the bridge knows that a record cannot be encoded, it stops evaluating
+further OTLP field serializers; entry and previously bound-state validation run
+before field conversion. Namespace overflow also rejects promptly. Other Zap
+sinks retain their independent behavior. These short circuits do not impose a
+time/memory limit on arbitrary application serializers while they are running.
 
 ## Operator limits and overload
 
@@ -68,8 +73,10 @@ Set them to zero to request unrestricted content within the queue resource budge
 The existing LOG_OTLP_QUEUE_SIZE and LOG_OTLP_QUEUE_MAX_MB still bound admission.
 Body, EventName, severity text and attribute values participate in byte accounting.
 Overload, exporter failures, startup-not-ready and shutdown losses retain explicit
-outcome counters. These best-effort resource limits do not prove durable storage;
-the local sink remains required.
+outcome counters. The `emitted` outcome counts Zap-bridge handoffs, not native SDK
+log calls; `exported` includes both paths, so these two labels are not a
+native-inclusive delivery fraction. These best-effort resource limits do not
+prove durable storage; the local sink remains required.
 
 ## Explicit application policy
 
@@ -78,7 +85,11 @@ remain application intent. No new automatic redaction option is introduced.
 NewPrivacyCore remains a deliberately selected legacy API with its historical
 constant-body/field-restriction contract; the production OTLP sink does not select
 it. The normal SDK provider does not silently force a private scope or resource.
-Applications are responsible for deciding what they log.
+Applications are responsible for deciding what they log. When full-fidelity OTLP
+is enabled, request identity fields (such as UUIDs and names), error text and
+other application-selected data can leave the process. Before enabling export,
+review collector authentication, transport security, access to queries and
+retention. Do not add mandatory field filtering or silent redaction in transport.
 
 ## Qualification boundaries
 

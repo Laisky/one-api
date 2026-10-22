@@ -9,8 +9,8 @@ package otelbridge
 //
 // These encoders turn a zap field into OpenTelemetry attributes. zap.Namespace
 // opens a nested attribute map rather than a dotted key prefix, and
-// zap.Object/zap.Array become nested map/slice attribute values, matching the
-// upstream bridge exactly.
+// zap.Object/zap.Array become nested map/slice attribute values. Encoding
+// failures reject the whole OTLP record rather than silently dropping content.
 
 import (
 	"time"
