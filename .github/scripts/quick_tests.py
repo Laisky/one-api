@@ -16,6 +16,14 @@ MODULE = "github.com/Laisky/one-api"
 # compilation cost left insufficient margin for a complete CI job below five minutes.
 SELECTIONS = {
     "relay/format": None,
+    # Temporary PR #585 RED/GREEN behavior qualification; remove after validation.
+    "common/logger/otelbridge": (
+        "TestBridgeRejectsInvalidEntryBeforeSerializingFields",
+        "TestBridgeStopsSerializingAfterKnownFailure",
+        "TestBridgeStopsSerializingAfterNamespaceLimit",
+        "TestBridgeInvalidBoundStateSkipsLaterSerialization",
+        "TestBridgeValidSerializerStillExecutesOnce",
+    ),
 }
 
 
