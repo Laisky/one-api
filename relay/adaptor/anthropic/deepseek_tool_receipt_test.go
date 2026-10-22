@@ -68,3 +68,32 @@ func TestDeepSeekToolReceiptEndpointClaudeCounters(t *testing.T) {
 		})
 	}
 }
+
+
+// TestDeepSeekReceiptAliasesPreserveUnrelatedProviderCounts validates that
+// contract suppression normalizes capability identity without changing the
+// existing raw multi-key counter merge for an unrelated Anthropic host.
+func TestDeepSeekReceiptAliasesPreserveUnrelatedProviderCounts(t *testing.T) {
+	for _, tc := range []struct {
+		name, base string
+		want int
+	}{
+		{"deepseek", "https://api.deepseek.com/anthropic", 0},
+		{"unrelated", "https://api.anthropic.com", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Set(ctxkey.Channel, channeltype.Anthropic)
+			c.Set(ctxkey.BaseURL, tc.base)
+			require.NoError(t, RecordServerToolUseFromJSON(c, []byte(`{"content":[],"usage":{"server_tool_use":{"web_search_requests":1,"web_search_preview_requests":1}}}`)))
+			raw, _ := c.Get(ctxkey.ToolInvocationCounts)
+			counts, _ := raw.(map[string]int)
+			if tc.want == 0 {
+				require.Empty(t, counts)
+			} else {
+				require.Equal(t, 1, counts["web_search"])
+				require.Equal(t, 1, counts["web_search_preview"])
+			}
+		})
+	}
+}

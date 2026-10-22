@@ -41,7 +41,7 @@ func serverToolCounterName(key string) string {
 		return ToolTypeCodeExecution
 	}
 	if name, ok := strings.CutSuffix(strings.ToLower(strings.TrimSpace(key)), "_requests"); ok && name != "" {
-		return builtinname.Canonical(name)
+		return name
 	}
 	return ""
 }
@@ -68,7 +68,7 @@ func serverToolBlockName(blockType, name string) string {
 	case strings.HasPrefix(normalized, "tool_search_tool_"):
 		return ToolTypeToolSearch
 	default:
-		return builtinname.Canonical(normalized)
+		return normalized
 	}
 }
 
@@ -175,7 +175,9 @@ func RecordServerToolInvocations(c *gin.Context, counts map[string]int) {
 		if (canonical == "web_search" || canonical == "web_fetch") && deepseekcompat.UsesDeepSeekToolReceiptContractFromContext(c) {
 			continue
 		}
-		merged[canonical] += count
+		// Keep published raw identities for unrelated providers: billing's
+		// existing merge path already canonicalizes and adds these counts.
+		merged[name] += count
 		recorded = true
 	}
 	if !recorded {
