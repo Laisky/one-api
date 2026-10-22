@@ -311,7 +311,6 @@ func claudeChannelRecord(c *gin.Context) *model.Channel {
 	return nil
 }
 
-
 // admitMCPConvertedChatBuiltins checks the final Chat request selected by the
 // MCP planner. This cannot be skipped for native Claude passthrough: the MCP
 // branch executes an internal Chat round even when the initial conversion

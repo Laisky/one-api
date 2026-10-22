@@ -117,7 +117,6 @@ func renderClaudeMessagesFromChatResponse(c *gin.Context, response *openai.TextR
 	return nil
 }
 
-
 // claudeMCPRoutePlan records which execution branch and request will be used.
 // Planning never dispatches or reserves quota; it can safely run before
 // provider capability admission even when endpoint overrides differ by mode.

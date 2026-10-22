@@ -227,42 +227,42 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if toolSearchRegistry := mcpPlan.toolSearch; toolSearchRegistry != nil {
 		lg.Debug("tool search with MCP tools detected, using Claude-native MCP loop")
 
-			// Disable streaming for the MCP loop
-			noStream := false
-			claudeRequest.Stream = &noStream
+		// Disable streaming for the MCP loop
+		noStream := false
+		claudeRequest.Stream = &noStream
 
-			response, mcpUsage, mcpSummary, incrementalCharged, execErr := executeClaudeToolSearchMCPLoop(
-				c, meta, claudeRequest, toolSearchRegistry, adaptorInstance, preConsumedQuota,
-			)
-			if execErr != nil && mcpUsage == nil {
-				if refundClaudeAdmission(c, execErr, preConsumedQuota, c.GetInt(ctxkey.TokenId)) {
-					return execErr
-				}
-				_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "tool_search_mcp_loop_failed")
+		response, mcpUsage, mcpSummary, incrementalCharged, execErr := executeClaudeToolSearchMCPLoop(
+			c, meta, claudeRequest, toolSearchRegistry, adaptorInstance, preConsumedQuota,
+		)
+		if execErr != nil && mcpUsage == nil {
+			if refundClaudeAdmission(c, execErr, preConsumedQuota, c.GetInt(ctxkey.TokenId)) {
 				return execErr
 			}
-			if mcpSummary != nil && mcpSummary.summary != nil {
-				var existing *model.ToolUsageSummary
-				if raw, ok := c.Get(ctxkey.ToolInvocationSummary); ok {
-					if summary, ok := raw.(*model.ToolUsageSummary); ok {
-						existing = summary
-					}
-				}
-				merged := mergeToolUsageSummaries(existing, mcpSummary.summary)
-				c.Set(ctxkey.ToolInvocationSummary, merged)
-			}
-			usage = mcpUsage
-			mcpIncrementalCharged = incrementalCharged
-			respErr = execErr
-			if execErr == nil && response != nil {
-				if errResp := writeClaudeResponse(c, response); errResp != nil {
-					respErr = openai.ErrorWrapper(errResp, "write_tool_search_response_failed", http.StatusInternalServerError)
+			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "tool_search_mcp_loop_failed")
+			return execErr
+		}
+		if mcpSummary != nil && mcpSummary.summary != nil {
+			var existing *model.ToolUsageSummary
+			if raw, ok := c.Get(ctxkey.ToolInvocationSummary); ok {
+				if summary, ok := raw.(*model.ToolUsageSummary); ok {
+					existing = summary
 				}
 			}
-			// Preserve prior receipts and all physical reservation credits even when
-			// continuation or downstream delivery fails after accepted upstream work.
-			markResponseSettlement(c, usage, respErr)
-			goto postConsume
+			merged := mergeToolUsageSummaries(existing, mcpSummary.summary)
+			c.Set(ctxkey.ToolInvocationSummary, merged)
+		}
+		usage = mcpUsage
+		mcpIncrementalCharged = incrementalCharged
+		respErr = execErr
+		if execErr == nil && response != nil {
+			if errResp := writeClaudeResponse(c, response); errResp != nil {
+				respErr = openai.ErrorWrapper(errResp, "write_tool_search_response_failed", http.StatusInternalServerError)
+			}
+		}
+		// Preserve prior receipts and all physical reservation credits even when
+		// continuation or downstream delivery fails after accepted upstream work.
+		markResponseSettlement(c, usage, respErr)
+		goto postConsume
 	}
 
 	// The registry and actual endpoint were selected before tool admission.
