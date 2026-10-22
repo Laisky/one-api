@@ -51,10 +51,12 @@ class NativeQualificationTests(unittest.TestCase):
     def test_actual_production_builder(self):
         """test_actual_production_builder catches altered build flags independently of Go sources."""
         current = (Path(__file__).resolve().parents[1]/"Dockerfile").read_text()
-        baseline = self.historical("d316af5675f1363ec8d06ed3e92c15ed0d9fa0a4")
-        self.assertEqual(native.builder_recipe(current), native.builder_recipe(baseline))
+        recipe = native.builder_recipe(current)
+        self.assertTrue(recipe)
+        self.assertIn('ARG GO_IMAGE=golang:'+native.GO_VERSION+'-bookworm', recipe)
+        self.assertTrue(any('-ldflags "-s -w"' in line for line in recipe))
         self.assertNotEqual(native.builder_recipe(current.replace('-ldflags "-s -w"', '-ldflags "-s"')),
-                            native.builder_recipe(baseline))
+                            recipe)
 
 
     def production_fixture(self, root):
@@ -79,7 +81,9 @@ class NativeQualificationTests(unittest.TestCase):
             git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                 "commit", "-qm", "public synthetic fixture")
             return git("rev-parse", "HEAD")
-        return git, commit, commit()
+        baseline = commit()
+        git("update-ref", "refs/remotes/origin/main", baseline)
+        return git, commit, baseline
 
     def test_source_guard_accepts_approved_baseline_and_rejects_production_drift(self):
         """test_source_guard_accepts_approved_baseline_and_rejects_production_drift exercises real Git paths."""
@@ -113,7 +117,8 @@ class NativeQualificationTests(unittest.TestCase):
                 head = commit()
                 qualification = native.Qualification(argparse.Namespace(
                     evidence=Path(temporary)/"evidence", timeout=300,
-                    expected_head="0"*40 if change == "wrong-head" else head))
+                    expected_head="0"*40 if change == "wrong-head" else head,
+                    baseline_target=baseline, baseline_ref="refs/remotes/origin/main"))
                 qualification.repo = root
                 if change == "dirty":
                     (root/"main.go").write_text("package dirty\n")
@@ -122,6 +127,7 @@ class NativeQualificationTests(unittest.TestCase):
                                    "commit-tree", head+"^{tree}", "-m", "unrelated public root")
                 if change == "absent-baseline":
                     baseline = "f"*40
+                qualification.args.baseline_target = baseline
                 try:
                     with mock.patch.object(native, "PRODUCTION_BASELINE", baseline):
                         if change == "test-only":
@@ -141,6 +147,124 @@ class NativeQualificationTests(unittest.TestCase):
                 finally:
                     shutil.rmtree(qualification.work)
 
+
+    def test_future_merged_main_is_not_packaging_branch_drift(self):
+        """test_future_merged_main_is_not_packaging_branch_drift exercises future merges and branch drift."""
+        for change in ("upstream-ahead", "upstream-merged", "branch-go", "branch-builder"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)/"repository"
+                root.mkdir()
+                git, commit, original = self.production_fixture(root)
+                git("checkout", "-qb", "future-main")
+                (root/"main.go").write_text("package future\n")
+                (root/"go.mod").write_text("module fixture\n\ngo 1.27.4\n")
+                dockerfile = root/"Dockerfile"
+                dockerfile.write_text(dockerfile.read_text().replace("golang:1.27.3", "golang:1.27.4"))
+                target = commit()
+                git("update-ref", "refs/remotes/origin/main", target)
+                git("checkout", "-qb", "packaging", original)
+                (root/"main_test.go").write_text("package main\n")
+                head = commit()
+                if change != "upstream-ahead":
+                    git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                        "merge", "--no-edit", target)
+                    head = git("rev-parse", "HEAD")
+                if change == "branch-go":
+                    (root/"main.go").write_text("package unreviewed_branch\n")
+                    head = commit()
+                elif change == "branch-builder":
+                    dockerfile.write_text(dockerfile.read_text().replace('-ldflags "-s -w"', '-ldflags "-s"'))
+                    head = commit()
+                q = native.Qualification(argparse.Namespace(evidence=Path(temporary)/"evidence",
+                    timeout=300, expected_head=head, baseline_target=target,
+                    baseline_ref="refs/remotes/origin/main"))
+                q.repo = root
+                try:
+                    with mock.patch.object(native, "PRODUCTION_BASELINE", original):
+                        if change.startswith("branch-"):
+                            with self.assertRaisesRegex(RuntimeError, "differs from approved baseline"):
+                                q.source()
+                        else:
+                            q.source()
+                            receipt = json.loads((q.evidence/"source-receipt.json").read_text())
+                            self.assertEqual(receipt["production_baseline"],
+                                             original if change == "upstream-ahead" else target)
+                            self.assertEqual(receipt["production_target"], target)
+                            self.assertEqual(receipt["production_changes_since_baseline"], [])
+                finally:
+                    shutil.rmtree(q.work)
+
+    def test_ambiguous_merge_base_is_rejected(self):
+        """test_ambiguous_merge_base_is_rejected constructs an actual crisscross Git history."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)/"repository"
+            root.mkdir()
+            git, _commit, baseline = self.production_fixture(root)
+            tree = git("rev-parse", "HEAD^{tree}")
+            def node(label, *parents):
+                """node creates one fixture commit with explicit parents and no checkout mutation."""
+                args = ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                        "commit-tree", tree, "-m", label]
+                for parent in parents:
+                    args.extend(("-p", parent))
+                return git(*args)
+            left, right = node("left", baseline), node("right", baseline)
+            head, target = node("candidate merge", left, right), node("target merge", right, left)
+            git("update-ref", "refs/remotes/origin/main", target)
+            git("checkout", "--detach", head)
+            q = native.Qualification(argparse.Namespace(evidence=Path(temporary)/"evidence",
+                timeout=300, expected_head=head, baseline_target=target,
+                baseline_ref="refs/remotes/origin/main"))
+            q.repo = root
+            try:
+                with self.assertRaisesRegex(RuntimeError, "one unambiguous merge base"):
+                    q.source()
+            finally:
+                shutil.rmtree(q.work)
+
+    def test_target_provenance_and_event_snapshot(self):
+        """test_target_provenance_and_event_snapshot rejects substituted targets and records later main tips."""
+        for change in ("snapshot", "branch-tip", "missing-object", "missing-ref", "local-ref", "unrelated"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)/"repository"
+                root.mkdir()
+                git, commit, baseline = self.production_fixture(root)
+                target = baseline
+                if change == "snapshot":
+                    (root/"main.go").write_text("package later_main\n")
+                    tip = commit()
+                    git("update-ref", "refs/remotes/origin/main", tip)
+                    git("checkout", "--detach", baseline)
+                (root/"main_test.go").write_text("package main\n")
+                head = commit()
+                ref = "refs/remotes/origin/main"
+                if change == "branch-tip":
+                    target = head
+                elif change == "missing-object":
+                    target = "f"*40
+                elif change == "missing-ref":
+                    ref = "refs/remotes/origin/absent"
+                elif change == "local-ref":
+                    ref = "refs/heads/main"
+                elif change == "unrelated":
+                    target = git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                                 "commit-tree", head+"^{tree}", "-m", "unrelated public root")
+                    git("update-ref", "refs/remotes/origin/main", target)
+                q = native.Qualification(argparse.Namespace(evidence=Path(temporary)/"evidence",
+                    timeout=300, expected_head=head, baseline_target=target, baseline_ref=ref))
+                q.repo = root
+                try:
+                    if change == "snapshot":
+                        q.source()
+                        receipt = json.loads((q.evidence/"source-receipt.json").read_text())
+                        self.assertEqual(receipt["production_baseline"], baseline)
+                        self.assertEqual(receipt["production_target"], baseline)
+                        self.assertEqual(receipt["production_target_tip"], tip)
+                    else:
+                        with self.assertRaises(RuntimeError):
+                            q.source()
+                finally:
+                    shutil.rmtree(q.work)
 
     def test_application_compiler_is_bound_to_actual_extracted_metadata(self):
         """test_application_compiler_is_bound_to_actual_extracted_metadata rejects stale or missing build data."""

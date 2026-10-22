@@ -572,9 +572,12 @@ class WorkflowTests(unittest.TestCase):
         build = next(step for step in job["steps"] if "qualify_native_arm64.py" in step.get("run", ""))
         self.assertEqual(build["run"],
                          'python3 scripts/qualify_native_arm64.py --architecture amd64 --evidence '
-                         '"$RUNNER_TEMP/native-amd64-evidence" --expected-head "$QUALIFICATION_HEAD"\n')
+                         '"$RUNNER_TEMP/native-amd64-evidence" --expected-head "$QUALIFICATION_HEAD" '
+                         '--baseline-ref "refs/remotes/origin/${QUALIFICATION_BASE_REF#refs/heads/}" --baseline-target "$QUALIFICATION_BASE_TARGET"\n')
         self.assertEqual(build["env"], {
             "QUALIFICATION_HEAD": "${{ github.event.pull_request.head.sha || github.sha }}",
+            "QUALIFICATION_BASE_REF": "${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || github.event.repository.default_branch }}",
+            "QUALIFICATION_BASE_TARGET": "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || format('refs/remotes/origin/{0}', github.event.repository.default_branch) }}",
             "GOMAXPROCS": "2", "GOFLAGS": "-p=2"})
         archive = job["steps"][-1]
         self.assertEqual(archive["if"], "always()")
@@ -590,7 +593,27 @@ class WorkflowTests(unittest.TestCase):
         arm_build = next(step for step in arm["steps"] if "qualify_native_arm64.py" in step.get("run", ""))
         self.assertEqual(arm_build["run"],
                          'python3 scripts/qualify_native_arm64.py --evidence '
-                         '"$RUNNER_TEMP/native-arm64-evidence" --expected-head "$QUALIFICATION_HEAD"\n')
+                         '"$RUNNER_TEMP/native-arm64-evidence" --expected-head "$QUALIFICATION_HEAD" '
+                         '--baseline-ref "refs/remotes/origin/${QUALIFICATION_BASE_REF#refs/heads/}" --baseline-target "$QUALIFICATION_BASE_TARGET"\n')
+
+    def test_native_baseline_comes_from_base_event_not_candidate_head(self) -> None:
+        """test_native_baseline_comes_from_base_event_not_candidate_head binds immutable event provenance."""
+        for name in ("native_arm64_images", "native_amd64_images"):
+            step = next(step for step in self.ci["jobs"][name]["steps"]
+                        if "qualify_native_arm64.py" in step.get("run", ""))
+            env = step["env"]
+            self.assertEqual(env["QUALIFICATION_BASE_REF"],
+                             "${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || github.event.repository.default_branch }}")
+            self.assertEqual(env["QUALIFICATION_BASE_TARGET"],
+                             "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || format('refs/remotes/origin/{0}', github.event.repository.default_branch) }}")
+            self.assertNotIn("github.sha", env["QUALIFICATION_BASE_TARGET"])
+            self.assertNotIn("github.event.before", env["QUALIFICATION_BASE_TARGET"])
+            for branch, wanted in (("main", "refs/remotes/origin/main"),
+                                   ("refs/heads/release/next", "refs/remotes/origin/release/next")):
+                result = subprocess.check_output(["bash", "-c",
+                    'printf "%s" "refs/remotes/origin/${QUALIFICATION_BASE_REF#refs/heads/}"'],
+                    env={**os.environ, "QUALIFICATION_BASE_REF": branch}, text=True)
+                self.assertEqual(result, wanted)
 
     def test_manual_amd64_aggregate_rejects_incomplete_selected_results(self) -> None:
         """test_manual_amd64_aggregate_rejects_incomplete_selected_results executes the shipped gate."""

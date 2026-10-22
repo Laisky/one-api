@@ -22,7 +22,7 @@ FFMPEG = "linuxserver/ffmpeg@sha256:742e17516dd4d7b76b939d774bd08f0f6b7cab8bce1c
 UBUNTU = "ubuntu@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944"
 ORIGINAL = "f4f26683404611c2313594e98e70ff5b36647dfd"
 OWNERSHIP = "ec72e68fc2c30363402e974d267674339159f0c2"
-# Historical runtime controls remain immutable; production includes merged security fixes.
+# Historical measurement provenance stays immutable; live guards derive the target merge base.
 PRODUCTION_BASELINE = "d316af5675f1363ec8d06ed3e92c15ed0d9fa0a4"
 GO_VERSION = "1.27.3"
 GIB, LIMIT = 1024**3, 4*1024**2
@@ -136,6 +136,22 @@ def builder_recipe(source):
         raise ValueError("expected one FFmpeg stage boundary")
     return [line for line in source.split(marker)[0].splitlines() if line.strip()
             and not line.lstrip().startswith("#") and not line.startswith("ARG RUNTIME_IMAGE=")]
+
+
+def production_reference(run, head, target, target_ref):
+    """production_reference resolves one merge base from a target proven on the remote base branch."""
+    if not target_ref or not re.fullmatch(r"refs/remotes/origin/[A-Za-z0-9][A-Za-z0-9/._-]*", target_ref):
+        raise RuntimeError("an explicit remote production base ref is required")
+    if not target or not (re.fullmatch(r"[0-9a-f]{40}", target) or target == target_ref):
+        raise RuntimeError("production target must be an event SHA or the explicit remote base ref")
+    tip = run(["git", "rev-parse", "--verify", target_ref+"^{commit}"], "production-ref").strip()
+    selected = run(["git", "rev-parse", "--verify", target+"^{commit}"], "production-target").strip()
+    run(["git", "merge-base", "--is-ancestor", selected, tip], "production-target-provenance")
+    bases = run(["git", "merge-base", "--all", head, selected], "production-merge-base").splitlines()
+    if len(bases) != 1 or not re.fullmatch(r"[0-9a-f]{40}", bases[0]):
+        raise RuntimeError("production target must have one unambiguous merge base")
+    return {"production_baseline": bases[0], "production_target": selected,
+            "production_target_ref": target_ref, "production_target_tip": tip}
 
 
 def runtime_records(manifest):
@@ -305,24 +321,26 @@ class Qualification:
             raise RuntimeError("checkout differs from requested head")
         if self.run(["git", "status", "--porcelain", "--untracked-files=normal"], "source-status").strip():
             raise RuntimeError("qualification requires a clean exact-head checkout")
-        self.run(["git", "merge-base", "--is-ancestor", PRODUCTION_BASELINE, head], "production-ancestry")
-        names = self.run(["git", "diff", "--no-renames", "--name-only", "-z", PRODUCTION_BASELINE, head],
+        reference = production_reference(self.run, head, getattr(self.args, "baseline_target", None),
+                                         getattr(self.args, "baseline_ref", None))
+        baseline_sha = reference["production_baseline"]
+        names = self.run(["git", "diff", "--no-renames", "--name-only", "-z", baseline_sha, head],
                          "production-diff").split("\0")
         changed = [name for name in names if name in ("go.mod", "go.sum", ".dockerignore", "scripts/docker-entrypoint.sh",
                                                     "model/dashboard_aggregate.sql")
                    or name.startswith("web/") or (name.endswith(".go") and not name.endswith("_test.go"))]
         if changed:
             raise RuntimeError("production application differs from approved baseline: "+repr(changed))
-        baseline = self.run(["git", "show", PRODUCTION_BASELINE+":Dockerfile"], "builder-baseline")
+        baseline = self.run(["git", "show", baseline_sha+":Dockerfile"], "builder-baseline")
         if builder_recipe((self.repo/"Dockerfile").read_text()) != builder_recipe(baseline):
             raise RuntimeError("production frontend or Go builder recipe differs from approved baseline")
         self.summary["checks"]["production_builder_recipe"] = "identical to approved production baseline"
-        self.summary["checks"]["production_baseline"] = PRODUCTION_BASELINE
+        self.summary["checks"].update(reference)
         paths = self.run(["git", "ls-files", "-z"], "source-files").split("\0")
         save(self.evidence/"source-receipt.json", {"head": head,
              "tree": self.run(["git", "rev-parse", "HEAD^{tree}"], "source-tree").strip(),
              "files": {name: sha(self.repo/name) for name in paths if name and (self.repo/name).is_file()},
-             "production_baseline": PRODUCTION_BASELINE, "production_changes_since_baseline": changed})
+             **reference, "production_changes_since_baseline": changed})
         archive = self.work/"source.tar"
         self.run(["git", "archive", "--format=tar", "-o", str(archive), head], "source-archive")
         self.context = self.work/"source"
@@ -577,6 +595,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence", required=True, type=Path)
     parser.add_argument("--expected-head", required=True)
+    parser.add_argument("--baseline-target", required=True)
+    parser.add_argument("--baseline-ref", required=True)
     parser.add_argument("--timeout", type=int, default=6600)
     parser.add_argument("--architecture", choices=("arm64", "amd64"), default="arm64")
     args = parser.parse_args()

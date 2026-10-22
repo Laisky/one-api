@@ -113,14 +113,33 @@ AMD64 results alone do not qualify it. This check does not replace normal hosted
 CodeQL acceptance.
 
 
-The current native qualification pins production source and builder instructions
-to merged security baseline `d316af5675f1363ec8d06ed3e92c15ed0d9fa0a4` and uses
-Go 1.27.3 for both native tests and the application builder. Historical original
-and ownership runtime recipes remain immutable controls; each receives the same
-new application executable. Updating the approved production reference requires
-source review and fresh qualification. Receipts bind that reference separately
-from the historical runtime controls. Old compiler/image measurements retain
-their original provenance and do not qualify the rebuilt images.
+Native qualification compares protected production source and builder instructions
+against the unique merge base with the target branch. CI passes the immutable PR
+base SHA or merge-group base SHA and the corresponding remote base ref; manual
+and protected-main push runs resolve the remote default branch. The target must
+exist on that remote branch. Missing, unrelated or ambiguous baselines and a
+candidate tip substituted for an unmerged target fail closed. Receipts record
+the selected target, remote tip, merge base and protected-source differences.
+If main advances after event capture, the recorded event target stays fixed.
+
+This remains a packaging-scope guard: production or builder drift introduced by
+the candidate branch is rejected. It accepts upstream production changes already
+merged into the candidate without freezing all future checks to one historical
+commit. Combining production changes with packaging requires separate review;
+this check does not approve arbitrary application or compiler modifications.
+The mandatory builder contract checks current instructions and mutation controls,
+rather than comparing every future builder to an old commit. Go 1.27.3 remains
+an explicit compiler pin; future compiler updates must change its coordinated
+contracts and repeat native qualification.
+
+Historical original and ownership runtime recipes remain immutable controls;
+each receives the same newly built application executable. Earlier measurements
+against `d316af5675f1363ec8d06ed3e92c15ed0d9fa0a4` retain that provenance and do
+not qualify other application/compiler/runtime inputs. For a local run supply
+both `--baseline-ref refs/remotes/origin/main` and `--baseline-target <event-sha>`
+(or that same remote ref for a manual snapshot) alongside `--expected-head`.
+The caller must supply the reviewed repository's base ref; a local ref alone is
+not independent evidence of approval.
 
 ## Manual native AMD64 qualification
 
