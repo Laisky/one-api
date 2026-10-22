@@ -69,14 +69,13 @@ func TestDeepSeekToolReceiptEndpointClaudeCounters(t *testing.T) {
 	}
 }
 
-
 // TestDeepSeekReceiptAliasesPreserveUnrelatedProviderCounts validates that
 // contract suppression normalizes capability identity without changing the
 // existing raw multi-key counter merge for an unrelated Anthropic host.
 func TestDeepSeekReceiptAliasesPreserveUnrelatedProviderCounts(t *testing.T) {
 	for _, tc := range []struct {
 		name, base string
-		want int
+		want       int
 	}{
 		{"deepseek", "https://api.deepseek.com/anthropic", 0},
 		{"unrelated", "https://api.anthropic.com", 2},

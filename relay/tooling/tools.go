@@ -535,7 +535,11 @@ func quotaPerCallFromLocal(pricing model.ToolPricingLocal) int64 {
 		return pricing.QuotaPerCall
 	}
 	if pricing.UsdPerCall > 0 {
-		return int64(math.Ceil(pricing.UsdPerCall * float64(ratio.QuotaPerUsd)))
+		quota := pricing.UsdPerCall * float64(ratio.QuotaPerUsd)
+		if math.IsInf(quota, 0) || quota >= float64(math.MaxInt64) {
+			return math.MaxInt64
+		}
+		return int64(math.Ceil(quota))
 	}
 	return pricing.QuotaPerCall
 }
@@ -546,7 +550,11 @@ func quotaPerCallFromProvider(pricing adaptor.ToolPricingConfig) int64 {
 		return pricing.QuotaPerCall
 	}
 	if pricing.UsdPerCall > 0 {
-		return int64(math.Ceil(pricing.UsdPerCall * float64(ratio.QuotaPerUsd)))
+		quota := pricing.UsdPerCall * float64(ratio.QuotaPerUsd)
+		if math.IsInf(quota, 0) || quota >= float64(math.MaxInt64) {
+			return math.MaxInt64
+		}
+		return int64(math.Ceil(quota))
 	}
 	return pricing.QuotaPerCall
 }
