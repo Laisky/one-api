@@ -12,7 +12,7 @@ import types
 import unittest
 from unittest import mock
 import qualify_native_arm64 as native
-from image_inputs import read_image_inputs
+from image_inputs import read_image_inputs, REVIEWED_PIN_MIGRATION
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -274,14 +274,21 @@ class NativeQualificationTests(unittest.TestCase):
             with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)/"repository";root.mkdir()
                 git, commit, baseline = self.production_fixture(root)
-                candidate = (ROOT/"Dockerfile").read_text()
+                candidate = self.historical(native.PRODUCTION_BASELINE)
+                for key in ("NODE_IMAGE", "GO_IMAGE", "FFMPEG_IMAGE"):
+                    pin = REVIEWED_PIN_MIGRATION[key]
+                    declaration = "ARG "+key+"="+pin.split("@")[0]+"\n"
+                    self.assertEqual(candidate.count(declaration), 1)
+                    candidate = candidate.replace(declaration, "ARG "+key+"="+pin+"\n")
                 if change == "already-pinned-drift":
-                    (root/"Dockerfile").write_text(candidate);baseline = commit()
+                    (root/"Dockerfile").write_text(candidate)
+                    baseline = commit()
                     git("update-ref", "refs/remotes/origin/main", baseline)
                 if change != "reviewed":
-                    pin = read_image_inputs(candidate, native.GO_VERSION)["GO_IMAGE"]
+                    pin = REVIEWED_PIN_MIGRATION["GO_IMAGE"]
                     candidate = candidate.replace(pin, pin[:-64]+"f"*64)
-                (root/"Dockerfile").write_text(candidate);head = commit()
+                (root/"Dockerfile").write_text(candidate)
+                head = commit()
                 q = native.Qualification(argparse.Namespace(evidence=Path(temporary)/"evidence", timeout=300,
                     expected_head=head, baseline_target=baseline, baseline_ref="refs/remotes/origin/main"))
                 q.repo = root
@@ -297,6 +304,30 @@ class NativeQualificationTests(unittest.TestCase):
                             q.source()
                 finally:
                     shutil.rmtree(q.work)
+
+    def test_migration_fixture_ignores_live_dockerfile_changes(self):
+        """test_migration_fixture_ignores_live_dockerfile_changes preserves the historical fixture across later edits."""
+        live_path = ROOT/"Dockerfile"
+        current = live_path.read_text()
+        boundary = "FROM ${FFMPEG_IMAGE}"
+        self.assertEqual(current.count(boundary), 1)
+        future = current.replace(boundary, "RUN printf future-policy > /tmp/fixture-policy\n\n"+boundary, 1)
+        variants = {"unchanged": current, "runtime_only": current+"\nLABEL fixture.runtime=changed\n",
+                    "future_builder": future}
+        original_read = Path.read_text
+        for name, recipe in variants.items():
+            with self.subTest(live_recipe=name):
+                def read_with_live_change(path, *args, **kwargs):
+                    """read_with_live_change substitutes only the live recipe and preserves real fixture reads."""
+                    return recipe if path == live_path else original_read(path, *args, **kwargs)
+                result = unittest.TestResult()
+                case = NativeQualificationTests("test_source_accepts_only_reviewed_initial_pin_migration")
+                with mock.patch.object(Path, "read_text", read_with_live_change):
+                    case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.skipped)
+                details = "\n".join(message for _, message in result.failures+result.errors)
+                self.assertTrue(result.wasSuccessful(), details)
 
     def test_application_compiler_is_bound_to_actual_extracted_metadata(self):
         """test_application_compiler_is_bound_to_actual_extracted_metadata rejects stale or missing build data."""

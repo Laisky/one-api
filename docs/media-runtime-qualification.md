@@ -178,9 +178,16 @@ references for Node, Go, FFmpeg and Ubuntu. Native qualification reads those sam
 four declarations, verifies one Linux AMD64 and ARM64 descriptor in each index,
 and passes the exact references to its builds and donor extraction. Both existing
 delivery jobs use the Dockerfile defaults; the ARM64 TARGETARCH argument remains.
-Changing a registry tag alone cannot alter these pinned inputs. Refresh pins in a
-reviewed source change with fresh native qualification and retain rollback image
-digests. No release is triggered by the qualification jobs themselves.
+Changing a registry tag alone cannot alter these pinned inputs. To refresh a
+Node, Go or FFmpeg builder pin relative to the approved baseline, first make a
+separately reviewed guard change approving that exact pinned-to-pinned transition
+and update its regression tests. Then update the pin with fresh native
+qualification and retain rollback image digests.
+
+Ubuntu's RUNTIME_IMAGE is excluded from the builder-recipe comparison, so a
+runtime-only pin refresh does not require that builder-migration exception. It
+still requires source review and fresh native qualification. No release is
+triggered by the qualification jobs themselves.
 
 The source guard allows only the recorded initial floating-to-digest migration
 using the previously qualified index digests; later pinned builder digest or
