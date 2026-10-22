@@ -54,6 +54,13 @@ type responseAPIEventUsage struct {
 // the frame without forwarding it and must not modify the supplied bytes.
 type ResponseAPIWebSocketAdmission func(context.Context, []byte, string) error
 
+// ResponseAPIWebSocketObservers receive accepted provider work and upstream
+// output without dereferencing gin.Context from WebSocket proxy goroutines.
+type ResponseAPIWebSocketObservers struct {
+	OnForwardedCreate func([]byte, string)
+	OnUpstreamEvent   func([]byte)
+}
+
 // ResponseAPIWebSocketHandler proxies a user websocket connection from /v1/responses
 // to the upstream OpenAI /v1/responses websocket endpoint.
 //
@@ -81,7 +88,7 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 // usage, and observed stored responses after both directions have drained. A
 // denial before any dispatch releases the handshake hold through the caller's
 // existing refund path; a later denial retains earlier accepted-work settlement.
-func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, admission ResponseAPIWebSocketAdmission) (*rmodel.ErrorWithStatusCode, *rmodel.Usage, []*ResponseAPIResponse) {
+func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, admission ResponseAPIWebSocketAdmission, observers ...ResponseAPIWebSocketObservers) (*rmodel.ErrorWithStatusCode, *rmodel.Usage, []*ResponseAPIResponse) {
 	if meta == nil || meta.Mode != relaymode.ResponseAPI {
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "invalid mode for response websocket handler", Type: rmodel.ErrorTypeOneAPI, Code: "invalid_mode", RawError: errors.New("invalid mode for response websocket handler")},
@@ -141,11 +148,15 @@ func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, 
 	stored := &responseAPIWSStoreCollector{ownership: ownership}
 	errc := make(chan error, 2)
 	requestContext := c.Request.Context()
+	var observed ResponseAPIWebSocketObservers
+	if len(observers) > 0 {
+		observed = observers[0]
+	}
 	go func() {
-		errc <- copyResponseAPIClientToUpstream(requestContext, clientConn, upstreamConn, meta, ownership, admission, fullRequestURL)
+		errc <- copyResponseAPIClientToUpstream(requestContext, clientConn, upstreamConn, meta, ownership, admission, fullRequestURL, observed.OnForwardedCreate)
 	}()
 	receipts := &responseAPIWSUsageCollector{usage: usage}
-	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, receipts, stored) }()
+	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, receipts, stored, observed.OnUpstreamEvent) }()
 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
@@ -280,7 +291,7 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 // Returns:
 //   - error: nil on clean close; ErrModelSwitchDenied (wrapped) on rejected
 //     model switch; other errors propagate underlying I/O failures.
-func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Conn, meta *rmeta.Meta, ownership *responseWSSessionOwnership, admission ResponseAPIWebSocketAdmission, upstreamURL string) error {
+func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Conn, meta *rmeta.Meta, ownership *responseWSSessionOwnership, admission ResponseAPIWebSocketAdmission, upstreamURL string, onForwardedCreate ...func([]byte, string)) error {
 	boundOriginModel, boundActualModel := meta.OriginModelName, meta.ActualModelName
 	for {
 		mt, msg, err := src.ReadMessage()
@@ -342,6 +353,9 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 		ownership.dispatched.Store(true)
 		if isResponseCreateFrame(outbound) {
 			ownership.creates.Add(1)
+			if len(onForwardedCreate) > 0 && onForwardedCreate[0] != nil {
+				onForwardedCreate[0](outbound, upstreamURL)
+			}
 		}
 	}
 }
@@ -352,7 +366,7 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 // also records store!=false completed response objects into stored so the
 // caller can commit them to the gateway store (proposal ST-011). Collection
 // happens after usage accounting and never alters the forwarded frame.
-func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, receipts *responseAPIWSUsageCollector, stored *responseAPIWSStoreCollector) error {
+func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, receipts *responseAPIWSUsageCollector, stored *responseAPIWSStoreCollector, onUpstreamEvent ...func([]byte)) error {
 
 	for {
 		mt, msg, err := src.ReadMessage()
@@ -373,6 +387,9 @@ func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, receipts *respo
 			receipts.collect(msg)
 			if stored != nil {
 				stored.collect(msg)
+			}
+			if len(onUpstreamEvent) > 0 && onUpstreamEvent[0] != nil {
+				onUpstreamEvent[0](msg)
 			}
 		}
 

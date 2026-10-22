@@ -312,9 +312,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		logUpstreamResponseFromBytes(lg, resp, nil, "response_api")
 	}
 	if respErr != nil {
-		// If usage is available even though writing to client failed (e.g., client cancelled),
-		// proceed to billing to ensure forwarded requests are charged; do not refund pre-consumed quota.
-		// Otherwise, refund pre-consumed quota and return error.
+		// Missing usage after provider success cannot establish that a paid
+		// DeepSeek tool was not executed. Preserve the admitted charge floor.
+		if usage == nil && tooling.ConservativeDeepSeekToolQuota(c) > 0 {
+			usage = &relaymodel.Usage{BillingEstimateReason: "deepseek_tool_response_missing_usage"}
+		}
 		if usage == nil {
 			lg.Warn("response api DoResponse failed without usage, refunding pre-consumed quota",
 				zap.Int64("pre_consumed_quota", preConsumedQuota),

@@ -348,6 +348,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		logUpstreamResponseFromBytes(lg, resp, nil, "chat_completions")
 	}
 	if respErr != nil {
+		if usage == nil && tooling.ConservativeDeepSeekToolQuota(c) > 0 {
+			usage = &relaymodel.Usage{BillingEstimateReason: "deepseek_tool_response_missing_usage"}
+		}
 		// If usage is available even though writing to client failed (e.g., client cancelled),
 		// proceed to billing to ensure forwarded requests are charged; do not refund pre-consumed quota.
 		// Otherwise, refund pre-consumed quota and return error.

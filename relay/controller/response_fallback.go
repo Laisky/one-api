@@ -397,6 +397,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		logUpstreamResponseFromBytes(lg, resp, nil, "response_api_fallback")
 	}
 	if respErr != nil {
+		if usage == nil && tooling.ConservativeDeepSeekToolQuota(c) > 0 {
+			usage = &relaymodel.Usage{BillingEstimateReason: "deepseek_tool_response_missing_usage"}
+		}
 		if usage == nil && (tracker == nil || !c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded)) {
 			if refundClaudeAdmission(c, respErr, preConsumedQuota, meta.TokenId) {
 				return respErr
