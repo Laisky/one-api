@@ -38,7 +38,7 @@ keeps only the smallest essential package instead of increasing the timeout.
 ## Local quick gate
 
 Use Go 1.27.3, Python 3, Git, and the matching `gofmt` for the current validation
-policy. The minimum compiler in `go.mod`, all five Go setup steps in `lint.yml`,
+policy. The minimum compiler in `go.mod`, all seven Go setup steps in `lint.yml`,
 and the Dockerfile builder use Go 1.27.3 to address GO-2026-6809 in
 `crypto/x509.Certificate.Verify`. This raises the minimum compiler patch version
 without changing third-party module requirements or `go.sum`.

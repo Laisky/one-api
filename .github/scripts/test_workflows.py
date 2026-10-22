@@ -18,6 +18,8 @@ import go_test_shards as shards
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
+sys.path.insert(0, str(ROOT / "scripts"))
+from image_inputs import read_image_inputs
 THEMES = ("modern", "air", "berry")
 MANDATORY = {
     "changes", "quick_tests", "goroutine_context_guard",
@@ -86,7 +88,7 @@ class WorkflowTests(unittest.TestCase):
     def test_go_validation_uses_security_baseline(self) -> None:
         """test_go_validation_uses_security_baseline pins CI, module and image compilers."""
         expected = {"quick_tests", "go_test_shards", "entity_response_guard",
-                    "vulnerability_scan", "historical_control"}
+                    "vulnerability_scan", "historical_control", "native_arm64_images", "native_amd64_images"}
         setups = {
             name: [step for step in job.get("steps", [])
                    if step.get("uses", "").startswith("actions/setup-go@")]
@@ -95,7 +97,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual({name for name, steps in setups.items() if steps}, expected)
         for name in expected:
             self.assertEqual(len(setups[name]), 1, name)
-            self.assertEqual(setups[name][0]["with"], {"go-version": "1.27.3"}, name)
+            wanted = {"go-version": "1.27.3"}
+            if name in {"native_arm64_images", "native_amd64_images"}:
+                wanted["cache"] = "false"
+            self.assertEqual(setups[name][0]["with"], wanted, name)
         self.assertRegex((ROOT / "go.mod").read_text(), r"(?m)^go 1\.27\.3$")
         self.assertIn("ARG GO_IMAGE=golang:1.27.3-bookworm", (ROOT / "Dockerfile").read_text())
 
@@ -238,6 +243,42 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn(f"scope={scope}", build["cache-to"])
             if not prefix:
                 self.assertIn("ignore-error=true", build["cache-to"])
+
+    def test_delivery_uses_the_qualified_dockerfile_inputs(self) -> None:
+        """test_delivery_uses_the_qualified_dockerfile_inputs rejects source or image overrides in both builds."""
+        defaults = read_image_inputs((ROOT/"Dockerfile").read_text(), "1.27.3")
+        def effective(arguments):
+            """effective applies Docker build arguments to the real canonical defaults."""
+            result = dict(defaults)
+            for line in arguments.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                key, value = line.split("=", 1)
+                if key.strip() in result:
+                    result[key.strip()] = value.strip()
+            return result
+        for name in ("build_latest", "build_arm64_hash"):
+            job = self.delivery["jobs"][name]
+            checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+            self.assertEqual(checkout.get("with", {}).get("ref", "${{ github.sha }}"), "${{ github.sha }}")
+            build = next(step["with"] for step in job["steps"] if step.get("uses", "").startswith("docker/build-push-action@"))
+            self.assertEqual(build["context"], ".")
+            self.assertEqual(build.get("file", "Dockerfile"), "Dockerfile")
+            self.assertEqual(effective(build.get("build-args", "")), defaults)
+        self.assertEqual(effective("  TARGETARCH=arm64\n\n"), defaults)
+        for key, pin in defaults.items():
+            self.assertEqual(effective(key+"="+pin), defaults)
+            for value in (pin.split("@")[0], pin[:-64]+"f"*64, "${{ env.UNREVIEWED_IMAGE }}"):
+                with self.subTest(key=key, value=value):
+                    for prefix in ("", "  ", "\t"):
+                        self.assertNotEqual(effective(prefix+key+"="+value), defaults)
+        filters = commands(self.ci["jobs"]["changes"])
+        self.assertIn("python3 scripts/test_image_inputs.py", filters)
+        selection = next(step["with"]["filters"] for step in self.ci["jobs"]["changes"]["steps"]
+                         if step.get("id") == "filter")
+        self.assertIn("scripts/image_inputs.py", selection)
+        self.assertIn("scripts/test_image_inputs.py", selection)
 
     def test_delivery_revision_label_matches_source_on_both_architectures(self) -> None:
         """test_delivery_revision_label_matches_source_on_both_architectures binds each image to its source."""
@@ -429,11 +470,11 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(gate["if"], "always()")
         audits = {f"{theme}_dependency_audit" for theme in THEMES}
         frontends = {f"{theme}_frontend_tests" for theme in THEMES}
-        expected = MANDATORY | audits | frontends | {"go_tests", "historical_control"}
+        expected = MANDATORY | audits | frontends | {"go_tests", "historical_control", "native_arm64_images", "native_amd64_images"}
         self.assertEqual(set(gate["needs"]), expected)
         script = gate["steps"][0]["run"].split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
         baseline = {name: {"result": "success"} for name in expected}
-        baseline["changes"]["outputs"] = {theme: "false" for theme in THEMES}
+        baseline["changes"]["outputs"] = {theme: "false" for theme in (*THEMES, "media_runtime")}
         for name in expected - MANDATORY:
             baseline[name]["result"] = "skipped"
         scenarios = [("unaffected manual suites and audits skipped", baseline, False, False, False, True)]
@@ -485,10 +526,163 @@ class WorkflowTests(unittest.TestCase):
                 env = {**os.environ, "NEEDS": json.dumps(jobs),
                        "MANUAL_RUN": str(manual_run).lower(),
                        "QUALIFICATION": str(qualification).lower(),
-                       "HISTORICAL_CONTROL": str(historical_run).lower()}
+                       "HISTORICAL_CONTROL": str(historical_run).lower(),
+                       "NATIVE_ARM64_IMAGES": "false", "NATIVE_AMD64_IMAGES": "false"}
                 result = subprocess.run([sys.executable, "-c", script], env=env, text=True, capture_output=True, check=False)
                 self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
 
+        for value, selected in (("true", True), ("false", False), (None, None), ("unknown", None)):
+            for status in ("success", "skipped"):
+                for manual_run, requested in ((False, False), (True, False), (True, True)):
+                    state = copy.deepcopy(manual if manual_run else baseline)
+                    state["changes"]["outputs"]["media_runtime"] = value
+                    state["native_arm64_images"]["result"] = status
+                    env = {**os.environ, "NEEDS": json.dumps(state),
+                           "MANUAL_RUN": str(manual_run).lower(), "QUALIFICATION": "false",
+                           "HISTORICAL_CONTROL": "false", "NATIVE_ARM64_IMAGES": str(requested).lower(), "NATIVE_AMD64_IMAGES": "false"}
+                    result = subprocess.run([sys.executable, "-c", script], env=env,
+                                            text=True, capture_output=True, check=False)
+                    success = (manual_run or selected is not None) and (status == "success" or not (selected or requested))
+                    self.assertEqual(result.returncode == 0, success,
+                                     (value, status, manual_run, requested, result.stdout, result.stderr))
+        for status in ("skipped", "missing"):
+            state = copy.deepcopy(baseline)
+            state["changes"]["outputs"]["media_runtime"] = "true"
+            if status == "missing":
+                del state["native_arm64_images"]
+            env = {**os.environ, "NEEDS": json.dumps(state), "MANUAL_RUN": "false",
+                   "QUALIFICATION": "false", "HISTORICAL_CONTROL": "false", "NATIVE_ARM64_IMAGES": "false", "NATIVE_AMD64_IMAGES": "false"}
+            result = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+
+    def test_native_arm64_qualification_uses_read_only_native_runner(self) -> None:
+        """test_native_arm64_qualification_uses_read_only_native_runner guards isolation and selection."""
+        job = self.ci["jobs"]["native_arm64_images"]
+        self.assertEqual(job["runs-on"], "ubuntu-24.04-arm")
+        self.assertEqual(job["needs"], "changes")
+        self.assertEqual(job["if"], "github.event.repository.private == false && (needs.changes.outputs.media_runtime == 'true' || (github.event_name == 'workflow_dispatch' && inputs.native_arm64_images))")
+        self.assertLessEqual(int(job["timeout-minutes"]), 120)
+        self.assertEqual(job["steps"][0]["with"], {
+            "ref": "${{ github.event.pull_request.head.sha || github.sha }}",
+            "fetch-depth": "0", "persist-credentials": "false",
+        })
+        self.assertNotIn("permissions", job)
+        self.assertNotIn("environment", job)
+        self.assertNotIn("services", job)
+        self.assertIn("scripts/qualify_native_arm64.py --evidence", commands(job))
+        for forbidden in ("setup-qemu", "setup-buildx", "login-action", "build-push-action", "sudo", "--privileged", "docker push"):
+            self.assertNotIn(forbidden, json.dumps(job))
+        archive = job["steps"][-1]
+        self.assertEqual(archive["if"], "always()")
+        self.assertEqual(archive["with"]["path"], "${{ runner.temp }}/native-arm64-evidence")
+        self.assertEqual(archive["with"]["retention-days"], "14")
+        self.assertEqual(self.ci["on"]["workflow_dispatch"]["inputs"]["native_arm64_images"]["default"], "false")
+        changes = self.ci["jobs"]["changes"]
+        self.assertIn("python3 scripts/test_qualify_native_arm64.py", commands(changes))
+        self.assertEqual(changes["outputs"]["media_runtime"], "${{ steps.filter.outputs.media_runtime }}")
+        filters = next(step["with"]["filters"] for step in changes["steps"] if step.get("id") == "filter")
+        media_paths = yaml.load(filters, Loader=UniqueKeyLoader)["media_runtime"]
+        for path in ("Dockerfile", "scripts/docker-entrypoint.sh", "scripts/collect_media_runtime.py",
+                     "scripts/qualify_native_arm64.py", "scripts/qualify_media_runtime.py",
+                     "scripts/qualify_media_transport.py", ".github/workflows/lint.yml"):
+            self.assertIn(path, media_paths)
+        self.assertNotIn("**", media_paths)
+
+
+    def test_native_amd64_qualification_is_manual_and_isolated(self) -> None:
+        """test_native_amd64_qualification_is_manual_and_isolated protects explicit native selection."""
+        job = self.ci["jobs"]["native_amd64_images"]
+        arm = self.ci["jobs"]["native_arm64_images"]
+        self.assertEqual(self.ci["on"]["workflow_dispatch"]["inputs"]["native_amd64_images"],
+                         {"description": "Qualify native AMD64 runtime images without publishing",
+                          "type": "boolean", "default": "false"})
+        self.assertEqual(job["if"], "github.event.repository.private == false && github.event_name == 'workflow_dispatch' && inputs.native_amd64_images")
+        self.assertEqual(job["needs"], "changes")
+        self.assertEqual(job["runs-on"], "ubuntu-24.04")
+        self.assertEqual(job["timeout-minutes"], "120")
+        self.assertEqual(job["steps"][0]["with"], arm["steps"][0]["with"])
+        self.assertEqual([step["uses"] for step in job["steps"] if "uses" in step],
+                         [step["uses"] for step in arm["steps"] if "uses" in step])
+        for forbidden in ("permissions", "environment", "services", "strategy", "continue-on-error"):
+            self.assertNotIn(forbidden, job)
+        for step in job["steps"]:
+            self.assertNotIn("continue-on-error", step)
+        build = next(step for step in job["steps"] if "qualify_native_arm64.py" in step.get("run", ""))
+        self.assertEqual(build["run"],
+                         'python3 scripts/qualify_native_arm64.py --architecture amd64 --evidence '
+                         '"$RUNNER_TEMP/native-amd64-evidence" --expected-head "$QUALIFICATION_HEAD" '
+                         '--baseline-ref "refs/remotes/origin/${QUALIFICATION_BASE_REF#refs/heads/}" --baseline-target "$QUALIFICATION_BASE_TARGET"\n')
+        self.assertEqual(build["env"], {
+            "QUALIFICATION_HEAD": "${{ github.event.pull_request.head.sha || github.sha }}",
+            "QUALIFICATION_BASE_REF": "${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || github.event.repository.default_branch }}",
+            "QUALIFICATION_BASE_TARGET": "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || format('refs/remotes/origin/{0}', github.event.repository.default_branch) }}",
+            "GOMAXPROCS": "2", "GOFLAGS": "-p=2"})
+        archive = job["steps"][-1]
+        self.assertEqual(archive["if"], "always()")
+        self.assertEqual(archive["with"], {
+            "name": "native-amd64-images-${{ github.event.pull_request.head.sha || github.sha }}",
+            "path": "${{ runner.temp }}/native-amd64-evidence",
+            "if-no-files-found": "warn", "retention-days": "14"})
+        self.assertNotEqual(archive["with"]["path"], arm["steps"][-1]["with"]["path"])
+        self.assertNotEqual(archive["with"]["name"], arm["steps"][-1]["with"]["name"])
+        for forbidden in ("setup-qemu", "setup-buildx", "login-action", "build-push-action",
+                          "sudo", "--privileged", "docker push"):
+            self.assertNotIn(forbidden, json.dumps(job))
+        arm_build = next(step for step in arm["steps"] if "qualify_native_arm64.py" in step.get("run", ""))
+        self.assertEqual(arm_build["run"],
+                         'python3 scripts/qualify_native_arm64.py --evidence '
+                         '"$RUNNER_TEMP/native-arm64-evidence" --expected-head "$QUALIFICATION_HEAD" '
+                         '--baseline-ref "refs/remotes/origin/${QUALIFICATION_BASE_REF#refs/heads/}" --baseline-target "$QUALIFICATION_BASE_TARGET"\n')
+
+    def test_native_baseline_comes_from_base_event_not_candidate_head(self) -> None:
+        """test_native_baseline_comes_from_base_event_not_candidate_head binds immutable event provenance."""
+        for name in ("native_arm64_images", "native_amd64_images"):
+            step = next(step for step in self.ci["jobs"][name]["steps"]
+                        if "qualify_native_arm64.py" in step.get("run", ""))
+            env = step["env"]
+            self.assertEqual(env["QUALIFICATION_BASE_REF"],
+                             "${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || github.event.repository.default_branch }}")
+            self.assertEqual(env["QUALIFICATION_BASE_TARGET"],
+                             "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || format('refs/remotes/origin/{0}', github.event.repository.default_branch) }}")
+            self.assertNotIn("github.sha", env["QUALIFICATION_BASE_TARGET"])
+            self.assertNotIn("github.event.before", env["QUALIFICATION_BASE_TARGET"])
+            for branch, wanted in (("main", "refs/remotes/origin/main"),
+                                   ("refs/heads/release/next", "refs/remotes/origin/release/next")):
+                result = subprocess.check_output(["bash", "-c",
+                    'printf "%s" "refs/remotes/origin/${QUALIFICATION_BASE_REF#refs/heads/}"'],
+                    env={**os.environ, "QUALIFICATION_BASE_REF": branch}, text=True)
+                self.assertEqual(result, wanted)
+
+    def test_manual_amd64_aggregate_rejects_incomplete_selected_results(self) -> None:
+        """test_manual_amd64_aggregate_rejects_incomplete_selected_results executes the shipped gate."""
+        gate = self.ci["jobs"]["required"]
+        step = gate["steps"][0]
+        self.assertIn("native_amd64_images", gate["needs"])
+        self.assertEqual(step["env"]["NATIVE_AMD64_IMAGES"],
+                         "${{ github.event_name == 'workflow_dispatch' && inputs.native_amd64_images }}")
+        script = step["run"].split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+        for manual in (False, True):
+            for requested in (False, True):
+                for media_changed in (False, True):
+                    for status in ("success", "failure", "cancelled", "skipped", "missing"):
+                        with self.subTest(manual=manual, requested=requested,
+                                          media_changed=media_changed, status=status):
+                            jobs = {name: {"result": "success"} for name in gate["needs"]}
+                            jobs["changes"]["outputs"] = {theme: "false" for theme in THEMES}
+                            jobs["changes"]["outputs"]["media_runtime"] = str(media_changed).lower()
+                            if status == "missing":
+                                del jobs["native_amd64_images"]
+                            else:
+                                jobs["native_amd64_images"]["result"] = status
+                            env = {**os.environ, "NEEDS": json.dumps(jobs),
+                                   "MANUAL_RUN": str(manual).lower(), "QUALIFICATION": "false",
+                                   "HISTORICAL_CONTROL": "false", "NATIVE_ARM64_IMAGES": "false",
+                                   "NATIVE_AMD64_IMAGES": str(requested).lower()}
+                            result = subprocess.run([sys.executable, "-c", script], env=env,
+                                                    text=True, capture_output=True, check=False)
+                            selected = manual and requested
+                            success = status == "success" or (not selected and status in {"skipped", "missing"})
+                            self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
