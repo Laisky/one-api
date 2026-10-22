@@ -22,6 +22,9 @@ FFMPEG = "linuxserver/ffmpeg@sha256:742e17516dd4d7b76b939d774bd08f0f6b7cab8bce1c
 UBUNTU = "ubuntu@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944"
 ORIGINAL = "f4f26683404611c2313594e98e70ff5b36647dfd"
 OWNERSHIP = "ec72e68fc2c30363402e974d267674339159f0c2"
+# Historical runtime controls remain immutable; production includes merged security fixes.
+PRODUCTION_BASELINE = "d316af5675f1363ec8d06ed3e92c15ed0d9fa0a4"
+GO_VERSION = "1.27.3"
 GIB, LIMIT = 1024**3, 4*1024**2
 TOKENS = {
     "cl100k_base": (1681126, "223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7"),
@@ -63,9 +66,16 @@ def assert_native(machine, docker_arch, go):
     if machine.lower() not in ("aarch64", "arm64") or docker_arch.lower() not in ("aarch64", "arm64"):
         raise RuntimeError("native ARM64 host and Docker server required")
     expected = {"GOARCH": "arm64", "GOHOSTARCH": "arm64", "GOOS": "linux",
-                "GOHOSTOS": "linux", "GOVERSION": "go1.27.2"}
+                "GOHOSTOS": "linux", "GOVERSION": "go"+GO_VERSION}
     if any(go.get(key) != value for key, value in expected.items()):
-        raise RuntimeError("native Linux ARM64 Go 1.27.2 required")
+        raise RuntimeError("native Linux ARM64 Go "+GO_VERSION+" required")
+
+
+
+def assert_application_compiler(metadata):
+    """assert_application_compiler verifies extracted ELF build information without executing it."""
+    if not re.match(r"^[^\n]+: go"+re.escape(GO_VERSION)+r"\n", metadata):
+        raise RuntimeError("actual application was not built with Go "+GO_VERSION)
 
 
 def runtime_recipe(source):
@@ -96,7 +106,7 @@ def normalized_recipe(source):
 
 
 def builder_recipe(source):
-    """builder_recipe compares every production builder instruction with the ownership baseline."""
+    """builder_recipe returns production builder instructions for strict baseline comparison."""
     marker = "FROM ${FFMPEG_IMAGE}"
     if source.count(marker) != 1:
         raise ValueError("expected one FFmpeg stage boundary")
@@ -267,20 +277,24 @@ class Qualification:
             raise RuntimeError("checkout differs from requested head")
         if self.run(["git", "status", "--porcelain", "--untracked-files=normal"], "source-status").strip():
             raise RuntimeError("qualification requires a clean exact-head checkout")
-        names = self.run(["git", "diff", "--name-only", OWNERSHIP, head], "production-diff").splitlines()
-        changed = [name for name in names if name in ("go.mod", "go.sum", "scripts/docker-entrypoint.sh")
+        self.run(["git", "merge-base", "--is-ancestor", PRODUCTION_BASELINE, head], "production-ancestry")
+        names = self.run(["git", "diff", "--no-renames", "--name-only", "-z", PRODUCTION_BASELINE, head],
+                         "production-diff").split("\0")
+        changed = [name for name in names if name in ("go.mod", "go.sum", ".dockerignore", "scripts/docker-entrypoint.sh",
+                                                    "model/dashboard_aggregate.sql")
                    or name.startswith("web/") or (name.endswith(".go") and not name.endswith("_test.go"))]
         if changed:
-            raise RuntimeError("production application changed since ownership control: "+repr(changed))
-        baseline = self.run(["git", "show", OWNERSHIP+":Dockerfile"], "builder-baseline")
+            raise RuntimeError("production application differs from approved baseline: "+repr(changed))
+        baseline = self.run(["git", "show", PRODUCTION_BASELINE+":Dockerfile"], "builder-baseline")
         if builder_recipe((self.repo/"Dockerfile").read_text()) != builder_recipe(baseline):
-            raise RuntimeError("production frontend or Go builder recipe changed since ownership control")
-        self.summary["checks"]["production_builder_recipe"] = "identical to ownership baseline"
+            raise RuntimeError("production frontend or Go builder recipe differs from approved baseline")
+        self.summary["checks"]["production_builder_recipe"] = "identical to approved production baseline"
+        self.summary["checks"]["production_baseline"] = PRODUCTION_BASELINE
         paths = self.run(["git", "ls-files", "-z"], "source-files").split("\0")
         save(self.evidence/"source-receipt.json", {"head": head,
              "tree": self.run(["git", "rev-parse", "HEAD^{tree}"], "source-tree").strip(),
              "files": {name: sha(self.repo/name) for name in paths if name and (self.repo/name).is_file()},
-             "production_changes_since_ownership": changed})
+             "production_baseline": PRODUCTION_BASELINE, "production_changes_since_baseline": changed})
         archive = self.work/"source.tar"
         self.run(["git", "archive", "--format=tar", "-o", str(archive), head], "source-archive")
         self.context = self.work/"source"
@@ -304,7 +318,7 @@ class Qualification:
         """inputs pins moving builder tags before building and records platform digests."""
         self.pins = {}
         for name, reference in (("FFMPEG_IMAGE", FFMPEG), ("RUNTIME_IMAGE", UBUNTU),
-                                ("NODE_IMAGE", "node:24-bookworm"), ("GO_IMAGE", "golang:1.27.2-bookworm")):
+                                ("NODE_IMAGE", "node:24-bookworm"), ("GO_IMAGE", "golang:"+GO_VERSION+"-bookworm")):
             self.run(["docker", "pull", "--platform", "linux/arm64", reference], "pull-"+name, 900)
             item = self.identity(reference, "inspect-"+name)
             pin = reference if "@sha256:" in reference else next(value for value in item["RepoDigests"]
@@ -357,6 +371,9 @@ class Qualification:
         if sha(artifact/"entrypoint.sh") != self.entrypoint_hash:
             raise RuntimeError("candidate entrypoint differs from unchanged source")
         self.app_hash = sha(artifact/"one-api")
+        metadata = self.run(["go", "version", "-m", str(artifact/"one-api")], "application-build-info")
+        assert_application_compiler(metadata)
+        self.summary["checks"]["application_go_version"] = GO_VERSION
         original = self.run(["git", "show", ORIGINAL+":Dockerfile"], "original-dockerfile")
         ownership = self.run(["git", "show", OWNERSHIP+":Dockerfile"], "ownership-dockerfile")
         if normalized_recipe(original) != normalized_recipe(ownership):

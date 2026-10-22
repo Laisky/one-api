@@ -111,3 +111,13 @@ caches. Resource exhaustion is a failed qualification, not a pass or a reason to
 delete unrelated runner data. ARM64 acceptance requires a completed native run;
 AMD64 results alone do not qualify it. This check does not replace normal hosted
 CodeQL acceptance when the stacked draft progresses through its approved base.
+
+
+The current native qualification pins production source and builder instructions
+to merged security baseline `d316af5675f1363ec8d06ed3e92c15ed0d9fa0a4` and uses
+Go 1.27.3 for both native tests and the application builder. Historical original
+and ownership runtime recipes remain immutable controls; each receives the same
+new application executable. Updating the approved production reference requires
+source review and fresh qualification. Receipts bind that reference separately
+from the historical runtime controls. Old compiler/image measurements retain
+their original provenance and do not qualify the rebuilt images.
