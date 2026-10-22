@@ -215,6 +215,7 @@ func main() {
 	server := gin.New()
 	server.RedirectTrailingSlash = false
 	middlewares := []gin.HandlerFunc{
+		middleware.RequestLifecycle(),
 		gin.Recovery(),
 	}
 

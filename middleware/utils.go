@@ -20,9 +20,10 @@ import (
 // AbortWithError aborts the request with an error message
 func AbortWithError(c *gin.Context, statusCode int, err error) {
 	logger := gmw.GetLogger(c)
+	plan := classifyAbortLog(c, statusCode, err)
 	fields := []zap.Field{
 		zap.Int("status_code", statusCode),
-		zap.String("error_kind", errkind.Of(err).String()),
+		zap.String("error_kind", plan.kind),
 	}
 	// Identity the bound logger does not already carry: late gin-context values
 	// and identity tagged onto the error deep in model/, where the entity struct
@@ -31,7 +32,7 @@ func AbortWithError(c *gin.Context, statusCode int, err error) {
 
 	// zap.Error is attached per branch, never to the shared slice: it renders the
 	// full errors/v2 stack, which must not appear on a WARN line.
-	if shouldLogAsWarning(statusCode, err) {
+	if plan.warning {
 		logger.Warn("server abort", append(fields, zap.String("error", errMessage(err)))...)
 	} else {
 		logger.Error("server abort", append(fields, zap.Error(err))...)
@@ -65,9 +66,10 @@ type TokenInfo struct {
 // for debugging purposes. The token information is safely masked to avoid exposing sensitive data.
 func AbortWithTokenError(c *gin.Context, statusCode int, err error, tokenInfo *TokenInfo) {
 	logger := gmw.GetLogger(c)
+	plan := classifyAbortLog(c, statusCode, err)
 	logFields := []zap.Field{
 		zap.Int("status_code", statusCode),
-		zap.String("error_kind", errkind.Of(err).String()),
+		zap.String("error_kind", plan.kind),
 	}
 
 	// Add token info fields if available. The refs carry uuid + name next to the
@@ -83,7 +85,7 @@ func AbortWithTokenError(c *gin.Context, statusCode int, err error, tokenInfo *T
 	logFields = append(logFields, identity.Fields(err)...)
 
 	// zap.Error only on the ERROR branch: it renders the full errors/v2 stack.
-	if shouldLogAsWarning(statusCode, err) {
+	if plan.warning {
 		logger.Warn("server abort", append(logFields, zap.String("error", errMessage(err)))...)
 	} else {
 		logger.Error("server abort", append(logFields, zap.Error(err))...)

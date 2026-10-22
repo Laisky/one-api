@@ -1,6 +1,6 @@
 # TypeSafe System One adaptor
 
-Research checked on **2026-09-18** against the official [API reference](https://docs.typesafe.ai/api), [model catalog](https://docs.typesafe.ai/models), and [advanced structures guide](https://docs.typesafe.ai/primitives/advanced), and **verified the same day against the live service** with a real provider key. Where the reference and the running service disagree, this adaptor follows the service and the difference is called out below.
+API behavior was researched on **2026-09-18** against the official [API reference](https://docs.typesafe.ai/api), [model catalog](https://docs.typesafe.ai/models), and [advanced structures guide](https://docs.typesafe.ai/primitives/advanced), and **verified that day against the live service** with a real provider key. The **model catalog was refreshed on 2026-10-20** against the official model reference. Jev 1.14 and the new alias targets are documentation-verified, not reverified with an authenticated provider key. Where the older reference and the live service disagreed, this adaptor followed the observed service behavior, as described below.
 
 ## Configure and call
 
@@ -56,15 +56,18 @@ Likewise, the service requires a noul question to carry *some* content — neith
 
 | Model | Role | Input USD / million tokens | Output price |
 | --- | --- | ---: | ---: |
-| `jev-1.13.0` | Pinned version | 0.042 | Free |
-| `jev-latest` | Mutable production alias | 0.042 | Free |
-| `jev-preview` | Mutable preview alias | 0.042 | Free |
+| `jev-1.13.0` | Pinned stable release | 0.042 | Free |
+| `jev-1.14.0` | Pinned newest release (2026-10-14) | 0.042 | Free |
+| `jev-latest` | Mutable stable alias → `jev-1.13.0` | 0.042 | Free |
+| `jev-preview` | Mutable preview alias → `jev-1.14.0` | 0.042 | Free |
 
-The aliases currently point to `jev-1.13.0`; they can change independently of this gateway release. The provider's own `GET /v1/models` lists **only the two aliases**, yet `jev-1.13.0` is accepted by the `model` field — verified live — so the catalog keeps it. Responses report the versioned ID that answered, which is why a request for `jev-latest` comes back as `"model": "jev-1.13.0"`.
+Per the [official model reference](https://docs.typesafe.ai/models) checked on 2026-10-20, **`jev-latest` still targets `jev-1.13.0`**, while **`jev-preview` targets the October 14 release `jev-1.14.0`**. Both aliases can change independently of a gateway deployment. TypeSafe's `GET /v1/models` currently lists only aliases; the versioned IDs are also documented as accepted even when absent from that response. Jev 1.13 was previously verified with the live provider; Jev 1.14 has not been probed with a provider key in this refresh. Responses can report the pinned version that actually answered.
 
 The documented price is **$42 per billion input tokens**, not $42 per million. The internal input ratio is `0.042 * ratio.MilliTokensUsd`; output usage is observable but never included in the native charge, even when a generic completion-ratio override is present. Group and input-price overrides still apply. Note that a channel model ratio of `0` means "not configured" to `pricing.ResolveModelRatioAt` and falls back to this catalog; a **group ratio** of `0` is the supported way to make a channel free. Unknown future models require an explicit verified flat input-price configuration.
 
-The provider documents **64k tokens for state plus all questions** and **32k for state plus the longest question**. The catalog records the former and describes the latter. Both are enforced by the provider, which returns `400 {"detail":{"error_type":"max_tokens_exceeded"}}`; the gateway does not pretend a generic OpenAI tokenizer is Jev's tokenizer. State is counted once no matter how many questions share it. Published rate limits are 250,000 tokens per second and 1,200 requests per minute. Images, audio and video are not supported modalities.
+The provider documents **64k tokens for state plus all questions** and **32k for state plus the longest question** by default. The catalog records the former and describes the latter. Both are enforced by the provider, which returns `400 {"detail":{"error_type":"max_tokens_exceeded"}}`; the gateway does not pretend a generic OpenAI tokenizer is Jev's tokenizer. State is counted once no matter how many questions share it. Provider rate limits are **per organization**, not universal; consult the TypeSafe developer console for current limits.
+
+TypeSafe also documents an optional **262k context** for both limits with the `TypeSafe-Danger-Zone-Long-Context: true` header, and **image assets / box questions** behind `TypeSafe-Danger-Zone-Images: true`. The current gateway does not forward either opt-in header, does not accept image `assets` or multipart bodies, and reserves only the standard context allowance. Therefore, this metadata advertises **text input and default 64k context only**; the upstream's optional long-context and image features are not claimed as gateway capabilities. Audio and video are not supported. See the [model reference](https://docs.typesafe.ai/models) and [images documentation](https://docs.typesafe.ai/images).
 
 ## Billing and failure behavior
 
