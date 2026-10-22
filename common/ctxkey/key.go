@@ -130,6 +130,9 @@ const (
 	// admitted for the current Claude Messages attempt. Set by Claude tool admission and added
 	// to the attempt's reservation so a missing upstream tool receipt is never read as free.
 	ClaudeToolAllowanceQuota = "claude_tool_allowance_quota"
+	// DeepSeekConservativeToolAllowance stores the admitted paid Search/Fetch
+	// attempt floors and per-call prices for the current, retry-isolated attempt.
+	DeepSeekConservativeToolAllowance = "deepseek_conservative_tool_allowance"
 
 	// Group is the user group resolved for the current user (affects routing & ratios).
 	// Set in: middleware/distributor (via model.CacheGetUserGroup).

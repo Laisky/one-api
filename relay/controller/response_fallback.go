@@ -154,6 +154,19 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	if err := tooling.ValidateResponseBuiltinToolsWithExclusions(responseAPIRequest, meta, channelRecord, requestAdaptor, mcpToolNames); err != nil {
 		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
+	// The original Responses declarations may be priced even if their Chat
+	// conversion omits hosted tool types.
+	responseToolRequests := tooling.CollectResponseBuiltins(responseAPIRequest)
+	for name := range mcpToolNames {
+		delete(responseToolRequests, name)
+	}
+	if len(responseToolRequests) > 0 {
+		quotes, quoteErr := tooling.BuiltinToolQuotes(gmw.Ctx(c), responseAPIRequest.Model, meta, channelRecord, requestAdaptor, responseToolRequests)
+		if quoteErr != nil {
+			return openai.ErrorWrapper(quoteErr, builtinToolAdmissionErrorCode(quoteErr), http.StatusBadRequest)
+		}
+		tooling.RecordConservativeDeepSeekTools(c, meta, quotes, nil)
+	}
 	if err := tooling.ValidateChatBuiltinTools(c, chatRequest, meta, channelRecord, requestAdaptor); err != nil {
 		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}

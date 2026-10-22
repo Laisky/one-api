@@ -13,6 +13,7 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/common/builtinname"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -32,7 +33,11 @@ func ValidateChatBuiltinTools(c *gin.Context, request *relaymodel.GeneralOpenAIR
 	}
 
 	modelName := resolveModelName(meta, request.Model)
-	return validateRequestedBuiltinsWithContext(gmw.Ctx(c), modelName, meta, channel, provider, requested)
+	quotes, err := BuiltinToolQuotes(gmw.Ctx(c), modelName, meta, channel, provider, requested)
+	if err == nil {
+		RecordConservativeDeepSeekTools(c, meta, quotes, nil)
+	}
+	return err
 }
 
 // PruneDisallowedResponseBuiltins removes built-in tools from the Response API request when the
@@ -101,6 +106,10 @@ func ApplyBuiltinToolCharges(c *gin.Context, usage **relaymodel.Usage, meta *met
 	}
 
 	counts := collectInvocationCounts(c)
+	conservativeEstimated := false
+	if deepseekcompat.UsesDeepSeekToolReceiptContract(meta) {
+		conservativeEstimated = conservativeDeepSeekCounts(c, counts)
+	}
 	if len(counts) == 0 {
 		return
 	}
@@ -139,9 +148,16 @@ func ApplyBuiltinToolCharges(c *gin.Context, usage **relaymodel.Usage, meta *met
 		}
 
 		perCall := policy.pricing[canonical]
-		cost := perCall * int64(count)
+		cost := SaturatingToolAllowance(perCall, int64(count))
 		if usagePtr := ensureUsage(); usagePtr != nil {
-			usagePtr.ToolsCost += cost
+			if cost > math.MaxInt64-usagePtr.ToolsCost {
+				usagePtr.ToolsCost = math.MaxInt64
+			} else {
+				usagePtr.ToolsCost += cost
+			}
+			if conservativeEstimated && usagePtr.BillingEstimateReason == "" {
+				usagePtr.BillingEstimateReason = "deepseek_conservative_tool_attempt_floor"
+			}
 			// Maintain TotalTokens when upstream omits it to align with previous behaviour.
 			if usagePtr.TotalTokens == 0 && (usagePtr.PromptTokens != 0 || usagePtr.CompletionTokens != 0) {
 				usagePtr.TotalTokens = usagePtr.PromptTokens + usagePtr.CompletionTokens
@@ -150,7 +166,11 @@ func ApplyBuiltinToolCharges(c *gin.Context, usage **relaymodel.Usage, meta *met
 		if cost != 0 {
 			logger.Debug("applied builtin tool cost", zap.String("tool", canonical), zap.Int("count", count), zap.Int64("quota_cost", cost))
 			summary.CostByTool[canonical] = cost
-			totalCost += cost
+			if cost > math.MaxInt64-totalCost {
+				totalCost = math.MaxInt64
+			} else {
+				totalCost += cost
+			}
 		}
 	}
 

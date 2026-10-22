@@ -135,7 +135,7 @@ func intFromAny(value any) int {
 // where that billing contract applies. DeepSeek items and usage extensions stay
 // on the wire but are not documented successful paid-tool receipts.
 func recordWebSearchInvocationCount(c *gin.Context, calls int) {
-	if c == nil || calls <= 0 || deepseekcompat.UsesDeepSeekToolReceiptContractFromContext(c) {
+	if c == nil || calls <= 0 {
 		return
 	}
 	c.Set(ctxkey.WebSearchCallCount, calls)

@@ -46,6 +46,7 @@ func resetClaudeToolAttemptState(c *gin.Context) {
 	c.Set(ctxkey.WebSearchCallCount, 0)
 	c.Set(ctxkey.ToolInvocationSummary, (*model.ToolUsageSummary)(nil))
 	c.Set(ctxkey.ClaudeToolAllowanceQuota, int64(0))
+	c.Set(ctxkey.DeepSeekConservativeToolAllowance, nil)
 }
 
 // admitClaudeMessagesTools applies the shared built-in tool policy to the raw
@@ -90,6 +91,7 @@ func admitClaudeMessagesTools(c *gin.Context, meta *metalib.Meta) *relaymodel.Er
 		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
 
+	tooling.RecordConservativeDeepSeekTools(c, meta, quotes, uses)
 	var allowance int64
 	for name, count := range uses {
 		allowance = saturatingQuotaAdd(allowance, tooling.SaturatingToolAllowance(quotes[name], count))
@@ -250,7 +252,7 @@ func saturatingQuotaAdd(a, b int64) int64 {
 // Claude reservation quote. Parameters: c carries the admission and quote is
 // the token-based reservation. Returns: the combined reservation quote.
 func withClaudeToolAllowance(c *gin.Context, quote int64) int64 {
-	return saturatingQuotaAdd(quote, c.GetInt64(ctxkey.ClaudeToolAllowanceQuota))
+	return saturatingQuotaAdd(quote, max(c.GetInt64(ctxkey.ClaudeToolAllowanceQuota), tooling.ConservativeDeepSeekToolQuota(c)))
 }
 
 // admitConvertedClaudeBuiltins re-applies the shared Chat or Responses
@@ -269,7 +271,12 @@ func admitConvertedClaudeBuiltins(c *gin.Context, meta *metalib.Meta, converted 
 	case *relaymodel.GeneralOpenAIRequest:
 		err = tooling.ValidateChatBuiltinTools(c, request, meta, claudeChannelRecord(c), provider)
 	case *openai.ResponseAPIRequest:
-		err = tooling.ValidateResponseBuiltinTools(request, meta, claudeChannelRecord(c), provider)
+		requested := tooling.CollectResponseBuiltins(request)
+		var quotes map[string]int64
+		quotes, err = tooling.BuiltinToolQuotes(gmw.Ctx(c), request.Model, meta, claudeChannelRecord(c), provider, requested)
+		if err == nil {
+			tooling.RecordConservativeDeepSeekTools(c, meta, quotes, nil)
+		}
 	}
 	if err != nil {
 		return openai.ErrorWrapper(errors.Wrap(err, "converted Claude request"), builtinToolAdmissionErrorCode(err), http.StatusBadRequest)

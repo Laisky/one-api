@@ -10,7 +10,6 @@ import (
 
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
-	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 )
@@ -103,8 +102,8 @@ func BuiltinToolQuotes(ctx context.Context, modelName string, meta *metalib.Meta
 		if !policy.isAllowed(canonical) {
 			return nil, errors.Errorf("tool %s is not allowed on this channel (model=%s); update the tooling whitelist or pricing", canonical, effectiveModel)
 		}
-		if (canonical == BuiltinWebSearch || canonical == BuiltinWebFetch) && policy.pricing[canonical] != 0 && deepseekcompat.UsesDeepSeekToolReceiptContract(meta) {
-			return nil, errors.Wrapf(ErrBuiltinToolBillingUnsupported, "DeepSeek %s has no supported billable tool receipt (model=%s)", canonical, effectiveModel)
+		if policy.pricing[canonical] < 0 {
+			return nil, errors.Errorf("tool %s has an invalid negative quota price (model=%s)", canonical, effectiveModel)
 		}
 		quotes[canonical] = policy.pricing[canonical]
 	}

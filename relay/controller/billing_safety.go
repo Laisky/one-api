@@ -278,6 +278,7 @@ func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 	c.Set(ctxkey.ToolInvocationCounts, map[string]int{})
 	c.Set(ctxkey.WebSearchCallCount, 0)
 	c.Set(ctxkey.ToolInvocationSummary, (*model.ToolUsageSummary)(nil))
+	c.Set(ctxkey.DeepSeekConservativeToolAllowance, nil)
 }
 
 // refundGoroutineReleaseForTest, when non-nil, blocks the asynchronous refund

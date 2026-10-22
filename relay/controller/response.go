@@ -145,9 +145,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 		lg.Debug("pruned disallowed response builtins", zap.Strings("tools", pruned), zap.String("model", responseAPIRequest.Model))
 	}
-	if err := tooling.ValidateRequestedBuiltins(responseAPIRequest.Model, meta, channelRecord, requestAdaptor, requestedBuiltins); err != nil {
+	quotes, err := tooling.BuiltinToolQuotes(gmw.Ctx(c), responseAPIRequest.Model, meta, channelRecord, requestAdaptor, requestedBuiltins)
+	if err != nil {
 		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
+	tooling.RecordConservativeDeepSeekTools(c, meta, quotes, nil)
 	// Validate every surviving tool, including types unknown to the builtin
 	// registry, before reserving quota. The wire boundary repeats this check.
 	if err := validateNativeResponseToolBilling(responseAPIRequest.Tools); err != nil {

@@ -13,7 +13,6 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/common/builtinname"
-	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 )
 
 // serverToolTally accumulates provider-executed tool invocations for one
@@ -172,9 +171,7 @@ func RecordServerToolInvocations(c *gin.Context, counts map[string]int) {
 		if count <= 0 || canonical == "" {
 			continue
 		}
-		if (canonical == "web_search" || canonical == "web_fetch") && deepseekcompat.UsesDeepSeekToolReceiptContractFromContext(c) {
-			continue
-		}
+
 		// Keep published raw identities for unrelated providers: billing's
 		// existing merge path already canonicalizes and adds these counts.
 		merged[name] += count

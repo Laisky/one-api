@@ -19,6 +19,7 @@ import (
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
+	"github.com/Laisky/one-api/relay/tooling"
 	quotautil "github.com/Laisky/one-api/relay/quota"
 )
 
@@ -48,10 +49,10 @@ func preConsumeResponseAPIQuota(
 		return 0, openai.ErrorWrapper(tierErr, "invalid_response_tier_quote", http.StatusBadRequest)
 	}
 	if tiered {
-		return reservePaidRequestQuota(c, meta, tierQuote, "response_api_preconsume")
+		return reservePaidRequestQuota(c, meta, saturatingQuotaAdd(tierQuote, tooling.ConservativeDeepSeekToolQuota(c)), "response_api_preconsume")
 	}
 	ctx := gmw.Ctx(c)
-	baseQuota := calculateResponseAPIPreconsumeQuota(promptTokens, responseAPIRequest.MaxOutputTokens, inputRatio, outputRatio, background)
+	baseQuota := saturatingQuotaAdd(calculateResponseAPIPreconsumeQuota(promptTokens, responseAPIRequest.MaxOutputTokens, inputRatio, outputRatio, background), tooling.ConservativeDeepSeekToolQuota(c))
 	// This reservation prices tokens itself, so validate catalog media contracts
 	// here too: unresolved tariffs and per-generation models fail before dispatch.
 	if _, tariffErr := mediaTariffAdmission(c, meta, baseQuota, "response_api_preconsume"); tariffErr != nil {
