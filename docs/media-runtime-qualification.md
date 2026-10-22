@@ -110,7 +110,7 @@ runtime containers, and always uploads compact evidence without images or build
 caches. Resource exhaustion is a failed qualification, not a pass or a reason to
 delete unrelated runner data. ARM64 acceptance requires a completed native run;
 AMD64 results alone do not qualify it. This check does not replace normal hosted
-CodeQL acceptance when the stacked draft progresses through its approved base.
+CodeQL acceptance.
 
 
 The current native qualification pins production source and builder instructions
@@ -121,3 +121,33 @@ new application executable. Updating the approved production reference requires
 source review and fresh qualification. Receipts bind that reference separately
 from the historical runtime controls. Old compiler/image measurements retain
 their original provenance and do not qualify the rebuilt images.
+
+## Manual native AMD64 qualification
+
+Dispatch the existing CI workflow with the boolean input
+`native_amd64_images` set to true to select `native_amd64_images` on
+`ubuntu-24.04`. Its default is false. Push, pull request, merge group, and media
+path changes do not automatically select this AMD64 job. The ARM64 job keeps its
+existing change selection and separate manual input.
+
+The AMD64 job invokes `scripts/qualify_native_arm64.py --architecture amd64`
+against the exact selected source head. It uses native Docker and Go 1.27.3,
+checks actual AMD64 image and ELF identities, and runs the same full production
+build, historical runtime controls, default/custom UID tests, media/billing/
+cancellation comparisons, retained-file checks, and isolated TLS fixtures.
+No images are published. Its read-only workflow permissions, disabled checkout
+credentials and Go action cache, 120-minute deadline, and resource floors match
+the ARM64 safeguards. Always-uploaded compact receipts use
+`native-amd64-images-<head>` and `native-amd64-evidence`, separately from ARM64.
+
+`CI required` requires success from the AMD64 job only when the manual AMD64
+input is true. A selected failure, cancellation, skip, or missing result fails
+the gate. This input neither selects full database/browser qualification nor
+changes ARM64 selection.
+
+Historical ARM64 evidence remains bound to its recorded source head, toolchain,
+input digests, and image IDs. The earlier successful Go 1.27.2 run at
+`dfd8ff0131a2b1fc284c9b7b926f9337e4013664` does not qualify the current Go 1.27.3
+security baseline. Reuse those receipts as historical evidence only; changes to
+production source, dependencies, compiler, or runtime packaging require fresh
+qualification for each architecture. An AMD64 pass cannot supply ARM64 acceptance.

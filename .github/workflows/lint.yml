@@ -17,6 +17,10 @@ on:
         description: Qualify native ARM64 runtime images without publishing
         type: boolean
         default: false
+      native_amd64_images:
+        description: Qualify native AMD64 runtime images without publishing
+        type: boolean
+        default: false
       historical_control:
         description: Replay the historical Realtime bug (current-code regressions always run)
         type: boolean
@@ -147,6 +151,41 @@ jobs:
         with:
           name: native-arm64-images-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/native-arm64-evidence
+          if-no-files-found: warn
+          retention-days: 14
+
+  # AMD64 image qualification runs only on an explicit manual request.
+  native_amd64_images:
+    name: Native AMD64 image qualification
+    needs: changes
+    if: github.event.repository.private == false && github.event_name == 'workflow_dispatch' && inputs.native_amd64_images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout exact qualification source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup native Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Build and qualify native runtime images
+        env:
+          QUALIFICATION_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          GOMAXPROCS: '2'
+          GOFLAGS: '-p=2'
+        run: |
+          python3 scripts/qualify_native_arm64.py --architecture amd64 --evidence "$RUNNER_TEMP/native-amd64-evidence" --expected-head "$QUALIFICATION_HEAD"
+      - name: Archive bounded qualification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-amd64-images-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/native-amd64-evidence
           if-no-files-found: warn
           retention-days: 14
 
@@ -689,12 +728,14 @@ jobs:
       - berry_frontend_tests
       - historical_control
       - native_arm64_images
+      - native_amd64_images
     steps:
       - name: Require all applicable checks to pass
         env:
           NEEDS: ${{ toJSON(needs) }}
           MANUAL_RUN: ${{ github.event_name == 'workflow_dispatch' }}
           NATIVE_ARM64_IMAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.native_arm64_images }}
+          NATIVE_AMD64_IMAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.native_amd64_images }}
           HISTORICAL_CONTROL: ${{ github.event_name == 'workflow_dispatch' && inputs.historical_control }}
           QUALIFICATION: ${{ github.event_name == 'workflow_dispatch' && inputs.qualification }}
         run: |
@@ -718,6 +759,8 @@ jobs:
               raise SystemExit('Missing or invalid media runtime change detection')
           if media_runtime == 'true' or os.environ['NATIVE_ARM64_IMAGES'] == 'true':
               required.add('native_arm64_images')
+          if manual and os.environ['NATIVE_AMD64_IMAGES'] == 'true':
+              required.add('native_amd64_images')
           if os.environ['QUALIFICATION'] == 'true':
               required.add('go_tests')
               required.update(f'{theme}_frontend_tests' for theme in ('modern', 'air', 'berry'))
