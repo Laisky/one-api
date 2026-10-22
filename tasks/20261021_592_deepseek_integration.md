@@ -4,6 +4,8 @@ Date: 2026-10-21 UTC. Original task: **20261016-2010**. Implementation lane: **2
 
 Tracking: [issue #592](https://github.com/Laisky/one-api/issues/592), [PR #589](https://github.com/Laisky/one-api/pull/589). The requested PR #582 is already merged; #592 identifies #589 as the remaining integration and release handoff. This record extends the delivered containment rather than recreating #582 or the HTTP implementation.
 
+Latest checkpoint: [2026-10-22 continuation](#2026-10-22-continuation) integrates the security fixes already merged into current main and records fresh qualification. Earlier compiler floors, source identities, and results below remain historical evidence.
+
 ## Initial source identity
 
 | Checkpoint | Identity |
@@ -162,7 +164,7 @@ The security follow-up is commit **`df12fdf25cbda7b0be4341d5cd66f0ab38d8f3d7`**,
 
 ### Final local qualification on the patched compiler
 
-All runs used Go 1.27.3 explicitly, `GOTOOLCHAIN=local`, and fresh `-count=1` execution. The new compiler justified repeating the affected and current-main controls; the original Go 1.27.2 receipts above retain their actual provenance.
+All final Go test runs used Go 1.27.3 explicitly, `GOTOOLCHAIN=local`, and fresh `-count=1` execution. The deliberate X.509 RED reproduction used Go 1.27.2. The non-test gates below used the patched toolchain where applicable and do not use `-count=1`. The new compiler justified repeating the affected and current-main controls; the original Go 1.27.2 receipts above retain their actual provenance.
 
 | Scope | Result |
 | --- | --- |
@@ -188,6 +190,9 @@ go test -race -p 2 -json -count=1 -timeout 10m \
   -run '^(TestToolchainX509CertificateTrust|TestPasskeyStrictOutResponses)$' ./controller
 govulncheck ./...
 python3 .github/scripts/test_workflows.py
+go vet ./...
+make lint-entity-response
+make test-quick
 ```
 
 | Patched-compiler evidence | SHA256 |
@@ -229,3 +234,91 @@ These are observed workflow receipts, not a new live-host verification or regist
 This work updates the existing PR branch only. Merging to `main` invokes the repository's automatic image publication and production deployment, so the explicit merge/release approval boundary in #589/#592 remains in effect. A separately authorized release must verify immutable source/image identity, architecture publication, service health, public application/config/assets, and unchanged unrelated services before closing the handoff.
 
 Source rollback requires no migration or price/configuration rollback and does not reverse historical charges. Reverting the new follow-up restores both the WebSocket admission gap and model-rewrite precision loss. Reverting the compiler to Go 1.27.2 also restores the known certificate-trust issue; retain that tradeoff in any rollback decision and keep a patched compiler when rebuilding older application source where possible.
+
+## 2026-10-22 continuation
+
+### Integration and source identity
+
+The continuation found that current main had already delivered the pending frontend fixes through [#591](https://github.com/Laisky/one-api/pull/591), and the required Go 1.27.3 compiler floor through [#593](https://github.com/Laisky/one-api/pull/593). Reuse those changes instead of reconstructing the previous unfinished dependency patch.
+
+| Checkpoint | Identity |
+| --- | --- |
+| Previous PR head | `490e8a7e44c1b96bc9dbad2f98de3f1484259752` |
+| Main integrated in this continuation | `d316af5675f1363ec8d06ed3e92c15ed0d9fa0a4` |
+| Tested local integration commit | `270edcbf98c687ebae45fc7a56a04275633ab292` |
+| Corresponding GitHub integration commit | `15d055fd324ec1855698cd632464cb77dc7e75f0` |
+| Identical local/GitHub integration tree | `2fdf8c42aa647d8d58cbef38679871e88427d595` |
+
+The integration retains main's `go 1.27.3` floor and resolves the two overlapping compiler-policy files to main's exact contents. It removes the now-redundant preferred-toolchain directive. All application Go files and `go.sum` remain unchanged from the previous PR head. All 2,572 tracked Go/module hashes remained identical before and after fresh qualification.
+
+The entire `web/` tree, both retained dependency regression scripts, validation workflow, workflow-contract tests, Dockerfile, module inputs, and CI guidance match current main byte for byte. Vite is 8.3.3 and Axios remains 1.20.0 in all three frozen installations; their actual Axios resolution uses follow-redirects 1.16.1. Air retains Rolldown 1.2.12, while Berry and Modern retain main's 1.2.14. No lockfile was regenerated, no dependency range was broadened, and no new CI job or acceptance exemption was added.
+
+The publication record in the PR and issue identifies the later documentation-only head. Its application/configuration tree is the qualified integration tree above; this file is the only subsequent local modification.
+
+### Fresh backend acceptance
+
+Execution used checksum-verified Go **1.27.3 linux/amd64**, `GOTOOLCHAIN=local`, `GOMAXPROCS=4`, and `-p 2`. The official compiler archive SHA256 was `65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40` (70,588,678 bytes). The final command block above was executed again against the integrated source, together with the formatter contract tests.
+
+| Check | Fresh result |
+| --- | --- |
+| Seven affected/current-main packages, `-race -count=1` | **21,329 passing events**, seven packages, zero failures; 342.842 seconds |
+| Event accounting | **1,706 top-level + 19,623 subtest** pass events |
+| WebSocket child behavior suite | **22/22 passed**, visible separately in child output |
+| Certificate trust and existing passkey-response race selection | **Four passing events**, zero failures/skips |
+| `go vet ./...` | Pass; no diagnostics |
+| `make lint-entity-response` | Pass; no findings |
+| `make test-quick` | Pass; **all 17** selected essential top-level tests executed |
+| `govulncheck ./...`, v1.9.0 | Exit 0; **zero reachable and zero imported-package findings** |
+| Workflow contracts | **19 passed**, one existing disposable-Docker-build opt-in skip |
+| Quick-runner and formatter contracts | **8/8** and **3/3** passed |
+
+The same ten existing race-suite opt-ins skipped: two live DeepSeek tests and eight MySQL/PostgreSQL subcases. Neither paid-provider opt-ins nor external database DSNs were supplied. The scanner retains one informational required-module finding that the application does not appear to call. Full repository/database race coverage and complete passkey registration-ceremony coverage remain outside this result.
+
+### Fresh frontend acceptance
+
+Node **24.19.0** and Yarn **1.22.22** performed clean frozen installs and ran the existing complete audit wrapper unchanged. The audit included every severity and did not select only production dependencies.
+
+| Theme | Frozen install | Complete audit | Actual Axios redirect cases | Synthetic-file Vite cases |
+| --- | --- | --- | --- | --- |
+| Air | Pass | **650** dependency entries, zero findings | **6/6** | **4/4** |
+| Berry | Pass | **440** dependency entries, zero findings | **6/6** | **4/4** |
+| Modern | Pass | **680** dependency entries, zero findings | **6/6** | **4/4** |
+
+The **18** redirect cases resolve follow-redirects through each theme's actual installed Axios. They cover credential retention on same-origin redirects, stripping on cross-origin redirects, custom sensitive-header metacharacters, and Axios GET/POST-307 method/body compatibility. The **12** Vite cases use owned temporary synthetic files and loopback servers to check allowed JavaScript/Wasm, ordinary denied files, and denied-file Wasm transforms. The existing audit-validator controls pass **16/16**, and non-browser release-input contracts pass **7/7**, with no failures or skips.
+
+Repeat this bounded acceptance after a frozen install in each theme:
+
+```sh
+for theme in air berry modern; do
+  (cd "web/$theme" && yarn install --frozen-lockfile --network-timeout 600000 --non-interactive)
+  FRONTEND_THEME="$theme" node --test .github/scripts/follow-redirects-security.test.cjs
+  FRONTEND_THEME="$theme" node --test .github/scripts/vite-filesystem-security.test.mjs
+  node .github/scripts/frontend-audit.mjs "$theme"
+done
+node --test .github/scripts/frontend-audit.test.mjs
+node --test .github/scripts/browser-release-inputs.test.mjs
+node .github/scripts/browser-release-inputs.mjs check
+```
+
+The previous frontend blocker is resolved by the merged patches and these fresh installed-dependency checks. The complete frontend sources are identical to main, whose [CI 39701679265](https://github.com/Laisky/one-api/actions/runs/39701679265) passed and whose [#591 qualification record](https://github.com/Laisky/one-api/pull/591) reports all three theme tests/builds. Those builds are historical main evidence, not newly executed #589 builds. Repeating broad builds was unnecessary for unchanged frontend bytes. The prior automatic-review restriction on editor-launch reproduction and browser acceptance was not retried or bypassed; neither operation is included in this continuation's acceptance.
+
+Initial missing-formatter and default-sandbox Node contract failures were environmental, not behavioral RED evidence. The same formatter and seven Node contracts passed with the verified toolchain and ordinary approved execution. Berry's frozen install completed after transient network retries. No assertions or checks were weakened.
+
+### Review and evidence
+
+Independent backend review found no additional confirmed implementation blocker. The two actionable documentation threads were corrected: the patched-compiler statement now applies specifically to final Go test runs, and the final repeatable command block includes vet, the entity-response guard, and the quick gate. This continuation introduces no new application defect claim, so the earlier deliberate RED reproductions and their passing controls retain their original provenance; the fixed-source regressions were freshly re-executed.
+
+| Fresh evidence | SHA256 |
+| --- | --- |
+| Seven-package race JSON | `39e9d3af4b4919fe163304576abb52d4636e8fcc175d76a04f88263825030c24` |
+| Certificate/passkey race JSON | `b8e93ce41285adb0d5c71a1f9391b33553d3495daa6b856ec53a18259b0c4253` |
+| Vet log, empty on success | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| Entity-response guard log | `6b56d01fdd2f80bc242fe6f85324613c2d3e88b7517d8da5cdae87424002c359` |
+| Quick-gate log | `3fba7b22d97a4764256394bb248fc17f683e52406ba452f5cf4b9e3dd968ae87` |
+| Vulnerability scan log | `b5ae54ddcfa4cb39e85f84ad2d9e43556bd817c480eaab2a71bab63bfc29353b` |
+| Air complete audit JSONL | `923a8088cf7b12c691dd2496aa023ab4b28735d0a0a34c347f3272195f437314` |
+| Berry complete audit JSONL | `567e70b811f7a1d99d49bad7262adb25437be5cf384fefdfff06461a7c1cba2c` |
+| Modern complete audit JSONL | `c4402c2d86b7db3d746ace33f36de65c32672c7298e575519498b6037e4f3092` |
+| Frontend acceptance summary | `51c0800bc7fcc2bc3ee759b8fd3bc71ddb876c6111563e6afffeb57e2cf51ee1` |
+
+Fresh remote checks must be assessed on the final published head and recorded in #589/#592. Earlier failed checks remain historical evidence, and main's successful checks do not substitute for the PR's new-head acceptance. No production deployment or new live-host verification occurred. The separately authorized merge/release and served-candidate boundary remains unchanged.
