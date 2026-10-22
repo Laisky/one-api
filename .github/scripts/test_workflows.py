@@ -83,8 +83,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.ci["concurrency"]["cancel-in-progress"], "true")
         self.assertEqual(self.ci["on"]["workflow_dispatch"]["inputs"]["historical_control"]["default"], "false")
 
-    def test_go_validation_uses_patched_compiler_independently_of_module_floor(self) -> None:
-        """test_go_validation_uses_patched_compiler_independently_of_module_floor pins every Go job."""
+    def test_go_validation_uses_security_baseline(self) -> None:
+        """test_go_validation_uses_security_baseline pins CI, module and image compilers."""
         expected = {"quick_tests", "go_test_shards", "entity_response_guard",
                     "vulnerability_scan", "historical_control", "native_arm64_images"}
         setups = {
@@ -95,10 +95,12 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual({name for name, steps in setups.items() if steps}, expected)
         for name in expected:
             self.assertEqual(len(setups[name]), 1, name)
-            wanted = {"go-version": "1.27.2"}
+            wanted = {"go-version": "1.27.3"}
             if name == "native_arm64_images":
                 wanted["cache"] = "false"
             self.assertEqual(setups[name][0]["with"], wanted, name)
+        self.assertRegex((ROOT / "go.mod").read_text(), r"(?m)^go 1\.27\.3$")
+        self.assertIn("ARG GO_IMAGE=golang:1.27.3-bookworm", (ROOT / "Dockerfile").read_text())
 
     def test_go_shards_preserve_fresh_race_coverage_and_complete_inventory(self) -> None:
         """test_go_shards_preserve_fresh_race_coverage_and_complete_inventory protects selection."""
