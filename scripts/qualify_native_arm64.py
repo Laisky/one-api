@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded actual-image ARM64 qualification; only compact receipts enter evidence."""
+"""Bounded actual-image native qualification; only compact receipts enter evidence."""
 import argparse
 import hashlib
 import json
@@ -61,15 +61,39 @@ def elf_machine(header):
     return int.from_bytes(header[18:20], "little" if header[5] == 1 else "big")
 
 
-def assert_native(machine, docker_arch, go):
-    """assert_native refuses foreign hosts, Docker daemons and Go compilers."""
-    if machine.lower() not in ("aarch64", "arm64") or docker_arch.lower() not in ("aarch64", "arm64"):
-        raise RuntimeError("native ARM64 host and Docker server required")
-    expected = {"GOARCH": "arm64", "GOHOSTARCH": "arm64", "GOOS": "linux",
+def architecture_profile(architecture):
+    """architecture_profile returns strict native identity controls for one explicit target."""
+    profiles = {
+        "arm64": {"aliases": ("aarch64", "arm64"), "machine": 183, "loader": "ld-linux-aarch64.so.1"},
+        "amd64": {"aliases": ("x86_64", "amd64"), "machine": 62, "loader": "ld-linux-x86-64.so.2"},
+    }
+    if architecture not in profiles:
+        raise ValueError("architecture must be explicitly arm64 or amd64")
+    return profiles[architecture]
+
+
+def assert_native(machine, docker_arch, go, architecture="arm64"):
+    """assert_native refuses foreign hosts, Docker daemons and Go compilers for the selected target."""
+    profile = architecture_profile(architecture)
+    if machine.lower() not in profile["aliases"] or docker_arch.lower() not in profile["aliases"]:
+        raise RuntimeError("native "+architecture+" host and Docker server required")
+    expected = {"GOARCH": architecture, "GOHOSTARCH": architecture, "GOOS": "linux",
                 "GOHOSTOS": "linux", "GOVERSION": "go"+GO_VERSION}
     if any(go.get(key) != value for key, value in expected.items()):
-        raise RuntimeError("native Linux ARM64 Go "+GO_VERSION+" required")
+        raise RuntimeError("native Linux "+architecture+" Go "+GO_VERSION+" required")
 
+
+def assert_native_elf(header, architecture):
+    """assert_native_elf independently binds actual ELF bytes to the explicit native target."""
+    if elf_machine(header) != architecture_profile(architecture)["machine"]:
+        raise RuntimeError("actual ELF machine is not "+architecture)
+
+
+def assert_manifest_architecture(manifest, architecture):
+    """assert_manifest_architecture binds donor metadata and private loader to the native target."""
+    profile = architecture_profile(architecture)
+    if manifest.get("machine") != profile["machine"] or manifest.get("loader") != profile["loader"]:
+        raise RuntimeError("collector machine or loader does not match "+architecture)
 
 
 def assert_application_compiler(metadata):
@@ -134,18 +158,22 @@ class Qualification:
     def __init__(self, args):
         """__init__ separates executable scratch from uploadable evidence."""
         self.args, self.repo = args, Path(__file__).resolve().parents[1]
+        self.architecture = getattr(args, "architecture", "arm64")
+        self.profile = architecture_profile(self.architecture)
+        self.platform = "linux/"+self.architecture
         self.evidence = args.evidence.resolve()
         self.evidence.mkdir(parents=True, exist_ok=True)
         if any(self.evidence.iterdir()):
             raise ValueError("evidence must initially be empty")
-        self.work = Path(tempfile.mkdtemp(prefix="oneapi-native-arm64-"))
+        self.work = Path(tempfile.mkdtemp(prefix="oneapi-native-"+self.architecture+"-"))
         self.token, self.started = uuid.uuid4().hex[:12], time.monotonic()
         self.docker, self.disks = shutil.which("docker"), [self.work, self.evidence]
         self.containers_enabled = False
         self.env = dict(os.environ, GOMAXPROCS="2", GOFLAGS="-p=2", TMPDIR=str(self.work),
                         GOCACHE=str(self.work/"go-cache"), GOMODCACHE=str(self.work/"go-modules"))
         self.summary = {"state": "incomplete", "owner": self.token, "scratch": str(self.work),
-                        "commands": [], "images": {}, "checks": {}}
+                        "commands": [], "images": {}, "checks": {}, "architecture": self.architecture,
+                        "platform": self.platform, "expected_elf_machine": self.profile["machine"]}
         self.flush()
 
     def flush(self):
@@ -241,14 +269,14 @@ class Qualification:
 
     def setup(self):
         """setup rejects emulated hosts and scopes descendant Docker container ownership."""
-        if platform.system() != "Linux" or platform.machine().lower() not in ("arm64", "aarch64"):
-            raise RuntimeError("native Linux ARM64 host required; refusing to build")
+        if platform.system() != "Linux" or platform.machine().lower() not in self.profile["aliases"]:
+            raise RuntimeError("native Linux "+self.architecture+" host required; refusing to build")
         if not self.docker:
             raise RuntimeError("Docker CLI unavailable")
         info = json.loads(self.run([self.docker, "info", "--format", "{{json .}}"], "docker-info"))
         go = json.loads(self.run(["go", "env", "-json", "GOARCH", "GOHOSTARCH", "GOOS",
                                  "GOHOSTOS", "GOVERSION"], "native-go"))
-        assert_native(platform.machine(), info["Architecture"], go)
+        assert_native(platform.machine(), info["Architecture"], go, self.architecture)
         self.disks.append(Path(info["DockerRootDir"]))
         self.summary["initial_resources"] = self.resources()
         self.summary["host"] = {"machine": platform.machine(), "docker_arch": info["Architecture"],
@@ -307,8 +335,8 @@ class Qualification:
     def identity(self, image, name):
         """identity independently verifies actual image architecture and records bytes."""
         item = json.loads(self.run(["docker", "image", "inspect", image], name))[0]
-        if (item["Os"], item["Architecture"]) != ("linux", "arm64"):
-            raise RuntimeError("actual image is not linux/arm64: "+image)
+        if (item["Os"], item["Architecture"]) != ("linux", self.architecture):
+            raise RuntimeError("actual image is not "+self.platform+": "+image)
         self.summary["images"][image] = {key: item.get(key) for key in
                                         ("Id", "Size", "Os", "Architecture", "RepoDigests")}
         self.flush()
@@ -319,7 +347,7 @@ class Qualification:
         self.pins = {}
         for name, reference in (("FFMPEG_IMAGE", FFMPEG), ("RUNTIME_IMAGE", UBUNTU),
                                 ("NODE_IMAGE", "node:24-bookworm"), ("GO_IMAGE", "golang:"+GO_VERSION+"-bookworm")):
-            self.run(["docker", "pull", "--platform", "linux/arm64", reference], "pull-"+name, 900)
+            self.run(["docker", "pull", "--platform", self.platform, reference], "pull-"+name, 900)
             item = self.identity(reference, "inspect-"+name)
             pin = reference if "@sha256:" in reference else next(value for value in item["RepoDigests"]
                                                                if "@sha256:" in value)
@@ -327,17 +355,17 @@ class Qualification:
             raw = json.loads(self.run(["docker", "buildx", "imagetools", "inspect", "--raw", pin],
                                       "manifest-"+name))
             matches = [value for value in raw.get("manifests", []) if value.get("platform", {}).get("os") == "linux"
-                       and value["platform"].get("architecture") == "arm64"]
+                       and value["platform"].get("architecture") == self.architecture]
             if "manifests" in raw and len(matches) != 1:
-                raise RuntimeError("input does not uniquely resolve Linux ARM64")
+                raise RuntimeError("input does not uniquely resolve "+self.platform)
             self.summary.setdefault("inputs", {})[name] = {"pin": pin, "image_id": item["Id"], "size": item["Size"],
                 "platform_digest": matches[0]["digest"] if matches else pin.split("@")[-1]}
         self.flush()
 
     def build(self, name, context, custom=False):
         """build uses the default native builder and loads only owned local tags."""
-        tag = f"oneapi-native-{self.token}:{name}"
-        argv = ["docker", "buildx", "build", "--builder", "default", "--platform", "linux/arm64",
+        tag = f"oneapi-native-{self.architecture}-{self.token}:{name}"
+        argv = ["docker", "buildx", "build", "--builder", "default", "--platform", self.platform,
                 "--load", "--label", "oneapi.native.owner="+self.token, "-t", tag]
         for key, value in self.pins.items():
             argv += ["--build-arg", key+"="+value]
@@ -366,8 +394,7 @@ class Qualification:
         artifact.mkdir()
         self.extract(media, {"/one-api": "one-api", "/usr/local/bin/docker-entrypoint.sh": "entrypoint.sh"}, artifact)
         with (artifact/"one-api").open("rb") as source:
-            if elf_machine(source.read(20)) != 183:
-                raise RuntimeError("actual application ELF machine is not ARM64")
+            assert_native_elf(source.read(20), self.architecture)
         if sha(artifact/"entrypoint.sh") != self.entrypoint_hash:
             raise RuntimeError("candidate entrypoint differs from unchanged source")
         self.app_hash = sha(artifact/"one-api")
@@ -427,8 +454,7 @@ class Qualification:
             raise RuntimeError("actual image app or entrypoint bytes differ")
         if lines[2] != ("12001:12002 755" if custom else "10001:10001 755"):
             raise RuntimeError("actual app ownership/mode differs")
-        if elf_machine(bytes.fromhex("".join(lines[3:]))) != 183:
-            raise RuntimeError("actual image app ELF machine is not ARM64")
+        assert_native_elf(bytes.fromhex("".join(lines[3:])), self.architecture)
         env = dict(self.env, ONEAPI_RUNTIME_TEST_IMAGE=image, ONEAPI_RUNTIME_TIKTOKEN_CACHE=str(cache),
                    ONEAPI_RUNTIME_TEST_UID="12001" if custom else "10001",
                    ONEAPI_RUNTIME_TEST_GID="12002" if custom else "10001")
@@ -479,11 +505,12 @@ class Qualification:
                 self.copy_reports(root)
 
     def integrity(self, image):
-        """integrity verifies complete retained hashes, ARM64 ELF bytes and pinned donor tools."""
+        """integrity verifies complete retained hashes, native ELF bytes and pinned donor tools."""
         root = self.work/"integrity"
         root.mkdir()
         self.extract(image, {"/opt/oneapi-media/manifest.json": "manifest.json"}, root)
         manifest = json.loads((root/"manifest.json").read_text())
+        assert_manifest_architecture(manifest, self.architecture)
         records = runtime_records(manifest)
         for offset in range(0, len(records), 80):
             batch = records[offset:offset+80]
@@ -496,10 +523,10 @@ class Qualification:
             batch = elfs[offset:offset+80]
             command = "for f in "+" ".join(item["destination"] for item in batch)+"; do "
             command += """printf '%s ' "$f"; od -An -v -t x1 -N20 "$f" | tr -d ' \n'; printf '\n'; done"""
-            output = self.shell(image, command, "retained-elf-arm64")
+            output = self.shell(image, command, "retained-elf-"+self.architecture)
             actual = {line.split()[0]: elf_machine(bytes.fromhex(line.split()[1])) for line in output.splitlines()}
-            if set(actual) != {item["destination"] for item in batch} or any(value != 183 for value in actual.values()):
-                raise RuntimeError("retained ELF closure is not independently ARM64")
+            if set(actual) != {item["destination"] for item in batch} or any(value != self.profile["machine"] for value in actual.values()):
+                raise RuntimeError("retained ELF closure is not independently "+self.architecture)
         loader = manifest["loader"]
         if not re.fullmatch(r"[A-Za-z0-9_.+-]+", loader):
             raise RuntimeError("invalid private loader basename")
@@ -520,12 +547,12 @@ class Qualification:
                         if value["destination"] == "/opt/oneapi-media/bin/"+name)
             with (donor/name).open("rb") as source:
                 machine = elf_machine(source.read(20))
-            if machine != 183 or sha(donor/name) != item["sha256"]:
+            if machine != self.profile["machine"] or sha(donor/name) != item["sha256"]:
                 raise RuntimeError("retained tool differs from pinned native donor")
             tools[name] = {"sha256": item["sha256"], "machine": machine}
         save(self.evidence/"retained-manifest.json", manifest)
         save(self.evidence/"retained-verification.json", {"state": "passed", "elf_count": len(elfs),
-             "file_count": len(records), "expected_machine": 183, "donor": tools,
+             "file_count": len(records), "expected_machine": self.profile["machine"], "donor": tools,
              "private_loader": loader, "nss_config_match": True})
 
     def cleanup(self):
@@ -551,6 +578,7 @@ def main():
     parser.add_argument("--evidence", required=True, type=Path)
     parser.add_argument("--expected-head", required=True)
     parser.add_argument("--timeout", type=int, default=6600)
+    parser.add_argument("--architecture", choices=("arm64", "amd64"), default="arm64")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-f]{40}", args.expected_head) or not 300 <= args.timeout <= 10800:
         parser.error("expected-head must be a full SHA; timeout must be 300..10800 seconds")

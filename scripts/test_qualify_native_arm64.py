@@ -160,7 +160,7 @@ class NativeQualificationTests(unittest.TestCase):
                                               "digest": "sha256:"+"a"*64}]})
         fake = types.SimpleNamespace(run=run, identity=lambda reference, _name: {
             "Id": "sha256:"+"b"*64, "Size": 1, "RepoDigests": [reference.split(":")[0]+"@sha256:"+"c"*64]},
-            summary={}, flush=lambda: None)
+            summary={}, flush=lambda: None, architecture="arm64", platform="linux/arm64")
         native.Qualification.inputs(fake)
         pulls = [argv[-1] for argv in calls if argv[:2] == ["docker", "pull"]]
         self.assertIn("golang:1.27.3-bookworm", pulls)
@@ -235,6 +235,117 @@ class NativeQualificationTests(unittest.TestCase):
                 self.assertLess(receipt["commands"][-1]["seconds"], 15)
             finally:
                 shutil.rmtree(qualification.work)
+
+
+    def test_explicit_amd64_native_profile(self):
+        """test_explicit_amd64_native_profile rejects each mixed host, daemon and compiler field."""
+        go = {"GOARCH": "amd64", "GOHOSTARCH": "amd64", "GOOS": "linux",
+              "GOHOSTOS": "linux", "GOVERSION": "go1.27.3"}
+        native.assert_native("x86_64", "amd64", go, "amd64")
+        native.assert_native("amd64", "x86_64", go, "amd64")
+        with self.assertRaises(RuntimeError):
+            native.assert_native("x86_64", "amd64", go)
+        for field, wrong in (("GOARCH", "arm64"), ("GOHOSTARCH", "arm64"),
+                             ("GOOS", "darwin"), ("GOHOSTOS", "windows"),
+                             ("GOVERSION", "go1.27.2")):
+            with self.subTest(field=field), self.assertRaises(RuntimeError):
+                native.assert_native("x86_64", "amd64", dict(go, **{field: wrong}), "amd64")
+        for host, daemon in (("arm64", "amd64"), ("x86_64", "arm64")):
+            with self.subTest(host=host, daemon=daemon), self.assertRaises(RuntimeError):
+                native.assert_native(host, daemon, go, "amd64")
+        with self.assertRaises(ValueError):
+            native.architecture_profile("auto")
+
+    def test_architecture_elf_and_manifest_controls(self):
+        """test_architecture_elf_and_manifest_controls checks native bytes and reported donor metadata."""
+        for arch, machine, loader in (("arm64", 183, "ld-linux-aarch64.so.1"),
+                                       ("amd64", 62, "ld-linux-x86-64.so.2")):
+            header = bytearray(20)
+            header[:6] = b"\x7fELF\x02\x01"
+            header[18:20] = machine.to_bytes(2, "little")
+            native.assert_native_elf(header, arch)
+            native.assert_manifest_architecture({"machine": machine, "loader": loader}, arch)
+            with self.assertRaises(RuntimeError):
+                native.assert_native_elf(header, "amd64" if arch == "arm64" else "arm64")
+            for manifest in ({"machine": 0, "loader": loader},
+                             {"machine": machine, "loader": "ld-unapproved.so"}):
+                with self.subTest(arch=arch, manifest=manifest), self.assertRaises(RuntimeError):
+                    native.assert_manifest_architecture(manifest, arch)
+
+    def test_selected_architecture_binds_inputs_build_and_image(self):
+        """test_selected_architecture_binds_inputs_build_and_image rejects mismatched image and manifest metadata."""
+        for arch in ("arm64", "amd64"):
+            calls = []
+            def run(argv, _name, *_args):
+                """run returns platform descriptors while retaining the commands under test."""
+                calls.append(argv)
+                return json.dumps({"manifests": [
+                    {"platform": {"os": "linux", "architecture": value},
+                     "digest": "sha256:"+("a" if value == "arm64" else "d")*64}
+                    for value in ("arm64", "amd64")]})
+            fake = types.SimpleNamespace(architecture=arch, platform="linux/"+arch, run=run,
+                identity=lambda reference, _name: {"Id": "sha256:"+"b"*64, "Size": 1,
+                    "RepoDigests": [reference.split(":")[0]+"@sha256:"+"c"*64]},
+                summary={"images": {}}, flush=lambda: None, token="publicfixture")
+            native.Qualification.inputs(fake)
+            expected_digest = "sha256:"+("a" if arch == "arm64" else "d")*64
+            self.assertTrue(all(value["platform_digest"] == expected_digest
+                                for value in fake.summary["inputs"].values()))
+            native.Qualification.build(fake, "media", Path("/public-context"))
+            pulls = [argv for argv in calls if argv[:2] == ["docker", "pull"]]
+            self.assertEqual(len(pulls), 4)
+            self.assertTrue(all(argv[2:4] == ["--platform", "linux/"+arch] for argv in pulls))
+            build = next(argv for argv in calls if argv[:3] == ["docker", "buildx", "build"])
+            self.assertEqual(build[build.index("--platform")+1], "linux/"+arch)
+            self.assertIn("--load", build)
+            self.assertNotIn("--push", build)
+            for os_name, image_arch in (("linux", arch), ("linux", "foreign"), ("windows", arch)):
+                image = dict(Os=os_name, Architecture=image_arch, Id="sha256:"+"d"*64)
+                fake.run = lambda *_args, item=image: json.dumps([item])
+                if os_name == "linux" and image_arch == arch:
+                    native.Qualification.identity(fake, "public-image", "identity")
+                else:
+                    with self.assertRaises(RuntimeError):
+                        native.Qualification.identity(fake, "public-image", "identity")
+            fake.run = lambda *_args: json.dumps({"manifests": [
+                {"platform": {"os": "linux", "architecture": "foreign"}, "digest": "sha256:"+"a"*64}]})
+            with self.assertRaises(RuntimeError):
+                native.Qualification.inputs(fake)
+
+    def test_amd64_setup_preserves_disk_floor_before_build(self):
+        """test_amd64_setup_preserves_disk_floor_before_build rejects low disk and a foreign native daemon."""
+        for disk, daemon in ((13*native.GIB, "amd64"), (12*native.GIB-1, "amd64"),
+                             (13*native.GIB, "arm64")):
+            with self.subTest(disk=disk, daemon=daemon), tempfile.TemporaryDirectory() as temporary:
+                q = native.Qualification(argparse.Namespace(evidence=Path(temporary)/"evidence",
+                    timeout=300, architecture="amd64"))
+                q.docker = "/public/docker"
+                calls = []
+                def run(argv, _name, *_args):
+                    """run supplies harmless native setup metadata without executing Docker."""
+                    calls.append(argv)
+                    if argv[0] == "go":
+                        return json.dumps(dict(GOARCH="amd64", GOHOSTARCH="amd64", GOOS="linux",
+                                               GOHOSTOS="linux", GOVERSION="go1.27.3"))
+                    if argv[1] == "info":
+                        return json.dumps(dict(Architecture=daemon, DockerRootDir=temporary, NCPU=2, MemTotal=4*native.GIB))
+                    return "Driver: docker\n"
+                try:
+                    with mock.patch.object(native.platform, "system", return_value="Linux"), \
+                         mock.patch.object(native.platform, "machine", return_value="x86_64"), \
+                         mock.patch.object(q, "run", side_effect=run), \
+                         mock.patch.object(q, "resources", return_value={"disks": {temporary: {"free": disk}}}):
+                        if disk >= 12*native.GIB and daemon == "amd64":
+                            q.setup()
+                            self.assertTrue(q.containers_enabled)
+                            self.assertEqual(q.summary["architecture"], "amd64")
+                        else:
+                            with self.assertRaises(RuntimeError):
+                                q.setup()
+                            self.assertFalse(q.containers_enabled)
+                            self.assertFalse(any(argv[1:3] == ["buildx", "inspect"] for argv in calls))
+                finally:
+                    shutil.rmtree(q.work)
 
 
 if __name__ == "__main__":
