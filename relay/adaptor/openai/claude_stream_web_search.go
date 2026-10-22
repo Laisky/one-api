@@ -100,5 +100,5 @@ func (w *webSearchStreamCounter) record(c *gin.Context) {
 	}
 	recordWebSearchInvocationCount(c, w.count)
 	lg := gmw.GetLogger(c)
-	lg.Debug("recorded converted Claude stream web search calls", zap.Int("web_search_calls", w.count))
+	lg.Debug("observed converted Claude stream web search calls", zap.Int("web_search_calls", w.count))
 }

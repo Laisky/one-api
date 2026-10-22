@@ -62,3 +62,22 @@ An intentional effective zero quote stays allowed. A nonzero converted quote
 cannot bypass the DeepSeek capability check when an extremely large finite USD
 override overflows the existing integer conversion. This is a DeepSeek admission
 guard, not a change to general tariff conversion or unrelated provider pricing.
+
+## Canonical receipts and MCP route selection — PR #589 follow-up
+
+Anthropic-compatible usage counters and content blocks now share the same built-in
+capability normalizer as the charging layer. Aliases such as `web_search_preview`,
+`web-search`, `web_search_20250305` and `web_fetch_20250910` cannot turn an
+undocumented DeepSeek response into a paid Search/Fetch receipt. Unknown tools
+retain independent identities; unrelated providers retain their pricing policy.
+
+A Claude Messages request may execute through the gateway MCP Chat loop with a
+different full endpoint override. Tool Search versus MCP Chat execution is
+selected before provider-tool admission and provisional quota reservation.
+Admission checks the selected execution endpoint and the actual converted
+Chat request. The existing MCP loop and settlement logic are reused.
+
+New controller and ledger regression tests are in
+`relay/controller/deepseek_receipt_alias_regression_test.go` and
+`relay/controller/deepseek_mcp_route_regression_test.go`. They require
+fresh post-fix execution; the earlier RED evidence is not a GREEN result.
