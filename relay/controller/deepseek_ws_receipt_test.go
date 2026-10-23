@@ -26,6 +26,7 @@ import (
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/tooling"
 )
 
 // deepSeekWSLoopbackProxy returns a CONNECT proxy that sends every admitted
@@ -100,8 +101,8 @@ func deepSeekWSReadReceiptOrClose(t *testing.T, client *websocket.Conn) bool {
 	}
 }
 
-// TestDeepSeekToolReceiptWebSocketAdmission exercises the real controller and
-// socket pump with positive, zero, client and unrelated-provider controls. A
+// TestDeepSeekToolReceiptWebSocketAdmission exercises real accepted paid tools,
+// a conservative per-create floor, and malformed/insufficient-budget denials. A
 // child test process isolates net/http's cached proxy environment from all other
 // tests. Provider traffic is routed only to the owned loopback fixture.
 func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
@@ -137,11 +138,11 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 		frameType                                 int
 		reject, previous                          bool
 	}{
-		{name: "paid_quota", price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
-		{name: "paid_binary", price: &model.ToolPricingLocal{QuotaPerCall: 17}, frameType: websocket.BinaryMessage, reject: true},
+		{name: "paid_quota", price: &model.ToolPricingLocal{QuotaPerCall: 17}},
+		{name: "paid_binary", price: &model.ToolPricingLocal{QuotaPerCall: 17}, frameType: websocket.BinaryMessage},
 		{name: "overflow_usd", price: &model.ToolPricingLocal{UsdPerCall: 1e100}, reject: true},
-		{name: "inherited_price", reject: true},
-		{name: "paid_fetch", tool: `{"type":"web_fetch"}`, price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
+		{name: "inherited_price"},
+		{name: "paid_fetch", tool: `{"type":"web_fetch"}`, price: &model.ToolPricingLocal{QuotaPerCall: 17}},
 		{name: "duplicate_tool_type", tool: `{"type":"web_search","type":"function","name":"local"}`, price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
 		{name: "folded_tool_type", tool: `{"type":"web_search","Type":"function","name":"local"}`, price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
 		{name: "duplicate_tools", price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
@@ -151,7 +152,7 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 		{name: "duplicate_input", tool: `{"type":"tool_search","execution":"client"}`, input: `[{"type":"tool_search_output","execution":"client","call_id":"search_1","tools":[{"type":"web_search"}]}]`, price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
 		{name: "folded_input", tool: `{"type":"tool_search","execution":"client"}`, input: `[{"type":"tool_search_output","execution":"client","call_id":"search_1","tools":[{"type":"web_search"}]}]`, price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
 		{name: "accepted_work_before_denial", price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true, previous: true},
-		{name: "unused_openai_override", price: &model.ToolPricingLocal{QuotaPerCall: 17}, override: "http://api.openai.com/v1/responses", reject: true},
+		{name: "unused_openai_override", price: &model.ToolPricingLocal{QuotaPerCall: 17}, override: "http://api.openai.com/v1/responses"},
 		{name: "unused_deepseek_override", host: "api.openai.com", actual: "gpt-4o-mini", price: &model.ToolPricingLocal{QuotaPerCall: 17}, override: "http://api.deepseek.com/v1/responses"},
 		{name: "explicit_zero", price: &model.ToolPricingLocal{}},
 		{name: "local_function", tool: `{"type":"function","name":"web_search","parameters":{"type":"object"}}`, price: &model.ToolPricingLocal{QuotaPerCall: 17}},
@@ -190,6 +191,7 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 			}
 			requestID := "ws-deepseek-" + tc.name
 			done := make(chan *relaymodel.ErrorWithStatusCode, 1)
+			toolAllowance := make(chan int64, 1)
 			router := gin.New()
 			router.GET("/v1/responses", func(c *gin.Context) {
 				gmw.SetLogger(c, logger.Logger)
@@ -204,7 +206,9 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 				} {
 					c.Set(key, value)
 				}
-				done <- RelayResponseAPIHelper(c)
+				apiErr := RelayResponseAPIHelper(c)
+				toolAllowance <- tooling.ConservativeDeepSeekToolQuota(c)
+				done <- apiErr
 			})
 			gateway := httptest.NewServer(router)
 			t.Cleanup(gateway.Close)
@@ -229,6 +233,8 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 				frame = strings.Replace(frame, `,"vendor_extension"`, `,"input":"synthetic","vendor_extension"`, 1)
 			case "folded_input":
 				frame = strings.Replace(frame, `,"vendor_extension"`, `,"Input":"synthetic","vendor_extension"`, 1)
+			case "accepted_work_before_denial":
+				frame = strings.Replace(frame, `,"vendor_extension"`, `,"tools":[{"type":"function","name":"local"}],"vendor_extension"`, 1)
 			}
 			require.NoError(t, client.WriteMessage(tc.frameType, []byte(frame)))
 			if deepSeekWSReadReceiptOrClose(t, client) {
@@ -236,6 +242,7 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 				require.NoError(t, client.Close())
 			}
 			apiErr := wsAwaitHandler(t, done)
+			toolFloor := <-toolAllowance
 			forwarded := upstream.received()[before:]
 			var token model.Token
 			require.NoError(t, model.DB.First(&token, fallbackTokenID).Error)
@@ -259,10 +266,14 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 			} else {
 				require.Nil(t, apiErr)
 				require.Equal(t, []string{frame}, forwarded, "accepted local/client/native payload remains byte-exact")
-				require.Equal(t, wsSettlementBalance-15, reloadUserQuota(t))
-				require.Equal(t, wsSettlementBalance-15, token.RemainQuota)
-				require.EqualValues(t, 15, token.UsedQuota)
-				require.EqualValues(t, 15, requestCostQuota(t, requestID))
+				expected := int64(15) + toolFloor
+				if tc.host == "api.deepseek.com" && (tc.tool == `{"type":"web_search"}` || tc.tool == `{"type":"web_fetch"}`) && tc.price != nil && tc.price.QuotaPerCall > 0 {
+					require.GreaterOrEqual(t, toolFloor, int64(170), "positive-price native tool must not be free")
+				}
+				require.Equal(t, wsSettlementBalance-expected, reloadUserQuota(t))
+				require.Equal(t, wsSettlementBalance-expected, token.RemainQuota)
+				require.EqualValues(t, expected, token.UsedQuota)
+				require.EqualValues(t, expected, requestCostQuota(t, requestID))
 			}
 		})
 	}
