@@ -130,10 +130,19 @@ func TestDeepSeekToolReceiptEndpointHTTP(t *testing.T) {
 					require.Len(t, logs, 1)
 					require.Empty(t, tools)
 				} else {
-					require.Len(t, logs, 2)
-					require.Len(t, tools, 1)
-					require.Equal(t, "web_search", tools[0].ModelName)
-					require.EqualValues(t, expected-16, tools[0].Quota)
+					toolFloor := tooling.ConservativeDeepSeekToolQuota(c)
+					count := 1
+					if toolFloor > 0 {
+						count = 10
+					}
+					require.Len(t, logs, 1+count)
+					require.Len(t, tools, count)
+					var sum int64
+					for _, tool := range tools {
+						require.Equal(t, "web_search", tool.ModelName)
+						sum += int64(tool.Quota)
+					}
+					require.Equal(t, expected-16, sum, "tool log rows must reconcile to the total quoted tool charge")
 				}
 			}
 		})

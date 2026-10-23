@@ -76,11 +76,11 @@ func TestDeepSeekToolReceiptAdmission(t *testing.T) {
 							require.EqualValues(t, expected, entry.Quota)
 						case model.LogTypeTool:
 							tools++
-							require.EqualValues(t, 10*perCall, entry.Quota)
+							require.EqualValues(t, perCall, entry.Quota)
 						}
 					}
 					require.Equal(t, 1, consume)
-					require.Equal(t, 1, tools)
+					require.Equal(t, 10, tools, "tool usage is recorded once for each estimated invocation")
 				})
 			}
 		}
@@ -150,7 +150,7 @@ func TestDeepSeekToolReceiptFreeAndLocalControls(t *testing.T) {
 			require.Equal(t, 4, logs[0].CachedPromptTokens)
 			require.Equal(t, 16, logs[0].Quota)
 			require.Equal(t, model.LogTypeConsume, logs[0].Type)
-			require.Zero(t, c.GetInt(ctxkey.WebSearchCallCount), "unsolicited items are not a DeepSeek paid receipt")
+			require.Equal(t, 1, c.GetInt(ctxkey.WebSearchCallCount), "observing a wire event does not price an unadmitted tool")
 		})
 	}
 }
@@ -184,10 +184,12 @@ func TestDeepSeekToolReceiptOtherProtocols(t *testing.T) {
 			require.NotEqual(t, "tool_billing_not_supported", apiErr.Error.Code)
 			drainCriticalTasks(t)
 			require.EqualValues(t, 1, calls.Load(), "priced Chat and Claude tool requests must dispatch")
-			require.Equal(t, balance, reloadUserQuota(t), "upstream explicitly rejected the operation")
-			var costs int64
-			require.NoError(t, model.DB.Model(&model.UserRequestCost{}).Where("request_id = ?", id).Count(&costs).Error)
-			require.Zero(t, costs)
+			charge := balance - reloadUserQuota(t)
+			require.GreaterOrEqual(t, charge, int64(170), "forwarded work retains the conservative tool floor on a 503")
+			require.Equal(t, charge, requestCostQuota(t, id), "retained user debits must remain visible in request costs")
+			var token model.Token
+			require.NoError(t, model.DB.First(&token, fallbackTokenID).Error)
+			require.Equal(t, charge, token.UsedQuota)
 		})
 	}
 }
@@ -228,10 +230,6 @@ func TestDeepSeekToolReceiptRetryProviderSwitch(t *testing.T) {
 		require.Nil(t, apiErr)
 		require.Equal(t, 12, usage.PromptTokens)
 		require.Equal(t, 3, usage.CompletionTokens)
-		want := 1
-		if channel == channeltype.DeepSeek {
-			want = 0
-		}
-		require.Equal(t, want, c.GetInt(ctxkey.WebSearchCallCount), "only the currently selected provider may publish its qualified count")
+		require.Equal(t, 1, c.GetInt(ctxkey.WebSearchCallCount), "wire observations remain available after every retry")
 	}
 }
