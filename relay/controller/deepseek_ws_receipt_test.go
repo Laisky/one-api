@@ -79,8 +79,12 @@ func deepSeekWSLoopbackProxy(t *testing.T, target string) *httptest.Server {
 
 // deepSeekWSReadReceiptOrClose reads a terminal fixture receipt or a policy
 // close from client, returning true only when an accepted receipt arrived.
-func deepSeekWSReadReceiptOrClose(t *testing.T, client *websocket.Conn) bool {
+func deepSeekWSReadReceiptOrClose(t *testing.T, client *websocket.Conn, closeReasons ...string) bool {
 	t.Helper()
+	expectedCloseReason := "tool_billing_not_supported"
+	if len(closeReasons) > 0 {
+		expectedCloseReason = closeReasons[0]
+	}
 	for {
 		require.NoError(t, client.SetReadDeadline(time.Now().Add(5*time.Second)))
 		_, frame, err := client.ReadMessage()
@@ -88,7 +92,7 @@ func deepSeekWSReadReceiptOrClose(t *testing.T, client *websocket.Conn) bool {
 			var closed *websocket.CloseError
 			require.ErrorAs(t, err, &closed, "the policy must close the socket without timing out")
 			require.Equal(t, websocket.ClosePolicyViolation, closed.Code, "admission denial must be an explicit policy close")
-			require.Equal(t, "tool_billing_not_supported", closed.Text)
+			require.Equal(t, expectedCloseReason, closed.Text)
 			return false
 		}
 		var event struct {
@@ -143,6 +147,9 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 		{name: "overflow_usd", price: &model.ToolPricingLocal{UsdPerCall: 1e100}, reject: true},
 		{name: "inherited_price"},
 		{name: "paid_fetch", tool: `{"type":"web_fetch"}`, price: &model.ToolPricingLocal{QuotaPerCall: 17}},
+		// RED: a rejected model must not bill unforwarded paid frames.
+		{name: "model_switch_rejected_paid", price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
+		{name: "accepted_paid_before_model_switch", price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true, previous: true},
 		{name: "duplicate_tool_type", tool: `{"type":"web_search","type":"function","name":"local"}`, price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
 		{name: "folded_tool_type", tool: `{"type":"web_search","Type":"function","name":"local"}`, price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
 		{name: "duplicate_tools", price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
@@ -220,7 +227,7 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 			var accepted []string
 			if tc.previous {
 				first := `{"type":"response.create","model":"` + tc.actual + `","input":"accepted synthetic work"}`
-				if tc.name == "accepted_paid_before_denial" {
+				if tc.name == "accepted_paid_before_denial" || tc.name == "accepted_paid_before_model_switch" {
 					first = strings.TrimSuffix(first, "}") + `,"tools":[{"type":"web_search"}]}`
 				}
 				require.NoError(t, client.WriteMessage(websocket.TextMessage, []byte(first)))
@@ -239,9 +246,15 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 				frame = strings.Replace(frame, `,"vendor_extension"`, `,"Input":"synthetic","vendor_extension"`, 1)
 			case "accepted_work_before_denial", "accepted_paid_before_denial":
 				frame = strings.Replace(frame, `,"vendor_extension"`, `,"tools":[{"type":"function","name":"local"}],"vendor_extension"`, 1)
+			case "model_switch_rejected_paid", "accepted_paid_before_model_switch":
+				frame = strings.Replace(frame, `"model":"`+tc.actual+`"`, `"model":"gpt-4o-mini"`, 1)
 			}
 			require.NoError(t, client.WriteMessage(tc.frameType, []byte(frame)))
-			if deepSeekWSReadReceiptOrClose(t, client) {
+			closeReason := "tool_billing_not_supported"
+			if tc.name == "model_switch_rejected_paid" || tc.name == "accepted_paid_before_model_switch" {
+				closeReason = "model_switch_denied"
+			}
+			if deepSeekWSReadReceiptOrClose(t, client, closeReason) {
 				require.NoError(t, client.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "fixture done"), time.Now().Add(time.Second)))
 				require.NoError(t, client.Close())
 			}
@@ -259,7 +272,7 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 				var charge int64
 				if tc.previous {
 					charge = 15
-					if tc.name == "accepted_paid_before_denial" {
+					if tc.name == "accepted_paid_before_denial" || tc.name == "accepted_paid_before_model_switch" {
 						charge += 170
 						require.EqualValues(t, 170, toolFloor, "first paid create must retain its tool floor")
 					}
