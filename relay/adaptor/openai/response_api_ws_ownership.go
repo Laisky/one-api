@@ -17,13 +17,13 @@ import (
 
 // responseWSSessionOwnership retains a bounded set of provider-confirmed IDs for one authenticated socket.
 type responseWSSessionOwnership struct {
-	mu         sync.RWMutex
+	mu sync.RWMutex
 	// Gorilla WebSocket permits one concurrent data writer per connection.
 	// The upstream relay and local rejection events share this client writer.
 	clientWriteMu sync.Mutex
-	ids        map[string]struct{}
-	denied     atomic.Bool
-	dispatched atomic.Bool
+	ids           map[string]struct{}
+	denied        atomic.Bool
+	dispatched    atomic.Bool
 	// creates counts response.create frames forwarded upstream, so settlement can
 	// tell when dispatched work never produced an authoritative terminal receipt.
 	creates atomic.Int64
