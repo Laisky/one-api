@@ -38,15 +38,19 @@ func TestLogFidelitySerializerReviewFailures(t *testing.T) {
 	require.EqualValues(t, 3, fidelityAttr(t, out.only(t), "count").AsInt64())
 }
 
-// TestLogFidelityTimeReviewRejectsOverflow prevents undefined UnixNano
-// results in explicit time fields and array elements; zero field time is year1.
-func TestLogFidelityTimeReviewRejectsOverflow(t *testing.T) {
+// TestLogFidelityTimeReviewPreservesOverflow guards against int64-nanosecond
+// wraparound without discarding a valid application log record.
+func TestLogFidelityTimeReviewPreservesOverflow(t *testing.T) {
 	for _, value := range []time.Time{time.Time{}, time.Date(2500, 1, 1, 0, 0, 0, 0, time.UTC)} {
-		for _, field := range []zap.Field{zap.Time("time", value), zap.Times("times", []time.Time{time.Unix(0, 0), value})} {
-			lg, out, _ := newTestBridge(t, zapcore.InfoLevel)
-			require.Error(t, lg.Core().Write(zapcore.Entry{Message: "overflow", Level: zapcore.InfoLevel}, []zap.Field{field}))
-			require.Empty(t, out.all())
-		}
+		lg, out, _ := newTestBridge(t, zapcore.InfoLevel)
+		fields := []zap.Field{zap.Time("time", value), zap.Times("times", []time.Time{time.Unix(0, 0), value})}
+		require.NoError(t, lg.Core().Write(zapcore.Entry{Message: "overflow", Level: zapcore.InfoLevel}, fields))
+		record := out.only(t)
+		require.Equal(t, value.Format(time.RFC3339Nano), fidelityAttr(t, record, "time").AsString())
+		items := fidelityAttr(t, record, "times").AsSlice()
+		require.Len(t, items, 2)
+		require.Equal(t, int64(0), items[0].AsInt64())
+		require.Equal(t, value.Format(time.RFC3339Nano), items[1].AsString())
 	}
 }
 

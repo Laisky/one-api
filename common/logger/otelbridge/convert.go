@@ -7,6 +7,7 @@ package otelbridge
 import (
 	"math"
 	"strconv"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -41,4 +42,15 @@ func convertUintValue(v uint64) attribute.Value {
 		return attribute.StringValue(strconv.FormatUint(v, 10))
 	}
 	return attribute.Int64Value(int64(v))
+}
+
+
+// convertTimeValue preserves signed Unix nanoseconds when exactly representable.
+// For earlier/later valid application time fields, OTLP has no native time
+ // scalar, so use RFC3339Nano text instead of rejecting unrelated log fields.
+func convertTimeValue(v time.Time) attribute.Value {
+	if ns, err := logTimeNanos(v); err == nil {
+		return attribute.Int64Value(ns)
+	}
+	return attribute.StringValue(v.Format(time.RFC3339Nano))
 }

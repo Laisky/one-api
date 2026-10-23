@@ -29,10 +29,12 @@ observable whole-record rejection rather than an implicit winner.
 
 OTLP represents signed int64, doubles (including NaN/Inf), booleans, strings,
 bytes, maps, lists and empty values. Native unsigned values above MaxInt64 use an
-exact decimal string because OTLP has no unsigned integer type. Zap time/duration
-fields retain signed int64 nanoseconds; time values outside that exact range fail
-rather than wrapping. Native record/observed timestamps accept zero as unset and
-otherwise require nonnegative signed UnixNano values for the pinned SDK exporter;
+exact decimal string because OTLP has no unsigned integer type. Zap duration
+fields retain signed int64 nanoseconds. Zap time attributes retain signed int64
+nanoseconds when representable, or exact RFC3339Nano text outside that range
+(including zero time); mixed time arrays may therefore contain both types.
+Native record/observed timestamps instead accept zero as unset and otherwise
+require nonnegative signed UnixNano values for the pinned SDK exporter;
 this is narrower than OTLP's uint64 timestamp range.
 
 Reflected JSON integers retain int64 precision or exact text. Decimal/exponent

@@ -19,7 +19,7 @@ func TestTimeOverflowPreservesLogAttribute(t *testing.T) {
 	}{
 		{name: "zero", value: time.Time{}},
 		{name: "future", value: time.Date(2500, 1, 2, 3, 4, 5, 123456789, time.UTC)},
-		{name: "historical_offset", value: time.Date(1800, 8, 7, 6, 5, 4, 987654321, time.FixedZone("historical", -5*3600))},
+		{name: "historical_offset", value: time.Date(1500, 8, 7, 6, 5, 4, 987654321, time.FixedZone("historical", -5*3600))},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			logger, output, _ := newTestBridge(t, zapcore.InfoLevel)

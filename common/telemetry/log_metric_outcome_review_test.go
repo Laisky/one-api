@@ -42,5 +42,20 @@ func TestLogExportOutcomeMetricsKeepKnownLabels(t *testing.T) {
 		got[attrs[0].Value.AsString()] = point.Value
 	}
 	require.Equal(t, want, got)
+
+	// The production exporter must retain exactly these known labels and values,
+	// rather than stripping them again after the aggregation view.
+	exported := &metricPrivacyCapture{}
+	require.NoError(t, (privacyMetricExporter{Exporter: exported}).Export(context.Background(), &collected))
+	require.NotNil(t, exported.result)
+	require.Len(t, exported.result.ScopeMetrics, 1)
+	exportedPoints := exported.result.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64]).DataPoints
+	exportedGot := make(map[string]int64, len(exportedPoints))
+	for _, point := range exportedPoints {
+		attrs := point.Attributes.ToSlice()
+		require.Len(t, attrs, 1)
+		exportedGot[attrs[0].Value.AsString()] = point.Value
+	}
+	require.Equal(t, want, exportedGot)
 	require.False(t, privateMetricAttribute(attribute.String("outcome", "synthetic-untrusted-outcome")))
 }

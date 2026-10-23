@@ -295,8 +295,8 @@ func (m *objectEncoder) AddComplex64(k string, v complex64) {
 	m.AddComplex128(k, complex128(v))
 }
 
-// AddTime implements zapcore.ObjectEncoder, recording timestamps as Unix
-// nanoseconds so the receiving pipeline needs no layout agreement.
+// AddTime implements zapcore.ObjectEncoder, preserving exact signed Unix
+// nanoseconds when representable and RFC3339Nano text otherwise.
 //
 // Parameters:
 //   - k: the attribute key.
@@ -304,12 +304,7 @@ func (m *objectEncoder) AddComplex64(k string, v complex64) {
 //
 // Return values: none.
 func (m *objectEncoder) AddTime(k string, v time.Time) {
-	ns, err := logTimeNanos(v)
-	if err != nil {
-		*m.failure = ErrLogEncoding
-		return
-	}
-	m.AddInt64(k, ns)
+	m.cur.attrs = append(m.cur.attrs, attribute.KeyValue{Key: attribute.Key(k), Value: convertTimeValue(v)})
 }
 
 // AddFloat32 implements zapcore.ObjectEncoder for 32-bit float fields.
@@ -605,19 +600,15 @@ func (a *arrayEncoder) AppendInt16(v int16) { a.AppendInt64(int64(v)) }
 // Return values: none.
 func (a *arrayEncoder) AppendInt8(v int8) { a.AppendInt64(int64(v)) }
 
-// AppendTime implements zapcore.ArrayEncoder, recording Unix nanoseconds.
+// AppendTime implements zapcore.ArrayEncoder, preserving a time's exact
+// signed nanoseconds when possible and RFC3339Nano text otherwise.
 //
 // Parameters:
 //   - v: the value to append.
 //
 // Return values: none.
 func (a *arrayEncoder) AppendTime(v time.Time) {
-	ns, err := logTimeNanos(v)
-	if err != nil {
-		*a.failure = ErrLogEncoding
-		return
-	}
-	a.AppendInt64(ns)
+	a.elems = append(a.elems, convertTimeValue(v))
 }
 
 // AppendUint implements zapcore.ArrayEncoder for platform-sized unsigned values.
