@@ -41,3 +41,21 @@ func TestTimeOverflowPreservesLogAttribute(t *testing.T) {
 		})
 	}
 }
+
+// TestOutOfRangeSecondPrecisionZonePreservesInstant reproduces the fact that
+// RFC3339Nano has minute-only zone offsets: logging a historical timestamp
+// whose zone contains offset seconds must not silently move its instant.
+func TestOutOfRangeSecondPrecisionZonePreservesInstant(t *testing.T) {
+	original := time.Date(1500, 8, 7, 6, 5, 4, 987654321, time.FixedZone("historical", -5*3600-17))
+	lg, out, _ := newTestBridge(t, zapcore.InfoLevel)
+	lg.Info("original instant", zap.Time("at", original), zap.Times("times", []time.Time{original}))
+	record := out.only(t)
+	for _, encoded := range []string{
+		fidelityAttr(t, record, "at").AsString(),
+		fidelityAttr(t, record, "times").AsSlice()[0].AsString(),
+	} {
+		parsed, err := time.Parse(time.RFC3339Nano, encoded)
+		require.NoError(t, err)
+		require.True(t, parsed.Equal(original), "OTLP time %q must represent the original instant %s", encoded, original.Format(time.RFC3339Nano))
+	}
+}
