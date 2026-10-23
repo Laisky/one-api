@@ -332,7 +332,7 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 				// upstream side so billing reconciliation runs without any
 				// upstream charges accruing for the denied model.
 				errEvent := buildModelSwitchErrorEvent(guardErr.Error())
-				_ = src.WriteMessage(websocket.TextMessage, errEvent)
+				_ = ownership.writeClientMessage(src, websocket.TextMessage, errEvent)
 				_ = src.WriteControl(
 					websocket.CloseMessage,
 					websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "model_switch_denied"),
@@ -403,8 +403,16 @@ func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, receipts *respo
 			}
 		}
 
-		if werr := dst.WriteMessage(mt, msg); werr != nil {
-			return errors.WithStack(werr)
+		// A model-switch denial on the opposite leg can write a local error
+		// event to this same client socket; Gorilla requires one data writer.
+		var writeErr error
+		if stored != nil && stored.ownership != nil {
+			writeErr = stored.ownership.writeClientMessage(dst, mt, msg)
+		} else {
+			writeErr = dst.WriteMessage(mt, msg)
+		}
+		if writeErr != nil {
+			return errors.WithStack(writeErr)
 		}
 	}
 }
