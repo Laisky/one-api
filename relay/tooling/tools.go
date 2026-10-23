@@ -13,7 +13,6 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/common/builtinname"
-	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -107,7 +106,7 @@ func ApplyBuiltinToolCharges(c *gin.Context, usage **relaymodel.Usage, meta *met
 
 	counts := collectInvocationCounts(c)
 	conservativeEstimated := false
-	if deepseekcompat.UsesDeepSeekToolReceiptContract(meta) {
+	if conservativeDeepSeekAllowance(c) != nil {
 		conservativeEstimated = conservativeDeepSeekCounts(c, counts)
 	}
 	if len(counts) == 0 {

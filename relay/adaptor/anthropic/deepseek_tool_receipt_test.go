@@ -21,8 +21,8 @@ func TestDeepSeekToolReceiptClaude(t *testing.T) {
 		name, base    string
 		channel, want int
 	}{
-		{"dedicated", "https://fixture.invalid", channeltype.DeepSeek, 0},
-		{"official_compatible_host", "https://api.deepseek.com/anthropic", channeltype.Anthropic, 0},
+		{"dedicated", "https://fixture.invalid", channeltype.DeepSeek, 2},
+		{"official_compatible_host", "https://api.deepseek.com/anthropic", channeltype.Anthropic, 2},
 		{"unrelated_anthropic", "https://api.anthropic.com", channeltype.Anthropic, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -53,7 +53,7 @@ func TestDeepSeekToolReceiptEndpointClaudeCounters(t *testing.T) {
 		name, base, override, observed string
 		want                           int
 	}{
-		{"planned_deepseek", "https://api.anthropic.com", "https://api.deepseek.com/anthropic/v1/messages", "https://api.anthropic.com/v1/messages", 0},
+		{"planned_deepseek", "https://api.anthropic.com", "https://api.deepseek.com/anthropic/v1/messages", "https://api.anthropic.com/v1/messages", 1},
 		{"reverse", "https://api.deepseek.com", "https://api.anthropic.com/v1/messages", "https://api.deepseek.com/anthropic/v1/messages", 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -70,14 +70,14 @@ func TestDeepSeekToolReceiptEndpointClaudeCounters(t *testing.T) {
 }
 
 // TestDeepSeekReceiptAliasesPreserveUnrelatedProviderCounts validates that
-// contract suppression normalizes capability identity without changing the
-// existing raw multi-key counter merge for an unrelated Anthropic host.
+// raw canonical and alias count publication remains unchanged for both
+// DeepSeek and unrelated Anthropic hosts. Tool billing applies later.
 func TestDeepSeekReceiptAliasesPreserveUnrelatedProviderCounts(t *testing.T) {
 	for _, tc := range []struct {
 		name, base string
 		want       int
 	}{
-		{"deepseek", "https://api.deepseek.com/anthropic", 0},
+		{"deepseek", "https://api.deepseek.com/anthropic", 2},
 		{"unrelated", "https://api.anthropic.com", 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -87,12 +87,8 @@ func TestDeepSeekReceiptAliasesPreserveUnrelatedProviderCounts(t *testing.T) {
 			require.NoError(t, RecordServerToolUseFromJSON(c, []byte(`{"content":[],"usage":{"server_tool_use":{"web_search_requests":1,"web_search_preview_requests":1}}}`)))
 			raw, _ := c.Get(ctxkey.ToolInvocationCounts)
 			counts, _ := raw.(map[string]int)
-			if tc.want == 0 {
-				require.Empty(t, counts)
-			} else {
-				require.Equal(t, 1, counts["web_search"])
-				require.Equal(t, 1, counts["web_search_preview"])
-			}
+			require.Equal(t, 1, counts["web_search"])
+			require.Equal(t, 1, counts["web_search_preview"])
 		})
 	}
 }

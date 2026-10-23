@@ -367,7 +367,6 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 // caller can commit them to the gateway store (proposal ST-011). Collection
 // happens after usage accounting and never alters the forwarded frame.
 func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, receipts *responseAPIWSUsageCollector, stored *responseAPIWSStoreCollector, onUpstreamEvent ...func([]byte)) error {
-
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {

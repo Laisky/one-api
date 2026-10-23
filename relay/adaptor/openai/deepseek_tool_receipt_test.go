@@ -14,19 +14,19 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-// deepseekReceiptJSON is an unsolicited OpenAI-shaped item, not a verified
-// DeepSeek successful Search/Fetch receipt. Unknown wire fields stay unchanged.
+// deepseekReceiptJSON is an OpenAI-compatible tool observation and usage
+// fixture. Unknown wire fields stay unchanged.
 const deepseekReceiptJSON = `{"id":"resp_receipt","object":"response","status":"completed","model":"deepseek-v4-pro","vendor_extension":{"precise":9007199254740993},"output":[{"id":"ws1","type":"web_search_call","status":"completed","action":{"type":"search","query":"synthetic"},"unknown_field":"kept"}],"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15,"input_tokens_details":{"cached_tokens":4,"web_search":{"requests":9}}}}`
 
-// TestDeepSeekToolReceiptJSON keeps native token/cache and wire evidence while
-// refusing to promote generic items or usage extensions into paid-tool counts.
+// TestDeepSeekToolReceiptJSON records observed calls for later conservative
+// settlement without mutating native wire fields or token usage.
 func TestDeepSeekToolReceiptJSON(t *testing.T) {
 	for _, tc := range []struct {
 		name, base    string
 		channel, want int
 	}{
-		{"dedicated", "https://example.invalid", channeltype.DeepSeek, 0},
-		{"official_compatible_host", "https://api.deepseek.com", channeltype.OpenAI, 0},
+		{"dedicated", "https://example.invalid", channeltype.DeepSeek, 1},
+		{"official_compatible_host", "https://api.deepseek.com", channeltype.OpenAI, 1},
 		{"third_party_same_model", "https://provider.example/v1", channeltype.OpenAI, 1},
 		{"ordinary_openai", "https://api.openai.com", channeltype.OpenAI, 1},
 	} {
@@ -45,7 +45,7 @@ func TestDeepSeekToolReceiptJSON(t *testing.T) {
 			require.NotNil(t, usage.PromptTokensDetails)
 			require.Equal(t, 4, usage.PromptTokensDetails.CachedTokens)
 			require.Equal(t, tc.want, c.GetInt(ctxkey.WebSearchCallCount))
-			require.Equal(t, deepseekReceiptJSON, w.Body.String(), "suppress billing inference, never the original wire fields")
+			require.Equal(t, deepseekReceiptJSON, w.Body.String(), "preserve all original wire fields")
 			require.Zero(t, usage.ToolsCost)
 		})
 	}
@@ -78,9 +78,6 @@ func TestDeepSeekToolReceiptStream(t *testing.T) {
 			require.NotNil(t, usage.PromptTokensDetails)
 			require.Equal(t, 4, usage.PromptTokensDetails.CachedTokens)
 			want := 1
-			if channel == channeltype.DeepSeek {
-				want = 0
-			}
 			require.Equal(t, want, c.GetInt(ctxkey.WebSearchCallCount))
 			require.Contains(t, w.Body.String(), `"unknown_field":"kept"`)
 			require.Contains(t, w.Body.String(), "9007199254740993")
@@ -124,9 +121,6 @@ func TestDeepSeekToolReceiptUsageOnly(t *testing.T) {
 					require.Equal(t, body, w.Body.String())
 				}
 				want := 9
-				if deepseek {
-					want = 0
-				}
 				require.Equal(t, want, c.GetInt(ctxkey.WebSearchCallCount))
 				require.Contains(t, w.Body.String(), `"requests":9`, "unknown usage is preserved on the wire")
 			})
@@ -163,9 +157,6 @@ func TestDeepSeekToolReceiptConverted(t *testing.T) {
 					require.Equal(t, 3, usage.CompletionTokens)
 				}
 				want := 1
-				if deepseek {
-					want = 0
-				}
 				require.Equal(t, want, c.GetInt(ctxkey.WebSearchCallCount))
 			})
 		}
@@ -199,7 +190,7 @@ func TestDeepSeekToolReceiptEndpointCounters(t *testing.T) {
 		name, base, override, observed string
 		channel, want                  int
 	}{
-		{"planned_deepseek", "https://api.openai.com", "https://api.deepseek.com/v1/responses", "https://api.openai.com/v1/responses", channeltype.OpenAI, 0},
+		{"planned_deepseek", "https://api.openai.com", "https://api.deepseek.com/v1/responses", "https://api.openai.com/v1/responses", channeltype.OpenAI, 1},
 		{"reverse_base", "https://api.deepseek.com", "https://api.openai.com/v1/responses", "https://api.deepseek.com/v1/responses", channeltype.OpenAI, 1},
 		{"reverse_channel", "https://api.deepseek.com", "https://api.openai.com/v1/responses", "", channeltype.DeepSeek, 1},
 		{"stale_observed", "https://api.openai.com", "", "https://api.deepseek.com/v1/responses", channeltype.OpenAI, 1},
