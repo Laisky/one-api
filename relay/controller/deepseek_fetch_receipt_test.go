@@ -15,6 +15,7 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 // deepSeekReceiptTransport routes only the synthetic provider transport to a
@@ -46,14 +47,14 @@ func TestDeepSeekToolReceiptClaudeFetchHTTP(t *testing.T) {
 	for _, tc := range []struct {
 		name, base    string
 		price         model.ToolPricingLocal
-		reject, local bool
+		local         bool
 		charge        int64
 	}{
-		{"quota_paid", "https://api.deepseek.com/anthropic", model.ToolPricingLocal{QuotaPerCall: 23}, true, false, 0},
-		{"usd_paid", "https://api.deepseek.com/anthropic", model.ToolPricingLocal{UsdPerCall: 0.01}, true, false, 0},
-		{"intentional_zero", "https://api.deepseek.com/anthropic", model.ToolPricingLocal{}, false, false, 16},
-		{"local_function_collision", "https://api.deepseek.com/anthropic", model.ToolPricingLocal{QuotaPerCall: 23}, false, true, 16},
-		{"unrelated_anthropic", "https://api.anthropic.com", model.ToolPricingLocal{QuotaPerCall: 23}, false, false, 39},
+		{"quota_paid", "https://api.deepseek.com/anthropic", model.ToolPricingLocal{QuotaPerCall: 23}, false, 246},
+		{"usd_paid", "https://api.deepseek.com/anthropic", model.ToolPricingLocal{UsdPerCall: 0.01}, false, 16 + 10*ratio.QuotaPerUsd/100},
+		{"intentional_zero", "https://api.deepseek.com/anthropic", model.ToolPricingLocal{}, false, 16},
+		{"local_function_collision", "https://api.deepseek.com/anthropic", model.ToolPricingLocal{QuotaPerCall: 23}, true, 16},
+		{"unrelated_anthropic", "https://api.anthropic.com", model.ToolPricingLocal{QuotaPerCall: 23}, false, 39},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			const balance int64 = 1000000
@@ -87,19 +88,10 @@ func TestDeepSeekToolReceiptClaudeFetchHTTP(t *testing.T) {
 			c, w, id := protocolContext(t, channeltype.Anthropic, "deepseek-v4-pro", "/v1/messages", body, tc.base, balance, 1, false, &model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2, CachedInputRatio: 0.5})
 			raw, _ := c.Get(ctxkey.ChannelModel)
 			require.NoError(t, raw.(*model.Channel).SetToolingConfig(&model.ChannelToolingConfig{Pricing: map[string]model.ToolPricingLocal{"web_fetch": tc.price}}))
-			apiErr := RelayClaudeMessagesHelper(c)
-			if tc.reject {
-				require.NotNil(t, apiErr)
-				require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-				require.Equal(t, "tool_billing_not_supported", apiErr.Error.Code)
-				require.Zero(t, calls.Load())
-				require.Zero(t, c.GetInt64(ctxkey.PreConsumedQuotaAmount))
-			} else {
-				require.Nil(t, apiErr)
-				require.EqualValues(t, 1, calls.Load())
-				require.Contains(t, <-observed, `"name":"web_fetch"`)
-				require.Equal(t, response, w.Body.String(), "native wire extensions remain byte-exact")
-			}
+			require.Nil(t, RelayClaudeMessagesHelper(c))
+			require.EqualValues(t, 1, calls.Load(), "priced native Fetch must reach the provider")
+			require.Contains(t, <-observed, `"name":"web_fetch"`)
+			require.Equal(t, response, w.Body.String(), "native wire extensions remain byte-exact")
 			drainCriticalTasks(t)
 			require.Equal(t, balance-tc.charge, reloadUserQuota(t))
 			var token model.Token
@@ -108,21 +100,14 @@ func TestDeepSeekToolReceiptClaudeFetchHTTP(t *testing.T) {
 			require.Equal(t, tc.charge, token.UsedQuota)
 			var logs []model.Log
 			require.NoError(t, model.LOG_DB.Where("request_id = ?", id).Find(&logs).Error)
-			if tc.reject {
-				require.Empty(t, logs)
-				var costs int64
-				require.NoError(t, model.DB.Model(&model.UserRequestCost{}).Where("request_id = ?", id).Count(&costs).Error)
-				require.Zero(t, costs)
+			require.Equal(t, tc.charge, requestCostQuota(t, id))
+			require.Len(t, logs, 1, "native Claude incorporates its tool cost into the consume receipt")
+			require.EqualValues(t, tc.charge, logs[0].Quota)
+			require.Equal(t, model.LogTypeConsume, logs[0].Type)
+			if tc.charge > 16 {
+				require.Contains(t, logs[0].Content, "tools cost")
 			} else {
-				require.Equal(t, tc.charge, requestCostQuota(t, id))
-				require.Len(t, logs, 1, "native Claude incorporates its tool cost into the consume receipt")
-				require.EqualValues(t, tc.charge, logs[0].Quota)
-				require.Equal(t, model.LogTypeConsume, logs[0].Type)
-				if tc.name == "unrelated_anthropic" {
-					require.Contains(t, logs[0].Content, "tools cost 23")
-				} else {
-					require.NotContains(t, logs[0].Content, "tools cost")
-				}
+				require.NotContains(t, logs[0].Content, "tools cost")
 			}
 		})
 	}

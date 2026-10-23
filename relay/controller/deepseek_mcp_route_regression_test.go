@@ -18,13 +18,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDeepSeekClaudeMCPEndpointAdmission binds raw and converted tool admission
-// to the endpoint used by the actual MCP Chat round, not the client-facing
-// Claude Messages endpoint. Both mismatch directions are regression cases.
+// TestDeepSeekClaudeMCPEndpointAdmission verifies paid tools are admitted
+// against the actual MCP Chat endpoint with a DeepSeek-only conservative floor.
 func TestDeepSeekClaudeMCPEndpointAdmission(t *testing.T) {
 	for _, tc := range []struct {
 		name, messages, chat string
-		reject               bool
+		deepseek             bool
 	}{
 		{"control_both_deepseek", "https://api.deepseek.com/v1/responses", "https://api.deepseek.com/v1/responses", true},
 		{"control_both_unrelated", "https://api.openai.com/v1/responses", "https://api.openai.com/v1/responses", false},
@@ -87,24 +86,14 @@ func TestDeepSeekClaudeMCPEndpointAdmission(t *testing.T) {
 			}
 			var token model.Token
 			require.NoError(t, model.DB.First(&token, fallbackTokenID).Error)
-			if tc.reject {
-				require.Zero(t, calls.Load(), "paid DeepSeek tool must not reach upstream")
-				require.NotNil(t, apiErr)
-				require.Equal(t, "tool_billing_not_supported", apiErr.Error.Code)
-				require.Zero(t, c.GetInt64(ctxkey.PreConsumedQuotaAmount))
-				require.Equal(t, balance, reloadUserQuota(t))
-				require.Equal(t, balance, token.RemainQuota)
-				require.Zero(t, token.UsedQuota)
-				var costs, logs int64
-				require.NoError(t, model.DB.Model(&model.UserRequestCost{}).Where("request_id = ?", id).Count(&costs).Error)
-				require.NoError(t, model.LOG_DB.Model(&model.Log{}).Where("request_id = ?", id).Count(&logs).Error)
-				require.Zero(t, costs)
-				require.Zero(t, logs)
-			} else {
-				require.EqualValues(t, 1, calls.Load())
-				require.Nil(t, apiErr)
-				require.Less(t, reloadUserQuota(t), balance)
-				require.Greater(t, token.UsedQuota, int64(0))
+			require.EqualValues(t, 1, calls.Load(), "the selected MCP Chat endpoint must receive the tool request")
+			require.Nil(t, apiErr)
+			require.Less(t, reloadUserQuota(t), balance)
+			require.Greater(t, token.UsedQuota, int64(0))
+			require.Equal(t, token.UsedQuota, requestCostQuota(t, id))
+			if tc.deepseek {
+				require.GreaterOrEqual(t, token.UsedQuota, int64(170),
+					"DeepSeek Chat-mode Search must retain ten paid attempts even without a receipt")
 			}
 		})
 	}
