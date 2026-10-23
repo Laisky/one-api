@@ -24,8 +24,11 @@ that may exceed upstream successful-operation charges.
    greater of the conservative minimum and the observed attempts, not their sum.
    Search and Fetch have independent configured prices and counts.
 4. HTTP Chat, Claude Messages, and native Responses reserve the tool floor
-   alongside the existing token quote **before** provider dispatch. Successful
-   responses settle measured Token/cache usage and ToolCost through existing
+   alongside the existing token quote **before** provider dispatch. Claude
+   separately adds independent non-Search/Fetch server-tool allowances; raw
+   Search/Fetch and converted Search/Fetch share one conservative allowance, so
+   a capability is never reserved twice merely because it appears in both forms.
+   Successful responses settle measured Token/cache usage and ToolCost through existing
    user/token/request-cost/consume/tool ledgers. A known completed Token receipt
    must not retain an unrelated inflated Token reservation merely because tool
    attempt counts were estimated.
@@ -36,17 +39,21 @@ that may exceed upstream successful-operation charges.
    Proven pre-dispatch failures and quota/validation denials retain existing
    zero-work refund and denial behavior.
 6. Native Responses WebSocket opens with an existing token handshake reservation
-   before client frames arrive. Only successfully forwarded create frames enter
-   the tool meter; denied frames and handshakes do not incur a new tool fee.
-   Each positively priced frame atomically reserves its extra Search/Fetch
-   allowance against the same durable user and token balances used by HTTP,
-   before the frame is forwarded to the upstream. Concurrent sessions cannot
-   spend the same finite balance. The session then reconciles all incremental
-   holds with the existing handshake reservation and observed tool costs once
-   both proxy legs have drained. A held but unforwarded frame is refunded by
-   final settlement; a denial before any executed frame refunds the whole hold.
-   An abrupt process loss between a durable debit and its final log
-   reconciliation still requires the existing billing-recovery audit.
+   before client frames arrive. Each create first passes ownership, model,
+   ambiguous-key and discovery validation **without an additional debit**.
+   The admission callback then inspects the original frame and atomically reserves
+   its extra Search/Fetch allowance against the same durable user and token
+   balances used by HTTP **before provider forwarding**. A model-switch or
+   ownership denial cannot bill an unforwarded paid frame; if no create was
+   accepted, the existing handshake hold is refunded. Earlier accepted work
+   remains billable after a subsequent denied frame. Only successfully
+   forwarded create frames enter the tool meter; concurrent sessions cannot
+   spend the same finite balance. The session reconciles all incremental
+   holds with the handshake reservation and observed tool costs after both
+   proxy legs drain. A transport write failure after a successful reservation
+   remains ambiguous work and is conservatively retained to avoid underbilling.
+   An abrupt process loss between durable debit and final log reconciliation
+   still requires the existing billing-recovery audit.
 7. Effective zero-price tools remain free to the OneAPI user but are not evidence
    that upstream execution is free. Client-executed local function calls,
    client Tool Search, and unrelated third-party model providers keep their
@@ -64,8 +71,12 @@ quota, not 170 + 204. If the provider returns a complete Token receipt worth
 16 quota, the two total examples settle at **186** and **220** quota.
 
 This pricing is intentionally conservative and can charge customers for tools
-that were merely offered or that did not successfully execute. Disclose this
-billing policy and the effective per-call tariff before enabling it.
+that were merely offered or that did not successfully execute. Even a declaration
+that DeepSeek silently ignores (for example `web_search` on Flash or `web_fetch` in
+Responses) may incur the explicitly configured OneAPI commercial floor: forwarding
+an allowed, priced declaration is not proof of upstream execution, but neither
+is missing execution evidence proof of zero upstream cost. Disclose this billing
+policy and the effective per-call tariff before enabling it.
 
 ## What this policy does **not** guarantee
 
