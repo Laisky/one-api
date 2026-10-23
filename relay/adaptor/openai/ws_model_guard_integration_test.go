@@ -126,8 +126,9 @@ func TestResponseAPIWS_ModelSwitchAttackRejected(t *testing.T) {
 	var closeCode int
 	var closeReason string
 	for {
-		_, msg, err := clientConn.ReadMessage()
+		messageType, msg, err := clientConn.ReadMessage()
 		if err != nil {
+			t.Logf("model-switch close: %v", err)
 			var closeErr *websocket.CloseError
 			if errors.As(err, &closeErr) {
 				sawClose = true
@@ -136,6 +137,7 @@ func TestResponseAPIWS_ModelSwitchAttackRejected(t *testing.T) {
 			}
 			break
 		}
+		t.Logf("model-switch frame: opcode=%d payload=%q", messageType, msg)
 		var ev map[string]any
 		if json.Unmarshal(msg, &ev) == nil {
 			lastTextEvent = ev
