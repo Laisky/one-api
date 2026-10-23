@@ -156,7 +156,9 @@ func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, 
 		errc <- copyResponseAPIClientToUpstream(requestContext, clientConn, upstreamConn, meta, ownership, admission, fullRequestURL, observed.OnForwardedCreate)
 	}()
 	receipts := &responseAPIWSUsageCollector{usage: usage}
-	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, receipts, stored, observed.OnUpstreamEvent) }()
+	go func() {
+		errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, receipts, stored, observed.OnUpstreamEvent)
+	}()
 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
