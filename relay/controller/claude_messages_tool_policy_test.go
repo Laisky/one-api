@@ -58,13 +58,13 @@ func TestClaudeConservativeIndependentToolAllowance(t *testing.T) {
 func TestClaudeConservativeRawAndConvertedToolQuoteCompatibility(t *testing.T) {
 	t.Parallel()
 	quotes := map[string]int64{
-		tooling.BuiltinWebSearch:  17,
-		tooling.BuiltinWebFetch:   23,
+		tooling.BuiltinWebSearch:     17,
+		tooling.BuiltinWebFetch:      23,
 		tooling.BuiltinCodeExecution: 50,
 	}
 	uses := map[string]int64{
-		tooling.BuiltinWebSearch: 10,
-		tooling.BuiltinWebFetch:  10,
+		tooling.BuiltinWebSearch:     10,
+		tooling.BuiltinWebFetch:      10,
 		tooling.BuiltinCodeExecution: 10,
 	}
 	for _, tc := range []struct {
