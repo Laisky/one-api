@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
@@ -92,10 +93,10 @@ func admitClaudeMessagesTools(c *gin.Context, meta *metalib.Meta) *relaymodel.Er
 	}
 
 	tooling.RecordConservativeDeepSeekTools(c, meta, quotes, uses)
-	var allowance int64
-	for name, count := range uses {
-		allowance = saturatingQuotaAdd(allowance, tooling.SaturatingToolAllowance(quotes[name], count))
-	}
+	// Search/Fetch on the actual DeepSeek endpoint are funded through the
+	// separate conservative allowance, including converted hosted tools.
+	// Keep other independently priced Claude server capabilities additive.
+	allowance := claudeOtherToolAllowance(meta, quotes, uses)
 	c.Set(ctxkey.ClaudeToolAllowanceQuota, allowance)
 	lg := gmw.GetLogger(c)
 	lg.Debug("admitted Claude provider tools",
@@ -248,11 +249,29 @@ func saturatingQuotaAdd(a, b int64) int64 {
 	return a + b
 }
 
-// withClaudeToolAllowance adds the admitted paid server-tool allowance to a
-// Claude reservation quote. Parameters: c carries the admission and quote is
-// the token-based reservation. Returns: the combined reservation quote.
+// claudeOtherToolAllowance reserves all independently priced Claude-native
+// capabilities. When the actual upstream is DeepSeek, Search/Fetch are already
+// accounted for by the shared conservative tool allowance; excluding ONLY
+// those raw declarations avoids double funding while preserving additional
+// converted Search/Fetch tools introduced after native Claude admission.
+func claudeOtherToolAllowance(meta *metalib.Meta, quotes map[string]int64, uses map[string]int64) int64 {
+	deepSeek := deepseekcompat.UsesDeepSeekToolReceiptContract(meta)
+	var allowance int64
+	for name, count := range uses {
+		if deepSeek && (name == tooling.BuiltinWebSearch || name == tooling.BuiltinWebFetch) && quotes[name] > 0 {
+			continue
+		}
+		allowance = saturatingQuotaAdd(allowance, tooling.SaturatingToolAllowance(quotes[name], count))
+	}
+	return allowance
+}
+
+// withClaudeToolAllowance combines independent Claude and DeepSeek tool
+// reservations with the token quote. Raw DeepSeek Search/Fetch declarations
+// are excluded from the Claude part above to prevent overlapping charges.
 func withClaudeToolAllowance(c *gin.Context, quote int64) int64 {
-	return saturatingQuotaAdd(quote, max(c.GetInt64(ctxkey.ClaudeToolAllowanceQuota), tooling.ConservativeDeepSeekToolQuota(c)))
+	toolQuota := saturatingQuotaAdd(c.GetInt64(ctxkey.ClaudeToolAllowanceQuota), tooling.ConservativeDeepSeekToolQuota(c))
+	return saturatingQuotaAdd(quote, toolQuota)
 }
 
 // admitConvertedClaudeBuiltins re-applies the shared Chat or Responses
