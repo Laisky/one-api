@@ -27,13 +27,7 @@ def check_files(root: Path, files: list[str]) -> None:
             result = subprocess.run(["gofmt", "-l", *files[offset:offset + 128]], cwd=root,
                                     capture_output=True, text=True, timeout=120, check=True)
             if result.stdout.strip():
-                # Include a bounded unified diff so CI failures identify the
-                # exact spacing drift instead of only listing filenames.
-                first = result.stdout.strip().splitlines()[0]
-                diff = subprocess.run(["gofmt", "-d", first], cwd=root,
-                                      capture_output=True, text=True, timeout=20)
-                raise ValueError("Go files require gofmt:\n" + result.stdout.strip() +
-                                 "\n" + (diff.stdout + diff.stderr)[:8000])
+                raise ValueError("Go files require gofmt:\n" + result.stdout.strip())
         print(f"Go formatting passed for {len(files)} tracked files in {time.monotonic() - started:.3f}s.")
         return
     with tempfile.TemporaryDirectory(prefix="oneapi-gofmt-") as temporary:

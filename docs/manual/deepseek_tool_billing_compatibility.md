@@ -38,10 +38,15 @@ that may exceed upstream successful-operation charges.
 6. Native Responses WebSocket opens with an existing token handshake reservation
    before client frames arrive. Only successfully forwarded create frames enter
    the tool meter; denied frames and handshakes do not incur a new tool fee.
-   The session checks tool-floor affordability before forwarding and settles
-   accepted tools once both proxy legs have drained, together with Token usage.
-   The session budget snapshot is **not an atomic reservation shared across
-   concurrent sockets**, so concurrency/debt exposure remains a known limitation.
+   Each positively priced frame atomically reserves its extra Search/Fetch
+   allowance against the same durable user and token balances used by HTTP,
+   before the frame is forwarded to the upstream. Concurrent sessions cannot
+   spend the same finite balance. The session then reconciles all incremental
+   holds with the existing handshake reservation and observed tool costs once
+   both proxy legs have drained. A held but unforwarded frame is refunded by
+   final settlement; a denial before any executed frame refunds the whole hold.
+   An abrupt process loss between a durable debit and its final log
+   reconciliation still requires the existing billing-recovery audit.
 7. Effective zero-price tools remain free to the OneAPI user but are not evidence
    that upstream execution is free. Client-executed local function calls,
    client Tool Search, and unrelated third-party model providers keep their
