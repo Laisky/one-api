@@ -27,15 +27,15 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.3'
-      - name: Run owned-provider RED-to-GREEN acceptance with race detection
+      - name: Run full affected-package billing and compatibility race suite
         env:
           GOTOOLCHAIN: local
           CGO_ENABLED: '1'
           GOMAXPROCS: '2'
         run: |
           go test -race -count=1 -p 2 -timeout 25m \
-            ./relay/tooling ./relay/adaptor/common/builtinname \
+            ./relay/controller ./relay/tooling ./relay/adaptor/openai \
+            ./relay/adaptor/anthropic ./relay/adaptor/deepseek \
             ./relay/adaptor/common/deepseekcompat \
-            ./relay/adaptor/anthropic ./relay/adaptor/openai \
-            ./relay/controller \
-            -run '^(TestDeepSeek|TestConservative|TestRecordServerTool)'
+            ./relay/adaptor/common/builtinname \
+            ./relay/quota ./relay/billing
