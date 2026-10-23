@@ -49,8 +49,8 @@ type responseAPIEventUsage struct {
 }
 
 // ResponseAPIWebSocketAdmission validates an original client frame after
-// ownership/model authorization, but before forwarding. Its parameters are
-// the request context, raw frame bytes, and resolved upstream WebSocket URL. It returns an error to reject
+// ownership/model authorization and before provider dispatch. Its parameters
+// are the request context, raw frame bytes, and the resolved upstream URL. It returns an error to reject
 // the frame without forwarding it and must not modify the supplied bytes.
 type ResponseAPIWebSocketAdmission func(context.Context, []byte, string) error
 
@@ -270,29 +270,6 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 	return u.String(), nil
 }
 
-// closeRejectedResponseWSClient sends a policy Close and waits briefly for
-// the peer's matching Close control frame before the proxy tears down TCP.
-// Immediate Conn.Close after WriteControl can discard a preceding JSON error
-// event. Only the client-to-upstream goroutine reads the client socket, so
-// this bounded read does not introduce a second concurrent reader.
-func closeRejectedResponseWSClient(conn *websocket.Conn, reason string) error {
-	deadline := time.Now().Add(250 * time.Millisecond)
-	if err := conn.WriteControl(websocket.CloseMessage,
-		websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason), deadline); err != nil {
-		return errors.Wrap(err, "send response websocket policy close")
-	}
-	if err := conn.SetReadDeadline(deadline); err != nil {
-		return errors.Wrap(err, "bound response websocket close handshake")
-	}
-	// A peer that follows RFC 6455 replies with Close; otherwise the read
-	// deadline bounds the grace period. Never dispatch further client frames.
-	for {
-		if _, _, err := conn.ReadMessage(); err != nil {
-			return nil
-		}
-	}
-}
-
 // copyResponseAPIClientToUpstream forwards client frames to the upstream
 // connection while enforcing model pinning on every `response.create` event.
 //
@@ -339,7 +316,7 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 			ownership.denied.Store(true)
 			// Control writes are safe alongside the upstream-to-client writer.
 			reason := responseWSAuthorizationCloseReason(authorizationErr)
-			if closeErr := closeRejectedResponseWSClient(src, reason); closeErr != nil {
+			if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason), time.Now().Add(time.Second)); closeErr != nil {
 				return errors.Wrap(closeErr, "close unauthorized response websocket")
 			}
 			return errors.WithStack(authorizationErr)
@@ -355,12 +332,12 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 				// upstream side so billing reconciliation runs without any
 				// upstream charges accruing for the denied model.
 				errEvent := buildModelSwitchErrorEvent(guardErr.Error())
-				if writeErr := ownership.writeClientMessage(src, websocket.TextMessage, errEvent); writeErr != nil {
-					return errors.Wrap(writeErr, "send response websocket model-switch error event")
-				}
-				if closeErr := closeRejectedResponseWSClient(src, "model_switch_denied"); closeErr != nil {
-					return errors.Wrap(closeErr, "close denied model-switch response websocket")
-				}
+				_ = ownership.writeClientMessage(src, websocket.TextMessage, errEvent)
+				_ = src.WriteControl(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "model_switch_denied"),
+					time.Now().Add(time.Second),
+				)
 				return errors.WithStack(guardErr)
 			}
 			outbound = rewritten
@@ -374,7 +351,7 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 			if admissionErr := admission(ctx, msg, upstreamURL); admissionErr != nil {
 				ownership.denied.Store(true)
 				// Control writes are safe alongside the upstream-to-client writer.
-				if closeErr := closeRejectedResponseWSClient(src, "tool_billing_not_supported"); closeErr != nil {
+				if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "tool_billing_not_supported"), time.Now().Add(time.Second)); closeErr != nil {
 					return errors.Wrap(closeErr, "close response websocket after tool admission denial")
 				}
 				return errors.Wrap(admissionErr, "response websocket tool admission failed")
