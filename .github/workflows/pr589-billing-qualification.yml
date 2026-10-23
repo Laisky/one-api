@@ -20,5 +20,5 @@ jobs:
         with:
           go-version: '1.27.3'
       - name: DeepSeek WS real route behavioral regression
-        run: go test -count=1 -timeout=12m -run '^(TestDeepSeekToolReceiptWebSocketAdmission|TestClaudeConservativeIndependentToolAllowance)
- -v ./relay/controller
+        run: |
+          go test -count=1 -timeout=12m -run '^(TestDeepSeekToolReceiptWebSocketAdmission|TestClaudeConservativeIndependentToolAllowance)$' -v ./relay/controller
