@@ -13,6 +13,7 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/common/builtinname"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -106,7 +107,7 @@ func ApplyBuiltinToolCharges(c *gin.Context, usage **relaymodel.Usage, meta *met
 
 	counts := collectInvocationCounts(c)
 	conservativeEstimated := false
-	if conservativeDeepSeekAllowance(c) != nil {
+	if deepseekcompat.UsesDeepSeekToolReceiptContract(meta) || conservativeDeepSeekAllowance(c) != nil {
 		conservativeEstimated = conservativeDeepSeekCounts(c, counts)
 	}
 	if len(counts) == 0 {
@@ -154,7 +155,12 @@ func ApplyBuiltinToolCharges(c *gin.Context, usage **relaymodel.Usage, meta *met
 			} else {
 				usagePtr.ToolsCost += cost
 			}
-			if conservativeEstimated && usagePtr.BillingEstimateReason == "" {
+			// A conservative tool count does not make measured token usage
+			// uncertain. Mark the whole request estimated only when token
+			// usage is also missing; otherwise the token over-reservation
+			// must be refunded while the tool floor remains charged.
+			if conservativeEstimated && usagePtr.BillingEstimateReason == "" &&
+				usagePtr.PromptTokens == 0 && usagePtr.CompletionTokens == 0 && usagePtr.TotalTokens == 0 {
 				usagePtr.BillingEstimateReason = "deepseek_conservative_tool_attempt_floor"
 			}
 			// Maintain TotalTokens when upstream omits it to align with previous behaviour.
