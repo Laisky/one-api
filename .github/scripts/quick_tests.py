@@ -16,21 +16,6 @@ MODULE = "github.com/Laisky/one-api"
 # compilation cost left insufficient margin for a complete CI job below five minutes.
 SELECTIONS = {
     "relay/format": None,
-    # Temporary PR585 affected regression validation; remove after test receipts.
-    "common/logger/otelbridge": (
-        "TestTimeOverflowPreservesLogAttribute",
-        "TestLogFidelityTimeReviewPreservesOverflow",
-        "TestLogFidelityTimeReviewBoundaries",
-        "TestLogFidelityBridgeFields",
-        "TestBridgeStopsSerializingAfterKnownFailure",
-    ),
-    "common/telemetry": (
-        "TestLogExportOutcomeMetricsKeepKnownLabels",
-        "TestPrivateMetricViewPreservesCountsWithoutUserStrings",
-        "TestDirectSDKMetricMetadataIsPrivate",
-        "TestMetricRegistryCoversSourceDeclaredInstruments",
-        "TestLogFidelityProductionMetadataAndBody",
-    ),
 }
 
 
