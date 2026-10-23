@@ -22,3 +22,6 @@ jobs:
       - name: DeepSeek WS real route behavioral regression
         run: |
           go test -race -count=1 -timeout=15m -run '^(TestDeepSeekToolReceiptWebSocketAdmission|TestClaudeConservativeIndependentToolAllowance|TestClaudeConservativeRawAndConvertedToolQuoteCompatibility)$' -v ./relay/controller
+      - name: Broader affected Go package race regressions
+        run: |
+          go test -race -count=1 -timeout=15m ./relay/controller ./relay/tooling ./relay/adaptor/openai ./relay/adaptor/anthropic ./relay/adaptor/common/deepseekcompat ./relay/adaptor/common/builtinname
