@@ -303,7 +303,10 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if err != nil {
 		// A transport error after dispatch does not prove Cohere rejected work.
 		// Settle the existing allowance once before the outer retry decision.
-		if shouldSkipPreConsumedRefund(c) {
+		if c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) &&
+			retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "transport_uncertain") {
+			// The admitted hosted tool may have run before transport failure.
+		} else if shouldSkipPreConsumedRefund(c) {
 			settleRetainedRequestAdmission(c, preConsumedQuota, meta.TokenId, "do_request_failed")
 		} else {
 			// Own both the refund and ledger reconciliation before the deferred audit.
@@ -328,6 +331,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 	if isErrorHappened(meta, resp) {
+		if retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "upstream_http_error") {
+			return RelayErrorHandlerWithContext(c, resp)
+		}
 		// refund pre-consumed quota under lifecycle management so shutdown waits for it
 		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error

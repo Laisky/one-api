@@ -238,7 +238,10 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	resp, err := requestAdaptor.DoRequest(c, meta, requestBody)
 	if err != nil {
 		// Refund pre-consumed quota since the upstream request failed before any tokens were consumed
-		scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "do_request_failed")
+		if !(c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) &&
+			retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "transport_uncertain")) {
+			scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "do_request_failed")
+		}
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
 	upstreamCapture := wrapUpstreamResponse(resp)
@@ -268,6 +271,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	// Check for HTTP errors
 	if resp.StatusCode != http.StatusOK {
+		// A provider may have executed paid Search/Fetch before returning an
+		// error without final usage. Retain the funded floor and audit it.
+		if retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "upstream_http_error") {
+			return RelayErrorHandlerWithContext(c, resp)
+		}
 		scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)

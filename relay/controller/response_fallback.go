@@ -371,7 +371,10 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 
 	resp, err := requestAdaptor.DoRequest(c, meta, requestBody)
 	if err != nil {
-		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "do_request_failed")
+		if !(c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) &&
+			retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "transport_uncertain")) {
+			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "do_request_failed")
+		}
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
 	upstreamCapture := wrapUpstreamResponse(resp)
@@ -386,6 +389,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	}
 
 	if isErrorHappened(meta, resp) {
+		if retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "upstream_http_error") {
+			return RelayErrorHandlerWithContext(c, resp)
+		}
 		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		return RelayErrorHandlerWithContext(c, resp)
 	}

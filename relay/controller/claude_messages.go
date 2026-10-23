@@ -384,7 +384,9 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// do request
 	resp, err = adaptorInstance.DoRequest(c, meta, requestBody)
 	if err != nil {
-		// ErrorWrapper will log the error, so we don't need to log it here
+		if c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) {
+			_ = retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "transport_uncertain")
+		}
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
 	origResp = resp
@@ -471,6 +473,9 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			goto handleResponse
 		}
 
+		if retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "upstream_http_error") {
+			return RelayErrorHandlerWithContext(c, resp)
+		}
 		scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)
