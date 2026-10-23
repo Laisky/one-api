@@ -17,9 +17,9 @@ import (
 	"github.com/Laisky/one-api/common/metrics"
 )
 
-// TestGlobalSDKLogsArePrivateBeforeAdmission verifies direct global Emit calls
+// TestExplicitLegacySDKLogsArePrivateBeforeAdmission verifies direct global Emit calls
 // cannot bypass privacy via body, event, scope options, attributes, or resources.
-func TestGlobalSDKLogsArePrivateBeforeAdmission(t *testing.T) {
+func TestExplicitLegacySDKLogsArePrivateBeforeAdmission(t *testing.T) {
 	capture := &captureProcessor{}
 	gate := newBoundedProcessor(capture, 10, 4096)
 	resource := privateResource(sdkresource.NewSchemaless(attribute.String("service.name", "one-api"),
@@ -70,9 +70,9 @@ func TestGlobalSDKLogsArePrivateBeforeAdmission(t *testing.T) {
 	require.Equal(t, []attribute.KeyValue{attribute.String("service.name", "one-api")}, got.Resource().Attributes())
 }
 
-// TestRawSDKUnsafeScopeIsDroppedBeforeAdmission verifies an internal raw SDK
+// TestExplicitLegacySDKUnsafeScopeIsDroppedBeforeAdmission verifies an internal raw SDK
 // provider reference cannot enqueue immutable unsafe scope metadata.
-func TestRawSDKUnsafeScopeIsDroppedBeforeAdmission(t *testing.T) {
+func TestExplicitLegacySDKUnsafeScopeIsDroppedBeforeAdmission(t *testing.T) {
 	spy := installLogExportSpy(t)
 	next := &nopProcessor{}
 	gate := newBoundedProcessor(next, 10, 4096)
@@ -88,9 +88,9 @@ func TestRawSDKUnsafeScopeIsDroppedBeforeAdmission(t *testing.T) {
 	require.Equal(t, 1, spy.outcome(metrics.AppLogExportOutcomeDroppedPrivacy))
 }
 
-// TestSDKEnvironmentResourceCannotBypassPrivacy verifies the SDK's implicit
+// TestExplicitLegacySDKEnvironmentResourceCannotBypassPrivacy verifies the SDK's implicit
 // environment-resource merge cannot reintroduce secrets after source filtering.
-func TestSDKEnvironmentResourceCannotBypassPrivacy(t *testing.T) {
+func TestExplicitLegacySDKEnvironmentResourceCannotBypassPrivacy(t *testing.T) {
 	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "unknown_secret=sentinel-env-secret")
 	spy := installLogExportSpy(t)
 	next := &nopProcessor{}

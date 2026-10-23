@@ -16,6 +16,12 @@ MODULE = "github.com/Laisky/one-api"
 # compilation cost left insufficient margin for a complete CI job below five minutes.
 SELECTIONS = {
     "relay/format": None,
+    # Temporary PR585 RED/GREEN verification of seconds-offset timestamp fidelity.
+    "common/logger/otelbridge": (
+        "TestOutOfRangeSecondPrecisionZonePreservesInstant",
+        "TestTimeOverflowPreservesLogAttribute",
+        "TestLogFidelityTimeReviewBoundaries",
+    ),
 }
 
 

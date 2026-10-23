@@ -33,15 +33,15 @@ import (
 	"github.com/Laisky/one-api/common/config"
 )
 
-// TestEdgeResourcePrivacyAndIdentity checks automatic resource detection with
+// TestEdgeResourceFidelityAndIdentity checks automatic resource detection with
 // synthetic command-line secrets and an operator-supplied stable host identity.
 // Parameters: t owns environment and argument restoration. It returns no value.
-func TestEdgeResourcePrivacyAndIdentity(t *testing.T) {
+func TestEdgeResourceFidelityAndIdentity(t *testing.T) {
 	previous := os.Args
 	os.Args = []string{"one-api", "--token=synthetic-secret-not-for-export"}
 	t.Cleanup(func() { os.Args = previous })
 	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "host.name=b1,operator.test=retained")
-	res, err := buildResource(context.Background())
+	res, err := buildLogResource(context.Background())
 	require.NoError(t, err)
 	attrs := map[string]string{}
 	for _, kv := range res.Attributes() {
@@ -50,8 +50,16 @@ func TestEdgeResourcePrivacyAndIdentity(t *testing.T) {
 	require.NotContains(t, attrs, "process.command_args")
 	require.NotContains(t, attrs, "process.owner")
 	require.Equal(t, "b1", attrs["host.name"])
-	// Unknown operator fields must not expand the export surface with secrets.
-	require.NotContains(t, attrs, "operator.test")
+	// Explicit operator metadata survives; no additional process detectors are enabled.
+	require.Equal(t, "retained", attrs["operator.test"])
+	// Trace/metric resource materialization keeps its prior scoped privacy contract.
+	legacy, err := buildResource(context.Background())
+	require.NoError(t, err)
+	legacyAttrs := map[string]string{}
+	for _, kv := range legacy.Attributes() {
+		legacyAttrs[string(kv.Key)] = kv.Value.Emit()
+	}
+	require.NotContains(t, legacyAttrs, "operator.test")
 	if config.OpenTelemetryEnvironment != "" {
 		require.Equal(t, config.OpenTelemetryEnvironment, attrs["deployment.environment.name"])
 		require.Equal(t, config.OpenTelemetryEnvironment, attrs["deployment.environment"])

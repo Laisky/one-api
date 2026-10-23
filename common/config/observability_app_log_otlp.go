@@ -11,10 +11,10 @@ package config
 // legacy behavior. APP_LOG_SINK keeps its meaning byte for byte: without the
 // new token, this file changes nothing at all and no log exporter is built.
 //
-// Second, a setting whose ABSENCE is a defect defaults to enabled and
-// generously sized. Every bound below is on rather than unlimited, sized so it
-// does not engage in healthy operation, because the deployment running pure
-// defaults is the least able to discover an unbounded queue.
+// Second, queue admission is bounded by record count and estimated bytes on
+// every deployment that opts into OTLP. Content limits instead default to zero
+// (unlimited): setting a positive limit explicitly rejects the entire OTLP
+// record without silently changing the application's chosen representation.
 
 import (
 	"strings"
@@ -109,23 +109,17 @@ var (
 	// Default: 30000, the OpenTelemetry SDK default
 	AppLogOTLPExportTimeoutMs = positiveOr(env.Int(EnvAppLogOTLPExportTimeoutMs, 30000), 30000)
 
-	// AppLogOTLPMaxAttributes bounds the attributes kept on one record.
-	//
+	// AppLogOTLPMaxAttributes is an explicit operator record-attribute budget.
+	// Zero (the default) is unlimited. A positive value rejects the whole record
+	// observably instead of silently truncating it in the SDK.
 	// Environment variable: LOG_OTLP_MAX_ATTRIBUTES
-	// Default: 128, the OpenTelemetry SDK default
-	AppLogOTLPMaxAttributes = positiveOr(env.Int(EnvAppLogOTLPMaxAttributes, 128), 128)
+	AppLogOTLPMaxAttributes = nonNegative(env.Int(EnvAppLogOTLPMaxAttributes, 0))
 
-	// AppLogOTLPMaxAttributeValueBytes bounds one attribute value.
-	//
-	// The SDK default is unlimited. Unlimited is not a conservative default for
-	// a resource bound; a single relay adaptor logging an upstream payload
-	// would otherwise put an unbounded string on the wire. 4 KiB keeps ordinary
-	// fields (URLs, model names, error text) intact.
-	//
+	// AppLogOTLPMaxAttributeValueBytes is an explicit operator text/binary leaf
+	// budget, including nested attribute values. Default zero is unlimited;
+	// exceeding a positive value rejects the whole record without partial export.
 	// Environment variable: LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES
-	// Default: 4096
-	// Unit: bytes
-	AppLogOTLPMaxAttributeValueBytes = positiveOr(env.Int(EnvAppLogOTLPMaxAttributeValueBytes, 4096), 4096)
+	AppLogOTLPMaxAttributeValueBytes = nonNegative(env.Int(EnvAppLogOTLPMaxAttributeValueBytes, 0))
 )
 
 // AppLogOTLPQueueMaxBytes returns the configured queue byte ceiling.

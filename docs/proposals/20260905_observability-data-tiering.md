@@ -236,8 +236,13 @@ certified capacity settings. File-size settings named `_MB` use MiB (`1 << 20`) 
 | `LOG_OTLP_BATCH_SIZE` | `512` | `512` | `512` |
 | `LOG_OTLP_EXPORT_INTERVAL_MS` | `1000` | `1000` | `1000` |
 | `LOG_OTLP_EXPORT_TIMEOUT_MS` | `30000` | `30000` | `30000` |
-| `LOG_OTLP_MAX_ATTRIBUTES` | `128` | `128` | `128` |
-| `LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES` | `4096` | `4096` | `4096` |
+| `LOG_OTLP_MAX_ATTRIBUTES` | `0` | `0` | `0` |
+| `LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES` | `0` | `0` | `0` |
+
+2026-10-18 contract update: optional OTLP logs preserve original application
+content by default. Attribute count/value limits now default to zero (unlimited);
+explicit positive limits reject whole records observably instead of silent SDK
+truncation. Queue resource limits remain. See [the current fidelity contract](../manual/operational_logging_privacy.md).
 
 Two kinds of setting appear in this table and they follow opposite default rules.
 A setting that changes what a user observes -- sampling, batched writes, file

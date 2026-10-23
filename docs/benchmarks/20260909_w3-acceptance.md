@@ -1,3 +1,8 @@
+> Historical measurement: the September defaults below describe that measured
+> revision. The 2026-10-18 default-fidelity repair supersedes implicit 128/4096
+> attribute truncation; see [the current contract](../manual/operational_logging_privacy.md).
+> These historical measurements do not qualify the new collector/storage mapping.
+
 # W3 acceptance evidence: OTLP application logs, operational metrics, collector topology
 
 - Date: 2026-09-09

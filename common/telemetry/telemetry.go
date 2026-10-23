@@ -185,10 +185,13 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 		return nil, laerrors.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL_ENABLED is true")
 	}
 
-	res, err := buildResource(ctx)
+	logResource, err := buildLogResource(ctx)
 	if err != nil {
 		return nil, laerrors.Wrap(err, "build OpenTelemetry resource")
 	}
+	// Preserve the established trace/metric provider input; log content fidelity
+	// does not expand their export policy or change their actual resource identity.
+	res := privateResource(logResource)
 
 	traceExporter, err := otlptracehttp.New(ctx, buildTraceExporterOptions()...)
 	if err != nil {
@@ -230,7 +233,7 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 	// no batch worker at all.
 	var loggerProvider *sdklog.LoggerProvider
 	if config.AppLogOTLPEnabled {
-		loggerProvider, err = newLoggerProvider(ctx, res)
+		loggerProvider, err = newLoggerProvider(ctx, logResource)
 		if err != nil {
 			_ = meterProvider.Shutdown(ctx)
 			_ = tracerProvider.Shutdown(ctx)
@@ -336,7 +339,18 @@ func (p *ProviderBundle) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// buildResource preserves the established trace/metric resource contract.
 func buildResource(ctx context.Context) (*sdkresource.Resource, error) {
+	res, err := buildLogResource(ctx)
+	if res != nil {
+		res = privateResource(res)
+	}
+	return res, err
+}
+
+// buildLogResource materializes the chosen SDK detectors and operator metadata
+// without a logging allowlist. Log, resource and scope namespaces remain distinct.
+func buildLogResource(ctx context.Context) (*sdkresource.Resource, error) {
 	attrs := []attribute.KeyValue{
 		attribute.String("service.name", config.OpenTelemetryServiceName),
 		attribute.String("service.version", common.Version),
@@ -363,9 +377,6 @@ func buildResource(ctx context.Context) (*sdkresource.Resource, error) {
 		sdkresource.WithAttributes(attrs...),
 	)
 	// resource.New can return a usable resource together with its error; both are passed on.
-	if res != nil {
-		res = privateResource(res)
-	}
 	return res, laerrors.WithStack(err)
 }
 

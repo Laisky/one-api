@@ -9,8 +9,8 @@ package otelbridge
 //
 // These encoders turn a zap field into OpenTelemetry attributes. zap.Namespace
 // opens a nested attribute map rather than a dotted key prefix, and
-// zap.Object/zap.Array become nested map/slice attribute values, matching the
-// upstream bridge exactly.
+// zap.Object/zap.Array become nested map/slice attribute values. Encoding
+// failures reject the whole OTLP record rather than silently dropping content.
 
 import (
 	"time"
@@ -39,7 +39,10 @@ type objectEncoder struct {
 	// root points at the outermost namespace, whose attrs are the result.
 	root *namespace
 	// cur points at the namespace currently being written to.
-	cur *namespace
+	cur            *namespace
+	failure        *error
+	depth          int
+	namespaceDepth int
 }
 
 // newObjectEncoder returns an object encoder sized for n fields.
@@ -51,7 +54,8 @@ type objectEncoder struct {
 //   - *objectEncoder: an encoder whose root namespace is empty.
 func newObjectEncoder(n int) *objectEncoder {
 	root := &namespace{attrs: make([]attribute.KeyValue, 0, n)}
-	return &objectEncoder{root: root, cur: root}
+	var failure error
+	return &objectEncoder{root: root, cur: root, failure: &failure}
 }
 
 // calculate collapses the namespace chain into nested map attributes.
@@ -64,11 +68,13 @@ func newObjectEncoder(n int) *objectEncoder {
 //
 // Return values: none.
 func (m *objectEncoder) calculate(o *namespace) {
-	if o.next == nil {
-		return
+	var chain []*namespace
+	for node := o; node != nil; node = node.next {
+		chain = append(chain, node)
 	}
-	m.calculate(o.next)
-	o.attrs = append(o.attrs, attribute.Map(o.next.name, o.next.attrs...))
+	for i := len(chain) - 2; i >= 0; i-- {
+		chain[i].attrs = append(chain[i].attrs, attribute.Map(chain[i+1].name, chain[i+1].attrs...))
+	}
 }
 
 // AddArray implements zapcore.ObjectEncoder by encoding v as a slice attribute.
@@ -81,7 +87,16 @@ func (m *objectEncoder) calculate(o *namespace) {
 //   - error: whatever v.MarshalLogArray reported.
 func (m *objectEncoder) AddArray(key string, v zapcore.ArrayMarshaler) error {
 	arr := newArrayEncoder()
+	arr.failure = m.failure
+	arr.depth = m.depth + 1
+	if arr.depth > maxLogEncodingDepth {
+		*m.failure = ErrLogEncoding
+		return ErrLogEncoding
+	}
 	err := v.MarshalLogArray(arr)
+	if err != nil {
+		*m.failure = ErrLogEncoding
+	}
 	m.cur.attrs = append(m.cur.attrs, attribute.Slice(key, arr.elems...))
 	return errors.WithStack(err)
 }
@@ -97,7 +112,16 @@ func (m *objectEncoder) AddArray(key string, v zapcore.ArrayMarshaler) error {
 func (m *objectEncoder) AddObject(k string, v zapcore.ObjectMarshaler) error {
 	// Capacity 2 mirrors zap's own console encoder, which assumes small objects.
 	inner := newObjectEncoder(2)
+	inner.failure = m.failure
+	inner.depth = m.depth + 1
+	if inner.depth > maxLogEncodingDepth {
+		*m.failure = ErrLogEncoding
+		return ErrLogEncoding
+	}
 	err := v.MarshalLogObject(inner)
+	if err != nil {
+		*m.failure = ErrLogEncoding
+	}
 	inner.calculate(inner.root)
 	m.cur.attrs = append(m.cur.attrs, attribute.Map(k, inner.root.attrs...))
 	return errors.WithStack(err)
@@ -229,12 +253,14 @@ func (m *objectEncoder) AddUint64(k string, v uint64) {
 //   - v: the value to convert.
 //
 // Return values:
-//   - error: always nil; unsupported values are reported in-band as strings.
+//   - error: fixed failure when the declared JSON value cannot be encoded.
 func (m *objectEncoder) AddReflected(k string, v any) error {
-	m.cur.attrs = append(m.cur.attrs, attribute.KeyValue{
-		Key:   attribute.Key(k),
-		Value: convertValue(v),
-	})
+	value, err := reflectedLogValue(v)
+	if err != nil {
+		*m.failure = ErrLogEncoding
+		return ErrLogEncoding
+	}
+	m.cur.attrs = append(m.cur.attrs, attribute.KeyValue{Key: attribute.Key(k), Value: value})
 	return nil
 }
 
@@ -246,6 +272,13 @@ func (m *objectEncoder) AddReflected(k string, v any) error {
 //
 // Return values: none.
 func (m *objectEncoder) OpenNamespace(k string) {
+	// Fail at the boundary, not after allocating an arbitrarily long
+	// namespace chain and invoking later application field serializers.
+	if m.depth+m.namespaceDepth >= maxLogEncodingDepth {
+		*m.failure = ErrLogEncoding
+		return
+	}
+	m.namespaceDepth++
 	next := &namespace{name: k, attrs: make([]attribute.KeyValue, 0, 5)}
 	m.cur.next = next
 	m.cur = next
@@ -262,8 +295,8 @@ func (m *objectEncoder) AddComplex64(k string, v complex64) {
 	m.AddComplex128(k, complex128(v))
 }
 
-// AddTime implements zapcore.ObjectEncoder, recording timestamps as Unix
-// nanoseconds so the receiving pipeline needs no layout agreement.
+// AddTime implements zapcore.ObjectEncoder, preserving exact signed Unix
+// nanoseconds when representable and RFC3339Nano text otherwise.
 //
 // Parameters:
 //   - k: the attribute key.
@@ -271,7 +304,7 @@ func (m *objectEncoder) AddComplex64(k string, v complex64) {
 //
 // Return values: none.
 func (m *objectEncoder) AddTime(k string, v time.Time) {
-	m.AddInt64(k, v.UnixNano())
+	m.cur.attrs = append(m.cur.attrs, attribute.KeyValue{Key: attribute.Key(k), Value: convertTimeValue(v)})
 }
 
 // AddFloat32 implements zapcore.ObjectEncoder for 32-bit float fields.
@@ -357,7 +390,9 @@ func (m *objectEncoder) AddUintptr(k string, v uintptr) { m.AddUint64(k, uint64(
 
 // arrayEncoder implements zapcore.ArrayEncoder by accumulating attribute values.
 type arrayEncoder struct {
-	elems []attribute.Value
+	elems   []attribute.Value
+	failure *error
+	depth   int
 }
 
 // newArrayEncoder returns an empty array encoder.
@@ -368,7 +403,8 @@ type arrayEncoder struct {
 //   - *arrayEncoder: an encoder holding no elements.
 func newArrayEncoder() *arrayEncoder {
 	// Capacity 2 mirrors zap's own console encoder.
-	return &arrayEncoder{elems: make([]attribute.Value, 0, 2)}
+	var failure error
+	return &arrayEncoder{elems: make([]attribute.Value, 0, 2), failure: &failure}
 }
 
 // AppendArray implements zapcore.ArrayEncoder for nested arrays.
@@ -380,7 +416,16 @@ func newArrayEncoder() *arrayEncoder {
 //   - error: whatever v.MarshalLogArray reported.
 func (a *arrayEncoder) AppendArray(v zapcore.ArrayMarshaler) error {
 	inner := newArrayEncoder()
+	inner.failure = a.failure
+	inner.depth = a.depth + 1
+	if inner.depth > maxLogEncodingDepth {
+		*a.failure = ErrLogEncoding
+		return ErrLogEncoding
+	}
 	err := v.MarshalLogArray(inner)
+	if err != nil {
+		*a.failure = ErrLogEncoding
+	}
 	a.elems = append(a.elems, attribute.SliceValue(inner.elems...))
 	return errors.WithStack(err)
 }
@@ -394,7 +439,16 @@ func (a *arrayEncoder) AppendArray(v zapcore.ArrayMarshaler) error {
 //   - error: whatever v.MarshalLogObject reported.
 func (a *arrayEncoder) AppendObject(v zapcore.ObjectMarshaler) error {
 	inner := newObjectEncoder(2)
+	inner.failure = a.failure
+	inner.depth = a.depth + 1
+	if inner.depth > maxLogEncodingDepth {
+		*a.failure = ErrLogEncoding
+		return ErrLogEncoding
+	}
 	err := v.MarshalLogObject(inner)
+	if err != nil {
+		*a.failure = ErrLogEncoding
+	}
 	inner.calculate(inner.root)
 	a.elems = append(a.elems, attribute.MapValue(inner.root.attrs...))
 	return errors.WithStack(err)
@@ -407,9 +461,14 @@ func (a *arrayEncoder) AppendObject(v zapcore.ObjectMarshaler) error {
 //   - v: the value to convert.
 //
 // Return values:
-//   - error: always nil; unsupported values are reported in-band as strings.
+//   - error: fixed failure when the declared JSON value cannot be encoded.
 func (a *arrayEncoder) AppendReflected(v any) error {
-	a.elems = append(a.elems, convertValue(v))
+	value, err := reflectedLogValue(v)
+	if err != nil {
+		*a.failure = ErrLogEncoding
+		return ErrLogEncoding
+	}
+	a.elems = append(a.elems, value)
 	return nil
 }
 
@@ -541,13 +600,16 @@ func (a *arrayEncoder) AppendInt16(v int16) { a.AppendInt64(int64(v)) }
 // Return values: none.
 func (a *arrayEncoder) AppendInt8(v int8) { a.AppendInt64(int64(v)) }
 
-// AppendTime implements zapcore.ArrayEncoder, recording Unix nanoseconds.
+// AppendTime implements zapcore.ArrayEncoder, preserving a time's exact
+// signed nanoseconds when possible and RFC3339Nano text otherwise.
 //
 // Parameters:
 //   - v: the value to append.
 //
 // Return values: none.
-func (a *arrayEncoder) AppendTime(v time.Time) { a.AppendInt64(v.UnixNano()) }
+func (a *arrayEncoder) AppendTime(v time.Time) {
+	a.elems = append(a.elems, convertTimeValue(v))
+}
 
 // AppendUint implements zapcore.ArrayEncoder for platform-sized unsigned values.
 //

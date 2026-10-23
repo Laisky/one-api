@@ -12,7 +12,8 @@ package otelbridge
 // "trace_id" in the attributes instead produces records that no backend joins.
 //
 // The upstream otelzap answer is to log a whole context.Context as a field.
-// This repository cannot adopt that as its primary mechanism. Request loggers
+// This repository uses an explicit carrier API instead. An ordinary logged
+// context follows its chosen Zap encoding and is not silently consumed. Request loggers
 // here are deliberately context-free: identity.Bind stores the request logger
 // by value and relayctx.Detach snapshots it into background goroutines that
 // outlive the request, so binding the request context into the logger would
@@ -92,7 +93,7 @@ func SpanContextFieldFrom(sc oteltrace.SpanContext) zap.Field {
 //     context, which is also the signal that it must not be encoded as an
 //     attribute.
 func spanContextFromField(field zapcore.Field) (oteltrace.SpanContext, bool) {
-	if field.Type != zapcore.SkipType || field.Interface == nil {
+	if field.Key != SpanContextFieldKey || field.Type != zapcore.SkipType || field.Interface == nil {
 		return oteltrace.SpanContext{}, false
 	}
 	sc, ok := field.Interface.(oteltrace.SpanContext)

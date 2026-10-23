@@ -5,10 +5,9 @@ package otel
 // created lazily on first use so the OtelRecorder struct and constructor in
 // recorder.go stay untouched.
 //
-// This is the deployment where the accounting matters most: when the OTLP
-// bridge is the only place application logs go, a record it discards leaves no
-// trace anywhere else, so the counters have to leave the process through the
-// metrics pipeline instead.
+// The OTLP application-log branch is best effort and always accompanies a
+// local sink of record. These counters distinguish losses of the off-box copy
+// even when the original line survives in local file/stdout logs.
 
 import (
 	"context"
