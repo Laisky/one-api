@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/gorilla/websocket"
 
 	"github.com/Laisky/one-api/common"
 	rmeta "github.com/Laisky/one-api/relay/meta"
@@ -17,6 +18,9 @@ import (
 // responseWSSessionOwnership retains a bounded set of provider-confirmed IDs for one authenticated socket.
 type responseWSSessionOwnership struct {
 	mu         sync.RWMutex
+	// Gorilla WebSocket permits one concurrent data writer per connection.
+	// The upstream relay and local rejection events share this client writer.
+	clientWriteMu sync.Mutex
 	ids        map[string]struct{}
 	denied     atomic.Bool
 	dispatched atomic.Bool
@@ -36,6 +40,14 @@ func (s *responseWSSessionOwnership) observe(id string) {
 		s.ids = make(map[string]struct{})
 	}
 	s.ids[id] = struct{}{}
+}
+
+// writeClientMessage serializes regular client WebSocket frames from both
+// proxy directions. WriteControl and Close remain safe concurrently.
+func (s *responseWSSessionOwnership) writeClientMessage(conn *websocket.Conn, messageType int, frame []byte) error {
+	s.clientWriteMu.Lock()
+	defer s.clientWriteMu.Unlock()
+	return conn.WriteMessage(messageType, frame)
 }
 
 // ErrResponseWSConversationUnsupported marks a response.create frame that names
