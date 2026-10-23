@@ -19,8 +19,8 @@ import (
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
-	"github.com/Laisky/one-api/relay/tooling"
 	quotautil "github.com/Laisky/one-api/relay/quota"
+	"github.com/Laisky/one-api/relay/tooling"
 )
 
 // postConsumeResponseAPIQuotaDetailed lets tests capture the billing detail without DB writes.

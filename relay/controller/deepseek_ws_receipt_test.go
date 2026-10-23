@@ -152,6 +152,7 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 		{name: "duplicate_input", tool: `{"type":"tool_search","execution":"client"}`, input: `[{"type":"tool_search_output","execution":"client","call_id":"search_1","tools":[{"type":"web_search"}]}]`, price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
 		{name: "folded_input", tool: `{"type":"tool_search","execution":"client"}`, input: `[{"type":"tool_search_output","execution":"client","call_id":"search_1","tools":[{"type":"web_search"}]}]`, price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true},
 		{name: "accepted_work_before_denial", price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true, previous: true},
+		{name: "accepted_paid_before_denial", price: &model.ToolPricingLocal{QuotaPerCall: 17}, reject: true, previous: true},
 		{name: "unused_openai_override", price: &model.ToolPricingLocal{QuotaPerCall: 17}, override: "http://api.openai.com/v1/responses"},
 		{name: "unused_deepseek_override", host: "api.openai.com", actual: "gpt-4o-mini", price: &model.ToolPricingLocal{QuotaPerCall: 17}, override: "http://api.deepseek.com/v1/responses"},
 		{name: "explicit_zero", price: &model.ToolPricingLocal{}},
@@ -219,6 +220,9 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 			var accepted []string
 			if tc.previous {
 				first := `{"type":"response.create","model":"` + tc.actual + `","input":"accepted synthetic work"}`
+				if tc.name == "accepted_paid_before_denial" {
+					first = strings.TrimSuffix(first, "}") + `,"tools":[{"type":"web_search"}]}`
+				}
 				require.NoError(t, client.WriteMessage(websocket.TextMessage, []byte(first)))
 				require.True(t, deepSeekWSReadReceiptOrClose(t, client))
 				accepted = append(accepted, first)
@@ -233,7 +237,7 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 				frame = strings.Replace(frame, `,"vendor_extension"`, `,"input":"synthetic","vendor_extension"`, 1)
 			case "folded_input":
 				frame = strings.Replace(frame, `,"vendor_extension"`, `,"Input":"synthetic","vendor_extension"`, 1)
-			case "accepted_work_before_denial":
+			case "accepted_work_before_denial", "accepted_paid_before_denial":
 				frame = strings.Replace(frame, `,"vendor_extension"`, `,"tools":[{"type":"function","name":"local"}],"vendor_extension"`, 1)
 			}
 			require.NoError(t, client.WriteMessage(tc.frameType, []byte(frame)))
@@ -255,6 +259,10 @@ func TestDeepSeekToolReceiptWebSocketAdmission(t *testing.T) {
 				var charge int64
 				if tc.previous {
 					charge = 15
+					if tc.name == "accepted_paid_before_denial" {
+						charge += 170
+						require.EqualValues(t, 170, toolFloor, "first paid create must retain its tool floor")
+					}
 					require.Nil(t, apiErr, "later denial retains completed work and its terminal receipt")
 					require.EqualValues(t, charge, requestCostQuota(t, requestID))
 				} else {
