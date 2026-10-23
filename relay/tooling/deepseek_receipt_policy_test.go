@@ -17,8 +17,8 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-// TestDeepSeekToolReceiptPositiveQuotes rejects unsupported paid receipt inference,
-// including provider defaults reached through an OpenAI compatibility channel.
+// TestDeepSeekToolReceiptPositiveQuotes keeps explicitly priced DeepSeek tools
+// available under the conservative billing policy.
 func TestDeepSeekToolReceiptPositiveQuotes(t *testing.T) {
 	for _, tc := range []struct {
 		name, base, actual string
@@ -40,8 +40,9 @@ func TestDeepSeekToolReceiptPositiveQuotes(t *testing.T) {
 				require.NoError(t, channel.SetToolingConfig(&model.ChannelToolingConfig{Pricing: map[string]model.ToolPricingLocal{BuiltinWebSearch: *tc.price}}))
 			}
 			meta := &metalib.Meta{ChannelType: tc.channel, BaseURL: tc.base, OriginModelName: "mapped-alias", ActualModelName: tc.actual}
-			_, err := BuiltinToolQuotes(context.Background(), tc.actual, meta, channel, tc.provider, map[string]struct{}{BuiltinWebSearch: {}})
-			require.ErrorContains(t, err, "no supported billable tool receipt")
+			quotes, err := BuiltinToolQuotes(context.Background(), tc.actual, meta, channel, tc.provider, map[string]struct{}{BuiltinWebSearch: {}})
+			require.NoError(t, err)
+			require.Positive(t, quotes[BuiltinWebSearch])
 		})
 	}
 }
@@ -78,37 +79,32 @@ func TestDeepSeekToolReceiptQuoteControls(t *testing.T) {
 	}
 }
 
-// TestDeepSeekToolReceiptFetchQuotes keeps separately configured Claude-style
-// Fetch tariffs subject to the same unsupported paid-receipt boundary.
+// TestDeepSeekToolReceiptFetchQuotes preserves separately configured Fetch
+// tariffs while enabling positively priced calls.
 func TestDeepSeekToolReceiptFetchQuotes(t *testing.T) {
 	for _, tc := range []struct {
 		name, base string
 		channel    int
 		price      int64
-		reject     bool
 	}{
-		{"dedicated_paid", "https://fixture.invalid", channeltype.DeepSeek, 23, true},
-		{"official_claude_paid", "https://api.deepseek.com/anthropic", channeltype.Anthropic, 23, true},
-		{"intentional_zero", "https://api.deepseek.com/anthropic", channeltype.Anthropic, 0, false},
-		{"unrelated_claude", "https://api.anthropic.com", channeltype.Anthropic, 23, false},
+		{"dedicated_paid", "https://fixture.invalid", channeltype.DeepSeek, 23},
+		{"official_claude_paid", "https://api.deepseek.com/anthropic", channeltype.Anthropic, 23},
+		{"intentional_zero", "https://api.deepseek.com/anthropic", channeltype.Anthropic, 0},
+		{"unrelated_claude", "https://api.anthropic.com", channeltype.Anthropic, 23},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			channel := &model.Channel{Type: tc.channel}
 			require.NoError(t, channel.SetToolingConfig(&model.ChannelToolingConfig{Pricing: map[string]model.ToolPricingLocal{BuiltinWebFetch: {QuotaPerCall: tc.price}}}))
 			meta := &metalib.Meta{ChannelType: tc.channel, BaseURL: tc.base, ActualModelName: "deepseek-v4-pro"}
 			quotes, err := BuiltinToolQuotes(context.Background(), meta.ActualModelName, meta, channel, &deepseek.Adaptor{}, map[string]struct{}{BuiltinWebFetch: {}})
-			if tc.reject {
-				require.ErrorContains(t, err, "no supported billable tool receipt")
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.price, quotes[BuiltinWebFetch])
-			}
+			require.NoError(t, err)
+			require.Equal(t, tc.price, quotes[BuiltinWebFetch])
 		})
 	}
 }
 
-// TestDeepSeekToolReceiptNoAutomaticActivation keeps the same receipt policy on
-// both sides of the upstream grace boundary without introducing tariff dates.
+// TestDeepSeekToolReceiptNoAutomaticActivation retains explicit price
+// configuration independent of the upstream grace-period boundary.
 func TestDeepSeekToolReceiptNoAutomaticActivation(t *testing.T) {
 	boundary := time.Date(2026, time.October, 31, 16, 0, 0, 0, time.UTC)
 	for _, at := range []time.Time{boundary.Add(-time.Nanosecond), boundary, boundary.Add(time.Nanosecond)} {
@@ -122,12 +118,8 @@ func TestDeepSeekToolReceiptNoAutomaticActivation(t *testing.T) {
 				channel := &model.Channel{Type: channeltype.DeepSeek}
 				require.NoError(t, channel.SetToolingConfig(&model.ChannelToolingConfig{Pricing: map[string]model.ToolPricingLocal{BuiltinWebSearch: {QuotaPerCall: price}}}))
 				quotes, err := BuiltinToolQuotes(context.Background(), metadata.ActualModelName, metadata, channel, provider, requested)
-				if price > 0 {
-					require.ErrorIs(t, err, ErrBuiltinToolBillingUnsupported)
-				} else {
-					require.NoError(t, err)
-					require.Zero(t, quotes[BuiltinWebSearch])
-				}
+				require.NoError(t, err)
+				require.Equal(t, price, quotes[BuiltinWebSearch])
 			}
 		})
 	}
@@ -140,29 +132,24 @@ func TestDeepSeekToolReceiptEndpointQuotes(t *testing.T) {
 		name, base, override, observed string
 		channel                        int
 		price                          int64
-		reject                         bool
 	}{
-		{"planned_deepseek", "https://api.openai.com", "https://api.deepseek.com/v1/responses", "", channeltype.OpenAI, 17, true},
-		{"planned_subdomain", "https://api.openai.com", "https://tools.deepseek.com/responses", "", channeltype.OpenAI, 17, true},
-		{"planned_zero", "https://api.openai.com", "https://api.deepseek.com/v1/responses", "", channeltype.OpenAI, 0, false},
-		{"reverse_base", "https://api.deepseek.com", "https://api.openai.com/v1/responses", "", channeltype.OpenAI, 17, false},
-		{"reverse_channel", "https://api.deepseek.com", "https://api.openai.com/v1/responses", "", channeltype.DeepSeek, 17, false},
-		{"stale_observed_deepseek", "https://api.openai.com", "", "https://api.deepseek.com/v1/responses", channeltype.OpenAI, 17, false},
-		{"stale_observed_openai", "https://api.openai.com", "https://api.deepseek.com/v1/responses", "https://api.openai.com/v1/responses", channeltype.OpenAI, 17, true},
-		{"hostname_lookalike", "https://api.openai.com", "https://api.deepseek.com.example/responses", "", channeltype.OpenAI, 17, false},
-		{"query_not_host", "https://api.openai.com", "https://provider.example/responses?target=api.deepseek.com", "", channeltype.OpenAI, 17, false},
+		{"planned_deepseek", "https://api.openai.com", "https://api.deepseek.com/v1/responses", "", channeltype.OpenAI, 17},
+		{"planned_subdomain", "https://api.openai.com", "https://tools.deepseek.com/responses", "", channeltype.OpenAI, 17},
+		{"planned_zero", "https://api.openai.com", "https://api.deepseek.com/v1/responses", "", channeltype.OpenAI, 0},
+		{"reverse_base", "https://api.deepseek.com", "https://api.openai.com/v1/responses", "", channeltype.OpenAI, 17},
+		{"reverse_channel", "https://api.deepseek.com", "https://api.openai.com/v1/responses", "", channeltype.DeepSeek, 17},
+		{"stale_observed_deepseek", "https://api.openai.com", "", "https://api.deepseek.com/v1/responses", channeltype.OpenAI, 17},
+		{"stale_observed_openai", "https://api.openai.com", "https://api.deepseek.com/v1/responses", "https://api.openai.com/v1/responses", channeltype.OpenAI, 17},
+		{"hostname_lookalike", "https://api.openai.com", "https://api.deepseek.com.example/responses", "", channeltype.OpenAI, 17},
+		{"query_not_host", "https://api.openai.com", "https://provider.example/responses?target=api.deepseek.com", "", channeltype.OpenAI, 17},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			channel := &model.Channel{Type: tc.channel}
 			require.NoError(t, channel.SetToolingConfig(&model.ChannelToolingConfig{Pricing: map[string]model.ToolPricingLocal{BuiltinWebSearch: {QuotaPerCall: tc.price}}}))
 			info := &metalib.Meta{ChannelType: tc.channel, BaseURL: tc.base, Mode: relaymode.ResponseAPI, ActualModelName: "deepseek-v4-pro", UpstreamRequestURL: tc.observed, Config: model.ChannelConfig{EndpointURLs: map[string]string{channeltype.RelayModeToEndpointName(relaymode.ResponseAPI): tc.override}}}
 			quotes, err := BuiltinToolQuotes(context.Background(), info.ActualModelName, info, channel, &openai.Adaptor{}, map[string]struct{}{BuiltinWebSearch: {}})
-			if tc.reject {
-				require.ErrorContains(t, err, "no supported billable tool receipt")
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.price, quotes[BuiltinWebSearch])
-			}
+			require.NoError(t, err)
+			require.Equal(t, tc.price, quotes[BuiltinWebSearch])
 		})
 	}
 }
