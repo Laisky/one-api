@@ -17,12 +17,13 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/billing/ratio"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
-// TestDeepSeekToolReceiptAdmission rejects unsupported native paid tools before
-// a physical provider call, reservation or persisted user/token/request charge.
+// TestDeepSeekToolReceiptAdmission ensures positively priced native DeepSeek
+// search stays available and reserves a conservative minimum tool charge.
 func TestDeepSeekToolReceiptAdmission(t *testing.T) {
 	for _, actual := range []string{"deepseek-v4-pro", "deepseek-flash", "deepseek-chat"} {
 		for _, choice := range []string{`"auto"`, `{"type":"web_search"}`} {
@@ -33,7 +34,8 @@ func TestDeepSeekToolReceiptAdmission(t *testing.T) {
 					var calls atomic.Int32
 					server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 						calls.Add(1)
-						w.WriteHeader(http.StatusServiceUnavailable)
+						w.Header().Set("Content-Type", "application/json")
+						_, _ = io.WriteString(w, `{"id":"priced","object":"response","status":"completed","output":[{"id":"ws1","type":"web_search_call"}],"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15,"input_tokens_details":{"cached_tokens":4}}}`)
 					}))
 					t.Cleanup(server.Close)
 					previous := client.HTTPClient
@@ -41,7 +43,7 @@ func TestDeepSeekToolReceiptAdmission(t *testing.T) {
 					t.Cleanup(func() { client.HTTPClient = previous })
 					c, _, id := protocolContext(t, channeltype.DeepSeek, actual, "/v1/responses",
 						`{"model":"alias","input":"synthetic","tools":[{"type":"web_search"}],"tool_choice":`+choice+`}`,
-						server.URL, balance, 1, false, nil)
+						server.URL, balance, 1, false, &model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2, CachedInputRatio: 0.5})
 					raw, ok := c.Get(ctxkey.ChannelModel)
 					require.True(t, ok)
 					channel := raw.(*model.Channel)
@@ -50,23 +52,35 @@ func TestDeepSeekToolReceiptAdmission(t *testing.T) {
 						price = model.ToolPricingLocal{UsdPerCall: 0.01}
 					}
 					require.NoError(t, channel.SetToolingConfig(&model.ChannelToolingConfig{Pricing: map[string]model.ToolPricingLocal{"web_search": price}}))
-					apiErr := RelayResponseAPIHelper(c)
-					require.NotNil(t, apiErr)
-					require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-					require.Equal(t, "tool_billing_not_supported", apiErr.Error.Code)
+					require.Nil(t, RelayResponseAPIHelper(c))
 					drainCriticalTasks(t)
-					require.Zero(t, calls.Load())
-					require.Zero(t, c.GetInt64(ctxkey.PreConsumedQuotaAmount))
-					require.Equal(t, balance, reloadUserQuota(t))
+					require.EqualValues(t, 1, calls.Load(), "priced search must reach the upstream")
+					perCall := int64(17)
+					if tariff == "usd" {
+						perCall = int64(0.01 * float64(ratio.QuotaPerUsd))
+					}
+					expected := int64(16) + 10*perCall
+					require.Equal(t, expected, balance-reloadUserQuota(t))
+					require.Equal(t, expected, requestCostQuota(t, id))
 					var token model.Token
 					require.NoError(t, model.DB.First(&token, fallbackTokenID).Error)
-					require.Equal(t, balance, token.RemainQuota)
-					require.Zero(t, token.UsedQuota)
-					var costs, logs int64
-					require.NoError(t, model.DB.Model(&model.UserRequestCost{}).Where("request_id = ?", id).Count(&costs).Error)
-					require.NoError(t, model.LOG_DB.Model(&model.Log{}).Where("request_id = ?", id).Count(&logs).Error)
-					require.Zero(t, costs)
-					require.Zero(t, logs)
+					require.Equal(t, expected, token.UsedQuota)
+					var logs []model.Log
+					require.NoError(t, model.LOG_DB.Where("request_id = ?", id).Find(&logs).Error)
+					require.NotEmpty(t, logs)
+					var consume, tools int
+					for _, entry := range logs {
+						switch entry.Type {
+						case model.LogTypeConsume:
+							consume++
+							require.EqualValues(t, expected, entry.Quota)
+						case model.LogTypeTool:
+							tools++
+							require.EqualValues(t, 10*perCall, entry.Quota)
+						}
+					}
+					require.Equal(t, 1, consume)
+					require.Equal(t, 1, tools)
 				})
 			}
 		}
@@ -141,8 +155,8 @@ func TestDeepSeekToolReceiptFreeAndLocalControls(t *testing.T) {
 	}
 }
 
-// TestDeepSeekToolReceiptOtherProtocols applies the same paid-tool admission
-// error to Chat and Claude entrypoints before physical work or quota holds.
+// TestDeepSeekToolReceiptOtherProtocols verifies paid tools dispatch through
+// Chat and Claude while definitive upstream errors retain existing refunds.
 func TestDeepSeekToolReceiptOtherProtocols(t *testing.T) {
 	for _, tc := range []struct{ name, path, body string }{
 		{"chat", "/v1/chat/completions", `{"model":"alias","messages":[{"role":"user","content":"synthetic"}],"tools":[{"type":"web_search"}],"tool_choice":"auto"}`},
@@ -166,13 +180,11 @@ func TestDeepSeekToolReceiptOtherProtocols(t *testing.T) {
 			} else {
 				apiErr = RelayTextHelper(c)
 			}
-			require.NotNil(t, apiErr)
-			require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-			require.Equal(t, "tool_billing_not_supported", apiErr.Error.Code)
+			require.NotNil(t, apiErr, "the owned upstream intentionally returns 503")
+			require.NotEqual(t, "tool_billing_not_supported", apiErr.Error.Code)
 			drainCriticalTasks(t)
-			require.Zero(t, calls.Load())
-			require.Zero(t, c.GetInt64(ctxkey.PreConsumedQuotaAmount))
-			require.Equal(t, balance, reloadUserQuota(t))
+			require.EqualValues(t, 1, calls.Load(), "priced Chat and Claude tool requests must dispatch")
+			require.Equal(t, balance, reloadUserQuota(t), "upstream explicitly rejected the operation")
 			var costs int64
 			require.NoError(t, model.DB.Model(&model.UserRequestCost{}).Where("request_id = ?", id).Count(&costs).Error)
 			require.Zero(t, costs)
