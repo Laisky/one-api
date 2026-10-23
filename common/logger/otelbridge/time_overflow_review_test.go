@@ -14,7 +14,7 @@ import (
 // records when a valid Zap time cannot fit into signed Unix nanoseconds.
 func TestTimeOverflowPreservesLogAttribute(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name  string
 		value time.Time
 	}{
 		{name: "zero", value: time.Time{}},
