@@ -16,6 +16,9 @@ MODULE = "github.com/Laisky/one-api"
 # compilation cost left insufficient margin for a complete CI job below five minutes.
 SELECTIONS = {
     "relay/format": None,
+    # Temporary PR585 RED/GREEN qualification; keep ordinary PR CI minimal later.
+    "common/logger/otelbridge": ("TestTimeOverflowPreservesLogAttribute",),
+    "common/telemetry": ("TestLogExportOutcomeMetricsKeepKnownLabels",),
 }
 
 
