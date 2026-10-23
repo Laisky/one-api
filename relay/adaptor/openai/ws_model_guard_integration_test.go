@@ -124,6 +124,7 @@ func TestResponseAPIWS_ModelSwitchAttackRejected(t *testing.T) {
 	var lastTextEvent map[string]any
 	var sawClose bool
 	var closeCode int
+	var closeReason string
 	for {
 		_, msg, err := clientConn.ReadMessage()
 		if err != nil {
@@ -131,6 +132,7 @@ func TestResponseAPIWS_ModelSwitchAttackRejected(t *testing.T) {
 			if errors.As(err, &closeErr) {
 				sawClose = true
 				closeCode = closeErr.Code
+				closeReason = closeErr.Text
 			}
 			break
 		}
@@ -143,6 +145,8 @@ func TestResponseAPIWS_ModelSwitchAttackRejected(t *testing.T) {
 	require.True(t, sawClose, "connection must be closed on model switch attempt")
 	require.Equal(t, websocket.ClosePolicyViolation, closeCode,
 		"close code must signal policy violation so SDKs surface the error")
+	require.Equal(t, "model_switch_denied", closeReason,
+		"model authorization must reject before invoking unrelated ownership or provider checks")
 	require.NotNil(t, lastTextEvent, "client must receive an error event before close")
 	require.Equal(t, "error", lastTextEvent["type"])
 	errBody, ok := lastTextEvent["error"].(map[string]any)
