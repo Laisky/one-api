@@ -56,9 +56,27 @@ intentionally preserved.
 - Focused Go 1.27.3 `-race -count=1` behavioral suite (WebSocket real
   proxy/controller + both Claude quote regressions) succeeded at
   [run 39953102731](https://github.com/Laisky/one-api/actions/runs/39953102731).
-- Broader six-package `go test -race -count=1` is tracked at
-  [run 39953621198](https://github.com/Laisky/one-api/actions/runs/39953621198).
-  Consult the run's live conclusion; at note creation it was still running.
+- The first broader six-package `go test -race -count=1` at
+  [run 39953621198](https://github.com/Laisky/one-api/actions/runs/39953621198)
+  failed because its host lacked `ffprobe` and an older model-switch test
+  incorrectly expected non-nil usage from a proven pre-dispatch denial.
+  Neither failure reproduced a DeepSeek tool billing defect.
+- Diagnostic test [39973809958](https://github.com/Laisky/one-api/actions/runs/39973809958)
+  captured the JSON `model_switch_denied` error event and matching 1008 Close,
+  eliminating the suspected missing-event defect. The nil usage return is
+  intentional: it lets the controller fully refund unforwarded work. The
+  test was corrected and speculative WS close-handshake code reverted.
+- After the correction, the model-switch test passed 40 race-enabled runs at
+  [39974368661](https://github.com/Laisky/one-api/actions/runs/39974368661).
+- The final temporary qualification run
+  [39974858770](https://github.com/Laisky/one-api/actions/runs/39974858770)
+  passed: **40 repeated model-switch cases under `-race`**, and all
+  **six affected packages** under Go 1.27.3
+  `go test -race -count=1 -timeout=15m` with `ffmpeg/ffprobe` installed.
+  Package outputs were all `ok`: relay/controller, relay/tooling,
+  relay/adaptor/openai, relay/adaptor/anthropic,
+  relay/adaptor/common/deepseekcompat, and relay/adaptor/common/builtinname.
+  No production DeepSeek endpoint or paid account was used.
 - Existing tests cover paid and free tool controls, unrelated providers, exact
   JSON numbers, retry endpoint affinity, two-socket atomic funding, accepted
   work before denial, and persisted financial ledgers.
@@ -90,3 +108,11 @@ requires the existing billing audit and recovery process.
 **Do not merge or deploy without explicit approval under issue #592.**
 Merging `main` builds and deploys automatically. Rollback uses the prior
 immutable image and does not undo historical customer charges.
+
+## Final workflow cleanup
+
+The temporary branch-only `.github/workflows/pr589-billing-qualification.yml`
+was deleted in the same commit as this record. Standard minimal CI retains only
+`ci.yml` and `lint.yml`. Final exact-head required CI and PR approval remain
+independent gates; neither a green historical run nor Ready for Review authorizes
+merging into `main`, which automatically publishes and deploys.
