@@ -1,0 +1,23 @@
+name: PR589 billing qualification (temporary)
+on:
+  pull_request:
+    paths:
+      - 'relay/**'
+      - '.github/workflows/pr589-billing-qualification.yml'
+permissions:
+  contents: read
+jobs:
+  model-switch-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Go 1.27.3
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+      - name: Repeat model-switch error-event contract with race detector
+        run: go test -race -count=40 -timeout=12m -run '^TestResponseAPIWS_ModelSwitchAttackRejected$' -v ./relay/adaptor/openai
