@@ -1,83 +1,114 @@
-# DeepSeek server-tool billing compatibility
+# DeepSeek native Search/Fetch: conservative billing and availability
 
-OneAPI already supports built-in tool pricing, channel overrides, invocation accounting, and accepted-work settlement. This change reuses those mechanisms; it does not add a new tariff or billing subsystem.
+OneAPI does **not** blanket-reject positively priced DeepSeek native Search/Fetch
+requests solely because DeepSeek does not provide a documented paid-success
+counter. Operators explicitly enable these capabilities and set prices using
+the existing channel/provider tooling policy. OneAPI then bills an estimate
+that may exceed upstream successful-operation charges.
 
-## Admitted behavior
+## Admission and billing contract
 
-For HTTP requests on a dedicated DeepSeek channel or an upstream host under `deepseek.com`, a request for `web_search` or Claude-style `web_fetch` with an effective positive tariff is rejected before quota reservation and provider dispatch. The response is HTTP 400 with `tool_billing_not_supported`. This includes positive USD-per-call and direct-quota overrides, and inherited OpenAI defaults on an OpenAI-compatible DeepSeek endpoint. Native Responses WebSockets apply the same pricing policy per client frame, with the handshake and settlement differences described below.
+1. The selected channel/model/provider must authorize the built-in tool and
+   resolve a nonnegative effective per-call quota price. An unknown or forbidden
+   capability is not made safe by this policy; existing whitelist rules still
+   apply. A genuinely insufficient user/token balance still rejects dispatch.
+2. For a positively priced hosted `web_search` or `web_fetch` on a real
+   DeepSeek endpoint, OneAPI starts with a **conservative ten-attempt minimum per
+   admitted tool declaration**. Claude Messages may declare a larger
+   `max_uses`; in that case the larger count is used. WebSocket execution
+   uses ten attempts for **each accepted `response.create` frame** that declares
+   the tool.
+3. Count observable server-tool events and usage counters using the existing
+   protocol parsers and canonical capability names. Repeated streaming events
+   with a stable ID are deduplicated. The effective billed count per tool is the
+   greater of the conservative minimum and the observed attempts, not their sum.
+   Search and Fetch have independent configured prices and counts.
+4. HTTP Chat, Claude Messages, and native Responses reserve the tool floor
+   alongside the existing token quote **before** provider dispatch. Successful
+   responses settle measured Token/cache usage and ToolCost through existing
+   user/token/request-cost/consume/tool ledgers. A known completed Token receipt
+   must not retain an unrelated inflated Token reservation merely because tool
+   attempt counts were estimated.
+5. Requests with possibly accepted provider work but missing terminal usage, an
+   ambiguous transport failure, or a provider 5xx after dispatch retain the
+   funded conservative reservation and emit an estimated consume record. The
+   retry/refund boundary must not refund paid tools and then retry them for free.
+   Proven pre-dispatch failures and quota/validation denials retain existing
+   zero-work refund and denial behavior.
+6. Native Responses WebSocket opens with an existing token handshake reservation
+   before client frames arrive. Only successfully forwarded create frames enter
+   the tool meter; denied frames and handshakes do not incur a new tool fee.
+   The session checks tool-floor affordability before forwarding and settles
+   accepted tools once both proxy legs have drained, together with Token usage.
+   The session budget snapshot is **not an atomic reservation shared across
+   concurrent sockets**, so concurrency/debt exposure remains a known limitation.
+7. Effective zero-price tools remain free to the OneAPI user but are not evidence
+   that upstream execution is free. Client-executed local function calls,
+   client Tool Search, and unrelated third-party model providers keep their
+   established policies. Model name alone never determines the DeepSeek API
+   contract; the current selected upstream host and endpoint override do.
 
-This changes previously unqualified operator overrides: a positive price no longer enables execution that OneAPI cannot settle from a documented DeepSeek paid-tool receipt. DeepSeek's own empty tooling defaults remain unchanged.
+### Worked example
 
-- Automatic pruning of disallowed default built-ins remains unchanged.
-- Explicit zero tool tariffs remain subject to the existing allowlist and conversion rules. They mean zero tool charge to the OneAPI user; they do not establish an upstream free-service or receipt contract.
-- Local functions named `search`, `fetch`, `web_search`, or `web_fetch`, custom tools, and explicitly client-executed `tool_search` retain their existing behavior.
-- A model named DeepSeek on an unrelated provider keeps that provider's existing tooling policy. Provider identity, rather than a model or client name, selects this restriction.
-- Native HTTP Responses `web_fetch` remains rejected by the existing unsupported-native-tool policy. The WebSocket proxy retains its existing effective-zero passthrough behavior.
+If the effective OneAPI Search price is **17 quota per call**, a single
+DeepSeek request that offers native Search is assigned at least
+**10 × 17 = 170 quota for Search**, plus its ordinary measured Token fee.
+One observed `web_search_call` with a failed or empty result does not reduce
+this estimate. Twelve observed distinct attempts produce **12 × 17 = 204**
+quota, not 170 + 204. If the provider returns a complete Token receipt worth
+16 quota, the two total examples settle at **186** and **220** quota.
 
-## Native Responses WebSockets
+This pricing is intentionally conservative and can charge customers for tools
+that were merely offered or that did not successfully execute. Disclose this
+billing policy and the effective per-call tariff before enabling it.
 
-An OpenAI channel configured with a DeepSeek `BaseURL` can select that host for the native Responses WebSocket proxy. This transport now checks each original text or binary `response.create` frame before ownership checks, model rewriting, or upstream forwarding. It reuses `BuiltinToolQuotes` and the existing client-tool-search validation instead of introducing a second price or discovery policy.
+## What this policy does **not** guarantee
 
-For an actual DeepSeek WebSocket target, a nonzero effective Search/Fetch quote closes the client connection with policy code **1008** and reason **`tool_billing_not_supported`**. The rejected frame never reaches the upstream. The same boundary rejects ambiguous duplicate/case-folded billing keys and hosted tools introduced through client discovery history. Explicit zero, local functions, explicitly client-executed search/discovery, and unrelated providers retain their established behavior.
+DeepSeek's direct Search/Fetch API is documented to bill per successful
+non-empty HTTP 200 response. But its *model-internal* Search/Fetch process does
+not provide a documented authoritative paid-operation count, and the Responses
+API ignores `max_tool_calls`. Thus ten attempts is an explicitly chosen
+**commercial floor**, **not a provider-guaranteed upper bound**. Invisible
+internal calls above the floor could still lead to undercollection. The only
+way to establish a strict no-loss guarantee is audited upstream bill
+reconciliation or gateway-owned direct Search/Fetch execution.
 
-WebSocket admission happens after the existing handshake has opened the upstream connection and reserved its provisional quota. A denial before the first dispatched create refunds that hold and restores final user/token balances. A later denial preserves settlement for earlier accepted work. The guarantee is therefore zero rejected response dispatch and correct final accounting; it is not zero handshake activity or zero transient reservation. HTTP positive-price rejection continues to occur before any reservation or provider dispatch.
+Official source: [Search & Fetch billing](https://api-docs.deepseek.com/guides/search/),
+[Responses API compatibility](https://api-docs.deepseek.com/guides/responses_api/).
+As of October 2026, DeepSeek's English guide lists USD 0.75 per 1,000
+successful Search/Fetch operations and a November 1, 2026 start for server-side
+tool charging in Harness/Claude Code/Codex. These public upstream prices are
+**not** automatically converted to OneAPI customer tariffs, and this PR does
+not change the operator's configured currency, quota or effective date.
 
-The policy receives the resolved URL actually used to dial the WebSocket. The existing WebSocket resolver uses `BaseURL` and `/v1/responses`; it does not consume the HTTP full-endpoint override. An unused HTTP override consequently cannot exempt a DeepSeek WebSocket or restrict an unrelated WebSocket. This change leaves routing behavior intact and does not claim that the upstream DeepSeek service supports WebSockets; the transport tests use an owned loopback fixture.
+## Compatibility and deployment
 
-Admission only inspects the original frame and does not serialize a replacement. When the existing model guard must inject the bound model or replace a client alias, raw JSON fields preserve exact numeric values in tool schemas, arguments, and provider extensions. The model guard leaves frames whose model is already bound byte-for-byte unchanged; the existing ownership guard can still rewrite authorized selectors or `previous_response_id`. Existing normalization of absent, empty, or non-string model values and rejection of an actual model switch remain intact.
+- OneAPI's dedicated DeepSeek adaptor retains its existing empty default
+  built-in Search/Fetch price table. The operator must explicitly configure
+  allowed tool prices to enable them; unpriced/default-pruned tools remain as
+  before. Native DeepSeek Responses documents server `web_search` for
+  `deepseek-v4-pro`; Flash ignores it. Support for arbitrary `web_fetch`
+  declarations does not imply provider support on every API surface.
+- WebSocket original frame bytes and model-rewrite unknown JSON numerics are
+  preserved. Duplicate/ambiguous billing keys, unsafe hosted discovery and
+  model switching remain denied. Effective-zero and unrelated-provider controls
+  retain existing behavior.
+- There are no schema migrations, historical charge rewrites, new API keys,
+  or a second billing/settlement subsystem. The existing tool invocation
+  summary and request-cost logs are the audit records.
+- The HTTP/Claude, MCP endpoint-switch and WebSocket tests use owned synthetic
+  TLS/WS providers and persisted test ledgers; they cannot prove live upstream
+  billing equivalence. Acceptance requires focused RED-to-GREEN, affected
+  package race suites, Go 1.27.3 formatting/static checks and code review.
+- Merge into main publishes/deploys production automatically and requires
+  separate approval under [issue #592](https://github.com/Laisky/one-api/issues/592).
+  Retain the immutable running image for rollback. A rollback does not undo
+  historical user charges and restores the earlier tool admission/precision bugs.
 
-## Upstream context, not OneAPI price activation
-
-The upstream Chinese schedule states RMB 0.005 per successful Search/Fetch request; the English schedule states USD 0.00075. These are distinct configured-currency schedules, not an instruction for OneAPI to calculate an exchange rate. The server-side grace boundary is 2026-10-31T16:00:00Z (Beijing November 1 at midnight); direct Search/Fetch endpoints already have their own charging contract. See the [Chinese pricing](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/), [English pricing](https://api-docs.deepseek.com/quick_start/pricing/), and [Search guide](https://api-docs.deepseek.com/zh-cn/guides/search/).
-
-The direct endpoints define successful HTTP 200 with nonempty search results or fetched page content. Search results remain valid when content is not requested; an empty Fetch title does not invalidate a nonempty page body; result count does not change the per-request price. Their JSON does not provide a tool-usage/cost counter. These direct-success rules do not establish a terminal server-side paid-operation receipt. See [Search](https://api-docs.deepseek.com/zh-cn/api/search/) and [Fetch](https://api-docs.deepseek.com/zh-cn/api/fetch/).
-
-Native Responses web search is supported for Pro and ignored for Flash; the upstream also ignores max_tool_calls. Neither a progress/output item nor a token-usage receipt documents how many successful paid Search/Fetch operations occurred. See the [Responses guide](https://api-docs.deepseek.com/zh-cn/guides/responses_api/) and [response API contract](https://api-docs.deepseek.com/zh-cn/api/create-response/). Token accounting remains separate; the [Chat API](https://api-docs.deepseek.com/zh-cn/api/create-chat-completion/) documents its final streaming usage receipt.
-
-The policy therefore behaves the same immediately before, at, and after the grace boundary: no calendar-driven tool activation and no guessed charge from declarations, history, client identity, or generic output shapes.
-
-## Usage and protocol preservation
-
-DeepSeek's documented Responses `web_search` tool does not establish a paid-success counter or one-output-item-to-paid-operation mapping. OpenAI-style progress/final items, usage extensions, implicit search-model inference, and Anthropic-style Search/Fetch blocks/counters therefore do not become DeepSeek paid-tool counts or tool-invocation ledger entries. The original native JSON/SSE fields and unknown extensions remain on the wire. Token/cache usage and existing accepted-work, error-settlement, and retry accounting remain intact.
-
-This is a fail-closed compatibility boundary, not new direct Search/Fetch endpoint support. It does not infer success from a declaration, conversation history, progress event, empty result, cancellation, or provider-internal retry. Other provider capabilities are not newly qualified by this change.
-
-No prices, currencies, agreements, effective dates, or production billing records are activated or modified. In particular, this change does not schedule automatic future pricing activation. A future positive DeepSeek tariff requires an explicitly implemented and tested provider receipt contract first.
-
-Official contract reference: [DeepSeek Responses API guide](https://api-docs.deepseek.com/guides/responses_api/).
-
-## Verification and rollback
-
-Synthetic tests cover HTTP positive tariff admission before all physical side effects; explicit zero/default/local controls; actual native Claude Fetch transport and physical token/cache/user/token/request ledgers; provider identity and aliases; item and usage-only inference; raw extensions and exact numeric tokens; duplicate terminal events; and unrelated OpenAI/Anthropic controls. WebSocket tests additionally cover text/binary frame rejection, original-key validation, discovery history, actual dial targets, first-denial refunds, and settlement after previously accepted work. Model-rewrite regressions cover large integers, precise decimals, and legacy model values. No paid provider request is required.
-
-Revert the source change to restore the previous compatibility behavior. No data migration or price/configuration rollback is needed, and reverting does not undo historical charges. Reverting the WebSocket follow-up also restores the prior admission gap and model-rewrite precision loss. Existing user prices should not be changed merely to bypass this capability error.
-
-The HTTP billing check follows the selected dispatch metadata. A nonempty full endpoint
-URL override replaces the channel/base target for this check; the parsed override
-hostname uses the existing DeepSeek hostname contract. A prior attempt's observed
-request URL is not used. This preserves an explicit non-DeepSeek override even on
-a DeepSeek channel and closes the reverse OpenAI-channel-to-DeepSeek override gap.
-
-An intentional effective zero quote stays allowed. A nonzero converted quote
-cannot bypass the DeepSeek capability check when an extremely large finite USD
-override overflows the existing integer conversion. This is a DeepSeek admission
-guard, not a change to general tariff conversion or unrelated provider pricing.
-
-## Canonical receipts and MCP route selection — PR #589 follow-up
-
-Anthropic-compatible usage counters and content blocks now share the same built-in
-capability normalizer as the charging layer. Aliases such as `web_search_preview`,
-`web-search`, `web_search_20250305` and `web_fetch_20250910` cannot turn an
-undocumented DeepSeek response into a paid Search/Fetch receipt. Unknown tools
-retain independent identities; unrelated providers retain their pricing policy.
-
-A Claude Messages request may execute through the gateway MCP Chat loop with a
-different full endpoint override. Tool Search versus MCP Chat execution is
-selected before provider-tool admission and provisional quota reservation.
-Admission checks the selected execution endpoint and the actual converted
-Chat request. The existing MCP loop and settlement logic are reused.
-
-New controller and ledger regression tests are in
-`relay/controller/deepseek_receipt_alias_regression_test.go` and
-`relay/controller/deepseek_mcp_route_regression_test.go`. They require
-fresh post-fix execution; the earlier RED evidence is not a GREEN result.
+Related tests: `relay/controller/deepseek_tool_receipt_test.go`,
+`relay/controller/deepseek_receipt_alias_regression_test.go`,
+`relay/controller/deepseek_fetch_receipt_test.go`,
+`relay/controller/deepseek_mcp_route_regression_test.go`,
+`relay/controller/deepseek_ws_receipt_test.go`,
+`relay/controller/deepseek_ws_conservative_test.go`, and
+`relay/tooling/deepseek_conservative_test.go`.
