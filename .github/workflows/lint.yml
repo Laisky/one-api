@@ -614,6 +614,143 @@ jobs:
           path: ${{ runner.temp }}/realtime-index-baseline.log
           retention-days: 14
 
+  # Temporary PR585 full Go/race/DB qualification. Remove after signed receipts.
+  pr585_full_go_test_shards:
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 585
+    name: PR585 full race (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [packages, model-0, model-1, model-2, model-3]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=20s
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=10s
+    env:
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      MYSQL_LOG_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      PG_LOG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      COMPACT_UUID_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      COMPACT_UUID_TEST_LOG_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_LOG_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      COMPACT_UUID_TEST_POSTGRES_BASE_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_workload_base?sslmode=disable
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      ONEAPI_REQUIRE_COMPACT_UUID_SUITE: '1'
+      CGO_ENABLED: '1'
+    steps:
+      - name: Checkout repository and historical compatibility fixtures
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify checkout does not retain authentication
+        run: |
+          python3 - <<'PYTHON'
+          import subprocess
+          keys = subprocess.check_output(
+              ["git", "config", "--local", "--name-only", "--list"], text=True
+          ).lower().splitlines()
+          if any(key.endswith(".extraheader") or key == "core.sshcommand" or
+                 key.startswith("credential.") or
+                 (key.startswith("includeif.") and key.endswith(".path")) for key in keys):
+              raise SystemExit("Checkout retained authentication configuration.")
+          PYTHON
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.2'
+      - name: Verify orchestration against the real Go toolchain
+        if: matrix.shard == 'packages'
+        run: python3 .github/scripts/test_go_test_shards_integration.py
+      - name: Install test dependencies and create secondary databases
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg mysql-client postgresql-client
+          mysql -h 127.0.0.1 -P 3306 -uroot \
+            -e "CREATE DATABASE IF NOT EXISTS oneapi_log CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          for db in oneapi_log oneapi_workload_base; do
+            psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+              "SELECT 1 FROM pg_database WHERE datname = '${db}'" | grep -q 1 \
+              || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE ${db};"
+          done
+      - name: Run assigned Go tests with race detection and coverage
+        env:
+          GO_TEST_SHARD: ${{ matrix.shard }}
+        run: |
+          python3 .github/scripts/go_test_shards.py run \
+            --shard "$GO_TEST_SHARD" --output "$RUNNER_TEMP/go-tests"
+      - name: Archive complete shard evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr585-go-tests-${{ matrix.shard }}-${{ github.sha }}
+          path: ${{ runner.temp }}/go-tests
+          retention-days: 14
+
+  # Manual qualification still requires complete, atomic coverage from every shard.
+  # Never publish partial coverage or let a failed/cancelled matrix look successful.
+  pr585_full_go_tests:
+    name: PR585 complete race receipt and coverage
+    if: always() && github.event_name == 'pull_request' && github.event.pull_request.number == 585
+    needs: pr585_full_go_test_shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require every Go test shard to pass
+        env:
+          SHARD_RESULT: ${{ needs.pr585_full_go_test_shards.result }}
+        run: test "$SHARD_RESULT" = success
+      - name: Checkout validation scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download all shard evidence from this run
+        uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: pr585-go-tests-*-${{ github.sha }}
+          path: go-test-results
+      - name: Verify completeness and merge atomic coverage
+        run: |
+          python3 .github/scripts/go_test_shards.py merge \
+            --input go-test-results --output coverage.txt
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr585-code-coverage-${{ github.sha }}
+          path: coverage.txt
+          if-no-files-found: error
+
   required:
     name: CI required
     if: always()
