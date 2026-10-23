@@ -152,6 +152,13 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		return wrapConvertRequestError(err)
 	}
 	convertedRequest = sanitizeConvertedChatFields(convertedRequest)
+	// Preserve the original request/converted quote for Claude-native Tool
+	// Search. Injected deferred MCP tool definitions are a separate internal
+	// round and are funded by executeClaudeToolSearchMCPLoop, not twice via
+	// the initial client-facing reservation.
+	originalToolSearchQuote := *claudeRequest
+	originalToolSearchQuote.Tools = append([]relaymodel.ClaudeTool(nil), claudeRequest.Tools...)
+	originalConvertedQuote := convertedRequest
 
 	// Select the actual MCP dispatch route before tool admission or quota
 	// reservation. A Claude client request may execute as Chat internally, and
@@ -190,7 +197,17 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			return policyErr
 		}
 	}
-	promptTokens, quoteErr := preparedClaudePromptTokens(ctx, claudeRequest, convertedRequest)
+	quoteRequest := claudeRequest
+	quoteConverted := convertedRequest
+	if mcpPlan.toolSearch != nil {
+		// Keep the pre-injection quote, matching the existing Claude MCP
+		// reservation contract. The actual converted payload above still
+		// receives tool admission, and every internal round funds its own
+		// expanded schema before sending.
+		quoteRequest = &originalToolSearchQuote
+		quoteConverted = originalConvertedQuote
+	}
+	promptTokens, quoteErr := preparedClaudePromptTokens(ctx, quoteRequest, quoteConverted)
 	if quoteErr != nil {
 		return openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", http.StatusBadRequest)
 	}
