@@ -1,0 +1,41 @@
+# Temporary branch-only qualification for PR #589.
+# Remove after final behavioral acceptance; normal main/PR CI remains minimal.
+name: PR589 Conservative Billing Acceptance
+
+on:
+  push:
+    branches:
+      - fix/deepseek-tool-billing-compat-20261019-0253
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr589-conservative-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  billing-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact PR branch commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Go 1.27.3
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+      - name: Run owned-provider RED-to-GREEN acceptance with race detection
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '1'
+          GOMAXPROCS: '2'
+        run: |
+          go test -race -count=1 -p 2 -timeout 25m \
+            ./relay/tooling ./relay/adaptor/common/builtinname \
+            ./relay/adaptor/common/deepseekcompat \
+            ./relay/adaptor/anthropic ./relay/adaptor/openai \
+            ./relay/controller \
+            -run '^(TestDeepSeek|TestConservative|TestRecordServerTool)'
