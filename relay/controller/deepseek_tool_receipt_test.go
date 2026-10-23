@@ -200,13 +200,15 @@ func TestDeepSeekToolReceiptOtherProtocols(t *testing.T) {
 // and cached-metadata refresh used after selecting a different retry channel.
 // The abandoned state is synthetic, has no hold, and performs no paid work.
 func TestDeepSeekToolReceiptRetryProviderSwitch(t *testing.T) {
-	c, _, _ := protocolContext(t, channeltype.OpenAI, "deepseek-v4-pro", "/v1/responses",
-		`{"model":"alias","input":"synthetic"}`, "https://api.openai.com", 1000000, 1, false, nil)
-	current := metalib.GetByContext(c)
-	c.Set(ctxkey.WebSearchCallCount, 9)
-	c.Set(ctxkey.ToolInvocationCounts, map[string]int{"web_search": 9, "web_fetch": 2})
-	c.Set(ctxkey.ToolInvocationSummary, &model.ToolUsageSummary{Counts: map[string]int{"web_search": 9}})
 	for index, channel := range []int{channeltype.DeepSeek, channeltype.OpenAI} {
+		c, _, _ := protocolContext(t, channeltype.OpenAI, "deepseek-v4-pro", "/v1/responses",
+			`{"model":"alias","input":"synthetic"}`, "https://api.openai.com", 1000000, 1, false, nil)
+		current := metalib.GetByContext(c)
+		c.Set(ctxkey.WebSearchCallCount, 9)
+		c.Set(ctxkey.ToolInvocationCounts, map[string]int{"web_search": 9, "web_fetch": 2})
+		c.Set(ctxkey.ToolInvocationSummary, &model.ToolUsageSummary{Counts: map[string]int{"web_search": 9}})
+
+		require.True(t, BillingAllowsRetry(c), "only an abandoned attempt may reset its tool state")
 		ResetPerAttemptBillingForRetry(context.Background(), c)
 		require.Zero(t, c.GetInt(ctxkey.WebSearchCallCount))
 		raw, exists := c.Get(ctxkey.ToolInvocationCounts)
@@ -233,5 +235,6 @@ func TestDeepSeekToolReceiptRetryProviderSwitch(t *testing.T) {
 		require.Equal(t, 12, usage.PromptTokens)
 		require.Equal(t, 3, usage.CompletionTokens)
 		require.Equal(t, 1, c.GetInt(ctxkey.WebSearchCallCount), "wire observations remain available after every retry")
+		require.False(t, BillingAllowsRetry(c), "completed responses are not retryable")
 	}
 }
