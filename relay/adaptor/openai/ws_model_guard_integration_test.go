@@ -126,9 +126,8 @@ func TestResponseAPIWS_ModelSwitchAttackRejected(t *testing.T) {
 	var closeCode int
 	var closeReason string
 	for {
-		messageType, msg, err := clientConn.ReadMessage()
+		_, msg, err := clientConn.ReadMessage()
 		if err != nil {
-			t.Logf("model-switch close: %v", err)
 			var closeErr *websocket.CloseError
 			if errors.As(err, &closeErr) {
 				sawClose = true
@@ -137,7 +136,6 @@ func TestResponseAPIWS_ModelSwitchAttackRejected(t *testing.T) {
 			}
 			break
 		}
-		t.Logf("model-switch frame: opcode=%d payload=%q", messageType, msg)
 		var ev map[string]any
 		if json.Unmarshal(msg, &ev) == nil {
 			lastTextEvent = ev
@@ -163,12 +161,11 @@ func TestResponseAPIWS_ModelSwitchAttackRejected(t *testing.T) {
 		// expected: nothing forwarded
 	}
 
-	// The handler returned without billable usage; the controller pre-consume
-	// logic still applies, but the WS-aggregated usage must be empty.
+	// Pre-dispatch denials produce nil usage and an error disposition so the
+	// controller refunds its reservation instead of settling an empty response.
+	// This is intentionally different from a forwarded request with zero usage.
 	usage := <-usageCh
-	require.NotNil(t, usage)
-	require.Zero(t, usage.PromptTokens)
-	require.Zero(t, usage.CompletionTokens)
+	require.Nil(t, usage, "a rejected, unforwarded frame must not expose billable usage")
 }
 
 // TestResponseAPIWS_MissingModelFieldInjected verifies that a `response.create`
