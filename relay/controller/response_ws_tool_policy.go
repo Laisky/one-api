@@ -2,11 +2,13 @@ package controller
 
 import (
 	"context"
+	"math"
 	"encoding/json"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
+	gmw "github.com/Laisky/gin-middlewares/v7"
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
@@ -44,8 +46,22 @@ func responseWebSocketToolAdmission(c *gin.Context, meta *metalib.Meta) openai.R
 			channel = &model.Channel{Id: record.Id, Type: record.Type, Config: record.Config}
 		}
 	}
+	// Snapshot the remaining balance on the request goroutine; the socket
+	// pump must never dereference *gin.Context after its handler has returned.
+	var balance int64 = math.MaxInt64
+	var balanceErr error
+	if meta.UserId > 0 {
+		balance, balanceErr = model.CacheGetUserQuota(gmw.Ctx(c), meta.UserId)
+		if tokenQuota := c.GetInt64(ctxkey.TokenQuota); !c.GetBool(ctxkey.TokenQuotaUnlimited) && tokenQuota > 0 {
+			balance = min(balance, tokenQuota)
+		}
+	}
+	var checkedFloor int64
 
 	return func(ctx context.Context, frame []byte, upstreamURL string) error {
+		if balanceErr != nil {
+			return errors.Wrap(balanceErr, "resolve websocket tool budget")
+		}
 		// Native WebSockets currently resolve BaseURL directly. The HTTP endpoint
 		// override and a previous observed URL must not classify a different host.
 		current := policyMeta
@@ -87,7 +103,25 @@ func responseWebSocketToolAdmission(c *gin.Context, meta *metalib.Meta) openai.R
 				requested[canonical] = struct{}{}
 			}
 		}
-		_, err = tooling.BuiltinToolQuotes(ctx, current.ActualModelName, &current, channel, provider, requested)
-		return err
+		quotes, err := tooling.BuiltinToolQuotes(ctx, current.ActualModelName, &current, channel, provider, requested)
+		if err != nil {
+			return err
+		}
+		var added int64
+		for name, price := range quotes {
+			if name != tooling.BuiltinWebSearch && name != tooling.BuiltinWebFetch {
+				continue
+			}
+			cost := tooling.SaturatingToolAllowance(price, tooling.ConservativeDeepSeekDefaultCalls)
+			if cost > math.MaxInt64-added {
+				return errors.New("conservative WebSocket tool quote overflows")
+			}
+			added += cost
+		}
+		if checkedFloor > balance || added > balance-checkedFloor {
+			return errors.New("insufficient quota for conservative WebSocket tool allowance")
+		}
+		checkedFloor += added
+		return nil
 	}
 }
