@@ -51,5 +51,11 @@ func convertTimeValue(v time.Time) attribute.Value {
 	if ns, err := logTimeNanos(v); err == nil {
 		return attribute.Int64Value(ns)
 	}
+	// RFC3339 supports only minute-resolution zone offsets. Preserve the
+	// instant for historical zones with second-resolution offsets instead of
+	// silently shifting it when the text is parsed by a downstream sink.
+	if _, offset := v.Zone(); offset%60 != 0 {
+		v = v.UTC()
+	}
 	return attribute.StringValue(v.Format(time.RFC3339Nano))
 }
