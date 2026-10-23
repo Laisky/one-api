@@ -14,8 +14,8 @@ import (
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 // deepSeekReceiptTransport routes only the synthetic provider transport to a
@@ -45,10 +45,10 @@ func (t deepSeekReceiptTransport) RoundTrip(request *http.Request) (*http.Respon
 func TestDeepSeekToolReceiptClaudeFetchHTTP(t *testing.T) {
 	const response = `{"id":"fetch_receipt","type":"message","role":"assistant","model":"deepseek-v4-pro","content":[{"type":"server_tool_use","id":"fetch1","name":"web_fetch","input":{}},{"type":"text","text":"ok"}],"stop_reason":"end_turn","vendor_extension":{"precise":9007199254740993},"usage":{"input_tokens":12,"cache_read_input_tokens":4,"output_tokens":3,"server_tool_use":{"web_fetch_requests":1}}}`
 	for _, tc := range []struct {
-		name, base    string
-		price         model.ToolPricingLocal
-		local         bool
-		charge        int64
+		name, base string
+		price      model.ToolPricingLocal
+		local      bool
+		charge     int64
 	}{
 		{"quota_paid", "https://api.deepseek.com/anthropic", model.ToolPricingLocal{QuotaPerCall: 23}, false, 246},
 		{"usd_paid", "https://api.deepseek.com/anthropic", model.ToolPricingLocal{UsdPerCall: 0.01}, false, 16 + 10*ratio.QuotaPerUsd/100},
