@@ -82,7 +82,9 @@ func enforceResponseCreateModel(frame []byte, boundOriginModel, boundActualModel
 		return frame, nil
 	}
 
-	var raw map[string]any
+	// Keep unowned fields raw: decoding schema, argument, or extension numbers
+	// through float64 would round them when the bound model is injected.
+	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(frame, &raw); err != nil {
 		// Non-JSON or malformed payload; forward unchanged. OpenAI will reject
 		// malformed frames on its side and a malformed frame cannot itself
@@ -93,35 +95,36 @@ func enforceResponseCreateModel(frame []byte, boundOriginModel, boundActualModel
 		return frame, errors.Wrapf(ErrModelSwitchDenied, "ambiguous response.create frame: %v", err)
 	}
 
-	eventType, _ := raw["type"].(string)
-	if eventType != "response.create" {
+	var eventType string
+	if err := json.Unmarshal(raw["type"], &eventType); err != nil || eventType != "response.create" {
 		return frame, nil
 	}
 
-	rawModel, exists := raw["model"]
-	if !exists {
-		raw["model"] = boundActualModel
-		out, err := json.Marshal(raw)
-		if err != nil {
-			return nil, errors.Wrap(err, "marshal response.create with injected model")
+	var clientModel string
+	if rawModel, exists := raw["model"]; exists {
+		if err := json.Unmarshal(rawModel, &clientModel); err != nil {
+			// Preserve the existing non-string-model behavior: normalize it to
+			// the handshake-bound model just like an absent or empty model.
+			clientModel = ""
 		}
-		return out, nil
 	}
 
-	clientModel, _ := rawModel.(string)
 	switch {
-	case clientModel == "":
-		raw["model"] = boundActualModel
 	case clientModel == boundActualModel:
 		return frame, nil
-	case boundOriginModel != "" && clientModel == boundOriginModel:
-		raw["model"] = boundActualModel
+	case clientModel == "" || (boundOriginModel != "" && clientModel == boundOriginModel):
+		// Empty models and user-facing aliases use the bound upstream model.
 	default:
 		return frame, errors.Wrapf(ErrModelSwitchDenied,
 			"client model %q does not match handshake-bound model %q",
 			clientModel, boundActualModel)
 	}
 
+	encodedModel, err := json.Marshal(boundActualModel)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal bound response model")
+	}
+	raw["model"] = encodedModel
 	out, err := json.Marshal(raw)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal response.create with rewritten model")

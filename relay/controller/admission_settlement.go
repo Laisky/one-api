@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -14,6 +15,7 @@ import (
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/tooling"
 )
 
 // upstreamHTTPErrorReason labels refunds triggered by an explicit provider error
@@ -40,7 +42,9 @@ func settleRetainedRequestAdmission(c *gin.Context, amount int64, tokenID int, r
 	// An explicit provider error response is not uncertain generation work: it
 	// keeps the generic retained hold so the shared retry loop can refund it and
 	// fail over instead of finalizing a charge and vetoing the retry.
-	if c.GetInt(ctxkey.Channel) != channeltype.Cohere &&
+	isConservativeDeepSeekTool := strings.HasPrefix(reason, "deepseek_tool_") &&
+		tooling.ConservativeDeepSeekToolQuota(c) > 0
+	if !isConservativeDeepSeekTool && c.GetInt(ctxkey.Channel) != channeltype.Cohere &&
 		(reason == upstreamHTTPErrorReason || !isRetainedGenerationAdmission(c, m, amount)) {
 		return false
 	}
@@ -61,6 +65,16 @@ func settleRetainedRequestAdmission(c *gin.Context, amount int64, tokenID int, r
 		}
 	})
 	return true
+}
+
+// retainDeepSeekToolAttempt settles an already-forwarded uncertain DeepSeek
+// Search/Fetch attempt at its admitted conservative reservation. It never
+// introduces a new debit or silently allows another automatic provider retry.
+func retainDeepSeekToolAttempt(c *gin.Context, amount int64, tokenID int, reason string) bool {
+	if tooling.ConservativeDeepSeekToolQuota(c) <= 0 {
+		return false
+	}
+	return settleRetainedRequestAdmission(c, amount, tokenID, "deepseek_tool_"+reason)
 }
 
 // refundRejectedAdmission completes a proven pre-inference rejection refund before

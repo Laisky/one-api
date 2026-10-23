@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
@@ -46,6 +47,7 @@ func resetClaudeToolAttemptState(c *gin.Context) {
 	c.Set(ctxkey.WebSearchCallCount, 0)
 	c.Set(ctxkey.ToolInvocationSummary, (*model.ToolUsageSummary)(nil))
 	c.Set(ctxkey.ClaudeToolAllowanceQuota, int64(0))
+	c.Set(ctxkey.DeepSeekConservativeToolAllowance, nil)
 }
 
 // admitClaudeMessagesTools applies the shared built-in tool policy to the raw
@@ -87,13 +89,14 @@ func admitClaudeMessagesTools(c *gin.Context, meta *metalib.Meta) *relaymodel.Er
 				break
 			}
 		}
-		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
+		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
 
-	var allowance int64
-	for name, count := range uses {
-		allowance = saturatingQuotaAdd(allowance, tooling.SaturatingToolAllowance(quotes[name], count))
-	}
+	tooling.RecordConservativeDeepSeekTools(c, meta, quotes, uses)
+	// Search/Fetch on the actual DeepSeek endpoint are funded through the
+	// separate conservative allowance, including converted hosted tools.
+	// Keep other independently priced Claude server capabilities additive.
+	allowance := claudeOtherToolAllowance(meta, quotes, uses)
 	c.Set(ctxkey.ClaudeToolAllowanceQuota, allowance)
 	lg := gmw.GetLogger(c)
 	lg.Debug("admitted Claude provider tools",
@@ -246,11 +249,29 @@ func saturatingQuotaAdd(a, b int64) int64 {
 	return a + b
 }
 
-// withClaudeToolAllowance adds the admitted paid server-tool allowance to a
-// Claude reservation quote. Parameters: c carries the admission and quote is
-// the token-based reservation. Returns: the combined reservation quote.
+// claudeOtherToolAllowance reserves all independently priced Claude-native
+// capabilities. When the actual upstream is DeepSeek, Search/Fetch are already
+// accounted for by the shared conservative tool allowance; excluding ONLY
+// those raw declarations avoids double funding while preserving additional
+// converted Search/Fetch tools introduced after native Claude admission.
+func claudeOtherToolAllowance(meta *metalib.Meta, quotes map[string]int64, uses map[string]int64) int64 {
+	deepSeek := deepseekcompat.UsesDeepSeekToolReceiptContract(meta)
+	var allowance int64
+	for name, count := range uses {
+		if deepSeek && (name == tooling.BuiltinWebSearch || name == tooling.BuiltinWebFetch) && quotes[name] > 0 {
+			continue
+		}
+		allowance = saturatingQuotaAdd(allowance, tooling.SaturatingToolAllowance(quotes[name], count))
+	}
+	return allowance
+}
+
+// withClaudeToolAllowance combines independent Claude and DeepSeek tool
+// reservations with the token quote. Raw DeepSeek Search/Fetch declarations
+// are excluded from the Claude part above to prevent overlapping charges.
 func withClaudeToolAllowance(c *gin.Context, quote int64) int64 {
-	return saturatingQuotaAdd(quote, c.GetInt64(ctxkey.ClaudeToolAllowanceQuota))
+	toolQuota := saturatingQuotaAdd(c.GetInt64(ctxkey.ClaudeToolAllowanceQuota), tooling.ConservativeDeepSeekToolQuota(c))
+	return saturatingQuotaAdd(quote, toolQuota)
 }
 
 // admitConvertedClaudeBuiltins re-applies the shared Chat or Responses
@@ -269,10 +290,15 @@ func admitConvertedClaudeBuiltins(c *gin.Context, meta *metalib.Meta, converted 
 	case *relaymodel.GeneralOpenAIRequest:
 		err = tooling.ValidateChatBuiltinTools(c, request, meta, claudeChannelRecord(c), provider)
 	case *openai.ResponseAPIRequest:
-		err = tooling.ValidateResponseBuiltinTools(request, meta, claudeChannelRecord(c), provider)
+		requested := tooling.CollectResponseBuiltins(request)
+		var quotes map[string]int64
+		quotes, err = tooling.BuiltinToolQuotes(gmw.Ctx(c), request.Model, meta, claudeChannelRecord(c), provider, requested)
+		if err == nil {
+			tooling.RecordConservativeDeepSeekTools(c, meta, quotes, nil)
+		}
 	}
 	if err != nil {
-		return openai.ErrorWrapper(errors.Wrap(err, "converted Claude request"), "tool_not_allowed", http.StatusBadRequest)
+		return openai.ErrorWrapper(errors.Wrap(err, "converted Claude request"), builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
 	return nil
 }
@@ -307,6 +333,17 @@ func claudeChannelRecord(c *gin.Context) *model.Channel {
 		if channel, ok := value.(*model.Channel); ok {
 			return channel
 		}
+	}
+	return nil
+}
+
+// admitMCPConvertedChatBuiltins checks the final Chat request selected by the
+// MCP planner. This cannot be skipped for native Claude passthrough: the MCP
+// branch executes an internal Chat round even when the initial conversion
+// had marked the Claude request as native.
+func admitMCPConvertedChatBuiltins(c *gin.Context, meta *metalib.Meta, request *relaymodel.GeneralOpenAIRequest, provider adaptor.Adaptor) *relaymodel.ErrorWithStatusCode {
+	if err := tooling.ValidateChatBuiltinTools(c, request, meta, claudeChannelRecord(c), provider); err != nil {
+		return openai.ErrorWrapper(errors.Wrap(err, "MCP Chat request"), builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
 	return nil
 }

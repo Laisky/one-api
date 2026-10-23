@@ -8,8 +8,6 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
-
-	"github.com/Laisky/one-api/common/ctxkey"
 )
 
 // maxWebSearchCounterLine bounds the bytes buffered for one SSE line. Longer
@@ -100,7 +98,7 @@ func (w *webSearchStreamCounter) record(c *gin.Context) {
 	if c == nil || w.count <= 0 {
 		return
 	}
-	c.Set(ctxkey.WebSearchCallCount, w.count)
+	recordWebSearchInvocationCount(c, w.count)
 	lg := gmw.GetLogger(c)
-	lg.Debug("recorded converted Claude stream web search calls", zap.Int("web_search_calls", w.count))
+	lg.Debug("observed converted Claude stream web search calls", zap.Int("web_search_calls", w.count))
 }

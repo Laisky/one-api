@@ -145,9 +145,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 		lg.Debug("pruned disallowed response builtins", zap.Strings("tools", pruned), zap.String("model", responseAPIRequest.Model))
 	}
-	if err := tooling.ValidateRequestedBuiltins(responseAPIRequest.Model, meta, channelRecord, requestAdaptor, requestedBuiltins); err != nil {
-		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
+	quotes, err := tooling.BuiltinToolQuotes(gmw.Ctx(c), responseAPIRequest.Model, meta, channelRecord, requestAdaptor, requestedBuiltins)
+	if err != nil {
+		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
+	tooling.RecordConservativeDeepSeekTools(c, meta, quotes, nil)
 	// Validate every surviving tool, including types unknown to the builtin
 	// registry, before reserving quota. The wire boundary repeats this check.
 	if err := validateNativeResponseToolBilling(responseAPIRequest.Tools); err != nil {
@@ -236,7 +238,10 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	resp, err := requestAdaptor.DoRequest(c, meta, requestBody)
 	if err != nil {
 		// Refund pre-consumed quota since the upstream request failed before any tokens were consumed
-		scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "do_request_failed")
+		if !(c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) &&
+			retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "transport_uncertain")) {
+			scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "do_request_failed")
+		}
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
 	upstreamCapture := wrapUpstreamResponse(resp)
@@ -266,6 +271,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	// Check for HTTP errors
 	if resp.StatusCode != http.StatusOK {
+		// A provider may have executed paid Search/Fetch before returning an
+		// error without final usage. Retain the funded floor and audit it.
+		if retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "upstream_http_error") {
+			return RelayErrorHandlerWithContext(c, resp)
+		}
 		scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)
@@ -310,9 +320,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		logUpstreamResponseFromBytes(lg, resp, nil, "response_api")
 	}
 	if respErr != nil {
-		// If usage is available even though writing to client failed (e.g., client cancelled),
-		// proceed to billing to ensure forwarded requests are charged; do not refund pre-consumed quota.
-		// Otherwise, refund pre-consumed quota and return error.
+		// Missing usage after provider success cannot establish that a paid
+		// DeepSeek tool was not executed. Preserve the admitted charge floor.
+		if usage == nil && tooling.ConservativeDeepSeekToolQuota(c) > 0 {
+			usage = &relaymodel.Usage{BillingEstimateReason: "deepseek_tool_response_missing_usage"}
+		}
 		if usage == nil {
 			lg.Warn("response api DoResponse failed without usage, refunding pre-consumed quota",
 				zap.Int64("pre_consumed_quota", preConsumedQuota),

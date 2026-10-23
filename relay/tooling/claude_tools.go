@@ -35,12 +35,6 @@ const (
 // a channel explicitly prices them.
 var zeroCostBuiltins = []string{BuiltinToolSearch}
 
-// anthropicDatedServerTool matches Anthropic's versioned server-tool type names
-// (for example web_search_20260209). Only dated forms are recognized so that
-// other providers' suffixed names (web_search_preview_reasoning) keep their
-// own pricing keys.
-var anthropicDatedServerTool = regexp.MustCompile(`^(web_search|web_fetch|code_execution)_\d{8}$`)
-
 // anthropicClientTool matches Anthropic tool types that are executed by the
 // caller's own client. The provider only emits tool_use blocks for them.
 var anthropicClientTool = regexp.MustCompile(`^(bash|text_editor|computer|computer_toolset|browser_toolset|memory)_\d{8}$`)
@@ -86,6 +80,10 @@ func ClassifyClaudeTool(toolType string) (ClaudeToolKind, string) {
 	return ClaudeToolUnknown, normalized
 }
 
+// ErrBuiltinToolBillingUnsupported identifies admitted capabilities whose
+// upstream contract has no implemented billable receipt.
+var ErrBuiltinToolBillingUnsupported = errors.New("built-in tool billing is not supported")
+
 // BuiltinToolQuotes validates requested canonical built-in tools against the
 // shared channel/provider policy and returns their per-call quota. Parameters:
 // ctx carries request correlation, modelName/meta identify the effective model,
@@ -103,6 +101,9 @@ func BuiltinToolQuotes(ctx context.Context, modelName string, meta *metalib.Meta
 		canonical := strings.ToLower(strings.TrimSpace(toolName))
 		if !policy.isAllowed(canonical) {
 			return nil, errors.Errorf("tool %s is not allowed on this channel (model=%s); update the tooling whitelist or pricing", canonical, effectiveModel)
+		}
+		if policy.pricing[canonical] < 0 {
+			return nil, errors.Errorf("tool %s has an invalid negative quota price (model=%s)", canonical, effectiveModel)
 		}
 		quotes[canonical] = policy.pricing[canonical]
 	}

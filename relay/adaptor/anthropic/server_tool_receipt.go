@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor/common/builtinname"
 )
 
 // serverToolTally accumulates provider-executed tool invocations for one
@@ -166,9 +167,13 @@ func RecordServerToolInvocations(c *gin.Context, counts map[string]int) {
 	}
 	recorded := false
 	for name, count := range counts {
-		if count <= 0 {
+		canonical := builtinname.Canonical(name)
+		if count <= 0 || canonical == "" {
 			continue
 		}
+
+		// Keep published raw identities for unrelated providers: billing's
+		// existing merge path already canonicalizes and adds these counts.
 		merged[name] += count
 		recorded = true
 	}

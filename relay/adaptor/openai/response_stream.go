@@ -12,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
-	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
@@ -69,7 +68,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 			webSearchCount = derived
 		}
 		if webSearchCount > 0 {
-			c.Set(ctxkey.WebSearchCallCount, webSearchCount)
+			recordWebSearchInvocationCount(c, webSearchCount)
 		}
 		lifecycle.finish(c, &apiErr)
 		if lifecycle.gap || !lifecycle.terminalReceipt {

@@ -116,3 +116,39 @@ func renderClaudeMessagesFromChatResponse(c *gin.Context, response *openai.TextR
 	}
 	return nil
 }
+
+// claudeMCPRoutePlan records which execution branch and request will be used.
+// Planning never dispatches or reserves quota; it can safely run before
+// provider capability admission even when endpoint overrides differ by mode.
+type claudeMCPRoutePlan struct {
+	toolSearch *claudeToolSearchMCPRegistry
+	registry   *mcpToolRegistry
+	names      map[string]struct{}
+	request    *relaymodel.GeneralOpenAIRequest
+}
+
+// planClaudeMCPRoute performs the same MCP discovery formerly done only after
+// quota reservation. Claude-native Tool Search takes precedence over the Chat
+// MCP loop; ordinary MCP aliases select Chat before pricing and admission.
+func planClaudeMCPRoute(c *gin.Context, meta *metalib.Meta, request *ClaudeMessagesRequest, provider adaptor.Adaptor) (*claudeMCPRoutePlan, *relaymodel.ErrorWithStatusCode) {
+	plan := &claudeMCPRoutePlan{}
+	if request == nil || len(request.Tools) == 0 {
+		return plan, nil
+	}
+	if hasToolSearchInClaudeRequest(request) && !meta.IsStream {
+		registry, err := injectDeferredMCPToolsForToolSearch(c, request)
+		if err != nil {
+			return nil, openai.ErrorWrapper(err, "tool_search_mcp_inject_failed", http.StatusInternalServerError)
+		}
+		if registry != nil {
+			plan.toolSearch = registry
+			return plan, nil
+		}
+	}
+	registry, names, converted, err := detectClaudeMCPTools(c, meta, request, provider)
+	if err != nil {
+		return nil, openai.ErrorWrapper(err, "mcp_tool_registry_failed", http.StatusBadRequest)
+	}
+	plan.registry, plan.names, plan.request = registry, names, converted
+	return plan, nil
+}

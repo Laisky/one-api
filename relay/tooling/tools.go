@@ -12,6 +12,8 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/common/builtinname"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -31,7 +33,11 @@ func ValidateChatBuiltinTools(c *gin.Context, request *relaymodel.GeneralOpenAIR
 	}
 
 	modelName := resolveModelName(meta, request.Model)
-	return validateRequestedBuiltinsWithContext(gmw.Ctx(c), modelName, meta, channel, provider, requested)
+	quotes, err := BuiltinToolQuotes(gmw.Ctx(c), modelName, meta, channel, provider, requested)
+	if err == nil {
+		RecordConservativeDeepSeekTools(c, meta, quotes, nil)
+	}
+	return err
 }
 
 // PruneDisallowedResponseBuiltins removes built-in tools from the Response API request when the
@@ -100,6 +106,10 @@ func ApplyBuiltinToolCharges(c *gin.Context, usage **relaymodel.Usage, meta *met
 	}
 
 	counts := collectInvocationCounts(c)
+	conservativeEstimated := false
+	if deepseekcompat.UsesDeepSeekToolReceiptContract(meta) || conservativeDeepSeekAllowance(c) != nil {
+		conservativeEstimated = conservativeDeepSeekCounts(c, counts)
+	}
 	if len(counts) == 0 {
 		return
 	}
@@ -138,9 +148,21 @@ func ApplyBuiltinToolCharges(c *gin.Context, usage **relaymodel.Usage, meta *met
 		}
 
 		perCall := policy.pricing[canonical]
-		cost := perCall * int64(count)
+		cost := SaturatingToolAllowance(perCall, int64(count))
 		if usagePtr := ensureUsage(); usagePtr != nil {
-			usagePtr.ToolsCost += cost
+			if cost > math.MaxInt64-usagePtr.ToolsCost {
+				usagePtr.ToolsCost = math.MaxInt64
+			} else {
+				usagePtr.ToolsCost += cost
+			}
+			// A conservative tool count does not make measured token usage
+			// uncertain. Mark the whole request estimated only when token
+			// usage is also missing; otherwise the token over-reservation
+			// must be refunded while the tool floor remains charged.
+			if conservativeEstimated && usagePtr.BillingEstimateReason == "" &&
+				usagePtr.PromptTokens == 0 && usagePtr.CompletionTokens == 0 && usagePtr.TotalTokens == 0 {
+				usagePtr.BillingEstimateReason = "deepseek_conservative_tool_attempt_floor"
+			}
 			// Maintain TotalTokens when upstream omits it to align with previous behaviour.
 			if usagePtr.TotalTokens == 0 && (usagePtr.PromptTokens != 0 || usagePtr.CompletionTokens != 0) {
 				usagePtr.TotalTokens = usagePtr.PromptTokens + usagePtr.CompletionTokens
@@ -149,7 +171,11 @@ func ApplyBuiltinToolCharges(c *gin.Context, usage **relaymodel.Usage, meta *met
 		if cost != 0 {
 			logger.Debug("applied builtin tool cost", zap.String("tool", canonical), zap.Int("count", count), zap.Int64("quota_cost", cost))
 			summary.CostByTool[canonical] = cost
-			totalCost += cost
+			if cost > math.MaxInt64-totalCost {
+				totalCost = math.MaxInt64
+			} else {
+				totalCost += cost
+			}
 		}
 	}
 
@@ -186,14 +212,7 @@ func collectInvocationCounts(c *gin.Context) map[string]int {
 // canonicalBuiltinInvocationName normalizes invocation counter keys so aliases
 // map to a single billing key while preserving unknown provider-specific names.
 func canonicalBuiltinInvocationName(toolName string) string {
-	trimmed := strings.TrimSpace(toolName)
-	if trimmed == "" {
-		return ""
-	}
-	if builtin := NormalizeBuiltinType(trimmed); builtin != "" {
-		return builtin
-	}
-	return strings.ToLower(trimmed)
+	return builtinname.Canonical(toolName)
 }
 
 // mergeToolCounts merges arbitrary typed maps containing tool invocation counters into the accumulator map.
@@ -289,26 +308,7 @@ func CollectResponseBuiltins(request *openai.ResponseAPIRequest) map[string]stru
 // (tool_search_tool_regex/bm25) maps to the distinct, unmetered "tool_search"
 // capability rather than to paid web search.
 func NormalizeBuiltinType(toolType string) string {
-	normalized := strings.ToLower(strings.TrimSpace(toolType))
-	switch normalized {
-	case "web_search":
-		return BuiltinWebSearch
-	case "web_search_preview":
-		return BuiltinWebSearch
-	case "web-search":
-		return BuiltinWebSearch
-	case "tool_search_tool_regex", "tool_search_tool_bm25":
-		return BuiltinToolSearch
-	}
-
-	if strings.HasPrefix(normalized, "tool_search_tool_regex_") || strings.HasPrefix(normalized, "tool_search_tool_bm25_") {
-		return BuiltinToolSearch
-	}
-	if match := anthropicDatedServerTool.FindStringSubmatch(normalized); len(match) == 2 {
-		return match[1]
-	}
-
-	return ""
+	return builtinname.Normalize(toolType)
 }
 
 // ValidateResponseBuiltinTools verifies built-in tool usage on Response API requests prior to fallback conversions.
@@ -540,7 +540,11 @@ func quotaPerCallFromLocal(pricing model.ToolPricingLocal) int64 {
 		return pricing.QuotaPerCall
 	}
 	if pricing.UsdPerCall > 0 {
-		return int64(math.Ceil(pricing.UsdPerCall * float64(ratio.QuotaPerUsd)))
+		quota := pricing.UsdPerCall * float64(ratio.QuotaPerUsd)
+		if math.IsInf(quota, 0) || quota >= float64(math.MaxInt64) {
+			return math.MaxInt64
+		}
+		return int64(math.Ceil(quota))
 	}
 	return pricing.QuotaPerCall
 }
@@ -551,7 +555,11 @@ func quotaPerCallFromProvider(pricing adaptor.ToolPricingConfig) int64 {
 		return pricing.QuotaPerCall
 	}
 	if pricing.UsdPerCall > 0 {
-		return int64(math.Ceil(pricing.UsdPerCall * float64(ratio.QuotaPerUsd)))
+		quota := pricing.UsdPerCall * float64(ratio.QuotaPerUsd)
+		if math.IsInf(quota, 0) || quota >= float64(math.MaxInt64) {
+			return math.MaxInt64
+		}
+		return int64(math.Ceil(quota))
 	}
 	return pricing.QuotaPerCall
 }

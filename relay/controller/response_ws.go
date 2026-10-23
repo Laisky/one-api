@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -107,8 +108,20 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 	provisionalLogId := recordProvisionalLog(c, meta, userVisibleModelName(meta, meta.ActualModelName), preConsumedQuota)
 	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
-	// --- Execute WS proxy ---
-	bizErrResult, usage, observedResponses := openai.ResponseAPIWebSocketHandler(c, meta)
+	// The observer captures immutable policy and synchronized work counters.
+	// Both proxy legs drain before the request goroutine touches gin.Context.
+	meter := newDeepSeekWSConservativeMeter(c)
+	var toolFunded atomic.Int64
+	bizErrResult, usage, observedResponses := openai.ResponseAPIWebSocketHandlerWithAdmission(
+		c, meta, responseWebSocketToolAdmission(c, meta, &toolFunded), openai.ResponseAPIWebSocketObservers{
+			OnForwardedCreate: meter.onForwardedCreate,
+			OnUpstreamEvent:   meter.onUpstreamEvent,
+		},
+	)
+	// Both proxy goroutines have drained. Include every incremental atomic
+	// tool hold in the existing single settlement/refund and safety-net audit.
+	preConsumedQuota = saturatingQuotaAdd(preConsumedQuota, toolFunded.Load())
+	markPreConsumed(c, preConsumedQuota)
 	if bizErrResult != nil {
 		// WS proxy failed - refund pre-consumed quota. scheduleConservativeRefund
 		// captures the token id on the request goroutine (value param) and marks
@@ -127,6 +140,7 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 	if usage == nil {
 		usage = &relaymodel.Usage{}
 	}
+	meter.settle(c, meta, &usage)
 
 	lg.Debug("response api websocket completed with usage",
 		zap.Int("prompt_tokens", usage.PromptTokens),
@@ -154,7 +168,7 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 	// receipts instead use post-billing to finalize the estimated charge and its
 	// provenance in the consume log and request-cost record.
 	//
-	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && usage.BillingEstimateReason == "" {
+	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && usage.ToolsCost == 0 && usage.BillingEstimateReason == "" {
 		lg.Warn("response api websocket returned zero usage, keeping pre-consumed quota as-is",
 			zap.Int64("pre_consumed_quota", preConsumedQuota),
 			zap.String("model", meta.ActualModelName),

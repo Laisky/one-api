@@ -107,3 +107,12 @@ func validResponseNamespaceName(name string) bool {
 	}
 	return true
 }
+
+// builtinToolAdmissionErrorCode preserves ordinary allowlist failures while
+// exposing unsupported paid receipts through the existing capability error code.
+func builtinToolAdmissionErrorCode(err error) string {
+	if errors.Is(err, tooling.ErrBuiltinToolBillingUnsupported) {
+		return "tool_billing_not_supported"
+	}
+	return "tool_not_allowed"
+}

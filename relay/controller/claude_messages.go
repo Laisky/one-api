@@ -129,11 +129,6 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// verbatim; SDK/rebuilding paths use this normalized struct.
 	mergeMidArraySystemMessages(claudeRequest)
 
-	// Apply the shared built-in tool policy before any reservation or dispatch.
-	if admissionErr := admitClaudeMessagesTools(c, meta); admissionErr != nil {
-		return admissionErr
-	}
-
 	// get channel model ratio
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
 	channelModelConfigs := getChannelModelConfigs(c)
@@ -157,12 +152,62 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		return wrapConvertRequestError(err)
 	}
 	convertedRequest = sanitizeConvertedChatFields(convertedRequest)
-	// Conversion may introduce built-ins; re-check them with the shared validator
-	// before any reservation or dispatch.
-	if policyErr := admitConvertedClaudeBuiltins(c, meta, convertedRequest, adaptorInstance); policyErr != nil {
+	// Preserve the original request/converted quote for Claude-native Tool
+	// Search. Injected deferred MCP tool definitions are a separate internal
+	// round and are funded by executeClaudeToolSearchMCPLoop, not twice via
+	// the initial client-facing reservation.
+	originalToolSearchQuote := *claudeRequest
+	originalToolSearchQuote.Tools = append([]relaymodel.ClaudeTool(nil), claudeRequest.Tools...)
+	originalConvertedQuote := convertedRequest
+
+	// Select the actual MCP dispatch route before tool admission or quota
+	// reservation. A Claude client request may execute as Chat internally, and
+	// those two modes can have different configured upstream endpoint URLs.
+	mcpPlan, planErr := planClaudeMCPRoute(c, meta, claudeRequest, adaptorInstance)
+	if planErr != nil {
+		return planErr
+	}
+	if mcpPlan.toolSearch != nil {
+		// Deferred MCP tools were injected by planning; quote and validate
+		// the converted payload that will actually be used by the loop.
+		convertedRequest, err = adaptorInstance.ConvertClaudeRequest(c, claudeRequest)
+		if err != nil {
+			return wrapConvertRequestError(err)
+		}
+		convertedRequest = sanitizeConvertedChatFields(convertedRequest)
+	}
+	admissionMeta := meta
+	if mcpPlan.registry != nil {
+		planned := *meta
+		planned.Mode = relaymode.ChatCompletions
+		planned.IsStream = false
+		admissionMeta = &planned
+	}
+	if admissionErr := admitClaudeMessagesTools(c, admissionMeta); admissionErr != nil {
+		return admissionErr
+	}
+	// Conversion can introduce additional built-ins, so check both the
+	// provider-visible conversion and, when MCP is selected, the actual
+	// Chat request used for its internal upstream rounds.
+	if policyErr := admitConvertedClaudeBuiltins(c, admissionMeta, convertedRequest, adaptorInstance); policyErr != nil {
 		return policyErr
 	}
-	promptTokens, quoteErr := preparedClaudePromptTokens(ctx, claudeRequest, convertedRequest)
+	if mcpPlan.registry != nil {
+		if policyErr := admitMCPConvertedChatBuiltins(c, admissionMeta, mcpPlan.request, adaptorInstance); policyErr != nil {
+			return policyErr
+		}
+	}
+	quoteRequest := claudeRequest
+	quoteConverted := convertedRequest
+	if mcpPlan.toolSearch != nil {
+		// Keep the pre-injection quote, matching the existing Claude MCP
+		// reservation contract. The actual converted payload above still
+		// receives tool admission, and every internal round funds its own
+		// expanded schema before sending.
+		quoteRequest = &originalToolSearchQuote
+		quoteConverted = originalConvertedQuote
+	}
+	promptTokens, quoteErr := preparedClaudePromptTokens(ctx, quoteRequest, quoteConverted)
 	if quoteErr != nil {
 		return openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", http.StatusBadRequest)
 	}
@@ -196,64 +241,50 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// Tool Search + MCP integration: when the request contains a tool_search_tool and
 	// there are MCP tools in the catalog, inject them as deferred tools and run a
 	// Claude-native MCP execution loop that handles tool discovery and execution.
-	if hasToolSearchInClaudeRequest(claudeRequest) && !meta.IsStream {
-		toolSearchRegistry, tsErr := injectDeferredMCPToolsForToolSearch(c, claudeRequest)
-		if tsErr != nil {
-			return openai.ErrorWrapper(tsErr, "tool_search_mcp_inject_failed", http.StatusInternalServerError)
-		}
-		if toolSearchRegistry != nil {
-			lg.Debug("tool search with MCP tools detected, using Claude-native MCP loop")
+	if toolSearchRegistry := mcpPlan.toolSearch; toolSearchRegistry != nil {
+		lg.Debug("tool search with MCP tools detected, using Claude-native MCP loop")
 
-			// Convert request to set pass-through flags (for headers etc.)
-			if _, cerr := adaptorInstance.ConvertClaudeRequest(c, claudeRequest); cerr != nil {
-				return wrapConvertRequestError(cerr)
-			}
+		// Disable streaming for the MCP loop
+		noStream := false
+		claudeRequest.Stream = &noStream
 
-			// Disable streaming for the MCP loop
-			noStream := false
-			claudeRequest.Stream = &noStream
-
-			response, mcpUsage, mcpSummary, incrementalCharged, execErr := executeClaudeToolSearchMCPLoop(
-				c, meta, claudeRequest, toolSearchRegistry, adaptorInstance, preConsumedQuota,
-			)
-			if execErr != nil && mcpUsage == nil {
-				if refundClaudeAdmission(c, execErr, preConsumedQuota, c.GetInt(ctxkey.TokenId)) {
-					return execErr
-				}
-				_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "tool_search_mcp_loop_failed")
+		response, mcpUsage, mcpSummary, incrementalCharged, execErr := executeClaudeToolSearchMCPLoop(
+			c, meta, claudeRequest, toolSearchRegistry, adaptorInstance, preConsumedQuota,
+		)
+		if execErr != nil && mcpUsage == nil {
+			if refundClaudeAdmission(c, execErr, preConsumedQuota, c.GetInt(ctxkey.TokenId)) {
 				return execErr
 			}
-			if mcpSummary != nil && mcpSummary.summary != nil {
-				var existing *model.ToolUsageSummary
-				if raw, ok := c.Get(ctxkey.ToolInvocationSummary); ok {
-					if summary, ok := raw.(*model.ToolUsageSummary); ok {
-						existing = summary
-					}
-				}
-				merged := mergeToolUsageSummaries(existing, mcpSummary.summary)
-				c.Set(ctxkey.ToolInvocationSummary, merged)
-			}
-			usage = mcpUsage
-			mcpIncrementalCharged = incrementalCharged
-			respErr = execErr
-			if execErr == nil && response != nil {
-				if errResp := writeClaudeResponse(c, response); errResp != nil {
-					respErr = openai.ErrorWrapper(errResp, "write_tool_search_response_failed", http.StatusInternalServerError)
-				}
-			}
-			// Preserve prior receipts and all physical reservation credits even when
-			// continuation or downstream delivery fails after accepted upstream work.
-			markResponseSettlement(c, usage, respErr)
-			goto postConsume
+			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "tool_search_mcp_loop_failed")
+			return execErr
 		}
+		if mcpSummary != nil && mcpSummary.summary != nil {
+			var existing *model.ToolUsageSummary
+			if raw, ok := c.Get(ctxkey.ToolInvocationSummary); ok {
+				if summary, ok := raw.(*model.ToolUsageSummary); ok {
+					existing = summary
+				}
+			}
+			merged := mergeToolUsageSummaries(existing, mcpSummary.summary)
+			c.Set(ctxkey.ToolInvocationSummary, merged)
+		}
+		usage = mcpUsage
+		mcpIncrementalCharged = incrementalCharged
+		respErr = execErr
+		if execErr == nil && response != nil {
+			if errResp := writeClaudeResponse(c, response); errResp != nil {
+				respErr = openai.ErrorWrapper(errResp, "write_tool_search_response_failed", http.StatusInternalServerError)
+			}
+		}
+		// Preserve prior receipts and all physical reservation credits even when
+		// continuation or downstream delivery fails after accepted upstream work.
+		markResponseSettlement(c, usage, respErr)
+		goto postConsume
 	}
 
-	// MCP tool loop handling for Claude Messages requests.
-	if mcpRegistry, mcpToolNames, mcpReq, mcpErr := detectClaudeMCPTools(c, meta, claudeRequest, adaptorInstance); mcpRegistry != nil || mcpErr != nil {
-		if mcpErr != nil {
-			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "mcp_tool_registry_failed")
-			return openai.ErrorWrapper(mcpErr, "mcp_tool_registry_failed", http.StatusBadRequest)
-		}
+	// The registry and actual endpoint were selected before tool admission.
+	if mcpRegistry := mcpPlan.registry; mcpRegistry != nil {
+		mcpToolNames, mcpReq := mcpPlan.names, mcpPlan.request
 		mcpReq.ToolChoice = normalizeChatToolChoiceForMCP(mcpReq.ToolChoice, mcpToolNames)
 		if mcpReq.Stream {
 			mcpReq.Stream = false
@@ -370,7 +401,9 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// do request
 	resp, err = adaptorInstance.DoRequest(c, meta, requestBody)
 	if err != nil {
-		// ErrorWrapper will log the error, so we don't need to log it here
+		if c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) {
+			_ = retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "transport_uncertain")
+		}
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
 	origResp = resp
@@ -457,6 +490,15 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			goto handleResponse
 		}
 
+		if retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "upstream_http_error") {
+			var nativeError *anthropic.NativeErrorResponse
+			if c.GetBool(ctxkey.ClaudeDirectPassthrough) {
+				nativeError = anthropic.PrepareNativeErrorResponse(resp)
+			}
+			apiErr := RelayErrorHandlerWithContext(c, resp)
+			anthropic.RetainNativeErrorResponse(c, nativeError, apiErr)
+			return apiErr
+		}
 		scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)

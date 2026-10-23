@@ -48,6 +48,19 @@ type responseAPIEventUsage struct {
 	} `json:"output_tokens_details,omitempty"`
 }
 
+// ResponseAPIWebSocketAdmission validates an original client frame after
+// ownership/model authorization and before provider dispatch. Its parameters
+// are the request context, raw frame bytes, and the resolved upstream URL. It returns an error to reject
+// the frame without forwarding it and must not modify the supplied bytes.
+type ResponseAPIWebSocketAdmission func(context.Context, []byte, string) error
+
+// ResponseAPIWebSocketObservers receive accepted provider work and upstream
+// output without dereferencing gin.Context from WebSocket proxy goroutines.
+type ResponseAPIWebSocketObservers struct {
+	OnForwardedCreate func([]byte, string)
+	OnUpstreamEvent   func([]byte)
+}
+
 // ResponseAPIWebSocketHandler proxies a user websocket connection from /v1/responses
 // to the upstream OpenAI /v1/responses websocket endpoint.
 //
@@ -65,6 +78,17 @@ type responseAPIEventUsage struct {
 //     HTTP afterwards. The slice is populated only after both proxy directions
 //     drain, so it is safe to read without further synchronization.
 func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusCode, *rmodel.Usage, []*ResponseAPIResponse) {
+	return ResponseAPIWebSocketHandlerWithAdmission(c, meta, nil)
+}
+
+// ResponseAPIWebSocketHandlerWithAdmission proxies a Responses WebSocket while
+// applying admission to every original text or binary client frame. c and meta
+// carry the authenticated request and upstream configuration; a nil admission
+// retains the existing passthrough policy. It returns the proxy error, aggregated
+// usage, and observed stored responses after both directions have drained. A
+// denial before any dispatch releases the handshake hold through the caller's
+// existing refund path; a later denial retains earlier accepted-work settlement.
+func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, admission ResponseAPIWebSocketAdmission, observers ...ResponseAPIWebSocketObservers) (*rmodel.ErrorWithStatusCode, *rmodel.Usage, []*ResponseAPIResponse) {
 	if meta == nil || meta.Mode != relaymode.ResponseAPI {
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "invalid mode for response websocket handler", Type: rmodel.ErrorTypeOneAPI, Code: "invalid_mode", RawError: errors.New("invalid mode for response websocket handler")},
@@ -124,11 +148,17 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 	stored := &responseAPIWSStoreCollector{ownership: ownership}
 	errc := make(chan error, 2)
 	requestContext := c.Request.Context()
+	var observed ResponseAPIWebSocketObservers
+	if len(observers) > 0 {
+		observed = observers[0]
+	}
 	go func() {
-		errc <- copyResponseAPIClientToUpstream(requestContext, clientConn, upstreamConn, meta, ownership)
+		errc <- copyResponseAPIClientToUpstream(requestContext, clientConn, upstreamConn, meta, ownership, admission, fullRequestURL, observed.OnForwardedCreate)
 	}()
 	receipts := &responseAPIWSUsageCollector{usage: usage}
-	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, receipts, stored) }()
+	go func() {
+		errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, receipts, stored, observed.OnUpstreamEvent)
+	}()
 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
@@ -248,7 +278,9 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 //   - emits a `model_switch_denied` error event back to the client
 //   - returns ErrModelSwitchDenied (wrapped) so the caller closes both legs
 //
-// Ownership is checked for both text and binary JSON frames before dispatch.
+// Admission inspects the original text or binary frame only AFTER ownership
+// and model authorization succeed, avoiding quota holds for rejected frames.
+// All validation and funding finish before dispatch.
 //
 // Parameters:
 //   - src: client WebSocket connection (reader).
@@ -256,11 +288,13 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 //   - ctx: request cancellation context.
 //   - meta: authenticated owner and handshake-bound provider/model.
 //   - ownership: response IDs confirmed on this connection.
+//   - admission: optional validation of the original client frame.
+//   - upstreamURL: the resolved URL used for this upstream connection.
 //
 // Returns:
 //   - error: nil on clean close; ErrModelSwitchDenied (wrapped) on rejected
 //     model switch; other errors propagate underlying I/O failures.
-func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Conn, meta *rmeta.Meta, ownership *responseWSSessionOwnership) error {
+func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Conn, meta *rmeta.Meta, ownership *responseWSSessionOwnership, admission ResponseAPIWebSocketAdmission, upstreamURL string, onForwardedCreate ...func([]byte, string)) error {
 	boundOriginModel, boundActualModel := meta.OriginModelName, meta.ActualModelName
 	for {
 		mt, msg, err := src.ReadMessage()
@@ -290,11 +324,15 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 		if (mt == websocket.TextMessage || mt == websocket.BinaryMessage) && boundActualModel != "" {
 			rewritten, guardErr := enforceResponseCreateModel(outbound, boundOriginModel, boundActualModel)
 			if guardErr != nil {
+				// No frame was forwarded: the handshake reservation must be
+				// refundable, just like a failed ownership check. A prior
+				// forwarded create remains charged under the normal settlement.
+				ownership.denied.Store(true)
 				// Reject: notify the client with an error event and close the
 				// upstream side so billing reconciliation runs without any
 				// upstream charges accruing for the denied model.
 				errEvent := buildModelSwitchErrorEvent(guardErr.Error())
-				_ = src.WriteMessage(websocket.TextMessage, errEvent)
+				_ = ownership.writeClientMessage(src, websocket.TextMessage, errEvent)
 				_ = src.WriteControl(
 					websocket.CloseMessage,
 					websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "model_switch_denied"),
@@ -305,12 +343,30 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 			outbound = rewritten
 		}
 
+		// Validate and durably reserve only after all local rejection gates.
+		// The admission callback inspects the ORIGINAL frame to detect
+		// ambiguous tool declarations, but must not debit a frame that the
+		// owner/model guards would have rejected without provider execution.
+		if admission != nil && (mt == websocket.TextMessage || mt == websocket.BinaryMessage) {
+			if admissionErr := admission(ctx, msg, upstreamURL); admissionErr != nil {
+				ownership.denied.Store(true)
+				// Control writes are safe alongside the upstream-to-client writer.
+				if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "tool_billing_not_supported"), time.Now().Add(time.Second)); closeErr != nil {
+					return errors.Wrap(closeErr, "close response websocket after tool admission denial")
+				}
+				return errors.Wrap(admissionErr, "response websocket tool admission failed")
+			}
+		}
+
 		if werr := dst.WriteMessage(mt, outbound); werr != nil {
 			return errors.WithStack(werr)
 		}
 		ownership.dispatched.Store(true)
 		if isResponseCreateFrame(outbound) {
 			ownership.creates.Add(1)
+			if len(onForwardedCreate) > 0 && onForwardedCreate[0] != nil {
+				onForwardedCreate[0](outbound, upstreamURL)
+			}
 		}
 	}
 }
@@ -321,8 +377,7 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 // also records store!=false completed response objects into stored so the
 // caller can commit them to the gateway store (proposal ST-011). Collection
 // happens after usage accounting and never alters the forwarded frame.
-func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, receipts *responseAPIWSUsageCollector, stored *responseAPIWSStoreCollector) error {
-
+func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, receipts *responseAPIWSUsageCollector, stored *responseAPIWSStoreCollector, onUpstreamEvent ...func([]byte)) error {
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {
@@ -343,10 +398,21 @@ func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, receipts *respo
 			if stored != nil {
 				stored.collect(msg)
 			}
+			if len(onUpstreamEvent) > 0 && onUpstreamEvent[0] != nil {
+				onUpstreamEvent[0](msg)
+			}
 		}
 
-		if werr := dst.WriteMessage(mt, msg); werr != nil {
-			return errors.WithStack(werr)
+		// A model-switch denial on the opposite leg can write a local error
+		// event to this same client socket; Gorilla requires one data writer.
+		var writeErr error
+		if stored != nil && stored.ownership != nil {
+			writeErr = stored.ownership.writeClientMessage(dst, mt, msg)
+		} else {
+			writeErr = dst.WriteMessage(mt, msg)
+		}
+		if writeErr != nil {
+			return errors.WithStack(writeErr)
 		}
 	}
 }

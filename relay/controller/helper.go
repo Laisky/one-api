@@ -29,6 +29,7 @@ import (
 	"github.com/Laisky/one-api/relay/pricing"
 	quotautil "github.com/Laisky/one-api/relay/quota"
 	"github.com/Laisky/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/tooling"
 )
 
 func getAndValidateTextRequest(c *gin.Context, relayMode int) (*relaymodel.GeneralOpenAIRequest, error) {
@@ -273,6 +274,9 @@ func preConsumeQuota(
 		return preConsumeJinaQuota(c, meta)
 	}
 	quote := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta, tierAdmissionPreparedPayload(c, textRequest))
+	if quote >= 0 {
+		quote = saturatingQuotaAdd(quote, tooling.ConservativeDeepSeekToolQuota(c))
+	}
 	return reservePaidRequestQuota(c, meta, quote, "chat_preconsume")
 }
 
