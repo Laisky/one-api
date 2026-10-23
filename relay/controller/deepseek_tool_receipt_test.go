@@ -24,8 +24,10 @@ import (
 
 // TestDeepSeekToolReceiptAdmission ensures positively priced native DeepSeek
 // search stays available and reserves a conservative minimum tool charge.
+// Legacy deepseek-chat uses the Chat fallback and is covered by the
+// separate Chat endpoint regression with its own provider response format.
 func TestDeepSeekToolReceiptAdmission(t *testing.T) {
-	for _, actual := range []string{"deepseek-v4-pro", "deepseek-flash", "deepseek-chat"} {
+	for _, actual := range []string{"deepseek-v4-pro", "deepseek-flash"} {
 		for _, choice := range []string{`"auto"`, `{"type":"web_search"}`} {
 			for _, tariff := range []string{"quota", "usd"} {
 				t.Run(actual+"/"+choice+"/"+tariff, func(t *testing.T) {

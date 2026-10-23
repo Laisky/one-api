@@ -474,7 +474,13 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 
 		if retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "upstream_http_error") {
-			return RelayErrorHandlerWithContext(c, resp)
+			var nativeError *anthropic.NativeErrorResponse
+			if c.GetBool(ctxkey.ClaudeDirectPassthrough) {
+				nativeError = anthropic.PrepareNativeErrorResponse(resp)
+			}
+			apiErr := RelayErrorHandlerWithContext(c, resp)
+			anthropic.RetainNativeErrorResponse(c, nativeError, apiErr)
+			return apiErr
 		}
 		scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error
