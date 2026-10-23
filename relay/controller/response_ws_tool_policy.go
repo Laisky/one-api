@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"math"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Laisky/errors/v2"
-	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
@@ -31,7 +31,7 @@ type responseWSToolFrame struct {
 // model on the request goroutine. It returns a validator that reuses the HTTP
 // receipt policy for the actual DeepSeek WebSocket target without retaining c,
 // changing accepted frame bytes, or changing unrelated providers' admission.
-func responseWebSocketToolAdmission(c *gin.Context, meta *metalib.Meta) openai.ResponseAPIWebSocketAdmission {
+func responseWebSocketToolAdmission(c *gin.Context, meta *metalib.Meta, funded *atomic.Int64) openai.ResponseAPIWebSocketAdmission {
 	policyMeta := metalib.Meta{
 		ChannelType:     meta.ChannelType,
 		ActualModelName: meta.ActualModelName,
@@ -46,22 +46,13 @@ func responseWebSocketToolAdmission(c *gin.Context, meta *metalib.Meta) openai.R
 			channel = &model.Channel{Id: record.Id, Type: record.Type, Config: record.Config}
 		}
 	}
-	// Snapshot the remaining balance on the request goroutine; the socket
-	// pump must never dereference *gin.Context after its handler has returned.
-	var balance int64 = math.MaxInt64
-	var balanceErr error
-	if meta.UserId > 0 {
-		balance, balanceErr = model.CacheGetUserQuota(gmw.Ctx(c), meta.UserId)
-		if tokenQuota := c.GetInt64(ctxkey.TokenQuota); !c.GetBool(ctxkey.TokenQuotaUnlimited) && tokenQuota > 0 {
-			balance = min(balance, tokenQuota)
-		}
-	}
+	// Resolve immutable identities on the request goroutine. A cached balance
+	// snapshot is not a reservation: concurrent WebSocket sessions must use
+	// the same atomic user/token debit as HTTP before forwarding paid tools.
+	userID, tokenID := meta.UserId, meta.TokenId
 	var checkedFloor int64
 
 	return func(ctx context.Context, frame []byte, upstreamURL string) error {
-		if balanceErr != nil {
-			return errors.Wrap(balanceErr, "resolve websocket tool budget")
-		}
 		// Native WebSockets currently resolve BaseURL directly. The HTTP endpoint
 		// override and a previous observed URL must not classify a different host.
 		current := policyMeta
@@ -118,10 +109,26 @@ func responseWebSocketToolAdmission(c *gin.Context, meta *metalib.Meta) openai.R
 			}
 			added += cost
 		}
-		if checkedFloor > balance || added > balance-checkedFloor {
-			return errors.New("insufficient quota for conservative WebSocket tool allowance")
+		if added == 0 {
+			return nil
 		}
+		if added > math.MaxInt64-checkedFloor {
+			return errors.New("conservative WebSocket tool reservation overflows")
+		}
+		if userID <= 0 || tokenID <= 0 {
+			return errors.New("conservative WebSocket tool reservation requires an authenticated owner and token")
+		}
+		// Atomic funding ensures two simultaneous WebSockets cannot authorize
+		// tool calls against the same balance. A successful hold precedes the
+		// provider's frame, so even a mid-session crash cannot make it free.
+		if err := model.PreConsumeTokenQuota(ctx, tokenID, added); err != nil {
+			return errors.Wrap(err, "atomically reserve conservative WebSocket tool quota")
+		}
+		syncUserQuotaCacheAfterPreConsume(ctx, userID, added, "response_websocket_tool_reservation")
 		checkedFloor += added
+		if funded != nil {
+			funded.Store(checkedFloor)
+		}
 		return nil
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -110,12 +111,17 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 	// The observer captures immutable policy and synchronized work counters.
 	// Both proxy legs drain before the request goroutine touches gin.Context.
 	meter := newDeepSeekWSConservativeMeter(c)
+	var toolFunded atomic.Int64
 	bizErrResult, usage, observedResponses := openai.ResponseAPIWebSocketHandlerWithAdmission(
-		c, meta, responseWebSocketToolAdmission(c, meta), openai.ResponseAPIWebSocketObservers{
+		c, meta, responseWebSocketToolAdmission(c, meta, &toolFunded), openai.ResponseAPIWebSocketObservers{
 			OnForwardedCreate: meter.onForwardedCreate,
 			OnUpstreamEvent:   meter.onUpstreamEvent,
 		},
 	)
+	// Both proxy goroutines have drained. Include every incremental atomic
+	// tool hold in the existing single settlement/refund and safety-net audit.
+	preConsumedQuota = saturatingQuotaAdd(preConsumedQuota, toolFunded.Load())
+	markPreConsumed(c, preConsumedQuota)
 	if bizErrResult != nil {
 		// WS proxy failed - refund pre-consumed quota. scheduleConservativeRefund
 		// captures the token id on the request goroutine (value param) and marks
