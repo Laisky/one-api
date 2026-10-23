@@ -32,7 +32,7 @@ var privateMetricEnums = map[string]map[string]bool{
 		"timeout": true, "canceled": true, "panic": true, "emitted": true,
 		"dropped_queue_full": true, "dropped_not_ready": true, "dropped_shutdown": true,
 		"dropped_privacy": true, "dropped_encoding": true, "dropped_operator_limit": true,
-		"exported":        true, "export_failed": true, "sampled_out": true, "queued": true,
+		"exported": true, "export_failed": true, "sampled_out": true, "queued": true,
 		"dropped_closed": true, "written": true, "write_failed": true,
 		"span_recorded": true, "span_record_failed": true, "excluded": true,
 		"truncated": true, "dropped_active_limit": true, "hydrated": true,
