@@ -19,10 +19,11 @@ import (
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/tooling"
 )
 
-// TestDeepSeekToolReceiptEndpointHTTP proves actual endpoint overrides are
-// checked before upstream work/holds and preserve zero/local/unrelated ledgers.
+// TestDeepSeekToolReceiptEndpointHTTP verifies conservative paid-tool charging
+// against actual endpoint overrides while preserving free and unrelated ledgers.
 func TestDeepSeekToolReceiptEndpointHTTP(t *testing.T) {
 	const response = `{"id":"override_receipt","object":"response","status":"completed","vendor_extension":{"precise":9007199254740993},"output":[{"id":"ws1","type":"web_search_call","status":"completed"}],"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15,"input_tokens_details":{"cached_tokens":4}}}`
 	for _, tc := range []struct {
@@ -31,9 +32,9 @@ func TestDeepSeekToolReceiptEndpointHTTP(t *testing.T) {
 		local, reject        bool
 		charge               int64
 	}{
-		{"paid_quota", "https://api.openai.com", "https://api.deepseek.com/v1/responses", &model.ToolPricingLocal{QuotaPerCall: 17}, false, true, 0},
+		{"paid_quota", "https://api.openai.com", "https://api.deepseek.com/v1/responses", &model.ToolPricingLocal{QuotaPerCall: 17}, false, false, 186},
 		{"paid_overflow_usd", "https://api.openai.com", "https://api.deepseek.com/v1/responses", &model.ToolPricingLocal{UsdPerCall: 1e100}, false, true, 0},
-		{"inherited_default", "https://api.openai.com", "https://api.deepseek.com/v1/responses", nil, false, true, 0},
+		{"inherited_default", "https://api.openai.com", "https://api.deepseek.com/v1/responses", nil, false, false, -1},
 		{"intentional_zero", "https://api.openai.com", "https://api.deepseek.com/v1/responses", &model.ToolPricingLocal{}, false, false, 16},
 		{"local_function", "https://api.openai.com", "https://api.deepseek.com/v1/responses", &model.ToolPricingLocal{QuotaPerCall: 17}, true, false, 16},
 		{"reverse_base", "https://api.deepseek.com", "https://api.openai.com/v1/responses", &model.ToolPricingLocal{QuotaPerCall: 17}, false, false, 33},
@@ -77,9 +78,8 @@ func TestDeepSeekToolReceiptEndpointHTTP(t *testing.T) {
 			apiErr := RelayResponseAPIHelper(c)
 			if tc.reject {
 				require.NotNil(t, apiErr)
-				require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-				require.Equal(t, "tool_billing_not_supported", apiErr.Error.Code)
-				require.Zero(t, calls.Load())
+				require.NotEqual(t, "tool_billing_not_supported", apiErr.Error.Code)
+				require.Zero(t, calls.Load(), "unfundable tariff must not dispatch")
 				require.Zero(t, c.GetInt64(ctxkey.PreConsumedQuotaAmount))
 			} else {
 				require.Nil(t, apiErr)
@@ -89,11 +89,16 @@ func TestDeepSeekToolReceiptEndpointHTTP(t *testing.T) {
 				require.Equal(t, tc.override, metalib.GetByContext(c).UpstreamRequestURL)
 			}
 			drainCriticalTasks(t)
-			require.Equal(t, balance-tc.charge, reloadUserQuota(t))
+			expected := tc.charge
+			if expected < 0 {
+				expected = 16 + tooling.ConservativeDeepSeekToolQuota(c)
+				require.Greater(t, expected, int64(16), "provider default tool price must be funded")
+			}
+			require.Equal(t, balance-expected, reloadUserQuota(t))
 			var token model.Token
 			require.NoError(t, model.DB.First(&token, fallbackTokenID).Error)
-			require.Equal(t, balance-tc.charge, token.RemainQuota)
-			require.Equal(t, tc.charge, token.UsedQuota)
+			require.Equal(t, balance-expected, token.RemainQuota)
+			require.Equal(t, expected, token.UsedQuota)
 			var costs []model.UserRequestCost
 			require.NoError(t, model.DB.Where("request_id = ?", id).Find(&costs).Error)
 			var logs []model.Log
@@ -103,7 +108,7 @@ func TestDeepSeekToolReceiptEndpointHTTP(t *testing.T) {
 				require.Empty(t, logs)
 			} else {
 				require.Len(t, costs, 1)
-				require.Equal(t, tc.charge, requestCostQuota(t, id))
+				require.Equal(t, expected, requestCostQuota(t, id))
 				var consume, tools []model.Log
 				for _, entry := range logs {
 					switch entry.Type {
@@ -116,20 +121,19 @@ func TestDeepSeekToolReceiptEndpointHTTP(t *testing.T) {
 					}
 				}
 				require.Len(t, consume, 1)
-				require.EqualValues(t, tc.charge, consume[0].Quota)
+				require.EqualValues(t, expected, consume[0].Quota)
 				require.Equal(t, 12, consume[0].PromptTokens)
 				require.Equal(t, 3, consume[0].CompletionTokens)
 				require.Equal(t, 4, consume[0].CachedPromptTokens)
-				if tc.charge == 16 {
+				require.Equal(t, 1, c.GetInt(ctxkey.WebSearchCallCount), "provider output is observed")
+				if expected == 16 {
 					require.Len(t, logs, 1)
 					require.Empty(t, tools)
-					require.Zero(t, c.GetInt(ctxkey.WebSearchCallCount))
 				} else {
 					require.Len(t, logs, 2)
 					require.Len(t, tools, 1)
 					require.Equal(t, "web_search", tools[0].ModelName)
-					require.EqualValues(t, 17, tools[0].Quota)
-					require.Equal(t, 1, c.GetInt(ctxkey.WebSearchCallCount))
+					require.EqualValues(t, expected-16, tools[0].Quota)
 				}
 			}
 		})
@@ -167,11 +171,7 @@ func TestDeepSeekToolReceiptRetryEndpointSwitch(t *testing.T) {
 			require.Nil(t, apiErr)
 			require.Equal(t, 12, usage.PromptTokens)
 			require.Equal(t, 3, usage.CompletionTokens)
-			want := 0
-			if index == 1 {
-				want = 1
-			}
-			require.Equal(t, want, c.GetInt(ctxkey.WebSearchCallCount), "planned target wins over stale observed URL in both directions")
+			require.Equal(t, 1, c.GetInt(ctxkey.WebSearchCallCount), "all provider outputs remain observable; billing uses the selected target")
 		})
 	}
 }
