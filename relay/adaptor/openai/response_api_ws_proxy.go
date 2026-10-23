@@ -278,8 +278,9 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 //   - emits a `model_switch_denied` error event back to the client
 //   - returns ErrModelSwitchDenied (wrapped) so the caller closes both legs
 //
-// Admission sees the original text or binary frame before ownership/model
-// rewrites can collapse duplicate keys. Ownership is checked before dispatch.
+// Admission inspects the original text or binary frame only AFTER ownership
+// and model authorization succeed, avoiding quota holds for rejected frames.
+// All validation and funding finish before dispatch.
 //
 // Parameters:
 //   - src: client WebSocket connection (reader).
@@ -310,17 +311,6 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 			return errors.WithStack(err)
 		}
 
-		if admission != nil && (mt == websocket.TextMessage || mt == websocket.BinaryMessage) {
-			if admissionErr := admission(ctx, msg, upstreamURL); admissionErr != nil {
-				ownership.denied.Store(true)
-				// Control writes are safe alongside the upstream-to-client writer.
-				if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "tool_billing_not_supported"), time.Now().Add(time.Second)); closeErr != nil {
-					return errors.Wrap(closeErr, "close response websocket after tool admission denial")
-				}
-				return errors.Wrap(admissionErr, "response websocket tool admission failed")
-			}
-		}
-
 		outbound, authorizationErr := ownership.authorize(ctx, meta, msg)
 		if authorizationErr != nil {
 			ownership.denied.Store(true)
@@ -334,6 +324,10 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 		if (mt == websocket.TextMessage || mt == websocket.BinaryMessage) && boundActualModel != "" {
 			rewritten, guardErr := enforceResponseCreateModel(outbound, boundOriginModel, boundActualModel)
 			if guardErr != nil {
+				// No frame was forwarded: the handshake reservation must be
+				// refundable, just like a failed ownership check. A prior
+				// forwarded create remains charged under the normal settlement.
+				ownership.denied.Store(true)
 				// Reject: notify the client with an error event and close the
 				// upstream side so billing reconciliation runs without any
 				// upstream charges accruing for the denied model.
@@ -347,6 +341,21 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 				return errors.WithStack(guardErr)
 			}
 			outbound = rewritten
+		}
+
+		// Validate and durably reserve only after all local rejection gates.
+		// The admission callback inspects the ORIGINAL frame to detect
+		// ambiguous tool declarations, but must not debit a frame that the
+		// owner/model guards would have rejected without provider execution.
+		if admission != nil && (mt == websocket.TextMessage || mt == websocket.BinaryMessage) {
+			if admissionErr := admission(ctx, msg, upstreamURL); admissionErr != nil {
+				ownership.denied.Store(true)
+				// Control writes are safe alongside the upstream-to-client writer.
+				if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "tool_billing_not_supported"), time.Now().Add(time.Second)); closeErr != nil {
+					return errors.Wrap(closeErr, "close response websocket after tool admission denial")
+				}
+				return errors.Wrap(admissionErr, "response websocket tool admission failed")
+			}
 		}
 
 		if werr := dst.WriteMessage(mt, outbound); werr != nil {
