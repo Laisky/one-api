@@ -124,6 +124,7 @@ func (b *issue599Boundary) Unwrap() io.ReadCloser { return b.ReadCloser }
 // the original double-cancellation ownership, the post-DONE read may return
 // net.ErrClosed rather than context.Canceled and produce a spurious HTTP 500.
 func TestIssue599NativeHTTPReadAfterDONE(t *testing.T) {
+	configureIssue599TraceFixture(t)
 	tests := []struct {
 		name       string
 		wire       string

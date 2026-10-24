@@ -22,6 +22,7 @@ import (
 // fixture bytes have been delivered, so cancellation happens at a real read.
 func newIssue599NativeResponse(t *testing.T, wire string) (*gin.Context, *httptest.ResponseRecorder, *http.Response, context.CancelFunc) {
 	t.Helper()
+	configureIssue599TraceFixture(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w, wire)

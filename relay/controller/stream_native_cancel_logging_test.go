@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/config"
 	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 )
 
@@ -19,6 +20,9 @@ import (
 // controller response wrapper on a native HTTP/1.1 connection. It must remain
 // visible as a transparent reader while continuing to count every byte.
 func TestIssue599LoggingBodyPreservesNativeCancellation(t *testing.T) {
+	previousSinks := config.TraceSinks
+	config.TraceSinks = []string{config.TraceSinkNone}
+	t.Cleanup(func() { config.TraceSinks = previousSinks })
 	const wire = "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7}}\n\n"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
