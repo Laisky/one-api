@@ -309,6 +309,24 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 			} else if scenario != "ordinary" {
 				frame["previous_response_id"] = parent.GatewayResponseID
 			}
+			// Keep the opaque-input security scenarios anchored to the exact
+			// authenticated channel/model quote, not merely to fixture guesses
+			// about what an upstream may expand after the request was forwarded.
+			if scenario == "remote_prompt_low" || scenario == "opaque_file_low" {
+				wire, marshalErr := json.Marshal(frame)
+				require.NoError(t, marshalErr)
+				var decoded openai.ResponseAPIRequest
+				require.NoError(t, json.Unmarshal(wire, &decoded))
+				require.True(t, responseTierHasOpaqueProviderInput(&decoded),
+					"the provider-resolved input must be present in the actual frame")
+				meta := metalib.GetByContext(template)
+				configs := getChannelModelConfigs(template)
+				budget, budgetErr := responseTierAdmissionPromptBudget(&decoded, getResponseAPIPromptTokens(context.Background(), &decoded),
+					configs, resolvePricingAdaptor(meta), meta.StartTime)
+				t.Logf("opaque quote diagnostic scenario=%s config_context=%d priced_budget=%d err=%v", scenario, configs[name].ContextLength, budget, budgetErr)
+				require.NoError(t, budgetErr)
+				require.GreaterOrEqual(t, budget, 5000)
+			}
 			require.NoError(t, conn.WriteJSON(frame))
 			_, _, readErr := conn.ReadMessage()
 			paidDenied := scenario == "owner_low" || scenario == "token_low" || scenario == "after_paid_known_work" || scenario == "remote_prompt_low" || scenario == "opaque_file_low"
