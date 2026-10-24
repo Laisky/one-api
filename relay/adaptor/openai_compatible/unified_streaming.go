@@ -14,6 +14,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/common/tracing"
@@ -93,20 +94,25 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 				// attribute this terminal read to the caller's cancellation.
 				// DONE alone is insufficient: later output or a missing
 				// measured receipt still requires unsuccessful termination.
-				// An independent net.ErrClosed / UnexpectedEOF is never
-				// swallowed merely because cancellation happened nearby.
+				// Every cause must be cancellation: an independent joined
+				// error is never swallowed merely because it happened nearby.
 				if nativeTransportOwnsCancel && upstreamDone && receiptComplete &&
-					errors.Is(err, canceled) && !errors.Is(err, net.ErrClosed) &&
-					!errors.Is(err, io.ErrUnexpectedEOF) {
+					errkind.HasOnlyCause(err, canceled) {
 					break
 				}
 				// Before terminal completion, EOF from a canceled body is not
 				// success. Retain cancellation identity and measured usage.
-				if !upstreamDone && errors.Is(err, io.EOF) {
-					err = canceled
+				if !upstreamDone {
+					if errkind.HasOnlyCause(err, io.EOF) {
+						err = canceled
+					} else if errors.Is(err, net.ErrClosed) && !errors.Is(err, canceled) {
+						// Keep both observed facts without attributing the close
+						// or hiding a genuine transport failure.
+						err = errors.Join(canceled, err)
+					}
 				}
 			}
-			if errors.Is(err, io.EOF) {
+			if errkind.HasOnlyCause(err, io.EOF) {
 				break
 			}
 
