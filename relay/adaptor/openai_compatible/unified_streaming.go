@@ -3,6 +3,7 @@ package openai_compatible
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -68,7 +69,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 	if tracker != nil {
 		streaming.ClaimProtocolObservation(c)
 	}
-	cleanup := watchStreamBody(c, resp)
+	cleanup, nativeTransportOwnsCancel := watchStreamBody(c, resp)
 	defer cleanup()
 	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
@@ -87,10 +88,23 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 	for {
 		line, err := lineReader.Next()
 		if err != nil {
-			// Closing a canceled body may surface as EOF. Preserve the caller's
-			// stop condition and observed receipt instead of synthesizing success.
-			if canceled := gmw.Ctx(c).Err(); canceled != nil && !upstreamDone && errors.Is(err, io.EOF) {
-				err = canceled
+			if canceled := gmw.Ctx(c).Err(); canceled != nil {
+				// Only the native context-bound HTTP transport can positively
+				// attribute this terminal read to the caller's cancellation.
+				// DONE alone is insufficient: later output or a missing
+				// measured receipt still requires unsuccessful termination.
+				// An independent net.ErrClosed / UnexpectedEOF is never
+				// swallowed merely because cancellation happened nearby.
+				if nativeTransportOwnsCancel && upstreamDone && receiptComplete &&
+					errors.Is(err, canceled) && !errors.Is(err, net.ErrClosed) &&
+					!errors.Is(err, io.ErrUnexpectedEOF) {
+					break
+				}
+				// Before terminal completion, EOF from a canceled body is not
+				// success. Retain cancellation identity and measured usage.
+				if !upstreamDone && errors.Is(err, io.EOF) {
+					err = canceled
+				}
 			}
 			if errors.Is(err, io.EOF) {
 				break
