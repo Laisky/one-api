@@ -54,6 +54,27 @@ type responseAPIEventUsage struct {
 // the frame without forwarding it and must not modify the supplied bytes.
 type ResponseAPIWebSocketAdmission func(context.Context, []byte, string) error
 
+// ResponseAPIWSAdmissionFundingError preserves the established Responses quota
+// status/code when a tiered continuation is denied before upstream dispatch.
+// Ordinary tool or authorization failures keep their existing generic policy.
+type ResponseAPIWSAdmissionFundingError struct {
+	Code       string
+	StatusCode int
+	Cause      error
+}
+
+func (e *ResponseAPIWSAdmissionFundingError) Error() string {
+	if e.Cause != nil {
+		return e.Cause.Error()
+	}
+	return "response WebSocket admission denied"
+}
+
+func (e *ResponseAPIWSAdmissionFundingError) Unwrap() error {
+	return e.Cause
+}
+
+
 // ResponseAPIWebSocketObservers receive accepted provider work and upstream
 // output without dereferencing gin.Context from WebSocket proxy goroutines.
 type ResponseAPIWebSocketObservers struct {
@@ -176,6 +197,10 @@ func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, 
 	// An admission failure before any execution must release the handshake hold.
 	// If an earlier frame was dispatched, preserve its billing reconciliation.
 	if ownership.denied.Load() && !ownership.dispatched.Load() {
+		var fundingErr *ResponseAPIWSAdmissionFundingError
+		if errors.As(firstErr, &fundingErr) || errors.As(secondErr, &fundingErr) {
+			return ErrorWrapper(fundingErr, fundingErr.Code, fundingErr.StatusCode), nil, nil
+		}
 		return ErrorWrapper(errors.New("response websocket request was rejected before execution"), "response_websocket_request_rejected", http.StatusBadRequest), nil, nil
 	}
 	if firstErr != nil {
