@@ -21,6 +21,9 @@ import (
 
 const (
 	extraRequestHeaderPrefix = "X-"
+	// This key is private to the relay request lifecycle; the recorded pointer
+	// proves which response came from the context-aware net/http transport.
+	nativeHTTPResponseKey = "relay_native_http_transport_response"
 	channelAPIKeyPlaceholder = "{{key}}"
 )
 
@@ -28,6 +31,19 @@ const (
 // mutating the shared HTTP client. CheckRedirect has net/http.Client semantics.
 type RedirectPolicyAdaptor interface {
 	CheckRedirect(req *http.Request, via []*http.Request) error
+}
+
+
+// ResponseTransportOwnsCancellation reports whether this exact response was
+// obtained through the standard net/http Transport. Only this transport has
+// the known contract to interrupt a pending Body.Read when its request context
+// ends. Custom RoundTrippers retain the explicit stream-body cancel watcher.
+func ResponseTransportOwnsCancellation(c *gin.Context, resp *http.Response) bool {
+	if c == nil || resp == nil {
+		return false
+	}
+	recorded, ok := c.Get(nativeHTTPResponseKey)
+	return ok && recorded == resp
 }
 
 // SetupCommonRequestHeader copies shared downstream headers into the upstream
@@ -263,6 +279,18 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 	}
 	if resp == nil {
 		return nil, errors.New("resp is nil")
+	}
+
+	// net/http.Transport already interrupts Body.Read when req.Context()
+	// is canceled. Record the exact response so the stream handler can
+	// avoid racing the native cancellation with another Body.Close().
+	// Keep the old cancellation watcher for custom RoundTrippers.
+	transport := httpClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	if _, native := transport.(*http.Transport); native {
+		c.Set(nativeHTTPResponseKey, resp)
 	}
 
 	// Optionally: Record when first response is received from upstream (non-standard event)
