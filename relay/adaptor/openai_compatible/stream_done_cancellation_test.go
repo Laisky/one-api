@@ -1,11 +1,18 @@
 package openai_compatible
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -13,6 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
 )
 
@@ -77,5 +86,233 @@ func TestSharedStreamDoneCancellation(t *testing.T) {
 				require.Nil(t, apiErr, "cancellation after the processed upstream terminal marker cannot replace clean EOF")
 			}
 		})
+	}
+}
+
+const issue599Receipt = "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18}}\n\n"
+const issue599DONE = "data: [DONE]\n\n"
+
+// issue599Boundary signals the next Body.Read only after every fixture byte
+// arrives. It preserves the HTTP transport's original cancellation behavior.
+type issue599Boundary struct {
+	io.ReadCloser
+	expected []byte
+	seen     []byte
+	entered  chan struct{}
+	once     sync.Once
+	closes   atomic.Int32
+}
+
+func (b *issue599Boundary) Read(p []byte) (int, error) {
+	if bytes.Equal(b.seen, b.expected) {
+		b.once.Do(func() { close(b.entered) })
+	}
+	n, err := b.ReadCloser.Read(p)
+	b.seen = append(b.seen, p[:n]...)
+	return n, err
+}
+
+func (b *issue599Boundary) Close() error {
+	b.closes.Add(1)
+	return b.ReadCloser.Close()
+}
+
+// Unwrap declares this fixture's Read/Close delegation to the native body.
+func (b *issue599Boundary) Unwrap() io.ReadCloser { return b.ReadCloser }
+
+// TestIssue599NativeHTTPReadAfterDONE is a loopback HTTP/1.1 regression. With
+// the original double-cancellation ownership, the post-DONE read may return
+// net.ErrClosed rather than context.Canceled and produce a spurious HTTP 500.
+func TestIssue599NativeHTTPReadAfterDONE(t *testing.T) {
+	configureIssue599TraceFixture(t)
+	tests := []struct {
+		name       string
+		wire       string
+		iterations int
+		bridge     bool
+		success    bool
+		doneCount  int
+		total      int
+		estimate   string
+	}{
+		{"measured_done", issue599Receipt + issue599DONE, 12, false, true, 1, 18, ""},
+		{"responses_bridge", issue599Receipt + issue599DONE, 6, true, true, 0, 18, ""},
+		{"before_done", issue599Receipt, 3, false, false, 0, 18, ""},
+		{"done_missing_receipt", "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"}}]}\n\n" + issue599DONE, 3, false, false, 1, 0, ""},
+		{"output_after_receipt", issue599Receipt + issue599DONE + "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"later output\"}}]}\n\n", 3, false, false, 1, 30, "stream_output_after_last_receipt"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			for i := 0; i < tc.iterations; i++ {
+				t.Run(fmt.Sprintf("%02d", i), func(t *testing.T) {
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "text/event-stream")
+						_, _ = io.WriteString(w, tc.wire)
+						w.(http.Flusher).Flush()
+						<-r.Context().Done()
+					}))
+					defer server.Close()
+
+					c, rec := newBridgeTestCtx(t)
+					gmw.SetLogger(c, createTestLogger())
+					ctx, cancel := context.WithCancel(c.Request.Context())
+					defer cancel()
+					c.Request = c.Request.WithContext(ctx)
+					c.Set(ctxkey.RequestModel, "gpt-4")
+					tracker := streaming.NewQuotaTracker(streaming.QuotaTrackerParams{
+						Ctx: ctx, ModelName: "gpt-4", PromptTokens: 11,
+						PreConsumedQuota: 10000,
+						TokenCounter:     func(s, _ string) int { return len(s) },
+					})
+					streaming.StoreTracker(c, tracker)
+					var bridge *bridgeRecorder
+					if tc.bridge {
+						bridge = &bridgeRecorder{}
+						c.Set(ctxkey.ResponseStreamRewriteHandler, bridge)
+					}
+
+					request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+					require.NoError(t, err)
+					resp, err := relayadaptor.DoRequest(c, request)
+					require.NoError(t, err)
+					require.NotNil(t, resp.Request)
+					require.True(t, relayadaptor.ResponseTransportOwnsCancellation(c, resp))
+					boundary := &issue599Boundary{
+						ReadCloser: resp.Body, expected: []byte(tc.wire),
+						entered: make(chan struct{}),
+					}
+					resp.Body = boundary
+
+					type result struct {
+						failure *model.ErrorWithStatusCode
+						usage   *model.Usage
+					}
+					finished := make(chan result, 1)
+					go func() {
+						failure, usage := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
+						finished <- result{failure, usage}
+					}()
+					select {
+					case <-boundary.entered:
+					case <-time.After(3 * time.Second):
+						cancel()
+						t.Fatal("did not reach extra HTTP Body.Read")
+					}
+					cancel()
+					var got result
+					select {
+					case got = <-finished:
+					case <-time.After(3 * time.Second):
+						t.Fatal("cancel failed to release blocked HTTP read")
+					}
+					require.Equal(t, int32(1), boundary.closes.Load())
+					require.Equal(t, tc.doneCount, strings.Count(rec.Body.String(), "[DONE]"))
+					require.NotNil(t, got.usage)
+					if tc.success {
+						require.Nil(t, got.failure, "completed receipt/DONE must not become read_stream_failed")
+					} else {
+						require.NotNil(t, got.failure, "incomplete/unmeasured work must not become success")
+					}
+					if tc.total > 0 {
+						require.Equal(t, tc.total, got.usage.TotalTokens)
+					}
+					if tc.estimate != "" {
+						require.Equal(t, tc.estimate, got.usage.BillingEstimateReason)
+					}
+					if tc.bridge {
+						require.Equal(t, 1, bridge.doneCount)
+						require.True(t, bridge.usageSet)
+					}
+				})
+			}
+		})
+	}
+}
+
+// issue599IndependentFailure has an ordinary Close callback, but its blocked
+// Read is independently released with a genuine error, not by that Close.
+type issue599IndependentFailure struct {
+	reader     *strings.Reader
+	failure    error
+	entered    chan struct{}
+	closed     chan struct{}
+	released   chan struct{}
+	enterOnce  sync.Once
+	closeOnce  sync.Once
+	closeCount atomic.Int32
+}
+
+func (b *issue599IndependentFailure) Read(p []byte) (int, error) {
+	if b.reader.Len() > 0 {
+		return b.reader.Read(p)
+	}
+	b.enterOnce.Do(func() { close(b.entered) })
+	<-b.released
+	return 0, b.failure
+}
+
+func (b *issue599IndependentFailure) Close() error {
+	b.closeCount.Add(1)
+	b.closeOnce.Do(func() { close(b.closed) })
+	return nil
+}
+
+// TestIssue599IndependentFailurePreserved rejects the false positive
+// "context canceled + Close called + net.ErrClosed means successful DONE".
+func TestIssue599IndependentFailurePreserved(t *testing.T) {
+	for _, readFailure := range []error{net.ErrClosed, io.ErrUnexpectedEOF} {
+		for _, withDONE := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%v/done=%v", readFailure, withDONE), func(t *testing.T) {
+				c, rec := newBridgeTestCtx(t)
+				gmw.SetLogger(c, createTestLogger())
+				ctx, cancel := context.WithCancel(c.Request.Context())
+				defer cancel()
+				c.Request = c.Request.WithContext(ctx)
+				wire := issue599Receipt
+				if withDONE {
+					wire += issue599DONE
+				}
+				body := &issue599IndependentFailure{
+					reader: strings.NewReader(wire), failure: readFailure,
+					entered: make(chan struct{}), closed: make(chan struct{}),
+					released: make(chan struct{}),
+				}
+				resp := &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": {"text/event-stream"}},
+					Body:       body,
+				}
+				finished := make(chan *model.ErrorWithStatusCode, 1)
+				go func() {
+					failure, _ := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
+					finished <- failure
+				}()
+				select {
+				case <-body.entered:
+				case <-time.After(3 * time.Second):
+					t.Fatal("independent reader never blocked")
+				}
+				cancel()
+				select {
+				case <-body.closed:
+				case <-time.After(3 * time.Second):
+					t.Fatal("fallback watcher did not close custom body")
+				}
+				close(body.released)
+				select {
+				case failure := <-finished:
+					require.NotNil(t, failure)
+					require.ErrorIs(t, failure.RawError, readFailure)
+				case <-time.After(3 * time.Second):
+					t.Fatal("independent error did not complete")
+				}
+				require.Equal(t, int32(1), body.closeCount.Load())
+				if withDONE {
+					require.Equal(t, 1, strings.Count(rec.Body.String(), "[DONE]"))
+				} else {
+					require.NotContains(t, rec.Body.String(), "[DONE]")
+				}
+			})
+		}
 	}
 }
