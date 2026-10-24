@@ -52,7 +52,7 @@ import (
 func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T) {
 	const name = "native-ws-tier-fixture"
 	const output = 20
-	for _, scenario := range []string{"owner_low", "token_low", "funded_multiround", "after_paid_known_work", "ordinary", "free_group", "flat"} {
+	for _, scenario := range []string{"owner_low", "token_low", "funded_multiround", "incomplete_local", "alias_echo", "after_paid_known_work", "ordinary", "free_group", "flat"} {
 		t.Run(scenario, func(t *testing.T) {
 			const initial int64 = 500000
 			xaiVideoSetup(t, initial, false)
@@ -138,11 +138,20 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 					}
 					funding <- fundingObservation{full, account.Quota, finite.RemainQuota, accountErr}
 					id := "resp_ws_second"
-					if (scenario == "funded_multiround" || scenario == "after_paid_known_work") && round == 1 {
+					if (scenario == "funded_multiround" || scenario == "incomplete_local" || scenario == "alias_echo" || scenario == "after_paid_known_work") && round == 1 {
 						id = "resp_ws_local"
 						localInput = full
 					}
-					if err = conn.WriteJSON(map[string]any{"type": "response.completed", "response": receipt(id, full, false)}); err != nil {
+					eventType := "response.completed"
+				response := receipt(id, full, false)
+				if scenario == "incomplete_local" && round == 1 {
+					eventType = "response.incomplete"
+					response["status"] = "incomplete"
+				}
+				if scenario == "alias_echo" && round == 1 {
+					response["model"] = name + "-2026-10-01"
+				}
+				if err = conn.WriteJSON(map[string]any{"type": eventType, "response": response}); err != nil {
 						return
 					}
 				}
@@ -269,7 +278,7 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 			t.Cleanup(func() { _ = conn.Close() })
 			_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 			frame := map[string]any{"type": "response.create", "model": name, "input": "next", "max_output_tokens": output}
-			if scenario == "funded_multiround" {
+			if scenario == "funded_multiround" || scenario == "incomplete_local" || scenario == "alias_echo" {
 				frame["previous_response_id"] = parent.GatewayResponseID
 				require.NoError(t, conn.WriteJSON(frame))
 				_, firstReply, firstErr := conn.ReadMessage()
@@ -367,7 +376,7 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 			require.NoError(t, readErr)
 			require.Nil(t, got.err)
 			expectedFrames := int32(1)
-			if scenario == "funded_multiround" {
+			if scenario == "funded_multiround" || scenario == "incomplete_local" || scenario == "alias_echo" {
 				expectedFrames = 2
 			}
 			require.Equal(t, expectedFrames, frames.Load())
@@ -376,7 +385,7 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 			require.Equal(t, balance-expectedCharge, finalUser)
 			require.Equal(t, tokenBalance-expectedCharge, token.RemainQuota)
 			require.Equal(t, firstCharge+expectedCharge, token.UsedQuota)
-			if scenario == "funded_multiround" {
+			if scenario == "funded_multiround" || scenario == "incomplete_local" || scenario == "alias_echo" {
 				requireSingleSettlement(expectedCharge)
 				cumulativeInput := 0
 				for round := 1; round <= int(expectedFrames); round++ {
