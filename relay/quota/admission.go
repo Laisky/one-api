@@ -34,14 +34,14 @@ func EstimateTierAdmission(input ComputeInput, maxOutputTokens int, bufferTokens
 	}
 	if maxOutputTokens == 0 {
 		full, _ := pricing.ResolveModelConfig(input.ModelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime)
-		maxOutputTokens = int(full.MaxOutputTokens)
-		if maxOutputTokens <= 0 {
-			maxOutputTokens = int(full.MaxTokens)
-		}
-		if maxOutputTokens <= 0 {
-			provider, _ := pricing.ResolveModelConfig(input.ModelName, nil, input.PricingAdaptor, input.RequestTime)
-			maxOutputTokens = int(provider.MaxOutputTokens)
-		}
+		provider, _ := pricing.ResolveModelConfig(input.ModelName, nil, input.PricingAdaptor, input.RequestTime)
+		// Channel MaxTokens may be a pricing/default estimate, not an enforced
+		// upstream limit. A request without max_output_tokens is forwarded
+		// unchanged, so its hold must at least cover the published provider
+		// output bound as well as any local override. Do not silently price
+		// provider-unbounded generation at a smaller channel estimate.
+		maxOutputTokens = max(int(full.MaxOutputTokens), int(full.MaxTokens),
+			int(provider.MaxOutputTokens), int(provider.MaxTokens))
 		if maxOutputTokens <= 0 {
 			return 0, true, errors.New("tiered request has no bounded output limit")
 		}
