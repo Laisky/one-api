@@ -7,19 +7,13 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// Moonshot pins some OpenAI sampling knobs to a constant value on its newer
-// models and answers 400 invalid_request_error when a request carries a
-// different value; the vendor guidance is to omit them entirely.
+// Moonshot fixes sampling values on all current K2.6, K2.7 Code, and K3 models.
+// Other values produce invalid_request_error; omit the fixed fields as advised:
+// https://platform.kimi.com/docs/api/models-overview
 //
-//	"表中"固定"表示该参数不可修改：传入其他值会报错，建议不要显式传入。"
-//	-- https://platform.kimi.com/docs/api/models-overview
-//
-// Kimi K3 pins temperature=1.0, top_p=0.95, n=1, presence_penalty=0 and
-// frequency_penalty=0. Since an OpenAI-compatible gateway forwards temperature
-// on almost every request, leaving them in place would fail nearly all K3
-// traffic. Rather than hardcode the model name, we drive the decision off the
-// per-model SupportedSamplingParameters metadata: a model that does not
-// advertise a knob does not accept it.
+// K3 and K2.7 fix temperature=1.0; K2.6 fixes it to 1.0 while thinking and 0.6
+// otherwise. All fix top_p=0.95, n=1, and both penalties=0. Metadata determines
+// which models need normalization, preserving retained legacy-model behavior.
 
 // pinnedSamplingParams are the knobs Moonshot may pin, in the spelling used by
 // ModelConfig.SupportedSamplingParameters. Only these are ever stripped, so a
@@ -50,12 +44,9 @@ var openAIToMoonshotEffort = map[string]string{
 // stripPinnedSamplingParams removes sampling knobs the target model pins to a
 // fixed value.
 //
-// Only models that pin sampling wholesale are touched, and "does not advertise
-// temperature" is the marker for that: every conventional Moonshot model
-// accepts a caller-chosen temperature, so a config omitting it is describing a
-// pinned model. Deriving the decision from each parameter's absence instead
-// would over-reach, because none of the conventional models advertise "n"
-// either yet all of them accept it.
+// Only models that pin sampling wholesale are touched: their metadata omits
+// temperature. Retained legacy models keep their previous forwarding behavior,
+// including n even though their historical metadata does not advertise it.
 func stripPinnedSamplingParams(request *model.GeneralOpenAIRequest) {
 	cfg, ok := ModelRatios[request.Model]
 	if !ok || len(cfg.SupportedSamplingParameters) == 0 {
@@ -86,9 +77,8 @@ func stripPinnedSamplingParams(request *model.GeneralOpenAIRequest) {
 }
 
 // normalizeReasoningEffort adapts an incoming reasoning_effort to what the
-// target model supports. Kimi K3 is the only Moonshot model that takes the
-// field (always-on thinking, depth selected by a top-level low/high/max), so
-// every other model has it dropped exactly as before.
+// target model supports. K3 and K3.1 Pro accept low/high/max; models without
+// effort metadata have the field dropped exactly as before.
 func normalizeReasoningEffort(request *model.GeneralOpenAIRequest) {
 	if request.ReasoningEffort == nil {
 		return

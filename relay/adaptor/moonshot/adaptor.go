@@ -25,8 +25,8 @@ func (a *Adaptor) GetModelList() []string {
 	return adaptor.GetModelListFromPricing(ModelRatios)
 }
 
-// GetDefaultModelPricing returns the pricing information for Moonshot models
-// Based on official Moonshot pricing: https://platform.moonshot.cn/pricing
+// GetDefaultModelPricing returns native CNY pricing and capabilities for Moonshot
+// models from https://platform.kimi.com/docs/pricing/chat.
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return ModelRatios
 }
@@ -49,7 +49,8 @@ func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
 	return a.DefaultPricingMethods.GetCompletionRatio(modelName)
 }
 
-// DefaultToolingConfig returns Moonshot tooling defaults (none published as of 2025-11-12).
+// DefaultToolingConfig returns no server-metered tool defaults; Formula tools are
+// executed by the client and are not settled as built-in relay calls.
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return MoonshotToolingDefaults
 }
@@ -81,9 +82,8 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 
 	// Moonshot is OpenAI-compatible, so the request passes through with only the
-	// per-model parameter adjustments the upstream enforces: Kimi K3 accepts
-	// reasoning_effort (every other model rejects it) and pins the sampling
-	// knobs it does not advertise, answering 400 when they are sent.
+	// per-model parameter adjustments the upstream enforces: the K3 family
+	// accepts reasoning_effort, while current K2 and K3 models fix sampling.
 	normalizeReasoningEffort(request)
 	stripPinnedSamplingParams(request)
 

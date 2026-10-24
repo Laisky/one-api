@@ -49,11 +49,10 @@ func TestStripPinnedSamplingParams_K3DropsPinnedKnobs(t *testing.T) {
 	assert.Equal(t, 4096, request.MaxTokens)
 }
 
-// The K2 generation and the V1 SKUs take caller-chosen sampling values; the K3
-// rule must not reach them. `n` is the sharp edge here: no Moonshot config
-// advertises it, yet these models accept it.
-func TestStripPinnedSamplingParams_ConventionalModelsUntouched(t *testing.T) {
-	for _, modelName := range []string{"kimi-k2.6", "kimi-k2.7-code", "moonshot-v1-32k"} {
+// TestStripPinnedSamplingParams_LegacyModelsUntouched uses t to preserve the
+// established forwarding of retained models, including unadvertised n values.
+func TestStripPinnedSamplingParams_LegacyModelsUntouched(t *testing.T) {
+	for _, modelName := range []string{"kimi-k2.5", "moonshot-v1-32k"} {
 		t.Run(modelName, func(t *testing.T) {
 			request := &model.GeneralOpenAIRequest{
 				Model:       modelName,
@@ -170,13 +169,14 @@ func TestConvertClaudeRequest_K3StripsPinnedSamplingParams(t *testing.T) {
 	assert.Nil(t, request.TopP)
 }
 
-// The same path must leave the conventional models' sampling values alone.
-func TestConvertClaudeRequest_ConventionalModelKeepsSamplingParams(t *testing.T) {
+// TestConvertClaudeRequest_LegacyModelKeepsSamplingParams uses t to verify that
+// retained legacy models preserve their established Claude sampling conversion.
+func TestConvertClaudeRequest_LegacyModelKeepsSamplingParams(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	adaptor := &Adaptor{}
 
 	converted, err := adaptor.ConvertClaudeRequest(newTestContext(), &model.ClaudeRequest{
-		Model:       "kimi-k2.6",
+		Model:       "kimi-k2.5",
 		MaxTokens:   1024,
 		Temperature: float64Ptr(0.7),
 		Messages: []model.ClaudeMessage{
