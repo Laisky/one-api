@@ -111,16 +111,20 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 	// The observer captures immutable policy and synchronized work counters.
 	// Both proxy legs drain before the request goroutine touches gin.Context.
 	meter := newDeepSeekWSConservativeMeter(c)
-	var toolFunded atomic.Int64
+	tierFunding := newResponseWSTierFunding(c, meta, preConsumedQuota)
+	var frameFunded atomic.Int64
 	bizErrResult, usage, observedResponses := openai.ResponseAPIWebSocketHandlerWithAdmission(
-		c, meta, responseWebSocketToolAdmission(c, meta, &toolFunded), openai.ResponseAPIWebSocketObservers{
+		c, meta, responseWebSocketToolAdmission(c, meta, &frameFunded, tierFunding), openai.ResponseAPIWebSocketObservers{
 			OnForwardedCreate: meter.onForwardedCreate,
-			OnUpstreamEvent:   meter.onUpstreamEvent,
+			OnUpstreamEvent: func(frame []byte) {
+				meter.onUpstreamEvent(frame)
+				tierFunding.observe(frame)
+			},
 		},
 	)
 	// Both proxy goroutines have drained. Include every incremental atomic
-	// tool hold in the existing single settlement/refund and safety-net audit.
-	preConsumedQuota = saturatingQuotaAdd(preConsumedQuota, toolFunded.Load())
+	// frame hold (tier context and native tools) in the existing single settlement/refund and safety-net audit.
+	preConsumedQuota = saturatingQuotaAdd(preConsumedQuota, frameFunded.Load())
 	markPreConsumed(c, preConsumedQuota)
 	if bizErrResult != nil {
 		// WS proxy failed - refund pre-consumed quota. scheduleConservativeRefund
