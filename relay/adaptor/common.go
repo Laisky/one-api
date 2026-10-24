@@ -288,7 +288,12 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
-	if _, native := transport.(*http.Transport); native {
+	if _, native := transport.(*http.Transport); native && c.Request != nil &&
+		req.Context().Done() != nil &&
+		req.Context().Done() == c.Request.Context().Done() {
+		// Inspect the supplied outbound request, not resp.Request:
+		// http.Client.Timeout can wrap the latter in a derived deadline
+		// context with a different Done channel that still propagates cancel.
 		c.Set(nativeHTTPResponseKey, resp)
 	}
 
