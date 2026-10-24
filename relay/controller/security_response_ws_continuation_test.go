@@ -326,6 +326,14 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 				t.Logf("opaque quote diagnostic scenario=%s config_context=%d priced_budget=%d err=%v", scenario, configs[name].ContextLength, budget, budgetErr)
 				require.NoError(t, budgetErr)
 				require.GreaterOrEqual(t, budget, 5000)
+				// Exercise the exact stateful policy (including enabled/pricing and
+				// the handshake credit) that the live WebSocket handler installs.
+				policy := newResponseWSTierFunding(template, meta, 17000)
+				added, quoted, quoteErr := policy.additionalQuote(context.Background(), wire)
+				t.Logf("opaque tier diagnostic scenario=%s enabled=%t added=%d quote=%d reserved=%d err=%v", scenario, policy.enabled, added, quoted, policy.reserved, quoteErr)
+				require.True(t, policy.enabled)
+				require.NoError(t, quoteErr)
+				require.Positive(t, added, "provider-resolved input must exceed the provisional handshake funding")
 			}
 			require.NoError(t, conn.WriteJSON(frame))
 			_, _, readErr := conn.ReadMessage()
