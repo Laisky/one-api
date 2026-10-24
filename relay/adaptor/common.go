@@ -3,6 +3,7 @@ package adaptor
 import (
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -27,22 +28,50 @@ const (
 	channelAPIKeyPlaceholder = "{{key}}"
 )
 
+// nativeHTTPResponseIdentity records both the returned transport-owned reader
+// and the cancellation channel that reached the native request. A response
+// pointer alone cannot prove ownership once another handler wraps the body.
+type nativeHTTPResponseIdentity struct {
+	response    *http.Response
+	body        io.ReadCloser
+	requestDone <-chan struct{}
+}
+
 // RedirectPolicyAdaptor optionally constrains redirects for one provider without
 // mutating the shared HTTP client. CheckRedirect has net/http.Client semantics.
 type RedirectPolicyAdaptor interface {
 	CheckRedirect(req *http.Request, via []*http.Request) error
 }
 
-// ResponseTransportOwnsCancellation reports whether this exact response was
-// obtained through the standard net/http Transport. Only this transport has
-// the known contract to interrupt a pending Body.Read when its request context
-// ends. Custom RoundTrippers retain the explicit stream-body cancel watcher.
+// ResponseTransportOwnsCancellation reports whether this response's current
+// body still delegates to the native transport reader bound to the handler's
+// current request cancellation channel. Unknown, replaced, or context-rebound
+// readers fall back to explicit close-on-cancel for backward compatibility.
 func ResponseTransportOwnsCancellation(c *gin.Context, resp *http.Response) bool {
-	if c == nil || resp == nil {
+	if c == nil || resp == nil || c.Request == nil {
 		return false
 	}
-	recorded, ok := c.Get(nativeHTTPResponseKey)
-	return ok && recorded == resp
+	value, ok := c.Get(nativeHTTPResponseKey)
+	identity, valid := value.(nativeHTTPResponseIdentity)
+	if !ok || !valid || identity.response != resp ||
+		identity.requestDone != c.Request.Context().Done() {
+		return false
+	}
+
+	// Only known, transparent ReadCloser wrappers opt in through Unwrap.
+	// The bound keeps accidental wrapper cycles from trapping dispatch.
+	body := resp.Body
+	for i := 0; i < 16 && body != nil; i++ {
+		if reflect.ValueOf(body).Comparable() && body == identity.body {
+			return true
+		}
+		wrapper, ok := body.(interface{ Unwrap() io.ReadCloser })
+		if !ok {
+			return false
+		}
+		body = wrapper.Unwrap()
+	}
+	return false
 }
 
 // SetupCommonRequestHeader copies shared downstream headers into the upstream
@@ -294,7 +323,11 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 		// Inspect the supplied outbound request, not resp.Request:
 		// http.Client.Timeout can wrap the latter in a derived deadline
 		// context with a different Done channel that still propagates cancel.
-		c.Set(nativeHTTPResponseKey, resp)
+		c.Set(nativeHTTPResponseKey, nativeHTTPResponseIdentity{
+			response:    resp,
+			body:        resp.Body,
+			requestDone: req.Context().Done(),
+		})
 	}
 
 	// Optionally: Record when first response is received from upstream (non-standard event)

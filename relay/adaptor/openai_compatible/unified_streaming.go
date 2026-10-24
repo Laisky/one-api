@@ -194,7 +194,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 			continue
 		}
 
-		if strings.HasPrefix(data[DataPrefixLength:], Done) {
+		if strings.TrimSpace(data[DataPrefixLength:]) == Done {
 			upstreamDone = true
 			if streamRewriter != nil {
 				handled, doneRendered := streamRewriter.HandleUpstreamDone(c)

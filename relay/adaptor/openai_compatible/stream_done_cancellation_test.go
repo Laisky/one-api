@@ -117,6 +117,9 @@ func (b *issue599Boundary) Close() error {
 	return b.ReadCloser.Close()
 }
 
+// Unwrap declares this fixture's Read/Close delegation to the native body.
+func (b *issue599Boundary) Unwrap() io.ReadCloser { return b.ReadCloser }
+
 // TestIssue599NativeHTTPReadAfterDONE is a loopback HTTP/1.1 regression. With
 // the original double-cancellation ownership, the post-DONE read may return
 // net.ErrClosed rather than context.Canceled and produce a spurious HTTP 500.
