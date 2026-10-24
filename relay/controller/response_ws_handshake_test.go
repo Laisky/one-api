@@ -8,7 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/pricing"
 	metalib "github.com/Laisky/one-api/relay/meta"
 )
 
@@ -92,4 +95,35 @@ func TestMaybeHandleResponseAPIWebSocket_NonOpenAIChannelStillRejectedFirst(t *t
 	require.NotNil(t, bizErr)
 	require.Equal(t, "response_websocket_only_supported_for_openai_channel", bizErr.Error.Code,
 		"non-OpenAI rejection must take precedence over the missing-model rejection")
+}
+
+// TestResponseWSHandshakeTierOutputIsProvisional preserves the historical
+// modest handshake hold even when the provider's published uncapped generation
+// limit is much larger. Actual response.create funding must still price the
+// provider bound if that frame omits max_output_tokens.
+func TestResponseWSHandshakeTierOutputIsProvisional(t *testing.T) {
+	const name = "claude-haiku-5-5"
+	provider := &anthropic.Adaptor{}
+	configs := map[string]model.ModelConfigLocal{name: {
+		MaxTokens:       20,
+		Ratio:           1,
+		CompletionRatio: 2,
+		Tiers: []model.ModelRatioTierLocal{{
+			InputTokenThreshold: 1, Ratio: 5, CompletionRatio: 3,
+		}},
+	}}
+	meta := &metalib.Meta{ActualModelName: name}
+	handshake := responseWebSocketHandshakeTierRequest(meta, configs, provider, 1)
+	require.NotNil(t, handshake.MaxOutputTokens)
+	require.Equal(t, 20, *handshake.MaxOutputTokens)
+
+	upstream, ok := pricing.ResolveModelConfig(name, nil, provider, meta.StartTime)
+	require.True(t, ok)
+	require.Greater(t, max(int(upstream.MaxOutputTokens), int(upstream.MaxTokens)), 20,
+		"provider fixture must have a published limit greater than the channel estimate")
+	// A synthetic handshake limit must not be confused with a provider-enforced
+	// create-frame limit. Zero-cost and flat-tariff handshakes remain unchanged.
+	require.Nil(t, responseWebSocketHandshakeTierRequest(meta, configs, provider, 0).MaxOutputTokens)
+	flat := map[string]model.ModelConfigLocal{name: {MaxTokens: 20, Ratio: 1}}
+	require.Nil(t, responseWebSocketHandshakeTierRequest(meta, flat, provider, 1).MaxOutputTokens)
 }
