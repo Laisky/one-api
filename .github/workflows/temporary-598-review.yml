@@ -27,5 +27,6 @@ jobs:
         run: |
           go test -race -count=1 -timeout=15m -run 'TestSecurityNativeResponseWebSocketKnownContinuationAdmission|TestResponseWSTierFundingObservedParentReceipts' ./relay/controller/
       - name: Adjacent WS and HTTP pricing regression checks
+        if: always()
         run: |
           go test -race -count=1 -timeout=15m -run 'TestResponseAPIWSOwnership|TestResponseAPIWS|TestResponseContinuationTier|TestTierAdmission|TestResponseTierInheritedTokensRequiresExplicitUsage' ./relay/adaptor/openai/ ./relay/controller/ ./relay/quota/
