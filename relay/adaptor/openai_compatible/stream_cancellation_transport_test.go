@@ -17,6 +17,7 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
@@ -51,9 +52,20 @@ func (b *streamReadBarrierBody) Close() error {
 	return b.ReadCloser.Close()
 }
 
+// suppressTraceDBForStreamTests disables unrelated synchronous tracing for
+// isolated transport tests without an initialized database. Restore the
+// process-wide setting before other package tests run.
+func suppressTraceDBForStreamTests(t *testing.T) {
+	t.Helper()
+	originalSinks := config.TraceSinks
+	config.TraceSinks = []string{config.TraceSinkNone}
+	t.Cleanup(func() { config.TraceSinks = originalSinks })
+}
+
 // TestRequestBoundSSECancelAfterRead distinguishes cancellation before DONE
 // from cancellation after DONE using actual context-bound HTTP/1 traffic.
 func TestRequestBoundSSECancelAfterRead(t *testing.T) {
+	suppressTraceDBForStreamTests(t)
 	for _, afterDone := range []bool{false, true} {
 		name := "before_done"
 		wire := canceledStreamReceipt
@@ -252,6 +264,7 @@ func (r streamTrailingFailure) Read([]byte) (int, error) { return 0, r.err }
 // provenance marker alone never hides a real error after actual DONE. Run
 // with and without downstream cancellation to catch broad suppression.
 func TestRequestBoundIndependentTrailingErrors(t *testing.T) {
+	suppressTraceDBForStreamTests(t)
 	for _, cancelOnDone := range []bool{false, true} {
 		for _, tc := range []struct {
 			name string
