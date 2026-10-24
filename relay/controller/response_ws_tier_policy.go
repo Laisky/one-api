@@ -79,9 +79,14 @@ func (s *responseWSTierFunding) observe(frame []byte) {
 			Usage  json.RawMessage `json:"usage"`
 		} `json:"response"`
 	}
-	if err := json.Unmarshal(frame, &event); err != nil ||
-		event.Type != "response.completed" || event.Response.Status != "completed" ||
+	if err := json.Unmarshal(frame, &event); err != nil || event.Type != "response.completed" ||
 		event.Response.ID == "" {
+		return
+	}
+	// The existing native WS collector supports provider terminal receipts that
+	// omit status. Keep that backward-compatible contract for funding too.
+	status := strings.ToLower(strings.TrimSpace(event.Response.Status))
+	if status != "" && status != "completed" {
 		return
 	}
 	tokens, err := responseTierInheritedTokens(event.Response.Usage)
