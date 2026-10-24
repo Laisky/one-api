@@ -5,6 +5,10 @@ on:
     branches:
       - fix/ws-continuation-funding-596-20261024
 
+concurrency:
+  group: temporary-596-websocket-qualification
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
