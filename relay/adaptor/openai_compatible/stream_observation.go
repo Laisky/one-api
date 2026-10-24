@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
 )
@@ -62,15 +63,28 @@ func (b *streamBodyOnce) Close() error {
 	return b.err
 }
 
-// watchStreamBody closes blocked reads on cancellation and every ordinary exit;
-// callers can still check the established underlying body-close error.
+// watchStreamBody always closes on handler exit. The standard HTTP transport
+// already interrupts a pending response Read when its request context is
+// canceled; an additional concurrent Close can obscure context.Canceled with a
+// raw closed-connection error. Keep the interrupting Close fallback for bodies
+// without that verified transport contract (including synthetic/custom bodies).
 func watchStreamBody(c *gin.Context, resp *http.Response) func() {
+	managedByRequest := adaptor.ResponseReadIsManagedByRequestContext(resp)
 	body := &streamBodyOnce{ReadCloser: resp.Body}
 	resp.Body = body
-	ctx := context.Background()
-	if c.Request != nil {
-		ctx = c.Request.Context()
+
+	var stop func() bool
+	if !managedByRequest {
+		ctx := context.Background()
+		if c.Request != nil {
+			ctx = c.Request.Context()
+		}
+		stop = context.AfterFunc(ctx, func() { _ = body.Close() })
 	}
-	stop := context.AfterFunc(ctx, func() { _ = body.Close() })
-	return func() { stop(); _ = body.Close() }
+	return func() {
+		if stop != nil {
+			stop()
+		}
+		_ = body.Close()
+	}
 }
