@@ -301,7 +301,9 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 		localClient.CheckRedirect = redirectPolicy
 		httpClient = &localClient
 	}
+	req, transportObservation := observeTransportRequest(req, httpClient.Transport)
 	resp, err := httpClient.Do(req)
+	transportObservation.complete(gmw.GetLogger(c), req.Context(), resp, err)
 	if err != nil {
 		return nil, errors.Wrap(SanitizeRequestURLError(err), "perform upstream request")
 	}
