@@ -243,7 +243,6 @@ func TestIndependentStreamErrorAfterCancellation(t *testing.T) {
 	}
 }
 
-
 // streamTrailingFailure injects a real, independently produced read error.
 type streamTrailingFailure struct{ err error }
 
