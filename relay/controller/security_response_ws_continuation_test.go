@@ -147,15 +147,15 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 						localInput = full
 					}
 					eventType := "response.completed"
-				response := receipt(id, full, false)
-				if scenario == "incomplete_local" && round == 1 {
-					eventType = "response.incomplete"
-					response["status"] = "incomplete"
-				}
-				if scenario == "alias_echo" && round == 1 {
-					response["model"] = name + "-2026-10-01"
-				}
-				if err = conn.WriteJSON(map[string]any{"type": eventType, "response": response}); err != nil {
+					response := receipt(id, full, false)
+					if scenario == "incomplete_local" && round == 1 {
+						eventType = "response.incomplete"
+						response["status"] = "incomplete"
+					}
+					if scenario == "alias_echo" && round == 1 {
+						response["model"] = name + "-2026-10-01"
+					}
+					if err = conn.WriteJSON(map[string]any{"type": eventType, "response": response}); err != nil {
 						return
 					}
 				}
