@@ -2,8 +2,6 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
-	"math"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -66,30 +64,14 @@ func responseContinuationTierPrompt(c *gin.Context, meta *metalib.Meta, request 
 		binding.UpstreamResponseID == "" || binding.UpstreamResponseID != *request.PreviousResponseId {
 		return 0, errors.Wrap(errResponseContinuationUnpriceable, "continuation parent pricing identity does not match")
 	}
-	// Typed native persistence loses original wire-field presence: omitted
-	// counters can become saved zeros. Neither an absent field nor a saved zero
-	// establishes a safe inherited allowance. Do not infer a bound from visible
-	// output text, a total counter, or an arbitrary configured context length.
-	var usage struct {
-		InputTokens  *int `json:"input_tokens"`
-		OutputTokens *int `json:"output_tokens"`
+	// Keep HTTP and native WebSocket continuations on the same explicit
+	// inherited-usage validation contract.
+	inherited, err := responseTierInheritedTokens(parent.Usage)
+	if err != nil {
+		return 0, err
 	}
-	if len(parent.Usage) == 0 {
-		return 0, errors.Wrap(errResponseContinuationUnpriceable, "saved parent usage is unavailable")
-	}
-	if err := json.Unmarshal(parent.Usage, &usage); err != nil {
-		return 0, errors.Wrap(errors.Join(errResponseContinuationUnpriceable, err), "decode owned Responses parent usage")
-	}
-	if usage.InputTokens == nil || usage.OutputTokens == nil ||
-		*usage.InputTokens <= 0 || *usage.OutputTokens <= 0 {
-		return 0, errors.Wrap(errResponseContinuationUnpriceable, "saved parent counters are absent, invalid, or ambiguous zeros")
-	}
-	if incremental < 0 || *usage.InputTokens > math.MaxInt-*usage.OutputTokens {
-		return 0, errors.WithStack(errors.New("owned Responses parent token budget is invalid or overflows"))
-	}
-	inherited := *usage.InputTokens + *usage.OutputTokens
-	if incremental > math.MaxInt-inherited {
-		return 0, errors.WithStack(errors.New("owned Responses continuation token budget overflows"))
+	if incremental < 0 || inherited > int(^uint(0)>>1)-incremental {
+		return 0, errors.New("owned Responses continuation token budget overflows")
 	}
 	return inherited + incremental, nil
 }
