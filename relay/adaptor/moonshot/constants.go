@@ -5,30 +5,34 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// Current model IDs and capabilities were checked on 2026-10-12:
+// Current model IDs, capabilities, and native CNY tariffs were checked on 2026-10-24:
 // https://platform.kimi.com/docs/models
-// https://platform.kimi.com/docs/guide/kimi-k3-quickstart
+// https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart
 // https://platform.kimi.com/docs/pricing/chat
+// https://platform.kimi.ai/docs/api/models-overview
 //
-// Existing CNY tariffs are retained from the July 20 audit. The current pricing
-// page's dynamic numeric table was not available to this audit; this is not a
-// fresh verification of every amount. In particular K3 now documents separately
-// charged 5-minute/1-hour cache writes. Their numeric rates and usage conversion
-// need verification before adding defaults; unknown write prices are not free.
-// International USD prices are a separate tariff, not an FX conversion.
-const moonshotRetiredNotice = " Retired on 2026-08-31; no longer supported by the Kimi API. Use kimi-k3. This entry retains historical pricing for existing configurations, not current upstream availability."
+// The numeric tables are embedded in the pricing HTML's compiled source.
+// International USD prices are separate tariffs, not an FX conversion. Cache
+// writes replace normal input charges for those tokens; native 1h receipt
+// normalization remains a separate limitation. See docs/moonshot-model-audit-20261024.md.
+const (
+	moonshotRetiredNotice      = " Retired on 2026-08-31; no longer supported by the Kimi API. Use kimi-k3.1-pro. This entry retains historical pricing for existing configurations, not current upstream availability."
+	moonshotK2RetirementNotice = " Unavailable to newly registered accounts from 2026-10-31; existing accounts remain eligible, with retirement planned for the end of December 2026."
+	moonshotK3ControlsNotice   = " Text/image/video input; always-on low/high/max reasoning (default max). max_completion_tokens defaults to 131072 and can reach 1048576, subject to remaining context. Images require base64 or ms:// file references. Separate 5m/1h cache-write prices are published, but native 1h write accounting is not yet supported. Upstream search is not recommended for production."
+)
 
 var (
-	moonshotTextInputs              = []string{"text"}
-	moonshotVisionInputs            = []string{"text", "image"}
-	moonshotMultimodalInputs        = []string{"text", "image", "video"}
-	moonshotTextOutputs             = []string{"text"}
-	moonshotChatFeatures            = []string{"tools", "json_mode", "structured_outputs"}
-	moonshotReasoningFeatures       = []string{"tools", "json_mode", "structured_outputs", "reasoning"}
-	moonshotMultimodalFeatures      = []string{"tools", "json_mode", "structured_outputs", "reasoning", "web_search"}
-	moonshotSamplingParams          = []string{"temperature", "top_p", "max_tokens", "stop", "frequency_penalty", "presence_penalty", "seed"}
-	moonshotReasoningSamplingParams = []string{"temperature", "top_p", "max_tokens", "stop", "seed"}
-	// K3 fixes temperature/top_p/penalties; they are not effective controls.
+	moonshotTextInputs         = []string{"text"}
+	moonshotVisionInputs       = []string{"text", "image"}
+	moonshotMultimodalInputs   = []string{"text", "image", "video"}
+	moonshotTextOutputs        = []string{"text"}
+	moonshotChatFeatures       = []string{"tools", "json_mode", "structured_outputs"}
+	moonshotReasoningFeatures  = []string{"tools", "json_mode", "structured_outputs", "reasoning"}
+	moonshotMultimodalFeatures = []string{"tools", "json_mode", "structured_outputs", "reasoning", "web_search"}
+	moonshotSamplingParams     = []string{"temperature", "top_p", "max_tokens", "stop", "frequency_penalty", "presence_penalty", "seed"}
+	// Current K2 and K3 models fix temperature/top_p/penalties. Keep the
+	// historical sampling metadata above only for retained legacy models.
+	moonshotK2SamplingParams   = []string{"max_tokens", "max_completion_tokens", "stop"}
 	moonshotK3SamplingParams   = []string{"max_tokens", "max_completion_tokens", "stop", "reasoning_effort"}
 	moonshotK3ReasoningEfforts = []string{"low", "high", "max"}
 )
@@ -36,41 +40,62 @@ var (
 // ModelRatios contains complete definitions for current and retained legacy IDs.
 // No catalogue metadata is used to rewrite a caller's model or impose access caps.
 var ModelRatios = map[string]adaptor.ModelConfig{
-	"kimi-k3": {
-		Ratio: 20.0 * ratio.MilliTokensRmb, CompletionRatio: 100.0 / 20.0,
-		CachedInputRatio: 2.0 * ratio.MilliTokensRmb,
-		ContextLength:    1048576, MaxOutputTokens: 1048576,
+	"kimi-k3.1-pro": {
+		Ratio: 13.0 * ratio.MilliTokensRmb, CompletionRatio: 68.0 / 13.0,
+		CachedInputRatio:  1.3 * ratio.MilliTokensRmb,
+		CacheWrite5mRatio: 13.0 * ratio.MilliTokensRmb, CacheWrite1hRatio: 26.0 * ratio.MilliTokensRmb,
+		ContextLength: 1048576, MaxOutputTokens: 1048576,
 		InputModalities: moonshotMultimodalInputs, OutputModalities: moonshotTextOutputs,
 		SupportedFeatures: moonshotReasoningFeatures, SupportedSamplingParameters: moonshotK3SamplingParams,
 		SupportedReasoningEfforts: moonshotK3ReasoningEfforts, DefaultReasoningEffort: "max",
-		Description: "Kimi K3: 1M context, text/image/video input, always-on low/high/max reasoning (default max). max_completion_tokens defaults to 131072 and can reach 1048576. Images require base64 or ms:// file references, not public URLs. K3 cache writes have separate 5m/1h fees; write prices and usage accounting are not yet represented by these retained input/cache-read/output defaults. Upstream search is being updated and is not recommended for production.",
+		Description: "Kimi K3.1 Pro: flagship model with 1M context." + moonshotK3ControlsNotice,
+	},
+	"kimi-k3.1-pro-highspeed": {
+		Ratio: 26.0 * ratio.MilliTokensRmb, CompletionRatio: 136.0 / 26.0,
+		CachedInputRatio:  1.3 * ratio.MilliTokensRmb,
+		CacheWrite5mRatio: 26.0 * ratio.MilliTokensRmb, CacheWrite1hRatio: 52.0 * ratio.MilliTokensRmb,
+		ContextLength: 1048576, MaxOutputTokens: 1048576,
+		InputModalities: moonshotMultimodalInputs, OutputModalities: moonshotTextOutputs,
+		SupportedFeatures: moonshotReasoningFeatures, SupportedSamplingParameters: moonshotK3SamplingParams,
+		SupportedReasoningEfforts: moonshotK3ReasoningEfforts, DefaultReasoningEffort: "max",
+		Description: "Kimi K3.1 Pro Highspeed: faster serving with the same capabilities and cache-read price as Pro." + moonshotK3ControlsNotice,
+	},
+	"kimi-k3": {
+		Ratio: 20.0 * ratio.MilliTokensRmb, CompletionRatio: 100.0 / 20.0,
+		CachedInputRatio:  2.0 * ratio.MilliTokensRmb,
+		CacheWrite5mRatio: 20.0 * ratio.MilliTokensRmb, CacheWrite1hRatio: 40.0 * ratio.MilliTokensRmb,
+		ContextLength: 1048576, MaxOutputTokens: 1048576,
+		InputModalities: moonshotMultimodalInputs, OutputModalities: moonshotTextOutputs,
+		SupportedFeatures: moonshotReasoningFeatures, SupportedSamplingParameters: moonshotK3SamplingParams,
+		SupportedReasoningEfforts: moonshotK3ReasoningEfforts, DefaultReasoningEffort: "max",
+		Description: "Kimi K3: previous-generation flagship with 1M context." + moonshotK3ControlsNotice,
 	},
 	"kimi-k2.7-code": {
 		Ratio: 6.5 * ratio.MilliTokensRmb, CompletionRatio: 27.0 / 6.5,
 		CachedInputRatio: 1.3 * ratio.MilliTokensRmb,
-		ContextLength:    262144, MaxOutputTokens: 32768,
+		ContextLength:    262144, MaxOutputTokens: 262144,
 		InputModalities: moonshotMultimodalInputs, OutputModalities: moonshotTextOutputs,
-		SupportedFeatures: moonshotReasoningFeatures, SupportedSamplingParameters: moonshotReasoningSamplingParams,
-		MaxReasoningTokens: 49152, HuggingFaceID: "moonshotai/Kimi-K2.7-Code",
-		Description: "Moonshot Kimi K2.7 Code, current top coding model (1.1T MoE, open weights); text + image + video input, 256k ctx, thinking-only deep reasoning.",
+		SupportedFeatures: moonshotReasoningFeatures, SupportedSamplingParameters: moonshotK2SamplingParams,
+		HuggingFaceID: "moonshotai/Kimi-K2.7-Code",
+		Description:   "Kimi K2.7 Code: text/image/video coding model with 256K context and always-on preserved thinking. The 32768-token default completion budget can grow to remaining context." + moonshotK2RetirementNotice,
 	},
 	"kimi-k2.7-code-highspeed": {
 		Ratio: 13.0 * ratio.MilliTokensRmb, CompletionRatio: 54.0 / 13.0,
 		CachedInputRatio: 2.6 * ratio.MilliTokensRmb,
-		ContextLength:    262144, MaxOutputTokens: 32768,
+		ContextLength:    262144, MaxOutputTokens: 262144,
 		InputModalities: moonshotMultimodalInputs, OutputModalities: moonshotTextOutputs,
-		SupportedFeatures: moonshotReasoningFeatures, SupportedSamplingParameters: moonshotReasoningSamplingParams,
-		MaxReasoningTokens: 49152, HuggingFaceID: "moonshotai/Kimi-K2.7-Code",
-		Description: "Moonshot Kimi K2.7 Code HighSpeed, high-throughput (~180 tok/s) variant of K2.7 Code; text + image + video input, 256k ctx, thinking-only deep reasoning. Priced at 2x standard K2.7 Code.",
+		SupportedFeatures: moonshotReasoningFeatures, SupportedSamplingParameters: moonshotK2SamplingParams,
+		HuggingFaceID: "moonshotai/Kimi-K2.7-Code",
+		Description:   "Kimi K2.7 Code Highspeed: faster serving with the same 256K context, completion budget, and always-on preserved thinking as K2.7 Code. Priced at 2x standard K2.7 Code." + moonshotK2RetirementNotice,
 	},
 	"kimi-k2.6": {
 		Ratio: 6.5 * ratio.MilliTokensRmb, CompletionRatio: 27.0 / 6.5,
 		CachedInputRatio: 1.1 * ratio.MilliTokensRmb,
-		ContextLength:    262144, MaxOutputTokens: 32768,
+		ContextLength:    262144, MaxOutputTokens: 262144,
 		InputModalities: moonshotMultimodalInputs, OutputModalities: moonshotTextOutputs,
-		SupportedFeatures: moonshotMultimodalFeatures, SupportedSamplingParameters: moonshotSamplingParams,
-		MaxReasoningTokens: 49152, HuggingFaceID: "moonshotai/Kimi-K2.6",
-		Description: "Moonshot Kimi K2.6 multimodal flagship (text + image + video, 256k ctx) with thinking and non-thinking modes; open weights on HuggingFace.",
+		SupportedFeatures: moonshotReasoningFeatures, SupportedSamplingParameters: moonshotK2SamplingParams,
+		HuggingFaceID: "moonshotai/Kimi-K2.6",
+		Description:   "Kimi K2.6: text/image/video model with 256K context and switchable thinking. The 32768-token default completion budget can grow to remaining context. Sampling is fixed in each thinking mode; upstream search is not recommended for production." + moonshotK2RetirementNotice,
 	},
 	"kimi-k2.5": {
 		Ratio: 4.0 * ratio.MilliTokensRmb, CompletionRatio: 21.0 / 4.0,

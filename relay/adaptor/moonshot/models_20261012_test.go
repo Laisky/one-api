@@ -31,7 +31,7 @@ func TestMoonshotOctoberLifecycle(t *testing.T) {
 		require.InDelta(t, prices[0], cfg.Ratio/ratio.MilliTokensRmb, 1e-12)
 		require.InDelta(t, prices[1], cfg.Ratio*cfg.CompletionRatio/ratio.MilliTokensRmb, 1e-12)
 	}
-	for _, id := range []string{"kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6"} {
+	for _, id := range []string{"kimi-k3.1-pro", "kimi-k3.1-pro-highspeed", "kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6"} {
 		require.NotContains(t, a.GetDefaultModelPricing()[id].Description, "Retired on")
 	}
 }
@@ -45,7 +45,7 @@ func TestKimiK3PublishedControlsReachRequest(t *testing.T) {
 	require.Contains(t, cfg.SupportedSamplingParameters, "max_completion_tokens")
 	require.Contains(t, cfg.SupportedSamplingParameters, "reasoning_effort")
 	require.Contains(t, cfg.Description, "5m/1h")
-	require.Contains(t, cfg.Description, "not yet represented")
+	require.Contains(t, cfg.Description, "native 1h write accounting is not yet supported")
 	effort, outputLimit := "max", 777
 	req := &model.GeneralOpenAIRequest{Model: "kimi-k3", MaxCompletionTokens: &outputLimit, ReasoningEffort: &effort}
 	converted, err := a.ConvertRequest(nil, 0, req)
