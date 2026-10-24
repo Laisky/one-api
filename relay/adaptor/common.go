@@ -277,7 +277,7 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 	// net/http already cancels pending response reads via req.Context. Record
 	// that verified transport ownership without changing response body types.
 	// Stream readers use it to avoid racing transport cancellation with Close.
-	if req.Context().Done() != nil {
+	if req.Context().Done() != nil && req.Context().Done() == gmw.Ctx(c).Done() {
 		transport := httpClient.Transport
 		if transport == nil {
 			transport = http.DefaultTransport
