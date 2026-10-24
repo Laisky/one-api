@@ -44,46 +44,65 @@ func (w *doneCancellationWriter) Write(p []byte) (int, error) {
 func (w *doneCancellationWriter) WriteString(s string) (int, error) { return w.Write([]byte(s)) }
 
 // streamTerminalReadFailure retains a genuine non-EOF transport error for the control.
-type streamTerminalReadFailure struct{}
+type streamTerminalReadFailure struct{ cause error }
 
-// Read always reports a truncated response, not a clean EOF.
-func (streamTerminalReadFailure) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+// Read returns the injected independent failure, preserving the historical
+// truncated-response default for existing zero-value fixtures.
+func (r streamTerminalReadFailure) Read([]byte) (int, error) {
+	if r.cause != nil {
+		return 0, r.cause
+	}
+	return 0, io.ErrUnexpectedEOF
+}
 
 // TestSharedStreamDoneCancellation distinguishes a completed protocol followed by
 // clean EOF from pre-terminal cancellation and genuine trailing transport failure.
 func TestSharedStreamDoneCancellation(t *testing.T) {
-	for _, trailingError := range []bool{false, true} {
-		name := "completed_eof"
-		if trailingError {
-			name = "transport_error_control"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		trailingErr  error
+		cancelOnDone bool
+	}{
+		{"completed_eof", nil, true},
+		{"transport_error_control", io.ErrUnexpectedEOF, true},
+		{"independent_closed_without_cancel", net.ErrClosed, false},
+		{"independent_closed_after_cancel", net.ErrClosed, true},
+		{"independent_truncated_without_cancel", io.ErrUnexpectedEOF, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			c, rec := newBridgeTestCtx(t)
 			gmw.SetLogger(c, createTestLogger())
 			ctx, cancel := context.WithCancel(c.Request.Context())
 			defer cancel()
 			c.Request = c.Request.WithContext(ctx)
-			c.Writer = &doneCancellationWriter{ResponseWriter: c.Writer, cancel: cancel}
+			if tc.cancelOnDone {
+				c.Writer = &doneCancellationWriter{ResponseWriter: c.Writer, cancel: cancel}
+			}
 			c.Set(ctxkey.RequestModel, "gpt-4")
 			tracker := streaming.NewQuotaTracker(streaming.QuotaTrackerParams{Ctx: ctx, ModelName: "gpt-4", PromptTokens: 11, PreConsumedQuota: 10000, TokenCounter: func(s, _ string) int { return len(s) }})
 			streaming.StoreTracker(c, tracker)
 			wire := "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18}}\n\ndata: [DONE]\n\n"
 			var source io.Reader = strings.NewReader(wire)
-			if trailingError {
-				source = io.MultiReader(source, streamTerminalReadFailure{})
+			if tc.trailingErr != nil {
+				source = io.MultiReader(source, streamTerminalReadFailure{cause: tc.trailingErr})
 			}
 			resp := &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(source)}
 			apiErr, usage := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
-			require.ErrorIs(t, ctx.Err(), context.Canceled)
+			if tc.cancelOnDone {
+				require.ErrorIs(t, ctx.Err(), context.Canceled)
+			} else {
+				require.NoError(t, ctx.Err(), "independent error must not require a canceled request")
+			}
 			require.Equal(t, 1, strings.Count(rec.Body.String(), "[DONE]"))
 			require.NotNil(t, usage)
 			require.Equal(t, 18, usage.TotalTokens)
 			require.Empty(t, usage.BillingEstimateReason)
-			if trailingError {
-				require.NotNil(t, apiErr)
-				require.True(t, errors.Is(apiErr.RawError, io.ErrUnexpectedEOF), "retain the real read failure rather than overwriting it with cancellation")
+			if tc.trailingErr != nil {
+				require.NotNil(t, apiErr, "an independent trailing failure must remain a failure")
+				require.Equal(t, "read_stream_failed", apiErr.Code)
+				require.True(t, errors.Is(apiErr.RawError, tc.trailingErr), "retain the independent read cause")
 			} else {
-				require.Nil(t, apiErr, "cancellation after the processed upstream terminal marker cannot replace clean EOF")
+				require.Nil(t, apiErr, "normal EOF after processed DONE must remain successful")
 			}
 		})
 	}
@@ -182,6 +201,8 @@ func TestIssue599NativeHTTPReadAfterDONE(t *testing.T) {
 						entered: make(chan struct{}),
 					}
 					resp.Body = boundary
+					require.True(t, relayadaptor.ResponseTransportOwnsCancellation(c, resp),
+						"transparent read barrier must preserve proven native cancellation")
 
 					type result struct {
 						failure *model.ErrorWithStatusCode
@@ -282,10 +303,14 @@ func TestIssue599IndependentFailurePreserved(t *testing.T) {
 					Header:     http.Header{"Content-Type": {"text/event-stream"}},
 					Body:       body,
 				}
-				finished := make(chan *model.ErrorWithStatusCode, 1)
+				type streamResult struct {
+					failure *model.ErrorWithStatusCode
+					usage   *model.Usage
+				}
+				finished := make(chan streamResult, 1)
 				go func() {
-					failure, _ := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
-					finished <- failure
+					failure, usage := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
+					finished <- streamResult{failure: failure, usage: usage}
 				}()
 				select {
 				case <-body.entered:
@@ -300,9 +325,16 @@ func TestIssue599IndependentFailurePreserved(t *testing.T) {
 				}
 				close(body.released)
 				select {
-				case failure := <-finished:
-					require.NotNil(t, failure)
-					require.ErrorIs(t, failure.RawError, readFailure)
+				case got := <-finished:
+					require.NotNil(t, got.failure)
+					require.ErrorIs(t, got.failure.RawError, readFailure)
+					require.Equal(t, "read_stream_failed", got.failure.Code)
+					require.NotNil(t, got.usage, "measured receipt must survive independent failure")
+					require.Equal(t, 18, got.usage.TotalTokens)
+					if !withDONE && errors.Is(readFailure, net.ErrClosed) {
+						require.ErrorIs(t, got.failure.RawError, context.Canceled,
+							"pre-DONE cancellation must preserve both observed causes")
+					}
 				case <-time.After(3 * time.Second):
 					t.Fatal("independent error did not complete")
 				}
