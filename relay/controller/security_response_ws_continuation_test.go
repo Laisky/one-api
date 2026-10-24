@@ -27,23 +27,20 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-// EXPECTED TO FAIL ON MAIN. This file is a red witness for an open security gap,
-// not a green regression. Native Responses WebSocket sessions reserve quota only
-// for the handshake estimate; later response.create frames that carry
-// previous_response_id reach the provider without a reservation for the
-// inherited parent context, even for tier-priced models. HTTP continuations
-// were repaired by #555 and #557; the WebSocket path was not.
+// This test is a permanent behavior regression for issue #596. Without the
+// fix, native Responses WebSocket handshakes reserve one estimate but a
+// response.create with previous_response_id can execute inherited context
+// without an additional funded reservation. HTTP continuations were already
+// repaired by #555 and #557.
 //
-// TestSecurityNativeResponseWebSocketKnownContinuationAdmission is the
-// acceptance check. On main (verified at 1d979d9b) exactly four sub-cases fail:
+// Before the fix, the independent red run 40050884387 confirmed four failures:
 //   - owner_low: an underfunded continuation frame reaches the provider.
 //   - token_low: an underfunded continuation frame reaches the provider.
 //   - funded_multiround: rounds dispatch with only the handshake hold.
 //   - after_paid_known_work: an underfunded later frame reaches the provider.
 //
-// The ordinary, free_group and flat controls pass on main and must keep
-// passing. The test must stay red until WebSocket continuations reserve quota
-// for inherited context before forwarding each create frame.
+// Ordinary, free_group and flat controls protect prior behavior. The green
+// acceptance requires every known-context debit to precede provider dispatch.
 
 // TestSecurityNativeResponseWebSocketKnownContinuationAdmission uses real supported
 // OpenAI WebSocket handlers and an isolated SQLite ledger. Parameters: t owns a
@@ -353,8 +350,12 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 				} else {
 					require.Nil(t, got.err, "completed paid work must retain settlement instead of taking the whole-session failure refund")
 				}
-				expectedCharge := compute(int(fullInputTotal.Load()), int(expectedFrames)*output)
+				// Compute enforces a one-unit minimum for an admitted paid
+				// request, but a pre-dispatch denied WebSocket did no paid work.
+				// Its refunded/voided provisional log must therefore be zero.
+				expectedCharge := int64(0)
 				if expectedFrames > 0 {
+					expectedCharge = compute(int(fullInputTotal.Load()), int(expectedFrames)*output)
 					requireSingleSettlement(expectedCharge)
 				}
 				require.Equal(t, expectedCharge, consumeLogQuota(t, requestID))
