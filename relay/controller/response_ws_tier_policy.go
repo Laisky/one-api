@@ -11,6 +11,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
@@ -159,6 +160,11 @@ func (s *responseWSTierFunding) additionalQuote(ctx context.Context, frame []byt
 		return 0, 0, nil
 	}
 	var request openai.ResponseAPIRequest
+	// Reject conflicting decoded/priced fields while passing unknown provider
+	// extensions through untouched. The same typed-root guard protects HTTP.
+	if err := common.ValidateUnambiguousJSONRootKeys(frame, request); err != nil {
+		return 0, 0, errors.Wrap(err, "validate WebSocket tiered response.create pricing keys")
+	}
 	if err := json.Unmarshal(frame, &request); err != nil {
 		return 0, 0, errors.Wrap(err, "decode WebSocket tiered response.create frame")
 	}
