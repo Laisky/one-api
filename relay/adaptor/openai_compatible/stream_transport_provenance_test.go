@@ -105,7 +105,7 @@ func TestIssue599OpaqueReplacementRetainsCancelWatcher(t *testing.T) {
 func TestIssue599ReboundContextRetainsCancelWatcher(t *testing.T) {
 	wire := issue599Receipt + issue599DONE
 	c, _, resp, cancelOriginal := newIssue599NativeResponse(t, wire)
-	rebound, cancelRebound := context.WithCancel(context.Background())
+	rebound, cancelRebound := context.WithCancel(context.WithoutCancel(c.Request.Context()))
 	defer cancelRebound()
 	c.Request = c.Request.WithContext(rebound)
 
