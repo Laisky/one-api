@@ -89,3 +89,19 @@ func TestResponseWSTierFundingObservedParentReceipts(t *testing.T) {
 	_, err = f.inherited(context.Background(), "wrong-model")
 	require.ErrorIs(t, err, errResponseContinuationUnpriceable)
 }
+
+func TestResponseWSTierFundingIgnoresControlFrames(t *testing.T) {
+	f := &responseWSTierFunding{enabled: true}
+	for _, frame := range []string{
+		`{"type":"response.cancel"}`,
+		`{"type":"ping","extension":"preserve"}`,
+		`{"type":"session.update"}`,
+	} {
+		added, quoted, err := f.additionalQuote(context.Background(), []byte(frame))
+		require.NoError(t, err)
+		require.Zero(t, added, "non-creation frames must not consume quota")
+		require.Zero(t, quoted, "non-creation frames must not be priced")
+		require.Zero(t, f.reserved)
+		require.Zero(t, f.quoted)
+	}
+}
