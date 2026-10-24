@@ -193,6 +193,14 @@ func (s *responseWSTierFunding) additionalQuote(ctx context.Context, frame []byt
 	if prompt < 0 {
 		return 0, 0, errors.New("invalid WebSocket prompt estimate")
 	}
+	// Apply the same provider-resolved input budget as native HTTP Responses.
+	// This prevents small file IDs or prompt template IDs from funding an
+	// arbitrarily larger upstream input than the admitted token estimate.
+	budgetedPrompt, err := responseTierAdmissionPromptBudget(&request, prompt, s.configs, s.provider, s.meta.StartTime)
+	if err != nil {
+		return 0, 0, err
+	}
+	prompt = budgetedPrompt
 	if request.PreviousResponseId != nil && strings.TrimSpace(*request.PreviousResponseId) != "" {
 		inherited, err := s.inherited(ctx, strings.TrimSpace(*request.PreviousResponseId))
 		if err != nil {
