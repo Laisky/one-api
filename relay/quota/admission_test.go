@@ -9,6 +9,7 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,4 +146,37 @@ func TestTierAdmissionFreeGroupNeedsNoOutputBound(t *testing.T) {
 	_, applies, err = quota.EstimateTierAdmission(input, 0, 0, quota.AdmissionOptions{})
 	require.True(t, applies)
 	require.ErrorContains(t, err, "invalid tier admission token estimate")
+}
+
+// TestTierAdmissionOmittedOutputUsesProviderBound verifies that a channel-local
+// estimate cannot silently become an unenforced provider generation ceiling.
+// A defaulted request may generate up to the provider's published output limit.
+func TestTierAdmissionOmittedOutputUsesProviderBound(t *testing.T) {
+	const name = "claude-haiku-5-5"
+	provider := &anthropic.Adaptor{}
+	providerConfig, ok := pricing.ResolveModelConfig(name, nil, provider, time.Time{})
+	require.True(t, ok)
+	providerLimit := max(int(providerConfig.MaxOutputTokens), int(providerConfig.MaxTokens))
+	require.Greater(t, providerLimit, 20, "fixture must have a provider output cap above the local quote override")
+
+	input := quota.ComputeInput{
+		Usage:      &relaymodel.Usage{PromptTokens: 50},
+		ModelName:  name,
+		GroupRatio: 1,
+		ModelRatio: 1,
+		ChannelModelConfigs: map[string]model.ModelConfigLocal{name: {
+			MaxTokens:       20,
+			Ratio:           1,
+			CompletionRatio: 2,
+			Tiers:           []model.ModelRatioTierLocal{{InputTokenThreshold: 1, Ratio: 5, CompletionRatio: 3}},
+		}},
+		PricingAdaptor: provider,
+	}
+	withoutCap, applies, err := quota.EstimateTierAdmission(input, 0, 0, quota.AdmissionOptions{})
+	require.NoError(t, err)
+	require.True(t, applies)
+	required, _, err := quota.EstimateTierAdmission(input, providerLimit, 0, quota.AdmissionOptions{})
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, withoutCap, required,
+		"quote must fund the provider-visible limit when the client did not send max_output_tokens")
 }

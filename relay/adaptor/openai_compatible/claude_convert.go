@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
@@ -300,7 +301,7 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 	for {
 		line, err := hbr.Next()
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if errkind.HasOnlyCause(err, io.EOF) {
 				break
 			}
 

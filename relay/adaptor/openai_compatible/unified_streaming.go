@@ -14,10 +14,10 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/common/tracing"
-	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
@@ -66,15 +66,11 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 
 	receiptComplete := false
 	upstreamDone := false
-	// Only response bodies dispatched through a verified standard HTTP transport
-	// can be completed on a matching post-DONE context cancellation. A custom
-	// reader's closed-connection error remains ambiguous and reportable.
-	requestManagedBody := adaptor.ResponseReadIsManagedByRequestContext(resp)
 	tracker := streaming.FromContext(c)
 	if tracker != nil {
 		streaming.ClaimProtocolObservation(c)
 	}
-	cleanup := watchStreamBody(c, resp)
+	cleanup, nativeTransportOwnsCancel := watchStreamBody(c, resp)
 	defer cleanup()
 	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
@@ -93,27 +89,30 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 	for {
 		line, err := lineReader.Next()
 		if err != nil {
-			canceled := gmw.Ctx(c).Err()
-			if canceled != nil && !upstreamDone {
-				// An EOF before the protocol terminal is not a completion.
-				// When a custom body's canceled Close reports net.ErrClosed,
-				// retain both the cancellation identity and the original cause.
-				if errors.Is(err, io.EOF) {
-					err = canceled
-				} else if errors.Is(err, net.ErrClosed) {
-					err = errors.Join(canceled, err)
+			if canceled := gmw.Ctx(c).Err(); canceled != nil {
+				// Only the native context-bound HTTP transport can positively
+				// attribute this terminal read to the caller's cancellation.
+				// DONE alone is insufficient: later output or a missing
+				// measured receipt still requires unsuccessful termination.
+				// Every cause must be cancellation: an independent joined
+				// error is never swallowed merely because it happened nearby.
+				if nativeTransportOwnsCancel && upstreamDone && receiptComplete &&
+					errkind.HasOnlyCause(err, canceled) {
+					break
+				}
+				// Before terminal completion, EOF from a canceled body is not
+				// success. Retain cancellation identity and measured usage.
+				if !upstreamDone {
+					if errkind.HasOnlyCause(err, io.EOF) {
+						err = canceled
+					} else if errors.Is(err, net.ErrClosed) && !errors.Is(err, canceled) {
+						// Keep both observed facts without attributing the close
+						// or hiding a genuine transport failure.
+						err = errors.Join(canceled, err)
+					}
 				}
 			}
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			// A completed Chat SSE stream may end with a request-context
-			// cancellation while draining past [DONE]. Only the standard
-			// transport's context error proves that interruption; a raw
-			// net.ErrClosed or independent trailing error is still a failure.
-			if upstreamDone && requestManagedBody && canceled != nil &&
-				errors.Is(err, canceled) && errors.Is(resp.Request.Context().Err(), canceled) {
-				logger.Debug("upstream read canceled after completed SSE marker")
+			if errkind.HasOnlyCause(err, io.EOF) {
 				break
 			}
 
@@ -201,7 +200,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 			continue
 		}
 
-		if strings.HasPrefix(data[DataPrefixLength:], Done) {
+		if strings.TrimSpace(data[DataPrefixLength:]) == Done {
 			upstreamDone = true
 			if streamRewriter != nil {
 				handled, doneRendered := streamRewriter.HandleUpstreamDone(c)

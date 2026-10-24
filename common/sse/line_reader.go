@@ -6,6 +6,8 @@ import (
 	"io"
 
 	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/common/errkind"
 )
 
 const (
@@ -88,9 +90,9 @@ func (r *LineReader) Next() (Line, error) {
 	switch {
 	case err == nil:
 		return classifyLine(normalizeSmallLine(fragment)), nil
-	case errors.Is(err, bufio.ErrBufferFull):
+	case errkind.HasOnlyCause(err, bufio.ErrBufferFull):
 		return r.buildLargeLine(fragment)
-	case errors.Is(err, io.EOF):
+	case errkind.HasOnlyCause(err, io.EOF):
 		if len(fragment) == 0 {
 			return Line{}, io.EOF
 		}
@@ -154,7 +156,7 @@ func (r *largeDataReader) Read(p []byte) (int, error) {
 		}
 
 		if err := r.fillPending(); err != nil {
-			if errors.Is(err, io.EOF) {
+			if errkind.HasOnlyCause(err, io.EOF) {
 				r.finish()
 				return 0, io.EOF
 			}
@@ -179,7 +181,7 @@ func (r *largeDataReader) Discard() error {
 		return nil
 	}
 
-	if _, err := io.Copy(io.Discard, r); err != nil && !errors.Is(err, io.EOF) {
+	if _, err := io.Copy(io.Discard, r); err != nil && !errkind.HasOnlyCause(err, io.EOF) {
 		return errors.Wrap(err, "discard oversized SSE payload")
 	}
 
@@ -200,11 +202,11 @@ func (r *largeDataReader) fillPending() error {
 		r.pending = cloneBytes(trimmed)
 		r.finalPending = true
 		return nil
-	case errors.Is(err, bufio.ErrBufferFull):
+	case errkind.HasOnlyCause(err, bufio.ErrBufferFull):
 		r.pending = cloneBytes(trimTrailingCarriageReturn(fragment))
 		r.finalPending = false
 		return nil
-	case errors.Is(err, io.EOF):
+	case errkind.HasOnlyCause(err, io.EOF):
 		trimmed := trimTrailingCarriageReturn(fragment)
 		if len(trimmed) == 0 {
 			r.finalPending = true

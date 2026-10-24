@@ -54,6 +54,26 @@ type responseAPIEventUsage struct {
 // the frame without forwarding it and must not modify the supplied bytes.
 type ResponseAPIWebSocketAdmission func(context.Context, []byte, string) error
 
+// ResponseAPIWSAdmissionFundingError preserves the established Responses quota
+// status/code when a tiered continuation is denied before upstream dispatch.
+// Ordinary tool or authorization failures keep their existing generic policy.
+type ResponseAPIWSAdmissionFundingError struct {
+	Code       string
+	StatusCode int
+	Cause      error
+}
+
+func (e *ResponseAPIWSAdmissionFundingError) Error() string {
+	if e.Cause != nil {
+		return e.Cause.Error()
+	}
+	return "response WebSocket admission denied"
+}
+
+func (e *ResponseAPIWSAdmissionFundingError) Unwrap() error {
+	return e.Cause
+}
+
 // ResponseAPIWebSocketObservers receive accepted provider work and upstream
 // output without dereferencing gin.Context from WebSocket proxy goroutines.
 type ResponseAPIWebSocketObservers struct {
@@ -176,6 +196,10 @@ func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, 
 	// An admission failure before any execution must release the handshake hold.
 	// If an earlier frame was dispatched, preserve its billing reconciliation.
 	if ownership.denied.Load() && !ownership.dispatched.Load() {
+		var fundingErr *ResponseAPIWSAdmissionFundingError
+		if errors.As(firstErr, &fundingErr) || errors.As(secondErr, &fundingErr) {
+			return ErrorWrapper(fundingErr, fundingErr.Code, fundingErr.StatusCode), nil, nil
+		}
 		return ErrorWrapper(errors.New("response websocket request was rejected before execution"), "response_websocket_request_rejected", http.StatusBadRequest), nil, nil
 	}
 	if firstErr != nil {
@@ -192,7 +216,7 @@ func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, 
 	return nil, usage, stored.responses
 }
 
-// responseAPIWSStoreCollector accumulates store!=false completed response objects
+// responseAPIWSStoreCollector accumulates store!=false terminal response objects
 // observed on the upstream->client leg of a native Responses websocket. store=false
 // responses are connection-local upstream state and are intentionally excluded
 // (proposal Section 5.9, SEC06).
@@ -202,8 +226,8 @@ type responseAPIWSStoreCollector struct {
 	seen      map[string]struct{}
 }
 
-// collect records one completed response object if it is retrievable (store!=false)
-// and not already captured. It parses only the terminal response.completed event;
+// collect records one completed or incomplete response object if it is retrievable (store!=false)
+// and not already captured. It parses only completed/incomplete terminal events;
 // all other frames are ignored.
 func (c *responseAPIWSStoreCollector) collect(msg []byte) {
 	if len(msg) == 0 {
@@ -216,7 +240,7 @@ func (c *responseAPIWSStoreCollector) collect(msg []byte) {
 	if err := json.Unmarshal(msg, &probe); err != nil {
 		return
 	}
-	if probe.Type != "response.completed" || len(probe.Response) == 0 {
+	if (probe.Type != "response.completed" && probe.Type != "response.incomplete") || len(probe.Response) == 0 {
 		return
 	}
 	var resp ResponseAPIResponse
@@ -350,11 +374,18 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 		if admission != nil && (mt == websocket.TextMessage || mt == websocket.BinaryMessage) {
 			if admissionErr := admission(ctx, msg, upstreamURL); admissionErr != nil {
 				ownership.denied.Store(true)
-				// Control writes are safe alongside the upstream-to-client writer.
-				if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "tool_billing_not_supported"), time.Now().Add(time.Second)); closeErr != nil {
-					return errors.Wrap(closeErr, "close response websocket after tool admission denial")
+				// Keep the established native-tool error for tool failures, but
+				// expose an actionable quota code for tier funding denials.
+				closeReason := "tool_billing_not_supported"
+				var fundingErr *ResponseAPIWSAdmissionFundingError
+				if errors.As(admissionErr, &fundingErr) {
+					closeReason = fundingErr.Code
 				}
-				return errors.Wrap(admissionErr, "response websocket tool admission failed")
+				// Control writes are safe alongside the upstream-to-client writer.
+				if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, closeReason), time.Now().Add(time.Second)); closeErr != nil {
+					return errors.Wrap(closeErr, "close response websocket after admission denial")
+				}
+				return errors.Wrap(admissionErr, "response websocket admission failed")
 			}
 		}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"net/http"
 	"strings"
 	"sync/atomic"
 
@@ -27,11 +28,11 @@ type responseWSToolFrame struct {
 	Input json.RawMessage          `json:"input"`
 }
 
-// responseWebSocketToolAdmission snapshots c's channel policy and meta's pinned
-// model on the request goroutine. It returns a validator that reuses the HTTP
-// receipt policy for the actual DeepSeek WebSocket target without retaining c,
-// changing accepted frame bytes, or changing unrelated providers' admission.
-func responseWebSocketToolAdmission(c *gin.Context, meta *metalib.Meta, funded *atomic.Int64) openai.ResponseAPIWebSocketAdmission {
+// responseWebSocketToolAdmission combines tiered context and DeepSeek native
+// tool holds into ONE atomic pre-dispatch debit. It snapshots the request's
+// authenticated pricing/identity, then runs only on the client-reader goroutine.
+// The optional tier funding argument preserves the old tool-only call contract.
+func responseWebSocketToolAdmission(c *gin.Context, meta *metalib.Meta, funded *atomic.Int64, tierFunding ...*responseWSTierFunding) openai.ResponseAPIWebSocketAdmission {
 	policyMeta := metalib.Meta{
 		ChannelType:     meta.ChannelType,
 		ActualModelName: meta.ActualModelName,
@@ -46,88 +47,120 @@ func responseWebSocketToolAdmission(c *gin.Context, meta *metalib.Meta, funded *
 			channel = &model.Channel{Id: record.Id, Type: record.Type, Config: record.Config}
 		}
 	}
-	// Resolve immutable identities on the request goroutine. A cached balance
-	// snapshot is not a reservation: concurrent WebSocket sessions must use
-	// the same atomic user/token debit as HTTP before forwarding paid tools.
 	userID, tokenID := meta.UserId, meta.TokenId
-	var checkedFloor int64
+	var totalFunded int64
+	var tier *responseWSTierFunding
+	if len(tierFunding) > 0 {
+		tier = tierFunding[0]
+	}
 
 	return func(ctx context.Context, frame []byte, upstreamURL string) error {
-		// Native WebSockets currently resolve BaseURL directly. The HTTP endpoint
-		// override and a previous observed URL must not classify a different host.
+		// Quoting has no side effects. A malformed/unpriceable frame or invalid
+		// tool declaration must not retain an unrelated partial reservation.
+		var tierAdded, turnQuote int64
+		if tier != nil {
+			var err error
+			tierAdded, turnQuote, err = tier.additionalQuote(ctx, frame)
+			if err != nil {
+				status := http.StatusBadRequest
+				code := "invalid_response_tier_quote"
+				if errors.Is(err, errResponseContinuationStoreUnavailable) {
+					status, code = http.StatusServiceUnavailable, codeStateStoreUnavailable
+				}
+				return &openai.ResponseAPIWSAdmissionFundingError{Code: code, StatusCode: status, Cause: err}
+			}
+		}
+
+		var toolAdded int64
 		current := policyMeta
 		current.BaseURL = upstreamURL
-		if !deepseekcompat.UsesDeepSeekToolReceiptContract(&current) {
-			return nil
-		}
-
-		var request responseWSToolFrame
-		if err := common.ValidateUnambiguousJSONRootKeys(frame, request); err != nil {
-			return errors.Wrap(err, "validate response websocket tool keys")
-		}
-		if err := json.Unmarshal(frame, &request); err != nil {
-			return errors.Wrap(err, "decode response websocket tool declarations")
-		}
-		if request.Type != "response.create" {
-			return nil
-		}
-
-		items, err := openai.InspectResponseToolSearchInput(request.Input)
-		if err != nil {
-			return errors.Wrap(err, "inspect response websocket discovery history")
-		}
-		if err := validateResponseToolSearchItems(items); err != nil {
-			return err
-		}
-
-		requested := make(map[string]struct{})
-		for _, tool := range request.Tools {
-			kind := strings.ToLower(strings.TrimSpace(tool.Type))
-			if kind == "namespace" || kind == "tool_search" {
-				if err := validateNativeResponseToolBilling([]openai.ResponseAPITool{tool}); err != nil {
-					return err
+		if deepseekcompat.UsesDeepSeekToolReceiptContract(&current) {
+			var request responseWSToolFrame
+			if err := common.ValidateUnambiguousJSONRootKeys(frame, request); err != nil {
+				return errors.Wrap(err, "validate response websocket tool keys")
+			}
+			if err := json.Unmarshal(frame, &request); err != nil {
+				return errors.Wrap(err, "decode response websocket tool declarations")
+			}
+			if request.Type != "response.create" {
+				return nil
+			}
+			items, err := openai.InspectResponseToolSearchInput(request.Input)
+			if err != nil {
+				return errors.Wrap(err, "inspect response websocket discovery history")
+			}
+			if err := validateResponseToolSearchItems(items); err != nil {
+				return err
+			}
+			requested := make(map[string]struct{})
+			for _, tool := range request.Tools {
+				kind := strings.ToLower(strings.TrimSpace(tool.Type))
+				if kind == "namespace" || kind == "tool_search" {
+					if err := validateNativeResponseToolBilling([]openai.ResponseAPITool{tool}); err != nil {
+						return err
+					}
+					continue
 				}
-				continue
+				_, canonical := tooling.ClassifyClaudeTool(kind)
+				if canonical == tooling.BuiltinWebSearch || canonical == tooling.BuiltinWebFetch {
+					requested[canonical] = struct{}{}
+				}
 			}
-			_, canonical := tooling.ClassifyClaudeTool(kind)
-			if canonical == tooling.BuiltinWebSearch || canonical == tooling.BuiltinWebFetch {
-				requested[canonical] = struct{}{}
+			quotes, err := tooling.BuiltinToolQuotes(ctx, current.ActualModelName, &current, channel, provider, requested)
+			if err != nil {
+				return err
+			}
+			for name, price := range quotes {
+				if name != tooling.BuiltinWebSearch && name != tooling.BuiltinWebFetch {
+					continue
+				}
+				cost := tooling.SaturatingToolAllowance(price, tooling.ConservativeDeepSeekDefaultCalls)
+				if cost > math.MaxInt64-toolAdded {
+					return errors.New("conservative WebSocket tool quote overflows")
+				}
+				toolAdded += cost
 			}
 		}
-		quotes, err := tooling.BuiltinToolQuotes(ctx, current.ActualModelName, &current, channel, provider, requested)
-		if err != nil {
-			return err
+
+		if tierAdded < 0 || toolAdded < 0 || tierAdded > math.MaxInt64-toolAdded {
+			return errors.New("WebSocket combined reservation overflows")
 		}
-		var added int64
-		for name, price := range quotes {
-			if name != tooling.BuiltinWebSearch && name != tooling.BuiltinWebFetch {
-				continue
+		added := tierAdded + toolAdded
+		if added > math.MaxInt64-totalFunded {
+			return errors.New("cumulative WebSocket reservation overflows")
+		}
+		if added > 0 {
+			if userID <= 0 || tokenID <= 0 {
+				return errors.New("WebSocket reservation requires an authenticated owner and token")
 			}
-			cost := tooling.SaturatingToolAllowance(price, tooling.ConservativeDeepSeekDefaultCalls)
-			if cost > math.MaxInt64-added {
-				return errors.New("conservative WebSocket tool quote overflows")
+			// Match the established Responses 403 for known owner exhaustion.
+			// The subsequent database transaction still makes admission atomic
+			// against concurrent sessions and their changing balances.
+			if tierAdded > 0 {
+				available, err := model.GetUserQuota(userID)
+				if err != nil {
+					return &openai.ResponseAPIWSAdmissionFundingError{Code: "get_user_quota_failed", StatusCode: http.StatusInternalServerError, Cause: err}
+				}
+				if available < added {
+					return &openai.ResponseAPIWSAdmissionFundingError{Code: "insufficient_user_quota", StatusCode: http.StatusForbidden, Cause: errors.New("user quota is not enough")}
+				}
 			}
-			added += cost
+			if err := model.PreConsumeTokenQuota(ctx, tokenID, added); err != nil {
+				if tierAdded > 0 {
+					return &openai.ResponseAPIWSAdmissionFundingError{Code: "pre_consume_token_quota_failed", StatusCode: http.StatusForbidden, Cause: err}
+				}
+				return errors.Wrap(err, "atomically reserve conservative WebSocket tool quota")
+			}
+			syncUserQuotaCacheAfterPreConsume(ctx, userID, added, "response_websocket_frame_reservation")
+			totalFunded += added
+			if funded != nil {
+				funded.Store(totalFunded)
+			}
 		}
-		if added == 0 {
-			return nil
-		}
-		if added > math.MaxInt64-checkedFloor {
-			return errors.New("conservative WebSocket tool reservation overflows")
-		}
-		if userID <= 0 || tokenID <= 0 {
-			return errors.New("conservative WebSocket tool reservation requires an authenticated owner and token")
-		}
-		// Atomic funding ensures two simultaneous WebSockets cannot authorize
-		// tool calls against the same balance. A successful hold precedes the
-		// provider's frame, so even a mid-session crash cannot make it free.
-		if err := model.PreConsumeTokenQuota(ctx, tokenID, added); err != nil {
-			return errors.Wrap(err, "atomically reserve conservative WebSocket tool quota")
-		}
-		syncUserQuotaCacheAfterPreConsume(ctx, userID, added, "response_websocket_tool_reservation")
-		checkedFloor += added
-		if funded != nil {
-			funded.Store(checkedFloor)
+		// No reservation state is committed until all validation succeeds,
+		// even if the handshake already provided enough quota for this turn.
+		if tier != nil {
+			tier.accepted(turnQuote, tierAdded)
 		}
 		return nil
 	}

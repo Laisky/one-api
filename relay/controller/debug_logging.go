@@ -180,6 +180,10 @@ func newLoggingReadCloser(rc io.ReadCloser, limit int) *loggingReadCloser {
 	return &loggingReadCloser{ReadCloser: rc, limit: limit}
 }
 
+// Unwrap exposes the delegated provider body without changing logging or
+// cleanup behavior. Only transparent wrappers may advertise this contract.
+func (r *loggingReadCloser) Unwrap() io.ReadCloser { return r.ReadCloser }
+
 func (r *loggingReadCloser) Read(p []byte) (int, error) {
 	n, err := r.ReadCloser.Read(p)
 	if n > 0 {

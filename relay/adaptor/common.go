@@ -1,9 +1,9 @@
 package adaptor
 
 import (
-	"context"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -22,29 +22,56 @@ import (
 
 const (
 	extraRequestHeaderPrefix = "X-"
+	// This key is private to the relay request lifecycle; the recorded pointer
+	// proves which response came from the context-aware net/http transport.
+	nativeHTTPResponseKey    = "relay_native_http_transport_response"
 	channelAPIKeyPlaceholder = "{{key}}"
 )
 
-// standardHTTPResponseContextKey marks outbound requests dispatched through
-// Go's context-cancelable HTTP transport. It is intentionally private so an
-// unrelated/custom response cannot claim the same cancellation contract.
-type standardHTTPResponseContextKey struct{}
-
-// ResponseReadIsManagedByRequestContext reports whether the outgoing request
-// used a standard net/http transport whose context interrupts response reads.
-// Unverified/custom response bodies must retain explicit cancellation cleanup.
-func ResponseReadIsManagedByRequestContext(resp *http.Response) bool {
-	if resp == nil || resp.Request == nil {
-		return false
-	}
-	managed, _ := resp.Request.Context().Value(standardHTTPResponseContextKey{}).(bool)
-	return managed
+// nativeHTTPResponseIdentity records both the returned transport-owned reader
+// and the cancellation channel that reached the native request. A response
+// pointer alone cannot prove ownership once another handler wraps the body.
+type nativeHTTPResponseIdentity struct {
+	response    *http.Response
+	body        io.ReadCloser
+	requestDone <-chan struct{}
 }
 
 // RedirectPolicyAdaptor optionally constrains redirects for one provider without
 // mutating the shared HTTP client. CheckRedirect has net/http.Client semantics.
 type RedirectPolicyAdaptor interface {
 	CheckRedirect(req *http.Request, via []*http.Request) error
+}
+
+// ResponseTransportOwnsCancellation reports whether this response's current
+// body still delegates to the native transport reader bound to the handler's
+// current request cancellation channel. Unknown, replaced, or context-rebound
+// readers fall back to explicit close-on-cancel for backward compatibility.
+func ResponseTransportOwnsCancellation(c *gin.Context, resp *http.Response) bool {
+	if c == nil || resp == nil || c.Request == nil {
+		return false
+	}
+	value, ok := c.Get(nativeHTTPResponseKey)
+	identity, valid := value.(nativeHTTPResponseIdentity)
+	if !ok || !valid || identity.response != resp ||
+		identity.requestDone != c.Request.Context().Done() {
+		return false
+	}
+
+	// Only known, transparent ReadCloser wrappers opt in through Unwrap.
+	// The bound keeps accidental wrapper cycles from trapping dispatch.
+	body := resp.Body
+	for i := 0; i < 16 && body != nil; i++ {
+		if reflect.ValueOf(body).Comparable() && body == identity.body {
+			return true
+		}
+		wrapper, ok := body.(interface{ Unwrap() io.ReadCloser })
+		if !ok {
+			return false
+		}
+		body = wrapper.Unwrap()
+	}
+	return false
 }
 
 // SetupCommonRequestHeader copies shared downstream headers into the upstream
@@ -274,24 +301,33 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 		localClient.CheckRedirect = redirectPolicy
 		httpClient = &localClient
 	}
-	// net/http already cancels pending response reads via req.Context. Record
-	// that verified transport ownership without changing response body types.
-	// Stream readers use it to avoid racing transport cancellation with Close.
-	if req.Context().Done() != nil && req.Context().Done() == gmw.Ctx(c).Done() {
-		transport := httpClient.Transport
-		if transport == nil {
-			transport = http.DefaultTransport
-		}
-		if _, ok := transport.(*http.Transport); ok {
-			req = req.WithContext(context.WithValue(req.Context(), standardHTTPResponseContextKey{}, true))
-		}
-	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(SanitizeRequestURLError(err), "perform upstream request")
 	}
 	if resp == nil {
 		return nil, errors.New("resp is nil")
+	}
+
+	// net/http.Transport already interrupts Body.Read when req.Context()
+	// is canceled. Record the exact response so the stream handler can
+	// avoid racing the native cancellation with another Body.Close().
+	// Keep the old cancellation watcher for custom RoundTrippers.
+	transport := httpClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	if _, native := transport.(*http.Transport); native && c.Request != nil &&
+		req.Context().Done() != nil &&
+		req.Context().Done() == c.Request.Context().Done() {
+		// Inspect the supplied outbound request, not resp.Request:
+		// http.Client.Timeout can wrap the latter in a derived deadline
+		// context with a different Done channel that still propagates cancel.
+		c.Set(nativeHTTPResponseKey, nativeHTTPResponseIdentity{
+			response:    resp,
+			body:        resp.Body,
+			requestDone: req.Context().Done(),
+		})
 	}
 
 	// Optionally: Record when first response is received from upstream (non-standard event)

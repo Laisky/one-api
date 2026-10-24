@@ -16,6 +16,7 @@ import (
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
@@ -93,9 +94,13 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 		estimatedPromptTokens = 2000
 	}
 	meta.PromptTokens = estimatedPromptTokens
-	preConsumedQuota, bizErr := preConsumeResponseAPIQuota(c, &openai.ResponseAPIRequest{
-		Model: meta.ActualModelName,
-	}, estimatedPromptTokens, ratio, outputRatio, false, meta)
+	// The handshake is only a provisional hold: no provider create frame has
+	// been received yet. Keep the previous modest tier output estimate here.
+	// Per-frame funding still uses the provider's actual published ceiling when
+	// the CLIENT omits max_output_tokens, before forwarding that frame.
+	handshakeRequest := responseWebSocketHandshakeTierRequest(meta, channelModelConfigs, pricingAdaptor, groupRatio)
+	preConsumedQuota, bizErr := preConsumeResponseAPIQuota(c, handshakeRequest,
+		estimatedPromptTokens, ratio, outputRatio, false, meta)
 	if bizErr != nil {
 		lg.Warn("preConsumeResponseAPIQuota failed for websocket",
 			zap.Error(bizErr.RawError),
@@ -111,16 +116,20 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 	// The observer captures immutable policy and synchronized work counters.
 	// Both proxy legs drain before the request goroutine touches gin.Context.
 	meter := newDeepSeekWSConservativeMeter(c)
-	var toolFunded atomic.Int64
+	tierFunding := newResponseWSTierFunding(c, meta, preConsumedQuota)
+	var frameFunded atomic.Int64
 	bizErrResult, usage, observedResponses := openai.ResponseAPIWebSocketHandlerWithAdmission(
-		c, meta, responseWebSocketToolAdmission(c, meta, &toolFunded), openai.ResponseAPIWebSocketObservers{
+		c, meta, responseWebSocketToolAdmission(c, meta, &frameFunded, tierFunding), openai.ResponseAPIWebSocketObservers{
 			OnForwardedCreate: meter.onForwardedCreate,
-			OnUpstreamEvent:   meter.onUpstreamEvent,
+			OnUpstreamEvent: func(frame []byte) {
+				meter.onUpstreamEvent(frame)
+				tierFunding.observe(frame)
+			},
 		},
 	)
 	// Both proxy goroutines have drained. Include every incremental atomic
-	// tool hold in the existing single settlement/refund and safety-net audit.
-	preConsumedQuota = saturatingQuotaAdd(preConsumedQuota, toolFunded.Load())
+	// frame hold (tier context and native tools) in the existing single settlement/refund and safety-net audit.
+	preConsumedQuota = saturatingQuotaAdd(preConsumedQuota, frameFunded.Load())
 	markPreConsumed(c, preConsumedQuota)
 	if bizErrResult != nil {
 		// WS proxy failed - refund pre-consumed quota. scheduleConservativeRefund
@@ -191,6 +200,34 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 		modelRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, ratio)
 
 	return true, nil
+}
+
+// responseWebSocketHandshakeTierRequest reproduces the historical handshake
+// estimate without treating an unobserved future frame as an uncapped request.
+// It does NOT enforce a limit upstream. The per-frame guard must price and
+// reserve the actual create with the provider's published upper bound.
+func responseWebSocketHandshakeTierRequest(meta *metalib.Meta, configs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, groupRatio float64) *openai.ResponseAPIRequest {
+	request := &openai.ResponseAPIRequest{Model: meta.ActualModelName}
+	if groupRatio == 0 {
+		return request
+	}
+	cfg, known := pricing.ResolveModelConfigRatioOnly(meta.ActualModelName, configs, provider, meta.StartTime)
+	if !known || len(cfg.Tiers) == 0 {
+		return request
+	}
+	effective, _ := pricing.ResolveModelConfig(meta.ActualModelName, configs, provider, meta.StartTime)
+	output := int(effective.MaxOutputTokens)
+	if output <= 0 {
+		output = int(effective.MaxTokens)
+	}
+	if output <= 0 {
+		upstream, _ := pricing.ResolveModelConfig(meta.ActualModelName, nil, provider, meta.StartTime)
+		output = int(upstream.MaxOutputTokens)
+	}
+	if output > 0 {
+		request.MaxOutputTokens = &output
+	}
+	return request
 }
 
 // wsPostBillingGateForTest, when non-nil, blocks the asynchronous post-billing

@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Laisky/one-api/relay/adaptor"
+	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
 )
@@ -63,28 +63,27 @@ func (b *streamBodyOnce) Close() error {
 	return b.err
 }
 
-// watchStreamBody always closes on handler exit. The standard HTTP transport
-// already interrupts a pending response Read when its request context is
-// canceled; an additional concurrent Close can obscure context.Canceled with a
-// raw closed-connection error. Keep the interrupting Close fallback for bodies
-// without that verified transport contract (including synthetic/custom bodies).
-func watchStreamBody(c *gin.Context, resp *http.Response) func() {
-	managedByRequest := adaptor.ResponseReadIsManagedByRequestContext(resp)
+// watchStreamBody assigns only one owner to request cancellation. For responses
+// from our native net/http.Transport with the *same* cancellation channel as the
+// incoming request, the transport already interrupts blocked reads. An extra
+// AfterFunc/Close races it and can obscure context.Canceled as net.ErrClosed.
+// Custom/unbound response bodies retain the existing interruptible cleanup.
+// The boolean enables narrowly-scoped read-error handling at protocol DONE.
+func watchStreamBody(c *gin.Context, resp *http.Response) (func(), bool) {
+	ctx := context.Background()
+	if c.Request != nil {
+		ctx = c.Request.Context()
+	}
+	// Dispatch has verified the original request's cancellation identity,
+	// even when http.Client.Timeout creates a derived response context.
+	nativeBound := relayadaptor.ResponseTransportOwnsCancellation(c, resp)
+
 	body := &streamBodyOnce{ReadCloser: resp.Body}
 	resp.Body = body
+	if nativeBound {
+		return func() { _ = body.Close() }, true
+	}
 
-	var stop func() bool
-	if !managedByRequest {
-		ctx := context.Background()
-		if c.Request != nil {
-			ctx = c.Request.Context()
-		}
-		stop = context.AfterFunc(ctx, func() { _ = body.Close() })
-	}
-	return func() {
-		if stop != nil {
-			stop()
-		}
-		_ = body.Close()
-	}
+	stop := context.AfterFunc(ctx, func() { _ = body.Close() })
+	return func() { stop(); _ = body.Close() }, false
 }

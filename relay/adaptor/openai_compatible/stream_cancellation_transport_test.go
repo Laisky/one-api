@@ -52,6 +52,10 @@ func (b *streamReadBarrierBody) Close() error {
 	return b.ReadCloser.Close()
 }
 
+// Unwrap declares transparent delegation to the net/http transport body.
+// The stream handler can therefore rely on native request cancellation.
+func (b *streamReadBarrierBody) Unwrap() io.ReadCloser { return b.ReadCloser }
+
 // suppressTraceDBForStreamTests disables unrelated synchronous tracing for
 // isolated transport tests without an initialized database. Restore the
 // process-wide setting before other package tests run.
@@ -295,7 +299,7 @@ func TestRequestBoundIndependentTrailingErrors(t *testing.T) {
 				require.NoError(t, err)
 				resp, err := relayadaptor.DoRequest(c, req)
 				require.NoError(t, err)
-				require.True(t, relayadaptor.ResponseReadIsManagedByRequestContext(resp))
+				require.True(t, relayadaptor.ResponseTransportOwnsCancellation(c, resp))
 				originalBody := resp.Body
 				defer originalBody.Close()
 				resp.Body = io.NopCloser(io.MultiReader(
@@ -303,6 +307,7 @@ func TestRequestBoundIndependentTrailingErrors(t *testing.T) {
 					streamTrailingFailure{err: tc.err},
 				))
 
+				require.False(t, relayadaptor.ResponseTransportOwnsCancellation(c, resp), "opaque replacement must not borrow transport provenance")
 				apiErr, usage := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
 				require.NotNil(t, apiErr, "independent read error must remain a failure")
 				require.Equal(t, "read_stream_failed", apiErr.Code)
