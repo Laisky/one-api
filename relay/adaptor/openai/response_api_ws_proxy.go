@@ -216,7 +216,7 @@ func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, 
 	return nil, usage, stored.responses
 }
 
-// responseAPIWSStoreCollector accumulates store!=false completed response objects
+// responseAPIWSStoreCollector accumulates store!=false terminal response objects
 // observed on the upstream->client leg of a native Responses websocket. store=false
 // responses are connection-local upstream state and are intentionally excluded
 // (proposal Section 5.9, SEC06).
@@ -226,8 +226,8 @@ type responseAPIWSStoreCollector struct {
 	seen      map[string]struct{}
 }
 
-// collect records one completed response object if it is retrievable (store!=false)
-// and not already captured. It parses only the terminal response.completed event;
+// collect records one completed or incomplete response object if it is retrievable (store!=false)
+// and not already captured. It parses only completed/incomplete terminal events;
 // all other frames are ignored.
 func (c *responseAPIWSStoreCollector) collect(msg []byte) {
 	if len(msg) == 0 {
@@ -240,7 +240,7 @@ func (c *responseAPIWSStoreCollector) collect(msg []byte) {
 	if err := json.Unmarshal(msg, &probe); err != nil {
 		return
 	}
-	if probe.Type != "response.completed" || len(probe.Response) == 0 {
+	if (probe.Type != "response.completed" && probe.Type != "response.incomplete") || len(probe.Response) == 0 {
 		return
 	}
 	var resp ResponseAPIResponse
