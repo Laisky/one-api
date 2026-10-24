@@ -1,6 +1,7 @@
 package adaptor
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -23,6 +24,22 @@ const (
 	extraRequestHeaderPrefix = "X-"
 	channelAPIKeyPlaceholder = "{{key}}"
 )
+
+// standardHTTPResponseContextKey marks outbound requests dispatched through
+// Go's context-cancelable HTTP transport. It is intentionally private so an
+// unrelated/custom response cannot claim the same cancellation contract.
+type standardHTTPResponseContextKey struct{}
+
+// ResponseReadIsManagedByRequestContext reports whether the outgoing request
+// used a standard net/http transport whose context interrupts response reads.
+// Unverified/custom response bodies must retain explicit cancellation cleanup.
+func ResponseReadIsManagedByRequestContext(resp *http.Response) bool {
+	if resp == nil || resp.Request == nil {
+		return false
+	}
+	managed, _ := resp.Request.Context().Value(standardHTTPResponseContextKey{}).(bool)
+	return managed
+}
 
 // RedirectPolicyAdaptor optionally constrains redirects for one provider without
 // mutating the shared HTTP client. CheckRedirect has net/http.Client semantics.
@@ -256,6 +273,18 @@ func doRequestWithRedirectPolicy(c *gin.Context, req *http.Request, redirectPoli
 		localClient := *httpClient
 		localClient.CheckRedirect = redirectPolicy
 		httpClient = &localClient
+	}
+	// net/http already cancels pending response reads via req.Context. Record
+	// that verified transport ownership without changing response body types.
+	// Stream readers use it to avoid racing transport cancellation with Close.
+	if req.Context().Done() != nil {
+		transport := httpClient.Transport
+		if transport == nil {
+			transport = http.DefaultTransport
+		}
+		if _, ok := transport.(*http.Transport); ok {
+			req = req.WithContext(context.WithValue(req.Context(), standardHTTPResponseContextKey{}, true))
+		}
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
