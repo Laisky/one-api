@@ -11,8 +11,8 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/channeltype"
-	"github.com/Laisky/one-api/relay/pricing"
 	metalib "github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/pricing"
 )
 
 // newWSUpgradeContext builds a gin.Context whose Request looks like a
