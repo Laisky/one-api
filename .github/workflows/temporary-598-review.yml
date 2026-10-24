@@ -1,0 +1,31 @@
+# Ephemeral behavior-test qualification for PR #598. Delete after validating red/green.
+name: Temporary PR598 behavior qualification
+on:
+  push:
+    branches:
+      - fix/ws-continuation-funding-596-20261024
+
+concurrency:
+  group: temporary-pr598-behavior
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  reviewed_funding_regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+      - name: Confirm funded WS continuation scenarios under race detector
+        run: |
+          go test -race -count=1 -timeout=15m -run 'TestSecurityNativeResponseWebSocketKnownContinuationAdmission|TestResponseWSTierFundingObservedParentReceipts' ./relay/controller/
+      - name: Adjacent WS and HTTP pricing regression checks
+        run: |
+          go test -race -count=1 -timeout=15m -run 'TestResponseAPIWSOwnership|TestResponseAPIWS|TestResponseContinuationTier|TestTierAdmission|TestResponseTierInheritedTokensRequiresExplicitUsage' ./relay/adaptor/openai/ ./relay/controller/ ./relay/quota/
