@@ -81,13 +81,29 @@ func TestResponseWSTierFundingObservedParentReceipts(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 10, tokens)
 
-	// Missing and model-mismatched usage is never silently taken as free.
+	// Missing usage remains unpriceable, but a provider's canonical model
+	// echo is not the authenticated model selection made by the proxy.
 	f.observe([]byte(`{"type":"response.completed","response":{"id":"missing","usage":{"input_tokens":8}}}`))
 	_, err = f.inherited(context.Background(), "missing")
 	require.ErrorIs(t, err, errResponseContinuationUnpriceable)
-	f.observe([]byte(`{"type":"response.completed","response":{"id":"wrong-model","model":"gpt-other","usage":{"input_tokens":8,"output_tokens":2}}}`))
-	_, err = f.inherited(context.Background(), "wrong-model")
-	require.ErrorIs(t, err, errResponseContinuationUnpriceable)
+	f.observe([]byte(`{"type":"response.completed","response":{"id":"alias-echo","model":"gpt-5-2026-10-01","usage":{"input_tokens":8,"output_tokens":2}}}`))
+	tokens, err = f.inherited(context.Background(), "alias-echo")
+	require.NoError(t, err, "provider canonical model echo must not override handshake model authorization")
+	require.Equal(t, 10, tokens)
+
+	// Both the funding observer and ownership guard must recognize incomplete
+	// terminal receipts. These requests may continue after a model output cap.
+	f.observe([]byte(`{"type":"response.incomplete","response":{"id":"incomplete","status":"incomplete","usage":{"input_tokens":11,"output_tokens":4}}}`))
+	tokens, err = f.inherited(context.Background(), "incomplete")
+	require.NoError(t, err)
+	require.Equal(t, 15, tokens)
+
+	// A raw terminal receipt can prove an explicit zero output, unlike older
+	// serialized state records whose omitempty fields lose zero-vs-absent.
+	f.observe([]byte(`{"type":"response.completed","response":{"id":"warmup","status":"completed","usage":{"input_tokens":8,"output_tokens":0}}}`))
+	tokens, err = f.inherited(context.Background(), "warmup")
+	require.NoError(t, err)
+	require.Equal(t, 8, tokens)
 }
 
 func TestResponseWSTierFundingIgnoresControlFrames(t *testing.T) {
