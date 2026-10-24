@@ -2,17 +2,17 @@ package openai_compatible
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
-	"context"
-	"io"
-	"net/http"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -88,7 +88,6 @@ func TestSharedStreamDoneCancellation(t *testing.T) {
 		})
 	}
 }
-
 
 const issue599Receipt = "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18}}\n\n"
 const issue599DONE = "data: [DONE]\n\n"
@@ -276,8 +275,8 @@ func TestIssue599IndependentFailurePreserved(t *testing.T) {
 				}
 				resp := &http.Response{
 					StatusCode: http.StatusOK,
-					Header: http.Header{"Content-Type": {"text/event-stream"}},
-					Body: body,
+					Header:     http.Header{"Content-Type": {"text/event-stream"}},
+					Body:       body,
 				}
 				finished := make(chan *model.ErrorWithStatusCode, 1)
 				go func() {
