@@ -80,18 +80,25 @@ func (s *responseWSTierFunding) observe(frame []byte) {
 			Usage  json.RawMessage `json:"usage"`
 		} `json:"response"`
 	}
-	if err := json.Unmarshal(frame, &event); err != nil || event.Type != "response.completed" ||
-		event.Response.ID == "" {
+	if err := json.Unmarshal(frame, &event); err != nil || event.Response.ID == "" ||
+		(event.Type != "response.completed" && event.Type != "response.incomplete") {
 		return
 	}
-	// The existing native WS collector supports provider terminal receipts that
-	// omit status. Keep that backward-compatible contract for funding too.
+	// The native WS collector accepts terminal receipts without a status for
+	// compatibility. Reject conflicting status/event pairs, but allow capped
+	// incomplete turns as valid continuations just like the HTTP path.
 	status := strings.ToLower(strings.TrimSpace(event.Response.Status))
-	if status != "" && status != "completed" {
+	if (event.Type == "response.completed" && status != "" && status != "completed") ||
+		(event.Type == "response.incomplete" && status != "" && status != "incomplete") {
 		return
 	}
-	tokens, err := responseTierInheritedTokens(event.Response.Usage)
-	if err != nil || (event.Response.Model != "" && event.Response.Model != s.meta.ActualModelName) {
+	// The already-authenticated WebSocket pins provider/model selection. The
+	// echoed model can be a canonical dated snapshot for the requested alias,
+	// so it is not an independent authorization or pricing source.
+	// Raw provider receipts preserve explicit zero output, unlike typed stored
+	// historical records whose omitted counters cannot establish that zero.
+	tokens, err := responseTierObservedInheritedTokens(event.Response.Usage)
+	if err != nil {
 		tokens = -1
 	}
 	s.mu.Lock()
@@ -231,10 +238,21 @@ func (s *responseWSTierFunding) accepted(quote, added int64) {
 	s.reserved += added
 }
 
-// responseTierInheritedTokens verifies that both input and output counters
-// are explicitly present and positive; typed native state otherwise turns
-// omitted counters into ambiguous zeros. HTTP and WS share this safety rule.
+// responseTierInheritedTokens validates persisted parent usage. Historical
+// typed state serialization omits zero counters, so an absent field or stored
+// zero cannot authorize previously unbudgeted provider context.
 func responseTierInheritedTokens(raw json.RawMessage) (int, error) {
+	return responseTierInheritedTokensValidated(raw, false)
+}
+
+// responseTierObservedInheritedTokens accepts explicit zero output only on an
+// original provider terminal receipt, where JSON field presence is preserved.
+// This permits WebSocket warmup (generate=false) to be used as a local parent.
+func responseTierObservedInheritedTokens(raw json.RawMessage) (int, error) {
+	return responseTierInheritedTokensValidated(raw, true)
+}
+
+func responseTierInheritedTokensValidated(raw json.RawMessage, allowExplicitZeroOutput bool) (int, error) {
 	var usage struct {
 		InputTokens  *int `json:"input_tokens"`
 		OutputTokens *int `json:"output_tokens"`
@@ -246,7 +264,8 @@ func responseTierInheritedTokens(raw json.RawMessage) (int, error) {
 		return 0, errors.Wrap(errors.Join(errResponseContinuationUnpriceable, err), "decode parent usage")
 	}
 	if usage.InputTokens == nil || usage.OutputTokens == nil ||
-		*usage.InputTokens <= 0 || *usage.OutputTokens <= 0 {
+		*usage.InputTokens <= 0 || *usage.OutputTokens < 0 ||
+		(!allowExplicitZeroOutput && *usage.OutputTokens == 0) {
 		return 0, errors.Wrap(errResponseContinuationUnpriceable, "parent counters are absent, invalid, or ambiguous zeros")
 	}
 	if *usage.InputTokens > math.MaxInt-*usage.OutputTokens {
