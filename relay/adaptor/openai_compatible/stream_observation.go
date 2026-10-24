@@ -74,9 +74,9 @@ func watchStreamBody(c *gin.Context, resp *http.Response) (func(), bool) {
 	if c.Request != nil {
 		ctx = c.Request.Context()
 	}
-	nativeBound := resp.Request != nil && ctx.Done() != nil &&
-		resp.Request.Context().Done() == ctx.Done() &&
-		relayadaptor.ResponseTransportOwnsCancellation(c, resp)
+	// Dispatch has verified the original request's cancellation identity,
+	// even when http.Client.Timeout creates a derived response context.
+	nativeBound := relayadaptor.ResponseTransportOwnsCancellation(c, resp)
 
 	body := &streamBodyOnce{ReadCloser: resp.Body}
 	resp.Body = body
