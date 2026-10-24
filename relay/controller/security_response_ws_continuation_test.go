@@ -57,7 +57,7 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 			const initial int64 = 500000
 			xaiVideoSetup(t, initial, false)
 			store := enableStateForTest(t)
-			cfg := model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2, MaxTokens: 20, ContextLength: 10000, Tiers: []model.ModelRatioTierLocal{{InputTokenThreshold: 100, Ratio: 5, CompletionRatio: 100}}}
+			cfg := model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2, MaxTokens: 20, ContextLength: 30000, Tiers: []model.ModelRatioTierLocal{{InputTokenThreshold: 100, Ratio: 5, CompletionRatio: 100}}}
 			var frames atomic.Int32
 			var handshakes atomic.Int32
 			var retainedInput atomic.Int64
@@ -127,11 +127,11 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 						}
 					}
 					if request.Prompt != nil && request.Prompt.Id == "prompt_ws_fixture" {
-						full += 5000
+						full += 25000
 					}
 					if scenario == "opaque_file_low" {
 						// The provider expands a previously uploaded file referenced by ID.
-						full += 5000
+						full += 25000
 					}
 					fullInputTotal.Add(int64(full))
 					var account model.User
@@ -325,7 +325,7 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 					configs, resolvePricingAdaptor(meta), meta.StartTime)
 				t.Logf("opaque quote diagnostic scenario=%s config_context=%d priced_budget=%d err=%v", scenario, configs[name].ContextLength, budget, budgetErr)
 				require.NoError(t, budgetErr)
-				require.GreaterOrEqual(t, budget, 5000)
+				require.GreaterOrEqual(t, budget, 25000)
 				// Exercise the exact stateful policy (including enabled/pricing and
 				// the handshake credit) that the live WebSocket handler installs.
 				policy := newResponseWSTierFunding(template, meta, 17000)
