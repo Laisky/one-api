@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
 )
@@ -62,15 +63,27 @@ func (b *streamBodyOnce) Close() error {
 	return b.err
 }
 
-// watchStreamBody closes blocked reads on cancellation and every ordinary exit;
-// callers can still check the established underlying body-close error.
-func watchStreamBody(c *gin.Context, resp *http.Response) func() {
-	body := &streamBodyOnce{ReadCloser: resp.Body}
-	resp.Body = body
+// watchStreamBody assigns only one owner to request cancellation. For responses
+// from our native net/http.Transport with the *same* cancellation channel as the
+// incoming request, the transport already interrupts blocked reads. An extra
+// AfterFunc/Close races it and can obscure context.Canceled as net.ErrClosed.
+// Custom/unbound response bodies retain the existing interruptible cleanup.
+// The boolean enables narrowly-scoped read-error handling at protocol DONE.
+func watchStreamBody(c *gin.Context, resp *http.Response) (func(), bool) {
 	ctx := context.Background()
 	if c.Request != nil {
 		ctx = c.Request.Context()
 	}
+	nativeBound := resp.Request != nil && ctx.Done() != nil &&
+		resp.Request.Context().Done() == ctx.Done() &&
+		relayadaptor.ResponseTransportOwnsCancellation(c, resp)
+
+	body := &streamBodyOnce{ReadCloser: resp.Body}
+	resp.Body = body
+	if nativeBound {
+		return func() { _ = body.Close() }, true
+	}
+
 	stop := context.AfterFunc(ctx, func() { _ = body.Close() })
-	return func() { stop(); _ = body.Close() }
+	return func() { stop(); _ = body.Close() }, false
 }
