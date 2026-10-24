@@ -144,18 +144,18 @@ func TestResponseTierAdmissionPromptBudgetOpaqueInputs(t *testing.T) {
 			want:    10000,
 		},
 		{
-			name:    "provider-resolved uploaded file",
+			name: "provider-resolved uploaded file",
 			request: &openai.ResponseAPIRequest{Model: name, Input: openai.ResponseAPIInput{
 				map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_file", "file_id": "file_remote"}}},
 			}},
-			want:    10000,
+			want: 10000,
 		},
 		{
-			name:    "raw file input survives source representation",
+			name: "raw file input survives source representation",
 			request: &openai.ResponseAPIRequest{Model: name, Input: openai.ResponseAPIInput{
 				json.RawMessage(`{"type":"input_file","file_id":"file_remote"}`),
 			}},
-			want:    10000,
+			want: 10000,
 		},
 	}
 	for _, tt := range tests {
