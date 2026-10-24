@@ -160,15 +160,15 @@ func TestTierAdmissionOmittedOutputUsesProviderBound(t *testing.T) {
 	require.Greater(t, providerLimit, 20, "fixture must have a provider output cap above the local quote override")
 
 	input := quota.ComputeInput{
-		Usage: &relaymodel.Usage{PromptTokens: 50},
-		ModelName: name,
+		Usage:      &relaymodel.Usage{PromptTokens: 50},
+		ModelName:  name,
 		GroupRatio: 1,
 		ModelRatio: 1,
 		ChannelModelConfigs: map[string]model.ModelConfigLocal{name: {
-			MaxTokens: 20,
-			Ratio: 1,
+			MaxTokens:       20,
+			Ratio:           1,
 			CompletionRatio: 2,
-			Tiers: []model.ModelRatioTierLocal{{InputTokenThreshold: 1, Ratio: 5, CompletionRatio: 3}},
+			Tiers:           []model.ModelRatioTierLocal{{InputTokenThreshold: 1, Ratio: 5, CompletionRatio: 3}},
 		}},
 		PricingAdaptor: provider,
 	}
