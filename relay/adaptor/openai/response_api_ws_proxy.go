@@ -74,7 +74,6 @@ func (e *ResponseAPIWSAdmissionFundingError) Unwrap() error {
 	return e.Cause
 }
 
-
 // ResponseAPIWebSocketObservers receive accepted provider work and upstream
 // output without dereferencing gin.Context from WebSocket proxy goroutines.
 type ResponseAPIWebSocketObservers struct {
