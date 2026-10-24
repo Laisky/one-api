@@ -333,7 +333,7 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 				actualPrompt := getResponseAPIPromptTokens(context.Background(), &decoded) + opaqueProviderExpandedTokens
 				rates, completionRatios := getChannelRatios(template)
 				actualCharge := quotautil.Compute(quotautil.ComputeInput{
-					Usage: &relaymodel.Usage{PromptTokens: actualPrompt, CompletionTokens: output},
+					Usage:     &relaymodel.Usage{PromptTokens: actualPrompt, CompletionTokens: output},
 					ModelName: name, ModelRatio: rates[name], ChannelModelRatio: rates,
 					GroupRatio: group, ChannelModelConfigs: configs, ChannelCompletionRatio: completionRatios,
 					PricingAdaptor: resolvePricingAdaptor(meta), RequestTime: meta.StartTime,
