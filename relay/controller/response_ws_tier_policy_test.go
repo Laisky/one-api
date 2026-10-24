@@ -67,7 +67,7 @@ func TestResponseWSTierFundingRejectsAmbiguousPricingKeys(t *testing.T) {
 func TestResponseWSTierFundingObservedParentReceipts(t *testing.T) {
 	f := &responseWSTierFunding{
 		enabled: true,
-		meta: metalib.Meta{ActualModelName: "gpt-5"},
+		meta:    metalib.Meta{ActualModelName: "gpt-5"},
 	}
 	// Native collector historically accepts response.completed with omitted
 	// status; every funded continuation must preserve that compatibility.
