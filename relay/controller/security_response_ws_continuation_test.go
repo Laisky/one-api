@@ -52,12 +52,12 @@ import (
 func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T) {
 	const name = "native-ws-tier-fixture"
 	const output = 20
-	for _, scenario := range []string{"owner_low", "token_low", "funded_multiround", "incomplete_local", "alias_echo", "after_paid_known_work", "ordinary", "free_group", "flat"} {
+	for _, scenario := range []string{"owner_low", "token_low", "funded_multiround", "incomplete_local", "alias_echo", "after_paid_known_work", "remote_prompt_low", "opaque_file_low", "ordinary", "free_group", "flat"} {
 		t.Run(scenario, func(t *testing.T) {
 			const initial int64 = 500000
 			xaiVideoSetup(t, initial, false)
 			store := enableStateForTest(t)
-			cfg := model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2, MaxTokens: 20, Tiers: []model.ModelRatioTierLocal{{InputTokenThreshold: 100, Ratio: 5, CompletionRatio: 100}}}
+			cfg := model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2, MaxTokens: 20, ContextLength: 10000, Tiers: []model.ModelRatioTierLocal{{InputTokenThreshold: 100, Ratio: 5, CompletionRatio: 100}}}
 			var frames atomic.Int32
 			var handshakes atomic.Int32
 			var retainedInput atomic.Int64
@@ -129,6 +129,10 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 					if request.Prompt != nil && request.Prompt.Id == "prompt_ws_fixture" {
 						full += 5000
 					}
+					if scenario == "opaque_file_low" {
+						// The provider expands a previously uploaded file referenced by ID.
+						full += 5000
+					}
 					fullInputTotal.Add(int64(full))
 					var account model.User
 					var finite model.Token
@@ -194,7 +198,7 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 			template, _, requestID := protocolContext(t, channeltype.OpenAI, name, "/v1/responses?model="+name, "", upstream.URL+"/api.openai.com", balance, group, false, &cfg)
 			requestID += "-socket"
 			template.Set(ctxkey.RequestId, requestID)
-			if scenario == "owner_low" || scenario == "token_low" || scenario == "after_paid_known_work" {
+			if scenario == "owner_low" || scenario == "token_low" || scenario == "after_paid_known_work" || scenario == "remote_prompt_low" || scenario == "opaque_file_low" {
 				meta := metalib.GetByContext(template)
 				estimatedPrompt := config.PreconsumeTokenForBackgroundRequest
 				if estimatedPrompt <= 0 {
@@ -203,7 +207,7 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 				handshake, tiered, quoteErr := quoteResponseTierAdmission(template, meta, &openai.ResponseAPIRequest{Model: name}, estimatedPrompt, nil)
 				require.NoError(t, quoteErr)
 				require.True(t, tiered)
-				if scenario == "after_paid_known_work" {
+				if scenario == "after_paid_known_work" || scenario == "remote_prompt_low" || scenario == "opaque_file_low" {
 					balance, tokenBalance = handshake+100, handshake+100
 				} else {
 					cap := output
@@ -294,12 +298,20 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 				require.Contains(t, string(firstReply), "resp_ws_local")
 				frame["previous_response_id"] = "resp_ws_local"
 				frame["input"] = strings.Repeat("additional counted text ", 5000)
+			} else if scenario == "remote_prompt_low" {
+				delete(frame, "input")
+				frame["prompt"] = map[string]any{"id": "prompt_ws_fixture"}
+			} else if scenario == "opaque_file_low" {
+				frame["input"] = []any{map[string]any{
+					"role": "user",
+					"content": []any{map[string]any{"type": "input_file", "file_id": "file_server_side"}},
+				}}
 			} else if scenario != "ordinary" {
 				frame["previous_response_id"] = parent.GatewayResponseID
 			}
 			require.NoError(t, conn.WriteJSON(frame))
 			_, _, readErr := conn.ReadMessage()
-			paidDenied := scenario == "owner_low" || scenario == "token_low" || scenario == "after_paid_known_work"
+			paidDenied := scenario == "owner_low" || scenario == "token_low" || scenario == "after_paid_known_work" || scenario == "remote_prompt_low" || scenario == "opaque_file_low"
 			if readErr == nil {
 				_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "complete"), time.Now().Add(time.Second))
 			}
