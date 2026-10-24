@@ -13,6 +13,7 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
@@ -34,7 +35,7 @@ type responseWSTierFunding struct {
 	configs          map[string]model.ModelConfigLocal
 	modelRatio       float64
 	groupRatio       float64
-	provider         *openai.Adaptor
+	provider         adaptor.Adaptor
 	enabled          bool
 
 	quoted   int64 // total per-create tier allowance admitted on this socket
@@ -46,10 +47,7 @@ type responseWSTierFunding struct {
 func newResponseWSTierFunding(c *gin.Context, meta *metalib.Meta, handshakeHold int64) *responseWSTierFunding {
 	ratios, completions := getChannelRatios(c)
 	configs := getChannelModelConfigs(c)
-	provider := &openai.Adaptor{}
-	if resolved, ok := resolvePricingAdaptor(meta).(*openai.Adaptor); ok && resolved != nil {
-		provider = resolved
-	}
+	provider := resolvePricingAdaptor(meta)
 	group := c.GetFloat64(ctxkey.ChannelRatio)
 	cfg, known := pricing.ResolveModelConfigRatioOnly(meta.ActualModelName, configs, provider, meta.StartTime)
 	return &responseWSTierFunding{
