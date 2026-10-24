@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
@@ -30,6 +32,9 @@ func TestIssue599LoggingBodyPreservesNativeCancellation(t *testing.T) {
 	defer cancel()
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/chat/completions", nil).WithContext(ctx)
+	lg, err := glog.New(glog.WithName("issue599-native-cancel"))
+	require.NoError(t, err)
+	gmw.SetLogger(c, lg)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
 	require.NoError(t, err)
 	resp, err := relayadaptor.DoRequest(c, req)
