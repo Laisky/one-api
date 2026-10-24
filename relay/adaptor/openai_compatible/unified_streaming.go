@@ -3,6 +3,7 @@ package openai_compatible
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/common/tracing"
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
@@ -64,6 +66,10 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 
 	receiptComplete := false
 	upstreamDone := false
+	// Only response bodies dispatched through a verified standard HTTP transport
+	// can be completed on a matching post-DONE context cancellation. A custom
+	// reader's closed-connection error remains ambiguous and reportable.
+	requestManagedBody := adaptor.ResponseReadIsManagedByRequestContext(resp)
 	tracker := streaming.FromContext(c)
 	if tracker != nil {
 		streaming.ClaimProtocolObservation(c)
@@ -87,12 +93,27 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 	for {
 		line, err := lineReader.Next()
 		if err != nil {
-			// Closing a canceled body may surface as EOF. Preserve the caller's
-			// stop condition and observed receipt instead of synthesizing success.
-			if canceled := gmw.Ctx(c).Err(); canceled != nil && !upstreamDone && errors.Is(err, io.EOF) {
-				err = canceled
+			canceled := gmw.Ctx(c).Err()
+			if canceled != nil && !upstreamDone {
+				// An EOF before the protocol terminal is not a completion.
+				// When a custom body's canceled Close reports net.ErrClosed,
+				// retain both the cancellation identity and the original cause.
+				if errors.Is(err, io.EOF) {
+					err = canceled
+				} else if errors.Is(err, net.ErrClosed) {
+					err = errors.Join(canceled, err)
+				}
 			}
 			if errors.Is(err, io.EOF) {
+				break
+			}
+			// A completed Chat SSE stream may end with a request-context
+			// cancellation while draining past [DONE]. Only the standard
+			// transport's context error proves that interruption; a raw
+			// net.ErrClosed or independent trailing error is still a failure.
+			if upstreamDone && requestManagedBody && canceled != nil &&
+				errors.Is(err, canceled) && errors.Is(resp.Request.Context().Err(), canceled) {
+				logger.Debug("upstream read canceled after completed SSE marker")
 				break
 			}
 
