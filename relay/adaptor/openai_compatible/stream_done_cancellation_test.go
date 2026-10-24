@@ -172,7 +172,7 @@ func TestIssue599NativeHTTPReadAfterDONE(t *testing.T) {
 					resp, err := relayadaptor.DoRequest(c, request)
 					require.NoError(t, err)
 					require.NotNil(t, resp.Request)
-					require.Equal(t, ctx.Done(), resp.Request.Context().Done())
+					require.True(t, relayadaptor.ResponseTransportOwnsCancellation(c, resp))
 					boundary := &issue599Boundary{
 						ReadCloser: resp.Body, expected: []byte(tc.wire),
 						entered: make(chan struct{}),
