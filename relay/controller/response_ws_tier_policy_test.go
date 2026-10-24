@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 	metalib "github.com/Laisky/one-api/relay/meta"
 )
 
@@ -120,4 +123,52 @@ func TestResponseWSTierFundingIgnoresControlFrames(t *testing.T) {
 		require.Zero(t, f.reserved)
 		require.Zero(t, f.quoted)
 	}
+}
+
+func TestResponseTierAdmissionPromptBudgetOpaqueInputs(t *testing.T) {
+	const name = "opaque-input-context-598"
+	cfg := map[string]model.ModelConfigLocal{name: {ContextLength: 10000}}
+	tests := []struct {
+		name string
+		request *openai.ResponseAPIRequest
+		want int
+	}{
+		{
+			name: "normal text unchanged",
+			request: &openai.ResponseAPIRequest{Model: name, Input: openai.ResponseAPIInput{"hello"}},
+			want: 25,
+		},
+		{
+			name: "remote stored prompt template",
+			request: &openai.ResponseAPIRequest{Model: name, Prompt: &openai.ResponseAPIPrompt{Id: "prompt_remote"}},
+			want: 10000,
+		},
+		{
+			name: "provider-resolved uploaded file",
+			request: &openai.ResponseAPIRequest{Model: name, Input: openai.ResponseAPIInput{
+				map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_file", "file_id": "file_remote"}}},
+			}},
+			want: 10000,
+		},
+		{
+			name: "raw file input survives source representation",
+			request: &openai.ResponseAPIRequest{Model: name, Input: openai.ResponseAPIInput{
+				json.RawMessage(`{"type":"input_file","file_id":"file_remote"}`),
+			}},
+			want: 10000,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := responseTierAdmissionPromptBudget(tt.request, 25, cfg, nil, time.Time{})
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+	_, err := responseTierAdmissionPromptBudget(&openai.ResponseAPIRequest{
+		Model: "unregistered-opaque-input-598",
+		Prompt: &openai.ResponseAPIPrompt{Id: "prompt_remote"},
+	}, 25, nil, nil, time.Time{})
+	require.ErrorContains(t, err, "without a model context bound",
+		"an opaque provider-side expansion must never be funded at only the tokenized ID length")
 }
