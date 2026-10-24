@@ -53,15 +53,15 @@ func TestIssue599OpaqueReplacementRetainsCancelWatcher(t *testing.T) {
 	defer original.Close()
 
 	body := &issue599IndependentFailure{
-		reader: strings.NewReader(issue599Receipt + issue599DONE),
-		failure: net.ErrClosed,
-		entered: make(chan struct{}),
-		closed: make(chan struct{}),
+		reader:   strings.NewReader(issue599Receipt + issue599DONE),
+		failure:  net.ErrClosed,
+		entered:  make(chan struct{}),
+		closed:   make(chan struct{}),
 		released: make(chan struct{}),
 	}
 	resp.Body = body
 	type result struct {
-		err *model.ErrorWithStatusCode
+		err   *model.ErrorWithStatusCode
 		usage *model.Usage
 	}
 	finished := make(chan result, 1)
@@ -111,8 +111,8 @@ func TestIssue599ReboundContextRetainsCancelWatcher(t *testing.T) {
 
 	boundary := &issue599Boundary{
 		ReadCloser: resp.Body,
-		expected: []byte(wire),
-		entered: make(chan struct{}),
+		expected:   []byte(wire),
+		entered:    make(chan struct{}),
 	}
 	resp.Body = boundary
 	finished := make(chan *model.ErrorWithStatusCode, 1)
@@ -143,8 +143,8 @@ func TestIssue599ReboundContextRetainsCancelWatcher(t *testing.T) {
 // a previously complete usage receipt. Whitespace-only suffixes remain valid.
 func TestIssue599MalformedDoneCannotAuthorizeCancellationSuccess(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		marker string
+		name         string
+		marker       string
 		wantComplete bool
 	}{
 		{"suffix", "[DONE]garbage", false},
@@ -156,8 +156,8 @@ func TestIssue599MalformedDoneCannotAuthorizeCancellationSuccess(t *testing.T) {
 			c, rec, resp, cancel := newIssue599NativeResponse(t, wire)
 			boundary := &issue599Boundary{
 				ReadCloser: resp.Body,
-				expected: []byte(wire),
-				entered: make(chan struct{}),
+				expected:   []byte(wire),
+				entered:    make(chan struct{}),
 			}
 			resp.Body = boundary
 			finished := make(chan *model.ErrorWithStatusCode, 1)
