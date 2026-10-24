@@ -159,6 +159,17 @@ func (s *responseWSTierFunding) additionalQuote(ctx context.Context, frame []byt
 	if s == nil || !s.enabled {
 		return 0, 0, nil
 	}
+	var event struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(frame, &event); err != nil {
+		return 0, 0, errors.Wrap(err, "decode WebSocket event type for tier admission")
+	}
+	if event.Type != "response.create" {
+		// Other WebSocket control/event frames are not inference requests and
+		// must not be charged or blocked by the per-create funding policy.
+		return 0, 0, nil
+	}
 	var request openai.ResponseAPIRequest
 	// Reject conflicting decoded/priced fields while passing unknown provider
 	// extensions through untouched. The same typed-root guard protects HTTP.
