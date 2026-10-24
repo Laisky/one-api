@@ -52,6 +52,7 @@ import (
 func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T) {
 	const name = "native-ws-tier-fixture"
 	const output = 20
+	const opaqueProviderExpandedTokens = 25_000
 	for _, scenario := range []string{"owner_low", "token_low", "funded_multiround", "incomplete_local", "alias_echo", "after_paid_known_work", "remote_prompt_low", "opaque_file_low", "ordinary", "free_group", "flat"} {
 		t.Run(scenario, func(t *testing.T) {
 			const initial int64 = 500000
@@ -127,11 +128,11 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 						}
 					}
 					if request.Prompt != nil && request.Prompt.Id == "prompt_ws_fixture" {
-						full += 25000
+						full += opaqueProviderExpandedTokens
 					}
 					if scenario == "opaque_file_low" {
 						// The provider expands a previously uploaded file referenced by ID.
-						full += 25000
+						full += opaqueProviderExpandedTokens
 					}
 					fullInputTotal.Add(int64(full))
 					var account model.User
@@ -325,7 +326,20 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 					configs, resolvePricingAdaptor(meta), meta.StartTime)
 				t.Logf("opaque quote diagnostic scenario=%s config_context=%d priced_budget=%d err=%v", scenario, configs[name].ContextLength, budget, budgetErr)
 				require.NoError(t, budgetErr)
-				require.GreaterOrEqual(t, budget, 25000)
+				require.GreaterOrEqual(t, budget, opaqueProviderExpandedTokens)
+				// Independent settlement pricing proves this fixture is genuinely
+				// unaffordable. An estimate above the handshake hold alone does not
+				// establish unfunded *actual* work (the earlier false positive).
+				actualPrompt := getResponseAPIPromptTokens(context.Background(), &decoded) + opaqueProviderExpandedTokens
+				rates, completionRatios := getChannelRatios(template)
+				actualCharge := quotautil.Compute(quotautil.ComputeInput{
+					Usage: &relaymodel.Usage{PromptTokens: actualPrompt, CompletionTokens: output},
+					ModelName: name, ModelRatio: rates[name], ChannelModelRatio: rates,
+					GroupRatio: group, ChannelModelConfigs: configs, ChannelCompletionRatio: completionRatios,
+					PricingAdaptor: resolvePricingAdaptor(meta), RequestTime: meta.StartTime,
+				}).TotalQuota
+				require.Greater(t, actualCharge, balance, "expanded provider usage must exceed the owner budget")
+				require.Greater(t, actualCharge, tokenBalance, "expanded provider usage must exceed the finite token budget")
 				// Exercise the exact stateful policy (including enabled/pricing and
 				// the handshake credit) that the live WebSocket handler installs.
 				policy := newResponseWSTierFunding(template, meta, 17000)
