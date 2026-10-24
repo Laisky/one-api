@@ -242,3 +242,68 @@ func TestIndependentStreamErrorAfterCancellation(t *testing.T) {
 		}
 	}
 }
+
+
+// streamTrailingFailure injects a real, independently produced read error.
+type streamTrailingFailure struct{ err error }
+
+func (r streamTrailingFailure) Read([]byte) (int, error) { return 0, r.err }
+
+// TestRequestBoundIndependentTrailingErrors verifies that the transport
+// provenance marker alone never hides a real error after actual DONE. Run
+// with and without downstream cancellation to catch broad suppression.
+func TestRequestBoundIndependentTrailingErrors(t *testing.T) {
+	for _, cancelOnDone := range []bool{false, true} {
+		for _, tc := range []struct {
+			name string
+			err  error
+		}{
+			{"closed", net.ErrClosed},
+			{"unexpected_eof", io.ErrUnexpectedEOF},
+		} {
+			name := "without_cancel/" + tc.name
+			if cancelOnDone {
+				name = "with_cancel/" + tc.name
+			}
+			t.Run(name, func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Content-Type", "text/event-stream")
+					_, _ = io.WriteString(w, canceledStreamDone)
+				}))
+				defer server.Close()
+				c, rec := newBridgeTestCtx(t)
+				gmw.SetLogger(c, createTestLogger())
+				ctx, cancel := context.WithCancel(c.Request.Context())
+				defer cancel()
+				c.Request = c.Request.WithContext(ctx)
+				if cancelOnDone {
+					c.Writer = &doneCancellationWriter{ResponseWriter: c.Writer, cancel: cancel}
+				}
+				req, err := http.NewRequestWithContext(gmw.Ctx(c), http.MethodGet, server.URL, nil)
+				require.NoError(t, err)
+				resp, err := relayadaptor.DoRequest(c, req)
+				require.NoError(t, err)
+				require.True(t, relayadaptor.ResponseReadIsManagedByRequestContext(resp))
+				originalBody := resp.Body
+				defer originalBody.Close()
+				resp.Body = io.NopCloser(io.MultiReader(
+					strings.NewReader(canceledStreamReceipt+canceledStreamDone),
+					streamTrailingFailure{err: tc.err},
+				))
+
+				apiErr, usage := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
+				require.NotNil(t, apiErr, "independent read error must remain a failure")
+				require.Equal(t, "read_stream_failed", apiErr.Code)
+				require.ErrorIs(t, apiErr.RawError, tc.err)
+				require.NotNil(t, usage)
+				require.Equal(t, 18, usage.TotalTokens)
+				require.Equal(t, 1, strings.Count(rec.Body.String(), "[DONE]"))
+				if cancelOnDone {
+					require.ErrorIs(t, ctx.Err(), context.Canceled)
+				} else {
+					require.NoError(t, ctx.Err())
+				}
+			})
+		}
+	}
+}
