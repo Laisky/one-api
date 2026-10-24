@@ -374,11 +374,18 @@ func copyResponseAPIClientToUpstream(ctx context.Context, src, dst *websocket.Co
 		if admission != nil && (mt == websocket.TextMessage || mt == websocket.BinaryMessage) {
 			if admissionErr := admission(ctx, msg, upstreamURL); admissionErr != nil {
 				ownership.denied.Store(true)
-				// Control writes are safe alongside the upstream-to-client writer.
-				if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "tool_billing_not_supported"), time.Now().Add(time.Second)); closeErr != nil {
-					return errors.Wrap(closeErr, "close response websocket after tool admission denial")
+				// Keep the established native-tool error for tool failures, but
+				// expose an actionable quota code for tier funding denials.
+				closeReason := "tool_billing_not_supported"
+				var fundingErr *ResponseAPIWSAdmissionFundingError
+				if errors.As(admissionErr, &fundingErr) {
+					closeReason = fundingErr.Code
 				}
-				return errors.Wrap(admissionErr, "response websocket tool admission failed")
+				// Control writes are safe alongside the upstream-to-client writer.
+				if closeErr := src.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, closeReason), time.Now().Add(time.Second)); closeErr != nil {
+					return errors.Wrap(closeErr, "close response websocket after admission denial")
+				}
+				return errors.Wrap(admissionErr, "response websocket admission failed")
 			}
 		}
 
