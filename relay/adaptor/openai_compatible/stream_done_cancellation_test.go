@@ -158,7 +158,7 @@ func TestIssue599NativeHTTPReadAfterDONE(t *testing.T) {
 					tracker := streaming.NewQuotaTracker(streaming.QuotaTrackerParams{
 						Ctx: ctx, ModelName: "gpt-4", PromptTokens: 11,
 						PreConsumedQuota: 10000,
-						TokenCounter: func(s, _ string) int { return len(s) },
+						TokenCounter:     func(s, _ string) int { return len(s) },
 					})
 					streaming.StoreTracker(c, tracker)
 					var bridge *bridgeRecorder
