@@ -25,5 +25,11 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.3'
-      - name: Reproduce owned continuation funding behavior under race detector
-        run: go test -race -count=1 -timeout=15m -run '^TestSecurityNativeResponseWebSocketKnownContinuationAdmission$' ./relay/controller/
+      - name: Verify WS funding red-to-green and direct regression cases
+        run: |
+          go test -race -count=1 -timeout=15m \
+            -run 'TestSecurityNativeResponseWebSocketKnownContinuationAdmission|TestResponseTierInheritedTokensRequiresExplicitUsage|TestResponseWSTierFundingRejectsAmbiguousPricingKeys|TestResponseWSTierFundingObservedParentReceipts' ./relay/controller/
+      - name: Verify adjacent WS ownership, settlement, HTTP continuation and tier pricing
+        run: |
+          go test -race -count=1 -timeout=15m \
+            -run 'TestResponseWS|TestResponseAPIWS|TestMaybeHandleResponseAPIWebSocket|TestCommitWebSocketObservedResponses|TestScheduleWebSocketPostBilling|TestResponseContinuationTier|TestQuoteResponseTierAdmission|TestEstimateTierAdmission|TestSecurityResponseWebSocket|TestSecurityNativeResponseWebSocket' ./relay/controller/ ./relay/adaptor/openai/ ./relay/quota/
