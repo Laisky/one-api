@@ -160,10 +160,14 @@ func TestIssue599MalformedDoneCannotAuthorizeCancellationSuccess(t *testing.T) {
 				entered:    make(chan struct{}),
 			}
 			resp.Body = boundary
-			finished := make(chan *model.ErrorWithStatusCode, 1)
+			type result struct {
+				failure *model.ErrorWithStatusCode
+				usage   *model.Usage
+			}
+			finished := make(chan result, 1)
 			go func() {
-				failure, _ := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
-				finished <- failure
+				failure, usage := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
+				finished <- result{failure, usage}
 			}()
 			select {
 			case <-boundary.entered:
@@ -173,12 +177,14 @@ func TestIssue599MalformedDoneCannotAuthorizeCancellationSuccess(t *testing.T) {
 			}
 			cancel()
 			select {
-			case failure := <-finished:
+			case got := <-finished:
+				require.NotNil(t, got.usage, "failed delivery must retain the provider receipt")
+				require.Equal(t, 18, got.usage.TotalTokens)
 				if tc.wantComplete {
-					require.Nil(t, failure)
+					require.Nil(t, got.failure)
 					require.Contains(t, rec.Body.String(), "data: [DONE]")
 				} else {
-					require.NotNil(t, failure, "malformed DONE must not turn a canceled stream into success")
+					require.NotNil(t, got.failure, "malformed DONE must not turn a canceled stream into success")
 					require.NotContains(t, rec.Body.String(), "data: [DONE]")
 				}
 			case <-time.After(3 * time.Second):
