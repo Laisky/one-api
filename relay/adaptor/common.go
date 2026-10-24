@@ -23,7 +23,7 @@ const (
 	extraRequestHeaderPrefix = "X-"
 	// This key is private to the relay request lifecycle; the recorded pointer
 	// proves which response came from the context-aware net/http transport.
-	nativeHTTPResponseKey = "relay_native_http_transport_response"
+	nativeHTTPResponseKey    = "relay_native_http_transport_response"
 	channelAPIKeyPlaceholder = "{{key}}"
 )
 
@@ -32,7 +32,6 @@ const (
 type RedirectPolicyAdaptor interface {
 	CheckRedirect(req *http.Request, via []*http.Request) error
 }
-
 
 // ResponseTransportOwnsCancellation reports whether this exact response was
 // obtained through the standard net/http Transport. Only this transport has
