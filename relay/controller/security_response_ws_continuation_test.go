@@ -303,7 +303,7 @@ func TestSecurityNativeResponseWebSocketKnownContinuationAdmission(t *testing.T)
 				frame["prompt"] = map[string]any{"id": "prompt_ws_fixture"}
 			} else if scenario == "opaque_file_low" {
 				frame["input"] = []any{map[string]any{
-					"role": "user",
+					"role":    "user",
 					"content": []any{map[string]any{"type": "input_file", "file_id": "file_server_side"}},
 				}}
 			} else if scenario != "ordinary" {
