@@ -78,7 +78,7 @@ func TestDoneCancellationWriterRejectsShortWrites(t *testing.T) {
 	defer cancel()
 	w := &doneCancellationWriter{
 		ResponseWriter: &issue599ShortWriteWriter{ResponseWriter: c.Writer},
-		cancel: cancel,
+		cancel:         cancel,
 	}
 	data := []byte("data: [DONE]")
 	n, err := w.Write(data)
