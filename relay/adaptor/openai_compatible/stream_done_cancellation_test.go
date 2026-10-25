@@ -32,10 +32,11 @@ type doneCancellationWriter struct {
 	cancel context.CancelFunc
 }
 
-// Write keeps the delivery result and cancels only after the upstream marker is rendered.
+// Write cancels only after a complete, successfully written terminal SSE frame.
+// Literal [DONE] within generated content must not end the request.
 func (w *doneCancellationWriter) Write(p []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(p)
-	if err == nil && strings.Contains(string(p), "[DONE]") {
+	if err == nil && n == len(p) && strings.TrimSpace(string(p)) == "data: [DONE]" {
 		w.cancel()
 	}
 	return n, err
@@ -136,14 +137,14 @@ func TestSharedStreamDoneCancellation(t *testing.T) {
 			} else {
 				require.NoError(t, ctx.Err(), "independent error must not require a canceled request")
 			}
-			require.Equal(t, 1, strings.Count(rec.Body.String(), "[DONE]"))
+			require.Equal(t, 1, strings.Count(rec.Body.String(), "data: [DONE]\n\n"))
 			require.NotNil(t, usage)
 			require.Equal(t, 18, usage.TotalTokens)
 			require.Empty(t, usage.BillingEstimateReason)
 			if tc.trailingErr != nil {
 				require.NotNil(t, apiErr, "an independent trailing failure must remain a failure")
 				require.Equal(t, "read_stream_failed", apiErr.Code)
-				require.True(t, errors.Is(apiErr.RawError, tc.trailingErr), "retain the independent read cause")
+				require.ErrorIs(t, apiErr.RawError, tc.trailingErr, "retain the independent read cause")
 			} else {
 				require.Nil(t, apiErr, "normal EOF after processed DONE must remain successful")
 			}
@@ -270,7 +271,7 @@ func TestIssue599NativeHTTPReadAfterDONE(t *testing.T) {
 						t.Fatal("cancel failed to release blocked HTTP read")
 					}
 					require.Equal(t, int32(1), boundary.closes.Load())
-					require.Equal(t, tc.doneCount, strings.Count(rec.Body.String(), "[DONE]"))
+					require.Equal(t, tc.doneCount, strings.Count(rec.Body.String(), "data: [DONE]\n\n"))
 					require.NotNil(t, got.usage)
 					if tc.success {
 						require.Nil(t, got.failure, "completed receipt/DONE must not become read_stream_failed")
@@ -341,6 +342,9 @@ func TestIssue599IndependentFailurePreserved(t *testing.T) {
 					entered: make(chan struct{}), closed: make(chan struct{}),
 					released: make(chan struct{}),
 				}
+				// Release even on t.Fatal before Close: a blocked test reader must
+				// not outlive its subtest. Normal and cleanup paths may both invoke it.
+				releaseRead := sync.OnceFunc(func() { close(body.released) })
 				resp := &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     http.Header{"Content-Type": {"text/event-stream"}},
@@ -351,7 +355,17 @@ func TestIssue599IndependentFailurePreserved(t *testing.T) {
 					usage   *model.Usage
 				}
 				finished := make(chan streamResult, 1)
+				completed := make(chan struct{})
+				defer func() {
+					releaseRead()
+					select {
+					case <-completed:
+					case <-time.After(3 * time.Second):
+						t.Error("independent reader goroutine did not exit during cleanup")
+					}
+				}()
 				go func() {
+					defer close(completed)
 					failure, usage := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
 					finished <- streamResult{failure: failure, usage: usage}
 				}()
@@ -366,14 +380,17 @@ func TestIssue599IndependentFailurePreserved(t *testing.T) {
 				case <-time.After(3 * time.Second):
 					t.Fatal("fallback watcher did not close custom body")
 				}
-				close(body.released)
+				releaseRead()
 				select {
 				case got := <-finished:
 					require.NotNil(t, got.failure)
 					require.ErrorIs(t, got.failure.RawError, readFailure)
 					require.Equal(t, "read_stream_failed", got.failure.Code)
 					require.NotNil(t, got.usage, "measured receipt must survive independent failure")
+					require.Equal(t, 11, got.usage.PromptTokens)
+					require.Equal(t, 7, got.usage.CompletionTokens)
 					require.Equal(t, 18, got.usage.TotalTokens)
+					require.Empty(t, got.usage.BillingEstimateReason)
 					if !withDONE && errors.Is(readFailure, net.ErrClosed) {
 						require.ErrorIs(t, got.failure.RawError, context.Canceled,
 							"pre-DONE cancellation must preserve both observed causes")
@@ -383,7 +400,7 @@ func TestIssue599IndependentFailurePreserved(t *testing.T) {
 				}
 				require.Equal(t, int32(1), body.closeCount.Load())
 				if withDONE {
-					require.Equal(t, 1, strings.Count(rec.Body.String(), "[DONE]"))
+					require.Equal(t, 1, strings.Count(rec.Body.String(), "data: [DONE]\n\n"))
 				} else {
 					require.NotContains(t, rec.Body.String(), "[DONE]")
 				}
