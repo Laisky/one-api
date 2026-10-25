@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/render"
 	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
@@ -31,10 +32,11 @@ type doneCancellationWriter struct {
 	cancel context.CancelFunc
 }
 
-// Write keeps the delivery result and cancels only after the upstream marker is rendered.
+// Write cancels only after a complete, successfully written terminal SSE frame.
+// Literal [DONE] within generated content must not end the request.
 func (w *doneCancellationWriter) Write(p []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(p)
-	if err == nil && strings.Contains(string(p), "[DONE]") {
+	if err == nil && n == len(p) && strings.TrimSpace(string(p)) == "data: [DONE]" {
 		w.cancel()
 	}
 	return n, err
@@ -43,47 +45,108 @@ func (w *doneCancellationWriter) Write(p []byte) (int, error) {
 // WriteString follows the same byte-oriented renderer contract.
 func (w *doneCancellationWriter) WriteString(s string) (int, error) { return w.Write([]byte(s)) }
 
-// streamTerminalReadFailure retains a genuine non-EOF transport error for the control.
-type streamTerminalReadFailure struct{}
+// issue599ShortWriteWriter simulates a terminal event not fully delivered.
+type issue599ShortWriteWriter struct{ gin.ResponseWriter }
 
-// Read always reports a truncated response, not a clean EOF.
-func (streamTerminalReadFailure) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+func (w *issue599ShortWriteWriter) Write(p []byte) (int, error) {
+	return len(p) - 1, nil
+}
+
+// TestDoneCancellationWriterRejectsNonterminalFrames ensures that text containing
+// [DONE] cannot cancel the request before the actual protocol terminal frame.
+func TestDoneCancellationWriterRejectsNonterminalFrames(t *testing.T) {
+	c, rec := newBridgeTestCtx(t)
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	defer cancel()
+	c.Request = c.Request.WithContext(ctx)
+	c.Writer = &doneCancellationWriter{ResponseWriter: c.Writer, cancel: cancel}
+
+	render.StringData(c, `data: {"choices":[{"delta":{"content":"literal [DONE] token"}}]}`)
+	require.NoError(t, ctx.Err(), "literal generated text is not the terminal frame")
+	render.StringData(c, "data: [DONE]garbage")
+	require.NoError(t, ctx.Err(), "malformed DONE suffix is not a terminal frame")
+	render.StringData(c, "data: [DONE]")
+	require.ErrorIs(t, ctx.Err(), context.Canceled, "real terminal frame must cancel")
+	require.Equal(t, 1, strings.Count(rec.Body.String(), "data: [DONE]\n\n"))
+}
+
+// TestDoneCancellationWriterRejectsShortWrites ensures a truncated write does not
+// count as delivered protocol completion even if the writer returned nil error.
+func TestDoneCancellationWriterRejectsShortWrites(t *testing.T) {
+	c, _ := newBridgeTestCtx(t)
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	defer cancel()
+	w := &doneCancellationWriter{
+		ResponseWriter: &issue599ShortWriteWriter{ResponseWriter: c.Writer},
+		cancel:         cancel,
+	}
+	data := []byte("data: [DONE]")
+	n, err := w.Write(data)
+	require.NoError(t, err)
+	require.Equal(t, len(data)-1, n)
+	require.NoError(t, ctx.Err(), "short writes must not imply delivered completion")
+}
+
+// streamTerminalReadFailure retains a genuine non-EOF transport error for the control.
+type streamTerminalReadFailure struct{ cause error }
+
+// Read returns the injected independent failure, preserving the historical
+// truncated-response default for existing zero-value fixtures.
+func (r streamTerminalReadFailure) Read([]byte) (int, error) {
+	if r.cause != nil {
+		return 0, r.cause
+	}
+	return 0, io.ErrUnexpectedEOF
+}
 
 // TestSharedStreamDoneCancellation distinguishes a completed protocol followed by
 // clean EOF from pre-terminal cancellation and genuine trailing transport failure.
 func TestSharedStreamDoneCancellation(t *testing.T) {
-	for _, trailingError := range []bool{false, true} {
-		name := "completed_eof"
-		if trailingError {
-			name = "transport_error_control"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		trailingErr  error
+		cancelOnDone bool
+	}{
+		{"completed_eof", nil, true},
+		{"transport_error_control", io.ErrUnexpectedEOF, true},
+		{"independent_closed_without_cancel", net.ErrClosed, false},
+		{"independent_closed_after_cancel", net.ErrClosed, true},
+		{"independent_truncated_without_cancel", io.ErrUnexpectedEOF, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			c, rec := newBridgeTestCtx(t)
 			gmw.SetLogger(c, createTestLogger())
 			ctx, cancel := context.WithCancel(c.Request.Context())
 			defer cancel()
 			c.Request = c.Request.WithContext(ctx)
-			c.Writer = &doneCancellationWriter{ResponseWriter: c.Writer, cancel: cancel}
+			if tc.cancelOnDone {
+				c.Writer = &doneCancellationWriter{ResponseWriter: c.Writer, cancel: cancel}
+			}
 			c.Set(ctxkey.RequestModel, "gpt-4")
 			tracker := streaming.NewQuotaTracker(streaming.QuotaTrackerParams{Ctx: ctx, ModelName: "gpt-4", PromptTokens: 11, PreConsumedQuota: 10000, TokenCounter: func(s, _ string) int { return len(s) }})
 			streaming.StoreTracker(c, tracker)
 			wire := "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18}}\n\ndata: [DONE]\n\n"
 			var source io.Reader = strings.NewReader(wire)
-			if trailingError {
-				source = io.MultiReader(source, streamTerminalReadFailure{})
+			if tc.trailingErr != nil {
+				source = io.MultiReader(source, streamTerminalReadFailure{cause: tc.trailingErr})
 			}
 			resp := &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(source)}
 			apiErr, usage := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
-			require.ErrorIs(t, ctx.Err(), context.Canceled)
-			require.Equal(t, 1, strings.Count(rec.Body.String(), "[DONE]"))
+			if tc.cancelOnDone {
+				require.ErrorIs(t, ctx.Err(), context.Canceled)
+			} else {
+				require.NoError(t, ctx.Err(), "independent error must not require a canceled request")
+			}
+			require.Equal(t, 1, strings.Count(rec.Body.String(), "data: [DONE]\n\n"))
 			require.NotNil(t, usage)
 			require.Equal(t, 18, usage.TotalTokens)
 			require.Empty(t, usage.BillingEstimateReason)
-			if trailingError {
-				require.NotNil(t, apiErr)
-				require.True(t, errors.Is(apiErr.RawError, io.ErrUnexpectedEOF), "retain the real read failure rather than overwriting it with cancellation")
+			if tc.trailingErr != nil {
+				require.NotNil(t, apiErr, "an independent trailing failure must remain a failure")
+				require.Equal(t, "read_stream_failed", apiErr.Code)
+				require.ErrorIs(t, apiErr.RawError, tc.trailingErr, "retain the independent read cause")
 			} else {
-				require.Nil(t, apiErr, "cancellation after the processed upstream terminal marker cannot replace clean EOF")
+				require.Nil(t, apiErr, "normal EOF after processed DONE must remain successful")
 			}
 		})
 	}
@@ -182,6 +245,8 @@ func TestIssue599NativeHTTPReadAfterDONE(t *testing.T) {
 						entered: make(chan struct{}),
 					}
 					resp.Body = boundary
+					require.True(t, relayadaptor.ResponseTransportOwnsCancellation(c, resp),
+						"transparent read barrier must preserve proven native cancellation")
 
 					type result struct {
 						failure *model.ErrorWithStatusCode
@@ -206,7 +271,7 @@ func TestIssue599NativeHTTPReadAfterDONE(t *testing.T) {
 						t.Fatal("cancel failed to release blocked HTTP read")
 					}
 					require.Equal(t, int32(1), boundary.closes.Load())
-					require.Equal(t, tc.doneCount, strings.Count(rec.Body.String(), "[DONE]"))
+					require.Equal(t, tc.doneCount, strings.Count(rec.Body.String(), "data: [DONE]\n\n"))
 					require.NotNil(t, got.usage)
 					if tc.success {
 						require.Nil(t, got.failure, "completed receipt/DONE must not become read_stream_failed")
@@ -277,15 +342,32 @@ func TestIssue599IndependentFailurePreserved(t *testing.T) {
 					entered: make(chan struct{}), closed: make(chan struct{}),
 					released: make(chan struct{}),
 				}
+				// Release even on t.Fatal before Close: a blocked test reader must
+				// not outlive its subtest. Normal and cleanup paths may both invoke it.
+				releaseRead := sync.OnceFunc(func() { close(body.released) })
 				resp := &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     http.Header{"Content-Type": {"text/event-stream"}},
 					Body:       body,
 				}
-				finished := make(chan *model.ErrorWithStatusCode, 1)
+				type streamResult struct {
+					failure *model.ErrorWithStatusCode
+					usage   *model.Usage
+				}
+				finished := make(chan streamResult, 1)
+				completed := make(chan struct{})
+				defer func() {
+					releaseRead()
+					select {
+					case <-completed:
+					case <-time.After(3 * time.Second):
+						t.Error("independent reader goroutine did not exit during cleanup")
+					}
+				}()
 				go func() {
-					failure, _ := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
-					finished <- failure
+					defer close(completed)
+					failure, usage := UnifiedStreamProcessing(c, resp, 11, "gpt-4", false)
+					finished <- streamResult{failure: failure, usage: usage}
 				}()
 				select {
 				case <-body.entered:
@@ -298,17 +380,27 @@ func TestIssue599IndependentFailurePreserved(t *testing.T) {
 				case <-time.After(3 * time.Second):
 					t.Fatal("fallback watcher did not close custom body")
 				}
-				close(body.released)
+				releaseRead()
 				select {
-				case failure := <-finished:
-					require.NotNil(t, failure)
-					require.ErrorIs(t, failure.RawError, readFailure)
+				case got := <-finished:
+					require.NotNil(t, got.failure)
+					require.ErrorIs(t, got.failure.RawError, readFailure)
+					require.Equal(t, "read_stream_failed", got.failure.Code)
+					require.NotNil(t, got.usage, "measured receipt must survive independent failure")
+					require.Equal(t, 11, got.usage.PromptTokens)
+					require.Equal(t, 7, got.usage.CompletionTokens)
+					require.Equal(t, 18, got.usage.TotalTokens)
+					require.Empty(t, got.usage.BillingEstimateReason)
+					if !withDONE && errors.Is(readFailure, net.ErrClosed) {
+						require.ErrorIs(t, got.failure.RawError, context.Canceled,
+							"pre-DONE cancellation must preserve both observed causes")
+					}
 				case <-time.After(3 * time.Second):
 					t.Fatal("independent error did not complete")
 				}
 				require.Equal(t, int32(1), body.closeCount.Load())
 				if withDONE {
-					require.Equal(t, 1, strings.Count(rec.Body.String(), "[DONE]"))
+					require.Equal(t, 1, strings.Count(rec.Body.String(), "data: [DONE]\n\n"))
 				} else {
 					require.NotContains(t, rec.Body.String(), "[DONE]")
 				}
