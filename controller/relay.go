@@ -147,7 +147,9 @@ func Relay(c *gin.Context) {
 	// Track channel request in flight
 	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
 
-	bizErr := invokeRelayHelper(c, relayMode)
+	observation := &relayOutcomeObservation{retryOutcome: "not_needed"}
+	bizErr := observation.invoke(c, relayMode)
+	defer func() { observation.failure = bizErr; observation.logFinal(c) }()
 	if bizErr == nil {
 		if c.GetString(asyncvideo.DurableTaskKey) != "" {
 			PrometheusMonitor.RecordRelayRequest(c, relayMeta, startTime, c.Writer.Status() < 400, 0, 0, 0)
@@ -171,6 +173,7 @@ func Relay(c *gin.Context) {
 	requestURL := c.Request.URL.String()
 	// Ensure channel error processing is completed during graceful drain
 	goProcessChannelRelayError(ctx, bizErr, processChannelRelayErrorParams{
+		Attempt:       observation.attempts,
 		RequestID:     requestId,
 		UserId:        userId,
 		TokenId:       tokenId,
@@ -211,6 +214,7 @@ func Relay(c *gin.Context) {
 				errorMessagePreview = errorMessagePreview[:240] + "..."
 			}
 			relayLogParams := processChannelRelayErrorParams{
+				Attempt:       observation.attempts,
 				RequestID:     requestId,
 				RequestURL:    requestURL,
 				UserId:        userId,
@@ -243,6 +247,7 @@ func Relay(c *gin.Context) {
 			)
 			retryTimes = 0
 			retryAllowed = false
+			observation.retryOutcome = "policy_veto"
 		}
 	}
 
@@ -324,6 +329,7 @@ func Relay(c *gin.Context) {
 		channel, err = selectRetryChannel(gmw.Ctx(c), group, originalModel, failedChannels, selectionPolicy)
 		if err != nil {
 			relayLogParams := processChannelRelayErrorParams{
+				Attempt:       observation.attempts,
 				RequestID:     requestId,
 				RequestURL:    requestURL,
 				UserId:        userId,
@@ -341,14 +347,17 @@ func Relay(c *gin.Context) {
 				zap.Int("remaining_attempts", i-1),
 				zap.String("retry_selection_policy", string(selectionPolicy)),
 				zap.Bool("server_transient", isServerTransient),
+				zap.String("log_stage", "retry_decision"),
 			)
 			if isExpectedChannelSelectionExhaustedError(err) {
+				observation.retryOutcome = "no_alternative"
 				lg.Warn("relay retry exhausted: no alternative channel available",
-					append(selectionFields, zap.String("selection_error", err.Error()))...,
+					append(selectionFields, zap.String("selection_error", err.Error()), zap.String("retry_outcome", "no_alternative"))...,
 				)
 			} else {
+				observation.retryOutcome = "selection_failed"
 				lg.Error("relay retry channel selection failed",
-					append(selectionFields, zap.Error(err))...,
+					append(selectionFields, zap.Error(err), zap.String("retry_outcome", "selection_failed"))...,
 				)
 			}
 
@@ -367,6 +376,7 @@ func Relay(c *gin.Context) {
 		// channel is a DIFFERENT channel than the one bound onto lg, so name it
 		// explicitly under its own key instead of shadowing the bound channel_id.
 		lg.Info("using channel to retry",
+			zap.String("log_stage", "retry_decision"), zap.String("retry_outcome", "selected"), zap.Int("relay_next_attempt", observation.attempts+1),
 			zap.String("retry_channel", channel.Ref().String()),
 			zap.Int64("retry_channel_priority", channel.GetPriority()),
 			zap.String("retry_selection_policy", string(selectionPolicy)),
@@ -392,7 +402,7 @@ func Relay(c *gin.Context) {
 		retryStartTime := time.Now()
 		retryMeta := meta.GetByContext(c)
 
-		bizErr = invokeRelayHelper(c, relayMode)
+		bizErr = observation.invoke(c, relayMode)
 		if bizErr == nil {
 			// Record successful retry
 			PrometheusMonitor.RecordRelayRequest(c, retryMeta, retryStartTime, true, 0, 0, 0)
@@ -419,6 +429,7 @@ func Relay(c *gin.Context) {
 		retryActualModel := retryMeta.ActualModelName
 		actualModel = retryActualModel
 		goProcessChannelRelayError(ctx, bizErr, processChannelRelayErrorParams{
+			Attempt:       observation.attempts,
 			RequestID:     requestId,
 			UserId:        userId,
 			TokenId:       tokenId,
@@ -444,9 +455,14 @@ func Relay(c *gin.Context) {
 				!errors.Is(bizErr.RawError, context.DeadlineExceeded) {
 				continue
 			}
+			observation.retryOutcome = "policy_veto"
 			lg.Debug("relay retry stopped after provider failure", zap.String("retry_skip_reason", stopErr.Error()))
 			break
 		}
+	}
+
+	if observation.retryOutcome == "budget_exhausted" {
+		observation.retryOutcome = relayObservedRetryStop(c, retryAllowed)
 	}
 
 	// An exhausted local transport candidate is not evidence that the caller
@@ -468,7 +484,8 @@ func Relay(c *gin.Context) {
 		// *bizErr synchronously at spawn time (see goProcessChannelRelayError), so
 		// rewriting Message here no longer races the error-processing goroutine.
 		bizErr.Error.Message = helper.MessageWithRequestId(bizErr.Error.Message, requestId)
-		if writeRelayFinalError(c, bizErr) && shouldDebugLog {
+		observation.errorResponseWritten = writeRelayFinalError(c, bizErr)
+		if observation.errorResponseWritten && shouldDebugLog {
 			rcontroller.LogClientResponse(c, "client error response sent")
 		}
 	}

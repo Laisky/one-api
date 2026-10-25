@@ -48,10 +48,14 @@ func appendRelayFailureDiagnosticFields(params processChannelRelayErrorParams, f
 		basis = "explicit_error_kind"
 	}
 	fields := []zap.Field{
+		zap.String("log_stage", "relay_attempt"),
 		zap.Int("normalized_status_code", params.Err.StatusCode),
 		zap.String("status_semantics", "normalized_relay_status"),
 		zap.String("error_kind", failureKind.String()),
 		zap.String("error_kind_basis", basis),
+	}
+	if params.Attempt > 0 {
+		fields = append(fields, zap.Int("relay_attempt", params.Attempt))
 	}
 	if outcome != "" {
 		fields = append(fields, zap.String("suspension_outcome", outcome))

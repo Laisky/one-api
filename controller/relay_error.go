@@ -331,6 +331,7 @@ func logChannelSuspensionStatus(ctx context.Context, group, model string, failed
 // appendRelayFailureFields so every relay failure remains self-contained even when
 // request-scoped logger bindings are unavailable.
 type processChannelRelayErrorParams struct {
+	Attempt       int
 	RequestID     string
 	UserId        int
 	TokenId       int

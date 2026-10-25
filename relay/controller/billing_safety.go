@@ -46,6 +46,18 @@ func shouldSkipPreConsumedRefund(c *gin.Context) bool {
 	return ok && forwarded
 }
 
+// refundAccountingFields describes observed refund calls without treating a
+// lifecycle flag as financial proof. A no-error ledger update does not verify
+// affected rows, and no field asserts exactly-once processing.
+func refundAccountingFields(outcome, balance, ledger string) []zap.Field {
+	return []zap.Field{
+		zap.String("log_stage", "accounting"),
+		zap.String("accounting_outcome", outcome),
+		zap.String("balance_update", balance),
+		zap.String("ledger_reconciliation", ledger),
+	}
+}
+
 // userVisibleModelName returns the origin/public model name for user-facing responses and logs.
 func userVisibleModelName(meta *metalib.Meta, fallback string) string {
 	if meta != nil {
@@ -104,8 +116,10 @@ func (s conservativeRefundSnapshot) refund(ctx context.Context) bool {
 	lg := gmw.GetLogger(ctx)
 	if s.skipRefund {
 		lg.Warn("skip pre-consumed refund to prevent underbilling",
-			zap.Int64("pre_consumed_quota", s.quota),
-			zap.String("reason", s.reason),
+			append(refundAccountingFields("reservation_retained", "not_attempted", "not_attempted"),
+				zap.Int64("pre_consumed_quota", s.quota),
+				zap.String("reason", s.reason),
+			)...,
 		)
 		return false
 	}
@@ -118,22 +132,34 @@ func (s conservativeRefundSnapshot) refund(ctx context.Context) bool {
 	if err := model.PostConsumeTokenQuota(ctx, s.tokenID, -s.quota); err != nil {
 		lg.Error("CRITICAL BILLING AUDIT: conservative refund failed to return pre-consumed quota; "+
 			"billing was already marked reconciled, manual reconciliation may be required",
-			zap.Error(err),
-			zap.Int64("pre_consumed_quota", s.quota),
-			zap.String("request_id", s.requestID),
-			zap.String("reason", s.reason),
+			append(refundAccountingFields("refund_balance_failed", "failed", "not_attempted"),
+				zap.Error(err),
+				zap.Int64("pre_consumed_quota", s.quota),
+				zap.String("request_id", s.requestID),
+				zap.String("reason", s.reason),
+			)...,
 		)
 		return false
 	}
 
 	// Reconcile provisional log to 0 so it doesn't appear as a duplicate entry.
+	ledgerOutcome := "skipped"
 	if s.provisionalLogID > 0 {
 		if err := model.ReconcileConsumeLog(ctx, s.provisionalLogID, 0,
 			fmt.Sprintf("refunded: %s", s.reason), 0, 0, 0, nil); err != nil {
+			ledgerOutcome = "failed"
 			lg.Warn("failed to reconcile provisional log on refund",
 				zap.Error(err), zap.Int("provisional_log_id", s.provisionalLogID))
+		} else {
+			ledgerOutcome = "update_returned_no_error"
 		}
 	}
+	lg.Info("billing refund outcome",
+		append(refundAccountingFields("refund_balance_applied", "call_returned_no_error", ledgerOutcome),
+			zap.Int64("pre_consumed_quota", s.quota),
+			zap.String("reason", s.reason),
+		)...,
+	)
 
 	if s.userID > 0 {
 		syncUserQuotaCacheAfterRefund(ctx, s.userID, s.reason)
@@ -249,18 +275,29 @@ func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 		// above), so it neither aborts on request cancellation nor races gin's recycle of c.
 		goDetachedBillingWork(relayctx.Detach(c), "resetPerAttemptBillingForRetry", func(bctx context.Context) {
 			if err := model.PostConsumeTokenQuota(bctx, tokenID, -amount); err != nil {
-				lg.Error("retry refund failed; provisional log retained", zap.Error(err))
+				lg.Error("retry refund failed; provisional log retained",
+					append(refundAccountingFields("refund_balance_failed", "failed", "not_attempted"), zap.Error(err))...)
 				return
 			}
 			syncUserQuotaCacheAfterRefund(bctx, userID, "cross_channel_retry")
+			ledgerOutcome := "skipped"
 			if provID > 0 {
 				if err := model.ReconcileConsumeLog(bctx, provID, 0, reason, 0, 0, 0, nil); err != nil {
+					ledgerOutcome = "failed"
 					lg.Warn("failed to void provisional log on cross-channel retry refund",
 						zap.Error(errors.Wrapf(err, "reconcile provisional log %d to zero", provID)),
 						zap.Int("provisional_log_id", provID),
 					)
+				} else {
+					ledgerOutcome = "update_returned_no_error"
 				}
 			}
+			lg.Info("billing refund outcome",
+				append(refundAccountingFields("refund_balance_applied", "call_returned_no_error", ledgerOutcome),
+					zap.Int64("pre_consumed_quota", amount),
+					zap.String("reason", "cross_channel_retry"),
+				)...,
+			)
 		})
 	}
 
@@ -461,8 +498,10 @@ func billingAuditSafetyNet(c *gin.Context) {
 		})
 	} else {
 		lg.Error("CRITICAL BILLING AUDIT: cannot refund - request was possibly forwarded upstream, manual reconciliation required",
-			zap.Int64("pre_consumed_quota", preConsumed),
-			zap.String("request_id", requestId),
+			append(refundAccountingFields("reservation_retained", "not_attempted", "not_attempted"),
+				zap.Int64("pre_consumed_quota", preConsumed),
+				zap.String("request_id", requestId),
+			)...,
 		)
 	}
 }

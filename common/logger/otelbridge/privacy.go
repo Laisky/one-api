@@ -9,7 +9,8 @@ import (
 )
 
 // privateNumericFields lists content-free operational metadata allowed off-box.
-// Unknown keys and all string, object, error, and byte fields fail closed.
+// Unknown keys and string, object, error, and byte fields fail closed here.
+// Separate lifecycle labels permit only exact fixed enums, not arbitrary text.
 var privateNumericFields = map[string]bool{
 	"status": true, "status_code": true, "body_size": true, "body_bytes": true,
 	"prompt_bytes": true, "prompt_tokens": true, "completion_tokens": true,
@@ -21,7 +22,7 @@ var privateNumericFields = map[string]bool{
 }
 
 // NewPrivacyCore returns a production OTLP core that exports correlation,
-// severity, caller location, and allowlisted numeric metadata.
+// severity, caller location, numeric metadata and exact lifecycle enums.
 // Local stdout/file sinks remain unaffected. Arbitrary messages and field values
 // cannot reach the OTLP queue or edge journal through this core.
 func NewPrivacyCore(holder *ProviderHolder, scope string, enab zapcore.LevelEnabler) *Core {
@@ -39,6 +40,10 @@ func (c *Core) convertFields(fields []zapcore.Field) convertedFields {
 	allowed := make([]zapcore.Field, 0, len(fields))
 	for _, field := range fields {
 		if _, ok := spanContextFromField(field); ok {
+			allowed = append(allowed, field)
+			continue
+		}
+		if privateLifecycleField(field) {
 			allowed = append(allowed, field)
 			continue
 		}
@@ -75,10 +80,16 @@ func IsPrivateContext(ctx context.Context) bool {
 }
 
 // PrivateAttribute applies the shared key/type/value policy to numeric log
-// attributes. Identifiers and statuses must be bounded integers, never floats,
+// attributes and exact lifecycle enums. Identifiers and statuses must be bounded integers, never floats,
 // strings, negative values, or uint64 values converted into decimal strings.
 func PrivateAttribute(kv attribute.KeyValue) bool {
 	key := string(kv.Key)
+	if _, ok := privateLifecycleEnums[key]; ok {
+		return privateLifecycleAttribute(kv)
+	}
+	if _, ok := privateLifecycleNumeric[key]; ok {
+		return privateLifecycleAttribute(kv)
+	}
 	if !privateNumericFields[key] {
 		return false
 	}
