@@ -104,9 +104,14 @@ func (o *transportObservation) complete(logger glog.Logger, ctx context.Context,
 	if resp != nil {
 		fields = append(fields, zap.Int("upstream_http_status", resp.StatusCode))
 	}
-	if err != nil {
+	switch {
+	case err != nil:
 		logger.Warn("upstream transport completed", fields...)
-	} else {
+	case resp != nil && resp.StatusCode >= http.StatusBadRequest && resp.StatusCode <= 599:
+		// Client.Do returns nil error for HTTP failures. Keep their actual status
+		// visible at the normal INFO floor without labeling them network failures.
+		logger.Info("upstream transport completed", fields...)
+	default:
 		logger.Debug("upstream transport completed", fields...)
 	}
 }
