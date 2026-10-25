@@ -188,6 +188,8 @@ func TestTransportObservationNativeCompletion(t *testing.T) {
 			level := zapcore.DebugLevel
 			if got.err != nil {
 				level = zapcore.WarnLevel
+			} else if mode == "http_error" {
+				level = zapcore.InfoLevel
 			}
 			fields := transportObservationFields(t, logs, level)
 			require.Equal(t, "observed", fields["transport_trace_state"])
