@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/render"
 	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
@@ -42,6 +43,48 @@ func (w *doneCancellationWriter) Write(p []byte) (int, error) {
 
 // WriteString follows the same byte-oriented renderer contract.
 func (w *doneCancellationWriter) WriteString(s string) (int, error) { return w.Write([]byte(s)) }
+
+// issue599ShortWriteWriter simulates a terminal event not fully delivered.
+type issue599ShortWriteWriter struct{ gin.ResponseWriter }
+
+func (w *issue599ShortWriteWriter) Write(p []byte) (int, error) {
+	return len(p) - 1, nil
+}
+
+// TestDoneCancellationWriterRejectsNonterminalFrames ensures that text containing
+// [DONE] cannot cancel the request before the actual protocol terminal frame.
+func TestDoneCancellationWriterRejectsNonterminalFrames(t *testing.T) {
+	c, rec := newBridgeTestCtx(t)
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	defer cancel()
+	c.Request = c.Request.WithContext(ctx)
+	c.Writer = &doneCancellationWriter{ResponseWriter: c.Writer, cancel: cancel}
+
+	render.StringData(c, `data: {"choices":[{"delta":{"content":"literal [DONE] token"}}]}`)
+	require.NoError(t, ctx.Err(), "literal generated text is not the terminal frame")
+	render.StringData(c, "data: [DONE]garbage")
+	require.NoError(t, ctx.Err(), "malformed DONE suffix is not a terminal frame")
+	render.StringData(c, "data: [DONE]")
+	require.ErrorIs(t, ctx.Err(), context.Canceled, "real terminal frame must cancel")
+	require.Equal(t, 1, strings.Count(rec.Body.String(), "data: [DONE]\n\n"))
+}
+
+// TestDoneCancellationWriterRejectsShortWrites ensures a truncated write does not
+// count as delivered protocol completion even if the writer returned nil error.
+func TestDoneCancellationWriterRejectsShortWrites(t *testing.T) {
+	c, _ := newBridgeTestCtx(t)
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	defer cancel()
+	w := &doneCancellationWriter{
+		ResponseWriter: &issue599ShortWriteWriter{ResponseWriter: c.Writer},
+		cancel: cancel,
+	}
+	data := []byte("data: [DONE]")
+	n, err := w.Write(data)
+	require.NoError(t, err)
+	require.Equal(t, len(data)-1, n)
+	require.NoError(t, ctx.Err(), "short writes must not imply delivered completion")
+}
 
 // streamTerminalReadFailure retains a genuine non-EOF transport error for the control.
 type streamTerminalReadFailure struct{ cause error }
