@@ -18,12 +18,12 @@ func TestGPT61TerraReviewerRejectsPresentNonStringTTL(t *testing.T) {
 		name string
 		body string
 	}{
-		{"\"top_level_null\"", "{\"model\":\"gpt-6.1-terra\",\"input\":\"hi\",\"prompt_cache_options\":{\"ttl\":null}}"},
-		{"\"input_null\"", "{\"model\":\"gpt-6.1-terra\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hello\",\"prompt_cache_breakpoint\":{\"ttl\":null}}]}]}"},
-		{"\"tools_null\"", "{\"model\":\"gpt-6.1-terra\",\"input\":\"hi\",\"tools\":[{\"type\":\"function\",\"name\":\"lookup\",\"description\":\"A small lookup tool\",\"parameters\":{\"type\":\"object\",\"properties\":{}},\"prompt_cache_breakpoint\":{\"ttl\":null}}]}"},
-		{"\"prompt_null\"", "{\"model\":\"gpt-6.1-terra\",\"prompt\":{\"id\":\"pmpt_cache_test\",\"prompt_cache_breakpoint\":{\"ttl\":null}}}"},
-		{"\"tools_numeric\"", "{\"model\":\"gpt-6.1-terra\",\"input\":\"hi\",\"tools\":[{\"type\":\"function\",\"name\":\"lookup\",\"description\":\"A small lookup tool\",\"parameters\":{\"type\":\"object\",\"properties\":{}},\"prompt_cache_breakpoint\":{\"ttl\":3600}}]}"},
-		{"\"prompt_paid\"", "{\"model\":\"gpt-6.1-terra\",\"prompt\":{\"id\":\"pmpt_cache_test\",\"prompt_cache_breakpoint\":{\"ttl\":\"12h\"}}}"},
+		{"top_level_null", "{\"model\":\"gpt-6.1-terra\",\"input\":\"hi\",\"prompt_cache_options\":{\"ttl\":null}}"},
+		{"input_null", "{\"model\":\"gpt-6.1-terra\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hello\",\"prompt_cache_breakpoint\":{\"ttl\":null}}]}]}"},
+		{"tools_null", "{\"model\":\"gpt-6.1-terra\",\"input\":\"hi\",\"tools\":[{\"type\":\"function\",\"name\":\"lookup\",\"description\":\"A small lookup tool\",\"parameters\":{\"type\":\"object\",\"properties\":{}},\"prompt_cache_breakpoint\":{\"ttl\":null}}]}"},
+		{"prompt_null", "{\"model\":\"gpt-6.1-terra\",\"prompt\":{\"id\":\"pmpt_cache_test\",\"prompt_cache_breakpoint\":{\"ttl\":null}}}"},
+		{"tools_numeric", "{\"model\":\"gpt-6.1-terra\",\"input\":\"hi\",\"tools\":[{\"type\":\"function\",\"name\":\"lookup\",\"description\":\"A small lookup tool\",\"parameters\":{\"type\":\"object\",\"properties\":{}},\"prompt_cache_breakpoint\":{\"ttl\":3600}}]}"},
+		{"prompt_paid", "{\"model\":\"gpt-6.1-terra\",\"prompt\":{\"id\":\"pmpt_cache_test\",\"prompt_cache_breakpoint\":{\"ttl\":\"12h\"}}}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw := []byte(tc.body)
@@ -43,14 +43,14 @@ func TestGPT61TerraReviewerPreservesNonControlData(t *testing.T) {
 		name string
 		body string
 	}{
-		{"\"tool_parameters_are_schema\"", "{\"model\":\"gpt-6.1-terra\",\"input\":\"hello\",\"tools\":[{\"type\":\"function\",\"name\":\"lookup\",\"description\":\"lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"subject\":{\"type\":\"string\",\"prompt_cache_breakpoint\":{\"ttl\":\"12h\"}}}}}]}"},
-		{"\"prompt_variables_are_data\"", "{\"model\":\"gpt-6.1-terra\",\"prompt\":{\"id\":\"pmpt_cache_test\",\"variables\":{\"subject\":{\"prompt_cache_breakpoint\":{\"ttl\":\"12h\"}}}}}"},
-		{"\"input_default_ttl\"", "{\"model\":\"gpt-6.1-terra\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hi\",\"prompt_cache_breakpoint\":{}}]}]}"},
-		{"\"input_empty_ttl\"", "{\"model\":\"gpt-6.1-terra\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hi\",\"prompt_cache_breakpoint\":{\"ttl\":\"\"}}]}]}"},
-		{"\"input_30m_casefold\"", "{\"model\":\"gpt-6.1-terra\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hi\",\"prompt_cache_breakpoint\":{\"ttl\":\" 30M \"}}]}]}"},
-		{"\"tools_30m\"", "{\"model\":\"gpt-6.1-terra\",\"input\":\"hi\",\"tools\":[{\"type\":\"function\",\"name\":\"lookup\",\"description\":\"A small lookup tool\",\"parameters\":{\"type\":\"object\",\"properties\":{}},\"prompt_cache_breakpoint\":{\"ttl\":\"30m\"}}]}"},
-		{"\"prompt_30m\"", "{\"model\":\"gpt-6.1-terra\",\"prompt\":{\"id\":\"pmpt_cache_test\",\"prompt_cache_breakpoint\":{\"ttl\":\"30m\"}}}"},
-		{"\"ordinary_text_literal\"", "{\"model\":\"gpt-6.1-terra\",\"input\":\"literal prompt_cache_breakpoint TTL 12h must not be interpreted\"}"},
+		{"tool_parameters_are_schema", "{\"model\":\"gpt-6.1-terra\",\"input\":\"hello\",\"tools\":[{\"type\":\"function\",\"name\":\"lookup\",\"description\":\"lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"subject\":{\"type\":\"string\",\"prompt_cache_breakpoint\":{\"ttl\":\"12h\"}}}}}]}"},
+		{"prompt_variables_are_data", "{\"model\":\"gpt-6.1-terra\",\"prompt\":{\"id\":\"pmpt_cache_test\",\"variables\":{\"subject\":{\"prompt_cache_breakpoint\":{\"ttl\":\"12h\"}}}}}"},
+		{"input_default_ttl", "{\"model\":\"gpt-6.1-terra\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hi\",\"prompt_cache_breakpoint\":{}}]}]}"},
+		{"input_empty_ttl", "{\"model\":\"gpt-6.1-terra\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hi\",\"prompt_cache_breakpoint\":{\"ttl\":\"\"}}]}]}"},
+		{"input_30m_casefold", "{\"model\":\"gpt-6.1-terra\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hi\",\"prompt_cache_breakpoint\":{\"ttl\":\" 30M \"}}]}]}"},
+		{"tools_30m", "{\"model\":\"gpt-6.1-terra\",\"input\":\"hi\",\"tools\":[{\"type\":\"function\",\"name\":\"lookup\",\"description\":\"A small lookup tool\",\"parameters\":{\"type\":\"object\",\"properties\":{}},\"prompt_cache_breakpoint\":{\"ttl\":\"30m\"}}]}"},
+		{"prompt_30m", "{\"model\":\"gpt-6.1-terra\",\"prompt\":{\"id\":\"pmpt_cache_test\",\"prompt_cache_breakpoint\":{\"ttl\":\"30m\"}}}"},
+		{"ordinary_text_literal", "{\"model\":\"gpt-6.1-terra\",\"input\":\"literal prompt_cache_breakpoint TTL 12h must not be interpreted\"}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw := []byte(tc.body)

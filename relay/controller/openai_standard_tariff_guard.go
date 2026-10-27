@@ -64,14 +64,25 @@ func requiresNativeOpenAICacheWriteTariff(name string) bool {
 // writes on native OpenAI models with separate unmetered 12h prices.
 func rejectUnpricedNativeOpenAICacheLifetime(root map[string]json.RawMessage) error {
 	if raw, ok := root["prompt_cache_options"]; ok && len(raw) > 0 {
+		// Preserve field presence: decoding JSON null into a Go string would
+		// otherwise silently accept a malformed (and unaudited) cache TTL.
 		var options struct {
-			TTL string `json:"ttl"`
+			TTL json.RawMessage `json:"ttl"`
 		}
 		if err := json.Unmarshal(raw, &options); err != nil {
-			return errors.Wrap(err, "decode Terra prompt_cache_options")
+			return errors.Wrap(err, "decode OpenAI prompt_cache_options")
 		}
-		if ttl := strings.TrimSpace(options.TTL); ttl != "" && !strings.EqualFold(ttl, "30m") {
-			return errors.Errorf("OpenAI cache-write TTL %q requires a separately metered tariff", ttl)
+		if len(options.TTL) > 0 {
+			if bytes.Equal(bytes.TrimSpace(options.TTL), []byte("null")) {
+				return errors.New("OpenAI cache-write TTL must be a string")
+			}
+			var ttl string
+			if err := json.Unmarshal(options.TTL, &ttl); err != nil {
+				return errors.Wrap(err, "decode OpenAI cache-write TTL as string")
+			}
+			if ttl = strings.TrimSpace(ttl); ttl != "" && !strings.EqualFold(ttl, "30m") {
+				return errors.Errorf("OpenAI cache-write TTL %q requires a separately metered tariff", ttl)
+			}
 		}
 	}
 
@@ -115,7 +126,7 @@ func inspectOpenAICacheBreakpoint(value any, depth int, nodes *int) error {
 			if !ok {
 				return errors.New("OpenAI prompt_cache_breakpoint must be an object")
 			}
-			if rawTTL, present := point["ttl"]; present && rawTTL != nil {
+			if rawTTL, present := point["ttl"]; present {
 				ttl, ok := rawTTL.(string)
 				if !ok {
 					return errors.New("OpenAI cache breakpoint TTL must be a string")
@@ -127,7 +138,10 @@ func inspectOpenAICacheBreakpoint(value any, depth int, nodes *int) error {
 		}
 		for key, child := range item {
 			switch key {
-			case "prompt_cache_breakpoint", "metadata", "arguments", "input_schema", "schema", "data", "output", "extra_body":
+			// Tool parameter schemas and prompt-template variables are caller
+			// data, not provider cache controls. Scanning them previously
+			// rejected valid requests whose data contained a TTL-like key.
+			case "prompt_cache_breakpoint", "metadata", "arguments", "input_schema", "schema", "parameters", "variables", "data", "output", "extra_body":
 				continue
 			}
 			if err := inspectOpenAICacheBreakpoint(child, depth+1, nodes); err != nil {
