@@ -29,12 +29,14 @@ type ResponseAPIUsage struct {
 // The schema is not stable yet (especially for web-search fields), so we keep a map of additional
 // properties while still projecting the common fields into strong types.
 type ResponseAPIInputTokensDetails struct {
-	CachedTokens int `json:"cached_tokens,omitempty"`
-	AudioTokens  int `json:"audio_tokens,omitempty"`
-	TextTokens   int `json:"text_tokens,omitempty"`
-	ImageTokens  int `json:"image_tokens,omitempty"`
-	WebSearch    any `json:"web_search,omitempty"`
-	additional   map[string]any
+	CachedTokens            int                                `json:"cached_tokens,omitempty"`
+	AudioTokens             int                                `json:"audio_tokens,omitempty"`
+	TextTokens              int                                `json:"text_tokens,omitempty"`
+	ImageTokens             int                                `json:"image_tokens,omitempty"`
+	CacheWriteTokens        int                                `json:"cache_write_tokens,omitempty"`
+	CacheWriteTokensDetails *model.UsageCacheWriteTokensDetails `json:"cache_write_tokens_details,omitempty"`
+	WebSearch               any                                `json:"web_search,omitempty"`
+	additional              map[string]any
 }
 
 // ResponseAPIOutputTokensDetails models the completion-side usage details returned by the Response API.
@@ -71,6 +73,15 @@ func (d *ResponseAPIInputTokensDetails) UnmarshalJSON(data []byte) error {
 			d.TextTokens = coerceNonNegativeInt(value)
 		case "image_tokens":
 			d.ImageTokens = coerceNonNegativeInt(value)
+		case "cache_write_tokens":
+			d.CacheWriteTokens = coerceNonNegativeInt(value)
+		case "cache_write_tokens_details":
+			if detail, ok := value.(map[string]any); ok {
+				d.CacheWriteTokensDetails = &model.UsageCacheWriteTokensDetails{
+					TTL30mTokens: coerceNonNegativeInt(detail["ttl_30m_tokens"]),
+					TTL12hTokens: coerceNonNegativeInt(detail["ttl_12h_tokens"]),
+				}
+			}
 		case "web_search":
 			d.WebSearch = value
 		default:
@@ -102,6 +113,12 @@ func (d ResponseAPIInputTokensDetails) MarshalJSON() ([]byte, error) {
 	}
 	if d.WebSearch != nil {
 		raw["web_search"] = d.WebSearch
+	}
+	if d.CacheWriteTokens != 0 {
+		raw["cache_write_tokens"] = d.CacheWriteTokens
+	}
+	if d.CacheWriteTokensDetails != nil {
+		raw["cache_write_tokens_details"] = d.CacheWriteTokensDetails
 	}
 
 	data, err := json.Marshal(raw)
@@ -269,10 +286,12 @@ func (d *ResponseAPIInputTokensDetails) toModel() *model.UsagePromptTokensDetail
 	}
 
 	details := &model.UsagePromptTokensDetails{
-		CachedTokens: d.CachedTokens,
-		AudioTokens:  d.AudioTokens,
-		TextTokens:   d.TextTokens,
-		ImageTokens:  d.ImageTokens,
+		CachedTokens:            d.CachedTokens,
+		AudioTokens:             d.AudioTokens,
+		TextTokens:              d.TextTokens,
+		ImageTokens:             d.ImageTokens,
+		CacheWriteTokens:        d.CacheWriteTokens,
+		CacheWriteTokensDetails: d.CacheWriteTokensDetails,
 	}
 	return details
 }
@@ -408,11 +427,13 @@ func (r *ResponseAPIUsage) ToModelUsage() *model.Usage {
 		PromptTokens:       r.InputTokens,
 		CompletionTokens:   r.OutputTokens,
 		TotalTokens:        r.TotalTokens,
-		CacheWrite5mTokens: r.CacheWriteTokens + r.CacheWrite5mTokens,
+		CacheWriteTokens:   r.CacheWriteTokens,
+		CacheWrite5mTokens: r.CacheWrite5mTokens,
 		CacheWrite1hTokens: r.CacheWrite1hTokens,
 	}
 	usage.PromptTokensDetails = r.InputTokensDetails.toModel()
 	usage.CompletionTokensDetails = r.OutputTokensDetails.toModel()
+	usage.NormalizeCacheWriteTokens()
 	return usage
 }
 

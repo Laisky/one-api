@@ -312,6 +312,15 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 	if meta != nil {
 		channelType = meta.ChannelType
 	}
+	// Terra's published model tariff currently covers Standard only. Force a
+	// stable default rather than allowing the upstream project's auto/Fast tier
+	// to incur a higher bill than the quota reserved by this gateway.
+	if channelType == channeltype.OpenAI && normalizedModelName(actualModel) == "gpt-6.1-terra" {
+		if request.ServiceTier != nil && normalizedModelName(*request.ServiceTier) != "default" {
+			return errors.Errorf("GPT-6.1 Terra Standard billing does not support service_tier %q", *request.ServiceTier)
+		}
+		request.ServiceTier = stringRef("default")
+	}
 	supportsReasoning := isModelSupportedReasoning(actualModel)
 
 	if supportsReasoning {
@@ -332,15 +341,21 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 			request.TopP = nil
 		}
 
-		request.Messages = func(raw []model.Message) (filtered []model.Message) {
-			for i := range raw {
-				if raw[i].Role != "system" {
-					filtered = append(filtered, raw[i])
+		// Preserve historical Chat-only reasoning semantics (notably o1), but
+		// keep native GPT-6 system instructions for the Responses converter. It
+		// moves the leading system message into the upstream instructions field.
+		_, publishedGPT6 := gpt6ModelRatios[normalizedModelName(actualModel)]
+		if !publishedGPT6 || meta.ChannelType != channeltype.OpenAI || !shouldForceResponseAPI(meta) {
+			request.Messages = func(raw []model.Message) (filtered []model.Message) {
+				for i := range raw {
+					if raw[i].Role != "system" {
+						filtered = append(filtered, raw[i])
+					}
 				}
-			}
 
-			return
-		}(request.Messages)
+				return
+			}(request.Messages)
+		}
 	} else {
 		request.ReasoningEffort = nil
 	}

@@ -91,10 +91,28 @@ func (u *Usage) NormalizeCachedTokens() {
 // usage field into the relay's generic cache-write bucket used for quota
 // billing.
 func (u *Usage) NormalizeCacheWriteTokens() {
-	if u == nil || u.CacheWriteTokens <= 0 {
+	if u == nil {
 		return
 	}
 
+	// OpenAI Responses reports total writes and mutually exclusive 30m/12h
+	// buckets inside input_tokens_details. These are alternatives to the older
+	// top-level counters, not additional writes. Avoid double counting if an
+	// intermediary includes both representations. The 12h tariff is not yet
+	// enabled for Terra; its explicit requests are rejected before dispatch.
+	if details := u.PromptTokensDetails; details != nil &&
+		(details.CacheWriteTokens > 0 || details.CacheWriteTokensDetails != nil) {
+		writes := details.CacheWriteTokens
+		if ttl := details.CacheWriteTokensDetails; ttl != nil {
+			writes = max(writes, ttl.TTL30mTokens)
+		}
+		u.CacheWrite5mTokens = max(u.CacheWrite5mTokens, u.CacheWriteTokens, writes)
+		u.CacheWriteTokens = 0
+		return
+	}
+	if u.CacheWriteTokens <= 0 {
+		return
+	}
 	u.CacheWrite5mTokens += u.CacheWriteTokens
 	u.CacheWriteTokens = 0
 }
@@ -159,11 +177,21 @@ type ErrorWithStatusCode struct {
 	StatusCode int `json:"status_code"`
 }
 
+// UsageCacheWriteTokensDetails records mutually exclusive OpenAI Responses cache
+// write lifetimes. The one-api quota meter currently supports the default 30m
+// bucket; explicit 12h writes require a separate tariff and admission contract.
+type UsageCacheWriteTokensDetails struct {
+	TTL30mTokens int `json:"ttl_30m_tokens,omitempty"`
+	TTL12hTokens int `json:"ttl_12h_tokens,omitempty"`
+}
+
 // UsagePromptTokensDetails contains details about the prompt tokens used in a request.
 type UsagePromptTokensDetails struct {
-	CachedTokensDetails *UsageCachedTokensDetails `json:"cached_tokens_details,omitempty"`
-	CachedTokens        int                       `json:"cached_tokens"`
-	AudioTokens         int                       `json:"audio_tokens"`
+	CachedTokensDetails      *UsageCachedTokensDetails      `json:"cached_tokens_details,omitempty"`
+	CachedTokens             int                            `json:"cached_tokens"`
+	CacheWriteTokens         int                            `json:"cache_write_tokens,omitempty"`
+	CacheWriteTokensDetails  *UsageCacheWriteTokensDetails  `json:"cache_write_tokens_details,omitempty"`
+	AudioTokens              int                            `json:"audio_tokens"`
 	// TextTokens could be zero for pure text chats
 	TextTokens     int     `json:"text_tokens"`
 	ImageTokens    int     `json:"image_tokens"`

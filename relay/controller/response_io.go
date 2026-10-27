@@ -186,6 +186,11 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 	// also forces a re-marshal, so exact duplicate keys in the raw body cannot
 	// survive on the unchanged-raw passthrough path below.
 	changed := openai.StripResponseBackgroundKeys(root)
+	guardChanged, guardErr := normalizeOpenAITerraStandardPricing(root, request.Model, channelType)
+	if guardErr != nil {
+		return nil, stats, false, errors.Wrap(guardErr, "validate native OpenAI Standard pricing")
+	}
+	changed = changed || guardChanged
 	for key := range root {
 		if nativeResponseRootDenied(key) || !nativeResponseRootAllowed(key) {
 			delete(root, key)
