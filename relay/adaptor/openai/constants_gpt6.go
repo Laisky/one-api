@@ -11,7 +11,7 @@ import (
 var gpt6AstraReasoningEfforts = []string{"low", "medium", "high", "xhigh", "max"}
 
 // gpt6SolLunaReasoningEfforts includes the non-reasoning mode supported by Sol
-// and Luna, in addition to the GPT-6 reasoning-effort ladder.
+// and Luna (as well as GPT-6.1 Terra), in addition to the GPT-6 effort ladder.
 var gpt6SolLunaReasoningEfforts = []string{"none", "low", "medium", "high", "xhigh", "max"}
 
 // gpt6AstraLongContextTier represents the surcharge applied when a GPT-6 Astra
@@ -26,13 +26,15 @@ var gpt6AstraLongContextTier = adaptor.ModelRatioTier{
 }
 
 // gpt6ModelRatios captures Standard pricing and metadata for the GPT-6 family.
-// Sol and Luna were released on 2026-09-22. Only published model IDs are listed;
+// Sol and Luna were released on 2026-09-22; Terra was released 2026-10-26.
+// Only published model IDs are listed;
 // account provisioning remains the channel administrator's responsibility.
 //
-// Sources verified 2026-09-22:
+// Sources verified through 2026-10-26:
 //   - https://developers.openai.com/api/docs/models/gpt-6-astra
 //   - https://developers.openai.com/api/docs/models/gpt-6-sol
 //   - https://developers.openai.com/api/docs/models/gpt-6-luna
+//   - https://developers.openai.com/api/docs/models/gpt-6.1-terra
 //   - https://developers.openai.com/api/docs/pricing
 //   - https://developers.openai.com/api/docs/guides/latest-model
 var gpt6ModelRatios = map[string]adaptor.ModelConfig{
@@ -76,6 +78,32 @@ var gpt6ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedReasoningEfforts:   []string{"low", "medium", "high", "xhigh", "max"},
 		DefaultReasoningEffort:      "medium",
 		Description:                 "GPT-6.1 Sol: reasoning model for coding, computer use, and professional work. Tool calling requires Responses; Chat Completions supports text without tools. Neither none nor minimal reasoning is supported.",
+	},
+	// Released 2026-10-26. Chat Completions accepts text requests, but tool
+	// calling must use Responses. Standard prices below are per 1M tokens.
+	// https://developers.openai.com/api/docs/models/gpt-6.1-terra
+	// https://developers.openai.com/api/docs/pricing
+	"gpt-6.1-terra": {
+		Ratio:             1.0 * ratio.MilliTokensUsd,
+		CompletionRatio:   5.0 / 1.0,
+		CachedInputRatio:  0.05 * ratio.MilliTokensUsd,
+		CacheWrite5mRatio: 1.25 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{{
+			Ratio:               2.0 * ratio.MilliTokensUsd,
+			CompletionRatio:     7.5 / 2.0,
+			CachedInputRatio:    0.1 * ratio.MilliTokensUsd,
+			CacheWrite5mRatio:   2.5 * ratio.MilliTokensUsd,
+			InputTokenThreshold: 272_001,
+		}},
+		ContextLength:               1_050_000,
+		MaxOutputTokens:             128_000,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           append([]string{"web_search"}, gpt5ReasoningFeatures...),
+		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   append([]string(nil), gpt6SolLunaReasoningEfforts...),
+		DefaultReasoningEffort:      "medium",
+		Description:                 "GPT-6.1 Terra: efficient visual reasoning and computer-use model. Tool calling requires Responses. Standard cache-read is 5% of input; inputs over 272K tokens incur the full-request long-context tier.",
 	},
 	"gpt-6-sol": {
 		Ratio:             2.0 * ratio.MilliTokensUsd,

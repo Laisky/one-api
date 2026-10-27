@@ -38,7 +38,7 @@ func hasBillableUsage(usage *relaymodel.Usage) bool {
 		return false
 	}
 	if usage.PromptTokens > 0 || usage.CompletionTokens > 0 || usage.ToolsCost > 0 ||
-		usage.CacheWrite5mTokens > 0 || usage.CacheWrite1hTokens > 0 || usage.CacheWriteTokens > 0 || usage.Realtime != nil {
+		usage.CacheWrite5mTokens > 0 || usage.CacheWrite1hTokens > 0 || usage.CacheWrite12hTokens > 0 || usage.CacheWriteTokens > 0 || usage.Realtime != nil {
 		return true
 	}
 	if d := usage.PromptTokensDetails; d != nil {

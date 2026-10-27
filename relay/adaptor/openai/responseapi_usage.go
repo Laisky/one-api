@@ -23,18 +23,21 @@ type ResponseAPIUsage struct {
 	CacheWriteTokens    int                             `json:"cache_write_tokens,omitempty"`
 	CacheWrite5mTokens  int                             `json:"cache_write_5m_tokens,omitempty"`
 	CacheWrite1hTokens  int                             `json:"cache_write_1h_tokens,omitempty"`
+	CacheWrite12hTokens int                             `json:"cache_write_12h_tokens,omitempty"`
 }
 
 // ResponseAPIInputTokensDetails models the nested usage block returned by the OpenAI Response API.
 // The schema is not stable yet (especially for web-search fields), so we keep a map of additional
 // properties while still projecting the common fields into strong types.
 type ResponseAPIInputTokensDetails struct {
-	CachedTokens int `json:"cached_tokens,omitempty"`
-	AudioTokens  int `json:"audio_tokens,omitempty"`
-	TextTokens   int `json:"text_tokens,omitempty"`
-	ImageTokens  int `json:"image_tokens,omitempty"`
-	WebSearch    any `json:"web_search,omitempty"`
-	additional   map[string]any
+	CachedTokens            int                                 `json:"cached_tokens,omitempty"`
+	AudioTokens             int                                 `json:"audio_tokens,omitempty"`
+	TextTokens              int                                 `json:"text_tokens,omitempty"`
+	ImageTokens             int                                 `json:"image_tokens,omitempty"`
+	CacheWriteTokens        int                                 `json:"cache_write_tokens,omitempty"`
+	CacheWriteTokensDetails *model.UsageCacheWriteTokensDetails `json:"cache_write_tokens_details,omitempty"`
+	WebSearch               any                                 `json:"web_search,omitempty"`
+	additional              map[string]any
 }
 
 // ResponseAPIOutputTokensDetails models the completion-side usage details returned by the Response API.
@@ -71,6 +74,15 @@ func (d *ResponseAPIInputTokensDetails) UnmarshalJSON(data []byte) error {
 			d.TextTokens = coerceNonNegativeInt(value)
 		case "image_tokens":
 			d.ImageTokens = coerceNonNegativeInt(value)
+		case "cache_write_tokens":
+			d.CacheWriteTokens = coerceNonNegativeInt(value)
+		case "cache_write_tokens_details":
+			if detail, ok := value.(map[string]any); ok {
+				d.CacheWriteTokensDetails = &model.UsageCacheWriteTokensDetails{
+					TTL30mTokens: coerceNonNegativeInt(detail["ttl_30m_tokens"]),
+					TTL12hTokens: coerceNonNegativeInt(detail["ttl_12h_tokens"]),
+				}
+			}
 		case "web_search":
 			d.WebSearch = value
 		default:
@@ -102,6 +114,12 @@ func (d ResponseAPIInputTokensDetails) MarshalJSON() ([]byte, error) {
 	}
 	if d.WebSearch != nil {
 		raw["web_search"] = d.WebSearch
+	}
+	if d.CacheWriteTokens != 0 {
+		raw["cache_write_tokens"] = d.CacheWriteTokens
+	}
+	if d.CacheWriteTokensDetails != nil {
+		raw["cache_write_tokens_details"] = d.CacheWriteTokensDetails
 	}
 
 	data, err := json.Marshal(raw)
@@ -269,10 +287,12 @@ func (d *ResponseAPIInputTokensDetails) toModel() *model.UsagePromptTokensDetail
 	}
 
 	details := &model.UsagePromptTokensDetails{
-		CachedTokens: d.CachedTokens,
-		AudioTokens:  d.AudioTokens,
-		TextTokens:   d.TextTokens,
-		ImageTokens:  d.ImageTokens,
+		CachedTokens:            d.CachedTokens,
+		AudioTokens:             d.AudioTokens,
+		TextTokens:              d.TextTokens,
+		ImageTokens:             d.ImageTokens,
+		CacheWriteTokens:        d.CacheWriteTokens,
+		CacheWriteTokensDetails: d.CacheWriteTokensDetails,
 	}
 	return details
 }
@@ -298,10 +318,16 @@ func newResponseAPIInputTokensDetailsFromModel(details *model.UsagePromptTokensD
 	}
 
 	converted := &ResponseAPIInputTokensDetails{
-		CachedTokens: details.CachedTokens,
-		AudioTokens:  details.AudioTokens,
-		TextTokens:   details.TextTokens,
-		ImageTokens:  details.ImageTokens,
+		CachedTokens:     details.CachedTokens,
+		AudioTokens:      details.AudioTokens,
+		TextTokens:       details.TextTokens,
+		ImageTokens:      details.ImageTokens,
+		CacheWriteTokens: details.CacheWriteTokens,
+	}
+	if details.CacheWriteTokensDetails != nil {
+		// Do not alias the mutable canonical usage object.
+		ttl := *details.CacheWriteTokensDetails
+		converted.CacheWriteTokensDetails = &ttl
 	}
 	return converted
 }
@@ -405,14 +431,17 @@ func (r *ResponseAPIUsage) ToModelUsage() *model.Usage {
 	}
 
 	usage := &model.Usage{
-		PromptTokens:       r.InputTokens,
-		CompletionTokens:   r.OutputTokens,
-		TotalTokens:        r.TotalTokens,
-		CacheWrite5mTokens: r.CacheWriteTokens + r.CacheWrite5mTokens,
-		CacheWrite1hTokens: r.CacheWrite1hTokens,
+		PromptTokens:        r.InputTokens,
+		CompletionTokens:    r.OutputTokens,
+		TotalTokens:         r.TotalTokens,
+		CacheWriteTokens:    r.CacheWriteTokens,
+		CacheWrite5mTokens:  r.CacheWrite5mTokens,
+		CacheWrite1hTokens:  r.CacheWrite1hTokens,
+		CacheWrite12hTokens: r.CacheWrite12hTokens,
 	}
 	usage.PromptTokensDetails = r.InputTokensDetails.toModel()
 	usage.CompletionTokensDetails = r.OutputTokensDetails.toModel()
+	usage.NormalizeCacheWriteTokens()
 	return usage
 }
 
@@ -422,14 +451,36 @@ func (r *ResponseAPIUsage) FromModelUsage(usage *model.Usage) *ResponseAPIUsage 
 		return nil
 	}
 
+	// The top-level counter is an aggregate. Use a saturating sum to
+	// preserve both write lifetimes without overflowing on malformed usage.
+	totalWrites := max(0, usage.CacheWrite5mTokens)
+	writes12h := max(0, usage.CacheWrite12hTokens)
+	if writes12h > int(^uint(0)>>1)-totalWrites {
+		totalWrites = int(^uint(0) >> 1)
+	} else {
+		totalWrites += writes12h
+	}
 	converted := &ResponseAPIUsage{
 		InputTokens:         usage.PromptTokens,
 		OutputTokens:        usage.CompletionTokens,
 		TotalTokens:         usage.TotalTokens,
 		InputTokensDetails:  newResponseAPIInputTokensDetailsFromModel(usage.PromptTokensDetails),
 		OutputTokensDetails: newResponseAPIOutputTokensDetailsFromModel(usage.CompletionTokensDetails),
-		CacheWriteTokens:    usage.CacheWrite5mTokens,
+		CacheWriteTokens:    totalWrites,
 		CacheWrite1hTokens:  usage.CacheWrite1hTokens,
+		CacheWrite12hTokens: usage.CacheWrite12hTokens,
+	}
+	if writes12h > 0 {
+		if converted.InputTokensDetails == nil {
+			converted.InputTokensDetails = &ResponseAPIInputTokensDetails{}
+		}
+		if converted.InputTokensDetails.CacheWriteTokensDetails == nil {
+			converted.InputTokensDetails.CacheWriteTokensDetails = &model.UsageCacheWriteTokensDetails{
+				TTL30mTokens: max(0, usage.CacheWrite5mTokens),
+				TTL12hTokens: writes12h,
+			}
+		}
+		converted.InputTokensDetails.CacheWriteTokens = max(converted.InputTokensDetails.CacheWriteTokens, totalWrites)
 	}
 
 	return converted

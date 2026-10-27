@@ -60,6 +60,18 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 		)
 	}
 
+	// Terra's WebSocket response.create frames bypass native HTTP's Standard
+	// service-tier and cache-lifetime guard. Until frame-level price contracts
+	// and actual-tier receipts are qualified, never forward this newly added
+	// model over an unmetered transport. Other model handshakes are unchanged.
+	if strings.EqualFold(strings.TrimSpace(meta.ActualModelName), "gpt-6.1-terra") {
+		return true, openai.ErrorWrapper(
+			errors.New("GPT-6.1 Terra WebSocket billing is not qualified; use HTTP Responses"),
+			"response_websocket_model_billing_not_supported",
+			http.StatusBadRequest,
+		)
+	}
+
 	// Refuse handshakes that did not pin a model. Without a bound model the
 	// per-event WS guard skips enforcement (the guard's backward-compat
 	// branch), which would let a client send response.create events with

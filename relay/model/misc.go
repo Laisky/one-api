@@ -53,6 +53,9 @@ type Usage struct {
 	CacheWriteTokens   int `json:"cache_write_tokens,omitempty"`
 	CacheWrite5mTokens int `json:"cache_write_5m_tokens,omitempty"`
 	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
+	// CacheWrite12hTokens is an observed paid OpenAI retention class, not a
+	// legacy 5m/30m or Anthropic 1h write. Pricing must explicitly handle it.
+	CacheWrite12hTokens int `json:"cache_write_12h_tokens,omitempty"`
 }
 
 // NormalizeCachedTokens promotes top-level and DeepSeek provider-specific cache-hit
@@ -87,14 +90,34 @@ func (u *Usage) NormalizeCachedTokens() {
 	u.CachedTokens = 0
 }
 
-// NormalizeCacheWriteTokens promotes OpenAI's top-level cache_write_tokens
-// usage field into the relay's generic cache-write bucket used for quota
-// billing.
+// NormalizeCacheWriteTokens translates overlapping OpenAI Responses aggregate
+// and per-lifetime cache-write receipts to distinct settlement buckets. Legacy
+// top-level-only providers retain their historical additive bucket semantics.
+// The gateway does not yet price 12h writes: the distinct 12h bucket must
+// trigger conservative unpriced-use settlement rather than a 30m charge.
 func (u *Usage) NormalizeCacheWriteTokens() {
-	if u == nil || u.CacheWriteTokens <= 0 {
+	if u == nil {
 		return
 	}
 
+	if details := u.PromptTokensDetails; details != nil &&
+		(details.CacheWriteTokens > 0 || details.CacheWriteTokensDetails != nil) {
+		total := max(0, u.CacheWriteTokens, details.CacheWriteTokens)
+		if ttl := details.CacheWriteTokensDetails; ttl != nil {
+			// Per-TTL counters partition the aggregate. Never include 12h
+			// writes in the ordinary 30m bucket, even if the receipt also
+			// supplies an aggregate alias for the same tokens.
+			writes12h := max(0, ttl.TTL12hTokens)
+			u.CacheWrite12hTokens = max(u.CacheWrite12hTokens, writes12h)
+			total = max(0, ttl.TTL30mTokens, total-writes12h)
+		}
+		u.CacheWrite5mTokens = max(u.CacheWrite5mTokens, total)
+		u.CacheWriteTokens = 0
+		return
+	}
+	if u.CacheWriteTokens <= 0 {
+		return
+	}
 	u.CacheWrite5mTokens += u.CacheWriteTokens
 	u.CacheWriteTokens = 0
 }
@@ -159,11 +182,21 @@ type ErrorWithStatusCode struct {
 	StatusCode int `json:"status_code"`
 }
 
+// UsageCacheWriteTokensDetails records mutually exclusive OpenAI Responses cache
+// write lifetimes. The one-api quota meter currently supports the default 30m
+// bucket; explicit 12h writes require a separate tariff and admission contract.
+type UsageCacheWriteTokensDetails struct {
+	TTL30mTokens int `json:"ttl_30m_tokens,omitempty"`
+	TTL12hTokens int `json:"ttl_12h_tokens,omitempty"`
+}
+
 // UsagePromptTokensDetails contains details about the prompt tokens used in a request.
 type UsagePromptTokensDetails struct {
-	CachedTokensDetails *UsageCachedTokensDetails `json:"cached_tokens_details,omitempty"`
-	CachedTokens        int                       `json:"cached_tokens"`
-	AudioTokens         int                       `json:"audio_tokens"`
+	CachedTokensDetails     *UsageCachedTokensDetails     `json:"cached_tokens_details,omitempty"`
+	CachedTokens            int                           `json:"cached_tokens"`
+	CacheWriteTokens        int                           `json:"cache_write_tokens,omitempty"`
+	CacheWriteTokensDetails *UsageCacheWriteTokensDetails `json:"cache_write_tokens_details,omitempty"`
+	AudioTokens             int                           `json:"audio_tokens"`
 	// TextTokens could be zero for pure text chats
 	TextTokens     int     `json:"text_tokens"`
 	ImageTokens    int     `json:"image_tokens"`
