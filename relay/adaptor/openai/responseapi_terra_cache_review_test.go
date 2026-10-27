@@ -12,7 +12,7 @@ import (
 // treating the entire input as uncached, and does not count legacy fields twice.
 func TestGPT61TerraResponseUsageThirtyMinuteCacheWrites(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name   string
 		legacy int
 	}{
 		{name: "nested_only"},

@@ -19,3 +19,19 @@ func TestResponseUsageTerraThirtyMinuteCacheWrites(t *testing.T) {
 	require.Equal(t, 4_000, usage.PromptTokensDetails.CachedTokens)
 	require.Equal(t, 7_000, usage.CacheWrite5mTokens)
 }
+
+// TestResponseUsageTerraPartialCacheReceipts ensures that a later snapshot
+// without write details cannot erase the previously observed cache tokens.
+func TestResponseUsageTerraPartialCacheReceipts(t *testing.T) {
+	before := &UsagePromptTokensDetails{
+		CacheWriteTokens: 7_000,
+		CacheWriteTokensDetails: &UsageCacheWriteTokensDetails{TTL30mTokens: 7_000},
+	}
+	after := &UsagePromptTokensDetails{CachedTokens: 4_000}
+	merged := mergeResponsePromptDetails(before, after)
+	require.Equal(t, 7_000, merged.CacheWriteTokens)
+	require.NotNil(t, merged.CacheWriteTokensDetails)
+	require.Equal(t, 7_000, merged.CacheWriteTokensDetails.TTL30mTokens)
+	require.Equal(t, 4_000, merged.CachedTokens)
+	require.Zero(t, before.CachedTokens, "merge must not mutate its source")
+}

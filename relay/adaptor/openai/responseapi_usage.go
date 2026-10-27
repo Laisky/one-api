@@ -29,13 +29,13 @@ type ResponseAPIUsage struct {
 // The schema is not stable yet (especially for web-search fields), so we keep a map of additional
 // properties while still projecting the common fields into strong types.
 type ResponseAPIInputTokensDetails struct {
-	CachedTokens            int                                `json:"cached_tokens,omitempty"`
-	AudioTokens             int                                `json:"audio_tokens,omitempty"`
-	TextTokens              int                                `json:"text_tokens,omitempty"`
-	ImageTokens             int                                `json:"image_tokens,omitempty"`
-	CacheWriteTokens        int                                `json:"cache_write_tokens,omitempty"`
+	CachedTokens            int                                 `json:"cached_tokens,omitempty"`
+	AudioTokens             int                                 `json:"audio_tokens,omitempty"`
+	TextTokens              int                                 `json:"text_tokens,omitempty"`
+	ImageTokens             int                                 `json:"image_tokens,omitempty"`
+	CacheWriteTokens        int                                 `json:"cache_write_tokens,omitempty"`
 	CacheWriteTokensDetails *model.UsageCacheWriteTokensDetails `json:"cache_write_tokens_details,omitempty"`
-	WebSearch               any                                `json:"web_search,omitempty"`
+	WebSearch               any                                 `json:"web_search,omitempty"`
 	additional              map[string]any
 }
 

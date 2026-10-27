@@ -22,13 +22,13 @@ func TestGPT61TerraResponseInstructionPreservation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			a := &Adaptor{ChannelType: channeltype.OpenAI}
 			info := &meta.Meta{
-				ChannelType: channeltype.OpenAI,
+				ChannelType:     channeltype.OpenAI,
 				ActualModelName: name,
-				Mode: relaymode.ChatCompletions,
+				Mode:            relaymode.ChatCompletions,
 			}
 			effort := "high"
 			request := &model.GeneralOpenAIRequest{
-				Model: name,
+				Model:           name,
 				ReasoningEffort: &effort,
 				Messages: []model.Message{
 					{Role: "system", Content: "Preserve this system instruction."},
@@ -59,12 +59,12 @@ func TestGPT61TerraResponseInstructionPreservation(t *testing.T) {
 func TestGPT61TerraLegacyReasoningInstructionCompatibility(t *testing.T) {
 	a := &Adaptor{ChannelType: channeltype.OpenAI}
 	info := &meta.Meta{
-		ChannelType: channeltype.OpenAI,
+		ChannelType:     channeltype.OpenAI,
 		ActualModelName: "o1-preview",
-		Mode: relaymode.ChatCompletions,
+		Mode:            relaymode.ChatCompletions,
 	}
 	request := &model.GeneralOpenAIRequest{
-		Model: "o1-preview",
+		Model:    "o1-preview",
 		Messages: []model.Message{
 			{Role: "system", Content: "Legacy instruction."},
 			{Role: "user", Content: "Hello."},

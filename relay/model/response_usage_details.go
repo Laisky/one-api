@@ -8,6 +8,20 @@ func mergeResponsePromptDetails(previous, next *UsagePromptTokensDetails) *Usage
 	}
 	merged := *previous
 	merged.CachedTokens = max(0, previous.CachedTokens, next.CachedTokens)
+	merged.CacheWriteTokens = max(0, previous.CacheWriteTokens, next.CacheWriteTokens)
+	if previous.CacheWriteTokensDetails != nil || next.CacheWriteTokensDetails != nil {
+		var before, after UsageCacheWriteTokensDetails
+		if previous.CacheWriteTokensDetails != nil {
+			before = *previous.CacheWriteTokensDetails
+		}
+		if next.CacheWriteTokensDetails != nil {
+			after = *next.CacheWriteTokensDetails
+		}
+		merged.CacheWriteTokensDetails = &UsageCacheWriteTokensDetails{
+			TTL30mTokens: max(0, before.TTL30mTokens, after.TTL30mTokens),
+			TTL12hTokens: max(0, before.TTL12hTokens, after.TTL12hTokens),
+		}
+	}
 	merged.AudioTokens = max(0, previous.AudioTokens, next.AudioTokens)
 	merged.TextTokens = max(0, previous.TextTokens, next.TextTokens)
 	merged.ImageTokens = max(0, previous.ImageTokens, next.ImageTokens)
