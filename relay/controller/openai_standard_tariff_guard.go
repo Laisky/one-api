@@ -7,27 +7,30 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 const (
-	openAITerraCacheScanMaxDepth = 64
-	openAITerraCacheScanMaxNodes = 100_000
+	openAICacheScanMaxDepth = 64
+	openAICacheScanMaxNodes = 100_000
 )
 
-// normalizeOpenAITerraStandardPricing restricts the new native Terra model to
-// the Standard pricing contract verified by this gateway. It inspects the raw
-// provider request before unknown roots are dropped and pins service_tier so
-// upstream project defaults cannot silently select an unmetered paid tier.
-// Parameters: root is the mutable wire object, model is mapped upstream, and
-// channel identifies its provider. Returns: whether it changed the wire and
-// any unsupported paid-tariff control error.
+// normalizeOpenAITerraStandardPricing enforces the common unpriced-cache
+// boundary for published native GPT-5.6/6 models and additionally pins Terra
+// to the Standard service tier. It checks raw controls before root filtering.
 func normalizeOpenAITerraStandardPricing(root map[string]json.RawMessage, model string, channel int) (bool, error) {
-	if channel != channeltype.OpenAI || !strings.EqualFold(strings.TrimSpace(model), "gpt-6.1-terra") {
+	if channel != channeltype.OpenAI {
 		return false, nil
 	}
-	if err := rejectOpenAITerraTwelveHourCache(root); err != nil {
-		return false, err
+	modelName := strings.ToLower(strings.TrimSpace(model))
+	if requiresNativeOpenAICacheWriteTariff(modelName) {
+		if err := rejectUnpricedNativeOpenAICacheLifetime(root); err != nil {
+			return false, err
+		}
+	}
+	if modelName != "gpt-6.1-terra" {
+		return false, nil
 	}
 
 	const standard = `"default"`
@@ -47,12 +50,19 @@ func normalizeOpenAITerraStandardPricing(root map[string]json.RawMessage, model 
 	return true, nil
 }
 
-// rejectOpenAITerraTwelveHourCache prevents accepting a 12h cache-write rate
-// without its independent token bucket. The top-level options are examined even
-// when the current provider-root manifest would subsequently omit them.
-// Parameters: root is the original request JSON object. Returns: an error for
-// unsupported TTL selections or malformed structural cache controls.
-func rejectOpenAITerraTwelveHourCache(root map[string]json.RawMessage) error {
+// requiresNativeOpenAICacheWriteTariff selects published GPT-5.6+ models
+// whose 12h cache-write tariff is not yet represented in the quota meter.
+func requiresNativeOpenAICacheWriteTariff(name string) bool {
+	if !strings.HasPrefix(name, "gpt-5.6") && !strings.HasPrefix(name, "gpt-6") {
+		return false
+	}
+	config, known := openai.ModelRatios[name]
+	return known && config.CacheWrite5mRatio > 0
+}
+
+// rejectUnpricedNativeOpenAICacheLifetime accepts only default or 30m cache
+// writes on native OpenAI models with separate unmetered 12h prices.
+func rejectUnpricedNativeOpenAICacheLifetime(root map[string]json.RawMessage) error {
 	if raw, ok := root["prompt_cache_options"]; ok && len(raw) > 0 {
 		var options struct {
 			TTL string `json:"ttl"`
@@ -60,8 +70,8 @@ func rejectOpenAITerraTwelveHourCache(root map[string]json.RawMessage) error {
 		if err := json.Unmarshal(raw, &options); err != nil {
 			return errors.Wrap(err, "decode Terra prompt_cache_options")
 		}
-		if strings.EqualFold(strings.TrimSpace(options.TTL), "12h") {
-			return errors.New("GPT-6.1 Terra 12h cache writes require a separately metered tariff")
+		if ttl := strings.TrimSpace(options.TTL); ttl != "" && !strings.EqualFold(ttl, "30m") {
+			return errors.Errorf("OpenAI cache-write TTL %q requires a separately metered tariff", ttl)
 		}
 	}
 
@@ -75,38 +85,43 @@ func rejectOpenAITerraTwelveHourCache(root map[string]json.RawMessage) error {
 			return errors.Wrapf(err, "decode Terra %s cache breakpoints", key)
 		}
 		nodes := 0
-		if err := inspectOpenAITerraCacheBreakpoint(node, 0, &nodes); err != nil {
+		if err := inspectOpenAICacheBreakpoint(node, 0, &nodes); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// inspectOpenAITerraCacheBreakpoint walks provider-owned message/tool structure,
-// not user text or embedded schemas, and rejects expensive breakpoint lifetimes.
-// Parameters: value is a decoded structural subtree, depth is its nesting level,
-// and nodes counts inspected elements. Returns: an error on unpriced or unsafe
-// structures and nil for ordinary 30m/default cache controls.
-func inspectOpenAITerraCacheBreakpoint(value any, depth int, nodes *int) error {
-	if depth > openAITerraCacheScanMaxDepth {
-		return errors.New("Terra cache breakpoint structure exceeds nesting limit")
+// inspectOpenAICacheBreakpoint walks provider-owned input/tool structures,
+// never user text or JSON schemas. Traversal is bounded against deep inputs.
+func inspectOpenAICacheBreakpoint(value any, depth int, nodes *int) error {
+	if depth > openAICacheScanMaxDepth {
+		return errors.New("OpenAI cache breakpoint structure exceeds nesting limit")
 	}
 	*nodes++
-	if *nodes > openAITerraCacheScanMaxNodes {
-		return errors.New("Terra cache breakpoint structure exceeds traversal limit")
+	if *nodes > openAICacheScanMaxNodes {
+		return errors.New("OpenAI cache breakpoint structure exceeds traversal limit")
 	}
 	switch item := value.(type) {
 	case []any:
 		for _, child := range item {
-			if err := inspectOpenAITerraCacheBreakpoint(child, depth+1, nodes); err != nil {
+			if err := inspectOpenAICacheBreakpoint(child, depth+1, nodes); err != nil {
 				return err
 			}
 		}
 	case map[string]any:
-		if raw, ok := item["prompt_cache_breakpoint"]; ok {
-			if point, ok := raw.(map[string]any); ok {
-				if ttl, ok := point["ttl"].(string); ok && strings.EqualFold(strings.TrimSpace(ttl), "12h") {
-					return errors.New("GPT-6.1 Terra 12h cache breakpoints require a separately metered tariff")
+		if raw, present := item["prompt_cache_breakpoint"]; present && raw != nil {
+			point, ok := raw.(map[string]any)
+			if !ok {
+				return errors.New("OpenAI prompt_cache_breakpoint must be an object")
+			}
+			if rawTTL, present := point["ttl"]; present && rawTTL != nil {
+				ttl, ok := rawTTL.(string)
+				if !ok {
+					return errors.New("OpenAI cache breakpoint TTL must be a string")
+				}
+				if ttl = strings.TrimSpace(ttl); ttl != "" && !strings.EqualFold(ttl, "30m") {
+					return errors.Errorf("OpenAI cache breakpoint TTL %q requires a separately metered tariff", ttl)
 				}
 			}
 		}
@@ -115,7 +130,7 @@ func inspectOpenAITerraCacheBreakpoint(value any, depth int, nodes *int) error {
 			case "prompt_cache_breakpoint", "metadata", "arguments", "input_schema", "schema", "data", "output", "extra_body":
 				continue
 			}
-			if err := inspectOpenAITerraCacheBreakpoint(child, depth+1, nodes); err != nil {
+			if err := inspectOpenAICacheBreakpoint(child, depth+1, nodes); err != nil {
 				return err
 			}
 		}

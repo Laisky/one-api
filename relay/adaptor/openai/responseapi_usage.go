@@ -23,7 +23,7 @@ type ResponseAPIUsage struct {
 	CacheWriteTokens    int                             `json:"cache_write_tokens,omitempty"`
 	CacheWrite5mTokens  int                             `json:"cache_write_5m_tokens,omitempty"`
 	CacheWrite1hTokens  int                             `json:"cache_write_1h_tokens,omitempty"`
-	CacheWrite12hTokens int                            `json:"cache_write_12h_tokens,omitempty"`
+	CacheWrite12hTokens int                             `json:"cache_write_12h_tokens,omitempty"`
 }
 
 // ResponseAPIInputTokensDetails models the nested usage block returned by the OpenAI Response API.
@@ -431,11 +431,11 @@ func (r *ResponseAPIUsage) ToModelUsage() *model.Usage {
 	}
 
 	usage := &model.Usage{
-		PromptTokens:       r.InputTokens,
-		CompletionTokens:   r.OutputTokens,
-		TotalTokens:        r.TotalTokens,
-		CacheWriteTokens:   r.CacheWriteTokens,
-		CacheWrite5mTokens: r.CacheWrite5mTokens,
+		PromptTokens:        r.InputTokens,
+		CompletionTokens:    r.OutputTokens,
+		TotalTokens:         r.TotalTokens,
+		CacheWriteTokens:    r.CacheWriteTokens,
+		CacheWrite5mTokens:  r.CacheWrite5mTokens,
 		CacheWrite1hTokens:  r.CacheWrite1hTokens,
 		CacheWrite12hTokens: r.CacheWrite12hTokens,
 	}
