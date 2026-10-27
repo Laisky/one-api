@@ -20,7 +20,7 @@ The latest *fully inspected* successful release in this handoff is the 2026-10-2
 | Source commit | `077c866f1c5cbdcef55896d0badbaaa626f6c7fa` |
 | AMD64 published manifest-list digest and deploy input | `sha256:6a86236a11f53c659b18ac56cc256d3d15a59c19b664c6a83f60349312c8fb79` |
 | ARM64 published manifest-list digest | `sha256:699cb2943d2e61eef770025c82f46f65b2ed8f08d302c2048a4b2ea08f4f4572` |
-| Source-labelled immutable image tags | `ppcelery/one-api:077c866` (AMD64), `ppcelery/one-api:arm64-077c866` (ARM64) |
+| Source-labelled tags (mutable; digests above are the immutable identity) | `ppcelery/one-api:077c866` (AMD64), `ppcelery/one-api:arm64-077c866` (ARM64) |
 | Earlier successful deploy (candidate *only* for rollback investigation) | [run 40154286467](https://github.com/Laisky/one-api/actions/runs/40154286467), source `a424575f178a6a2b75ca19c6d63bf4fb299c2403`, AMD64 digest `sha256:54f501412dd05543cd48a70394a1170ca8837524a1817fc499bfaf9b97e9eaa4` |
 
 **Freshness warning:** At the 2026-10-27 inspection, `main` had advanced to `c213bac4b3d973786ae7c07aad567d0a0475e172` and [build-and-deploy run 40505389612](https://github.com/Laisky/one-api/actions/runs/40505389612) was **in progress**. Recheck its *final* result and anything newer before using the October 25 digest. The mutable `:latest` and `:arm64-latest` tags are not immutable deployment evidence. Published multi-platform manifest digests and local image IDs are different kinds of identifiers; do not assume they are string-equal.
