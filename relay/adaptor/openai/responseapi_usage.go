@@ -23,6 +23,7 @@ type ResponseAPIUsage struct {
 	CacheWriteTokens    int                             `json:"cache_write_tokens,omitempty"`
 	CacheWrite5mTokens  int                             `json:"cache_write_5m_tokens,omitempty"`
 	CacheWrite1hTokens  int                             `json:"cache_write_1h_tokens,omitempty"`
+	CacheWrite12hTokens int                            `json:"cache_write_12h_tokens,omitempty"`
 }
 
 // ResponseAPIInputTokensDetails models the nested usage block returned by the OpenAI Response API.
@@ -317,10 +318,16 @@ func newResponseAPIInputTokensDetailsFromModel(details *model.UsagePromptTokensD
 	}
 
 	converted := &ResponseAPIInputTokensDetails{
-		CachedTokens: details.CachedTokens,
-		AudioTokens:  details.AudioTokens,
-		TextTokens:   details.TextTokens,
-		ImageTokens:  details.ImageTokens,
+		CachedTokens:     details.CachedTokens,
+		AudioTokens:      details.AudioTokens,
+		TextTokens:       details.TextTokens,
+		ImageTokens:      details.ImageTokens,
+		CacheWriteTokens: details.CacheWriteTokens,
+	}
+	if details.CacheWriteTokensDetails != nil {
+		// Do not alias the mutable canonical usage object.
+		ttl := *details.CacheWriteTokensDetails
+		converted.CacheWriteTokensDetails = &ttl
 	}
 	return converted
 }
@@ -429,7 +436,8 @@ func (r *ResponseAPIUsage) ToModelUsage() *model.Usage {
 		TotalTokens:        r.TotalTokens,
 		CacheWriteTokens:   r.CacheWriteTokens,
 		CacheWrite5mTokens: r.CacheWrite5mTokens,
-		CacheWrite1hTokens: r.CacheWrite1hTokens,
+		CacheWrite1hTokens:  r.CacheWrite1hTokens,
+		CacheWrite12hTokens: r.CacheWrite12hTokens,
 	}
 	usage.PromptTokensDetails = r.InputTokensDetails.toModel()
 	usage.CompletionTokensDetails = r.OutputTokensDetails.toModel()
@@ -443,14 +451,36 @@ func (r *ResponseAPIUsage) FromModelUsage(usage *model.Usage) *ResponseAPIUsage 
 		return nil
 	}
 
+	// The top-level counter is an aggregate. Use a saturating sum to
+	// preserve both write lifetimes without overflowing on malformed usage.
+	totalWrites := max(0, usage.CacheWrite5mTokens)
+	writes12h := max(0, usage.CacheWrite12hTokens)
+	if writes12h > int(^uint(0)>>1)-totalWrites {
+		totalWrites = int(^uint(0) >> 1)
+	} else {
+		totalWrites += writes12h
+	}
 	converted := &ResponseAPIUsage{
 		InputTokens:         usage.PromptTokens,
 		OutputTokens:        usage.CompletionTokens,
 		TotalTokens:         usage.TotalTokens,
 		InputTokensDetails:  newResponseAPIInputTokensDetailsFromModel(usage.PromptTokensDetails),
 		OutputTokensDetails: newResponseAPIOutputTokensDetailsFromModel(usage.CompletionTokensDetails),
-		CacheWriteTokens:    usage.CacheWrite5mTokens,
+		CacheWriteTokens:    totalWrites,
 		CacheWrite1hTokens:  usage.CacheWrite1hTokens,
+		CacheWrite12hTokens: usage.CacheWrite12hTokens,
+	}
+	if writes12h > 0 {
+		if converted.InputTokensDetails == nil {
+			converted.InputTokensDetails = &ResponseAPIInputTokensDetails{}
+		}
+		if converted.InputTokensDetails.CacheWriteTokensDetails == nil {
+			converted.InputTokensDetails.CacheWriteTokensDetails = &model.UsageCacheWriteTokensDetails{
+				TTL30mTokens: max(0, usage.CacheWrite5mTokens),
+				TTL12hTokens: writes12h,
+			}
+		}
+		converted.InputTokensDetails.CacheWriteTokens = max(converted.InputTokensDetails.CacheWriteTokens, totalWrites)
 	}
 
 	return converted

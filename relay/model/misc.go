@@ -53,6 +53,9 @@ type Usage struct {
 	CacheWriteTokens   int `json:"cache_write_tokens,omitempty"`
 	CacheWrite5mTokens int `json:"cache_write_5m_tokens,omitempty"`
 	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
+	// CacheWrite12hTokens is an observed paid OpenAI retention class, not a
+	// legacy 5m/30m or Anthropic 1h write. Pricing must explicitly handle it.
+	CacheWrite12hTokens int `json:"cache_write_12h_tokens,omitempty"`
 }
 
 // NormalizeCachedTokens promotes top-level and DeepSeek provider-specific cache-hit
@@ -87,26 +90,28 @@ func (u *Usage) NormalizeCachedTokens() {
 	u.CachedTokens = 0
 }
 
-// NormalizeCacheWriteTokens promotes OpenAI's top-level cache_write_tokens
-// usage field into the relay's generic cache-write bucket used for quota
-// billing.
+// NormalizeCacheWriteTokens translates overlapping OpenAI Responses aggregate
+// and per-lifetime cache-write receipts to distinct settlement buckets. Legacy
+// top-level-only providers retain their historical additive bucket semantics.
+// The gateway does not yet price 12h writes: the distinct 12h bucket must
+// trigger conservative unpriced-use settlement rather than a 30m charge.
 func (u *Usage) NormalizeCacheWriteTokens() {
 	if u == nil {
 		return
 	}
 
-	// OpenAI Responses reports total writes and mutually exclusive 30m/12h
-	// buckets inside input_tokens_details. These are alternatives to the older
-	// top-level counters, not additional writes. Avoid double counting if an
-	// intermediary includes both representations. The 12h tariff is not yet
-	// enabled for Terra; its explicit requests are rejected before dispatch.
 	if details := u.PromptTokensDetails; details != nil &&
 		(details.CacheWriteTokens > 0 || details.CacheWriteTokensDetails != nil) {
-		writes := details.CacheWriteTokens
+		total := max(0, u.CacheWriteTokens, details.CacheWriteTokens)
 		if ttl := details.CacheWriteTokensDetails; ttl != nil {
-			writes = max(writes, ttl.TTL30mTokens)
+			// Per-TTL counters partition the aggregate. Never include 12h
+			// writes in the ordinary 30m bucket, even if the receipt also
+			// supplies an aggregate alias for the same tokens.
+			writes12h := max(0, ttl.TTL12hTokens)
+			u.CacheWrite12hTokens = max(u.CacheWrite12hTokens, writes12h)
+			total = max(0, ttl.TTL30mTokens, total-writes12h)
 		}
-		u.CacheWrite5mTokens = max(u.CacheWrite5mTokens, u.CacheWriteTokens, writes)
+		u.CacheWrite5mTokens = max(u.CacheWrite5mTokens, total)
 		u.CacheWriteTokens = 0
 		return
 	}

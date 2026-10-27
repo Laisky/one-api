@@ -266,11 +266,16 @@ func (a *ResponseUsageAccumulator) consumeJSON(data []byte) {
 		if json.Unmarshal(root[key], &nested) == nil && nested != nil {
 			a.consumeUsage(nested["usage"], key == "message", kind == "message_start" || kind == "response.created" || kind == "response.in_progress")
 			if key == "response" {
+				// In Responses, service_tier belongs to the nested response
+				// object. Preserve its authoritative value for billing.
+				if tier := responseUsageString(nested["service_tier"]); tier != "" {
+					a.usage.ServiceTier = tier
+				}
 				a.consumeOutput(nested, true)
 			}
 		}
 	}
-	if value := responseUsageString(root["service_tier"]); value != "" {
+	if value := responseUsageString(root["service_tier"]); value != "" && a.usage.ServiceTier == "" {
 		a.usage.ServiceTier = value
 	}
 	if value := responseUsageString(root["system_fingerprint"]); value != "" {
@@ -361,6 +366,7 @@ func (a *ResponseUsageAccumulator) consumeUsage(raw json.RawMessage, claude, pro
 	a.usage.CacheWriteTokens = max(a.usage.CacheWriteTokens, canonical.CacheWriteTokens)
 	a.usage.CacheWrite5mTokens = max(a.usage.CacheWrite5mTokens, canonical.CacheWrite5mTokens)
 	a.usage.CacheWrite1hTokens = max(a.usage.CacheWrite1hTokens, canonical.CacheWrite1hTokens)
+	a.usage.CacheWrite12hTokens = max(a.usage.CacheWrite12hTokens, canonical.CacheWrite12hTokens)
 	if canonical.ServiceTier != "" {
 		a.usage.ServiceTier = canonical.ServiceTier
 	}
