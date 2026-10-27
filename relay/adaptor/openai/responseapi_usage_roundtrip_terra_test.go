@@ -12,10 +12,10 @@ import (
 // converted through the shared usage representation does not lose TTL detail.
 func TestGPT61TerraCacheWriteUsageRoundTrip(t *testing.T) {
 	raw := &ResponseAPIUsage{
-		InputTokens:        8000,
-		OutputTokens:       10,
+		InputTokens:  8000,
+		OutputTokens: 10,
 		InputTokensDetails: &ResponseAPIInputTokensDetails{
-			CacheWriteTokens:        7000,
+			CacheWriteTokens: 7000,
 			CacheWriteTokensDetails: &model.UsageCacheWriteTokensDetails{
 				TTL30mTokens: 2000,
 				TTL12hTokens: 5000,
