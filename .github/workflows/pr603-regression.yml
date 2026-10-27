@@ -12,7 +12,7 @@ permissions:
 jobs:
   focused:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout the PR revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -24,6 +24,6 @@ jobs:
           go-version: '1.27.3'
       - name: Execute real behavior regression tests
         run: |
-          go test -count=1 -timeout=12m -p=2 \
+          go test -race -count=1 -timeout=18m -p=2 \
             -run '^(TestGPT61Terra.*|TestResponseUsageTerra.*)$' \
             ./relay/adaptor/openai ./relay/controller ./relay/model

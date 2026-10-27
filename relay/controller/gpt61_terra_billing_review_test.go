@@ -2,12 +2,17 @@ package controller
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/channeltype"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // TestGPT61TerraStandardServiceTierAdmission checks the final native Responses
@@ -62,4 +67,24 @@ func TestGPT61TerraStandardPolicyPreservesOtherModels(t *testing.T) {
 	var payload map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(wire, &payload))
 	require.Equal(t, `"fast"`, string(payload["service_tier"]))
+}
+
+// TestGPT61TerraWebSocketFailsClosed checks that an admitted HTTP upgrade for
+// Terra cannot bypass Standard-only HTTP billing through WS response.create.
+func TestGPT61TerraWebSocketFailsClosed(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses?model=gpt-6.1-terra", nil)
+	c.Request.Header.Set("Upgrade", "websocket")
+	c.Request.Header.Set("Connection", "Upgrade")
+	info := &metalib.Meta{
+		ChannelType:     channeltype.OpenAI,
+		ActualModelName: "gpt-6.1-terra",
+		BaseURL:         "https://api.openai.com",
+		Mode:            relaymode.ResponseAPI,
+	}
+	handled, err := maybeHandleResponseAPIWebSocket(c, info)
+	require.True(t, handled)
+	require.NotNil(t, err)
+	require.Equal(t, http.StatusBadRequest, err.StatusCode)
+	require.Equal(t, "response_websocket_model_billing_not_supported", err.Code)
 }

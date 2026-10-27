@@ -64,7 +64,7 @@ func TestGPT61TerraLegacyReasoningInstructionCompatibility(t *testing.T) {
 		Mode:            relaymode.ChatCompletions,
 	}
 	request := &model.GeneralOpenAIRequest{
-		Model:    "o1-preview",
+		Model: "o1-preview",
 		Messages: []model.Message{
 			{Role: "system", Content: "Legacy instruction."},
 			{Role: "user", Content: "Hello."},
