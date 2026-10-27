@@ -121,6 +121,17 @@ not change the operator's configured currency, quota or effective date.
   Retain the immutable running image for rollback. A rollback does not undo
   historical user charges and restores the earlier tool admission/precision bugs.
 
+### Served-candidate release acceptance (issue #592)
+
+The [2026-10-27 release evidence and operator checklist](../../tasks/20261027_592_served_candidate_acceptance.md)
+distinguishes source integration, published image digests and historical deployment
+health from *current* production provenance, effective tariffs, synthetic billing
+canaries, and recoverable rollback. The former #595 gate was explicitly cancelled;
+the separate Responses WebSocket funding defect #596 was fixed by merged PR #598.
+Neither event is proof of currently served behavior or consent for a new rollout.
+Keep #592 open until its remaining, separately authorized acceptance evidence is
+recorded. This section changes no release/CI or billing defaults.
+
 Related tests: `relay/controller/deepseek_tool_receipt_test.go`,
 `relay/controller/deepseek_receipt_alias_regression_test.go`,
 `relay/controller/deepseek_fetch_receipt_test.go`,
