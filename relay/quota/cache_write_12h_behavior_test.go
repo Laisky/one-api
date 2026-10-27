@@ -22,7 +22,7 @@ func TestGPT61TerraUnpricedCacheWriteReceipt(t *testing.T) {
 // non-Standard usage cannot be considered fully priced by the Standard contract.
 func TestGPT61TerraUnverifiedActualServiceTier(t *testing.T) {
 	input := ComputeInput{
-		Usage: &model.Usage{PromptTokens: 200, CompletionTokens: 50, ServiceTier: "fast"},
+		Usage:     &model.Usage{PromptTokens: 200, CompletionTokens: 50, ServiceTier: "fast"},
 		ModelName: "gpt-6.1-terra", ModelRatio: 1, GroupRatio: 1,
 	}
 	require.True(t, Compute(input).UnpricedUsage)

@@ -24,7 +24,7 @@ func TestResponseUsageTerraThirtyMinuteCacheWrites(t *testing.T) {
 // without write details cannot erase the previously observed cache tokens.
 func TestResponseUsageTerraPartialCacheReceipts(t *testing.T) {
 	before := &UsagePromptTokensDetails{
-		CacheWriteTokens: 7_000,
+		CacheWriteTokens:        7_000,
 		CacheWriteTokensDetails: &UsageCacheWriteTokensDetails{TTL30mTokens: 7_000},
 	}
 	after := &UsagePromptTokensDetails{CachedTokens: 4_000}

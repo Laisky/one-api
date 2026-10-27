@@ -192,11 +192,11 @@ type UsageCacheWriteTokensDetails struct {
 
 // UsagePromptTokensDetails contains details about the prompt tokens used in a request.
 type UsagePromptTokensDetails struct {
-	CachedTokensDetails      *UsageCachedTokensDetails      `json:"cached_tokens_details,omitempty"`
-	CachedTokens             int                            `json:"cached_tokens"`
-	CacheWriteTokens         int                            `json:"cache_write_tokens,omitempty"`
-	CacheWriteTokensDetails  *UsageCacheWriteTokensDetails  `json:"cache_write_tokens_details,omitempty"`
-	AudioTokens              int                            `json:"audio_tokens"`
+	CachedTokensDetails     *UsageCachedTokensDetails     `json:"cached_tokens_details,omitempty"`
+	CachedTokens            int                           `json:"cached_tokens"`
+	CacheWriteTokens        int                           `json:"cache_write_tokens,omitempty"`
+	CacheWriteTokensDetails *UsageCacheWriteTokensDetails `json:"cache_write_tokens_details,omitempty"`
+	AudioTokens             int                           `json:"audio_tokens"`
 	// TextTokens could be zero for pure text chats
 	TextTokens     int     `json:"text_tokens"`
 	ImageTokens    int     `json:"image_tokens"`
