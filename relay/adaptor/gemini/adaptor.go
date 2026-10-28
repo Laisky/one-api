@@ -91,6 +91,9 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		}
 		return geminiEmbeddingRequest, nil
 	default:
+		if err := ValidateNativeToolSupport(c, request); err != nil {
+			return nil, errors.Wrap(err, "validate native Gemini tools")
+		}
 		geminiRequest := ConvertRequest(*request)
 		return geminiRequest, nil
 	}
