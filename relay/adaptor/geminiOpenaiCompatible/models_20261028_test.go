@@ -12,9 +12,9 @@ import (
 // output resolution tiers, and deliberately unsupported capabilities.
 func TestGeminiOctober28NanoBanana21Catalog(t *testing.T) {
 	t.Parallel()
-	cfg, ok := ModelRatios[geminiNanoBanana21Model]
+	cfg, ok := ModelRatios[GeminiNanoBanana21Model]
 	require.True(t, ok)
-	require.Contains(t, ModelList, geminiNanoBanana21Model)
+	require.Contains(t, ModelList, GeminiNanoBanana21Model)
 
 	require.InDelta(t, 1.50, cfg.Ratio/ratio.MilliTokensUsd, 1e-12)
 	require.InDelta(t, 7.50, cfg.Ratio*cfg.CompletionRatio/ratio.MilliTokensUsd, 1e-12)
@@ -23,7 +23,7 @@ func TestGeminiOctober28NanoBanana21Catalog(t *testing.T) {
 	require.EqualValues(t, 32_768, cfg.MaxOutputTokens)
 	require.ElementsMatch(t, []string{"text", "image", "video", "file"}, cfg.InputModalities)
 	require.Equal(t, []string{"text", "image"}, cfg.OutputModalities)
-	require.ElementsMatch(t, []string{"web_search", "reasoning"}, cfg.SupportedFeatures)
+	require.ElementsMatch(t, []string{"reasoning"}, cfg.SupportedFeatures)
 	require.NotContains(t, cfg.SupportedFeatures, "tools")
 	require.NotContains(t, cfg.SupportedFeatures, "structured_outputs")
 	require.Equal(t, []string{"max_tokens"}, cfg.SupportedSamplingParameters)
@@ -60,18 +60,18 @@ func TestGeminiOctober28NanoBanana21Catalog(t *testing.T) {
 // response-mode policy and search tariff without relaxing other Gemini IDs.
 func TestGeminiOctober28NanoBanana21Routing(t *testing.T) {
 	t.Parallel()
-	require.True(t, IsGeminiImageGenerationModel(geminiNanoBanana21Model))
+	require.True(t, IsGeminiImageGenerationModel(GeminiNanoBanana21Model))
 	require.True(t, IsGeminiImageGenerationModel("Gemini-Nano-Banana-2.1"))
 	require.True(t, IsGeminiImageGenerationModel("gemini-3.1-flash-image"))
 	require.False(t, IsGeminiImageGenerationModel("gemini-3.8-flash"))
 
-	require.Equal(t, []string{ModalityText, ModalityImage}, GetModelModalities(geminiNanoBanana21Model))
+	require.Equal(t, []string{ModalityText, ModalityImage}, GetModelModalities(GeminiNanoBanana21Model))
 	require.Equal(t, []string{ModalityText, ModalityImage}, GetModelModalities("Gemini-Nano-Banana-2.1"))
 	require.Nil(t, GetModelModalities("gemini-3.1-flash-image"), "numeric Gemini 2.5+ omits this field for backward compatibility")
 	require.Nil(t, GetModelModalities("gemini-4-argon"))
 
-	require.Contains(t, geminiWebSearchModels, geminiNanoBanana21Model)
-	require.InDelta(t, 0.014, GeminiToolingDefaultsForModel(geminiNanoBanana21Model).Pricing["web_search"].UsdPerCall, 1e-12)
+	require.NotContains(t, geminiWebSearchModels, GeminiNanoBanana21Model)
+	require.Empty(t, GeminiToolingDefaultsForModel(GeminiNanoBanana21Model).Pricing)
 	require.InDelta(t, 0.035, GeminiToolingDefaultsForModel("gemini-2.5-flash").Pricing["web_search"].UsdPerCall, 1e-12)
 }
 
