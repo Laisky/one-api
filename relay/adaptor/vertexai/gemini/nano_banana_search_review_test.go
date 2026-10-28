@@ -16,8 +16,8 @@ import (
 func TestVertexGeminiOctober28RejectDroppedSearch(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	bad := &model.GeneralOpenAIRequest{
-		Model: "gemini-nano-banana-2.1",
-		Tools: []model.Tool{{Type: "web_search"}},
+		Model:    "gemini-nano-banana-2.1",
+		Tools:    []model.Tool{{Type: "web_search"}},
 		Messages: []model.Message{{Role: "user", Content: "Search and summarize."}},
 	}
 	converted, err := (&Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, bad)
@@ -26,7 +26,7 @@ func TestVertexGeminiOctober28RejectDroppedSearch(t *testing.T) {
 	require.Contains(t, err.Error(), "web_search")
 
 	good := &model.GeneralOpenAIRequest{
-		Model: "gemini-nano-banana-2.1",
+		Model:    "gemini-nano-banana-2.1",
 		Messages: []model.Message{{Role: "user", Content: "Draw a duck."}},
 	}
 	converted, err = (&Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, good)
