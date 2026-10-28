@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	geminiNanoBanana21Model = "gemini-nano-banana-2.1"
+	// GeminiNanoBanana21Model is the stable upstream ID used by the Gemini and Vertex adaptors.
+	GeminiNanoBanana21Model = "gemini-nano-banana-2.1"
 
 	// Google bills image output by resolution: 1,120/1,680/3,780 tokens
 	// at $30 per million output-image tokens for Standard inference.
@@ -40,14 +41,15 @@ func geminiNanoBanana21Config() adaptor.ModelConfig {
 		MaxOutputTokens:             32_768,
 		InputModalities:             []string{"text", "image", "video", "file"},
 		OutputModalities:            []string{"text", "image"},
-		SupportedFeatures:           []string{"web_search", "reasoning"},
+		SupportedFeatures:           []string{"reasoning"},
 		SupportedSamplingParameters: []string{"max_tokens"},
 		SupportedReasoningEfforts:   []string{"minimal", "medium", "high"},
 		DefaultReasoningEffort:      "medium",
 		Description: "Gemini Nano Banana 2.1 stable image generation and conversational editing model. " +
 			"Supports text, images, video, and PDF inputs; text and image outputs. " +
 			"128K context, 32K output, 1K default render and 2K/4K resolution tiers. " +
-			"Google Web and Image Search grounding and level-based thinking are supported; " +
+			"The upstream supports Google Search, but this gateway does not forward built-in web_search yet. " +
+			"Requests for web_search are rejected explicitly; level-based thinking remains supported. " +
 			"function calling, JSON structured output, Live API, and sampling controls are not. " +
 			"Developer API caching is unavailable; Vertex AI implicit-cache pricing is provider-specific. " +
 			"Higher image resolution requires explicit native imageConfig and matching billing configuration.",
@@ -70,11 +72,10 @@ var geminiOctober28LifecycleDescriptions = map[string]string{
 // init installs the new model and refreshes lifecycle descriptions without
 // removing existing IDs, reassigning legacy prices, or rewriting model aliases.
 func init() {
-	if _, exists := ModelRatios[geminiNanoBanana21Model]; exists {
-		panic("gemini: duplicate model definition " + geminiNanoBanana21Model)
+	if _, exists := ModelRatios[GeminiNanoBanana21Model]; exists {
+		panic("gemini: duplicate model definition " + GeminiNanoBanana21Model)
 	}
-	ModelRatios[geminiNanoBanana21Model] = geminiNanoBanana21Config()
-	geminiWebSearchModels[geminiNanoBanana21Model] = struct{}{}
+	ModelRatios[GeminiNanoBanana21Model] = geminiNanoBanana21Config()
 	for id, description := range geminiOctober28LifecycleDescriptions {
 		cfg, exists := ModelRatios[id]
 		if !exists {
