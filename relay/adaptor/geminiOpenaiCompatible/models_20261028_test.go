@@ -60,6 +60,9 @@ func TestGeminiOctober28NanoBanana21Catalog(t *testing.T) {
 // response-mode policy and search tariff without relaxing other Gemini IDs.
 func TestGeminiOctober28NanoBanana21Routing(t *testing.T) {
 	t.Parallel()
+	require.True(t, IsGeminiNanoBanana21Model(GeminiNanoBanana21Model))
+	require.True(t, IsGeminiNanoBanana21Model("Gemini-Nano-Banana-2.1"))
+	require.False(t, IsGeminiNanoBanana21Model("gemini-3.8-flash"))
 	require.True(t, IsGeminiImageGenerationModel(GeminiNanoBanana21Model))
 	require.True(t, IsGeminiImageGenerationModel("Gemini-Nano-Banana-2.1"))
 	require.True(t, IsGeminiImageGenerationModel("gemini-3.1-flash-image"))
@@ -89,7 +92,7 @@ func TestGeminiOctober28NanoBananaConfigIsolation(t *testing.T) {
 	require.InDelta(t, 0.1134, second.Image.PricePerImageUsd*second.Image.SizeMultipliers["4096x4096"], 1e-12)
 	require.Equal(t, "text", second.InputModalities[0])
 	require.Equal(t, "text", second.OutputModalities[0])
-	require.Equal(t, "web_search", second.SupportedFeatures[0])
+	require.Equal(t, "reasoning", second.SupportedFeatures[0])
 	require.Equal(t, "minimal", second.SupportedReasoningEfforts[0])
 }
 
