@@ -26,6 +26,9 @@ func ValidateNativeToolSupport(c *gin.Context, request *model.GeneralOpenAIReque
 	if !geminiOpenaiCompatible.IsGeminiNanoBanana21Model(modelName) {
 		return nil
 	}
+	if request.N != nil && *request.N > 1 {
+		return errors.New("native Gemini Nano Banana 2.1 supports at most one response candidate")
+	}
 	if request.ReasoningEffort != nil {
 		switch strings.ToLower(*request.ReasoningEffort) {
 		case "", "default", "minimal", "medium", "high":

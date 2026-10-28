@@ -138,3 +138,29 @@ func TestGeminiNanoBananaRejectsVideo(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, got)
 }
+
+// TestGeminiNanoBananaCandidateAdmission preserves single-result and legacy model requests.
+func TestGeminiNanoBananaCandidateAdmission(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	for _, n := range []int{0, 1, 2} {
+		req := &model.GeneralOpenAIRequest{Model: "gemini-nano-banana-2.1", N: &n, Messages: []model.Message{{Role: "user", Content: "draw"}}}
+		got, err := (&Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, req)
+		if n == 2 {
+			require.Error(t, err)
+			require.Nil(t, got)
+		} else {
+			require.NoError(t, err)
+			require.NotNil(t, got)
+		}
+	}
+	n := 2
+	req := &model.GeneralOpenAIRequest{Model: "gemini-2.5-flash", N: &n, Messages: []model.Message{{Role: "user", Content: "hello"}}}
+	got, err := (&Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, req)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	c.Set(ctxkey.Meta, &meta.Meta{ActualModelName: "Gemini-Nano-Banana-2.1"})
+	req.Model = "alias"
+	got, err = (&Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, req)
+	require.Error(t, err)
+	require.Nil(t, got)
+}

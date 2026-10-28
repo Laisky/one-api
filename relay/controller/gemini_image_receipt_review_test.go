@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -126,6 +127,53 @@ func TestGeminiStreamImageQuotaFits(t *testing.T) {
 				ChannelModelConfigs: map[string]dbmodel.ModelConfigLocal{"gemini-nano-banana-2.1": {Ratio: 100, CompletionRatio: 1}},
 			})
 			require.Equal(t, balance-expected.TotalQuota, reloadUserQuota(t))
+		})
+	}
+}
+
+// TestGeminiNativeCandidateRequestBehavior observes candidate controls on the real controller-to-provider path.
+func TestGeminiNativeCandidateRequestBehavior(t *testing.T) {
+	for _, tc := range []struct {
+		name, field string
+		reject      bool
+	}{{"omitted", "", false}, {"zero", `,"n":0`, false}, {"one", `,"n":1`, false}, {"two", `,"n":2`, true}, {"raw_candidate", `,"candidateCount":2`, false}, {"extra_candidate", `,"extra_body":{"candidateCount":2}`, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			const balance int64 = 100000
+			xaiVideoSetup(t, balance, false)
+			wire := make(chan map[string]any, 1)
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var payload map[string]any
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				wire <- payload
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, `data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":1,"totalTokenCount":2}}`+"\n\ndata: [DONE]\n\n")
+			}))
+			t.Cleanup(server.Close)
+			old := client.HTTPClient
+			client.HTTPClient = server.Client()
+			t.Cleanup(func() { client.HTTPClient = old })
+			body := `{"model":"alias","messages":[{"role":"user","content":"draw"}],"max_tokens":1,"stream":true` + tc.field + `}`
+			c, rec, _ := protocolContext(t, channeltype.Gemini, "gemini-nano-banana-2.1", "/v1/chat/completions", body, server.URL, balance, 1, false, nil)
+			apiErr := RelayTextHelper(c)
+			drainCriticalTasks(t)
+			if tc.reject {
+				require.NotNil(t, apiErr)
+				select {
+				case <-wire:
+					t.Fatal("unsupported n reached provider")
+				default:
+				}
+				return
+			}
+			require.Nil(t, apiErr)
+			require.Contains(t, rec.Body.String(), `"content":"ok"`)
+			sent := <-wire
+			gen, ok := sent["generation_config"].(map[string]any)
+			require.True(t, ok)
+			require.NotContains(t, gen, "candidateCount")
+			require.NotContains(t, sent, "n")
+			require.NotContains(t, sent, "candidateCount")
+			require.NotContains(t, sent, "extra_body")
 		})
 	}
 }
