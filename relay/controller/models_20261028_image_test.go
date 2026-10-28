@@ -61,16 +61,16 @@ func TestGeminiOctober28ImageChargeExclusionBoundary(t *testing.T) {
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())
 			c.Set(ctxkey.ChannelRatio, tc.groupRatio)
 			c.Set(ctxkey.OutputImageCount, tc.imageCount)
-			meta := &metalib.Meta{
+			requestMeta := &meta.Meta{
 				ActualModelName: tc.model,
 				ChannelType:     channeltype.VertextAI,
 				APIType:         apitype.VertexAI,
 			}
-			usage := &relaymodel.Usage{
-				CompletionTokens: tc.completion,
+			usage := &model.Usage{
+				CompletionTokens:     tc.completion,
 				CandidateImageTokens: tc.imageTokens,
 			}
-			applyOutputImageCharges(c, &usage, meta)
+			applyOutputImageCharges(c, &usage, requestMeta)
 			require.Equal(t, tc.completion, usage.CompletionTokens)
 			require.Equal(t, tc.wantExcluded, usage.ImageTokensBilledSeparately)
 			if tc.wantImageCost {
