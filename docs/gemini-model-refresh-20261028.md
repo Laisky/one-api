@@ -22,7 +22,7 @@ Developer API and the global Vertex AI endpoint.
 | Image output | $30 per 1M image tokens |
 | 1K / 2K / 4K image render | $0.0336 / $0.0504 / $0.1134 |
 | Default render tier | 1K; **no 512-pixel tier** |
-| Grounded search | $14 per 1,000 calls after upstream allowance |
+| Upstream Google Search | $14 per 1,000 **individual search queries** after the upstream allowance; **not forwarded by this gateway for Nano Banana 2.1** |
 | Thinking levels | `minimal`, `medium` (default), `high` |
 | Not supported | Temperature/top-p/top-k, function calling, structured outputs, Live |
 | Caching | Gemini Developer API: unsupported; Vertex AI: implicit cached input at $0.15/1M tokens |
@@ -47,11 +47,22 @@ registered in the catalog retain their previous tariffs.
   are included in the image pricing metadata for channels that can explicitly
   select and consistently bill those resolutions. Merely choosing a billing
   size override does not make an upstream 2K/4K request.
+- Native `web_search` is not forwarded by the Gemini or Vertex converters for
+  this model. The gateway deliberately does **not** advertise this feature or
+  expose its upstream tool price, and fails closed before dispatch if a client
+  requests it. The underlying Google model supports Google Search, but upstream
+  capability is not the same as gateway support. Each Google search query (not
+  each client request) would be billable once a fully metered integration exists.
+- When Google's `candidatesTokensDetails` receipt identifies generated
+  `IMAGE` tokens and a separate per-image fee is successfully applied, final
+  quota settlement excludes only those measured image candidate tokens from
+  ordinary text/thinking output-token charges. In the absence of the
+  breakdown, invalid pricing, or zero billable image cost, the existing
+  conservative token charge remains. The public provider token counts and
+  total tokens are preserved exactly; no fixed 1K token estimate is subtracted.
 - This catalog registration does **not** implement full compatibility with
   Gemini's Interactions API, image-edit/multipart endpoints, configurable
-  aspect ratios, or a native image-generation endpoint. It also does not
-  reinterpret Gemini's image output token receipt; the existing chat image
-  billing path remains in effect.
+  aspect ratios, or a native image-generation endpoint.
 - Google AI Studio / Vertex permissions, quota and region availability still
   apply. No paid upstream requests were issued as part of this refresh.
 
@@ -79,15 +90,16 @@ assurance of service on a particular day.
 
 Focused tests cover shared discovery, model caps, supported features,
 independent pricing maps, the absence of a 512-pixel tier, three image prices,
-grounded-search billing, native payload conversion and image responses, Vertex
-global routing and cached-input pricing, default rendered image quota, and
-backward-compatible lifecycle pricing. Existing September and October
-lifecycle test assertions are updated for the current official schedule.
+fail-closed search admission, native payload conversion and image responses,
+Vertex global routing and cached-input pricing, receipt-aware image billing
+without double-charging, and backward-compatible lifecycle pricing. Existing
+September and October lifecycle test assertions are updated for the current
+official schedule.
 
 Suggested local verification with the repository's Go toolchain:
 
 ```bash
-go test ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/gemini ./relay/adaptor/vertexai ./relay/controller
+go test ./relay/adaptor/geminiOpenaiCompatible ./relay/adaptor/gemini ./relay/adaptor/vertexai/gemini ./relay/adaptor/vertexai ./relay/controller ./relay/quota
 ```
 
 No CI workflow changes are needed.
