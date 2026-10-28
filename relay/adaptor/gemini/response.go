@@ -403,9 +403,10 @@ func geminiUsageMetadataToOpenAIUsage(meta *UsageMetadata) *model.Usage {
 	}
 
 	usage := &model.Usage{
-		PromptTokens:     meta.PromptTokenCount,
-		CompletionTokens: meta.CandidatesTokenCount + meta.ThoughtsTokenCount,
-		TotalTokens:      meta.TotalTokenCount,
+		PromptTokens:         meta.PromptTokenCount,
+		CompletionTokens:     meta.CandidatesTokenCount + meta.ThoughtsTokenCount,
+		TotalTokens:          meta.TotalTokenCount,
+		CandidateImageTokens: geminiCandidateImageTokens(meta),
 	}
 	if meta.CachedContentTokenCount > 0 {
 		usage.PromptTokensDetails = &model.UsagePromptTokensDetails{
@@ -418,4 +419,25 @@ func geminiUsageMetadataToOpenAIUsage(meta *UsageMetadata) *model.Usage {
 		}
 	}
 	return usage
+}
+
+// geminiCandidateImageTokens extracts only provider-reported IMAGE output tokens.
+// Parameters: meta is Gemini's usage receipt. Returns: a nonnegative count
+// bounded by candidatesTokenCount, not an estimated count per image.
+func geminiCandidateImageTokens(meta *UsageMetadata) int {
+	if meta == nil || meta.CandidatesTokenCount <= 0 {
+		return 0
+	}
+	count := 0
+	for _, entry := range meta.CandidatesTokensDetails {
+		if !strings.EqualFold(entry.Modality, "IMAGE") || entry.TokenCount <= 0 {
+			continue
+		}
+		// Bound cumulative counts without overflow, even for malformed receipts.
+		count += min(entry.TokenCount, meta.CandidatesTokenCount-count)
+		if count == meta.CandidatesTokenCount {
+			break
+		}
+	}
+	return count
 }
