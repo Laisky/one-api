@@ -30,7 +30,7 @@ func ValidateNativeToolSupport(c *gin.Context, request *model.GeneralOpenAIReque
 		}
 	}
 	// Other Gemini models retain their existing transport contracts.
-	if modelName != geminiOpenaiCompatible.GeminiNanoBanana21Model {
+	if !geminiOpenaiCompatible.IsGeminiNanoBanana21Model(modelName) {
 		return nil
 	}
 	if request.WebSearchOptions != nil {
