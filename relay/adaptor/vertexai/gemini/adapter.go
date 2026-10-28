@@ -54,6 +54,9 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		}
 		convertedRequest = embeddingRequest
 	} else {
+		if err := gemini.ValidateNativeToolSupport(c, request); err != nil {
+			return nil, errors.Wrap(err, "validate native Vertex Gemini tools")
+		}
 		geminiRequest = gemini.ConvertRequest(*request)
 		convertedRequest = geminiRequest
 	}
