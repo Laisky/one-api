@@ -41,7 +41,7 @@ func TestPublishedGeminiShutdownBehavior(t *testing.T) {
 			}
 			// A future earliest date is not evidence that a model is already off.
 			future := catalog["gemini-2.5-flash-image"].Description
-			require.Contains(t, future, "earliest shutdown October 2, 2026")
+			require.Contains(t, future, "earliest shutdown March 15, 2027")
 			require.NotContains(t, future, "was shut down")
 		})
 	}

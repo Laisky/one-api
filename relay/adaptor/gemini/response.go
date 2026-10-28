@@ -231,58 +231,30 @@ func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatRespons
 		return nil
 	}
 
-	// Handle different content types in the parts
+	var content []model.MessageContent
+	var textParts []string
 	for _, part := range candidate.Content.Parts {
-		// Handle text content
 		if part.Text != "" {
-			// Store as string for simple text responses
-			textContent := part.Text
-			choice.Delta.Content = textContent
+			text := part.Text
+			textParts = append(textParts, text)
+			content = append(content, model.MessageContent{Type: model.ContentTypeText, Text: &text})
 		}
-
-		// Handle image content
 		imageURL := ""
-		if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" &&
-			isGeminiImageMimeType(part.InlineData.MimeType) {
+		if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
 			imageURL = fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data)
 		} else if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
 			imageURL = part.FileData.FileURI
 		}
 		if imageURL != "" {
-			// If we already have text content, create a mixed content response
-			if strContent, ok := choice.Delta.Content.(string); ok && strContent != "" {
-				// Convert the existing text content and add the image
-				messageContents := []model.MessageContent{
-					{
-						Type: model.ContentTypeText,
-						Text: &strContent,
-					},
-					{
-						Type: model.ContentTypeImageURL,
-						ImageURL: &model.ImageURL{
-							Url: imageURL,
-						},
-					},
-				}
-				choice.Delta.Content = messageContents
-			} else {
-				// Only have image content
-				choice.Delta.Content = []model.MessageContent{
-					{
-						Type: model.ContentTypeImageURL,
-						ImageURL: &model.ImageURL{
-							Url: imageURL,
-						},
-					},
-				}
-			}
-		}
-
-		// Handle function calls (if present)
-		if part.FunctionCall != nil {
-			choice.Delta.ToolCalls = getStreamingToolCalls(c, &candidate)
+			content = append(content, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &model.ImageURL{Url: imageURL}})
 		}
 	}
+	if len(content) > len(textParts) {
+		choice.Delta.Content = content
+	} else if len(textParts) > 0 {
+		choice.Delta.Content = strings.Join(textParts, "")
+	}
+	choice.Delta.ToolCalls = getStreamingToolCalls(c, &candidate)
 
 	// Create response
 	var response openai.ChatCompletionsStreamResponse
@@ -365,7 +337,7 @@ func countGeminiOutputImages(response *ChatResponse) geminiOutputImageCounts {
 	var counts geminiOutputImageCounts
 	for _, candidate := range response.Candidates {
 		for _, part := range candidate.Content.Parts {
-			if part.InlineData != nil && part.InlineData.Data != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
+			if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
 				counts.Inline++
 				counts.Total++
 			}
@@ -440,4 +412,15 @@ func geminiCandidateImageTokens(meta *UsageMetadata) int {
 		}
 	}
 	return count
+}
+
+// geminiStreamText extracts textual stream content for fallback token estimation.
+func geminiStreamText(message model.Message) string {
+	var text strings.Builder
+	for _, part := range message.ParseContent() {
+		if part.Type == model.ContentTypeText && part.Text != nil {
+			text.WriteString(*part.Text)
+		}
+	}
+	return text.String()
 }

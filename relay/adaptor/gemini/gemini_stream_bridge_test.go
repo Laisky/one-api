@@ -103,3 +103,23 @@ func TestStreamHandler_NoBridgeEmitsChatChunks(t *testing.T) {
 	require.Contains(t, body, `"content":" world"`, "missing second content delta; body:\n%s", body)
 	require.Contains(t, body, "data: [DONE]", "missing [DONE] sentinel; body:\n%s", body)
 }
+
+// TestStreamHandlerCountsOnlyDeliveredImages checks billed image counts against the emitted stream.
+func TestStreamHandlerCountsOnlyDeliveredImages(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	chunk := ChatResponse{Candidates: []ChatCandidate{
+		{Content: ChatContent{Parts: []Part{{InlineData: &InlineData{MimeType: "image/png", Data: "YQ=="}}, {InlineData: &InlineData{Data: "Yg=="}}}}},
+		{Content: ChatContent{Parts: []Part{{InlineData: &InlineData{MimeType: "image/png", Data: "Yw=="}}}}},
+	}}
+	raw, err := json.Marshal(chunk)
+	require.NoError(t, err)
+	apiErr, _, _ := StreamHandler(c, newGeminiStreamResp("data: "+string(raw)+"\n\ndata: [DONE]\n\n"))
+	require.Nil(t, apiErr)
+	require.Contains(t, rec.Body.String(), "YQ==")
+	require.NotContains(t, rec.Body.String(), "Yg==")
+	require.NotContains(t, rec.Body.String(), "Yw==")
+	require.Equal(t, 1, c.GetInt(ctxkey.OutputImageCount))
+}

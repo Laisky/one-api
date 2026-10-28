@@ -317,6 +317,9 @@ func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 // other models keep the channel-wide defaults. Parameters: modelName is the
 // upstream model. Returns: the effective provider tooling configuration.
 func (a *Adaptor) DefaultToolingConfigForModel(modelName string) adaptor.ChannelToolConfig {
+	if geminiOpenaiCompatible.IsGeminiNanoBanana21Model(modelName) {
+		return adaptor.ChannelToolConfig{}
+	}
 	if getModelEndpointType(modelName) != EndpointTypeClaude {
 		return VertexAIToolingDefaults
 	}

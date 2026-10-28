@@ -242,6 +242,7 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 	if geminiRequest.GenerationConfig.MaxOutputTokens == 0 {
 		geminiRequest.GenerationConfig.MaxOutputTokens = config.DefaultMaxToken
 	}
+	configureNanoBananaThinking(&geminiRequest, textRequest)
 	if textRequest.ResponseFormat != nil {
 		if mimeType, ok := mimeTypeMap[textRequest.ResponseFormat.Type]; ok {
 			geminiRequest.GenerationConfig.ResponseMimeType = mimeType
@@ -612,7 +613,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			usageMetadata = geminiResponse.UsageMetadata
 		}
 
-		chunkCounts := countGeminiOutputImages(&geminiResponse)
+		var delivered ChatResponse
+		if len(geminiResponse.Candidates) > 0 {
+			delivered.Candidates = geminiResponse.Candidates[:1]
+		}
+		chunkCounts := countGeminiOutputImages(&delivered)
 		outputImageCount += chunkCounts.Total
 		inlineImageCount += chunkCounts.Inline
 		fileImageCount += chunkCounts.File
@@ -622,7 +627,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			continue
 		}
 
-		responseText += response.Choices[0].Delta.StringContent()
+		responseText += geminiStreamText(response.Choices[0].Delta)
 
 		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
 		if err != nil {

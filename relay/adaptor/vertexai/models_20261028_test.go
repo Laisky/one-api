@@ -57,3 +57,12 @@ func TestGeminiOctober28NanoBananaVertexURLs(t *testing.T) {
 			url)
 	}
 }
+
+// TestVertexNanoBananaToolingDefaults verifies model-specific discovery retains legacy defaults.
+func TestVertexNanoBananaToolingDefaults(t *testing.T) {
+	adapter := &Adaptor{}
+	require.Empty(t, adapter.DefaultToolingConfigForModel("gemini-nano-banana-2.1").Pricing)
+	require.Empty(t, adapter.DefaultToolingConfigForModel("Gemini-Nano-Banana-2.1").Pricing)
+	require.Equal(t, VertexAIToolingDefaults, adapter.DefaultToolingConfigForModel("gemini-2.5-flash"))
+	require.Equal(t, VertexAIClaudeToolingDefaults, adapter.DefaultToolingConfigForModel("claude-sonnet-4-5"))
+}

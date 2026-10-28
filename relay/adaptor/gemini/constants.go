@@ -42,5 +42,5 @@ var ModelsSupportSystemInstruction = []string{
 // IsModelSupportSystemInstruction reports whether model accepts system instructions.
 // Parameters: model is the upstream Gemini model ID. Returns: true when system instructions are supported.
 func IsModelSupportSystemInstruction(model string) bool {
-	return slices.Contains(ModelsSupportSystemInstruction, model)
+	return geminiOpenaiCompatible.IsGeminiNanoBanana21Model(model) || slices.Contains(ModelsSupportSystemInstruction, model)
 }
