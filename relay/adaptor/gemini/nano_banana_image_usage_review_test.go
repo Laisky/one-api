@@ -19,10 +19,10 @@ import (
 // without changing public completion_tokens, total_tokens or reasoning tokens.
 func TestGeminiOctober28ImageCandidateReceipt(t *testing.T) {
 	for _, tt := range []struct {
-		name         string
-		receipt      UsageMetadata
-		imageTokens  int
-		completion   int
+		name        string
+		receipt     UsageMetadata
+		imageTokens int
+		completion  int
 	}{
 		{
 			name: "image plus text and reasoning",
@@ -60,7 +60,7 @@ func TestGeminiOctober28ImageCandidateReceipt(t *testing.T) {
 			name: "thinking tokens excluded from image bucket",
 			receipt: UsageMetadata{
 				CandidatesTokenCount: 0, ThoughtsTokenCount: 13,
-				TotalTokenCount: 13,
+				TotalTokenCount:         13,
 				CandidatesTokensDetails: []PromptTokensDetails{{Modality: "IMAGE", TokenCount: 1024}},
 			},
 			imageTokens: 0, completion: 13,
@@ -94,8 +94,8 @@ func TestGeminiOctober28ImageStreamReceipt(t *testing.T) {
 	stream := "data: " + first + "\n\ndata: " + last + "\n\ndata: [DONE]\n\n"
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
-		Body: io.NopCloser(strings.NewReader(stream)),
-		Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader(stream)),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
 	}
 	apiErr, _, usage := StreamHandler(c, resp)
 	require.Nil(t, apiErr)
