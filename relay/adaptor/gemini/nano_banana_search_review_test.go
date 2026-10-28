@@ -7,6 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
@@ -43,6 +45,36 @@ func TestGeminiOctober28RejectDroppedSearch(t *testing.T) {
 		Messages: []model.Message{{Role: "user", Content: "Draw a duck."}},
 	}
 	got, err := (&Adaptor{}).ConvertRequest(nil, relaymode.ChatCompletions, &ordinary)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+}
+
+
+// TestGeminiOctober28MappedNanoBananaRejectsDroppedTools verifies authorization
+// follows the effective upstream model even when the client uses a channel alias.
+func TestGeminiOctober28MappedNanoBananaRejectsDroppedTools(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set(ctxkey.Meta, &meta.Meta{ActualModelName: "gemini-nano-banana-2.1"})
+	req := &model.GeneralOpenAIRequest{
+		Model: "custom-channel-image-alias",
+		Tools: []model.Tool{{Type: "web_search_preview"}},
+		Messages: []model.Message{{Role: "user", Content: "Search for flowers."}},
+	}
+	got, err := (&Adaptor{}).ConvertRequest(ctx, relaymode.ChatCompletions, req)
+	require.ErrorContains(t, err, "web_search")
+	require.Nil(t, got)
+
+	req.Tools = nil
+	req.Functions = []model.Function{{Name: "unsupported_function"}}
+	got, err = (&Adaptor{}).ConvertRequest(ctx, relaymode.ChatCompletions, req)
+	require.ErrorContains(t, err, "function calling")
+	require.Nil(t, got)
+
+	// Other models keep their previous converter behavior; this admission fix
+	// is intentionally scoped to Nano Banana to avoid surprising old channels.
+	req.Model = "gemini-3.8-flash"
+	ctx.Set(ctxkey.Meta, &meta.Meta{ActualModelName: "gemini-3.8-flash"})
+	got, err = (&Adaptor{}).ConvertRequest(ctx, relaymode.ChatCompletions, req)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 }
