@@ -119,10 +119,10 @@ func TestGemini38TTSConfigIsolation(t *testing.T) {
 	require.Equal(t, "00:00", second.TimeWindows[0].Ranges[0].Start)
 }
 
-// TestGeminiSeptember30LifecyclePreservesLegacyPricing checks migration guidance
-// without assuming a shutdown, deleting IDs, or copying new prices onto old models.
+// TestGeminiLatestLifecyclePreservesLegacyPricing checks current migration guidance
+// without deleting legacy IDs or copying new prices onto old models.
 // Parameters: t is the current test handle. Returns: none.
-func TestGeminiSeptember30LifecyclePreservesLegacyPricing(t *testing.T) {
+func TestGeminiLatestLifecyclePreservesLegacyPricing(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		model       string
@@ -138,7 +138,7 @@ func TestGeminiSeptember30LifecyclePreservesLegacyPricing(t *testing.T) {
 			config, ok := ModelRatios[tt.model]
 			require.True(t, ok)
 			require.Contains(t, ModelList, tt.model)
-			require.Contains(t, config.Description, "no shutdown date is announced")
+			require.Contains(t, config.Description, "earliest shutdown November 17, 2026")
 			require.Contains(t, config.Description, tt.replacement)
 			require.InDelta(t, tt.inputUsd, config.Ratio/ratio.MilliTokensUsd, 1e-12)
 			require.InDelta(t, tt.outputUsd, config.Ratio*config.CompletionRatio/ratio.MilliTokensUsd, 1e-12)
@@ -150,5 +150,5 @@ func TestGeminiSeptember30LifecyclePreservesLegacyPricing(t *testing.T) {
 		require.Contains(t, ModelRatios[model].Description, "prior active usage")
 		require.Contains(t, ModelRatios[model].Description, "not deprecated")
 	}
-	require.Contains(t, ModelRatios["gemini-omni-flash-preview"].Description, "earliest shutdown September 30, 2026")
+	require.Contains(t, ModelRatios["gemini-omni-flash-preview"].Description, "shutdown October 22, 2026")
 }
