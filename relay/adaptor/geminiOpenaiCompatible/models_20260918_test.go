@@ -103,9 +103,9 @@ func TestGeminiSeptember18LifecycleMetadata(t *testing.T) {
 		{"gemini-3.1-flash-lite-preview", "May 25, 2026", "gemini-3.1-flash-lite"},
 		{"gemini-3.1-flash-image-preview", "June 25, 2026", "gemini-3.1-flash-image"},
 		{"gemini-3-pro-image-preview", "June 25, 2026", "gemini-3-pro-image"},
-		{"gemini-2.5-flash-image", "earliest shutdown October 2, 2026", "gemini-3.1-flash-image"},
+		{"gemini-2.5-flash-image", "earliest shutdown March 15, 2027", "gemini-3.1-flash-lite-image"},
 		{"gemini-2.5-flash-image-preview", "January 15, 2026", "gemini-3.1-flash-image"},
-		{"gemini-3.1-flash-live-preview", "no shutdown date is announced", "gemini-3.8-live"},
+		{"gemini-3.1-flash-live-preview", "earliest shutdown November 17, 2026", "gemini-3.8-live"},
 	} {
 		t.Run(tt.model, func(t *testing.T) {
 			config, ok := ModelRatios[tt.model]
