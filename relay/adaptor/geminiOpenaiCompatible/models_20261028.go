@@ -57,14 +57,14 @@ func geminiNanoBanana21Config() adaptor.ModelConfig {
 // geminiOctober28LifecycleDescriptions records Google's October 22 published
 // shutdown schedule. Keep historical IDs and prices intact for configured channels.
 var geminiOctober28LifecycleDescriptions = map[string]string{
-	"gemini-3.1-flash-tts-preview": "Gemini 3.1 Flash TTS preview; published earliest shutdown November 17, 2026. Use gemini-3.8-flash-tts or gemini-3.8-flash-lite-tts; migration requires the new speech_metadata protocol.",
-	"gemini-2.5-flash-preview-tts": "Gemini 2.5 Flash TTS preview; published earliest shutdown November 17, 2026. Use gemini-3.8-flash-lite-tts; migration requires the new speech_metadata protocol.",
-	"gemini-2.5-pro-preview-tts": "Gemini 2.5 Pro TTS preview; published earliest shutdown November 17, 2026. Use gemini-3.8-flash-tts; migration requires the new speech_metadata protocol.",
-	"gemini-3.1-flash-live-preview": "Gemini 3.1 Flash Live preview; published earliest shutdown November 17, 2026. Use gemini-3.8-live with its dedicated native Live WebSocket API.",
+	"gemini-3.1-flash-tts-preview":                  "Gemini 3.1 Flash TTS preview; published earliest shutdown November 17, 2026. Use gemini-3.8-flash-tts or gemini-3.8-flash-lite-tts; migration requires the new speech_metadata protocol.",
+	"gemini-2.5-flash-preview-tts":                  "Gemini 2.5 Flash TTS preview; published earliest shutdown November 17, 2026. Use gemini-3.8-flash-lite-tts; migration requires the new speech_metadata protocol.",
+	"gemini-2.5-pro-preview-tts":                    "Gemini 2.5 Pro TTS preview; published earliest shutdown November 17, 2026. Use gemini-3.8-flash-tts; migration requires the new speech_metadata protocol.",
+	"gemini-3.1-flash-live-preview":                 "Gemini 3.1 Flash Live preview; published earliest shutdown November 17, 2026. Use gemini-3.8-live with its dedicated native Live WebSocket API.",
 	"gemini-2.5-flash-native-audio-preview-12-2025": "Gemini 2.5 Flash native-audio preview December 2025 snapshot; published earliest shutdown November 17, 2026. Use gemini-3.8-live and its native Live WebSocket transport.",
-	"gemini-2.5-flash-image": "Gemini 2.5 Flash Image stable; published earliest shutdown March 15, 2027. Use gemini-3.1-flash-lite-image for new image workloads.",
-	"gemini-omni-flash-preview": "Gemini Omni Flash preview video model; published shutdown October 22, 2026. Use gemini-omni-1.1-flash. Retaining this ID does not restore upstream availability.",
-	"gemini-2.5-computer-use-preview-10-2025": "Gemini 2.5 Computer Use October 2025 preview snapshot; published shutdown July 28, 2026. Use gemini-3.8-flash for new agentic workflows.",
+	"gemini-2.5-flash-image":                        "Gemini 2.5 Flash Image stable; published earliest shutdown March 15, 2027. Use gemini-3.1-flash-lite-image for new image workloads.",
+	"gemini-omni-flash-preview":                     "Gemini Omni Flash preview video model; published shutdown October 22, 2026. Use gemini-omni-1.1-flash. Retaining this ID does not restore upstream availability.",
+	"gemini-2.5-computer-use-preview-10-2025":       "Gemini 2.5 Computer Use October 2025 preview snapshot; published shutdown July 28, 2026. Use gemini-3.8-flash for new agentic workflows.",
 }
 
 // init installs the new model and refreshes lifecycle descriptions without
