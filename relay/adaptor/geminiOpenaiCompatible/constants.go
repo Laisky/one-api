@@ -493,7 +493,7 @@ func GeminiToolingDefaults() adaptor.ChannelToolConfig {
 func GeminiToolingDefaultsForModel(model string) adaptor.ChannelToolConfig {
 	// The upstream offers search, but this gateway cannot send native search
 	// tools for Nano Banana yet. Expose no pricing that could imply admission.
-	if strings.EqualFold(model, GeminiNanoBanana21Model) {
+	if IsGeminiNanoBanana21Model(model) {
 		return adaptor.ChannelToolConfig{}
 	}
 	if GeminiVersionAtLeast(model, 3.0) {
@@ -514,11 +514,18 @@ var (
 	geminiResponseModalitiesCutoff = 2.5
 )
 
+// IsGeminiNanoBanana21Model matches this named upstream ID regardless of case.
+// The same predicate is shared by native tool admission, image discovery, and
+// Vertex global routing so a channel mapping cannot bypass model restrictions.
+func IsGeminiNanoBanana21Model(model string) bool {
+	return strings.EqualFold(model, GeminiNanoBanana21Model)
+}
+
 // GetModelModalities returns the modalities of the model.
 func GetModelModalities(model string) []string {
 	// The named Nano Banana model does not match the numeric Gemini version rule;
 	// omitting IMAGE would turn image requests into text-only generation.
-	if strings.EqualFold(model, GeminiNanoBanana21Model) {
+	if IsGeminiNanoBanana21Model(model) {
 		return []string{ModalityText, ModalityImage}
 	}
 	normalized := strings.ToLower(model)
@@ -537,7 +544,7 @@ func GetModelModalities(model string) []string {
 // named Nano Banana family. Parameters: model is the upstream ID. Returns: whether
 // the model generates images and needs image-safe generation configuration.
 func IsGeminiImageGenerationModel(model string) bool {
-	return strings.Contains(strings.ToLower(model), "-image") || strings.EqualFold(model, GeminiNanoBanana21Model)
+	return strings.Contains(strings.ToLower(model), "-image") || IsGeminiNanoBanana21Model(model)
 }
 
 // shouldOmitResponseModalities reports whether the request should skip responseModalities.
