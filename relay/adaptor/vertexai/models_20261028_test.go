@@ -35,6 +35,7 @@ func TestGeminiOctober28NanoBananaVertexURLs(t *testing.T) {
 	t.Parallel()
 	const modelName = "gemini-nano-banana-2.1"
 	require.True(t, IsRequireGlobalEndpoint(modelName))
+	require.True(t, IsRequireGlobalEndpoint("Gemini-Nano-Banana-2.1"), "mixed-case mapped ID must not be routed regionally")
 	require.False(t, IsRequireGlobalEndpoint("gemini-2.0-flash"))
 	for _, tc := range []struct {
 		stream bool
