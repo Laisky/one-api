@@ -613,11 +613,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			usageMetadata = geminiResponse.UsageMetadata
 		}
 
-		var delivered ChatResponse
-		if len(geminiResponse.Candidates) > 0 {
-			delivered.Candidates = geminiResponse.Candidates[:1]
-		}
-		chunkCounts := countGeminiOutputImages(&delivered)
+		chunkCounts := countGeminiStreamImages(&geminiResponse)
 		outputImageCount += chunkCounts.Total
 		inlineImageCount += chunkCounts.Inline
 		fileImageCount += chunkCounts.File

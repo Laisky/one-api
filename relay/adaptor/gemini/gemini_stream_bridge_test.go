@@ -123,3 +123,30 @@ func TestStreamHandlerCountsOnlyDeliveredImages(t *testing.T) {
 	require.NotContains(t, rec.Body.String(), "Yw==")
 	require.Equal(t, 1, c.GetInt(ctxkey.OutputImageCount))
 }
+
+// TestStreamHandlerMalformedImagePartCountsDelivered verifies ambiguous parts do not incur an extra image fee.
+func TestStreamHandlerMalformedImagePartCountsDelivered(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		part            Part
+		count           int
+		present, absent string
+	}{
+		{"inline", Part{InlineData: &InlineData{MimeType: "image/png", Data: "YQ=="}}, 1, "YQ==", "file.example"},
+		{"file", Part{FileData: &FileData{MimeType: "image/png", FileURI: "https://file.example/a.png"}}, 1, "file.example", "YQ=="},
+		{"both", Part{InlineData: &InlineData{MimeType: "image/png", Data: "YQ=="}, FileData: &FileData{MimeType: "image/png", FileURI: "https://file.example/a.png"}}, 1, "YQ==", "file.example"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			raw, err := json.Marshal(ChatResponse{Candidates: []ChatCandidate{{Content: ChatContent{Parts: []Part{tc.part}}}}})
+			require.NoError(t, err)
+			apiErr, _, _ := StreamHandler(c, newGeminiStreamResp("data: "+string(raw)+"\n\ndata: [DONE]\n\n"))
+			require.Nil(t, apiErr)
+			require.Contains(t, rec.Body.String(), tc.present)
+			require.NotContains(t, rec.Body.String(), tc.absent)
+			require.Equal(t, tc.count, c.GetInt(ctxkey.OutputImageCount))
+		})
+	}
+}

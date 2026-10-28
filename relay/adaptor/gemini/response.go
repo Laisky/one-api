@@ -337,6 +337,9 @@ func countGeminiOutputImages(response *ChatResponse) geminiOutputImageCounts {
 	var counts geminiOutputImageCounts
 	for _, candidate := range response.Candidates {
 		for _, part := range candidate.Content.Parts {
+			if part.FunctionCall != nil {
+				continue
+			}
 			if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
 				counts.Inline++
 				counts.Total++
@@ -345,6 +348,24 @@ func countGeminiOutputImages(response *ChatResponse) geminiOutputImageCounts {
 				counts.File++
 				counts.Total++
 			}
+		}
+	}
+	return counts
+}
+
+// countGeminiStreamImages counts image representations selected by the first-candidate stream converter.
+func countGeminiStreamImages(response *ChatResponse) geminiOutputImageCounts {
+	var counts geminiOutputImageCounts
+	if response == nil || len(response.Candidates) == 0 {
+		return counts
+	}
+	for _, part := range response.Candidates[0].Content.Parts {
+		if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
+			counts.Inline++
+			counts.Total++
+		} else if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
+			counts.File++
+			counts.Total++
 		}
 	}
 	return counts
