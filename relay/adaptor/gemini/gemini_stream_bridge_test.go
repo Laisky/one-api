@@ -112,7 +112,7 @@ func TestStreamHandlerCountsOnlyDeliveredImages(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 	chunk := ChatResponse{Candidates: []ChatCandidate{
 		{Content: ChatContent{Parts: []Part{{InlineData: &InlineData{MimeType: "image/png", Data: "YQ=="}}, {InlineData: &InlineData{Data: "Yg=="}}}}},
-		{Content: ChatContent{Parts: []Part{{InlineData: &InlineData{MimeType: "image/png", Data: "Yw=="}}}}},
+		{Index: 1, Content: ChatContent{Parts: []Part{{InlineData: &InlineData{MimeType: "image/png", Data: "Yw=="}}}}},
 	}}
 	raw, err := json.Marshal(chunk)
 	require.NoError(t, err)
@@ -120,8 +120,8 @@ func TestStreamHandlerCountsOnlyDeliveredImages(t *testing.T) {
 	require.Nil(t, apiErr)
 	require.Contains(t, rec.Body.String(), "YQ==")
 	require.NotContains(t, rec.Body.String(), "Yg==")
-	require.NotContains(t, rec.Body.String(), "Yw==")
-	require.Equal(t, 1, c.GetInt(ctxkey.OutputImageCount))
+	require.Contains(t, rec.Body.String(), "Yw==")
+	require.Equal(t, 2, c.GetInt(ctxkey.OutputImageCount))
 }
 
 // TestStreamHandlerMalformedImagePartCountsDelivered verifies ambiguous parts do not incur an extra image fee.

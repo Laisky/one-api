@@ -198,7 +198,7 @@ func applyOutputImageCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 	// receipt. Exclude the measured portion from token pricing only after the
 	// separate per-image fee was actually admitted and applied. Preserve the
 	// original upstream usage counts for API clients, logs, and metrics.
-	if usage.CandidateImageTokens > 0 && usage.CompletionTokens > 0 {
+	if !c.GetBool(ctxkey.GeminiOutputIncomplete) && usage.CandidateImageTokens > 0 && usage.CompletionTokens > 0 {
 		usage.ImageTokensBilledSeparately = min(usage.CandidateImageTokens, usage.CompletionTokens)
 	}
 

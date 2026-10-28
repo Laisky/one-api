@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 // HandleChunk converts chat stream content and tool deltas into Responses events.
 func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_compatible.ChatCompletionsStreamResponse) (bool, bool) {
+	h.deliveredImages = 0
 	if h.streamDone {
 		return true, true
 	}
@@ -34,14 +36,43 @@ func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_c
 	}
 
 	for _, choice := range chunk.Choices {
+		state := h.choiceState(c, choice.Index)
+		h.activeChoiceIndex = choice.Index
+		if h.writeErr != nil {
+			return true, true
+		}
 		if choice.Delta.IsStringContent() {
 			if delta := choice.Delta.StringContent(); delta != "" {
-				h.appendTextDelta(c, delta)
+				h.appendChoiceText(c, state, delta)
 			}
 		} else {
-			for _, part := range convertMessageContent(choice.Delta) {
-				h.appendTextDelta(c, part.Text)
+			for _, part := range choice.Delta.ParseContent() {
+				var text string
+				image := false
+				switch part.Type {
+				case model.ContentTypeText:
+					if part.Text != nil {
+						text = *part.Text
+					}
+				case model.ContentTypeImageURL:
+					if part.ImageURL != nil && part.ImageURL.Url != "" {
+						text, image = part.ImageURL.Url, true
+					}
+				case model.ContentTypeInputAudio:
+					if part.InputAudio != nil {
+						text = part.InputAudio.Data
+					}
+				}
+				if h.appendChoiceText(c, state, text) && image {
+					h.deliveredImages++
+				}
+				if h.writeErr != nil {
+					return true, true
+				}
 			}
+		}
+		if h.writeErr != nil {
+			return true, true
 		}
 
 		if choice.Delta.Reasoning != nil && *choice.Delta.Reasoning != "" {
@@ -59,7 +90,13 @@ func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_c
 		}
 
 		if choice.FinishReason != nil {
-			h.lastFinishReason = *choice.FinishReason
+			state.finishReason = *choice.FinishReason
+			if choice.Index == h.primaryChoiceIndex {
+				h.lastFinishReason = *choice.FinishReason
+			}
+		}
+		if h.writeErr != nil {
+			return true, true
 		}
 	}
 

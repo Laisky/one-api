@@ -366,6 +366,9 @@ const (
 	// automatic pre-consume refunds once forwarding has started.
 	UpstreamRequestPossiblyForwarded = "upstream_request_possibly_forwarded"
 
+	// GeminiOutputIncomplete means not all upstream image output was represented downstream.
+	GeminiOutputIncomplete = "gemini_output_incomplete"
+
 	// APIFormat is the detected API format of the request (OpenAI, Claude, Response API).
 	// Set in: middleware/api_format_detect.
 	// Read in: metrics for labeling.

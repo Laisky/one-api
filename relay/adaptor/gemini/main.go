@@ -603,36 +603,51 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		var geminiResponse ChatResponse
 		err = json.Unmarshal([]byte(data), &geminiResponse)
 		if err != nil {
-			lg.Error("error unmarshalling stream response",
-				zap.Error(errors.Wrap(err, "unmarshal stream")))
-			continue
+			streamErr = errors.Wrap(err, "unmarshal stream")
+			break
 		}
-
-		// Capture the latest non-empty usageMetadata (cumulative totals, not deltas).
+		seen := make(map[int64]bool, len(geminiResponse.Candidates))
+		for _, candidate := range geminiResponse.Candidates {
+			if candidate.Index < 0 || int64(int(candidate.Index)) != candidate.Index || seen[candidate.Index] {
+				streamErr = errors.New("invalid or duplicate Gemini candidate index")
+				break
+			}
+			seen[candidate.Index] = true
+		}
+		if streamErr != nil {
+			break
+		}
 		if geminiResponse.UsageMetadata != nil && geminiResponse.UsageMetadata.TotalTokenCount > 0 {
 			usageMetadata = geminiResponse.UsageMetadata
 		}
-
-		chunkCounts := countGeminiStreamImages(&geminiResponse)
-		outputImageCount += chunkCounts.Total
-		inlineImageCount += chunkCounts.Inline
-		fileImageCount += chunkCounts.File
-
 		response := streamResponseGeminiChat2OpenAI(c, &geminiResponse)
 		if response == nil {
 			continue
 		}
-
-		responseText += geminiStreamText(response.Choices[0].Delta)
-
-		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
-		if err != nil {
-			lg.Error("error rendering stream",
-				zap.Error(errors.Wrap(err, "render stream")))
+		for _, choice := range response.Choices {
+			responseText += geminiStreamText(choice.Delta)
 		}
+		counts := countGeminiStreamImages(&geminiResponse)
+		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
+		if rw := openai_compatible.StreamRewriterFromContext(c); rw != nil {
+			if reporter, ok := rw.(interface{ DeliveredImagesInLastChunk() int }); ok {
+				outputImageCount += reporter.DeliveredImagesInLastChunk()
+			} else if err == nil {
+				outputImageCount += counts.Total
+			}
+		} else if err == nil {
+			outputImageCount += counts.Total
+		}
+		if err != nil {
+			streamErr = errors.Wrap(err, "render stream")
+			break
+		}
+		inlineImageCount += counts.Inline
+		fileImageCount += counts.File
 	}
 	if streamErr != nil {
-		render.LogHeartbeatLineReaderError(c, lg, errors.Wrap(streamErr, "line reader stream"), hbr)
+		c.Set(ctxkey.GeminiOutputIncomplete, true)
+		render.LogHeartbeatLineReaderError(c, lg, errors.Wrap(streamErr, "gemini stream"), hbr)
 	}
 
 	if outputImageCount > 0 {
@@ -648,13 +663,21 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	usage := geminiUsageMetadataToOpenAIUsage(usageMetadata)
 
-	openai_compatible.FinalizeStreamWithBridge(c, usage)
+	if streamErr == nil {
+		streamErr = openai_compatible.FinalizeStreamWithBridgeChecked(c, usage)
+		if streamErr != nil {
+			c.Set(ctxkey.GeminiOutputIncomplete, true)
+		}
+	}
 
 	err := resp.Body.Close()
 	if err != nil {
 		return openai.ErrorWrapper(errors.Wrap(err, "close_response_body_failed"), "close_response_body_failed", http.StatusInternalServerError), "", nil
 	}
 
+	if streamErr != nil {
+		return openai.ErrorWrapper(streamErr, "gemini_stream_failed", http.StatusBadGateway), responseText, usage
+	}
 	return nil, responseText, usage
 }
 

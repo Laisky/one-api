@@ -215,54 +215,53 @@ func responseGeminiChat2OpenAI(c *gin.Context, response *ChatResponse) *openai.T
 // Parameters: c is the current request context and geminiResponse is the parsed Gemini stream chunk.
 // Returns: an OpenAI-compatible stream response, or nil when the chunk has no usable candidate content.
 func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatResponse) *openai.ChatCompletionsStreamResponse {
-	var choice openai.ChatCompletionsStreamResponseChoice
-	choice.Delta.Role = "assistant"
-
-	// Check if we have any candidates
 	if len(geminiResponse.Candidates) == 0 {
 		return nil
 	}
+	choices := make([]openai.ChatCompletionsStreamResponseChoice, 0, len(geminiResponse.Candidates))
+	for _, candidate := range geminiResponse.Candidates {
+		if len(candidate.Content.Parts) == 0 {
+			continue
+		}
+		var choice openai.ChatCompletionsStreamResponseChoice
+		choice.Index = int(candidate.Index)
+		choice.Delta.Role = "assistant"
+		var content []model.MessageContent
+		var textParts []string
+		for _, part := range candidate.Content.Parts {
+			if part.Text != "" {
+				text := part.Text
+				textParts = append(textParts, text)
+				content = append(content, model.MessageContent{Type: model.ContentTypeText, Text: &text})
+			}
+			imageURL := ""
+			if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
+				imageURL = fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data)
+			} else if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
+				imageURL = part.FileData.FileURI
+			}
+			if imageURL != "" {
+				content = append(content, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &model.ImageURL{Url: imageURL}})
+			}
+		}
+		if len(content) > len(textParts) {
+			choice.Delta.Content = content
+		} else if len(textParts) > 0 {
+			choice.Delta.Content = strings.Join(textParts, "")
+		}
+		choice.Delta.ToolCalls = getStreamingToolCalls(c, &candidate)
 
-	// Get the first candidate
-	candidate := geminiResponse.Candidates[0]
-
-	// Check if there are parts in the content
-	if len(candidate.Content.Parts) == 0 {
+		choices = append(choices, choice)
+	}
+	if len(choices) == 0 {
 		return nil
 	}
-
-	var content []model.MessageContent
-	var textParts []string
-	for _, part := range candidate.Content.Parts {
-		if part.Text != "" {
-			text := part.Text
-			textParts = append(textParts, text)
-			content = append(content, model.MessageContent{Type: model.ContentTypeText, Text: &text})
-		}
-		imageURL := ""
-		if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
-			imageURL = fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data)
-		} else if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
-			imageURL = part.FileData.FileURI
-		}
-		if imageURL != "" {
-			content = append(content, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &model.ImageURL{Url: imageURL}})
-		}
-	}
-	if len(content) > len(textParts) {
-		choice.Delta.Content = content
-	} else if len(textParts) > 0 {
-		choice.Delta.Content = strings.Join(textParts, "")
-	}
-	choice.Delta.ToolCalls = getStreamingToolCalls(c, &candidate)
-
-	// Create response
 	var response openai.ChatCompletionsStreamResponse
 	response.Id = tracing.GenerateChatCompletionID(c)
 	response.Created = helper.GetTimestamp()
 	response.Object = "chat.completion.chunk"
 	response.Model = "gemini"
-	response.Choices = []openai.ChatCompletionsStreamResponseChoice{choice}
+	response.Choices = choices
 
 	return &response
 }
@@ -353,19 +352,21 @@ func countGeminiOutputImages(response *ChatResponse) geminiOutputImageCounts {
 	return counts
 }
 
-// countGeminiStreamImages counts image representations selected by the first-candidate stream converter.
+// countGeminiStreamImages counts image representations selected by the stream converter.
 func countGeminiStreamImages(response *ChatResponse) geminiOutputImageCounts {
 	var counts geminiOutputImageCounts
 	if response == nil || len(response.Candidates) == 0 {
 		return counts
 	}
-	for _, part := range response.Candidates[0].Content.Parts {
-		if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
-			counts.Inline++
-			counts.Total++
-		} else if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
-			counts.File++
-			counts.Total++
+	for _, candidate := range response.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
+				counts.Inline++
+				counts.Total++
+			} else if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
+				counts.File++
+				counts.Total++
+			}
 		}
 	}
 	return counts
