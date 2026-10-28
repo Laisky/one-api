@@ -21,14 +21,14 @@ func TestGeminiOctober28RejectDroppedSearch(t *testing.T) {
 		request model.GeneralOpenAIRequest
 	}{
 		{"explicit_tool", model.GeneralOpenAIRequest{
-			Model: "gemini-nano-banana-2.1",
-			Tools: []model.Tool{{Type: "web_search"}},
+			Model:    "gemini-nano-banana-2.1",
+			Tools:    []model.Tool{{Type: "web_search"}},
 			Messages: []model.Message{{Role: "user", Content: "What happened today?"}},
 		}},
 		{"web_search_options", model.GeneralOpenAIRequest{
-			Model: "gemini-nano-banana-2.1",
+			Model:            "gemini-nano-banana-2.1",
 			WebSearchOptions: &model.WebSearchOptions{},
-			Messages: []model.Message{{Role: "user", Content: "What happened today?"}},
+			Messages:         []model.Message{{Role: "user", Content: "What happened today?"}},
 		}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -41,7 +41,7 @@ func TestGeminiOctober28RejectDroppedSearch(t *testing.T) {
 	}
 
 	ordinary := model.GeneralOpenAIRequest{
-		Model: "gemini-nano-banana-2.1",
+		Model:    "gemini-nano-banana-2.1",
 		Messages: []model.Message{{Role: "user", Content: "Draw a duck."}},
 	}
 	got, err := (&Adaptor{}).ConvertRequest(nil, relaymode.ChatCompletions, &ordinary)
@@ -49,15 +49,14 @@ func TestGeminiOctober28RejectDroppedSearch(t *testing.T) {
 	require.NotNil(t, got)
 }
 
-
 // TestGeminiOctober28MappedNanoBananaRejectsDroppedTools verifies authorization
 // follows the effective upstream model even when the client uses a channel alias.
 func TestGeminiOctober28MappedNanoBananaRejectsDroppedTools(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Set(ctxkey.Meta, &meta.Meta{ActualModelName: "gemini-nano-banana-2.1"})
 	req := &model.GeneralOpenAIRequest{
-		Model: "custom-channel-image-alias",
-		Tools: []model.Tool{{Type: "web_search_preview"}},
+		Model:    "custom-channel-image-alias",
+		Tools:    []model.Tool{{Type: "web_search_preview"}},
 		Messages: []model.Message{{Role: "user", Content: "Search for flowers."}},
 	}
 	got, err := (&Adaptor{}).ConvertRequest(ctx, relaymode.ChatCompletions, req)
