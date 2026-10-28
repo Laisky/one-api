@@ -491,7 +491,7 @@ func GeminiToolingDefaults() adaptor.ChannelToolConfig {
 // GeminiToolingDefaultsForModel returns the tooling defaults for the given model,
 // selecting $14/1K queries for Gemini 3.x models and $35/1K queries for 2.5 and earlier.
 func GeminiToolingDefaultsForModel(model string) adaptor.ChannelToolConfig {
-	if GeminiVersionAtLeast(model, 3.0) {
+	if strings.EqualFold(model, geminiNanoBanana21Model) || GeminiVersionAtLeast(model, 3.0) {
 		return gemini3xToolingDefaults
 	}
 	return geminiToolingDefaults
@@ -511,16 +511,28 @@ var (
 
 // GetModelModalities returns the modalities of the model.
 func GetModelModalities(model string) []string {
+	// The named Nano Banana model does not match the numeric Gemini version rule;
+	// omitting IMAGE would turn image requests into text-only generation.
+	if strings.EqualFold(model, geminiNanoBanana21Model) {
+		return []string{ModalityText, ModalityImage}
+	}
 	normalized := strings.ToLower(model)
 	if shouldOmitResponseModalities(normalized) {
 		return nil
 	}
 
-	if strings.Contains(normalized, "-image") {
+	if IsGeminiImageGenerationModel(normalized) {
 		return []string{ModalityText, ModalityImage}
 	}
 
 	return []string{ModalityText}
+}
+
+// IsGeminiImageGenerationModel checks both numeric Gemini image IDs and the
+// named Nano Banana family. Parameters: model is the upstream ID. Returns: whether
+// the model generates images and needs image-safe generation configuration.
+func IsGeminiImageGenerationModel(model string) bool {
+	return strings.Contains(strings.ToLower(model), "-image") || strings.EqualFold(model, geminiNanoBanana21Model)
 }
 
 // shouldOmitResponseModalities reports whether the request should skip responseModalities.
