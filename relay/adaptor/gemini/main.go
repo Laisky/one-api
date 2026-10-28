@@ -265,7 +265,7 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 	}
 
 	// remove temperature & top_p for Gemini image models; only enforce response modalities when allowed
-	if strings.Contains(strings.ToLower(textRequest.Model), "-image") {
+	if geminiOpenaiCompatible.IsGeminiImageGenerationModel(textRequest.Model) {
 		geminiRequest.GenerationConfig.Temperature = nil
 		geminiRequest.GenerationConfig.TopP = nil
 		if geminiRequest.GenerationConfig.ResponseModalities != nil {
