@@ -25,6 +25,11 @@ func TestGeminiOctober28RejectDroppedSearch(t *testing.T) {
 			Tools:    []model.Tool{{Type: "web_search"}},
 			Messages: []model.Message{{Role: "user", Content: "What happened today?"}},
 		}},
+		{"mixed_case_model", model.GeneralOpenAIRequest{
+			Model:    "Gemini-Nano-Banana-2.1",
+			Tools:    []model.Tool{{Type: "web_search"}},
+			Messages: []model.Message{{Role: "user", Content: "What happened today?"}},
+		}},
 		{"web_search_options", model.GeneralOpenAIRequest{
 			Model:            "gemini-nano-banana-2.1",
 			WebSearchOptions: &model.WebSearchOptions{},
@@ -53,7 +58,9 @@ func TestGeminiOctober28RejectDroppedSearch(t *testing.T) {
 // follows the effective upstream model even when the client uses a channel alias.
 func TestGeminiOctober28MappedNanoBananaRejectsDroppedTools(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set(ctxkey.Meta, &meta.Meta{ActualModelName: "gemini-nano-banana-2.1"})
+	// A mixed-case effective model ID must not bypass tool admission even
+	// when the user-facing model is a custom channel alias.
+	ctx.Set(ctxkey.Meta, &meta.Meta{ActualModelName: "Gemini-Nano-Banana-2.1"})
 	req := &model.GeneralOpenAIRequest{
 		Model:    "custom-channel-image-alias",
 		Tools:    []model.Tool{{Type: "web_search_preview"}},
