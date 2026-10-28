@@ -194,6 +194,13 @@ func applyOutputImageCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 	}
 
 	usage.ToolsCost += imageQuota
+	// Image candidate tokens are already part of Gemini's completion-token
+	// receipt. Exclude the measured portion from token pricing only after the
+	// separate per-image fee was actually admitted and applied. Preserve the
+	// original upstream usage counts for API clients, logs, and metrics.
+	if usage.CandidateImageTokens > 0 && usage.CompletionTokens > 0 {
+		usage.ImageTokensBilledSeparately = min(usage.CandidateImageTokens, usage.CompletionTokens)
+	}
 
 	if billingCtx.Logger != nil {
 		billingCtx.Logger.Debug("output image billing applied",
