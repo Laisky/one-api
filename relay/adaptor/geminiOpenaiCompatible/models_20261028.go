@@ -3,6 +3,7 @@ package geminiOpenaiCompatible
 import (
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/billing/ratio"
+	"strings"
 )
 
 const (
@@ -85,4 +86,14 @@ func init() {
 		ModelRatios[id] = cfg
 	}
 	ModelList = adaptor.GetModelListFromPricing(ModelRatios)
+}
+
+// NativeGeminiModelConfig returns transport-specific discovery metadata without changing shared pricing.
+func NativeGeminiModelConfig(modelName string, cfg adaptor.ModelConfig) adaptor.ModelConfig {
+	if !IsGeminiNanoBanana21Model(modelName) {
+		return cfg
+	}
+	cfg.InputModalities = []string{"text", "image"}
+	cfg.Description = strings.Replace(cfg.Description, "Supports text, images, video, and PDF inputs; text and image outputs.", "The native chat transport supports text and image inputs and outputs; video and PDF inputs are rejected.", 1)
+	return cfg
 }

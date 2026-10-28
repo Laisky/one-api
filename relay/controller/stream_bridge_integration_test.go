@@ -91,7 +91,7 @@ func TestResponseStreamBridgeGeminiMixedContent(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 	c.Set(ctxkey.ResponseStreamRewriteHandler, newChatToResponseStreamBridge(c, &metalib.Meta{ActualModelName: "gemini-nano-banana-2.1"}, &openai.ResponseAPIRequest{Model: "gemini-nano-banana-2.1"}))
-	frame := `data: {"candidates":[{"content":{"parts":[{"text":"before"},{"inlineData":{"mimeType":"image/png","data":"YQ=="}},{"text":"after"}]}}]}` + "\n\ndata: [DONE]\n\n"
+	frame := `data: {"candidates":[{"content":{"parts":[{"text":"before"},{"inlineData":{"mimeType":"image/png","data":"YQ=="}},{"fileData":{"mimeType":"image/png","fileUri":"https://example.test/b.png"}},{"text":"after"}]}}]}` + "\n\ndata: [DONE]\n\n"
 	resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(frame))}
 	apiErr, text, usage := gemini.StreamHandler(c, resp)
 	require.Nil(t, apiErr)
@@ -101,6 +101,7 @@ func TestResponseStreamBridgeGeminiMixedContent(t *testing.T) {
 	require.Contains(t, body, "response.completed")
 	require.Contains(t, body, "before")
 	require.Contains(t, body, "data:image/png;base64,YQ==")
+	require.Contains(t, body, "https://example.test/b.png")
 	require.Contains(t, body, "after")
-	require.Equal(t, 1, c.GetInt(ctxkey.OutputImageCount))
+	require.Equal(t, 2, c.GetInt(ctxkey.OutputImageCount))
 }

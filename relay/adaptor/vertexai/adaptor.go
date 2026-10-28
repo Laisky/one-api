@@ -264,7 +264,7 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 				// the Gemini Developer API does not expose caching for this model.
 				cfg.CachedInputRatio = 0.15 * ratio.MilliTokensUsd
 			}
-			pricing[name] = cfg
+			pricing[name] = geminiOpenaiCompatible.NativeGeminiModelConfig(name, cfg)
 		}
 	}
 

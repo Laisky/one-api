@@ -66,3 +66,11 @@ func TestVertexNanoBananaToolingDefaults(t *testing.T) {
 	require.Equal(t, VertexAIToolingDefaults, adapter.DefaultToolingConfigForModel("gemini-2.5-flash"))
 	require.Equal(t, VertexAIClaudeToolingDefaults, adapter.DefaultToolingConfigForModel("claude-sonnet-4-5"))
 }
+
+// TestVertexNanoBananaNativeDiscoveryMatchesTransport verifies native Vertex metadata matches accepted inputs.
+func TestVertexNanoBananaNativeDiscoveryMatchesTransport(t *testing.T) {
+	cfg := (&Adaptor{}).GetDefaultModelPricing()["gemini-nano-banana-2.1"]
+	require.Equal(t, []string{"text", "image"}, cfg.InputModalities)
+	require.Contains(t, cfg.Description, "native chat")
+	require.InDelta(t, 0.15, cfg.CachedInputRatio/ratio.MilliTokensUsd, 1e-12)
+}

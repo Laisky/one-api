@@ -104,3 +104,12 @@ func TestGeminiOctober28NanoBananaImageResponse(t *testing.T) {
 	require.Equal(t, "data:image/png;base64,aW1hZ2U=", parts[1].ImageURL.Url)
 	require.Equal(t, 1, countGeminiOutputImages(received).Total)
 }
+
+// TestNanoBananaNativeDiscoveryMatchesTransport verifies native discovery only advertises supported inputs.
+func TestNanoBananaNativeDiscoveryMatchesTransport(t *testing.T) {
+	native := (&Adaptor{}).GetDefaultModelPricing()[geminiOpenaiCompatible.GeminiNanoBanana21Model]
+	require.Equal(t, []string{"text", "image"}, native.InputModalities)
+	require.Contains(t, native.Description, "native chat")
+	require.Contains(t, geminiOpenaiCompatible.ModelRatios[geminiOpenaiCompatible.GeminiNanoBanana21Model].InputModalities, "file")
+	require.Equal(t, ModelRatios["gemini-2.5-flash"], (&Adaptor{}).GetDefaultModelPricing()["gemini-2.5-flash"])
+}

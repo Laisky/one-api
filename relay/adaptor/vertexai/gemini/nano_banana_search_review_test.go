@@ -79,3 +79,13 @@ func TestVertexGeminiMappedNanoBananaPayload(t *testing.T) {
 	require.Contains(t, string(raw), `"system_instruction"`)
 	require.Contains(t, string(raw), `"responseModalities":["TEXT","IMAGE"]`)
 }
+
+// TestVertexGeminiNanoBananaRejectsVideo verifies unsupported native video is rejected before dispatch.
+func TestVertexGeminiNanoBananaRejectsVideo(t *testing.T) {
+	var req model.GeneralOpenAIRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"model":"gemini-nano-banana-2.1","messages":[{"role":"user","content":[{"type":"video","video_url":"https://example.test/video.mp4"}]}]}`), &req))
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	got, err := (&Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, &req)
+	require.Error(t, err)
+	require.Nil(t, got)
+}

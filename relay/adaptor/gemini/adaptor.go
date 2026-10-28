@@ -738,8 +738,12 @@ func writeClaudeSSEEvent(buf *bytes.Buffer, event string, payload any) error {
 
 // Pricing methods - Gemini adapter manages its own model pricing
 func (a *Adaptor) GetDefaultModelPricing() map[string]channelhelper.ModelConfig {
-	// Use the constants.go ModelRatios which already use ratio.MilliTokensUsd correctly
-	return ModelRatios
+	pricing := maps.Clone(ModelRatios)
+	name := geminiOpenaiCompatible.GeminiNanoBanana21Model
+	if cfg, ok := pricing[name]; ok {
+		pricing[name] = geminiOpenaiCompatible.NativeGeminiModelConfig(name, cfg)
+	}
+	return pricing
 }
 
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
