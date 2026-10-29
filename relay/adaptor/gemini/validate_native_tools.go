@@ -44,23 +44,53 @@ func ValidateNativeToolSupport(c *gin.Context, request *model.GeneralOpenAIReque
 	}
 	images := 0
 	for _, message := range request.Messages {
+		if len(message.ToolCalls) > 0 || message.ToolCallId != "" || strings.EqualFold(message.Role, "tool") {
+			return errors.New("function calling history is not supported by Gemini Nano Banana 2.1")
+		}
+		// Check the raw type tags before ParseContent, because the shared
+		// decoder intentionally omits unknown part types. Validation must not
+		// silently accept discarded input or parse malformed audio first.
+		switch message.Content.(type) {
+		case nil, string, []any, []model.MessageContent:
+		default:
+			return errors.New("input content type is not supported by the native Gemini Nano Banana 2.1 adaptor")
+		}
+		if parts, ok := message.Content.([]any); ok {
+			for _, raw := range parts {
+				part, ok := raw.(map[string]any)
+				if !ok {
+					return errors.New("input content type is not supported by the native Gemini Nano Banana 2.1 adaptor")
+				}
+				typ, _ := part["type"].(string)
+				switch {
+				case strings.EqualFold(typ, model.ContentTypeText):
+					if _, ok := part["text"].(string); !ok {
+						return errors.New("input text content is invalid for Gemini Nano Banana 2.1")
+					}
+				case typ == model.ContentTypeImageURL:
+					image, ok := part["image_url"].(map[string]any)
+					if !ok {
+						return errors.New("input image content is invalid for Gemini Nano Banana 2.1")
+					}
+					url, ok := image["url"].(string)
+					if !ok || strings.TrimSpace(url) == "" {
+						return errors.New("input image content is invalid for Gemini Nano Banana 2.1")
+					}
+				default:
+					return errors.New("input content type is not supported by the native Gemini Nano Banana 2.1 adaptor")
+				}
+			}
+		}
 		for _, part := range message.ParseContent() {
 			switch part.Type {
 			case model.ContentTypeText:
 			case model.ContentTypeImageURL:
+				if part.ImageURL == nil || strings.TrimSpace(part.ImageURL.Url) == "" {
+					return errors.New("input image content is invalid for Gemini Nano Banana 2.1")
+				}
 				images++
 			default:
 				return errors.New("input content type is not supported by the native Gemini Nano Banana 2.1 adaptor")
-			}
-		}
-		if parts, ok := message.Content.([]any); ok {
-			for _, raw := range parts {
-				if part, ok := raw.(map[string]any); ok {
-					typ, _ := part["type"].(string)
-					if typ != "" && !strings.EqualFold(typ, model.ContentTypeText) && !strings.EqualFold(typ, model.ContentTypeImageURL) {
-						return errors.New("input content type is not supported by the native Gemini Nano Banana 2.1 adaptor")
-					}
-				}
 			}
 		}
 	}
@@ -89,6 +119,12 @@ func ValidateNativeToolSupport(c *gin.Context, request *model.GeneralOpenAIReque
 	if len(request.Functions) > 0 {
 		return errors.New("function calling is not supported by Gemini Nano Banana 2.1")
 	}
+	if request.FunctionCall != nil {
+		choice, ok := request.FunctionCall.(string)
+		if !ok || !strings.EqualFold(choice, "none") {
+			return errors.New("function calling is not supported by Gemini Nano Banana 2.1")
+		}
+	}
 	return nil
 }
 
@@ -116,8 +152,17 @@ func nativeEffectiveModel(c *gin.Context, modelName string) string {
 
 // ConvertNativeRequest converts a request using the effective Nano Banana model when mapped.
 func ConvertNativeRequest(c *gin.Context, request model.GeneralOpenAIRequest) *ChatRequest {
+	isNanoBanana := false
 	if effective := nativeEffectiveModel(c, request.Model); geminiOpenaiCompatible.IsGeminiNanoBanana21Model(effective) {
 		request.Model = effective
+		isNanoBanana = true
 	}
-	return ConvertRequest(request)
+	converted := ConvertRequest(request)
+	if isNanoBanana {
+		// "tool_choice": "none" is a valid no-tools client constraint,
+		// but upstream Nano Banana does not support a function-calling
+		// toolConfig even when its mode is NONE.
+		converted.ToolConfig = nil
+	}
+	return converted
 }

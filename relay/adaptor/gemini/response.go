@@ -372,6 +372,35 @@ func countGeminiStreamImages(response *ChatResponse) geminiOutputImageCounts {
 	return counts
 }
 
+// geminiHasUnrepresentedMedia reports output media for which this gateway has
+// no complete downstream representation. Gemini's IMAGE-token receipt is
+// aggregate, not per candidate or per image. If any media part is dropped or
+// ambiguous, excluding the entire IMAGE-token bucket after billing only the
+// visible images could undercharge. Retain conservative token pricing instead.
+func geminiHasUnrepresentedMedia(response *ChatResponse) bool {
+	if response == nil {
+		return false
+	}
+	for _, candidate := range response.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData != nil {
+				if part.FunctionCall != nil || part.FileData != nil ||
+					part.InlineData.Data == "" || part.InlineData.MimeType == "" ||
+					!isGeminiImageMimeType(part.InlineData.MimeType) {
+					return true
+				}
+			}
+			if part.FileData != nil {
+				if part.FunctionCall != nil || part.FileData.FileURI == "" ||
+					!isGeminiImageMimeType(part.FileData.MimeType) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // recordGeminiOutputImageCount accumulates output image counts in the Gin context.
 // Parameters: c is the Gin context for the request; count is the number of images to add.
 // Returns: nothing; the aggregated count is stored under ctxkey.OutputImageCount.

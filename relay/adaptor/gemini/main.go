@@ -617,6 +617,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		if streamErr != nil {
 			break
 		}
+		if geminiHasUnrepresentedMedia(&geminiResponse) {
+			// A partial media projection cannot safely claim the entire
+			// aggregate IMAGE-token receipt was separately image-billed.
+			c.Set(ctxkey.GeminiOutputIncomplete, true)
+		}
 		if geminiResponse.UsageMetadata != nil && geminiResponse.UsageMetadata.TotalTokenCount > 0 {
 			usageMetadata = geminiResponse.UsageMetadata
 		}
@@ -733,6 +738,9 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 		)
 	}
 
+	if geminiHasUnrepresentedMedia(&geminiResponse) {
+		c.Set(ctxkey.GeminiOutputIncomplete, true)
+	}
 	outputCounts := countGeminiOutputImages(&geminiResponse)
 	if outputCounts.Total > 0 {
 		recordGeminiOutputImageCount(c, outputCounts.Total)

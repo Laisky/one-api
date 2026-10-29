@@ -56,6 +56,11 @@ func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_c
 					}
 				case model.ContentTypeImageURL:
 					if part.ImageURL != nil && part.ImageURL.Url != "" {
+						// Intentional compatibility contract: the Chat-to-Responses
+						// fallback projects image URLs (including base64 data URLs)
+						// as output_text deltas. Existing consumers rely on this
+						// representation. "image" tracks complete image-frame
+						// delivery for billing; it is not a typed image SSE event.
 						text, image = part.ImageURL.Url, true
 					}
 				case model.ContentTypeInputAudio:
