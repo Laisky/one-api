@@ -40,7 +40,7 @@ func TestNanoBananaHistoricalToolAdmission(t *testing.T) {
 			name: "legacy_function_call",
 			request: model.GeneralOpenAIRequest{
 				FunctionCall: map[string]any{"name": "lookup"},
-				Messages: []model.Message{{Role: "user", Content: "draw"}},
+				Messages:     []model.Message{{Role: "user", Content: "draw"}},
 			},
 			wantErr: "function calling",
 		},
