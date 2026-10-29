@@ -392,7 +392,7 @@ func geminiHasUnrepresentedMedia(response *ChatResponse) bool {
 			}
 			if part.FileData != nil {
 				if part.FunctionCall != nil || part.FileData.FileURI == "" ||
-					!isGeminiImageMimeType(part.FileData.MimeType) {
+					part.FileData.MimeType == "" || !isGeminiImageMimeType(part.FileData.MimeType) {
 					return true
 				}
 			}

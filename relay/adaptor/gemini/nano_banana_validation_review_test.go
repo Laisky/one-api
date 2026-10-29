@@ -64,9 +64,9 @@ func TestNanoBananaHistoricalToolAdmission(t *testing.T) {
 	require.NotNil(t, got)
 }
 
-// TestNanoBananaMalformedAudioAdmissionRequires4xx verifies rejected
-// unsupported audio cannot crash parsing before the provider call.
-func TestNanoBananaMalformedAudioAdmissionRequires4xx(t *testing.T) {
+// TestNanoBananaMalformedAudioRejectedWithoutPanic verifies conversion
+// rejects unsupported malformed audio instead of reaching its unsafe parser.
+func TestNanoBananaMalformedAudioRejectedWithoutPanic(t *testing.T) {
 	for _, malformed := range []string{
 		"{\"type\":\"input_audio\",\"input_audio\":{\"format\":\"wav\"}}",
 		"{\"type\":\"input_audio\",\"input_audio\":{\"data\":\"YQ==\",\"format\":42}}",
@@ -83,4 +83,25 @@ func TestNanoBananaMalformedAudioAdmissionRequires4xx(t *testing.T) {
 		require.ErrorContains(t, err, "input content type")
 		require.Nil(t, got)
 	}
+}
+
+// TestNanoBananaNoFunctionModeForwarded verifies harmless "none" constraints
+// do not produce unsupported native toolConfig on the named image model.
+func TestNanoBananaNoFunctionModeForwarded(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	for _, legacyFunction := range []any{nil, "none"} {
+		req := &model.GeneralOpenAIRequest{Model: "gemini-nano-banana-2.1", ToolChoice: "none",
+			FunctionCall: legacyFunction, Messages: []model.Message{{Role: "user", Content: "draw"}}}
+		result, err := (&Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, req)
+		require.NoError(t, err)
+		converted, ok := result.(*ChatRequest)
+		require.True(t, ok)
+		require.Nil(t, converted.ToolConfig)
+	}
+	// Do not alter legacy numeric Gemini conversion for existing channels.
+	old := &model.GeneralOpenAIRequest{Model: "gemini-2.5-flash", ToolChoice: "none",
+		Messages: []model.Message{{Role: "user", Content: "draw"}}}
+	result, err := (&Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, old)
+	require.NoError(t, err)
+	require.NotNil(t, result.(*ChatRequest).ToolConfig)
 }

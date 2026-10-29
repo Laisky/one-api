@@ -17,6 +17,7 @@ import (
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/quota"
 )
 
 // TestGeminiUnrepresentableImageTokensRemainBillable exercises the actual Gemini
@@ -66,6 +67,12 @@ func TestGeminiUnrepresentableImageTokensRemainBillable(t *testing.T) {
 				require.Equal(t, tc.wantExcluded, usage.ImageTokensBilledSeparately,
 					"unrecognized media must retain conservative ordinary token billing")
 				require.Equal(t, 2240, usage.CompletionTokens, "never rewrite provider usage")
+				// Assert the final shared quota calculation, not only the intermediate billing marker.
+				input := quota.ComputeInput{Usage: usage, ModelName: "gemini-nano-banana-2.1", ModelRatio: 100, GroupRatio: 1}
+				charged := quota.Compute(input)
+				input.Usage = &model.Usage{PromptTokens: 1, CompletionTokens: 2240 - tc.wantExcluded, ToolsCost: usage.ToolsCost}
+				expected := quota.Compute(input)
+				require.Equal(t, expected.TotalQuota, charged.TotalQuota)
 			})
 		}
 	}

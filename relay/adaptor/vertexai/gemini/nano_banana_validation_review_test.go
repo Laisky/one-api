@@ -25,3 +25,15 @@ func TestVertexNanoBananaRejectsHistoricalFunctionHistory(t *testing.T) {
 	require.ErrorContains(t, err, "function calling")
 	require.Nil(t, got)
 }
+
+// TestVertexNanoBananaNoneToolChoicePreservesNoFunctionSemantics confirms
+// aliases use the same normalized transport contract as direct Gemini requests.
+func TestVertexNanoBananaNoneToolChoicePreservesNoFunctionSemantics(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set(ctxkey.Meta, &meta.Meta{ActualModelName: "Gemini-Nano-Banana-2.1"})
+	req := &model.GeneralOpenAIRequest{Model: "vertex-alias", ToolChoice: "none",
+		Messages: []model.Message{{Role: "user", Content: "draw"}}}
+	result, err := (&Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, req)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}
