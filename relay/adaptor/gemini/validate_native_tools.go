@@ -166,3 +166,20 @@ func ConvertNativeRequest(c *gin.Context, request model.GeneralOpenAIRequest) *C
 	}
 	return converted
 }
+
+// ConvertNativeRequestChecked converts native requests and validates Nano Banana image inputs.
+// Parameters: c supplies the mapped model and request is the validated source request.
+// Returns: the converted payload or a controlled error without exposing the image URL.
+func ConvertNativeRequestChecked(c *gin.Context, request model.GeneralOpenAIRequest) (*ChatRequest, error) {
+	effective := nativeEffectiveModel(c, request.Model)
+	if !geminiOpenaiCompatible.IsGeminiNanoBanana21Model(effective) {
+		return ConvertNativeRequest(c, request), nil
+	}
+	request.Model = effective
+	converted, err := convertRequest(request, true)
+	if err != nil {
+		return nil, errors.Wrap(err, "convert native Gemini request")
+	}
+	converted.ToolConfig = nil
+	return converted, nil
+}

@@ -142,10 +142,18 @@ func applyOutputImageCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 	}
 
 	size := imagePricing.DefaultSize
+	// Native Nano chat does not send imageConfig.imageSize; the provider default is 1K.
+	// Keep channel pricing overrides for that tier and preserve other providers' defaults.
+	if isNativeNanoImageBilling(meta) {
+		size = "1024x1024"
+	}
 	if size == "" {
 		size = "1024x1024"
 	}
 	quality := imagePricing.DefaultQuality
+	if isNativeNanoImageBilling(meta) {
+		quality = "standard"
+	}
 	if quality == "" {
 		quality = "standard"
 	}
@@ -158,6 +166,9 @@ func applyOutputImageCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 	}
 
 	imageCostRatio, err := getImageCostRatio(imageRequest, imagePricing)
+	if isNativeNanoImageBilling(meta) {
+		imageCostRatio, err = nativeNanoImageTierRatio(billingCtx, imagePricing)
+	}
 	if err != nil {
 		if billingCtx.Logger != nil {
 			billingCtx.Logger.Debug("output image billing skipped due to invalid image tier",

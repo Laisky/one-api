@@ -62,6 +62,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	meta.OriginModelName = textRequest.Model
 	textRequest.Model = meta.ActualModelName
 	meta.ActualModelName = textRequest.Model
+	if tariffErr := validateNativeNanoImageTariff(c, meta); tariffErr != nil {
+		return tariffErr
+	}
 	applyThinkingQueryToChatRequest(c, textRequest, meta)
 	// set system prompt if not empty
 	systemPromptReset := setSystemPrompt(ctx, textRequest, meta.ForcedSystemPrompt)

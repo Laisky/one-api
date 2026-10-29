@@ -92,6 +92,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		c.Request.URL.RawPath = "/v1/chat/completions"
 	}
 	metalib.Set2Context(c, meta)
+	if tariffErr := validateNativeNanoImageTariff(c, meta); tariffErr != nil {
+		return tariffErr
+	}
 
 	var channelRecord *model.Channel
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {

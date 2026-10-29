@@ -86,7 +86,7 @@ func TestNanoBananaNativeRequestCapabilities(t *testing.T) {
 // TestNanoBananaReferenceLimit verifies the limit applies across the entire request.
 func TestNanoBananaReferenceLimit(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	image := model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &model.ImageURL{Url: "data:image/png;base64,YQ=="}}
+	image := model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &model.ImageURL{Url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="}}
 	req := &model.GeneralOpenAIRequest{Model: "gemini-nano-banana-2.1", Messages: []model.Message{{Role: "user", Content: []model.MessageContent{image}}}}
 	for i := 1; i < 14; i++ {
 		req.Messages = append(req.Messages, model.Message{Role: "user", Content: []model.MessageContent{image}})

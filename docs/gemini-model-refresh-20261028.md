@@ -45,8 +45,16 @@ registered in the catalog retain their previous tariffs.
   `imageConfig.imageSize` selector. It therefore uses Google's default
   **1K** render tier when estimating output-image quota. The 2K and 4K rates
   are included in the image pricing metadata for channels that can explicitly
-  select and consistently bill those resolutions. Merely choosing a billing
-  size override does not make an upstream 2K/4K request.
+  select and consistently bill those resolutions. A larger configured default
+  does not change the native request or its billed 1K standard tier; an explicit
+  channel price override for that tier still applies. If a paid custom tariff
+  cannot price 1K standard, the gateway rejects the request before provider
+  dispatch rather than charging a different tier or omitting the image fee.
+- A Responses stream can be stored before its final completion event is
+  delivered. If delivery is interrupted, a client that received the gateway
+  response ID can retrieve the stored response when state storage is enabled.
+  Retrieval is read-only and does not reapply gateway quota or execute tools;
+  clients remain responsible for reconciling any tool execution they perform.
 - Native `web_search` is not forwarded by the Gemini or Vertex converters for
   this model. The gateway deliberately does **not** advertise this feature or
   expose its upstream tool price, and fails closed before dispatch if a client
@@ -85,6 +93,21 @@ September audit files. It also explicitly states that the `gemini-2.5-pro`,
 for existing users; this change leaves their pricing and status untouched.
 Upstream dates may be *earliest possible* shutdown dates rather than an
 assurance of service on a particular day.
+
+## Claude Messages image output
+
+When a Claude Messages request is mapped to native Nano Banana 2.1, generated
+images are returned as Claude text blocks containing the image data URL (or the
+provider file URI). Text and supported image inputs continue to use their
+existing formats. Streaming uses separate text blocks for images and preserves
+text order around them. This is a gateway convention for Claude Messages, not a
+claim that the native Claude API generates image blocks.
+
+Image fees apply only to image blocks whose complete output was accepted by the
+downstream writer. If a write fails or provider output cannot be fully
+represented, the aggregate provider image-token receipt is retained in token
+pricing rather than allocated across unseen candidates. Acceptance by a writer
+does not prove that a disconnected client processed the bytes.
 
 ## Regression checks
 
