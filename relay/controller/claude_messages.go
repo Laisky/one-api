@@ -80,6 +80,9 @@ func readAndRestoreResponseBody(resp *http.Response) ([]byte, error) {
 // request through either native pass-through or an adaptor conversion. Response
 // errors with usage are returned after final settlement is scheduled.
 func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
+	// Delivery receipts belong to one attempt, even when retries reuse the context.
+	c.Set(ctxkey.ClaudeGeminiImageReceipt, nil)
+	c.Set(ctxkey.GeminiOutputIncomplete, false)
 	lg := gmw.GetLogger(c)
 	// Passthrough is current-attempt authority. A retry reuses this gin context,
 	// so only the selected adaptor may establish native capability again.
@@ -105,6 +108,9 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	claudeRequest.Model = meta.ActualModelName
 	meta.ActualModelName = claudeRequest.Model
 	metalib.Set2Context(c, meta)
+	if tariffErr := validateNativeNanoImageTariff(c, meta); tariffErr != nil {
+		return tariffErr
+	}
 
 	claudeRequest.CompatibilityModel = anthropic.CompatibilityModel(c, claudeRequest.Model)
 	if anthropic.IsClaudeSonnet55(claudeRequest.CompatibilityModel) {
@@ -580,7 +586,17 @@ handleResponse:
 			if err != nil {
 				respErr = openai.ErrorWrapper(err, "read_converted_response_failed", http.StatusInternalServerError)
 			} else {
-				c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
+				if raw, ok := c.Get(ctxkey.ClaudeGeminiImageReceipt); ok {
+					if receipt, valid := raw.(*relaymodel.ClaudeImageReceipt); valid && receipt != nil {
+						if writeErr := writeClaudeGeminiOutput(c, body, receipt); writeErr != nil {
+							respErr = openai.ErrorWrapper(writeErr, "write_converted_response_failed", http.StatusInternalServerError)
+						}
+					} else {
+						c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
+					}
+				} else {
+					c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
+				}
 
 				// Extract usage information from the response body for billing
 				// 1) Try Claude JSON body with usage
@@ -675,6 +691,14 @@ handleResponse:
 	}
 
 postConsume:
+	if raw, ok := c.Get(ctxkey.ClaudeGeminiImageReceipt); ok {
+		if receipt, valid := raw.(*relaymodel.ClaudeImageReceipt); valid && receipt != nil {
+			if usage != nil {
+				usage.CandidateImageTokens = receipt.CandidateImageTokens
+			}
+			applyOutputImageCharges(c, &usage, meta)
+		}
+	}
 	applyClaudeServerToolCharges(c, &usage, meta, adaptorInstance)
 
 	// post-consume quota

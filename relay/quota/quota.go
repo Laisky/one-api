@@ -75,6 +75,12 @@ func Compute(input ComputeInput) ComputeResult {
 	}
 	nonCachedPrompt := max(promptTokens, 0)
 	nonCachedCompletion := completionTokens
+	// A separately charged image render replaces only the measured IMAGE
+	// candidate-token portion of the output fee. Keep the raw completion
+	// count unchanged in ComputeResult and public provider usage.
+	if usage.ImageTokensBilledSeparately > 0 && nonCachedCompletion > 0 {
+		nonCachedCompletion -= min(nonCachedCompletion, usage.ImageTokensBilledSeparately)
+	}
 
 	normalInputPrice := usedModelRatio * input.GroupRatio
 	normalOutputPrice := usedModelRatio * usedCompletionRatio * input.GroupRatio

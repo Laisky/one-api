@@ -92,6 +92,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		c.Request.URL.RawPath = "/v1/chat/completions"
 	}
 	metalib.Set2Context(c, meta)
+	if tariffErr := validateNativeNanoImageTariff(c, meta); tariffErr != nil {
+		return tariffErr
+	}
 
 	var channelRecord *model.Channel
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
@@ -415,12 +418,20 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		}
 	}
 
+	// Apply measured image charges before the tracker enforces the final receipt,
+	// so separately priced image tokens are not also funded as text tokens.
+	imageChargedBeforeFinalization := usage != nil
+	if imageChargedBeforeFinalization {
+		applyOutputImageCharges(c, &usage, meta)
+	}
 	usage, incrementalCharged, respErr := finalizeStreamingUsage(tracker, usage, respErr)
 	if respErr != nil {
 		openai_compatible.FailStreamWithBridge(c, respErr, usage)
 	}
 
-	applyOutputImageCharges(c, &usage, meta)
+	if !imageChargedBeforeFinalization {
+		applyOutputImageCharges(c, &usage, meta)
+	}
 	applyOutputAudioCharges(c, &usage, meta)
 	applyOutputVideoCharges(c, &usage, meta)
 	tooling.ApplyBuiltinToolCharges(c, &usage, meta, channelRecord, requestAdaptor)

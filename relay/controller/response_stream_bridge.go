@@ -2,23 +2,19 @@ package controller
 
 import (
 	"encoding/json"
-	"math"
-	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
-	gmw "github.com/Laisky/gin-middlewares/v7"
-	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/random"
-	"github.com/Laisky/one-api/common/render"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/state"
-	"github.com/Laisky/one-api/relay/streaming"
 )
 
 type chatToResponseStreamBridge struct {
@@ -38,10 +34,18 @@ type chatToResponseStreamBridge struct {
 
 	reasoningInitialized bool
 	usage                *openai.ResponseAPIUsage
+	primaryChoiceBound   bool
+	primaryChoiceIndex   int
+	activeChoiceIndex    int
+	choices              map[int]*responseChoiceState
+	choiceOrder          []*responseChoiceState
+	writeErr             error
+	deliveredImages      int
 
-	toolCalls map[string]*streamToolCallState
-	toolIndex map[int]*streamToolCallState
-	toolOrder []string
+	toolCalls       map[string]*streamToolCallState
+	toolIndex       map[string]*streamToolCallState
+	toolOrder       []string
+	choiceToolOrder map[int][]string
 
 	lastFinishReason string
 	incomplete       *openai.IncompleteDetails
@@ -63,6 +67,18 @@ type streamToolCallState struct {
 	index       int
 	arguments   strings.Builder
 	streamIndex *int
+}
+
+type responseChoiceState struct {
+	index                int
+	messageID            string
+	messageIndex         int
+	text                 strings.Builder
+	reasoning            strings.Builder
+	reasoningID          string
+	reasoningIndex       int
+	reasoningInitialized bool
+	finishReason         string
 }
 
 func rawMessageFromString(value string) json.RawMessage {
@@ -122,61 +138,6 @@ func (h *chatToResponseStreamBridge) commitStreamedResponse(c *gin.Context, resp
 	}
 }
 
-func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_compatible.ChatCompletionsStreamResponse) (bool, bool) {
-	if h.streamDone {
-		return true, true
-	}
-
-	if tracker := streaming.FromContext(c); tracker != nil && !streaming.HasProtocolObservation(c) {
-		if err := openai_compatible.ObserveStreamChunk(c, chunk); err != nil {
-			h.FinalizeUsage(tracker.UsageSnapshot())
-			streaming.StopUpstream(c)
-			return h.HandleError(c, openai.ErrorWrapper(err, "streaming_billing_failed", http.StatusForbidden))
-		}
-	}
-
-	if !h.streamStarted {
-		h.ensureInitialized(c, chunk)
-	}
-
-	if chunk.Model != "" {
-		h.model = chunk.Model
-	}
-	if chunk.Created != 0 {
-		h.createdAt = chunk.Created
-	}
-
-	for _, choice := range chunk.Choices {
-		if delta := choice.Delta.StringContent(); delta != "" {
-			h.appendTextDelta(c, delta)
-		}
-
-		if choice.Delta.Reasoning != nil && *choice.Delta.Reasoning != "" {
-			h.appendReasoningDelta(c, *choice.Delta.Reasoning)
-		}
-		if choice.Delta.ReasoningContent != nil && *choice.Delta.ReasoningContent != "" {
-			h.appendReasoningDelta(c, *choice.Delta.ReasoningContent)
-		}
-		if choice.Delta.Thinking != nil && *choice.Delta.Thinking != "" {
-			h.appendReasoningDelta(c, *choice.Delta.Thinking)
-		}
-
-		if len(choice.Delta.ToolCalls) > 0 {
-			h.handleToolCalls(c, choice.Delta.ToolCalls)
-		}
-
-		if choice.FinishReason != nil {
-			h.lastFinishReason = *choice.FinishReason
-		}
-	}
-
-	if chunk.Usage != nil {
-		h.usage = (&openai.ResponseAPIUsage{}).FromModelUsage(chunk.Usage)
-	}
-
-	return true, false
-}
-
 func (h *chatToResponseStreamBridge) HandleUpstreamDone(_ *gin.Context) (bool, bool) {
 	h.upstreamDone = true
 	return true, false
@@ -221,13 +182,6 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		Status:  "completed",
 		Role:    "assistant",
 		Content: []openai.OutputContent{{Type: "output_text", Text: text}},
-	}
-
-	if reasoning := strings.TrimSpace(h.reasoningBuilder.String()); reasoning != "" {
-		h.emitEvent(c, "response.reasoning_summary_text.done", openai.ResponseAPIStreamEvent{
-			Type: "response.reasoning_summary_text.done",
-			Part: &openai.OutputContent{Type: "summary_text", Text: reasoning},
-		})
 	}
 
 	// Emit tool-call terminals BEFORE the message item's output_item.done so that
@@ -286,24 +240,31 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		OutputIndex: h.messageOutputIndex,
 		Item:        &messageItem,
 	})
-
-	finalOutputs := make([]openai.OutputItem, 0, 1+len(toolItems)+1)
-	finalOutputs = append(finalOutputs, messageItem)
-
-	if reasoning := strings.TrimSpace(h.reasoningBuilder.String()); reasoning != "" {
-		finalOutputs = append(finalOutputs, openai.OutputItem{
-			Type:   "reasoning",
-			Status: "completed",
-			Content: []openai.OutputContent{
-				{Type: "text", Text: reasoning},
-			},
-			Summary: []openai.OutputContent{
-				{Type: "summary_text", Text: reasoning},
-			},
-		})
+	for _, choice := range h.choiceOrder {
+		h.finishChoice(c, choice)
 	}
 
-	finalOutputs = append(finalOutputs, toolItems...)
+	type indexedItem struct {
+		index int
+		item  openai.OutputItem
+	}
+	indexed := []indexedItem{{h.messageOutputIndex, messageItem}}
+	for _, choice := range h.choiceOrder {
+		if choice.index != h.primaryChoiceIndex {
+			indexed = append(indexed, indexedItem{choice.messageIndex, h.choiceMessage(choice, "completed")})
+		}
+		if reasoning := h.choiceReasoning(choice, "completed"); reasoning != nil {
+			indexed = append(indexed, indexedItem{choice.reasoningIndex, *reasoning})
+		}
+	}
+	for i, key := range h.toolOrder {
+		indexed = append(indexed, indexedItem{h.toolCalls[key].index, toolItems[i]})
+	}
+	sort.Slice(indexed, func(i, j int) bool { return indexed[i].index < indexed[j].index })
+	finalOutputs := make([]openai.OutputItem, 0, len(indexed))
+	for _, item := range indexed {
+		finalOutputs = append(finalOutputs, item.item)
+	}
 
 	requiredAction := h.buildRequiredActionSnapshot()
 	if requiredAction != nil {
@@ -319,6 +280,9 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 	if h.incomplete != nil {
 		response.IncompleteDetails = h.incomplete
 	}
+	if h.writeErr != nil {
+		return true, true
+	}
 
 	// Commit the gateway response node exactly once at the terminal event so the
 	// streamed fallback ID is backed by a retrievable record (closes B13).
@@ -328,8 +292,11 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		Type:     "response.completed",
 		Response: response,
 	})
+	if h.writeErr != nil {
+		return true, true
+	}
 
-	render.Done(c)
+	h.emitDone(c)
 
 	return true, true
 }
@@ -419,15 +386,15 @@ func (h *chatToResponseStreamBridge) appendTextDelta(c *gin.Context, delta strin
 		return
 	}
 
-	h.textBuilder.WriteString(delta)
-
-	h.emitEvent(c, "response.output_text.delta", openai.ResponseAPIStreamEvent{
+	if h.emitEvent(c, "response.output_text.delta", openai.ResponseAPIStreamEvent{
 		Type:         "response.output_text.delta",
 		ItemId:       h.messageItemID,
 		OutputIndex:  h.messageOutputIndex,
 		ContentIndex: 0,
 		Delta:        rawMessageFromString(delta),
-	})
+	}) {
+		h.textBuilder.WriteString(delta)
+	}
 }
 
 func (h *chatToResponseStreamBridge) appendReasoningDelta(c *gin.Context, delta string) {
@@ -435,20 +402,8 @@ func (h *chatToResponseStreamBridge) appendReasoningDelta(c *gin.Context, delta 
 	if trimmed == "" {
 		return
 	}
-
-	if !h.reasoningInitialized {
-		h.emitEvent(c, "response.reasoning_summary_part.added", openai.ResponseAPIStreamEvent{
-			Type: "response.reasoning_summary_part.added",
-			Part: &openai.OutputContent{Type: "summary_text", Text: ""},
-		})
-		h.reasoningInitialized = true
-	}
-
-	h.reasoningBuilder.WriteString(trimmed)
-	h.emitEvent(c, "response.reasoning_summary_text.delta", openai.ResponseAPIStreamEvent{
-		Type:  "response.reasoning_summary_text.delta",
-		Delta: rawMessageFromString(trimmed),
-	})
+	choice := h.choices[h.activeChoiceIndex]
+	h.appendChoiceReasoning(c, choice, trimmed)
 }
 
 func (h *chatToResponseStreamBridge) handleToolCalls(c *gin.Context, tools []model.Tool) {
@@ -464,13 +419,15 @@ func (h *chatToResponseStreamBridge) handleToolCalls(c *gin.Context, tools []mod
 			continue
 		}
 
-		state.arguments.WriteString(args)
-		h.emitEvent(c, "response.function_call_arguments.delta", openai.ResponseAPIStreamEvent{
+		if !h.emitEvent(c, "response.function_call_arguments.delta", openai.ResponseAPIStreamEvent{
 			Type:        "response.function_call_arguments.delta",
 			ItemId:      state.id,
 			OutputIndex: state.index,
 			Delta:       rawMessageFromString(args),
-		})
+		}) {
+			return
+		}
+		state.arguments.WriteString(args)
 		h.emitRequiredActionDelta(c, false)
 	}
 }
@@ -482,8 +439,13 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 		h.toolCalls = make(map[string]*streamToolCallState)
 	}
 	if tool.Index != nil && h.toolIndex == nil {
-		h.toolIndex = make(map[int]*streamToolCallState)
+		h.toolIndex = make(map[string]*streamToolCallState)
 	}
+	if h.choiceToolOrder == nil {
+		h.choiceToolOrder = make(map[int][]string)
+	}
+	choice := h.activeChoiceIndex
+	key := func(id string) string { return strconv.Itoa(choice) + ":" + id }
 
 	normalizedID := ""
 	if trimmed := strings.TrimSpace(tool.Id); trimmed != "" {
@@ -492,14 +454,14 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 
 	var state *streamToolCallState
 	if normalizedID != "" {
-		state = h.toolCalls[normalizedID]
+		state = h.toolCalls[key(normalizedID)]
 	}
 	if state == nil && tool.Index != nil {
 		idx := *tool.Index
-		if existing, ok := h.toolIndex[idx]; ok {
+		if existing, ok := h.toolIndex[key(strconv.Itoa(idx))]; ok {
 			state = existing
-		} else if idx >= 0 && idx < len(h.toolOrder) {
-			if id := h.toolOrder[idx]; id != "" {
+		} else if idx >= 0 && idx < len(h.choiceToolOrder[choice]) {
+			if id := h.choiceToolOrder[choice][idx]; id != "" {
 				if candidate, ok := h.toolCalls[id]; ok {
 					state = candidate
 				}
@@ -513,6 +475,12 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 		if id == "" {
 			id = "call_" + random.GetRandomString(16)
 		}
+		for _, existingKey := range h.toolOrder {
+			if h.toolCalls[existingKey].id == id {
+				id = "call_" + random.GetRandomString(16)
+				break
+			}
+		}
 		state = &streamToolCallState{
 			id:    id,
 			index: h.nextOutputIndex(),
@@ -521,10 +489,12 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 			idx := *tool.Index
 			state.streamIndex = new(int)
 			*state.streamIndex = idx
-			h.toolIndex[idx] = state
+			h.toolIndex[key(strconv.Itoa(idx))] = state
 		}
-		h.toolCalls[state.id] = state
-		h.toolOrder = append(h.toolOrder, state.id)
+		storageKey := key(state.id)
+		h.toolCalls[storageKey] = state
+		h.toolOrder = append(h.toolOrder, storageKey)
+		h.choiceToolOrder[choice] = append(h.choiceToolOrder[choice], storageKey)
 		created = true
 	}
 
@@ -539,7 +509,7 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 		// self-consistent within the conversation: it is converted back by
 		// convertResponseAPIIDToToolCall on replay and never has to match what the
 		// upstream originally issued.
-		h.toolCalls[normalizedID] = state
+		h.toolCalls[key(normalizedID)] = state
 	}
 
 	if tool.Index != nil {
@@ -548,7 +518,7 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 			state.streamIndex = new(int)
 		}
 		*state.streamIndex = idx
-		h.toolIndex[idx] = state
+		h.toolIndex[key(strconv.Itoa(idx))] = state
 	}
 
 	if tool.Function != nil && tool.Function.Name != "" {
@@ -705,6 +675,16 @@ func (h *chatToResponseStreamBridge) buildFinalResponse(status string, outputs [
 }
 
 func (h *chatToResponseStreamBridge) finalStatus() (string, *openai.IncompleteDetails) {
+	for _, choice := range h.choiceOrder {
+		if strings.EqualFold(strings.TrimSpace(choice.finishReason), "cancelled") {
+			return "cancelled", nil
+		}
+	}
+	for _, choice := range h.choiceOrder {
+		if strings.EqualFold(strings.TrimSpace(choice.finishReason), "length") {
+			return "incomplete", &openai.IncompleteDetails{Reason: "max_output_tokens"}
+		}
+	}
 	switch strings.ToLower(strings.TrimSpace(h.lastFinishReason)) {
 	case "length":
 		return "incomplete", &openai.IncompleteDetails{Reason: "max_output_tokens"}
@@ -713,74 +693,6 @@ func (h *chatToResponseStreamBridge) finalStatus() (string, *openai.IncompleteDe
 	default:
 		return "completed", nil
 	}
-}
-
-const (
-	responseStreamEventPrefix = "event: "
-	responseStreamDataPrefix  = "data: "
-	responseStreamFrameSuffix = "\n\n"
-)
-
-func responseStreamFrameCapacity(payloadLen, eventTypeLen int) (int, bool) {
-	const dataOnlyOverhead = len(responseStreamDataPrefix) + len(responseStreamFrameSuffix)
-	if payloadLen < 0 || eventTypeLen < 0 || payloadLen > math.MaxInt-dataOnlyOverhead {
-		return 0, false
-	}
-
-	frameSize := payloadLen + dataOnlyOverhead
-	if eventTypeLen == 0 {
-		return frameSize, true
-	}
-
-	const namedEventOverhead = len(responseStreamEventPrefix) + 1
-	if frameSize > math.MaxInt-namedEventOverhead {
-		return 0, false
-	}
-	frameSize += namedEventOverhead
-	if eventTypeLen > math.MaxInt-frameSize {
-		return 0, false
-	}
-	return frameSize + eventTypeLen, true
-}
-
-func (h *chatToResponseStreamBridge) emitEvent(c *gin.Context, eventType string, event openai.ResponseAPIStreamEvent) {
-	event.Type = eventType
-	if event.Id == "" {
-		event.Id = h.responseID
-	}
-
-	payload, err := json.Marshal(event)
-	if err != nil {
-		gmw.GetLogger(c).Warn("failed to marshal response stream event", zap.String("event_type", eventType), zap.Error(err))
-		return
-	}
-
-	frameSize, ok := responseStreamFrameCapacity(len(payload), len(eventType))
-	if !ok {
-		gmw.GetLogger(c).Warn("response stream event is too large", zap.String("event_type", eventType))
-		return
-	}
-
-	frame := make([]byte, 0, frameSize)
-	if eventType != "" {
-		frame = append(frame, responseStreamEventPrefix...)
-		frame = append(frame, eventType...)
-		frame = append(frame, '\n')
-	}
-	frame = append(frame, responseStreamDataPrefix...)
-	frame = append(frame, payload...)
-	frame = append(frame, responseStreamFrameSuffix...)
-
-	if _, err := c.Writer.Write(frame); err != nil {
-		gmw.GetLogger(c).Warn("failed to write response stream event", zap.String("event_type", eventType), zap.Error(err))
-	}
-	c.Writer.Flush()
-}
-
-func (h *chatToResponseStreamBridge) nextOutputIndex() int {
-	idx := h.outputIndexCounter
-	h.outputIndexCounter++
-	return idx
 }
 
 // HandleError preserves partial output as failed, never authorizing complete tool
@@ -793,16 +705,28 @@ func (h *chatToResponseStreamBridge) HandleError(c *gin.Context, failure *model.
 	if !h.streamStarted {
 		h.ensureInitialized(c, &openai_compatible.ChatCompletionsStreamResponse{})
 	}
-	output := []openai.OutputItem{}
-	if text := h.textBuilder.String(); text != "" {
-		output = append(output, openai.OutputItem{Id: h.messageItemID, Type: "message", Status: "incomplete", Role: "assistant", Content: []openai.OutputContent{{Type: "output_text", Text: text}}})
+	type indexedItem struct {
+		index int
+		item  openai.OutputItem
 	}
-	if text := h.reasoningBuilder.String(); text != "" {
-		output = append(output, openai.OutputItem{Type: "reasoning", Status: "incomplete", Summary: []openai.OutputContent{{Type: "summary_text", Text: text}}})
+	items := []indexedItem{}
+	for _, choice := range h.choiceOrder {
+		item := h.choiceMessage(choice, "incomplete")
+		if item.Content[0].Text != "" {
+			items = append(items, indexedItem{choice.messageIndex, item})
+		}
+		if reasoning := h.choiceReasoning(choice, "incomplete"); reasoning != nil {
+			items = append(items, indexedItem{choice.reasoningIndex, *reasoning})
+		}
 	}
 	for _, id := range h.toolOrder {
 		call := h.toolCalls[id]
-		output = append(output, openai.OutputItem{Id: id, Type: "function_call", Status: "incomplete", CallId: id, Name: call.name, Arguments: call.arguments.String()})
+		items = append(items, indexedItem{call.index, openai.OutputItem{Id: call.id, Type: "function_call", Status: "incomplete", CallId: call.id, Name: call.name, Arguments: call.arguments.String()}})
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].index < items[j].index })
+	output := make([]openai.OutputItem, 0, len(items))
+	for _, item := range items {
+		output = append(output, item.item)
 	}
 	response := h.buildFinalResponse("failed", output, nil)
 	response.Error = &failure.Error

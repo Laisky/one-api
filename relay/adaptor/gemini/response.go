@@ -215,82 +215,53 @@ func responseGeminiChat2OpenAI(c *gin.Context, response *ChatResponse) *openai.T
 // Parameters: c is the current request context and geminiResponse is the parsed Gemini stream chunk.
 // Returns: an OpenAI-compatible stream response, or nil when the chunk has no usable candidate content.
 func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatResponse) *openai.ChatCompletionsStreamResponse {
-	var choice openai.ChatCompletionsStreamResponseChoice
-	choice.Delta.Role = "assistant"
-
-	// Check if we have any candidates
 	if len(geminiResponse.Candidates) == 0 {
 		return nil
 	}
-
-	// Get the first candidate
-	candidate := geminiResponse.Candidates[0]
-
-	// Check if there are parts in the content
-	if len(candidate.Content.Parts) == 0 {
-		return nil
-	}
-
-	// Handle different content types in the parts
-	for _, part := range candidate.Content.Parts {
-		// Handle text content
-		if part.Text != "" {
-			// Store as string for simple text responses
-			textContent := part.Text
-			choice.Delta.Content = textContent
+	choices := make([]openai.ChatCompletionsStreamResponseChoice, 0, len(geminiResponse.Candidates))
+	for _, candidate := range geminiResponse.Candidates {
+		if len(candidate.Content.Parts) == 0 {
+			continue
 		}
-
-		// Handle image content
-		imageURL := ""
-		if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" &&
-			isGeminiImageMimeType(part.InlineData.MimeType) {
-			imageURL = fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data)
-		} else if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
-			imageURL = part.FileData.FileURI
-		}
-		if imageURL != "" {
-			// If we already have text content, create a mixed content response
-			if strContent, ok := choice.Delta.Content.(string); ok && strContent != "" {
-				// Convert the existing text content and add the image
-				messageContents := []model.MessageContent{
-					{
-						Type: model.ContentTypeText,
-						Text: &strContent,
-					},
-					{
-						Type: model.ContentTypeImageURL,
-						ImageURL: &model.ImageURL{
-							Url: imageURL,
-						},
-					},
-				}
-				choice.Delta.Content = messageContents
-			} else {
-				// Only have image content
-				choice.Delta.Content = []model.MessageContent{
-					{
-						Type: model.ContentTypeImageURL,
-						ImageURL: &model.ImageURL{
-							Url: imageURL,
-						},
-					},
-				}
+		var choice openai.ChatCompletionsStreamResponseChoice
+		choice.Index = int(candidate.Index)
+		choice.Delta.Role = "assistant"
+		var content []model.MessageContent
+		var textParts []string
+		for _, part := range candidate.Content.Parts {
+			if part.Text != "" {
+				text := part.Text
+				textParts = append(textParts, text)
+				content = append(content, model.MessageContent{Type: model.ContentTypeText, Text: &text})
+			}
+			imageURL := ""
+			if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
+				imageURL = fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data)
+			} else if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
+				imageURL = part.FileData.FileURI
+			}
+			if imageURL != "" {
+				content = append(content, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &model.ImageURL{Url: imageURL}})
 			}
 		}
-
-		// Handle function calls (if present)
-		if part.FunctionCall != nil {
-			choice.Delta.ToolCalls = getStreamingToolCalls(c, &candidate)
+		if len(content) > len(textParts) {
+			choice.Delta.Content = content
+		} else if len(textParts) > 0 {
+			choice.Delta.Content = strings.Join(textParts, "")
 		}
-	}
+		choice.Delta.ToolCalls = getStreamingToolCalls(c, &candidate)
 
-	// Create response
+		choices = append(choices, choice)
+	}
+	if len(choices) == 0 {
+		return nil
+	}
 	var response openai.ChatCompletionsStreamResponse
 	response.Id = tracing.GenerateChatCompletionID(c)
 	response.Created = helper.GetTimestamp()
 	response.Object = "chat.completion.chunk"
 	response.Model = "gemini"
-	response.Choices = []openai.ChatCompletionsStreamResponseChoice{choice}
+	response.Choices = choices
 
 	return &response
 }
@@ -365,7 +336,10 @@ func countGeminiOutputImages(response *ChatResponse) geminiOutputImageCounts {
 	var counts geminiOutputImageCounts
 	for _, candidate := range response.Candidates {
 		for _, part := range candidate.Content.Parts {
-			if part.InlineData != nil && part.InlineData.Data != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
+			if part.FunctionCall != nil {
+				continue
+			}
+			if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
 				counts.Inline++
 				counts.Total++
 			}
@@ -376,6 +350,55 @@ func countGeminiOutputImages(response *ChatResponse) geminiOutputImageCounts {
 		}
 	}
 	return counts
+}
+
+// countGeminiStreamImages counts image representations selected by the stream converter.
+func countGeminiStreamImages(response *ChatResponse) geminiOutputImageCounts {
+	var counts geminiOutputImageCounts
+	if response == nil || len(response.Candidates) == 0 {
+		return counts
+	}
+	for _, candidate := range response.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
+				counts.Inline++
+				counts.Total++
+			} else if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
+				counts.File++
+				counts.Total++
+			}
+		}
+	}
+	return counts
+}
+
+// geminiHasUnrepresentedMedia reports output media for which this gateway has
+// no complete downstream representation. Gemini's IMAGE-token receipt is
+// aggregate, not per candidate or per image. If any media part is dropped or
+// ambiguous, excluding the entire IMAGE-token bucket after billing only the
+// visible images could undercharge. Retain conservative token pricing instead.
+func geminiHasUnrepresentedMedia(response *ChatResponse) bool {
+	if response == nil {
+		return false
+	}
+	for _, candidate := range response.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData != nil {
+				if part.FunctionCall != nil || part.FileData != nil ||
+					part.InlineData.Data == "" || part.InlineData.MimeType == "" ||
+					!isGeminiImageMimeType(part.InlineData.MimeType) {
+					return true
+				}
+			}
+			if part.FileData != nil {
+				if part.FunctionCall != nil || part.FileData.FileURI == "" ||
+					part.FileData.MimeType == "" || !isGeminiImageMimeType(part.FileData.MimeType) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // recordGeminiOutputImageCount accumulates output image counts in the Gin context.
@@ -403,9 +426,10 @@ func geminiUsageMetadataToOpenAIUsage(meta *UsageMetadata) *model.Usage {
 	}
 
 	usage := &model.Usage{
-		PromptTokens:     meta.PromptTokenCount,
-		CompletionTokens: meta.CandidatesTokenCount + meta.ThoughtsTokenCount,
-		TotalTokens:      meta.TotalTokenCount,
+		PromptTokens:         meta.PromptTokenCount,
+		CompletionTokens:     meta.CandidatesTokenCount + meta.ThoughtsTokenCount,
+		TotalTokens:          meta.TotalTokenCount,
+		CandidateImageTokens: geminiCandidateImageTokens(meta),
 	}
 	if meta.CachedContentTokenCount > 0 {
 		usage.PromptTokensDetails = &model.UsagePromptTokensDetails{
@@ -418,4 +442,36 @@ func geminiUsageMetadataToOpenAIUsage(meta *UsageMetadata) *model.Usage {
 		}
 	}
 	return usage
+}
+
+// geminiCandidateImageTokens extracts only provider-reported IMAGE output tokens.
+// Parameters: meta is Gemini's usage receipt. Returns: a nonnegative count
+// bounded by candidatesTokenCount, not an estimated count per image.
+func geminiCandidateImageTokens(meta *UsageMetadata) int {
+	if meta == nil || meta.CandidatesTokenCount <= 0 {
+		return 0
+	}
+	count := 0
+	for _, entry := range meta.CandidatesTokensDetails {
+		if !strings.EqualFold(entry.Modality, "IMAGE") || entry.TokenCount <= 0 {
+			continue
+		}
+		// Bound cumulative counts without overflow, even for malformed receipts.
+		count += min(entry.TokenCount, meta.CandidatesTokenCount-count)
+		if count == meta.CandidatesTokenCount {
+			break
+		}
+	}
+	return count
+}
+
+// geminiStreamText extracts textual stream content for fallback token estimation.
+func geminiStreamText(message model.Message) string {
+	var text strings.Builder
+	for _, part := range message.ParseContent() {
+		if part.Type == model.ContentTypeText && part.Text != nil {
+			text.WriteString(*part.Text)
+		}
+	}
+	return text.String()
 }

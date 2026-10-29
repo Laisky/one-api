@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
-	"github.com/Laisky/one-api/common/render"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
 )
@@ -47,6 +47,11 @@ func RenderStreamChunkWithBridge(c *gin.Context, chunk any) error {
 	if rw := StreamRewriterFromContext(c); rw != nil {
 		if normalized, ok := normalizeStreamChunk(chunk); ok {
 			if handled, _ := rw.HandleChunk(c, normalized); handled {
+				if reporter, ok := rw.(interface{ StreamWriteError() error }); ok {
+					if err := reporter.StreamWriteError(); err != nil {
+						return err
+					}
+				}
 				if tracker := streaming.FromContext(c); tracker != nil {
 					return tracker.AbortError()
 				}
@@ -54,7 +59,15 @@ func RenderStreamChunkWithBridge(c *gin.Context, chunk any) error {
 			}
 		}
 	}
-	return render.ObjectData(c, chunk)
+	payload, err := json.Marshal(chunk)
+	if err != nil {
+		return err
+	}
+	if err = (common.CustomEvent{Data: "data: " + string(payload)}).Render(c.Writer); err != nil {
+		return err
+	}
+	c.Writer.Flush()
+	return nil
 }
 
 // FinalizeStreamWithBridge emits the terminal SSE events for a stream. With a
@@ -62,13 +75,25 @@ func RenderStreamChunkWithBridge(c *gin.Context, chunk any) error {
 // completion events; otherwise it writes the chat-completions `data: [DONE]`
 // sentinel. usage may be nil.
 func FinalizeStreamWithBridge(c *gin.Context, usage *model.Usage) {
+	_ = FinalizeStreamWithBridgeChecked(c, usage)
+}
+
+// FinalizeStreamWithBridgeChecked reports errors writing the terminal stream frame.
+func FinalizeStreamWithBridgeChecked(c *gin.Context, usage *model.Usage) error {
 	if rw := StreamRewriterFromContext(c); rw != nil {
 		rw.FinalizeUsage(usage)
 		if handled, _ := rw.HandleDone(c); handled {
-			return
+			if reporter, ok := rw.(interface{ StreamWriteError() error }); ok {
+				return reporter.StreamWriteError()
+			}
+			return nil
 		}
 	}
-	render.Done(c)
+	if err := (common.CustomEvent{Data: "data: [DONE]"}).Render(c.Writer); err != nil {
+		return err
+	}
+	c.Writer.Flush()
+	return nil
 }
 
 // normalizeStreamChunk converts an arbitrary OpenAI chat-completion chunk value

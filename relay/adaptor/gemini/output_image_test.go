@@ -1,7 +1,10 @@
 package gemini
 
 import (
+	"io"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -77,4 +80,28 @@ func TestResponseGeminiChat2OpenAI_FileData(t *testing.T) {
 	require.Len(t, content, 1)
 	require.NotNil(t, content[0].ImageURL)
 	require.Equal(t, "gs://bucket/image.png", content[0].ImageURL.Url)
+}
+
+// TestHandlerMalformedImagePartsCountsDelivered checks unary billing against serialized output.
+func TestHandlerMalformedImagePartsCountsDelivered(t *testing.T) {
+	for _, tc := range []struct {
+		name, parts     string
+		count           int
+		present, absent string
+	}{
+		{"dual_image", `{"inlineData":{"mimeType":"image/png","data":"YQ=="},"fileData":{"mimeType":"image/png","fileUri":"https://file.example/a.png"}}`, 2, "file.example", "not-present"},
+		{"function_image", `{"functionCall":{"name":"f","args":{}},"inlineData":{"mimeType":"image/png","data":"YQ=="}}`, 0, "tool_calls", "YQ=="},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"candidates":[{"content":{"parts":[` + tc.parts + `]}}]}`))}
+			apiErr, _ := Handler(c, resp, 0, "gemini-nano-banana-2.1")
+			require.Nil(t, apiErr)
+			require.Contains(t, rec.Body.String(), tc.present)
+			require.NotContains(t, rec.Body.String(), tc.absent)
+			require.Equal(t, tc.count, c.GetInt(ctxkey.OutputImageCount))
+		})
+	}
 }

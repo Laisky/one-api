@@ -41,7 +41,8 @@ const channelName = "vertexai"
 // IsRequireGlobalEndpoint determines if the given model requires a global endpoint
 // by checking whether its numeric version is at least 2.5.
 func IsRequireGlobalEndpoint(model string) bool {
-	return geminiOpenaiCompatible.GeminiVersionAtLeast(model, 2.5)
+	// Nano Banana uses a named ID and is offered only at Vertex's global endpoint.
+	return geminiOpenaiCompatible.IsGeminiNanoBanana21Model(model) || geminiOpenaiCompatible.GeminiVersionAtLeast(model, 2.5)
 }
 
 type Adaptor struct {
@@ -258,7 +259,12 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	// administrator-owned channel rates rather than fabricated defaults.
 	for name, cfg := range geminiOpenaiCompatible.ModelRatios {
 		if !adaptor.IsLiveOnlyGoogleModel(name) {
-			pricing[name] = cfg
+			if geminiOpenaiCompatible.IsGeminiNanoBanana21Model(name) {
+				// Vertex prices implicit cache hits at $0.15/1M input tokens;
+				// the Gemini Developer API does not expose caching for this model.
+				cfg.CachedInputRatio = 0.15 * ratio.MilliTokensUsd
+			}
+			pricing[name] = geminiOpenaiCompatible.NativeGeminiModelConfig(name, cfg)
 		}
 	}
 
@@ -311,6 +317,9 @@ func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 // other models keep the channel-wide defaults. Parameters: modelName is the
 // upstream model. Returns: the effective provider tooling configuration.
 func (a *Adaptor) DefaultToolingConfigForModel(modelName string) adaptor.ChannelToolConfig {
+	if geminiOpenaiCompatible.IsGeminiNanoBanana21Model(modelName) {
+		return adaptor.ChannelToolConfig{}
+	}
 	if getModelEndpointType(modelName) != EndpointTypeClaude {
 		return VertexAIToolingDefaults
 	}

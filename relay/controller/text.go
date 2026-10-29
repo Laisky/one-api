@@ -62,6 +62,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	meta.OriginModelName = textRequest.Model
 	textRequest.Model = meta.ActualModelName
 	meta.ActualModelName = textRequest.Model
+	if tariffErr := validateNativeNanoImageTariff(c, meta); tariffErr != nil {
+		return tariffErr
+	}
 	applyThinkingQueryToChatRequest(c, textRequest, meta)
 	// set system prompt if not empty
 	systemPromptReset := setSystemPrompt(ctx, textRequest, meta.ForcedSystemPrompt)
@@ -378,9 +381,17 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	// Enforcement failure stops future work but cannot discard a verified
 	// receipt or the final delta for work already bought from the provider.
+	// Apply measured image charges before the tracker enforces the final receipt,
+	// so separately priced image tokens are not also funded as text tokens.
+	imageChargedBeforeFinalization := usage != nil
+	if imageChargedBeforeFinalization {
+		applyOutputImageCharges(c, &usage, meta)
+	}
 	usage, incrementalCharged, respErr := finalizeStreamingUsage(tracker, usage, respErr)
 
-	applyOutputImageCharges(c, &usage, meta)
+	if !imageChargedBeforeFinalization {
+		applyOutputImageCharges(c, &usage, meta)
+	}
 	applyOutputAudioCharges(c, &usage, meta)
 	applyOutputVideoCharges(c, &usage, meta)
 	tooling.ApplyBuiltinToolCharges(c, &usage, meta, channelRecord, requestAdaptor)

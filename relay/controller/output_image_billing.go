@@ -142,10 +142,18 @@ func applyOutputImageCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 	}
 
 	size := imagePricing.DefaultSize
+	// Native Nano chat does not send imageConfig.imageSize; the provider default is 1K.
+	// Keep channel pricing overrides for that tier and preserve other providers' defaults.
+	if isNativeNanoImageBilling(meta) {
+		size = "1024x1024"
+	}
 	if size == "" {
 		size = "1024x1024"
 	}
 	quality := imagePricing.DefaultQuality
+	if isNativeNanoImageBilling(meta) {
+		quality = "standard"
+	}
 	if quality == "" {
 		quality = "standard"
 	}
@@ -158,6 +166,9 @@ func applyOutputImageCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 	}
 
 	imageCostRatio, err := getImageCostRatio(imageRequest, imagePricing)
+	if isNativeNanoImageBilling(meta) {
+		imageCostRatio, err = nativeNanoImageTierRatio(billingCtx, imagePricing)
+	}
 	if err != nil {
 		if billingCtx.Logger != nil {
 			billingCtx.Logger.Debug("output image billing skipped due to invalid image tier",
@@ -194,6 +205,13 @@ func applyOutputImageCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 	}
 
 	usage.ToolsCost += imageQuota
+	// Image candidate tokens are already part of Gemini's completion-token
+	// receipt. Exclude the measured portion from token pricing only after the
+	// separate per-image fee was actually admitted and applied. Preserve the
+	// original upstream usage counts for API clients, logs, and metrics.
+	if !c.GetBool(ctxkey.GeminiOutputIncomplete) && usage.CandidateImageTokens > 0 && usage.CompletionTokens > 0 {
+		usage.ImageTokensBilledSeparately = min(usage.CandidateImageTokens, usage.CompletionTokens)
+	}
 
 	if billingCtx.Logger != nil {
 		billingCtx.Logger.Debug("output image billing applied",

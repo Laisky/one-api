@@ -15,9 +15,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
-	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/random"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	channelhelper "github.com/Laisky/one-api/relay/adaptor"
@@ -52,21 +50,6 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	return fmt.Sprintf("%s/%s/models/%s:%s", meta.BaseURL, version, meta.ActualModelName, action), nil
 }
 
-// resolveGeminiAPIVersion selects the Gemini API version for the requested model.
-// Parameters: modelName is the target upstream model and configuredVersion is the optional channel override.
-// Returns: the API version string that should be used for Gemini requests.
-func resolveGeminiAPIVersion(modelName string, configuredVersion string) string {
-	defaultVersion := config.GeminiVersion
-	modelName = strings.ToLower(modelName)
-	if geminiOpenaiCompatible.GeminiVersionAtLeast(modelName, 1.5) ||
-		strings.Contains(modelName, "preview") ||
-		strings.Contains(modelName, "gemma-3") {
-		defaultVersion = "v1beta"
-	}
-
-	return helper.AssignOrDefault(configuredVersion, defaultVersion)
-}
-
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	channelhelper.SetupCommonRequestHeader(c, req, meta)
 	req.Header.Set("x-goog-api-key", meta.APIKey)
@@ -91,7 +74,13 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		}
 		return geminiEmbeddingRequest, nil
 	default:
-		geminiRequest := ConvertRequest(*request)
+		if err := ValidateNativeToolSupport(c, request); err != nil {
+			return nil, errors.Wrap(err, "validate native Gemini tools")
+		}
+		geminiRequest, err := ConvertNativeRequestChecked(c, *request)
+		if err != nil {
+			return nil, errors.Wrap(err, "convert native Gemini request")
+		}
 		return geminiRequest, nil
 	}
 }
@@ -308,7 +297,6 @@ func (a *Adaptor) convertToClaudeResponse(c *gin.Context, resp *http.Response, m
 
 	// Check if it's a streaming response
 	if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
-		// Handle streaming response conversion (not implemented yet)
 		return a.convertStreamingToClaudeResponse(c, resp, body, meta)
 	}
 
@@ -345,6 +333,8 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 
 	var textBuilder strings.Builder
 	var toolArgsBuilder strings.Builder
+	imageReceipt := &model.ClaudeImageReceipt{CandidateImageTokens: geminiCandidateImageTokens(geminiResp.UsageMetadata), Incomplete: len(geminiResp.Candidates) > 1 || geminiHasUnrepresentedMedia(&geminiResp)}
+	imageCount := 0
 
 	// Convert candidates to content
 	if len(geminiResp.Candidates) > 0 {
@@ -361,6 +351,13 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 					Type: "text",
 					Text: part.Text,
 				})
+			}
+
+			if geminiOpenaiCompatible.IsGeminiNanoBanana21Model(meta.ActualModelName) {
+				if image := claudeGeminiImageText(part); image != "" {
+					claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: image})
+					imageCount++
+				}
 			}
 
 			// Handle function calls if present
@@ -409,6 +406,13 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 		return nil, openai.ErrorWrapper(err, "marshal_claude_response_failed", http.StatusInternalServerError)
 	}
 
+	if geminiOpenaiCompatible.IsGeminiNanoBanana21Model(meta.ActualModelName) {
+		for i := 0; i < imageCount; i++ {
+			imageReceipt.ImageEndOffsets = append(imageReceipt.ImageEndOffsets, len(claudeBody))
+		}
+		c.Set(ctxkey.ClaudeGeminiImageReceipt, imageReceipt)
+	}
+
 	// Create new response with Claude format
 	newResp := &http.Response{
 		StatusCode: resp.StatusCode,
@@ -431,6 +435,10 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	lineReader := commonsse.NewLineReader(bytes.NewReader(body), commonsse.DefaultLineBufferSize)
 
 	var textBuilder strings.Builder
+	var textBlocks []claudeImageTextBlock
+	var pendingText strings.Builder
+	imageReceipt := &model.ClaudeImageReceipt{}
+	nanoOutput := geminiOpenaiCompatible.IsGeminiNanoBanana21Model(meta.ActualModelName)
 	type toolUse struct {
 		name  string
 		input string
@@ -448,6 +456,7 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 				break
 			}
 
+			imageReceipt.Incomplete = true
 			lg.Warn("error reading Gemini stream for Claude conversion", zap.Error(errors.Wrap(err, "read stream")))
 			break
 		}
@@ -456,6 +465,7 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 		if line.Oversized {
 			payloadBytes, err := io.ReadAll(line.Large)
 			if err != nil {
+				imageReceipt.Incomplete = true
 				lg.Warn("error reading oversized Gemini stream payload", zap.Error(errors.Wrap(err, "read oversized stream")))
 				continue
 			}
@@ -489,12 +499,14 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 			// Handle cases where payload is a quoted JSON string
 			unquoted, uerr := strconv.Unquote(payload)
 			if uerr != nil || json.Unmarshal([]byte(unquoted), &geminiResp) != nil {
+				imageReceipt.Incomplete = true
 				lg.Debug("discarding unparseable Gemini stream chunk", zap.String("chunk", payload), zap.Error(err))
 				continue
 			}
 		}
 
 		if geminiResp.UsageMetadata != nil {
+			imageReceipt.CandidateImageTokens = geminiCandidateImageTokens(geminiResp.UsageMetadata)
 			promptTokens = geminiResp.UsageMetadata.PromptTokenCount
 			completionTokens = geminiResp.UsageMetadata.CandidatesTokenCount + geminiResp.UsageMetadata.ThoughtsTokenCount
 			if geminiResp.UsageMetadata.TotalTokenCount > 0 {
@@ -506,7 +518,26 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 			continue
 		}
 
+		if len(geminiResp.Candidates) > 1 || geminiHasUnrepresentedMedia(&geminiResp) {
+			imageReceipt.Incomplete = true
+		}
 		candidate := geminiResp.Candidates[0]
+		if nanoOutput {
+			found := false
+			for _, entry := range geminiResp.Candidates {
+				if entry.Index != 0 {
+					imageReceipt.Incomplete = true
+					continue
+				}
+				if !found {
+					candidate = entry
+					found = true
+				}
+			}
+			if !found {
+				continue
+			}
+		}
 		if candidate.FinishReason != "" {
 			stopReason = mapGeminiFinishReason(candidate.FinishReason)
 		}
@@ -514,6 +545,18 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 		for _, part := range candidate.Content.Parts {
 			if part.Text != "" {
 				textBuilder.WriteString(part.Text)
+				if nanoOutput {
+					pendingText.WriteString(part.Text)
+				}
+			}
+			if nanoOutput {
+				if image := claudeGeminiImageText(part); image != "" {
+					if pendingText.Len() > 0 {
+						textBlocks = append(textBlocks, claudeImageTextBlock{text: pendingText.String()})
+						pendingText.Reset()
+					}
+					textBlocks = append(textBlocks, claudeImageTextBlock{text: image, image: true})
+				}
 			}
 
 			if part.FunctionCall != nil {
@@ -531,6 +574,9 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 		}
 	}
 
+	if pendingText.Len() > 0 {
+		textBlocks = append(textBlocks, claudeImageTextBlock{text: pendingText.String()})
+	}
 	var toolArgsText strings.Builder
 	for _, tool := range toolUses {
 		if tool.input != "" {
@@ -539,6 +585,9 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	}
 
 	textOutput := textBuilder.String()
+	if !nanoOutput && textOutput != "" {
+		textBlocks = append(textBlocks, claudeImageTextBlock{text: textOutput})
+	}
 	if promptTokens == 0 && meta.PromptTokens > 0 {
 		promptTokens = meta.PromptTokens
 	}
@@ -568,7 +617,7 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	}
 
 	index := 0
-	if textOutput != "" {
+	for _, block := range textBlocks {
 		if err := writeClaudeSSEEvent(output, "content_block_start", map[string]any{
 			"type":  "content_block_start",
 			"index": index,
@@ -585,12 +634,15 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 			"index": index,
 			"delta": map[string]any{
 				"type": "text_delta",
-				"text": textOutput,
+				"text": block.text,
 			},
 		}); err != nil {
 			return nil, openai.ErrorWrapper(errors.Wrap(err, "write text delta"), "marshal_claude_stream_failed", http.StatusInternalServerError)
 		}
 
+		if block.image {
+			imageReceipt.ImageEndOffsets = append(imageReceipt.ImageEndOffsets, output.Len())
+		}
 		if err := writeClaudeSSEEvent(output, "content_block_stop", map[string]any{
 			"type":  "content_block_stop",
 			"index": index,
@@ -667,6 +719,9 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	output.WriteString("data: [DONE]\n\n")
 
 	outBytes := output.Bytes()
+	if nanoOutput {
+		c.Set(ctxkey.ClaudeGeminiImageReceipt, imageReceipt)
+	}
 	newResp := &http.Response{
 		StatusCode:    resp.StatusCode,
 		Header:        make(http.Header, len(resp.Header)),
@@ -704,39 +759,14 @@ func (a *Adaptor) DefaultToolingConfigForModel(model string) channelhelper.Chann
 	return geminiOpenaiCompatible.GeminiToolingDefaultsForModel(model)
 }
 
-func mapGeminiFinishReason(reason string) string {
-	switch reason {
-	case "MAX_TOKENS":
-		return "max_tokens"
-	case "SAFETY", "RECITATION":
-		return "stop_sequence"
-	case "STOP", "":
-		return "end_turn"
-	default:
-		return "end_turn"
-	}
-}
-
-func writeClaudeSSEEvent(buf *bytes.Buffer, event string, payload any) error {
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return errors.Wrap(err, "marshal Claude SSE payload")
-	}
-	if event != "" {
-		buf.WriteString("event: ")
-		buf.WriteString(event)
-		buf.WriteString("\n")
-	}
-	buf.WriteString("data: ")
-	buf.Write(data)
-	buf.WriteString("\n\n")
-	return nil
-}
-
 // Pricing methods - Gemini adapter manages its own model pricing
 func (a *Adaptor) GetDefaultModelPricing() map[string]channelhelper.ModelConfig {
-	// Use the constants.go ModelRatios which already use ratio.MilliTokensUsd correctly
-	return ModelRatios
+	pricing := maps.Clone(ModelRatios)
+	name := geminiOpenaiCompatible.GeminiNanoBanana21Model
+	if cfg, ok := pricing[name]; ok {
+		pricing[name] = geminiOpenaiCompatible.NativeGeminiModelConfig(name, cfg)
+	}
+	return pricing
 }
 
 func (a *Adaptor) GetModelRatio(modelName string) float64 {

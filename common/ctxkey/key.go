@@ -95,6 +95,9 @@ const (
 	// Read in: response handlers that need to inspect the converted structure.
 	ImageRequest = "image_request"
 
+	// ClaudeGeminiImageReceipt carries private Gemini image delivery accounting.
+	ClaudeGeminiImageReceipt = "claude_gemini_image_receipt"
+
 	// OutputImageCount stores the number of output images observed in upstream responses.
 	// Set by: adaptors that parse image outputs (e.g., Gemini inlineData).
 	// Read in: controllers to apply per-image billing for image-capable models.
@@ -365,6 +368,9 @@ const (
 	// to apply conservative no-underbilling policy on ambiguous failures by avoiding
 	// automatic pre-consume refunds once forwarding has started.
 	UpstreamRequestPossiblyForwarded = "upstream_request_possibly_forwarded"
+
+	// GeminiOutputIncomplete means not all upstream image output was represented downstream.
+	GeminiOutputIncomplete = "gemini_output_incomplete"
 
 	// APIFormat is the detected API format of the request (OpenAI, Claude, Response API).
 	// Set in: middleware/api_format_detect.

@@ -32,6 +32,7 @@ var ModelsSupportSystemInstruction = []string{
 	"gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools",
 	"gemini-3.1-flash-image-preview", "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview",
 	"gemini-3.1-flash-image", "gemini-3.1-flash-lite-image",
+	geminiOpenaiCompatible.GeminiNanoBanana21Model,
 	"gemini-3.5-flash", "gemini-3.5-flash-lite",
 	"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash",
 	"gemini-4-argon",
@@ -41,5 +42,5 @@ var ModelsSupportSystemInstruction = []string{
 // IsModelSupportSystemInstruction reports whether model accepts system instructions.
 // Parameters: model is the upstream Gemini model ID. Returns: true when system instructions are supported.
 func IsModelSupportSystemInstruction(model string) bool {
-	return slices.Contains(ModelsSupportSystemInstruction, model)
+	return geminiOpenaiCompatible.IsGeminiNanoBanana21Model(model) || slices.Contains(ModelsSupportSystemInstruction, model)
 }

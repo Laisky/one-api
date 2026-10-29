@@ -225,11 +225,19 @@ func (m Message) ParseContent() []MessageContent {
 				}
 			case ContentTypeInputAudio:
 				if subObj, ok := contentMap["input_audio"].(map[string]any); ok {
+					// Client-supplied audio fields can be absent or have the wrong
+					// type. Skip malformed parts instead of panicking before the
+					// provider's request validator can return a controlled error.
+					data, hasData := subObj["data"].(string)
+					format, hasFormat := subObj["format"].(string)
+					if !hasData || !hasFormat {
+						continue
+					}
 					contentList = append(contentList, MessageContent{
 						Type: ContentTypeInputAudio,
 						InputAudio: &InputAudio{
-							Data:   subObj["data"].(string),
-							Format: subObj["format"].(string),
+							Data:   data,
+							Format: format,
 						},
 					})
 				}

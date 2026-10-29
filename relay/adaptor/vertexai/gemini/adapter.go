@@ -10,6 +10,7 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/gemini"
+	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -54,7 +55,14 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		}
 		convertedRequest = embeddingRequest
 	} else {
-		geminiRequest = gemini.ConvertRequest(*request)
+		if err := gemini.ValidateNativeToolSupport(c, request); err != nil {
+			return nil, errors.Wrap(err, "validate native Vertex Gemini tools")
+		}
+		var err error
+		geminiRequest, err = gemini.ConvertNativeRequestChecked(c, *request)
+		if err != nil {
+			return nil, errors.Wrap(err, "convert native Vertex Gemini request")
+		}
 		convertedRequest = geminiRequest
 	}
 
@@ -121,6 +129,9 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	if c.GetBool(ctxkey.ClaudeMessagesConversion) && geminiOpenaiCompatible.IsGeminiNanoBanana21Model(meta.ActualModelName) {
+		return (&gemini.Adaptor{}).DoResponse(c, resp, meta)
+	}
 	if meta.IsStream {
 		var responseText string
 		var streamUsage *model.Usage

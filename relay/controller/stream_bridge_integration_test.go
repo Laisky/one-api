@@ -12,6 +12,7 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/ali"
+	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	metalib "github.com/Laisky/one-api/relay/meta"
 )
@@ -81,4 +82,26 @@ func TestResponseStreamBridge_AdaptorEndToEnd(t *testing.T) {
 			require.Failf(t, "[DONE] order", "[DONE] not preceded by response.completed; body:\n%s", body)
 		}
 	}
+}
+
+// TestResponseStreamBridgeGeminiMixedContent verifies real Gemini images and text reach Responses clients.
+func TestResponseStreamBridgeGeminiMixedContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Set(ctxkey.ResponseStreamRewriteHandler, newChatToResponseStreamBridge(c, &metalib.Meta{ActualModelName: "gemini-nano-banana-2.1"}, &openai.ResponseAPIRequest{Model: "gemini-nano-banana-2.1"}))
+	frame := `data: {"candidates":[{"content":{"parts":[{"text":"before"},{"inlineData":{"mimeType":"image/png","data":"YQ=="}},{"fileData":{"mimeType":"image/png","fileUri":"https://example.test/b.png"}},{"text":"after"}]}}]}` + "\n\ndata: [DONE]\n\n"
+	resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(frame))}
+	apiErr, text, usage := gemini.StreamHandler(c, resp)
+	require.Nil(t, apiErr)
+	require.Nil(t, usage)
+	require.Equal(t, "beforeafter", text)
+	body := rec.Body.String()
+	require.Contains(t, body, "response.completed")
+	require.Contains(t, body, "before")
+	require.Contains(t, body, "data:image/png;base64,YQ==")
+	require.Contains(t, body, "https://example.test/b.png")
+	require.Contains(t, body, "after")
+	require.Equal(t, 2, c.GetInt(ctxkey.OutputImageCount))
 }

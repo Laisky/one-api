@@ -2,7 +2,6 @@ package gemini
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -207,6 +206,14 @@ func cleanFunctionParametersInternal(params any, isTopLevel bool) any {
 // and configures generation parameters like temperature, top_p, max_tokens, etc.
 // Safety settings are configured to the lowest possible thresholds by default.
 func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
+	converted, _ := convertRequest(textRequest, false)
+	return converted
+}
+
+// convertRequest builds a native request and optionally rejects invalid input images.
+// Parameters: textRequest is the source request; strictImages enables controlled image failures.
+// Returns: the converted request or a sanitized image validation error.
+func convertRequest(textRequest model.GeneralOpenAIRequest, strictImages bool) (*ChatRequest, error) {
 	geminiRequest := ChatRequest{
 		Contents: make([]ChatContent, 0, len(textRequest.Messages)),
 		SafetySettings: []ChatSafetySettings{
@@ -242,6 +249,7 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 	if geminiRequest.GenerationConfig.MaxOutputTokens == 0 {
 		geminiRequest.GenerationConfig.MaxOutputTokens = config.DefaultMaxToken
 	}
+	configureNanoBananaThinking(&geminiRequest, textRequest)
 	if textRequest.ResponseFormat != nil {
 		if mimeType, ok := mimeTypeMap[textRequest.ResponseFormat.Type]; ok {
 			geminiRequest.GenerationConfig.ResponseMimeType = mimeType
@@ -265,7 +273,7 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 	}
 
 	// remove temperature & top_p for Gemini image models; only enforce response modalities when allowed
-	if strings.Contains(strings.ToLower(textRequest.Model), "-image") {
+	if geminiOpenaiCompatible.IsGeminiImageGenerationModel(textRequest.Model) {
 		geminiRequest.GenerationConfig.Temperature = nil
 		geminiRequest.GenerationConfig.TopP = nil
 		if geminiRequest.GenerationConfig.ResponseModalities != nil {
@@ -411,7 +419,17 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 				if imageNum > VisionMaxImageNum {
 					continue
 				}
-				mimeType, data, _ := image.GetImageFromUrl(part.ImageURL.Url)
+				mimeType, data, imageErr := image.GetImageFromUrl(part.ImageURL.Url)
+				if strictImages {
+					if imageErr != nil {
+						return nil, errors.New("validation failed: invalid or inaccessible input image")
+					}
+					var err error
+					mimeType, err = validateNativeImageData(mimeType, data)
+					if err != nil {
+						return nil, errors.Wrap(err, "validate native image input")
+					}
+				}
 				parts = append(parts, Part{
 					InlineData: &InlineData{
 						MimeType: mimeType,
@@ -476,65 +494,7 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 		}
 	}
 
-	return &geminiRequest
-}
-
-func convertToolChoiceToConfig(toolChoice any) *ToolConfig {
-	switch choice := toolChoice.(type) {
-	case string:
-		switch strings.ToLower(strings.TrimSpace(choice)) {
-		case "none":
-			return &ToolConfig{FunctionCallingConfig: FunctionCallingConfig{Mode: "NONE"}}
-		default:
-			return nil
-		}
-	case map[string]any:
-		choiceType := strings.ToLower(strings.TrimSpace(fmt.Sprint(choice["type"])))
-		var allowed []string
-		switch choiceType {
-		case "function":
-			if fn, ok := choice["function"].(map[string]any); ok {
-				if name, ok := fn["name"].(string); ok && strings.TrimSpace(name) != "" {
-					allowed = append(allowed, strings.TrimSpace(name))
-				}
-			}
-		case "tool":
-			if name, ok := choice["name"].(string); ok && strings.TrimSpace(name) != "" {
-				allowed = append(allowed, strings.TrimSpace(name))
-			}
-		}
-		if len(allowed) > 0 {
-			return &ToolConfig{FunctionCallingConfig: FunctionCallingConfig{
-				Mode:                 "ANY",
-				AllowedFunctionNames: allowed,
-			}}
-		}
-	}
-	return nil
-}
-
-// ConvertEmbeddingRequest converts an OpenAI-compatible embedding request to Gemini's BatchEmbeddingRequest format.
-// Parameters: request is the OpenAI-compatible embeddings request.
-// Returns: the Gemini batch embedding request or an error when the input cannot be normalized into Gemini contents.
-func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) (*BatchEmbeddingRequest, error) {
-	contents, _, err := BuildEmbeddingContents(request.Input)
-	if err != nil {
-		return nil, errors.Wrap(err, "build gemini embedding contents")
-	}
-
-	requests := make([]EmbeddingRequest, len(contents))
-	model := fmt.Sprintf("models/%s", request.Model)
-
-	for i, content := range contents {
-		requests[i] = EmbeddingRequest{
-			Model:   model,
-			Content: content,
-		}
-	}
-
-	return &BatchEmbeddingRequest{
-		Requests: requests,
-	}, nil
+	return &geminiRequest, nil
 }
 
 // StreamHandler processes streaming responses from the Gemini API and converts them to OpenAI-compatible
@@ -602,36 +562,56 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		var geminiResponse ChatResponse
 		err = json.Unmarshal([]byte(data), &geminiResponse)
 		if err != nil {
-			lg.Error("error unmarshalling stream response",
-				zap.Error(errors.Wrap(err, "unmarshal stream")))
-			continue
+			streamErr = errors.Wrap(err, "unmarshal stream")
+			break
 		}
-
-		// Capture the latest non-empty usageMetadata (cumulative totals, not deltas).
+		seen := make(map[int64]bool, len(geminiResponse.Candidates))
+		for _, candidate := range geminiResponse.Candidates {
+			if candidate.Index < 0 || int64(int(candidate.Index)) != candidate.Index || seen[candidate.Index] {
+				streamErr = errors.New("invalid or duplicate Gemini candidate index")
+				break
+			}
+			seen[candidate.Index] = true
+		}
+		if streamErr != nil {
+			break
+		}
+		if geminiHasUnrepresentedMedia(&geminiResponse) {
+			// A partial media projection cannot safely claim the entire
+			// aggregate IMAGE-token receipt was separately image-billed.
+			c.Set(ctxkey.GeminiOutputIncomplete, true)
+		}
 		if geminiResponse.UsageMetadata != nil && geminiResponse.UsageMetadata.TotalTokenCount > 0 {
 			usageMetadata = geminiResponse.UsageMetadata
 		}
-
-		chunkCounts := countGeminiOutputImages(&geminiResponse)
-		outputImageCount += chunkCounts.Total
-		inlineImageCount += chunkCounts.Inline
-		fileImageCount += chunkCounts.File
-
 		response := streamResponseGeminiChat2OpenAI(c, &geminiResponse)
 		if response == nil {
 			continue
 		}
-
-		responseText += response.Choices[0].Delta.StringContent()
-
-		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
-		if err != nil {
-			lg.Error("error rendering stream",
-				zap.Error(errors.Wrap(err, "render stream")))
+		for _, choice := range response.Choices {
+			responseText += geminiStreamText(choice.Delta)
 		}
+		counts := countGeminiStreamImages(&geminiResponse)
+		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
+		if rw := openai_compatible.StreamRewriterFromContext(c); rw != nil {
+			if reporter, ok := rw.(interface{ DeliveredImagesInLastChunk() int }); ok {
+				outputImageCount += reporter.DeliveredImagesInLastChunk()
+			} else if err == nil {
+				outputImageCount += counts.Total
+			}
+		} else if err == nil {
+			outputImageCount += counts.Total
+		}
+		if err != nil {
+			streamErr = errors.Wrap(err, "render stream")
+			break
+		}
+		inlineImageCount += counts.Inline
+		fileImageCount += counts.File
 	}
 	if streamErr != nil {
-		render.LogHeartbeatLineReaderError(c, lg, errors.Wrap(streamErr, "line reader stream"), hbr)
+		c.Set(ctxkey.GeminiOutputIncomplete, true)
+		render.LogHeartbeatLineReaderError(c, lg, errors.Wrap(streamErr, "gemini stream"), hbr)
 	}
 
 	if outputImageCount > 0 {
@@ -647,13 +627,21 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	usage := geminiUsageMetadataToOpenAIUsage(usageMetadata)
 
-	openai_compatible.FinalizeStreamWithBridge(c, usage)
+	if streamErr == nil {
+		streamErr = openai_compatible.FinalizeStreamWithBridgeChecked(c, usage)
+		if streamErr != nil {
+			c.Set(ctxkey.GeminiOutputIncomplete, true)
+		}
+	}
 
 	err := resp.Body.Close()
 	if err != nil {
 		return openai.ErrorWrapper(errors.Wrap(err, "close_response_body_failed"), "close_response_body_failed", http.StatusInternalServerError), "", nil
 	}
 
+	if streamErr != nil {
+		return openai.ErrorWrapper(streamErr, "gemini_stream_failed", http.StatusBadGateway), responseText, usage
+	}
 	return nil, responseText, usage
 }
 
@@ -709,6 +697,9 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 		)
 	}
 
+	if geminiHasUnrepresentedMedia(&geminiResponse) {
+		c.Set(ctxkey.GeminiOutputIncomplete, true)
+	}
 	outputCounts := countGeminiOutputImages(&geminiResponse)
 	if outputCounts.Total > 0 {
 		recordGeminiOutputImageCount(c, outputCounts.Total)

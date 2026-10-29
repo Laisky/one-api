@@ -123,5 +123,5 @@ func TestGeminiSeptember2026LifecycleMetadata(t *testing.T) {
 	require.NotContains(t, ModelRatios["gemini-2.5-flash"].Description, "2026-10-16")
 	require.NotContains(t, ModelRatios["gemini-2.5-flash-lite"].Description, "2026-10-16")
 	require.Contains(t, ModelRatios["gemini-robotics-er-1.6-preview"].Description, "August 31, 2026")
-	require.Contains(t, ModelRatios["gemini-omni-flash-preview"].Description, "September 30, 2026")
+	require.Contains(t, ModelRatios["gemini-omni-flash-preview"].Description, "October 22, 2026")
 }

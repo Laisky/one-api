@@ -3,6 +3,7 @@ package streaming
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
@@ -61,7 +62,7 @@ func (t *QuotaTracker) ObserveMessages(messages []relaymodel.Message, usage *rel
 	}
 	delta := 0
 	for _, message := range messages {
-		delta += count(message.StringContent(), t.params.ModelName)
+		delta += count(observedText(message), t.params.ModelName)
 		seen := map[string]bool{}
 		for _, part := range []*string{message.ReasoningContent, message.Reasoning, message.Thinking} {
 			if part != nil && !seen[*part] {
@@ -97,4 +98,21 @@ func (t *QuotaTracker) ObserveMessages(messages []relaymodel.Message, usage *rel
 		}
 	}
 	return recordErr
+}
+
+// observedText extracts only textual typed parts while retaining existing string and wire-format semantics.
+// Parameters: message is the incoming stream delta.
+// Returns: its concatenated text, excluding image and audio payloads.
+func observedText(message relaymodel.Message) string {
+	parts, ok := message.Content.([]relaymodel.MessageContent)
+	if !ok {
+		return message.StringContent()
+	}
+	var text strings.Builder
+	for _, part := range parts {
+		if strings.EqualFold(part.Type, relaymodel.ContentTypeText) && part.Text != nil {
+			text.WriteString(*part.Text)
+		}
+	}
+	return text.String()
 }

@@ -10,6 +10,14 @@ type Usage struct {
 	// BillingEstimateReason is server-only evidence that usage was conservatively
 	// estimated rather than measured. Clients cannot supply it through JSON.
 	BillingEstimateReason string `json:"-"`
+	// CandidateImageTokens is an authoritative upstream count of generated IMAGE
+	// candidate tokens. It remains private so public completion and total usage
+	// continue to represent the unmodified provider receipt.
+	CandidateImageTokens int `json:"-"`
+	// ImageTokensBilledSeparately excludes only measured image candidate tokens
+	// from ordinary completion-token pricing after a separate image fee was charged.
+	// This is accounting-only and never changes publicly reported token usage.
+	ImageTokensBilledSeparately int `json:"-"`
 	// BillingEstimateQuotaFloor retains the original quote for accepted but
 	// unmeasured work, independently of whether admission took a physical hold.
 	// This is server-only evidence, never a client-controlled pricing dimension.
