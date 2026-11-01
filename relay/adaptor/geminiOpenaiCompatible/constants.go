@@ -344,20 +344,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			},
 		},
 	},
-	// GA alias for gemini-3-pro-image (same pricing as preview).
+	// GA model retains the preview's base text and image prices, but the
+	// 65K-context image endpoint does not offer caching or a 200K+ input tier.
+	// Sources: https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image
+	//          https://ai.google.dev/gemini-api/docs/pricing (verified 2026-11-01).
 	"gemini-3-pro-image": {
-		Ratio:            2.0 * ratio.MilliTokensUsd,
-		CompletionRatio:  12.0 / 2.0,
-		CachedInputRatio: 0.20 * ratio.MilliTokensUsd,
-		Image:            gemini3ProImageConfig(),
-		Tiers: []adaptor.ModelRatioTier{
-			{
-				Ratio:               4.0 * ratio.MilliTokensUsd,
-				CompletionRatio:     18.0 / 4.0,
-				CachedInputRatio:    0.40 * ratio.MilliTokensUsd,
-				InputTokenThreshold: 200001,
-			},
-		},
+		Ratio:           2.0 * ratio.MilliTokensUsd,
+		CompletionRatio: 12.0 / 2.0,
+		Image:           gemini3ProImageConfig(),
 	},
 
 	// Gemini 2.5 Pro & Computer Use Models
