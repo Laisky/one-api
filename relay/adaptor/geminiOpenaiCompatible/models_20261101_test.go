@@ -97,9 +97,9 @@ func TestGeminiNovember2026ThinkingCatalog(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		model   string
-		levels  []string
-		def     string
+		model  string
+		levels []string
+		def    string
 	}{
 		{"gemini-3-flash-preview", []string{"minimal", "low", "medium", "high"}, "high"},
 		{"gemini-3-pro-preview", []string{"low", "high"}, "high"},
