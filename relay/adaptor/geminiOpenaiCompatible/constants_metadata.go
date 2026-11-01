@@ -210,23 +210,28 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: geminiSamplingImage,
 		Description:                 "Gemini 3.1 Flash native image-generation preview tier with up to 128K context. (RETIRED 2026-06-25; use gemini-3.1-flash-image)",
 	},
+	// Stable image model cards verified 2026-11-01:
+	// https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image
+	// https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite-image
 	"gemini-3.1-flash-image": {
 		ContextLength:               131_072,
 		MaxOutputTokens:             32_768,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             []string{"text", "image", "video", "file"},
 		OutputModalities:            geminiOutputTextImage,
-		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
+		SupportedFeatures:           []string{"reasoning"},
 		SupportedSamplingParameters: geminiSamplingImage,
-		Description:                 "Gemini 3.1 Flash native image-generation GA tier with up to 128K context.",
+		Description:                 "Gemini 3.1 Flash image generation (Nano Banana 2): 128K input, 32K output, text/image/video/PDF inputs, and text/image outputs. No function calling or structured outputs.",
 	},
 	"gemini-3.1-flash-lite-image": {
-		ContextLength:               131_072,
-		MaxOutputTokens:             32_768,
-		InputModalities:             geminiInputTextImageFile,
+		ContextLength:               65_536,
+		MaxOutputTokens:             4_096,
+		InputModalities:             []string{"text", "image", "video", "file"},
 		OutputModalities:            geminiOutputTextImage,
-		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
+		SupportedFeatures:           []string{"reasoning"}
+		SupportedReasoningEfforts:   []string{"minimal", "high"}
+		DefaultReasoningEffort:      "minimal",
 		SupportedSamplingParameters: geminiSamplingImage,
-		Description:                 "Gemini 3.1 Flash Lite native image-generation tier (flat single-tier image pricing, no 512/2K/4K tiers) with up to 128K context.",
+		Description:                 "Gemini 3.1 Flash Lite Image (Nano Banana 2 Lite): 65,536 input and 4,096 output tokens, text/image/video/PDF inputs, text/image outputs, 1K images only. Thinking supports minimal/high; no structured output, function calling, grounding, or caching.",
 	},
 	"gemini-3.1-flash-live-preview": {
 		ContextLength:               32_768,
@@ -285,7 +290,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
-		SupportedReasoningEfforts:   gemini3ProReasoningEfforts,
+		SupportedReasoningEfforts:   []string{"low", "high"},
 		DefaultReasoningEffort:      "high",
 		MaxReasoningTokens:          gemini3LevelMaxThinkingBudget,
 		Description:                 "Gemini 3 Pro preview multimodal reasoning tier with 1M context. (RETIRED 2026-03-09; use gemini-3.1-pro-preview)",
@@ -298,9 +303,9 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
 		SupportedReasoningEfforts:   gemini3FlashReasoningEfforts,
-		// Per https://ai.google.dev/gemini-api/docs/thinking the Gemini 3 Flash thinkingLevel
-		// default is "minimal"; callers that require deep reasoning must opt in explicitly.
-		DefaultReasoningEffort: "minimal",
+		// Per https://ai.google.dev/gemini-api/docs/thinking the Gemini 3 Flash
+		// default thinking level is high (minimal/low/medium/high are accepted).
+		DefaultReasoningEffort: "high",
 		MaxReasoningTokens:     gemini3LevelMaxThinkingBudget,
 		Description:            "Gemini 3 Flash preview multimodal model balancing latency and quality. (DEPRECATED; use gemini-3.5-flash)",
 	},
@@ -360,14 +365,15 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: geminiSamplingImage,
 		Description:                 "Gemini 3 Pro native image-generation preview tier with 1K/2K/4K rendering. (RETIRED 2026-06-25; use gemini-3-pro-image)",
 	},
+	// https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image (verified 2026-11-01).
 	"gemini-3-pro-image": {
 		ContextLength:               65_536,
 		MaxOutputTokens:             32_768,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             []string{"text", "image"},
 		OutputModalities:            geminiOutputTextImage,
-		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
+		SupportedFeatures:           []string{"reasoning"},
 		SupportedSamplingParameters: geminiSamplingImage,
-		Description:                 "Gemini 3 Pro native image-generation GA tier with 1K/2K/4K rendering.",
+		Description:                 "Gemini 3 Pro Image (Nano Banana Pro): 65,536 input and 32,768 output tokens, text/image inputs and outputs, 1K/2K/4K renders. Thinking and search grounding are available upstream; structured outputs and caching are not supported.",
 	},
 
 	// Gemini 2.5 Pro & Computer Use Models.
