@@ -227,8 +227,8 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		MaxOutputTokens:             4_096,
 		InputModalities:             []string{"text", "image", "video", "file"},
 		OutputModalities:            geminiOutputTextImage,
-		SupportedFeatures:           []string{"reasoning"}
-		SupportedReasoningEfforts:   []string{"minimal", "high"}
+		SupportedFeatures:           []string{"reasoning"},
+		SupportedReasoningEfforts:   []string{"minimal", "high"},
 		DefaultReasoningEffort:      "minimal",
 		SupportedSamplingParameters: geminiSamplingImage,
 		Description:                 "Gemini 3.1 Flash Lite Image (Nano Banana 2 Lite): 65,536 input and 4,096 output tokens, text/image/video/PDF inputs, text/image outputs, 1K images only. Thinking supports minimal/high; no structured output, function calling, grounding, or caching.",
