@@ -29,6 +29,16 @@ const (
 
 // ConvertClaudeRequest converts Claude Messages API request to OpenAI format for OpenAI-compatible adapters
 func ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+	return convertClaudeRequest(c, request, false)
+}
+
+// ConvertClaudeRequestWithNativeMedia preserves media only for native-capable
+// transports. Other OpenAI-compatible routes retain their established contract.
+func ConvertClaudeRequestWithNativeMedia(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+	return convertClaudeRequest(c, request, true)
+}
+
+func convertClaudeRequest(c *gin.Context, request *model.ClaudeRequest, nativeMedia bool) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
@@ -63,7 +73,7 @@ func ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, er
 			metaInfo = meta.GetByContext(c)
 		}
 	}
-	if promoteStructured && structuredPromotionDisabled(metaInfo) {
+	if promoteStructured && (nativeMedia || structuredPromotionDisabled(metaInfo)) {
 		promoteStructured = false
 	}
 	if promoteStructured {
@@ -120,7 +130,20 @@ func ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, er
 
 	// Convert messages
 	for _, msg := range request.Messages {
-		converted := convertClaudeMessageToOpenAI(msg)
+		if nativeMedia {
+			if blocks, ok := msg.Content.([]any); ok {
+				for _, raw := range blocks {
+					block, ok := raw.(map[string]any)
+					if !ok {
+						return nil, errors.New("validation failed: Claude content must contain objects")
+					}
+					if _, _, err := model.DecodeClaudeMediaPart(block); err != nil {
+						return nil, errors.Wrap(err, "validation failed: Claude media")
+					}
+				}
+			}
+		}
+		converted := convertClaudeMessageToOpenAI(msg, nativeMedia)
 		openaiRequest.Messages = append(openaiRequest.Messages, converted...)
 	}
 
@@ -216,12 +239,12 @@ type pendingOpenAIMessage struct {
 	contentParts []model.MessageContent
 }
 
-func convertClaudeMessageToOpenAI(msg model.ClaudeMessage) []model.Message {
+func convertClaudeMessageToOpenAI(msg model.ClaudeMessage, nativeMedia ...bool) []model.Message {
 	switch content := msg.Content.(type) {
 	case string:
 		return []model.Message{{Role: msg.Role, Content: content}}
 	case []any:
-		return convertClaudeBlocks(msg.Role, content)
+		return convertClaudeBlocks(msg.Role, content, nativeMedia...)
 	default:
 		if b, err := json.Marshal(content); err == nil {
 			return []model.Message{{Role: msg.Role, Content: string(b)}}
@@ -230,7 +253,7 @@ func convertClaudeMessageToOpenAI(msg model.ClaudeMessage) []model.Message {
 	}
 }
 
-func convertClaudeBlocks(role string, blocks []any) []model.Message {
+func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model.Message {
 	var (
 		result  []model.Message
 		pending *pendingOpenAIMessage
@@ -268,6 +291,13 @@ func convertClaudeBlocks(role string, blocks []any) []model.Message {
 			continue
 		}
 		bt, _ := blockMap["type"].(string)
+		if len(nativeMedia) > 0 && nativeMedia[0] {
+			if part, recognized, err := model.DecodeClaudeMediaPart(blockMap); recognized && err == nil {
+				msg := ensurePending()
+				msg.contentParts = append(msg.contentParts, part)
+				continue
+			}
+		}
 		switch bt {
 		case "text":
 			if text, ok := blockMap["text"].(string); ok {

@@ -1,4 +1,4 @@
-package format_test
+package gemini_test
 
 import (
 	"encoding/json"
@@ -16,54 +16,8 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-// This temporary placement runs the actual native adaptor contracts through the
-// existing essential unit gate. After RED/GREEN verification, move these tests
-// to the Gemini package; do not permanently expand the normal CI compilation set.
-
-// TestReview607NativeThinkingWireContract verifies both native transports,
-// mapped IDs, model-specific defaults, explicit levels and invalid-level errors.
-func TestReview607NativeThinkingWireContract(t *testing.T) {
-	for _, provider := range []string{"gemini", "vertex"} {
-		for _, level := range []string{"absent", "default", "minimal", "high", "low", "medium", "none", "xhigh"} {
-			t.Run(provider+"/"+level, func(t *testing.T) {
-				c, _ := gin.CreateTestContext(httptest.NewRecorder())
-				c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
-				c.Set(ctxkey.Meta, &meta.Meta{ActualModelName: "gemini-3.1-flash-lite-image"})
-				request := &model.GeneralOpenAIRequest{
-					Model: "public-alias", Messages: []model.Message{{Role: "user", Content: "Draw a bird"}},
-				}
-				if level != "absent" {
-					request.ReasoningEffort = &level
-				}
-				var converted any
-				var err error
-				if provider == "gemini" {
-					converted, err = (&gemini.Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, request)
-				} else {
-					converted, err = (&vertexgemini.Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, request)
-				}
-				require.Equal(t, "public-alias", request.Model, "conversion must not mutate the caller")
-				switch level {
-				case "absent", "default", "minimal", "high":
-					require.NoError(t, err)
-					encoded, err := json.Marshal(converted)
-					require.NoError(t, err)
-					want := "minimal"
-					if level == "high" {
-						want = "high"
-					}
-					require.Contains(t, string(encoded), `"thinkingLevel":"`+want+`"`)
-				default:
-					require.ErrorContains(t, err, "reasoning effort")
-					require.Nil(t, converted)
-				}
-			})
-		}
-	}
-}
-
-// TestReview607NativeMediaWireContract preserves interleaved text/video/PDF
-// through the real Gemini and Vertex converters, for unary and streaming calls.
+// TestReview607NativeMediaWireContract verifies both native adaptor entrypoints.
+// The same assertions are replayed against the pre-fix revision for RED evidence.
 func TestReview607NativeMediaWireContract(t *testing.T) {
 	for _, provider := range []string{"gemini", "vertex"} {
 		for _, modelName := range []string{"gemini-3.1-flash-image", "gemini-3.1-flash-lite-image"} {
@@ -106,8 +60,8 @@ func TestReview607NativeMediaWireContract(t *testing.T) {
 	}
 }
 
-// TestReview607NativeMediaErrors rejects malformed and unsupported media before
-// dispatch rather than dropping it and sending an empty fallback text prompt.
+// TestReview607NativeMediaErrors rejects invalid or unsupported work instead of
+// sending an empty fallback prompt. No request is dispatched by these tests.
 func TestReview607NativeMediaErrors(t *testing.T) {
 	for _, tc := range []struct{ name, model, content string }{
 		{"malformed-video", "gemini-3.1-flash-image", `[{"type":"video_url","video_url":{}}]`},

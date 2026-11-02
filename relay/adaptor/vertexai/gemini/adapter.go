@@ -129,7 +129,7 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
-	if c.GetBool(ctxkey.ClaudeMessagesConversion) && geminiOpenaiCompatible.IsGeminiNanoBanana21Model(meta.ActualModelName) {
+	if c.GetBool(ctxkey.ClaudeMessagesConversion) && geminiOpenaiCompatible.IsGeminiImageGenerationModel(meta.ActualModelName) {
 		return (&gemini.Adaptor{}).DoResponse(c, resp, meta)
 	}
 	if meta.IsStream {

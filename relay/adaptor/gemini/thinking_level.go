@@ -1,0 +1,24 @@
+package gemini
+
+import (
+	"errors"
+	"slices"
+	"strings"
+)
+
+// resolveNativeThinkingLevel validates a model-specific level. Empty/default
+// uses the supplied model default; an empty default leaves upstream behavior
+// unchanged. Callers must select the contract for the mapped upstream model.
+func resolveNativeThinkingLevel(requested *string, allowed []string, defaultLevel string) (string, error) {
+	level := ""
+	if requested != nil {
+		level = strings.ToLower(strings.TrimSpace(*requested))
+	}
+	if level == "" || level == "default" {
+		level = defaultLevel
+	}
+	if level != "" && !slices.Contains(allowed, level) {
+		return "", errors.New("reasoning effort is not supported by the selected Gemini model")
+	}
+	return level, nil
+}

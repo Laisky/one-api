@@ -351,6 +351,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// do response
 	c.Set(ctxkey.SkipAdaptorResponseBodyLog, true)
 	usage, respErr := requestAdaptor.DoResponse(c, resp, meta)
+	applyNativeGoogleUsageEvidence(c, usage)
 	if upstreamCapture != nil {
 		logUpstreamResponseFromCapture(lg, resp, upstreamCapture, "chat_completions")
 	} else {

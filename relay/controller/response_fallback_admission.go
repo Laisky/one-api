@@ -37,7 +37,7 @@ func prepareResponseFallbackInput(ctx context.Context, c *gin.Context, meta *met
 		return nil, openai.ErrorWrapper(err, "response_fallback_input_too_large", http.StatusRequestEntityTooLarge)
 	}
 
-	if err := responseFallbackFidelityError(request.Input, true); err != nil {
+	if err := responseFallbackFidelityError(request.Input, true, isNativeGoogleChannel(meta)); err != nil {
 		return nil, err
 	}
 
@@ -58,7 +58,7 @@ func prepareResponseFallbackInput(ctx context.Context, c *gin.Context, meta *met
 	if err := openai.ValidateResponseAPIFallbackInput(hydrated.Input); err != nil {
 		return nil, openai.ErrorWrapper(err, "response_fallback_input_too_large", http.StatusRequestEntityTooLarge)
 	}
-	if err := responseFallbackFidelityError(hydrated.Input, false); err != nil {
+	if err := responseFallbackFidelityError(hydrated.Input, false, isNativeGoogleChannel(meta)); err != nil {
 		return nil, err
 	}
 	// Hydration returns a clone; snapshot the original incremental request only
@@ -68,8 +68,8 @@ func prepareResponseFallbackInput(ctx context.Context, c *gin.Context, meta *met
 }
 
 // responseFallbackFidelityError maps shared semantic admission errors without exposing input values.
-func responseFallbackFidelityError(input []any, allowReferences bool) *relaymodel.ErrorWithStatusCode {
-	err := openai.ValidateResponseAPIFallbackFidelity(input, allowReferences)
+func responseFallbackFidelityError(input []any, allowReferences bool, nativeMedia ...bool) *relaymodel.ErrorWithStatusCode {
+	err := openai.ValidateResponseAPIFallbackFidelity(input, allowReferences, nativeMedia...)
 	if err == nil {
 		return nil
 	}

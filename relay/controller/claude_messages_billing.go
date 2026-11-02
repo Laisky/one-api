@@ -81,8 +81,16 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 		if cacheErr != nil {
 			return 0, openai.ErrorWrapper(cacheErr, "invalid_claude_quota_quote", http.StatusBadRequest)
 		}
+		promptUsage := &relaymodel.Usage{PromptTokens: promptTokens}
+		if isNativeGoogleChannel(meta) {
+			if raw, exists := c.Get(nativeGoogleMediaUsageKey); exists {
+				if measured, valid := raw.(*relaymodel.Usage); valid && measured != nil {
+					promptUsage = measured
+				}
+			}
+		}
 		tierQuote, applies, quoteErr := quotautil.EstimateTierAdmission(quotautil.ComputeInput{
-			Usage: &relaymodel.Usage{PromptTokens: promptTokens}, ModelName: request.Model,
+			Usage: promptUsage, ModelName: request.Model,
 			ModelRatio: modelRatio, ChannelModelRatio: channelModelRatio,
 			GroupRatio: c.GetFloat64(ctxkey.ChannelRatio), ChannelModelConfigs: channelModelConfigs,
 			ChannelCompletionRatio: channelCompletionRatio, PricingAdaptor: provider, RequestTime: meta.StartTime,
@@ -92,6 +100,18 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 				return 0, openai.ErrorWrapper(quoteErr, "invalid_claude_quota_quote", http.StatusBadRequest)
 			}
 			baseQuota = tierQuote
+		}
+	}
+	if isNativeGoogleChannel(meta) && len(cfg.Tiers) == 0 {
+		if raw, exists := c.Get(nativeGoogleMediaUsageKey); exists {
+			if usage, ok := raw.(*relaymodel.Usage); ok {
+				baseQuota = withMediaPromptQuota(baseQuota, quotautil.ComputeInput{
+					Usage: usage, ModelName: request.Model, ModelRatio: modelRatio,
+					ChannelModelRatio: channelModelRatio, GroupRatio: c.GetFloat64(ctxkey.ChannelRatio),
+					ChannelModelConfigs: channelModelConfigs, ChannelCompletionRatio: channelCompletionRatio,
+					PricingAdaptor: provider, RequestTime: meta.StartTime,
+				})
+			}
 		}
 	}
 	if ratio != 0 && baseQuota <= 0 {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
+	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/replicate"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
@@ -15,6 +16,8 @@ func preparedChatQuotaRequest(c *gin.Context, request *relaymodel.GeneralOpenAIR
 	converted, _ := c.Get(ctxkey.ConvertedRequest)
 	var limit int
 	switch payload := converted.(type) {
+	case *gemini.ChatRequest:
+		limit = payload.GenerationConfig.MaxOutputTokens
 	case *anthropic.Request:
 		limit = payload.MaxTokens
 	case replicate.ReplicateChatRequest:

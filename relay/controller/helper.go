@@ -134,6 +134,9 @@ func estimatePromptUsage(c *gin.Context, meta *meta.Meta, textRequest *relaymode
 		return estimateEmbeddingPromptUsage(c, meta, textRequest)
 	}
 
+	if usage, handled, failure := estimateNativeGooglePromptUsage(c, meta, textRequest); handled {
+		return usage, failure
+	}
 	promptTokens := getPromptTokens(gmw.Ctx(c), textRequest, meta.Mode)
 	return &relaymodel.Usage{
 		PromptTokens: promptTokens,
@@ -252,7 +255,15 @@ func estimatePreConsumedQuota(
 			}
 		}
 	}
-	return getPreConsumedQuota(textRequest, promptTokens, modelRatio*groupRatio, completionRatio)
+	quote := getPreConsumedQuota(textRequest, promptTokens, modelRatio*groupRatio, completionRatio)
+	if !isNativeGoogleChannel(meta) {
+		return quote
+	}
+	return withMediaPromptQuota(quote, quotautil.ComputeInput{
+		Usage: promptUsage, ModelName: textRequest.Model, ModelRatio: modelRatio,
+		ChannelModelRatio: channelModelRatio, GroupRatio: groupRatio, ChannelModelConfigs: channelModelConfigs,
+		ChannelCompletionRatio: channelCompletionRatio, PricingAdaptor: resolvePricingAdaptor(meta), RequestTime: meta.StartTime,
+	})
 }
 
 // preConsumeQuota reserves quota before the upstream request is sent. It returns
