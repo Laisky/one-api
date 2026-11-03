@@ -593,7 +593,9 @@
       "testing_model_failed_title": "保存失败",
       "testing_model_normalized_message": "服务器无法为该渠道保留所选测试模型，现已使用页面显示的已保存值。",
       "testing_model_normalized_title": "测试模型已重置",
-      "testing_model_saved": "测试模型已保存。"
+      "testing_model_saved": "测试模型已保存。",
+      "testing_model_unverified_message": "保存请求已被接受，但服务器未返回已保存的测试模型。请刷新页面进行确认。",
+      "testing_model_unverified_title": "测试模型未确认"
     },
     "response": {
       "not_tested": "尚未测试",

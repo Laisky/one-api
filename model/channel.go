@@ -63,7 +63,7 @@ type Channel struct {
 	// Preferred testing model for this channel (optional).
 	// If empty or nil, the system auto-selects the cheapest chat-format model at test
 	// time. Set it to ChannelTestingModelSkip to exclude the channel from testing.
-	// Every write path stores it through NormalizeChannelTestingModel.
+	// Every write path stores it through Channel.NormalizeTestingModel.
 	TestingModel *string `json:"testing_model" gorm:"column:testing_model;type:varchar(255)"`
 	// Channel-specific pricing tables
 	// DEPRECATED: Use ModelConfigs instead. These fields are kept for backward compatibility and migration.
@@ -245,7 +245,7 @@ func BatchInsertChannels(channels []Channel) error {
 		if err := channels[i].NormalizeHiddenModels(); err != nil {
 			return errors.Wrapf(err, "normalize hidden models for channel at index %d", i)
 		}
-		channels[i].TestingModel = NormalizeChannelTestingModel(channels[i].TestingModel, channels[i].Models)
+		channels[i].TestingModel = channels[i].NormalizeTestingModel(channels[i].TestingModel)
 		if err := validateJinaChannelConfiguration(&channels[i]); err != nil {
 			return errors.Wrapf(err, "validate channel at batch index %d", i)
 		}
@@ -386,7 +386,7 @@ func (channel *Channel) Insert() error {
 			errors.Wrapf(err, "failed to normalize hidden models for channel: name=%s, type=%d", channel.Name, channel.Type),
 			channel.Ref())
 	}
-	channel.TestingModel = NormalizeChannelTestingModel(channel.TestingModel, channel.Models)
+	channel.TestingModel = channel.NormalizeTestingModel(channel.TestingModel)
 	if err := validateJinaChannelConfiguration(channel); err != nil {
 		return errors.Wrap(err, "validate new channel")
 	}
@@ -421,25 +421,18 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 	}
 	var existing Channel
 	if channel.Id != 0 {
-		if err := DB.Select("id", "models", "testing_model", "group").First(&existing, "id = ?", channel.Id).Error; err != nil {
+		if err := DB.Select("id", "group").First(&existing, "id = ?", channel.Id).Error; err != nil {
 			return identity.Tag(
 				errors.Wrapf(err, "load existing channel %d before update", channel.Id),
 				channel.Ref())
 		}
 	}
-	// Determine models to validate against: new value if provided, else existing
-	modelsForValidation := channel.Models
-	if strings.TrimSpace(modelsForValidation) == "" {
-		modelsForValidation = existing.Models
-	}
-	// Resolve testing_model with merge-patch semantics (omitted keeps, null clears)
-	// and the shared storage policy, so SKIP survives every update path. A non-nil
-	// pointer counts as provided for internal callers that never set the map.
+	// testing_model has merge-patch semantics (omitted keeps, null clears) and is
+	// resolved against the locked row inside the transaction, never written by the
+	// struct update. A non-nil pointer is an explicit write, so callers that reload a
+	// row and save it back must clear TestingModel unless they mean to change it.
 	requestedTestingModel := channel.TestingModel
 	testingModelProvided := requestedTestingModel != nil || channel.NullableFieldsProvided[ChannelTestingModelField]
-	testingModel := resolveUpdatedTestingModel(requestedTestingModel, testingModelProvided, existing.TestingModel, modelsForValidation)
-	channel.TestingModel = testingModel
-	writeTestingModel := !sameOptionalString(testingModel, existing.TestingModel)
 
 	// Some nullable text fields are persisted as *string. GORM's struct-based
 	// Updates() skips nil pointers, so collect explicitly provided values for a
@@ -463,8 +456,14 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 	}
 
 	persisted := *channel
-	err := DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&persisted).Omit("uuid").Updates(&persisted).Error; err != nil {
+	var testingModel testingModelResolution
+	// WithoutCancel keeps request values (logging, tracing) while preserving the
+	// established run-to-completion behaviour if the client disconnects mid-update.
+	err := DB.WithContext(context.WithoutCancel(ctx)).Transaction(func(tx *gorm.DB) error {
+		if err := lockChannelRow(tx, persisted.Id); err != nil {
+			return errors.Wrapf(err, "lock channel %d for update", persisted.Id)
+		}
+		if err := tx.Model(&persisted).Omit("uuid", ChannelTestingModelField).Updates(&persisted).Error; err != nil {
 			return errors.Wrapf(err, "update channel: id=%d, name=%s", persisted.Id, persisted.Name)
 		}
 		if persisted.HiddenModelsProvided {
@@ -477,13 +476,11 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 				return errors.Wrapf(err, "update nullable fields for channel: id=%d, name=%s", persisted.Id, persisted.Name)
 			}
 		}
-		if writeTestingModel {
-			// Struct Updates skips a nil pointer, so persist the resolved value,
-			// including NULL for auto-select, through an explicit column update.
-			if err := tx.Model(&Channel{}).Where("id = ?", persisted.Id).Update(ChannelTestingModelField, testingModel).Error; err != nil {
-				return errors.Wrapf(err, "update testing_model for channel: id=%d", persisted.Id)
-			}
+		resolution, err := persistResolvedTestingModel(tx, persisted.Id, requestedTestingModel, testingModelProvided)
+		if err != nil {
+			return errors.Wrap(err, "persist resolved testing_model")
 		}
+		testingModel = resolution
 		if err := tx.First(&persisted, "id = ?", persisted.Id).Error; err != nil {
 			return errors.Wrapf(err, "reload channel %d before rebuilding abilities", persisted.Id)
 		}
@@ -512,15 +509,34 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 		lg.Debug("channel update cleared nullable fields",
 			append(channel.Ref().Zap(), zap.Strings("cleared_fields", cleared))...)
 	}
-	if writeTestingModel {
+	if testingModel.written {
 		lg.Debug("channel update resolved testing_model",
 			append(channel.Ref().Zap(),
 				zap.Bool("testing_model_provided", testingModelProvided),
 				zap.String("requested_testing_model", derefStr(requestedTestingModel)),
-				zap.String("previous_testing_model", derefStr(existing.TestingModel)),
-				zap.String("persisted_testing_model", derefStr(testingModel)))...)
+				zap.String("previous_testing_model", derefStr(testingModel.previous)),
+				zap.String("persisted_testing_model", derefStr(testingModel.persisted)))...)
 	}
 	InvalidateChannelModelCachesWithContext(ctx, existing.Group, channel.Group)
+	return nil
+}
+
+// lockChannelRow takes the channel row's write lock inside tx before the transaction
+// reads it. The no-op UPDATE works on SQLite, MySQL, and PostgreSQL without dialect-
+// specific SELECT ... FOR UPDATE syntax, and UpdateColumn skips timestamp hooks. A
+// concurrent writer of the same row blocks until tx ends, so a read-then-write inside
+// tx cannot interleave with it. Do not interpret MySQL's no-op RowsAffected as absence.
+//
+// Parameters:
+//   - tx: the transaction that will read and write the row.
+//   - id: the channel to lock.
+//
+// Return values:
+//   - error: a wrapped database failure.
+func lockChannelRow(tx *gorm.DB, id int) error {
+	if err := tx.Model(&Channel{}).Where("id = ?", id).UpdateColumn("models", gorm.Expr("models")).Error; err != nil {
+		return errors.Wrapf(err, "lock channel row %d", id)
+	}
 	return nil
 }
 

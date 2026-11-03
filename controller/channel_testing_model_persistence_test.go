@@ -403,3 +403,76 @@ func TestChannelReadsCanonicaliseLegacySkipSpelling(t *testing.T) {
 	requireTestingModel(t, &skip, responseTestingModel(t, envelope.Data), "single channel read")
 	requireTestingModel(t, &legacy, storedTestingModel(t, channel.Id), "database row is not rewritten by a read")
 }
+
+// TestUpdateChannelRoundTripKeepsTestingModel is the compatibility guard for clients that
+// read a channel and PUT the unchanged object back: whatever testing_model the read
+// returned, including null for auto-select, must survive the round trip.
+// Parameters: t is the test handle. Returns: no values.
+func TestUpdateChannelRoundTripKeepsTestingModel(t *testing.T) {
+	router := newTestingModelPersistenceRouter(t)
+	skip := model.ChannelTestingModelSkip
+	for _, stored := range []*string{&skip, testingModelPtr("gpt-4o"), nil} {
+		t.Run(derefTestingModel(stored), func(t *testing.T) {
+			channel := insertTestingModelChannel(t, testingModelPersistenceModels, stored)
+			read := serveTestingModelJSON(t, router, http.MethodGet, "/api/channel/"+channel.UUID, nil)
+			var payload map[string]any
+			require.NoError(t, json.Unmarshal(read.Data, &payload))
+			require.Contains(t, payload, "testing_model", "the read must expose the field it round-trips")
+
+			serveTestingModelJSON(t, router, http.MethodPut, "/api/channel/", payload)
+
+			requireTestingModel(t, stored, storedTestingModel(t, channel.Id), "database row")
+		})
+	}
+}
+
+// TestEveryOfferedTestModelCanBeSaved pins the selector/persistence contract: each
+// model the channel list offers in test_models, and SKIP, must be accepted and read
+// back unchanged, for channels with a model list, with a mapping alias, and with an
+// empty (unrestricted) model list whose choices come from the provider catalogue.
+// Parameters: t is the test handle. Returns: no values.
+func TestEveryOfferedTestModelCanBeSaved(t *testing.T) {
+	setupChannelSweepTestEnvironment(t)
+	router := gin.New()
+	router.GET("/api/channel/", GetAllChannels)
+	router.PUT("/api/channel/", UpdateChannel)
+
+	mapping := `{"house-alias":"gpt-4o"}`
+	shapes := []*model.Channel{
+		{Name: "offer-listed", Type: channeltype.OpenAI, Models: "gpt-4o-mini,gpt-4o"},
+		{Name: "offer-alias", Type: channeltype.OpenAI, Models: "gpt-4o,house-alias", ModelMapping: &mapping},
+		{Name: "offer-unrestricted", Type: channeltype.OpenAI, Models: ""},
+	}
+	for _, shape := range shapes {
+		t.Run(shape.Name, func(t *testing.T) {
+			shape.Key, shape.Group, shape.Status = "sk-test", "default", model.ChannelStatusEnabled
+			require.NoError(t, shape.Insert())
+
+			listed := serveTestingModelJSON(t, router, http.MethodGet,
+				fmt.Sprintf("/api/channel/?p=0&size=%d", config.MaxItemsPerPage), nil)
+			var rows []struct {
+				UUID       string   `json:"uuid"`
+				TestModels []string `json:"test_models"`
+			}
+			require.NoError(t, json.Unmarshal(listed.Data, &rows))
+			var offered []string
+			for _, row := range rows {
+				if row.UUID == shape.UUID {
+					offered = row.TestModels
+				}
+			}
+			require.NotEmpty(t, offered, "the selector must offer at least one model")
+			if len(offered) > 5 {
+				offered = offered[:5]
+			}
+
+			for _, choice := range append([]string{model.ChannelTestingModelSkip}, offered...) {
+				envelope := serveTestingModelJSON(t, router, http.MethodPut, "/api/channel/",
+					map[string]any{"uuid": shape.UUID, "name": shape.Name, "testing_model": choice})
+				requireTestingModel(t, &choice, responseTestingModel(t, envelope.Data),
+					fmt.Sprintf("offered choice %q", choice))
+				requireTestingModel(t, &choice, storedTestingModel(t, shape.Id), "database row")
+			}
+		})
+	}
+}

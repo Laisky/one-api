@@ -7,53 +7,54 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNormalizeChannelTestingModel pins the shared testing_model storage policy: nil
-// for auto-select, the canonical SKIP sentinel for any SKIP spelling, or a trimmed
-// model the channel lists.
+// TestNormalizeTestingModel pins the shared testing_model storage policy: nil for
+// auto-select, the canonical SKIP sentinel for any SKIP spelling, or a trimmed model the
+// channel serves by the same SupportsModel rule the health checker applies.
 // Parameters: t is the test handle. Returns: no values.
-func TestNormalizeChannelTestingModel(t *testing.T) {
+func TestNormalizeTestingModel(t *testing.T) {
 	t.Parallel()
-	const models = " gpt-4o-mini , gpt-4o"
 	skip := ChannelTestingModelSkip
+	listed := &Channel{Models: " gpt-4o-mini , gpt-4o", ModelMapping: resetTestString(`{"alias":"gpt-4o","dangling":"gpt-5"}`)}
+	unrestricted := &Channel{}
 	cases := []struct {
-		name  string
-		value *string
-		want  *string
+		name    string
+		channel *Channel
+		value   *string
+		want    *string
 	}{
-		{name: "nil selects auto", value: nil, want: nil},
-		{name: "blank selects auto", value: resetTestString("   "), want: nil},
-		{name: "canonical SKIP", value: resetTestString(skip), want: &skip},
-		{name: "upper-case SKIP", value: resetTestString("__SKIP__"), want: &skip},
-		{name: "padded mixed-case SKIP", value: resetTestString("  __Skip__\t"), want: &skip},
-		{name: "listed model", value: resetTestString("gpt-4o"), want: resetTestString("gpt-4o")},
-		{name: "listed model is trimmed", value: resetTestString(" gpt-4o-mini "), want: resetTestString("gpt-4o-mini")},
-		{name: "unlisted model selects auto", value: resetTestString("gpt-5"), want: nil},
-		{name: "model names are case-sensitive", value: resetTestString("GPT-4O"), want: nil},
-		{name: "near-miss sentinel is a model name", value: resetTestString("__skip"), want: nil},
+		{name: "nil selects auto", channel: listed, value: nil, want: nil},
+		{name: "blank selects auto", channel: listed, value: resetTestString("   "), want: nil},
+		{name: "canonical SKIP", channel: listed, value: resetTestString(skip), want: &skip},
+		{name: "upper-case SKIP", channel: listed, value: resetTestString("__SKIP__"), want: &skip},
+		{name: "padded mixed-case SKIP", channel: listed, value: resetTestString("  __Skip__\t"), want: &skip},
+		{name: "listed model", channel: listed, value: resetTestString("gpt-4o"), want: resetTestString("gpt-4o")},
+		{name: "listed model is trimmed", channel: listed, value: resetTestString(" gpt-4o-mini "), want: resetTestString("gpt-4o-mini")},
+		{name: "mapping alias of a listed model", channel: listed, value: resetTestString("alias"), want: resetTestString("alias")},
+		{name: "mapping alias of an unlisted model", channel: listed, value: resetTestString("dangling"), want: nil},
+		{name: "unlisted model selects auto", channel: listed, value: resetTestString("gpt-5"), want: nil},
+		{name: "model names are case-sensitive", channel: listed, value: resetTestString("GPT-4O"), want: nil},
+		{name: "near-miss sentinel is a model name", channel: listed, value: resetTestString("__skip"), want: nil},
+		{name: "unrestricted channel keeps a named model", channel: unrestricted, value: resetTestString(" gpt-4o "), want: resetTestString("gpt-4o")},
+		{name: "unrestricted channel keeps SKIP", channel: unrestricted, value: resetTestString(skip), want: &skip},
+		{name: "unrestricted channel blank selects auto", channel: unrestricted, value: resetTestString(""), want: nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := NormalizeChannelTestingModel(tc.value, models)
+			got := tc.channel.NormalizeTestingModel(tc.value)
 			require.Equal(t, tc.want, got)
 			if got != nil && tc.value != nil {
 				require.NotSame(t, tc.value, got, "the result must not alias the caller's pointer")
 			}
 		})
 	}
-
-	t.Run("SKIP needs no model list", func(t *testing.T) {
-		t.Parallel()
-		require.Equal(t, &skip, NormalizeChannelTestingModel(resetTestString(skip), ""))
-		require.Nil(t, NormalizeChannelTestingModel(resetTestString("gpt-4o"), ""))
-	})
 }
 
-// TestResolveUpdatedTestingModel pins the merge-patch update semantics: an omitted
-// field keeps the stored value, an explicit null or blank clears it, and the result is
-// always normalized against the effective model list.
+// TestResolveTestingModelUpdate pins the merge-patch update semantics: an omitted field
+// keeps the latest stored value, an explicit null or blank clears it, and the result is
+// always normalized against the channel as it stands after the update.
 // Parameters: t is the test handle. Returns: no values.
-func TestResolveUpdatedTestingModel(t *testing.T) {
+func TestResolveTestingModelUpdate(t *testing.T) {
 	t.Parallel()
 	const models = "gpt-4o-mini,gpt-4o"
 	skip := ChannelTestingModelSkip
@@ -81,7 +82,8 @@ func TestResolveUpdatedTestingModel(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, resolveUpdatedTestingModel(tc.requested, tc.provided, tc.stored, tc.models))
+			current := &Channel{Models: tc.models, TestingModel: tc.stored}
+			require.Equal(t, tc.want, resolveTestingModelUpdate(current, tc.requested, tc.provided))
 		})
 	}
 }
@@ -157,4 +159,61 @@ func TestChannelPersistenceKeepsTestingModelSkip(t *testing.T) {
 		NullableFieldsProvided: map[string]bool{ChannelTestingModelField: true}}
 	require.NoError(t, clearRequest.Update())
 	require.Nil(t, loadTestingModel(inserted.Id))
+}
+
+// TestClearStaleChannelTestingModel pins the compare-and-swap cleanup the health
+// checker uses: only the value it observed is cleared, so a selection saved after the
+// probe read the channel survives.
+// Parameters: t is the test handle. Returns: no values.
+func TestClearStaleChannelTestingModel(t *testing.T) {
+	db := useChannelPersistenceTestDB(t)
+	ctx := context.Background()
+	skip := ChannelTestingModelSkip
+	stale := "sora-2"
+	channel := &Channel{Name: "stale-cleanup", Models: "sora-2,gpt-4o-mini", Group: "default",
+		Status: ChannelStatusEnabled, TestingModel: &stale}
+	require.NoError(t, channel.Insert())
+	load := func() *string {
+		var stored Channel
+		require.NoError(t, db.Select("id", "testing_model").First(&stored, "id = ?", channel.Id).Error)
+		return stored.TestingModel
+	}
+
+	cleared, err := ClearStaleChannelTestingModel(ctx, channel.Id, nil)
+	require.NoError(t, err)
+	require.False(t, cleared, "nothing observed means nothing to clear")
+	require.Equal(t, &stale, load())
+
+	require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).Update("testing_model", skip).Error)
+	cleared, err = ClearStaleChannelTestingModel(ctx, channel.Id, &stale)
+	require.NoError(t, err)
+	require.False(t, cleared, "a selection replaced after the probe read it must be kept")
+	require.Equal(t, &skip, load())
+
+	require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).Update("testing_model", stale).Error)
+	cleared, err = ClearStaleChannelTestingModel(ctx, channel.Id, &stale)
+	require.NoError(t, err)
+	require.True(t, cleared)
+	require.Nil(t, load())
+}
+
+// TestRefreshTestingModelWithContext verifies a sweep can replace its snapshot of a
+// channel's testing model with the stored value, and that a failed read leaves the
+// snapshot untouched.
+// Parameters: t is the test handle. Returns: no values.
+func TestRefreshTestingModelWithContext(t *testing.T) {
+	db := useChannelPersistenceTestDB(t)
+	ctx := context.Background()
+	channel := &Channel{Name: "refresh", Models: "gpt-4o", Group: "default", Status: ChannelStatusEnabled}
+	require.NoError(t, channel.Insert())
+	require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).Update("testing_model", ChannelTestingModelSkip).Error)
+
+	snapshot := *channel
+	require.Nil(t, snapshot.TestingModel)
+	require.NoError(t, snapshot.RefreshTestingModelWithContext(ctx))
+	require.True(t, snapshot.IsTestingSkipped())
+
+	missing := &Channel{Id: channel.Id + 1000, TestingModel: resetTestString("gpt-4o")}
+	require.Error(t, missing.RefreshTestingModelWithContext(ctx))
+	require.Equal(t, resetTestString("gpt-4o"), missing.TestingModel)
 }

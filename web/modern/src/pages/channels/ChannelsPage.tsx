@@ -24,15 +24,9 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CHANNEL_TYPE_LABELS as CHANNEL_TYPES } from './constants';
 import { resolveChannelColor } from './utils/colorGenerator';
-import {
-  channelRef,
-  channelRefPayload,
-  createChannelColumns,
-  resolvePersistedTestingModel,
-  sameChannelRef,
-  type Channel,
-} from './channels-page-columns';
+import { channelRef, channelRefPayload, createChannelColumns, sameChannelRef, type Channel } from './channels-page-columns';
 import { ChannelModelResetButton, useChannelModelReset } from './useChannelModelReset';
+import { useTestingModelUpdate } from './useTestingModelUpdate';
 
 /** ChannelsPage renders searchable channel administration, bulk actions, and pagination. */
 export function ChannelsPage() {
@@ -327,54 +321,7 @@ export function ChannelsPage() {
   /** duplicateChannel identifies the selected channel for the shared one-click duplicate interaction. */
   const duplicateChannel = (channel: Channel) => duplicateAction.duplicate(channelRef(channel));
 
-  const updateTestingModel = async (channel: Channel, testingModel: string | null) => {
-    try {
-      const payload: any = { ...channelRefPayload(channelRef(channel)), name: channel.name };
-      // When null, let backend clear it (auto-cheapest)
-      if (testingModel === null) {
-        payload.testing_model = null;
-      } else {
-        payload.testing_model = testingModel;
-      }
-      // Unified API call - complete URL with /api prefix
-      const res = await api.put('/api/channel/', payload);
-      if (res.data?.success) {
-        // Render the value the server persisted, not the one requested, so the row
-        // matches what a refresh would show even when the server normalized it.
-        const persisted = resolvePersistedTestingModel(res.data?.data, testingModel);
-        setData((prev) => prev.map((ch) => (sameChannelRef(ch, channel) ? { ...ch, testing_model: persisted } : ch)));
-        if (persisted === testingModel) {
-          notify({
-            type: 'success',
-            message: t('channels.notifications.testing_model_saved'),
-          });
-        } else {
-          console.warn(
-            `[ChannelsPage] testing_model normalized by server requested=${testingModel ?? 'auto'} persisted=${persisted ?? 'auto'}`
-          );
-          notify({
-            type: 'warning',
-            title: t('channels.notifications.testing_model_normalized_title'),
-            message: t('channels.notifications.testing_model_normalized_message'),
-          });
-        }
-      } else {
-        const msg = res.data?.message || t('channels.notifications.testing_model_failed_message');
-        notify({
-          type: 'error',
-          title: t('channels.notifications.testing_model_failed_title'),
-          message: msg,
-        });
-      }
-    } catch (error) {
-      console.error('Failed to update testing model:', error);
-      notify({
-        type: 'error',
-        title: t('channels.notifications.testing_model_failed_title'),
-        message: t('channels.notifications.testing_model_failed_message'),
-      });
-    }
-  };
+  const testingModelUpdate = useTestingModelUpdate(setData);
 
   const handlePriorityUpdate = async (channel: Channel, newPriority: number) => {
     if ((channel.priority ?? 0) === newPriority) return;
@@ -478,7 +425,8 @@ export function ChannelsPage() {
     renderResetAction,
     onPriorityUpdate: handlePriorityUpdate,
     onBalanceRefresh: handleBalanceRefresh,
-    onTestingModelUpdate: updateTestingModel,
+    onTestingModelUpdate: testingModelUpdate.update,
+    savingTestingModelIds: testingModelUpdate.saving,
     onDuplicate: duplicateChannel,
     duplicatingIds: duplicateAction.pending,
     onManage: manage,

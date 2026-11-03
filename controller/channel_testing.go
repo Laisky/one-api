@@ -347,12 +347,10 @@ func TestChannel(c *gin.Context) {
 	// testChannel, which relies on its caller having bound it.
 	lg = lg.With(channel.Ref().Zap()...)
 
+	observedTestingModel := channel.TestingModel
 	modelName, clearTestingModel, err := chooseChannelTestModelWithContext(gmw.Ctx(c), channel, c.Query("model"))
 	if clearTestingModel {
-		channel.TestingModel = nil
-		if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
-			lg.Error("failed to clear invalid testing_model", zap.Error(updateErr))
-		}
+		clearStaleTestingModel(gmw.Ctx(c), lg, channel, observedTestingModel)
 	}
 	if err != nil {
 		// A channel with no chat-capable surface was never probed, so it is
@@ -486,13 +484,16 @@ func runAutomaticChannelSweep(ctx context.Context, notify bool, scope string) er
 		clg := lg.With(channel.Ref().Zap()...)
 		cctx := gmw.SetLogger(ctx, clg)
 		isChannelEnabled := channel.Status == model.ChannelStatusEnabled
+		// The channel list is a snapshot taken when the sweep started; re-read the
+		// selection so SKIP saved since then is honoured before probing.
+		if err := channel.RefreshTestingModelWithContext(cctx); err != nil {
+			clg.Warn("failed to refresh testing_model; using the sweep snapshot", zap.Error(err))
+		}
+		observedTestingModel := channel.TestingModel
 		tik := time.Now()
 		chosenModel, clearTestingModel, err := chooseChannelTestModelWithContext(cctx, channel, "")
 		if clearTestingModel {
-			channel.TestingModel = nil
-			if updateErr := model.DB.WithContext(cctx).Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
-				clg.Error("failed to clear invalid testing_model in bulk test", zap.Error(updateErr))
-			}
+			clearStaleTestingModel(cctx, clg, channel, observedTestingModel)
 		}
 		// A channel that exposes no chat-capable surface, or whose every model
 		// is a non-chat task model (embeddings, rerank, translation, media),
@@ -510,36 +511,14 @@ func runAutomaticChannelSweep(ctx context.Context, notify bool, scope string) er
 			testRequest := buildTestRequest(chosenModel)
 			_, err, openaiErr = testChannel(cctx, channel, testRequest)
 		}
-		tok := time.Now()
-		milliseconds := tok.Sub(tik).Milliseconds()
-		if isChannelEnabled && milliseconds > disableThreshold {
-			err = errors.Errorf("Response time %.2fs exceeds threshold %.2fs", float64(milliseconds)/1000.0, float64(disableThreshold)/1000.0)
-			if config.AutomaticDisableChannelEnabled {
-				monitor.DisableChannel(channel.Id, channel.Name, err.Error())
-			} else {
-				_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test timed out: %s", channel.Ref().String()), "", err.Error())
-			}
+		milliseconds := time.Since(tik).Milliseconds()
+		if channelOptedOutDuringProbe(cctx, clg, channel) {
+			// SKIP was saved while the probe was in flight: the administrator opted
+			// the channel out, so its result must not disable, enable, or time it.
+			clg.Info("discarded channel test result: testing model set to SKIP during the probe")
+		} else {
+			applyChannelSweepResult(cctx, channel, isChannelEnabled, milliseconds, disableThreshold, err, openaiErr)
 		}
-		// Only disable a channel on failure when AutomaticDisableChannelEnabled is true.
-		if isChannelEnabled && (err != nil || monitor.ShouldDisableChannel(openaiErr, -1)) {
-			// Build a safe reason string to avoid nil dereference
-			reason := "channel test failed"
-			if err != nil {
-				reason = err.Error()
-			} else if openaiErr != nil {
-				reason = openaiErr.Message
-			}
-			if config.AutomaticDisableChannelEnabled {
-				monitor.DisableChannel(channel.Id, channel.Name, reason)
-			} else {
-				// Notify only when auto-disable is off
-				_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test failed: %s", channel.Ref().String()), "", reason)
-			}
-		}
-		if !isChannelEnabled && (err == nil && monitor.ShouldEnableChannel(err, openaiErr)) {
-			monitor.EnableChannel(channel.Id, channel.Name)
-		}
-		channel.UpdateResponseTimeWithContext(cctx, milliseconds)
 		if config.RequestInterval > 0 {
 			timer := time.NewTimer(config.RequestInterval)
 			select {
@@ -556,6 +535,46 @@ func runAutomaticChannelSweep(ctx context.Context, notify bool, scope string) er
 		}
 	}
 	return nil
+}
+
+// applyChannelSweepResult acts on one finished sweep probe: it auto-disables (or
+// notifies about) a failing or slow enabled channel, re-enables a recovered disabled
+// one, and records the measured response time.
+// Parameters: ctx carries the channel-bound logger, channel is the probed channel,
+// isChannelEnabled is its status when the sweep reached it, milliseconds is the probe
+// latency, disableThreshold is the latency limit in milliseconds, and err/openaiErr are
+// the probe outcome.
+// Returns: no values; notification and persistence failures are handled downstream.
+func applyChannelSweepResult(ctx context.Context, channel *model.Channel, isChannelEnabled bool,
+	milliseconds, disableThreshold int64, err error, openaiErr *relaymodel.Error) {
+	if isChannelEnabled && milliseconds > disableThreshold {
+		err = errors.Errorf("Response time %.2fs exceeds threshold %.2fs", float64(milliseconds)/1000.0, float64(disableThreshold)/1000.0)
+		if config.AutomaticDisableChannelEnabled {
+			monitor.DisableChannel(channel.Id, channel.Name, err.Error())
+		} else {
+			_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test timed out: %s", channel.Ref().String()), "", err.Error())
+		}
+	}
+	// Only disable a channel on failure when AutomaticDisableChannelEnabled is true.
+	if isChannelEnabled && (err != nil || monitor.ShouldDisableChannel(openaiErr, -1)) {
+		// Build a safe reason string to avoid nil dereference
+		reason := "channel test failed"
+		if err != nil {
+			reason = err.Error()
+		} else if openaiErr != nil {
+			reason = openaiErr.Message
+		}
+		if config.AutomaticDisableChannelEnabled {
+			monitor.DisableChannel(channel.Id, channel.Name, reason)
+		} else {
+			// Notify only when auto-disable is off
+			_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test failed: %s", channel.Ref().String()), "", reason)
+		}
+	}
+	if !isChannelEnabled && (err == nil && monitor.ShouldEnableChannel(err, openaiErr)) {
+		monitor.EnableChannel(channel.Id, channel.Name)
+	}
+	channel.UpdateResponseTimeWithContext(ctx, milliseconds)
 }
 
 // testChannelsSync runs one channel-test sweep synchronously under an atomic

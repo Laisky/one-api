@@ -593,7 +593,9 @@
       "testing_model_failed_title": "Save failed",
       "testing_model_normalized_message": "The server could not keep that testing model for this channel, so it now uses the saved value shown.",
       "testing_model_normalized_title": "Testing model reset",
-      "testing_model_saved": "Testing model saved."
+      "testing_model_saved": "Testing model saved.",
+      "testing_model_unverified_message": "The save was accepted, but the server did not report the stored testing model. Refresh the page to check it.",
+      "testing_model_unverified_title": "Testing model not confirmed"
     },
     "response": {
       "not_tested": "Not tested",

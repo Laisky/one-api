@@ -593,7 +593,9 @@
       "testing_model_failed_title": "Error al guardar",
       "testing_model_normalized_message": "El servidor no pudo conservar ese modelo de prueba para este canal, por lo que ahora usa el valor guardado que se muestra.",
       "testing_model_normalized_title": "Modelo de prueba restablecido",
-      "testing_model_saved": "Modelo de prueba guardado."
+      "testing_model_saved": "Modelo de prueba guardado.",
+      "testing_model_unverified_message": "Se aceptó el guardado, pero el servidor no informó el modelo de prueba almacenado. Actualice la página para comprobarlo.",
+      "testing_model_unverified_title": "Modelo de prueba sin confirmar"
     },
     "response": {
       "not_tested": "No probado",

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	glog "github.com/Laisky/go-utils/v6/log"
+	"github.com/Laisky/zap"
 
 	"github.com/Laisky/one-api/dto"
 	"github.com/Laisky/one-api/model"
@@ -58,7 +60,7 @@ func chooseChannelTestModelWithContext(ctx context.Context, channel *model.Chann
 	// An administrator who selected SKIP for this channel has opted it out of health
 	// checking. This is checked after the explicit requestedModel branch so a manual
 	// test naming a model can still force a one-off probe.
-	if channelTestingSkipped(channel) {
+	if channel.IsTestingSkipped() {
 		return "", false, errChannelTestNotApplicable(
 			"channel testing is disabled for this channel (testing model set to SKIP)")
 	}
@@ -186,14 +188,45 @@ func channelTestModelCandidates(channel *model.Channel, explicit bool) []string 
 	return testModels
 }
 
-// channelTestingSkipped reports whether an administrator excluded this channel from
-// health checking by selecting SKIP as its testing model.
-// Parameters: channel is the channel under consideration.
-// Returns: true when the channel must not be probed.
-func channelTestingSkipped(channel *model.Channel) bool {
-	// Delegate to the model-layer policy so the checker and persistence agree on
-	// which spellings select SKIP.
+// clearStaleTestingModel reverts the stored testing model a probe found unusable to
+// auto-select, unless an administrator changed it after the probe read the channel.
+// Parameters: ctx scopes the write, lg is the channel-bound logger, channel is the
+// tested channel, and observed is the testing_model the probe read.
+// Returns: no values; failures are logged because the probe result stands either way.
+func clearStaleTestingModel(ctx context.Context, lg glog.Logger, channel *model.Channel, observed *string) {
+	channel.TestingModel = nil
+	cleared, err := model.ClearStaleChannelTestingModel(ctx, channel.Id, observed)
+	if err != nil {
+		lg.Error("failed to clear stale testing_model", zap.Error(err))
+		return
+	}
+	if !cleared {
+		lg.Debug("kept testing_model changed after the probe read it",
+			zap.String("observed_testing_model", derefTestingModelForLog(observed)))
+	}
+}
+
+// channelOptedOutDuringProbe re-reads the stored selection after a sweep probe and
+// reports whether the channel was set to SKIP while the probe was in flight, in which
+// case its result must not disable, enable, or time the channel.
+// Parameters: ctx scopes the read, lg is the channel-bound logger, and channel is the
+// probed channel; its TestingModel is refreshed in place.
+// Returns: true when the probe result must be discarded.
+func channelOptedOutDuringProbe(ctx context.Context, lg glog.Logger, channel *model.Channel) bool {
+	if err := channel.RefreshTestingModelWithContext(ctx); err != nil {
+		lg.Warn("failed to re-read testing_model after probe; applying the probe result", zap.Error(err))
+		return false
+	}
 	return channel.IsTestingSkipped()
+}
+
+// derefTestingModelForLog renders an optional testing model for structured logs.
+// Parameters: value is the optional testing model. Returns: the value or "" for nil.
+func derefTestingModelForLog(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 // channelTestModelUsesChatFormat reports whether a model is served through one of

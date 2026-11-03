@@ -191,6 +191,6 @@ func planChannelModelReset(channel *Channel, defaults []string) (*Channel, error
 	planned.HiddenModels = nil
 	// The shared policy keeps SKIP (in any legacy spelling) and still-default models,
 	// and reverts a selection the reset removes to auto-select.
-	planned.TestingModel = NormalizeChannelTestingModel(planned.TestingModel, planned.Models)
+	planned.TestingModel = planned.NormalizeTestingModel(planned.TestingModel)
 	return &planned, nil
 }

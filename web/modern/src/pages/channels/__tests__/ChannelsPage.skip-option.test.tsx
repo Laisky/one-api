@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '@/lib/api';
 import { ChannelsPage } from '../ChannelsPage';
-import { CHANNEL_TESTING_MODEL_SKIP, resolvePersistedTestingModel } from '../channels-page-columns';
+import { CHANNEL_TESTING_MODEL_SKIP } from '../channels-page-columns';
+import { confirmPersistedTestingModel, readPersistedTestingModel } from '../helpers';
 
 const { mockNotify } = vi.hoisted(() => ({ mockNotify: vi.fn() }));
 
@@ -177,20 +178,50 @@ describe('ChannelsPage testing-model SKIP option', () => {
   });
 });
 
-describe('resolvePersistedTestingModel', () => {
-  it('prefers the testing model echoed by the server', () => {
-    expect(resolvePersistedTestingModel({ testing_model: CHANNEL_TESTING_MODEL_SKIP }, null)).toBe(CHANNEL_TESTING_MODEL_SKIP);
-    expect(resolvePersistedTestingModel({ testing_model: 'gpt-4o-mini' }, CHANNEL_TESTING_MODEL_SKIP)).toBe('gpt-4o-mini');
+describe('readPersistedTestingModel', () => {
+  it('reads the testing model echoed by the server', () => {
+    expect(readPersistedTestingModel({ testing_model: CHANNEL_TESTING_MODEL_SKIP })).toBe(CHANNEL_TESTING_MODEL_SKIP);
+    expect(readPersistedTestingModel({ testing_model: 'gpt-4o-mini' })).toBe('gpt-4o-mini');
   });
 
   it('maps a null or blank persisted value to auto-select', () => {
-    expect(resolvePersistedTestingModel({ testing_model: null }, CHANNEL_TESTING_MODEL_SKIP)).toBeNull();
-    expect(resolvePersistedTestingModel({ testing_model: '' }, 'gpt-4o-mini')).toBeNull();
+    expect(readPersistedTestingModel({ testing_model: null })).toBeNull();
+    expect(readPersistedTestingModel({ testing_model: '' })).toBeNull();
   });
 
-  it('falls back to the requested value when the server omits the row', () => {
-    expect(resolvePersistedTestingModel(undefined, CHANNEL_TESTING_MODEL_SKIP)).toBe(CHANNEL_TESTING_MODEL_SKIP);
-    expect(resolvePersistedTestingModel(null, 'gpt-4o-mini')).toBe('gpt-4o-mini');
-    expect(resolvePersistedTestingModel({ name: 'Channel 11' }, null)).toBeNull();
+  it('reports a row without the field as unknown', () => {
+    expect(readPersistedTestingModel(undefined)).toBeUndefined();
+    expect(readPersistedTestingModel(null)).toBeUndefined();
+    expect(readPersistedTestingModel({ name: 'Channel 11' })).toBeUndefined();
+  });
+});
+
+describe('confirmPersistedTestingModel', () => {
+  it('trusts the saved row in the response without re-reading', async () => {
+    const readChannel = vi.fn();
+    await expect(confirmPersistedTestingModel({ testing_model: null }, CHANNEL_TESTING_MODEL_SKIP, readChannel)).resolves.toEqual({
+      value: null,
+      verified: true,
+    });
+    expect(readChannel).not.toHaveBeenCalled();
+  });
+
+  it('re-reads the channel when the response omits the row', async () => {
+    const readChannel = vi.fn().mockResolvedValue({ testing_model: CHANNEL_TESTING_MODEL_SKIP });
+    await expect(confirmPersistedTestingModel(undefined, CHANNEL_TESTING_MODEL_SKIP, readChannel)).resolves.toEqual({
+      value: CHANNEL_TESTING_MODEL_SKIP,
+      verified: true,
+    });
+  });
+
+  it('reports the requested value as unverified when the re-read fails or lacks the field', async () => {
+    await expect(confirmPersistedTestingModel(undefined, 'gpt-4o-mini', () => Promise.reject(new Error('offline')))).resolves.toEqual({
+      value: 'gpt-4o-mini',
+      verified: false,
+    });
+    await expect(confirmPersistedTestingModel({}, null, () => Promise.resolve(undefined))).resolves.toEqual({
+      value: null,
+      verified: false,
+    });
   });
 });

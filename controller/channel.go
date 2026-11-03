@@ -577,6 +577,10 @@ func UpdateChannelPricing(c *gin.Context) {
 		helper.RespondError(c, err)
 		return
 	}
+	// This endpoint never changes the testing model. Leaving the value just loaded
+	// would make the save re-assert it and overwrite a selection (such as SKIP)
+	// saved concurrently, so omit it and let the update keep the stored value.
+	channel.TestingModel = nil
 
 	// Handle both old format (separate model_ratio and completion_ratio) and new format (unified model_configs)
 	if len(request.ModelConfigs) > 0 {

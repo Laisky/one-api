@@ -593,7 +593,9 @@
       "testing_model_failed_title": "保存に失敗しました",
       "testing_model_normalized_message": "このチャネルではそのテスト用モデルを保持できなかったため、表示されている保存済みの値が使用されます。",
       "testing_model_normalized_title": "テスト用モデルがリセットされました",
-      "testing_model_saved": "テスト用モデルを保存しました。"
+      "testing_model_saved": "テスト用モデルを保存しました。",
+      "testing_model_unverified_message": "保存は受け付けられましたが、サーバーから保存されたテスト用モデルが返されませんでした。ページを再読み込みして確認してください。",
+      "testing_model_unverified_title": "テスト用モデルを確認できません"
     },
     "response": {
       "not_tested": "未テスト",
