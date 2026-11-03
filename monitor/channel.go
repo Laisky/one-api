@@ -54,6 +54,20 @@ func notifyRootUser(subject string, content string) {
 // DisableChannel disable & notify
 func DisableChannel(channelId int, channelName string, reason string) {
 	model.UpdateChannelStatusById(channelId, model.ChannelStatusAutoDisabled)
+	NotifyChannelDisabled(channelId, channelName, reason)
+}
+
+// NotifyChannelDisabled logs and announces to the root user that a channel was
+// disabled. It changes no state, so callers that persisted the transition
+// themselves (such as the health-check sweep) announce only what actually happened.
+//
+// Parameters:
+//   - channelId: the disabled channel.
+//   - channelName: its name, used when the channel snapshot cannot resolve it.
+//   - reason: why the channel was disabled.
+//
+// Return values: none; delivery failures are logged.
+func NotifyChannelDisabled(channelId int, channelName string, reason string) {
 	ref := resolveChannelRef(channelId, channelName)
 	logger.Logger.Info("channel has been disabled",
 		ref.AppendZap([]zap.Field{zap.String("reason", reason)})...)
@@ -91,6 +105,18 @@ func MetricDisableChannel(channelId int, successRate float64) {
 // EnableChannel enable & notify
 func EnableChannel(channelId int, channelName string) {
 	model.UpdateChannelStatusById(channelId, model.ChannelStatusEnabled)
+	NotifyChannelEnabled(channelId, channelName)
+}
+
+// NotifyChannelEnabled logs and announces to the root user that a channel was
+// re-enabled. It changes no state.
+//
+// Parameters:
+//   - channelId: the re-enabled channel.
+//   - channelName: its name, used when the channel snapshot cannot resolve it.
+//
+// Return values: none; delivery failures are logged.
+func NotifyChannelEnabled(channelId int, channelName string) {
 	ref := resolveChannelRef(channelId, channelName)
 	logger.Logger.Info("channel has been enabled", ref.Zap()...)
 	subject := "Channel Status Change Reminder"

@@ -199,7 +199,7 @@ describe('readPersistedTestingModel', () => {
 describe('confirmPersistedTestingModel', () => {
   it('trusts the saved row in the response without re-reading', async () => {
     const readChannel = vi.fn();
-    await expect(confirmPersistedTestingModel({ testing_model: null }, CHANNEL_TESTING_MODEL_SKIP, readChannel)).resolves.toEqual({
+    await expect(confirmPersistedTestingModel({ testing_model: null }, readChannel)).resolves.toEqual({
       value: null,
       verified: true,
     });
@@ -208,19 +208,18 @@ describe('confirmPersistedTestingModel', () => {
 
   it('re-reads the channel when the response omits the row', async () => {
     const readChannel = vi.fn().mockResolvedValue({ testing_model: CHANNEL_TESTING_MODEL_SKIP });
-    await expect(confirmPersistedTestingModel(undefined, CHANNEL_TESTING_MODEL_SKIP, readChannel)).resolves.toEqual({
+    await expect(confirmPersistedTestingModel(undefined, readChannel)).resolves.toEqual({
       value: CHANNEL_TESTING_MODEL_SKIP,
       verified: true,
     });
   });
 
-  it('reports the requested value as unverified when the re-read fails or lacks the field', async () => {
-    await expect(confirmPersistedTestingModel(undefined, 'gpt-4o-mini', () => Promise.reject(new Error('offline')))).resolves.toEqual({
-      value: 'gpt-4o-mini',
+  it('reports an unverified outcome without a value when the re-read fails or lacks the field', async () => {
+    // No value at all: an unconfirmed selection must not be renderable as stored.
+    await expect(confirmPersistedTestingModel(undefined, () => Promise.reject(new Error('offline')))).resolves.toStrictEqual({
       verified: false,
     });
-    await expect(confirmPersistedTestingModel({}, null, () => Promise.resolve(undefined))).resolves.toEqual({
-      value: null,
+    await expect(confirmPersistedTestingModel({}, () => Promise.resolve(undefined))).resolves.toStrictEqual({
       verified: false,
     });
   });

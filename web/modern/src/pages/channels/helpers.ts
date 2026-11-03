@@ -593,13 +593,16 @@ export function logPrivateChannelJSONError(error: unknown): void {
   );
 }
 
-/** PersistedTestingModel is the testing model a save actually stored and whether the server confirmed it. */
-export interface PersistedTestingModel {
-  /** value is the stored testing model, or null for auto-select. */
-  value: string | null;
-  /** verified is false when neither the save response nor a re-read reported the stored row. */
-  verified: boolean;
-}
+/**
+ * PersistedTestingModel is the outcome of confirming a testing-model save. Only a
+ * verified outcome carries a value, so an unconfirmed selection cannot be rendered as
+ * if it had been stored.
+ */
+export type PersistedTestingModel =
+  /** verified: the server reported the stored row; value is null for auto-select. */
+  | { verified: true; value: string | null }
+  /** unverified: neither the save response nor a re-read reported the stored row. */
+  | { verified: false };
 
 /**
  * readPersistedTestingModel extracts testing_model from a channel row returned by the API.
@@ -619,16 +622,15 @@ export const readPersistedTestingModel = (row: unknown): string | null | undefin
  * confirmPersistedTestingModel determines what a testing-model save stored, so the list
  * never reports a value a page refresh would contradict. The backend echoes the saved
  * row; when a response omits it (an older server), the channel is read back instead, and
- * if that also fails the save is reported as unverified rather than as a success.
+ * if that also fails the save is reported as unverified, without a value, rather than as
+ * a success.
  *
  * @param responseData - the `data` field of the PUT /api/channel/ response.
- * @param requested - the testing model the administrator selected; null means auto-select.
  * @param readChannel - re-reads the channel row; it may reject or resolve to anything.
- * @returns the persisted value and whether the server confirmed it.
+ * @returns the confirmed stored value, or an unverified outcome.
  */
 export const confirmPersistedTestingModel = async (
   responseData: unknown,
-  requested: string | null,
   readChannel: () => Promise<unknown>
 ): Promise<PersistedTestingModel> => {
   const echoed = readPersistedTestingModel(responseData);
@@ -643,5 +645,5 @@ export const confirmPersistedTestingModel = async (
   } catch (error) {
     console.warn(`[ChannelsPage] could not re-read channel to confirm testing_model: ${String(error)}`);
   }
-  return { value: requested, verified: false };
+  return { verified: false };
 };

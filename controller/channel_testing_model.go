@@ -206,20 +206,6 @@ func clearStaleTestingModel(ctx context.Context, lg glog.Logger, channel *model.
 	}
 }
 
-// channelOptedOutDuringProbe re-reads the stored selection after a sweep probe and
-// reports whether the channel was set to SKIP while the probe was in flight, in which
-// case its result must not disable, enable, or time the channel.
-// Parameters: ctx scopes the read, lg is the channel-bound logger, and channel is the
-// probed channel; its TestingModel is refreshed in place.
-// Returns: true when the probe result must be discarded.
-func channelOptedOutDuringProbe(ctx context.Context, lg glog.Logger, channel *model.Channel) bool {
-	if err := channel.RefreshTestingModelWithContext(ctx); err != nil {
-		lg.Warn("failed to re-read testing_model after probe; applying the probe result", zap.Error(err))
-		return false
-	}
-	return channel.IsTestingSkipped()
-}
-
 // derefTestingModelForLog renders an optional testing model for structured logs.
 // Parameters: value is the optional testing model. Returns: the value or "" for nil.
 func derefTestingModelForLog(value *string) string {

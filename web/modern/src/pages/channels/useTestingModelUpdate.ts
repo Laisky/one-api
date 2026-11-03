@@ -51,18 +51,23 @@ export function useTestingModelUpdate(setData: Dispatch<SetStateAction<Channel[]
         });
         return;
       }
-      const persisted = await confirmPersistedTestingModel(res.data?.data, testingModel, async () => {
+      const persisted = await confirmPersistedTestingModel(res.data?.data, async () => {
         const reread = await api.get(`/api/channel/${encodeURIComponent(key)}`);
         return reread.data?.success ? reread.data.data : undefined;
       });
-      setData((prev) => prev.map((ch) => (sameChannelRef(ch, channel) ? { ...ch, testing_model: persisted.value } : ch)));
       if (!persisted.verified) {
+        // Keep the last confirmed value: showing the requested selection would claim a
+        // save the server never confirmed.
+        console.warn(`[ChannelsPage] testing_model save unconfirmed channel=${key} requested=${testingModel ?? 'auto'}`);
         notify({
           type: 'info',
           title: t('channels.notifications.testing_model_unverified_title'),
           message: t('channels.notifications.testing_model_unverified_message'),
         });
-      } else if (persisted.value === testingModel) {
+        return;
+      }
+      setData((prev) => prev.map((ch) => (sameChannelRef(ch, channel) ? { ...ch, testing_model: persisted.value } : ch)));
+      if (persisted.value === testingModel) {
         notify({ type: 'success', message: t('channels.notifications.testing_model_saved') });
       } else {
         console.warn(

@@ -27,7 +27,6 @@ import (
 	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/monitor"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 
@@ -487,7 +486,10 @@ func runAutomaticChannelSweep(ctx context.Context, notify bool, scope string) er
 		// The channel list is a snapshot taken when the sweep started; re-read the
 		// selection so SKIP saved since then is honoured before probing.
 		if err := channel.RefreshTestingModelWithContext(cctx); err != nil {
-			clg.Warn("failed to refresh testing_model; using the sweep snapshot", zap.Error(err))
+			// Fail closed: the snapshot may predate a SKIP, so never spend an
+			// upstream request on it. The next sweep retries the channel.
+			clg.Warn("skipped channel test: could not read the current testing selection", zap.Error(err))
+			continue
 		}
 		observedTestingModel := channel.TestingModel
 		tik := time.Now()
@@ -512,13 +514,8 @@ func runAutomaticChannelSweep(ctx context.Context, notify bool, scope string) er
 			_, err, openaiErr = testChannel(cctx, channel, testRequest)
 		}
 		milliseconds := time.Since(tik).Milliseconds()
-		if channelOptedOutDuringProbe(cctx, clg, channel) {
-			// SKIP was saved while the probe was in flight: the administrator opted
-			// the channel out, so its result must not disable, enable, or time it.
-			clg.Info("discarded channel test result: testing model set to SKIP during the probe")
-		} else {
-			applyChannelSweepResult(cctx, channel, isChannelEnabled, milliseconds, disableThreshold, err, openaiErr)
-		}
+		plan := planChannelSweepResult(channel, isChannelEnabled, milliseconds, disableThreshold, err, openaiErr)
+		applyChannelSweepResult(cctx, clg, channel, plan, milliseconds)
 		if config.RequestInterval > 0 {
 			timer := time.NewTimer(config.RequestInterval)
 			select {
@@ -535,46 +532,6 @@ func runAutomaticChannelSweep(ctx context.Context, notify bool, scope string) er
 		}
 	}
 	return nil
-}
-
-// applyChannelSweepResult acts on one finished sweep probe: it auto-disables (or
-// notifies about) a failing or slow enabled channel, re-enables a recovered disabled
-// one, and records the measured response time.
-// Parameters: ctx carries the channel-bound logger, channel is the probed channel,
-// isChannelEnabled is its status when the sweep reached it, milliseconds is the probe
-// latency, disableThreshold is the latency limit in milliseconds, and err/openaiErr are
-// the probe outcome.
-// Returns: no values; notification and persistence failures are handled downstream.
-func applyChannelSweepResult(ctx context.Context, channel *model.Channel, isChannelEnabled bool,
-	milliseconds, disableThreshold int64, err error, openaiErr *relaymodel.Error) {
-	if isChannelEnabled && milliseconds > disableThreshold {
-		err = errors.Errorf("Response time %.2fs exceeds threshold %.2fs", float64(milliseconds)/1000.0, float64(disableThreshold)/1000.0)
-		if config.AutomaticDisableChannelEnabled {
-			monitor.DisableChannel(channel.Id, channel.Name, err.Error())
-		} else {
-			_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test timed out: %s", channel.Ref().String()), "", err.Error())
-		}
-	}
-	// Only disable a channel on failure when AutomaticDisableChannelEnabled is true.
-	if isChannelEnabled && (err != nil || monitor.ShouldDisableChannel(openaiErr, -1)) {
-		// Build a safe reason string to avoid nil dereference
-		reason := "channel test failed"
-		if err != nil {
-			reason = err.Error()
-		} else if openaiErr != nil {
-			reason = openaiErr.Message
-		}
-		if config.AutomaticDisableChannelEnabled {
-			monitor.DisableChannel(channel.Id, channel.Name, reason)
-		} else {
-			// Notify only when auto-disable is off
-			_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test failed: %s", channel.Ref().String()), "", reason)
-		}
-	}
-	if !isChannelEnabled && (err == nil && monitor.ShouldEnableChannel(err, openaiErr)) {
-		monitor.EnableChannel(channel.Id, channel.Name)
-	}
-	channel.UpdateResponseTimeWithContext(ctx, milliseconds)
 }
 
 // testChannelsSync runs one channel-test sweep synchronously under an atomic

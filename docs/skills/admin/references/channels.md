@@ -251,9 +251,14 @@ names a model explicitly (`?model=`) still runs, as a deliberate one-off. The se
 matched case-insensitively and stored as `"__skip__"`; it survives every later
 update, model-list change, pricing save, duplication, and model reset until you set
 `testing_model` to a model name, or to `null` for auto-select. A sweep re-reads each
-channel's selection before probing it and again before acting on the result, so SKIP
-saved while a sweep is running is honoured, and the checker's repair of a stale
-testing model never overwrites a selection saved after the probe read it.
+channel's selection before probing it (and skips the channel, without contacting the
+upstream, if that read fails). It then applies the result in one database transaction
+that re-checks SKIP and the channel status under the row lock: SKIP saved during the
+probe discards the result, a status changed during the probe is kept, and a result that
+cannot be checked is discarded rather than applied. No lock is held during the probe,
+notifications are sent only for status changes actually applied, and the checker's
+repair of a stale testing model never overwrites a selection saved after the probe
+read it.
 
 **Models of unknown format are excluded by default.** If nothing in either catalogue
 describes a model, the gateway does not guess: assuming "chat" is what sends a Chat

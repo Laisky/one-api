@@ -109,6 +109,10 @@ describe('ChannelsPage testing-model confirmation', () => {
 
     await waitFor(() => expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({ type: 'info' })));
     expect(mockNotify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    // The selector must keep the last confirmed value (auto-select), not display a
+    // selection the server never confirmed storing.
+    await waitFor(() => expect(currentSelect().disabled).toBe(false));
+    expect(currentSelect().value).toBe('');
   });
 
   it('locks the selector while a save is in flight so saves cannot overlap', async () => {

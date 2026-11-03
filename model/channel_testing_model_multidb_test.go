@@ -201,3 +201,134 @@ func TestChannelTestingModelPersistenceMultiDB(t *testing.T) {
 		})
 	}
 }
+
+// probeResultMarker marks the context of the probe-result transaction a test intercepts.
+type probeResultMarker struct{}
+
+// abilitiesEnabled reports the routing flag of every ability row of a channel.
+// Parameters: t is the test handle, db is the database, and id identifies the channel.
+// Returns: the enabled flags, one per ability row.
+func abilitiesEnabled(t *testing.T, db *gorm.DB, id int) []bool {
+	t.Helper()
+	var flags []bool
+	require.NoError(t, db.Model(&Ability{}).Where("channel_id = ?", id).Pluck("enabled", &flags).Error)
+	return flags
+}
+
+// TestApplyChannelProbeResultMultiDB pins the atomic, fail-closed application of a
+// health-check result on SQLite, MySQL, and PostgreSQL: SKIP discards the whole result,
+// the status transition is a compare-and-swap on the probed status, abilities follow the
+// status, and a competing SKIP write cannot slip in between the check and the change.
+// Parameters: t is the test handle. Returns: no values.
+func TestApplyChannelProbeResultMultiDB(t *testing.T) {
+	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
+		t.Run(dialect, func(t *testing.T) {
+			db := useTestingModelMatrixBackend(t, dialect)
+			skip := ChannelTestingModelSkip
+			disable := ChannelProbeResult{ObservedStatus: ChannelStatusEnabled, TargetStatus: ChannelStatusAutoDisabled, ResponseTimeMs: 50}
+			ctx := context.Background()
+			stored := func(id int) Channel {
+				var channel Channel
+				require.NoError(t, db.Select("id", "status", "response_time", "test_time", ChannelTestingModelField).
+					First(&channel, "id = ?", id).Error)
+				return channel
+			}
+
+			t.Run("SKIP discards the whole result", func(t *testing.T) {
+				channel := insertTestingModelMatrixChannel(t, dialect, "probe-skip", &skip)
+				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable)
+				require.NoError(t, err)
+				require.True(t, outcome.OptedOut)
+				require.False(t, outcome.StatusChanged)
+				row := stored(channel.Id)
+				require.Equal(t, ChannelStatusEnabled, row.Status)
+				require.Zero(t, row.TestTime)
+				require.NotContains(t, abilitiesEnabled(t, db, channel.Id), false)
+			})
+
+			t.Run("transition applies when the status is unchanged", func(t *testing.T) {
+				channel := insertTestingModelMatrixChannel(t, dialect, "probe-apply", nil)
+				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable)
+				require.NoError(t, err)
+				require.True(t, outcome.StatusChanged)
+				require.Equal(t, ChannelStatusAutoDisabled, outcome.Channel.Status)
+				row := stored(channel.Id)
+				require.Equal(t, ChannelStatusAutoDisabled, row.Status)
+				require.Equal(t, 50, row.ResponseTime)
+				require.NotZero(t, row.TestTime)
+				flags := abilitiesEnabled(t, db, channel.Id)
+				require.NotEmpty(t, flags)
+				require.NotContains(t, flags, true, "abilities must stop routing to the disabled channel")
+			})
+
+			t.Run("a status changed since the probe is kept", func(t *testing.T) {
+				channel := insertTestingModelMatrixChannel(t, dialect, "probe-cas", nil)
+				require.NoError(t, SetChannelStatusWithContext(ctx, channel.Id, ChannelStatusManuallyDisabled))
+				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable)
+				require.NoError(t, err)
+				require.False(t, outcome.StatusChanged)
+				row := stored(channel.Id)
+				require.Equal(t, ChannelStatusManuallyDisabled, row.Status)
+				require.NotZero(t, row.TestTime, "the measurement is still recorded")
+			})
+
+			t.Run("a transition that already happened is not repeated", func(t *testing.T) {
+				channel := insertTestingModelMatrixChannel(t, dialect, "probe-noop", nil)
+				require.NoError(t, SetChannelStatusWithContext(ctx, channel.Id, ChannelStatusAutoDisabled))
+				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable)
+				require.NoError(t, err)
+				require.False(t, outcome.StatusChanged, "no second transition, so no second announcement")
+			})
+
+			t.Run("a missing channel fails without effects", func(t *testing.T) {
+				_, err := ApplyChannelProbeResultWithContext(ctx, 987654321, disable)
+				require.Error(t, err)
+			})
+
+			if dialect == "sqlite" {
+				return
+			}
+			t.Run("a competing SKIP write waits for the probe transaction", func(t *testing.T) {
+				channel := insertTestingModelMatrixChannel(t, dialect, "probe-lock", nil)
+				marked := context.WithValue(ctx, probeResultMarker{}, true)
+				writerDone := make(chan error, 1)
+				var writerFinishedFirst, fired atomic.Bool
+				const name = "test:probe_result_interleave"
+				require.NoError(t, db.Callback().Query().After("gorm:query").Register(name, func(tx *gorm.DB) {
+					if tx.Statement.Context.Value(probeResultMarker{}) == nil || !fired.CompareAndSwap(false, true) {
+						return
+					}
+					go func() {
+						competing := &Channel{Id: channel.Id, Name: channel.Name, TestingModel: &skip}
+						writerDone <- competing.UpdateWithContext(context.Background())
+					}()
+					select {
+					case err := <-writerDone:
+						writerFinishedFirst.Store(true)
+						writerDone <- err
+					case <-time.After(testingModelConcurrentWriterGrace):
+					}
+				}))
+				t.Cleanup(func() { require.NoError(t, db.Callback().Query().Remove(name)) })
+
+				outcome, err := ApplyChannelProbeResultWithContext(marked, channel.Id, disable)
+				require.NoError(t, err)
+				select {
+				case err := <-writerDone:
+					require.NoError(t, err)
+				case <-time.After(30 * time.Second):
+					require.FailNow(t, "competing SKIP writer never finished")
+				}
+
+				require.True(t, fired.Load())
+				require.False(t, writerFinishedFirst.Load(),
+					"the SKIP write must wait for the probe transaction that already checked the selection")
+				require.True(t, outcome.StatusChanged, "the probe checked first, so its transition stands")
+				row := stored(channel.Id)
+				require.Equal(t, ChannelStatusAutoDisabled, row.Status)
+				require.NotNil(t, row.TestingModel)
+				require.Equal(t, skip, *row.TestingModel, "the later SKIP is persisted for future sweeps")
+			})
+		})
+	}
+}
