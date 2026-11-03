@@ -191,10 +191,9 @@ func channelTestModelCandidates(channel *model.Channel, explicit bool) []string 
 // Parameters: channel is the channel under consideration.
 // Returns: true when the channel must not be probed.
 func channelTestingSkipped(channel *model.Channel) bool {
-	if channel == nil || channel.TestingModel == nil {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(*channel.TestingModel), model.ChannelTestingModelSkip)
+	// Delegate to the model-layer policy so the checker and persistence agree on
+	// which spellings select SKIP.
+	return channel.IsTestingSkipped()
 }
 
 // channelTestModelUsesChatFormat reports whether a model is served through one of

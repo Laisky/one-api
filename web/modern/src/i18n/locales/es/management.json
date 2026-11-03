@@ -591,6 +591,8 @@
       "test_success": "Prueba del canal exitosa.",
       "testing_model_failed_message": "No se pudo actualizar el modelo de prueba",
       "testing_model_failed_title": "Error al guardar",
+      "testing_model_normalized_message": "El servidor no pudo conservar ese modelo de prueba para este canal, por lo que ahora usa el valor guardado que se muestra.",
+      "testing_model_normalized_title": "Modelo de prueba restablecido",
       "testing_model_saved": "Modelo de prueba guardado."
     },
     "response": {

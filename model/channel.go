@@ -63,6 +63,7 @@ type Channel struct {
 	// Preferred testing model for this channel (optional).
 	// If empty or nil, the system auto-selects the cheapest chat-format model at test
 	// time. Set it to ChannelTestingModelSkip to exclude the channel from testing.
+	// Every write path stores it through NormalizeChannelTestingModel.
 	TestingModel *string `json:"testing_model" gorm:"column:testing_model;type:varchar(255)"`
 	// Channel-specific pricing tables
 	// DEPRECATED: Use ModelConfigs instead. These fields are kept for backward compatibility and migration.
@@ -244,6 +245,7 @@ func BatchInsertChannels(channels []Channel) error {
 		if err := channels[i].NormalizeHiddenModels(); err != nil {
 			return errors.Wrapf(err, "normalize hidden models for channel at index %d", i)
 		}
+		channels[i].TestingModel = NormalizeChannelTestingModel(channels[i].TestingModel, channels[i].Models)
 		if err := validateJinaChannelConfiguration(&channels[i]); err != nil {
 			return errors.Wrapf(err, "validate channel at batch index %d", i)
 		}
@@ -384,6 +386,7 @@ func (channel *Channel) Insert() error {
 			errors.Wrapf(err, "failed to normalize hidden models for channel: name=%s, type=%d", channel.Name, channel.Type),
 			channel.Ref())
 	}
+	channel.TestingModel = NormalizeChannelTestingModel(channel.TestingModel, channel.Models)
 	if err := validateJinaChannelConfiguration(channel); err != nil {
 		return errors.Wrap(err, "validate new channel")
 	}
@@ -416,8 +419,6 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 			errors.Wrapf(err, "failed to normalize hidden models for channel: id=%d, name=%s", channel.Id, channel.Name),
 			channel.Ref())
 	}
-	// Validate/sync TestingModel with latest supported models
-	clearTestingModel := false
 	var existing Channel
 	if channel.Id != 0 {
 		if err := DB.Select("id", "models", "testing_model", "group").First(&existing, "id = ?", channel.Id).Error; err != nil {
@@ -431,31 +432,14 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 	if strings.TrimSpace(modelsForValidation) == "" {
 		modelsForValidation = existing.Models
 	}
-	// Helper to check containment
-	contains := func(listCSV, name string) bool {
-		for n := range strings.SplitSeq(listCSV, ",") {
-			if strings.TrimSpace(n) == name {
-				return true
-			}
-		}
-		return false
-	}
-	if channel.TestingModel != nil {
-		tm := strings.TrimSpace(*channel.TestingModel)
-		if tm == "" {
-			clearTestingModel = true
-			channel.TestingModel = nil
-		} else if !contains(modelsForValidation, tm) {
-			// requested value not supported by current models
-			clearTestingModel = true
-			channel.TestingModel = nil
-		}
-	} else if existing.TestingModel != nil && *existing.TestingModel != "" {
-		// No explicit testing_model provided in payload, but existing one may become invalid due to models change
-		if !contains(modelsForValidation, *existing.TestingModel) {
-			clearTestingModel = true
-		}
-	}
+	// Resolve testing_model with merge-patch semantics (omitted keeps, null clears)
+	// and the shared storage policy, so SKIP survives every update path. A non-nil
+	// pointer counts as provided for internal callers that never set the map.
+	requestedTestingModel := channel.TestingModel
+	testingModelProvided := requestedTestingModel != nil || channel.NullableFieldsProvided[ChannelTestingModelField]
+	testingModel := resolveUpdatedTestingModel(requestedTestingModel, testingModelProvided, existing.TestingModel, modelsForValidation)
+	channel.TestingModel = testingModel
+	writeTestingModel := !sameOptionalString(testingModel, existing.TestingModel)
 
 	// Some nullable text fields are persisted as *string. GORM's struct-based
 	// Updates() skips nil pointers, so collect explicitly provided values for a
@@ -493,9 +477,11 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 				return errors.Wrapf(err, "update nullable fields for channel: id=%d, name=%s", persisted.Id, persisted.Name)
 			}
 		}
-		if clearTestingModel {
-			if err := tx.Model(&Channel{}).Where("id = ?", persisted.Id).Update("testing_model", nil).Error; err != nil {
-				return errors.Wrapf(err, "clear testing_model for channel: id=%d", persisted.Id)
+		if writeTestingModel {
+			// Struct Updates skips a nil pointer, so persist the resolved value,
+			// including NULL for auto-select, through an explicit column update.
+			if err := tx.Model(&Channel{}).Where("id = ?", persisted.Id).Update(ChannelTestingModelField, testingModel).Error; err != nil {
+				return errors.Wrapf(err, "update testing_model for channel: id=%d", persisted.Id)
 			}
 		}
 		if err := tx.First(&persisted, "id = ?", persisted.Id).Error; err != nil {
@@ -521,9 +507,18 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 	}
 
 	*channel = persisted
+	lg := logger.FromContext(ctx)
 	if len(cleared) > 0 {
-		logger.FromContext(ctx).Debug("channel update cleared nullable fields",
+		lg.Debug("channel update cleared nullable fields",
 			append(channel.Ref().Zap(), zap.Strings("cleared_fields", cleared))...)
+	}
+	if writeTestingModel {
+		lg.Debug("channel update resolved testing_model",
+			append(channel.Ref().Zap(),
+				zap.Bool("testing_model_provided", testingModelProvided),
+				zap.String("requested_testing_model", derefStr(requestedTestingModel)),
+				zap.String("previous_testing_model", derefStr(existing.TestingModel)),
+				zap.String("persisted_testing_model", derefStr(testingModel)))...)
 	}
 	InvalidateChannelModelCachesWithContext(ctx, existing.Group, channel.Group)
 	return nil

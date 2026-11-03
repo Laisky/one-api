@@ -591,6 +591,8 @@
       "test_success": "Test du canal réussi.",
       "testing_model_failed_message": "Impossible de mettre à jour le modèle de test",
       "testing_model_failed_title": "Échec de l'enregistrement",
+      "testing_model_normalized_message": "Le serveur n'a pas pu conserver ce modèle de test pour ce canal ; il utilise désormais la valeur enregistrée affichée.",
+      "testing_model_normalized_title": "Modèle de test réinitialisé",
       "testing_model_saved": "Modèle de test enregistré."
     },
     "response": {

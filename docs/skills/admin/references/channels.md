@@ -23,7 +23,7 @@ The full schema lives in [model/channel.go](../../../../model/channel.go). Field
 | `config`         | string   | Provider-specific JSON config (e.g. Azure `api_version`, `plugin`)    |
 | `system_prompt`  | *string  | Injected at top of every request — leave null unless you know why. Send `null` or `""` to clear; omit to keep current value. |
 | `ratelimit`      | *int     | Per-channel req/min cap; null = unlimited                             |
-| `testing_model`  | *string  | Model used by the health check. Null → cheapest chat-format model; `"__skip__"` → never test this channel |
+| `testing_model`  | *string  | Model used by the health check. Null → cheapest chat-format model; `"__skip__"` → never test this channel. Send `null` or `""` to return to auto-select; omit to keep current value. A model not in `models` is stored as null. |
 | `balance`        | float64  | USD, refreshed by `/update_balance/:id`                                |
 
 ### Channel types (subset)
@@ -247,7 +247,10 @@ classifier — stays in scope.
 **Opting a channel out entirely.** Set `testing_model` to `"__skip__"` (the SKIP entry
 in the list page's Testing Model selector). The channel is then never probed by either
 the manual test or the periodic sweep, and never auto-disabled. A manual test that
-names a model explicitly (`?model=`) still runs, as a deliberate one-off.
+names a model explicitly (`?model=`) still runs, as a deliberate one-off. The sentinel is
+matched case-insensitively and stored as `"__skip__"`; it survives every later
+update, model-list change, pricing save, duplication, and model reset until you set
+`testing_model` to a model name, or to `null` for auto-select.
 
 **Models of unknown format are excluded by default.** If nothing in either catalogue
 describes a model, the gateway does not guess: assuming "chat" is what sends a Chat

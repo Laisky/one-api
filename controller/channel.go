@@ -54,7 +54,10 @@ func bindChannelPayload(c *gin.Context) (*model.Channel, json.RawMessage, channe
 		}
 	}
 	_, hiddenModelsProvided := rawFields["hidden_models"]
-	nullableFieldNames := []string{"model_mapping", "model_configs", "system_prompt", "inference_profile_arn_map"}
+	// Presence is recorded so an explicit null clears a field while an omitted field
+	// keeps it; testing_model null selects auto-select instead of being ignored.
+	nullableFieldNames := []string{"model_mapping", "model_configs", "system_prompt", "inference_profile_arn_map",
+		model.ChannelTestingModelField}
 	nullableProvided := make(map[string]bool, len(nullableFieldNames))
 	for _, name := range nullableFieldNames {
 		if _, ok := rawFields[name]; ok {
@@ -134,28 +137,11 @@ func buildDuplicateChannelName(name string) string {
 }
 
 // prepareChannelForCreate normalizes a channel before insert.
-// It mutates the channel by setting creation timestamps, validating TestingModel, and applying default BaseURL values when needed.
+// It mutates the channel by setting creation timestamps and applying default BaseURL values when needed.
+// TestingModel is normalized by the model layer on insert (model.NormalizeChannelTestingModel), so
+// creation, duplication, and updates share one policy that keeps the SKIP sentinel.
 func prepareChannelForCreate(channel *model.Channel) {
 	channel.CreatedTime = helper.GetTimestamp()
-
-	// Sanitize testing model at creation: only keep if present in models list.
-	if channel.TestingModel != nil {
-		tm := strings.TrimSpace(*channel.TestingModel)
-		if tm == "" {
-			channel.TestingModel = nil
-		} else {
-			ok := false
-			for name := range strings.SplitSeq(channel.Models, ",") {
-				if strings.TrimSpace(name) == tm {
-					ok = true
-					break
-				}
-			}
-			if !ok {
-				channel.TestingModel = nil
-			}
-		}
-	}
 
 	// Auto-populate default BaseURL on creation if blank and default exists.
 	if (channel.BaseURL == nil || *channel.BaseURL == "") && channel.Type >= 0 {

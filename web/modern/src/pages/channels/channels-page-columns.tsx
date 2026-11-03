@@ -54,6 +54,25 @@ export const sameChannelRef = (left: Pick<Channel, 'id' | 'uuid'>, right: Pick<C
 export const CHANNEL_TESTING_MODEL_SKIP = '__skip__';
 
 /**
+ * resolvePersistedTestingModel returns the testing model the server actually stored
+ * after an update, so the list never shows a value a page refresh would contradict.
+ * The backend normalizes the selection (SKIP, auto-select, or a model the channel
+ * lists) and echoes the saved row in `data`; older servers that omit the row fall
+ * back to the requested value.
+ *
+ * @param responseData - the `data` field of the PUT /api/channel/ response.
+ * @param requested - the testing model the administrator selected; null means auto-select.
+ * @returns the persisted testing model, or null for auto-select.
+ */
+export const resolvePersistedTestingModel = (responseData: unknown, requested: string | null): string | null => {
+  if (responseData === null || typeof responseData !== 'object' || !('testing_model' in responseData)) {
+    return requested;
+  }
+  const persisted = (responseData as { testing_model?: unknown }).testing_model;
+  return typeof persisted === 'string' && persisted !== '' ? persisted : null;
+};
+
+/**
  * fallbackTestingModelMarkers is only consulted when the server did not send
  * test_models (an older backend). The server is otherwise authoritative: it
  * classifies by API format using provider metadata, which this list cannot do, and

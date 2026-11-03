@@ -591,6 +591,8 @@
       "test_success": "渠道测试成功。",
       "testing_model_failed_message": "更新测试模型失败",
       "testing_model_failed_title": "保存失败",
+      "testing_model_normalized_message": "服务器无法为该渠道保留所选测试模型，现已使用页面显示的已保存值。",
+      "testing_model_normalized_title": "测试模型已重置",
       "testing_model_saved": "测试模型已保存。"
     },
     "response": {

@@ -6180,7 +6180,7 @@ Creates one or more channels from a posted channel object. The `key` field is sp
 | Priority | `priority` | integer | No | 0 | Selection priority (higher = preferred). |
 | Weight | `weight` | integer | No | 0 | Load-balancing weight within a priority tier. |
 | Status | `status` | integer | No | 1 | `1` enabled, `2` manually disabled, `3` auto-disabled. |
-| Testing model | `testing_model` | string | No | null | Model used for health checks; cleared at create time if not in `models`. |
+| Testing model | `testing_model` | string | No | null | Model used for health checks. `null` or `""` auto-selects the cheapest chat-format model; `"__skip__"` (case-insensitive, stored canonically) excludes the channel from health checks; any other value must be listed in `models` (trimmed) or it is stored as `null`. |
 | Inference profile ARN map | `inference_profile_arn_map` | string (JSON) | No | null | AWS Bedrock model→ARN map; validated when non-empty. |
 | Tooling | `tooling` | string or object | No | null | Channel tooling policy (whitelist/pricing). Accepts a JSON object or a JSON string. |
 
@@ -6271,7 +6271,7 @@ Updates a channel. Two modes: a full update (default), or a status-only update w
 |------|------|----------|---------|-------------|
 | `status_only` | string | No | (empty) | When non-empty, only `uuid` and `status` are applied; all other fields are ignored. |
 
-**Request body**: a channel object including `uuid`. For a full update the same fields as `POST /api/channel/` apply, and `name` must be non-empty. For a status-only update, only `uuid` and `status` are required. Note: `inference_profile_arn_map` (when non-empty) is validated before the `status_only` branch, so an invalid ARN map is rejected even in status-only mode.
+**Request body**: a channel object including `uuid`. For a full update the same fields as `POST /api/channel/` apply, and `name` must be non-empty. For a status-only update, only `uuid` and `status` are required. `testing_model` follows merge-patch semantics: omit it to keep the stored value (re-validated against the effective `models`, so `"__skip__"` always survives), or send `null`/`""` to return to auto-select. The value actually stored is echoed in the response `data`. Note: `inference_profile_arn_map` (when non-empty) is validated before the `status_only` branch, so an invalid ARN map is rejected even in status-only mode.
 
 ```json
 {
