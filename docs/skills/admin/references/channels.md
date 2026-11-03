@@ -291,6 +291,11 @@ Per-channel pricing lives in two places:
 
 See [groups-and-ratios.md](groups-and-ratios.md) for the ratio model and JSON shape.
 
+`PUT /api/channel/pricing/:uuid` writes only `model_configs` and the `tooling` entry inside `config`. It locks the row, applies the change to the stored values, and leaves every other channel field (models, priority, base URL, groups, testing model, other `config` entries) as stored, so it cannot revert an edit saved concurrently. It does not rebuild abilities.
+- `model_configs` replaces the whole pricing table. Legacy `model_ratio`/`completion_ratio` replace it with ratio-only entries; a legacy payload with no non-zero ratio changes nothing.
+- `tooling` replaces the tooling entry; `"tooling": null` removes it.
+- Omitted fields keep the stored value.
+
 Fetch:
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \

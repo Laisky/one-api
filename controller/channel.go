@@ -551,6 +551,8 @@ func GetChannelPricing(c *gin.Context) {
 }
 
 // UpdateChannelPricing replaces the channel pricing configuration using either legacy ratios or the unified model config format.
+// It writes only model_configs and the tooling entry of config, against the locked row, so an edit
+// of the channel's other fields saved concurrently is never reverted.
 func UpdateChannelPricing(c *gin.Context) {
 	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
@@ -572,78 +574,29 @@ func UpdateChannelPricing(c *gin.Context) {
 		return
 	}
 
-	channel, err := model.GetChannelById(id, false)
-	if err != nil {
-		helper.RespondError(c, err)
-		return
-	}
-	// This endpoint never changes the testing model. Leaving the value just loaded
-	// would make the save re-assert it and overwrite a selection (such as SKIP)
-	// saved concurrently, so omit it and let the update keep the stored value.
-	channel.TestingModel = nil
-
+	var update model.ChannelPricingUpdate
 	// Handle both old format (separate model_ratio and completion_ratio) and new format (unified model_configs)
-	if len(request.ModelConfigs) > 0 {
+	switch {
+	case len(request.ModelConfigs) > 0:
 		// New unified format - preferred approach
-		err = channel.SetModelPriceConfigs(request.ModelConfigs)
-		if err != nil {
-			helper.RespondError(c, errors.New("Failed to set model configs: "+err.Error()))
-			return
-		}
-	} else if len(request.ModelRatio) > 0 || len(request.CompletionRatio) > 0 {
-		// Old format - convert to unified format automatically
-		modelConfigs := make(map[string]model.ModelConfigLocal)
-
-		// Collect all model names from both ratios
-		allModelNames := make(map[string]bool)
-		for modelName := range request.ModelRatio {
-			allModelNames[modelName] = true
-		}
-		for modelName := range request.CompletionRatio {
-			allModelNames[modelName] = true
-		}
-
-		// Create ModelPriceLocal entries for each model
-		for modelName := range allModelNames {
-			config := model.ModelConfigLocal{}
-
-			if request.ModelRatio != nil {
-				if ratio, exists := request.ModelRatio[modelName]; exists {
-					config.Ratio = ratio
-				}
-			}
-
-			if request.CompletionRatio != nil {
-				if completionRatio, exists := request.CompletionRatio[modelName]; exists {
-					config.CompletionRatio = completionRatio
-				}
-			}
-
-			// Only add if we have some pricing data
-			if config.Ratio != 0 || config.CompletionRatio != 0 {
-				modelConfigs[modelName] = config
-			}
-		}
-
-		// Save to unified ModelConfigs only
-		err = channel.SetModelPriceConfigs(modelConfigs)
-		if err != nil {
-			helper.RespondError(c, errors.New("Failed to set model configs: "+err.Error()))
-			return
-		}
+		update.ModelConfigs = request.ModelConfigs
+		update.ModelConfigsProvided = true
+	case len(request.ModelRatio) > 0 || len(request.CompletionRatio) > 0:
+		// Old format - converted to the unified format. Ratios that carry no
+		// non-zero price leave the stored table unchanged, as they always have.
+		update.ModelConfigs = legacyRatiosToModelConfigs(request.ModelRatio, request.CompletionRatio)
+		update.ModelConfigsProvided = len(update.ModelConfigs) > 0
 	}
 
-	if toolingCfg, provided, err := parseToolingConfigPayload(request.Tooling); err != nil {
-		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid tooling config: "+err.Error())))
+	update.Tooling, update.ToolingProvided, err = parseToolingConfigPayload(request.Tooling)
+	if err != nil {
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.Wrap(err, "Invalid tooling config")))
 		return
-	} else if provided {
-		if err := channel.SetToolingConfig(toolingCfg); err != nil {
-			helper.RespondError(c, errors.New("Failed to set tooling config: "+err.Error()))
-			return
-		}
 	}
 
-	err = channel.UpdateWithContext(gmw.Ctx(c))
+	// The model layer re-reads config and model_configs from the locked row and writes
+	// only those columns, so this handler never holds a stale copy of the channel.
+	err = model.UpdateChannelPricingWithContext(gmw.Ctx(c), id, update)
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -653,6 +606,28 @@ func UpdateChannelPricing(c *gin.Context) {
 		"success": true,
 		"message": "",
 	})
+}
+
+// legacyRatiosToModelConfigs converts the legacy pricing payload into the unified format.
+// Parameters: modelRatio and completionRatio map model names to their ratios; either may be nil.
+// Returns: one entry per model that has a non-zero model or completion ratio.
+func legacyRatiosToModelConfigs(modelRatio, completionRatio map[string]float64) map[string]model.ModelConfigLocal {
+	modelConfigs := make(map[string]model.ModelConfigLocal, max(len(modelRatio), len(completionRatio)))
+	for modelName, ratio := range modelRatio {
+		cfg := modelConfigs[modelName]
+		cfg.Ratio = ratio
+		modelConfigs[modelName] = cfg
+	}
+	for modelName, ratio := range completionRatio {
+		cfg := modelConfigs[modelName]
+		cfg.CompletionRatio = ratio
+		modelConfigs[modelName] = cfg
+	}
+	// Only keep models that carry some pricing data.
+	maps.DeleteFunc(modelConfigs, func(_ string, cfg model.ModelConfigLocal) bool {
+		return cfg.Ratio == 0 && cfg.CompletionRatio == 0
+	})
+	return modelConfigs
 }
 
 // GetChannelDefaultPricing returns adapter-provided default pricing metadata for the supplied channel type.
