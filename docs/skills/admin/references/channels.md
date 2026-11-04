@@ -246,19 +246,42 @@ classifier — stays in scope.
 
 **Opting a channel out entirely.** Set `testing_model` to `"__skip__"` (the SKIP entry
 in the list page's Testing Model selector). The channel is then never probed by either
-the manual test or the periodic sweep, and never auto-disabled. A manual test that
-names a model explicitly (`?model=`) still runs, as a deliberate one-off. The sentinel is
-matched case-insensitively and stored as `"__skip__"`; it survives every later
-update, model-list change, pricing save, duplication, and model reset until you set
-`testing_model` to a model name, or to `null` for auto-select. A sweep re-reads each
-channel's selection before probing it (and skips the channel, without contacting the
-upstream, if that read fails). It then applies the result in one database transaction
-that re-checks SKIP and the channel status under the row lock: SKIP saved during the
-probe discards the result, a status changed during the probe is kept, and a result that
-cannot be checked is discarded rather than applied. No lock is held during the probe,
-notifications are sent only for status changes actually applied, and the checker's
-repair of a stale testing model never overwrites a selection saved after the probe
-read it.
+the manual test or the periodic sweep, and the health check never disables or
+re-enables it. A manual test that names a model explicitly (`?model=`) still runs, as a
+deliberate one-off. The sentinel is matched case-insensitively and stored as
+`"__skip__"`; it survives every later update, model-list change, pricing save,
+duplication, and model reset until you set `testing_model` to a model name, or to `null`
+for auto-select.
+
+SKIP scopes **health checking only**. It does not stop relay-time protection: a channel
+that returns authentication, quota, or balance errors to real traffic is still
+auto-disabled by the passive path in `relay_error.go` and by balance checks.
+
+**How the sweep stays consistent with concurrent edits.** For each channel the sweep:
+
+1. reloads the whole channel row (selection, models, mapping, key, base URL, status) and
+   skips the channel without contacting the upstream if that read fails;
+2. probes with no database lock held;
+3. applies the result in one transaction that holds the row lock and discards it when
+   the channel is now SKIP, or when its probed configuration (key, base URL, config,
+   models, mapping, system prompt, testing model) changed during the probe; a status
+   changed during the probe is kept, and a result that cannot be persisted atomically
+   is discarded rather than applied. The next sweep retries discarded channels.
+
+Repairing a stale testing model follows the same rule: it is cleared only while the
+channel still has the configuration the decision was based on.
+
+**Automatic re-enable** (when enabled) only applies to channels the sweep or relay
+disabled automatically (status 3), and only when the probe succeeded within
+`ChannelDisableThreshold`. A channel you disabled manually (status 2) stays disabled.
+
+**Notifications.** Status-change notifications ("disabled" / "re-enabled") are sent only
+for transitions the transaction actually applied. When automatic disabling is off, a
+failed or slow probe sends a probe-failure notice instead; it changes nothing. Every
+channel the sweep finishes with is counted in `oneapi_channel_health_checks_total` by
+`outcome`: `applied`, `status_changed`, `transition_refused`, `opted_out`,
+`config_changed`, `apply_failed`, `unreadable`. A rising `apply_failed`, `unreadable`,
+or `config_changed` count means results are being discarded rather than acted on.
 
 **Models of unknown format are excluded by default.** If nothing in either catalogue
 describes a model, the gateway does not guess: assuming "chat" is what sends a Chat

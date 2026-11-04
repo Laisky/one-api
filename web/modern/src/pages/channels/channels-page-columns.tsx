@@ -247,11 +247,12 @@ export const createChannelColumns = ({
         .filter((model) => (serverProvided ? true : isLikelyChatModelName(model)))
         .sort();
       const isSkipped = channel.testing_model === CHANNEL_TESTING_MODEL_SKIP;
-      const value = isSkipped
-        ? CHANNEL_TESTING_MODEL_SKIP
-        : channel.testing_model && models.includes(channel.testing_model)
-          ? channel.testing_model
-          : '';
+      // A confirmed selection the offered choices do not list (a mapping alias, a custom
+      // model on an unrestricted channel, or an older server's list) is still the stored
+      // value: show it as its own option rather than misreporting it as Auto.
+      const unlistedSelection =
+        !isSkipped && channel.testing_model && !models.includes(channel.testing_model) ? channel.testing_model : null;
+      const value = isSkipped ? CHANNEL_TESTING_MODEL_SKIP : channel.testing_model || '';
       return (
         <div className="w-[140px] md:w-[160px] max-w-[220px]">
           <select
@@ -264,6 +265,9 @@ export const createChannelColumns = ({
           >
             <option value="">{t('channels.testing.auto')}</option>
             <option value={CHANNEL_TESTING_MODEL_SKIP}>{t('channels.testing.skip')}</option>
+            {unlistedSelection && (
+              <option value={unlistedSelection}>{t('channels.testing.unlisted_selection', { model: unlistedSelection })}</option>
+            )}
             {models.map((model) => (
               <option key={model} value={model}>
                 {model}

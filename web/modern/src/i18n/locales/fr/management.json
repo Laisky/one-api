@@ -615,7 +615,8 @@
       "auto": "LE MOINS CHER",
       "help": "Choisit le modèle utilisé pour contrôler l'état de ce canal.\n\nCHEAPEST — utilise automatiquement le modèle le moins cher servi via une API de chat (chat completions, response API, Claude messages ou Gemini chat).\n\nSKIP — exclut totalement ce canal des contrôles. Il n'est jamais sondé ni désactivé automatiquement.\n\nSeuls les modèles au format chat sont testables. Les modèles d'embeddings, de reranking, de modération, de complétion et multimédias sont exclus, de même que ceux dont le format d'API est inconnu — sélectionnez-en un ici pour le tester malgré tout.",
       "help_label": "Comment le modèle de test est choisi",
-      "skip": "SKIP (jamais testé)"
+      "skip": "SKIP (jamais testé)",
+      "unlisted_selection": "{{model}} (actuel)"
     },
     "title": "Canaux",
     "toolbar": {

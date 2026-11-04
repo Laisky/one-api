@@ -615,7 +615,8 @@
       "auto": "自动最便宜",
       "help": "选择用于对该渠道做健康检查的模型。\n\nCHEAPEST —— 自动选用价格最低、且通过对话类接口（chat completions、response API、Claude messages 或 Gemini chat）提供服务的模型。\n\nSKIP —— 将该渠道完全排除在健康检查之外：不会发起探测，也不会被自动禁用。\n\n只有对话格式的模型可被测试。嵌入、重排序、内容审核、补全以及多媒体模型均被排除；API 格式未知的模型同样默认排除 —— 如需测试，可在此处手动指定。",
       "help_label": "测试模型的选取逻辑",
-      "skip": "SKIP（不测试）"
+      "skip": "SKIP（不测试）",
+      "unlisted_selection": "{{model}}（当前设置）"
     },
     "title": "渠道",
     "toolbar": {

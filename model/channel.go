@@ -419,9 +419,14 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 			errors.Wrapf(err, "failed to normalize hidden models for channel: id=%d, name=%s", channel.Id, channel.Name),
 			channel.Ref())
 	}
+	// A client disconnect must not abort a half-applied update, so the write is detached
+	// from cancellation, but it stays bounded: the caller's deadline or
+	// channelWriteTimeout, whichever is sooner, also caps row-lock waits.
+	writeCtx, cancel := detachedChannelWriteContext(ctx)
+	defer cancel()
 	var existing Channel
 	if channel.Id != 0 {
-		if err := DB.Select("id", "group").First(&existing, "id = ?", channel.Id).Error; err != nil {
+		if err := DB.WithContext(writeCtx).Select("id", "group").First(&existing, "id = ?", channel.Id).Error; err != nil {
 			return identity.Tag(
 				errors.Wrapf(err, "load existing channel %d before update", channel.Id),
 				channel.Ref())
@@ -457,9 +462,7 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 
 	persisted := *channel
 	var testingModel testingModelResolution
-	// WithoutCancel keeps request values (logging, tracing) while preserving the
-	// established run-to-completion behaviour if the client disconnects mid-update.
-	err := DB.WithContext(context.WithoutCancel(ctx)).Transaction(func(tx *gorm.DB) error {
+	err := DB.WithContext(writeCtx).Transaction(func(tx *gorm.DB) error {
 		if err := lockChannelRow(tx, persisted.Id); err != nil {
 			return errors.Wrapf(err, "lock channel %d for update", persisted.Id)
 		}
@@ -518,25 +521,6 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 				zap.String("persisted_testing_model", derefStr(testingModel.persisted)))...)
 	}
 	InvalidateChannelModelCachesWithContext(ctx, existing.Group, channel.Group)
-	return nil
-}
-
-// lockChannelRow takes the channel row's write lock inside tx before the transaction
-// reads it. The no-op UPDATE works on SQLite, MySQL, and PostgreSQL without dialect-
-// specific SELECT ... FOR UPDATE syntax, and UpdateColumn skips timestamp hooks. A
-// concurrent writer of the same row blocks until tx ends, so a read-then-write inside
-// tx cannot interleave with it. Do not interpret MySQL's no-op RowsAffected as absence.
-//
-// Parameters:
-//   - tx: the transaction that will read and write the row.
-//   - id: the channel to lock.
-//
-// Return values:
-//   - error: a wrapped database failure.
-func lockChannelRow(tx *gorm.DB, id int) error {
-	if err := tx.Model(&Channel{}).Where("id = ?", id).UpdateColumn("models", gorm.Expr("models")).Error; err != nil {
-		return errors.Wrapf(err, "lock channel row %d", id)
-	}
 	return nil
 }
 
@@ -655,28 +639,15 @@ func UpdateChannelStatusById(id int, status int) {
 }
 
 // UpdateChannelStatusByIdWithContext updates channel ability/status state with request-scoped diagnostics.
+// It delegates to SetChannelStatusWithContext so the status and the ability routing
+// flags change in one locked transaction; the separate statements it used to issue let
+// a concurrent status change leave a disabled channel whose abilities still routed traffic.
 // Parameters: ctx carries request logging, id identifies the channel, and status is the desired channel status.
 // Returns: none; persistence failures are logged with channel identity.
 func UpdateChannelStatusByIdWithContext(ctx context.Context, id int, status int) {
-	var channel Channel
-	// uuid and name are selected alongside the group so the failure logs below can
-	// name the channel without issuing a second query.
-	_ = DB.Select("id", "uuid", "name", "group").First(&channel, "id = ?", id).Error
-	if channel.Id == 0 {
-		channel.Id = id
-	}
-	err := UpdateAbilityStatus(id, status == ChannelStatusEnabled)
-	if err != nil {
-		logger.FromContext(ctx).Error("failed to update ability status",
-			append(channel.Ref().Zap(), zap.Error(err), zap.Int("status", status))...)
-	}
-	err = DB.Model(&Channel{}).Where("id = ?", id).Update("status", status).Error
-	if err != nil {
+	if err := SetChannelStatusWithContext(ctx, id, status); err != nil {
 		logger.FromContext(ctx).Error("failed to update channel status",
-			append(channel.Ref().Zap(), zap.Error(err), zap.Int("status", status))...)
-	}
-	if err == nil {
-		InvalidateChannelModelCachesWithContext(ctx, channel.Group)
+			append(LookupChannelRef(ctx, id).Zap(), zap.Error(err), zap.Int("status", status))...)
 	}
 }
 

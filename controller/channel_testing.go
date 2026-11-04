@@ -24,6 +24,7 @@ import (
 	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/message"
+	"github.com/Laisky/one-api/common/metrics"
 	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
@@ -346,10 +347,10 @@ func TestChannel(c *gin.Context) {
 	// testChannel, which relies on its caller having bound it.
 	lg = lg.With(channel.Ref().Zap()...)
 
-	observedTestingModel := channel.TestingModel
+	revision := channel.ProbeConfigRevision()
 	modelName, clearTestingModel, err := chooseChannelTestModelWithContext(gmw.Ctx(c), channel, c.Query("model"))
 	if clearTestingModel {
-		clearStaleTestingModel(gmw.Ctx(c), lg, channel, observedTestingModel)
+		clearStaleTestingModel(gmw.Ctx(c), lg, channel, revision)
 	}
 	if err != nil {
 		// A channel with no chat-capable surface was never probed, so it is
@@ -482,20 +483,21 @@ func runAutomaticChannelSweep(ctx context.Context, notify bool, scope string) er
 		// request, so nothing else carries the channel identity.
 		clg := lg.With(channel.Ref().Zap()...)
 		cctx := gmw.SetLogger(ctx, clg)
-		isChannelEnabled := channel.Status == model.ChannelStatusEnabled
-		// The channel list is a snapshot taken when the sweep started; re-read the
-		// selection so SKIP saved since then is honoured before probing.
-		if err := channel.RefreshTestingModelWithContext(cctx); err != nil {
-			// Fail closed: the snapshot may predate a SKIP, so never spend an
-			// upstream request on it. The next sweep retries the channel.
-			clg.Warn("skipped channel test: could not read the current testing selection", zap.Error(err))
+		// The channel list is a snapshot taken when the sweep started. Reload the whole
+		// row so the selection, model list, mapping, key, and status are judged and
+		// probed together, as they are stored now.
+		if err := channel.ReloadForProbeWithContext(cctx); err != nil {
+			// Fail closed: the snapshot may predate a SKIP or a new configuration,
+			// so never spend an upstream request on it. The next sweep retries it.
+			clg.Warn("skipped channel test: could not read the current channel configuration", zap.Error(err))
+			metrics.RecordChannelHealthCheck(metrics.ChannelHealthCheckUnreadable)
 			continue
 		}
-		observedTestingModel := channel.TestingModel
+		revision := channel.ProbeConfigRevision()
 		tik := time.Now()
 		chosenModel, clearTestingModel, err := chooseChannelTestModelWithContext(cctx, channel, "")
 		if clearTestingModel {
-			clearStaleTestingModel(cctx, clg, channel, observedTestingModel)
+			clearStaleTestingModel(cctx, clg, channel, revision)
 		}
 		// A channel that exposes no chat-capable surface, or whose every model
 		// is a non-chat task model (embeddings, rerank, translation, media),
@@ -514,8 +516,8 @@ func runAutomaticChannelSweep(ctx context.Context, notify bool, scope string) er
 			_, err, openaiErr = testChannel(cctx, channel, testRequest)
 		}
 		milliseconds := time.Since(tik).Milliseconds()
-		plan := planChannelSweepResult(channel, isChannelEnabled, milliseconds, disableThreshold, err, openaiErr)
-		applyChannelSweepResult(cctx, clg, channel, plan, milliseconds)
+		plan := planChannelSweepResult(channel, milliseconds, disableThreshold, err, openaiErr)
+		applyChannelSweepResult(cctx, clg, channel, revision, plan, milliseconds)
 		if config.RequestInterval > 0 {
 			timer := time.NewTimer(config.RequestInterval)
 			select {

@@ -310,38 +310,44 @@ func TestSweepAnnouncesOnlyPersistedTransitions(t *testing.T) {
 
 // TestPlanChannelSweepResult pins the sweep's decision policy, which the atomic apply
 // then re-validates: slow or failing enabled channels are disabled (or reported when
-// auto-disable is off), recovered disabled channels are re-enabled when auto-enable is on.
+// auto-disable is off); only automatically disabled channels that recover within the
+// latency threshold are re-enabled, and only when auto-enable is on.
 // Parameters: t is the test handle. Returns: no values.
 func TestPlanChannelSweepResult(t *testing.T) {
 	originalDisable, originalEnable := config.AutomaticDisableChannelEnabled, config.AutomaticEnableChannelEnabled
 	t.Cleanup(func() {
 		config.AutomaticDisableChannelEnabled, config.AutomaticEnableChannelEnabled = originalDisable, originalEnable
 	})
-	channel := &model.Channel{Id: 7, Name: "plan"}
+	withStatus := func(status int) *model.Channel { return &model.Channel{Id: 7, Name: "plan", Status: status} }
+	enabled := withStatus(model.ChannelStatusEnabled)
 	invalidKey := &relaymodel.Error{Message: "bad key", Code: "invalid_api_key"}
 	probeErr := errors.New("connection refused")
 
 	config.AutomaticDisableChannelEnabled, config.AutomaticEnableChannelEnabled = true, true
-	slow := planChannelSweepResult(channel, true, 5000, 1000, nil, nil)
+	slow := planChannelSweepResult(enabled, 5000, 1000, nil, nil)
 	require.Equal(t, model.ChannelStatusAutoDisabled, slow.targetStatus)
 	require.Contains(t, slow.reason, "exceeds threshold")
 	require.Empty(t, slow.notices)
 
-	failed := planChannelSweepResult(channel, true, 10, 1000, nil, invalidKey)
+	failed := planChannelSweepResult(enabled, 10, 1000, nil, invalidKey)
 	require.Equal(t, model.ChannelStatusAutoDisabled, failed.targetStatus)
 	require.Equal(t, "bad key", failed.reason)
 
-	healthy := planChannelSweepResult(channel, true, 10, 1000, nil, nil)
-	require.Zero(t, healthy.targetStatus)
+	require.Zero(t, planChannelSweepResult(enabled, 10, 1000, nil, nil).targetStatus)
 
-	recovered := planChannelSweepResult(channel, false, 10, 1000, nil, nil)
-	require.Equal(t, model.ChannelStatusEnabled, recovered.targetStatus)
+	autoDisabled := withStatus(model.ChannelStatusAutoDisabled)
+	require.Equal(t, model.ChannelStatusEnabled, planChannelSweepResult(autoDisabled, 10, 1000, nil, nil).targetStatus)
+	require.Zero(t, planChannelSweepResult(autoDisabled, 10, 1000, probeErr, nil).targetStatus)
+	require.Zero(t, planChannelSweepResult(autoDisabled, 5000, 1000, nil, nil).targetStatus,
+		"a recovery slower than the threshold would flap, so it is not re-enabled")
+	require.Zero(t, planChannelSweepResult(withStatus(model.ChannelStatusManuallyDisabled), 10, 1000, nil, nil).targetStatus,
+		"a manual disable is never undone by the sweep")
 
-	stillDown := planChannelSweepResult(channel, false, 10, 1000, probeErr, nil)
-	require.Zero(t, stillDown.targetStatus)
+	config.AutomaticEnableChannelEnabled = false
+	require.Zero(t, planChannelSweepResult(autoDisabled, 10, 1000, nil, nil).targetStatus)
 
 	config.AutomaticDisableChannelEnabled = false
-	reported := planChannelSweepResult(channel, true, 5000, 1000, probeErr, nil)
+	reported := planChannelSweepResult(enabled, 5000, 1000, probeErr, nil)
 	require.Zero(t, reported.targetStatus, "without auto-disable the sweep only reports")
 	require.Len(t, reported.notices, 2)
 	require.Contains(t, reported.notices[0].title, "Channel test timed out")

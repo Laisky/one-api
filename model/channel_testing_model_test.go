@@ -161,59 +161,122 @@ func TestChannelPersistenceKeepsTestingModelSkip(t *testing.T) {
 	require.Nil(t, loadTestingModel(inserted.Id))
 }
 
-// TestClearStaleChannelTestingModel pins the compare-and-swap cleanup the health
-// checker uses: only the value it observed is cleared, so a selection saved after the
-// probe read the channel survives.
+// TestClearStaleChannelTestingModel pins the revision-checked cleanup the health checker
+// uses: a stale selection is cleared only while the channel still has the probe
+// configuration the decision was based on, so a selection saved since, or a model list
+// extended since, survives.
 // Parameters: t is the test handle. Returns: no values.
 func TestClearStaleChannelTestingModel(t *testing.T) {
 	db := useChannelPersistenceTestDB(t)
 	ctx := context.Background()
-	skip := ChannelTestingModelSkip
 	stale := "sora-2"
 	channel := &Channel{Name: "stale-cleanup", Models: "sora-2,gpt-4o-mini", Group: "default",
 		Status: ChannelStatusEnabled, TestingModel: &stale}
 	require.NoError(t, channel.Insert())
-	load := func() *string {
-		var stored Channel
-		require.NoError(t, db.Select("id", "testing_model").First(&stored, "id = ?", channel.Id).Error)
-		return stored.TestingModel
+	snapshot := func() *Channel {
+		probed := &Channel{Id: channel.Id}
+		require.NoError(t, probed.ReloadForProbeWithContext(ctx))
+		return probed
 	}
+	load := func() *string { return snapshot().TestingModel }
 
-	cleared, err := ClearStaleChannelTestingModel(ctx, channel.Id, nil)
-	require.NoError(t, err)
-	require.False(t, cleared, "nothing observed means nothing to clear")
-	require.Equal(t, &stale, load())
+	t.Run("a replaced selection is kept", func(t *testing.T) {
+		revision := snapshot().ProbeConfigRevision()
+		require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).Update("testing_model", ChannelTestingModelSkip).Error)
+		cleared, err := ClearStaleChannelTestingModel(ctx, channel.Id, revision)
+		require.NoError(t, err)
+		require.False(t, cleared)
+		require.Equal(t, resetTestString(ChannelTestingModelSkip), load())
+		require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).Update("testing_model", stale).Error)
+	})
 
-	require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).Update("testing_model", skip).Error)
-	cleared, err = ClearStaleChannelTestingModel(ctx, channel.Id, &stale)
-	require.NoError(t, err)
-	require.False(t, cleared, "a selection replaced after the probe read it must be kept")
-	require.Equal(t, &skip, load())
+	t.Run("a changed model list keeps the selection", func(t *testing.T) {
+		revision := snapshot().ProbeConfigRevision()
+		require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).Update("models", "sora-2,gpt-4o-mini,gpt-4o").Error)
+		cleared, err := ClearStaleChannelTestingModel(ctx, channel.Id, revision)
+		require.NoError(t, err)
+		require.False(t, cleared, "the decision was made against a model list that no longer exists")
+		require.Equal(t, &stale, load())
+	})
 
-	require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).Update("testing_model", stale).Error)
-	cleared, err = ClearStaleChannelTestingModel(ctx, channel.Id, &stale)
-	require.NoError(t, err)
-	require.True(t, cleared)
-	require.Nil(t, load())
+	t.Run("an unchanged channel is repaired", func(t *testing.T) {
+		cleared, err := ClearStaleChannelTestingModel(ctx, channel.Id, snapshot().ProbeConfigRevision())
+		require.NoError(t, err)
+		require.True(t, cleared)
+		require.Nil(t, load())
+	})
+
+	t.Run("an empty selection has nothing to clear", func(t *testing.T) {
+		cleared, err := ClearStaleChannelTestingModel(ctx, channel.Id, snapshot().ProbeConfigRevision())
+		require.NoError(t, err)
+		require.False(t, cleared)
+	})
 }
 
-// TestRefreshTestingModelWithContext verifies a sweep can replace its snapshot of a
-// channel's testing model with the stored value, and that a failed read leaves the
-// snapshot untouched.
+// TestReloadForProbeWithContext verifies a sweep replaces its whole snapshot of a channel
+// with the stored row, so the model list, mapping, and selection it judges are mutually
+// consistent, and that a failed read leaves the snapshot untouched.
 // Parameters: t is the test handle. Returns: no values.
-func TestRefreshTestingModelWithContext(t *testing.T) {
+func TestReloadForProbeWithContext(t *testing.T) {
 	db := useChannelPersistenceTestDB(t)
 	ctx := context.Background()
-	channel := &Channel{Name: "refresh", Models: "gpt-4o", Group: "default", Status: ChannelStatusEnabled}
+	channel := &Channel{Name: "reload", Key: "sk-test", Models: "gpt-4o-mini", Group: "default", Status: ChannelStatusEnabled}
 	require.NoError(t, channel.Insert())
-	require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).Update("testing_model", ChannelTestingModelSkip).Error)
+	require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).
+		Updates(map[string]any{"models": "gpt-4o", "testing_model": "gpt-4o", "status": ChannelStatusAutoDisabled}).Error)
 
 	snapshot := *channel
-	require.Nil(t, snapshot.TestingModel)
-	require.NoError(t, snapshot.RefreshTestingModelWithContext(ctx))
-	require.True(t, snapshot.IsTestingSkipped())
+	require.NoError(t, snapshot.ReloadForProbeWithContext(ctx))
+	require.Equal(t, "gpt-4o", snapshot.Models)
+	require.Equal(t, resetTestString("gpt-4o"), snapshot.TestingModel)
+	require.Equal(t, ChannelStatusAutoDisabled, snapshot.Status)
+	require.Equal(t, "sk-test", snapshot.Key, "the probe needs the key")
+	require.NotEqual(t, channel.ProbeConfigRevision(), snapshot.ProbeConfigRevision())
 
-	missing := &Channel{Id: channel.Id + 1000, TestingModel: resetTestString("gpt-4o")}
-	require.Error(t, missing.RefreshTestingModelWithContext(ctx))
-	require.Equal(t, resetTestString("gpt-4o"), missing.TestingModel)
+	missing := &Channel{Id: channel.Id + 1000, Models: "kept"}
+	require.Error(t, missing.ReloadForProbeWithContext(ctx))
+	require.Equal(t, "kept", missing.Models)
+}
+
+// TestProbeConfigRevision pins which fields invalidate a probe decision: every field the
+// probe sends or selects with, but not status, pricing, or usage counters.
+// Parameters: t is the test handle. Returns: no values.
+func TestProbeConfigRevision(t *testing.T) {
+	t.Parallel()
+	base := func() *Channel {
+		return &Channel{Type: 1, Key: "sk", BaseURL: resetTestString("https://a"), Config: "{}", Models: "m",
+			ModelMapping: resetTestString("{}"), TestingModel: resetTestString("m"), Status: ChannelStatusEnabled}
+	}
+	revision := base().ProbeConfigRevision()
+	require.Equal(t, revision, base().ProbeConfigRevision(), "the revision is deterministic")
+
+	for name, mutate := range map[string]func(*Channel){
+		"type":          func(c *Channel) { c.Type = 2 },
+		"key":           func(c *Channel) { c.Key = "sk-rotated" },
+		"base url":      func(c *Channel) { c.BaseURL = resetTestString("https://b") },
+		"nil base url":  func(c *Channel) { c.BaseURL = nil },
+		"config":        func(c *Channel) { c.Config = `{"region":"x"}` },
+		"models":        func(c *Channel) { c.Models = "m,n" },
+		"model mapping": func(c *Channel) { c.ModelMapping = resetTestString(`{"a":"m"}`) },
+		"testing model": func(c *Channel) { c.TestingModel = nil },
+		"system prompt": func(c *Channel) { c.SystemPrompt = resetTestString("be brief") },
+	} {
+		changed := base()
+		mutate(changed)
+		require.NotEqual(t, revision, changed.ProbeConfigRevision(), name)
+	}
+	for name, mutate := range map[string]func(*Channel){
+		"status":     func(c *Channel) { c.Status = ChannelStatusAutoDisabled },
+		"used quota": func(c *Channel) { c.UsedQuota = 99 },
+		"pricing":    func(c *Channel) { c.ModelConfigs = resetTestString(`{"m":{"ratio":2}}`) },
+		"test time":  func(c *Channel) { c.TestTime = 5 },
+	} {
+		changed := base()
+		mutate(changed)
+		require.Equal(t, revision, changed.ProbeConfigRevision(), name)
+	}
+	// Field boundaries are length-prefixed, so shifting text between fields changes it.
+	shifted := base()
+	shifted.Key, shifted.Config = "sk{", "}"
+	require.NotEqual(t, revision, shifted.ProbeConfigRevision())
 }

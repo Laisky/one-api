@@ -66,6 +66,8 @@ func persistChannelStatusWithDB(tx *gorm.DB, id, status int) error {
 
 // ChannelProbeResult is what a finished automatic health-check probe asks to persist.
 type ChannelProbeResult struct {
+	// Revision is the ProbeConfigRevision of the channel configuration that was probed.
+	Revision string
 	// ObservedStatus is the channel status the sweep saw when it probed the channel.
 	ObservedStatus int
 	// TargetStatus is the status the result calls for; zero keeps the current status.
@@ -78,50 +80,68 @@ type ChannelProbeResult struct {
 type ChannelProbeOutcome struct {
 	// OptedOut is true when the channel was set to SKIP; nothing was persisted.
 	OptedOut bool
+	// ConfigChanged is true when the probed configuration changed during the probe;
+	// nothing was persisted.
+	ConfigChanged bool
 	// StatusChanged is true when the requested status transition was applied.
 	StatusChanged bool
-	// Channel identifies the probed channel as read under the row lock (id, uuid,
-	// name, group, status after the update, and testing_model).
+	// Channel identifies the probed channel as read under the row lock: id, uuid, name,
+	// group, and status after the update. It never carries the channel key.
 	Channel Channel
 }
+
+// errProbeResultDiscarded rolls back a probe-result transaction whose result no longer
+// applies; it never leaves ApplyChannelProbeResultWithContext.
+var errProbeResultDiscarded = errors.New("probe result discarded")
 
 // ApplyChannelProbeResultWithContext persists an automatic health-check result
 // atomically with the checks that make it valid. In one transaction that holds the
 // channel row lock it:
-//   - discards the result when the channel is now set to SKIP, so an opt-out saved
+//   - records the response time (this first write also takes the row lock, so no
+//     separate locking statement is needed);
+//   - discards everything when the channel is now set to SKIP, so an opt-out saved
 //     while the probe was in flight can never be overridden;
-//   - applies TargetStatus (status and ability routing) only if the status still
-//     equals ObservedStatus, so a manual status change made during the probe wins and
-//     a transition that already happened is not repeated;
-//   - records the response time.
+//   - discards everything when the probe configuration changed during the probe
+//     (Revision mismatch), because the result no longer describes the channel;
+//   - applies TargetStatus (status and ability routing) only if the status still equals
+//     ObservedStatus, so a manual change made during the probe wins and a transition
+//     that already happened is not repeated.
 //
-// The probe itself must run before this call; no lock is held during network I/O.
-// Any failure rolls everything back, so a caller that cannot persist the result also
-// cannot act on it (fail closed).
+// The probe itself must run before this call; no lock is held during network I/O. Any
+// failure rolls everything back, so a caller that cannot persist the result also cannot
+// act on it (fail closed).
 //
 // Parameters:
-//   - ctx: sweep scope for the transaction.
+//   - ctx: sweep scope for the transaction; it should carry a deadline.
 //   - id: the probed channel.
-//   - result: the probe's observed status, requested status, and latency.
+//   - result: the probed revision and status, the requested status, and the latency.
 //
 // Return values:
 //   - ChannelProbeOutcome: whether the result was discarded or changed the status.
-//   - error: a wrapped database failure; nothing was persisted.
+//   - error: a wrapped database failure or a missing revision; nothing was persisted.
 func ApplyChannelProbeResultWithContext(ctx context.Context, id int, result ChannelProbeResult) (ChannelProbeOutcome, error) {
+	if result.Revision == "" {
+		return ChannelProbeOutcome{}, errors.Errorf("apply probe result to channel %d: probe configuration revision is required", id)
+	}
 	var outcome ChannelProbeOutcome
 	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockChannelRow(tx, id); err != nil {
-			return errors.Wrap(err, "lock channel for probe result")
+		if err := tx.Model(&Channel{}).Where("id = ?", id).Select("response_time", "test_time").
+			Updates(Channel{TestTime: helper.GetTimestamp(), ResponseTime: int(result.ResponseTimeMs)}).Error; err != nil {
+			return errors.Wrap(err, "record probe response time")
 		}
 		var current Channel
-		if err := tx.Select("id", "uuid", "name", "group", "status", ChannelTestingModelField).
+		if err := tx.Select(append([]string{"uuid", "name", "group", "status"}, probeConfigColumns...)).
 			First(&current, "id = ?", id).Error; err != nil {
 			return errors.Wrap(err, "read locked channel for probe result")
 		}
-		outcome.Channel = current
-		if current.IsTestingSkipped() {
+		outcome.Channel = Channel{Id: current.Id, UUID: current.UUID, Name: current.Name, Group: current.Group, Status: current.Status}
+		switch {
+		case current.IsTestingSkipped():
 			outcome.OptedOut = true
-			return nil
+			return errProbeResultDiscarded
+		case current.ProbeConfigRevision() != result.Revision:
+			outcome.ConfigChanged = true
+			return errProbeResultDiscarded
 		}
 		target := result.TargetStatus
 		if target != 0 && target != current.Status && current.Status == result.ObservedStatus {
@@ -131,12 +151,11 @@ func ApplyChannelProbeResultWithContext(ctx context.Context, id int, result Chan
 			outcome.StatusChanged = true
 			outcome.Channel.Status = target
 		}
-		if err := tx.Model(&Channel{}).Where("id = ?", id).Select("response_time", "test_time").
-			Updates(Channel{TestTime: helper.GetTimestamp(), ResponseTime: int(result.ResponseTimeMs)}).Error; err != nil {
-			return errors.Wrap(err, "record probe response time")
-		}
 		return nil
 	})
+	if errors.Is(err, errProbeResultDiscarded) {
+		return outcome, nil
+	}
 	if err != nil {
 		return ChannelProbeOutcome{}, errors.Wrapf(err, "apply probe result to channel %d", id)
 	}

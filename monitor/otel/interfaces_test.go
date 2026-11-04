@@ -17,4 +17,5 @@ var (
 	_ metrics.LogExportRecorder      = (*OtelRecorder)(nil)
 	_ metrics.RequestOutcomeRecorder = (*OtelRecorder)(nil)
 	_ metrics.RetentionRecorder      = (*OtelRecorder)(nil)
+	_ metrics.ChannelHealthRecorder  = (*OtelRecorder)(nil)
 )

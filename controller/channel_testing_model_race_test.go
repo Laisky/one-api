@@ -132,19 +132,20 @@ func TestManualChannelTestKeepsSkipSavedDuringStaleCleanup(t *testing.T) {
 	stale := "sora-2"
 	channel := insertProbeChannel(t, "manual-cleanup-race", "sora-2,gpt-4o-mini", upstream.server.URL, &stale)
 
+	// Save SKIP right after the manual test has loaded the channel, so its stale-model
+	// decision is based on a selection that no longer exists when the cleanup runs. (A
+	// write injected inside the cleanup's own transaction would not model a concurrent
+	// administrator: the cleanup holds the row lock, so a real writer waits for it.)
 	var fired atomic.Bool
 	const callback = "test:stale_cleanup_interleave"
-	require.NoError(t, model.DB.Callback().Update().Before("gorm:update").Register(callback, func(tx *gorm.DB) {
-		updates, ok := tx.Statement.Dest.(map[string]any)
-		if !ok || tx.Statement.Table != "channels" {
-			return
-		}
-		if value, present := updates["testing_model"]; !present || value != nil || !fired.CompareAndSwap(false, true) {
+	require.NoError(t, model.DB.Callback().Query().After("gorm:query").Register(callback, func(tx *gorm.DB) {
+		loaded, ok := tx.Statement.Dest.(*model.Channel)
+		if !ok || loaded.Id != channel.Id || !fired.CompareAndSwap(false, true) {
 			return
 		}
 		require.NoError(t, storeTestingModelSkip(tx.Session(&gorm.Session{NewDB: true}), channel.Id))
 	}))
-	t.Cleanup(func() { require.NoError(t, model.DB.Callback().Update().Remove(callback)) })
+	t.Cleanup(func() { require.NoError(t, model.DB.Callback().Query().Remove(callback)) })
 
 	router := gin.New()
 	router.POST("/api/channel/test/:id", TestChannel)

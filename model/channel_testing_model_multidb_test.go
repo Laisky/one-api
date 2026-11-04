@@ -225,8 +225,15 @@ func TestApplyChannelProbeResultMultiDB(t *testing.T) {
 		t.Run(dialect, func(t *testing.T) {
 			db := useTestingModelMatrixBackend(t, dialect)
 			skip := ChannelTestingModelSkip
-			disable := ChannelProbeResult{ObservedStatus: ChannelStatusEnabled, TargetStatus: ChannelStatusAutoDisabled, ResponseTimeMs: 50}
 			ctx := context.Background()
+			// disable builds the result a failed probe of the channel's current
+			// configuration asks for.
+			disable := func(channel *Channel) ChannelProbeResult {
+				probed := &Channel{Id: channel.Id}
+				require.NoError(t, probed.ReloadForProbeWithContext(ctx))
+				return ChannelProbeResult{Revision: probed.ProbeConfigRevision(), ObservedStatus: ChannelStatusEnabled,
+					TargetStatus: ChannelStatusAutoDisabled, ResponseTimeMs: 50}
+			}
 			stored := func(id int) Channel {
 				var channel Channel
 				require.NoError(t, db.Select("id", "status", "response_time", "test_time", ChannelTestingModelField).
@@ -236,7 +243,7 @@ func TestApplyChannelProbeResultMultiDB(t *testing.T) {
 
 			t.Run("SKIP discards the whole result", func(t *testing.T) {
 				channel := insertTestingModelMatrixChannel(t, dialect, "probe-skip", &skip)
-				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable)
+				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable(channel))
 				require.NoError(t, err)
 				require.True(t, outcome.OptedOut)
 				require.False(t, outcome.StatusChanged)
@@ -248,7 +255,7 @@ func TestApplyChannelProbeResultMultiDB(t *testing.T) {
 
 			t.Run("transition applies when the status is unchanged", func(t *testing.T) {
 				channel := insertTestingModelMatrixChannel(t, dialect, "probe-apply", nil)
-				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable)
+				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable(channel))
 				require.NoError(t, err)
 				require.True(t, outcome.StatusChanged)
 				require.Equal(t, ChannelStatusAutoDisabled, outcome.Channel.Status)
@@ -264,7 +271,7 @@ func TestApplyChannelProbeResultMultiDB(t *testing.T) {
 			t.Run("a status changed since the probe is kept", func(t *testing.T) {
 				channel := insertTestingModelMatrixChannel(t, dialect, "probe-cas", nil)
 				require.NoError(t, SetChannelStatusWithContext(ctx, channel.Id, ChannelStatusManuallyDisabled))
-				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable)
+				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable(channel))
 				require.NoError(t, err)
 				require.False(t, outcome.StatusChanged)
 				row := stored(channel.Id)
@@ -275,13 +282,33 @@ func TestApplyChannelProbeResultMultiDB(t *testing.T) {
 			t.Run("a transition that already happened is not repeated", func(t *testing.T) {
 				channel := insertTestingModelMatrixChannel(t, dialect, "probe-noop", nil)
 				require.NoError(t, SetChannelStatusWithContext(ctx, channel.Id, ChannelStatusAutoDisabled))
-				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable)
+				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, disable(channel))
 				require.NoError(t, err)
 				require.False(t, outcome.StatusChanged, "no second transition, so no second announcement")
 			})
 
+			t.Run("a configuration changed during the probe discards the whole result", func(t *testing.T) {
+				channel := insertTestingModelMatrixChannel(t, dialect, "probe-config", nil)
+				result := disable(channel)
+				require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).Update("models", "gpt-4o").Error)
+				outcome, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, result)
+				require.NoError(t, err)
+				require.True(t, outcome.ConfigChanged)
+				require.False(t, outcome.StatusChanged)
+				row := stored(channel.Id)
+				require.Equal(t, ChannelStatusEnabled, row.Status)
+				require.Zero(t, row.TestTime, "a discarded result records nothing")
+			})
+
+			t.Run("a missing revision is rejected", func(t *testing.T) {
+				channel := insertTestingModelMatrixChannel(t, dialect, "probe-norev", nil)
+				_, err := ApplyChannelProbeResultWithContext(ctx, channel.Id, ChannelProbeResult{TargetStatus: ChannelStatusAutoDisabled})
+				require.Error(t, err)
+				require.Equal(t, ChannelStatusEnabled, stored(channel.Id).Status)
+			})
+
 			t.Run("a missing channel fails without effects", func(t *testing.T) {
-				_, err := ApplyChannelProbeResultWithContext(ctx, 987654321, disable)
+				_, err := ApplyChannelProbeResultWithContext(ctx, 987654321, ChannelProbeResult{Revision: "r", TargetStatus: ChannelStatusAutoDisabled})
 				require.Error(t, err)
 			})
 
@@ -311,7 +338,7 @@ func TestApplyChannelProbeResultMultiDB(t *testing.T) {
 				}))
 				t.Cleanup(func() { require.NoError(t, db.Callback().Query().Remove(name)) })
 
-				outcome, err := ApplyChannelProbeResultWithContext(marked, channel.Id, disable)
+				outcome, err := ApplyChannelProbeResultWithContext(marked, channel.Id, disable(channel))
 				require.NoError(t, err)
 				select {
 				case err := <-writerDone:
@@ -329,6 +356,41 @@ func TestApplyChannelProbeResultMultiDB(t *testing.T) {
 				require.NotNil(t, row.TestingModel)
 				require.Equal(t, skip, *row.TestingModel, "the later SKIP is persisted for future sweeps")
 			})
+		})
+	}
+}
+
+// TestChannelUpdateHonoursCallerDeadlineMultiDB reproduces the review's unbounded lock
+// wait: UpdateWithContext detaches from request cancellation so a disconnect cannot
+// abort a half-applied update, but it must still respect the caller's deadline instead
+// of waiting indefinitely behind another transaction's row lock.
+// Parameters: t is the test handle. Returns: no values.
+func TestChannelUpdateHonoursCallerDeadlineMultiDB(t *testing.T) {
+	for _, dialect := range []string{"mysql", "postgres"} {
+		t.Run(dialect, func(t *testing.T) {
+			db := useTestingModelMatrixBackend(t, dialect)
+			channel := insertTestingModelMatrixChannel(t, dialect, "deadline", nil)
+
+			holder := db.Begin()
+			require.NoError(t, holder.Error)
+			require.NoError(t, holder.Exec("UPDATE channels SET models = models WHERE id = ?", channel.Id).Error)
+			released := make(chan struct{})
+			go func() {
+				defer close(released)
+				time.Sleep(3 * time.Second)
+				require.NoError(t, holder.Rollback().Error)
+			}()
+			t.Cleanup(func() { <-released })
+
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			defer cancel()
+			priority := int64(3)
+			started := time.Now()
+			err := (&Channel{Id: channel.Id, Name: channel.Name, Priority: &priority}).UpdateWithContext(ctx)
+			elapsed := time.Since(started)
+
+			require.Error(t, err, "the update must give up when the caller's deadline passes")
+			require.Less(t, elapsed, 2*time.Second, "the lock wait must be bounded by the caller's deadline")
 		})
 	}
 }

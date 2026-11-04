@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 
@@ -146,7 +147,20 @@ func channelTextTestModels(channel *model.Channel) []string {
 	// The admin selector is an explicit choice, so it also offers models whose API
 	// format the gateway cannot determine. That is how an operator opts a
 	// custom-named chat model back into testing after auto-selection skipped it.
-	return channelTestModelCandidates(channel, true)
+	candidates := channelTestModelCandidates(channel, true)
+	// Offer the stored selection too when the channel serves it and it is chat-probeable,
+	// such as a model_mapping alias or a custom model on an unrestricted channel, so a
+	// valid persisted value is always selectable rather than shown as Auto.
+	if channel == nil || channel.IsTestingSkipped() || !channelHasChatSurface(channel) {
+		return candidates
+	}
+	stored := channel.NormalizeTestingModel(channel.TestingModel)
+	if stored == nil || slices.Contains(candidates, *stored) || !channelTestModelUsesChatFormat(channel, *stored, true) {
+		return candidates
+	}
+	candidates = append(candidates, *stored)
+	sort.Strings(candidates)
+	return candidates
 }
 
 // channelAutoTestModels returns the models the automatic sweep may pick on its own.
@@ -189,19 +203,23 @@ func channelTestModelCandidates(channel *model.Channel, explicit bool) []string 
 }
 
 // clearStaleTestingModel reverts the stored testing model a probe found unusable to
-// auto-select, unless an administrator changed it after the probe read the channel.
+// auto-select, unless the channel's probe configuration changed after the probe read it
+// (a new selection, model list, or mapping may make the decision wrong).
 // Parameters: ctx scopes the write, lg is the channel-bound logger, channel is the
-// tested channel, and observed is the testing_model the probe read.
+// tested channel, and revision is the ProbeConfigRevision the decision was based on.
 // Returns: no values; failures are logged because the probe result stands either way.
-func clearStaleTestingModel(ctx context.Context, lg glog.Logger, channel *model.Channel, observed *string) {
+func clearStaleTestingModel(ctx context.Context, lg glog.Logger, channel *model.Channel, revision string) {
+	observed := channel.TestingModel
 	channel.TestingModel = nil
-	cleared, err := model.ClearStaleChannelTestingModel(ctx, channel.Id, observed)
+	writeCtx, cancel := context.WithTimeout(ctx, channelProbeWriteTimeout)
+	defer cancel()
+	cleared, err := model.ClearStaleChannelTestingModel(writeCtx, channel.Id, revision)
 	if err != nil {
 		lg.Error("failed to clear stale testing_model", zap.Error(err))
 		return
 	}
 	if !cleared {
-		lg.Debug("kept testing_model changed after the probe read it",
+		lg.Debug("kept testing_model: the channel changed after the probe read it",
 			zap.String("observed_testing_model", derefTestingModelForLog(observed)))
 	}
 }

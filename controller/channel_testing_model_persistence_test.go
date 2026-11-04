@@ -476,3 +476,35 @@ func TestEveryOfferedTestModelCanBeSaved(t *testing.T) {
 		})
 	}
 }
+
+// TestUpdateChannelLegacyNullPayload pins the documented semantics for clients that send
+// every nullable field explicitly: an explicit null clears testing_model to auto-select
+// (as it clears the other nullable fields), while the same payload without the field
+// keeps the stored selection.
+// Parameters: t is the test handle. Returns: no values.
+func TestUpdateChannelLegacyNullPayload(t *testing.T) {
+	router := newTestingModelPersistenceRouter(t)
+	skip := model.ChannelTestingModelSkip
+	nullFields := map[string]any{"model_mapping": nil, "model_configs": nil, "system_prompt": nil,
+		"inference_profile_arn_map": nil}
+
+	t.Run("explicit null clears", func(t *testing.T) {
+		channel := insertTestingModelChannel(t, testingModelPersistenceModels, &skip)
+		payload := map[string]any{"uuid": channel.UUID, "name": channel.Name, "testing_model": nil}
+		for field, value := range nullFields {
+			payload[field] = value
+		}
+		serveTestingModelJSON(t, router, http.MethodPut, "/api/channel/", payload)
+		requireTestingModel(t, nil, storedTestingModel(t, channel.Id), "database row")
+	})
+
+	t.Run("omitted keeps", func(t *testing.T) {
+		channel := insertTestingModelChannel(t, testingModelPersistenceModels, &skip)
+		payload := map[string]any{"uuid": channel.UUID, "name": channel.Name}
+		for field, value := range nullFields {
+			payload[field] = value
+		}
+		serveTestingModelJSON(t, router, http.MethodPut, "/api/channel/", payload)
+		requireTestingModel(t, &skip, storedTestingModel(t, channel.Id), "database row")
+	})
+}

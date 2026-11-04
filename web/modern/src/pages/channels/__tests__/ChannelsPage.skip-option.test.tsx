@@ -156,6 +156,28 @@ describe('ChannelsPage testing-model SKIP option', () => {
     expect((screen.getByLabelText('Testing Model') as HTMLSelectElement).value).toBe('');
   });
 
+  it('displays a stored selection the offered choices do not list instead of Auto', async () => {
+    // A mapping alias (or a custom model on an unrestricted channel) is a valid stored
+    // selection; an older server may not include it in test_models. The selector must
+    // never present a confirmed non-null selection as Auto.
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.startsWith('/api/channel/?')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: [{ ...channelRow, models: 'gpt-4o', test_models: ['gpt-4o'], testing_model: 'house-alias' }],
+            total: 1,
+          },
+        });
+      }
+      return Promise.resolve({ data: { success: true } });
+    });
+    renderPage();
+    const select = (await screen.findByLabelText('Testing Model')) as HTMLSelectElement;
+    expect(select.value).toBe('house-alias');
+    expect(Array.from(select.options).map((option) => option.value)).toContain('house-alias');
+  });
+
   it('does not re-filter server-provided test_models', async () => {
     // The server classifies by API format; a name-based client filter would hide
     // chat models it accepts, such as a video-understanding chat model.

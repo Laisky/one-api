@@ -38,6 +38,7 @@ var (
 	_ LogExportRecorder      = (*MultiRecorder)(nil)
 	_ RequestOutcomeRecorder = (*MultiRecorder)(nil)
 	_ RetentionRecorder      = (*MultiRecorder)(nil)
+	_ ChannelHealthRecorder  = (*MultiRecorder)(nil)
 )
 
 // countingRecorder is a child recorder that implements every optional
@@ -55,6 +56,7 @@ type countingRecorder struct {
 	requestOutcomes map[string][]float64
 	ttft            map[string][]float64
 	retentionSweeps map[string][2]float64
+	channelHealth   map[string]int
 }
 
 // newCountingRecorder builds a countingRecorder with initialized maps.
@@ -71,6 +73,7 @@ func newCountingRecorder() *countingRecorder {
 		requestOutcomes: map[string][]float64{},
 		ttft:            map[string][]float64{},
 		retentionSweeps: map[string][2]float64{},
+		channelHealth:   map[string]int{},
 	}
 }
 
@@ -181,6 +184,16 @@ func (c *countingRecorder) RecordRetentionSweep(target, result string, rows floa
 	c.retentionSweeps[target+"/"+result] = [2]float64{rows, durationMs}
 }
 
+// RecordChannelHealthCheck implements ChannelHealthRecorder.
+//
+// Parameters:
+//   - outcome: how the health-check sweep finished with one channel.
+//
+// Return values: none.
+func (c *countingRecorder) RecordChannelHealthCheck(outcome string) {
+	c.channelHealth[outcome]++
+}
+
 // TestMultiRecorderFansOutOptionalExtensions proves the fan-out actually
 // forwards, not merely that it satisfies the interface. A method body that
 // silently did nothing would still pass the compile-time assertions above.
@@ -197,6 +210,7 @@ func TestMultiRecorderFansOutOptionalExtensions(t *testing.T) {
 	multi.RecordRequestOutcome(RequestOutcomeUpstream, 1234.5)
 	multi.RecordTimeToFirstToken(RequestOutcomeSuccess, 87.5)
 	multi.RecordRetentionSweep("logs", RetentionResultCompleted, 900, 4200)
+	multi.RecordChannelHealthCheck(ChannelHealthCheckConfigChanged)
 
 	for name, rec := range map[string]*countingRecorder{"first": first, "second": second} {
 		require.Equal(t, 3, rec.traceOutcomes[TraceOutcomeDroppedActiveLimit],
@@ -217,6 +231,8 @@ func TestMultiRecorderFansOutOptionalExtensions(t *testing.T) {
 			"%s child must receive time-to-first-token", name)
 		require.Equal(t, [2]float64{900, 4200}, rec.retentionSweeps["logs/"+RetentionResultCompleted],
 			"%s child must receive the retention sweep", name)
+		require.Equal(t, 1, rec.channelHealth[ChannelHealthCheckConfigChanged],
+			"%s child must receive the channel health-check outcome", name)
 	}
 }
 
@@ -237,6 +253,7 @@ func TestMultiRecorderSkipsChildrenWithoutExtensions(t *testing.T) {
 		multi.RecordRequestOutcome(RequestOutcomeCanceled, 9)
 		multi.RecordTimeToFirstToken(RequestOutcomeCanceled, 3)
 		multi.RecordRetentionSweep("traces", RetentionResultCanceled, 0, 12)
+		multi.RecordChannelHealthCheck(ChannelHealthCheckApplyFailed)
 	}, "a child without the extension must be skipped, not panic")
 
 	require.Equal(t, [][2]float64{{42, 0}}, modern.activeCalls,
@@ -247,4 +264,5 @@ func TestMultiRecorderSkipsChildrenWithoutExtensions(t *testing.T) {
 	require.Equal(t, []float64{9}, modern.requestOutcomes[RequestOutcomeCanceled])
 	require.Equal(t, []float64{3}, modern.ttft[RequestOutcomeCanceled])
 	require.Equal(t, [2]float64{0, 12}, modern.retentionSweeps["traces/"+RetentionResultCanceled])
+	require.Equal(t, 1, modern.channelHealth[ChannelHealthCheckApplyFailed])
 }

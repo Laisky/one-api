@@ -615,7 +615,8 @@
       "auto": "CHEAPEST",
       "help": "Chooses the model used to health check this channel.\n\nCHEAPEST — automatically use the cheapest model served through a chat API (chat completions, response API, Claude messages, or Gemini chat).\n\nSKIP — exclude this channel from health checks entirely. It is never probed and never auto-disabled.\n\nOnly chat-format models can be tested. Embedding, rerank, moderation, completions and media models are excluded, and so are models whose API format is unknown — pick one here to test it anyway.",
       "help_label": "How the testing model is chosen",
-      "skip": "SKIP (never test)"
+      "skip": "SKIP (never test)",
+      "unlisted_selection": "{{model}} (current)"
     },
     "title": "Channels",
     "toolbar": {

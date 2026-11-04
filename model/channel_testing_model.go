@@ -2,6 +2,10 @@ package model
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -138,49 +142,103 @@ func persistResolvedTestingModel(tx *gorm.DB, id int, requested *string, provide
 	return resolution, nil
 }
 
-// ClearStaleChannelTestingModel reverts a stored testing model that the health checker
-// found unusable back to auto-select, but only if the column still holds the value the
-// checker observed. A selection saved after the probe read the channel, such as SKIP,
-// is left untouched (compare-and-swap).
-//
-// Parameters:
-//   - ctx: request or sweep scope for the write.
-//   - id: the channel whose selection was found stale.
-//   - observed: the testing_model the checker read; nil means there is nothing to clear.
-//
-// Return values:
-//   - bool: true when the stale value was cleared, false when it had already changed.
-//   - error: a wrapped database failure.
-func ClearStaleChannelTestingModel(ctx context.Context, id int, observed *string) (bool, error) {
-	if observed == nil {
-		return false, nil
-	}
-	result := DB.WithContext(ctx).Model(&Channel{}).
-		Where("id = ? AND "+ChannelTestingModelField+" = ?", id, *observed).
-		Update(ChannelTestingModelField, nil)
-	if result.Error != nil {
-		return false, errors.Wrapf(result.Error, "clear stale testing_model for channel %d", id)
-	}
-	return result.RowsAffected > 0, nil
+// probeConfigColumns are the channel columns that determine what a health-check probe
+// sends and how its testing model is chosen. ProbeConfigRevision covers exactly these.
+var probeConfigColumns = []string{
+	"id", "type", "key", "base_url", "other", "config", "models", "model_mapping",
+	"system_prompt", "inference_profile_arn_map", ChannelTestingModelField,
 }
 
-// RefreshTestingModelWithContext replaces the channel's in-memory TestingModel with the
-// value currently stored, so a long-running health-check sweep acts on the latest
-// selection rather than on the snapshot it loaded at start.
+// ProbeConfigRevision returns a digest of the configuration a health-check probe depends
+// on: type, key, base URL, legacy and current config, models, model mapping, system
+// prompt, inference profile map, and testing model. A result or cleanup decided from one
+// revision must not be applied once the stored channel has another, because it no longer
+// describes the channel. Status is deliberately excluded; it is compared separately.
+// The digest is only compared in memory and never logged.
+//
+// Parameters: none (pointer receiver).
+//
+// Return values:
+//   - string: a hex SHA-256 digest of the probe-relevant fields.
+func (channel *Channel) ProbeConfigRevision() string {
+	digest := sha256.New()
+	writeField := func(value string) {
+		_, _ = fmt.Fprintf(digest, "%d:%s|", len(value), value)
+	}
+	writeOptional := func(value *string) {
+		if value == nil {
+			_, _ = digest.Write([]byte("-|"))
+			return
+		}
+		writeField(*value)
+	}
+	writeField(strconv.Itoa(channel.Type))
+	writeField(channel.Key)
+	writeOptional(channel.BaseURL)
+	writeOptional(channel.Other)
+	writeField(channel.Config)
+	writeField(channel.Models)
+	writeOptional(channel.ModelMapping)
+	writeOptional(channel.SystemPrompt)
+	writeOptional(channel.InferenceProfileArnMap)
+	writeOptional(channel.TestingModel)
+	return hex.EncodeToString(digest.Sum(nil))
+}
+
+// ReloadForProbeWithContext replaces the channel with its current stored row, so a
+// long-running health-check sweep chooses and probes from a consistent, current
+// configuration instead of the snapshot it loaded at start.
 //
 // Parameters:
 //   - ctx: sweep scope for the read.
 //
 // Return values:
-//   - error: a wrapped database failure; TestingModel is unchanged on error.
-func (channel *Channel) RefreshTestingModelWithContext(ctx context.Context) error {
+//   - error: a wrapped database failure; the channel is unchanged on error.
+func (channel *Channel) ReloadForProbeWithContext(ctx context.Context) error {
 	var current Channel
-	if err := DB.WithContext(ctx).Select("id", ChannelTestingModelField).
-		First(&current, "id = ?", channel.Id).Error; err != nil {
-		return errors.Wrapf(err, "refresh testing_model for channel %d", channel.Id)
+	if err := DB.WithContext(ctx).First(&current, "id = ?", channel.Id).Error; err != nil {
+		return errors.Wrapf(err, "reload channel %d for probe", channel.Id)
 	}
-	channel.TestingModel = current.TestingModel
+	*channel = current
 	return nil
+}
+
+// ClearStaleChannelTestingModel reverts a stored testing model that the health checker
+// found unusable back to auto-select, but only if the channel still has the exact probe
+// configuration the checker judged it against (including the testing model itself). A
+// selection saved since, or a model list or mapping changed since, is left untouched.
+//
+// Parameters:
+//   - ctx: request or sweep scope for the transaction.
+//   - id: the channel whose selection was found stale.
+//   - revision: the ProbeConfigRevision the checker based its decision on.
+//
+// Return values:
+//   - bool: true when the stale value was cleared, false when the channel had changed.
+//   - error: a wrapped database failure.
+func ClearStaleChannelTestingModel(ctx context.Context, id int, revision string) (bool, error) {
+	cleared := false
+	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockChannelRow(tx, id); err != nil {
+			return errors.Wrap(err, "lock channel for stale testing_model cleanup")
+		}
+		var current Channel
+		if err := tx.Select(probeConfigColumns).First(&current, "id = ?", id).Error; err != nil {
+			return errors.Wrap(err, "read locked channel for stale testing_model cleanup")
+		}
+		if current.TestingModel == nil || current.ProbeConfigRevision() != revision {
+			return nil
+		}
+		if err := tx.Model(&Channel{}).Where("id = ?", id).Update(ChannelTestingModelField, nil).Error; err != nil {
+			return errors.Wrap(err, "clear stale testing_model")
+		}
+		cleared = true
+		return nil
+	})
+	if err != nil {
+		return false, errors.Wrapf(err, "clear stale testing_model for channel %d", id)
+	}
+	return cleared, nil
 }
 
 // canonicalChannelTestingModel reports a stored testing_model the way the health
