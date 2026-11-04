@@ -5,6 +5,8 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+
+	"github.com/Laisky/one-api/common/metrics"
 )
 
 // newPrivateMetricView applies the production label allowlist together with the
@@ -40,6 +42,11 @@ var privateMetricEnums = map[string]map[string]bool{
 		"sidecar_dropped": true, "not_portable": true, "committed": true,
 		"commit_failed": true, "no_store": true, "pinned": true, "unpinned": true,
 		"not_found": true, "store_error": true,
+		// Channel health-check sweep outcomes (oneapi_channel_health_checks_total).
+		metrics.ChannelHealthCheckApplied: true, metrics.ChannelHealthCheckStatusChanged: true,
+		metrics.ChannelHealthCheckTransitionRefused: true, metrics.ChannelHealthCheckOptedOut: true,
+		metrics.ChannelHealthCheckNotApplicable: true, metrics.ChannelHealthCheckConfigChanged: true,
+		metrics.ChannelHealthCheckApplyFailed: true, metrics.ChannelHealthCheckUnreadable: true,
 	},
 	"reason":   {"disk_pressure": true, "active_file_cap": true, "writer_failure": true},
 	"result":   {"completed": true, "failed": true, "canceled": true, "success": true, "error": true, "skipped": true},
