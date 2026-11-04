@@ -466,6 +466,10 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 		if err := lockChannelRow(tx, persisted.Id); err != nil {
 			return errors.Wrapf(err, "lock channel %d for update", persisted.Id)
 		}
+		var upstreamBefore Channel
+		if err := tx.Select(abilityUpstreamColumns).First(&upstreamBefore, "id = ?", persisted.Id).Error; err != nil {
+			return errors.Wrapf(err, "read upstream configuration of channel %d before update", persisted.Id)
+		}
 		if err := tx.Model(&persisted).Omit("uuid", ChannelTestingModelField).Updates(&persisted).Error; err != nil {
 			return errors.Wrapf(err, "update channel: id=%d, name=%s", persisted.Id, persisted.Name)
 		}
@@ -492,11 +496,10 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 		if err := validateJinaChannelConfiguration(&persisted); err != nil {
 			return errors.Wrap(err, "validate updated channel")
 		}
-		if err := deleteAbilitiesWithDB(tx, persisted.Id); err != nil {
-			return errors.Wrapf(err, "delete abilities for channel %d during update", persisted.Id)
-		}
-		if err := addAbilitiesWithDB(tx, &persisted); err != nil {
-			return errors.Wrapf(err, "add abilities for channel %d during update", persisted.Id)
+		// Keep the relay-time suspensions of retained abilities unless this write changed
+		// the upstream they were measured against.
+		if err := syncAbilitiesWithDB(tx, &persisted, !sameAbilityUpstream(&upstreamBefore, &persisted)); err != nil {
+			return errors.Wrapf(err, "sync abilities for channel %d during update", persisted.Id)
 		}
 		return nil
 	})

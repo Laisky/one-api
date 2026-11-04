@@ -49,11 +49,9 @@ func ResetChannelModelsToDefaults(ctx context.Context, id int, catalog func(int)
 		if err := tx.Model(&Channel{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 			return errors.Wrap(err, "persist default channel models")
 		}
-		if err := deleteAbilitiesWithDB(tx, id); err != nil {
-			return errors.Wrap(err, "remove previous channel abilities")
-		}
-		if err := addAbilitiesWithDB(tx, planned); err != nil {
-			return errors.Wrap(err, "rebuild default channel abilities")
+		// A reset changes only the model list, so retained models keep their suspensions.
+		if err := syncAbilitiesWithDB(tx, planned, false); err != nil {
+			return errors.Wrap(err, "sync default channel abilities")
 		}
 		persisted = planned
 		return nil
