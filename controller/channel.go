@@ -633,17 +633,22 @@ func UpdateChannelPricing(c *gin.Context) {
 		}
 	}
 
-	if toolingCfg, provided, err := parseToolingConfigPayload(request.Tooling); err != nil {
+	toolingCfg, provided, err := parseToolingConfigPayload(request.Tooling)
+	if err != nil {
 		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid tooling config: "+err.Error())))
 		return
-	} else if provided {
-		if err := channel.SetToolingConfig(toolingCfg); err != nil {
+	}
+
+	// Validate the request independently of the previously loaded row. The
+	// transaction applies it again to the current locked configuration.
+	if provided {
+		if err := (&model.Channel{}).SetToolingConfig(toolingCfg); err != nil {
 			helper.RespondError(c, errors.New("Failed to set tooling config: "+err.Error()))
 			return
 		}
 	}
 
-	err = channel.UpdateWithContext(gmw.Ctx(c))
+	err = channel.UpdatePricingWithContext(gmw.Ctx(c), len(request.ModelConfigs) > 0 || len(request.ModelRatio) > 0 || len(request.CompletionRatio) > 0, toolingCfg, provided)
 	if err != nil {
 		helper.RespondError(c, err)
 		return

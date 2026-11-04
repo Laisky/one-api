@@ -103,5 +103,8 @@ PG_DSN='postgres://postgres:…@127.0.0.1:5432/oneapi?sslmode=disable' \
 go test ./model/ -run '^$' -bench 'BenchmarkChannelAbilityProjection|BenchmarkChannelTestingModelSave' -benchmem -count=5
 ```
 
-The benchmarks drop and recreate `channels` and `abilities` in the target databases, so
-point them at disposable instances only.
+The server DSNs are administrative connections. Each benchmark creates a randomly named
+`oneapi_probe_bench_*` database, migrates its own tables there, and drops only that
+database during cleanup. The database user needs CREATE DATABASE and DROP DATABASE
+privileges. Use a disposable server; an interrupted process can leave its isolated
+database behind.

@@ -2,9 +2,14 @@ package model
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"os"
 	"testing"
 
+	mysqlDriver "github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
@@ -15,38 +20,92 @@ import (
 	"github.com/Laisky/one-api/common"
 )
 
-// openProbeBenchDB opens and migrates a database for the probe-write benchmark.
-// Parameters: b is the benchmark handle and backend is "sqlite", "mysql" (MYSQL_DSN), or
-// "postgres" (PG_DSN).
-// Returns: the database; the benchmark is skipped when a server DSN is not set.
-func openProbeBenchDB(b *testing.B, backend string) *gorm.DB {
-	b.Helper()
-	var dialector gorm.Dialector
-	switch backend {
-	case "sqlite":
-		dialector = sqlite.Open(b.TempDir() + "/probe-bench.db")
-	case "mysql":
-		if os.Getenv("MYSQL_DSN") == "" {
-			b.Skip("MYSQL_DSN not set")
-		}
-		dialector = mysql.Open(os.Getenv("MYSQL_DSN"))
-	case "postgres":
-		if os.Getenv("PG_DSN") == "" {
-			b.Skip("PG_DSN not set")
-		}
-		dialector = postgres.Open(os.Getenv("PG_DSN"))
+// probeBenchDatabaseName creates an unpredictable SQL identifier for a disposable
+// benchmark database. Parameters: none. Returns: the identifier and any random-source error.
+func probeBenchDatabaseName() (string, error) {
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", err
 	}
-	db, err := gorm.Open(dialector, &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
-	require.NoError(b, err)
+	return "oneapi_probe_bench_" + hex.EncodeToString(random[:]), nil
+}
+
+// openProbeBenchDB opens an isolated database and migrates the benchmark tables.
+// Server DSNs identify an administrative connection; the benchmark creates and
+// removes only a fresh, randomly named database, never tables in the DSN database.
+// Parameters: tb is the test handle and backend is sqlite, mysql, or postgres.
+// Returns: the isolated handle; server arms skip when their DSN is not set.
+func openProbeBenchDB(tb testing.TB, backend string) *gorm.DB {
+	tb.Helper()
+	cfg := &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)}
 	if backend == "sqlite" {
+		db, err := gorm.Open(sqlite.Open(tb.TempDir()+"/probe-bench.db"), cfg)
+		require.NoError(tb, err)
 		sqlDB, err := db.DB()
-		require.NoError(b, err)
+		require.NoError(tb, err)
 		sqlDB.SetMaxOpenConns(1)
-	} else {
-		_ = db.Migrator().DropTable("abilities", "channels")
-		b.Cleanup(func() { _ = db.Migrator().DropTable("abilities", "channels") })
+		tb.Cleanup(func() { require.NoError(tb, sqlDB.Close()) })
+		require.NoError(tb, db.AutoMigrate(&Channel{}, &Ability{}))
+		return db
 	}
-	require.NoError(b, db.AutoMigrate(&Channel{}, &Ability{}))
+
+	env := "MYSQL_DSN"
+	if backend == "postgres" {
+		env = "PG_DSN"
+	} else if backend != "mysql" {
+		tb.Fatalf("unsupported benchmark backend %q", backend)
+	}
+	dsn := os.Getenv(env)
+	if dsn == "" {
+		tb.Skipf("%s not set", env)
+	}
+	name, err := probeBenchDatabaseName()
+	require.NoError(tb, err)
+
+	var admin, db *gorm.DB
+	switch backend {
+	case "mysql":
+		parsed, parseErr := mysqlDriver.ParseDSN(dsn)
+		require.NoError(tb, parseErr)
+		admin, err = gorm.Open(mysql.Open(dsn), cfg)
+		require.NoError(tb, err)
+		adminSQL, adminErr := admin.DB()
+		require.NoError(tb, adminErr)
+		tb.Cleanup(func() { require.NoError(tb, adminSQL.Close()) })
+		// The name is generated from a fixed prefix and hexadecimal random bytes.
+		require.NoError(tb, admin.Exec("CREATE DATABASE `"+name+"`").Error)
+		tb.Cleanup(func() {
+			if db != nil {
+				sqlDB, closeErr := db.DB()
+				require.NoError(tb, closeErr)
+				require.NoError(tb, sqlDB.Close())
+			}
+			require.NoError(tb, admin.Exec("DROP DATABASE `"+name+"`").Error)
+		})
+		parsed.DBName = name
+		db, err = gorm.Open(mysql.Open(parsed.FormatDSN()), cfg)
+	case "postgres":
+		parsed, parseErr := pgx.ParseConfig(dsn)
+		require.NoError(tb, parseErr)
+		admin, err = gorm.Open(postgres.Open(dsn), cfg)
+		require.NoError(tb, err)
+		adminSQL, adminErr := admin.DB()
+		require.NoError(tb, adminErr)
+		tb.Cleanup(func() { require.NoError(tb, adminSQL.Close()) })
+		require.NoError(tb, admin.Exec("CREATE DATABASE \""+name+"\"").Error)
+		tb.Cleanup(func() {
+			if db != nil {
+				sqlDB, closeErr := db.DB()
+				require.NoError(tb, closeErr)
+				require.NoError(tb, sqlDB.Close())
+			}
+			require.NoError(tb, admin.Exec("DROP DATABASE \""+name+"\"").Error)
+		})
+		parsed.Database = name
+		db, err = gorm.Open(postgres.New(postgres.Config{Conn: stdlib.OpenDB(*parsed)}), cfg)
+	}
+	require.NoError(tb, err)
+	require.NoError(tb, db.AutoMigrate(&Channel{}, &Ability{}))
 	return db
 }
 

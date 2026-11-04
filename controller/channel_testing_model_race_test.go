@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -108,6 +109,7 @@ func TestUpdateChannelPricingDoesNotReassertStaleTestingModel(t *testing.T) {
 			return
 		}
 		require.NoError(t, storeTestingModelSkip(tx.Session(&gorm.Session{NewDB: true}), channel.Id))
+		require.NoError(t, tx.Session(&gorm.Session{NewDB: true}).Exec("UPDATE channels SET name = ? WHERE id = ?", "concurrent-name", channel.Id).Error)
 	}))
 	t.Cleanup(func() { require.NoError(t, model.DB.Callback().Query().Remove(callback)) })
 
@@ -120,6 +122,10 @@ func TestUpdateChannelPricingDoesNotReassertStaleTestingModel(t *testing.T) {
 	require.True(t, fired.Load(), "the interleaving hook must have run")
 	stored, _ := readChannelTestState(t, channel.Id)
 	requireTestingModel(t, testingModelPtr(model.ChannelTestingModelSkip), stored, "database row")
+	var updated model.Channel
+	require.NoError(t, model.DB.First(&updated, channel.Id).Error)
+	require.Equal(t, "concurrent-name", updated.Name)
+	require.Equal(t, float64(2), updated.GetModelPriceConfigs()["gpt-4o"].Ratio)
 }
 
 // TestManualChannelTestKeepsSkipSavedDuringStaleCleanup reproduces the review's P2
@@ -248,4 +254,53 @@ func TestSweepHonoursSkipSavedAfterSnapshot(t *testing.T) {
 	require.Equal(t, model.ChannelStatusEnabled, channelStatus(t, optedOut.Id))
 	_, testTime := readChannelTestState(t, optedOut.Id)
 	require.Zero(t, testTime)
+}
+
+// TestPricingToolingPreservesConcurrentConfigAndPricing checks that an omitted
+// pricing map and unrelated config updates survive a tooling-only request.
+// Parameters: t owns the test. Returns: no values.
+func TestPricingToolingPreservesConcurrentConfigAndPricing(t *testing.T) {
+	setupChannelSweepTestEnvironment(t)
+	channel := insertProbeChannel(t, "tooling-race", "gpt-4o", "http://127.0.0.1:1", nil)
+	var fired atomic.Bool
+	const callback = "test:pricing_tooling_interleave"
+	require.NoError(t, model.DB.Callback().Query().After("gorm:query").Register(callback, func(tx *gorm.DB) {
+		loaded, ok := tx.Statement.Dest.(*model.Channel)
+		if !ok || loaded.Id != channel.Id || !fired.CompareAndSwap(false, true) {
+			return
+		}
+		require.NoError(t, tx.Session(&gorm.Session{NewDB: true}).Exec("UPDATE channels SET config = ?, model_configs = ? WHERE id = ?", `{"region":"concurrent"}`, `{"gpt-4o":{"ratio":3}}`, channel.Id).Error)
+	}))
+	t.Cleanup(func() { require.NoError(t, model.DB.Callback().Query().Remove(callback)) })
+	router := gin.New()
+	router.PUT("/api/channel/pricing/:id", UpdateChannelPricing)
+	serveTestingModelJSON(t, router, http.MethodPut, "/api/channel/pricing/"+channel.UUID, map[string]any{
+		"tooling": map[string]any{"whitelist": []string{"code_interpreter"}},
+	})
+	require.True(t, fired.Load())
+	var updated model.Channel
+	require.NoError(t, model.DB.First(&updated, channel.Id).Error)
+	require.Equal(t, float64(3), updated.GetModelPriceConfigs()["gpt-4o"].Ratio)
+	require.Contains(t, updated.Config, `"region":"concurrent"`)
+	require.Equal(t, []string{"code_interpreter"}, updated.GetToolingConfig().Whitelist)
+}
+
+// TestPricingRejectsInvalidToolingWithCompatibleResponse checks the existing
+// error envelope and that invalid input does not update pricing.
+// Parameters: t owns the test. Returns: no values.
+func TestPricingRejectsInvalidToolingWithCompatibleResponse(t *testing.T) {
+	setupChannelSweepTestEnvironment(t)
+	channel := insertProbeChannel(t, "tooling-invalid", "gpt-4o", "http://127.0.0.1:1", nil)
+	router := gin.New()
+	router.PUT("/api/channel/pricing/:id", UpdateChannelPricing)
+	body := `{"model_configs":{"gpt-4o":{"ratio":2}},"tooling":{"pricing":{"tool":{"usd_per_call":-1}}}}`
+	request := httptest.NewRequest(http.MethodPut, "/api/channel/pricing/"+channel.UUID, strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.JSONEq(t, `{"success":false,"message":"Failed to set tooling config: invalid tooling configuration: normalize tool pricing: tool tool usd_per_call cannot be negative"}`, response.Body.String())
+	var updated model.Channel
+	require.NoError(t, model.DB.First(&updated, channel.Id).Error)
+	require.Nil(t, updated.ModelConfigs)
 }

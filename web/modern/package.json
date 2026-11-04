@@ -12,9 +12,10 @@
     "lint:fix": "eslint . --fix",
     "check:i18n": "node scripts/check-i18n-locales.mjs",
     "type-check": "tsc --noEmit",
-    "test": "yarn test:sentry && vitest",
+    "test": "yarn test:sentry && yarn test:dependencies && vitest",
     "test:ui": "vitest --ui",
-    "test:sentry": "node --test ../../.github/scripts/browser-sentry.test.mjs ../../.github/scripts/browser-sentry-diagnostics.test.mjs ../../.github/scripts/browser-sentry-privacy.test.mjs ../../.github/scripts/browser-request-errors.test.mjs ../../.github/scripts/browser-sentry-runtime.test.mjs ../../.github/scripts/browser-sentry-react.test.mjs ../../.github/scripts/browser-sentry-sdk.test.mjs"
+    "test:sentry": "node --test ../../.github/scripts/browser-sentry.test.mjs ../../.github/scripts/browser-sentry-diagnostics.test.mjs ../../.github/scripts/browser-sentry-privacy.test.mjs ../../.github/scripts/browser-request-errors.test.mjs ../../.github/scripts/browser-sentry-runtime.test.mjs ../../.github/scripts/browser-sentry-react.test.mjs ../../.github/scripts/browser-sentry-sdk.test.mjs",
+    "test:dependencies": "node --test ../../.github/scripts/follow-redirects-security.test.cjs ../../.github/scripts/frontend-dependency-advisories.test.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -62,7 +63,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "tailwind-merge": "^3.7.0",
-    "zod": "^4.6.5",
+    "zod": "^4.6.7",
     "zustand": "^5.0.15",
     "@sentry/react": "11.7.0"
   },
@@ -100,6 +101,9 @@
   },
   "resolutions": {
     "katex": "0.18.2",
-    "@tailwindcss/typography/postcss-selector-parser": "7.1.6"
+    "@tailwindcss/typography/postcss-selector-parser": "7.1.6",
+    "**/eslint/minimatch": "11.0.4",
+    "**/@eslint/config-array/minimatch": "11.0.4",
+    "**/@typescript-eslint/typescript-estree/minimatch": "11.0.4"
   }
 }
