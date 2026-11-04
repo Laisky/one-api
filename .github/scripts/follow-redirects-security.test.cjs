@@ -3,6 +3,7 @@ const http = require('node:http');
 const { createRequire } = require('node:module');
 const path = require('node:path');
 const { test } = require('node:test');
+const vm = require('node:vm');
 
 const theme = process.env.FRONTEND_THEME || path.basename(process.cwd());
 assert.ok(['air', 'berry', 'modern'].includes(theme), 'Run from a frontend or set FRONTEND_THEME');
@@ -71,6 +72,15 @@ for (const crossOrigin of [false, true]) {
         ['proxy-authorization', 'synthetic-proxy']]) {
         assert.equal(result.headers[name], crossOrigin ? undefined : value, name);
       }
+      assert.equal(result.headers['x-control'], 'benign');
+    });
+  });
+  test(theme + ': cross-realm declared headers respect ' + boundary + ' redirects (GHSA-mrwp-f3q8-3g9p)', async () => {
+    const sensitiveHeaders = vm.runInNewContext("['X-Api-Key']");
+    assert.equal(sensitiveHeaders instanceof Array, false, 'The fixture must be a genuine cross-realm array');
+    await withRedirect(crossOrigin, async url => {
+      const result = await request(url, { 'X-Api-Key': 'synthetic-key', 'X-Control': 'benign' }, sensitiveHeaders);
+      assert.equal(result.headers['x-api-key'], crossOrigin ? undefined : 'synthetic-key');
       assert.equal(result.headers['x-control'], 'benign');
     });
   });
