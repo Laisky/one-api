@@ -10,8 +10,12 @@ const (
 	// ChannelHealthCheckTransitionRefused counts a result whose status change was refused
 	// because the status changed while the probe was in flight.
 	ChannelHealthCheckTransitionRefused = "transition_refused"
-	// ChannelHealthCheckOptedOut counts a result discarded because the channel was set to SKIP.
+	// ChannelHealthCheckOptedOut counts a channel set to SKIP: one the sweep did not probe,
+	// or one whose result it discarded because SKIP was saved while the probe was in flight.
 	ChannelHealthCheckOptedOut = "opted_out"
+	// ChannelHealthCheckNotApplicable counts a channel skipped before probing because it
+	// has no chat-capable surface or no model known to be served through a chat API format.
+	ChannelHealthCheckNotApplicable = "not_applicable"
 	// ChannelHealthCheckConfigChanged counts a result discarded because the probed
 	// configuration (key, base URL, models, mapping, testing model, ...) changed mid-probe.
 	ChannelHealthCheckConfigChanged = "config_changed"

@@ -207,21 +207,28 @@ func channelTestModelCandidates(channel *model.Channel, explicit bool) []string 
 // (a new selection, model list, or mapping may make the decision wrong).
 // Parameters: ctx scopes the write, lg is the channel-bound logger, channel is the
 // tested channel, and revision is the ProbeConfigRevision the decision was based on.
-// Returns: no values; failures are logged because the probe result stands either way.
-func clearStaleTestingModel(ctx context.Context, lg glog.Logger, channel *model.Channel, revision string) {
-	observed := channel.TestingModel
-	channel.TestingModel = nil
+// Returns: the revision a probe result must be applied against. After a confirmed
+// cleanup that is the channel's new revision (and channel reflects the cleared value);
+// otherwise it is revision unchanged, so a concurrent change still discards the result.
+// Failures are logged, not returned, because the probe proceeds either way.
+func clearStaleTestingModel(ctx context.Context, lg glog.Logger, channel *model.Channel, revision string) string {
 	writeCtx, cancel := context.WithTimeout(ctx, channelProbeWriteTimeout)
 	defer cancel()
 	cleared, err := model.ClearStaleChannelTestingModel(writeCtx, channel.Id, revision)
 	if err != nil {
 		lg.Error("failed to clear stale testing_model", zap.Error(err))
-		return
+		return revision
 	}
 	if !cleared {
 		lg.Debug("kept testing_model: the channel changed after the probe read it",
-			zap.String("observed_testing_model", derefTestingModelForLog(observed)))
+			zap.String("observed_testing_model", derefTestingModelForLog(channel.TestingModel)))
+		return revision
 	}
+	// The cleanup verified, under the row lock, that the stored probe configuration
+	// matched revision and changed nothing but testing_model, so the reloaded channel
+	// with the value cleared is exactly what is stored now.
+	channel.TestingModel = nil
+	return channel.ProbeConfigRevision()
 }
 
 // derefTestingModelForLog renders an optional testing model for structured logs.

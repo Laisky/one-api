@@ -350,7 +350,9 @@ func TestChannel(c *gin.Context) {
 	revision := channel.ProbeConfigRevision()
 	modelName, clearTestingModel, err := chooseChannelTestModelWithContext(gmw.Ctx(c), channel, c.Query("model"))
 	if clearTestingModel {
-		clearStaleTestingModel(gmw.Ctx(c), lg, channel, revision)
+		// The manual test records only its latency, never a status change, so it does
+		// not need the post-cleanup revision.
+		_ = clearStaleTestingModel(gmw.Ctx(c), lg, channel, revision)
 	}
 	if err != nil {
 		// A channel with no chat-capable surface was never probed, so it is
@@ -494,22 +496,31 @@ func runAutomaticChannelSweep(ctx context.Context, notify bool, scope string) er
 			continue
 		}
 		revision := channel.ProbeConfigRevision()
-		tik := time.Now()
 		chosenModel, clearTestingModel, err := chooseChannelTestModelWithContext(cctx, channel, "")
 		if clearTestingModel {
-			clearStaleTestingModel(cctx, clg, channel, revision)
+			// The sweep's own cleanup changes the stored revision, so the result must be
+			// applied against the revision it leaves behind.
+			revision = clearStaleTestingModel(cctx, clg, channel, revision)
 		}
-		// A channel that exposes no chat-capable surface, or whose every model
-		// is a non-chat task model (embeddings, rerank, translation, media),
-		// cannot receive a representative probe. That is an inconclusive
-		// result, not a failure: skip it entirely rather than judging it.
-		// Letting it fall through is what auto-disabled healthy
-		// embeddings-only channels (issue #400).
+		// A channel set to SKIP, one that exposes no chat-capable surface, or one whose
+		// every model is a non-chat task model (embeddings, rerank, translation, media)
+		// cannot receive a representative probe. That is an inconclusive result, not a
+		// failure: skip it entirely rather than judging it. Letting it fall through is
+		// what auto-disabled healthy embeddings-only channels (issue #400).
 		if err != nil && isChannelTestNotApplicable(err) {
+			if channel.IsTestingSkipped() {
+				clg.Info("skipped channel test: testing model set to SKIP")
+				metrics.RecordChannelHealthCheck(metrics.ChannelHealthCheckOptedOut)
+				continue
+			}
 			clg.Info("skipped channel test: channel is not chat-probeable",
 				zap.String("reason", err.Error()))
+			metrics.RecordChannelHealthCheck(metrics.ChannelHealthCheckNotApplicable)
 			continue
 		}
+		// Time the probe alone: the cleanup above may wait for a row lock, and that wait
+		// must not count towards the latency threshold.
+		tik := time.Now()
 		var openaiErr *relaymodel.Error
 		if err == nil {
 			testRequest := buildTestRequest(chosenModel)

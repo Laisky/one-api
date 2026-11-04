@@ -33,6 +33,7 @@ func TestRecordChannelHealthCheckReachesRecorder(t *testing.T) {
 		ChannelHealthCheckStatusChanged,
 		ChannelHealthCheckTransitionRefused,
 		ChannelHealthCheckOptedOut,
+		ChannelHealthCheckNotApplicable,
 		ChannelHealthCheckConfigChanged,
 		ChannelHealthCheckApplyFailed,
 		ChannelHealthCheckUnreadable,
