@@ -245,14 +245,47 @@ func SetupLogger() {
 }
 
 // FromContext returns a context-aware logger when available, otherwise the global logger.
+//
+// The availability check cannot be left to gmw.GetLogger: it never reports a
+// missing logger, it substitutes gin-middlewares' own library logger, which
+// writes to stdout only. Background work handed a process context therefore
+// bypassed the log file, the OTLP export, sampling and alerting.
 func FromContext(ctx context.Context) glog.Logger {
-	if ctx == nil {
+	if ctx == nil || !carriesRequestLogger(ctx) {
 		return Logger
 	}
 	if lg := gmw.GetLogger(ctx); lg != nil {
 		return lg
 	}
 	return Logger
+}
+
+// gmwLoggerKey is the context key gmw.SetLogger stores a request logger under.
+// gin-middlewares does not export it; TestFromContextReturnsTheRequestLogger
+// fails if the library ever renames it.
+const gmwLoggerKey gutils.CtxKey = "gmw-logger"
+
+// carriesRequestLogger reports whether ctx holds a request logger, looking where
+// gmw.GetLogger looks: the gin key store for a gin context, the context values
+// otherwise.
+//
+// Parameters:
+//   - ctx: a non-nil context.
+//
+// Return values:
+//   - bool: whether gmw.GetLogger would return a stored logger rather than its fallback.
+func carriesRequestLogger(ctx context.Context) bool {
+	var stored any
+	if c, ok := ctx.(*gin.Context); ok {
+		if c == nil {
+			return false
+		}
+		stored, _ = c.Get(gmwLoggerKey)
+	} else {
+		stored = ctx.Value(gmwLoggerKey)
+	}
+	lg, ok := stored.(glog.Logger)
+	return ok && lg != nil
 }
 
 // configureGlobalLogger reinitializes the shared logger with the provided output paths.
