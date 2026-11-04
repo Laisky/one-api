@@ -59,7 +59,7 @@ func DeriveLogExceptionAttributes(err error, attrs []attribute.KeyValue, encoded
 	return derived, nil
 }
 
-var logFmtWrapErrorType = reflect.TypeOf(fmt.Errorf("wrapped: %w", errors.New("err")))
+var logFmtWrapErrorType = reflect.TypeOf(fmt.Errorf("wrapped: %w", errors.New("err"))) //nolint:err113 // type probe copied verbatim from sdk/log v0.22.0; the value is never returned
 
 // sdkLogErrorType matches sdk/log v0.22.0 errorType, including its deliberately
 // narrow fmt single-wrapper unwrapping and named-versus-pointer type projection.

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"unicode/utf8"
 
+	"github.com/Laisky/errors/v2"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -31,7 +32,7 @@ func reflectedLogValue(value any) (attribute.Value, error) {
 	if err != nil {
 		return attribute.Value{}, err
 	}
-	if err = decoder.Decode(new(any)); err != io.EOF {
+	if err = decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		return attribute.Value{}, ErrLogEncoding
 	}
 	return decoded, nil
@@ -201,6 +202,8 @@ func validateReflectedUTF8(v reflect.Value, projection json.RawMessage, depth in
 				childProjection = projected[strconv.FormatInt(key.Int(), 10)]
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 				childProjection = projected[strconv.FormatUint(key.Uint(), 10)]
+			default:
+				// No other key kind has a derivable JSON key; validate without a projection.
 			}
 			if err := validateReflectedUTF8(iter.Value(), childProjection, depth+1); err != nil {
 				return err
@@ -235,6 +238,8 @@ func validateReflectedUTF8(v reflect.Value, projection json.RawMessage, depth in
 				return err
 			}
 		}
+	default:
+		// Boolean, numeric, and kinds JSON cannot encode hold no text to validate.
 	}
 	return nil
 }

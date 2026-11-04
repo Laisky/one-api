@@ -25,11 +25,11 @@ func HasOnlyCause(err, target error) bool {
 		if current == nil {
 			return false
 		}
-		if reflect.TypeOf(current).Comparable() && current == target {
+		if reflect.TypeOf(current).Comparable() && current == target { //nolint:err113,errorlint // exact sentinel identity per node; this loop is the bounded unwrap walk
 			continue
 		}
 
-		switch wrapped := current.(type) {
+		switch wrapped := current.(type) { //nolint:errorlint // inspects one node of the bounded unwrap walk, not the whole chain
 		case interface{ Unwrap() []error }:
 			causes := wrapped.Unwrap()
 			if len(causes) == 0 || len(causes) > maxErrorCauseNodes-visited-len(pending) {

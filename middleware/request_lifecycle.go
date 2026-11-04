@@ -80,7 +80,7 @@ func transportRequestCanceled(c *gin.Context) bool {
 	}
 	original, ok := value.(transportRequestContext)
 	return ok && original.Context != nil &&
-		original.Err() == context.Canceled && context.Cause(original.Context) == context.Canceled
+		original.Err() == context.Canceled && context.Cause(original.Context) == context.Canceled //nolint:err113,errorlint // Err returns the bare sentinel; a cause wrapping it is application-specific
 }
 
 // inspectAbortError checks err's standard unwrap tree with bounded depth and
@@ -96,10 +96,10 @@ func inspectAbortError(err error, depth int, budget *int) (complete, pureCancell
 		return false, false
 	}
 	*budget -= 1
-	if err == context.Canceled {
+	if err == context.Canceled { //nolint:err113,errorlint // per-node identity; errors.Is would bypass the depth/budget bound on cyclic chains
 		return true, true
 	}
-	switch wrapped := err.(type) {
+	switch wrapped := err.(type) { //nolint:errorlint // inspects one node of the bounded manual unwrap walk
 	case interface{ Unwrap() []error }:
 		found := false
 		pureCancellation = true
@@ -140,10 +140,10 @@ func abortErrorKind(err error) (kind errkind.Kind, cancellation, unmarkedFault b
 			return directKind, cancellation, false
 		}
 	}
-	if err == context.Canceled {
+	if err == context.Canceled { //nolint:err113,errorlint // per-node identity; errors.Is would skip kind marks nested under a wrapper
 		return errkind.Unknown, true, false
 	}
-	switch wrapped := err.(type) {
+	switch wrapped := err.(type) { //nolint:errorlint // inspects one node of the bounded manual unwrap walk
 	case interface{ Unwrap() []error }:
 		return abortJoinedErrorKind(wrapped.Unwrap(), cancellation)
 	case interface{ Unwrap() error }:

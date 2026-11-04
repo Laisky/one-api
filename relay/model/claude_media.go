@@ -5,6 +5,17 @@ import (
 	"strings"
 )
 
+// Claude media-source validation errors. Messages are client-facing and never
+// include input payloads.
+var (
+	errClaudeMediaSourceNotObject = errors.New("media source must be an object")
+	errClaudeMediaBase64Shape     = errors.New("base64 media requires data and media_type only")
+	errClaudeMediaURLShape        = errors.New("URL media requires a single url source")
+	errClaudeMediaFileShape       = errors.New("file media requires a single file_id source")
+	errClaudeMediaSourceType      = errors.New("unsupported media source type")
+	errClaudeMediaTypeMismatch    = errors.New("media source requires a matching media_type")
+)
+
 // DecodeClaudeMediaPart lowers a Claude media source into the canonical content
 // envelope. recognized stays true on malformed media so callers cannot drop it.
 // It does not fetch a URL or resolve a provider-owned file ID.
@@ -15,7 +26,7 @@ func DecodeClaudeMediaPart(block map[string]any) (part MessageContent, recognize
 	}
 	source, ok := block["source"].(map[string]any)
 	if !ok {
-		return MessageContent{}, true, errors.New("media source must be an object")
+		return MessageContent{}, true, errClaudeMediaSourceNotObject
 	}
 	var value struct {
 		Type      string `json:"type"`
@@ -31,21 +42,21 @@ func DecodeClaudeMediaPart(block map[string]any) (part MessageContent, recognize
 	switch value.Type {
 	case "base64":
 		if value.Data == "" || value.MediaType == "" || value.URL != "" || value.FileID != "" {
-			return MessageContent{}, true, errors.New("base64 media requires data and media_type only")
+			return MessageContent{}, true, errClaudeMediaBase64Shape
 		}
 		part.FileData = value.Data
 	case "url":
 		if value.URL == "" || value.Data != "" || value.FileID != "" {
-			return MessageContent{}, true, errors.New("URL media requires a single url source")
+			return MessageContent{}, true, errClaudeMediaURLShape
 		}
 		part.FileURL = value.URL
 	case "file":
 		if value.FileID == "" || value.Data != "" || value.URL != "" {
-			return MessageContent{}, true, errors.New("file media requires a single file_id source")
+			return MessageContent{}, true, errClaudeMediaFileShape
 		}
 		part.FileID = value.FileID
 	default:
-		return MessageContent{}, true, errors.New("unsupported media source type")
+		return MessageContent{}, true, errClaudeMediaSourceType
 	}
 	if kind == "document" && part.MIMEType == "" {
 		part.MIMEType = "application/pdf"
@@ -53,7 +64,7 @@ func DecodeClaudeMediaPart(block map[string]any) (part MessageContent, recognize
 	if kind == "video" || kind == "audio" {
 		// A generic file must not let audio masquerade as video (or vice versa).
 		if part.MIMEType == "" || !strings.HasPrefix(part.MIMEType, kind+"/") {
-			return MessageContent{}, true, errors.New("media source requires a matching media_type")
+			return MessageContent{}, true, errClaudeMediaTypeMismatch
 		}
 	}
 	return part, true, nil

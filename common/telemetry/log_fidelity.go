@@ -4,10 +4,11 @@ import (
 	"context"
 	"unicode/utf8"
 
-	"github.com/Laisky/one-api/common/logger/otelbridge"
-	"github.com/Laisky/one-api/common/metrics"
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+
+	"github.com/Laisky/one-api/common/logger/otelbridge"
+	"github.com/Laisky/one-api/common/metrics"
 )
 
 // fidelityLogProcessor performs no content rewrite, key allowlisting, metadata
@@ -84,6 +85,8 @@ func exceedsValueBytes(v attribute.Value, limit int) bool {
 				return true
 			}
 		}
+	default:
+		// Empty, boolean, and numeric scalars or slices carry no text or binary leaf.
 	}
 	return false
 }

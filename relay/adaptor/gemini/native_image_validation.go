@@ -2,11 +2,12 @@ package gemini
 
 import (
 	"encoding/base64"
-	"github.com/Laisky/errors/v2"
 	"io"
 	"mime"
 	"net/http"
 	"strings"
+
+	"github.com/Laisky/errors/v2"
 )
 
 // validateNativeImageData validates encoding and recognizable image signatures without exposing input bytes.
@@ -30,7 +31,7 @@ func validateNativeImageData(declared, data string) (string, error) {
 	}
 	var sample [512]byte
 	n, readErr := io.ReadFull(base64.NewDecoder(base64.StdEncoding, strings.NewReader(data)), sample[:])
-	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+	if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) {
 		return invalid()
 	}
 	detected := http.DetectContentType(sample[:n])
