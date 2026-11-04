@@ -143,3 +143,26 @@ func TestChannelStatusUpdateWithCanceledContextInvalidatesRedisCache(t *testing.
 	require.NoError(t, err)
 	require.Zero(t, v2Exists, "the v2 group-model cache must not survive a committed status change")
 }
+
+// TestChannelStatusUpdateWithExpiredDeadlineStillCommits pins the legacy status writer's
+// contract after it moved onto the transactional status setter: relay error paths call
+// it once the request is over, so an expired request deadline must not drop the change.
+// Parameters: t is the test handle. Returns: no values.
+func TestChannelStatusUpdateWithExpiredDeadlineStillCommits(t *testing.T) {
+	setupChannelCacheInvalidationTest(t)
+	channel := &Channel{Name: "expired-deadline-status", Type: 1, Status: ChannelStatusEnabled,
+		Models: "status-model", Group: fmt.Sprintf("expired-status-%d", time.Now().UnixNano())}
+	require.NoError(t, channel.Insert())
+
+	expiredCtx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	UpdateChannelStatusByIdWithContext(expiredCtx, channel.Id, ChannelStatusAutoDisabled)
+
+	var persisted Channel
+	require.NoError(t, DB.First(&persisted, channel.Id).Error)
+	require.Equal(t, ChannelStatusAutoDisabled, persisted.Status)
+	var flags []bool
+	require.NoError(t, DB.Model(&Ability{}).Where("channel_id = ?", channel.Id).Pluck("enabled", &flags).Error)
+	require.NotEmpty(t, flags)
+	require.NotContains(t, flags, true, "abilities follow the committed status")
+}

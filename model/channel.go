@@ -642,10 +642,14 @@ func UpdateChannelStatusById(id int, status int) {
 // It delegates to SetChannelStatusWithContext so the status and the ability routing
 // flags change in one locked transaction; the separate statements it used to issue let
 // a concurrent status change leave a disabled channel whose abilities still routed traffic.
+// Relay error paths call it after the request has finished, so, as before, the write
+// ignores ctx's cancellation and deadline; channelWriteTimeout still bounds lock waits.
 // Parameters: ctx carries request logging, id identifies the channel, and status is the desired channel status.
 // Returns: none; persistence failures are logged with channel identity.
 func UpdateChannelStatusByIdWithContext(ctx context.Context, id int, status int) {
-	if err := SetChannelStatusWithContext(ctx, id, status); err != nil {
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), channelWriteTimeout)
+	defer cancel()
+	if err := SetChannelStatusWithContext(writeCtx, id, status); err != nil {
 		logger.FromContext(ctx).Error("failed to update channel status",
 			append(LookupChannelRef(ctx, id).Zap(), zap.Error(err), zap.Int("status", status))...)
 	}
