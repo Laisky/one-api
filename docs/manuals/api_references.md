@@ -6430,16 +6430,21 @@ Synchronously runs one live chat-completion request against a single channel to 
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `model` | string | No | (stored testing model, else cheapest supported) | Model to send the probe request to. Trimmed; falls back to `testing_model` (if still supported) then the channel's cheapest supported model. |
+| `model` | string | No | (stored testing model, else cheapest chat-format model) | Model to send the probe request to. Trimmed. When given, the probe runs with that model even for a channel whose `testing_model` is `"__skip__"` (a deliberate one-off), provided the channel has a chat-capable endpoint, serves the model, and the model is not a known non-chat format. When omitted, the probe uses `testing_model` (if the channel still serves it through a chat API format), otherwise the channel's cheapest chat-format model; a channel set to `"__skip__"` is not probed (see the skipped response below). |
 
-**Response**: HTTP 200. Note: this endpoint does not use the standard `data` envelope; it returns flat fields. On success `message` holds the upstream reply text; on failure `success` is `false` and `message` holds the error, with `time` set to 0.
+**Response**: HTTP 200. Note: this endpoint does not use the standard `data` envelope; it returns flat fields. There are three outcomes:
+
+- **Probed and succeeded:** `success` is `true` and `message` holds the upstream reply text.
+- **Probed and failed:** `success` is `false` and `message` holds the error, with `time` set to 0.
+- **Skipped (not probed):** `success` is `false`, `skipped` is `true`, `time` is 0, `modelName` is `""`, and `message` explains why. This is returned when `model` is omitted and the channel's `testing_model` is `"__skip__"` or the channel has no model known to be served through a chat API format, and, with or without `model`, when the channel has no chat-capable endpoint. Nothing was sent upstream, so it is not an upstream failure: no test log or response time is recorded and the channel status is unchanged. Clients must check `skipped` before treating `success: false` as an outage.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `success` | bool | Whether the probe succeeded. |
-| `message` | string | Reply text on success, or error message on failure. |
-| `time` | number | Elapsed seconds (0 on failure). |
-| `modelName` | string | The model actually used for the probe. |
+| `success` | bool | Whether the probe ran and succeeded. |
+| `skipped` | bool | Present and `true` only when the channel was not probed. |
+| `message` | string | Reply text on success, the error on failure, or the reason on a skip. |
+| `time` | number | Elapsed seconds (0 on failure or skip). |
+| `modelName` | string | The model actually used for the probe (`""` on a skip). |
 
 ```json
 {
@@ -6447,6 +6452,18 @@ Synchronously runs one live chat-completion request against a single channel to 
   "message": "Hello! How can I help you today?",
   "time": 0.842,
   "modelName": "gpt-4o-mini"
+}
+```
+
+A channel set to SKIP, tested without `model`:
+
+```json
+{
+  "success": false,
+  "skipped": true,
+  "message": "channel testing is disabled for this channel (testing model set to SKIP)",
+  "time": 0,
+  "modelName": ""
 }
 ```
 

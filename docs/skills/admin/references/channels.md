@@ -185,12 +185,12 @@ Single, synchronous:
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   -X POST "$ONEAPI_BASE_URL/api/channel/test/$CHANNEL_UUID?model=gpt-4o-mini" \
-  | jq '{success, message, time, modelName}'
+  | jq '{success, skipped, message, time, modelName}'
 ```
 Response:
 - `success: true` → round-trip succeeded. `time` is seconds.
 - `success: false`, no `skipped` → `.message` has the upstream error (auth, rate limit, model unavailable). The channel is **not** auto-disabled from a single failed manual test.
-- `success: false`, `skipped: true` → the channel was **never probed**: it exposes no chat-capable endpoint, or every model it lists is a non-chat task model. This is an inconclusive result, not a failure — `test_time` and `response_time` are left untouched.
+- `success: false`, `skipped: true` → the channel was **never probed**: its `testing_model` is `"__skip__"` and no `?model=` was given, it exposes no chat-capable endpoint, or every model it lists is a non-chat task model. This is an inconclusive result, not a failure — `test_time` and `response_time` are left untouched. Pass `?model=` to force a one-off probe of a SKIP channel.
 
 All at once, async (fire-and-forget):
 ```bash
@@ -278,10 +278,36 @@ disabled automatically (status 3), and only when the probe succeeded within
 **Notifications.** Status-change notifications ("disabled" / "re-enabled") are sent only
 for transitions the transaction actually applied. When automatic disabling is off, a
 failed or slow probe sends a probe-failure notice instead; it changes nothing. Every
-channel the sweep finishes with is counted in `oneapi_channel_health_checks_total` by
-`outcome`: `applied`, `status_changed`, `transition_refused`, `opted_out`,
-`config_changed`, `apply_failed`, `unreadable`. A rising `apply_failed`, `unreadable`,
-or `config_changed` count means results are being discarded rather than acted on.
+channel the sweep processes is counted once in `oneapi_channel_health_checks_total` by
+`outcome`:
+
+| Outcome | Meaning |
+|---|---|
+| `applied` | Probed; latency recorded; no status change called for. |
+| `status_changed` | Probed; the channel was disabled or re-enabled. |
+| `transition_refused` | Probed; the status changed during the probe, so it was kept. |
+| `opted_out` | Set to SKIP: not probed, or SKIP was saved during the probe and the result dropped. |
+| `not_applicable` | Not probed: no chat-capable endpoint, or no model known to use a chat API format. |
+| `config_changed` | Probed; the probed configuration changed during the probe, so the result was dropped. |
+| `apply_failed` | Probed; the result could not be persisted atomically and was dropped. |
+| `unreadable` | Not probed: the current configuration could not be read. |
+
+A sweep cancelled part-way (shutdown) does not count the channels it never reached. A
+rising `apply_failed`, `unreadable`, or `config_changed` count means results are being
+discarded rather than acted on.
+
+The relay-time, balance and success-rate disable paths follow the same notification
+rule: they move only an **enabled** channel to auto-disabled, in one transaction with its
+abilities, and announce it only once that commits. A channel that is already disabled —
+automatically, or manually by you — keeps its status and is not announced again, so a
+burst of failing requests sends one notification, and an automatic path never turns your
+manual disable into one the sweep could re-enable.
+
+**Suspensions survive channel saves.** A relay-time suspension of one (group, model)
+ability (after a 429, a 5xx, or an auth error) is kept when you save the channel's testing
+model, name, priority, status, pricing, groups, or model list, as long as the ability
+still exists. Saving a new key, base URL, type, config, model mapping, or inference
+profile map lifts the channel's suspensions, because that is how you fix what caused them.
 
 **Models of unknown format are excluded by default.** If nothing in either catalogue
 describes a model, the gateway does not guess: assuming "chat" is what sends a Chat

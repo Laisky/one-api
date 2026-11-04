@@ -138,7 +138,7 @@ func buildDuplicateChannelName(name string) string {
 
 // prepareChannelForCreate normalizes a channel before insert.
 // It mutates the channel by setting creation timestamps and applying default BaseURL values when needed.
-// TestingModel is normalized by the model layer on insert (model.NormalizeChannelTestingModel), so
+// TestingModel is normalized by the model layer on insert (Channel.NormalizeTestingModel), so
 // creation, duplication, and updates share one policy that keeps the SKIP sentinel.
 func prepareChannelForCreate(channel *model.Channel) {
 	channel.CreatedTime = helper.GetTimestamp()

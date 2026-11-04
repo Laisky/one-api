@@ -156,6 +156,13 @@ var probeConfigColumns = []string{
 // describes the channel. Status is deliberately excluded; it is compared separately.
 // The digest is only compared in memory and never logged.
 //
+// Other columns the probe's request context reads are excluded because they cannot change
+// what the upstream receives or how it answers: group only feeds the channel billing
+// ratio (and the test cost ignores it), ratelimit is enforced by the relay middleware,
+// which the probe bypasses, and model_configs or the legacy ratios only rank which
+// served model auto-selection probes, while a probe of any served model remains a valid
+// health sample. Name, weight, priority, and usage counters never reach the probe.
+//
 // Parameters: none (pointer receiver).
 //
 // Return values:
