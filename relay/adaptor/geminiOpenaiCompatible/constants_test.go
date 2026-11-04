@@ -176,8 +176,8 @@ func TestGeminiMetadataOverrides(t *testing.T) {
 	flashCfg, ok := ModelRatios["gemini-3-flash-preview"]
 	require.True(t, ok)
 	require.EqualValues(t, 65536, flashCfg.MaxOutputTokens)
-	// Gemini 3 Flash defaults to "minimal" thinking per the official docs.
-	require.Equal(t, "minimal", flashCfg.DefaultReasoningEffort)
+	// Google now documents high as the Gemini 3 Flash preview default.
+	require.Equal(t, "high", flashCfg.DefaultReasoningEffort)
 
 	flashLiteCfg, ok := ModelRatios["gemini-3.1-flash-lite-preview"]
 	require.True(t, ok)

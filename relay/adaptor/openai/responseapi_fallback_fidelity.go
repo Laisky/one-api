@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // ErrResponseNamespaceUnsupported identifies call identities that require native Responses support.
@@ -20,7 +21,7 @@ var ErrResponseFallbackStateNotPortable = errors.Wrap(ErrResponseFallbackNotRepr
 // allowReferences permits owner-scoped resolution before hydration only. Reasoning
 // and thinking retain their existing sidecar degradation policy; this validation
 // does not promote opaque state into text or inspect function arguments/results.
-func ValidateResponseAPIFallbackFidelity(input []any, allowReferences bool) error {
+func ValidateResponseAPIFallbackFidelity(input []any, allowReferences bool, nativeMedia ...bool) error {
 	for _, raw := range input {
 		item, ok := raw.(map[string]any)
 		if !ok {
@@ -45,7 +46,7 @@ func ValidateResponseAPIFallbackFidelity(input []any, allowReferences bool) erro
 				return errors.Wrap(ErrResponseFallbackNotRepresentable, "unresolved item reference")
 			}
 		case "", "message":
-			if err := validateResponseFallbackContent(item["content"]); err != nil {
+			if err := validateResponseFallbackContent(item["content"], nativeMedia...); err != nil {
 				return err
 			}
 		default:
@@ -56,7 +57,7 @@ func ValidateResponseAPIFallbackFidelity(input []any, allowReferences bool) erro
 }
 
 // validateResponseFallbackContent accepts only content the converter represents.
-func validateResponseFallbackContent(raw any) error {
+func validateResponseFallbackContent(raw any, nativeMedia ...bool) error {
 	switch content := raw.(type) {
 	case nil, string:
 		return nil
@@ -88,7 +89,13 @@ func validateResponseFallbackContent(raw any) error {
 				if !responseFallbackFileRepresentable(part) {
 					return errors.Wrap(ErrResponseFallbackNotRepresentable, "unsupported image part")
 				}
-			case "input_file":
+			case "input_file", "input_video", "video_url":
+				if len(nativeMedia) > 0 && nativeMedia[0] {
+					if _, err := (model.Message{Content: []any{part}}).ParseContentChecked(); err != nil {
+						return errors.Wrap(ErrResponseFallbackNotRepresentable, "invalid native media part")
+					}
+					continue
+				}
 				// The shared Chat content model uses a legacy flat file shape,
 				// not the nested Chat file protocol. Do not dispatch invalid
 				// wire data or infer a provider-uploaded file's type here.

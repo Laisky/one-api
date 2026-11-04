@@ -91,7 +91,19 @@ func EstimateTierAdmission(input ComputeInput, maxOutputTokens int, bufferTokens
 				return 0, true, errors.New("invalid tier admission ratio")
 			}
 		}
-		cost := float64(prompt)*inputRate + float64(output)*completion + float64(bufferTokens)*normal
+		audioCost := 0.0
+		if input.Usage.NativeGoogleAudio != nil {
+			full := *input.Usage
+			audio := *input.Usage.NativeGoogleAudio
+			audio.CachedTokens, audio.CachedKnown = 0, true
+			full.NativeGoogleAudio = &audio
+			var unpriced bool
+			audioCost, unpriced = nativeGoogleAudioSurcharge(&full, cfg, inputRate, inputRate, 0)
+			if unpriced {
+				return 0, true, errors.New("invalid native audio admission receipt")
+			}
+		}
+		cost := float64(prompt)*inputRate + audioCost + float64(output)*completion + float64(bufferTokens)*normal
 		if math.IsNaN(cost) || math.IsInf(cost, 0) || cost < 0 || math.Ceil(cost) >= float64(math.MaxInt64) {
 			return 0, true, errors.New("tier admission quote exceeds integer range")
 		}

@@ -22,19 +22,15 @@ func ValidateNativeToolSupport(c *gin.Context, request *model.GeneralOpenAIReque
 		return errors.New("gemini request is nil")
 	}
 	modelName := nativeEffectiveModel(c, request.Model)
+	if _, err := nativeImageThinkingLevel(modelName, request.ReasoningEffort); err != nil {
+		return errors.Wrap(err, "validation failed")
+	}
 	// Other Gemini models retain their existing transport contracts.
 	if !geminiOpenaiCompatible.IsGeminiNanoBanana21Model(modelName) {
 		return nil
 	}
 	if request.N != nil && *request.N > 1 {
 		return errors.New("native Gemini Nano Banana 2.1 supports at most one response candidate")
-	}
-	if request.ReasoningEffort != nil {
-		switch strings.ToLower(*request.ReasoningEffort) {
-		case "", "default", "minimal", "medium", "high":
-		default:
-			return errors.New("reasoning effort is not supported by Gemini Nano Banana 2.1")
-		}
 	}
 	if request.ToolChoice != nil {
 		choice, ok := request.ToolChoice.(string)
@@ -128,14 +124,37 @@ func ValidateNativeToolSupport(c *gin.Context, request *model.GeneralOpenAIReque
 	return nil
 }
 
-// configureNanoBananaThinking maps a supported explicit reasoning level to native configuration.
-func configureNanoBananaThinking(out *ChatRequest, request model.GeneralOpenAIRequest) {
-	if geminiOpenaiCompatible.IsGeminiNanoBanana21Model(request.Model) && request.ReasoningEffort != nil {
-		level := strings.ToLower(*request.ReasoningEffort)
-		if level != "" && level != "default" {
-			out.GenerationConfig.ThinkingConfig = &ThinkingConfig{ThinkingLevel: level}
-		}
+// nativeImageThinkingLevel selects the contract for the actual upstream model.
+// The Nano Banana default remains omitted for backward compatibility; Flash-Lite
+// Image explicitly uses minimal unless the caller selects high.
+func nativeImageThinkingLevel(modelName string, requested *string) (string, error) {
+	switch {
+	case geminiOpenaiCompatible.IsGeminiNanoBanana21Model(modelName):
+		return resolveNativeThinkingLevel(requested, []string{"minimal", "medium", "high"}, "")
+	case strings.EqualFold(modelName, "gemini-3.1-flash-lite-image"):
+		return resolveNativeThinkingLevel(requested, []string{"minimal", "high"}, "minimal")
+	default:
+		return "", nil
 	}
+}
+
+// configureNanoBananaThinking serializes only a validated model-specific level.
+func configureNanoBananaThinking(out *ChatRequest, request model.GeneralOpenAIRequest) error {
+	requested := request.ReasoningEffort
+	if request.Reasoning != nil && request.Reasoning.Effort != nil {
+		if requested != nil && !strings.EqualFold(*requested, *request.Reasoning.Effort) {
+			return errors.New("validation failed: conflicting reasoning effort controls")
+		}
+		requested = request.Reasoning.Effort
+	}
+	level, err := nativeImageThinkingLevel(request.Model, requested)
+	if err != nil {
+		return err
+	}
+	if level != "" {
+		out.GenerationConfig.ThinkingConfig = &ThinkingConfig{ThinkingLevel: level}
+	}
+	return nil
 }
 
 // nativeEffectiveModel resolves the mapped upstream model without modifying the request.
@@ -150,36 +169,27 @@ func nativeEffectiveModel(c *gin.Context, modelName string) string {
 	return modelName
 }
 
-// ConvertNativeRequest converts a request using the effective Nano Banana model when mapped.
+// ConvertNativeRequest is the legacy no-error conversion entrypoint. New callers
+// must use ConvertNativeRequestChecked so validation errors reach the client.
 func ConvertNativeRequest(c *gin.Context, request model.GeneralOpenAIRequest) *ChatRequest {
-	isNanoBanana := false
-	if effective := nativeEffectiveModel(c, request.Model); geminiOpenaiCompatible.IsGeminiNanoBanana21Model(effective) {
-		request.Model = effective
-		isNanoBanana = true
-	}
-	converted := ConvertRequest(request)
-	if isNanoBanana {
-		// "tool_choice": "none" is a valid no-tools client constraint,
-		// but upstream Nano Banana does not support a function-calling
-		// toolConfig even when its mode is NONE.
-		converted.ToolConfig = nil
-	}
+	converted, _ := ConvertNativeRequestChecked(c, request)
 	return converted
 }
 
-// ConvertNativeRequestChecked converts native requests and validates Nano Banana image inputs.
-// Parameters: c supplies the mapped model and request is the validated source request.
-// Returns: the converted payload or a controlled error without exposing the image URL.
+// ConvertNativeRequestChecked resolves mapped model contracts and preserves
+// conversion errors for all native Gemini and Vertex requests. The source
+// request is copied by value; its public model alias is never overwritten.
 func ConvertNativeRequestChecked(c *gin.Context, request model.GeneralOpenAIRequest) (*ChatRequest, error) {
-	effective := nativeEffectiveModel(c, request.Model)
-	if !geminiOpenaiCompatible.IsGeminiNanoBanana21Model(effective) {
-		return ConvertNativeRequest(c, request), nil
-	}
-	request.Model = effective
-	converted, err := convertRequest(request, true)
+	request.Model = nativeEffectiveModel(c, request.Model)
+	isNanoBanana := geminiOpenaiCompatible.IsGeminiNanoBanana21Model(request.Model)
+	converted, err := convertRequest(request, isNanoBanana)
 	if err != nil {
 		return nil, errors.Wrap(err, "convert native Gemini request")
 	}
-	converted.ToolConfig = nil
+	if isNanoBanana {
+		// A client no-tools constraint must not become an unsupported native
+		// function-calling configuration on Nano Banana 2.1.
+		converted.ToolConfig = nil
+	}
 	return converted, nil
 }

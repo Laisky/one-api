@@ -22,6 +22,7 @@ type UsageMetadata struct {
 	ThoughtsTokenCount      int                   `json:"thoughtsTokenCount,omitempty"`
 	PromptTokensDetails     []PromptTokensDetails `json:"promptTokensDetails,omitempty"`
 	CandidatesTokensDetails []PromptTokensDetails `json:"candidatesTokensDetails,omitempty"`
+	CacheTokensDetails      []PromptTokensDetails `json:"cacheTokensDetails,omitempty"`
 }
 
 type PromptTokensDetails struct {

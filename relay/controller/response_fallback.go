@@ -55,7 +55,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		)
 	}
 
-	chatRequest, err := openai.ConvertResponseAPIToChatCompletionRequest(responseAPIRequest)
+	chatRequest, err := openai.ConvertResponseAPIToChatCompletionRequest(responseAPIRequest, isNativeGoogleChannel(meta))
 	if err != nil {
 		if errors.Is(err, openai.ErrResponseBackgroundUnsupported) {
 			return openai.ErrorWrapper(err, "background_not_supported", http.StatusBadRequest)
@@ -192,7 +192,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	}
 	promptTokens := promptUsage.PromptTokens
 	meta.PromptTokens = promptTokens
-	preConsumedQuota, bizErr := preConsumeQuota(c, chatRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
+	preConsumedQuota, bizErr := preConsumeQuota(c, preparedChatQuotaRequest(c, chatRequest), promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 	if bizErr != nil {
 		lg.Warn("preConsumeQuota failed",
 			zap.Error(bizErr.RawError),
@@ -357,7 +357,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		return execErr
 	}
 
-	convertedRequest, err := requestAdaptor.ConvertRequest(c, relaymode.ChatCompletions, chatRequest)
+	convertedRequest, err := preparedGoogleOrConvertRequest(c, meta, chatRequest, requestAdaptor)
 	if err != nil {
 		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "convert_request_failed")
 		return wrapConvertRequestError(err)
@@ -400,6 +400,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	}
 
 	usage, respErr := requestAdaptor.DoResponse(c, resp, meta)
+	applyNativeGoogleUsageEvidence(c, usage)
 	if upstreamCapture != nil {
 		logUpstreamResponseFromCapture(lg, resp, upstreamCapture, "response_api_fallback")
 	} else {

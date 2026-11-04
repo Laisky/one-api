@@ -115,6 +115,11 @@ func geminiSeptember2026RoboticsConfig(streaming bool) adaptor.ModelConfig {
 		config.Description = "Gemini Robotics ER 2 Streaming preview for low-latency bidirectional audio and video robotics agents over the Live API."
 		return config
 	}
+	// The REST Robotics ER 2 model defaults to high and also supports minimal;
+	// the distinct Live-only streaming preview retains its separate settings.
+	// Source: https://ai.google.dev/gemini-api/docs/thinking (2026-11-01).
+	config.SupportedReasoningEfforts = append([]string(nil), gemini3FlashReasoningEfforts...)
+	config.DefaultReasoningEffort = "high"
 	config.CachedInputRatio = 0.10 * ratio.MilliTokensUsd
 	config.TimeWindows[0].Overlay.CachedInputRatio = 0.20 * ratio.MilliTokensUsd
 	return config

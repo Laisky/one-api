@@ -213,9 +213,9 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		quoteRequest = &originalToolSearchQuote
 		quoteConverted = originalConvertedQuote
 	}
-	promptTokens, quoteErr := preparedClaudePromptTokens(ctx, quoteRequest, quoteConverted)
+	promptTokens, quoteErr := preparedClaudePromptTokensForChannel(c, meta, quoteRequest, quoteConverted)
 	if quoteErr != nil {
-		return openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", http.StatusBadRequest)
+		return openai.ErrorWrapper(quoteErr, "invalid_claude_prompt_quote", nativeGooglePromptErrorStatus(meta, quoteConverted, quoteErr))
 	}
 	meta.PromptTokens = promptTokens
 	c.Set(ctxkey.ConvertedRequest, convertedRequest)
@@ -691,6 +691,7 @@ handleResponse:
 	}
 
 postConsume:
+	applyNativeGoogleUsageEvidence(c, usage)
 	if raw, ok := c.Get(ctxkey.ClaudeGeminiImageReceipt); ok {
 		if receipt, valid := raw.(*relaymodel.ClaudeImageReceipt); valid && receipt != nil {
 			if usage != nil {

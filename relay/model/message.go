@@ -183,6 +183,10 @@ func (m Message) ParseContent() []MessageContent {
 			if !ok {
 				continue
 			}
+			if media, recognized, err := decodeMediaPart(contentMap); recognized && err == nil {
+				contentList = append(contentList, media)
+				continue
+			}
 			typeStr, _ := contentMap["type"].(string)
 			switch strings.ToLower(typeStr) {
 			case strings.ToLower(ContentTypeText):
@@ -290,11 +294,14 @@ type ImageURL struct {
 }
 
 type MessageContent struct {
-	// Type identifies the content part, such as text, image_url, file, or input_audio.
+	// Type identifies text, image_url, video_url, file, or input_audio.
 	Type       string      `json:"type,omitempty"`
 	Text       *string     `json:"text,omitempty"`
 	ImageURL   *ImageURL   `json:"image_url,omitempty"`
 	InputAudio *InputAudio `json:"input_audio,omitempty"`
+	VideoURL   *VideoURL   `json:"video_url,omitempty"`
+	FileURL    string      `json:"file_url,omitempty"`
+	MIMEType   string      `json:"mime_type,omitempty"`
 	FileID     string      `json:"file_id,omitempty"`
 	FileData   string      `json:"file_data,omitempty"`
 	Filename   string      `json:"filename,omitempty"`

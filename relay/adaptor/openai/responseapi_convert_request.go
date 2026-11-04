@@ -11,7 +11,7 @@ import (
 
 // ConvertResponseAPIToChatCompletionRequest converts a Response API request into a
 // ChatCompletion request for providers that do not support Response API natively.
-func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*model.GeneralOpenAIRequest, error) {
+func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nativeMedia ...bool) (*model.GeneralOpenAIRequest, error) {
 	if request == nil {
 		return nil, errors.New("response api request is nil")
 	}
@@ -19,7 +19,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 		return nil, errors.Wrap(err, "validate response fallback input")
 	}
 
-	if err := ValidateResponseAPIFallbackFidelity(request.Input, false); err != nil {
+	if err := ValidateResponseAPIFallbackFidelity(request.Input, false, nativeMedia...); err != nil {
 		return nil, errors.Wrap(err, "validate response fallback fidelity")
 	}
 
@@ -343,7 +343,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					continue
 				}
 			}
-			msg, err := responseContentItemToMessage(v)
+			msg, err := responseContentItemToMessage(v, nativeMedia...)
 			if err != nil {
 				return nil, errors.Wrap(err, "convert response api content to chat message")
 			}
@@ -450,7 +450,7 @@ func extractResponseAPIReasoningContent(item map[string]any) string {
 }
 
 // responseContentItemToMessage converts one supported Responses input item to a Chat message or returns an error.
-func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
+func responseContentItemToMessage(item map[string]any, nativeMedia ...bool) (*model.Message, error) {
 	role := normalizeResponseMessageRoleForChat(item["role"], "user")
 
 	var namePtr *string
@@ -486,6 +486,16 @@ func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
 					parts = append(parts, model.MessageContent{Type: model.ContentTypeText, Text: &text})
 					textSections = append(textSections, text)
 				}
+			case "input_file", "input_video", "video_url":
+				if len(nativeMedia) == 0 || !nativeMedia[0] {
+					return nil, errors.WithStack(ErrResponseFallbackNotRepresentable)
+				}
+				media, err := (model.Message{Content: []any{partMap}}).ParseContentChecked()
+				if err != nil {
+					return nil, errors.Wrap(err, "validation failed: response media")
+				}
+				parts = append(parts, media...)
+				hasNonText = true
 			case "input_image":
 				if url, ok := partMap["image_url"].(string); ok && url != "" {
 					image := &model.ImageURL{Url: url}

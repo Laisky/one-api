@@ -246,10 +246,15 @@ func convertRequest(textRequest model.GeneralOpenAIRequest, strictImages bool) (
 		},
 	}
 
+	if textRequest.MaxCompletionTokens != nil {
+		geminiRequest.GenerationConfig.MaxOutputTokens = *textRequest.MaxCompletionTokens
+	}
 	if geminiRequest.GenerationConfig.MaxOutputTokens == 0 {
 		geminiRequest.GenerationConfig.MaxOutputTokens = config.DefaultMaxToken
 	}
-	configureNanoBananaThinking(&geminiRequest, textRequest)
+	if err := configureNanoBananaThinking(&geminiRequest, textRequest); err != nil {
+		return nil, errors.Wrap(err, "validation failed: reasoning effort")
+	}
 	if textRequest.ResponseFormat != nil {
 		if mimeType, ok := mimeTypeMap[textRequest.ResponseFormat.Type]; ok {
 			geminiRequest.GenerationConfig.ResponseMimeType = mimeType
@@ -366,9 +371,14 @@ func convertRequest(textRequest model.GeneralOpenAIRequest, strictImages bool) (
 	}
 
 	shouldAddDummyModelMessage := false
+	var additionalInlineBytes int64
 	for _, message := range textRequest.Messages {
-		// Start with initial content based on message string content
-		initialText := message.StringContent()
+		// Only prefill scalar content. Multipart text stays in its original
+		// position relative to media and must not be concatenated/duplicated.
+		initialText := ""
+		if message.IsStringContent() {
+			initialText = message.StringContent()
+		}
 		var parts []Part
 
 		// Add text content if it's not empty
@@ -404,7 +414,10 @@ func convertRequest(textRequest model.GeneralOpenAIRequest, strictImages bool) (
 		}
 
 		// Parse structured content and add additional parts
-		openaiContent := message.ParseContent()
+		openaiContent, err := message.ParseContentChecked()
+		if err != nil {
+			return nil, errors.Wrap(err, "validation failed: native Gemini content")
+		}
 		imageNum := 0
 		for _, part := range openaiContent {
 			if part.Type == model.ContentTypeText && part.Text != nil && *part.Text != "" {
@@ -436,6 +449,16 @@ func convertRequest(textRequest model.GeneralOpenAIRequest, strictImages bool) (
 						Data:     data,
 					},
 				})
+			} else if part.Type == model.ContentTypeVideoURL || part.Type == model.ContentTypeFile || part.Type == model.ContentTypeInputAudio {
+				converted, size, err := convertNativeMediaPart(textRequest.Model, part)
+				if err != nil {
+					return nil, errors.Wrap(err, "validation failed: native Gemini media")
+				}
+				additionalInlineBytes += size
+				if additionalInlineBytes > nativeInlineMediaLimit {
+					return nil, errors.New("validation failed: aggregate inline video/audio/file input exceeds the relay limit")
+				}
+				parts = append(parts, converted)
 			}
 		}
 

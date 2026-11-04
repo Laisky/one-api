@@ -92,151 +92,13 @@ func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageReques
 	return request, nil
 }
 
+// ConvertClaudeRequest lowers Claude content through the common native Gemini pipeline.
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
-	if request == nil {
-		return nil, errors.New("request is nil")
+	converted, err := ConvertClaudeToNativeChat(c, request)
+	if err != nil {
+		return nil, err
 	}
-
-	// Convert Claude Messages API request to OpenAI format first
-	openaiRequest := &model.GeneralOpenAIRequest{
-		Model:       request.Model,
-		MaxTokens:   request.MaxTokens,
-		Temperature: request.Temperature,
-		TopP:        request.TopP,
-		Stream:      request.Stream != nil && *request.Stream,
-		Stop:        request.StopSequences,
-	}
-	if structuredResponseFormat := claudeStructuredResponseFormat(request); structuredResponseFormat != nil {
-		openaiRequest.ResponseFormat = structuredResponseFormat
-	}
-
-	// Convert system prompt
-	if request.System != nil {
-		switch system := request.System.(type) {
-		case string:
-			if system != "" {
-				openaiRequest.Messages = append(openaiRequest.Messages, model.Message{
-					Role:    "system",
-					Content: system,
-				})
-			}
-		case []any:
-			// For structured system content, extract text parts
-			var systemParts []string
-			for _, block := range system {
-				if blockMap, ok := block.(map[string]any); ok {
-					if text, exists := blockMap["text"]; exists {
-						if textStr, ok := text.(string); ok {
-							systemParts = append(systemParts, textStr)
-						}
-					}
-				}
-			}
-			if len(systemParts) > 0 {
-				systemText := strings.Join(systemParts, "\n")
-				openaiRequest.Messages = append(openaiRequest.Messages, model.Message{
-					Role:    "system",
-					Content: systemText,
-				})
-			}
-		}
-	}
-
-	// Convert messages
-	for _, msg := range request.Messages {
-		openaiMessage := model.Message{
-			Role: msg.Role,
-		}
-
-		// Convert content based on type
-		switch content := msg.Content.(type) {
-		case string:
-			// Simple string content
-			openaiMessage.Content = content
-		case []any:
-			// Structured content blocks - convert to OpenAI format
-			var contentParts []model.MessageContent
-			for _, block := range content {
-				if blockMap, ok := block.(map[string]any); ok {
-					if blockType, exists := blockMap["type"]; exists {
-						switch blockType {
-						case "text":
-							if text, exists := blockMap["text"]; exists {
-								if textStr, ok := text.(string); ok {
-									contentParts = append(contentParts, model.MessageContent{
-										Type: "text",
-										Text: &textStr,
-									})
-								}
-							}
-						case "image":
-							if source, exists := blockMap["source"]; exists {
-								if sourceMap, ok := source.(map[string]any); ok {
-									imageURL := model.ImageURL{}
-									if mediaType, exists := sourceMap["media_type"]; exists {
-										if data, exists := sourceMap["data"]; exists {
-											if dataStr, ok := data.(string); ok {
-												// Convert to data URL format
-												imageURL.Url = fmt.Sprintf("data:%s;base64,%s", mediaType, dataStr)
-											}
-										}
-									}
-									contentParts = append(contentParts, model.MessageContent{
-										Type:     "image_url",
-										ImageURL: &imageURL,
-									})
-								}
-							}
-						}
-					}
-				}
-			}
-			if len(contentParts) > 0 {
-				openaiMessage.Content = contentParts
-			}
-		default:
-			// Fallback: convert to string
-			if contentBytes, err := json.Marshal(content); err == nil {
-				openaiMessage.Content = string(contentBytes)
-			}
-		}
-
-		openaiRequest.Messages = append(openaiRequest.Messages, openaiMessage)
-	}
-
-	// Convert tools
-	if openaiRequest.ResponseFormat == nil {
-		for _, tool := range request.Tools {
-			openaiTool := model.Tool{
-				Type: "function",
-				Function: &model.Function{
-					Name:        tool.Name,
-					Description: tool.Description,
-				},
-			}
-
-			// Convert input schema
-			if tool.InputSchema != nil {
-				if schemaMap, ok := tool.InputSchema.(map[string]any); ok {
-					openaiTool.Function.Parameters = schemaMap
-				}
-			}
-
-			openaiRequest.Tools = append(openaiRequest.Tools, openaiTool)
-		}
-	}
-
-	// Convert tool choice
-	if request.ToolChoice != nil && openaiRequest.ResponseFormat == nil {
-		openaiRequest.ToolChoice = request.ToolChoice
-	}
-
-	// Mark this as a Claude Messages conversion for response handling
-	c.Set(ctxkey.ClaudeMessagesConversion, true)
-	c.Set(ctxkey.OriginalClaudeRequest, request)
-
-	// Now convert using Gemini's existing logic
-	return a.ConvertRequest(c, relaymode.ChatCompletions, openaiRequest)
+	return a.ConvertRequest(c, relaymode.ChatCompletions, converted)
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
@@ -353,7 +215,7 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 				})
 			}
 
-			if geminiOpenaiCompatible.IsGeminiNanoBanana21Model(meta.ActualModelName) {
+			if geminiOpenaiCompatible.IsGeminiImageGenerationModel(meta.ActualModelName) {
 				if image := claudeGeminiImageText(part); image != "" {
 					claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: image})
 					imageCount++
@@ -381,6 +243,7 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 
 	// Populate usage if metadata available or fall back to local estimates
 	if geminiResp.UsageMetadata != nil {
+		c.Set(NativeUsageReceiptKey, geminiUsageMetadataToOpenAIUsage(geminiResp.UsageMetadata))
 		claudeResp.Usage.InputTokens = geminiResp.UsageMetadata.PromptTokenCount
 		if geminiResp.UsageMetadata.TotalTokenCount > 0 && geminiResp.UsageMetadata.PromptTokenCount > 0 {
 			claudeResp.Usage.OutputTokens = geminiResp.UsageMetadata.TotalTokenCount - geminiResp.UsageMetadata.PromptTokenCount
@@ -406,7 +269,7 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 		return nil, openai.ErrorWrapper(err, "marshal_claude_response_failed", http.StatusInternalServerError)
 	}
 
-	if geminiOpenaiCompatible.IsGeminiNanoBanana21Model(meta.ActualModelName) {
+	if geminiOpenaiCompatible.IsGeminiImageGenerationModel(meta.ActualModelName) {
 		for i := 0; i < imageCount; i++ {
 			imageReceipt.ImageEndOffsets = append(imageReceipt.ImageEndOffsets, len(claudeBody))
 		}
@@ -438,7 +301,7 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	var textBlocks []claudeImageTextBlock
 	var pendingText strings.Builder
 	imageReceipt := &model.ClaudeImageReceipt{}
-	nanoOutput := geminiOpenaiCompatible.IsGeminiNanoBanana21Model(meta.ActualModelName)
+	nanoOutput := geminiOpenaiCompatible.IsGeminiImageGenerationModel(meta.ActualModelName)
 	type toolUse struct {
 		name  string
 		input string
@@ -506,6 +369,7 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 		}
 
 		if geminiResp.UsageMetadata != nil {
+			c.Set(NativeUsageReceiptKey, geminiUsageMetadataToOpenAIUsage(geminiResp.UsageMetadata))
 			imageReceipt.CandidateImageTokens = geminiCandidateImageTokens(geminiResp.UsageMetadata)
 			promptTokens = geminiResp.UsageMetadata.PromptTokenCount
 			completionTokens = geminiResp.UsageMetadata.CandidatesTokenCount + geminiResp.UsageMetadata.ThoughtsTokenCount
