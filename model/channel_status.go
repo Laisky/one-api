@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"slices"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
@@ -62,6 +63,91 @@ func persistChannelStatusWithDB(tx *gorm.DB, id, status int) error {
 		return errors.Wrap(err, "persist channel ability status")
 	}
 	return nil
+}
+
+// ChannelStatusChange reports what TransitionChannelStatusWithContext did.
+type ChannelStatusChange struct {
+	// Channel identifies the channel as read under the row lock (id, uuid, name, group)
+	// and carries its status after the call. It never carries the channel key.
+	Channel Channel
+	// PreviousStatus is the status the channel had when the transaction read it.
+	PreviousStatus int
+	// Changed is true when the requested transition was applied.
+	Changed bool
+}
+
+// TransitionChannelStatusWithContext is the compare-and-set status writer for automatic
+// transitions (relay-time, balance, and success-rate disables). In one transaction that
+// holds the channel row lock it moves the channel to status only when its current status
+// is one of from, so an automatic path never overrides an administrator's manual disable
+// and never repeats a transition that already happened. Either way it realigns the
+// ability routing flags with the resulting status, repairing a projection that an
+// earlier non-transactional writer left routing for a disabled channel.
+//
+// The write is detached from ctx's cancellation, because automatic transitions are
+// decided after the triggering request ends, and bounded by ctx's deadline or
+// channelWriteTimeout, whichever is sooner. Caches are invalidated only when routing
+// state changed, so a burst of failing requests does not reload them on every call.
+//
+// Parameters:
+//   - ctx: logging scope and optional deadline.
+//   - id: the channel to transition.
+//   - status: the target status (enabled, manually disabled, or automatically disabled).
+//   - from: the statuses the transition may start from; at least one is required.
+//
+// Return values:
+//   - ChannelStatusChange: what was read and whether the transition was applied. Callers
+//     announce a transition only when Changed is true.
+//   - error: invalid arguments or a wrapped database failure; nothing was persisted.
+func TransitionChannelStatusWithContext(ctx context.Context, id, status int, from ...int) (ChannelStatusChange, error) {
+	if id <= 0 || len(from) == 0 ||
+		(status != ChannelStatusEnabled && status != ChannelStatusManuallyDisabled && status != ChannelStatusAutoDisabled) {
+		return ChannelStatusChange{}, errors.WithStack(errors.New("invalid channel status transition"))
+	}
+	writeCtx, cancel := detachedChannelWriteContext(ctx)
+	defer cancel()
+	var (
+		change             ChannelStatusChange
+		abilitiesRealigned int64
+	)
+	err := DB.WithContext(writeCtx).Transaction(func(tx *gorm.DB) error {
+		if err := lockChannelRow(tx, id); err != nil {
+			return errors.Wrap(err, "lock channel for status transition")
+		}
+		var current Channel
+		if err := tx.Select("id", "uuid", "name", "group", "status").First(&current, "id = ?", id).Error; err != nil {
+			return errors.Wrap(err, "read channel for status transition")
+		}
+		change.PreviousStatus = current.Status
+		if current.Status != status && slices.Contains(from, current.Status) {
+			if err := tx.Model(&Channel{}).Where("id = ?", id).Update("status", status).Error; err != nil {
+				return errors.Wrap(err, "persist channel status transition")
+			}
+			current.Status, change.Changed = status, true
+		}
+		enabled := current.Status == ChannelStatusEnabled
+		result := tx.Model(&Ability{}).Where("channel_id = ? AND enabled <> ?", id, enabled).Update("enabled", enabled)
+		if result.Error != nil {
+			return errors.Wrap(result.Error, "align channel ability status")
+		}
+		abilitiesRealigned = result.RowsAffected
+		change.Channel = Channel{Id: current.Id, UUID: current.UUID, Name: current.Name, Group: current.Group,
+			Status: current.Status}
+		return nil
+	})
+	if err != nil {
+		return ChannelStatusChange{}, errors.Wrapf(err, "transition channel %d status", id)
+	}
+	if change.Changed || abilitiesRealigned > 0 {
+		InvalidateChannelModelCachesWithContext(ctx, change.Channel.Group)
+	}
+	logger.FromContext(ctx).Debug("channel status transition evaluated",
+		append(change.Channel.Ref().Zap(),
+			zap.Int("previous_status", change.PreviousStatus),
+			zap.Int("requested_status", status),
+			zap.Bool("changed", change.Changed),
+			zap.Int64("abilities_realigned", abilitiesRealigned))...)
+	return change, nil
 }
 
 // ChannelProbeResult is what a finished automatic health-check probe asks to persist.

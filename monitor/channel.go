@@ -51,9 +51,47 @@ func notifyRootUser(subject string, content string) {
 	}
 }
 
-// DisableChannel disable & notify
+// applyAutomaticStatusChange persists an automatic status transition and reports whether
+// it happened, so its caller announces only a committed change.
+//
+// Parameters:
+//   - channelId: the channel to transition.
+//   - channelName: its name, used in logs when the channel snapshot cannot resolve it.
+//   - status: the target status.
+//   - from: the statuses the transition may start from.
+//
+// Return values:
+//   - bool: true when the transition was committed; failures are logged here.
+func applyAutomaticStatusChange(channelId int, channelName string, status int, from ...int) bool {
+	change, err := model.TransitionChannelStatusWithContext(context.Background(), channelId, status, from...)
+	if err != nil {
+		logger.Logger.Error("failed to persist automatic channel status change; not announcing it",
+			resolveChannelRef(channelId, channelName).AppendZap([]zap.Field{
+				zap.Int("requested_status", status), zap.Error(err)})...)
+		return false
+	}
+	if !change.Changed {
+		logger.Logger.Debug("automatic channel status change not applied: current status is not eligible",
+			resolveChannelRef(channelId, channelName).AppendZap([]zap.Field{
+				zap.Int("current_status", change.PreviousStatus), zap.Int("requested_status", status)})...)
+	}
+	return change.Changed
+}
+
+// DisableChannel automatically disables an enabled channel and announces it. A channel
+// that is already disabled, automatically or by an administrator, keeps its status and
+// is not announced again; a disable that cannot be persisted is logged, not announced.
+//
+// Parameters:
+//   - channelId: the channel to disable.
+//   - channelName: its name, used when the channel snapshot cannot resolve it.
+//   - reason: why the channel is disabled.
+//
+// Return values: none.
 func DisableChannel(channelId int, channelName string, reason string) {
-	model.UpdateChannelStatusById(channelId, model.ChannelStatusAutoDisabled)
+	if !applyAutomaticStatusChange(channelId, channelName, model.ChannelStatusAutoDisabled, model.ChannelStatusEnabled) {
+		return
+	}
 	NotifyChannelDisabled(channelId, channelName, reason)
 }
 
@@ -84,8 +122,18 @@ func NotifyChannelDisabled(channelId int, channelName string, reason string) {
 	notifyRootUser(subject, content)
 }
 
+// MetricDisableChannel automatically disables an enabled channel whose success rate fell
+// below the threshold and announces it, under the same rules as DisableChannel.
+//
+// Parameters:
+//   - channelId: the channel to disable.
+//   - successRate: the observed success rate, between 0 and 1.
+//
+// Return values: none.
 func MetricDisableChannel(channelId int, successRate float64) {
-	model.UpdateChannelStatusById(channelId, model.ChannelStatusAutoDisabled)
+	if !applyAutomaticStatusChange(channelId, "", model.ChannelStatusAutoDisabled, model.ChannelStatusEnabled) {
+		return
+	}
 	ref := resolveChannelRef(channelId, "")
 	logger.Logger.Info("channel has been disabled due to low success rate",
 		ref.AppendZap([]zap.Field{zap.Float64("success_rate", successRate*100)})...)
@@ -102,9 +150,19 @@ func MetricDisableChannel(channelId int, successRate float64) {
 	notifyRootUser(subject, content)
 }
 
-// EnableChannel enable & notify
+// EnableChannel automatically re-enables a channel that was disabled automatically and
+// announces it. A channel an administrator disabled stays disabled; a re-enable that
+// cannot be persisted is logged, not announced.
+//
+// Parameters:
+//   - channelId: the channel to re-enable.
+//   - channelName: its name, used when the channel snapshot cannot resolve it.
+//
+// Return values: none.
 func EnableChannel(channelId int, channelName string) {
-	model.UpdateChannelStatusById(channelId, model.ChannelStatusEnabled)
+	if !applyAutomaticStatusChange(channelId, channelName, model.ChannelStatusEnabled, model.ChannelStatusAutoDisabled) {
+		return
+	}
 	NotifyChannelEnabled(channelId, channelName)
 }
 
