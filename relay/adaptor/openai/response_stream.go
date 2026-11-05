@@ -525,19 +525,20 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		}
 	}
 
-	if hbr.HeartbeatsSent() > 0 || hbr.HeartbeatWriteErr() != nil {
-		lg.Debug("heartbeat diagnostics",
-			zap.Int("heartbeats_sent", hbr.HeartbeatsSent()),
-			zap.NamedError("heartbeat_write_err", hbr.HeartbeatWriteErr()),
-		)
+	if heartbeatErr := hbr.HeartbeatWriteErr(); hbr.HeartbeatsSent() > 0 || heartbeatErr != nil {
+		fields := []zap.Field{zap.Int("heartbeats_sent", hbr.HeartbeatsSent()), zap.Bool("heartbeat_write_failed", heartbeatErr != nil)}
+		returnedHeartbeat := errors.Is(heartbeatErr, lifecycle.writer.err) && (streamErr == nil || errors.Is(streamErr, lifecycle.writer.err))
+		if heartbeatErr != nil && !returnedHeartbeat {
+			fields = append(fields, zap.NamedError("heartbeat_write_err", heartbeatErr))
+		}
+		lg.Debug("heartbeat diagnostics", fields...)
 	}
 
 	if streamErr != nil {
-		lg.Debug("stream read failed",
-			zap.Error(streamErr),
+		lg.Debug("stream forwarding interrupted",
 			zap.Int("forwarded_chunks", forwardedChunks),
 		)
-		return ErrorWrapper(streamErr, "read_stream_failed", http.StatusInternalServerError), responseText, usage
+		return ErrorWrapper(streamErr, lifecycle.failureCode(streamErr), http.StatusInternalServerError), responseText, usage
 	}
 
 	// Do NOT fabricate a [DONE] if the upstream didn't send one.

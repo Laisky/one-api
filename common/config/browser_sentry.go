@@ -58,7 +58,7 @@ func ParseBrowserSentryConfig(raw string) (*BrowserSentryConfig, error) {
 	if token, err = decoder.Token(); err != nil || token != json.Delim('}') {
 		return invalid()
 	}
-	if _, err = decoder.Token(); err != io.EOF {
+	if _, err = decoder.Token(); !errors.Is(err, io.EOF) {
 		return invalid()
 	}
 	if len(fields) != 2 {

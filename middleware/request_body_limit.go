@@ -49,7 +49,7 @@ func (b *boundedBody) Read(p []byte) (int, error) {
 		var probe [1]byte
 		n, err := b.reader.Read(probe[:])
 		if n > 0 {
-			return 0, ErrRequestBodyTooLarge
+			return 0, errors.WithStack(ErrRequestBodyTooLarge)
 		}
 		return 0, err
 	}

@@ -2,15 +2,16 @@ package controller
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
 	"math"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
-	"github.com/Laisky/one-api/common"
-	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 )
 
 const (
@@ -18,6 +19,10 @@ const (
 	responseStreamDataPrefix  = "data: "
 	responseStreamFrameSuffix = "\n\n"
 )
+
+// errResponseStreamEventTooLarge reports a frame whose size cannot be represented.
+// It is a plain stdlib error, matching the former fmt.Errorf value without a stack.
+var errResponseStreamEventTooLarge = errors.New("response stream event is too large")
 
 func responseStreamFrameCapacity(payloadLen, eventTypeLen int) (int, bool) {
 	const dataOnlyOverhead = len(responseStreamDataPrefix) + len(responseStreamFrameSuffix)
@@ -60,7 +65,7 @@ func (h *chatToResponseStreamBridge) emitEvent(c *gin.Context, eventType string,
 	frameSize, ok := responseStreamFrameCapacity(len(payload), len(eventType))
 	if !ok {
 		gmw.GetLogger(c).Warn("response stream event is too large", zap.String("event_type", eventType))
-		h.writeErr = fmt.Errorf("response stream event is too large")
+		h.writeErr = errResponseStreamEventTooLarge
 		return false
 	}
 

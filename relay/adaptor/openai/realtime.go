@@ -181,14 +181,18 @@ func RealtimeSessionsHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWit
 			StatusCode: http.StatusBadGateway,
 		}, errors.Wrap(err, "read upstream response")
 	}
-	_, _ = c.Writer.Write(respBody)
+	_, writeErr := c.Writer.Write(respBody)
+	writeErr = errors.WithStack(writeErr)
 
 	// If upstream returned a non-2xx status, surface it as a business error
 	if resp.StatusCode >= 400 {
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: string(respBody), Type: rmodel.ErrorTypeUpstream, Code: resp.StatusCode},
 			StatusCode: resp.StatusCode,
-		}, nil
+		}, writeErr
+	}
+	if writeErr != nil {
+		return ErrorWrapper(writeErr, "write_response_body_failed", http.StatusInternalServerError), writeErr
 	}
 
 	return nil, nil

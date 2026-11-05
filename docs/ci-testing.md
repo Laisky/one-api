@@ -25,15 +25,29 @@ requires every selected test to emit a passing terminal JSON result. It runs
 fresh tests with `-count=1`, rejects skipped essential cases and missing outcomes,
 and retains inventories, raw JSON, commands, exit codes, and elapsed times.
 This is a focused gate; its evidence does not claim full-suite coverage.
-The selection includes every discovered test in `relay/format`: request-format
-detection and endpoint selection for Chat Completions, Responses, and Claude
-Messages. Core message/usage/tool serialization and protocol adapter conversion
-suites remain in manual full qualification. Including adapter package
+The selection includes every discovered test in `relay/format`, the nested media
+error-stack propagation test in `relay/model`, and focused log fidelity and
+privacy tests in `common/logger/otelbridge`. The selected names must be present
+in the discovered inventory and report passing results; a missing or skipped
+test fails the gate. Core message/usage/tool serialization and protocol adapter
+conversion suites remain in manual full qualification. Including adapter package
 compilation in a trial cold gate exceeded its 240-second wall budget; that failed
 trial is not reported as a successful speed result.
-A two-package format/model cold trial passed in 222.063 seconds, but left
-insufficient room for formatting and runner setup. The final gate therefore
-keeps only the smallest essential package instead of increasing the timeout.
+A previous two-package format/model cold trial passed in 222.063 seconds, but left
+little room for formatting and runner setup. Retain the 240-second runner budget
+and assess cold-cache timing when changing the selection; a focused selection is
+not a full-suite qualification. A local Go 1.27.3 trial with an empty `GOCACHE`
+and already downloaded modules completed the updated runner in 41.551 seconds;
+this does not predict cold dependency downloads or GitHub runner performance.
+
+The stack and logging tests guard selected behavior, not every error return in
+the repository. Error-return audits must distinguish failures from protocol
+signals: `io.Reader` completion must preserve bare `io.EOF`, database drivers
+may require exact `driver.ErrBadConn`, and bounded `errkind` cancellation walks
+intentionally inspect individual error identities. Logging policy also matters:
+WARN output and privacy-filtered events must not gain stack details solely to
+satisfy a blanket wrapping rule. Review propagation and boundary behavior
+before adding wrappers or changing sentinel comparisons.
 
 ## Local quick gate
 

@@ -170,7 +170,10 @@ func RelayVoiceCloneHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	})
 
-	return nil
+	// Report a failure observed after a billable receipt instead of a success;
+	// the settlement marker vetoes a paid cross-channel replay.
+	markResponseSettlement(c, usage, respErr)
+	return respErr
 }
 
 // getAndValidateVoiceCloneRequest parses and validates the voice-clone payload.

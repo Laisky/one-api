@@ -82,6 +82,10 @@ Encoding failures reject the complete OTLP record and increment the fixed
 dropped_encoding outcome. Bridge failures return a fixed encoding error; native
 SDK processor failures use the SDK error handler. Diagnostics contain no failed
 field value. A serializer failure never exports the successfully encoded subset.
+The bridge's exported ErrLogEncoding is a shared rejection marker. Its original
+identity and fixed message are preserved at the bridge boundary; its stored stack
+reflects marker initialization, not the particular rejection site. Rejection
+details and application values are not attached to this diagnostic.
 Once the bridge knows that a record cannot be encoded, it stops evaluating
 further OTLP field serializers; entry and previously bound-state validation run
 before field conversion. Namespace overflow also rejects promptly. Other Zap

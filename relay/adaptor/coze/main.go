@@ -194,7 +194,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	err := resp.Body.Close()
 	if err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "close_response_body_failed", http.StatusInternalServerError), nil
 	}
 
 	return nil, &responseText
@@ -203,16 +203,16 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *string) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "read_response_body_failed", http.StatusInternalServerError), nil
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "close_response_body_failed", http.StatusInternalServerError), nil
 	}
 	var cozeResponse Response
 	err = json.Unmarshal(responseBody, &cozeResponse)
 	if err != nil {
-		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	if cozeResponse.Code != 0 {
 		return &model.ErrorWithStatusCode{
@@ -228,14 +228,20 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	fullTextResponse.Model = modelName
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
-		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "marshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(resp.StatusCode)
-	_, err = c.Writer.Write(jsonResponse)
 	var responseText string
 	if len(fullTextResponse.Choices) > 0 {
 		responseText = fullTextResponse.Choices[0].Message.StringContent()
+	}
+	n, err := c.Writer.Write(jsonResponse)
+	if err == nil && n != len(jsonResponse) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
+		return openai.ErrorWrapper(errors.WithStack(err), "write_response_body_failed", http.StatusInternalServerError), &responseText
 	}
 	return nil, &responseText
 }

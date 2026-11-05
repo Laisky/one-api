@@ -1,10 +1,15 @@
 package gemini
 
 import (
-	"errors"
+	stderrors "errors"
 	"slices"
 	"strings"
+
+	"github.com/Laisky/errors/v2"
 )
+
+// errThinkingLevelUnsupported rejects a level outside the mapped model's contract.
+var errThinkingLevelUnsupported = stderrors.New("reasoning effort is not supported by the selected Gemini model")
 
 // resolveNativeThinkingLevel validates a model-specific level. Empty/default
 // uses the supplied model default; an empty default leaves upstream behavior
@@ -18,7 +23,7 @@ func resolveNativeThinkingLevel(requested *string, allowed []string, defaultLeve
 		level = defaultLevel
 	}
 	if level != "" && !slices.Contains(allowed, level) {
-		return "", errors.New("reasoning effort is not supported by the selected Gemini model")
+		return "", errors.WithStack(errThinkingLevelUnsupported)
 	}
 	return level, nil
 }

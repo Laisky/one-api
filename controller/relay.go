@@ -48,7 +48,11 @@ func invokeRelayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode
 	// only such candidates remain, so keep its matching capture available.
 	previous, _ := c.Get(ctxkey.ClaudeNativeErrorResponse)
 	c.Set(ctxkey.ClaudeNativeErrorResponse, nil)
-	failure := relayHelper(c, relayMode)
+	// Observe the downstream writer for this attempt so a failed delivery is
+	// reported and attributed to the gateway whatever the adaptor returned.
+	tracker, releaseTracker := trackDelivery(c)
+	failure := attributeDeliveryFailure(c, tracker, relayHelper(c, relayMode))
+	releaseTracker()
 	if failure != nil && adaptor.IsRESTTransportMismatch(failure.RawError) {
 		c.Set(ctxkey.ClaudeNativeErrorResponse, previous)
 	}

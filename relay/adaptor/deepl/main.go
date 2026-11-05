@@ -71,23 +71,23 @@ func ResponseDeepL2OpenAI(deeplResponse *Response) *openai.TextResponse {
 func StreamHandler(c *gin.Context, resp *http.Response, modelName string) *model.ErrorWithStatusCode {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+		return openai.ErrorWrapper(errors.WithStack(err), "read_response_body_failed", http.StatusInternalServerError)
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError)
+		return openai.ErrorWrapper(errors.WithStack(err), "close_response_body_failed", http.StatusInternalServerError)
 	}
 	var deeplResponse Response
 	err = json.Unmarshal(responseBody, &deeplResponse)
 	if err != nil {
-		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
+		return openai.ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError)
 	}
 	fullTextResponse := StreamResponseDeepL2OpenAI(&deeplResponse)
 	fullTextResponse.Model = modelName
 	fullTextResponse.Id = helper.GetResponseID(c)
 	jsonData, err := json.Marshal(fullTextResponse)
 	if err != nil {
-		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError)
+		return openai.ErrorWrapper(errors.WithStack(err), "marshal_response_body_failed", http.StatusInternalServerError)
 	}
 	common.SetEventStreamHeaders(c)
 	c.Stream(func(w io.Writer) bool {
@@ -106,16 +106,16 @@ func StreamHandler(c *gin.Context, resp *http.Response, modelName string) *model
 func Handler(c *gin.Context, resp *http.Response, modelName string) *model.ErrorWithStatusCode {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+		return openai.ErrorWrapper(errors.WithStack(err), "read_response_body_failed", http.StatusInternalServerError)
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError)
+		return openai.ErrorWrapper(errors.WithStack(err), "close_response_body_failed", http.StatusInternalServerError)
 	}
 	var deeplResponse Response
 	err = json.Unmarshal(responseBody, &deeplResponse)
 	if err != nil {
-		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
+		return openai.ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError)
 	}
 	if deeplResponse.Message != "" {
 		return &model.ErrorWithStatusCode{
@@ -132,10 +132,16 @@ func Handler(c *gin.Context, resp *http.Response, modelName string) *model.Error
 	fullTextResponse.Id = helper.GetResponseID(c)
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
-		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError)
+		return openai.ErrorWrapper(errors.WithStack(err), "marshal_response_body_failed", http.StatusInternalServerError)
 	}
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(resp.StatusCode)
-	_, err = c.Writer.Write(jsonResponse)
+	n, err := c.Writer.Write(jsonResponse)
+	if err == nil && n != len(jsonResponse) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
+		return openai.ErrorWrapper(errors.WithStack(err), "write_response_body_failed", http.StatusInternalServerError)
+	}
 	return nil
 }

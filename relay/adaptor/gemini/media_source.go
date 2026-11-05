@@ -2,13 +2,33 @@ package gemini
 
 import (
 	"encoding/base64"
-	"errors"
+	stderrors "errors"
 	"io"
 	"mime"
 	"net"
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/Laisky/errors/v2"
+)
+
+// Native media source validation errors. Messages are client-facing and never
+// include URLs, filenames, or payloads.
+var (
+	errMediaSourceCount                = stderrors.New("media requires exactly one source")
+	errMediaDataURINotBase64           = stderrors.New("media data URI must contain base64 data")
+	errMediaDataURIMIMEInvalid         = stderrors.New("media data URI requires a valid MIME type")
+	errMediaMIMEConflict               = stderrors.New("media MIME type conflicts with data URI")
+	errMediaMIMEUnsupported            = stderrors.New("unsupported or mismatched media MIME type")
+	errInlineMediaTooLargeUseReference = stderrors.New("inline media exceeds the relay limit; use a public HTTPS reference")
+	errMediaDataInvalidBase64          = stderrors.New("media data must be non-empty valid base64")
+	errInlineMediaTooLarge             = stderrors.New("inline media exceeds the relay limit")
+	errMediaMIMEInvalid                = stderrors.New("media MIME type is invalid")
+	errMediaReferenceNotPublicHTTPS    = stderrors.New("media reference must be a public HTTPS URL without user credentials or fragments")
+	errMediaReferencePort              = stderrors.New("media reference must use HTTPS port 443")
+	errMediaReferencePrivate           = stderrors.New("private media references are not supported")
+	errMediaReferenceProviderFile      = stderrors.New("private provider file references require owner-scoped resolution")
 )
 
 // This is a relay memory bound, not Google's model size limit. Larger inputs
@@ -31,7 +51,7 @@ type nativeMediaSource struct {
 // are not accepted by this public-reference path.
 func prepareNativeMediaSource(source nativeMediaSource) (Part, string, int64, error) {
 	if (source.URI == "") == (source.Data == "") {
-		return Part{}, "", 0, errors.New("media requires exactly one source")
+		return Part{}, "", 0, errors.WithStack(errMediaSourceCount)
 	}
 	mediaType, err := normalizeNativeMIME(source.MIMEType)
 	if err != nil {
@@ -45,14 +65,14 @@ func prepareNativeMediaSource(source nativeMediaSource) (Part, string, int64, er
 	if strings.HasPrefix(uri, "data:") {
 		header, payload, ok := strings.Cut(strings.TrimPrefix(uri, "data:"), ",")
 		if !ok || !strings.HasSuffix(header, ";base64") {
-			return Part{}, "", 0, errors.New("media data URI must contain base64 data")
+			return Part{}, "", 0, errors.WithStack(errMediaDataURINotBase64)
 		}
 		declaredType, err := normalizeNativeMIME(strings.TrimSuffix(header, ";base64"))
 		if err != nil || declaredType == "" {
-			return Part{}, "", 0, errors.New("media data URI requires a valid MIME type")
+			return Part{}, "", 0, errors.WithStack(errMediaDataURIMIMEInvalid)
 		}
 		if mediaType != "" && mediaType != declaredType {
-			return Part{}, "", 0, errors.New("media MIME type conflicts with data URI")
+			return Part{}, "", 0, errors.WithStack(errMediaMIMEConflict)
 		}
 		mediaType, data, uri = declaredType, payload, ""
 	}
@@ -67,7 +87,7 @@ func prepareNativeMediaSource(source nativeMediaSource) (Part, string, int64, er
 	}
 	kind := nativeMIMEKind(mediaType)
 	if kind == "" || (source.Kind != "" && source.Kind != kind) {
-		return Part{}, "", 0, errors.New("unsupported or mismatched media MIME type")
+		return Part{}, "", 0, errors.WithStack(errMediaMIMEUnsupported)
 	}
 	if uri != "" {
 		if err := validatePublicMediaURI(uri); err != nil {
@@ -80,15 +100,15 @@ func prepareNativeMediaSource(source nativeMediaSource) (Part, string, int64, er
 		limit = 50_000_000
 	}
 	if int64(len(data)) > (limit+2)/3*4 {
-		return Part{}, "", 0, errors.New("inline media exceeds the relay limit; use a public HTTPS reference")
+		return Part{}, "", 0, errors.WithStack(errInlineMediaTooLargeUseReference)
 	}
 	decoder := base64.NewDecoder(base64.StdEncoding.Strict(), strings.NewReader(data))
 	n, err := io.Copy(io.Discard, io.LimitReader(decoder, limit+1))
 	if err != nil || n == 0 {
-		return Part{}, "", 0, errors.New("media data must be non-empty valid base64")
+		return Part{}, "", 0, errors.WithStack(errMediaDataInvalidBase64)
 	}
 	if n > limit {
-		return Part{}, "", 0, errors.New("inline media exceeds the relay limit")
+		return Part{}, "", 0, errors.WithStack(errInlineMediaTooLarge)
 	}
 	return Part{InlineData: &InlineData{MimeType: mediaType, Data: data}}, kind, n, nil
 }
@@ -100,7 +120,7 @@ func normalizeNativeMIME(raw string) (string, error) {
 	}
 	typ, params, err := mime.ParseMediaType(raw)
 	if err != nil || len(params) != 0 {
-		return "", errors.New("media MIME type is invalid")
+		return "", errors.WithStack(errMediaMIMEInvalid)
 	}
 	switch typ {
 	case "audio/mp3":
@@ -184,20 +204,20 @@ func nativeMIMEFromFilename(name string) string {
 func validatePublicMediaURI(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" || u.Opaque != "" {
-		return errors.New("media reference must be a public HTTPS URL without user credentials or fragments")
+		return errors.WithStack(errMediaReferenceNotPublicHTTPS)
 	}
 	if port := u.Port(); port != "" && port != "443" {
-		return errors.New("media reference must use HTTPS port 443")
+		return errors.WithStack(errMediaReferencePort)
 	}
 	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") || (net.ParseIP(host) == nil && !strings.Contains(host, ".")) {
-		return errors.New("private media references are not supported")
+		return errors.WithStack(errMediaReferencePrivate)
 	}
 	if ip := net.ParseIP(host); ip != nil && (!ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast()) {
-		return errors.New("private media references are not supported")
+		return errors.WithStack(errMediaReferencePrivate)
 	}
 	if host == "generativelanguage.googleapis.com" || host == "aiplatform.googleapis.com" || strings.HasSuffix(host, "-aiplatform.googleapis.com") {
-		return errors.New("private provider file references require owner-scoped resolution")
+		return errors.WithStack(errMediaReferenceProviderFile)
 	}
 	return nil
 }

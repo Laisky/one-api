@@ -14,6 +14,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/logger"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
@@ -152,7 +153,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	if streamErr != nil {
 		err := resp.Body.Close()
 		if err != nil {
-			return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+			lg.Warn("error reading stream response", zap.String("error", logger.Redact(streamErr)))
+			return openai.ErrorWrapper(errors.WithStack(err), "close_response_body_failed", http.StatusInternalServerError), nil
 		}
 		return openai.ErrorWrapper(streamErr, "read_stream_failed", http.StatusInternalServerError), &usage
 	}
@@ -166,7 +168,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	err = resp.Body.Close()
 	if err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "close_response_body_failed", http.StatusInternalServerError), nil
 	}
 
 	return nil, &usage
@@ -176,15 +178,15 @@ func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *
 	var AIProxyLibraryResponse LibraryResponse
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "read_response_body_failed", http.StatusInternalServerError), nil
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "close_response_body_failed", http.StatusInternalServerError), nil
 	}
 	err = json.Unmarshal(responseBody, &AIProxyLibraryResponse)
 	if err != nil {
-		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	if AIProxyLibraryResponse.ErrCode != 0 {
 		errType := model.ErrorType(strconv.Itoa(AIProxyLibraryResponse.ErrCode))
@@ -201,13 +203,13 @@ func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *
 	fullTextResponse := responseAIProxyLibrary2OpenAI(c, &AIProxyLibraryResponse)
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
-		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "marshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(resp.StatusCode)
 	_, err = c.Writer.Write(jsonResponse)
 	if err != nil {
-		return openai.ErrorWrapper(err, "write_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "write_response_body_failed", http.StatusInternalServerError), &fullTextResponse.Usage
 	}
 	return nil, &fullTextResponse.Usage
 }

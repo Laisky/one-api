@@ -224,7 +224,7 @@ func RecordTraceStart(c *gin.Context) {
 	if syncWriteMode() {
 		ctx := gmw.SetLogger(gmw.Ctx(c), lg)
 		if _, err := model.CreateTrace(ctx, traceID, url, method, bodySize); err != nil {
-			lg.Error("failed to create trace record", zap.Error(err))
+			lg.Error("failed to create trace record", zap.Error(err), zap.String("trace_id", traceID))
 		}
 		return
 	}
@@ -290,7 +290,7 @@ func RecordTraceTimestamp(c *gin.Context, timestampKey string) {
 	}
 
 	if err := model.UpdateTraceTimestamp(c, traceID, timestampKey); err != nil {
-		lg.Error("failed to update trace timestamp", zap.Error(err))
+		lg.Error("failed to update trace timestamp", zap.Error(err), zap.String("trace_id", traceID))
 	}
 }
 
@@ -323,7 +323,7 @@ func RecordTraceExternalCall(c *gin.Context, call model.TraceExternalCall) {
 	}
 
 	if err := model.AppendTraceExternalCall(c, traceID, call); err != nil {
-		lg.Error("failed to append trace external call", zap.Error(err))
+		lg.Error("failed to append trace external call", zap.Error(err), zap.String("trace_id", traceID))
 	}
 }
 
@@ -360,7 +360,7 @@ func RecordTraceStatus(c *gin.Context, status int) {
 
 	ctx := gmw.SetLogger(gmw.Ctx(c), lg)
 	if err := model.UpdateTraceStatus(ctx, traceID, status); err != nil {
-		lg.Error("failed to update trace status", zap.Error(err))
+		lg.Error("failed to update trace status", zap.Error(err), zap.String("trace_id", traceID))
 	}
 }
 

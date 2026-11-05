@@ -154,7 +154,7 @@ func FindAsyncTaskByDedup(ctx context.Context, key, hash string, userID int, use
 		return task, err
 	}
 	if subtle.ConstantTimeCompare([]byte(task.RequestHash), []byte(hash)) != 1 {
-		return nil, ErrAsyncIdempotencyConflict
+		return nil, errors.WithStack(ErrAsyncIdempotencyConflict)
 	}
 	return task, nil
 }
@@ -206,7 +206,7 @@ func ReserveAsyncTask(ctx context.Context, task *AsyncTask) (*AsyncTask, bool, e
 				return errors.New("async task owner or token is unavailable")
 			}
 			if user.Quota < task.Quota || (!token.UnlimitedQuota && (token.RemainQuota < task.Quota || token.UsedQuota > math.MaxInt64-task.Quota)) {
-				return ErrAsyncQuota
+				return errors.WithStack(ErrAsyncQuota)
 			}
 			task.TokenUnlimited, task.TokenName = token.UnlimitedQuota, token.Name
 			if err := tx.Create(task).Error; err != nil {
