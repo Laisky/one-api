@@ -54,7 +54,10 @@ func bindChannelPayload(c *gin.Context) (*model.Channel, json.RawMessage, channe
 		}
 	}
 	_, hiddenModelsProvided := rawFields["hidden_models"]
-	nullableFieldNames := []string{"model_mapping", "model_configs", "system_prompt", "inference_profile_arn_map"}
+	// Presence is recorded so an explicit null clears a field while an omitted field
+	// keeps it; testing_model null selects auto-select instead of being ignored.
+	nullableFieldNames := []string{"model_mapping", "model_configs", "system_prompt", "inference_profile_arn_map",
+		model.ChannelTestingModelField}
 	nullableProvided := make(map[string]bool, len(nullableFieldNames))
 	for _, name := range nullableFieldNames {
 		if _, ok := rawFields[name]; ok {
@@ -134,28 +137,11 @@ func buildDuplicateChannelName(name string) string {
 }
 
 // prepareChannelForCreate normalizes a channel before insert.
-// It mutates the channel by setting creation timestamps, validating TestingModel, and applying default BaseURL values when needed.
+// It mutates the channel by setting creation timestamps and applying default BaseURL values when needed.
+// TestingModel is normalized by the model layer on insert (Channel.NormalizeTestingModel), so
+// creation, duplication, and updates share one policy that keeps the SKIP sentinel.
 func prepareChannelForCreate(channel *model.Channel) {
 	channel.CreatedTime = helper.GetTimestamp()
-
-	// Sanitize testing model at creation: only keep if present in models list.
-	if channel.TestingModel != nil {
-		tm := strings.TrimSpace(*channel.TestingModel)
-		if tm == "" {
-			channel.TestingModel = nil
-		} else {
-			ok := false
-			for name := range strings.SplitSeq(channel.Models, ",") {
-				if strings.TrimSpace(name) == tm {
-					ok = true
-					break
-				}
-			}
-			if !ok {
-				channel.TestingModel = nil
-			}
-		}
-	}
 
 	// Auto-populate default BaseURL on creation if blank and default exists.
 	if (channel.BaseURL == nil || *channel.BaseURL == "") && channel.Type >= 0 {
@@ -591,6 +577,10 @@ func UpdateChannelPricing(c *gin.Context) {
 		helper.RespondError(c, err)
 		return
 	}
+	// This endpoint never changes the testing model. Leaving the value just loaded
+	// would make the save re-assert it and overwrite a selection (such as SKIP)
+	// saved concurrently, so omit it and let the update keep the stored value.
+	channel.TestingModel = nil
 
 	// Handle both old format (separate model_ratio and completion_ratio) and new format (unified model_configs)
 	if len(request.ModelConfigs) > 0 {
@@ -643,17 +633,22 @@ func UpdateChannelPricing(c *gin.Context) {
 		}
 	}
 
-	if toolingCfg, provided, err := parseToolingConfigPayload(request.Tooling); err != nil {
+	toolingCfg, provided, err := parseToolingConfigPayload(request.Tooling)
+	if err != nil {
 		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid tooling config: "+err.Error())))
 		return
-	} else if provided {
-		if err := channel.SetToolingConfig(toolingCfg); err != nil {
+	}
+
+	// Validate the request independently of the previously loaded row. The
+	// transaction applies it again to the current locked configuration.
+	if provided {
+		if err := (&model.Channel{}).SetToolingConfig(toolingCfg); err != nil {
 			helper.RespondError(c, errors.New("Failed to set tooling config: "+err.Error()))
 			return
 		}
 	}
 
-	err = channel.UpdateWithContext(gmw.Ctx(c))
+	err = channel.UpdatePricingWithContext(gmw.Ctx(c), len(request.ModelConfigs) > 0 || len(request.ModelRatio) > 0 || len(request.CompletionRatio) > 0, toolingCfg, provided)
 	if err != nil {
 		helper.RespondError(c, err)
 		return

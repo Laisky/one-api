@@ -47,6 +47,8 @@
       "web/legacy/browser-sentry-runtime.mjs",
       "web/legacy/browser-sentry.d.mts",
       "web/legacy/browser-sentry.mjs",
+      "web/legacy/channel-update-payload.d.mts",
+      "web/legacy/channel-update-payload.mjs",
       "web/legacy/vite-config.mjs"
     ]
   },
@@ -71,6 +73,8 @@
       "web/legacy/browser-sentry-runtime.mjs",
       "web/legacy/browser-sentry.d.mts",
       "web/legacy/browser-sentry.mjs",
+      "web/legacy/channel-update-payload.d.mts",
+      "web/legacy/channel-update-payload.mjs",
       "web/legacy/vite-config.mjs"
     ]
   }

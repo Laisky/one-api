@@ -591,7 +591,11 @@
       "test_success": "チャンネルのテストに成功しました。",
       "testing_model_failed_message": "テスト用モデルの更新に失敗しました",
       "testing_model_failed_title": "保存に失敗しました",
-      "testing_model_saved": "テスト用モデルを保存しました。"
+      "testing_model_normalized_message": "このチャネルではそのテスト用モデルを保持できなかったため、表示されている保存済みの値が使用されます。",
+      "testing_model_normalized_title": "テスト用モデルがリセットされました",
+      "testing_model_saved": "テスト用モデルを保存しました。",
+      "testing_model_unverified_message": "保存は受け付けられましたが、サーバーから保存されたテスト用モデルが返されませんでした。ページを再読み込みして確認してください。",
+      "testing_model_unverified_title": "テスト用モデルを確認できません"
     },
     "response": {
       "not_tested": "未テスト",
@@ -611,7 +615,8 @@
       "auto": "最安",
       "help": "このチャネルのヘルスチェックに使用するモデルを選びます。\n\nCHEAPEST — チャット系 API（chat completions、response API、Claude messages、Gemini chat）で提供される最も安価なモデルを自動的に使用します。\n\nSKIP — このチャネルをヘルスチェックの対象から完全に除外します。プローブは送信されず、自動的に無効化されることもありません。\n\nテストできるのはチャット形式のモデルのみです。埋め込み、リランク、モデレーション、補完、メディア系のモデルは除外されます。API 形式が不明なモデルも既定で除外されるため、テストしたい場合はここで明示的に選択してください。",
       "help_label": "テスト用モデルの選択ロジック",
-      "skip": "SKIP（テストしない）"
+      "skip": "SKIP（テストしない）",
+      "unlisted_selection": "{{model}}（現在の設定）"
     },
     "title": "チャンネル",
     "toolbar": {

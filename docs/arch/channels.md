@@ -152,13 +152,14 @@ Suspension (temporary, per ability)
   - 5xx/network: set `abilities.suspend_until = now + CHANNEL_SUSPEND_SECONDS_FOR_5XX`.
   - Auth/quota/permission: set `abilities.suspend_until = now + CHANNEL_SUSPEND_SECONDS_FOR_AUTH`, unless immediately escalated to auto‑disable by policy.
 - Effect: the ability is excluded from selection until suspension expires and the cache refreshes.
+- Channel saves keep it. The `abilities` table is a projection of the channel's models, groups, status, and priority that also carries this runtime state, so every channel write reconciles it in place (`syncAbilitiesWithDB`): abilities the configuration drops are deleted, new ones are inserted, and retained ones are updated without touching `suspend_until`. Saving a testing model, name, priority, status, pricing, or a model-list change therefore never lifts an active suspension of a retained (group, model). A save that changes the upstream the suspension was measured against — channel type, key, base URL, config, model mapping, or inference profile map — does lift the channel's suspensions, because rotating a revoked key or repointing the endpoint is how an administrator remedies the failure.
 
 Auto‑disable (persistent, per channel)
 
 - Gate: `AUTOMATIC_DISABLE_CHANNEL_ENABLED` must be true.
 - Reserved for fatal channel‑wide conditions verified by `monitor.ShouldDisableChannel`:
   - Invalid API key, account deactivated, hard permission denials, permanent organization restrictions, clear vendor policy violations.
-- Action: `monitor.DisableChannel` sets `channels.status = auto_disabled` and sends a notification (email or message pusher).
+- Action: `monitor.DisableChannel` moves an enabled channel to `channels.status = auto_disabled` in one locked transaction with its abilities (`model.TransitionChannelStatusWithContext`), then sends a notification (email or message pusher). The notification is sent only when that transition committed: a write that fails, a channel that is already auto-disabled, and a channel an administrator disabled manually (which keeps its status, so the health check never re-enables it) are not announced. The balance check (`Insufficient balance`) and the success-rate monitor (`monitor.MetricDisableChannel`) follow the same rule.
 
 ## Metrics integration
 
@@ -173,7 +174,7 @@ Environment variables (see `common/config/config.go`):
 
 - `CHANNEL_SUSPEND_SECONDS_FOR_429` (int seconds, default 60): ability suspension window after 429.
 - `CHANNEL_SUSPEND_SECONDS_FOR_5XX` (int seconds, default 30): ability suspension window after transient 5xx/network errors.
-- `CHANNEL_SUSPEND_SECONDS_FOR_AUTH` (int seconds, default 300): ability suspension window after auth/quota/permission errors, unless escalated to channel‑wide auto‑disable.
+- `CHANNEL_SUSPEND_SECONDS_FOR_AUTH` (int seconds, default 60): ability suspension window after auth/quota/permission errors, unless escalated to channel‑wide auto‑disable.
 - `MEMORY_CACHE_ENABLED` (bool): enable in‑memory channel cache. Auto‑enabled when Redis is enabled.
 - `SYNC_FREQUENCY` (int seconds, default 600): cache refresh interval for channels and abilities.
 - `DEBUG` (bool): verbose retry diagnostics and DB suspension dumps.

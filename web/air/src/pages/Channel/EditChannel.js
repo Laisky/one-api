@@ -7,6 +7,7 @@ import Title from "@douyinfe/semi-ui/lib/es/typography/title";
 import { SideSheet, Space, Spin, Button, Input, Typography, Select, TextArea, Checkbox, Banner, Tooltip } from "@douyinfe/semi-ui";
 import { IconHelpCircle } from "@douyinfe/semi-icons";
 import ChannelDebugPanel from '../../components/ChannelDebugPanel';
+import { omitUnownedChannelFields } from '../../../../legacy/channel-update-payload.mjs';
 
 const MODEL_MAPPING_EXAMPLE = {
     'gpt-3.5-turbo-0301': 'gpt-3.5-turbo',
@@ -540,7 +541,7 @@ const EditChannel = (props) => {
         }
         localInputs.config = JSON.stringify(config);
         if (isEdit) {
-            res = await API.put(`/api/channel/`, { ...localInputs, uuid: channelId });
+            res = await API.put(`/api/channel/`, omitUnownedChannelFields({ ...localInputs, uuid: channelId }));
         } else {
             res = await API.post(`/api/channel/`, localInputs);
         }

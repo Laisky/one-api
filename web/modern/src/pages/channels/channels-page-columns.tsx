@@ -97,6 +97,8 @@ interface ChannelColumnsOptions {
   onPriorityUpdate: (channel: Channel, priority: number) => void;
   onBalanceRefresh: (channel: Channel) => void;
   onTestingModelUpdate: (channel: Channel, testingModel: string | null) => void;
+  /** savingTestingModelIds lists channel references whose testing-model save is in flight; their selector is locked. */
+  savingTestingModelIds?: ReadonlySet<string>;
   onDuplicate: (channel: Channel) => void | Promise<void>;
   duplicatingIds?: ReadonlySet<string>;
   onManage: (id: string | number, action: 'enable' | 'disable' | 'delete' | 'test', index?: number) => void;
@@ -113,6 +115,7 @@ export const createChannelColumns = ({
   onPriorityUpdate,
   onBalanceRefresh,
   onTestingModelUpdate,
+  savingTestingModelIds,
   onDuplicate,
   duplicatingIds,
   onManage,
@@ -244,21 +247,27 @@ export const createChannelColumns = ({
         .filter((model) => (serverProvided ? true : isLikelyChatModelName(model)))
         .sort();
       const isSkipped = channel.testing_model === CHANNEL_TESTING_MODEL_SKIP;
-      const value = isSkipped
-        ? CHANNEL_TESTING_MODEL_SKIP
-        : channel.testing_model && models.includes(channel.testing_model)
-          ? channel.testing_model
-          : '';
+      // A confirmed selection the offered choices do not list (a mapping alias, a custom
+      // model on an unrestricted channel, or an older server's list) is still the stored
+      // value: show it as its own option rather than misreporting it as Auto.
+      const unlistedSelection =
+        !isSkipped && channel.testing_model && !models.includes(channel.testing_model) ? channel.testing_model : null;
+      const value = isSkipped ? CHANNEL_TESTING_MODEL_SKIP : channel.testing_model || '';
       return (
         <div className="w-[140px] md:w-[160px] max-w-[220px]">
           <select
             className="w-full border rounded px-2 py-1 text-sm bg-background"
             value={value}
             aria-label={t('channels.columns.testing_model')}
+            disabled={savingTestingModelIds?.has(String(channelRef(channel)))}
+            aria-busy={savingTestingModelIds?.has(String(channelRef(channel)))}
             onChange={(event) => onTestingModelUpdate(channel, event.target.value === '' ? null : event.target.value)}
           >
             <option value="">{t('channels.testing.auto')}</option>
             <option value={CHANNEL_TESTING_MODEL_SKIP}>{t('channels.testing.skip')}</option>
+            {unlistedSelection && (
+              <option value={unlistedSelection}>{t('channels.testing.unlisted_selection', { model: unlistedSelection })}</option>
+            )}
             {models.map((model) => (
               <option key={model} value={model}>
                 {model}

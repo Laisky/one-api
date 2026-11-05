@@ -38,6 +38,7 @@ import { defaultConfig, typeConfig } from '../type/Config'; //typeConfig
 import { createFilterOptions } from '@mui/material/Autocomplete';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
+import { omitUnownedChannelFields } from '../../../../../legacy/channel-update-payload.mjs';
 
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
@@ -366,12 +367,12 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
         values.model_configs = null;
       }
       if (channelId) {
-        res = await API.put(`/api/channel/`, {
+        res = await API.put(`/api/channel/`, omitUnownedChannelFields({
           ...values,
           uuid: channelId,
           models: modelsStr,
           config: configStr
-        });
+        }));
       } else {
         res = await API.post(`/api/channel/`, { ...values, models: modelsStr, config: configStr });
       }

@@ -63,6 +63,7 @@ type Channel struct {
 	// Preferred testing model for this channel (optional).
 	// If empty or nil, the system auto-selects the cheapest chat-format model at test
 	// time. Set it to ChannelTestingModelSkip to exclude the channel from testing.
+	// Every write path stores it through Channel.NormalizeTestingModel.
 	TestingModel *string `json:"testing_model" gorm:"column:testing_model;type:varchar(255)"`
 	// Channel-specific pricing tables
 	// DEPRECATED: Use ModelConfigs instead. These fields are kept for backward compatibility and migration.
@@ -244,6 +245,7 @@ func BatchInsertChannels(channels []Channel) error {
 		if err := channels[i].NormalizeHiddenModels(); err != nil {
 			return errors.Wrapf(err, "normalize hidden models for channel at index %d", i)
 		}
+		channels[i].TestingModel = channels[i].NormalizeTestingModel(channels[i].TestingModel)
 		if err := validateJinaChannelConfiguration(&channels[i]); err != nil {
 			return errors.Wrapf(err, "validate channel at batch index %d", i)
 		}
@@ -384,6 +386,7 @@ func (channel *Channel) Insert() error {
 			errors.Wrapf(err, "failed to normalize hidden models for channel: name=%s, type=%d", channel.Name, channel.Type),
 			channel.Ref())
 	}
+	channel.TestingModel = channel.NormalizeTestingModel(channel.TestingModel)
 	if err := validateJinaChannelConfiguration(channel); err != nil {
 		return errors.Wrap(err, "validate new channel")
 	}
@@ -416,46 +419,25 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 			errors.Wrapf(err, "failed to normalize hidden models for channel: id=%d, name=%s", channel.Id, channel.Name),
 			channel.Ref())
 	}
-	// Validate/sync TestingModel with latest supported models
-	clearTestingModel := false
+	// A client disconnect must not abort a half-applied update, so the write is detached
+	// from cancellation, but it stays bounded: the caller's deadline or
+	// channelWriteTimeout, whichever is sooner, also caps row-lock waits.
+	writeCtx, cancel := detachedChannelWriteContext(ctx)
+	defer cancel()
 	var existing Channel
 	if channel.Id != 0 {
-		if err := DB.Select("id", "models", "testing_model", "group").First(&existing, "id = ?", channel.Id).Error; err != nil {
+		if err := DB.WithContext(writeCtx).Select("id", "group").First(&existing, "id = ?", channel.Id).Error; err != nil {
 			return identity.Tag(
 				errors.Wrapf(err, "load existing channel %d before update", channel.Id),
 				channel.Ref())
 		}
 	}
-	// Determine models to validate against: new value if provided, else existing
-	modelsForValidation := channel.Models
-	if strings.TrimSpace(modelsForValidation) == "" {
-		modelsForValidation = existing.Models
-	}
-	// Helper to check containment
-	contains := func(listCSV, name string) bool {
-		for n := range strings.SplitSeq(listCSV, ",") {
-			if strings.TrimSpace(n) == name {
-				return true
-			}
-		}
-		return false
-	}
-	if channel.TestingModel != nil {
-		tm := strings.TrimSpace(*channel.TestingModel)
-		if tm == "" {
-			clearTestingModel = true
-			channel.TestingModel = nil
-		} else if !contains(modelsForValidation, tm) {
-			// requested value not supported by current models
-			clearTestingModel = true
-			channel.TestingModel = nil
-		}
-	} else if existing.TestingModel != nil && *existing.TestingModel != "" {
-		// No explicit testing_model provided in payload, but existing one may become invalid due to models change
-		if !contains(modelsForValidation, *existing.TestingModel) {
-			clearTestingModel = true
-		}
-	}
+	// testing_model has merge-patch semantics (omitted keeps, null clears) and is
+	// resolved against the locked row inside the transaction, never written by the
+	// struct update. A non-nil pointer is an explicit write, so callers that reload a
+	// row and save it back must clear TestingModel unless they mean to change it.
+	requestedTestingModel := channel.TestingModel
+	testingModelProvided := requestedTestingModel != nil || channel.NullableFieldsProvided[ChannelTestingModelField]
 
 	// Some nullable text fields are persisted as *string. GORM's struct-based
 	// Updates() skips nil pointers, so collect explicitly provided values for a
@@ -479,8 +461,16 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 	}
 
 	persisted := *channel
-	err := DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&persisted).Omit("uuid").Updates(&persisted).Error; err != nil {
+	var testingModel testingModelResolution
+	err := DB.WithContext(writeCtx).Transaction(func(tx *gorm.DB) error {
+		if err := lockChannelRow(tx, persisted.Id); err != nil {
+			return errors.Wrapf(err, "lock channel %d for update", persisted.Id)
+		}
+		var upstreamBefore Channel
+		if err := tx.Select(abilityUpstreamColumns).First(&upstreamBefore, "id = ?", persisted.Id).Error; err != nil {
+			return errors.Wrapf(err, "read upstream configuration of channel %d before update", persisted.Id)
+		}
+		if err := tx.Model(&persisted).Omit("uuid", ChannelTestingModelField).Updates(&persisted).Error; err != nil {
 			return errors.Wrapf(err, "update channel: id=%d, name=%s", persisted.Id, persisted.Name)
 		}
 		if persisted.HiddenModelsProvided {
@@ -493,11 +483,11 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 				return errors.Wrapf(err, "update nullable fields for channel: id=%d, name=%s", persisted.Id, persisted.Name)
 			}
 		}
-		if clearTestingModel {
-			if err := tx.Model(&Channel{}).Where("id = ?", persisted.Id).Update("testing_model", nil).Error; err != nil {
-				return errors.Wrapf(err, "clear testing_model for channel: id=%d", persisted.Id)
-			}
+		resolution, err := persistResolvedTestingModel(tx, persisted.Id, requestedTestingModel, testingModelProvided)
+		if err != nil {
+			return errors.Wrap(err, "persist resolved testing_model")
 		}
+		testingModel = resolution
 		if err := tx.First(&persisted, "id = ?", persisted.Id).Error; err != nil {
 			return errors.Wrapf(err, "reload channel %d before rebuilding abilities", persisted.Id)
 		}
@@ -506,11 +496,10 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 		if err := validateJinaChannelConfiguration(&persisted); err != nil {
 			return errors.Wrap(err, "validate updated channel")
 		}
-		if err := deleteAbilitiesWithDB(tx, persisted.Id); err != nil {
-			return errors.Wrapf(err, "delete abilities for channel %d during update", persisted.Id)
-		}
-		if err := addAbilitiesWithDB(tx, &persisted); err != nil {
-			return errors.Wrapf(err, "add abilities for channel %d during update", persisted.Id)
+		// Keep the relay-time suspensions of retained abilities unless this write changed
+		// the upstream they were measured against.
+		if err := syncAbilitiesWithDB(tx, &persisted, !sameAbilityUpstream(&upstreamBefore, &persisted)); err != nil {
+			return errors.Wrapf(err, "sync abilities for channel %d during update", persisted.Id)
 		}
 		return nil
 	})
@@ -521,9 +510,18 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 	}
 
 	*channel = persisted
+	lg := logger.FromContext(ctx)
 	if len(cleared) > 0 {
-		logger.FromContext(ctx).Debug("channel update cleared nullable fields",
+		lg.Debug("channel update cleared nullable fields",
 			append(channel.Ref().Zap(), zap.Strings("cleared_fields", cleared))...)
+	}
+	if testingModel.written {
+		lg.Debug("channel update resolved testing_model",
+			append(channel.Ref().Zap(),
+				zap.Bool("testing_model_provided", testingModelProvided),
+				zap.String("requested_testing_model", derefStr(requestedTestingModel)),
+				zap.String("previous_testing_model", derefStr(testingModel.previous)),
+				zap.String("persisted_testing_model", derefStr(testingModel.persisted)))...)
 	}
 	InvalidateChannelModelCachesWithContext(ctx, existing.Group, channel.Group)
 	return nil
@@ -644,28 +642,19 @@ func UpdateChannelStatusById(id int, status int) {
 }
 
 // UpdateChannelStatusByIdWithContext updates channel ability/status state with request-scoped diagnostics.
+// It delegates to SetChannelStatusWithContext so the status and the ability routing
+// flags change in one locked transaction; the separate statements it used to issue let
+// a concurrent status change leave a disabled channel whose abilities still routed traffic.
+// Relay error paths call it after the request has finished, so, as before, the write
+// ignores ctx's cancellation and deadline; channelWriteTimeout still bounds lock waits.
 // Parameters: ctx carries request logging, id identifies the channel, and status is the desired channel status.
 // Returns: none; persistence failures are logged with channel identity.
 func UpdateChannelStatusByIdWithContext(ctx context.Context, id int, status int) {
-	var channel Channel
-	// uuid and name are selected alongside the group so the failure logs below can
-	// name the channel without issuing a second query.
-	_ = DB.Select("id", "uuid", "name", "group").First(&channel, "id = ?", id).Error
-	if channel.Id == 0 {
-		channel.Id = id
-	}
-	err := UpdateAbilityStatus(id, status == ChannelStatusEnabled)
-	if err != nil {
-		logger.FromContext(ctx).Error("failed to update ability status",
-			append(channel.Ref().Zap(), zap.Error(err), zap.Int("status", status))...)
-	}
-	err = DB.Model(&Channel{}).Where("id = ?", id).Update("status", status).Error
-	if err != nil {
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), channelWriteTimeout)
+	defer cancel()
+	if err := SetChannelStatusWithContext(writeCtx, id, status); err != nil {
 		logger.FromContext(ctx).Error("failed to update channel status",
-			append(channel.Ref().Zap(), zap.Error(err), zap.Int("status", status))...)
-	}
-	if err == nil {
-		InvalidateChannelModelCachesWithContext(ctx, channel.Group)
+			append(LookupChannelRef(ctx, id).Zap(), zap.Error(err), zap.Int("status", status))...)
 	}
 }
 
