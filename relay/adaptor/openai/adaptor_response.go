@@ -381,6 +381,13 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 
 	go func() {
 		defer writer.Close()
+		write := func(data []byte) bool {
+			if _, err := writer.Write(data); err != nil {
+				lg.Debug("Claude stream downstream closed", zap.Error(err))
+				return false
+			}
+			return true
+		}
 
 		lineReader := commonsse.NewLineReader(bytes.NewReader(body), commonsse.DefaultLineBufferSize)
 		for {
@@ -410,8 +417,9 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 				data := after
 
 				if data == "[DONE]" {
-					writer.Write([]byte("event: message_stop\n"))
-					writer.Write([]byte("data: {\"type\":\"message_stop\"}\n\n"))
+					if !write([]byte("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")) {
+						return
+					}
 					break
 				}
 
@@ -433,8 +441,9 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 						}
 
 						claudeData, _ := json.Marshal(claudeChunk)
-						writer.Write([]byte("event: content_block_delta\n"))
-						writer.Write(fmt.Appendf(nil, "data: %s\n\n", claudeData))
+						if !write(fmt.Appendf(nil, "event: content_block_delta\ndata: %s\n\n", claudeData)) {
+							return
+						}
 					}
 				}
 			}

@@ -106,8 +106,12 @@ func TestHandlerWriteFailureCarriesOrigin(t *testing.T) {
 	failure := errors.New("synthetic write failure")
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+	resultOK, usageOK := Handler(c, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("{}"))})
+	require.Nil(t, resultOK)
+	require.NotNil(t, usageOK)
 	c.Writer = failingResponseWriter{ResponseWriter: c.Writer, err: failure}
-	result, _ := Handler(c, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("{}"))})
+	result, usage := Handler(c, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("{}"))})
+	require.Equal(t, usageOK, usage)
 	require.NotNil(t, result)
 	require.Equal(t, "write_response_body_failed", result.Code)
 	require.Equal(t, failure.Error(), result.Message)

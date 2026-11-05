@@ -91,3 +91,21 @@ func TestHandlerWriteFailureCarriesOrigin(t *testing.T) {
 	require.ErrorIs(t, result.RawError, failure)
 	require.Contains(t, fmt.Sprintf("%+v", result.RawError), "Handler")
 }
+
+// TestEmbeddingWriteFailureCarriesUsage verifies delivery failure propagation
+// without losing usage after an upstream embedding request succeeds.
+func TestEmbeddingWriteFailureCarriesUsage(t *testing.T) {
+	failure := errors.New("synthetic embedding write failure")
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+	c.Writer = failingResponseWriter{ResponseWriter: c.Writer, err: failure}
+	result, usage := EmbeddingHandler(c, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"Response":{"Usage":{"TotalTokens":11}}}`))})
+	require.NotNil(t, result)
+	require.NotNil(t, usage)
+	require.Equal(t, 11, usage.TotalTokens)
+	require.Equal(t, "write_response_body_failed", result.Code)
+	require.Equal(t, http.StatusInternalServerError, result.StatusCode)
+	require.Equal(t, failure.Error(), result.Message)
+	require.ErrorIs(t, result.RawError, failure)
+	require.Contains(t, fmt.Sprintf("%+v", result.RawError), "EmbeddingHandler")
+}

@@ -290,7 +290,7 @@ func RecordTraceTimestamp(c *gin.Context, timestampKey string) {
 	}
 
 	if err := model.UpdateTraceTimestamp(c, traceID, timestampKey); err != nil {
-		lg.Error("failed to update trace timestamp", zap.Error(err), zap.String("trace_id", traceID), zap.String("timestamp_key", timestampKey))
+		lg.Error("failed to update trace timestamp", zap.Error(err), zap.String("trace_id", traceID))
 	}
 }
 
@@ -360,7 +360,7 @@ func RecordTraceStatus(c *gin.Context, status int) {
 
 	ctx := gmw.SetLogger(gmw.Ctx(c), lg)
 	if err := model.UpdateTraceStatus(ctx, traceID, status); err != nil {
-		lg.Error("failed to update trace status", zap.Error(err), zap.String("trace_id", traceID), zap.Int("status", status))
+		lg.Error("failed to update trace status", zap.Error(err), zap.String("trace_id", traceID))
 	}
 }
 
