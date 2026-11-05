@@ -150,7 +150,7 @@ func embedResponse(c *gin.Context, resp *http.Response, m *meta.Meta) (*model.Us
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, (32<<20)+1))
 	if err != nil {
-		return nil, openai.ErrorWrapper(err, "read_embedding_response", http.StatusBadGateway)
+		return nil, openai.ErrorWrapper(errors.WithStack(err), "read_embedding_response", http.StatusBadGateway)
 	}
 	if len(body) > 32<<20 {
 		return nil, openai.ErrorWrapper(errors.New("embedding response too large"), "invalid_embedding_response", http.StatusBadGateway)
@@ -171,7 +171,7 @@ func embedResponse(c *gin.Context, resp *http.Response, m *meta.Meta) (*model.Us
 		Message string `json:"message"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, openai.ErrorWrapper(err, "invalid_embedding_response", http.StatusBadGateway)
+		return nil, openai.ErrorWrapper(errors.WithStack(err), "invalid_embedding_response", http.StatusBadGateway)
 	}
 	if payload.Message != "" {
 		return nil, buildRerankError(body, http.StatusBadGateway)
@@ -224,7 +224,7 @@ func embedResponse(c *gin.Context, resp *http.Response, m *meta.Meta) (*model.Us
 	}
 	encoded, err := json.Marshal(map[string]any{"object": "list", "model": visible, "data": data, "usage": usage})
 	if err != nil {
-		return usage, openai.ErrorWrapper(err, "encode_embedding_response", http.StatusBadGateway)
+		return usage, openai.ErrorWrapper(errors.WithStack(err), "encode_embedding_response", http.StatusBadGateway)
 	}
 	c.Header("Content-Type", "application/json")
 	if id := resp.Header.Get("X-Request-ID"); id != "" {
@@ -232,7 +232,7 @@ func embedResponse(c *gin.Context, resp *http.Response, m *meta.Meta) (*model.Us
 	}
 	c.Status(http.StatusOK)
 	if _, err := c.Writer.Write(encoded); err != nil {
-		return usage, openai.ErrorWrapper(err, "write_embedding_response", http.StatusInternalServerError)
+		return usage, openai.ErrorWrapper(errors.WithStack(err), "write_embedding_response", http.StatusInternalServerError)
 	}
 	return usage, nil
 }

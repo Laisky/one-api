@@ -2,10 +2,13 @@ package controller
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	glog "github.com/Laisky/go-utils/v6/log"
+	"github.com/Laisky/zap"
 
 	"github.com/Laisky/one-api/dto"
 	"github.com/Laisky/one-api/model"
@@ -58,7 +61,7 @@ func chooseChannelTestModelWithContext(ctx context.Context, channel *model.Chann
 	// An administrator who selected SKIP for this channel has opted it out of health
 	// checking. This is checked after the explicit requestedModel branch so a manual
 	// test naming a model can still force a one-off probe.
-	if channelTestingSkipped(channel) {
+	if channel.IsTestingSkipped() {
 		return "", false, errChannelTestNotApplicable(
 			"channel testing is disabled for this channel (testing model set to SKIP)")
 	}
@@ -144,7 +147,20 @@ func channelTextTestModels(channel *model.Channel) []string {
 	// The admin selector is an explicit choice, so it also offers models whose API
 	// format the gateway cannot determine. That is how an operator opts a
 	// custom-named chat model back into testing after auto-selection skipped it.
-	return channelTestModelCandidates(channel, true)
+	candidates := channelTestModelCandidates(channel, true)
+	// Offer the stored selection too when the channel serves it and it is chat-probeable,
+	// such as a model_mapping alias or a custom model on an unrestricted channel, so a
+	// valid persisted value is always selectable rather than shown as Auto.
+	if channel == nil || channel.IsTestingSkipped() || !channelHasChatSurface(channel) {
+		return candidates
+	}
+	stored := channel.NormalizeTestingModel(channel.TestingModel)
+	if stored == nil || slices.Contains(candidates, *stored) || !channelTestModelUsesChatFormat(channel, *stored, true) {
+		return candidates
+	}
+	candidates = append(candidates, *stored)
+	sort.Strings(candidates)
+	return candidates
 }
 
 // channelAutoTestModels returns the models the automatic sweep may pick on its own.
@@ -186,15 +202,42 @@ func channelTestModelCandidates(channel *model.Channel, explicit bool) []string 
 	return testModels
 }
 
-// channelTestingSkipped reports whether an administrator excluded this channel from
-// health checking by selecting SKIP as its testing model.
-// Parameters: channel is the channel under consideration.
-// Returns: true when the channel must not be probed.
-func channelTestingSkipped(channel *model.Channel) bool {
-	if channel == nil || channel.TestingModel == nil {
-		return false
+// clearStaleTestingModel reverts the stored testing model a probe found unusable to
+// auto-select, unless the channel's probe configuration changed after the probe read it
+// (a new selection, model list, or mapping may make the decision wrong).
+// Parameters: ctx scopes the write, lg is the channel-bound logger, channel is the
+// tested channel, and revision is the ProbeConfigRevision the decision was based on.
+// Returns: the revision a probe result must be applied against. After a confirmed
+// cleanup that is the channel's new revision (and channel reflects the cleared value);
+// otherwise it is revision unchanged, so a concurrent change still discards the result.
+// Failures are logged, not returned, because the probe proceeds either way.
+func clearStaleTestingModel(ctx context.Context, lg glog.Logger, channel *model.Channel, revision string) string {
+	writeCtx, cancel := context.WithTimeout(ctx, channelProbeWriteTimeout)
+	defer cancel()
+	cleared, err := model.ClearStaleChannelTestingModel(writeCtx, channel.Id, revision)
+	if err != nil {
+		lg.Error("failed to clear stale testing_model", zap.Error(err))
+		return revision
 	}
-	return strings.EqualFold(strings.TrimSpace(*channel.TestingModel), model.ChannelTestingModelSkip)
+	if !cleared {
+		lg.Debug("kept testing_model: the channel changed after the probe read it",
+			zap.String("observed_testing_model", derefTestingModelForLog(channel.TestingModel)))
+		return revision
+	}
+	// The cleanup verified, under the row lock, that the stored probe configuration
+	// matched revision and changed nothing but testing_model, so the reloaded channel
+	// with the value cleared is exactly what is stored now.
+	channel.TestingModel = nil
+	return channel.ProbeConfigRevision()
+}
+
+// derefTestingModelForLog renders an optional testing model for structured logs.
+// Parameters: value is the optional testing model. Returns: the value or "" for nil.
+func derefTestingModelForLog(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 // channelTestModelUsesChatFormat reports whether a model is served through one of

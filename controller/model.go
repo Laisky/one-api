@@ -2050,6 +2050,7 @@ func intersectTokenModelIDs(modelsString string, abilities []dto.EnabledAbility)
 
 // GetAvailableModelsByToken reports the models allowed for the current API token when explicitly restricted.
 func GetAvailableModelsByToken(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	// Get token information to determine status
 	tokenID := c.GetInt(ctxkey.TokenId)
 	userID := c.GetInt(ctxkey.Id)
@@ -2078,6 +2079,7 @@ func GetAvailableModelsByToken(c *gin.Context) {
 		if modelsString != "" {
 			ctx, userGroup, err := getRequestUserGroup(c)
 			if err != nil {
+				lg.Warn("failed to load user group for available models", zap.Int("user_id", userID), zap.String("error", err.Error()))
 				c.JSON(http.StatusBadRequest, gin.H{
 					"success": false,
 					"message": err.Error(),

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
-	gmw "github.com/Laisky/gin-middlewares/v7"
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 	"github.com/gin-contrib/sessions"
@@ -206,11 +205,6 @@ func main() {
 	relay.InitializeGlobalPricing()
 	asyncvideo.StartWorkers(workerCtx, relaycontroller.ResolveAsyncVideoProvider, config.AsyncVideoWorkers)
 
-	logLevel := glog.LevelInfo
-	if config.DebugEnabled {
-		logLevel = glog.LevelDebug
-	}
-
 	// Initialize HTTP server
 	server := gin.New()
 	server.RedirectTrailingSlash = false
@@ -223,13 +217,7 @@ func main() {
 		middlewares = append(middlewares, otelgin.Middleware(config.OpenTelemetryServiceName))
 	}
 
-	middlewares = append(middlewares,
-		gmw.NewLoggerMiddleware(
-			gmw.WithLoggerMwColored(),
-			gmw.WithLevel(logLevel.String()),
-			gmw.WithLogger(logger.Logger.Named("gin")),
-		),
-	)
+	middlewares = append(middlewares, middleware.RequestLogger())
 	server.Use(middlewares...)
 	// This will cause SSE not to work!!!
 	//server.Use(gzip.Gzip(gzip.DefaultCompression))

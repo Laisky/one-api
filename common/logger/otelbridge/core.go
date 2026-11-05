@@ -251,14 +251,8 @@ func (c *Core) Write(ent zapcore.Entry, fields []zapcore.Field) (result error) {
 		metrics.RecordAppLogExport(metrics.AppLogExportOutcomeDroppedEncoding, 1)
 		return ErrLogEncoding
 	}
-	record, err := c.buildRecord(ent, converted)
+	record, deduplicated, err := c.buildRecord(ent, converted)
 	if err != nil {
-		metrics.RecordAppLogExport(metrics.AppLogExportOutcomeDroppedEncoding, 1)
-		return ErrLogEncoding
-	}
-	var attrs []attribute.KeyValue
-	record.WalkAttributes(func(kv attribute.KeyValue) bool { attrs = append(attrs, kv); return true })
-	if !c.private && ValidateLogRecordAttributes(attrs) != nil {
 		metrics.RecordAppLogExport(metrics.AppLogExportOutcomeDroppedEncoding, 1)
 		return ErrLogEncoding
 	}
@@ -269,6 +263,9 @@ func (c *Core) Write(ent zapcore.Entry, fields []zapcore.Field) (result error) {
 
 	lg.Emit(emitCtx, record)
 	metrics.RecordAppLogExport(metrics.AppLogExportOutcomeEmitted, 1)
+	if deduplicated {
+		metrics.RecordAppLogExport(metrics.AppLogExportOutcomeDeduplicated, 1)
+	}
 	return nil
 }
 
@@ -280,7 +277,9 @@ func (c *Core) Write(ent zapcore.Entry, fields []zapcore.Field) (result error) {
 //
 // Return values:
 //   - log.Record: the record to emit.
-func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) (log.Record, error) {
+//   - bool: whether a repeated attribute key was resolved last-value-wins.
+//   - error: ErrLogEncoding when the record cannot be encoded faithfully.
+func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) (log.Record, bool, error) {
 	var record log.Record
 	record.SetTimestamp(ent.Time)
 	if c.private {
@@ -292,13 +291,16 @@ func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) (log.Re
 	record.SetSeverityText(ent.Level.String())
 
 	appAttrs := appendNamespaced(c.attrs, c.namespacePath, converted.attrs)
-	record.AddAttributes(appAttrs...)
+	// appendNamespaced returns a fresh slice, so generated metadata can be
+	// appended to it; appAttrs keeps its own length and still names only the
+	// application's fields for the collision checks below.
+	attrs := appAttrs
 	if ent.Caller.Defined {
 		for _, kv := range []attribute.KeyValue{
 			attribute.String(string(semconv.CodeFilePathKey), ent.Caller.File), attribute.Int(string(semconv.CodeLineNumberKey), ent.Caller.Line), attribute.String(string(semconv.CodeFunctionNameKey), ent.Caller.Function),
 		} {
 			if !hasLogKey(appAttrs, kv.Key) {
-				record.AddAttributes(kv)
+				attrs = append(attrs, kv)
 			}
 		}
 	}
@@ -308,25 +310,36 @@ func (c *Core) buildRecord(ent zapcore.Entry, converted convertedFields) (log.Re
 			stackKey = semconv.ExceptionStacktraceKey
 		}
 		if !hasLogKey(appAttrs, attribute.Key(stackKey)) {
-			record.AddAttributes(attribute.String(string(stackKey), ent.Stack))
+			attrs = append(attrs, attribute.String(string(stackKey), ent.Stack))
 		}
 	}
+	deduplicated := false
 	if !c.private {
 		derived := c.exceptionAttrs
 		if converted.err != nil {
 			var err error
 			derived, err = DeriveLogExceptionAttributes(converted.err, appAttrs, converted.errMessage)
 			if err != nil {
-				return log.Record{}, err
+				return log.Record{}, false, err
 			}
 		}
 		for _, kv := range derived {
 			if !hasLogKey(appAttrs, kv.Key) {
-				record.AddAttributes(kv)
+				attrs = append(attrs, kv)
 			}
 		}
+
+		// Zap allows a key to repeat; OTLP does not. Resolve collisions the way
+		// the OpenTelemetry specification prescribes rather than discarding the
+		// record, and reject only what genuinely cannot be encoded.
+		var err error
+		attrs, deduplicated, err = NormalizeLogRecordAttributes(attrs)
+		if err != nil {
+			return log.Record{}, false, err
+		}
 	}
-	return record, nil
+	record.AddAttributes(attrs...)
+	return record, deduplicated, nil
 }
 
 // emitContext resolves the context a record is emitted with, which is what

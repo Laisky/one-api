@@ -59,7 +59,6 @@ func forwardOCRResponse(c *gin.Context, resp *http.Response) (*model.OCRReceipt,
 	receipt := ParseOCRReceipt(body)
 	if readErr != nil {
 		lg.Debug("upstream OCR response read failed",
-			zap.Error(readErr),
 			zap.Int("body_bytes", len(body)),
 			zap.String("usage_problem", receipt.UsageProblem))
 		return receipt, openai.ErrorWrapper(

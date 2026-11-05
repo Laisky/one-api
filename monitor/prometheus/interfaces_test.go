@@ -19,4 +19,5 @@ var (
 	_ metrics.LogExportRecorder      = (*PrometheusRecorder)(nil)
 	_ metrics.RequestOutcomeRecorder = (*PrometheusRecorder)(nil)
 	_ metrics.RetentionRecorder      = (*PrometheusRecorder)(nil)
+	_ metrics.ChannelHealthRecorder  = (*PrometheusRecorder)(nil)
 )

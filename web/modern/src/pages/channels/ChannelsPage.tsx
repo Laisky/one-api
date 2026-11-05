@@ -26,6 +26,7 @@ import { CHANNEL_TYPE_LABELS as CHANNEL_TYPES } from './constants';
 import { resolveChannelColor } from './utils/colorGenerator';
 import { channelRef, channelRefPayload, createChannelColumns, sameChannelRef, type Channel } from './channels-page-columns';
 import { ChannelModelResetButton, useChannelModelReset } from './useChannelModelReset';
+import { useTestingModelUpdate } from './useTestingModelUpdate';
 
 /** ChannelsPage renders searchable channel administration, bulk actions, and pagination. */
 export function ChannelsPage() {
@@ -320,41 +321,7 @@ export function ChannelsPage() {
   /** duplicateChannel identifies the selected channel for the shared one-click duplicate interaction. */
   const duplicateChannel = (channel: Channel) => duplicateAction.duplicate(channelRef(channel));
 
-  const updateTestingModel = async (channel: Channel, testingModel: string | null) => {
-    try {
-      const payload: any = { ...channelRefPayload(channelRef(channel)), name: channel.name };
-      // When null, let backend clear it (auto-cheapest)
-      if (testingModel === null) {
-        payload.testing_model = null;
-      } else {
-        payload.testing_model = testingModel;
-      }
-      // Unified API call - complete URL with /api prefix
-      const res = await api.put('/api/channel/', payload);
-      if (res.data?.success) {
-        // Update local row to reflect change
-        setData((prev) => prev.map((ch) => (sameChannelRef(ch, channel) ? { ...ch, testing_model: testingModel } : ch)));
-        notify({
-          type: 'success',
-          message: t('channels.notifications.testing_model_saved'),
-        });
-      } else {
-        const msg = res.data?.message || t('channels.notifications.testing_model_failed_message');
-        notify({
-          type: 'error',
-          title: t('channels.notifications.testing_model_failed_title'),
-          message: msg,
-        });
-      }
-    } catch (error) {
-      console.error('Failed to update testing model:', error);
-      notify({
-        type: 'error',
-        title: t('channels.notifications.testing_model_failed_title'),
-        message: t('channels.notifications.testing_model_failed_message'),
-      });
-    }
-  };
+  const testingModelUpdate = useTestingModelUpdate(setData);
 
   const handlePriorityUpdate = async (channel: Channel, newPriority: number) => {
     if ((channel.priority ?? 0) === newPriority) return;
@@ -458,7 +425,8 @@ export function ChannelsPage() {
     renderResetAction,
     onPriorityUpdate: handlePriorityUpdate,
     onBalanceRefresh: handleBalanceRefresh,
-    onTestingModelUpdate: updateTestingModel,
+    onTestingModelUpdate: testingModelUpdate.update,
+    savingTestingModelIds: testingModelUpdate.saving,
     onDuplicate: duplicateChannel,
     duplicatingIds: duplicateAction.pending,
     onManage: manage,

@@ -196,11 +196,13 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 
 	// Log heartbeat diagnostics regardless of error state — critical for
 	// debugging reverse-proxy timeout (524) issues.
-	if hbr.HeartbeatsSent() > 0 || hbr.HeartbeatWriteErr() != nil {
-		lg.Debug("heartbeat diagnostics",
-			zap.Int("heartbeats_sent", hbr.HeartbeatsSent()),
-			zap.NamedError("heartbeat_write_err", hbr.HeartbeatWriteErr()),
-		)
+	if heartbeatErr := hbr.HeartbeatWriteErr(); hbr.HeartbeatsSent() > 0 || heartbeatErr != nil {
+		fields := []zap.Field{zap.Int("heartbeats_sent", hbr.HeartbeatsSent()), zap.Bool("heartbeat_write_failed", heartbeatErr != nil)}
+		returnedHeartbeat := errors.Is(heartbeatErr, lifecycle.writer.err) && (streamErr == nil || errors.Is(streamErr, lifecycle.writer.err))
+		if heartbeatErr != nil && !returnedHeartbeat {
+			fields = append(fields, zap.NamedError("heartbeat_write_err", heartbeatErr))
+		}
+		lg.Debug("heartbeat diagnostics", fields...)
 	}
 
 	if streamErr != nil {

@@ -137,7 +137,7 @@ describe('RegisterPage live password feedback', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
   });
 
-  it.each(['Abcdefgh12', 'A1' + 'x'.repeat(18), 'A1' + 'x'.repeat(19), 'A1' + 'x'.repeat(27), 'A1' + 'x'.repeat(28), 'Abcdefg12!@#_-', `Abcdefg12'\"\\/<>`])(
+  it.each(['Abcdefgh12', 'A1' + 'x'.repeat(18), 'A1' + 'x'.repeat(19), 'A1' + 'x'.repeat(27), 'A1' + 'x'.repeat(28), 'Abcdefg12!@#_-', `Abcdefg12'"\\/<>`])(
     'accepts pasted passwords %j unchanged and sends neither confirmation nor new payload fields', async (value) => {
       const { user, password, confirmation } = setup();
       await completeOtherFields(user);

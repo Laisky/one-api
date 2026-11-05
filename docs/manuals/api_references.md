@@ -6180,7 +6180,7 @@ Creates one or more channels from a posted channel object. The `key` field is sp
 | Priority | `priority` | integer | No | 0 | Selection priority (higher = preferred). |
 | Weight | `weight` | integer | No | 0 | Load-balancing weight within a priority tier. |
 | Status | `status` | integer | No | 1 | `1` enabled, `2` manually disabled, `3` auto-disabled. |
-| Testing model | `testing_model` | string | No | null | Model used for health checks; cleared at create time if not in `models`. |
+| Testing model | `testing_model` | string | No | null | Model used for health checks. `null` or `""` auto-selects the cheapest chat-format model; `"__skip__"` (case-insensitive, stored canonically) excludes the channel from health checks; any other value (trimmed) must be a model the channel serves — listed in `models`, a `model_mapping` alias of a listed model, or any model when `models` is empty — or it is stored as `null`. |
 | Inference profile ARN map | `inference_profile_arn_map` | string (JSON) | No | null | AWS Bedrock model→ARN map; validated when non-empty. |
 | Tooling | `tooling` | string or object | No | null | Channel tooling policy (whitelist/pricing). Accepts a JSON object or a JSON string. |
 
@@ -6271,7 +6271,7 @@ Updates a channel. Two modes: a full update (default), or a status-only update w
 |------|------|----------|---------|-------------|
 | `status_only` | string | No | (empty) | When non-empty, only `uuid` and `status` are applied; all other fields are ignored. |
 
-**Request body**: a channel object including `uuid`. For a full update the same fields as `POST /api/channel/` apply, and `name` must be non-empty. For a status-only update, only `uuid` and `status` are required. Note: `inference_profile_arn_map` (when non-empty) is validated before the `status_only` branch, so an invalid ARN map is rejected even in status-only mode.
+**Request body**: a channel object including `uuid`. For a full update the same fields as `POST /api/channel/` apply, and `name` must be non-empty. For a status-only update, only `uuid` and `status` are required. `testing_model` follows merge-patch semantics: omit it to keep the stored value (re-validated against the effective `models`, so `"__skip__"` always survives), or send `null`/`""` to return to auto-select. An explicit `null` therefore clears a previous selection; before this behaviour was introduced (issue #609) a `null` was ignored, so clients must omit the field rather than send `null` to leave it unchanged. Clients that read a channel and send it back unchanged keep their selection. The value is resolved against the row while the update holds its lock, so an update that omits it never overwrites a selection saved concurrently. The value actually stored is echoed in the response `data`. Clients that load a channel and save the whole object back should omit `testing_model` unless they edit it; echoing a value loaded earlier would overwrite a selection saved in the meantime. Note: `inference_profile_arn_map` (when non-empty) is validated before the `status_only` branch, so an invalid ARN map is rejected even in status-only mode.
 
 ```json
 {
@@ -6430,16 +6430,21 @@ Synchronously runs one live chat-completion request against a single channel to 
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `model` | string | No | (stored testing model, else cheapest supported) | Model to send the probe request to. Trimmed; falls back to `testing_model` (if still supported) then the channel's cheapest supported model. |
+| `model` | string | No | (stored testing model, else cheapest chat-format model) | Model to send the probe request to. Trimmed. When given, the probe runs with that model even for a channel whose `testing_model` is `"__skip__"` (a deliberate one-off), provided the channel has a chat-capable endpoint, serves the model, and the model is not a known non-chat format. When omitted, the probe uses `testing_model` (if the channel still serves it through a chat API format), otherwise the channel's cheapest chat-format model; a channel set to `"__skip__"` is not probed (see the skipped response below). |
 
-**Response**: HTTP 200. Note: this endpoint does not use the standard `data` envelope; it returns flat fields. On success `message` holds the upstream reply text; on failure `success` is `false` and `message` holds the error, with `time` set to 0.
+**Response**: HTTP 200. Note: this endpoint does not use the standard `data` envelope; it returns flat fields. There are three outcomes:
+
+- **Probed and succeeded:** `success` is `true` and `message` holds the upstream reply text.
+- **Probed and failed:** `success` is `false` and `message` holds the error, with `time` set to 0.
+- **Skipped (not probed):** `success` is `false`, `skipped` is `true`, `time` is 0, `modelName` is `""`, and `message` explains why. This is returned when `model` is omitted and the channel's `testing_model` is `"__skip__"` or the channel has no model known to be served through a chat API format, and, with or without `model`, when the channel has no chat-capable endpoint. Nothing was sent upstream, so it is not an upstream failure: no test log or response time is recorded and the channel status is unchanged. Clients must check `skipped` before treating `success: false` as an outage.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `success` | bool | Whether the probe succeeded. |
-| `message` | string | Reply text on success, or error message on failure. |
-| `time` | number | Elapsed seconds (0 on failure). |
-| `modelName` | string | The model actually used for the probe. |
+| `success` | bool | Whether the probe ran and succeeded. |
+| `skipped` | bool | Present and `true` only when the channel was not probed. |
+| `message` | string | Reply text on success, the error on failure, or the reason on a skip. |
+| `time` | number | Elapsed seconds (0 on failure or skip). |
+| `modelName` | string | The model actually used for the probe (`""` on a skip). |
 
 ```json
 {
@@ -6447,6 +6452,18 @@ Synchronously runs one live chat-completion request against a single channel to 
   "message": "Hello! How can I help you today?",
   "time": 0.842,
   "modelName": "gpt-4o-mini"
+}
+```
+
+A channel set to SKIP, tested without `model`:
+
+```json
+{
+  "success": false,
+  "skipped": true,
+  "message": "channel testing is disabled for this channel (testing model set to SKIP)",
+  "time": 0,
+  "modelName": ""
 }
 ```
 

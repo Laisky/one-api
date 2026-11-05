@@ -141,13 +141,13 @@ func RerankHandler(c *gin.Context, resp *http.Response, meta *meta.Meta) (*model
 
 	responseBytes, err := json.Marshal(cohereResponse)
 	if err != nil {
-		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), usage
+		return openai.ErrorWrapper(errors.WithStack(err), "marshal_response_body_failed", http.StatusInternalServerError), usage
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(resp.StatusCode)
 	if _, err = c.Writer.Write(responseBytes); err != nil {
-		return openai.ErrorWrapper(err, "write_response_body_failed", http.StatusInternalServerError), usage
+		return openai.ErrorWrapper(errors.WithStack(err), "write_response_body_failed", http.StatusInternalServerError), usage
 	}
 
 	return nil, usage

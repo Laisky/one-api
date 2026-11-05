@@ -92,17 +92,25 @@ func TestPlanChannelModelResetPreservesCompatibleOverrides(t *testing.T) {
 
 // TestPlanChannelModelResetTestingModel verifies valid selections and the explicit
 // skip sentinel survive, while removed testing models revert to automatic choice.
+// Legacy SKIP spellings, which the health checker already honours, must survive a
+// reset in their canonical form rather than being cleared as unknown model names.
 func TestPlanChannelModelResetTestingModel(t *testing.T) {
-	for _, name := range []string{"Foo", ChannelTestingModelSkip, "Retired", ""} {
-		t.Run(name, func(t *testing.T) {
-			channel := Channel{Type: channeltype.OpenAI, TestingModel: resetTestString(name)}
+	cases := []struct {
+		stored string
+		want   *string
+	}{
+		{stored: "Foo", want: resetTestString("Foo")},
+		{stored: ChannelTestingModelSkip, want: resetTestString(ChannelTestingModelSkip)},
+		{stored: " __SKIP__ ", want: resetTestString(ChannelTestingModelSkip)},
+		{stored: "Retired", want: nil},
+		{stored: "", want: nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.stored, func(t *testing.T) {
+			channel := Channel{Type: channeltype.OpenAI, TestingModel: resetTestString(tc.stored)}
 			planned, err := planChannelModelReset(&channel, []string{"Foo"})
 			require.NoError(t, err)
-			if name == "Foo" || name == ChannelTestingModelSkip {
-				require.Equal(t, channel.TestingModel, planned.TestingModel)
-			} else {
-				require.Nil(t, planned.TestingModel)
-			}
+			require.Equal(t, tc.want, planned.TestingModel)
 		})
 	}
 }

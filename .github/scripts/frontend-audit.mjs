@@ -22,10 +22,17 @@ export function verifyAudit(output, status) {
 }
 
 /** runAudit audits development and runtime dependencies and saves the raw evidence. */
-export function runAudit(theme) {
+export function runAudit(theme, execute = spawnSync) {
   assert.ok(['modern', 'air', 'berry'].includes(theme), 'Unknown frontend theme');
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-  const result = spawnSync('yarn', ['audit', '--json', '--non-interactive'], {
+  const regression = execute(process.execPath, ['--test',
+    '.github/scripts/follow-redirects-security.test.cjs',
+    '.github/scripts/frontend-dependency-advisories.test.cjs'], {
+    cwd: root, env: { ...process.env, FRONTEND_THEME: theme }, stdio: 'inherit', timeout: 180000,
+  });
+  if (regression.error) throw regression.error;
+  assert.equal(regression.status, 0, 'Dependency regression tests did not pass');
+  const result = execute('yarn', ['audit', '--json', '--non-interactive'], {
     cwd: path.join(root, 'web', theme), encoding: 'utf8', timeout: 180000, maxBuffer: 32 * 1024 * 1024,
   });
   if (result.error) throw result.error;

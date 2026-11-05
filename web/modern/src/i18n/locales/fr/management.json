@@ -591,7 +591,11 @@
       "test_success": "Test du canal réussi.",
       "testing_model_failed_message": "Impossible de mettre à jour le modèle de test",
       "testing_model_failed_title": "Échec de l'enregistrement",
-      "testing_model_saved": "Modèle de test enregistré."
+      "testing_model_normalized_message": "Le serveur n'a pas pu conserver ce modèle de test pour ce canal ; il utilise désormais la valeur enregistrée affichée.",
+      "testing_model_normalized_title": "Modèle de test réinitialisé",
+      "testing_model_saved": "Modèle de test enregistré.",
+      "testing_model_unverified_message": "L'enregistrement a été accepté, mais le serveur n'a pas indiqué le modèle de test stocké. Actualisez la page pour le vérifier.",
+      "testing_model_unverified_title": "Modèle de test non confirmé"
     },
     "response": {
       "not_tested": "Non testé",
@@ -611,7 +615,8 @@
       "auto": "LE MOINS CHER",
       "help": "Choisit le modèle utilisé pour contrôler l'état de ce canal.\n\nCHEAPEST — utilise automatiquement le modèle le moins cher servi via une API de chat (chat completions, response API, Claude messages ou Gemini chat).\n\nSKIP — exclut totalement ce canal des contrôles. Il n'est jamais sondé ni désactivé automatiquement.\n\nSeuls les modèles au format chat sont testables. Les modèles d'embeddings, de reranking, de modération, de complétion et multimédias sont exclus, de même que ceux dont le format d'API est inconnu — sélectionnez-en un ici pour le tester malgré tout.",
       "help_label": "Comment le modèle de test est choisi",
-      "skip": "SKIP (jamais testé)"
+      "skip": "SKIP (jamais testé)",
+      "unlisted_selection": "{{model}} (actuel)"
     },
     "title": "Canaux",
     "toolbar": {

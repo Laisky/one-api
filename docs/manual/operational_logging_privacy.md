@@ -23,9 +23,35 @@ SpanContextField/SpanContextFieldFrom are the explicit correlation API.
 Native SDK scope name/version/schema/attributes and resource attributes are
 preserved in their OTLP protocol namespaces. A record-level service.name does not
 replace resource service.name. Attribute.Set inputs already have the SDK's
-canonical-map semantics; record/body maps retain duplicate inputs until validation.
-OTLP requires unique map keys, so conflicting record or nested map keys cause
-observable whole-record rejection rather than an implicit winner.
+canonical-map semantics.
+
+### Repeated keys
+
+Zap allows a field key to appear more than once on a record, and it happens in
+ordinary use: the process logger binds `host` (the container hostname) and the
+gin request logger binds `host` again (the HTTP Host header), so every
+request-scoped record carries it twice. OTLP requires each key to appear once in
+a record's attributes and in every nested map. The OpenTelemetry common
+specification resolves a key set twice by letting the later value overwrite the
+earlier one, and that is what both the Zap bridge and the native SDK path do,
+at every depth (record attributes, nested maps, maps inside lists, and map
+bodies): the first occurrence keeps its position and takes the last value. On a
+request record, `host` is therefore the HTTP Host header; the container identity
+remains in the local log line.
+
+The result is identical to the OpenTelemetry Go SDK's own deduplication, except
+in one case where the pinned SDK (sdk/log v0.22.0) is not conformant -- an
+overwriting value whose own map repeats a key -- where the bridge produces the
+conformant result. `TestNormalizeMatchesSDKDeduplication` pins both. The bridge
+applies the rule itself rather than enabling the SDK's deduplication because the
+SDK deduplicates one attribute at a time, which measured about 27% slower on a
+request-scoped record; see
+`docs/benchmarks/20261104_otlp-app-log-key-collisions.md`.
+
+A record whose key repeated is exported, never dropped, and increments the
+`deduplicated` outcome in addition to its other outcomes, so an overwritten value
+is visible in metrics. Before this rule, such records were rejected whole with
+`dropped_encoding`, which removed every request-scoped line from the export.
 
 OTLP represents signed int64, doubles (including NaN/Inf), booleans, strings,
 bytes, maps, lists and empty values. Native unsigned values above MaxInt64 use an
@@ -68,7 +94,8 @@ time/memory limit on arbitrary application serializers while they are running.
 
 ## Operator limits and overload
 
-The SDK's automatic attribute truncation and deduplication are disabled. The
+The SDK's automatic attribute truncation is disabled, and its deduplication is
+replaced by the equivalent rule described under "Repeated keys". The
 default LOG_OTLP_MAX_ATTRIBUTES=0 and LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES=0 impose
 no content limits. An explicitly configured positive attribute-count or text/
 binary-leaf byte limit rejects the complete record with dropped_operator_limit;

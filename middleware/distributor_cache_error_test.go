@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -30,9 +32,9 @@ import (
 // while retaining the selected group and the existing subsequent routing outcome.
 func TestDistributorGroupFailureReporting(t *testing.T) {
 	for _, tc := range []struct {
-		name, group     string
-		databaseFailure bool
-	}{{"redis set failure", "vip", false}, {"database failure", "", true}} {
+		name, group, errorText string
+		databaseFailure        bool
+	}{{"redis set failure", "vip", "synthetic set failure", false}, {"database failure", "", "no such table", true}} {
 		t.Run(tc.name, func(t *testing.T) {
 			db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "users.db")), &gorm.Config{Logger: gormlogger.Discard})
 			require.NoError(t, err)
@@ -62,7 +64,9 @@ func TestDistributorGroupFailureReporting(t *testing.T) {
 			common.SetRedisEnabled(true)
 			t.Cleanup(func() { common.RDB = oldClient; common.SetRedisEnabled(oldEnabled) })
 			core, logs := observer.New(zapcore.DebugLevel)
-			lg, err := glog.NewWithName("distributor-test", glog.LevelDebug, zap.WrapCore(func(zapcore.Core) zapcore.Core { return core }))
+			var encoded bytes.Buffer
+			jsonCore := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), zapcore.AddSync(&encoded), zapcore.DebugLevel)
+			lg, err := glog.NewWithName("distributor-test", glog.LevelDebug, zap.WrapCore(func(zapcore.Core) zapcore.Core { return zapcore.NewTee(core, jsonCore) }))
 			require.NoError(t, err)
 			recorder := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(recorder)
@@ -79,6 +83,21 @@ func TestDistributorGroupFailureReporting(t *testing.T) {
 			require.EqualValues(t, 123, entries[0].ContextMap()["user_id"])
 			require.Contains(t, entries[0].ContextMap()["error"], "user")
 			require.Empty(t, logs.FilterMessage("Redis set user group failed, continuing without cache").All())
+			var warning map[string]any
+			decoder := json.NewDecoder(&encoded)
+			for decoder.More() {
+				var event map[string]any
+				require.NoError(t, decoder.Decode(&event))
+				if event["msg"] == "failed to load user group, continuing with available group" {
+					warning = event
+				}
+			}
+			require.NotNil(t, warning)
+			require.Equal(t, "warn", warning["level"])
+			require.EqualValues(t, 123, warning["user_id"])
+			require.Contains(t, warning["error"], tc.errorText)
+			require.NotContains(t, warning, "errorVerbose", "warning diagnostics must not export a stack")
+			require.NotContains(t, warning, "stacktrace")
 		})
 	}
 }

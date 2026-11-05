@@ -24,10 +24,10 @@ import (
 	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/message"
+	"github.com/Laisky/one-api/common/metrics"
 	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
-	"github.com/Laisky/one-api/monitor"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 
@@ -347,12 +347,12 @@ func TestChannel(c *gin.Context) {
 	// testChannel, which relies on its caller having bound it.
 	lg = lg.With(channel.Ref().Zap()...)
 
+	revision := channel.ProbeConfigRevision()
 	modelName, clearTestingModel, err := chooseChannelTestModelWithContext(gmw.Ctx(c), channel, c.Query("model"))
 	if clearTestingModel {
-		channel.TestingModel = nil
-		if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
-			lg.Error("failed to clear invalid testing_model", zap.Error(updateErr))
-		}
+		// The manual test records only its latency, never a status change, so it does
+		// not need the post-cleanup revision.
+		_ = clearStaleTestingModel(gmw.Ctx(c), lg, channel, revision)
 	}
 	if err != nil {
 		// A channel with no chat-capable surface was never probed, so it is
@@ -485,61 +485,50 @@ func runAutomaticChannelSweep(ctx context.Context, notify bool, scope string) er
 		// request, so nothing else carries the channel identity.
 		clg := lg.With(channel.Ref().Zap()...)
 		cctx := gmw.SetLogger(ctx, clg)
-		isChannelEnabled := channel.Status == model.ChannelStatusEnabled
-		tik := time.Now()
-		chosenModel, clearTestingModel, err := chooseChannelTestModelWithContext(cctx, channel, "")
-		if clearTestingModel {
-			channel.TestingModel = nil
-			if updateErr := model.DB.WithContext(cctx).Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
-				clg.Error("failed to clear invalid testing_model in bulk test", zap.Error(updateErr))
-			}
-		}
-		// A channel that exposes no chat-capable surface, or whose every model
-		// is a non-chat task model (embeddings, rerank, translation, media),
-		// cannot receive a representative probe. That is an inconclusive
-		// result, not a failure: skip it entirely rather than judging it.
-		// Letting it fall through is what auto-disabled healthy
-		// embeddings-only channels (issue #400).
-		if err != nil && isChannelTestNotApplicable(err) {
-			clg.Info("skipped channel test: channel is not chat-probeable",
-				zap.String("reason", err.Error()))
+		// The channel list is a snapshot taken when the sweep started. Reload the whole
+		// row so the selection, model list, mapping, key, and status are judged and
+		// probed together, as they are stored now.
+		if err := channel.ReloadForProbeWithContext(cctx); err != nil {
+			// Fail closed: the snapshot may predate a SKIP or a new configuration,
+			// so never spend an upstream request on it. The next sweep retries it.
+			clg.Warn("skipped channel test: could not read the current channel configuration", zap.Error(err))
+			metrics.RecordChannelHealthCheck(metrics.ChannelHealthCheckUnreadable)
 			continue
 		}
+		revision := channel.ProbeConfigRevision()
+		chosenModel, clearTestingModel, err := chooseChannelTestModelWithContext(cctx, channel, "")
+		if clearTestingModel {
+			// The sweep's own cleanup changes the stored revision, so the result must be
+			// applied against the revision it leaves behind.
+			revision = clearStaleTestingModel(cctx, clg, channel, revision)
+		}
+		// A channel set to SKIP, one that exposes no chat-capable surface, or one whose
+		// every model is a non-chat task model (embeddings, rerank, translation, media)
+		// cannot receive a representative probe. That is an inconclusive result, not a
+		// failure: skip it entirely rather than judging it. Letting it fall through is
+		// what auto-disabled healthy embeddings-only channels (issue #400).
+		if err != nil && isChannelTestNotApplicable(err) {
+			if channel.IsTestingSkipped() {
+				clg.Info("skipped channel test: testing model set to SKIP")
+				metrics.RecordChannelHealthCheck(metrics.ChannelHealthCheckOptedOut)
+				continue
+			}
+			clg.Info("skipped channel test: channel is not chat-probeable",
+				zap.String("reason", err.Error()))
+			metrics.RecordChannelHealthCheck(metrics.ChannelHealthCheckNotApplicable)
+			continue
+		}
+		// Time the probe alone: the cleanup above may wait for a row lock, and that wait
+		// must not count towards the latency threshold.
+		tik := time.Now()
 		var openaiErr *relaymodel.Error
 		if err == nil {
 			testRequest := buildTestRequest(chosenModel)
 			_, err, openaiErr = testChannel(cctx, channel, testRequest)
 		}
-		tok := time.Now()
-		milliseconds := tok.Sub(tik).Milliseconds()
-		if isChannelEnabled && milliseconds > disableThreshold {
-			err = errors.Errorf("Response time %.2fs exceeds threshold %.2fs", float64(milliseconds)/1000.0, float64(disableThreshold)/1000.0)
-			if config.AutomaticDisableChannelEnabled {
-				monitor.DisableChannel(channel.Id, channel.Name, err.Error())
-			} else {
-				_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test timed out: %s", channel.Ref().String()), "", err.Error())
-			}
-		}
-		// Only disable a channel on failure when AutomaticDisableChannelEnabled is true.
-		if isChannelEnabled && (err != nil || monitor.ShouldDisableChannel(openaiErr, -1)) {
-			// Build a safe reason string to avoid nil dereference
-			reason := "channel test failed"
-			if err != nil {
-				reason = err.Error()
-			} else if openaiErr != nil {
-				reason = openaiErr.Message
-			}
-			if config.AutomaticDisableChannelEnabled {
-				monitor.DisableChannel(channel.Id, channel.Name, reason)
-			} else {
-				// Notify only when auto-disable is off
-				_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test failed: %s", channel.Ref().String()), "", reason)
-			}
-		}
-		if !isChannelEnabled && (err == nil && monitor.ShouldEnableChannel(err, openaiErr)) {
-			monitor.EnableChannel(channel.Id, channel.Name)
-		}
-		channel.UpdateResponseTimeWithContext(cctx, milliseconds)
+		milliseconds := time.Since(tik).Milliseconds()
+		plan := planChannelSweepResult(channel, milliseconds, disableThreshold, err, openaiErr)
+		applyChannelSweepResult(cctx, clg, channel, revision, plan, milliseconds)
 		if config.RequestInterval > 0 {
 			timer := time.NewTimer(config.RequestInterval)
 			select {

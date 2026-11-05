@@ -16,12 +16,22 @@ SELECTIONS = {
     "relay/format": None,
     "relay/model": ("TestParseContentCheckedRetainsNestedErrorStack",),
     # Temporary PR585 RED/GREEN verification of seconds-offset timestamp fidelity.
+    # The remaining entries pin repeated-key handling: rejecting a record whose key
+    # repeated dropped every request-scoped log from the OTLP export in production.
+    # They share this package's compilation, so they add no build cost; the
+    # end-to-end test/applogexport suite is too costly to compile here and stays
+    # in full qualification (`make test`).
     "common/logger/otelbridge": (
         "TestOutOfRangeSecondPrecisionZonePreservesInstant",
         "TestTimeOverflowPreservesLogAttribute",
         "TestLogFidelityTimeReviewBoundaries",
         "TestLogStackContract",
         "TestPrivacyCoreDropsStackErrors",
+        "TestLogFidelityBridgeDuplicateKeysResolveLastValueWins",
+        "TestLogFidelityBridgeUniqueKeysAreNotCountedAsDeduplicated",
+        "TestNormalizeMatchesSDKDeduplication",
+        "TestNormalizeLeavesUniqueInputUntouched",
+        "TestNormalizeStillRejectsWhatCannotBeEncoded",
     ),
 }
 
