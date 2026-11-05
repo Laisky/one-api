@@ -10,6 +10,7 @@ import {
   buildChannelSubmitPayload,
   isValidJSON,
   normalizeChannelType,
+  normalizeGroupOptions,
   parsePrivateChannelJSON,
   formatPrivateChannelJSONField,
   logPrivateChannelJSONError,
@@ -347,21 +348,10 @@ export const useChannelForm = () => {
 
   const loadGroups = useCallback(async () => {
     try {
-      const response = await api.get('/api/option/');
+      // Groups are the configured billing groups (GroupRatio keys), the same list users are assigned from.
+      const response = await api.get('/api/group/');
       const { success, data } = response.data;
-
-      if (success && data) {
-        const groupsOption = data.find((option: any) => option.key === 'AvailableGroups');
-        if (groupsOption?.value) {
-          const availableGroups = groupsOption.value
-            .split(',')
-            .map((g: string) => g.trim())
-            .filter((g: string) => g !== '');
-          setGroups(['default', ...availableGroups]);
-        } else {
-          setGroups(['default']);
-        }
-      }
+      setGroups(normalizeGroupOptions(success ? data : []));
     } catch (error) {
       console.error(`Error loading groups: ${error instanceof Error ? error.message : String(error)}`);
       setGroups(['default']);

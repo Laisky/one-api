@@ -292,9 +292,12 @@
         }
       },
       "groups": {
-        "add_placeholder": "Agregar grupo personalizado...",
-        "help": "Restringir el acceso a grupos de usuarios específicos. Vacío significa que todos los usuarios pueden acceder. El grupo predeterminado siempre se mantiene.",
-        "label": "Grupos *"
+        "add_placeholder": "Selecciona un grupo o escribe uno personalizado...",
+        "create": "Agregar grupo personalizado \"{{group}}\"",
+        "help": "Grupos de usuarios que pueden usar este canal. Los usuarios normales pertenecen al grupo \"default\". Se requiere al menos un grupo.",
+        "label": "Grupos *",
+        "no_match": "No hay grupos coincidentes",
+        "remove": "Quitar el grupo {{group}}"
       },
       "hidden_models": {
         "custom_placeholder": "Agregar modelo oculto...",

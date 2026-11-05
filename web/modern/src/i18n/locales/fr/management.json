@@ -292,9 +292,12 @@
         }
       },
       "groups": {
-        "add_placeholder": "Ajouter un groupe personnalisé...",
-        "help": "Restreindre l'accès à des groupes d'utilisateurs spécifiques. Vide signifie que tous les utilisateurs peuvent y accéder. Le groupe par défaut est toujours conservé.",
-        "label": "Groupes *"
+        "add_placeholder": "Sélectionnez un groupe ou saisissez-en un personnalisé...",
+        "create": "Ajouter le groupe personnalisé « {{group}} »",
+        "help": "Groupes d'utilisateurs autorisés à utiliser ce canal. Les utilisateurs normaux appartiennent au groupe \"default\". Au moins un groupe est requis.",
+        "label": "Groupes *",
+        "no_match": "Aucun groupe correspondant",
+        "remove": "Retirer le groupe {{group}}"
       },
       "hidden_models": {
         "custom_placeholder": "Ajouter un modèle masqué...",

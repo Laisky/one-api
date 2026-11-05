@@ -292,9 +292,12 @@
         }
       },
       "groups": {
-        "add_placeholder": "添加自定义分组...",
-        "help": "限制特定用户组的访问。留空表示所有用户都可以访问。默认分组始终保留。",
-        "label": "分组 *"
+        "add_placeholder": "选择分组或输入自定义分组...",
+        "create": "添加自定义分组“{{group}}”",
+        "help": "允许使用此渠道的用户分组。普通用户属于 \"default\" 分组。至少需要一个分组。",
+        "label": "分组 *",
+        "no_match": "没有匹配的分组",
+        "remove": "移除分组 {{group}}"
       },
       "hidden_models": {
         "custom_placeholder": "添加隐藏模型...",

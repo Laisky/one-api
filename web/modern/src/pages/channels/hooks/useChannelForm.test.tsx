@@ -60,11 +60,11 @@ describe('useChannelForm', () => {
           },
         });
       }
-      if (url.startsWith('/api/option/')) {
+      if (url.startsWith('/api/group/')) {
         return Promise.resolve({
           data: {
             success: true,
-            data: [{ key: 'AvailableGroups', value: 'vip' }],
+            data: ['vip', 'default'],
           },
         });
       }
@@ -107,8 +107,12 @@ describe('useChannelForm', () => {
     expect(modelsCalls).toBe(1);
 
     // loadGroups should be called once
-    const groupsCalls = mockApiGet.mock.calls.filter((call) => call[0].startsWith('/api/option/')).length;
+    const groupsCalls = mockApiGet.mock.calls.filter((call) => call[0].startsWith('/api/group/')).length;
     expect(groupsCalls).toBe(1);
+    // Group choices come from the billing groups, with "default" first.
+    await waitFor(() => {
+      expect(result.current.groups).toEqual(['default', 'vip']);
+    });
 
     // default pricing might be called multiple times but should settle
     const pricingCalls = mockApiGet.mock.calls.filter((call) => call[0].startsWith('/api/channel/default-pricing')).length;
@@ -143,11 +147,11 @@ describe('useChannelForm', () => {
           },
         });
       }
-      if (url.startsWith('/api/option/')) {
+      if (url.startsWith('/api/group/')) {
         return Promise.resolve({
           data: {
             success: true,
-            data: [{ key: 'AvailableGroups', value: 'vip' }],
+            data: ['vip', 'default'],
           },
         });
       }
@@ -214,7 +218,7 @@ describe('useChannelForm', () => {
       if (url.startsWith('/api/models')) {
         return Promise.resolve({ data: { success: true, data: { 1: ['gpt-4o'] } } });
       }
-      if (url.startsWith('/api/option/')) {
+      if (url.startsWith('/api/group/')) {
         return Promise.resolve({ data: { success: true, data: [] } });
       }
       if (url.startsWith('/api/channel/default-pricing')) {
@@ -274,7 +278,7 @@ describe('useChannelForm', () => {
       if (url.startsWith('/api/models')) {
         return Promise.resolve({ data: { success: true, data: { 1: ['Public-Alias', 'GPT-4o'] } } });
       }
-      if (url.startsWith('/api/option/')) {
+      if (url.startsWith('/api/group/')) {
         return Promise.resolve({ data: { success: true, data: [] } });
       }
       if (url.startsWith('/api/channel/default-pricing')) {

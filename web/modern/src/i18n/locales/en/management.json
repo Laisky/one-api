@@ -292,9 +292,12 @@
         }
       },
       "groups": {
-        "add_placeholder": "Add custom group...",
-        "help": "Restrict access to specific user groups. Empty means all users can access. The default group is always kept.",
-        "label": "Groups *"
+        "add_placeholder": "Select a group or type a custom one...",
+        "create": "Add custom group \"{{group}}\"",
+        "help": "User groups allowed to use this channel. Normal users belong to the \"default\" group. At least one group is required.",
+        "label": "Groups *",
+        "no_match": "No matching groups",
+        "remove": "Remove group {{group}}"
       },
       "hidden_models": {
         "custom_placeholder": "Add hidden model...",
