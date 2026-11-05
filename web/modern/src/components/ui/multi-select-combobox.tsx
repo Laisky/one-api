@@ -1,27 +1,23 @@
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { Check, ChevronsUpDown, Plus } from 'lucide-react';
+import { Check, ChevronsUpDown } from 'lucide-react';
 import * as React from 'react';
-import { buildComboboxItems, mergeComboboxOptions, type ComboboxItem } from './multi-select-combobox-items';
+import { filterComboboxValues, mergeComboboxOptions } from './multi-select-combobox-items';
 
 export interface MultiSelectComboboxProps {
-  /** options lists the known values offered in the dropdown. */
+  /** options lists the values that may be selected; typed text is only a filter and never becomes a value. */
   options: readonly string[];
   /** selected lists the currently chosen values; they are shown with a check mark. */
   selected: readonly string[];
-  /** onAdd is called with a value the user picked or created. */
+  /** onAdd is called with an option the user picked. */
   onAdd: (value: string) => void;
   /** onRemove is called with a selected value the user picked again to deselect it. */
   onRemove: (value: string) => void;
-  /** allowCustom enables adding typed values that are not in `options`. */
-  allowCustom?: boolean;
   /** placeholder is the input placeholder text. */
   placeholder?: string;
   /** emptyLabel is shown when no option matches the typed text. */
   emptyLabel: string;
-  /** createLabel renders the label of the row that adds the typed text as a custom value. */
-  createLabel?: (value: string) => string;
   /** id is forwarded to the input so a label can reference it. */
   id?: string;
   /** className is applied to the input wrapper. */
@@ -36,9 +32,11 @@ export interface MultiSelectComboboxProps {
  * MultiSelectCombobox renders a text input with an autocomplete dropdown for
  * choosing several values. Focusing or clicking the input opens the dropdown
  * with every option, typing filters it, and Enter or a click toggles the
- * highlighted option (or adds the typed text when custom values are allowed).
- * Selected values stay in the list with a check mark; rendering the selection
- * itself (for example as removable badges) is left to the caller.
+ * highlighted option. Only values from `options` can be added: typed text that
+ * matches nothing selects nothing. Selected values stay in the list with a
+ * check mark (including selected values missing from `options`, which can be
+ * deselected but not re-added); rendering the selection itself (for example as
+ * removable badges) is left to the caller.
  *
  * @param props - The options, current selection, change callbacks and labels.
  * @returns The combobox element.
@@ -48,10 +46,8 @@ export function MultiSelectCombobox({
   selected,
   onAdd,
   onRemove,
-  allowCustom = false,
   placeholder,
   emptyLabel,
-  createLabel,
   id,
   className,
   disabled = false,
@@ -66,7 +62,7 @@ export function MultiSelectCombobox({
 
   const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const values = React.useMemo(() => mergeComboboxOptions(options, selected), [options, selected]);
-  const items = React.useMemo(() => buildComboboxItems(values, query, allowCustom), [values, query, allowCustom]);
+  const items = React.useMemo(() => filterComboboxValues(values, query), [values, query]);
   const isOpen = open && !disabled;
   const highlighted = activeIndex >= 0 && activeIndex < items.length ? activeIndex : -1;
   /** optionId returns the DOM id of the dropdown row at `index`, used for aria-activedescendant. */
@@ -79,12 +75,12 @@ export function MultiSelectCombobox({
     document.getElementById(`${listboxId}-option-${highlighted}`)?.scrollIntoView({ block: 'nearest' });
   }, [isOpen, highlighted, listboxId]);
 
-  /** commit applies one dropdown row: create or toggle its value, then reset the query. */
-  const commit = (item: ComboboxItem) => {
-    if (item.kind === 'option' && selectedSet.has(item.value)) {
-      onRemove(item.value);
+  /** commit toggles one listed value, then resets the query. */
+  const commit = (value: string) => {
+    if (selectedSet.has(value)) {
+      onRemove(value);
     } else {
-      onAdd(item.value);
+      onAdd(value);
     }
     setQuery('');
     setActiveIndex(-1);
@@ -130,9 +126,9 @@ export function MultiSelectCombobox({
           setOpen(true);
           return;
         }
-        const match = items.find((item) => item.value === typed);
-        if (match) {
-          commit(match);
+        // Typed text is only a filter: commit it solely when it names a listed value exactly.
+        if (items.includes(typed)) {
+          commit(typed);
         }
         break;
       }
@@ -195,11 +191,11 @@ export function MultiSelectCombobox({
           <p className="py-6 text-center text-sm text-muted-foreground">{emptyLabel}</p>
         ) : (
           <ul id={listboxId} role="listbox" aria-multiselectable="true" className="max-h-60 overflow-y-auto">
-            {items.map((item, index) => {
-              const isSelected = item.kind === 'option' && selectedSet.has(item.value);
+            {items.map((value, index) => {
+              const isSelected = selectedSet.has(value);
               return (
                 <li
-                  key={`${item.kind}:${item.value}`}
+                  key={value}
                   id={optionId(index)}
                   role="option"
                   aria-selected={isSelected}
@@ -214,15 +210,11 @@ export function MultiSelectCombobox({
                       setActiveIndex(index);
                     }
                   }}
-                  onClick={() => commit(item)}
+                  onClick={() => commit(value)}
                 >
-                  {item.kind === 'create' ? (
-                    <Plus className="h-4 w-4 shrink-0" />
-                  ) : (
-                    <Check className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} />
-                  )}
-                  <span className="truncate" title={item.value}>
-                    {item.kind === 'create' && createLabel ? createLabel(item.value) : item.value}
+                  <Check className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} />
+                  <span className="truncate" title={value}>
+                    {value}
                   </span>
                 </li>
               );

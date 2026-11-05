@@ -4,23 +4,13 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MultiSelectCombobox } from '../multi-select-combobox';
-import { buildComboboxItems, mergeComboboxOptions } from '../multi-select-combobox-items';
+import { filterComboboxValues, mergeComboboxOptions } from '../multi-select-combobox-items';
 
 /**
  * Harness renders a controlled MultiSelectCombobox inside a form so tests can
  * observe selection changes and detect accidental form submission.
  */
-function Harness({
-  options,
-  initial = [],
-  allowCustom = true,
-  onSubmit = vi.fn(),
-}: {
-  options: string[];
-  initial?: string[];
-  allowCustom?: boolean;
-  onSubmit?: () => void;
-}) {
+function Harness({ options, initial = [], onSubmit = vi.fn() }: { options: string[]; initial?: string[]; onSubmit?: () => void }) {
   const [selected, setSelected] = useState<string[]>(initial);
   return (
     <form
@@ -35,10 +25,8 @@ function Harness({
         selected={selected}
         onAdd={(value) => setSelected((prev) => [...prev, value])}
         onRemove={(value) => setSelected((prev) => prev.filter((item) => item !== value))}
-        allowCustom={allowCustom}
         placeholder="Pick a group"
         emptyLabel="Nothing matches"
-        createLabel={(value) => `Add "${value}"`}
       />
       <output data-testid="selected">{selected.join(',')}</output>
     </form>
@@ -49,26 +37,25 @@ function Harness({
 const optionLabels = () => screen.queryAllByRole('option').map((option) => option.textContent ?? '');
 
 describe('mergeComboboxOptions', () => {
-  it('appends selected custom values and drops blanks and duplicates', () => {
-    expect(mergeComboboxOptions(['default', ' vip ', 'vip', ''], ['custom', 'default', ' '])).toEqual(['default', 'vip', 'custom']);
+  it('appends selected values missing from options and drops blanks and duplicates', () => {
+    expect(mergeComboboxOptions(['default', ' vip ', 'vip', ''], ['legacy', 'default', ' '])).toEqual(['default', 'vip', 'legacy']);
   });
 });
 
-describe('buildComboboxItems', () => {
+describe('filterComboboxValues', () => {
   const values = ['default', 'vip', 'svip', 'VIP-2', 'team'];
 
   it('lists every value when the query is empty', () => {
-    expect(buildComboboxItems(values, '   ', true)).toEqual(values.map((value) => ({ kind: 'option', value })));
+    expect(filterComboboxValues(values, '   ')).toEqual(values);
   });
 
   it('ranks exact, prefix, then substring matches case-insensitively', () => {
-    expect(buildComboboxItems(values, 'Vip', false).map((item) => item.value)).toEqual(['vip', 'VIP-2', 'svip']);
+    expect(filterComboboxValues(values, 'Vip')).toEqual(['vip', 'VIP-2', 'svip']);
   });
 
-  it('offers a create row only when no value equals the trimmed query', () => {
-    expect(buildComboboxItems(values, ' vi ', true).at(-1)).toEqual({ kind: 'create', value: 'vi' });
-    expect(buildComboboxItems(values, 'vip', true).some((item) => item.kind === 'create')).toBe(false);
-    expect(buildComboboxItems(values, 'vi', false).some((item) => item.kind === 'create')).toBe(false);
+  it('never returns the typed text itself when it is not a known value', () => {
+    expect(filterComboboxValues(values, 'vi')).toEqual(['vip', 'VIP-2', 'svip']);
+    expect(filterComboboxValues(values, 'partners')).toEqual([]);
   });
 });
 
@@ -125,8 +112,8 @@ describe('MultiSelectCombobox', () => {
     await user.click(input);
     await user.type(input, 'vi');
 
-    // Prefix match ranks before substring match; the create row comes last.
-    expect(optionLabels()).toEqual(['vip', 'svip', 'Add "vi"']);
+    // Prefix match ranks before substring match, and the typed text is never offered as a value.
+    expect(optionLabels()).toEqual(['vip', 'svip']);
     expect(input).toHaveAttribute('aria-activedescendant', screen.getByRole('option', { name: 'vip' }).id);
 
     await user.keyboard('{Enter}');
@@ -136,34 +123,51 @@ describe('MultiSelectCombobox', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it('navigates with arrow keys and adds a custom value from the create row', async () => {
+  it('navigates with arrow keys, wrapping at both ends', async () => {
     const user = userEvent.setup();
-    render(<Harness options={['default', 'vip']} />);
+    render(<Harness options={['default', 'vip', 'svip']} />);
 
     const input = screen.getByRole('combobox', { name: 'Groups' });
     await user.click(input);
-    await user.type(input, 'vi');
-    await user.keyboard('{ArrowDown}{Enter}');
+    await user.keyboard('{ArrowUp}');
+    expect(input).toHaveAttribute('aria-activedescendant', screen.getByRole('option', { name: 'svip' }).id);
 
-    expect(screen.getByTestId('selected')).toHaveTextContent(/^vi$/);
-    // The new custom value is now listed as a selected option.
-    await user.type(input, 'vi');
-    expect(screen.getByRole('option', { name: 'vi' })).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+
+    expect(screen.getByTestId('selected')).toHaveTextContent(/^vip$/);
   });
 
-  it('shows the empty label when nothing matches and custom values are disabled', async () => {
+  it('cannot add a value that is not one of the options', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
-    render(<Harness options={['default', 'vip']} allowCustom={false} onSubmit={onSubmit} />);
+    render(<Harness options={['default', 'vip']} initial={['default']} onSubmit={onSubmit} />);
 
     const input = screen.getByRole('combobox', { name: 'Groups' });
     await user.click(input);
-    await user.type(input, 'zzz{Enter}');
+    await user.type(input, 'partners{Enter}');
 
     expect(screen.getByText('Nothing matches')).toBeInTheDocument();
     expect(screen.queryAllByRole('option')).toHaveLength(0);
-    expect(screen.getByTestId('selected')).toHaveTextContent(/^$/);
+    // Escape clears the highlight; Enter on unmatched text must still add nothing.
+    await user.keyboard('{Escape}{Enter}{ArrowDown}{Enter}');
+    expect(screen.getByTestId('selected')).toHaveTextContent(/^default$/);
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('lists a selected value missing from options so it can be deselected, but not re-added', async () => {
+    const user = userEvent.setup();
+    render(<Harness options={['default', 'vip']} initial={['default', 'legacy']} />);
+
+    const input = screen.getByRole('combobox', { name: 'Groups' });
+    await user.click(input);
+    expect(screen.getByRole('option', { name: 'legacy' })).toHaveAttribute('aria-selected', 'true');
+
+    await user.click(screen.getByRole('option', { name: 'legacy' }));
+
+    expect(screen.getByTestId('selected')).toHaveTextContent(/^default$/);
+    expect(screen.queryByRole('option', { name: 'legacy' })).not.toBeInTheDocument();
+    await user.type(input, 'legacy{Enter}');
+    expect(screen.getByTestId('selected')).toHaveTextContent(/^default$/);
   });
 
   it('closes on Escape and reopens on the next click', async () => {

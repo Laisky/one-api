@@ -542,21 +542,6 @@ export const buildChannelSubmitPayload = (data: ChannelForm, opts: BuildChannelS
   return payload;
 };
 
-/**
- * normalizeGroupOptions converts the `/api/group/` payload (the configured
- * billing group names) into the channel group choices. It keeps trimmed,
- * unique, non-empty string names, always includes "default" first, and sorts
- * the remaining names so the list order is stable across reloads.
- *
- * @param data - The raw `data` field returned by `/api/group/`.
- * @returns The ordered group names offered by the channel group selector.
- */
-export const normalizeGroupOptions = (data: unknown): string[] => {
-  const names = Array.isArray(data) ? data.filter((group): group is string => typeof group === 'string').map((group) => group.trim()) : [];
-  const others = Array.from(new Set(names.filter((group) => group !== '' && group !== 'default'))).sort((a, b) => a.localeCompare(b));
-  return ['default', ...others];
-};
-
 // Helper function to get key prompt based on channel type
 export const getKeyPrompt = (type: number) => {
   switch (type) {

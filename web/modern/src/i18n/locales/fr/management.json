@@ -292,10 +292,12 @@
         }
       },
       "groups": {
-        "add_placeholder": "Sélectionnez un groupe ou saisissez-en un personnalisé...",
-        "create": "Ajouter le groupe personnalisé « {{group}} »",
-        "help": "Groupes d'utilisateurs autorisés à utiliser ce canal. Les utilisateurs normaux appartiennent au groupe \"default\". Au moins un groupe est requis.",
+        "add_placeholder": "Rechercher ou sélectionner des groupes...",
+        "help": "Groupes d'utilisateurs autorisés à utiliser ce canal. Seuls les groupes configurés dans Paramètres → Opération → Groupes et ratios peuvent être sélectionnés. Les utilisateurs normaux appartiennent au groupe \"default\". Au moins un groupe est requis.",
         "label": "Groupes *",
+        "load_failed": "Impossible de charger les groupes configurés : aucun groupe ne peut être ajouté pour le moment. Les groupes déjà sélectionnés sont conservés.",
+        "load_failed_empty": "Aucun groupe disponible : la liste n'a pas pu être chargée",
+        "loading": "Chargement des groupes...",
         "no_match": "Aucun groupe correspondant",
         "remove": "Retirer le groupe {{group}}"
       },
@@ -996,6 +998,9 @@
         "group": {
           "help": "Le groupe d'utilisateurs contrôle l'accès et la visibilité des modèles/canaux.",
           "label": "Groupe *",
+          "load_failed": "Impossible de charger les groupes configurés : le groupe ne peut pas être modifié pour le moment. Le groupe actuel est conservé.",
+          "load_failed_empty": "Aucun autre groupe disponible : la liste n'a pas pu être chargée",
+          "loading": "Chargement des groupes...",
           "placeholder": "Sélectionnez un groupe"
         },
         "mcp_tool_blacklist": {

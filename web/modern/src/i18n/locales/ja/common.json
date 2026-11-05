@@ -66,6 +66,7 @@
     "register": "登録",
     "remove": "削除",
     "remove_item": "{{item}} を削除",
+    "retry": "再試行",
     "search": "検索",
     "search_for": "検索: ",
     "search_placeholder": "検索...",

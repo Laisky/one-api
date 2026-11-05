@@ -1,4 +1,5 @@
 import { ToolListEditor } from '@/components/mcp/ToolListEditor';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -10,6 +11,7 @@ import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { appendAssignedGroups, useGroupCatalog } from '@/hooks/useGroupCatalog';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import { zodResolver } from '@/lib/zod-resolver';
@@ -46,12 +48,6 @@ type UserFormInput = Omit<UserForm, 'mcp_tool_blacklist' | 'password_locked' | '
   password_locked?: boolean;
 };
 
-interface Group {
-  key: string;
-  text: string;
-  value: string;
-}
-
 type UserSnapshot = {
   username: string;
   display_name: string;
@@ -85,7 +81,6 @@ export function EditUserPage() {
 
   const [loading, setLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [groupOptions, setGroupOptions] = useState<Group[]>([]);
   const [initialSnapshot, setInitialSnapshot] = useState<UserSnapshot | null>(null);
   const [createdAt, setCreatedAt] = useState<number | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
@@ -140,6 +135,12 @@ export function EditUserPage() {
   });
 
   const watchQuota = useWatch({ control: form.control, name: 'quota' });
+  const watchGroup = useWatch({ control: form.control, name: 'group' });
+  const { groups: catalogGroups, loading: groupsLoading, error: groupsError, retry: retryGroups } = useGroupCatalog();
+  const groupChoices = useMemo(
+    () => appendAssignedGroups(catalogGroups, [initialSnapshot?.group, watchGroup]),
+    [catalogGroups, initialSnapshot?.group, watchGroup]
+  );
   const watchPasswordLocked = useWatch({ control: form.control, name: 'password_locked' });
 
   const loadUser = async () => {
@@ -174,28 +175,9 @@ export function EditUserPage() {
         throw new Error(message || 'Failed to load user');
       }
     } catch (error) {
-      console.error('Error loading user:', error);
+      console.error(`Error loading user: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadGroups = async () => {
-    try {
-      // Unified API call - complete URL with /api prefix
-      const response = await api.get('/api/group/');
-      const { success, data } = response.data;
-
-      if (success && data) {
-        const options = data.map((group: string) => ({
-          key: group,
-          text: group,
-          value: group,
-        }));
-        setGroupOptions(options);
-      }
-    } catch (error) {
-      console.error('Error loading groups:', error);
     }
   };
 
@@ -206,7 +188,6 @@ export function EditUserPage() {
       setLoading(false);
       setInitialSnapshot(null);
     }
-    loadGroups();
   }, [isEdit, userId]);
 
   const onSubmit = async (data: UserForm) => {
@@ -656,13 +637,38 @@ export function EditUserPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {groupOptions.map((group) => (
-                              <SelectItem key={group.value} value={group.value}>
-                                {group.text}
+                            {groupChoices.map((group) => (
+                              <SelectItem key={group} value={group}>
+                                {group}
                               </SelectItem>
                             ))}
+                            {(groupsLoading || groupsError) && (
+                              <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                                {groupsLoading
+                                  ? tr('fields.group.loading', 'Loading groups...')
+                                  : tr(
+                                      'fields.group.load_failed_empty',
+                                      'Other groups are unavailable because the list could not be loaded'
+                                    )}
+                              </p>
+                            )}
                           </SelectContent>
                         </Select>
+                        {groupsError && (
+                          <Alert variant="destructive">
+                            <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                              <span>
+                                {tr(
+                                  'fields.group.load_failed',
+                                  'The configured groups could not be loaded, so the group cannot be changed right now. The current group is kept.'
+                                )}
+                              </span>
+                              <Button type="button" variant="outline" size="sm" onClick={retryGroups}>
+                                {t('common.retry')}
+                              </Button>
+                            </AlertDescription>
+                          </Alert>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}

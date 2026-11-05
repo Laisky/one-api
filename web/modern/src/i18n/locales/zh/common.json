@@ -66,6 +66,7 @@
     "register": "注册",
     "remove": "移除",
     "remove_item": "移除 {{item}}",
+    "retry": "重试",
     "search": "搜索",
     "search_for": "搜索：",
     "search_placeholder": "搜索...",
