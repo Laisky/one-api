@@ -32,60 +32,49 @@ var (
 )
 
 // CacheGetTokenByKey retrieves the token identified by key using Redis with a
-// database fallback, and returns the token or a wrapped lookup error.
+// database fallback, and returns the token or a wrapped lookup error. An
+// unreadable cache entry is treated as a miss, and filling the cache is
+// best-effort, so only a failed database lookup is returned as an error.
 func CacheGetTokenByKey(ctx context.Context, key string) (*Token, error) {
-	lg := logger.FromContext(ctx)
-	keyCol := "`key`"
-	if common.UsingPostgreSQL.Load() {
-		keyCol = `"key"`
-	}
-	var token Token
 	if !common.IsRedisEnabled() {
-		if DB == nil {
-			return nil, errors.New("database not initialized")
-		}
-		err := DB.Where(keyCol+" = ?", key).First(&token).Error
-		if err != nil {
-			return nil, errors.Wrap(err, "get token by key")
-		}
-		return &token, nil
+		return getTokenByKey(key)
 	}
-	tokenObjectString, err := common.RedisGet(ctx, fmt.Sprintf("token:%s", key))
+	cacheKey := fmt.Sprintf("token:%s", key)
+	cached, cacheErr := common.RedisGet(ctx, cacheKey)
+	if cacheErr == nil {
+		var token Token
+		jsonErr := json.Unmarshal([]byte(cached), &token)
+		if jsonErr == nil {
+			return &token, nil
+		}
+		// The raw token key is a credential: neither the cache key nor the
+		// payload may reach the log.
+		logger.FromContext(ctx).Warn("Redis cached token corrupted, falling back to database",
+			zap.String("error", jsonErr.Error()))
+	} else if DB == nil {
+		// Without a database the cache failure is the actionable diagnostic.
+		return nil, errors.Wrap(cacheErr, "database not initialized")
+	}
+	token, err := getTokenByKey(key)
 	if err != nil {
-		if DB == nil {
-			return nil, errors.Wrap(err, "database not initialized")
-		}
-		err := DB.Where(keyCol+" = ?", key).First(&token).Error
-		if err != nil {
-			return nil, errors.Wrap(err, "get token by key")
-		}
-		// Cache the raw token row. With Token.MarshalJSON retired, the default
-		// serialization already keeps the raw stored key (the response-time
-		// prefix now lives in Token.ToResponse, not in json.Marshal) and carries
-		// the internal id, which is exactly what the cache needs. (This file is
-		// allowlisted in the noentityresponse analyzer: marshaling the raw entity
-		// for the internal cache is intentional here.)
-		jsonBytes, err := json.Marshal(token)
-		if err != nil {
-			return nil, identity.Tag(
-				errors.Wrapf(err, "marshal token %d for cache", token.Id),
-				token.Ref(), token.OwnerRef())
-		}
-		err = common.RedisSet(ctx, fmt.Sprintf("token:%s", key), string(jsonBytes), time.Duration(TokenCacheSeconds)*time.Second)
-		if err != nil {
-			// The raw token key is a credential and must never reach the log; the
-			// token reference (id + uuid + name) is what an operator can act on.
-			lg.Warn("Redis set token failed, continuing without cache",
-				append(token.Ref().Zap(), zap.Error(err))...)
-		}
-		return &token, nil
+		return nil, err
 	}
-
-	err = json.Unmarshal([]byte(tokenObjectString), &token)
+	// Cache the raw token row. With Token.MarshalJSON retired, the default
+	// serialization already keeps the raw stored key (the response-time
+	// prefix now lives in Token.ToResponse, not in json.Marshal) and carries
+	// the internal id, which is exactly what the cache needs. (This file is
+	// allowlisted in the noentityresponse analyzer: marshaling the raw entity
+	// for the internal cache is intentional here.)
+	jsonBytes, err := json.Marshal(token)
 	if err != nil {
-		return nil, errors.Wrap(err, "unmarshal cached token")
+		logger.FromContext(ctx).Warn("failed to marshal token for cache, continuing without cache",
+			append(token.Ref().Zap(), zap.String("error", err.Error()))...)
+		return token, nil
 	}
-	return &token, nil
+	// The token reference (id + uuid + name) is what an operator can act on.
+	fillCacheBestEffort(ctx, cacheKey, string(jsonBytes), time.Duration(TokenCacheSeconds)*time.Second,
+		"Redis set token failed, continuing without cache", token.Ref().Zap()...)
+	return token, nil
 }
 
 // UserId2UserCacheSeconds controls the TTL for the full user object cache.
@@ -125,28 +114,28 @@ func CacheGetUserById(ctx context.Context, id int) (*User, error) {
 		lg.Warn("failed to marshal user for cache", append(user.Ref().Zap(), zap.Error(err))...)
 		return user, nil
 	}
-	if setErr := common.RedisSet(ctx, cacheKey, string(payload), time.Duration(UserId2UserCacheSeconds)*time.Second); setErr != nil {
-		lg.Warn("Redis set user object failed, continuing without cache",
-			append(user.Ref().Zap(), zap.Error(setErr))...)
-	}
+	fillCacheBestEffort(ctx, cacheKey, string(payload), time.Duration(UserId2UserCacheSeconds)*time.Second,
+		"Redis set user object failed, continuing without cache", user.Ref().Zap()...)
 	return user, nil
 }
 
+// CacheGetUserGroup returns the user's billing group, using Redis when enabled.
+// On a cache miss it reads the database and fills the cache best-effort; only a
+// failed database read is returned as an error.
 func CacheGetUserGroup(ctx context.Context, id int) (group string, err error) {
 	if !common.IsRedisEnabled() {
 		return GetUserGroup(id)
 	}
 	group, err = common.RedisGet(ctx, fmt.Sprintf("user_group:%d", id))
-	if err != nil {
-		group, err = GetUserGroup(id)
-		if err != nil {
-			return "", errors.Wrapf(err, "get user group for user %d", id)
-		}
-		err = common.RedisSet(ctx, fmt.Sprintf("user_group:%d", id), group, time.Duration(UserId2GroupCacheSeconds)*time.Second)
+	if err == nil {
+		return group, nil
 	}
+	group, err = GetUserGroup(id)
 	if err != nil {
-		return group, errors.Wrapf(err, "cache user group for user %d", id)
+		return "", errors.Wrapf(err, "get user group for user %d", id)
 	}
+	fillCacheBestEffort(ctx, fmt.Sprintf("user_group:%d", id), group, time.Duration(UserId2GroupCacheSeconds)*time.Second,
+		"Redis set user group failed, continuing without cache", zap.Int("user_id", id))
 	return group, nil
 }
 
@@ -154,7 +143,6 @@ func CacheGetUserGroup(ctx context.Context, id int) (group string, err error) {
 // On cache miss it falls back to GetUsernameById and populates the cache.
 // Empty usernames (non-existent users) are not cached to allow retry on the next request.
 func CacheGetUsername(ctx context.Context, id int) string {
-	lg := logger.FromContext(ctx)
 	if !common.IsRedisEnabled() {
 		return GetUsernameById(id)
 	}
@@ -164,25 +152,22 @@ func CacheGetUsername(ctx context.Context, id int) string {
 		if username == "" {
 			return username
 		}
-		if setErr := common.RedisSet(ctx, fmt.Sprintf("user_username:%d", id), username, time.Duration(UserId2UsernameCacheSeconds)*time.Second); setErr != nil {
-			lg.Warn("Redis set username failed, continuing without cache",
-				append(identity.NewUserRef(id, "", username).Zap(), zap.Error(setErr))...)
-		}
+		fillCacheBestEffort(ctx, fmt.Sprintf("user_username:%d", id), username, time.Duration(UserId2UsernameCacheSeconds)*time.Second,
+			"Redis set username failed, continuing without cache", identity.NewUserRef(id, "", username).Zap()...)
 	}
 	return username
 }
 
-func fetchAndUpdateUserQuota(ctx context.Context, id int) (quota int64, err error) {
-	lg := logger.FromContext(ctx)
-	quota, err = GetUserQuota(id)
+// fetchAndUpdateUserQuota reads the authoritative balance and refreshes its
+// cache entry best-effort. Only a failed database read is returned as an error.
+func fetchAndUpdateUserQuota(ctx context.Context, id int) (int64, error) {
+	quota, err := GetUserQuota(id)
 	if err != nil {
 		return 0, errors.Wrap(err, "get user quota")
 	}
-	err = common.RedisSet(ctx, fmt.Sprintf("user_quota:%d", id), fmt.Sprintf("%d", quota), time.Duration(UserId2QuotaCacheSeconds)*time.Second)
-	if err != nil {
-		lg.Warn("Redis set user quota failed, continuing without cache", zap.Int("user_id", id), zap.Error(err))
-	}
-	return
+	fillCacheBestEffort(ctx, fmt.Sprintf("user_quota:%d", id), fmt.Sprintf("%d", quota), time.Duration(UserId2QuotaCacheSeconds)*time.Second,
+		"Redis set user quota failed, continuing without cache", zap.Int("user_id", id))
+	return quota, nil
 }
 
 func CacheGetUserQuota(ctx context.Context, id int) (quota int64, err error) {
@@ -196,7 +181,10 @@ func CacheGetUserQuota(ctx context.Context, id int) (quota int64, err error) {
 	}
 	quota, err = strconv.ParseInt(quotaString, 10, 64)
 	if err != nil {
-		return 0, nil
+		// An unreadable entry is a cache miss, never a zero balance.
+		lg.Warn("Redis cached user quota corrupted, falling back to database",
+			zap.Int("user_id", id), zap.String("error", err.Error()))
+		return fetchAndUpdateUserQuota(ctx, id)
 	}
 	if quota <= config.PreConsumedQuota { // when user's quota is less than pre-consumed quota, we need to fetch from db
 		lg.Info("user's cached quota is too low, refreshing from db", zap.Int64("quota", quota), zap.Int("user_id", id))
@@ -240,6 +228,9 @@ func CacheDecreaseUserQuota(ctx context.Context, id int, quota int64) error {
 	return nil
 }
 
+// CacheIsUserEnabled reports whether the user is enabled, using Redis when
+// enabled. On a cache miss it reads the database and fills the cache
+// best-effort; only a failed database read is returned as an error.
 func CacheIsUserEnabled(ctx context.Context, userId int) (bool, error) {
 	if !common.IsRedisEnabled() {
 		return IsUserEnabled(userId)
@@ -257,10 +248,8 @@ func CacheIsUserEnabled(ctx context.Context, userId int) (bool, error) {
 	if userEnabled {
 		enabled = "1"
 	}
-	err = common.RedisSet(ctx, fmt.Sprintf("user_enabled:%d", userId), enabled, time.Duration(UserId2StatusCacheSeconds)*time.Second)
-	if err != nil {
-		return userEnabled, errors.Wrapf(err, "cache enabled status for user %d", userId)
-	}
+	fillCacheBestEffort(ctx, fmt.Sprintf("user_enabled:%d", userId), enabled, time.Duration(UserId2StatusCacheSeconds)*time.Second,
+		"Redis set user enabled failed, continuing without cache", zap.Int("user_id", userId))
 	return userEnabled, nil
 }
 
@@ -268,7 +257,6 @@ func CacheIsUserEnabled(ctx context.Context, userId int) (bool, error) {
 //
 // Deprecated: use CacheGetGroupModelsV2 instead
 func CacheGetGroupModels(ctx context.Context, group string) (models []string, err error) {
-	lg := logger.FromContext(ctx)
 	if !common.IsRedisEnabled() {
 		return GetGroupModels(ctx, group)
 	}
@@ -280,10 +268,8 @@ func CacheGetGroupModels(ctx context.Context, group string) (models []string, er
 	if err != nil {
 		return nil, errors.Wrap(err, "get group models")
 	}
-	err = common.RedisSet(ctx, fmt.Sprintf("group_models:%s", group), strings.Join(models, ","), time.Duration(GroupModelsCacheSeconds)*time.Second)
-	if err != nil {
-		lg.Warn("Redis set group models failed, continuing without cache", zap.String("group", group), zap.Error(err))
-	}
+	fillCacheBestEffort(ctx, fmt.Sprintf("group_models:%s", group), strings.Join(models, ","), time.Duration(GroupModelsCacheSeconds)*time.Second,
+		"Redis set group models failed, continuing without cache", zap.String("group", group))
 	return models, nil
 }
 
@@ -319,12 +305,9 @@ func CacheGetGroupModelsV2(ctx context.Context, group string) (models []dto.Enab
 	// a rolling deploy read pre-upgrade JSON whose rows all unmarshal as priority
 	// 0, silently collapsing the owner ranking to lowest-channel-id until the key
 	// expires. Bumping the key is the same fix the v1 -> v2 payload change used.
-	err = common.RedisSet(ctx, fmt.Sprintf("group_models_v3:%s", group), string(cachePayload),
-		time.Duration(GroupModelsCacheSeconds)*time.Second)
-	if err != nil {
-		lg.Warn("Redis set group models failed, continuing without cache", zap.String("group", group), zap.Error(err))
-	}
-
+	fillCacheBestEffort(ctx, fmt.Sprintf("group_models_v3:%s", group), string(cachePayload),
+		time.Duration(GroupModelsCacheSeconds)*time.Second,
+		"Redis set group models failed, continuing without cache", zap.String("group", group))
 	return models, nil
 }
 

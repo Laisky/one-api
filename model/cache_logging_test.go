@@ -30,15 +30,14 @@ func TestCacheMissLogging(t *testing.T) {
 
 	t.Run("CacheGetUserGroup_miss", func(t *testing.T) {
 		ctx := context.Background()
-		// This should trigger a cache miss
+		// A cache miss must return exactly the authoritative database answer.
+		// A failed cache fill is best-effort and must not turn that answer
+		// into an error; for a non-existent user the database reports an empty
+		// group without an error, with or without Redis.
+		wantGroup, wantErr := GetUserGroup(99999)
 		group, err := CacheGetUserGroup(ctx, 99999) // Non-existent user ID
-
-		// Should handle cache miss gracefully
-		if group == "" {
-			assert.Error(t, err, "Should return error when user group not found")
-		} else {
-			assert.NoError(t, err, "Should not return error if group found")
-		}
+		assert.Equal(t, wantGroup, group)
+		assert.Equal(t, wantErr == nil, err == nil, "the cache layer must not add or hide a lookup error")
 	})
 
 	t.Run("CacheGetGroupModels_miss", func(t *testing.T) {

@@ -30,6 +30,9 @@ import (
 
 // TestDistributorGroupFailureReporting exercises cache-fill and database failure
 // while retaining the selected group and the existing subsequent routing outcome.
+// A failed cache fill is degradation inside the cache layer: the distributor
+// receives the authoritative group without an error and reports nothing, while
+// a failed database read is still reported once by the distributor.
 func TestDistributorGroupFailureReporting(t *testing.T) {
 	for _, tc := range []struct {
 		name, group, errorText string
@@ -78,11 +81,19 @@ func TestDistributorGroupFailureReporting(t *testing.T) {
 			require.Equal(t, tc.group, c.GetString(ctxkey.Group))
 			require.True(t, c.IsAborted())
 			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			cacheWarnings := logs.FilterMessage("Redis set user group failed, continuing without cache").All()
 			entries := logs.FilterMessage("failed to load user group, continuing with available group").All()
+			if !tc.databaseFailure {
+				require.Empty(t, entries, "a cache fill failure is not a group lookup failure")
+				require.Len(t, cacheWarnings, 1, "the cache layer reports its own degradation once")
+				require.Contains(t, cacheWarnings[0].ContextMap()["error"], tc.errorText)
+				require.NotContains(t, cacheWarnings[0].ContextMap(), "errorVerbose")
+				return
+			}
+			require.Empty(t, cacheWarnings, "no cache fill is attempted without an authoritative value")
 			require.Len(t, entries, 1)
 			require.EqualValues(t, 123, entries[0].ContextMap()["user_id"])
 			require.Contains(t, entries[0].ContextMap()["error"], "user")
-			require.Empty(t, logs.FilterMessage("Redis set user group failed, continuing without cache").All())
 			var warning map[string]any
 			decoder := json.NewDecoder(&encoded)
 			for decoder.More() {

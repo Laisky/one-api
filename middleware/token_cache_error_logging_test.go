@@ -21,6 +21,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
 	dbmodel "github.com/Laisky/one-api/model"
 )
@@ -36,7 +37,6 @@ func TestTokenAuthCacheLookupErrorsLogNoCredentials(t *testing.T) {
 		{"database_miss_with_cache", "miss", "open", "record not found", "WARN", "unauthorized"},
 		{"database_miss_without_cache", "disabled", "open", "record not found", "WARN", "unauthorized"},
 		{"database_failure_with_cache", "miss", "closed", "database is closed", "ERROR", "server"},
-		{"malformed_cached_token", "corrupt", "open", "unexpected end of JSON input", "ERROR", "server"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			previousDB, previousRedis, previousEnabled := dbmodel.DB, common.RDB, common.IsRedisEnabled()
@@ -129,4 +129,79 @@ func TestTokenAuthCacheLookupErrorsLogNoCredentials(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestTokenAuthCorruptCachedTokenFallsBackToDatabase verifies that an
+// unreadable cached token is a cache miss, not an authentication failure: the
+// request is authenticated from the database, the cache entry is repaired, and
+// the corruption is reported once without exposing the credential.
+func TestTokenAuthCorruptCachedTokenFallsBackToDatabase(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	previousDB, previousRedis, previousEnabled := dbmodel.DB, common.RDB, common.IsRedisEnabled()
+	previousPostgreSQL, previousPrefix := common.UsingPostgreSQL.Load(), config.TokenKeyPrefix
+	common.UsingPostgreSQL.Store(false)
+	config.TokenKeyPrefix = "sk-"
+	t.Cleanup(func() {
+		dbmodel.DB, common.RDB = previousDB, previousRedis
+		common.SetRedisEnabled(previousEnabled)
+		common.UsingPostgreSQL.Store(previousPostgreSQL)
+		config.TokenKeyPrefix = previousPrefix
+	})
+
+	const key = "syntheticcorruptcachecredentialboundary0517"
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "tokens.db")), &gorm.Config{Logger: gormlogger.Discard})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
+	require.NoError(t, db.AutoMigrate(&dbmodel.Token{}, &dbmodel.User{}))
+	require.NoError(t, db.Create(&dbmodel.User{Id: 42, Username: "synthetic-owner", Password: "synthetic-password", Status: dbmodel.UserStatusEnabled, Group: "default", Quota: 1000}).Error)
+	require.NoError(t, db.Exec("INSERT INTO tokens (id, user_id, key, name, status, expired_time, remain_quota) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		517, 42, key, "synthetic-corrupt-token", dbmodel.TokenStatusEnabled, -1, 100).Error)
+	dbmodel.DB = db
+
+	redisServer := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	common.RDB = client
+	common.SetRedisEnabled(true)
+	require.NoError(t, redisServer.Set("token:"+key, "{"))
+
+	logPath := filepath.Join(t.TempDir(), "auth-corrupt.log")
+	captured, err := glog.New(
+		glog.WithName("token-auth-corrupt-cache-test"),
+		glog.WithLevel(glog.LevelInfo),
+		glog.WithEncoding(glog.EncodingJSON),
+		glog.WithOutputPaths([]string{logPath}),
+		glog.WithErrorOutputPaths([]string{logPath}),
+	)
+	require.NoError(t, err)
+	engine := gin.New()
+	engine.Use(func(c *gin.Context) {
+		gmw.SetLogger(c, captured.With(zap.String("request_id", "synthetic-corrupt-request")))
+		c.Set(helper.RequestIdKey, "synthetic-corrupt-request")
+		c.Next()
+	})
+	engine.Use(TokenAuth())
+	authenticatedToken := 0
+	engine.GET("/v1/models", func(c *gin.Context) {
+		authenticatedToken = c.GetInt(ctxkey.TokenId)
+		c.Status(http.StatusNoContent)
+	})
+	request := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	request.Header.Set("Authorization", "Bearer sk-"+key)
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
+	require.Equal(t, 517, authenticatedToken, "the database token authenticates the request")
+	repaired, err := redisServer.Get("token:" + key)
+	require.NoError(t, err)
+	require.NotEqual(t, "{", repaired, "the corrupt cache entry is replaced by the database row")
+	require.NoError(t, captured.Sync())
+	output, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	require.Contains(t, string(output), "Redis cached token corrupted, falling back to database")
+	require.NotContains(t, string(output), "server abort", "a corrupt cache entry is not an authentication failure")
+	require.NotContains(t, string(output), key, "the credential must never reach any encoded log field")
 }

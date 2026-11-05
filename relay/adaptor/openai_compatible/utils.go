@@ -333,7 +333,9 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	if rewriteAny, exists := c.Get(ctxkey.ResponseRewriteHandler); exists {
 		if rewriter, ok := rewriteAny.(func(*gin.Context, int, *SlimTextResponse) error); ok {
 			if err := rewriter(c, resp.StatusCode, &textResponse); err != nil {
-				return ErrorWrapper(err, "response_rewrite_failed", http.StatusInternalServerError), nil
+				// The provider receipt was accepted before the local rewrite or
+				// delivery failed: keep it so settlement bills the measured usage.
+				return ErrorWrapper(err, "response_rewrite_failed", http.StatusInternalServerError), &usage
 			}
 			return nil, &usage
 		}
