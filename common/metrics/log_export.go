@@ -21,6 +21,15 @@ package metrics
 const (
 	// AppLogExportOutcomeDroppedEncoding counts visible whole-record encoding failures.
 	AppLogExportOutcomeDroppedEncoding = "dropped_encoding"
+	// AppLogExportOutcomeDeduplicated counts records that were kept after an
+	// attribute key repeated -- typically a field bound by both the process and
+	// the request logger -- and was resolved by letting the later value
+	// overwrite the earlier one, as the OpenTelemetry specification prescribes.
+	// It is counted IN ADDITION to the record's other outcomes, never instead of
+	// one, and it covers native SDK emissions as well as Zap-bridge records. It is
+	// not a loss signal for the record; it says an overwritten value exists only
+	// in the local log line.
+	AppLogExportOutcomeDeduplicated = "deduplicated"
 	// AppLogExportOutcomeDroppedOperatorLimit counts explicit operator-cap rejections.
 	AppLogExportOutcomeDroppedOperatorLimit = "dropped_operator_limit"
 
