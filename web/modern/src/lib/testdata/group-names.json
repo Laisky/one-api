@@ -1,0 +1,127 @@
+[
+  {
+    "name": "default",
+    "group": "default",
+    "valid": true
+  },
+  {
+    "name": "lowercase",
+    "group": "vip",
+    "valid": true
+  },
+  {
+    "name": "mixed-case-preserved",
+    "group": "VIP-Plus",
+    "valid": true
+  },
+  {
+    "name": "digits-and-dot",
+    "group": "1.1",
+    "valid": true
+  },
+  {
+    "name": "leading-digit",
+    "group": "8zhe",
+    "valid": true
+  },
+  {
+    "name": "underscore",
+    "group": "team_a",
+    "valid": true
+  },
+  {
+    "name": "leading-symbol",
+    "group": "_internal",
+    "valid": true
+  },
+  {
+    "name": "max-length-32",
+    "group": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "valid": true
+  },
+  {
+    "name": "empty",
+    "group": "",
+    "valid": false
+  },
+  {
+    "name": "too-long-33",
+    "group": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "valid": false
+  },
+  {
+    "name": "leading-space",
+    "group": " vip",
+    "valid": false
+  },
+  {
+    "name": "trailing-space",
+    "group": "vip ",
+    "valid": false
+  },
+  {
+    "name": "inner-space",
+    "group": "my group",
+    "valid": false
+  },
+  {
+    "name": "tab",
+    "group": "vip\tplus",
+    "valid": false
+  },
+  {
+    "name": "newline",
+    "group": "vip\n",
+    "valid": false
+  },
+  {
+    "name": "comma-separator",
+    "group": "vip,svip",
+    "valid": false
+  },
+  {
+    "name": "plus",
+    "group": "vip+",
+    "valid": false
+  },
+  {
+    "name": "colon",
+    "group": "team:a",
+    "valid": false
+  },
+  {
+    "name": "slash",
+    "group": "team/a",
+    "valid": false
+  },
+  {
+    "name": "at-sign",
+    "group": "@vip",
+    "valid": false
+  },
+  {
+    "name": "quote",
+    "group": "vip\"",
+    "valid": false
+  },
+  {
+    "name": "percent",
+    "group": "vip%",
+    "valid": false
+  },
+  {
+    "name": "non-ascii-letter",
+    "group": "café",
+    "valid": false
+  },
+  {
+    "name": "cjk",
+    "group": "企业",
+    "valid": false
+  },
+  {
+    "name": "fullwidth-letter",
+    "group": "ｖｉｐ",
+    "valid": false
+  }
+]
