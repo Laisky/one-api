@@ -275,10 +275,6 @@ class WorkflowTests(unittest.TestCase):
                         self.assertNotEqual(effective(prefix+key+"="+value), defaults)
         filters = commands(self.ci["jobs"]["changes"])
         self.assertIn("python3 scripts/test_image_inputs.py", filters)
-        selection = next(step["with"]["filters"] for step in self.ci["jobs"]["changes"]["steps"]
-                         if step.get("id") == "filter")
-        self.assertIn("scripts/image_inputs.py", selection)
-        self.assertIn("scripts/test_image_inputs.py", selection)
 
     def test_delivery_revision_label_matches_source_on_both_architectures(self) -> None:
         """test_delivery_revision_label_matches_source_on_both_architectures binds each image to its source."""
@@ -474,7 +470,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(set(gate["needs"]), expected)
         script = gate["steps"][0]["run"].split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
         baseline = {name: {"result": "success"} for name in expected}
-        baseline["changes"]["outputs"] = {theme: "false" for theme in (*THEMES, "media_runtime")}
+        baseline["changes"]["outputs"] = {theme: "false" for theme in THEMES}
         for name in expected - MANDATORY:
             baseline[name]["result"] = "skipped"
         scenarios = [("unaffected manual suites and audits skipped", baseline, False, False, False, True)]
@@ -531,36 +527,12 @@ class WorkflowTests(unittest.TestCase):
                 result = subprocess.run([sys.executable, "-c", script], env=env, text=True, capture_output=True, check=False)
                 self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
 
-        for value, selected in (("true", True), ("false", False), (None, None), ("unknown", None)):
-            for status in ("success", "skipped"):
-                for manual_run, requested in ((False, False), (True, False), (True, True)):
-                    state = copy.deepcopy(manual if manual_run else baseline)
-                    state["changes"]["outputs"]["media_runtime"] = value
-                    state["native_arm64_images"]["result"] = status
-                    env = {**os.environ, "NEEDS": json.dumps(state),
-                           "MANUAL_RUN": str(manual_run).lower(), "QUALIFICATION": "false",
-                           "HISTORICAL_CONTROL": "false", "NATIVE_ARM64_IMAGES": str(requested).lower(), "NATIVE_AMD64_IMAGES": "false"}
-                    result = subprocess.run([sys.executable, "-c", script], env=env,
-                                            text=True, capture_output=True, check=False)
-                    success = (manual_run or selected is not None) and (status == "success" or not (selected or requested))
-                    self.assertEqual(result.returncode == 0, success,
-                                     (value, status, manual_run, requested, result.stdout, result.stderr))
-        for status in ("skipped", "missing"):
-            state = copy.deepcopy(baseline)
-            state["changes"]["outputs"]["media_runtime"] = "true"
-            if status == "missing":
-                del state["native_arm64_images"]
-            env = {**os.environ, "NEEDS": json.dumps(state), "MANUAL_RUN": "false",
-                   "QUALIFICATION": "false", "HISTORICAL_CONTROL": "false", "NATIVE_ARM64_IMAGES": "false", "NATIVE_AMD64_IMAGES": "false"}
-            result = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, check=False)
-            self.assertNotEqual(result.returncode, 0)
-
     def test_native_arm64_qualification_uses_read_only_native_runner(self) -> None:
         """test_native_arm64_qualification_uses_read_only_native_runner guards isolation and selection."""
         job = self.ci["jobs"]["native_arm64_images"]
         self.assertEqual(job["runs-on"], "ubuntu-24.04-arm")
         self.assertEqual(job["needs"], "changes")
-        self.assertEqual(job["if"], "github.event.repository.private == false && (needs.changes.outputs.media_runtime == 'true' || (github.event_name == 'workflow_dispatch' && inputs.native_arm64_images))")
+        self.assertEqual(job["if"], "github.event.repository.private == false && github.event_name == 'workflow_dispatch' && inputs.native_arm64_images")
         self.assertLessEqual(int(job["timeout-minutes"]), 120)
         self.assertEqual(job["steps"][0]["with"], {
             "ref": "${{ github.event.pull_request.head.sha || github.sha }}",
@@ -579,15 +551,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.ci["on"]["workflow_dispatch"]["inputs"]["native_arm64_images"]["default"], "false")
         changes = self.ci["jobs"]["changes"]
         self.assertIn("python3 scripts/test_qualify_native_arm64.py", commands(changes))
-        self.assertEqual(changes["outputs"]["media_runtime"], "${{ steps.filter.outputs.media_runtime }}")
+        self.assertNotIn("media_runtime", changes["outputs"])
         filters = next(step["with"]["filters"] for step in changes["steps"] if step.get("id") == "filter")
-        media_paths = yaml.load(filters, Loader=UniqueKeyLoader)["media_runtime"]
-        for path in ("Dockerfile", "scripts/docker-entrypoint.sh", "scripts/collect_media_runtime.py",
-                     "scripts/qualify_native_arm64.py", "scripts/qualify_media_runtime.py",
-                     "scripts/qualify_media_transport.py", ".github/workflows/lint.yml"):
-            self.assertIn(path, media_paths)
-        self.assertNotIn("**", media_paths)
-
+        self.assertNotIn("media_runtime", yaml.load(filters, Loader=UniqueKeyLoader))
 
     def test_native_amd64_qualification_is_manual_and_isolated(self) -> None:
         """test_native_amd64_qualification_is_manual_and_isolated protects explicit native selection."""
@@ -653,34 +619,36 @@ class WorkflowTests(unittest.TestCase):
                     env={**os.environ, "QUALIFICATION_BASE_REF": branch}, text=True)
                 self.assertEqual(result, wanted)
 
-    def test_manual_amd64_aggregate_rejects_incomplete_selected_results(self) -> None:
-        """test_manual_amd64_aggregate_rejects_incomplete_selected_results executes the shipped gate."""
+    def test_native_aggregate_rejects_incomplete_selected_results(self) -> None:
+        """test_native_aggregate_rejects_incomplete_selected_results executes the shipped gate."""
         gate = self.ci["jobs"]["required"]
         step = gate["steps"][0]
-        self.assertIn("native_amd64_images", gate["needs"])
-        self.assertEqual(step["env"]["NATIVE_AMD64_IMAGES"],
-                         "${{ github.event_name == 'workflow_dispatch' && inputs.native_amd64_images }}")
         script = step["run"].split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
-        for manual in (False, True):
-            for requested in (False, True):
-                for media_changed in (False, True):
+        for architecture in ("arm64", "amd64"):
+            name = f"native_{architecture}_images"
+            variable = name.upper()
+            self.assertIn(name, gate["needs"])
+            self.assertEqual(step["env"][variable],
+                             "${{ github.event_name == 'workflow_dispatch' && inputs." + name + " }}")
+            for event in ("pull_request", "push", "merge_group", "workflow_dispatch"):
+                for requested in (False, True):
                     for status in ("success", "failure", "cancelled", "skipped", "missing"):
-                        with self.subTest(manual=manual, requested=requested,
-                                          media_changed=media_changed, status=status):
-                            jobs = {name: {"result": "success"} for name in gate["needs"]}
+                        with self.subTest(architecture=architecture, event=event,
+                                          requested=requested, status=status):
+                            jobs = {job: {"result": "success"} for job in gate["needs"]}
                             jobs["changes"]["outputs"] = {theme: "false" for theme in THEMES}
-                            jobs["changes"]["outputs"]["media_runtime"] = str(media_changed).lower()
                             if status == "missing":
-                                del jobs["native_amd64_images"]
+                                del jobs[name]
                             else:
-                                jobs["native_amd64_images"]["result"] = status
+                                jobs[name]["result"] = status
+                            manual = event == "workflow_dispatch"
+                            selected = manual and requested
                             env = {**os.environ, "NEEDS": json.dumps(jobs),
                                    "MANUAL_RUN": str(manual).lower(), "QUALIFICATION": "false",
                                    "HISTORICAL_CONTROL": "false", "NATIVE_ARM64_IMAGES": "false",
-                                   "NATIVE_AMD64_IMAGES": str(requested).lower()}
+                                   "NATIVE_AMD64_IMAGES": "false", variable: str(selected).lower()}
                             result = subprocess.run([sys.executable, "-c", script], env=env,
                                                     text=True, capture_output=True, check=False)
-                            selected = manual and requested
                             success = status == "success" or (not selected and status in {"skipped", "missing"})
                             self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
 
