@@ -151,3 +151,29 @@ func runChannelGroupUpgradeCase(t *testing.T, dialect string) {
 	require.NoError(t, err)
 	require.Zero(t, again)
 }
+
+// TestTruncatedRowCopiedToSQLiteKeepsFullList verifies a row written where channels.group
+// is varchar(32) (MySQL or PostgreSQL) keeps its whole group list after it is copied to a
+// SQLite deployment, where the column has no width limit: reads must trust the 32-character
+// copy and startup reconciliation must leave it alone.
+func TestTruncatedRowCopiedToSQLiteKeepsFullList(t *testing.T) {
+	openChannelGroupBackend(t, "sqlite")
+	channel := &Channel{Name: "copied", Type: 1, Models: "gpt-4o", Group: groupname.JoinList(wideChannelGroups), Status: ChannelStatusEnabled}
+	require.NoError(t, channel.Insert())
+	column, truncated := storedChannelGroupRow(t, channel.Id)
+	require.Equal(t, wideChannelGroupColumn, column)
+	require.True(t, *truncated)
+
+	// The same rows now live on SQLite, which never enforced the width.
+	channelGroupColumnLimitOverride.Store(0)
+
+	got, err := GetChannelById(channel.Id, true)
+	require.NoError(t, err)
+	require.Equal(t, groupname.JoinList(wideChannelGroups), got.Group)
+
+	result, err := ReconcileChannelGroups(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, result, "a row in the 32-character form is consistent on every backend")
+	require.Equal(t, wideChannelGroups, relationGroups(t, channel.Id))
+	require.Equal(t, sortedCopy(wideChannelGroups), abilityGroups(t, channel.Id))
+}

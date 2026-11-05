@@ -79,8 +79,21 @@ func channelGroupColumnLimit() int {
 //   - string: the value to store in channels.group.
 //   - bool: true when names were left out, so channel_groups alone holds the full list.
 func channelGroupColumnValue(groups []string) (string, bool) {
+	return channelGroupColumnValueWithLimit(groups, channelGroupColumnLimit())
+}
+
+// channelGroupColumnValueWithLimit is channelGroupColumnValue for a column that holds
+// limit characters (0 means unlimited), so a copy can be staged for another backend.
+//
+// Parameters:
+//   - groups: the channel's complete, normalized group list.
+//   - limit: the column's capacity in characters, or 0 when it is unlimited.
+//
+// Return values:
+//   - string: the value to store in channels.group.
+//   - bool: true when names were left out, so channel_groups alone holds the full list.
+func channelGroupColumnValueWithLimit(groups []string, limit int) (string, bool) {
 	whole := groupname.JoinList(groups)
-	limit := channelGroupColumnLimit()
 	if limit <= 0 || utf8.RuneCountInString(whole) <= limit {
 		return whole, false
 	}
@@ -100,9 +113,11 @@ func channelGroupColumnValue(groups []string) (string, bool) {
 
 // resolveChannelGroupList decides which list a stored channel row stands for, given its
 // channels.group value and its channel_groups rows. The relation is trusted only when
-// the column still holds exactly what a relation-aware writer stores for that relation;
-// otherwise something else (an older binary, or manual SQL) rewrote the column after
-// the relation was written, and the column is the newer intent.
+// the column still holds one of the two values a relation-aware writer stores for that
+// relation, on any backend: the whole list, or the 32-character leading run written where
+// the column enforces its width. Rows copied between backends therefore keep their list.
+// Otherwise something else (an older binary, or manual SQL) rewrote the column after the
+// relation was written, and the column is the newer intent.
 //
 // Parameters:
 //   - column: the stored channels.group value.
@@ -116,11 +131,14 @@ func resolveChannelGroupList(column string, relation []string) ([]string, bool) 
 	if len(relation) == 0 {
 		return stored, false
 	}
-	expected, _ := channelGroupColumnValue(relation)
-	if !slices.Equal(groupname.ParseList(expected), stored) {
-		return stored, false
+	if slices.Equal(relation, stored) {
+		return relation, true
 	}
-	return relation, true
+	if prefix, truncated := channelGroupColumnValueWithLimit(relation, legacyChannelGroupColumnWidth); truncated &&
+		slices.Equal(groupname.ParseList(prefix), stored) {
+		return relation, true
+	}
+	return stored, false
 }
 
 // assignedChannelGroups returns the normalized list a channel write assigns. An empty
@@ -270,6 +288,72 @@ func deleteChannelGroupsWithDB(tx *gorm.DB, channelIDs ...int) error {
 		if err := tx.Where("channel_id IN ?", batch).Delete(&ChannelGroup{}).Error; err != nil {
 			return errors.Wrapf(err, "delete channel_groups of %d channels", len(batch))
 		}
+	}
+	return nil
+}
+
+// PrepareChannelGroupCopy stages channels read from one database for insertion into
+// another, as cmd/migrate does. Each channel's Group must already be its complete list
+// (read through a handle with RegisterChannelGroupHydration). Its channels.group copy and
+// GroupTruncated flag are rewritten for the target column, and the returned rows are the
+// target's channel_groups for these channels, to be written with WriteCopiedChannelGroups.
+// A channel with no group keeps its column value and gets no rows, as a plain copy would.
+//
+// Parameters:
+//   - channels: the batch about to be inserted; modified in place.
+//   - enforcesColumnWidth: true when the target is MySQL or PostgreSQL, whose channels.group
+//     holds 32 characters; false for SQLite.
+//
+// Return values:
+//   - []ChannelGroup: the complete relation rows of the batch.
+func PrepareChannelGroupCopy(channels []Channel, enforcesColumnWidth bool) []ChannelGroup {
+	limit := 0
+	if enforcesColumnWidth {
+		limit = legacyChannelGroupColumnWidth
+	}
+	var rows []ChannelGroup
+	for i := range channels {
+		groups := channels[i].GetGroupNames()
+		if len(groups) == 0 {
+			complete := false
+			channels[i].GroupTruncated = &complete
+			continue
+		}
+		column, truncated := channelGroupColumnValueWithLimit(groups, limit)
+		channels[i].Group = column
+		channels[i].GroupTruncated = &truncated
+		for position, name := range groups {
+			rows = append(rows, ChannelGroup{ChannelId: channels[i].Id, GroupName: name, Position: position})
+		}
+	}
+	return rows
+}
+
+// WriteCopiedChannelGroups makes rows the channel_groups of the channels in channelIDs on
+// db, replacing whatever an earlier copy left there.
+//
+// Parameters:
+//   - db: the target database.
+//   - channelIDs: the copied channels.
+//   - rows: their complete relation rows, from PrepareChannelGroupCopy.
+//
+// Return values:
+//   - error: a wrapped write failure; nothing is written when it is non-nil.
+func WriteCopiedChannelGroups(db *gorm.DB, channelIDs []int, rows []ChannelGroup) error {
+	err := db.Transaction(func(tx *gorm.DB) error {
+		if err := deleteChannelGroupsWithDB(tx, channelIDs...); err != nil {
+			return errors.Wrap(err, "clear copied channel groups")
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		if err := tx.CreateInBatches(&rows, abilitySyncBatchSize).Error; err != nil {
+			return errors.Wrapf(err, "write %d copied channel groups", len(rows))
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Wrapf(err, "copy groups of %d channels", len(channelIDs))
 	}
 	return nil
 }
