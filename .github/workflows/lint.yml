@@ -48,7 +48,6 @@ jobs:
       modern: ${{ steps.filter.outputs.modern }}
       air: ${{ steps.filter.outputs.air }}
       berry: ${{ steps.filter.outputs.berry }}
-      media_runtime: ${{ steps.filter.outputs.media_runtime }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,22 +80,6 @@ jobs:
           # Use the previous commit on the same branch for push events.
           base: ${{ github.event_name == 'push' && github.ref || '' }}
           filters: |
-            media_runtime:
-              - 'Dockerfile'
-              - '.dockerignore'
-              - 'scripts/docker-entrypoint.sh'
-              - 'scripts/collect_media_runtime.py'
-              - 'scripts/qualify_native_arm64.py'
-              - 'scripts/image_inputs.py'
-              - 'scripts/test_image_inputs.py'
-              - 'scripts/test_qualify_native_arm64.py'
-              - 'scripts/qualify_media_runtime.py'
-              - 'scripts/qualify_media_transport.py'
-              - 'scripts/test_runtime_image.py'
-              - 'common/helper/audio_runtime_linux_test.go'
-              - 'relay/adaptor/gemini/tts/media_runtime_linux_test.go'
-              - 'relay/controller/media_runtime_test.go'
-              - '.github/workflows/lint.yml'
             modern:
               - 'web/modern/**'
               - 'web/legacy/**'
@@ -122,11 +105,11 @@ jobs:
               - '.dockerignore'
               - 'VERSION'
 
-  # Public hosted native hardware; this job never publishes or deploys an image.
+  # Native image qualification runs only on an explicit manual request.
   native_arm64_images:
     name: Native ARM64 image qualification
     needs: changes
-    if: github.event.repository.private == false && (needs.changes.outputs.media_runtime == 'true' || (github.event_name == 'workflow_dispatch' && inputs.native_arm64_images))
+    if: github.event.repository.private == false && github.event_name == 'workflow_dispatch' && inputs.native_arm64_images
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
     steps:
@@ -741,6 +724,7 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           MANUAL_RUN: ${{ github.event_name == 'workflow_dispatch' }}
+          PUBLIC_REPOSITORY: ${{ github.event.repository.private == false }}
           NATIVE_ARM64_IMAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.native_arm64_images }}
           NATIVE_AMD64_IMAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.native_amd64_images }}
           HISTORICAL_CONTROL: ${{ github.event_name == 'workflow_dispatch' && inputs.historical_control }}
@@ -755,16 +739,16 @@ jobs:
                       'entity_response_guard', 'vulnerability_scan'}
           outputs = jobs['changes'].get('outputs', {})
           manual = os.environ['MANUAL_RUN'] == 'true'
+          if manual and os.environ['PUBLIC_REPOSITORY'] != 'true' and (
+                  os.environ['NATIVE_ARM64_IMAGES'] == 'true' or os.environ['NATIVE_AMD64_IMAGES'] == 'true'):
+              raise SystemExit('Native image qualification requires a public repository; selected qualification cannot run')
           for theme in ('modern', 'air', 'berry'):
               changed = outputs.get(theme)
               if not manual and changed not in ('true', 'false'):
                   raise SystemExit(f'Missing or invalid change detection for {theme}')
               if manual or changed == 'true':
                   required.add(f'{theme}_dependency_audit')
-          media_runtime = outputs.get('media_runtime')
-          if not manual and media_runtime not in ('true', 'false'):
-              raise SystemExit('Missing or invalid media runtime change detection')
-          if media_runtime == 'true' or os.environ['NATIVE_ARM64_IMAGES'] == 'true':
+          if manual and os.environ['NATIVE_ARM64_IMAGES'] == 'true':
               required.add('native_arm64_images')
           if manual and os.environ['NATIVE_AMD64_IMAGES'] == 'true':
               required.add('native_amd64_images')
