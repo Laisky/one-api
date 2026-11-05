@@ -4,6 +4,9 @@ import "github.com/Laisky/one-api/relay/realtime"
 
 // Usage is the token usage information returned by OpenAI API.
 type Usage struct {
+	// NativeGoogleAudio is a validated native input receipt, not client JSON.
+	// It keeps ordinary audio admission/settlement distinct from Live/output audio.
+	NativeGoogleAudio *NativeGoogleAudioUsage `json:"-"`
 	// BilledSearchUnits is an adaptor-validated non-token receipt. Nil means that
 	// no valid search-unit count was received; public JSON cannot set this field.
 	BilledSearchUnits *int64 `json:"-"`

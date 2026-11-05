@@ -99,8 +99,6 @@ func TestLogFidelityBridgeEncodingFailure(t *testing.T) {
 	}{
 		{"invalid UTF8", "invalid " + string([]byte{255}), nil},
 		{"reflected invalid UTF8", "invalid reflected", []zap.Field{zap.Reflect("value", struct{ Text string }{string([]byte{255})})}},
-		{"duplicate attrs", "duplicate", []zap.Field{zap.Int("count", 1), zap.Int("count", 2)}},
-		{"duplicate nested", "duplicate nested", []zap.Field{zap.Object("map", fidelityDuplicateObject{})}},
 		{"unsupported", "unsupported", []zap.Field{zap.Reflect("channel", make(chan int))}},
 		{"cycle", "cycle", []zap.Field{zap.Reflect("cycle", cyclic)}},
 		{"object error", "object", []zap.Field{zap.Object("object", fidelityObject{fail: true})}},
@@ -114,6 +112,138 @@ func TestLogFidelityBridgeEncodingFailure(t *testing.T) {
 			require.NotContains(t, err.Error(), strings.Repeat("self", 3))
 		})
 	}
+}
+
+// TestLogFidelityBridgeDuplicateKeysResolveLastValueWins pins how a Zap field
+// collision reaches OTLP.
+//
+// Zap allows the same key more than once; an OTLP attribute collection and
+// every nested map must not hold one twice. The OpenTelemetry common
+// specification resolves that by having a later value overwrite an earlier one,
+// which is also what the SDK does by default and how every JSON reader of the
+// local log line already interprets it. The bridge used to reject the whole
+// record instead, and because the request logger and the process logger both
+// bind "host", that dropped every request-scoped line in production.
+//
+// Parameters:
+//   - t: the test handle.
+//
+// Return values: none.
+func TestLogFidelityBridgeDuplicateKeysResolveLastValueWins(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		write func(lg *zap.Logger)
+		check func(t *testing.T, r sdklog.Record)
+	}{
+		{
+			name: "process and request loggers both bind host",
+			write: func(lg *zap.Logger) {
+				lg.With(zap.String("host", "b4c6097d77f6")).
+					With(zap.String("url", "/v1/chat/completions"), zap.String("host", "oneapi.example.com")).
+					Info("select channel in cache", zap.Int("channel_id", 7))
+			},
+			check: func(t *testing.T, r sdklog.Record) {
+				require.Equal(t, 1, attrCount(r, "host"))
+				require.Equal(t, "oneapi.example.com", fidelityAttr(t, r, "host").AsString())
+				require.Equal(t, "/v1/chat/completions", fidelityAttr(t, r, "url").AsString())
+				require.EqualValues(t, 7, fidelityAttr(t, r, "channel_id").AsInt64())
+			},
+		},
+		{
+			name: "call site overrides a bound field",
+			write: func(lg *zap.Logger) {
+				lg.With(zap.String("model", "bound")).Info("relay finished", zap.String("model", "call-site"))
+			},
+			check: func(t *testing.T, r sdklog.Record) {
+				require.Equal(t, 1, attrCount(r, "model"))
+				require.Equal(t, "call-site", fidelityAttr(t, r, "model").AsString())
+			},
+		},
+		{
+			name: "repeated call-site field",
+			write: func(lg *zap.Logger) {
+				lg.Info("duplicate", zap.Int("count", 1), zap.Int("count", 2))
+			},
+			check: func(t *testing.T, r sdklog.Record) {
+				require.Equal(t, 1, attrCount(r, "count"))
+				require.EqualValues(t, 2, fidelityAttr(t, r, "count").AsInt64())
+			},
+		},
+		{
+			name: "repeated key inside an object",
+			write: func(lg *zap.Logger) {
+				lg.Info("duplicate nested", zap.Object("map", fidelityDuplicateObject{}))
+			},
+			check: func(t *testing.T, r sdklog.Record) {
+				nested := fidelityAttr(t, r, "map").AsMap()
+				require.Len(t, nested, 1)
+				require.Equal(t, attribute.Key("count"), nested[0].Key)
+				require.EqualValues(t, 2, nested[0].Value.AsInt64())
+			},
+		},
+		{
+			name: "repeated key inside a namespace",
+			write: func(lg *zap.Logger) {
+				lg.With(zap.Namespace("worker"), zap.Int("attempt", 1)).Info("retrying", zap.Int("attempt", 2))
+			},
+			check: func(t *testing.T, r sdklog.Record) {
+				nested := fidelityAttr(t, r, "worker").AsMap()
+				require.Len(t, nested, 1)
+				require.EqualValues(t, 2, nested[0].Value.AsInt64())
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spy := installLogExportSpy(t)
+			lg, out, _ := newTestBridge(t, zapcore.InfoLevel)
+
+			tc.write(lg)
+
+			tc.check(t, out.only(t))
+			require.Zero(t, spy.outcomes["dropped_encoding"], "a key collision is not an encoding failure")
+			require.Equal(t, 1, spy.outcomes["emitted"])
+			require.Equal(t, 1, spy.outcomes["deduplicated"],
+				"overwriting a value is visible in metrics even though the record is kept")
+		})
+	}
+}
+
+// TestLogFidelityBridgeUniqueKeysAreNotCountedAsDeduplicated is the control for
+// the test above: an ordinary record must not report a collision.
+//
+// Parameters:
+//   - t: the test handle.
+//
+// Return values: none.
+func TestLogFidelityBridgeUniqueKeysAreNotCountedAsDeduplicated(t *testing.T) {
+	spy := installLogExportSpy(t)
+	lg, out, _ := newTestBridge(t, zapcore.InfoLevel)
+
+	lg.With(zap.String("host", "b4c6097d77f6")).Info("channels synced from database", zap.Object("map", fidelityObject{}))
+
+	r := out.only(t)
+	require.Equal(t, "b4c6097d77f6", fidelityAttr(t, r, "host").AsString())
+	require.Equal(t, 1, spy.outcomes["emitted"])
+	require.Zero(t, spy.outcomes["deduplicated"])
+}
+
+// attrCount returns how many top-level attributes of r use key.
+//
+// Parameters:
+//   - r: the exported record.
+//   - key: the attribute key.
+//
+// Return values:
+//   - int: the number of attributes with that key.
+func attrCount(r sdklog.Record, key string) int {
+	n := 0
+	r.WalkAttributes(func(kv attribute.KeyValue) bool {
+		if string(kv.Key) == key {
+			n++
+		}
+		return true
+	})
+	return n
 }
 
 // fidelityAttr requires presence independently of EMPTY/nil value semantics.

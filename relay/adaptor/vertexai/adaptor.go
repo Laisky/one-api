@@ -15,6 +15,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor"
 	channelhelper "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
+	nativegemini "github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 	vertexaiClaude "github.com/Laisky/one-api/relay/adaptor/vertexai/claude"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/deepseek"
@@ -93,6 +94,14 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 
 	if claude, ok := adaptor.(*vertexaiClaude.Adaptor); ok {
 		return claude.ConvertClaudeRequest(c, request)
+	}
+
+	if modelMapping[meta.ActualModelName] == VertexAIGemini {
+		converted, err := nativegemini.ConvertClaudeToNativeChat(c, request)
+		if err != nil {
+			return nil, err
+		}
+		return adaptor.ConvertRequest(c, relaymode.ChatCompletions, converted)
 	}
 
 	// Convert Claude Messages API request to OpenAI format first

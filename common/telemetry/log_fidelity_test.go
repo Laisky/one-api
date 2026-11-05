@@ -216,21 +216,45 @@ func TestLogFidelityInvalidUTF8IsExplicitFailure(t *testing.T) {
 	require.Equal(t, 1, spy.outcome("dropped_encoding"))
 }
 
-// TestLogFidelityNativeDuplicatesRejectWholeRecord proves the SDK does not
-// silently deduplicate body/attribute maps before validation.
-func TestLogFidelityNativeDuplicatesRejectWholeRecord(t *testing.T) {
+// TestLogFidelityNativeDuplicatesResolveLastValueWins proves the production
+// provider enforces OTLP key uniqueness the way the OpenTelemetry common
+// specification prescribes -- a later value overwrites an earlier one -- for
+// record attributes, nested attribute maps and map bodies alike, and that the
+// record is delivered rather than discarded.
+//
+// The provider used to disable SDK deduplication and reject such records
+// whole, which turned an ordinary Zap key collision into a lost log line.
+func TestLogFidelityNativeDuplicatesResolveLastValueWins(t *testing.T) {
 	spy := installLogExportSpy(t)
 	p, collect := fidelityHTTPProvider(t, sdkresource.Empty(), 0, 0)
 	lg := p.Logger("synthetic.native")
 	var attrs otellog.Record
 	attrs.SetBody(attribute.StringValue("duplicate attrs"))
-	attrs.AddAttributes(attribute.Int("key", 1), attribute.Int("key", 2))
+	attrs.AddAttributes(attribute.Int("key", 1), attribute.Int("key", 2),
+		attribute.Map("nested", attribute.Int("inner", 1), attribute.Int("inner", 2)))
 	lg.Emit(context.Background(), attrs)
 	var body otellog.Record
 	body.SetBody(attribute.MapValue(attribute.Int("key", 1), attribute.Int("key", 2)))
 	lg.Emit(context.Background(), body)
-	require.Empty(t, collect())
-	require.Equal(t, 2, spy.outcome("dropped_encoding"))
+
+	groups := collect()
+	require.Len(t, groups, 1)
+	records := groups[0].GetScopeLogs()[0].GetLogRecords()
+	require.Len(t, records, 2, "a key collision must not cost the record")
+
+	got := fidelityPBAttrs(records[0].GetAttributes())
+	require.Len(t, records[0].GetAttributes(), 2, "each key is exported once")
+	require.EqualValues(t, 2, got["key"].GetIntValue())
+	nested := got["nested"].GetKvlistValue().GetValues()
+	require.Len(t, nested, 1)
+	require.EqualValues(t, 2, nested[0].GetValue().GetIntValue())
+
+	bodyMap := records[1].GetBody().GetKvlistValue().GetValues()
+	require.Len(t, bodyMap, 1)
+	require.EqualValues(t, 2, bodyMap[0].GetValue().GetIntValue())
+
+	require.Zero(t, spy.outcome("dropped_encoding"))
+	require.Equal(t, 2, spy.outcome("deduplicated"))
 }
 
 // writeFidelityWireReceipt writes actual HTTP protobuf bytes only after the test

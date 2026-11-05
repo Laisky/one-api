@@ -113,12 +113,13 @@ func TestResponseWSTerminalGateReceiptControls(t *testing.T) {
 
 // TestResponseWSTerminalGateOwnershipControls preserves completed-envelope
 // ownership, store=false connection locality and status-omitted compatibility.
-// A response.incomplete envelope (for example a response stopped by
-// max_output_tokens) is owned and, unless store=false, retrievable like a
-// completed one: since #598 (issue #596) a session may continue it with
-// previous_response_id, so the ownership guard and the continuation funding
-// observer both accept it. A response.failed envelope is never continuable and
-// stays unowned.
+//
+// A response.incomplete envelope is owned like a completed one: an incomplete
+// response (for example one cut off by max_output_tokens) is the caller's and
+// can be continued with previous_response_id, so issue #596 / PR #598 made it a
+// qualified parent receipt in the session ownership ledger
+// (TestSecurityNativeResponseWebSocketKnownContinuationAdmission, case
+// incomplete_local). A response.failed envelope still establishes nothing.
 func TestResponseWSTerminalGateOwnershipControls(t *testing.T) {
 	for _, test := range []struct {
 		name, event, status string
@@ -132,6 +133,7 @@ func TestResponseWSTerminalGateOwnershipControls(t *testing.T) {
 		{"failed_envelope", "response.failed", `,"status":"failed"`, false},
 		{"incomplete_envelope", "response.incomplete", `,"status":"incomplete"`, true},
 		{"incomplete_envelope_status_omitted", "response.incomplete", "", true},
+		{"failed_envelope_status_omitted", "response.failed", "", false},
 	} {
 		for _, store := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/store_%v", test.name, store), func(t *testing.T) {

@@ -441,6 +441,7 @@ func geminiUsageMetadataToOpenAIUsage(meta *UsageMetadata) *model.Usage {
 			ReasoningTokens: meta.ThoughtsTokenCount,
 		}
 	}
+	applyNativeGoogleAudioReceipt(usage, meta.PromptTokensDetails, meta.CacheTokensDetails)
 	return usage
 }
 

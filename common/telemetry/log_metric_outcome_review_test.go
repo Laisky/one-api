@@ -24,6 +24,7 @@ func TestLogExportOutcomeMetricsKeepKnownLabels(t *testing.T) {
 		metrics.AppLogExportOutcomeDroppedEncoding:      2,
 		metrics.AppLogExportOutcomeDroppedOperatorLimit: 3,
 		metrics.AppLogExportOutcomeEmitted:              5,
+		metrics.AppLogExportOutcomeDeduplicated:         7,
 	}
 	for outcome, count := range want {
 		counter.Add(context.Background(), count, apimetric.WithAttributes(attribute.String("outcome", outcome)))
