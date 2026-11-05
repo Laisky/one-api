@@ -520,7 +520,7 @@ class WorkflowTests(unittest.TestCase):
         for label, jobs, manual_run, qualification, historical_run, success in scenarios:
             with self.subTest(label=label):
                 env = {**os.environ, "NEEDS": json.dumps(jobs),
-                       "MANUAL_RUN": str(manual_run).lower(),
+                       "MANUAL_RUN": str(manual_run).lower(), "PUBLIC_REPOSITORY": "true",
                        "QUALIFICATION": str(qualification).lower(),
                        "HISTORICAL_CONTROL": str(historical_run).lower(),
                        "NATIVE_ARM64_IMAGES": "false", "NATIVE_AMD64_IMAGES": "false"}
@@ -662,13 +662,41 @@ class WorkflowTests(unittest.TestCase):
                             manual = event == "workflow_dispatch"
                             selected = manual and requested
                             env = {**os.environ, "NEEDS": json.dumps(jobs),
-                                   "MANUAL_RUN": str(manual).lower(), "QUALIFICATION": "false",
+                                   "MANUAL_RUN": str(manual).lower(), "PUBLIC_REPOSITORY": "true", "QUALIFICATION": "false",
                                    "HISTORICAL_CONTROL": "false", "NATIVE_ARM64_IMAGES": "false",
                                    "NATIVE_AMD64_IMAGES": "false", variable: str(selected).lower()}
                             result = subprocess.run([sys.executable, "-c", script], env=env,
                                                     text=True, capture_output=True, check=False)
                             success = status == "success" or (not selected and status in {"skipped", "missing"})
                             self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
+
+
+    def test_private_native_requests_fail_explicitly(self) -> None:
+        """test_private_native_requests_fail_explicitly checks eligibility without hiding selected skips."""
+        gate = self.ci["jobs"]["required"]
+        step = gate["steps"][0]
+        self.assertEqual(step["env"]["PUBLIC_REPOSITORY"],
+                         "${{ github.event.repository.private == false }}")
+        script = step["run"].split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+        for architecture in ("ARM64", "AMD64"):
+            for public in (False, True):
+                for manual in (False, True):
+                    for requested in (False, True):
+                        with self.subTest(architecture=architecture, public=public, manual=manual, requested=requested):
+                            jobs = {name: {"result": "success"} for name in gate["needs"]}
+                            jobs["changes"]["outputs"] = {theme: "false" for theme in THEMES}
+                            jobs[f"native_{architecture.lower()}_images"]["result"] = "skipped"
+                            env = {**os.environ, "NEEDS": json.dumps(jobs),
+                                   "MANUAL_RUN": str(manual).lower(), "PUBLIC_REPOSITORY": str(public).lower(),
+                                   "QUALIFICATION": "false", "HISTORICAL_CONTROL": "false",
+                                   "NATIVE_ARM64_IMAGES": "false", "NATIVE_AMD64_IMAGES": "false",
+                                   f"NATIVE_{architecture}_IMAGES": str(manual and requested).lower()}
+                            result = subprocess.run([sys.executable, "-c", script], env=env,
+                                                    text=True, capture_output=True, check=False)
+                            self.assertEqual(result.returncode == 0, not (manual and requested))
+                            if manual and requested and not public:
+                                self.assertIn("Native image qualification requires a public repository", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

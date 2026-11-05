@@ -91,6 +91,8 @@ and themes remain covered by scripts/test_runtime_image.py.
 In the CI workflow dispatch, select the candidate branch (not the default branch
 unless it is the candidate) and set `native_arm64_images` to true to run
 `native_arm64_images` on the public GitHub-hosted `ubuntu-24.04-arm` runner.
+Both native inputs require a public repository. Selecting either in a private
+repository fails `CI required` because the requested qualification cannot run.
 The input defaults to false. Push, pull request, merge group, and image or media
 path changes do not automatically select this job. Use it when qualifying
 important Dockerfile, base image, or FFmpeg changes. `CI required` requires
@@ -149,7 +151,8 @@ not independent evidence of approval.
 
 Select the candidate branch in the CI workflow dispatch and set the boolean input
 `native_amd64_images` to true to select `native_amd64_images` on
-`ubuntu-24.04`. Its default is false. Push, pull request, merge group, and media
+`ubuntu-24.04`. As with ARM64, selecting it in a private repository fails
+`CI required`; native qualification requires a public repository. Its default is false. Push, pull request, merge group, and media
 path changes do not automatically select this AMD64 job. ARM64 has a separate
 manual input.
 

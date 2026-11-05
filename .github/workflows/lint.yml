@@ -724,6 +724,7 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           MANUAL_RUN: ${{ github.event_name == 'workflow_dispatch' }}
+          PUBLIC_REPOSITORY: ${{ github.event.repository.private == false }}
           NATIVE_ARM64_IMAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.native_arm64_images }}
           NATIVE_AMD64_IMAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.native_amd64_images }}
           HISTORICAL_CONTROL: ${{ github.event_name == 'workflow_dispatch' && inputs.historical_control }}
@@ -738,6 +739,9 @@ jobs:
                       'entity_response_guard', 'vulnerability_scan'}
           outputs = jobs['changes'].get('outputs', {})
           manual = os.environ['MANUAL_RUN'] == 'true'
+          if manual and os.environ['PUBLIC_REPOSITORY'] != 'true' and (
+                  os.environ['NATIVE_ARM64_IMAGES'] == 'true' or os.environ['NATIVE_AMD64_IMAGES'] == 'true'):
+              raise SystemExit('Native image qualification requires a public repository; selected qualification cannot run')
           for theme in ('modern', 'air', 'berry'):
               changed = outputs.get(theme)
               if not manual and changed not in ('true', 'false'):
