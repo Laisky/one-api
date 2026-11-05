@@ -555,6 +555,24 @@ class WorkflowTests(unittest.TestCase):
         filters = next(step["with"]["filters"] for step in changes["steps"] if step.get("id") == "filter")
         self.assertNotIn("media_runtime", yaml.load(filters, Loader=UniqueKeyLoader))
 
+    def test_manual_native_documentation_identifies_candidate_and_receipt(self) -> None:
+        """test_manual_native_documentation_identifies_candidate_and_receipt guards operator guidance."""
+        doc = (ROOT / "docs/media-runtime-qualification.md").read_text()
+        for architecture in ("ARM64", "AMD64"):
+            section = doc.split(f"## Manual native {architecture} qualification", 1)[1].split("\n## ", 1)[0]
+            self.assertIn("candidate branch", section)
+            self.assertIn("`github.sha`", section)
+            self.assertIn("`source-receipt.json`", section)
+            self.assertIn("`head` matching the intended candidate commit", section)
+            job = self.ci["jobs"][f"native_{architecture.lower()}_images"]
+            self.assertEqual(job["steps"][0]["with"]["ref"],
+                             "${{ github.event.pull_request.head.sha || github.sha }}")
+            build = next(step for step in job["steps"] if "qualify_native_arm64.py" in step.get("run", ""))
+            self.assertEqual(build["env"]["QUALIFICATION_HEAD"],
+                             "${{ github.event.pull_request.head.sha || github.sha }}")
+            self.assertIn('--expected-head "$QUALIFICATION_HEAD"', build["run"])
+        self.assertNotIn("checks out the exact PR head", doc)
+
     def test_native_amd64_qualification_is_manual_and_isolated(self) -> None:
         """test_native_amd64_qualification_is_manual_and_isolated protects explicit native selection."""
         job = self.ci["jobs"]["native_amd64_images"]

@@ -88,15 +88,18 @@ and themes remain covered by scripts/test_runtime_image.py.
 
 ## Manual native ARM64 qualification
 
-Dispatch the existing CI workflow with `native_arm64_images` set to true to run
+In the CI workflow dispatch, select the candidate branch (not the default branch
+unless it is the candidate) and set `native_arm64_images` to true to run
 `native_arm64_images` on the public GitHub-hosted `ubuntu-24.04-arm` runner.
 The input defaults to false. Push, pull request, merge group, and image or media
 path changes do not automatically select this job. Use it when qualifying
 important Dockerfile, base image, or FFmpeg changes. `CI required` requires
 success when selected; a failure, cancellation, skip, or missing result fails
 the gate.
-It retains `contents: read`, checks out the exact PR head without persisted Git
-credentials, and uses the runner's existing native Docker builder. It does not
+The job checks out the selected ref's `github.sha` without persisted Git
+credentials. Verify that `source-receipt.json` in the uploaded evidence has a
+`head` matching the intended candidate commit before accepting the result. It
+retains `contents: read` and uses the runner's existing native Docker builder. It does not
 install QEMU, create privileged builders, publish images, or deploy.
 
 `scripts/qualify_native_arm64.py` builds the complete production Dockerfile on
@@ -144,14 +147,16 @@ not independent evidence of approval.
 
 ## Manual native AMD64 qualification
 
-Dispatch the existing CI workflow with the boolean input
-`native_amd64_images` set to true to select `native_amd64_images` on
+Select the candidate branch in the CI workflow dispatch and set the boolean input
+`native_amd64_images` to true to select `native_amd64_images` on
 `ubuntu-24.04`. Its default is false. Push, pull request, merge group, and media
 path changes do not automatically select this AMD64 job. ARM64 has a separate
 manual input.
 
 The AMD64 job invokes `scripts/qualify_native_arm64.py --architecture amd64`
-against the exact selected source head. It uses native Docker and Go 1.27.3,
+against the selected ref’s `github.sha`. Verify that `source-receipt.json` in
+the uploaded evidence has a `head` matching the intended candidate commit. It
+uses native Docker and Go 1.27.3,
 checks actual AMD64 image and ELF identities, and runs the same full production
 build, historical runtime controls, default/custom UID tests, media/billing/
 cancellation comparisons, retained-file checks, and isolated TLS fixtures.
