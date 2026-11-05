@@ -87,12 +87,15 @@ func TestParseContentCheckedRetainsNestedErrorStack(t *testing.T) {
 		{[]any{map[string]any{"type": "file"}}, errFileSourceChoice, "decodeMediaPart"},
 	}
 	for _, tc := range tests {
-		_, err := (Message{Content: tc.content}).ParseContentChecked()
-		require.ErrorIs(t, err, tc.cause)
-		require.Equal(t, "content part 0: "+tc.cause.Error(), err.Error())
-		var trace stackTracer
-		require.True(t, stderrors.As(err, &trace))
-		require.Contains(t, fmt.Sprintf("%+v", trace.StackTrace()), tc.frame)
+		t.Run(tc.frame, func(t *testing.T) {
+			_, err := (Message{Content: tc.content}).ParseContentChecked()
+			require.ErrorIs(t, err, tc.cause)
+			require.Equal(t, "content part 0: "+tc.cause.Error(), err.Error())
+			var trace stackTracer
+			require.True(t, stderrors.As(err, &trace))
+			require.Contains(t, fmt.Sprintf("%+v", trace.StackTrace()), tc.frame)
+			require.Contains(t, fmt.Sprintf("%+v", err), tc.frame)
+		})
 	}
 }
 

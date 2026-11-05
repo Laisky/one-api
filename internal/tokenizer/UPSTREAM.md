@@ -1,7 +1,9 @@
 # Pinned tokenizer implementation
 
 This package copies `github.com/pkoukk/tiktoken-go` v0.1.8, MIT licensed.
-`encoding.go`, `load.go`, `tiktoken.go`, and `LICENSE` are unchanged.
+`tiktoken.go` and `LICENSE` are unchanged. `encoding.go` and `load.go`
+add error stacks at external loader, file, HTTP, cache, and parsing boundaries;
+their error messages and unwrap causes remain unchanged.
 `bpe.go` preserves the upstream merge algorithm; the post-integration
 `checkedMergePartCount` guard rejects an unrepresentable sentinel-inclusive
 allocation dimension before `int` addition, with boundary tests requiring no

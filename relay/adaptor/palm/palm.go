@@ -93,24 +93,22 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		lg.Error("error reading stream response", zap.Error(err))
-		err := resp.Body.Close()
-		if err != nil {
-			return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), ""
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			lg.Error("error reading stream response", zap.Error(err))
+			return openai.ErrorWrapper(errors.WithStack(closeErr), "close_response_body_failed", http.StatusInternalServerError), ""
 		}
-		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), ""
+		return openai.ErrorWrapper(errors.WithStack(err), "read_response_body_failed", http.StatusInternalServerError), ""
 	}
 
 	err = resp.Body.Close()
 	if err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), ""
+		return openai.ErrorWrapper(errors.WithStack(err), "close_response_body_failed", http.StatusInternalServerError), ""
 	}
 
 	var palmResponse ChatResponse
 	err = json.Unmarshal(responseBody, &palmResponse)
 	if err != nil {
-		lg.Error("error unmarshalling stream response", zap.Error(err))
-		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), ""
+		return openai.ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError), ""
 	}
 
 	fullTextResponse := streamResponsePaLM2OpenAI(&palmResponse)

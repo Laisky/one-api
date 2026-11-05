@@ -100,9 +100,6 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 		Timestamps: &TraceTimestamps{RequestReceived: &now},
 	})
 	if err != nil {
-		lg.Error("failed to build trace record",
-			zap.Error(err),
-			zap.String("trace_id", traceId))
 		return nil, errors.Wrapf(err, "failed to build trace record for trace_id: %s", traceId)
 	}
 	urlToStore := traceRecord.URL
@@ -138,9 +135,6 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 				zap.String("method", method))
 			return traceRecord, nil
 		}
-		lg.Error("failed to create trace record",
-			zap.Error(err),
-			zap.String("trace_id", traceId))
 		return nil, errors.Wrapf(err, "failed to create trace record for trace_id: %s", traceId)
 	}
 
@@ -166,18 +160,11 @@ func UpdateTraceTimestamp(ctx *gin.Context, traceId, timestampKey string) error 
 				zap.String("timestamp_key", timestampKey))
 			return nil
 		}
-		lg.Error("failed to query trace record for timestamp update",
-			zap.Error(err),
-			zap.String("trace_id", traceId),
-			zap.String("timestamp_key", timestampKey))
 		return errors.Wrapf(err, "failed to query trace record for timestamp update, trace_id: %s, key: %s", traceId, timestampKey)
 	}
 
 	var timestamps TraceTimestamps
 	if err := json.Unmarshal([]byte(traceRecord.Timestamps), &timestamps); err != nil {
-		lg.Error("failed to unmarshal trace timestamps",
-			zap.Error(err),
-			zap.String("trace_id", traceId))
 		return errors.Wrapf(err, "failed to unmarshal trace timestamps for trace_id: %s", traceId)
 	}
 
@@ -212,9 +199,6 @@ func UpdateTraceTimestamp(ctx *gin.Context, traceId, timestampKey string) error 
 
 	timestampsJSON, err := json.Marshal(timestamps)
 	if err != nil {
-		lg.Error("failed to marshal updated trace timestamps",
-			zap.Error(err),
-			zap.String("trace_id", traceId))
 		return errors.Wrapf(err, "failed to marshal updated trace timestamps for trace_id: %s", traceId)
 	}
 
@@ -231,10 +215,6 @@ func UpdateTraceTimestamp(ctx *gin.Context, traceId, timestampKey string) error 
 	}
 
 	if err := db.Model(&traceRecord).Updates(updates).Error; err != nil {
-		lg.Error("failed to update trace timestamp",
-			zap.Error(err),
-			zap.String("trace_id", traceId),
-			zap.String("timestamp_key", timestampKey))
 		return errors.Wrapf(err, "failed to update trace timestamp for trace_id: %s, key: %s", traceId, timestampKey)
 	}
 
@@ -275,17 +255,11 @@ func AppendTraceExternalCall(ctx *gin.Context, traceId string, call TraceExterna
 				zap.String("trace_id", traceId))
 			return nil
 		}
-		lg.Error("failed to query trace record for external call update",
-			zap.Error(err),
-			zap.String("trace_id", traceId))
 		return errors.Wrapf(err, "failed to query trace record for external call, trace_id: %s", traceId)
 	}
 
 	var timestamps TraceTimestamps
 	if err := json.Unmarshal([]byte(traceRecord.Timestamps), &timestamps); err != nil {
-		lg.Error("failed to unmarshal trace timestamps for external call",
-			zap.Error(err),
-			zap.String("trace_id", traceId))
 		return errors.Wrapf(err, "failed to unmarshal trace timestamps for external call, trace_id: %s", traceId)
 	}
 
@@ -293,16 +267,10 @@ func AppendTraceExternalCall(ctx *gin.Context, traceId string, call TraceExterna
 
 	timestampsJSON, err := json.Marshal(timestamps)
 	if err != nil {
-		lg.Error("failed to marshal trace timestamps for external call",
-			zap.Error(err),
-			zap.String("trace_id", traceId))
 		return errors.Wrapf(err, "failed to marshal trace timestamps for external call, trace_id: %s", traceId)
 	}
 
 	if err := db.Model(&traceRecord).Update("timestamps", string(timestampsJSON)).Error; err != nil {
-		lg.Error("failed to update trace external call",
-			zap.Error(err),
-			zap.String("trace_id", traceId))
 		return errors.Wrapf(err, "failed to update trace external call, trace_id: %s", traceId)
 	}
 
@@ -329,10 +297,6 @@ func UpdateTraceStatus(ctx context.Context, traceId string, status int) error {
 	db := traceDBWithDetachedContext(ctx)
 	tx := db.Model(&Trace{}).Where("trace_id = ?", traceId).Update("status", status)
 	if tx.Error != nil {
-		lg.Error("failed to update trace status",
-			zap.Error(tx.Error),
-			zap.String("trace_id", traceId),
-			zap.Int("status", status))
 		return errors.Wrapf(tx.Error, "failed to update trace status for trace_id: %s", traceId)
 	}
 	if tx.RowsAffected == 0 {

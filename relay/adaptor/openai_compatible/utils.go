@@ -171,11 +171,7 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStat
 	}
 
 	if err = json.Unmarshal(responseBody, &embeddingResponse); err != nil {
-		logger.Error("failed to unmarshal embedding response body",
-			zap.Int("body_bytes", len(responseBody)),
-			zap.Bool("body_logging_suppressed", true),
-			zap.Error(err))
-		return ErrorWrapper(err, "unmarshal_embedding_response_failed", http.StatusInternalServerError), nil
+		return ErrorWrapper(errors.WithStack(err), "unmarshal_embedding_response_failed", http.StatusInternalServerError), nil
 	}
 
 	// Check for API error in response
@@ -254,11 +250,7 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 
 	var textResponse SlimTextResponse
 	if err = json.Unmarshal(responseBody, &textResponse); err != nil {
-		logger.Error("failed to unmarshal response body",
-			zap.Int("body_bytes", len(responseBody)),
-			zap.Bool("body_logging_suppressed", true),
-			zap.Error(err))
-		return ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
+		return ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 
 	if textResponse.Error != nil && textResponse.Error.Type != "" {
@@ -463,11 +455,7 @@ func HandlerWithThinking(c *gin.Context, resp *http.Response, promptTokens int, 
 
 	var textResponse SlimTextResponse
 	if err = json.Unmarshal(responseBody, &textResponse); err != nil {
-		logger.Error("failed to unmarshal response body",
-			zap.Int("body_bytes", len(responseBody)),
-			zap.Bool("body_logging_suppressed", true),
-			zap.Error(err))
-		return ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
+		return ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 
 	if textResponse.Error != nil && textResponse.Error.Type != "" {

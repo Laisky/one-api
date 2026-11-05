@@ -140,7 +140,7 @@ func ApplyAsyncTaskUpdate(ctx context.Context, task *AsyncTask, update AsyncTask
 				if err := tx.Raw(query, leaseID, leaseState, leaseOwner, now, AsyncBillingHeld).
 					Row().Scan(&acceptedID); err != nil {
 					if errors.Is(err, sql.ErrNoRows) {
-						return ErrAsyncLeaseLost
+						return errors.WithStack(ErrAsyncLeaseLost)
 					}
 					return errors.Wrap(err, "lock accepted async identity")
 				}
@@ -153,7 +153,7 @@ func ApplyAsyncTaskUpdate(ctx context.Context, task *AsyncTask, update AsyncTask
 				return errors.Wrap(result.Error, "persist async task observation")
 			}
 			if result.RowsAffected != 1 {
-				return ErrAsyncLeaseLost
+				return errors.WithStack(ErrAsyncLeaseLost)
 			}
 			var persisted AsyncTask
 			if err := tx.Where("id = ?", task.ID).Take(&persisted).Error; err != nil {

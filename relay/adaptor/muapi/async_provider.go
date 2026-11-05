@@ -110,7 +110,7 @@ func normalizeAsyncObservation(body []byte, expectedID string) (asyncvideo.Obser
 		return asyncvideo.Observation{}, errors.Wrap(err, "decode MuAPI result")
 	}
 	if (response.ID != "" && response.ID != expectedID) || (response.RequestID != "" && response.RequestID != expectedID) {
-		return asyncvideo.Observation{}, errMuAPIResultTaskIDMismatch
+		return asyncvideo.Observation{}, errors.WithStack(errMuAPIResultTaskIDMismatch)
 	}
 	charged, err := muAPIChargedCost(response.Cost)
 	if err != nil {

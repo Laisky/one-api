@@ -204,8 +204,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	}
 
 	if streamErr != nil {
-		lg.Debug("stream read failed",
-			zap.Error(streamErr),
+		lg.Debug("stream forwarding interrupted",
 			zap.Int("forwarded_chunks", forwardedChunks),
 		)
 		return ErrorWrapper(streamErr, "read_stream_failed", http.StatusInternalServerError), responseText, usage

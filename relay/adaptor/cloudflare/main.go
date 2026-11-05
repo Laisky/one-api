@@ -110,7 +110,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelN
 
 	err := resp.Body.Close()
 	if err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "close_response_body_failed", http.StatusInternalServerError), nil
 	}
 
 	usage := openai.ResponseText2Usage(responseText, responseModel, promptTokens)
@@ -120,16 +120,16 @@ func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelN
 func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "read_response_body_failed", http.StatusInternalServerError), nil
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "close_response_body_failed", http.StatusInternalServerError), nil
 	}
 	var response openai.TextResponse
 	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
-		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	response.Model = modelName
 	var responseText string
@@ -141,7 +141,7 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	response.Id = helper.GetResponseID(c)
 	jsonResponse, err := json.Marshal(response)
 	if err != nil {
-		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
+		return openai.ErrorWrapper(errors.WithStack(err), "marshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(resp.StatusCode)

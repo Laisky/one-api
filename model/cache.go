@@ -133,7 +133,6 @@ func CacheGetUserById(ctx context.Context, id int) (*User, error) {
 }
 
 func CacheGetUserGroup(ctx context.Context, id int) (group string, err error) {
-	lg := logger.FromContext(ctx)
 	if !common.IsRedisEnabled() {
 		return GetUserGroup(id)
 	}
@@ -144,9 +143,6 @@ func CacheGetUserGroup(ctx context.Context, id int) (group string, err error) {
 			return "", errors.Wrapf(err, "get user group for user %d", id)
 		}
 		err = common.RedisSet(ctx, fmt.Sprintf("user_group:%d", id), group, time.Duration(UserId2GroupCacheSeconds)*time.Second)
-		if err != nil {
-			lg.Warn("Redis set user group failed, continuing without cache", zap.Int("user_id", id), zap.Error(err))
-		}
 	}
 	if err != nil {
 		return group, errors.Wrapf(err, "cache user group for user %d", id)
@@ -245,7 +241,6 @@ func CacheDecreaseUserQuota(ctx context.Context, id int, quota int64) error {
 }
 
 func CacheIsUserEnabled(ctx context.Context, userId int) (bool, error) {
-	lg := logger.FromContext(ctx)
 	if !common.IsRedisEnabled() {
 		return IsUserEnabled(userId)
 	}
@@ -263,9 +258,6 @@ func CacheIsUserEnabled(ctx context.Context, userId int) (bool, error) {
 		enabled = "1"
 	}
 	err = common.RedisSet(ctx, fmt.Sprintf("user_enabled:%d", userId), enabled, time.Duration(UserId2StatusCacheSeconds)*time.Second)
-	if err != nil {
-		lg.Warn("Redis set user enabled failed, continuing without cache", zap.Int("user_id", userId), zap.Error(err))
-	}
 	if err != nil {
 		return userEnabled, errors.Wrapf(err, "cache enabled status for user %d", userId)
 	}

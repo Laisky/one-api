@@ -23,18 +23,20 @@ func readFile(blobpath string) ([]byte, error) {
 	if !strings.HasPrefix(blobpath, "http://") && !strings.HasPrefix(blobpath, "https://") {
 		file, err := os.Open(blobpath)
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		defer file.Close()
-		return io.ReadAll(file)
+		contents, err := io.ReadAll(file)
+		return contents, errors.WithStack(err)
 	}
 	// avoiding blobfile for public files helps avoid auth issues, like MFA prompts
 	resp, err := http.Get(blobpath)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	contents, err := io.ReadAll(resp.Body)
+	return contents, errors.WithStack(err)
 }
 
 func readFileCached(blobpath string) ([]byte, error) {
@@ -54,7 +56,8 @@ func readFileCached(blobpath string) ([]byte, error) {
 	cacheKey := fmt.Sprintf("%x", sha1.Sum([]byte(blobpath)))
 	cachePath := filepath.Join(cacheDir, cacheKey)
 	if _, err := os.Stat(cachePath); err == nil {
-		return os.ReadFile(cachePath)
+		contents, err := os.ReadFile(cachePath)
+		return contents, errors.WithStack(err)
 	}
 
 	contents, err := readFile(blobpath)
@@ -63,17 +66,17 @@ func readFileCached(blobpath string) ([]byte, error) {
 	}
 
 	if err := os.MkdirAll(cacheDir, os.ModePerm); err != nil {
-		return nil, fmt.Errorf("failed to create cache directory: %w", err)
+		return nil, errors.Wrap(err, "failed to create cache directory")
 	}
 
 	tmpFilename := fmt.Sprintf("%s.%s.tmp", cachePath, uuid.NewString())
 	if err := os.WriteFile(tmpFilename, contents, 0644); err != nil {
-		return nil, fmt.Errorf("failed to write temporary file: %w", err)
+		return nil, errors.Wrap(err, "failed to write temporary file")
 	}
 
 	if err := os.Rename(tmpFilename, cachePath); err != nil {
 		os.Remove(tmpFilename) // Clean up on failure
-		return nil, fmt.Errorf("failed to rename temporary file: %w", err)
+		return nil, errors.Wrap(err, "failed to rename temporary file")
 	}
 
 	return contents, nil
@@ -93,11 +96,11 @@ func loadTiktokenBpe(tiktokenBpeFile string) (map[string]int, error) {
 		parts := strings.Split(line, " ")
 		token, err := base64.StdEncoding.DecodeString(parts[0])
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		rank, err := strconv.Atoi(parts[1])
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		bpeRanks[string(token)] = rank
 	}

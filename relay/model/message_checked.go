@@ -30,7 +30,7 @@ func (m Message) ParseContentChecked() ([]MessageContent, error) {
 	case []MessageContent:
 		for i, part := range content {
 			if err := validateMessagePart(part); err != nil {
-				return nil, fmt.Errorf("content part %d: %w", i, err)
+				return nil, errors.WithMessagef(err, "content part %d", i)
 			}
 		}
 		return content, nil
@@ -55,7 +55,7 @@ func (m Message) ParseContentChecked() ([]MessageContent, error) {
 				err = validateMessagePart(part)
 			}
 			if err != nil {
-				return nil, fmt.Errorf("content part %d: %w", i, err)
+				return nil, errors.WithMessagef(err, "content part %d", i)
 			}
 			out = append(out, part)
 		}

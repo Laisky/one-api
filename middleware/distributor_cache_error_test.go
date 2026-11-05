@@ -1,0 +1,84 @@
+package middleware
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	glog "github.com/Laisky/go-utils/v6/log"
+	"github.com/Laisky/zap"
+	"github.com/Laisky/zap/zapcore"
+	"github.com/Laisky/zap/zaptest/observer"
+	miniredis "github.com/alicebob/miniredis/v2"
+	"github.com/alicebob/miniredis/v2/server"
+	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
+
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
+)
+
+// TestDistributorGroupFailureReporting exercises cache-fill and database failure
+// while retaining the selected group and the existing subsequent routing outcome.
+func TestDistributorGroupFailureReporting(t *testing.T) {
+	for _, tc := range []struct {
+		name, group     string
+		databaseFailure bool
+	}{{"redis set failure", "vip", false}, {"database failure", "", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "users.db")), &gorm.Config{Logger: gormlogger.Discard})
+			require.NoError(t, err)
+			sqlDB, err := db.DB()
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
+			if !tc.databaseFailure {
+				require.NoError(t, db.AutoMigrate(&model.User{}))
+				require.NoError(t, db.Create(&model.User{Id: 123, Username: "test-cache", Password: "test-password", Group: "vip"}).Error)
+			}
+			oldDB, oldPG := model.DB, common.UsingPostgreSQL.Load()
+			model.DB = db
+			common.UsingPostgreSQL.Store(false)
+			t.Cleanup(func() { model.DB = oldDB; common.UsingPostgreSQL.Store(oldPG) })
+			redisServer := miniredis.RunT(t)
+			redisServer.Server().SetPreHook(func(peer *server.Peer, cmd string, _ ...string) bool {
+				if strings.EqualFold(cmd, "SET") {
+					peer.WriteError("ERR synthetic set failure")
+					return true
+				}
+				return false
+			})
+			client := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+			t.Cleanup(func() { require.NoError(t, client.Close()) })
+			oldClient, oldEnabled := common.RDB, common.IsRedisEnabled()
+			common.RDB = client
+			common.SetRedisEnabled(true)
+			t.Cleanup(func() { common.RDB = oldClient; common.SetRedisEnabled(oldEnabled) })
+			core, logs := observer.New(zapcore.DebugLevel)
+			lg, err := glog.NewWithName("distributor-test", glog.LevelDebug, zap.WrapCore(func(zapcore.Core) zapcore.Core { return core }))
+			require.NoError(t, err)
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			c.Set(ctxkey.Id, 123)
+			c.Set(ctxkey.SpecificChannelId, -1)
+			gmw.SetLogger(c, lg)
+			Distribute()(c)
+			require.Equal(t, tc.group, c.GetString(ctxkey.Group))
+			require.True(t, c.IsAborted())
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			entries := logs.FilterMessage("failed to load user group, continuing with available group").All()
+			require.Len(t, entries, 1)
+			require.EqualValues(t, 123, entries[0].ContextMap()["user_id"])
+			require.Contains(t, entries[0].ContextMap()["error"], "user")
+			require.Empty(t, logs.FilterMessage("Redis set user group failed, continuing without cache").All())
+		})
+	}
+}

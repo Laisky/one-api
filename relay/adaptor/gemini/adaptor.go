@@ -150,11 +150,11 @@ func (a *Adaptor) convertToClaudeResponse(c *gin.Context, resp *http.Response, m
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+		return nil, openai.ErrorWrapper(errors.WithStack(err), "read_response_body_failed", http.StatusInternalServerError)
 	}
 
 	if err = resp.Body.Close(); err != nil {
-		return nil, openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError)
+		return nil, openai.ErrorWrapper(errors.WithStack(err), "close_response_body_failed", http.StatusInternalServerError)
 	}
 
 	// Check if it's a streaming response

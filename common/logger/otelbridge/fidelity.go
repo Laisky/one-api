@@ -8,7 +8,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// ErrLogEncoding is a fixed diagnostic: it never embeds application field values.
+// ErrLogEncoding is the fixed fail-closed diagnostic for rejected log records.
+// The bridge returns this marker unchanged at its rejection boundary, without
+// embedding application field values or forwarding serializer errors. Its stack
+// identifies marker initialization, not the particular rejected field.
 var ErrLogEncoding = errors.New("application log cannot be encoded faithfully")
 
 // maxLogEncodingDepth is a stack/work resource bound, not an OTLP protocol rule.
