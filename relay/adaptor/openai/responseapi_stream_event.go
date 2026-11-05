@@ -37,6 +37,7 @@ type ResponseAPIStreamEvent struct {
 
 	// Function call events (type contains "function_call")
 	Arguments string          `json:"arguments,omitempty"` // Complete function arguments (for done events)
+	Input     string          `json:"input,omitempty"`     // Complete custom-tool input (response.custom_tool_call_input.done)
 	Output    json.RawMessage `json:"output,omitempty"`    // Output payload for structured data events
 	JSON      json.RawMessage `json:"json,omitempty"`      // Direct JSON payload field when provided
 

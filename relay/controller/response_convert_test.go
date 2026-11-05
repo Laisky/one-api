@@ -157,7 +157,7 @@ func TestBuildResponseOutput_EmptyChoicesReturnsEmptySlice(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			out := buildResponseOutput(tc.choices)
+			out := buildResponseOutput(tc.choices, nil)
 			require.NotNil(t, out, "buildResponseOutput must never return nil")
 			require.Equal(t, 0, len(out), "expected empty slice for empty/contentless input")
 		})
@@ -176,7 +176,7 @@ func TestBuildResponseOutput_PopulatedReturnsItems(t *testing.T) {
 			FinishReason: "stop",
 		},
 	}
-	out := buildResponseOutput(choices)
+	out := buildResponseOutput(choices, nil)
 	require.NotNil(t, out)
 	require.Len(t, out, 1)
 	assert.Equal(t, "message", out[0].Type)

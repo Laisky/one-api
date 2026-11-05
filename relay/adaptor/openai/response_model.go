@@ -581,52 +581,6 @@ func convertWebSearchOptionsToTool(options *model.WebSearchOptions) ResponseAPIT
 	return tool
 }
 
-func convertResponseAPITools(tools []ResponseAPITool) []model.Tool {
-	if len(tools) == 0 {
-		return nil
-	}
-	converted := make([]model.Tool, 0, len(tools))
-	for _, tool := range tools {
-		toolType := strings.ToLower(strings.TrimSpace(tool.Type))
-		switch toolType {
-		case "function":
-			fn := sanitizeFunctionForRequest(tool)
-			if fn == nil {
-				continue
-			}
-			fn.Strict = nil
-			paramsMap := map[string]any{}
-			if fn.Parameters != nil {
-				sanitized := sanitizeResponseAPIFunctionParameters(fn.Parameters)
-				if parsed, ok := sanitized.(map[string]any); ok && parsed != nil {
-					paramsMap = parsed
-				}
-			}
-
-			if _, ok := paramsMap["type"]; !ok {
-				paramsMap["type"] = "object"
-			} else if typeStr, ok := paramsMap["type"].(string); !ok || strings.TrimSpace(typeStr) == "" {
-				paramsMap["type"] = "object"
-			}
-			fn.Parameters = paramsMap
-			converted = append(converted, model.Tool{
-				Type:     "function",
-				Function: fn,
-			})
-		case "web_search", "web_search_preview":
-			// Web search tools are not supported when downgrading Response API requests
-			// to Chat Completions. Skip them to avoid upstream validation errors.
-			continue
-		default:
-			// Non-function tools (e.g. MCP, code interpreter) cannot be expressed for
-			// channels that only understand Chat Completions. Drop them so fallback
-			// requests remain compatible.
-			continue
-		}
-	}
-	return converted
-}
-
 func sanitizeToolChoiceAgainstTools(choice any, tools []model.Tool) any {
 	if choice == nil {
 		return nil

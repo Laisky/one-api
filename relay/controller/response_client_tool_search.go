@@ -93,20 +93,14 @@ func validateResponseDiscoveredTools(tools []openai.ResponseAPITool, allowSearch
 	return nil
 }
 
-// responseToolSearchFallbackError rejects discovery definitions and history
-// before fallback drops their semantics. It returns nil for ordinary input.
-func responseToolSearchFallbackError(request *openai.ResponseAPIRequest) *relaymodel.ErrorWithStatusCode {
-	for _, tool := range request.Tools {
-		if strings.EqualFold(strings.TrimSpace(tool.Type), "tool_search") {
-			return openai.ErrorWrapper(errors.New("tool search requires native Responses support"), "tool_search_not_supported", http.StatusBadRequest)
-		}
-	}
-	items, err := responseToolSearchInputItems(request.Input)
-	if err != nil {
-		return openai.ErrorWrapper(err, "invalid_response_api_request", http.StatusBadRequest)
-	}
-	if len(items) > 0 {
-		return openai.ErrorWrapper(errors.New("tool search history and catalogs require native Responses support"), "tool_search_not_supported", http.StatusBadRequest)
+// responseFallbackToolCatalogError checks that request's tool definitions and
+// discovery history (namespaces, custom tools, client tool search, loaded
+// catalogs) can be flattened faithfully for a Chat/Claude fallback route.
+// Parameters: request is the Responses request before or after hydration.
+// Returns a 400 error for an unrepresentable catalog, or nil.
+func responseFallbackToolCatalogError(request *openai.ResponseAPIRequest) *relaymodel.ErrorWithStatusCode {
+	if _, err := openai.BuildResponseFallbackToolCatalog(request); err != nil {
+		return openai.ErrorWrapper(err, "response_fallback_not_supported", http.StatusBadRequest)
 	}
 	return nil
 }

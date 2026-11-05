@@ -105,7 +105,9 @@ const (
 // Section 5.8 portability table:
 //
 //   - portable items (messages, function calls, function-call outputs, and
-//     already-resolved references) carry;
+//     already-resolved references) carry, as do client-executed custom tool,
+//     tool-search, additional_tools, agent_message and configuration_update
+//     items, which the fallback converter lowers itself;
 //   - reasoning and thinking degrade to a display-only sidecar: their opaque
 //     provider-bound state is dropped and the request proceeds;
 //   - hosted/built-in tool-call state and unknown future item types have no
@@ -118,6 +120,12 @@ func FallbackLowering(raw json.RawMessage) (action, kind string) {
 	kind = probeItemKind(raw)
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case KindMessage, KindFunctionCall, KindFunctionCallOutput, KindItemReference, "":
+		return FallbackActionCarry, kind
+	case "custom_tool_call", "custom_tool_call_output", "tool_search_call", "tool_search_output",
+		"additional_tools", "agent_message", "configuration_update":
+		// Client-executed tool and harness items: the fallback converter lowers
+		// them faithfully (flattened names, raw custom input, loaded catalogs) and
+		// rejects any variant it cannot represent, such as encrypted agent content.
 		return FallbackActionCarry, kind
 	case KindReasoning, KindThinking:
 		return FallbackActionDrop, kind

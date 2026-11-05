@@ -23,7 +23,7 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 	responseID := generateResponseAPIID(c, textResp)
 	statusText, incomplete := deriveResponseStatus(textResp.Choices)
 	usage := (&openai.ResponseAPIUsage{}).FromModelUsage(&textResp.Usage)
-	output := buildResponseOutput(textResp.Choices)
+	output := buildResponseOutput(textResp.Choices, responseFallbackCatalogForRender(c, originalReq))
 	toolCalls := buildRequiredActionToolCalls(textResp.Choices)
 
 	// Commit a gateway response node so the fallback ID is resolvable, retrievable,
@@ -152,7 +152,7 @@ func deriveResponseStatus(choices []openai_compatible.TextResponseChoice) (strin
 // buildResponseOutput builds the output items for a Response API response from Chat Completion choices.
 // The returned slice is always non-nil so that JSON serialization yields "output": [] instead of null,
 // which strict OpenAI SDK clients reject as a violation of the Responses API schema.
-func buildResponseOutput(choices []openai_compatible.TextResponseChoice) []openai.OutputItem {
+func buildResponseOutput(choices []openai_compatible.TextResponseChoice, catalog *openai.ResponseFallbackToolCatalog) []openai.OutputItem {
 	output := make([]openai.OutputItem, 0)
 	for _, choice := range choices {
 		msg := choice.Message
@@ -196,19 +196,13 @@ func buildResponseOutput(choices []openai_compatible.TextResponseChoice) []opena
 			// that keys the tool call on either field has to see the same value from
 			// the streamed and the non-streamed fallback of the same channel.
 			callID := ensureResponseAPICallID(tool.Id)
-			output = append(output, openai.OutputItem{
-				Type:   "function_call",
-				Status: "completed",
-				Id:     callID,
-				CallId: callID,
-				Name: func() string {
-					if tool.Function != nil {
-						return tool.Function.Name
-					}
-					return ""
-				}(),
-				Arguments: arguments,
-			})
+			name := ""
+			if tool.Function != nil {
+				name = tool.Function.Name
+			}
+			// The catalog restores namespaced, custom and tool_search identities
+			// that fallback flattened into ordinary Chat function tools.
+			output = append(output, catalog.ResponseFallbackToolCallItem(callID, name, arguments))
 		}
 	}
 	return output

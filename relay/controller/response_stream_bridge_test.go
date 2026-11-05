@@ -1487,7 +1487,7 @@ func TestBuildResponseOutput_FunctionCallCarriesBothIDs(t *testing.T) {
 						Function: &model.Function{Name: "read_file", Arguments: `{"path":"a"}`},
 					}},
 				},
-			}})
+			}}, nil)
 
 			var seen int
 			for _, item := range out {

@@ -55,6 +55,10 @@ type chatToResponseStreamBridge struct {
 	streamStarted             bool
 	requiredActionInitialized bool
 
+	// toolCatalog restores namespaced, custom and tool_search identities that
+	// fallback flattened into Chat function tools. Nil renders plain calls.
+	toolCatalog *openai.ResponseFallbackToolCatalog
+
 	// pendingCommit, when set, causes the terminal event to commit a gateway
 	// response node. The gateway response ID is pre-minted at construction so it is
 	// the ID carried by every emitted event (STR01).
@@ -104,6 +108,7 @@ func newChatToResponseStreamBridge(c *gin.Context, meta *metalib.Meta, request *
 	if handler.model == "" {
 		handler.model = request.Model
 	}
+	handler.toolCatalog = responseFallbackCatalogForRender(c, request)
 
 	// If gateway state is active for this request, pre-mint a gateway response ID
 	// and remember the pre-hydration commit snapshot so the terminal event can
@@ -204,23 +209,8 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 	toolItems := make([]openai.OutputItem, 0, len(h.toolOrder))
 	for _, id := range h.toolOrder {
 		state := h.toolCalls[id]
-		args := state.arguments.String()
-
-		h.emitEvent(c, "response.function_call_arguments.done", openai.ResponseAPIStreamEvent{
-			Type:        "response.function_call_arguments.done",
-			ItemId:      state.id,
-			OutputIndex: state.index,
-			Arguments:   args,
-		})
-
-		toolItem := openai.OutputItem{
-			Id:        state.id,
-			Type:      "function_call",
-			Status:    "completed",
-			CallId:    state.id,
-			Name:      state.name,
-			Arguments: args,
-		}
+		toolItem := h.toolItem(state, "completed", true)
+		h.emitToolArgumentsDone(c, state, toolItem)
 
 		// output_item.done MUST come after function_call_arguments.done for the
 		// same call_id and MUST carry the full buffered arguments string (not a
@@ -419,6 +409,14 @@ func (h *chatToResponseStreamBridge) handleToolCalls(c *gin.Context, tools []mod
 			continue
 		}
 
+		if h.toolKind(state) != openai.ResponseFallbackToolFunction {
+			// Custom input and tool_search arguments are JSON envelopes upstream;
+			// buffer them and release the decoded value when the call completes.
+			state.arguments.WriteString(args)
+			h.emitRequiredActionDelta(c, false)
+			continue
+		}
+
 		if !h.emitEvent(c, "response.function_call_arguments.delta", openai.ResponseAPIStreamEvent{
 			Type:        "response.function_call_arguments.delta",
 			ItemId:      state.id,
@@ -528,13 +526,7 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 	if created {
 		// Clients such as pi derive the tool call identity from call_id on the added
 		// event and never revisit it, so the added item must already carry call_id.
-		item := openai.OutputItem{
-			Id:     state.id,
-			Type:   "function_call",
-			Status: "in_progress",
-			CallId: state.id,
-			Name:   state.name,
-		}
+		item := h.toolItem(state, "in_progress", false)
 
 		h.emitEvent(c, "response.output_item.added", openai.ResponseAPIStreamEvent{
 			Type:        "response.output_item.added",
@@ -721,7 +713,7 @@ func (h *chatToResponseStreamBridge) HandleError(c *gin.Context, failure *model.
 	}
 	for _, id := range h.toolOrder {
 		call := h.toolCalls[id]
-		items = append(items, indexedItem{call.index, openai.OutputItem{Id: call.id, Type: "function_call", Status: "incomplete", CallId: call.id, Name: call.name, Arguments: call.arguments.String()}})
+		items = append(items, indexedItem{call.index, h.toolItem(call, "incomplete", true)})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].index < items[j].index })
 	output := make([]openai.OutputItem, 0, len(items))

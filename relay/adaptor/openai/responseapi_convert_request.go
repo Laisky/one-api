@@ -35,6 +35,27 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 		request.ToolChoice = normalized
 	}
 
+	// Namespaces, custom tools, client tool search and loaded catalogs are
+	// flattened into one reversible tool list; history items that reference
+	// them are lowered onto that list before the Chat message loop below.
+	catalog, err := BuildResponseFallbackToolCatalog(request)
+	if err != nil {
+		return nil, errors.Wrap(err, "build response fallback tool catalog")
+	}
+	input, effortOverride, err := lowerResponseFallbackToolItems(request.Input, catalog)
+	if err != nil {
+		return nil, errors.Wrap(err, "lower response fallback tool history")
+	}
+	reasoning := request.Reasoning
+	if effortOverride != "" {
+		updated := model.OpenAIResponseReasoning{}
+		if reasoning != nil {
+			updated = *reasoning
+		}
+		updated.Effort = &effortOverride
+		reasoning = &updated
+	}
+
 	chatReq := &model.GeneralOpenAIRequest{
 		Thinking:     request.Thinking,
 		OutputConfig: request.OutputConfig,
@@ -43,7 +64,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 		Store:        request.Store,
 		Metadata:     request.Metadata,
 		Stream:       request.Stream != nil && *request.Stream,
-		Reasoning:    request.Reasoning,
+		Reasoning:    reasoning,
 		ServiceTier:  request.ServiceTier,
 		Temperature:  request.Temperature,
 		TopP:         request.TopP,
@@ -88,12 +109,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 		chatReq.Verbosity = request.Text.Verbosity
 	}
 
-	if len(request.Tools) > 0 {
-		chatReq.Tools = convertResponseAPITools(request.Tools)
-		if len(chatReq.Tools) == 0 {
-			chatReq.Tools = nil
-		}
-	}
+	chatReq.Tools = catalog.Tools()
 
 	if chatReq.ToolChoice != nil {
 		chatReq.ToolChoice = sanitizeToolChoiceAgainstTools(chatReq.ToolChoice, chatReq.Tools)
@@ -144,7 +160,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 	// assistant message; a reasoning item that trails its message is written back into that
 	// message directly. See the "reasoning" case for why both orders must work.
 	pendingReasoning := ""
-	for _, item := range request.Input {
+	for _, item := range input {
 		currentToolCallMsgIdx := openToolCallMsgIdx
 		openToolCallMsgIdx = -1
 		switch v := item.(type) {
