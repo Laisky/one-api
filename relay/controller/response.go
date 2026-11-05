@@ -384,5 +384,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	})
 
-	return nil
+	// A failure observed after the provider receipt (a broken downstream
+	// connection, a cancelled client or an interrupted provider stream) has just
+	// been settled. Report it, like the other relay helpers, so the relay
+	// controller logs and measures the failed attempt instead of recording a
+	// success; the settlement marker vetoes a paid cross-channel replay.
+	markResponseSettlement(c, usage, respErr)
+	return respErr
 }

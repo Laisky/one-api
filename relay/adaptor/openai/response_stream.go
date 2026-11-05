@@ -538,7 +538,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		lg.Debug("stream forwarding interrupted",
 			zap.Int("forwarded_chunks", forwardedChunks),
 		)
-		return ErrorWrapper(streamErr, "read_stream_failed", http.StatusInternalServerError), responseText, usage
+		return ErrorWrapper(streamErr, lifecycle.failureCode(streamErr), http.StatusInternalServerError), responseText, usage
 	}
 
 	// Do NOT fabricate a [DONE] if the upstream didn't send one.

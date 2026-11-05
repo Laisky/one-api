@@ -294,6 +294,13 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			return
 		}
 
+		// A 2xx receipt is settled as accepted, paid provider work even when the
+		// adaptor then fails to decode or deliver it. Mark the settlement before it
+		// runs so the relay retry loop never replays this attempt on another
+		// channel, which would also refund this settled charge as an abandoned
+		// hold. The marker is only consulted after a failed attempt.
+		c.Set(responseSettlementKey, true)
+
 		// Post-billing: reconcile pre-consumed quota with actual usage
 		// A token-only quote is refundable prepayment, not an earned render fee.
 		quotaDelta := usedQuota - preConsumedQuota
