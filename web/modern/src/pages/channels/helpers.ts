@@ -592,3 +592,58 @@ export function logPrivateChannelJSONError(error: unknown): void {
       : 'Failed to parse config JSON: ' + (error instanceof Error ? error.message : String(error))
   );
 }
+
+/**
+ * PersistedTestingModel is the outcome of confirming a testing-model save. Only a
+ * verified outcome carries a value, so an unconfirmed selection cannot be rendered as
+ * if it had been stored.
+ */
+export type PersistedTestingModel =
+  /** verified: the server reported the stored row; value is null for auto-select. */
+  | { verified: true; value: string | null }
+  /** unverified: neither the save response nor a re-read reported the stored row. */
+  | { verified: false };
+
+/**
+ * readPersistedTestingModel extracts testing_model from a channel row returned by the API.
+ *
+ * @param row - a channel object from a response's `data` field, or anything else.
+ * @returns the stored value (null for auto-select), or undefined when the row does not carry the field.
+ */
+export const readPersistedTestingModel = (row: unknown): string | null | undefined => {
+  if (row === null || typeof row !== 'object' || !('testing_model' in row)) {
+    return undefined;
+  }
+  const value = (row as { testing_model?: unknown }).testing_model;
+  return typeof value === 'string' && value !== '' ? value : null;
+};
+
+/**
+ * confirmPersistedTestingModel determines what a testing-model save stored, so the list
+ * never reports a value a page refresh would contradict. The backend echoes the saved
+ * row; when a response omits it (an older server), the channel is read back instead, and
+ * if that also fails the save is reported as unverified, without a value, rather than as
+ * a success.
+ *
+ * @param responseData - the `data` field of the PUT /api/channel/ response.
+ * @param readChannel - re-reads the channel row; it may reject or resolve to anything.
+ * @returns the confirmed stored value, or an unverified outcome.
+ */
+export const confirmPersistedTestingModel = async (
+  responseData: unknown,
+  readChannel: () => Promise<unknown>
+): Promise<PersistedTestingModel> => {
+  const echoed = readPersistedTestingModel(responseData);
+  if (echoed !== undefined) {
+    return { value: echoed, verified: true };
+  }
+  try {
+    const reread = readPersistedTestingModel(await readChannel());
+    if (reread !== undefined) {
+      return { value: reread, verified: true };
+    }
+  } catch (error) {
+    console.warn(`[ChannelsPage] could not re-read channel to confirm testing_model: ${String(error)}`);
+  }
+  return { verified: false };
+};

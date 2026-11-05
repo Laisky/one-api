@@ -17,6 +17,7 @@ import (
 // user text enter metric names. New instruments require explicit review here.
 var privateMetricInstruments = map[string]bool{
 	"oneapi_metric_privacy_dropped_instruments_total": true,
+	"oneapi_channel_health_checks_total":              true,
 	"one_api_channel_balance_usd":                     true, "one_api_channel_requests_in_flight": true,
 	"one_api_channel_response_time_ms": true, "one_api_channel_status": true,
 	"one_api_channel_success_rate": true, "one_api_db_queries_total": true,

@@ -28,11 +28,9 @@ func ResetChannelModelsToDefaults(ctx context.Context, id int, catalog func(int)
 	}
 	var persisted *Channel
 	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Acquire the row's write lock BEFORE reading and validating it. UpdateColumn
-		// skips timestamp hooks; this no-op works on SQLite, MySQL, and PostgreSQL
-		// without relying on dialect-specific SELECT FOR UPDATE syntax. A refused
-		// reset rolls it back. Do not interpret MySQL's no-op RowsAffected as absence.
-		if err := tx.Model(&Channel{}).Where("id = ?", id).UpdateColumn("models", gorm.Expr("models")).Error; err != nil {
+		// Acquire the row's write lock BEFORE reading and validating it; a refused
+		// reset rolls it back.
+		if err := lockChannelRow(tx, id); err != nil {
 			return errors.Wrap(err, "lock channel for model reset")
 		}
 		var current Channel
@@ -51,11 +49,9 @@ func ResetChannelModelsToDefaults(ctx context.Context, id int, catalog func(int)
 		if err := tx.Model(&Channel{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 			return errors.Wrap(err, "persist default channel models")
 		}
-		if err := deleteAbilitiesWithDB(tx, id); err != nil {
-			return errors.Wrap(err, "remove previous channel abilities")
-		}
-		if err := addAbilitiesWithDB(tx, planned); err != nil {
-			return errors.Wrap(err, "rebuild default channel abilities")
+		// A reset changes only the model list, so retained models keep their suspensions.
+		if err := syncAbilitiesWithDB(tx, planned, false); err != nil {
+			return errors.Wrap(err, "sync default channel abilities")
 		}
 		persisted = planned
 		return nil

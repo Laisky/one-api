@@ -641,3 +641,18 @@ func (m *MultiRecorder) RecordRetentionSweep(target, result string, rows float64
 		}
 	}
 }
+
+// RecordChannelHealthCheck implements ChannelHealthRecorder by forwarding to
+// every child recorder that supports it.
+//
+// Parameters:
+//   - outcome: a ChannelHealthCheck* constant from channel_health.go.
+//
+// Return values: none.
+func (m *MultiRecorder) RecordChannelHealthCheck(outcome string) {
+	for _, r := range m.Recorders {
+		if hr, ok := r.(ChannelHealthRecorder); ok {
+			hr.RecordChannelHealthCheck(outcome)
+		}
+	}
+}

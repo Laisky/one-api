@@ -205,26 +205,7 @@ func addAbilitiesWithDB(db *gorm.DB, channel *Channel) error {
 		return errors.New("channel must be specified when adding abilities")
 	}
 
-	models := channel.GetSupportedModelNames()
-	groups := channel.GetGroupNames()
-	hiddenModels := channel.GetHiddenModels()
-	abilities := make([]Ability, 0, len(models)*len(groups))
-	for _, model := range models {
-		if _, hidden := hiddenModels[strings.ToLower(model)]; hidden {
-			continue
-		}
-		for _, group := range groups {
-			ability := Ability{
-				Group:        group,
-				Model:        model,
-				ChannelId:    channel.Id,
-				Enabled:      channel.Status == ChannelStatusEnabled,
-				Priority:     channel.Priority,
-				SuspendUntil: nil, // Explicitly nil on new creation
-			}
-			abilities = append(abilities, ability)
-		}
-	}
+	abilities := buildChannelAbilities(channel)
 	if len(abilities) == 0 {
 		return nil
 	}
@@ -255,17 +236,15 @@ func deleteAbilitiesWithDB(db *gorm.DB, channelID int) error {
 	return nil
 }
 
-// UpdateAbilities updates abilities of this channel.
+// UpdateAbilities reconciles the abilities of this channel with its configuration,
+// keeping the runtime suspension of every (group, model) it retains.
 // Make sure the channel is completed before calling this function.
 func (channel *Channel) UpdateAbilities() error {
 	if DB == nil {
 		return errors.New("database not initialized")
 	}
 	if err := DB.Transaction(func(tx *gorm.DB) error {
-		if err := deleteAbilitiesWithDB(tx, channel.Id); err != nil {
-			return err
-		}
-		return addAbilitiesWithDB(tx, channel)
+		return syncAbilitiesWithDB(tx, channel, false)
 	}); err != nil {
 		return identity.Tag(
 			errors.Wrapf(err, "update abilities for channel %d", channel.Id),

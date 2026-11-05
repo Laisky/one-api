@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { verifyAudit } from './frontend-audit.mjs';
+import { runAudit, verifyAudit } from './frontend-audit.mjs';
 
 /** report creates synthetic audit evidence to test failure-closed validation. */
 function report(overrides = {}) {
@@ -23,3 +23,29 @@ for (const [name, output, status] of [
 ]) {
   test(`audit rejects ${name}`, () => assert.throws(() => verifyAudit(output, status)));
 }
+
+test('audit runs theme-specific regressions before registry and fails closed', () => {
+  const calls = [];
+  const fake = (command, args, options) => {
+    calls.push({ command, args, options });
+    return { status: 1 };
+  };
+  assert.throws(() => runAudit('air', fake), /Dependency regression tests did not pass/);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, process.execPath);
+  assert.deepEqual(calls[0].args, ['--test', '.github/scripts/follow-redirects-security.test.cjs', '.github/scripts/frontend-dependency-advisories.test.cjs']);
+  assert.equal(calls[0].options.env.FRONTEND_THEME, 'air');
+});
+
+test('audit invokes registry only after regressions succeed', () => {
+  const calls = [];
+  const fake = (command, args, options) => {
+    calls.push({ command, args, options });
+    return calls.length === 1 ? { status: 0 } : { error: new Error('registry sentinel') };
+  };
+  assert.throws(() => runAudit('berry', fake), /registry sentinel/);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].options.env.FRONTEND_THEME, 'berry');
+  assert.equal(calls[1].command, 'yarn');
+  assert.deepEqual(calls[1].args, ['audit', '--json', '--non-interactive']);
+});

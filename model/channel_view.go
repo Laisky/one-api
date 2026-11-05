@@ -40,7 +40,7 @@ func (channel *Channel) ToResponse() dto.ChannelResponse {
 		Config:                 channel.Config,
 		SystemPrompt:           channel.SystemPrompt,
 		RateLimit:              channel.RateLimit,
-		TestingModel:           channel.TestingModel,
+		TestingModel:           canonicalChannelTestingModel(channel.TestingModel),
 		ModelRatio:             channel.ModelRatio,
 		CompletionRatio:        channel.CompletionRatio,
 		CreatedAt:              channel.CreatedAt,

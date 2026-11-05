@@ -591,7 +591,11 @@
       "test_success": "Prueba del canal exitosa.",
       "testing_model_failed_message": "No se pudo actualizar el modelo de prueba",
       "testing_model_failed_title": "Error al guardar",
-      "testing_model_saved": "Modelo de prueba guardado."
+      "testing_model_normalized_message": "El servidor no pudo conservar ese modelo de prueba para este canal, por lo que ahora usa el valor guardado que se muestra.",
+      "testing_model_normalized_title": "Modelo de prueba restablecido",
+      "testing_model_saved": "Modelo de prueba guardado.",
+      "testing_model_unverified_message": "Se aceptó el guardado, pero el servidor no informó el modelo de prueba almacenado. Actualice la página para comprobarlo.",
+      "testing_model_unverified_title": "Modelo de prueba sin confirmar"
     },
     "response": {
       "not_tested": "No probado",
@@ -611,7 +615,8 @@
       "auto": "MÁS ECONÓMICO",
       "help": "Elige el modelo usado para comprobar el estado de este canal.\n\nCHEAPEST — usa automáticamente el modelo más barato servido a través de una API de chat (chat completions, response API, Claude messages o Gemini chat).\n\nSKIP — excluye este canal por completo de las comprobaciones. Nunca se sondea ni se desactiva automáticamente.\n\nSolo se pueden probar modelos de formato chat. Los modelos de embeddings, reranking, moderación, completions y multimedia quedan excluidos, igual que los modelos cuyo formato de API se desconoce: selecciona uno aquí para probarlo de todos modos.",
       "help_label": "Cómo se elige el modelo de prueba",
-      "skip": "SKIP (nunca probar)"
+      "skip": "SKIP (nunca probar)",
+      "unlisted_selection": "{{model}} (actual)"
     },
     "title": "Canales",
     "toolbar": {

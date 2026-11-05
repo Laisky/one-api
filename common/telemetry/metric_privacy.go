@@ -5,6 +5,8 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+
+	"github.com/Laisky/one-api/common/metrics"
 )
 
 // newPrivateMetricView applies the production label allowlist together with the
@@ -33,13 +35,18 @@ var privateMetricEnums = map[string]map[string]bool{
 		"dropped_queue_full": true, "dropped_not_ready": true, "dropped_shutdown": true,
 		"dropped_privacy": true, "dropped_encoding": true, "dropped_operator_limit": true,
 		"exported": true, "export_failed": true, "sampled_out": true, "queued": true,
-		"dropped_closed": true, "written": true, "write_failed": true,
+		"dropped_closed": true, "written": true, "write_failed": true, "deduplicated": true,
 		"span_recorded": true, "span_record_failed": true, "excluded": true,
 		"truncated": true, "dropped_active_limit": true, "hydrated": true,
 		"conversation": true, "stateless": true, "portable": true,
 		"sidecar_dropped": true, "not_portable": true, "committed": true,
 		"commit_failed": true, "no_store": true, "pinned": true, "unpinned": true,
 		"not_found": true, "store_error": true,
+		// Channel health-check sweep outcomes (oneapi_channel_health_checks_total).
+		metrics.ChannelHealthCheckApplied: true, metrics.ChannelHealthCheckStatusChanged: true,
+		metrics.ChannelHealthCheckTransitionRefused: true, metrics.ChannelHealthCheckOptedOut: true,
+		metrics.ChannelHealthCheckNotApplicable: true, metrics.ChannelHealthCheckConfigChanged: true,
+		metrics.ChannelHealthCheckApplyFailed: true, metrics.ChannelHealthCheckUnreadable: true,
 	},
 	"reason":   {"disk_pressure": true, "active_file_cap": true, "writer_failure": true},
 	"result":   {"completed": true, "failed": true, "canceled": true, "success": true, "error": true, "skipped": true},

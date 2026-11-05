@@ -54,7 +54,7 @@ now:
 
 Both files run in each theme's `yarn test`, and in every "Dependency audit" CI job before
 the registry audit, so they still guard the tree when the registry is unavailable.
-`test_frontend_contracts.py` keeps that step present, theme-correct and fail-closed. The
+`frontend-audit.mjs` runs them with the selected theme and stops before the registry audit on failure; `frontend-audit.test.mjs` verifies that ordering and failure behavior. The
 follow-redirects test existed before but was not wired into any test command or job.
 
 ## Security acceptance

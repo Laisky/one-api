@@ -433,10 +433,6 @@ jobs:
       - name: Install dependencies
         working-directory: web/modern
         run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
-      - name: Verify patched dependency behaviour
-        env:
-          FRONTEND_THEME: modern
-        run: node --test .github/scripts/follow-redirects-security.test.cjs .github/scripts/frontend-dependency-advisories.test.cjs
       - name: Audit every dependency including development tools
         run: |
           node --test .github/scripts/frontend-audit.test.mjs
@@ -522,10 +518,6 @@ jobs:
       - name: Install dependencies
         working-directory: web/air
         run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
-      - name: Verify patched dependency behaviour
-        env:
-          FRONTEND_THEME: air
-        run: node --test .github/scripts/follow-redirects-security.test.cjs .github/scripts/frontend-dependency-advisories.test.cjs
       - name: Audit every dependency including development tools
         run: |
           node --test .github/scripts/frontend-audit.test.mjs
@@ -606,10 +598,6 @@ jobs:
       - name: Install dependencies
         working-directory: web/berry
         run: yarn install --frozen-lockfile --network-timeout 600000 --non-interactive
-      - name: Verify patched dependency behaviour
-        env:
-          FRONTEND_THEME: berry
-        run: node --test .github/scripts/follow-redirects-security.test.cjs .github/scripts/frontend-dependency-advisories.test.cjs
       - name: Audit every dependency including development tools
         run: |
           node --test .github/scripts/frontend-audit.test.mjs

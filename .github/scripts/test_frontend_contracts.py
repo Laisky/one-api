@@ -27,27 +27,6 @@ class FrontendContractTests(unittest.TestCase):
             self.assertNotIn('yarn build', commands(job))
             self.assertIn(f'{theme}_dependency_audit', ci['jobs']['required']['needs'])
 
-    def test_dependency_advisory_regressions_run_with_every_audit(self) -> None:
-        """test_dependency_advisory_regressions_run_with_every_audit requires the behavioural advisory regressions on the installed tree of each theme, fail-closed and before the registry audit, so they still run when the registry is unavailable."""
-        ci = load_workflow('lint.yml')
-        for theme in THEMES:
-            steps = ci['jobs'][f'{theme}_dependency_audit']['steps']
-            regressions = [index for index, step in enumerate(steps)
-                           if 'frontend-dependency-advisories.test.cjs' in step.get('run', '')]
-            self.assertEqual(len(regressions), 1)
-            step = steps[regressions[0]]
-            self.assertIn('follow-redirects-security.test.cjs', step['run'])
-            self.assertEqual(step.get('env', {}).get('FRONTEND_THEME'), theme)
-            self.assertNotIn('if', step)
-            self.assertNotIn('continue-on-error', step)
-            self.assertNotIn('||', step['run'])
-            install = next(index for index, candidate in enumerate(steps)
-                           if 'yarn install --frozen-lockfile' in candidate.get('run', ''))
-            audit = next(index for index, candidate in enumerate(steps)
-                         if f'frontend-audit.mjs {theme}' in candidate.get('run', ''))
-            self.assertLess(install, regressions[0])
-            self.assertLess(regressions[0], audit)
-
     def assert_release_input_contract(self, ci: dict) -> None:
         """assert_release_input_contract requires each fail-closed command and its effective Node setup, regardless of step grouping."""
         changes = ci['jobs']['changes']

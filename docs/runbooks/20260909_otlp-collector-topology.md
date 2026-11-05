@@ -1272,6 +1272,10 @@ admission is unlimited).
 | `dropped_shutdown` | The logger provider was already shut down. By design: the exporter closes before the database, so the last shutdown lines are file/stdout only. |
 | `exported` | *"records the SDK handed to the OTLP exporter without a transport error. It is **NOT** proof of collector persistence."* |
 | `export_failed` | The exporter rejected or could not deliver the batch. **The records are lost; the SDK does not re-queue them.** |
+| `dropped_encoding` | The record could not be encoded faithfully (invalid UTF-8, an unsupported or cyclic value, excessive nesting, a failing serializer) and was rejected whole. It still reached the file and stdout sinks, and each one also prints `write error: application log cannot be encoded faithfully` on stderr. Any sustained rate is a bug in a log call site, not a collector problem. |
+| `dropped_operator_limit` | An explicitly configured `LOG_OTLP_MAX_ATTRIBUTES` or `LOG_OTLP_MAX_ATTRIBUTE_VALUE_BYTES` rejected the record whole. Zero with the default (unlimited) settings. |
+| `dropped_privacy` | The record carried unsafe SDK metadata and was rejected. |
+| `deduplicated` | Counted **in addition to** the record's other outcomes. A field key repeated on the record — normally `host`, bound by both the process logger and the request logger — and the later value overwrote the earlier one, as the OpenTelemetry specification prescribes. The record was kept; see `docs/manual/operational_logging_privacy.md`, "Repeated keys". A steady rate tracking request volume is expected. |
 
 Accompanying gauges: `oneapi_app_log_export_queue_records`,
 `oneapi_app_log_export_queue_record_limit`, `oneapi_app_log_export_queue_bytes`,
@@ -1316,6 +1320,7 @@ Two details worth internalizing:
 | `oneapi_app_log_export_queue_records / oneapi_app_log_export_queue_record_limit > 0.7` | The bridge is about to start dropping. |
 | `oneapi_app_log_export_queue_bytes / oneapi_app_log_export_queue_byte_limit > 0.7` | Same, but driven by a few very large records rather than many small ones. |
 | `rate(oneapi_app_log_export_records_total{outcome="dropped_queue_full"}[5m]) > 0` | Already dropping. |
+| `rate(oneapi_app_log_export_records_total{outcome="dropped_encoding"}[15m]) > 0` | A log call site produces records that cannot be exported. The collector is healthy; those lines exist only on the local sinks. This rule would have caught every request-scoped log being dropped for a key collision long before anyone noticed the log store was nearly empty. |
 | `rate(oneapi_trace_records_total{outcome="dropped_queue_full"}[5m]) > 0` | The **SQL** writer queue, not the collector — relevant only with `TRACE_SINK=db`. |
 | Collector `otelcol_receiver_accepted_spans` flat while `oneapi_trace_records_total{outcome="span_recorded"}` climbs | The classic outage signature: the gateway thinks it is recording, the collector is receiving nothing. |
 
