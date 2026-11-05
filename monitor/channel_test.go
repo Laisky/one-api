@@ -28,7 +28,7 @@ func setupMonitorChannelDB(t *testing.T) (*gorm.DB, *atomic.Int64) {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}))
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelGroup{}, &model.Ability{}))
 
 	var delivered atomic.Int64
 	pusher := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

@@ -111,19 +111,19 @@ func openChannelNullableBackend(t *testing.T, dialect string) *gorm.DB {
 			return nil
 		}
 		// Best-effort cleanup: a previous run may have left tables behind.
-		_ = db.Migrator().DropTable("abilities", "channels")
+		_ = db.Migrator().DropTable("abilities", "channel_groups", "channels")
 	default:
 		t.Fatalf("unknown dialect %q", dialect)
 	}
 
 	require.NoError(t, errors.Wrapf(
-		db.AutoMigrate(&Channel{}, &Ability{}),
+		db.AutoMigrate(&Channel{}, &ChannelGroup{}, &Ability{}),
 		"auto-migrate channel/ability tables for %s", dialect))
 
 	if dialect != "sqlite" {
 		// Make repeat runs idempotent without leaking the schema.
 		t.Cleanup(func() {
-			_ = db.Migrator().DropTable("abilities", "channels")
+			_ = db.Migrator().DropTable("abilities", "channel_groups", "channels")
 		})
 	}
 	return db

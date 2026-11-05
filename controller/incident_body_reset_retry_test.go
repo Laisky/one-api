@@ -80,7 +80,7 @@ func incidentBodyResetRoutingFixture(t *testing.T, channels []*dbmodel.Channel, 
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&dbmodel.Channel{}, &dbmodel.Ability{}, &dbmodel.User{}, &dbmodel.Token{}, &dbmodel.Log{}, &dbmodel.UserRequestCost{}, &dbmodel.MCPServer{}, &dbmodel.MCPTool{}, &dbmodel.Trace{}))
+	require.NoError(t, db.AutoMigrate(&dbmodel.Channel{}, &dbmodel.ChannelGroup{}, &dbmodel.Ability{}, &dbmodel.User{}, &dbmodel.Token{}, &dbmodel.Log{}, &dbmodel.UserRequestCost{}, &dbmodel.MCPServer{}, &dbmodel.MCPTool{}, &dbmodel.Trace{}))
 	oldDB, oldLogDB := dbmodel.DB, dbmodel.LOG_DB
 	oldSQLite, oldMySQL, oldPostgres := common.UsingSQLite.Load(), common.UsingMySQL.Load(), common.UsingPostgreSQL.Load()
 	oldRetry, oldMemory, oldBatch, oldPre := config.RetryTimes, config.MemoryCacheEnabled, config.BatchUpdateEnabled, config.PreConsumedQuota

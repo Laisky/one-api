@@ -27,7 +27,7 @@ func setupTokenAuthListModelsEnv(t *testing.T) {
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.ChannelGroup{}, &model.Ability{}))
 
 	originalDB := model.DB
 	originalSQLite := common.UsingSQLite.Load()

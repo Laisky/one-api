@@ -73,7 +73,7 @@ func newSuspension5XXFixture(t *testing.T, observeSuccess func(*gorm.DB)) suspen
 		common.UsingPostgreSQL.Store(oldPostgres)
 		config.EnableMetric, config.AutomaticDisableChannelEnabled, config.ChannelSuspendSecondsFor5XX = oldMetric, oldDisable, oldDuration
 	})
-	require.NoError(t, db.AutoMigrate(&dbmodel.Ability{}, &dbmodel.Channel{}))
+	require.NoError(t, db.AutoMigrate(&dbmodel.Ability{}, &dbmodel.Channel{}, &dbmodel.ChannelGroup{}))
 	require.NoError(t, db.Create(&dbmodel.Channel{Id: suspension5XXChannel, Name: "synthetic-suspension-channel", Status: dbmodel.ChannelStatusEnabled}).Error)
 	for _, ability := range []dbmodel.Ability{
 		{Group: suspension5XXGroup, Model: suspension5XXModel, ChannelId: suspension5XXChannel, Enabled: true},

@@ -136,7 +136,7 @@ func dropLiveCompactSchema(t *testing.T, db *gorm.DB, dialect compactLiveDialect
 	for _, owned := range uuidOwnedRegistry() {
 		tables = append(tables, owned.table)
 	}
-	for _, extra := range []string{"abilities", "options", "channels", "tokens", "users", "logs"} {
+	for _, extra := range []string{"abilities", "channel_groups", "options", "channels", "tokens", "users", "logs"} {
 		tables = append(tables, extra)
 	}
 	if dialect.name == "mysql" {

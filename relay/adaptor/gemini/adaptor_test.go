@@ -12,15 +12,18 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
+// TestAdaptorGetRequestURLGeminiVersions verifies the API version each model family resolves
+// to when the configured default is v1. It sets the process-wide config.GeminiVersion, so it
+// must not run in parallel with other tests, and it restores the value in t.Cleanup, which
+// runs only after its parallel subtests finish (a defer would restore it before they run).
 func TestAdaptorGetRequestURLGeminiVersions(t *testing.T) {
-	t.Parallel()
 	adaptor := &Adaptor{}
 	baseURL := "https://generativelanguage.googleapis.com"
 	originalVersion := config.GeminiVersion
 	config.GeminiVersion = "v1"
-	defer func() {
+	t.Cleanup(func() {
 		config.GeminiVersion = originalVersion
-	}()
+	})
 
 	testCases := []struct {
 		name            string

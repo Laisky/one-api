@@ -1041,7 +1041,7 @@ func ensureResponseFallbackFixtures(t *testing.T) {
 	err := model.DB.AutoMigrate(
 		&model.User{},
 		&model.Token{},
-		&model.Channel{},
+		&model.Channel{}, &model.ChannelGroup{},
 		&model.UserRequestCost{},
 		&model.QuotaRefund{},
 		&model.Log{},

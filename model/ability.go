@@ -2,7 +2,6 @@ package model
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
@@ -313,6 +312,18 @@ func deleteRedisKeysByPattern(ctx context.Context, pattern string) error {
 	}
 }
 
+// groupModelsCachePrefix prefixes the Redis key of a group's CacheGetGroupModels list.
+const groupModelsCachePrefix = "group_models:"
+
+// groupModelsV2CachePrefix prefixes the Redis key of a group's CacheGetGroupModelsV2 list.
+// The "v3" suffix is the payload version: v3 added EnabledAbility.Priority.
+const groupModelsV2CachePrefix = "group_models_v3:"
+
+// groupModelsCachePrefixes lists the Redis key prefixes of every cached group model list a
+// channel change invalidates. group_models_v2 holds the pre-priority payload that older
+// binaries may still write during a rolling deploy.
+var groupModelsCachePrefixes = []string{groupModelsCachePrefix, "group_models_v2:", groupModelsV2CachePrefix}
+
 // InvalidateChannelModelCaches refreshes the in-memory routing cache and clears group-model list caches.
 func InvalidateChannelModelCaches(groupCSVs ...string) {
 	InvalidateChannelModelCachesWithContext(context.Background(), groupCSVs...)
@@ -343,11 +354,10 @@ func InvalidateChannelModelCachesWithContext(ctx context.Context, groupCSVs ...s
 	redisReady := common.IsRedisEnabled() && common.RDB != nil
 	if len(affectedGroups) == 0 {
 		if redisReady {
-			if err := deleteRedisKeysByPattern(invalidationCtx, "group_models:*"); err != nil {
-				lg.Warn("failed to clear redis group_models cache by pattern", zap.Error(err))
-			}
-			if err := deleteRedisKeysByPattern(invalidationCtx, "group_models_v2:*"); err != nil {
-				lg.Warn("failed to clear redis group_models_v2 cache by pattern", zap.Error(err))
+			for _, prefix := range groupModelsCachePrefixes {
+				if err := deleteRedisKeysByPattern(invalidationCtx, prefix+"*"); err != nil {
+					lg.Warn("failed to clear redis group model cache by pattern", zap.String("key_prefix", prefix), zap.Error(err))
+				}
 			}
 		}
 		return
@@ -358,11 +368,11 @@ func InvalidateChannelModelCachesWithContext(ctx context.Context, groupCSVs ...s
 		if !redisReady {
 			continue
 		}
-		if err := common.RedisDel(invalidationCtx, fmt.Sprintf("group_models:%s", group)); err != nil {
-			lg.Warn("failed to clear redis group_models cache", zap.String("group", group), zap.Error(err))
-		}
-		if err := common.RedisDel(invalidationCtx, fmt.Sprintf("group_models_v2:%s", group)); err != nil {
-			lg.Warn("failed to clear redis group_models_v2 cache", zap.String("group", group), zap.Error(err))
+		for _, prefix := range groupModelsCachePrefixes {
+			if err := common.RedisDel(invalidationCtx, prefix+group); err != nil {
+				lg.Warn("failed to clear redis group model cache",
+					zap.String("key_prefix", prefix), zap.String("group", group), zap.Error(err))
+			}
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -72,6 +73,7 @@ func dropBootMigrationTables(t *testing.T, db *gorm.DB) {
 		"token_transactions",
 		"logs",
 		"abilities",
+		"channel_groups",
 		"redemptions",
 		"options",
 		"users",
@@ -123,6 +125,8 @@ func runBootMigrationPortable(t *testing.T) {
 	require.NoError(t, MigrateChannelFieldsToText(), "MigrateChannelFieldsToText")
 	require.NoError(t, MigrateTraceURLColumnToText(), "MigrateTraceURLColumnToText")
 	require.NoError(t, MigrateUserRequestCostEnsureUniqueRequestID(), "MigrateUserRequestCostEnsureUniqueRequestID")
+	_, err := ReconcileChannelGroups(context.Background())
+	require.NoError(t, err, "ReconcileChannelGroups")
 	require.NoError(t, MigrateCustomChannelsToOpenAICompatible(), "MigrateCustomChannelsToOpenAICompatible")
 }
 

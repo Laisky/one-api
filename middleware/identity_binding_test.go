@@ -39,7 +39,7 @@ func setupIdentityBindingTestDB(t *testing.T) {
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&dbmodel.User{}, &dbmodel.Token{}, &dbmodel.Channel{}))
+	require.NoError(t, db.AutoMigrate(&dbmodel.User{}, &dbmodel.Token{}, &dbmodel.Channel{}, &dbmodel.ChannelGroup{}))
 
 	userUUID := identityTestUserUUID
 	require.NoError(t, db.Create(&dbmodel.User{

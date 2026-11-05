@@ -66,7 +66,7 @@ func setupRetryOrderDB(t *testing.T, channels []*dbmodel.Channel) {
 	// A single connection keeps every query on the same in-memory database.
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	require.NoError(t, db.AutoMigrate(&dbmodel.Channel{}, &dbmodel.Ability{}))
+	require.NoError(t, db.AutoMigrate(&dbmodel.Channel{}, &dbmodel.ChannelGroup{}, &dbmodel.Ability{}))
 
 	originalDB := dbmodel.DB
 	dbmodel.DB = db

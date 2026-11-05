@@ -93,7 +93,7 @@ func asyncBillingLiveStore(t *testing.T, backend string) *AsyncTask {
 		common.UsingPostgreSQL.Store(oldPg)
 		config.SetLogConsumeEnabled(oldLogging)
 	})
-	require.NoError(t, primary.AutoMigrate(&User{}, &Token{}, &Channel{}, &AsyncTask{}, &UserRequestCost{}))
+	require.NoError(t, primary.AutoMigrate(&User{}, &Token{}, &Channel{}, &ChannelGroup{}, &AsyncTask{}, &UserRequestCost{}))
 	require.NoError(t, logDB.AutoMigrate(&Log{}, &AsyncTaskLogReceipt{}))
 	user := User{Id: 1001, UUID: uuid.NewString(), Username: "billing-live", Status: UserStatusEnabled, Quota: 1000000}
 	token := Token{Id: 1002, UUID: uuid.NewString(), UserId: user.Id, Key: uuid.NewString(), Status: TokenStatusEnabled, RemainQuota: 1000000, ExpiredTime: -1}

@@ -352,7 +352,7 @@ func setupEmptyValueChannelEnv(t *testing.T) func() {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, errors.Wrap(err, "open sqlite for channel env"))
 	require.NoError(t, errors.Wrap(
-		db.AutoMigrate(&model.Channel{}, &model.Ability{}),
+		db.AutoMigrate(&model.Channel{}, &model.ChannelGroup{}, &model.Ability{}),
 		"auto-migrate channel tables"))
 
 	originalDB := model.DB

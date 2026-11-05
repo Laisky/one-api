@@ -166,3 +166,32 @@ func TestChannelStatusUpdateWithExpiredDeadlineStillCommits(t *testing.T) {
 	require.NotEmpty(t, flags)
 	require.NotContains(t, flags, true, "abilities follow the committed status")
 }
+
+// TestChannelUpdateRefreshesRedisGroupModelList verifies that the group model list served
+// from Redis by CacheGetGroupModelsV2 follows a committed channel change. The list is
+// cached under the group_models_v3 key, so invalidation must clear that key, not only the
+// v2 and legacy keys older binaries used.
+func TestChannelUpdateRefreshesRedisGroupModelList(t *testing.T) {
+	redisCtx := setupChannelCacheInvalidationTest(t)
+	group := fmt.Sprintf("model-list-refresh-%d", time.Now().UnixNano())
+	channel := &Channel{Name: "model-list-refresh", Type: 1, Status: ChannelStatusEnabled, Models: "old-model", Group: group}
+	require.NoError(t, channel.Insert())
+
+	modelNames := func() []string {
+		abilities, err := CacheGetGroupModelsV2(redisCtx, group)
+		require.NoError(t, err)
+		names := make([]string, 0, len(abilities))
+		for _, ability := range abilities {
+			names = append(names, ability.Model)
+		}
+		return names
+	}
+	require.Equal(t, []string{"old-model"}, modelNames(), "the first read fills the Redis cache")
+
+	channel.Models = "new-model"
+	require.NoError(t, channel.Update())
+	require.Equal(t, []string{"new-model"}, modelNames(), "a committed update must not keep serving the cached list")
+
+	UpdateChannelStatusByIdWithContext(context.Background(), channel.Id, ChannelStatusManuallyDisabled)
+	require.Empty(t, modelNames(), "a disabled channel's models must leave the cached list")
+}

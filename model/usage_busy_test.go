@@ -20,7 +20,7 @@ func usageBusyFixture(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "usage.db")+"?_busy_timeout=1&_journal_mode=WAL"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&User{}, &Channel{}))
+	require.NoError(t, db.AutoMigrate(&User{}, &Channel{}, &ChannelGroup{}))
 	pool, err := db.DB()
 	require.NoError(t, err)
 	pool.SetMaxOpenConns(2)

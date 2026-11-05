@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,8 @@ func runBootMigration(t *testing.T) {
 	require.NoError(t, MigrateChannelFieldsToText(), "STEP 2c: channel field type migration")
 	require.NoError(t, MigrateTraceURLColumnToText(), "STEP 2d: trace URL migration")
 	require.NoError(t, MigrateUserRequestCostEnsureUniqueRequestID(), "STEP 2e: user_request_costs unique index")
+	_, err := ReconcileChannelGroups(context.Background())
+	require.NoError(t, err, "STEP 3a: channel group relation reconciliation")
 	require.NoError(t, MigrateCustomChannelsToOpenAICompatible(), "STEP 3: custom channel migration")
 }
 

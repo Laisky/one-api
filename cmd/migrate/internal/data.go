@@ -38,6 +38,7 @@ var TableMigrationOrder = []TableInfo{
 	{"options", &model.Option{}},
 	{"tokens", &model.Token{}},
 	{"channels", &model.Channel{}},
+	{"channel_groups", &model.ChannelGroup{}},
 	{"redemptions", &model.Redemption{}},
 	{"abilities", &model.Ability{}},
 	{"logs", &model.Log{}},

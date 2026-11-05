@@ -30,7 +30,7 @@ func csrfFixture(t *testing.T) (*gorm.DB, *gin.Engine, *http.Cookie) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "csrf.db")), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.ChannelGroup{}))
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
