@@ -127,6 +127,24 @@ func (s *responseStreamLifecycle) finish(c *gin.Context, apiErr **model.ErrorWit
 	}
 }
 
+// failureCode names an interrupted Responses stream by its origin. A failed
+// downstream write, including a heartbeat write, is a local delivery failure
+// and keeps the "write_stream_failed" code that the relay controller attributes
+// to the gateway rather than the provider. Every other interruption remains a
+// "read_stream_failed" provider/transport failure.
+//
+// Parameters:
+//   - streamErr: the error that stopped forwarding; nil is treated as a read failure.
+//
+// Returns:
+//   - string: the one-api error code for the interruption.
+func (s *responseStreamLifecycle) failureCode(streamErr error) string {
+	if streamErr != nil && s.writer.err != nil && errors.Is(streamErr, s.writer.err) {
+		return "write_stream_failed"
+	}
+	return "read_stream_failed"
+}
+
 // responseStreamSnapshotText counts provider-visible billable content from a
 // cumulative output snapshot without adding it to already counted deltas.
 func responseStreamSnapshotText(outputs []OutputItem) string {

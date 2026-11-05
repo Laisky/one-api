@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -81,10 +82,10 @@ func relayObservedRetryStop(c *gin.Context, allowed bool) string {
 		}
 		return "billing_veto"
 	}
-	if c.Request.Context().Err() == context.Canceled {
+	if errors.Is(c.Request.Context().Err(), context.Canceled) {
 		return "request_canceled"
 	}
-	if c.Request.Context().Err() == context.DeadlineExceeded {
+	if errors.Is(c.Request.Context().Err(), context.DeadlineExceeded) {
 		return "request_deadline"
 	}
 	return "budget_exhausted"

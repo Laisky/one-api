@@ -84,6 +84,12 @@ func relayFailureKind(e *model.ErrorWithStatusCode) errkind.Kind {
 	if kind := errkind.Of(e.RawError); kind != errkind.Unknown {
 		return kind
 	}
+	// A failed downstream delivery is local to the gateway/client connection,
+	// not evidence that the provider failed. IsDeliveryFailure only accepts
+	// one-api generated errors, so a provider cannot spoof the classification.
+	if model.IsDeliveryFailure(e) {
+		return errkind.Server
+	}
 
 	switch {
 	case e.StatusCode == http.StatusUnauthorized:

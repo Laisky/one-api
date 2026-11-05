@@ -31,6 +31,13 @@ def execution_events():
 class IntegrityTests(unittest.TestCase):
     """IntegrityTests verifies that missing or misleading evidence cannot pass the gate."""
 
+    def test_nested_media_stack_regression_is_required(self):
+        """test_nested_media_stack_regression_is_required protects the behavioral selection."""
+        self.assertIn("TestParseContentCheckedRetainsNestedErrorStack",
+                      QUICK.SELECTIONS["relay/model"])
+        for name in ("TestLogStackContract", "TestPrivacyCoreDropsStackErrors"):
+            self.assertIn(name, QUICK.SELECTIONS["common/logger/otelbridge"])
+
     def test_new_core_tests_are_discovered(self):
         """test_new_core_tests_are_discovered verifies new package tests enter the selection."""
         selected, _ = QUICK.discover(discovery_events(["TestEssential", "TestNew"]),

@@ -86,7 +86,6 @@ func GetAudioTokens(ctx context.Context, audio io.Reader, tokensPerSecond float6
 func GetAudioDuration(ctx context.Context, filename string) (float64, error) {
 	path, err := lookupFFProbe()
 	if err != nil {
-		gmw.GetLogger(ctx).Debug("ffprobe unavailable", zap.Error(err))
 		return 0, errors.Wrap(err, "failed to get audio duration")
 	}
 	// ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {{input}}
@@ -96,8 +95,7 @@ func GetAudioDuration(ctx context.Context, filename string) (float64, error) {
 		gmw.GetLogger(ctx).Debug("ffprobe execution failed",
 			zap.String("ffprobe_path", path),
 			zap.String("filename", filename),
-			zap.String("stderr", strings.TrimSpace(string(output))),
-			zap.Error(err))
+			zap.String("stderr", strings.TrimSpace(string(output))))
 		wrapped := wrapFFProbeError(err, output)
 		return 0, errors.Wrap(wrapped, "failed to get audio duration")
 	}

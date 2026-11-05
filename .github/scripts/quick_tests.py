@@ -12,10 +12,9 @@ import time
 
 MODULE = "github.com/Laisky/one-api"
 # None means every currently discoverable top-level unit test in this package.
-# Keep model and adapter suites in manual full qualification: their measured clean
-# compilation cost left insufficient margin for a complete CI job below five minutes.
 SELECTIONS = {
     "relay/format": None,
+    "relay/model": ("TestParseContentCheckedRetainsNestedErrorStack",),
     # Temporary PR585 RED/GREEN verification of seconds-offset timestamp fidelity.
     # The remaining entries pin repeated-key handling: rejecting a record whose key
     # repeated dropped every request-scoped log from the OTLP export in production.
@@ -26,6 +25,8 @@ SELECTIONS = {
         "TestOutOfRangeSecondPrecisionZonePreservesInstant",
         "TestTimeOverflowPreservesLogAttribute",
         "TestLogFidelityTimeReviewBoundaries",
+        "TestLogStackContract",
+        "TestPrivacyCoreDropsStackErrors",
         "TestLogFidelityBridgeDuplicateKeysResolveLastValueWins",
         "TestLogFidelityBridgeUniqueKeysAreNotCountedAsDeduplicated",
         "TestNormalizeMatchesSDKDeduplication",

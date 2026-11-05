@@ -1,8 +1,22 @@
 package model
 
 import (
-	"errors"
+	stderrors "errors"
 	"strings"
+
+	"github.com/Laisky/errors/v2"
+)
+
+// Media envelope validation errors. Messages are client-facing and never
+// include input payloads.
+var (
+	errVideoURLNotObject    = stderrors.New("video_url must be an object")
+	errVideoURLFields       = stderrors.New("video_url requires a non-empty string url and a string mime_type")
+	errFileNotObject        = stderrors.New("file must be an object")
+	errFileMixedShape       = stderrors.New("file cannot mix nested and flat fields")
+	errFileFieldsNotStrings = stderrors.New("file fields must be strings")
+	errFileSourceChoice     = stderrors.New("file requires exactly one of file_id, file_data, or file_url")
+	errMediaFieldType       = stderrors.New("invalid media field type")
 )
 
 // ContentTypeVideoURL identifies an OpenAI-compatible video content part.
@@ -31,10 +45,10 @@ func decodeMediaPart(part map[string]any) (MessageContent, bool, error) {
 			}
 		}
 		if !ok {
-			return MessageContent{}, true, errors.New("video_url must be an object")
+			return MessageContent{}, true, errors.WithStack(errVideoURLNotObject)
 		}
 		if err := readMediaStrings(raw, map[string]*string{"url": &video.URL, "mime_type": &video.MIMEType}); err != nil || strings.TrimSpace(video.URL) == "" {
-			return MessageContent{}, true, errors.New("video_url requires a non-empty string url and a string mime_type")
+			return MessageContent{}, true, errors.WithStack(errVideoURLFields)
 		}
 		return MessageContent{Type: ContentTypeVideoURL, VideoURL: &video}, true, nil
 	case ContentTypeFile, "input_file":
@@ -45,11 +59,11 @@ func decodeMediaPart(part map[string]any) (MessageContent, bool, error) {
 			var ok bool
 			source, ok = raw.(map[string]any)
 			if !ok {
-				return MessageContent{}, true, errors.New("file must be an object")
+				return MessageContent{}, true, errors.WithStack(errFileNotObject)
 			}
 			for _, key := range []string{"file_id", "file_data", "file_url", "filename", "mime_type"} {
 				if _, exists := part[key]; exists {
-					return MessageContent{}, true, errors.New("file cannot mix nested and flat fields")
+					return MessageContent{}, true, errors.WithStack(errFileMixedShape)
 				}
 			}
 		}
@@ -61,7 +75,7 @@ func decodeMediaPart(part map[string]any) (MessageContent, bool, error) {
 			MIMEType string `json:"mime_type"`
 		}
 		if err := readMediaStrings(source, map[string]*string{"file_id": &file.ID, "file_data": &file.Data, "file_url": &file.URL, "filename": &file.Filename, "mime_type": &file.MIMEType}); err != nil {
-			return MessageContent{}, true, errors.New("file fields must be strings")
+			return MessageContent{}, true, errors.WithStack(errFileFieldsNotStrings)
 		}
 		n := 0
 		for _, value := range []string{file.ID, file.Data, file.URL} {
@@ -70,7 +84,7 @@ func decodeMediaPart(part map[string]any) (MessageContent, bool, error) {
 			}
 		}
 		if n != 1 {
-			return MessageContent{}, true, errors.New("file requires exactly one of file_id, file_data, or file_url")
+			return MessageContent{}, true, errors.WithStack(errFileSourceChoice)
 		}
 		return MessageContent{Type: ContentTypeFile, FileID: file.ID, FileData: file.Data,
 			FileURL: file.URL, Filename: file.Filename, MIMEType: file.MIMEType}, true, nil
@@ -88,7 +102,7 @@ func readMediaStrings(raw map[string]any, fields map[string]*string) error {
 		}
 		text, ok := value.(string)
 		if !ok {
-			return errors.New("invalid media field type")
+			return errors.WithStack(errMediaFieldType)
 		}
 		*target = text
 	}

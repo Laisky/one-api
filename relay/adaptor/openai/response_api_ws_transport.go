@@ -588,10 +588,19 @@ func buildStreamingWebSocketHTTPResponse(c *gin.Context, conn *websocket.Conn, f
 			}
 		}()
 
-		writeWebSocketMessageAsSSE(writer, firstMessage)
+		writeDone := func() {
+			if err := writeSSEDone(writer); err != nil {
+				lg.Debug("websocket stream bridge: terminal marker delivery failed", zap.Error(err))
+			}
+		}
+
+		if err := writeWebSocketMessageAsSSE(writer, firstMessage); err != nil {
+			lg.Debug("websocket stream bridge: downstream closed", zap.Error(err))
+			return
+		}
 		if isWebSocketResponseTerminalEvent(firstMessage) {
 			lg.Debug("websocket stream bridge: first message is terminal event")
-			writeSSEDone(writer)
+			writeDone()
 			return
 		}
 
@@ -607,20 +616,23 @@ func buildStreamingWebSocketHTTPResponse(c *gin.Context, conn *websocket.Conn, f
 						zap.Int("close_code", closeCode),
 						zap.String("close_reason", closeReason),
 					)
-					writeSSEDone(writer)
+					writeDone()
 					return
 				}
 				lg.Debug("websocket stream bridge: upstream read error, ending stream",
 					zap.Error(err),
 				)
-				writeSSEDone(writer)
+				writeDone()
 				return
 			}
 
-			writeWebSocketMessageAsSSE(writer, message)
+			if err := writeWebSocketMessageAsSSE(writer, message); err != nil {
+				lg.Debug("websocket stream bridge: downstream closed", zap.Error(err))
+				return
+			}
 			if isWebSocketResponseTerminalEvent(message) {
 				lg.Debug("websocket stream bridge: terminal event received, ending stream")
-				writeSSEDone(writer)
+				writeDone()
 				return
 			}
 		}
@@ -640,21 +652,27 @@ func buildStreamingWebSocketHTTPResponse(c *gin.Context, conn *websocket.Conn, f
 // Parameters:
 //   - writer: output stream.
 //   - message: raw websocket text payload.
-func writeWebSocketMessageAsSSE(writer *io.PipeWriter, message []byte) {
+func writeWebSocketMessageAsSSE(writer *io.PipeWriter, message []byte) error {
 	if len(bytes.TrimSpace(message)) == 0 {
-		return
+		return nil
 	}
-	_, _ = writer.Write([]byte("data: "))
-	_, _ = writer.Write(message)
-	_, _ = writer.Write([]byte("\n\n"))
+	for _, part := range [][]byte{[]byte("data: "), message, []byte("\n\n")} {
+		if _, err := writer.Write(part); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	return nil
 }
 
 // writeSSEDone writes the terminal SSE [DONE] marker.
 //
 // Parameters:
 //   - writer: output stream.
-func writeSSEDone(writer *io.PipeWriter) {
-	_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+func writeSSEDone(writer *io.PipeWriter) error {
+	if _, err := writer.Write([]byte("data: [DONE]\n\n")); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
 }
 
 // isWebSocketResponseTerminalEvent reports whether a websocket payload is terminal for

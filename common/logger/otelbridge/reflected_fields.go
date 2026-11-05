@@ -135,6 +135,8 @@ func jsonEmptyValue(v reflect.Value) bool {
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
 		reflect.Float32, reflect.Float64, reflect.Interface, reflect.Pointer:
 		return v.IsZero()
+	default:
+		// encoding/json never treats structs or other kinds as empty.
 	}
 	return false
 }

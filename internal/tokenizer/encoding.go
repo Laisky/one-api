@@ -128,10 +128,18 @@ func initEncoding(encodingName string) (*Encoding, error) {
 	}
 }
 
+// loaderErrorWithStack preserves a directly exposed stack and captures one for other loader errors.
+func loaderErrorWithStack(err error) error {
+	if _, ok := err.(interface{ StackTrace() errors.StackTrace }); ok {
+		return err
+	}
+	return errors.WithStack(err)
+}
+
 func o200k_base() (*Encoding, error) {
 	ranks, err := bpeLoader.LoadTiktokenBpe("https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken")
 	if err != nil {
-		return nil, err
+		return nil, loaderErrorWithStack(err)
 	}
 	special_tokens := map[string]int{
 		ENDOFTEXT:   199999,
@@ -157,7 +165,7 @@ func o200k_base() (*Encoding, error) {
 func cl100k_base() (*Encoding, error) {
 	ranks, err := bpeLoader.LoadTiktokenBpe("https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken")
 	if err != nil {
-		return nil, err
+		return nil, loaderErrorWithStack(err)
 	}
 	special_tokens := map[string]int{
 		ENDOFTEXT:   100257,
@@ -177,7 +185,7 @@ func cl100k_base() (*Encoding, error) {
 func p50k_edit() (*Encoding, error) {
 	ranks, err := bpeLoader.LoadTiktokenBpe("https://openaipublic.blob.core.windows.net/encodings/p50k_base.tiktoken")
 	if err != nil {
-		return nil, err
+		return nil, loaderErrorWithStack(err)
 	}
 	special_tokens := map[string]int{ENDOFTEXT: 50256, FIM_PREFIX: 50281, FIM_MIDDLE: 50282, FIM_SUFFIX: 50283}
 	return &Encoding{
@@ -191,7 +199,7 @@ func p50k_edit() (*Encoding, error) {
 func p50k_base() (*Encoding, error) {
 	ranks, err := bpeLoader.LoadTiktokenBpe("https://openaipublic.blob.core.windows.net/encodings/p50k_base.tiktoken")
 	if err != nil {
-		return nil, err
+		return nil, loaderErrorWithStack(err)
 	}
 	special_tokens := map[string]int{ENDOFTEXT: 50256}
 
@@ -214,7 +222,7 @@ func p50k_base() (*Encoding, error) {
 func r50k_base() (*Encoding, error) {
 	ranks, err := bpeLoader.LoadTiktokenBpe("https://openaipublic.blob.core.windows.net/encodings/r50k_base.tiktoken")
 	if err != nil {
-		return nil, err
+		return nil, loaderErrorWithStack(err)
 	}
 	special_tokens := map[string]int{ENDOFTEXT: 50256}
 	return &Encoding{

@@ -42,7 +42,7 @@ func RecordAsyncTaskEvidence(ctx context.Context, task *AsyncTask, update AsyncT
 				return errors.Wrap(claim.Error, "lock async task evidence")
 			}
 			if claim.RowsAffected != 1 {
-				return ErrAsyncLeaseLost
+				return errors.WithStack(ErrAsyncLeaseLost)
 			}
 			var saved AsyncTask
 			if err := tx.Where("id = ?", task.ID).Take(&saved).Error; err != nil {

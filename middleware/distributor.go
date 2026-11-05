@@ -233,7 +233,11 @@ func Distribute() func(c *gin.Context) {
 			}
 		}
 		if userGroup == "" {
-			userGroup, _ = model.CacheGetUserGroup(ctx, userId)
+			var err error
+			userGroup, err = model.CacheGetUserGroup(ctx, userId)
+			if err != nil {
+				lg.Warn("failed to load user group, continuing with available group", zap.Int("user_id", userId), zap.String("error", errMessage(err)))
+			}
 		}
 		c.Set(ctxkey.Group, userGroup)
 

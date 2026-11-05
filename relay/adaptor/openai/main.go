@@ -226,11 +226,7 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response, promptTokens int, mod
 
 	var embeddingResponse EmbeddingResponse
 	if err = json.Unmarshal(responseBody, &embeddingResponse); err != nil {
-		logger.Error("failed to unmarshal embedding response body",
-			zap.Error(err),
-			zap.Int("body_bytes", len(responseBody)),
-			zap.Bool("body_logging_suppressed", true))
-		return ErrorWrapper(err, "unmarshal_embedding_response_failed", http.StatusInternalServerError), nil
+		return ErrorWrapper(errors.WithStack(err), "unmarshal_embedding_response_failed", http.StatusInternalServerError), nil
 	}
 
 	if embeddingResponse.Error != nil && embeddingResponse.Error.Type != "" {
