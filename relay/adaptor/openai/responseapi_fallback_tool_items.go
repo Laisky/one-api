@@ -8,7 +8,13 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/relay/model"
 )
+
+// responseEmptyToolOutputText stands in for an empty tool output that must be
+// carried as a standalone message, which Claude requires to be nonempty.
+const responseEmptyToolOutputText = "(empty tool output)"
 
 // responseFallbackToolSummaryLimit bounds each loaded-tool line in a lowered
 // tool_search_output so a large catalog cannot dominate the tool result text.
@@ -286,6 +292,13 @@ func (c *ResponseFallbackToolCatalog) ResponseFallbackToolCallItem(callID, flatN
 	default:
 		item.Name = binding.Name
 		item.Namespace = binding.Namespace
+		if binding.Namespace != "" {
+			// Fallback never encrypts function arguments. Codex reads an empty
+			// encrypted_function_args list as "plaintext arguments", so its
+			// multi-agent messages stay plaintext instead of being stored as
+			// opaque encrypted_content that no fallback route can replay.
+			item.EncryptedFunctionArgs = &[]string{}
+		}
 		return item
 	}
 }
@@ -339,5 +352,36 @@ func validResponseReasoningEffort(effort string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// mergeAssistantTurnText folds an assistant message item into the open
+// assistant tool-call message of the same turn. Parameters: target is the open
+// assistant message, msg the lowered assistant item, pendingReasoning staged
+// reasoning that belongs to this turn. Text is joined with a newline; staged
+// reasoning attaches when the turn has none yet and is then cleared.
+func mergeAssistantTurnText(target *model.Message, msg *model.Message, pendingReasoning *string) {
+	if target == nil || msg == nil {
+		return
+	}
+	if text := msg.StringContent(); text != "" {
+		if existing := target.StringContent(); existing != "" {
+			target.Content = existing + "\n" + text
+		} else {
+			target.Content = text
+		}
+	}
+	reasoning := ""
+	if msg.ReasoningContent != nil {
+		reasoning = *msg.ReasoningContent
+	}
+	if reasoning == "" && pendingReasoning != nil {
+		reasoning = *pendingReasoning
+	}
+	if reasoning != "" && (target.ReasoningContent == nil || *target.ReasoningContent == "") {
+		target.ReasoningContent = &reasoning
+	}
+	if pendingReasoning != nil {
+		*pendingReasoning = ""
 	}
 }

@@ -348,6 +348,11 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 						continue
 					}
 
+					if output == "" {
+						// Claude rejects a message with no content blocks; keep the
+						// orphan output's position with an explicit empty marker.
+						output = responseEmptyToolOutputText
+					}
 					chatReq.Messages = append(chatReq.Messages, model.Message{
 						Role:    "user",
 						Content: output,
@@ -362,6 +367,17 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 			msg, err := responseContentItemToMessage(v, nativeMedia...)
 			if err != nil {
 				return nil, errors.Wrap(err, "convert response api content to chat message")
+			}
+			if msg.Role == "assistant" && len(pendingToolCallIDs) > 0 && currentToolCallMsgIdx >= 0 &&
+				chatReq.Messages[currentToolCallMsgIdx].Role == "assistant" {
+				// Streaming clients such as Codex record a turn's function_call items
+				// before its assistant text when the bridge flushes tool items first,
+				// so the text arrives between the calls and their outputs. It belongs
+				// to the same assistant turn; closing the turn here would orphan every
+				// following tool output.
+				mergeAssistantTurnText(&chatReq.Messages[currentToolCallMsgIdx], msg, &pendingReasoning)
+				openToolCallMsgIdx = currentToolCallMsgIdx
+				continue
 			}
 			if pendingReasoning != "" && msg.Role == "assistant" {
 				reasoning := pendingReasoning

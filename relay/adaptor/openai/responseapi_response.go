@@ -59,6 +59,9 @@ type OutputItem struct {
 	Namespace string `json:"namespace,omitempty"` // Namespace stays separate from the local tool name.
 	Input     string `json:"input,omitempty"`     // Client-side custom-tool input.
 	Arguments string `json:"arguments,omitempty"` // Function arguments for function calls
+	// EncryptedFunctionArgs, when non-nil, is serialized even when empty: Codex
+	// treats an empty list as the provider's statement that arguments are plaintext.
+	EncryptedFunctionArgs *[]string `json:"encrypted_function_args,omitempty"`
 
 	// Tool search uses structured arguments and Responses definitions, while
 	// ordinary function Arguments and MCP Tools retain their existing Go types.
