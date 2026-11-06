@@ -90,6 +90,9 @@ func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_c
 			h.appendReasoningDelta(c, *choice.Delta.Thinking)
 		}
 
+		if len(choice.Delta.WebSearchCalls) > 0 {
+			h.handleWebSearchCalls(c, choice.Delta.WebSearchCalls)
+		}
 		if len(choice.Delta.ToolCalls) > 0 {
 			h.handleToolCalls(c, choice.Delta.ToolCalls)
 		}

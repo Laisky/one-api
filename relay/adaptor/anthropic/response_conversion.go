@@ -184,7 +184,15 @@ func ResponseClaude2OpenAI(c *gin.Context, claudeResponse *Response) *openai.Tex
 	var reasoningText string
 
 	tools := make([]model.Tool, 0)
+	// Server-side blocks (web search and other provider tools) never become
+	// caller tool calls; web searches are carried as WebSearchCalls.
+	var searches webSearchCallCollector
+	separatorPending := false
 	for i, v := range claudeResponse.Content {
+		if searches.observe(v) {
+			separatorPending = separatorPending || responseText != ""
+			continue
+		}
 		switch v.Type {
 		case "thinking", "redacted_thinking":
 			if v.Thinking != nil {
@@ -214,6 +222,10 @@ func ResponseClaude2OpenAI(c *gin.Context, claudeResponse *Response) *openai.Tex
 				}
 			}
 		case "text":
+			if separatorPending && v.Text != "" {
+				responseText += claudeServerTextSeparator
+				separatorPending = false
+			}
 			responseText += v.Text
 		case "tool_use":
 			// handled below when building tool call payloads
@@ -245,6 +257,8 @@ func ResponseClaude2OpenAI(c *gin.Context, claudeResponse *Response) *openai.Tex
 			Reasoning: &reasoningText,
 			Name:      nil,
 			ToolCalls: tools,
+
+			WebSearchCalls: searches.calls,
 		},
 		FinishReason: stopReasonClaude2OpenAI(claudeResponse.StopReason),
 	}

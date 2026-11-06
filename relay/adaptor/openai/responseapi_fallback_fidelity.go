@@ -52,6 +52,10 @@ func ValidateResponseAPIFallbackFidelity(input []any, allowReferences bool, nati
 			}
 		case "reasoning", "thinking":
 			// These provider-bound sidecars intentionally degrade on fallback.
+		case "web_search_call":
+			// Hosted search history (for example Codex replaying its own turns)
+			// is dropped: the assistant text already carries what the search
+			// found, and no stateless upstream can resume provider search state.
 		case "item_reference":
 			if !allowReferences {
 				return errors.Wrap(ErrResponseFallbackNotRepresentable, "unresolved item reference")

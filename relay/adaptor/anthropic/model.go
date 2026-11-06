@@ -49,6 +49,23 @@ type Tool struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description,omitempty"`
 	InputSchema InputSchema `json:"input_schema"`
+
+	// Server-tool declaration fields. A non-empty Type marks a provider-executed
+	// tool (for example web_search_20250305); see Tool.MarshalJSON.
+	Type           string                 `json:"type,omitempty"`
+	MaxUses        *int                   `json:"max_uses,omitempty"`
+	AllowedDomains []string               `json:"allowed_domains,omitempty"`
+	BlockedDomains []string               `json:"blocked_domains,omitempty"`
+	UserLocation   *WebSearchUserLocation `json:"user_location,omitempty"`
+}
+
+// WebSearchUserLocation localizes Claude server-side web search results.
+type WebSearchUserLocation struct {
+	Type     string `json:"type"`
+	City     string `json:"city,omitempty"`
+	Region   string `json:"region,omitempty"`
+	Country  string `json:"country,omitempty"`
+	Timezone string `json:"timezone,omitempty"`
 }
 
 type InputSchema struct {

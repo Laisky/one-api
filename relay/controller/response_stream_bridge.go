@@ -47,6 +47,11 @@ type chatToResponseStreamBridge struct {
 	toolOrder       []string
 	choiceToolOrder map[int][]string
 
+	// webSearches renders provider-executed web searches as web_search_call
+	// items, keyed by upstream invocation ID, in arrival order.
+	webSearches    map[string]*streamWebSearchState
+	webSearchOrder []*streamWebSearchState
+
 	lastFinishReason string
 	incomplete       *openai.IncompleteDetails
 
@@ -206,6 +211,7 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 	// downstream. Tool-call events are flushed first to preserve the spec
 	// ordering for every function_call regardless of whether the response also
 	// carried a text message.
+	h.finishPendingWebSearches(c)
 	toolItems := make([]openai.OutputItem, 0, len(h.toolOrder))
 	for _, id := range h.toolOrder {
 		state := h.toolCalls[id]
@@ -246,6 +252,9 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		if reasoning := h.choiceReasoning(choice, "completed"); reasoning != nil {
 			indexed = append(indexed, indexedItem{choice.reasoningIndex, *reasoning})
 		}
+	}
+	for _, search := range h.webSearchOrder {
+		indexed = append(indexed, indexedItem{search.index, h.webSearchItem(search)})
 	}
 	for i, key := range h.toolOrder {
 		indexed = append(indexed, indexedItem{h.toolCalls[key].index, toolItems[i]})

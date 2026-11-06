@@ -86,6 +86,10 @@ func lowerResponseFallbackToolItems(input ResponseAPIInput, catalog *ResponseFal
 				return nil, "", err
 			}
 			lowered = append(lowered, message)
+		case "web_search_call":
+			// Replayed hosted search calls have no Chat or Claude counterpart;
+			// dropping them keeps the surrounding assistant turn contiguous.
+			continue
 		case "configuration_update":
 			if reasoning, ok := item["reasoning"].(map[string]any); ok {
 				if value, ok := reasoning["effort"].(string); ok && strings.TrimSpace(value) != "" {

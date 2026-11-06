@@ -179,6 +179,10 @@ func buildResponseOutput(choices []openai_compatible.TextResponseChoice, catalog
 			})
 		}
 
+		// Provider-executed searches follow the reasoning item and precede
+		// caller tool calls, matching the streaming bridge's output order.
+		output = append(output, webSearchCallOutputItems(msg.WebSearchCalls)...)
+
 		for _, tool := range msg.ToolCalls {
 			arguments := ""
 			if tool.Function != nil && tool.Function.Arguments != nil {

@@ -36,6 +36,7 @@ const (
 	KindFunctionCallOutput = "function_call_output"
 	KindItemReference      = "item_reference"
 	KindThinking           = "thinking"
+	KindWebSearchCall      = "web_search_call"
 )
 
 // hostedToolCallKinds are provider-hosted/built-in tool items whose state is
@@ -110,7 +111,9 @@ const (
 //     items, which the fallback converter lowers itself;
 //   - reasoning and thinking degrade to a display-only sidecar: their opaque
 //     provider-bound state is dropped and the request proceeds;
-//   - hosted/built-in tool-call state and unknown future item types have no
+//   - web_search_call items are dropped too: the search results are already
+//     summarized by the assistant message that follows them;
+//   - other hosted/built-in tool-call state and unknown future item types have no
 //     sanctioned degradation and fail closed with state_not_portable (rows P04,
 //     I05, E05).
 //
@@ -127,7 +130,9 @@ func FallbackLowering(raw json.RawMessage) (action, kind string) {
 		// them faithfully (flattened names, raw custom input, loaded catalogs) and
 		// rejects any variant it cannot represent, such as encrypted agent content.
 		return FallbackActionCarry, kind
-	case KindReasoning, KindThinking:
+	case KindReasoning, KindThinking, KindWebSearchCall:
+		// A replayed web_search_call is hosted state whose findings already live
+		// in the assistant text that follows it; fallback drops the item.
 		return FallbackActionDrop, kind
 	}
 	return FallbackActionFail, kind

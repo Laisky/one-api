@@ -237,6 +237,7 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 			InputSchema: schema,
 		})
 	}
+	claudeTools = appendConvertedWebSearchTool(c, claudeTools)
 
 	claudeRequest := Request{
 		Model:        textRequest.Model,

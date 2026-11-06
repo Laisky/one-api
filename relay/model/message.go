@@ -58,6 +58,11 @@ type Message struct {
 	// -------------------------------------
 	Thinking  *string `json:"thinking,omitempty"`
 	Signature *string `json:"signature,omitempty"`
+
+	// WebSearchCalls is a gateway response extension carrying provider-executed
+	// web searches (Claude server_tool_use web_search) observed on a converted
+	// upstream, so the Responses fallback can render web_search_call items.
+	WebSearchCalls []WebSearchCall `json:"web_search_calls,omitempty"`
 }
 
 type AnnotationItem struct {
