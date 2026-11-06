@@ -45,7 +45,9 @@ func TestResponseFallbackAcceptsWebSearchCallHistory(t *testing.T) {
 		roles = append(roles, message.Role)
 	}
 	require.Equal(t, []string{"user", "assistant", "tool", "user"}, roles)
-	require.Equal(t, "Go 1.27 is out.", converted.Messages[1].StringContent())
+	// The searches themselves cannot be replayed, so the response that ran them
+	// carries a deterministic note naming each action ahead of its answer.
+	require.Equal(t, "[Web search: go release; opened https://go.dev; searched https://go.dev for 1.27]\nGo 1.27 is out.", converted.Messages[1].StringContent())
 	require.Len(t, converted.Messages[1].ToolCalls, 1)
 	require.Equal(t, "shell", converted.Messages[1].ToolCalls[0].Function.Name)
 	require.Equal(t, converted.Messages[1].ToolCalls[0].Id, converted.Messages[2].ToolCallId)

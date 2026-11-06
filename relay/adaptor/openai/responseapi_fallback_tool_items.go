@@ -39,9 +39,18 @@ func lowerResponseFallbackToolItems(input ResponseAPIInput, catalog *ResponseFal
 		byIndex[item.Index] = item
 	}
 
+	serverTools := inspectResponseServerToolSegments(input, byIndex)
+
 	lowered := make(ResponseAPIInput, 0, len(input))
 	effort := ""
 	for index, raw := range input {
+		if serverTools.dropReasoning[index] {
+			// Fallback cannot replay the provider's server_tool_use and
+			// web_search_tool_result blocks, and Claude rejects replayed thinking
+			// whose assistant message was modified, so thinking from a response
+			// that ran provider searches is omitted (Claude accepts omission).
+			continue
+		}
 		if discovered, ok := byIndex[index]; ok {
 			item, err := lowerResponseDiscoveryItem(discovered, catalog)
 			if err != nil {
@@ -56,6 +65,12 @@ func lowerResponseFallbackToolItems(input ResponseAPIInput, catalog *ResponseFal
 		if !ok {
 			lowered = append(lowered, raw)
 			continue
+		}
+		if note, annotate := serverTools.notes[index]; annotate {
+			// The provider's search blocks cannot be replayed; this note keeps
+			// the model aware that the answer came from a web search.
+			item = annotateResponseAssistantMessage(item, note)
+			raw = item
 		}
 		kind, _ := item["type"].(string)
 		switch strings.ToLower(strings.TrimSpace(kind)) {
@@ -153,6 +168,118 @@ func lowerResponseDiscoveryItem(item ResponseToolSearchInputItem, catalog *Respo
 		// additional_tools: the catalog already carries these definitions.
 		return nil, nil
 	}
+}
+
+// responseServerToolSegments describes, for model responses that also ran
+// provider-executed web searches, which reasoning items must be omitted and
+// which assistant message should carry a note naming the searches.
+type responseServerToolSegments struct {
+	dropReasoning map[int]bool
+	notes         map[int]string
+}
+
+// inspectResponseServerToolSegments groups input into model responses: maximal
+// runs of model output items (reasoning, thinking, assistant messages and tool
+// calls), ended by caller inputs such as user messages and tool outputs. For a
+// response that produced a web_search_call it marks its reasoning items for
+// omission and assigns a search note to its first assistant message.
+// Parameters: input is the request input, discovery its raw discovery items.
+func inspectResponseServerToolSegments(input ResponseAPIInput, discovery map[int]ResponseToolSearchInputItem) responseServerToolSegments {
+	result := responseServerToolSegments{}
+	var reasoning []int
+	var searches []string
+	assistant := -1
+	flush := func() {
+		if len(searches) > 0 {
+			if result.dropReasoning == nil {
+				result.dropReasoning, result.notes = make(map[int]bool), make(map[int]string)
+			}
+			for _, index := range reasoning {
+				result.dropReasoning[index] = true
+			}
+			if assistant >= 0 {
+				result.notes[assistant] = "[Web search: " + strings.Join(searches, "; ") + "]"
+			}
+		}
+		reasoning, searches, assistant = reasoning[:0], searches[:0], -1
+	}
+	for index, raw := range input {
+		kind, role := "", ""
+		item, isMap := raw.(map[string]any)
+		if discovered, ok := discovery[index]; ok {
+			kind, isMap = strings.ToLower(strings.TrimSpace(discovered.Type)), false
+		} else if isMap {
+			kind, _ = item["type"].(string)
+			kind = strings.ToLower(strings.TrimSpace(kind))
+			role, _ = item["role"].(string)
+		}
+		switch {
+		case kind == "reasoning" || kind == "thinking":
+			reasoning = append(reasoning, index)
+		case kind == "web_search_call":
+			searches = append(searches, describeResponseWebSearchCall(item))
+		case kind == "function_call" || kind == "custom_tool_call" || kind == "tool_search_call":
+		case (kind == "message" || kind == "") && role == "assistant":
+			if assistant < 0 {
+				assistant = index
+			}
+		default:
+			flush()
+		}
+	}
+	flush()
+	return result
+}
+
+// describeResponseWebSearchCall renders one web_search_call action as a short
+// bounded phrase, e.g. a query, an opened URL, or a find-in-page pattern.
+func describeResponseWebSearchCall(item map[string]any) string {
+	action, _ := item["action"].(map[string]any)
+	kind, _ := action["type"].(string)
+	text := ""
+	switch kind {
+	case "open_page":
+		url, _ := action["url"].(string)
+		text = "opened " + url
+	case "find_in_page":
+		url, _ := action["url"].(string)
+		pattern, _ := action["pattern"].(string)
+		text = "searched " + url + " for " + pattern
+	default:
+		if query, _ := action["query"].(string); query != "" {
+			text = query
+		} else if queries, ok := action["queries"].([]any); ok {
+			parts := make([]string, 0, len(queries))
+			for _, raw := range queries {
+				if query, ok := raw.(string); ok && query != "" {
+					parts = append(parts, query)
+				}
+			}
+			text = strings.Join(parts, "; ")
+		}
+	}
+	if text = firstResponseLine(text); text == "" {
+		return "query not recorded"
+	}
+	return text
+}
+
+// annotateResponseAssistantMessage returns a copy of an assistant message item
+// whose content is prefixed with note on its own line.
+func annotateResponseAssistantMessage(item map[string]any, note string) map[string]any {
+	clone := cloneResponseInputItem(item)
+	switch content := item["content"].(type) {
+	case string:
+		clone["content"] = note + "\n" + content
+	case []any:
+		parts := make([]any, 0, len(content)+1)
+		parts = append(parts, map[string]any{"type": "output_text", "text": note})
+		parts = append(parts, content...)
+		clone["content"] = parts
+	default:
+		clone["content"] = note
+	}
+	return clone
 }
 
 // responseLoweredFunctionCall builds a function_call item that keeps the
