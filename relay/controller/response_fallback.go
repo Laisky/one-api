@@ -176,6 +176,11 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	if err := tooling.ValidateChatBuiltinTools(c, chatRequest, meta, channelRecord, requestAdaptor); err != nil {
 		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
+	// Forward the admitted hosted web search as a Claude server tool where the
+	// platform runs and meters it; its allowance joins the reservation below.
+	if searchErr := planResponseFallbackClaudeWebSearch(c, meta, channelRecord, requestAdaptor, responseAPIRequest, chatRequest, registry != nil, mcpToolNames); searchErr != nil {
+		return searchErr
+	}
 
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
 	channelModelConfigs := getChannelModelConfigs(c)

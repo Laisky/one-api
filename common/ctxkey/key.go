@@ -136,6 +136,14 @@ const (
 	// DeepSeekConservativeToolAllowance stores the admitted paid Search/Fetch
 	// attempt floors and per-call prices for the current, retry-isolated attempt.
 	DeepSeekConservativeToolAllowance = "deepseek_conservative_tool_allowance"
+	// ResponseFallbackToolAllowanceQuota stores the paid server-tool allowance (int64 quota)
+	// that the Responses fallback forwards to a converted upstream (Claude web search).
+	// Set per attempt by relayResponseAPIThroughChat and added to its Chat reservation.
+	ResponseFallbackToolAllowanceQuota = "response_fallback_tool_allowance_quota"
+	// ClaudeConvertedWebSearchTool stores the *anthropic.Tool web search declaration the
+	// Responses fallback asks the Claude request converter to append for this attempt.
+	// A nil value means converted requests carry no server-side web search.
+	ClaudeConvertedWebSearchTool = "claude_converted_web_search_tool"
 
 	// Group is the user group resolved for the current user (affects routing & ratios).
 	// Set in: middleware/distributor (via model.CacheGetUserGroup).

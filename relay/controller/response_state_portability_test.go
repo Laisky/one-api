@@ -28,7 +28,7 @@ func TestHydrateHostedToolStateNotPortable(t *testing.T) {
 		Status:            state.StatusCompleted,
 		InputItems:        []state.ItemEnvelope{mustEnv(t, `{"type":"message","role":"user","content":"search please"}`)},
 		OutputItems: []state.ItemEnvelope{
-			mustEnv(t, `{"type":"web_search_call","id":"ws_1","status":"completed"}`),
+			mustEnv(t, `{"type":"code_interpreter_call","id":"ci_1","status":"completed"}`),
 		},
 	})
 
@@ -41,6 +41,46 @@ func TestHydrateHostedToolStateNotPortable(t *testing.T) {
 	require.NotNil(t, serr)
 	require.Equal(t, codeStateNotPortable, serr.Code)
 	require.Equal(t, http.StatusConflict, serr.StatusCode)
+}
+
+// TestHydrateWebSearchCallDropsOnFallback verifies a hydrated chain whose prior
+// output carries web_search_call items (for example a Claude fallback turn or
+// a Codex replay) lowers onto a fallback route with the searches dropped and
+// the surrounding messages kept in order.
+func TestHydrateWebSearchCallDropsOnFallback(t *testing.T) {
+	store := enableStateForTest(t)
+
+	id, err := state.NewResponseID()
+	require.NoError(t, err)
+	seedResponse(t, store, &state.ResponseStateRecord{
+		GatewayResponseID: id,
+		Owner:             testOwner(),
+		Status:            state.StatusCompleted,
+		InputItems:        []state.ItemEnvelope{mustEnv(t, `{"type":"message","role":"user","content":"search please"}`)},
+		OutputItems: []state.ItemEnvelope{
+			mustEnv(t, `{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"q"}}`),
+			mustEnv(t, `{"type":"message","role":"assistant","content":[{"type":"output_text","text":"found it"}]}`),
+		},
+	})
+
+	for _, target := range []hydrationTarget{targetChatFallback, targetClaudeFallback} {
+		req := &openai.ResponseAPIRequest{
+			Model:              "claude-opus-4-6",
+			PreviousResponseId: &id,
+			Input: openai.ResponseAPIInput{
+				map[string]any{"type": "web_search_call", "id": "ws_2", "status": "completed"},
+				"and then?",
+			},
+		}
+		hydrated, serr := hydrateResponseAPIRequestForFallback(context.Background(), testMeta(), req, target)
+		require.Nil(t, serr)
+		require.Len(t, hydrated.Input, 3, "user, assistant and the new user turn remain")
+		for _, item := range hydrated.Input {
+			if fields, ok := item.(map[string]any); ok {
+				require.NotEqual(t, "web_search_call", fields["type"])
+			}
+		}
+	}
 }
 
 // TestHydrateUnknownItemTypeNotPortable verifies an unknown future Responses item

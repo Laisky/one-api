@@ -197,6 +197,12 @@ func buildResponseOutput(lg glog.Logger, choices []openai_compatible.TextRespons
 			})
 		}
 
+		// Thinking that preceded the first caller tool call comes first, then the
+		// provider-executed searches, then caller tool calls with the thinking
+		// that preceded each of them, matching the streaming bridge's order.
+		appendBlocks(func(block relaymodel.ClaudeThinkingBlock) bool { return block.ToolCallsBefore == 0 })
+		output = append(output, webSearchCallOutputItems(msg.WebSearchCalls)...)
+
 		for toolIndex, tool := range msg.ToolCalls {
 			appendBlocks(func(block relaymodel.ClaudeThinkingBlock) bool { return block.ToolCallsBefore <= toolIndex })
 			arguments := ""
