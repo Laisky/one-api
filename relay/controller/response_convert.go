@@ -9,10 +9,12 @@ import (
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	glog "github.com/Laisky/go-utils/v6/log"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/random"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	metalib "github.com/Laisky/one-api/relay/meta"
@@ -25,7 +27,8 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 	responseID := generateResponseAPIID(c, textResp)
 	statusText, incomplete := deriveResponseStatus(textResp.Choices)
 	usage := (&openai.ResponseAPIUsage{}).FromModelUsage(&textResp.Usage)
-	output := buildResponseOutput(gmw.GetLogger(c), textResp.Choices, responseFallbackCatalogForRender(c, originalReq))
+	lg := gmw.GetLogger(c)
+	output := buildResponseOutput(lg, textResp.Choices, responseFallbackCatalogForRender(c, originalReq))
 	toolCalls := buildRequiredActionToolCalls(textResp.Choices)
 
 	// Commit a gateway response node so the fallback ID is resolvable, retrievable,
@@ -69,7 +72,7 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 		Temperature:        originalReq.Temperature,
 		Text:               originalReq.Text,
 		ToolChoice:         originalReq.ToolChoice,
-		Tools:              convertResponseAPITools(originalReq.Tools),
+		ToolsEcho:          responseToolsEcho(lg, originalReq.Tools),
 		TopP:               originalReq.TopP,
 		Truncation:         originalReq.Truncation,
 		User:               originalReq.User,
@@ -158,22 +161,12 @@ func deriveResponseStatus(choices []openai_compatible.TextResponseChoice) (strin
 // The returned slice is always non-nil so that JSON serialization yields "output": [] instead of null,
 // which strict OpenAI SDK clients reject as a violation of the Responses API schema. Parameters: lg
 // reports envelope failures, choices are the Chat choices and catalog restores fallback tool identities.
-// Claude thinking blocks become one reasoning item each, placed before the function_call they preceded,
-// mirroring the streaming bridge's output_index order (message first, then reasoning and calls in order).
+// Claude thinking blocks become one reasoning item each, placed before the text or function_call they
+// preceded, mirroring the streaming bridge's output_index order: reasoning, searches, message, calls.
 func buildResponseOutput(lg glog.Logger, choices []openai_compatible.TextResponseChoice, catalog *openai.ResponseFallbackToolCatalog) []openai.OutputItem {
 	output := make([]openai.OutputItem, 0)
 	for _, choice := range choices {
 		msg := choice.Message
-		contents := convertMessageContent(msg)
-		if len(contents) > 0 {
-			output = append(output, openai.OutputItem{
-				Type:    "message",
-				Role:    "assistant",
-				Status:  "completed",
-				Content: contents,
-			})
-		}
-
 		blocks := msg.ClaudeThinkingBlocks
 		nextBlock := 0
 		appendBlocks := func(ready func(relaymodel.ClaudeThinkingBlock) bool) {
@@ -183,25 +176,37 @@ func buildResponseOutput(lg glog.Logger, choices []openai_compatible.TextRespons
 				nextBlock++
 			}
 		}
-		// Verbatim Claude blocks supersede the joined reasoning text.
+		// Items follow the order the model produced them, as the streaming
+		// bridge emits them: reasoning, then provider-executed searches, then
+		// the answer text, then caller tool calls with the thinking that
+		// preceded each of them. Verbatim Claude blocks supersede the joined
+		// reasoning text.
 		if reasoning := extractReasoning(msg); len(blocks) == 0 && reasoning != "" {
 			output = append(output, openai.OutputItem{
+				Id:     "rs_" + random.GetRandomString(16),
 				Type:   "reasoning",
 				Status: "completed",
 				Content: []openai.OutputContent{
-					{Type: "text", Text: reasoning},
+					{Type: "reasoning_text", Text: reasoning},
 				},
 				Summary: []openai.OutputContent{
 					{Type: "summary_text", Text: reasoning},
 				},
 			})
 		}
-
-		// Thinking that preceded the first caller tool call comes first, then the
-		// provider-executed searches, then caller tool calls with the thinking
-		// that preceded each of them, matching the streaming bridge's order.
-		appendBlocks(func(block relaymodel.ClaudeThinkingBlock) bool { return block.ToolCallsBefore == 0 })
+		appendBlocks(func(block relaymodel.ClaudeThinkingBlock) bool { return block.ToolCallsBefore == 0 && !block.AfterText })
 		output = append(output, webSearchCallOutputItems(msg.WebSearchCalls)...)
+		if contents := convertMessageContent(msg); len(contents) > 0 {
+			// Every output item carries an id (clients key items on it); gateway
+			// state, when active, replaces it with a stable gateway item ID.
+			output = append(output, openai.OutputItem{
+				Id:      "msg_" + random.GetRandomString(16),
+				Type:    "message",
+				Role:    "assistant",
+				Status:  "completed",
+				Content: contents,
+			})
+		}
 
 		for toolIndex, tool := range msg.ToolCalls {
 			appendBlocks(func(block relaymodel.ClaudeThinkingBlock) bool { return block.ToolCallsBefore <= toolIndex })
@@ -328,52 +333,15 @@ func extractReasoning(msg relaymodel.Message) string {
 	return ""
 }
 
-// convertResponseAPITools converts Response API tools to Chat Completion tools
-func convertResponseAPITools(tools []openai.ResponseAPITool) []relaymodel.Tool {
-	if len(tools) == 0 {
+// responseToolsEcho returns the request's tools in the Response object's spec
+// shape for a synthesized response. Parameters: lg reports an encoding failure
+// and tools are the request's definitions. It returns nil (rendered as an
+// empty tools array) when there are none or they cannot be encoded.
+func responseToolsEcho(lg glog.Logger, tools []openai.ResponseAPITool) json.RawMessage {
+	echo, err := openai.ResponseToolsEcho(tools)
+	if err != nil {
+		lg.Warn("encode response tools echo", zap.Error(err))
 		return nil
 	}
-	converted := make([]relaymodel.Tool, 0, len(tools))
-	for _, tool := range tools {
-		switch strings.ToLower(tool.Type) {
-		case "function":
-			fn := tool.Function
-			if fn == nil {
-				fn = &relaymodel.Function{
-					Name:        tool.Name,
-					Description: tool.Description,
-					Parameters:  tool.Parameters,
-				}
-			}
-			converted = append(converted, relaymodel.Tool{
-				Type: "function",
-				Function: &relaymodel.Function{
-					Name:        fn.Name,
-					Description: fn.Description,
-					Parameters:  fn.Parameters,
-					Required:    fn.Required,
-					Strict:      fn.Strict,
-				},
-			})
-		case "web_search":
-			converted = append(converted, relaymodel.Tool{
-				Type:              "web_search",
-				SearchContextSize: tool.SearchContextSize,
-				Filters:           tool.Filters,
-				UserLocation:      tool.UserLocation,
-			})
-		case "mcp":
-			converted = append(converted, relaymodel.Tool{
-				Type:            "mcp",
-				ServerLabel:     tool.ServerLabel,
-				ServerUrl:       tool.ServerUrl,
-				RequireApproval: tool.RequireApproval,
-				AllowedTools:    tool.AllowedTools,
-				Headers:         tool.Headers,
-			})
-		default:
-			converted = append(converted, relaymodel.Tool{Type: tool.Type})
-		}
-	}
-	return converted
+	return echo
 }

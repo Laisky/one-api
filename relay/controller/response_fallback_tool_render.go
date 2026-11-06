@@ -8,17 +8,27 @@ import (
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 
+	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 )
 
-// responseFallbackCatalogForRender rebuilds the fallback tool catalog used to
-// render upstream tool calls back into Responses items. Admission already
-// validated the same request, so a failure here is unexpected; it is logged and
+// responseFallbackCatalogForRender returns the fallback tool catalog used to
+// render upstream tool calls back into Responses items: the one admission
+// built from the hydrated request (stored in the context), or, for callers
+// that bypass admission, one rebuilt from request. A rebuild failure is
+// unexpected because admission validated the same request; it is logged and
 // rendering degrades to plain function_call items rather than failing a
 // response whose upstream work already completed.
 // Parameters: c is the request context, request the hydrated Responses request.
 // Returns the catalog, or nil when it cannot be built.
 func responseFallbackCatalogForRender(c *gin.Context, request *openai.ResponseAPIRequest) *openai.ResponseFallbackToolCatalog {
+	if c != nil {
+		if stored, ok := c.Get(ctxkey.ResponseFallbackToolCatalog); ok {
+			if catalog, ok := stored.(*openai.ResponseFallbackToolCatalog); ok && catalog != nil {
+				return catalog
+			}
+		}
+	}
 	if request == nil {
 		return nil
 	}

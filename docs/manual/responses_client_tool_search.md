@@ -44,8 +44,14 @@ estimation is not introduced by this change.
 Chat/Claude fallback emulates client discovery instead of rejecting it. The
 client `tool_search` definition becomes an ordinary function tool named
 `tool_search`; an upstream call to it is rendered as a `tool_search_call` with
-`execution: "client"` and object `arguments` (an integral `limit` is written as
-a JSON integer). Every `tool_search_output` and developer `additional_tools`
+`execution: "client"` and object `arguments`. Because a client that cannot parse
+the arguments (Codex decodes `{query: string, limit?: unsigned integer}`) leaves
+the call unanswered, the gateway normalizes the model-generated arguments: they
+are always one JSON object; `query` is always a string (numbers and booleans
+keep their JSON text, anything else becomes `""`, which the client answers with
+an empty result); `limit` is kept only as a positive JSON integer read from an
+integral number or a base-10 integer string, and any other `limit` is removed so
+the client default applies; other members are kept. Every `tool_search_output` and developer `additional_tools`
 catalog in the input is flattened, in input order after the root tools, into the
 upstream tool list using the namespace rules in
 [local tool namespaces](responses_tool_namespaces.md#chatclaude-fallback-emulation);

@@ -46,6 +46,7 @@ func (h *chatToResponseStreamBridge) webSearchState(c *gin.Context, call model.W
 			return state
 		}
 	}
+	h.beforeItemAdded(c, h.choices[h.activeChoiceIndex], itemKindOther)
 	state := &streamWebSearchState{
 		id:     responseWebSearchCallID(call.ID),
 		index:  h.nextOutputIndex(),

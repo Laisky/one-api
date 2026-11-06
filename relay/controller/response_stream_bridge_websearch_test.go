@@ -63,10 +63,10 @@ func TestBridgeWebSearchOrderingWithReasoningAndToolCalls(t *testing.T) {
 	for _, item := range completed.Response.Output {
 		types = append(types, item.Type+":"+item.Id)
 	}
-	require.Equal(t, []string{"message:" + bridge.messageItemID, "reasoning:" + completed.Response.Output[1].Id,
-		"web_search_call:ws_x", "web_search_call:ws_y", "function_call:call_1"}, types)
-	require.Equal(t, 2, doneByID["ws_x"].OutputIndex)
-	require.Equal(t, 3, doneByID["ws_y"].OutputIndex)
+	require.Equal(t, []string{"reasoning:" + completed.Response.Output[0].Id, "web_search_call:ws_x", "web_search_call:ws_y",
+		"message:" + completed.Response.Output[3].Id, "function_call:call_1"}, types, "items keep the order the model produced them")
+	require.Equal(t, 1, doneByID["ws_x"].OutputIndex)
+	require.Equal(t, 2, doneByID["ws_y"].OutputIndex)
 
 	jsonOutput := buildResponseOutput(logger.Logger, []openai_compatible.TextResponseChoice{{Message: model.Message{
 		Role: "assistant", Content: "answer", Reasoning: &reasoning,
@@ -77,6 +77,7 @@ func TestBridgeWebSearchOrderingWithReasoningAndToolCalls(t *testing.T) {
 	for _, item := range jsonOutput {
 		jsonTypes = append(jsonTypes, item.Type+":"+item.Status)
 	}
-	require.Equal(t, []string{"message:completed", "reasoning:completed", "web_search_call:completed", "web_search_call:failed", "function_call:completed"}, jsonTypes)
-	require.Equal(t, "ws_x", jsonOutput[2].Id)
+	require.Equal(t, []string{"reasoning:completed", "web_search_call:completed", "web_search_call:failed", "message:completed", "function_call:completed"}, jsonTypes,
+		"JSON output uses the streaming order")
+	require.Equal(t, "ws_x", jsonOutput[1].Id)
 }

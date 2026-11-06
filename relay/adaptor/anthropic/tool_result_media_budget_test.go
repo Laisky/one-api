@@ -18,7 +18,7 @@ func TestToolResultMediaBudgetBoundsTotalBytes(t *testing.T) {
 	_, probe, err := loadToolMediaPayloadSize(image)
 	require.NoError(t, err)
 
-	budget := newToolResultMediaBudget(context.Background(), 2*probe+probe/2)
+	budget := newRequestMediaBudget(context.Background(), 2*probe+probe/2)
 	blocks, err := convertToolResultMediaBlocks(budget, []model.MessageContent{image, image})
 	require.NoError(t, err)
 	require.Len(t, blocks, 2)
@@ -35,7 +35,7 @@ func TestToolResultMediaBudgetStopsOnCancel(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	budget := newToolResultMediaBudget(ctx, maxToolResultMediaBytes)
+	budget := newRequestMediaBudget(ctx, maxRequestMediaBytes)
 	_, err := convertToolResultMediaBlocks(budget, []model.MessageContent{toolMediaImage("data:image/png;base64," + toolMediaPayload)})
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
@@ -44,7 +44,7 @@ func TestToolResultMediaBudgetStopsOnCancel(t *testing.T) {
 // loadToolMediaPayloadSize converts one image with an unlimited budget and
 // returns the resulting block plus its base64 size, for budget arithmetic.
 func loadToolMediaPayloadSize(part model.MessageContent) ([]Content, int, error) {
-	blocks, err := convertToolResultMediaBlocks(newToolResultMediaBudget(context.Background(), maxToolResultMediaBytes), []model.MessageContent{part})
+	blocks, err := convertToolResultMediaBlocks(newRequestMediaBudget(context.Background(), maxRequestMediaBytes), []model.MessageContent{part})
 	if err != nil || len(blocks) == 0 || blocks[0].Source == nil {
 		return nil, 0, err
 	}

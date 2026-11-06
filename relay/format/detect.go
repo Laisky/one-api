@@ -11,6 +11,7 @@ package format
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 )
@@ -299,24 +300,22 @@ func hasClaudeContentBlocks(messagesRaw json.RawMessage) bool {
 	return false
 }
 
-// FormatFromPath returns the expected API format based on the request path.
+// FormatFromPath returns the generation format served at path. Only the three
+// generation endpoints themselves qualify (an optional trailing slash
+// allowed); their sub-resources, such as /v1/responses/{id}/cancel or
+// /v1/messages/count_tokens, are Unknown, so format auto-detection can never
+// re-dispatch a retrieval, cancel or token-count request as a billed
+// generation. Parameters: path is the request URL path. Returns the format or
+// Unknown.
 func FormatFromPath(path string) APIFormat {
-	switch {
-	case pathMatches(path, "/v1/chat/completions"):
+	switch strings.TrimSuffix(path, "/") {
+	case "/v1/chat/completions":
 		return ChatCompletion
-	case pathMatches(path, "/v1/responses"):
+	case "/v1/responses":
 		return ResponseAPI
-	case pathMatches(path, "/v1/messages"):
+	case "/v1/messages":
 		return ClaudeMessages
 	default:
 		return Unknown
 	}
-}
-
-// pathMatches checks if the path starts with the given prefix.
-func pathMatches(path, prefix string) bool {
-	if len(path) < len(prefix) {
-		return false
-	}
-	return path[:len(prefix)] == prefix
 }

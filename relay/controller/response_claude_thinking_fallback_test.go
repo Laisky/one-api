@@ -136,6 +136,7 @@ func runClaudeThinkingFallbackTurn(t *testing.T, upstreamURL string, channelType
 	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "fallback turn failed: %s", recorder.Body.String())
 	require.Equal(t, http.StatusOK, recorder.Code)
+	requireResponsesRecorderConformance(t, recorder)
 	return recorder
 }
 

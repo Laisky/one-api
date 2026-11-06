@@ -11,7 +11,20 @@ import (
 
 // ConvertResponseAPIToChatCompletionRequest converts a Response API request into a
 // ChatCompletion request for providers that do not support Response API natively.
+// It builds the fallback tool catalog from request itself; see
+// ConvertResponseAPIToChatCompletionRequestWithCatalog for the parameters.
 func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nativeMedia ...bool) (*model.GeneralOpenAIRequest, error) {
+	return ConvertResponseAPIToChatCompletionRequestWithCatalog(request, nil, nativeMedia...)
+}
+
+// ConvertResponseAPIToChatCompletionRequestWithCatalog converts a Response API
+// request into a ChatCompletion request using a fallback tool catalog the
+// caller already built and validated from the same request, so the converter
+// and the response renderer share one identity map. Parameters: request is
+// the (hydrated) Responses request; catalog is BuildResponseFallbackToolCatalog
+// of request, or nil to build it here; nativeMedia marks native Google
+// channels. Returns the Chat request or a wrapped validation error.
+func ConvertResponseAPIToChatCompletionRequestWithCatalog(request *ResponseAPIRequest, catalog *ResponseFallbackToolCatalog, nativeMedia ...bool) (*model.GeneralOpenAIRequest, error) {
 	if request == nil {
 		return nil, errors.New("response api request is nil")
 	}
@@ -38,9 +51,12 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 	// Namespaces, custom tools, client tool search and loaded catalogs are
 	// flattened into one reversible tool list; history items that reference
 	// them are lowered onto that list before the Chat message loop below.
-	catalog, err := BuildResponseFallbackToolCatalog(request)
-	if err != nil {
-		return nil, errors.Wrap(err, "build response fallback tool catalog")
+	if catalog == nil {
+		built, err := BuildResponseFallbackToolCatalog(request)
+		if err != nil {
+			return nil, errors.Wrap(err, "build response fallback tool catalog")
+		}
+		catalog = built
 	}
 	input, effortOverride, err := lowerResponseFallbackToolItems(request.Input, catalog)
 	if err != nil {

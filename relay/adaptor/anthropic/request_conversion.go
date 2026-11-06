@@ -14,7 +14,6 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
-	"github.com/Laisky/one-api/common/image"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -222,7 +221,7 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 	if c != nil && c.Request != nil {
 		requestCtx = c.Request.Context()
 	}
-	mediaBudget := newToolResultMediaBudget(requestCtx, maxToolResultMediaBytes)
+	mediaBudget := newRequestMediaBudget(requestCtx, maxRequestMediaBytes)
 
 	claudeTools := make([]Tool, 0, len(textRequest.Tools))
 
@@ -541,13 +540,21 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 					contents = append(contents, content)
 				}
 			case model.ContentTypeImageURL:
+				if part.ImageURL == nil || part.ImageURL.Url == "" {
+					return nil, errors.New("validation failed: image_url part has no url")
+				}
+				// User images share the tool-result budget: both count toward
+				// Claude's request size limit, and cancellation stops either.
+				mimeType, data, err := mediaBudget.load(part.ImageURL.Url)
+				if err != nil {
+					return nil, errors.Wrapf(err, "load image in message %d", len(claudeRequest.Messages))
+				}
 				content.Type = "image"
 				content.Source = &ImageSource{
-					Type: "base64",
+					Type:      "base64",
+					MediaType: mimeType,
+					Data:      data,
 				}
-				mimeType, data, _ := image.GetImageFromUrl(part.ImageURL.Url)
-				content.Source.MediaType = mimeType
-				content.Source.Data = data
 				contents = append(contents, content)
 			}
 		}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/random"
+	"github.com/Laisky/one-api/relay/adaptor/aws"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
 	metalib "github.com/Laisky/one-api/relay/meta"
@@ -21,29 +22,41 @@ import (
 // asks for replayable reasoning state on every reasoning item.
 const responseIncludeReasoningEncryptedContent = "reasoning.encrypted_content"
 
-// responseFallbackReplaysClaudeThinking reports whether the fallback Chat
-// request is lowered by the Claude Messages converter, the only consumer of
-// gateway thinking blocks. The meta parameter carries the resolved upstream;
-// the return value is false for every non-Claude Chat upstream.
-func responseFallbackReplaysClaudeThinking(meta *metalib.Meta) bool {
+// responseFallbackLowersToClaude is the single decision of whether a Responses
+// fallback request is lowered by the Claude Messages converter, i.e. whether
+// the resolved upstream speaks Claude Messages. State hydration (the Claude
+// column of the portability table) and Claude thinking replay both follow it,
+// so they never disagree about one request. The meta parameter carries the
+// resolved channel and mapped model; the return value is true for Anthropic
+// channels, Bedrock models the AWS registry routes to its Claude adaptor
+// (model ids and ARNs), Vertex AI Claude models and Azure Foundry Claude.
+func responseFallbackLowersToClaude(meta *metalib.Meta) bool {
 	if meta == nil {
 		return false
 	}
-	modelName := strings.ToLower(strings.TrimSpace(meta.ActualModelName))
 	switch meta.APIType {
 	case apitype.Anthropic:
 		return true
 	case apitype.AwsClaude:
-		// Bedrock hosts several families; only Claude ids and ARNs use the
-		// Claude converter, the others marshal Chat messages directly.
-		return strings.Contains(modelName, "claude")
+		// Bedrock hosts several families; only models its registry routes to
+		// the Claude adaptor use the Claude converter.
+		return aws.IsClaudeModel(strings.TrimSpace(meta.ActualModelName))
 	case apitype.VertexAI:
-		return strings.HasPrefix(modelName, "claude")
+		return metalib.IsClaudeModelName(meta.ActualModelName)
 	case apitype.Azure:
 		return meta.AzureTargetsAnthropic()
 	default:
 		return false
 	}
+}
+
+// responseFallbackReplaysClaudeThinking reports whether gateway Claude
+// thinking blocks may reach the upstream: only when the request is lowered by
+// the Claude Messages converter, their sole consumer. The meta parameter
+// carries the resolved upstream; the return value is false for every
+// non-Claude Chat upstream.
+func responseFallbackReplaysClaudeThinking(meta *metalib.Meta) bool {
+	return responseFallbackLowersToClaude(meta)
 }
 
 // applyClaudeThinkingReplayPolicy strips gateway Claude thinking blocks from a

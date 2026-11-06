@@ -115,26 +115,27 @@ func TestResponseFallbackToolCallItemJSON(t *testing.T) {
 }
 
 // TestNormalizeResponseToolSearchArguments proves tool_search arguments are
-// always a JSON object, integral limits become integer literals, and every
-// other value keeps its exact bytes.
+// always a JSON object with a string query, integral positive limits become
+// integer literals while every other limit is dropped, and every other value
+// keeps its exact bytes.
 func TestNormalizeResponseToolSearchArguments(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct{ in, want string }{
-		"float_limit":       {in: `{"query":"docs","limit":8.0}`, want: `{"limit":8,"query":"docs"}`},
-		"integer_limit":     {in: `{"query":"docs","limit":8}`, want: `{"limit":8,"query":"docs"}`},
-		"exponent_limit":    {in: `{"limit":1e2}`, want: `{"limit":100}`},
-		"negative_limit":    {in: `{"limit":-3.0}`, want: `{"limit":-3}`},
-		"fractional_limit":  {in: `{"limit":2.5}`, want: `{"limit":2.5}`},
-		"string_limit":      {in: `{"limit":"8"}`, want: `{"limit":"8"}`},
-		"huge_limit":        {in: `{"limit":9007199254740993}`, want: `{"limit":9007199254740993}`},
-		"overflow_limit":    {in: `{"limit":1e300}`, want: `{"limit":1e300}`},
-		"no_limit_verbatim": {in: `{"query": "x", "n": 1.50}`, want: `{"query": "x", "n": 1.50}`},
-		"trimmed":           {in: "  {\"query\":\"x\"}\n", want: `{"query":"x"}`},
-		"invalid_json":      {in: `not json`, want: `{}`},
-		"empty":             {in: ``, want: `{}`},
-		"null":              {in: `null`, want: `{}`},
-		"array":             {in: `[1,2]`, want: `{}`},
-		"string":            {in: `"docs"`, want: `{}`},
+		"float_limit":        {in: `{"query":"docs","limit":8.0}`, want: `{"limit":8,"query":"docs"}`},
+		"integer_limit":      {in: `{"query":"docs","limit":8}`, want: `{"limit":8,"query":"docs"}`},
+		"exponent_limit":     {in: `{"limit":1e2}`, want: `{"limit":100,"query":""}`},
+		"negative_limit":     {in: `{"limit":-3.0}`, want: `{"query":""}`},
+		"fractional_limit":   {in: `{"limit":2.5}`, want: `{"query":""}`},
+		"string_limit":       {in: `{"limit":"8"}`, want: `{"limit":8,"query":""}`},
+		"huge_limit":         {in: `{"limit":9007199254740993}`, want: `{"limit":9007199254740993,"query":""}`},
+		"overflow_limit":     {in: `{"limit":1e300}`, want: `{"query":""}`},
+		"no_limit_canonical": {in: `{"query": "x", "n": 1.50}`, want: `{"n":1.50,"query":"x"}`},
+		"trimmed":            {in: "  {\"query\":\"x\"}\n", want: `{"query":"x"}`},
+		"invalid_json":       {in: `not json`, want: `{"query":""}`},
+		"empty":              {in: ``, want: `{"query":""}`},
+		"null":               {in: `null`, want: `{"query":""}`},
+		"array":              {in: `[1,2]`, want: `{"query":""}`},
+		"string":             {in: `"docs"`, want: `{"query":""}`},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -143,7 +144,7 @@ func TestNormalizeResponseToolSearchArguments(t *testing.T) {
 		})
 	}
 	withLarge := string(normalizeResponseToolSearchArguments(`{"limit":4.0,"large":9007199254740993}`))
-	require.JSONEq(t, `{"limit":4,"large":9007199254740993}`, withLarge)
+	require.JSONEq(t, `{"limit":4,"large":9007199254740993,"query":""}`, withLarge)
 	require.Contains(t, withLarge, "9007199254740993", "sibling literals survive the limit rewrite")
 }
 

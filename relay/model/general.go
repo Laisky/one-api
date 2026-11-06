@@ -205,6 +205,8 @@ func IntPtr(v int) *int {
 	return &v
 }
 
+// ParseInput returns the embedding-style input as a list of strings: a string
+// input as one element, a list input with its string elements, nil otherwise.
 func (r GeneralOpenAIRequest) ParseInput() []string {
 	if r.Input == nil {
 		return nil
@@ -279,39 +281,4 @@ type ClaudeTool struct {
 	// TrustedDeferredLoading is set only for server-injected native MCP tools.
 	// Caller JSON cannot establish provenance or change admission authority.
 	TrustedDeferredLoading bool `json:"-"`
-}
-
-// Claude Messages API Response Types
-type ClaudeResponse struct {
-	ID           string          `json:"id"`
-	Type         string          `json:"type"`
-	Role         string          `json:"role"`
-	Model        string          `json:"model"`
-	Content      []ClaudeContent `json:"content"`
-	StopReason   string          `json:"stop_reason"`
-	StopSequence *string         `json:"stop_sequence,omitempty"`
-	Usage        ClaudeUsage     `json:"usage"`
-}
-
-type ClaudeContent struct {
-	Type     string          `json:"type"`
-	Text     string          `json:"text,omitempty"`
-	ID       string          `json:"id,omitempty"`
-	Name     string          `json:"name,omitempty"`
-	Input    json.RawMessage `json:"input,omitempty"`
-	Thinking string          `json:"thinking,omitempty"`
-}
-
-type ClaudeUsage struct {
-	InputTokens              int                  `json:"input_tokens"`
-	OutputTokens             int                  `json:"output_tokens"`
-	CacheReadInputTokens     int                  `json:"cache_read_input_tokens,omitempty"`
-	CacheCreationInputTokens int                  `json:"cache_creation_input_tokens,omitempty"`
-	CacheCreation            *ClaudeCacheCreation `json:"cache_creation,omitempty"`
-}
-
-// ClaudeCacheCreation stores Claude cache creation token buckets for different TTL windows.
-type ClaudeCacheCreation struct {
-	Ephemeral5mInputTokens int `json:"ephemeral_5m_input_tokens,omitempty"`
-	Ephemeral1hInputTokens int `json:"ephemeral_1h_input_tokens,omitempty"`
 }

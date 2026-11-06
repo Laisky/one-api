@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
@@ -25,6 +26,8 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
+// DoRequest sends the converted request upstream over the standard HTTP
+// transport and returns the raw upstream response or the transport error.
 func (a *Adaptor) DoRequest(c *gin.Context,
 	meta *meta.Meta,
 	requestBody io.Reader) (*http.Response, error) {
@@ -36,6 +39,8 @@ func (a *Adaptor) DoRequest(c *gin.Context,
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
+// DoResponse renders the upstream response for the client mode (including
+// Claude Messages conversion) and returns the usage for billing or an error.
 func (a *Adaptor) DoResponse(c *gin.Context,
 	resp *http.Response,
 	meta *meta.Meta) (usage *model.Usage,
@@ -161,13 +166,17 @@ func (a *Adaptor) convertToClaudeResponse(c *gin.Context, resp *http.Response) (
 	resp.Body.Close()
 
 	if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
+		// The buffered SSE rendering carries no receipt; the controller parses it.
+		openai_compatible.SetConvertedClaudeUsage(c, nil)
 		return a.convertStreamingToClaudeResponse(c, resp, body)
 	}
 
 	return a.convertNonStreamingToClaudeResponse(c, resp, body)
 }
 
-// convertNonStreamingToClaudeResponse converts a non-streaming OpenAI response to Claude format.
+// convertNonStreamingToClaudeResponse converts a non-streaming OpenAI response
+// (Responses object or Chat Completion) to a Claude Messages response. A body in
+// neither shape is passed through unchanged for the controller's error handling.
 func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http.Response, body []byte) (*http.Response, *model.ErrorWithStatusCode) {
 	var responseAPIResp ResponseAPIResponse
 	if err := json.Unmarshal(body, &responseAPIResp); err == nil && responseAPIResp.Object == "response" {
@@ -176,6 +185,7 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 
 	var openaiResp TextResponse
 	if err := json.Unmarshal(body, &openaiResp); err != nil {
+		openai_compatible.SetConvertedClaudeUsage(c, nil)
 		newResp := &http.Response{
 			StatusCode: resp.StatusCode,
 			Header:     resp.Header,
@@ -184,27 +194,36 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 		return newResp, nil
 	}
 
+	// Settle on the cache-aware receipt, normalized as the native Chat handler
+	// does, so cached input is discounted exactly as on the streamed and native
+	// /v1/chat/completions paths; the body presents it in Anthropic semantics.
+	upstreamUsage := openaiResp.Usage
+	upstreamUsage.NormalizeCachedTokens()
+	upstreamUsage.NormalizeCacheWriteTokens()
 	claudeResp := model.ClaudeResponse{
-		ID:      openaiResp.Id,
+		ID:      openai_compatible.ClaudeMessageID(openaiResp.Id),
 		Type:    "message",
 		Role:    "assistant",
 		Model:   openaiResp.Model,
 		Content: []model.ClaudeContent{},
-		Usage: model.ClaudeUsage{
-			InputTokens:  openaiResp.Usage.PromptTokens,
-			OutputTokens: openaiResp.Usage.CompletionTokens,
-		},
-		StopReason: "end_turn",
+		Usage:   openai_compatible.PresentConvertedClaudeUsage(c, &upstreamUsage, openaiResp.Model),
 	}
 
+	ids := openai_compatible.NewClaudeToolIDAllocator()
+	stopReason := ""
 	for _, choice := range openaiResp.Choices {
+		if thinking := openai_compatible.ChatMessageThinking(choice.Message); thinking != "" {
+			claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "thinking", Thinking: thinking})
+		}
 		if choice.Message.Content != nil {
 			switch content := choice.Message.Content.(type) {
 			case string:
-				claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: content})
+				if content != "" {
+					claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: content})
+				}
 			case []model.MessageContent:
 				for _, part := range content {
-					if part.Type == "text" && part.Text != nil {
+					if part.Type == "text" && part.Text != nil && *part.Text != "" {
 						claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: *part.Text})
 					}
 				}
@@ -212,55 +231,38 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 		}
 
 		if len(choice.Message.ToolCalls) > 0 {
+			// Restore sanitized tool names so the client sees the names it sent.
+			toolnamesafe.RestoreToolCallNames(c, choice.Message.ToolCalls)
 			for _, toolCall := range choice.Message.ToolCalls {
-				var input json.RawMessage
-				if toolCall.Function.Arguments != nil {
-					if argsStr, ok := toolCall.Function.Arguments.(string); ok {
-						input = json.RawMessage(argsStr)
-					} else if argsBytes, err := json.Marshal(toolCall.Function.Arguments); err == nil {
-						input = json.RawMessage(argsBytes)
-					}
+				name := ""
+				var args any
+				if toolCall.Function != nil {
+					name, args = toolCall.Function.Name, toolCall.Function.Arguments
 				}
 				claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{
 					Type:  "tool_use",
-					ID:    toolCall.Id,
-					Name:  toolCall.Function.Name,
-					Input: input,
+					ID:    ids.Allocate(toolCall.Id),
+					Name:  name,
+					Input: openai_compatible.ClaudeToolInputFromArguments(args),
 				})
 			}
 		}
 
-		switch choice.FinishReason {
-		case "stop":
-			claudeResp.StopReason = "end_turn"
-		case "length":
-			claudeResp.StopReason = "max_tokens"
-		case "tool_calls":
-			claudeResp.StopReason = "tool_use"
-		case "content_filter":
-			claudeResp.StopReason = "stop_sequence"
+		if choice.FinishReason != "" {
+			stopReason = openai_compatible.ClaudeStopReasonFromChatFinish(choice.FinishReason)
 		}
 	}
+	claudeResp.StopReason = openai_compatible.FinalizeClaudeStopReason(stopReason, openai_compatible.ClaudeContentHasToolUse(claudeResp.Content))
 
-	claudeBody, err := json.Marshal(claudeResp)
-	if err != nil {
-		return nil, ErrorWrapper(err, "marshal_claude_response_failed", http.StatusInternalServerError)
-	}
-
-	newResp := &http.Response{
-		StatusCode: resp.StatusCode,
-		Header:     make(http.Header),
-		Body:       io.NopCloser(bytes.NewReader(claudeBody)),
-	}
-
-	maps.Copy(newResp.Header, resp.Header)
-	newResp.Header.Set("Content-Type", "application/json")
-	newResp.Header.Set("Content-Length", fmt.Sprintf("%d", len(claudeBody)))
-
-	return newResp, nil
+	return openai_compatible.MarshalClaudeHTTPResponse(resp, claudeResp)
 }
 
-// ConvertResponseAPIToClaudeResponse converts a Response API response to Claude Messages format.
+// ConvertResponseAPIToClaudeResponse converts a Response API response to Claude
+// Messages format. The stop_reason follows the response status (an incomplete
+// max_output_tokens response maps to max_tokens) and becomes tool_use when the
+// turn requests tools; tool ids, names, and inputs are normalized for Claude
+// clients. It also records the upstream id, paid web searches, and the rendered
+// assistant turn for the stateless-client checkpoint.
 func (a *Adaptor) ConvertResponseAPIToClaudeResponse(c *gin.Context, resp *http.Response, responseAPIResp *ResponseAPIResponse) (*http.Response, *model.ErrorWithStatusCode) {
 	// Surface the upstream Responses id for a stateless-client checkpoint (ST-022).
 	if c != nil && responseAPIResp.Id != "" {
@@ -277,48 +279,34 @@ func (a *Adaptor) ConvertResponseAPIToClaudeResponse(c *gin.Context, resp *http.
 			recordWebSearchInvocationCount(c, calls)
 		}
 	}
+	// Settle on the cache-aware receipt the native Responses handler bills
+	// (ToModelUsage), so cached input is discounted exactly as on the streamed
+	// and native paths; the body presents it in Anthropic semantics.
 	claudeResp := model.ClaudeResponse{
-		ID:         responseAPIResp.Id,
-		Type:       "message",
-		Role:       "assistant",
-		Model:      responseAPIResp.Model,
-		Content:    []model.ClaudeContent{},
-		StopReason: "end_turn",
+		ID:      openai_compatible.ClaudeMessageID(responseAPIResp.Id),
+		Type:    "message",
+		Role:    "assistant",
+		Model:   responseAPIResp.Model,
+		Content: []model.ClaudeContent{},
+		Usage:   openai_compatible.PresentConvertedClaudeUsage(c, responseAPIResp.Usage.ToModelUsage(), responseAPIResp.Model),
 	}
 
-	toolUseAdded := false
-	if responseAPIResp.Usage != nil {
-		claudeResp.Usage = model.ClaudeUsage{
-			InputTokens:  responseAPIResp.Usage.InputTokens,
-			OutputTokens: responseAPIResp.Usage.OutputTokens,
-		}
-	}
-
+	ids := openai_compatible.NewClaudeToolIDAllocator()
 	for _, outputItem := range responseAPIResp.Output {
-		if outputItem.Type == "reasoning" {
+		switch {
+		case outputItem.Type == "reasoning":
 			for _, summary := range outputItem.Summary {
 				if summary.Type == "summary_text" && summary.Text != "" {
 					claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "thinking", Thinking: summary.Text})
 				}
 			}
-		} else if outputItem.Type == "message" && outputItem.Role == "assistant" {
+		case outputItem.Type == "message" && outputItem.Role == "assistant":
 			for _, content := range outputItem.Content {
-				if content.Type == "output_text" && content.Text != "" {
-					claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: content.Text})
-				} else if content.Type == "output_json" {
-					var jsonText string
-					if len(content.JSON) > 0 {
-						jsonText = string(content.JSON)
-					} else {
-						jsonText = content.Text
-					}
-					jsonText = strings.TrimSpace(jsonText)
-					if jsonText != "" {
-						claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: jsonText})
-					}
+				if text := claudeResponseOutputText(content); text != "" {
+					claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: text})
 				}
 			}
-		} else if outputItem.Type == "function_call" {
+		case outputItem.Type == "function_call":
 			name := strings.TrimSpace(outputItem.Name)
 			if name == "" {
 				continue
@@ -327,28 +315,23 @@ func (a *Adaptor) ConvertResponseAPIToClaudeResponse(c *gin.Context, resp *http.
 			if id == "" {
 				id = outputItem.Id
 			}
-			var input json.RawMessage
-			if args := strings.TrimSpace(outputItem.Arguments); args != "" {
-				raw := []byte(args)
-				if json.Valid(raw) {
-					input = json.RawMessage(raw)
-				} else if marshaled, err := json.Marshal(args); err == nil {
-					input = json.RawMessage(marshaled)
-				}
-			}
 			claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{
 				Type:  "tool_use",
-				ID:    id,
-				Name:  name,
-				Input: input,
+				ID:    ids.Allocate(id),
+				Name:  toolnamesafe.RestoreToolName(c, name),
+				Input: openai_compatible.ClaudeToolInputFromArguments(outputItem.Arguments),
 			})
-			toolUseAdded = true
 		}
 	}
 
-	if toolUseAdded {
-		claudeResp.StopReason = "tool_use"
+	incompleteReason := ""
+	if responseAPIResp.IncompleteDetails != nil {
+		incompleteReason = responseAPIResp.IncompleteDetails.Reason
 	}
+	claudeResp.StopReason = openai_compatible.FinalizeClaudeStopReason(
+		openai_compatible.ClaudeStopReasonFromResponseStatus(responseAPIResp.Status, incompleteReason),
+		openai_compatible.ClaudeContentHasToolUse(claudeResp.Content),
+	)
 
 	// Surface the rendered assistant turn for a stateless-client checkpoint (ST-022),
 	// as the client will echo the content blocks back on its next request.
@@ -356,22 +339,23 @@ func (a *Adaptor) ConvertResponseAPIToClaudeResponse(c *gin.Context, resp *http.
 		c.Set(ctxkey.ResponseAPIAssistantMessage, model.Message{Role: "assistant", Content: claudeResp.Content})
 	}
 
-	claudeBody, err := json.Marshal(claudeResp)
-	if err != nil {
-		return nil, ErrorWrapper(err, "marshal_claude_response_failed", http.StatusInternalServerError)
+	return openai_compatible.MarshalClaudeHTTPResponse(resp, claudeResp)
+}
+
+// claudeResponseOutputText returns the Claude text of a Responses message part:
+// output_text verbatim, or trimmed output_json (raw JSON or its text form).
+func claudeResponseOutputText(content OutputContent) string {
+	switch content.Type {
+	case "output_text":
+		return content.Text
+	case "output_json":
+		if len(content.JSON) > 0 {
+			return strings.TrimSpace(string(content.JSON))
+		}
+		return strings.TrimSpace(content.Text)
+	default:
+		return ""
 	}
-
-	newResp := &http.Response{
-		StatusCode: resp.StatusCode,
-		Header:     make(http.Header),
-		Body:       io.NopCloser(bytes.NewReader(claudeBody)),
-	}
-
-	maps.Copy(newResp.Header, resp.Header)
-	newResp.Header.Set("Content-Type", "application/json")
-	newResp.Header.Set("Content-Length", fmt.Sprintf("%d", len(claudeBody)))
-
-	return newResp, nil
 }
 
 // convertStreamingToClaudeResponse converts a streaming OpenAI response to Claude format.

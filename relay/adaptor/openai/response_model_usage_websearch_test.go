@@ -482,7 +482,11 @@ func TestConvertResponseAPIToClaudeResponseWebSearch(t *testing.T) {
 	var claude model.ClaudeResponse
 	err = json.Unmarshal(body, &claude)
 	require.NoError(t, err, "failed to unmarshal claude response")
-	require.Equal(t, 8555, claude.Usage.InputTokens, "expected usage tokens 8555")
+	// Anthropic semantics: input_tokens excludes the 4224 cached tokens that the
+	// Responses input_tokens includes; the buckets sum to the upstream prompt.
+	require.Equal(t, 4331, claude.Usage.InputTokens, "expected uncached input tokens 4331")
+	require.Equal(t, 4224, claude.Usage.CacheReadInputTokens, "expected cache read tokens 4224")
+	require.Equal(t, 8555, claude.Usage.InputTokens+claude.Usage.CacheReadInputTokens+claude.Usage.CacheCreationInputTokens)
 	require.Equal(t, 889, claude.Usage.OutputTokens, "expected usage tokens 889")
 	require.NotEmpty(t, claude.Content, "expected claude content")
 

@@ -93,14 +93,16 @@ func validateResponseDiscoveredTools(tools []openai.ResponseAPITool, allowSearch
 	return nil
 }
 
-// responseFallbackToolCatalogError checks that request's tool definitions and
-// discovery history (namespaces, custom tools, client tool search, loaded
-// catalogs) can be flattened faithfully for a Chat/Claude fallback route.
+// buildResponseFallbackToolCatalog builds the fallback tool catalog for
+// request and checks that its tool definitions and discovery history
+// (namespaces, custom tools, client tool search, loaded catalogs) can be
+// flattened faithfully for a Chat/Claude fallback route.
 // Parameters: request is the Responses request before or after hydration.
-// Returns a 400 error for an unrepresentable catalog, or nil.
-func responseFallbackToolCatalogError(request *openai.ResponseAPIRequest) *relaymodel.ErrorWithStatusCode {
-	if _, err := openai.BuildResponseFallbackToolCatalog(request); err != nil {
-		return openai.ErrorWrapper(err, "response_fallback_not_supported", http.StatusBadRequest)
+// Returns the catalog, or a 400 error for an unrepresentable catalog.
+func buildResponseFallbackToolCatalog(request *openai.ResponseAPIRequest) (*openai.ResponseFallbackToolCatalog, *relaymodel.ErrorWithStatusCode) {
+	catalog, err := openai.BuildResponseFallbackToolCatalog(request)
+	if err != nil {
+		return nil, openai.ErrorWrapper(err, "response_fallback_not_supported", http.StatusBadRequest)
 	}
-	return nil
+	return catalog, nil
 }

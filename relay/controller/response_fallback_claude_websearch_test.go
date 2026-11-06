@@ -115,6 +115,9 @@ func runResponsesWebSearchCase(t *testing.T, tc responsesWebSearchCase) response
 	apiErr := RelayResponseAPIHelper(c)
 	drainCriticalTasks(t)
 	result := responsesWebSearchResult{apiErr: apiErr, calls: calls.Load(), heldDuringIO: held.Load(), id: id, c: c, w: w}
+	if apiErr == nil {
+		requireResponsesRecorderConformance(t, w)
+	}
 	if len(observed) > 0 {
 		result.body = <-observed
 	}
@@ -162,9 +165,9 @@ func TestResponseFallbackClaudeWebSearchJSON(t *testing.T) {
 	var response openai.ResponseAPIResponse
 	require.NoError(t, json.Unmarshal(result.w.Body.Bytes(), &response))
 	require.Len(t, response.Output, 3)
-	require.Equal(t, "message", response.Output[0].Type)
+	require.Equal(t, "message", response.Output[2].Type, "the answer follows the searches it used")
 	for i, query := range []string{"a", "b"} {
-		item := response.Output[i+1]
+		item := response.Output[i]
 		require.Equal(t, "web_search_call", item.Type)
 		require.Equal(t, fmt.Sprintf("ws_%d", i+1), item.Id)
 		require.Equal(t, "completed", item.Status)
@@ -224,14 +227,14 @@ func TestResponseFallbackClaudeWebSearchSSE(t *testing.T) {
 	}
 	require.Equal(t, []string{"ws_1", "ws_2"}, order)
 	require.Equal(t, added, done)
-	require.Equal(t, map[string]int{"ws_1": 1, "ws_2": 2}, added, "the message keeps index 0")
+	require.Equal(t, map[string]int{"ws_1": 0, "ws_2": 1}, added, "searches that ran before the answer precede its message")
 	require.NotNil(t, completed)
 	require.Len(t, completed.Output, 3)
-	require.Equal(t, "message", completed.Output[0].Type)
-	require.Equal(t, "ok", completed.Output[0].Content[0].Text)
-	require.Equal(t, "ws_1", completed.Output[1].Id)
-	require.Equal(t, &openai.WebSearchCallAction{Type: "search", Query: "a"}, completed.Output[1].Action)
-	require.Equal(t, "ws_2", completed.Output[2].Id)
+	require.Equal(t, "ws_1", completed.Output[0].Id)
+	require.Equal(t, &openai.WebSearchCallAction{Type: "search", Query: "a"}, completed.Output[0].Action)
+	require.Equal(t, "ws_2", completed.Output[1].Id)
+	require.Equal(t, "message", completed.Output[2].Type)
+	require.Equal(t, "ok", completed.Output[2].Content[0].Text)
 
 	requireClaudeToolPolicyLedger(t, claudeToolPolicyResult{id: result.id}, responsesWebSearchBalance, responsesWebSearchCharge)
 	requireWebSearchToolSummary(t, result.c)

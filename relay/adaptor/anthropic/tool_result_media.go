@@ -10,46 +10,48 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// maxToolResultMediaBytes bounds the total base64 image bytes that tool
-// results may add to one Claude request. Anthropic rejects request bodies over
-// 32 MB, so a larger total could only fail upstream after every fetch.
-const maxToolResultMediaBytes = 24 << 20
+// maxRequestMediaBytes bounds the total base64 image bytes that user-message
+// and tool-result images may add to one Claude request. Anthropic rejects
+// request bodies over 32 MB, so a larger total could only fail upstream after
+// every fetch.
+const maxRequestMediaBytes = 24 << 20
 
-// toolResultMediaBudget tracks one Claude request's remaining tool-result image
-// bytes and the request context whose cancellation stops further fetches.
-type toolResultMediaBudget struct {
+// requestMediaBudget tracks one Claude request's remaining image bytes and the
+// request context whose cancellation stops further fetches and interrupts a
+// remote download in flight.
+type requestMediaBudget struct {
 	ctx       context.Context
 	remaining int
 }
 
-// newToolResultMediaBudget returns a budget of limit bytes bound to ctx; a nil
+// newRequestMediaBudget returns a budget of limit bytes bound to ctx; a nil
 // ctx is treated as context.Background.
-func newToolResultMediaBudget(ctx context.Context, limit int) *toolResultMediaBudget {
+func newRequestMediaBudget(ctx context.Context, limit int) *requestMediaBudget {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return &toolResultMediaBudget{ctx: ctx, remaining: limit}
+	return &requestMediaBudget{ctx: ctx, remaining: limit}
 }
 
 // check reports whether size more bytes fit and the request is still live. It
 // returns a validation error when the request was cancelled or the images of
-// all tool results would exceed the per-request byte limit.
-func (b *toolResultMediaBudget) check(size int) error {
+// the request would exceed the per-request byte limit.
+func (b *requestMediaBudget) check(size int) error {
 	if b == nil {
 		return nil
 	}
 	if err := b.ctx.Err(); err != nil {
-		return errors.Wrap(err, "validation failed: request cancelled while loading tool result images")
+		return errors.Wrap(err, "validation failed: request cancelled while loading images")
 	}
 	if size > b.remaining {
-		return errors.Errorf("validation failed: tool result images exceed %d MiB per request", maxToolResultMediaBytes>>20)
+		return errors.Errorf("validation failed: images exceed %d MiB per request", maxRequestMediaBytes>>20)
 	}
 	return nil
 }
 
 // reserve charges size bytes against the budget after check succeeds. It
 // returns the same errors as check.
-func (b *toolResultMediaBudget) reserve(size int) error {
+func (b *requestMediaBudget) reserve(size int) error {
 	if err := b.check(size); err != nil {
 		return err
 	}
@@ -57,6 +59,44 @@ func (b *toolResultMediaBudget) reserve(size int) error {
 		b.remaining -= size
 	}
 	return nil
+}
+
+// context returns the request context fetches must honor.
+func (b *requestMediaBudget) context() context.Context {
+	if b == nil {
+		return context.Background()
+	}
+	return b.ctx
+}
+
+// load fetches one image through the shared, size-limited and SSRF-guarded
+// image loader and charges it against the budget. Parameters: url is a data
+// URL or a public http(s) URL. Returns the MIME type and base64 payload, or a
+// validation error when the image cannot be loaded, the request was cancelled
+// (the error wraps the context error), or the budget is exhausted.
+func (b *requestMediaBudget) load(url string) (mimeType, data string, err error) {
+	// A data URL is already in memory; reject it before decoding when it alone
+	// exceeds what is left. Remote images are charged after the download.
+	precheck := 0
+	if strings.HasPrefix(url, "data:") {
+		precheck = len(url)
+	}
+	if err := b.check(precheck); err != nil {
+		return "", "", err
+	}
+	mimeType, data, err = image.GetImageFromUrlWithContext(b.context(), url)
+	if err != nil {
+		if ctxErr := b.context().Err(); ctxErr != nil && !errors.Is(err, ctxErr) {
+			// The transport may report cancellation as a generic I/O failure;
+			// keep the cancellation visible to callers that classify it.
+			return "", "", errors.Wrapf(ctxErr, "validation failed: load image: %v", err)
+		}
+		return "", "", errors.Wrap(err, "validation failed: load image")
+	}
+	if err := b.reserve(len(data)); err != nil {
+		return "", "", err
+	}
+	return mimeType, data, nil
 }
 
 // convertToolResultMediaBlocks rebuilds the content of a Claude tool_result
@@ -69,7 +109,7 @@ func (b *toolResultMediaBudget) reserve(size int) error {
 // Returns: the blocks, or nil when the parts carry no image so the caller keeps
 // the historical string content; an error when an image cannot be loaded or
 // the budget is exhausted.
-func convertToolResultMediaBlocks(budget *toolResultMediaBudget, parts []model.MessageContent) ([]Content, error) {
+func convertToolResultMediaBlocks(budget *requestMediaBudget, parts []model.MessageContent) ([]Content, error) {
 	if len(parts) == 0 {
 		return nil, nil
 	}
@@ -85,20 +125,8 @@ func convertToolResultMediaBlocks(budget *toolResultMediaBudget, parts []model.M
 			if part.ImageURL == nil || part.ImageURL.Url == "" {
 				continue
 			}
-			// A data URL is already in memory; reject it before decoding when it
-			// alone exceeds what is left. Remote images are charged after fetch.
-			precheck := 0
-			if strings.HasPrefix(part.ImageURL.Url, "data:") {
-				precheck = len(part.ImageURL.Url)
-			}
-			if err := budget.check(precheck); err != nil {
-				return nil, errors.Wrapf(err, "load tool result image part %d", index)
-			}
-			mimeType, data, err := image.GetImageFromUrl(part.ImageURL.Url)
+			mimeType, data, err := budget.load(part.ImageURL.Url)
 			if err != nil {
-				return nil, errors.Wrapf(err, "validation failed: load tool result image part %d", index)
-			}
-			if err := budget.reserve(len(data)); err != nil {
 				return nil, errors.Wrapf(err, "load tool result image part %d", index)
 			}
 			blocks = append(blocks, Content{

@@ -254,7 +254,7 @@ func TestChatToResponseStreamBridge_ReasoningContentField(t *testing.T) {
 		}
 	}
 	require.NotNil(t, reasoningItem)
-	require.Equal(t, []openai.OutputContent{{Type: "text", Text: "Deep thought"}}, reasoningItem.Content,
+	require.Equal(t, []openai.OutputContent{{Type: "reasoning_text", Text: "Deep thought"}}, reasoningItem.Content,
 		"fallback output must retain replayable reasoning content for the next tool turn")
 }
 
@@ -283,7 +283,11 @@ func TestChatToResponseStreamBridge_ToolCallStreaming(t *testing.T) {
 
 	events := parseBridgeSSE(w.Body.String())
 
-	assert.GreaterOrEqual(t, len(bridgeFindEvents(events, "response.output_item.added")), 2)
+	added := bridgeFindEvents(events, "response.output_item.added")
+	require.Len(t, added, 1, "a tool-only turn announces only its call, no empty message item")
+	var addedEvent openai.ResponseAPIStreamEvent
+	bridgeUnmarshal(t, added[0], &addedEvent)
+	require.Equal(t, "function_call", addedEvent.Item.Type)
 	assert.Len(t, bridgeFindEvents(events, "response.function_call_arguments.delta"), 2)
 
 	argDone := bridgeFindEvents(events, "response.function_call_arguments.done")
@@ -574,10 +578,10 @@ func TestChatToResponseStreamBridge_ToolCallWithEmptyArguments(t *testing.T) {
 }
 
 // TestChatToResponseStreamBridge_ToolCallsPrecedeMessageOutputItemDone asserts
-// that all function_call terminals (args.done + output_item.done) are flushed
-// BEFORE the message item's output_item.done. This protects defensive
+// that a pending function_call (announced, arguments not final) never
+// overlaps another item's completion. This protects defensive
 // downstream agent parsers that watch *any* output_item.done event as a tool
-// dispatch trigger — previously, the message item.done fired first while tool
+// dispatch trigger — previously, the message item.done fired while tool
 // calls were still pending args.done, shipping empty args downstream.
 func TestChatToResponseStreamBridge_ToolCallsPrecedeMessageOutputItemDone(t *testing.T) {
 	t.Parallel()
@@ -592,16 +596,33 @@ func TestChatToResponseStreamBridge_ToolCallsPrecedeMessageOutputItemDone(t *tes
 
 	events := parseBridgeSSE(w.Body.String())
 
+	// The protected invariant: no other item completes while a function_call
+	// was announced but its arguments are not final yet, so a parser that
+	// treats any output_item.done as a dispatch trigger never sees partial
+	// args. The message completes before the call is announced (items are
+	// sequential); calls complete together once all arguments arrived.
+	pending := map[string]bool{}
 	toolDoneIdx, msgDoneIdx, argsDoneIdx := -1, -1, -1
 	for i, e := range events {
+		var ev openai.ResponseAPIStreamEvent
 		switch e.event {
+		case "response.output_item.added", "response.function_call_arguments.done", "response.output_item.done":
+			bridgeUnmarshal(t, e, &ev)
+		}
+		switch e.event {
+		case "response.output_item.added":
+			if ev.Item != nil && ev.Item.Type == "function_call" {
+				pending[ev.Item.Id] = true
+			}
 		case "response.function_call_arguments.done":
 			argsDoneIdx = i
+			delete(pending, ev.ItemId)
 		case "response.output_item.done":
-			var ev openai.ResponseAPIStreamEvent
-			bridgeUnmarshal(t, e, &ev)
 			if ev.Item == nil {
 				continue
+			}
+			if ev.Item.Type != "function_call" {
+				require.Empty(t, pending, "event %d: %s completed while a function_call still awaited its final arguments", i, ev.Item.Type)
 			}
 			switch ev.Item.Type {
 			case "function_call":
@@ -615,11 +636,7 @@ func TestChatToResponseStreamBridge_ToolCallsPrecedeMessageOutputItemDone(t *tes
 	require.NotEqual(t, -1, argsDoneIdx, "args.done must be emitted")
 	require.NotEqual(t, -1, toolDoneIdx, "function_call output_item.done must be emitted")
 	require.NotEqual(t, -1, msgDoneIdx, "message output_item.done must be emitted")
-
 	assert.Less(t, argsDoneIdx, toolDoneIdx, "args.done must precede function_call output_item.done")
-	assert.Less(t, toolDoneIdx, msgDoneIdx,
-		"function_call terminals must be flushed BEFORE the message item's output_item.done so "+
-			"naive downstream parsers that trigger on any output_item.done observe complete args")
 }
 
 func TestChatToResponseStreamBridge_HandleDoneTerminalEvents(t *testing.T) {
@@ -689,10 +706,11 @@ func TestChatToResponseStreamBridge_FinalStatus_Length(t *testing.T) {
 	bridge.HandleDone(c)
 
 	events := parseBridgeSSE(w.Body.String())
-	completed := bridgeFindEvents(events, "response.completed")
-	require.Len(t, completed, 1)
+	require.Empty(t, bridgeFindEvents(events, "response.completed"), "an incomplete response ends with response.incomplete")
+	incomplete := bridgeFindEvents(events, "response.incomplete")
+	require.Len(t, incomplete, 1)
 	var ev openai.ResponseAPIStreamEvent
-	bridgeUnmarshal(t, completed[0], &ev)
+	bridgeUnmarshal(t, incomplete[0], &ev)
 	assert.Equal(t, "incomplete", ev.Response.Status)
 	require.NotNil(t, ev.Response.IncompleteDetails)
 	assert.Equal(t, "max_output_tokens", ev.Response.IncompleteDetails.Reason)

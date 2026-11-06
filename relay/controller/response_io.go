@@ -26,11 +26,38 @@ type responseCaptureWriter struct {
 	body        bytes.Buffer
 	status      int
 	wroteHeader bool
+	// header holds headers the upstream handler sets while it is captured.
+	// They describe the captured Chat body (its Content-Length, upstream
+	// Date/Server, ...), so they must not reach the client when the gateway
+	// renders a different Responses body instead.
+	header http.Header
 }
 
-// newResponseCaptureWriter creates a new responseCaptureWriter
+// newResponseCaptureWriter creates a capture writer over w whose headers are
+// kept apart from w until copyHeadersTo publishes them.
 func newResponseCaptureWriter(w gin.ResponseWriter) *responseCaptureWriter {
-	return &responseCaptureWriter{ResponseWriter: w}
+	return &responseCaptureWriter{ResponseWriter: w, header: make(http.Header)}
+}
+
+// Header returns the captured header map, never the client's.
+func (w *responseCaptureWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+
+// copyHeadersTo publishes the captured headers to dst for a response that is
+// written verbatim from the captured body. Framing headers are skipped: the
+// writer recomputes them for the bytes it actually sends.
+func (w *responseCaptureWriter) copyHeadersTo(dst http.Header) {
+	for key, values := range w.header {
+		switch http.CanonicalHeaderKey(key) {
+		case "Content-Length", "Transfer-Encoding", "Content-Encoding":
+			continue
+		}
+		dst[key] = append([]string(nil), values...)
+	}
 }
 
 // Write writes data to the captured body

@@ -248,6 +248,7 @@ func codexFallbackRun(t *testing.T, channel int, stream bool, balance int64) (*g
 	got := <-observed
 	require.NoError(t, got.Err)
 	require.True(t, metalib.GetByContext(c).ResponseAPIFallback)
+	requireResponsesRecorderConformance(t, recorder)
 	return c, recorder, requestID, got, calls
 }
 

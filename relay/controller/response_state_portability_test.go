@@ -185,7 +185,9 @@ func TestHydratePriorItemReferenceResolves(t *testing.T) {
 func TestResponseFallbackTarget(t *testing.T) {
 	require.Equal(t, targetChatFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.OpenAI}))
 	require.Equal(t, targetClaudeFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.Anthropic}))
-	require.Equal(t, targetClaudeFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.AwsClaude}))
+	require.Equal(t, targetClaudeFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.AwsClaude, ActualModelName: "claude-opus-5-5"}))
+	// Bedrock follows its registry: a non-Claude family is lowered as Chat.
+	require.Equal(t, targetChatFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.AwsClaude, ActualModelName: "llama3-70b"}))
 	require.Equal(t, targetClaudeFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.VertexAI, ActualModelName: "claude-sonnet-5"}))
 	require.Equal(t, targetChatFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.VertexAI, ActualModelName: "gemini-2.5-pro"}))
 }

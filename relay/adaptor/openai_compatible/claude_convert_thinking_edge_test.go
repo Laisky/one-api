@@ -13,6 +13,7 @@ import (
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
+// TestThinkingFieldPrecedence_AllFieldsPresent verifies the thinking field wins over reasoning fields.
 func TestThinkingFieldPrecedence_AllFieldsPresent(t *testing.T) {
 	t.Parallel()
 	body := `{
@@ -64,6 +65,7 @@ func TestThinkingFieldPrecedence_AllFieldsPresent(t *testing.T) {
 	assert.True(t, hasThinking, "Should prefer 'thinking' field when all are present")
 }
 
+// TestNoThinkingBlock_AllFieldsEmpty verifies empty reasoning fields produce no thinking block.
 func TestNoThinkingBlock_AllFieldsEmpty(t *testing.T) {
 	t.Parallel()
 	body := `{
@@ -110,6 +112,7 @@ func TestNoThinkingBlock_AllFieldsEmpty(t *testing.T) {
 	assert.False(t, hasThinking, "Should not add thinking block if all fields are empty")
 }
 
+// TestMalformedResponse_MissingFields verifies sparse upstream bodies still convert safely.
 func TestMalformedResponse_MissingFields(t *testing.T) {
 	t.Parallel()
 	body := `{
@@ -153,6 +156,7 @@ func TestMalformedResponse_MissingFields(t *testing.T) {
 	assert.False(t, hasThinking, "Should not add thinking block if fields are missing")
 }
 
+// TestReasoningFieldOnly verifies the reasoning field alone produces a thinking block.
 func TestReasoningFieldOnly(t *testing.T) {
 	t.Parallel()
 	body := `{

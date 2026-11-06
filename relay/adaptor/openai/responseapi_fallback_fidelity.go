@@ -22,7 +22,11 @@ var ErrResponseFallbackStateNotPortable = errors.Wrap(ErrResponseFallbackNotRepr
 // and custom tool results are inspected only when they carry input_image parts:
 // those are validated like user-message content and capped at
 // maxResponseFallbackToolOutputImages, while every other result shape keeps its
-// historical JSON stringification.
+// historical JSON stringification. agent_message items are admitted only when
+// lowerResponseAgentMessage can lower them: string content or an array of text
+// parts. It returns nil, or an error wrapping ErrResponseFallbackNotRepresentable
+// (ErrResponseFallbackStateNotPortable for unknown item kinds) that names the
+// rejected shape without quoting input content.
 func ValidateResponseAPIFallbackFidelity(input []any, allowReferences bool, nativeMedia ...bool) error {
 	toolOutputImages := 0
 	for _, raw := range input {
@@ -66,6 +70,8 @@ func ValidateResponseAPIFallbackFidelity(input []any, allowReferences bool, nati
 			// Client discovery and harness controls are validated by the
 			// discovery admission and lowered by lowerResponseFallbackToolItems.
 		case "agent_message":
+			// Admission runs the same lowering the converter uses, so content
+			// that would lose the agent's text is rejected before dispatch.
 			if _, err := lowerResponseAgentMessage(item); err != nil {
 				return err
 			}

@@ -208,13 +208,17 @@ func claudeThinkingContent(block model.ClaudeThinkingBlock) Content {
 // assistant message rebuilt from Chat fields (text first, then tool_use). Each
 // block goes before the tool_use it preceded originally, after the text when
 // text preceded it, and the blocks never change their relative order. The
-// contents parameter is the rebuilt content and blocks the replayable blocks;
-// the return value is a new slice when blocks is non-empty.
+// contents parameter is the rebuilt content and blocks the replayable blocks.
+// It returns contents itself when blocks is empty; otherwise it returns a new
+// slice holding every content and block exactly once, leaving contents and its
+// backing array unmodified.
 func insertClaudeThinkingBlocks(contents []Content, blocks []model.ClaudeThinkingBlock) []Content {
 	if len(blocks) == 0 {
 		return contents
 	}
-	out := make([]Content, 0, len(contents)+len(blocks))
+	// The capacity avoids arithmetic on caller-supplied lengths; append grows
+	// the slice for the blocks.
+	out := make([]Content, 0, len(contents))
 	next, toolsSeen := 0, 0
 	flush := func(ready func(model.ClaudeThinkingBlock) bool) {
 		for next < len(blocks) && ready(blocks[next]) {

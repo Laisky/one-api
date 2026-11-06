@@ -63,12 +63,13 @@ func TestBuildResponseOutputEmitsClaudeThinkingItems(t *testing.T) {
 	for _, item := range out {
 		kinds = append(kinds, item.Type)
 	}
-	require.Equal(t, []string{"message", "reasoning", "reasoning", "function_call", "reasoning", "function_call"}, kinds)
-	requireClaudeEnvelope(t, out[1], blocks[0])
-	require.Equal(t, []openai.OutputContent{{Type: "summary_text", Text: "Plan ahead"}}, out[1].Summary)
-	require.True(t, strings.HasPrefix(out[1].Id, "rs_"))
-	requireClaudeEnvelope(t, out[2], blocks[1])
-	require.Empty(t, out[2].Summary)
+	require.Equal(t, []string{"reasoning", "reasoning", "message", "function_call", "reasoning", "function_call"}, kinds,
+		"thinking that preceded the text comes first, as in the stream")
+	requireClaudeEnvelope(t, out[0], blocks[0])
+	require.Equal(t, []openai.OutputContent{{Type: "summary_text", Text: "Plan ahead"}}, out[0].Summary)
+	require.True(t, strings.HasPrefix(out[0].Id, "rs_"))
+	requireClaudeEnvelope(t, out[1], blocks[1])
+	require.Empty(t, out[1].Summary)
 	requireClaudeEnvelope(t, out[4], blocks[2])
 	require.Empty(t, out[4].Summary)
 	require.Equal(t, "call_toolu_1", out[3].CallId)
@@ -93,10 +94,11 @@ func TestRenderChatResponseAsResponseAPIGatesClaudeEnvelopesOnInclude(t *testing
 		var response openai.ResponseAPIResponse
 		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
 		require.Len(t, response.Output, 2)
-		require.Equal(t, "reasoning", response.Output[1].Type)
+		require.Equal(t, "reasoning", response.Output[0].Type)
+		require.Equal(t, "message", response.Output[1].Type)
 		require.Contains(t, recorder.Body.String(), `"summary":[]`)
 		if include {
-			requireClaudeEnvelope(t, response.Output[1], relaymodel.ClaudeThinkingBlock{Type: "thinking", Signature: "sig1"})
+			requireClaudeEnvelope(t, response.Output[0], relaymodel.ClaudeThinkingBlock{Type: "thinking", Signature: "sig1"})
 		} else {
 			require.NotContains(t, recorder.Body.String(), "encrypted_content")
 		}
@@ -167,9 +169,9 @@ func TestStreamBridgeEmitsClaudeThinkingItems(t *testing.T) {
 		for _, item := range doneOrder {
 			kinds = append(kinds, item.Type)
 		}
-		require.Equal(t, []string{"reasoning", "reasoning", "reasoning", "function_call", "function_call", "message"}, kinds,
-			"reasoning must be done before the calls it preceded")
-		require.Equal(t, []int{1, 2, 4, 3, 5, 0}, doneIndexes)
+		require.Equal(t, []string{"reasoning", "reasoning", "message", "reasoning", "function_call", "function_call"}, kinds,
+			"items complete in the order the model produced them; reasoning is done before the calls it preceded")
+		require.Equal(t, []int{0, 1, 2, 4, 3, 5}, doneIndexes, "the message opens with its text after the thinking that preceded it and closes when the next item starts")
 		require.Equal(t, []openai.OutputContent{{Type: "summary_text", Text: "Plan ahead"}}, doneOrder[0].Summary)
 		require.Empty(t, doneOrder[1].Summary)
 
@@ -178,10 +180,10 @@ func TestStreamBridgeEmitsClaudeThinkingItems(t *testing.T) {
 		for _, item := range completed.Output {
 			finalKinds = append(finalKinds, item.Type)
 		}
-		require.Equal(t, []string{"message", "reasoning", "reasoning", "function_call", "reasoning", "function_call"}, finalKinds)
+		require.Equal(t, []string{"reasoning", "reasoning", "message", "function_call", "reasoning", "function_call"}, finalKinds)
 
 		if include {
-			for i, item := range []openai.OutputItem{doneOrder[0], doneOrder[1], doneOrder[2]} {
+			for i, item := range []openai.OutputItem{doneOrder[0], doneOrder[1], doneOrder[3]} {
 				requireClaudeEnvelope(t, item, blocks[i])
 			}
 			requireClaudeEnvelope(t, completed.Output[4], blocks[2])

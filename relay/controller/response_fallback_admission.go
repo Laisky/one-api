@@ -16,51 +16,56 @@ import (
 // hydrating it, then bounds the resulting effective turn before normalization.
 // ctx carries cancellation, c stores the pending state commit, meta supplies
 // ownership/routing, and request supplies the caller's Responses input. It
-// returns the hydrated request or the existing state/admission error without
-// dispatching upstream work. The limits do not depend on state persistence.
-func prepareResponseFallbackInput(ctx context.Context, c *gin.Context, meta *metalib.Meta, request *openai.ResponseAPIRequest) (*openai.ResponseAPIRequest, *relaymodel.ErrorWithStatusCode) {
+// returns the hydrated request with the fallback tool catalog built from it,
+// which conversion and rendering reuse, or the existing state/admission error
+// without dispatching upstream work. The limits do not depend on state
+// persistence.
+func prepareResponseFallbackInput(ctx context.Context, c *gin.Context, meta *metalib.Meta, request *openai.ResponseAPIRequest) (*openai.ResponseAPIRequest, *openai.ResponseFallbackToolCatalog, *relaymodel.ErrorWithStatusCode) {
 	if request == nil {
-		return nil, openai.ErrorWrapper(errors.New("response api request is nil"), "invalid_response_api_request", http.StatusBadRequest)
+		return nil, nil, openai.ErrorWrapper(errors.New("response api request is nil"), "invalid_response_api_request", http.StatusBadRequest)
 	}
 	// Namespaces, custom tools and client tool search are emulated through the
 	// fallback tool catalog, which keeps qualified call identities reversible.
 	// Validate that the catalog is representable before state hydration or
 	// quota reservation so an unrepresentable definition never reserves quota.
-	if unsupported := responseFallbackToolCatalogError(request); unsupported != nil {
-		return nil, unsupported
+	if _, unsupported := buildResponseFallbackToolCatalog(request); unsupported != nil {
+		return nil, nil, unsupported
 	}
 	if err := openai.ValidateResponseAPIFallbackInput(request.Input); err != nil {
-		return nil, openai.ErrorWrapper(err, "response_fallback_input_too_large", http.StatusRequestEntityTooLarge)
+		return nil, nil, openai.ErrorWrapper(err, "response_fallback_input_too_large", http.StatusRequestEntityTooLarge)
 	}
 
 	if err := responseFallbackFidelityError(request.Input, true, isNativeGoogleChannel(meta)); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, openai.ErrorWrapper(err, "response_fallback_cancelled", http.StatusRequestTimeout)
+		return nil, nil, openai.ErrorWrapper(err, "response_fallback_cancelled", http.StatusRequestTimeout)
 	}
 
 	hydrated, stateErr := hydrateResponseAPIRequestForFallback(ctx, meta, request, responseFallbackTarget(meta))
 	if stateErr != nil {
-		return nil, stateErr
+		return nil, nil, stateErr
 	}
 	if hydrated == nil {
-		return nil, openai.ErrorWrapper(errors.New("response fallback hydration returned no request"), "response_fallback_hydration_failed", http.StatusInternalServerError)
+		return nil, nil, openai.ErrorWrapper(errors.New("response fallback hydration returned no request"), "response_fallback_hydration_failed", http.StatusInternalServerError)
 	}
-	if unsupported := responseFallbackToolCatalogError(hydrated); unsupported != nil {
-		return nil, unsupported
+	// Hydration can add discovery history, so the catalog conversion and
+	// rendering use is built once from the hydrated request.
+	catalog, unsupported := buildResponseFallbackToolCatalog(hydrated)
+	if unsupported != nil {
+		return nil, nil, unsupported
 	}
 	if err := openai.ValidateResponseAPIFallbackInput(hydrated.Input); err != nil {
-		return nil, openai.ErrorWrapper(err, "response_fallback_input_too_large", http.StatusRequestEntityTooLarge)
+		return nil, nil, openai.ErrorWrapper(err, "response_fallback_input_too_large", http.StatusRequestEntityTooLarge)
 	}
 	if err := responseFallbackFidelityError(hydrated.Input, false, isNativeGoogleChannel(meta)); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Hydration returns a clone; snapshot the original incremental request only
 	// after both input forms pass admission, avoiding pending state on rejection.
 	capturePendingStateCommit(c, meta, request)
-	return hydrated, nil
+	return hydrated, catalog, nil
 }
 
 // responseFallbackFidelityError maps shared semantic admission errors without exposing input values.

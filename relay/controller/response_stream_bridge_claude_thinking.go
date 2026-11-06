@@ -68,6 +68,7 @@ func (h *chatToResponseStreamBridge) sealClaudeThinkingBlock(c *gin.Context, lg 
 			summary = strings.TrimSpace(choice.reasoning.String())
 		}
 	} else {
+		h.beforeItemAdded(c, choice, itemKindReasoning)
 		choice.reasoningID, choice.reasoningIndex = newClaudeThinkingReasoningID(), h.nextOutputIndex()
 		added := &openai.OutputItem{Id: choice.reasoningID, Type: "reasoning", Status: "in_progress"}
 		h.emitEvent(c, "response.output_item.added", openai.ResponseAPIStreamEvent{OutputIndex: choice.reasoningIndex, Item: added})

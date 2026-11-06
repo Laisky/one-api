@@ -662,11 +662,12 @@ func TestChatToResponseStreamBridge_UpstreamDropWithFinishLength(t *testing.T) {
 	bridge.HandleDone(c)
 
 	body := w.Body.String()
-	assert.Contains(t, body, "event: response.completed")
+	assert.Contains(t, body, "event: response.incomplete")
+	assert.NotContains(t, body, "event: response.completed")
 
-	// Parse response.completed to check incomplete status
+	// Parse response.incomplete to check incomplete status
 	for _, line := range strings.Split(body, "\n") {
-		if strings.HasPrefix(line, "data: ") && strings.Contains(line, "response.completed") {
+		if strings.HasPrefix(line, "data: ") && strings.Contains(line, "response.incomplete") {
 			var evt openai.ResponseAPIStreamEvent
 			err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &evt)
 			require.NoError(t, err)

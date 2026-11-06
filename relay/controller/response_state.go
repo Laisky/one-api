@@ -10,7 +10,6 @@ import (
 
 	"github.com/Laisky/one-api/common/metrics"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
-	"github.com/Laisky/one-api/relay/apitype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/state"
@@ -64,20 +63,8 @@ func stateOwnerFromMeta(meta *metalib.Meta) state.OwnerScope {
 // the distinction drives the error label. Azure channels qualify only when they
 // delegate to Foundry's native Anthropic Messages surface.
 func responseFallbackTarget(meta *metalib.Meta) hydrationTarget {
-	if meta == nil {
-		return targetChatFallback
-	}
-	switch meta.APIType {
-	case apitype.Anthropic, apitype.AwsClaude:
+	if responseFallbackLowersToClaude(meta) {
 		return targetClaudeFallback
-	case apitype.VertexAI:
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(meta.ActualModelName)), "claude") {
-			return targetClaudeFallback
-		}
-	case apitype.Azure:
-		if meta.AzureTargetsAnthropic() {
-			return targetClaudeFallback
-		}
 	}
 	return targetChatFallback
 }
@@ -359,6 +346,8 @@ func envelopesToItems(envelopes []state.ItemEnvelope) []any {
 	return out
 }
 
+// rawToAny decodes a raw canonical item into the generic value the Responses
+// input carries. It returns the value or the wrapped decode error.
 func rawToAny(raw json.RawMessage) (any, error) {
 	if len(raw) == 0 {
 		return nil, nil

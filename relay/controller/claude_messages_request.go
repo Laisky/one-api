@@ -549,6 +549,8 @@ func stripClaudeUnsignedThinkingFromAssistantHistory(raw []byte) ([]byte, claude
 	return encodedRequest, stats, nil
 }
 
+// messageLocation names one content block in validation errors, e.g.
+// messages[0].content[1].
 func messageLocation(messageIndex, blockIndex int) string {
 	return "messages[" + strconv.Itoa(messageIndex) + "].content[" + strconv.Itoa(blockIndex) + "]"
 }
@@ -568,21 +570,34 @@ func getAndValidateClaudeMessagesRequest(c *gin.Context) (*ClaudeMessagesRequest
 	if claudeRequest.MaxTokens <= 0 {
 		return nil, errors.New("max_tokens must be greater than 0")
 	}
+	if err := validateClaudeMessagesContent(claudeRequest); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return claudeRequest, nil
+}
+
+// validateClaudeMessagesContent validates the system prompt and messages that
+// the Messages and count_tokens endpoints share: a non-empty messages array,
+// supported image hints, and a role and non-empty content on every message.
+// Parameters: claudeRequest is the decoded request. Returns: an input error
+// describing the first invalid field, or nil.
+func validateClaudeMessagesContent(claudeRequest *ClaudeMessagesRequest) error {
 	if len(claudeRequest.Messages) == 0 {
-		return nil, errors.New("messages array cannot be empty")
+		return errors.New("messages array cannot be empty")
 	}
 
 	if err := validateClaudeImageDetails(claudeRequest.System); err != nil {
-		return nil, errors.Wrap(err, "validate system images")
+		return errors.Wrap(err, "validate system images")
 	}
 
 	// Validate messages
 	for i, message := range claudeRequest.Messages {
 		if err := validateClaudeImageDetails(message.Content); err != nil {
-			return nil, errors.Wrapf(err, "validate message[%d] images", i)
+			return errors.Wrapf(err, "validate message[%d] images", i)
 		}
 		if message.Role == "" {
-			return nil, errors.Errorf("message[%d].role is required", i)
+			return errors.Errorf("message[%d].role is required", i)
 		}
 		// Claude Code v2.1.154+ (e.g. "adaptive thinking") may inject role:"system"
 		// messages inside the messages array (issue #350). Tolerate them here; the
@@ -590,25 +605,25 @@ func getAndValidateClaudeMessagesRequest(c *gin.Context) (*ClaudeMessagesRequest
 		// turn for rebuilt upstreams, while direct HTTP passthrough forwards the
 		// raw body unchanged.
 		if message.Role != "user" && message.Role != "assistant" && message.Role != "system" {
-			return nil, errors.Errorf("message[%d].role must be 'user', 'assistant', or 'system'", i)
+			return errors.Errorf("message[%d].role must be 'user', 'assistant', or 'system'", i)
 		}
 		if message.Content == nil {
-			return nil, errors.Errorf("message[%d].content is required", i)
+			return errors.Errorf("message[%d].content is required", i)
 		}
 		// Additional validation for content based on type
 		switch content := message.Content.(type) {
 		case string:
 			if content == "" {
-				return nil, errors.Errorf("message[%d].content cannot be empty string", i)
+				return errors.Errorf("message[%d].content cannot be empty string", i)
 			}
 		case []any:
 			if len(content) == 0 {
-				return nil, errors.Errorf("message[%d].content array cannot be empty", i)
+				return errors.Errorf("message[%d].content array cannot be empty", i)
 			}
 		default:
 			// Allow other content types (like structured content blocks)
 		}
 	}
 
-	return claudeRequest, nil
+	return nil
 }

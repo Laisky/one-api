@@ -3,6 +3,7 @@ package openai
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"math"
 	"strconv"
 	"strings"
@@ -270,16 +271,19 @@ func describeResponseWebSearchCall(item map[string]any) string {
 	return text
 }
 
-// annotateResponseAssistantMessage returns a copy of an assistant message item
-// whose content is prefixed with note on its own line.
+// annotateResponseAssistantMessage returns a shallow copy of an assistant
+// message item whose content carries note first: string content becomes note,
+// a newline and the original text; array content gets a new array whose first
+// part is an output_text part holding note; any other content is replaced by
+// note. Parameters: item is the assistant message and note the annotation.
+// The caller's item and its content array are never modified.
 func annotateResponseAssistantMessage(item map[string]any, note string) map[string]any {
 	clone := cloneResponseInputItem(item)
 	switch content := item["content"].(type) {
 	case string:
 		clone["content"] = note + "\n" + content
 	case []any:
-		parts := make([]any, 0, len(content)+1)
-		parts = append(parts, map[string]any{"type": "output_text", "text": note})
+		parts := []any{map[string]any{"type": "output_text", "text": note}}
 		parts = append(parts, content...)
 		clone["content"] = parts
 	default:
@@ -374,25 +378,40 @@ func firstResponseLine(text string) string {
 }
 
 // lowerResponseAgentMessage turns a multi-agent agent_message item into a user
-// message that keeps its author and recipient. Encrypted agent content is bound
-// to the provider that produced it and cannot be represented on fallback.
+// message whose single input_text part is a "[Agent message from A to B]"
+// header line followed by the message text. A string content is the text
+// verbatim; an array content contributes the text of its input_text, text and
+// output_text parts joined by newlines. Encrypted or other non-text parts are
+// bound to the provider that produced them, and missing, null or non-string
+// non-array content carries no representable text, so both return an error
+// wrapping ErrResponseFallbackNotRepresentable that never quotes the content.
+// Parameters: item is the decoded agent_message item. Returns the lowered user
+// message or that error.
 func lowerResponseAgentMessage(item map[string]any) (map[string]any, error) {
 	author, _ := item["author"].(string)
 	recipient, _ := item["recipient"].(string)
 	var texts []string
-	parts, _ := item["content"].([]any)
-	for _, rawPart := range parts {
-		part, ok := rawPart.(map[string]any)
-		if !ok {
-			return nil, errors.Wrap(ErrResponseFallbackNotRepresentable, "invalid agent message content")
+	switch content := item["content"].(type) {
+	case string:
+		texts = []string{content}
+	case []any:
+		for _, rawPart := range content {
+			part, ok := rawPart.(map[string]any)
+			if !ok {
+				return nil, errors.Wrap(ErrResponseFallbackNotRepresentable, "invalid agent message content")
+			}
+			switch kind, _ := part["type"].(string); kind {
+			case "input_text", "text", "output_text":
+				text, _ := part["text"].(string)
+				texts = append(texts, text)
+			default:
+				return nil, errors.Wrap(ErrResponseFallbackNotRepresentable, "encrypted or non-text agent message content requires native Responses support")
+			}
 		}
-		switch kind, _ := part["type"].(string); kind {
-		case "input_text", "text", "output_text":
-			text, _ := part["text"].(string)
-			texts = append(texts, text)
-		default:
-			return nil, errors.Wrap(ErrResponseFallbackNotRepresentable, "encrypted or non-text agent message content requires native Responses support")
-		}
+	default:
+		// Lowering this as an empty message would silently drop what the
+		// agent said, so a shape with no representable text is rejected.
+		return nil, errors.Wrap(ErrResponseFallbackNotRepresentable, "agent message content must be a string or an array of text parts")
 	}
 	header := "[Agent message"
 	if author != "" {
@@ -411,8 +430,9 @@ func lowerResponseAgentMessage(item map[string]any) (map[string]any, error) {
 
 // ResponseFallbackToolCallItem renders one upstream Chat tool call as the
 // Responses output item its declaring definition expects: function_call (with
-// namespace), custom_tool_call (raw input), or a client tool_search_call
-// (object arguments). Unknown names render as plain function_call items.
+// namespace), custom_tool_call (raw input), or a client tool_search_call whose
+// arguments follow the contract of normalizeResponseToolSearchArguments.
+// Unknown names render as plain function_call items.
 // Parameters: callID is the normalized Responses call ID, flatName the
 // upstream tool name, arguments the complete JSON argument string.
 func (c *ResponseFallbackToolCatalog) ResponseFallbackToolCallItem(callID, flatName, arguments string) OutputItem {
@@ -460,25 +480,99 @@ func ResponseCustomToolInput(arguments string) string {
 	return input
 }
 
-// normalizeResponseToolSearchArguments returns object-valued tool_search
-// arguments. Integral numeric "limit" values are rewritten as JSON integers
-// because clients parse the field as an integer; invalid input becomes {}.
+// responseToolSearchEmptyArguments renders tool_search arguments that carry no
+// usable JSON object: an empty query, which Codex answers with an empty
+// tool_search_output instead of failing to parse the call.
+const responseToolSearchEmptyArguments = `{"query":""}`
+
+// responseToolSearchMaxExactLimit bounds limits read through float64, the
+// largest integer it represents exactly.
+const responseToolSearchMaxExactLimit = 1 << 53
+
+// normalizeResponseToolSearchArguments renders model-generated tool_search
+// arguments so a client that parses them as {query: required string, limit:
+// optional unsigned integer, unknown keys ignored} (Codex's
+// SearchToolCallParams) always succeeds; a parse failure there leaves an
+// orphan call the client cannot answer. Parameters: arguments is the complete
+// upstream argument string. The result is one compact JSON object, keys
+// sorted, in which:
+//   - "query" is a string: a string is kept, a number or boolean becomes its
+//     JSON text, and a missing, null, array or object query becomes "";
+//   - "limit" is present only as a positive JSON integer, read from an
+//     integral JSON number or a base-10 integer string; any other limit is
+//     removed so the client's default applies;
+//   - every other member keeps its value (the last one for a repeated key).
+//
+// Empty, invalid or non-object input becomes {"query":""}.
 func normalizeResponseToolSearchArguments(arguments string) json.RawMessage {
-	trimmed := bytes.TrimSpace([]byte(arguments))
-	var fields map[string]json.RawMessage
-	if len(trimmed) == 0 || json.Unmarshal(trimmed, &fields) != nil || fields == nil {
-		return json.RawMessage("{}")
+	var members map[string]json.RawMessage
+	decoder := json.NewDecoder(strings.NewReader(arguments))
+	if decoder.Decode(&members) != nil || members == nil {
+		return json.RawMessage(responseToolSearchEmptyArguments)
 	}
-	if raw, ok := fields["limit"]; ok {
-		var limit float64
-		if json.Unmarshal(raw, &limit) == nil && limit == math.Trunc(limit) && !math.IsInf(limit, 0) && math.Abs(limit) < 1<<53 {
-			fields["limit"] = json.RawMessage(strconv.FormatInt(int64(limit), 10))
-			if encoded, err := json.Marshal(fields); err == nil {
-				return encoded
-			}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		// Trailing data after the object, such as a second value.
+		return json.RawMessage(responseToolSearchEmptyArguments)
+	}
+	members["query"] = responseToolSearchQuery(members["query"])
+	limit, ok := responseToolSearchLimit(members["limit"])
+	delete(members, "limit")
+	if ok {
+		members["limit"] = json.RawMessage(strconv.FormatInt(limit, 10))
+	}
+	var encoded bytes.Buffer
+	encoder := json.NewEncoder(&encoded)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(members); err != nil {
+		return json.RawMessage(responseToolSearchEmptyArguments)
+	}
+	return json.RawMessage(bytes.TrimRight(encoded.Bytes(), "\n"))
+}
+
+// responseToolSearchQuery renders a tool_search query member as a JSON
+// string. Parameters: raw is the member's value, nil when absent. Strings are
+// returned unchanged, numbers and booleans become a string of their JSON
+// text, and every other value becomes "".
+func responseToolSearchQuery(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage(`""`)
+	}
+	switch first := raw[0]; {
+	case first == '"':
+		return raw
+	case first == 't' || first == 'f' || first == '-' || (first >= '0' && first <= '9'):
+		// Number and boolean literals hold no quotes or backslashes, so their
+		// text is already a valid string body.
+		return json.RawMessage(`"` + string(raw) + `"`)
+	default:
+		return json.RawMessage(`""`)
+	}
+}
+
+// responseToolSearchLimit reads a tool_search limit member. Parameters: raw is
+// the member's value, nil when absent. It returns the value and true only for
+// a positive integer given as a base-10 integer string, an integer literal
+// within int64, or an integral number literal (8.0, 1e2) up to 2^53.
+func responseToolSearchLimit(raw json.RawMessage) (int64, bool) {
+	if len(raw) == 0 {
+		return 0, false
+	}
+	text := string(raw)
+	if raw[0] == '"' {
+		if err := json.Unmarshal(raw, &text); err != nil {
+			return 0, false
 		}
+		value, err := strconv.ParseInt(text, 10, 64)
+		return value, err == nil && value > 0
 	}
-	return append(json.RawMessage(nil), trimmed...)
+	if value, err := strconv.ParseInt(text, 10, 64); err == nil {
+		return value, value > 0
+	}
+	value, err := strconv.ParseFloat(text, 64)
+	if err != nil || value != math.Trunc(value) || value < 1 || value > responseToolSearchMaxExactLimit {
+		return 0, false
+	}
+	return int64(value), true
 }
 
 // validResponseReasoningEffort reports whether effort is one of the reasoning

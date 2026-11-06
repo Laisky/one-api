@@ -96,5 +96,14 @@ func marshalToolSearchOutputItem(item OutputItem) ([]byte, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal response tool-search item")
 	}
-	return data, nil
+	// call_id is required but nullable on both tool search items, and a
+	// tool_search_call always carries arguments (clients decode it strictly).
+	var extras []wireField
+	if item.CallId == "" {
+		extras = append(extras, wireField{"call_id", "null"})
+	}
+	if item.Type == "tool_search_call" && len(item.ToolSearchArguments) == 0 {
+		extras = append(extras, wireField{"arguments", "{}"})
+	}
+	return appendWireFields(data, extras), nil
 }

@@ -24,6 +24,8 @@ const (
 // It is a plain stdlib error, matching the former fmt.Errorf value without a stack.
 var errResponseStreamEventTooLarge = errors.New("response stream event is too large")
 
+// responseStreamFrameCapacity returns the byte size of one SSE frame for a
+// payload and event name of the given lengths, or false when it overflows int.
 func responseStreamFrameCapacity(payloadLen, eventTypeLen int) (int, bool) {
 	const dataOnlyOverhead = len(responseStreamDataPrefix) + len(responseStreamFrameSuffix)
 	if payloadLen < 0 || eventTypeLen < 0 || payloadLen > math.MaxInt-dataOnlyOverhead {
@@ -46,6 +48,12 @@ func responseStreamFrameCapacity(payloadLen, eventTypeLen int) (int, bool) {
 	return frameSize + eventTypeLen, true
 }
 
+// emitEvent writes one Responses SSE frame: it stamps the event type, the
+// response id and the next sequence_number, marshals the event through the
+// spec-conformant DTO encoder and flushes it. Parameters: c is the request
+// context, eventType the SSE event name and event the payload. It returns
+// false, and keeps the error for StreamWriteError, once a marshal or write
+// fails; the sequence number advances only for written events.
 func (h *chatToResponseStreamBridge) emitEvent(c *gin.Context, eventType string, event openai.ResponseAPIStreamEvent) bool {
 	if h.writeErr != nil {
 		return false
@@ -54,6 +62,9 @@ func (h *chatToResponseStreamBridge) emitEvent(c *gin.Context, eventType string,
 	if event.Id == "" {
 		event.Id = h.responseID
 	}
+	// Every Responses stream event carries its position; clients order and
+	// de-duplicate by it, so it starts at 0 and advances once per emitted event.
+	event.SequenceNumber = h.sequenceNumber
 
 	payload, err := json.Marshal(event)
 	if err != nil {
@@ -88,6 +99,7 @@ func (h *chatToResponseStreamBridge) emitEvent(c *gin.Context, eventType string,
 		h.writeErr = err
 		return false
 	}
+	h.sequenceNumber++
 	c.Writer.Flush()
 	return true
 }
@@ -110,6 +122,7 @@ func (h *chatToResponseStreamBridge) emitDone(c *gin.Context) {
 	c.Writer.Flush()
 }
 
+// nextOutputIndex reserves and returns the next dense output_index.
 func (h *chatToResponseStreamBridge) nextOutputIndex() int {
 	idx := h.outputIndexCounter
 	h.outputIndexCounter++
