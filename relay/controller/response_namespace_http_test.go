@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -227,9 +228,46 @@ func TestResponseNamespaceHTTPRejectsUnsafeChildrenBeforeQuota(t *testing.T) {
 	}
 }
 
-// TestResponseNamespaceHTTPFallbackRejectsBeforeState proves fallback never
-// flattens a namespace or hydrates/reserves state before explicit rejection.
-func TestResponseNamespaceHTTPFallbackRejectsBeforeState(t *testing.T) {
+// responseNamespaceFallbackProvider starts a TLS loopback upstream for the
+// fallback route that records the request and the quota held at dispatch and
+// answers with a plain text completion in channel's format. Parameters: t owns
+// cleanup and channel picks Chat or Claude framing. Returns the server, the
+// observation channel and the dispatch counter.
+func responseNamespaceFallbackProvider(t *testing.T, channel int) (*httptest.Server, chan codexFallbackObservation, *atomic.Int32) {
+	t.Helper()
+	observed := make(chan codexFallbackObservation, 1)
+	calls := &atomic.Int32{}
+	provider := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		got := codexFallbackObservation{Path: r.URL.Path}
+		got.Body, got.Err = io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
+		var user model.User
+		var token model.Token
+		if got.Err == nil {
+			got.Err = model.DB.First(&user, fallbackUserID).Error
+		}
+		if got.Err == nil {
+			got.Err = model.DB.First(&token, fallbackTokenID).Error
+		}
+		got.User, got.Token = user.Quota, token.RemainQuota
+		select {
+		case observed <- got:
+		default:
+		}
+		writeFallbackTextReply(w, channel)
+	}))
+	t.Cleanup(provider.Close)
+	previousClient := client.HTTPClient
+	client.HTTPClient = provider.Client()
+	t.Cleanup(func() { client.HTTPClient = previousClient })
+	return provider, observed, calls
+}
+
+// TestResponseNamespaceHTTPFallbackMissingParentHasNoEffects proves a
+// namespaced fallback request whose previous_response_id does not resolve
+// still fails during admission (previous_response_not_found) before any
+// provider dispatch, pending state, quota reservation or ledger record.
+func TestResponseNamespaceHTTPFallbackMissingParentHasNoEffects(t *testing.T) {
 	for _, channel := range []int{channeltype.OpenAICompatible, channeltype.Anthropic} {
 		t.Run(fmt.Sprint(channel), func(t *testing.T) {
 			const balance = int64(1_000_000)
@@ -252,15 +290,71 @@ func TestResponseNamespaceHTTPFallbackRejectsBeforeState(t *testing.T) {
 			drainCriticalTasks(t)
 			require.NotNil(t, apiErr)
 			require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-			require.Equal(t, "tool_namespace_not_supported", apiErr.Code, "reject before missing-parent hydration")
+			require.Equal(t, "previous_response_not_found", apiErr.Code, "namespaces are representable; the missing parent is the rejection")
 			require.Nil(t, pendingCommitFromContext(c))
-			require.Zero(t, calls.Load())
-			require.Zero(t, c.GetInt64(ctxkey.PreConsumedQuotaAmount))
-			require.Equal(t, balance, reloadUserQuota(t))
-			var token model.Token
-			require.NoError(t, model.DB.First(&token, fallbackTokenID).Error)
-			require.Equal(t, balance, token.RemainQuota)
-			require.Zero(t, token.UsedQuota)
+			responseClientSearchNoEffects(t, c, requestID, balance, &calls)
+		})
+	}
+}
+
+// TestResponseNamespaceHTTPFallbackDispatchesFlattenedTools proves grouped
+// local tools now reach Chat and Claude fallback upstreams as one flattened
+// catalog: same-leaf children of different namespaces stay distinct
+// (alpha__shared vs beta__shared), namespace descriptions prefix each child,
+// custom children carry the single-string input schema with their grammar,
+// and the request settles ordinary token billing without hosted fees.
+func TestResponseNamespaceHTTPFallbackDispatchesFlattenedTools(t *testing.T) {
+	for _, channel := range []int{channeltype.OpenAICompatible, channeltype.Anthropic} {
+		t.Run(fmt.Sprint(channel), func(t *testing.T) {
+			const balance = int64(1_000_000)
+			xaiVideoSetup(t, balance, false)
+			enableStateForTest(t)
+			provider, observed, calls := responseNamespaceFallbackProvider(t, channel)
+			payload := `{"model":"alias","input":"continue","max_output_tokens":32,"tools":` + responseNamespaceTools + `}`
+			c, recorder, requestID := protocolContext(t, channel, "namespace-http-fixture", "/v1/responses", payload, provider.URL, balance, 1, false, &model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2})
+			responseNamespaceCleanLedger(t, requestID)
+			require.False(t, supportsNativeResponseAPI(metalib.GetByContext(c)))
+			apiErr := RelayResponseAPIHelper(c)
+			drainCriticalTasks(t)
+			require.Nil(t, apiErr)
+			require.Equal(t, http.StatusOK, recorder.Code)
+			require.EqualValues(t, 1, calls.Load())
+			got := <-observed
+			require.NoError(t, got.Err)
+			require.Equal(t, fallbackUpstreamPath(channel), got.Path)
+			require.True(t, metalib.GetByContext(c).ResponseAPIFallback)
+
+			wire := decodeFallbackWire(t, channel, got.Body)
+			require.Equal(t, []string{"alpha__shared", "alpha__apply_patch", "beta__shared", "beta__apply_patch"}, fallbackWireToolNames(wire))
+			require.Equal(t, "[First local tool group] Alpha implementation", fallbackWireToolByName(t, wire, "alpha__shared").Description)
+			require.Equal(t, "[Second local tool group] Beta implementation", fallbackWireToolByName(t, wire, "beta__shared").Description)
+			require.JSONEq(t, `{"type":"object","properties":{"alpha":{"type":"string"}}}`, string(fallbackWireToolByName(t, wire, "alpha__shared").Schema))
+			require.JSONEq(t, `{"type":"object","properties":{"beta":{"type":"integer"}}}`, string(fallbackWireToolByName(t, wire, "beta__shared").Schema))
+			alphaPatch := fallbackWireToolByName(t, wire, "alpha__apply_patch")
+			betaPatch := fallbackWireToolByName(t, wire, "beta__apply_patch")
+			require.JSONEq(t, codexFallbackCustomInputSchema, string(alphaPatch.Schema))
+			require.JSONEq(t, codexFallbackCustomInputSchema, string(betaPatch.Schema))
+			require.True(t, strings.HasPrefix(alphaPatch.Description, "[First local tool group] "), alphaPatch.Description)
+			require.Contains(t, alphaPatch.Description, "The input must match this lark grammar exactly:\nstart: \"alpha\"")
+			require.True(t, strings.HasPrefix(betaPatch.Description, "[Second local tool group] "), betaPatch.Description)
+			require.NotContains(t, betaPatch.Description, "grammar", "text-format custom tools carry no grammar")
+			requireFallbackWireTurns(t, []fallbackWireTurn{{Role: "user", Text: "continue"}}, wire.Turns)
+
+			var reply struct {
+				Status string `json:"status"`
+				Output []struct {
+					Type    string `json:"type"`
+					Content []struct {
+						Text string `json:"text"`
+					} `json:"content"`
+				} `json:"output"`
+			}
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &reply))
+			require.Equal(t, "completed", reply.Status)
+			require.Len(t, reply.Output, 1)
+			require.Equal(t, "message", reply.Output[0].Type)
+			require.Equal(t, "done", reply.Output[0].Content[0].Text)
+			requireFallbackTokenSettlement(t, c, requestID, balance, got.User, got.Token)
 		})
 	}
 }
