@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
@@ -23,7 +25,7 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 	responseID := generateResponseAPIID(c, textResp)
 	statusText, incomplete := deriveResponseStatus(textResp.Choices)
 	usage := (&openai.ResponseAPIUsage{}).FromModelUsage(&textResp.Usage)
-	output := buildResponseOutput(textResp.Choices, responseFallbackCatalogForRender(c, originalReq))
+	output := buildResponseOutput(gmw.GetLogger(c), textResp.Choices, responseFallbackCatalogForRender(c, originalReq))
 	toolCalls := buildRequiredActionToolCalls(textResp.Choices)
 
 	// Commit a gateway response node so the fallback ID is resolvable, retrievable,
@@ -43,6 +45,9 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 			conversationPtr = &openai.ResponseAPIConversation{Id: res.conversation}
 		}
 	}
+	// Persisted state keeps gateway thinking envelopes for previous_response_id;
+	// the client sees them only when it opted in through include.
+	output = clientVisibleResponseOutput(output, responseIncludesReasoningEncryptedContent(originalReq))
 
 	response := openai.ResponseAPIResponse{
 		Id:                 responseID,
@@ -151,8 +156,11 @@ func deriveResponseStatus(choices []openai_compatible.TextResponseChoice) (strin
 
 // buildResponseOutput builds the output items for a Response API response from Chat Completion choices.
 // The returned slice is always non-nil so that JSON serialization yields "output": [] instead of null,
-// which strict OpenAI SDK clients reject as a violation of the Responses API schema.
-func buildResponseOutput(choices []openai_compatible.TextResponseChoice, catalog *openai.ResponseFallbackToolCatalog) []openai.OutputItem {
+// which strict OpenAI SDK clients reject as a violation of the Responses API schema. Parameters: lg
+// reports envelope failures, choices are the Chat choices and catalog restores fallback tool identities.
+// Claude thinking blocks become one reasoning item each, placed before the function_call they preceded,
+// mirroring the streaming bridge's output_index order (message first, then reasoning and calls in order).
+func buildResponseOutput(lg glog.Logger, choices []openai_compatible.TextResponseChoice, catalog *openai.ResponseFallbackToolCatalog) []openai.OutputItem {
 	output := make([]openai.OutputItem, 0)
 	for _, choice := range choices {
 		msg := choice.Message
@@ -166,7 +174,17 @@ func buildResponseOutput(choices []openai_compatible.TextResponseChoice, catalog
 			})
 		}
 
-		if reasoning := extractReasoning(msg); reasoning != "" {
+		blocks := msg.ClaudeThinkingBlocks
+		nextBlock := 0
+		appendBlocks := func(ready func(relaymodel.ClaudeThinkingBlock) bool) {
+			for nextBlock < len(blocks) && ready(blocks[nextBlock]) {
+				block := blocks[nextBlock]
+				output = append(output, newClaudeThinkingReasoningItem(lg, newClaudeThinkingReasoningID(), block, strings.TrimSpace(block.Thinking)))
+				nextBlock++
+			}
+		}
+		// Verbatim Claude blocks supersede the joined reasoning text.
+		if reasoning := extractReasoning(msg); len(blocks) == 0 && reasoning != "" {
 			output = append(output, openai.OutputItem{
 				Type:   "reasoning",
 				Status: "completed",
@@ -179,7 +197,8 @@ func buildResponseOutput(choices []openai_compatible.TextResponseChoice, catalog
 			})
 		}
 
-		for _, tool := range msg.ToolCalls {
+		for toolIndex, tool := range msg.ToolCalls {
+			appendBlocks(func(block relaymodel.ClaudeThinkingBlock) bool { return block.ToolCallsBefore <= toolIndex })
 			arguments := ""
 			if tool.Function != nil && tool.Function.Arguments != nil {
 				switch v := tool.Function.Arguments.(type) {
@@ -204,6 +223,7 @@ func buildResponseOutput(choices []openai_compatible.TextResponseChoice, catalog
 			// that fallback flattened into ordinary Chat function tools.
 			output = append(output, catalog.ResponseFallbackToolCallItem(callID, name, arguments))
 		}
+		appendBlocks(func(relaymodel.ClaudeThinkingBlock) bool { return true })
 	}
 	return output
 }

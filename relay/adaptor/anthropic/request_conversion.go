@@ -357,13 +357,23 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		claudeMessage := Message{
 			Role: message.Role,
 		}
+		// Blocks decoded from gateway envelopes are exact provider state and take
+		// precedence over the signature cache and the <think> text fallback.
+		replayBlocks := claudeReplayThinkingBlocks(message, textRequest.Model, claudeRequest.Thinking)
+		if len(message.ClaudeThinkingBlocks) > 0 {
+			logger.Debug("replay Claude thinking blocks from Responses envelopes",
+				zap.Int("message_index", len(claudeRequest.Messages)),
+				zap.Int("thinking_blocks", len(message.ClaudeThinkingBlocks)),
+				zap.Int("replayed_blocks", len(replayBlocks)),
+			)
+		}
 		var content Content
 		if message.IsStringContent() {
 			stringContent := message.StringContent()
 
 			if stringContent != "" {
 				// For assistant messages with thinking enabled, check if we need to add thinking block
-				if message.Role == "assistant" && claudeRequest.Thinking != nil {
+				if message.Role == "assistant" && claudeRequest.Thinking != nil && len(replayBlocks) == 0 {
 					// Check if this message has reasoning content that should be converted to thinking block
 					var reasoningContent string
 					if message.Reasoning != nil {
@@ -456,6 +466,8 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 				})
 			}
 
+			claudeMessage.Content = insertClaudeThinkingBlocks(claudeMessage.Content, replayBlocks)
+
 			// Claude requires at least one content block per message
 			if len(claudeMessage.Content) == 0 {
 				return nil, errors.Wrap(errors.New("message must have at least one content block"), "validate message content")
@@ -469,7 +481,7 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		// Store reasoning content for later processing
 		var reasoningContent string
 		var needsThinkingProcessing bool
-		if message.Role == "assistant" && claudeRequest.Thinking != nil {
+		if message.Role == "assistant" && claudeRequest.Thinking != nil && len(replayBlocks) == 0 {
 			// Check if this message has reasoning content that should be converted to thinking block
 			if message.Reasoning != nil {
 				reasoningContent = *message.Reasoning
@@ -594,7 +606,7 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 			}
 		}
 
-		claudeMessage.Content = contents
+		claudeMessage.Content = insertClaudeThinkingBlocks(contents, replayBlocks)
 
 		// Claude requires at least one content block per message
 		if len(claudeMessage.Content) == 0 {

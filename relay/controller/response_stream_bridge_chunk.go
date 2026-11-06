@@ -80,18 +80,24 @@ func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_c
 			return true, true
 		}
 
-		if choice.Delta.Reasoning != nil && *choice.Delta.Reasoning != "" {
-			h.appendReasoningDelta(c, *choice.Delta.Reasoning)
-		}
-		if choice.Delta.ReasoningContent != nil && *choice.Delta.ReasoningContent != "" {
-			h.appendReasoningDelta(c, *choice.Delta.ReasoningContent)
-		}
-		if choice.Delta.Thinking != nil && *choice.Delta.Thinking != "" {
-			h.appendReasoningDelta(c, *choice.Delta.Thinking)
-		}
+		if len(choice.Delta.ClaudeThinkingBlocks) > 0 {
+			// Verbatim Claude blocks supersede this delta's joined reasoning text
+			// and become one reasoning item each, ordered among the tool calls.
+			h.handleClaudeThinkingBlocks(c, state, choice.Delta.ClaudeThinkingBlocks, choice.Delta.ToolCalls)
+		} else {
+			if choice.Delta.Reasoning != nil && *choice.Delta.Reasoning != "" {
+				h.appendReasoningDelta(c, *choice.Delta.Reasoning)
+			}
+			if choice.Delta.ReasoningContent != nil && *choice.Delta.ReasoningContent != "" {
+				h.appendReasoningDelta(c, *choice.Delta.ReasoningContent)
+			}
+			if choice.Delta.Thinking != nil && *choice.Delta.Thinking != "" {
+				h.appendReasoningDelta(c, *choice.Delta.Thinking)
+			}
 
-		if len(choice.Delta.ToolCalls) > 0 {
-			h.handleToolCalls(c, choice.Delta.ToolCalls)
+			if len(choice.Delta.ToolCalls) > 0 {
+				h.handleToolCalls(c, choice.Delta.ToolCalls)
+			}
 		}
 
 		if choice.FinishReason != nil {

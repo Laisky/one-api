@@ -3,6 +3,8 @@ package state
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // PortabilityClass describes whether a canonical item can be replayed onto a
@@ -131,6 +133,34 @@ func FallbackLowering(raw json.RawMessage) (action, kind string) {
 		return FallbackActionDrop, kind
 	}
 	return FallbackActionFail, kind
+}
+
+// FallbackLoweringForClaude applies FallbackLowering for a stateless Claude
+// Messages target. A reasoning item whose encrypted_content is a valid gateway
+// Claude thinking envelope stays provider-bound but is carried, because the
+// target is the provider family that issued it and the converter replays the
+// exact block; any other reasoning or thinking state still degrades. It returns
+// the action and the parsed item kind exactly like FallbackLowering.
+func FallbackLoweringForClaude(raw json.RawMessage) (action, kind string) {
+	action, kind = FallbackLowering(raw)
+	if action == FallbackActionDrop && strings.EqualFold(strings.TrimSpace(kind), KindReasoning) &&
+		rawCarriesClaudeThinkingEnvelope(raw) {
+		return FallbackActionCarry, kind
+	}
+	return action, kind
+}
+
+// rawCarriesClaudeThinkingEnvelope reports whether a raw reasoning item holds a
+// strictly valid gateway Claude thinking envelope in encrypted_content.
+func rawCarriesClaudeThinkingEnvelope(raw json.RawMessage) bool {
+	var probe struct {
+		EncryptedContent string `json:"encrypted_content"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil || !model.IsClaudeThinkingEnvelope(probe.EncryptedContent) {
+		return false
+	}
+	_, err := model.DecodeClaudeThinkingEnvelope(probe.EncryptedContent)
+	return err == nil
 }
 
 // probeItemKind extracts the "type" field of a raw canonical item, or "" when the
