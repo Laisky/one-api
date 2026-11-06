@@ -220,12 +220,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 				case "function_call":
 					fcID, _ := v["id"].(string)
 					callID, _ := v["call_id"].(string)
-					normalizedID := convertResponseAPIIDToToolCall(fcID, callID)
-					if normalizedID == "" && callID != "" {
-						normalizedID = callID
-					} else if normalizedID == "" && fcID != "" {
-						normalizedID = fcID
-					}
+					normalizedID := responseToolCallPairingID(fcID, callID)
 
 					name, _ := v["name"].(string)
 					arguments := stringifyFunctionCallArguments(v["arguments"])
@@ -307,12 +302,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 				case "function_call_output":
 					fcID, _ := v["id"].(string)
 					callID, _ := v["call_id"].(string)
-					normalizedID := convertResponseAPIIDToToolCall(fcID, callID)
-					if normalizedID == "" && callID != "" {
-						normalizedID = callID
-					} else if normalizedID == "" && fcID != "" {
-						normalizedID = fcID
-					}
+					normalizedID := responseToolCallPairingID(fcID, callID)
 
 					// Image-bearing outputs keep their images: the tool message holds
 					// the text and ToolResultParts the ordered parts (see

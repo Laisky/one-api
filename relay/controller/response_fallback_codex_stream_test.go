@@ -149,7 +149,7 @@ func TestResponseFallbackCodexToolsHTTPStream(t *testing.T) {
 						"custom input is released once, without function_call_arguments events")
 					require.Equal(t, codexFallbackPatch, trace.deltas.String())
 					require.Equal(t, codexFallbackPatch, trace.input)
-					require.NotContains(t, string(trace.added), `"input"`, "the added item carries no input yet")
+					require.Contains(t, string(trace.added), `"input":""`, "the added item carries the required, still-empty input field")
 				case "tool_search":
 					require.Equal(t, "tool_search_call", added.Type)
 					require.Equal(t, []string{"response.output_item.added", "response.output_item.done"}, trace.sequence, "client tool_search has no argument events")

@@ -89,6 +89,18 @@ func (o OutputItem) MarshalJSON() ([]byte, error) {
 		return marshalToolSearchOutputItem(o)
 	}
 	type outputItemAlias OutputItem
+	if o.Type == "custom_tool_call" {
+		// input is required on custom tool calls even when the tool received
+		// empty text; clients such as Codex fail to parse a call without it.
+		data, err := json.Marshal(struct {
+			outputItemAlias
+			Input string `json:"input"`
+		}{outputItemAlias: outputItemAlias(o), Input: o.Input})
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal response API custom tool call item")
+		}
+		return data, nil
+	}
 	if o.Type != "message" {
 		data, err := json.Marshal(outputItemAlias(o))
 		if err != nil {
