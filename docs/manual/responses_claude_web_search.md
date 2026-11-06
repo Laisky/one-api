@@ -19,7 +19,7 @@ priced exactly these tools.
 | `user_location` (`type: approximate`, with flattened or nested `city`/`region`/`country`/`timezone`) | `user_location` (`type: approximate`); omitted when empty |
 | `search_context_size`, `search_content_types`, `indexed_web_access` | not forwarded; Claude has no equivalent |
 | `external_web_access` | not forwarded; see below |
-| (none) | `max_uses` is omitted, which leaves the search count uncapped, as Anthropic's default |
+| (none) | `max_uses` is set to 10 (`anthropic.ConvertedWebSearchMaxUses`), exactly the searches the reservation funds |
 
 The gateway bounds its own input handling: at most 100 domains, and at most 256 bytes per
 domain or location field.
@@ -76,14 +76,19 @@ Anthropic tooling policy leaves `code_execution` unpriced.
 
 ## History replay
 
-Codex replays `web_search_call` items verbatim. On fallback they are accepted and **dropped**:
+Codex replays `web_search_call` items verbatim. On fallback they are accepted and lowered:
 
-- fidelity admission accepts them;
-- the converter removes them without splitting the surrounding assistant turn;
-- `state.FallbackLowering` classifies them as `drop` for hydrated chains.
+- fidelity admission accepts them, and `state.FallbackLowering` carries them through hydrated
+  chains so the converter sees them;
+- the converter removes the item without splitting the surrounding assistant turn and prefixes that
+  model response's answer with a deterministic `[Web search: ...]` note, so the model still knows
+  the answer came from a search;
+- the reasoning of that same model response is omitted: Claude's `server_tool_use` /
+  `web_search_tool_result` blocks cannot be reconstructed from Responses items (Codex keeps only
+  the typed action), and Claude rejects replayed thinking whose assistant message changed
+  (`thinking ... blocks in the latest assistant message cannot be modified`).
 
-The searches' findings already live in the assistant text that follows. Claude's encrypted search
-results cannot be reconstructed from Responses items. Native Responses passthrough is unchanged,
+The searches' findings already live in the assistant text that follows. Native Responses passthrough is unchanged,
 and other hosted items (`code_interpreter_call`, `file_search_call`, `mcp_call`, …) still fail
 closed with `state_not_portable`.
 
@@ -95,8 +100,8 @@ The fallback uses the same server-tool billing path as native Claude Messages:
    whitelisted, priced `web_search`. The Anthropic default is 10 USD per 1,000 searches, which is
    5,000 quota per search; channel tooling pricing overrides it.
 2. **Reservation:** when the search is forwarded, the Chat reservation adds 10 searches at the
-   admitted per-call price (`claudeServerToolDefaultReservedUses`, the same floor native Claude
-   Messages uses when `max_uses` is absent). A complete receipt refunds the unused part. A missing
+   admitted per-call price (`anthropic.ConvertedWebSearchMaxUses`, which is also the converted
+   tool's `max_uses`, so the hold bounds the searches). A complete receipt refunds the unused part. A missing
    or incomplete receipt keeps the funded estimate.
 3. **Settlement:** the Claude response handlers merge `usage.server_tool_use.web_search_requests`
    by maximum, so cumulative and duplicate stream receipts never add up. When no receipt counter is
