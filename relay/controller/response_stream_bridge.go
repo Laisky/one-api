@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 
@@ -406,13 +407,22 @@ func (h *chatToResponseStreamBridge) appendTextDelta(c *gin.Context, delta strin
 	}
 }
 
+// appendReasoningDelta forwards one streamed reasoning delta verbatim so word
+// boundaries that fall on chunk edges survive. Leading whitespace is dropped
+// only before any reasoning has accumulated, so a whitespace-only first delta
+// never opens an empty reasoning item.
 func (h *chatToResponseStreamBridge) appendReasoningDelta(c *gin.Context, delta string) {
-	trimmed := strings.TrimSpace(delta)
-	if trimmed == "" {
+	choice := h.choices[h.activeChoiceIndex]
+	if choice == nil {
 		return
 	}
-	choice := h.choices[h.activeChoiceIndex]
-	h.appendChoiceReasoning(c, choice, trimmed)
+	if choice.reasoning.Len() == 0 {
+		delta = strings.TrimLeftFunc(delta, unicode.IsSpace)
+	}
+	if delta == "" {
+		return
+	}
+	h.appendChoiceReasoning(c, choice, delta)
 }
 
 func (h *chatToResponseStreamBridge) handleToolCalls(c *gin.Context, tools []model.Tool) {
