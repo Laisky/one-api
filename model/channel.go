@@ -53,13 +53,23 @@ type Channel struct {
 	Models             string  `json:"models"`
 	HiddenModels       *string `json:"hidden_models" gorm:"type:text"`
 	ModelConfigs       *string `json:"model_configs" gorm:"type:text"`
-	Group              string  `json:"group" gorm:"type:varchar(32);default:'default'"`
-	UsedQuota          int64   `json:"used_quota" gorm:"bigint;default:0"`
-	ModelMapping       *string `json:"model_mapping" gorm:"type:text"`
-	Priority           *int64  `json:"priority" gorm:"bigint;default:0"`
-	Config             string  `json:"config"`
-	SystemPrompt       *string `json:"system_prompt" gorm:"type:text"`
-	RateLimit          *int    `json:"ratelimit" gorm:"column:ratelimit;default:0"`
+	// Group is the comma-separated list of every group the channel serves. Loaded
+	// channels carry the complete list even when the channels.group column holds only
+	// a prefix of it; see GroupTruncated and ChannelGroup.
+	Group string `json:"group" gorm:"type:varchar(32);default:'default'"`
+	// GroupTruncated is true when channels.group holds only a leading part of the
+	// channel's groups because the whole list does not fit the column, so channel_groups
+	// alone holds all of them; false when the column holds the whole list. It is nil for
+	// a row no relation-aware writer has stored (one written before the relation existed,
+	// or by an older binary), whose column is complete. It deliberately has no column
+	// default, so existing rows read back NULL and startup reconciliation finds them.
+	GroupTruncated *bool   `json:"-" gorm:"column:group_truncated;index"`
+	UsedQuota      int64   `json:"used_quota" gorm:"bigint;default:0"`
+	ModelMapping   *string `json:"model_mapping" gorm:"type:text"`
+	Priority       *int64  `json:"priority" gorm:"bigint;default:0"`
+	Config         string  `json:"config"`
+	SystemPrompt   *string `json:"system_prompt" gorm:"type:text"`
+	RateLimit      *int    `json:"ratelimit" gorm:"column:ratelimit;default:0"`
 	// Preferred testing model for this channel (optional).
 	// If empty or nil, the system auto-selects the cheapest chat-format model at test
 	// time. Set it to ChannelTestingModelSkip to exclude the channel from testing.
@@ -251,9 +261,28 @@ func BatchInsertChannels(channels []Channel) error {
 		}
 	}
 
+	groupLists := make([][]string, len(channels))
+	for i := range channels {
+		groupLists[i] = assignedChannelGroups(&channels[i])
+	}
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&channels).Error; err != nil {
+		restores := make([]func(), len(channels))
+		for i := range channels {
+			restores[i] = stageChannelGroupColumn(&channels[i], groupLists[i])
+		}
+		err := tx.Create(&channels).Error
+		for _, restore := range restores {
+			restore()
+		}
+		if err != nil {
 			return errors.Wrapf(err, "batch insert %d channels", len(channels))
+		}
+		ids := make([]int, len(channels))
+		for i := range channels {
+			ids[i] = channels[i].Id
+		}
+		if err := insertNewChannelGroupsWithDB(tx, ids, groupLists); err != nil {
+			return errors.Wrapf(err, "write groups for %d channels", len(channels))
 		}
 		for i := range channels {
 			if err := addAbilitiesWithDB(tx, &channels[i]); err != nil {
@@ -390,9 +419,16 @@ func (channel *Channel) Insert() error {
 	if err := validateJinaChannelConfiguration(channel); err != nil {
 		return errors.Wrap(err, "validate new channel")
 	}
+	groups := assignedChannelGroups(channel)
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(channel).Error; err != nil {
+		restore := stageChannelGroupColumn(channel, groups)
+		err := tx.Create(channel).Error
+		restore()
+		if err != nil {
 			return errors.Wrapf(err, "insert channel: name=%s, type=%d", channel.Name, channel.Type)
+		}
+		if err := insertNewChannelGroupsWithDB(tx, []int{channel.Id}, [][]string{groups}); err != nil {
+			return errors.Wrapf(err, "write groups for channel: id=%d, name=%s", channel.Id, channel.Name)
 		}
 		if err := addAbilitiesWithDB(tx, channel); err != nil {
 			return errors.Wrapf(err, "add abilities for channel: id=%d, name=%s", channel.Id, channel.Name)
@@ -460,6 +496,9 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 		}
 	}
 
+	// A submission that names no group keeps the stored groups: the struct update skips
+	// the empty column and the relation is left alone.
+	requestedGroups := channel.GetGroupNames()
 	persisted := *channel
 	var testingModel testingModelResolution
 	err := DB.WithContext(writeCtx).Transaction(func(tx *gorm.DB) error {
@@ -470,8 +509,19 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 		if err := tx.Select(abilityUpstreamColumns).First(&upstreamBefore, "id = ?", persisted.Id).Error; err != nil {
 			return errors.Wrapf(err, "read upstream configuration of channel %d before update", persisted.Id)
 		}
+		// The reload below gives persisted its whole list back, so the staged column
+		// copy needs no restore.
+		persisted.Group, persisted.GroupTruncated = "", nil
+		if len(requestedGroups) > 0 {
+			stageChannelGroupColumn(&persisted, requestedGroups)
+		}
 		if err := tx.Model(&persisted).Omit("uuid", ChannelTestingModelField).Updates(&persisted).Error; err != nil {
 			return errors.Wrapf(err, "update channel: id=%d, name=%s", persisted.Id, persisted.Name)
+		}
+		if len(requestedGroups) > 0 {
+			if err := replaceChannelGroupsWithDB(tx, persisted.Id, requestedGroups); err != nil {
+				return errors.Wrapf(err, "write groups for channel %d", persisted.Id)
+			}
 		}
 		if persisted.HiddenModelsProvided {
 			if err := tx.Model(&Channel{}).Where("id = ?", persisted.Id).Update("hidden_models", persisted.HiddenModels).Error; err != nil {
@@ -556,21 +606,37 @@ func (channel *Channel) UpdateBalance(balance float64) {
 	}
 }
 
+// Delete removes the channel together with its abilities and channel_groups rows in one
+// transaction, then refreshes the model-list caches of the groups it served.
+//
+// Return values:
+//   - error: a wrapped read or delete failure; nothing is removed when it is non-nil.
 func (channel *Channel) Delete() error {
 	oldGroups := channel.Group
 	if strings.TrimSpace(oldGroups) == "" && channel.Id != 0 {
 		var existing Channel
-		if err := DB.Select("id", "group").First(&existing, "id = ?", channel.Id).Error; err == nil {
+		err := DB.Select("id", "group").First(&existing, "id = ?", channel.Id).Error
+		switch {
+		case err == nil:
 			oldGroups = existing.Group
+		case !errors.Is(err, gorm.ErrRecordNotFound):
+			return identity.Tag(errors.Wrapf(err, "read groups of channel %d before deletion", channel.Id), channel.Ref())
 		}
 	}
-	if err := DB.Delete(channel).Error; err != nil {
-		return identity.Tag(errors.Wrapf(err, "delete channel %d", channel.Id), channel.Ref())
-	}
-	if err := channel.DeleteAbilities(); err != nil {
-		return identity.Tag(
-			errors.Wrapf(err, "delete abilities for channel %d", channel.Id),
-			channel.Ref())
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := deleteAbilitiesWithDB(tx, channel.Id); err != nil {
+			return errors.Wrapf(err, "delete abilities for channel %d", channel.Id)
+		}
+		if err := deleteChannelGroupsWithDB(tx, channel.Id); err != nil {
+			return errors.Wrapf(err, "delete groups for channel %d", channel.Id)
+		}
+		if err := tx.Delete(channel).Error; err != nil {
+			return errors.Wrapf(err, "delete channel %d", channel.Id)
+		}
+		return nil
+	})
+	if err != nil {
+		return identity.Tag(errors.Wrapf(err, "delete channel %d transaction", channel.Id), channel.Ref())
 	}
 	InvalidateChannelModelCaches(oldGroups)
 	return nil
@@ -690,30 +756,33 @@ func updateChannelUsedQuota(ctx context.Context, id int, quota int64) {
 	}
 }
 
+// DeleteChannelByStatus removes every channel whose status equals status, with its
+// abilities and channel_groups rows, and returns how many channels it removed.
+//
+// Parameters:
+//   - status: the channel status to delete.
+//
+// Return values:
+//   - int64: the number of channels removed.
+//   - error: a wrapped failure; nothing is removed when it is non-nil.
 func DeleteChannelByStatus(status int64) (int64, error) {
-	var channels []Channel
-	_ = DB.Select("group").Where("status = ?", status).Find(&channels).Error
-	groups := make([]string, 0, len(channels))
-	for _, channel := range channels {
-		groups = append(groups, channel.Group)
+	removed, err := deleteChannelsWithStatus(context.Background(), int(status))
+	if err != nil {
+		return 0, errors.Wrapf(err, "delete channels with status %d", status)
 	}
-	result := DB.Where("status = ?", status).Delete(&Channel{})
-	if result.Error == nil {
-		InvalidateChannelModelCaches(groups...)
-	}
-	return result.RowsAffected, errors.WithStack(result.Error)
+	return removed, nil
 }
 
+// DeleteDisabledChannel removes every automatically or manually disabled channel, with
+// its abilities and channel_groups rows, and returns how many channels it removed.
+//
+// Return values:
+//   - int64: the number of channels removed.
+//   - error: a wrapped failure; nothing is removed when it is non-nil.
 func DeleteDisabledChannel() (int64, error) {
-	var channels []Channel
-	_ = DB.Select("group").Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Find(&channels).Error
-	groups := make([]string, 0, len(channels))
-	for _, channel := range channels {
-		groups = append(groups, channel.Group)
+	removed, err := deleteChannelsWithStatus(context.Background(), ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled)
+	if err != nil {
+		return 0, errors.Wrap(err, "delete disabled channels")
 	}
-	result := DB.Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Delete(&Channel{})
-	if result.Error == nil {
-		InvalidateChannelModelCaches(groups...)
-	}
-	return result.RowsAffected, errors.WithStack(result.Error)
+	return removed, nil
 }

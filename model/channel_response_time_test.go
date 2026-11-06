@@ -40,7 +40,7 @@ func TestChannelResponseTimeContextCompatibility(t *testing.T) {
 			sqlDB, err := db.DB()
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
-			require.NoError(t, db.AutoMigrate(&Channel{}))
+			require.NoError(t, db.AutoMigrate(&Channel{}, &ChannelGroup{}))
 			originalDB := DB
 			DB = db
 			t.Cleanup(func() { DB = originalDB })

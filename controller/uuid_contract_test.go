@@ -47,7 +47,7 @@ func setupUUIDContractTestEnvironment(t *testing.T) (*uuidContractFixture, func(
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&model.User{},
-		&model.Channel{},
+		&model.Channel{}, &model.ChannelGroup{},
 		&model.Token{},
 		&model.Redemption{},
 		&model.MCPServer{},

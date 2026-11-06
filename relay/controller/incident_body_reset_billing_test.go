@@ -43,7 +43,7 @@ func incidentBodyResetBillingFixture(t *testing.T, forwarded bool) (*gin.Context
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Log{}, &model.Channel{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Log{}, &model.Channel{}, &model.ChannelGroup{}))
 	oldDB, oldLogDB := model.DB, model.LOG_DB
 	oldSQLite, oldMySQL, oldPostgres := common.UsingSQLite.Load(), common.UsingMySQL.Load(), common.UsingPostgreSQL.Load()
 	oldRedis, oldConsume, oldBatch := common.IsRedisEnabled(), config.IsLogConsumeEnabled(), config.BatchUpdateEnabled

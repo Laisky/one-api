@@ -52,7 +52,7 @@ func TestGPTImage25ReviewRelayAccounting(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cleanup := setupCacheBillingLogTest(t)
 			defer cleanup()
-			require.NoError(t, model.DB.AutoMigrate(&model.Channel{}, &model.UserRequestCost{}))
+			require.NoError(t, model.DB.AutoMigrate(&model.Channel{}, &model.ChannelGroup{}, &model.UserRequestCost{}))
 			require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", 1).Update("quota", tc.balance).Error)
 			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Update("remain_quota", tc.balance).Error)
 			oldLog := config.IsLogConsumeEnabled()

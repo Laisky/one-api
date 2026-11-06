@@ -127,7 +127,7 @@ func TestAsyncBillingSIGKILLRecovery(t *testing.T) {
 		t.Run(stage, func(t *testing.T) {
 			dir := t.TempDir()
 			openCrashBillingStore(t, dir)
-			require.NoError(t, model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.AsyncTask{}, &model.UserRequestCost{}))
+			require.NoError(t, model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.ChannelGroup{}, &model.AsyncTask{}, &model.UserRequestCost{}))
 			require.NoError(t, model.LOG_DB.AutoMigrate(&model.Log{}, &model.AsyncTaskLogReceipt{}))
 			user := model.User{Id: 901, UUID: uuid.NewString(), Username: "crash-owner", Status: model.UserStatusEnabled, Quota: 200000}
 			token := model.Token{Id: 902, UUID: uuid.NewString(), UserId: user.Id, Key: uuid.NewString(), Status: model.TokenStatusEnabled, RemainQuota: 200000, ExpiredTime: -1}

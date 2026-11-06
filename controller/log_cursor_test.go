@@ -46,7 +46,7 @@ func cursorTestEnv(t *testing.T, rows int) {
 
 	primary, err := gorm.Open(sqlite.Open(dir+"/primary.db"), &gorm.Config{Logger: glogger.Discard})
 	require.NoError(t, err)
-	require.NoError(t, primary.AutoMigrate(&model.Channel{}))
+	require.NoError(t, primary.AutoMigrate(&model.Channel{}, &model.ChannelGroup{}))
 
 	prevDB, prevLogDB := model.DB, model.LOG_DB
 	model.DB, model.LOG_DB = primary, logDB

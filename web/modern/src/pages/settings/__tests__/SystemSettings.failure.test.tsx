@@ -1,4 +1,5 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { AxiosError, AxiosHeaders } from 'axios';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -100,6 +101,33 @@ describe('SystemSettings failure handling', () => {
           message: 'endpoint save failed',
         })
       );
+    });
+  });
+  it('surfaces the backend reason when a GroupRatio save is rejected with HTTP 400', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: { success: true, data: [{ key: 'GroupRatio', value: '{"default":1}' }] },
+    });
+    const reason = "group name \"my group\" may only contain letters, digits, '.', '_' and '-'";
+    const rejection = new AxiosError('Request failed with status code 400', 'ERR_BAD_REQUEST', undefined, undefined, {
+      status: 400,
+      statusText: 'Bad Request',
+      headers: {},
+      config: { headers: new AxiosHeaders() },
+      data: { success: false, message: reason },
+    });
+    vi.spyOn(api, 'put').mockRejectedValue(rejection);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    render(<SystemSettings />);
+
+    const editor = (await screen.findByLabelText('GroupRatio value')) as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: '{"default":1,"my group":2}' } });
+    const field = within(editor.closest('.border.rounded-lg') as HTMLElement);
+    await user.click(field.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: reason }));
     });
   });
 });

@@ -46,7 +46,7 @@ func TestModelDiscoverySurvivesCacheFillFailure(t *testing.T) {
 			sqlDB, err := db.DB()
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
-			require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}))
+			require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.ChannelGroup{}, &model.Ability{}))
 			require.NoError(t, db.Create(&model.User{Id: 123, Username: "fixture", Password: "password", Group: tc.group, Status: model.UserStatusEnabled}).Error)
 			require.NoError(t, db.Create(&model.Token{Id: 456, UserId: 123, Name: "fixture", Status: model.TokenStatusEnabled}).Error)
 			require.NoError(t, db.Create(&model.Channel{Id: 789, Name: "fixture-channel", Type: 1, Status: model.ChannelStatusEnabled, Group: tc.group, Models: "model-a"}).Error)

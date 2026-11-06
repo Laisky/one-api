@@ -160,7 +160,7 @@ func setupDistributorTestDB(t *testing.T) (*gorm.DB, func()) {
 	t.Helper()
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}))
+	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Channel{}, &model.ChannelGroup{}, &model.Ability{}))
 
 	originalDB := model.DB
 	originalUsingSQLite := common.UsingSQLite.Load()
@@ -549,7 +549,7 @@ func TestEndpointRoutingIntegration(t *testing.T) {
 	// Set up test database
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	err = db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{})
+	err = db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.ChannelGroup{}, &model.Ability{})
 	require.NoError(t, err)
 	model.DB = db
 	common.UsingSQLite.Store(true)

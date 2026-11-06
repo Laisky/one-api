@@ -277,6 +277,12 @@ func initPrimaryDatabase() error {
 	if err != nil {
 		return errors.Wrap(err, "open primary database")
 	}
+	// Every channel read must see the complete group list, so the hydration callback is
+	// installed before the handle issues any statement (callback registration is not
+	// synchronized with running queries). Slave nodes need it as much as the master.
+	if err = RegisterChannelGroupHydration(DB); err != nil {
+		return errors.Wrap(err, "register channel group hydration")
+	}
 
 	if config.OpenTelemetryEnabled {
 		if err = enableGormOpenTelemetry(DB, "primary"); err != nil {
@@ -353,6 +359,15 @@ func initPrimaryDatabase() error {
 	}
 
 	// STEP 3: Data-format migrations (schema is already correct at this point).
+
+	// 3a) Keep the channel-to-group relation complete: backfill channels written before it
+	// existed or by an older binary, and repair truncated columns an older binary rewrote.
+	// Reads stay correct without it (the column is authoritative for unreconciled rows),
+	// so a failure is logged instead of blocking startup.
+	if _, err = ReconcileChannelGroups(context.Background()); err != nil {
+		logger.Logger.Error("failed to reconcile channel group relation", zap.Error(err))
+	}
+
 	if err = MigrateCustomChannelsToOpenAICompatible(); err != nil {
 		return errors.Wrap(err, "migrate custom channels")
 	}
@@ -393,6 +408,9 @@ func migrateDB() error {
 	}
 	if err = DB.AutoMigrate(&Ability{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate Ability")
+	}
+	if err = DB.AutoMigrate(&ChannelGroup{}); err != nil {
+		return errors.Wrapf(err, "failed to migrate ChannelGroup")
 	}
 	// In split mode LOG_DB is the only authoritative owner of logs, so the primary must not
 	// gain or keep evolving a stale logs table. migrateLOGDB owns that schema instead. A

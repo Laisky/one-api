@@ -79,7 +79,7 @@ func billingTransportAuditFixture(t *testing.T, backend string, first *model.Cha
 	t.Helper()
 	billingTransportAuditDrain(t)
 	db, logDB := billingTransportAuditStores(t, backend)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}, &model.UserRequestCost{}, &model.QuotaRefund{}, &model.MCPServer{}, &model.MCPTool{}, &model.Trace{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.ChannelGroup{}, &model.Ability{}, &model.UserRequestCost{}, &model.QuotaRefund{}, &model.MCPServer{}, &model.MCPTool{}, &model.Trace{}))
 	require.NoError(t, logDB.AutoMigrate(&model.Log{}))
 	oldDB, oldLogDB := model.DB, model.LOG_DB
 	oldSQLite, oldMySQL, oldPostgres := common.UsingSQLite.Load(), common.UsingMySQL.Load(), common.UsingPostgreSQL.Load()

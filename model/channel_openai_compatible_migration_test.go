@@ -24,7 +24,7 @@ func TestMigrateCustomChannelsToOpenAICompatible(t *testing.T) {
 	DB = db
 	t.Cleanup(func() { DB = originalDB })
 
-	require.NoError(t, db.AutoMigrate(&Channel{}))
+	require.NoError(t, db.AutoMigrate(&Channel{}, &ChannelGroup{}))
 
 	legacy := Channel{Id: 1, Name: "legacy-custom", Type: channeltype.Custom}
 	modern := Channel{Id: 2, Name: "already-compatible", Type: channeltype.OpenAICompatible}

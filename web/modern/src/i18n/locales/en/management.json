@@ -292,9 +292,14 @@
         }
       },
       "groups": {
-        "add_placeholder": "Add custom group...",
-        "help": "Restrict access to specific user groups. Empty means all users can access. The default group is always kept.",
-        "label": "Groups *"
+        "add_placeholder": "Search or select groups...",
+        "help": "User groups allowed to use this channel. Only groups configured in Settings → Operation → Groups & Ratios can be selected. Normal users belong to the \"default\" group. At least one group is required.",
+        "label": "Groups *",
+        "load_failed": "The configured groups could not be loaded, so no group can be added right now. The groups already selected are kept.",
+        "load_failed_empty": "Groups are unavailable because the list could not be loaded",
+        "loading": "Loading groups...",
+        "no_match": "No matching groups",
+        "remove": "Remove group {{group}}"
       },
       "hidden_models": {
         "custom_placeholder": "Add hidden model...",
@@ -993,6 +998,9 @@
         "group": {
           "help": "User group controls access and model/channel visibility.",
           "label": "Group *",
+          "load_failed": "The configured groups could not be loaded, so the group cannot be changed right now. The current group is kept.",
+          "load_failed_empty": "Other groups are unavailable because the list could not be loaded",
+          "loading": "Loading groups...",
           "placeholder": "Select a group"
         },
         "mcp_tool_blacklist": {

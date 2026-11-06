@@ -31,7 +31,7 @@ import (
 func securityImageAccount(t *testing.T, owner, token int64, unlimited bool) {
 	t.Helper()
 	t.Cleanup(setupCacheBillingLogTest(t))
-	require.NoError(t, model.DB.AutoMigrate(&model.Channel{}, &model.UserRequestCost{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.Channel{}, &model.ChannelGroup{}, &model.UserRequestCost{}))
 	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", 1).Update("quota", owner).Error)
 	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"remain_quota": token, "used_quota": 0, "unlimited_quota": unlimited}).Error)
 	oldLog, oldBatch := config.IsLogConsumeEnabled(), config.BatchUpdateEnabled

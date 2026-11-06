@@ -41,7 +41,7 @@ func cacheAsideFixture(t *testing.T, failSet bool) (context.Context, *observer.O
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
-	require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &Channel{}, &Ability{}))
+	require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &Channel{}, &ChannelGroup{}, &Ability{}))
 	require.NoError(t, db.Create(&User{Id: 123, Username: "test-cache", Password: "test-password", Group: "vip", Status: UserStatusEnabled, Quota: 5000}).Error)
 	require.NoError(t, db.Create(&Token{Id: 456, UserId: 123, Name: "cache-token", Key: "cachefillfailurekey", Status: TokenStatusEnabled}).Error)
 	require.NoError(t, db.Create(&Channel{Id: 789, Name: "cache-channel", Type: 1, Status: ChannelStatusEnabled, Group: "vip", Models: "model-a"}).Error)

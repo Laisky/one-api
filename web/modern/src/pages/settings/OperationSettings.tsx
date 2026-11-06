@@ -14,6 +14,7 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import * as z from 'zod';
 import { formatJSON, sanitizeJsonInput } from '../channels/helpers';
+import { groupRatioKeys, validateGroupRatioJSON } from './group-ratio-validation';
 import { OperationAdministrationCards, OperationQuotaCard } from './OperationSettingsCards';
 
 const operationSchema = z.object({
@@ -39,35 +40,6 @@ const operationSchema = z.object({
 export type OperationFormInput = z.input<typeof operationSchema>;
 /** OperationForm describes validated operation settings after schema defaults are applied. */
 export type OperationForm = z.output<typeof operationSchema>;
-
-export type GroupRatioIssue = { type: 'parse'; message: string } | { type: 'shape' } | { type: 'invalid-entries'; entries: string[] };
-
-const validateGroupRatioJSON = (raw: string): GroupRatioIssue | null => {
-  if (!raw.trim()) return { type: 'shape' };
-  try {
-    const parsed = JSON.parse(sanitizeJsonInput(raw));
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-      return { type: 'shape' };
-    }
-    const invalid: string[] = [];
-    for (const [rawKey, rawValue] of Object.entries(parsed as Record<string, unknown>)) {
-      const keyLabel = rawKey.trim().length > 0 ? rawKey : '(empty key)';
-      if (rawKey.trim().length === 0) {
-        invalid.push(keyLabel);
-        continue;
-      }
-      if (typeof rawValue !== 'number' || !Number.isFinite(rawValue) || rawValue < 0) {
-        invalid.push(keyLabel);
-      }
-    }
-    if (invalid.length > 0) {
-      return { type: 'invalid-entries', entries: invalid };
-    }
-    return null;
-  } catch (error) {
-    return { type: 'parse', message: error instanceof Error ? error.message : 'Invalid JSON' };
-  }
-};
 
 export function OperationSettings() {
   const { t } = useTranslation();
@@ -156,7 +128,7 @@ export function OperationSettings() {
         form.reset(formData);
       }
     } catch (error) {
-      console.error('Error loading options:', error);
+      console.error(`Error loading options: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoading(false);
     }
@@ -170,7 +142,7 @@ export function OperationSettings() {
         throw new Error(response.data?.message || t('operation_settings.save_failed_generic'));
       }
     } catch (error) {
-      console.error(`Error updating ${key}:`, error);
+      console.error(`Error updating ${key}: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   };
@@ -216,11 +188,13 @@ export function OperationSettings() {
     }
   };
 
-  const groupRatioIssue = useMemo(() => validateGroupRatioJSON(groupRatioText), [groupRatioText]);
+  // Keys of the last loaded or saved value are grandfathered; every other key is a new group.
+  const existingGroupKeys = useMemo(() => groupRatioKeys(groupRatioOriginal), [groupRatioOriginal]);
+  const groupRatioIssue = useMemo(() => validateGroupRatioJSON(groupRatioText, existingGroupKeys), [groupRatioText, existingGroupKeys]);
   const groupRatioDirty = groupRatioText !== groupRatioOriginal;
 
   const saveGroupRatio = async () => {
-    const issue = validateGroupRatioJSON(groupRatioText);
+    const issue = validateGroupRatioJSON(groupRatioText, existingGroupKeys);
     if (issue) {
       notify({
         type: 'error',
@@ -278,7 +252,7 @@ export function OperationSettings() {
         });
       }
     } catch (error) {
-      console.error('Error clearing logs:', error);
+      console.error(`Error clearing logs: ${error instanceof Error ? error.message : String(error)}`);
       notify({
         type: 'error',
         title: t('operation_settings.logs.clear_failed_title'),

@@ -66,6 +66,9 @@ func DeleteSelectedDisabledChannel(ctx context.Context, id int) (bool, error) {
 		if err := deleteAbilitiesWithDB(tx, id); err != nil {
 			return errors.Wrap(err, "delete selected channel abilities")
 		}
+		if err := deleteChannelGroupsWithDB(tx, id); err != nil {
+			return errors.Wrap(err, "delete selected channel groups")
+		}
 		if err := tx.Delete(&Channel{}, "id = ?", id).Error; err != nil {
 			return errors.Wrap(err, "delete selected disabled channel")
 		}

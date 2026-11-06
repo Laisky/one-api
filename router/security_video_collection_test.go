@@ -50,7 +50,7 @@ func TestSecurityLegacyVideoCollectionOwnership(t *testing.T) {
 		config.MemoryCacheEnabled, config.RateLimitDisabled = oldMemory, oldRate
 		require.NoError(t, sqlDB.Close())
 	})
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}, &model.AsyncTaskBinding{}, &model.Trace{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.ChannelGroup{}, &model.Ability{}, &model.AsyncTaskBinding{}, &model.Trace{}))
 	var collections, items atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

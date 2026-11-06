@@ -14,6 +14,7 @@ import (
 	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 // isSensitiveOptionKey reports whether the option key holds a secret value
@@ -123,6 +124,14 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 		option.Value = val
+	case "GroupRatio":
+		// Settings is the only place groups are created, so validate the whole
+		// catalog before model.UpdateOption persists it: a rejected value must
+		// leave both the stored option and the live catalog unchanged.
+		if err := ratio.ValidateGroupRatioUpdate(option.Value); err != nil {
+			helper.RespondError(c, errkind.InvalidRequestErr(err))
+			return
+		}
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && config.GitHubClientId == "" {
 			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Unable to enable GitHub OAuth, please fill in the GitHub Client Id and GitHub Client Secret first!")))
