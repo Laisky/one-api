@@ -58,6 +58,21 @@ type Message struct {
 	// -------------------------------------
 	Thinking  *string `json:"thinking,omitempty"`
 	Signature *string `json:"signature,omitempty"`
+
+	// -------------------------------------
+	// Gateway-internal tool result media (never serialized)
+	// -------------------------------------
+	// ToolResultParts carries the ordered text and image parts of a tool
+	// result whose Content holds only its text. Chat upstreams keep receiving
+	// that text-only tool message (plus a ToolResultMediaCarrier message);
+	// converters that can place images inside a tool result, such as Claude
+	// tool_result blocks, rebuild the result from these parts instead.
+	ToolResultParts []MessageContent `json:"-"`
+	// ToolResultMediaCarrier marks a synthetic user message that only
+	// re-delivers the images held in the ToolResultParts of the directly
+	// preceding run of tool messages. Converters that consume ToolResultParts
+	// skip it; every other path forwards it as an ordinary user message.
+	ToolResultMediaCarrier bool `json:"-"`
 }
 
 type AnnotationItem struct {

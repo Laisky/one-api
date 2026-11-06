@@ -60,10 +60,16 @@ func (c *Content) UnmarshalJSON(data []byte) error {
 // MarshalJSON preserves unchanged raw fields and applies every typed edit/removal.
 // Parameters: c is the block to serialize. Returns: a wrapped encoding error.
 // Opaque strings and numeric tokens retain their values; JSON whitespace is not an identity.
+// Non-empty ContentBlocks replace the string content with a block array.
 func (c Content) MarshalJSON() ([]byte, error) {
 	typedBytes, err := json.Marshal(contentWire(c))
 	if err != nil {
 		return nil, errors.Wrap(err, "encode typed Claude content")
+	}
+	if len(c.ContentBlocks) > 0 {
+		if typedBytes, err = withContentBlocks(typedBytes, c.ContentBlocks); err != nil {
+			return nil, err
+		}
 	}
 	if len(c.rawFields) == 0 {
 		return typedBytes, nil
@@ -90,4 +96,21 @@ func (c Content) MarshalJSON() ([]byte, error) {
 	}
 	result, err := json.Marshal(merged)
 	return result, errors.Wrap(err, "encode lossless Claude content")
+}
+
+// withContentBlocks sets the "content" field of an encoded block to blocks.
+// Parameters: encoded is one typed content object and blocks its nested content.
+// Returns: the re-encoded object, or a wrapped encoding error.
+func withContentBlocks(encoded []byte, blocks []Content) ([]byte, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		return nil, errors.Wrap(err, "decode typed Claude content for nested blocks")
+	}
+	nested, err := json.Marshal(blocks)
+	if err != nil {
+		return nil, errors.Wrap(err, "encode nested Claude content blocks")
+	}
+	fields["content"] = nested
+	result, err := json.Marshal(fields)
+	return result, errors.Wrap(err, "encode Claude content with nested blocks")
 }

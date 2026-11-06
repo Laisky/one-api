@@ -314,9 +314,16 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 						normalizedID = fcID
 					}
 
-					output := stringifyFunctionCallOutput(v["output"])
-					if output == "" {
-						output = stringifyFunctionCallOutput(v["content"])
+					// Image-bearing outputs keep their images: the tool message holds
+					// the text and ToolResultParts the ordered parts (see
+					// attachToolResultMediaCarriers); other shapes stay stringified.
+					outputValue := responseToolOutputValue(v)
+					mediaParts, hasMedia := responseToolOutputMediaParts(outputValue)
+					var output string
+					if hasMedia {
+						output = responseToolOutputText(mediaParts)
+					} else {
+						output = stringifyFunctionCallOutput(outputValue)
 					}
 
 					role := "tool"
@@ -340,11 +347,15 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 						} else {
 							pendingToolCallIDs[normalizedID] = queue[1:]
 						}
-						chatReq.Messages = append(chatReq.Messages, model.Message{
+						toolMessage := model.Message{
 							Role:       role,
 							ToolCallId: queue[0],
 							Content:    output,
-						})
+						}
+						if hasMedia {
+							toolMessage.ToolResultParts = mediaParts
+						}
+						chatReq.Messages = append(chatReq.Messages, toolMessage)
 						continue
 					}
 
@@ -357,6 +368,10 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 						Role:    "user",
 						Content: output,
 					})
+					if hasMedia {
+						// User messages carry images natively, in their original order.
+						chatReq.Messages[len(chatReq.Messages)-1].Content = mediaParts
+					}
 					// The downgraded user message breaks adjacency, so any tool calls still
 					// awaiting a response can no longer be answered by a subsequent tool message.
 					clear(pendingToolCallIDs)
@@ -399,6 +414,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 		}
 	}
 
+	chatReq.Messages = attachToolResultMediaCarriers(chatReq.Messages)
 	return chatReq, nil
 }
 

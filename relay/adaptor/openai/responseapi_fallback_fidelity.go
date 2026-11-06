@@ -18,8 +18,13 @@ var ErrResponseFallbackStateNotPortable = errors.Wrap(ErrResponseFallbackNotRepr
 // ValidateResponseAPIFallbackFidelity rejects semantic loss before fallback work.
 // allowReferences permits owner-scoped resolution before hydration only. Reasoning
 // and thinking retain their existing sidecar degradation policy; this validation
-// does not promote opaque state into text or inspect function arguments/results.
+// does not promote opaque state into text or inspect function arguments. Function
+// and custom tool results are inspected only when they carry input_image parts:
+// those are validated like user-message content and capped at
+// maxResponseFallbackToolOutputImages, while every other result shape keeps its
+// historical JSON stringification.
 func ValidateResponseAPIFallbackFidelity(input []any, allowReferences bool, nativeMedia ...bool) error {
+	toolOutputImages := 0
 	for _, raw := range input {
 		item, ok := raw.(map[string]any)
 		if !ok {
@@ -41,6 +46,20 @@ func ValidateResponseAPIFallbackFidelity(input []any, allowReferences bool, nati
 			if namespace, exists := item["namespace"]; exists && namespace != nil {
 				if _, ok := namespace.(string); !ok {
 					return errors.Wrap(ErrResponseFallbackNotRepresentable, "tool call namespace must be a string")
+				}
+			}
+			if strings.HasSuffix(strings.ToLower(kind), "_output") {
+				// Image-bearing outputs (Codex view_image and similar) are lowered
+				// as images, so they are validated like user-message content and
+				// bounded; every other output shape keeps its stringification.
+				images, err := validateResponseFallbackToolOutput(responseToolOutputValue(item))
+				if err != nil {
+					return err
+				}
+				toolOutputImages += images
+				if toolOutputImages > maxResponseFallbackToolOutputImages {
+					return errors.Wrapf(ErrResponseFallbackNotRepresentable,
+						"tool outputs carry more than %d images", maxResponseFallbackToolOutputImages)
 				}
 			}
 		case "tool_search_call", "tool_search_output", "additional_tools", "configuration_update":
