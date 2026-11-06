@@ -304,7 +304,21 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 	emptySystemMessageCount := 0
 	systemPrompts := make([]string, 0)
 
+	// toolRunCarriedMedia records that the current run of tool messages placed
+	// images inside its tool_result blocks, so the synthetic user message that
+	// re-delivers those images for Chat upstreams must not be sent again.
+	toolRunCarriedMedia := false
 	for _, message := range textRequest.Messages {
+		if message.ToolResultMediaCarrier && toolRunCarriedMedia {
+			logger.Debug("skip tool result media carrier already folded into tool_result blocks",
+				zap.Int("message_index", len(claudeRequest.Messages)),
+			)
+			toolRunCarriedMedia = false
+			continue
+		}
+		if message.Role != "tool" {
+			toolRunCarriedMedia = false
+		}
 		if message.Role == "system" {
 			systemMessageCount++
 
@@ -331,11 +345,17 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 				}
 			}
 
+			mediaBlocks, mediaErr := convertToolResultMediaBlocks(message.ToolResultParts)
+			if mediaErr != nil {
+				return nil, errors.Wrap(mediaErr, "convert tool result media")
+			}
+
 			logger.Debug("convert OpenAI tool role to Anthropic tool_result",
 				zap.Int("message_index", len(claudeRequest.Messages)),
 				zap.Bool("has_tool_call_id", message.ToolCallId != ""),
 				zap.Bool("string_content", message.IsStringContent()),
 				zap.Int("tool_calls_count", len(message.ToolCalls)),
+				zap.Int("media_blocks", len(mediaBlocks)),
 			)
 			if message.ToolCallId == "" {
 				logger.Debug("tool role message missing tool_call_id during Anthropic conversion",
@@ -343,13 +363,20 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 				)
 			}
 
+			toolResult := Content{
+				Type:      "tool_result",
+				Content:   toolResultContent,
+				ToolUseId: message.ToolCallId,
+			}
+			if len(mediaBlocks) > 0 {
+				// Ordered text and image blocks replace the text-only content.
+				toolResult.Content = ""
+				toolResult.ContentBlocks = mediaBlocks
+				toolRunCarriedMedia = true
+			}
 			claudeRequest.Messages = append(claudeRequest.Messages, Message{
-				Role: "user",
-				Content: []Content{{
-					Type:      "tool_result",
-					Content:   toolResultContent,
-					ToolUseId: message.ToolCallId,
-				}},
+				Role:    "user",
+				Content: []Content{toolResult},
 			})
 			continue
 		}
