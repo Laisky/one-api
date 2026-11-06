@@ -69,3 +69,33 @@ func attachClaudeThinkingBlocks(message *model.Message, blocks []model.ClaudeThi
 	}
 	message.ClaudeThinkingBlocks = append(message.ClaudeThinkingBlocks, blocks...)
 }
+
+// StripResponseGatewayClaudeReasoning removes reasoning items whose
+// encrypted_content carries a gateway Claude thinking envelope from input. The
+// envelope is only meaningful to this gateway's Claude converter; a native
+// Responses provider would treat it as invalid encrypted reasoning, which can
+// happen when a client moves a conversation from a Claude fallback channel to
+// a native channel. The input parameter is modified in place. It returns the
+// number of removed items.
+func StripResponseGatewayClaudeReasoning(input *ResponseAPIInput) int {
+	if input == nil || len(*input) == 0 {
+		return 0
+	}
+	kept := (*input)[:0:0]
+	removed := 0
+	for _, raw := range *input {
+		if item, ok := raw.(map[string]any); ok {
+			kind, _ := item["type"].(string)
+			envelope, _ := item["encrypted_content"].(string)
+			if kind == "reasoning" && model.IsClaudeThinkingEnvelope(envelope) {
+				removed++
+				continue
+			}
+		}
+		kept = append(kept, raw)
+	}
+	if removed > 0 {
+		*input = kept
+	}
+	return removed
+}

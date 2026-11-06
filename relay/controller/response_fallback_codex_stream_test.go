@@ -154,7 +154,7 @@ func TestResponseFallbackCodexToolsHTTPStream(t *testing.T) {
 					require.Equal(t, "tool_search_call", added.Type)
 					require.Equal(t, []string{"response.output_item.added", "response.output_item.done"}, trace.sequence, "client tool_search has no argument events")
 					require.Contains(t, string(trace.added), `"execution":"client"`)
-					require.NotContains(t, string(trace.added), `"arguments"`)
+					require.Contains(t, string(trace.added), `"arguments":{}`, "the added item carries the required, still-empty arguments object")
 					require.Contains(t, string(trace.done), `"limit":8`)
 					require.NotContains(t, string(trace.done), `8.0`)
 				default:

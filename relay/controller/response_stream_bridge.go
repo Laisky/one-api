@@ -116,6 +116,12 @@ func rawMessageFromString(value string) json.RawMessage {
 	return json.RawMessage(encoded)
 }
 
+// newChatToResponseStreamBridge builds the handler that rewrites an upstream
+// Chat Completions stream into Responses API SSE events for a fallback request.
+// Parameters: c is the request context, meta the mapped request metadata and
+// request the hydrated Responses request (its tools drive call rendering).
+// Returns: the stream rewrite handler; when gateway state is active it carries
+// a pre-minted gateway response ID and the pending state commit.
 func newChatToResponseStreamBridge(c *gin.Context, meta *metalib.Meta, request *openai.ResponseAPIRequest) openai_compatible.StreamRewriteHandler {
 	handler := &chatToResponseStreamBridge{
 		meta:       meta,
@@ -169,6 +175,11 @@ func (h *chatToResponseStreamBridge) HandleUpstreamDone(_ *gin.Context) (bool, b
 	return true, false
 }
 
+// HandleDone completes the bridged stream once the upstream signalled [DONE]:
+// it flushes every tool call's completion events and output_item.done, closes
+// the message and reasoning items, commits gateway state when pending, and
+// emits the terminal response event. Parameters: c is the request context.
+// Returns: whether the done marker was handled and whether streaming must stop.
 func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 	if h.streamDone {
 		return true, true
@@ -434,6 +445,10 @@ func (h *chatToResponseStreamBridge) appendReasoningDelta(c *gin.Context, delta 
 	h.appendChoiceReasoning(c, choice, delta)
 }
 
+// handleToolCalls applies one chunk's tool-call deltas: it opens each call's
+// output item on first sight and forwards function argument deltas, while
+// custom-tool input and tool_search arguments are buffered until completion.
+// Parameters: c is the request context, tools the chunk's tool-call deltas.
 func (h *chatToResponseStreamBridge) handleToolCalls(c *gin.Context, tools []model.Tool) {
 	for _, tool := range tools {
 		state := h.ensureToolCallState(c, &tool)
@@ -468,6 +483,10 @@ func (h *chatToResponseStreamBridge) handleToolCalls(c *gin.Context, tools []mod
 	}
 }
 
+// ensureToolCallState returns the accumulated state for one upstream tool call,
+// matching deltas by stream index or ID, and emits response.output_item.added
+// with the kind-specific item when the call is first seen. Parameters: c is the
+// request context, tool the tool-call delta. Returns: the call's stream state.
 func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *model.Tool) *streamToolCallState {
 	// Text-only streams never use tool state, so allocate these maps only when
 	// the first tool delta arrives instead of on every bridged response.

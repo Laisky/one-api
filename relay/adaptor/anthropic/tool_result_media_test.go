@@ -120,10 +120,10 @@ func TestConvertRequestToolResultImageLoadFailure(t *testing.T) {
 // caller on the historical string content.
 func TestConvertToolResultMediaBlocksWithoutImages(t *testing.T) {
 	t.Parallel()
-	blocks, err := convertToolResultMediaBlocks([]model.MessageContent{toolMediaText("only text")})
+	blocks, err := convertToolResultMediaBlocks(nil, []model.MessageContent{toolMediaText("only text")})
 	require.NoError(t, err)
 	require.Nil(t, blocks)
-	blocks, err = convertToolResultMediaBlocks(nil)
+	blocks, err = convertToolResultMediaBlocks(nil, nil)
 	require.NoError(t, err)
 	require.Nil(t, blocks)
 }

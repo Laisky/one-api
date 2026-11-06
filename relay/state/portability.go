@@ -132,9 +132,13 @@ func FallbackLowering(raw json.RawMessage) (action, kind string) {
 		// them faithfully (flattened names, raw custom input, loaded catalogs) and
 		// rejects any variant it cannot represent, such as encrypted agent content.
 		return FallbackActionCarry, kind
-	case KindReasoning, KindThinking, KindWebSearchCall:
-		// A replayed web_search_call is hosted state whose findings already live
-		// in the assistant text that follows it; fallback drops the item.
+	case KindWebSearchCall:
+		// The converter must see a replayed web_search_call: it marks the model
+		// response that ran provider searches, whose Claude thinking cannot be
+		// replayed without the server-tool blocks, and it is rendered as a short
+		// note on that response's answer. The converter drops the item itself.
+		return FallbackActionCarry, kind
+	case KindReasoning, KindThinking:
 		return FallbackActionDrop, kind
 	}
 	return FallbackActionFail, kind
@@ -158,13 +162,17 @@ func FallbackLoweringForClaude(raw json.RawMessage) (action, kind string) {
 // rawCarriesClaudeThinkingEnvelope reports whether a raw reasoning item holds a
 // strictly valid gateway Claude thinking envelope in encrypted_content.
 func rawCarriesClaudeThinkingEnvelope(raw json.RawMessage) bool {
-	var probe struct {
-		EncryptedContent string `json:"encrypted_content"`
-	}
-	if err := json.Unmarshal(raw, &probe); err != nil || !model.IsClaudeThinkingEnvelope(probe.EncryptedContent) {
+	// Decode into a map so only the exact lowercase key counts, matching the
+	// converter; a struct decode would also accept case-folded variants.
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &probe); err != nil {
 		return false
 	}
-	_, err := model.DecodeClaudeThinkingEnvelope(probe.EncryptedContent)
+	var envelope string
+	if err := json.Unmarshal(probe["encrypted_content"], &envelope); err != nil || !model.IsClaudeThinkingEnvelope(envelope) {
+		return false
+	}
+	_, err := model.DecodeClaudeThinkingEnvelope(envelope)
 	return err == nil
 }
 

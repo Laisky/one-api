@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
@@ -62,6 +63,11 @@ type ResponseFallbackToolCatalog struct {
 	byFlat     map[string]ResponseFallbackToolBinding
 	byIdentity map[responseToolIdentity]string
 	tools      []model.Tool
+	// discovery caches the decoded discovery items of the request input the
+	// catalog was built from, so history lowering need not decode them again.
+	discovery         []ResponseToolSearchInputItem
+	discoveryDecoded  bool
+	discoveryInputLen int
 }
 
 // BuildResponseFallbackToolCatalog builds the flattened tool catalog for request.
@@ -84,6 +90,7 @@ func BuildResponseFallbackToolCatalog(request *ResponseAPIRequest) (*ResponseFal
 	if err != nil {
 		return nil, errors.Wrap(err, "inspect response tool catalogs")
 	}
+	catalog.discovery, catalog.discoveryDecoded, catalog.discoveryInputLen = items, true, len(request.Input)
 	for _, item := range items {
 		switch strings.ToLower(strings.TrimSpace(item.Type)) {
 		case "additional_tools":
@@ -360,4 +367,32 @@ func validResponseToolIdentifier(name string) bool {
 		return false
 	}
 	return true
+}
+
+// cachedDiscoveryFor returns the cached discovery items when they were decoded
+// from input: same length, and each cached item still sits at its index with
+// identical raw bytes (or, for a decoded map, the same item type). It returns
+// false when the cache cannot be proven to describe input.
+func (c *ResponseFallbackToolCatalog) cachedDiscoveryFor(input ResponseAPIInput) ([]ResponseToolSearchInputItem, bool) {
+	if c == nil || !c.discoveryDecoded || c.discoveryInputLen != len(input) {
+		return nil, false
+	}
+	for _, item := range c.discovery {
+		if item.Index < 0 || item.Index >= len(input) {
+			return nil, false
+		}
+		switch raw := input[item.Index].(type) {
+		case json.RawMessage:
+			if !bytes.Equal(raw, item.Raw) {
+				return nil, false
+			}
+		case map[string]any:
+			if kind, _ := raw["type"].(string); !strings.EqualFold(strings.TrimSpace(kind), strings.TrimSpace(item.Type)) {
+				return nil, false
+			}
+		default:
+			return nil, false
+		}
+	}
+	return c.discovery, true
 }

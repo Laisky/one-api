@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -217,6 +218,11 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		return nil, controlsErr
 	}
 	compatibilityModel := CompatibilityModel(c, textRequest.Model)
+	var requestCtx context.Context
+	if c != nil && c.Request != nil {
+		requestCtx = c.Request.Context()
+	}
+	mediaBudget := newToolResultMediaBudget(requestCtx, maxToolResultMediaBytes)
 
 	claudeTools := make([]Tool, 0, len(textRequest.Tools))
 
@@ -346,7 +352,7 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 				}
 			}
 
-			mediaBlocks, mediaErr := convertToolResultMediaBlocks(message.ToolResultParts)
+			mediaBlocks, mediaErr := convertToolResultMediaBlocks(mediaBudget, message.ToolResultParts)
 			if mediaErr != nil {
 				return nil, errors.Wrap(mediaErr, "convert tool result media")
 			}

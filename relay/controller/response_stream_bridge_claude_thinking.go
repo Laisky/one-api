@@ -14,13 +14,14 @@ import (
 
 // handleClaudeThinkingBlocks turns verbatim Claude thinking blocks into one
 // completed reasoning item each. Parameters: c is the request context, choice
-// the upstream choice, blocks the replayable blocks in original order and tools
-// any tool calls of the same delta (a whole message rendered as one chunk), so
-// each block lands before the function_call it preceded. Streaming Claude
+// the upstream choice, blocks the replayable blocks in original order, searches
+// the provider-executed web searches and tools any tool calls of the same delta
+// (a whole message rendered as one chunk), so each block lands before the
+// function_call it preceded and searches follow the leading thinking. Streaming Claude
 // sends each block in its own chunk once its signature arrived, which emits
 // response.output_item.done immediately and lets clients that record items in
 // done order (Codex) keep the thinking ahead of the turn's calls and text.
-func (h *chatToResponseStreamBridge) handleClaudeThinkingBlocks(c *gin.Context, choice *responseChoiceState, blocks []model.ClaudeThinkingBlock, tools []model.Tool) {
+func (h *chatToResponseStreamBridge) handleClaudeThinkingBlocks(c *gin.Context, choice *responseChoiceState, blocks []model.ClaudeThinkingBlock, searches []model.WebSearchCall, tools []model.Tool) {
 	lg := gmw.GetLogger(c)
 	next := 0
 	seal := func(ready func(model.ClaudeThinkingBlock) bool) {
@@ -28,6 +29,12 @@ func (h *chatToResponseStreamBridge) handleClaudeThinkingBlocks(c *gin.Context, 
 			h.sealClaudeThinkingBlock(c, lg, choice, blocks[next])
 			next++
 		}
+	}
+	// Thinking that preceded every caller tool call comes first, then the
+	// provider-executed searches, matching buildResponseOutput's JSON order.
+	seal(func(block model.ClaudeThinkingBlock) bool { return block.ToolCallsBefore == 0 })
+	if len(searches) > 0 && h.writeErr == nil {
+		h.handleWebSearchCalls(c, searches)
 	}
 	for i := range tools {
 		seal(func(block model.ClaudeThinkingBlock) bool { return block.ToolCallsBefore <= i })

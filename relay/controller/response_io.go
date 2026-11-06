@@ -310,7 +310,11 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		if err := json.Unmarshal(rawInput, &parsed); err == nil {
 			inputStats, inputChanged := openai.NormalizeResponseAPIInputContentTypes(&parsed)
 			dataURLStats, dataURLChanged := openai.NormalizeResponseAPIInputEmbeddedImageDataURLs(&parsed)
-			if inputChanged || dataURLChanged {
+			// Gateway Claude thinking envelopes are only replayable on Claude
+			// fallback routes; a native provider would reject them as invalid
+			// encrypted reasoning after a client switches channels mid-session.
+			envelopesStripped := openai.StripResponseGatewayClaudeReasoning(&parsed) > 0
+			if inputChanged || dataURLChanged || envelopesStripped {
 				stats.AssistantInputTextFixed += inputStats.AssistantInputTextFixed
 				stats.NonAssistantOutputTextFixed += inputStats.NonAssistantOutputTextFixed
 				stats.DataURLRedacted += dataURLStats.DataURLRedacted

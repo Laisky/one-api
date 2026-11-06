@@ -64,7 +64,7 @@ func TestConvertedWebSearchToolFromResponsesCodex(t *testing.T) {
 	require.NoError(t, err)
 	encoded, err := json.Marshal(converted)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"type":"web_search_20260209","name":"web_search","allowed_domains":["example.com","docs.example.com/blog"],
+	require.JSONEq(t, `{"type":"web_search_20260209","name":"web_search","max_uses":10,"allowed_domains":["example.com","docs.example.com/blog"],
 		"user_location":{"type":"approximate","city":"San Francisco","region":"California","country":"US","timezone":"America/Los_Angeles"}}`, string(encoded))
 
 	var bare openai.ResponseAPITool
@@ -73,7 +73,7 @@ func TestConvertedWebSearchToolFromResponsesCodex(t *testing.T) {
 	require.NoError(t, err)
 	encoded, err = json.Marshal(converted)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"type":"web_search_20250305","name":"web_search"}`, string(encoded))
+	require.JSONEq(t, `{"type":"web_search_20250305","name":"web_search","max_uses":10}`, string(encoded))
 }
 
 // TestConvertedWebSearchToolFromResponsesRejects bounds untrusted options.

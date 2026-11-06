@@ -15,6 +15,7 @@ import (
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/channeltype"
 	relaymodel "github.com/Laisky/one-api/relay/model"
@@ -152,6 +153,8 @@ func TestResponseFallbackClaudeWebSearchJSON(t *testing.T) {
 	require.Equal(t, []any{map[string]any{
 		"type": "web_search_20260209", "name": "web_search", "allowed_domains": []any{"example.com"},
 		"user_location": map[string]any{"type": "approximate", "country": "US"},
+		// max_uses equals the reserved search allowance, so the hold bounds the work.
+		"max_uses": float64(anthropic.ConvertedWebSearchMaxUses),
 	}}, result.body["tools"])
 	require.GreaterOrEqual(t, result.heldDuringIO, claudeServerToolDefaultReservedUses*claudeToolPolicyPerSearch,
 		"the search allowance is reserved before dispatch")

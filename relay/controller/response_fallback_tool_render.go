@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"encoding/json"
+
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
@@ -49,6 +51,11 @@ func (h *chatToResponseStreamBridge) toolItem(state *streamToolCallState, status
 	if !final {
 		item.Input = ""
 		item.ToolSearchArguments = nil
+		if item.Type == "tool_search_call" {
+			// arguments is required on tool_search_call; an in-progress item
+			// carries an empty object so strict clients can parse the event.
+			item.ToolSearchArguments = json.RawMessage("{}")
+		}
 	}
 	return item
 }

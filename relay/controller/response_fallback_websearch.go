@@ -25,8 +25,8 @@ import (
 // forwards the admitted Responses web_search declaration to a Claude upstream
 // as a server-side web search tool. When it does, it records the Claude
 // declaration for the request converter and the paid allowance that the Chat
-// reservation adds (claudeServerToolDefaultReservedUses searches at the
-// admitted per-call price, as on native Claude Messages). Billing itself uses
+// reservation adds (anthropic.ConvertedWebSearchMaxUses searches at the
+// admitted per-call price, the max_uses the converted tool carries). Billing itself uses
 // the upstream usage.server_tool_use receipt through the shared server-tool
 // path. Platforms without a metered Claude web search keep the historical drop.
 //
@@ -72,7 +72,7 @@ func planResponseFallbackClaudeWebSearch(c *gin.Context, meta *metalib.Meta, cha
 	if err != nil {
 		return openai.ErrorWrapper(errors.Wrap(err, "price converted Claude web search"), builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
-	allowance := tooling.SaturatingToolAllowance(quotes[tooling.BuiltinWebSearch], claudeServerToolDefaultReservedUses)
+	allowance := tooling.SaturatingToolAllowance(quotes[tooling.BuiltinWebSearch], int64(anthropic.ConvertedWebSearchMaxUses))
 	if deepseekcompat.UsesDeepSeekToolReceiptContract(meta) {
 		// The DeepSeek conservative floor recorded at admission already funds
 		// Search; reserving it twice would only inflate the hold.

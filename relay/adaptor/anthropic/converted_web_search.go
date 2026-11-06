@@ -130,6 +130,10 @@ func SupportsWebSearchDynamicFiltering(modelName string) bool {
 	return false
 }
 
+// ConvertedWebSearchMaxUses is the max_uses the gateway sets on a converted
+// Claude web search; the fallback reserves exactly this many searches.
+const ConvertedWebSearchMaxUses = 10
+
 // ConvertedWebSearchToolFromResponses maps one Responses web_search declaration
 // onto a Claude server-side web search tool. Parameters: tool is the admitted
 // Responses declaration and toolType a WebSearchToolType* constant. Returns:
@@ -141,7 +145,10 @@ func ConvertedWebSearchToolFromResponses(tool openai.ResponseAPITool, toolType s
 	if toolType != WebSearchToolTypeBasic && toolType != WebSearchToolTypeDynamic {
 		return nil, errors.Wrapf(ErrConvertedWebSearchNotRepresentable, "unsupported Claude web search version %q", toolType)
 	}
-	converted := &Tool{Type: toolType, Name: webSearchToolName}
+	// Bound the searches to the allowance the gateway reserves for them, so the
+	// pre-consumed hold is an upper bound on this tool's paid work.
+	maxUses := ConvertedWebSearchMaxUses
+	converted := &Tool{Type: toolType, Name: webSearchToolName, MaxUses: &maxUses}
 	if tool.Filters != nil {
 		allowed, err := convertedWebSearchDomains(tool.Filters.AllowedDomains)
 		if err != nil {

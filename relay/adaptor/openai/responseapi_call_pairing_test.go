@@ -63,3 +63,25 @@ func countJSONKey(data, key string) int {
 	}
 	return count
 }
+
+// TestFallbackCatalogDiscoveryCacheMatchesInput verifies that the catalog's
+// cached discovery items are reused only for the input they were decoded from.
+func TestFallbackCatalogDiscoveryCacheMatchesInput(t *testing.T) {
+	t.Parallel()
+	var request ResponseAPIRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"model":"m","tools":[{"type":"tool_search","execution":"client"}],"input":[{"type":"message","role":"user","content":"hi"},{"type":"tool_search_call","call_id":"s1","execution":"client","arguments":{"query":"x"}}]}`), &request))
+	catalog, err := BuildResponseFallbackToolCatalog(&request)
+	require.NoError(t, err)
+
+	items, ok := catalog.cachedDiscoveryFor(request.Input)
+	require.True(t, ok, "the input the catalog was built from reuses the cache")
+	require.Len(t, items, 1)
+
+	_, ok = catalog.cachedDiscoveryFor(ResponseAPIInput{"other"})
+	require.False(t, ok, "a different-length input never reuses the cache")
+	_, ok = catalog.cachedDiscoveryFor(ResponseAPIInput{"hi", "not a discovery item"})
+	require.False(t, ok, "same length but a different item at the cached index never reuses the cache")
+	var nilCatalog *ResponseFallbackToolCatalog
+	_, ok = nilCatalog.cachedDiscoveryFor(request.Input)
+	require.False(t, ok)
+}

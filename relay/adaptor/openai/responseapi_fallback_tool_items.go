@@ -30,9 +30,15 @@ func lowerResponseFallbackToolItems(input ResponseAPIInput, catalog *ResponseFal
 	if len(input) == 0 {
 		return input, "", nil
 	}
-	discovery, err := responseFallbackToolSearchItems(input)
-	if err != nil {
-		return nil, "", errors.Wrap(err, "inspect response discovery history")
+	// The converter builds catalog from the same input, so its decoded
+	// discovery items are reused; a catalog without them decodes afresh.
+	discovery, cached := catalog.cachedDiscoveryFor(input)
+	if !cached {
+		decoded, err := responseFallbackToolSearchItems(input)
+		if err != nil {
+			return nil, "", errors.Wrap(err, "inspect response discovery history")
+		}
+		discovery = decoded
 	}
 	byIndex := make(map[int]ResponseToolSearchInputItem, len(discovery))
 	for _, item := range discovery {

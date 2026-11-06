@@ -8,7 +8,7 @@ import (
 )
 
 // TestFallbackLowering pins the Section 5.8 fallback-column decisions: portable
-// items carry, reasoning/thinking and replayed web_search_call items drop, and
+// items carry, replayed web_search_call items carry (the converter drops them), reasoning/thinking drop, and
 // other hosted/built-in tool-call state plus unknown future item types fail closed.
 func TestFallbackLowering(t *testing.T) {
 	cases := []struct {
@@ -23,7 +23,7 @@ func TestFallbackLowering(t *testing.T) {
 		{"reasoning_encrypted", `{"type":"reasoning","encrypted_content":"opaque"}`, FallbackActionDrop},
 		{"reasoning_summary", `{"type":"reasoning","summary":[]}`, FallbackActionDrop},
 		{"thinking_signed", `{"type":"thinking","signature":"sig","thinking":"x"}`, FallbackActionDrop},
-		{"web_search_call", `{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"q"}}`, FallbackActionDrop},
+		{"web_search_call", `{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"q"}}`, FallbackActionCarry},
 		{"file_search_call", `{"type":"file_search_call","id":"fs_1"}`, FallbackActionFail},
 		{"code_interpreter_call", `{"type":"code_interpreter_call","id":"ci_1"}`, FallbackActionFail},
 		{"computer_call", `{"type":"computer_call","id":"cc_1"}`, FallbackActionFail},

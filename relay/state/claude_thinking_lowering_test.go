@@ -37,10 +37,12 @@ func TestFallbackLoweringForClaudeCarriesGatewayEnvelopes(t *testing.T) {
 	}
 	action, _ = FallbackLoweringForClaude(json.RawMessage(`{"type":"thinking","thinking":"t","signature":"s"}`))
 	require.Equal(t, FallbackActionDrop, action)
-	// Replayed hosted web searches are dropped: their findings already live in
-	// the assistant text that follows them.
+	// Replayed hosted web searches reach the converter, which needs them to omit
+	// the searched response's thinking and drops the item itself.
 	action, _ = FallbackLoweringForClaude(json.RawMessage(`{"type":"web_search_call","id":"ws"}`))
-	require.Equal(t, FallbackActionDrop, action)
+	require.Equal(t, FallbackActionCarry, action)
+	action, _ = FallbackLoweringForClaude(json.RawMessage(`{"type":"reasoning","id":"rs","Encrypted_Content":"` + envelope + `"}`))
+	require.Equal(t, FallbackActionDrop, action, "only the exact encrypted_content key carries an envelope")
 	action, _ = FallbackLoweringForClaude(json.RawMessage(`{"type":"image_generation_call","id":"ig"}`))
 	require.Equal(t, FallbackActionFail, action, "other hosted tool state still fails closed")
 }

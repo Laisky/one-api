@@ -83,10 +83,7 @@ func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_c
 		if len(choice.Delta.ClaudeThinkingBlocks) > 0 {
 			// Verbatim Claude blocks supersede this delta's joined reasoning text
 			// and become one reasoning item each, ordered among the tool calls.
-			h.handleClaudeThinkingBlocks(c, state, choice.Delta.ClaudeThinkingBlocks, choice.Delta.ToolCalls)
-			if len(choice.Delta.WebSearchCalls) > 0 {
-				h.handleWebSearchCalls(c, choice.Delta.WebSearchCalls)
-			}
+			h.handleClaudeThinkingBlocks(c, state, choice.Delta.ClaudeThinkingBlocks, choice.Delta.WebSearchCalls, choice.Delta.ToolCalls)
 		} else {
 			if choice.Delta.Reasoning != nil && *choice.Delta.Reasoning != "" {
 				h.appendReasoningDelta(c, *choice.Delta.Reasoning)
