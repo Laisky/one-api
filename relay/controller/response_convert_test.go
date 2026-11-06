@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	metalib "github.com/Laisky/one-api/relay/meta"
@@ -157,7 +158,7 @@ func TestBuildResponseOutput_EmptyChoicesReturnsEmptySlice(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			out := buildResponseOutput(tc.choices, nil)
+			out := buildResponseOutput(logger.Logger, tc.choices, nil)
 			require.NotNil(t, out, "buildResponseOutput must never return nil")
 			require.Equal(t, 0, len(out), "expected empty slice for empty/contentless input")
 		})
@@ -176,7 +177,7 @@ func TestBuildResponseOutput_PopulatedReturnsItems(t *testing.T) {
 			FinishReason: "stop",
 		},
 	}
-	out := buildResponseOutput(choices, nil)
+	out := buildResponseOutput(logger.Logger, choices, nil)
 	require.NotNil(t, out)
 	require.Len(t, out, 1)
 	assert.Equal(t, "message", out[0].Type)

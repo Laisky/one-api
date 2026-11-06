@@ -59,6 +59,11 @@ type chatToResponseStreamBridge struct {
 	// fallback flattened into Chat function tools. Nil renders plain calls.
 	toolCatalog *openai.ResponseFallbackToolCatalog
 
+	// includeEncrypted reports whether the client asked for
+	// reasoning.encrypted_content; gateway Claude envelopes are always persisted
+	// with committed state but reach the client only when it opted in.
+	includeEncrypted bool
+
 	// pendingCommit, when set, causes the terminal event to commit a gateway
 	// response node. The gateway response ID is pre-minted at construction so it is
 	// the ID carried by every emitted event (STR01).
@@ -83,6 +88,15 @@ type responseChoiceState struct {
 	reasoningIndex       int
 	reasoningInitialized bool
 	finishReason         string
+	// sealedReasoning holds reasoning items already completed by verbatim Claude
+	// thinking blocks, with their envelopes, in output order.
+	sealedReasoning []sealedReasoningItem
+}
+
+// sealedReasoningItem is a completed reasoning item and its output index.
+type sealedReasoningItem struct {
+	index int
+	item  openai.OutputItem
 }
 
 func rawMessageFromString(value string) json.RawMessage {
@@ -109,6 +123,7 @@ func newChatToResponseStreamBridge(c *gin.Context, meta *metalib.Meta, request *
 		handler.model = request.Model
 	}
 	handler.toolCatalog = responseFallbackCatalogForRender(c, request)
+	handler.includeEncrypted = responseIncludesReasoningEncryptedContent(request)
 
 	// If gateway state is active for this request, pre-mint a gateway response ID
 	// and remember the pre-hydration commit snapshot so the terminal event can
@@ -246,6 +261,9 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		if reasoning := h.choiceReasoning(choice, "completed"); reasoning != nil {
 			indexed = append(indexed, indexedItem{choice.reasoningIndex, *reasoning})
 		}
+		for _, sealed := range choice.sealedReasoning {
+			indexed = append(indexed, indexedItem{sealed.index, sealed.item})
+		}
 	}
 	for i, key := range h.toolOrder {
 		indexed = append(indexed, indexedItem{h.toolCalls[key].index, toolItems[i]})
@@ -277,6 +295,7 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 	// Commit the gateway response node exactly once at the terminal event so the
 	// streamed fallback ID is backed by a retrievable record (closes B13).
 	h.commitStreamedResponse(c, response, status)
+	response.Output = clientVisibleResponseOutput(response.Output, h.includeEncrypted)
 
 	h.emitEvent(c, "response.completed", openai.ResponseAPIStreamEvent{
 		Type:     "response.completed",
@@ -710,6 +729,9 @@ func (h *chatToResponseStreamBridge) HandleError(c *gin.Context, failure *model.
 		if reasoning := h.choiceReasoning(choice, "incomplete"); reasoning != nil {
 			items = append(items, indexedItem{choice.reasoningIndex, *reasoning})
 		}
+		for _, sealed := range choice.sealedReasoning {
+			items = append(items, indexedItem{sealed.index, sealed.item})
+		}
 	}
 	for _, id := range h.toolOrder {
 		call := h.toolCalls[id]
@@ -723,6 +745,7 @@ func (h *chatToResponseStreamBridge) HandleError(c *gin.Context, failure *model.
 	response := h.buildFinalResponse("failed", output, nil)
 	response.Error = &failure.Error
 	h.commitStreamedResponse(c, response, "failed")
+	response.Output = clientVisibleResponseOutput(response.Output, h.includeEncrypted)
 	h.emitEvent(c, "response.failed", openai.ResponseAPIStreamEvent{Type: "response.failed", Response: response})
 	return true, true
 }

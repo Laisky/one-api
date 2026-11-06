@@ -101,6 +101,19 @@ func (o OutputItem) MarshalJSON() ([]byte, error) {
 		}
 		return data, nil
 	}
+	if o.Type == "reasoning" && len(o.Summary) == 0 {
+		// The Responses schema requires summary on reasoning items. A Claude
+		// block with omitted display has no summary text but must still parse
+		// for clients (Codex) that replay reasoning items verbatim.
+		data, err := json.Marshal(struct {
+			outputItemAlias
+			Summary []OutputContent `json:"summary"`
+		}{outputItemAlias: outputItemAlias(o), Summary: make([]OutputContent, 0)})
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal response API reasoning output item")
+		}
+		return data, nil
+	}
 	if o.Type != "message" {
 		data, err := json.Marshal(outputItemAlias(o))
 		if err != nil {

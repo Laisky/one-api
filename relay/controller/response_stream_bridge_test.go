@@ -12,6 +12,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	metalib "github.com/Laisky/one-api/relay/meta"
@@ -1477,7 +1478,7 @@ func TestBuildResponseOutput_FunctionCallCarriesBothIDs(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			out := buildResponseOutput([]openai_compatible.TextResponseChoice{{
+			out := buildResponseOutput(logger.Logger, []openai_compatible.TextResponseChoice{{
 				Message: model.Message{
 					Role:    "assistant",
 					Content: "Let me read it.",

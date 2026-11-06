@@ -73,6 +73,11 @@ type Message struct {
 	// preceding run of tool messages. Converters that consume ToolResultParts
 	// skip it; every other path forwards it as an ordinary user message.
 	ToolResultMediaCarrier bool `json:"-"`
+	// ClaudeThinkingBlocks carries Claude thinking/redacted_thinking blocks
+	// verbatim (text, signature or redacted data, and position) between the
+	// Claude adaptor and the Responses API bridge. It is populated only for
+	// Responses fallback requests and is stripped before any non-Claude upstream.
+	ClaudeThinkingBlocks []ClaudeThinkingBlock `json:"oneapi_claude_thinking_blocks,omitempty"`
 }
 
 type AnnotationItem struct {

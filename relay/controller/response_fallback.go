@@ -84,6 +84,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	if shouldRouteResponseFallbackThroughDeepSeek(meta) {
 		meta.APIType = apitype.DeepSeek
 	}
+	// Gateway Claude thinking blocks reach only the Claude converter; strip them
+	// once the upstream is final so no other Chat upstream receives them.
+	applyClaudeThinkingReplayPolicy(c, meta, responseAPIRequest.Input, chatRequest)
 	applyThinkingQueryToChatRequest(c, chatRequest, meta)
 	meta.RequestURLPath = "/v1/chat/completions"
 	meta.ResponseAPIFallback = true

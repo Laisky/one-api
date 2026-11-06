@@ -178,6 +178,10 @@ func StreamResponseClaude2OpenAI(c *gin.Context, claudeResponse *StreamResponse)
 	return &openaiResponse, response
 }
 
+// ResponseClaude2OpenAI converts one complete Claude message into a Chat
+// Completion response. Parameters: c is the request context and claudeResponse
+// the decoded Claude message. It returns the Chat response; Responses fallback
+// requests additionally receive the verbatim thinking blocks for the bridge.
 func ResponseClaude2OpenAI(c *gin.Context, claudeResponse *Response) *openai.TextResponse {
 	logger := gmw.GetLogger(c)
 	var responseText string
@@ -189,9 +193,10 @@ func ResponseClaude2OpenAI(c *gin.Context, claudeResponse *Response) *openai.Tex
 		case "thinking", "redacted_thinking":
 			if v.Thinking != nil {
 				reasoningText += *v.Thinking
-			} else {
+			} else if v.Type == "thinking" {
 				logger.Error("thinking is nil in response")
 			}
+			// redacted_thinking carries only encrypted data; it has no display text.
 			// Cache signature if present
 			if v.Signature != nil {
 				// Cache the signature for future use
@@ -250,6 +255,15 @@ func ResponseClaude2OpenAI(c *gin.Context, claudeResponse *Response) *openai.Tex
 	}
 	if reasoningText != "" {
 		choice.Message.SetReasoningContent(c.Query("reasoning_format"), reasoningText)
+	}
+	if ThinkingBlocksRequested(c) {
+		// The Responses bridge needs every block verbatim (including empty
+		// omitted-display text and redacted data) to emit replayable envelopes.
+		choice.Message.ClaudeThinkingBlocks = claudeThinkingBlocksFromContent(claudeResponse.Content)
+		if len(choice.Message.ClaudeThinkingBlocks) > 0 {
+			logger.Debug("attached Claude thinking blocks for Responses bridge",
+				zap.Int("thinking_blocks", len(choice.Message.ClaudeThinkingBlocks)))
+		}
 	}
 	fullTextResponse := openai.TextResponse{
 		Id:      tracing.GenerateChatCompletionID(c),

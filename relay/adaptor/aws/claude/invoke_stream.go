@@ -43,6 +43,9 @@ type invokeStreamState struct {
 	tools     int
 	id        string
 	created   int64
+	// thinking rebuilds complete thinking blocks for the Responses bridge;
+	// it is nil for Chat clients and native Claude Messages streams.
+	thinking *anthropic.ThinkingBlockTracker
 }
 
 // StreamHandler reads AWS EventStream frames synchronously with cancellation.
@@ -91,6 +94,9 @@ func StreamHandler(c *gin.Context, client *bedrockruntime.Client) (result *relay
 	defer func() { c.Writer = original }()
 	common.SetEventStreamHeaders(c)
 	state := &invokeStreamState{blocks: map[int]*invokeContentBlock{}, id: tracing.GenerateChatCompletionID(c), created: helper.GetTimestamp()}
+	if !c.GetBool(ctxkey.ClaudeMessagesNative) {
+		state.thinking = anthropic.NewThinkingBlockTracker(c)
+	}
 	defer func() {
 		if result != nil && !state.finished {
 			if usage == nil {
@@ -289,6 +295,9 @@ func (s *invokeStreamState) consume(c *gin.Context, raw []byte) error {
 			return writeInvokeSSE(c, envelope.Type, raw)
 		}
 		if envelope.Type == "content_block_stop" {
+			if completed := s.thinking.Complete(index); completed != nil {
+				return s.writeChat(c, anthropic.ThinkingBlockChunk(*completed))
+			}
 			if block.kind == "tool_use" && !block.arguments {
 				index := block.toolIndex
 				chunk := &openai.ChatCompletionsStreamResponse{Choices: []openai.ChatCompletionsStreamResponseChoice{{}}}
@@ -300,6 +309,7 @@ func (s *invokeStreamState) consume(c *gin.Context, raw []byte) error {
 		if err := decodeInvokeJSON(raw, &event); err != nil {
 			return err
 		}
+		s.thinking.Observe(index, &event)
 		chunk, _ := anthropic.StreamResponseClaude2OpenAI(c, &event)
 		if chunk == nil {
 			return nil

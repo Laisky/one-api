@@ -34,6 +34,9 @@ type httpStreamState struct {
 	tools     int
 	id        string
 	created   int64
+	// thinking rebuilds complete thinking blocks for the Responses bridge;
+	// it is nil for Chat clients and native Claude Messages streams.
+	thinking *ThinkingBlockTracker
 }
 
 // consume validates one Anthropic event, merges receipts, and forwards content.
@@ -185,6 +188,9 @@ func (s *httpStreamState) consume(c *gin.Context, raw []byte) error {
 			return writeHTTPSSE(c, envelope.Type, raw)
 		}
 		if envelope.Type == "content_block_stop" {
+			if completed := s.thinking.Complete(index); completed != nil {
+				return s.writeChat(c, ThinkingBlockChunk(*completed))
+			}
 			if block.kind == "tool_use" && !block.arguments {
 				index := block.toolIndex
 				chunk := &openai.ChatCompletionsStreamResponse{Choices: []openai.ChatCompletionsStreamResponseChoice{{}}}
@@ -196,6 +202,7 @@ func (s *httpStreamState) consume(c *gin.Context, raw []byte) error {
 		if err := decodeClaudeJSON(raw, &event); err != nil {
 			return err
 		}
+		s.thinking.Observe(index, &event)
 		chunk, _ := StreamResponseClaude2OpenAI(c, &event)
 		if chunk == nil {
 			return nil

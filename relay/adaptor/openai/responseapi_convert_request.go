@@ -160,6 +160,10 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 	// assistant message; a reasoning item that trails its message is written back into that
 	// message directly. See the "reasoning" case for why both orders must work.
 	pendingReasoning := ""
+	// pendingClaudeBlocks mirrors pendingReasoning for gateway Claude thinking
+	// envelopes: verbatim blocks staged until their turn's assistant message
+	// exists. They only reach Claude; other upstreams have them stripped.
+	var pendingClaudeBlocks []model.ClaudeThinkingBlock
 	for _, item := range input {
 		currentToolCallMsgIdx := openToolCallMsgIdx
 		openToolCallMsgIdx = -1
@@ -168,6 +172,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 			chatReq.Messages = append(chatReq.Messages, model.Message{Role: "user", Content: v})
 			clear(pendingToolCallIDs)
 			pendingReasoning = ""
+			pendingClaudeBlocks = nil
 		case map[string]any:
 			if typeVal, ok := v["type"].(string); ok {
 				switch strings.ToLower(typeVal) {
@@ -186,6 +191,17 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 					// and the tool messages answering it: the in-flight tool calls stay
 					// answerable across it.
 					openToolCallMsgIdx = currentToolCallMsgIdx
+
+					// A gateway envelope restores the exact Claude block. It joins the
+					// open assistant message of this turn, or waits for it, following
+					// the same placement rules as the plaintext reasoning below.
+					if block, ok := responseReasoningClaudeThinkingBlock(v); ok {
+						if currentToolCallMsgIdx >= 0 && chatReq.Messages[currentToolCallMsgIdx].Role == "assistant" {
+							attachClaudeThinkingBlocks(&chatReq.Messages[currentToolCallMsgIdx], []model.ClaudeThinkingBlock{block})
+						} else {
+							pendingClaudeBlocks = append(pendingClaudeBlocks, block)
+						}
+					}
 
 					reasoning := extractResponseAPIReasoningContent(v)
 					if reasoning == "" {
@@ -281,6 +297,8 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 							chatReq.Messages[currentToolCallMsgIdx].ReasoningContent = &reasoning
 						}
 						pendingReasoning = ""
+						attachClaudeThinkingBlocks(&chatReq.Messages[currentToolCallMsgIdx], pendingClaudeBlocks)
+						pendingClaudeBlocks = nil
 						openToolCallMsgIdx = currentToolCallMsgIdx
 						continue
 					}
@@ -295,6 +313,8 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 						assistantMessage.ReasoningContent = &reasoning
 					}
 					pendingReasoning = ""
+					attachClaudeThinkingBlocks(&assistantMessage, pendingClaudeBlocks)
+					pendingClaudeBlocks = nil
 					chatReq.Messages = append(chatReq.Messages, assistantMessage)
 					openToolCallMsgIdx = len(chatReq.Messages) - 1
 					toolCallIDsMessageIdx = openToolCallMsgIdx
@@ -366,6 +386,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 					// awaiting a response can no longer be answered by a subsequent tool message.
 					clear(pendingToolCallIDs)
 					pendingReasoning = ""
+					pendingClaudeBlocks = nil
 					continue
 				}
 			}
@@ -381,6 +402,8 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 				// to the same assistant turn; closing the turn here would orphan every
 				// following tool output.
 				mergeAssistantTurnText(&chatReq.Messages[currentToolCallMsgIdx], msg, &pendingReasoning)
+				attachClaudeThinkingBlocks(&chatReq.Messages[currentToolCallMsgIdx], pendingClaudeBlocks)
+				pendingClaudeBlocks = nil
 				openToolCallMsgIdx = currentToolCallMsgIdx
 				continue
 			}
@@ -389,6 +412,10 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 				msg.ReasoningContent = &reasoning
 			}
 			pendingReasoning = ""
+			if msg.Role == "assistant" {
+				attachClaudeThinkingBlocks(msg, pendingClaudeBlocks)
+			}
+			pendingClaudeBlocks = nil
 			chatReq.Messages = append(chatReq.Messages, *msg)
 			// A non-tool content message ends the current tool-call turn.
 			clear(pendingToolCallIDs)
