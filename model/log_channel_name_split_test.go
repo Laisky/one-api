@@ -32,7 +32,7 @@ func TestFillLogChannelNamesWorksWithSeparateLogDatabase(t *testing.T) {
 	// Primary handle: owns channels, and deliberately has no logs table.
 	primary, err := gorm.Open(sqlite.Open(filepath.Join(dir, "primary.db")), &gorm.Config{Logger: glogger.Discard})
 	require.NoError(t, err)
-	require.NoError(t, primary.AutoMigrate(&Channel{}))
+	require.NoError(t, primary.AutoMigrate(&Channel{}, &ChannelGroup{}))
 
 	// Log handle: owns logs, and deliberately has no channels table, exactly as
 	// migrateLOGDB provisions it.

@@ -138,3 +138,86 @@ describe('EditUserPage 2FA disable button', () => {
     expect(screen.queryByRole('button', { name: /disable user 2fa/i })).not.toBeInTheDocument();
   });
 });
+
+/**
+ * seedUserWithCatalog serves user 2 in `group` and answers each `/api/group/`
+ * call with the next entry of `catalog` (the last one repeats); `'reject'`
+ * simulates a network error and `'pending'` a request that never settles.
+ */
+const seedUserWithCatalog = (group: string, catalog: Array<'reject' | 'pending' | unknown>) => {
+  let groupCall = 0;
+  (api.get as any).mockReset();
+  (api.get as any).mockImplementation((url: string) => {
+    if (url === '/api/group/') {
+      const next = catalog[Math.min(groupCall, catalog.length - 1)];
+      groupCall += 1;
+      if (next === 'reject') return Promise.reject(new Error('network down'));
+      if (next === 'pending') return new Promise(() => {});
+      return Promise.resolve({ data: next });
+    }
+    if (url.startsWith('/api/user/')) {
+      return Promise.resolve({
+        data: {
+          success: true,
+          data: { id: 2, username: 'alice', display_name: 'Alice', email: 'alice@example.com', quota: 100, group, mcp_tool_blacklist: [] },
+        },
+      });
+    }
+    return Promise.resolve({ data: { success: true } });
+  });
+};
+
+describe('EditUserPage group catalog', () => {
+  beforeEach(() => {
+    notify.mockReset();
+    (api.put as any).mockReset();
+    setAdmin();
+  });
+
+  it('shows a retryable error and keeps displaying the current group when the catalog fails', async () => {
+    seedUserWithCatalog('legacy group', ['reject', { success: true, data: ['default', 'vip'] }]);
+    const user = userEvent.setup();
+    renderEditPage('2');
+
+    await screen.findByDisplayValue('alice');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('The configured groups could not be loaded');
+    expect(screen.getByRole('combobox')).toHaveTextContent('legacy group');
+
+    await user.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+
+    // The stored group stays selected and listed next to the configured groups.
+    const trigger = screen.getByRole('combobox');
+    expect(trigger).toHaveTextContent('legacy group');
+    await user.click(trigger);
+    expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual(['default', 'vip', 'legacy group']);
+  });
+
+  it('treats a success:false catalog response as a load failure', async () => {
+    seedUserWithCatalog('default', [{ success: false, message: 'forbidden' }]);
+    renderEditPage('2');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The configured groups could not be loaded');
+    expect(screen.getByRole('combobox')).toHaveTextContent('default');
+  });
+
+  it('keeps showing an unconfigured current group while the catalog is loading and does not resend it', async () => {
+    seedUserWithCatalog('partners', ['pending']);
+    (api.put as any).mockResolvedValue({ data: { success: true } });
+    const user = userEvent.setup();
+    renderEditPage('2');
+
+    const displayName = await screen.findByDisplayValue('Alice');
+    expect(screen.getByRole('combobox')).toHaveTextContent('partners');
+
+    await user.clear(displayName);
+    await user.type(displayName, 'Alice B');
+    await user.click(screen.getByRole('button', { name: 'Update User' }));
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    const payload = (api.put as any).mock.calls[0][1];
+    expect(payload).toEqual(expect.objectContaining({ display_name: 'Alice B' }));
+    expect(payload).not.toHaveProperty('group');
+  });
+});

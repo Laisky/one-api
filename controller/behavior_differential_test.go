@@ -372,7 +372,7 @@ func behaviorDiffSetup(t *testing.T) *behaviorDiffFixture {
 
 	require.NoError(t, db.AutoMigrate(
 		&model.User{},
-		&model.Channel{},
+		&model.Channel{}, &model.ChannelGroup{},
 		&model.Token{},
 		&model.TokenTransaction{},
 		&model.Redemption{},

@@ -21,7 +21,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 
 	// Auto-migrate the tables
-	err = db.AutoMigrate(&Channel{}, &Ability{})
+	err = db.AutoMigrate(&Channel{}, &ChannelGroup{}, &Ability{})
 	require.NoError(t, err)
 
 	return db

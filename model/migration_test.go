@@ -124,7 +124,7 @@ func TestChannelModelConfigsMigration(t *testing.T) {
 	defer func() { DB = originalDB }()
 
 	// Create channels table
-	err := testDB.AutoMigrate(&Channel{})
+	err := testDB.AutoMigrate(&Channel{}, &ChannelGroup{})
 	require.NoError(t, err, "Failed to create channels table")
 
 	// Create test channel with old format ModelConfigs
@@ -170,7 +170,7 @@ func TestChannelModelConfigsMigration_EmptyData(t *testing.T) {
 	defer func() { DB = originalDB }()
 
 	// Create channels table
-	err := testDB.AutoMigrate(&Channel{})
+	err := testDB.AutoMigrate(&Channel{}, &ChannelGroup{})
 	require.NoError(t, err, "Failed to create channels table")
 
 	// Create test channel with no ModelConfigs
@@ -197,7 +197,7 @@ func TestChannelModelConfigsMigration_InvalidJSON(t *testing.T) {
 	defer func() { DB = originalDB }()
 
 	// Create channels table
-	err := testDB.AutoMigrate(&Channel{})
+	err := testDB.AutoMigrate(&Channel{}, &ChannelGroup{})
 	require.NoError(t, err, "Failed to create channels table")
 
 	// Create test channel with invalid JSON
@@ -229,7 +229,7 @@ func TestChannelNullHandling(t *testing.T) {
 	defer func() { DB = originalDB }()
 
 	// Create channels table
-	err := testDB.AutoMigrate(&Channel{})
+	err := testDB.AutoMigrate(&Channel{}, &ChannelGroup{})
 	require.NoError(t, err, "Failed to create channels table")
 
 	// Test 1: Create channel with NULL ModelConfigs and ModelMapping

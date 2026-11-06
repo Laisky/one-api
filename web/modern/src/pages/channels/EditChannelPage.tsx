@@ -27,7 +27,6 @@ export function EditChannelPage() {
     loading,
     isSubmitting,
     modelsCatalog,
-    groups,
     defaultPricing,
     defaultTooling,
     defaultBaseURL,
@@ -165,7 +164,7 @@ export function EditChannelPage() {
                   tr={tr}
                 />
 
-                <ChannelGroups form={form} groups={groups} tr={tr} />
+                <ChannelGroups form={form} tr={tr} />
 
                 <ChannelModelSettings
                   form={form}

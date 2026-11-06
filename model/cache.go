@@ -260,7 +260,7 @@ func CacheGetGroupModels(ctx context.Context, group string) (models []string, er
 	if !common.IsRedisEnabled() {
 		return GetGroupModels(ctx, group)
 	}
-	modelsStr, err := common.RedisGet(ctx, fmt.Sprintf("group_models:%s", group))
+	modelsStr, err := common.RedisGet(ctx, groupModelsCachePrefix+group)
 	if err == nil {
 		return strings.Split(modelsStr, ","), nil
 	}
@@ -268,7 +268,7 @@ func CacheGetGroupModels(ctx context.Context, group string) (models []string, er
 	if err != nil {
 		return nil, errors.Wrap(err, "get group models")
 	}
-	fillCacheBestEffort(ctx, fmt.Sprintf("group_models:%s", group), strings.Join(models, ","), time.Duration(GroupModelsCacheSeconds)*time.Second,
+	fillCacheBestEffort(ctx, groupModelsCachePrefix+group, strings.Join(models, ","), time.Duration(GroupModelsCacheSeconds)*time.Second,
 		"Redis set group models failed, continuing without cache", zap.String("group", group))
 	return models, nil
 }
@@ -279,7 +279,7 @@ func CacheGetGroupModelsV2(ctx context.Context, group string) (models []dto.Enab
 	if !common.IsRedisEnabled() {
 		return GetGroupModelsV2(ctx, group)
 	}
-	modelsStr, err := common.RedisGet(ctx, fmt.Sprintf("group_models_v3:%s", group))
+	modelsStr, err := common.RedisGet(ctx, groupModelsV2CachePrefix+group)
 	if err != nil {
 		lg.Debug("Redis cache miss for group models, falling back to database", zap.String("group", group), zap.Error(err))
 	} else {
@@ -305,7 +305,7 @@ func CacheGetGroupModelsV2(ctx context.Context, group string) (models []dto.Enab
 	// a rolling deploy read pre-upgrade JSON whose rows all unmarshal as priority
 	// 0, silently collapsing the owner ranking to lowest-channel-id until the key
 	// expires. Bumping the key is the same fix the v1 -> v2 payload change used.
-	fillCacheBestEffort(ctx, fmt.Sprintf("group_models_v3:%s", group), string(cachePayload),
+	fillCacheBestEffort(ctx, groupModelsV2CachePrefix+group, string(cachePayload),
 		time.Duration(GroupModelsCacheSeconds)*time.Second,
 		"Redis set group models failed, continuing without cache", zap.String("group", group))
 	return models, nil

@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/common/groupname"
 )
 
 // splitCSVNames trims comma-separated names, removes empty entries, and deduplicates them.
@@ -106,7 +108,7 @@ func (channel *Channel) GetSupportedModelNames() []string {
 // GetGroupNames returns the trimmed group names configured on the channel.
 // Case-insensitive duplicates are removed to preserve existing group behavior.
 func (channel *Channel) GetGroupNames() []string {
-	return splitCSVNames(channel.Group, false)
+	return groupname.ParseList(channel.Group)
 }
 
 // GetHiddenModels returns lowercase hidden-model membership keys for the channel.

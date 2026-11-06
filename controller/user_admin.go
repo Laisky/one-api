@@ -254,13 +254,13 @@ func UpdateUser(c *gin.Context) {
 				helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 				return
 			}
-			group = strings.TrimSpace(group)
-			if group == "" {
-				helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Group cannot be empty")))
+			// The stored group is grandfathered; any other group must already exist in GroupRatio.
+			if group, err = resolveUserGroup(group, originUser.Group); err != nil {
+				helper.RespondError(c, err)
 				return
 			}
-			if utf8.RuneCountInString(group) > 32 {
-				helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Group cannot exceed 32 characters")))
+			if group == "" {
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Group cannot be empty")))
 				return
 			}
 			updates["group"] = group
@@ -521,6 +521,11 @@ func CreateUser(c *gin.Context) {
 	myRole := c.GetInt("role")
 	if req.Role >= myRole {
 		helper.RespondError(c, errkind.ForbiddenErr(errors.New("Unable to create users with permissions greater than or equal to your own")))
+		return
+	}
+	// A new user has no stored group, so a requested group must already exist in GroupRatio.
+	if req.Group, err = resolveUserGroup(req.Group, ""); err != nil {
+		helper.RespondError(c, err)
 		return
 	}
 	// Even for admin users, we cannot fully trust them!

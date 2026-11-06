@@ -1,5 +1,6 @@
 import { useNotifications } from '@/components/ui/notifications';
 import { api } from '@/lib/api';
+import { parseGroupList } from '@/lib/group-name';
 import { zodResolver } from '@/lib/zod-resolver';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -34,7 +35,6 @@ export const useChannelForm = () => {
   const [loading, setLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modelsCatalog, setModelsCatalog] = useState<Record<number, string[]>>({});
-  const [groups, setGroups] = useState<string[]>([]);
   const [defaultPricing, setDefaultPricing] = useState<string>('');
   const [defaultTooling, setDefaultTooling] = useState<string>('');
   const [defaultBaseURL, setDefaultBaseURL] = useState<string>('');
@@ -158,13 +158,9 @@ export const useChannelForm = () => {
             .filter((model: string) => model !== '');
         }
 
-        let groups: string[] = ['default'];
-        if (data.group && typeof data.group === 'string' && data.group.trim() !== '') {
-          groups = data.group
-            .split(',')
-            .map((group: string) => group.trim())
-            .filter((group: string) => group !== '');
-        }
+        // Parse like the backend (trim, drop empties, case-insensitive de-dup) so the form shows the effective groups.
+        const storedGroups = typeof data.group === 'string' ? parseGroupList(data.group) : [];
+        const groups: string[] = storedGroups.length > 0 ? storedGroups : ['default'];
 
         let config: ChannelConfigForm = {
           region: '',
@@ -345,33 +341,10 @@ export const useChannelForm = () => {
     }
   }, []);
 
-  const loadGroups = useCallback(async () => {
-    try {
-      const response = await api.get('/api/option/');
-      const { success, data } = response.data;
-
-      if (success && data) {
-        const groupsOption = data.find((option: any) => option.key === 'AvailableGroups');
-        if (groupsOption?.value) {
-          const availableGroups = groupsOption.value
-            .split(',')
-            .map((g: string) => g.trim())
-            .filter((g: string) => g !== '');
-          setGroups(['default', ...availableGroups]);
-        } else {
-          setGroups(['default']);
-        }
-      }
-    } catch (error) {
-      console.error(`Error loading groups: ${error instanceof Error ? error.message : String(error)}`);
-      setGroups(['default']);
-    }
-  }, []);
-
+  // The group catalog is loaded by ChannelGroups itself through useGroupCatalog.
   useEffect(() => {
     loadModelsCatalog();
-    loadGroups();
-  }, [loadModelsCatalog, loadGroups]);
+  }, [loadModelsCatalog]);
 
   useEffect(() => {
     if (isEdit) {
@@ -769,7 +742,6 @@ export const useChannelForm = () => {
     loading,
     isSubmitting,
     modelsCatalog,
-    groups,
     defaultPricing,
     defaultTooling,
     defaultBaseURL,

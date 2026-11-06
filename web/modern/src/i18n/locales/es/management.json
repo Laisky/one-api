@@ -292,9 +292,14 @@
         }
       },
       "groups": {
-        "add_placeholder": "Agregar grupo personalizado...",
-        "help": "Restringir el acceso a grupos de usuarios específicos. Vacío significa que todos los usuarios pueden acceder. El grupo predeterminado siempre se mantiene.",
-        "label": "Grupos *"
+        "add_placeholder": "Buscar o seleccionar grupos...",
+        "help": "Grupos de usuarios que pueden usar este canal. Solo se pueden seleccionar los grupos configurados en Configuración → Operación → Grupos y ratios. Los usuarios normales pertenecen al grupo \"default\". Se requiere al menos un grupo.",
+        "label": "Grupos *",
+        "load_failed": "No se pudieron cargar los grupos configurados, por lo que ahora no se puede añadir ningún grupo. Los grupos ya seleccionados se conservan.",
+        "load_failed_empty": "No hay grupos disponibles porque no se pudo cargar la lista",
+        "loading": "Cargando grupos...",
+        "no_match": "No hay grupos coincidentes",
+        "remove": "Quitar el grupo {{group}}"
       },
       "hidden_models": {
         "custom_placeholder": "Agregar modelo oculto...",
@@ -993,6 +998,9 @@
         "group": {
           "help": "El grupo de usuarios controla el acceso y la visibilidad de modelos/canales.",
           "label": "Grupo *",
+          "load_failed": "No se pudieron cargar los grupos configurados, por lo que ahora no se puede cambiar el grupo. Se conserva el grupo actual.",
+          "load_failed_empty": "No hay otros grupos disponibles porque no se pudo cargar la lista",
+          "loading": "Cargando grupos...",
           "placeholder": "Selecciona un grupo"
         },
         "mcp_tool_blacklist": {

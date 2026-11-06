@@ -45,7 +45,7 @@ func openProbeBenchDB(tb testing.TB, backend string) *gorm.DB {
 		require.NoError(tb, err)
 		sqlDB.SetMaxOpenConns(1)
 		tb.Cleanup(func() { require.NoError(tb, sqlDB.Close()) })
-		require.NoError(tb, db.AutoMigrate(&Channel{}, &Ability{}))
+		require.NoError(tb, db.AutoMigrate(&Channel{}, &ChannelGroup{}, &Ability{}))
 		return db
 	}
 
@@ -105,7 +105,7 @@ func openProbeBenchDB(tb testing.TB, backend string) *gorm.DB {
 		db, err = gorm.Open(postgres.New(postgres.Config{Conn: stdlib.OpenDB(*parsed)}), cfg)
 	}
 	require.NoError(tb, err)
-	require.NoError(tb, db.AutoMigrate(&Channel{}, &Ability{}))
+	require.NoError(tb, db.AutoMigrate(&Channel{}, &ChannelGroup{}, &Ability{}))
 	return db
 }
 

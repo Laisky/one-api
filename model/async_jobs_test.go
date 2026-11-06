@@ -44,7 +44,7 @@ func durableJobTestStore(t *testing.T) (string, *AsyncTask) {
 		_ = dbConn.Close()
 		_ = logsConn.Close()
 	})
-	require.NoError(t, primary.AutoMigrate(&User{}, &Token{}, &Channel{}, &UserRequestCost{}, &AsyncTask{}))
+	require.NoError(t, primary.AutoMigrate(&User{}, &Token{}, &Channel{}, &ChannelGroup{}, &UserRequestCost{}, &AsyncTask{}))
 	require.NoError(t, logDB.AutoMigrate(&Log{}, &AsyncTaskLogReceipt{}))
 	user := &User{Id: 987001, UUID: uuid.NewString(), Username: "async-owner", Status: UserStatusEnabled, Quota: 1000000}
 	require.NoError(t, primary.Create(user).Error)

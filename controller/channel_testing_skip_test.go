@@ -34,7 +34,7 @@ func setupChannelSweepTestEnvironment(t *testing.T) {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.Log{}))
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelGroup{}, &model.Ability{}, &model.Log{}))
 
 	// main.go does this at boot. Without it the cross-provider catalogue is empty,
 	// so every model would classify as unknown format and the suite would be

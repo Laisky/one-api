@@ -45,7 +45,7 @@ func newRoutingTestDB(t *testing.T) *gorm.DB {
 func setupWeightedRoutingDB(t *testing.T, channels []*Channel) {
 	t.Helper()
 	db := newRoutingTestDB(t)
-	require.NoError(t, db.AutoMigrate(&Channel{}, &Ability{}))
+	require.NoError(t, db.AutoMigrate(&Channel{}, &ChannelGroup{}, &Ability{}))
 	for _, ch := range channels {
 		require.NoError(t, db.Create(ch).Error)
 		require.NoError(t, ch.AddAbilities())
@@ -208,7 +208,7 @@ func TestBackwardCompat_OldWeightColumn(t *testing.T) {
 			t.Run(tc.name+"/"+pathName, func(t *testing.T) {
 				db := newRoutingTestDB(t)
 				require.NoError(t, db.Exec(tc.createDDL).Error, tc.description)
-				require.NoError(t, db.AutoMigrate(&Channel{}, &Ability{}),
+				require.NoError(t, db.AutoMigrate(&Channel{}, &ChannelGroup{}, &Ability{}),
 					"AutoMigrate must not drop or require the orphaned weight column")
 
 				// Channels carry the authoritative 7/3 weights.

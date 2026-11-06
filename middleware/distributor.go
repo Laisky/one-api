@@ -63,8 +63,8 @@ func channelSupportsGroup(channel *model.Channel, userGroup string) bool {
 		return false
 	}
 
-	for grp := range strings.SplitSeq(channel.Group, ",") {
-		if strings.EqualFold(strings.TrimSpace(grp), targetGroup) {
+	for _, grp := range channel.GetGroupNames() {
+		if strings.EqualFold(grp, targetGroup) {
 			return true
 		}
 	}
@@ -376,15 +376,20 @@ func Distribute() func(c *gin.Context) {
 
 func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, modelName string) {
 	lg := gmw.GetLogger(c)
-	// one channel could relates to multiple groups,
-	// and each groud has individual ratio,
-	// set minimal group ratio as channel_ratio
+	// One channel can serve several groups, each with its own ratio; bill the
+	// minimal one. Groups are parsed with the same rule as abilities so a stored
+	// "default, vip" resolves "vip" rather than an unknown " vip".
 	var minimalRatio float64 = -1
-	for grp := range strings.SplitSeq(channel.Group, ",") {
+	for _, grp := range channel.GetGroupNames() {
 		v := ratio.GetGroupRatioWithContext(gmw.Ctx(c), grp)
 		if minimalRatio < 0 || v < minimalRatio {
 			minimalRatio = v
 		}
+	}
+	if minimalRatio < 0 {
+		// A channel without groups is unreachable through abilities; keep the legacy unknown-group ratio.
+		lg.Warn("selected channel has no groups, using group ratio 1", zap.Int("channel_id", channel.Id))
+		minimalRatio = 1
 	}
 	lg.Info("set channel ratio",
 		zap.String("channel_name", channel.Name),

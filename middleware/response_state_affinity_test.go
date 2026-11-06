@@ -26,7 +26,7 @@ func setupAffinityTestDB(t *testing.T, channel *dbmodel.Channel) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&dbmodel.Channel{}))
+	require.NoError(t, db.AutoMigrate(&dbmodel.Channel{}, &dbmodel.ChannelGroup{}))
 	require.NoError(t, db.Create(channel).Error)
 
 	originalDB := dbmodel.DB

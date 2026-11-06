@@ -66,6 +66,7 @@
     "register": "Register",
     "remove": "Remove",
     "remove_item": "Remove {{item}}",
+    "retry": "Retry",
     "search": "Search",
     "search_for": "Search for: ",
     "search_placeholder": "Search...",

@@ -314,6 +314,7 @@ func dropUUIDMigrationTables(t *testing.T, db *gorm.DB) {
 		&Log{},
 		&Redemption{},
 		&Ability{},
+		&ChannelGroup{},
 		&Option{},
 		&Token{},
 		&Channel{},

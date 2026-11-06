@@ -28,7 +28,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 
 	// Auto-migrate the tables
-	err = db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Token{}, &model.Option{}, &model.Redemption{}, &model.Ability{}, &model.Log{}, &model.UserRequestCost{})
+	err = db.AutoMigrate(&model.User{}, &model.Channel{}, &model.ChannelGroup{}, &model.Token{}, &model.Option{}, &model.Redemption{}, &model.Ability{}, &model.Log{}, &model.UserRequestCost{})
 	require.NoError(t, err)
 
 	return db

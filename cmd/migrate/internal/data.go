@@ -37,6 +37,9 @@ var TableMigrationOrder = []TableInfo{
 	{"users", &model.User{}},
 	{"options", &model.Option{}},
 	{"tokens", &model.Token{}},
+	// channel_groups is not copied as a table: the channels step writes every copied
+	// channel's complete relation (see copyChannelBatch), because a source channel's
+	// list may live in channels.group alone (SQLite, or rows from before the relation).
 	{"channels", &model.Channel{}},
 	{"redemptions", &model.Redemption{}},
 	{"abilities", &model.Ability{}},
@@ -322,12 +325,47 @@ func (m *Migrator) migrateBatch(tableInfo TableInfo, offset int64, limit int) (i
 		return int64(batchLen), nil
 	}
 
+	if channels, ok := batch.(*[]model.Channel); ok {
+		if err := m.copyChannelBatch(*channels, batch, tableInfo); err != nil {
+			return 0, errors.Wrap(err, "failed to copy channel batch")
+		}
+		return int64(batchLen), nil
+	}
+
 	// Insert batch into target database with conflict resolution
 	if err := m.insertBatchWithConflictResolution(batch, tableInfo); err != nil {
 		return 0, errors.Wrapf(err, "failed to insert batch into target")
 	}
 
 	return int64(batchLen), nil
+}
+
+// copyChannelBatch inserts a batch of channels into the target together with their
+// complete channel_groups. The source handle completes each channel's group list on read
+// (model.RegisterChannelGroupHydration), and model.PrepareChannelGroupCopy rewrites the
+// channels.group copy for the target's column, so a SQLite list wider than a MySQL or
+// PostgreSQL varchar(32) column is stored as a whole-name prefix plus the full relation.
+//
+// Parameters:
+//   - channels: the batch read from the source; modified in place for the target.
+//   - batch: the same batch as passed to insertBatchWithConflictResolution.
+//   - tableInfo: the channels table entry.
+//
+// Return values:
+//   - error: a wrapped insert or relation write failure.
+func (m *Migrator) copyChannelBatch(channels []model.Channel, batch any, tableInfo TableInfo) error {
+	rows := model.PrepareChannelGroupCopy(channels, m.targetConn.Type != "sqlite")
+	if err := m.insertBatchWithConflictResolution(batch, tableInfo); err != nil {
+		return errors.Wrap(err, "insert channels into target")
+	}
+	ids := make([]int, 0, len(channels))
+	for i := range channels {
+		ids = append(ids, channels[i].Id)
+	}
+	if err := model.WriteCopiedChannelGroups(m.targetConn.DB, ids, rows); err != nil {
+		return errors.Wrap(err, "write channel groups into target")
+	}
+	return nil
 }
 
 // insertBatchWithConflictResolution inserts a batch with conflict resolution

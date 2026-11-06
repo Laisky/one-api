@@ -322,7 +322,7 @@ func TestProvisionalLogAlwaysSettles(t *testing.T) {
 			defer cleanup()
 			// The Logs page joins channel names onto every row, so the visibility
 			// query needs the channels table present.
-			require.NoError(t, model.LOG_DB.AutoMigrate(&model.Channel{}))
+			require.NoError(t, model.LOG_DB.AutoMigrate(&model.Channel{}, &model.ChannelGroup{}))
 
 			prevLogConsume := config.IsLogConsumeEnabled()
 			config.SetLogConsumeEnabled(true)

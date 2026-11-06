@@ -7,7 +7,37 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { TFunction } from 'i18next';
 import type { UseFormReturn } from 'react-hook-form';
-import type { GroupRatioIssue, OperationForm, OperationFormInput } from './OperationSettings';
+import { GROUP_NAME_MAX_LENGTH } from '@/lib/group-name';
+import type { GroupRatioIssue } from './group-ratio-validation';
+import type { OperationForm, OperationFormInput } from './OperationSettings';
+
+/**
+ * describeGroupRatioIssue turns a GroupRatio validation issue into translated
+ * messages, one per problem. Keys are shown JSON-quoted so surrounding
+ * whitespace and empty names stay visible.
+ *
+ * @param t - The translator.
+ * @param issue - The issue reported by validateGroupRatioJSON.
+ * @returns The messages to list under the editor.
+ */
+function describeGroupRatioIssue(t: TFunction, issue: GroupRatioIssue): string[] {
+  /** quote renders one group key as a JSON string literal. */
+  const quote = (key: string) => JSON.stringify(key);
+  switch (issue.type) {
+    case 'parse':
+      return [t('operation_settings.group_ratio.invalid_json', { message: issue.message })];
+    case 'shape':
+      return [t('operation_settings.group_ratio.shape_invalid')];
+    case 'invalid-entries':
+      return [t('operation_settings.group_ratio.invalid_entries', { keys: issue.entries.map(quote).join(', ') })];
+    case 'invalid-names':
+      return issue.entries.map(({ key, reason }) =>
+        t(`operation_settings.group_ratio.name_${reason}`, { key: quote(key), max: GROUP_NAME_MAX_LENGTH })
+      );
+    case 'case-conflicts':
+      return issue.groups.map((keys) => t('operation_settings.group_ratio.case_conflict', { keys: keys.map(quote).join(', ') }));
+  }
+}
 
 type OperationQuotaCardProps = {
   t: TFunction;
@@ -144,13 +174,11 @@ export function OperationAdministrationCards({
             {groupRatioIssue && (
               <div className="flex items-start gap-2 rounded-lg border border-destructive bg-destructive/10 p-3">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                <span className="text-sm text-destructive">
-                  {groupRatioIssue.type === 'parse'
-                    ? t('operation_settings.group_ratio.invalid_json', { message: groupRatioIssue.message })
-                    : groupRatioIssue.type === 'shape'
-                      ? t('operation_settings.group_ratio.shape_invalid')
-                      : t('operation_settings.group_ratio.invalid_entries', { keys: groupRatioIssue.entries.join(', ') })}
-                </span>
+                <ul className="space-y-1 text-sm text-destructive">
+                  {describeGroupRatioIssue(t, groupRatioIssue).map((message, index) => (
+                    <li key={index}>{message}</li>
+                  ))}
+                </ul>
               </div>
             )}
             <div className="flex items-center gap-2">

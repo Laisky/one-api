@@ -66,6 +66,7 @@
     "register": "Registrarse",
     "remove": "Eliminar",
     "remove_item": "Eliminar {{item}}",
+    "retry": "Reintentar",
     "search": "Buscar",
     "search_for": "Buscar: ",
     "search_placeholder": "Buscar...",

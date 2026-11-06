@@ -60,11 +60,11 @@ describe('useChannelForm', () => {
           },
         });
       }
-      if (url.startsWith('/api/option/')) {
+      if (url.startsWith('/api/group/')) {
         return Promise.resolve({
           data: {
             success: true,
-            data: [{ key: 'AvailableGroups', value: 'vip' }],
+            data: ['vip', 'default'],
           },
         });
       }
@@ -106,14 +106,52 @@ describe('useChannelForm', () => {
     const modelsCalls = mockApiGet.mock.calls.filter((call) => call[0].startsWith('/api/models')).length;
     expect(modelsCalls).toBe(1);
 
-    // loadGroups should be called once
-    const groupsCalls = mockApiGet.mock.calls.filter((call) => call[0].startsWith('/api/option/')).length;
-    expect(groupsCalls).toBe(1);
+    // The group catalog belongs to ChannelGroups (useGroupCatalog), not to the form hook.
+    const groupsCalls = mockApiGet.mock.calls.filter((call) => call[0].startsWith('/api/group/')).length;
+    expect(groupsCalls).toBe(0);
+    expect(result.current).not.toHaveProperty('groups');
 
     // default pricing might be called multiple times but should settle
     const pricingCalls = mockApiGet.mock.calls.filter((call) => call[0].startsWith('/api/channel/default-pricing')).length;
     expect(pricingCalls).toBeGreaterThanOrEqual(1);
     expect(pricingCalls).toBeLessThan(5); // Arbitrary limit, but definitely not infinite
+  });
+
+  it('parses the stored group list like the backend and submits it normalized', async () => {
+    mockApiGet.mockImplementation((url) => {
+      if (url.startsWith('/api/channel/1')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: { id: 1, type: 1, name: 'Test Channel', models: 'gpt-4o', group: ' default, VIP,vip,, ', config: '{}', tooling: '{}' },
+          },
+        });
+      }
+      if (url.startsWith('/api/models')) {
+        return Promise.resolve({ data: { success: true, data: { 1: ['gpt-4o'] } } });
+      }
+      if (url.startsWith('/api/channel/default-pricing')) {
+        return Promise.resolve({ data: { success: true, data: { model_configs: '{}', tooling: '{}' } } });
+      }
+      if (url.startsWith('/api/channel/metadata')) {
+        return Promise.resolve({ data: { success: true, data: { default_base_url: 'https://api.openai.com' } } });
+      }
+      return Promise.resolve({ data: { success: false } });
+    });
+    mockApiPut.mockResolvedValue({ data: { success: true, message: '' } });
+
+    const { result } = renderHook(() => useChannelForm());
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    // The backend keeps only the first spelling of names that differ by case, so the form shows the same.
+    expect(result.current.form.getValues('groups')).toEqual(['default', 'VIP']);
+
+    await act(async () => {
+      await result.current.form.handleSubmit(result.current.onSubmit)();
+    });
+    expect(mockApiPut).toHaveBeenCalledWith('/api/channel/', expect.objectContaining({ group: 'default,VIP' }));
   });
 
   it('should parse and submit hidden models', async () => {
@@ -140,14 +178,6 @@ describe('useChannelForm', () => {
           data: {
             success: true,
             data: { 1: ['gpt-4o', 'public-alias'] },
-          },
-        });
-      }
-      if (url.startsWith('/api/option/')) {
-        return Promise.resolve({
-          data: {
-            success: true,
-            data: [{ key: 'AvailableGroups', value: 'vip' }],
           },
         });
       }
@@ -214,9 +244,6 @@ describe('useChannelForm', () => {
       if (url.startsWith('/api/models')) {
         return Promise.resolve({ data: { success: true, data: { 1: ['gpt-4o'] } } });
       }
-      if (url.startsWith('/api/option/')) {
-        return Promise.resolve({ data: { success: true, data: [] } });
-      }
       if (url.startsWith('/api/channel/default-pricing')) {
         return Promise.resolve({ data: { success: true, data: { model_configs: '{}', tooling: '{}' } } });
       }
@@ -273,9 +300,6 @@ describe('useChannelForm', () => {
       }
       if (url.startsWith('/api/models')) {
         return Promise.resolve({ data: { success: true, data: { 1: ['Public-Alias', 'GPT-4o'] } } });
-      }
-      if (url.startsWith('/api/option/')) {
-        return Promise.resolve({ data: { success: true, data: [] } });
       }
       if (url.startsWith('/api/channel/default-pricing')) {
         return Promise.resolve({ data: { success: true, data: { model_configs: '{}', tooling: '{}' } } });

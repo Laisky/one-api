@@ -26,7 +26,7 @@ func setupUserAvailableModelsTestEnvironment(t *testing.T) func() {
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Ability{}, &model.Channel{}))
+	require.NoError(t, db.AutoMigrate(&model.Ability{}, &model.Channel{}, &model.ChannelGroup{}))
 
 	originalDB := model.DB
 	originalUsingSQLite := common.UsingSQLite.Load()

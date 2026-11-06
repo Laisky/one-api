@@ -15,6 +15,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	oneapilogger "github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/model"
 )
 
 // DatabaseConnection represents a database connection with metadata
@@ -130,6 +131,12 @@ func ConnectDatabase(dbType, dsn string) (*DatabaseConnection, error) {
 	// from source (separate connection), so this is the right trade-off.
 	if strings.ToLower(dbType) == "sqlite" {
 		sqlDB.SetMaxOpenConns(1)
+	}
+
+	// Channels read through this connection must carry their complete group list, which
+	// lives in channel_groups when channels.group holds only a prefix of it.
+	if err := model.RegisterChannelGroupHydration(db); err != nil {
+		return nil, errors.Wrapf(err, "register channel group hydration on %s database", dbType)
 	}
 
 	oneapilogger.Logger.Info("Successfully connected to database", zap.String("type", dbType))

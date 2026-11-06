@@ -140,7 +140,7 @@ func ambiguousKeysRouter(t *testing.T, base string, channelType int, models stri
 		config.EnforceIncludeUsage = oldEnforceUsage
 		require.NoError(t, conn.Close())
 	})
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}, &model.UserRequestCost{}, &model.QuotaRefund{}, &model.Log{}, &model.Trace{}, &model.MCPServer{}, &model.MCPTool{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.ChannelGroup{}, &model.Ability{}, &model.UserRequestCost{}, &model.QuotaRefund{}, &model.Log{}, &model.Trace{}, &model.MCPServer{}, &model.MCPTool{}))
 	allowed := models
 	user := &model.User{Id: passthroughKeysUserID, UUID: uuid.NewString(), Username: "passthrough-keys", Status: model.UserStatusEnabled, Quota: passthroughKeysQuota, Group: "default"}
 	key := strings.ReplaceAll(uuid.NewString(), "-", "")

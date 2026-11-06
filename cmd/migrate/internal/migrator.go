@@ -245,6 +245,9 @@ func (m *Migrator) runAutoMigration() error {
 	if err := model.DB.AutoMigrate(&model.Ability{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate Ability")
 	}
+	if err := model.DB.AutoMigrate(&model.ChannelGroup{}); err != nil {
+		return errors.Wrapf(err, "failed to migrate ChannelGroup")
+	}
 	if err := model.DB.AutoMigrate(&model.Log{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate Log")
 	}

@@ -340,6 +340,10 @@ func AddChannel(c *gin.Context) {
 		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Channel name is required")))
 		return
 	}
+	if channel.Group, err = resolveChannelGroups(channel.Group, ""); err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 
 	// Validate inference profile ARN map if provided
 	if channel.InferenceProfileArnMap != nil && *channel.InferenceProfileArnMap != "" {
@@ -476,6 +480,10 @@ func UpdateChannel(c *gin.Context) {
 	// Disallow empty name on full update
 	if strings.TrimSpace(channel.Name) == "" {
 		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Channel name cannot be empty")))
+		return
+	}
+	if err := normalizeChannelUpdateGroups(channel); err != nil {
+		helper.RespondError(c, err)
 		return
 	}
 
