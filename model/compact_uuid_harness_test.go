@@ -163,6 +163,15 @@ func configuredTestTimeout() time.Duration {
 // deployment and far too slow for a test, so the intervals are compressed. Every other bound —
 // batch sizes, bind caps, the health TTL's relationship to the idle interval — is left exactly
 // as production computes it, because those are the properties under test.
+//
+// The lock timeout is pinned to the production default rather than compressed. It is not an
+// interval, so shortening it buys no speed (SQLite ownership is a non-blocking try-lock), but
+// production derives wall-clock budgets from it: the ownership catalog reads run under it and
+// every pre-DDL metadata read under it plus two seconds. Compressed to the one-second minimum,
+// those per-call budgets were 1s and 3s, and a test-process stall under `go test -race ./...`
+// load expired one mid-cycle ("context deadline exceeded / read index metadata for logs") —
+// a harness timeout reported as a migration failure. The live fault suite still proves the
+// metadata bound itself against a real conflicting lock.
 // Parameters:
 //   - t: test handle used for cleanup registration.
 //
@@ -181,7 +190,7 @@ func withCompactTestSettings(t *testing.T) {
 	config.CompactUUIDActiveInterval = 10 * time.Millisecond
 	config.CompactUUIDIdleInterval = 50 * time.Millisecond
 	config.CompactUUIDRetryInterval = 10 * time.Millisecond
-	config.CompactUUIDLockTimeout = time.Second
+	config.CompactUUIDLockTimeout = config.DefaultCompactUUIDLockTimeout
 
 	t.Cleanup(func() {
 		config.CompactUUIDAutoMigrate = originalAuto

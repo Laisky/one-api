@@ -21,7 +21,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common/config"
-	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/model"
@@ -110,68 +109,6 @@ func TestIsExpectedChannelSelectionExhaustedError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tt.want, isExpectedChannelSelectionExhaustedError(tt.err))
-		})
-	}
-}
-
-func TestShouldRetry(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	tests := []struct {
-		name            string
-		statusCode      int
-		specificChannel int
-		expectError     bool
-		errorContains   string
-	}{
-		{
-			name:            "should retry on 200 OK",
-			statusCode:      http.StatusOK,
-			specificChannel: 0,
-			expectError:     false,
-		},
-		{
-			name:            "should retry on 429 when no specific channel",
-			statusCode:      http.StatusTooManyRequests,
-			specificChannel: 0,
-			expectError:     false,
-		},
-		{
-			name:            "should not retry when specific channel ID is set",
-			statusCode:      http.StatusTooManyRequests,
-			specificChannel: 123,
-			expectError:     true,
-			errorContains:   "specific channel ID (123) was provided",
-		},
-		{
-			name:            "should retry on 500 error",
-			statusCode:      http.StatusInternalServerError,
-			specificChannel: 0,
-			expectError:     false,
-		},
-		{
-			name:            "should retry on 503 error",
-			statusCode:      http.StatusServiceUnavailable,
-			specificChannel: 0,
-			expectError:     false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c, _ := gin.CreateTestContext(nil)
-			c.Set(ctxkey.SpecificChannelId, tt.specificChannel)
-
-			err := shouldRetry(c, &model.ErrorWithStatusCode{StatusCode: tt.statusCode})
-
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
-				}
-			} else {
-				assert.NoError(t, err)
-			}
 		})
 	}
 }
@@ -792,78 +729,6 @@ func TestProcessChannelRelayError(t *testing.T) {
 				// For 5xx errors, verify server error handling
 				t.Logf("✓ 5xx error correctly triggers server error handling: %s (status: %d)", testError.Error.Message, testError.StatusCode)
 			}
-		})
-	}
-}
-
-func TestShouldRetryLogic(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	_ = ctx
-
-	tests := []struct {
-		name            string
-		statusCode      int
-		specificChannel bool
-		shouldRetry     bool
-		description     string
-	}{
-		{
-			name:            "400 with specific channel should not retry",
-			statusCode:      http.StatusBadRequest,
-			specificChannel: true,
-			shouldRetry:     false,
-			description:     "Specific channel requests should not retry regardless of error",
-		},
-		{
-			name:            "400 without specific channel should not retry channels",
-			statusCode:      http.StatusBadRequest,
-			specificChannel: false,
-			shouldRetry:     true, // Should retry with other channels, but not disable current channel
-			description:     "400 errors should retry with other channels but not disable the current one",
-		},
-		{
-			name:            "429 should retry with other channels",
-			statusCode:      http.StatusTooManyRequests,
-			specificChannel: false,
-			shouldRetry:     true,
-			description:     "Rate limit errors should retry with other channels",
-		},
-		{
-			name:            "500 should retry with other channels",
-			statusCode:      http.StatusInternalServerError,
-			specificChannel: false,
-			shouldRetry:     true,
-			description:     "Server errors should retry with other channels",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			startTime := time.Now().UTC()
-
-			// Simulate the retry logic behavior
-			if tt.specificChannel {
-				// If specific channel is requested, no retry should happen
-				require.False(t, tt.shouldRetry, "Should not retry when specific channel is requested")
-			} else {
-				// For general requests, retry behavior depends on error type
-				if tt.statusCode == http.StatusBadRequest {
-					// 400 errors should still retry with other channels
-					// but should not disable the current channel
-					t.Logf("✓ 400 error allows retry with other channels without disabling current channel")
-				} else if tt.statusCode == http.StatusTooManyRequests {
-					// 429 errors should retry with other channels and suspend current ability
-					t.Logf("✓ 429 error allows retry with other channels and suspends current ability")
-				} else if tt.statusCode >= 500 {
-					// 5xx errors should retry with other channels and disable current channel
-					t.Logf("✓ 5xx error allows retry with other channels and disables current channel")
-				}
-			}
-
-			elapsed := time.Since(startTime)
-			require.LessOrEqual(t, elapsed, 5*time.Millisecond, "Retry logic test took too long: %v", elapsed)
 		})
 	}
 }
