@@ -6,6 +6,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
+	commonsse "github.com/Laisky/one-api/common/sse"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
@@ -63,12 +64,11 @@ func (e *ClaudeStreamEmitter) writeEvent(eventType string, payload any) {
 		e.err = errors.Wrapf(err, "marshal Claude %s event", eventType)
 		return
 	}
-	frame := make([]byte, 0, len(data)+len(eventType)+16)
-	frame = append(frame, "event: "...)
-	frame = append(frame, eventType...)
-	frame = append(frame, "\ndata: "...)
-	frame = append(frame, data...)
-	frame = append(frame, "\n\n"...)
+	frame, err := commonsse.EncodeFrame(eventType, data)
+	if err != nil {
+		e.err = errors.Wrapf(err, "encode Claude %s event", eventType)
+		return
+	}
 	if _, err := e.out.Write(frame); err != nil {
 		e.err = errors.Wrapf(err, "write Claude %s event", eventType)
 		return

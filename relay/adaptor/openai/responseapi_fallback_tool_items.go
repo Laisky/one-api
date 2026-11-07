@@ -402,7 +402,14 @@ func lowerResponseAgentMessage(item map[string]any) (map[string]any, error) {
 			}
 			switch kind, _ := part["type"].(string); kind {
 			case "input_text", "text", "output_text":
-				text, _ := part["text"].(string)
+				// An absent text member is an empty part; a present non-string
+				// one (null, number, object, array) is rejected, as for tool
+				// output text parts, instead of being lowered as "".
+				rawText, present := part["text"]
+				text, isString := rawText.(string)
+				if present && !isString {
+					return nil, errors.Wrap(ErrResponseFallbackNotRepresentable, "agent message text part must carry string text")
+				}
 				texts = append(texts, text)
 			default:
 				return nil, errors.Wrap(ErrResponseFallbackNotRepresentable, "encrypted or non-text agent message content requires native Responses support")
@@ -532,18 +539,24 @@ func normalizeResponseToolSearchArguments(arguments string) json.RawMessage {
 // responseToolSearchQuery renders a tool_search query member as a JSON
 // string. Parameters: raw is the member's value, nil when absent. Strings are
 // returned unchanged, numbers and booleans become a string of their JSON
-// text, and every other value becomes "".
+// text, and every other value, including bytes that are not exactly one JSON
+// value, becomes "". The result is always one valid JSON string.
 func responseToolSearchQuery(raw json.RawMessage) json.RawMessage {
-	if len(raw) == 0 {
+	if len(raw) == 0 || !json.Valid(raw) {
 		return json.RawMessage(`""`)
 	}
 	switch first := raw[0]; {
 	case first == '"':
 		return raw
 	case first == 't' || first == 'f' || first == '-' || (first >= '0' && first <= '9'):
-		// Number and boolean literals hold no quotes or backslashes, so their
-		// text is already a valid string body.
-		return json.RawMessage(`"` + string(raw) + `"`)
+		// A valid JSON value led by these bytes is a boolean or number
+		// literal. Encode its text through the JSON encoder rather than
+		// splicing it between quotes, so the string can never be broken out of.
+		quoted, err := json.Marshal(string(raw))
+		if err != nil {
+			return json.RawMessage(`""`)
+		}
+		return quoted
 	default:
 		return json.RawMessage(`""`)
 	}

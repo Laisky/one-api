@@ -137,7 +137,10 @@ func hydrateResponseAPIRequestForFallback(ctx context.Context, meta *metalib.Met
 		metrics.RecordStateEvent(metrics.StateCategoryPath, metrics.StateOutcomeStateless)
 	}
 
-	combined := make([]any, 0, len(priorItems)+len(req.Input))
+	// Capacity covers the prior items only; append grows it for the input.
+	// Summing both untrusted lengths into one make size is the overflow-prone
+	// shape, and the item-count bound below runs before any per-item work.
+	combined := make([]any, 0, len(priorItems))
 	combined = append(combined, priorItems...)
 	combined = append(combined, []any(req.Input)...)
 

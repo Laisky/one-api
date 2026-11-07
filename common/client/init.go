@@ -71,6 +71,24 @@ func buildUserContentDialContext(proxyURL *url.URL) func(ctx context.Context, ne
 	}
 }
 
+// userContentProxy returns the Transport.Proxy hook of the user-content client
+// behind USER_CONTENT_REQUEST_PROXY. The transport calls it before connecting
+// for every request, each redirect hop included. Behind a proxy the dial guard
+// only sees the proxy's own address, so this hook applies the public-address
+// policy to the request target instead; that covers every caller of the shared
+// client, including ones that do not validate the URL themselves. The proxy
+// still resolves the name again, so it must enforce its own egress policy
+// against DNS rebinding. Parameters: proxyURL is the configured proxy. Returns
+// a hook yielding proxyURL for an allowed target and an error otherwise.
+func userContentProxy(proxyURL *url.URL) func(*http.Request) (*url.URL, error) {
+	return func(req *http.Request) (*url.URL, error) {
+		if _, err := netutil.ValidateExternalURL(req.Context(), req.URL.String()); err != nil {
+			return nil, errors.Wrap(err, "user content target not allowed")
+		}
+		return proxyURL, nil
+	}
+}
+
 // Init builds the shared HTTP clients with proxy and timeout settings derived from configuration.
 func Init() {
 	// Create a transport with HTTP/2 disabled to avoid stream errors in CI environments
@@ -83,6 +101,9 @@ func Init() {
 		}
 		if restrictExternal {
 			transport.DialContext = buildUserContentDialContext(proxyURL)
+			if proxyURL != nil {
+				transport.Proxy = userContentProxy(proxyURL)
+			}
 		}
 		return transport
 	}

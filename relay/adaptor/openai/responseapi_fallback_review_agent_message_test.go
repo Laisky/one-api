@@ -36,6 +36,14 @@ func TestLowerResponseAgentMessageContentShapes(t *testing.T) {
 		"encrypted":      {content: `[{"type":"encrypted_content","encrypted_content":"` + responseAgentMessageReviewCanary + `"}]`, wantErr: true},
 		"array_scalar":   {content: `["` + responseAgentMessageReviewCanary + `"]`, wantErr: true},
 		"array_of_image": {content: `[{"type":"input_image","image_url":"https://example.invalid/` + responseAgentMessageReviewCanary + `.png"}]`, wantErr: true},
+		// A text part whose text is not a string carries content the lowering
+		// cannot represent; it must be rejected like a tool-output text part,
+		// not silently lowered as an empty string.
+		"part_object_text": {content: `[{"type":"input_text","text":{"value":"` + responseAgentMessageReviewCanary + `"}}]`, wantErr: true},
+		"part_number_text": {content: `[{"type":"input_text","text":7031}]`, wantErr: true},
+		"part_null_text":   {content: `[{"type":"output_text","text":null}]`, wantErr: true},
+		"part_array_text":  {content: `[{"type":"text","text":["` + responseAgentMessageReviewCanary + `"]}]`, wantErr: true},
+		"part_absent_text": {content: `[{"type":"input_text"},{"type":"input_text","text":"two"}]`, wantText: header + "\ntwo"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

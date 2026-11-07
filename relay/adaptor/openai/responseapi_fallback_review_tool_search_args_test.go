@@ -160,3 +160,40 @@ func TestResponseToolSearchArgumentsKeepsValidInput(t *testing.T) {
 		require.Equal(t, want, string(normalizeResponseToolSearchArguments(in)), in)
 	}
 }
+
+// TestResponseToolSearchQueryEncodesLiteralsAsJSONStrings proves the query
+// renderer always returns one valid JSON string, whatever bytes it is handed.
+// Number and boolean literals keep their exact text; a malformed literal (which
+// the decoder never yields today, but the function must not trust that) can no
+// longer break out of the quotes and inject members.
+func TestResponseToolSearchQueryEncodesLiteralsAsJSONStrings(t *testing.T) {
+	t.Parallel()
+	for raw, want := range map[string]string{
+		`true`:    "true",
+		`false`:   "false",
+		`-0`:      "-0",
+		`1.50`:    "1.50",
+		`1e+400`:  "1e+400",
+		`-2.5E-3`: "-2.5E-3",
+		`7`:       "7",
+		`"docs"`:  "docs",
+		`null`:    "",
+		`[1]`:     "",
+		`{"a":1}`: "",
+		``:        "",
+		// Hostile inputs that are not one JSON value: before the fix a
+		// literal-shaped one was wrapped in quotes verbatim (`"1"}"`) and a
+		// quote-led one was returned as is, both breaking out of the string.
+		`t","x":"y`:   "",
+		`1"}`:         "",
+		"f\\\"":       "",
+		`"a","b":"c"`: "",
+		`"open`:       "",
+	} {
+		rendered := responseToolSearchQuery(json.RawMessage(raw))
+		require.True(t, json.Valid(rendered), "invalid JSON for %q: %s", raw, rendered)
+		var decoded string
+		require.NoError(t, json.Unmarshal(rendered, &decoded), "not a JSON string for %q: %s", raw, rendered)
+		require.Equal(t, want, decoded, raw)
+	}
+}

@@ -415,7 +415,9 @@ func ConvertChatCompletionToResponseAPI(request *model.GeneralOpenAIRequest) *Re
 	}
 
 	// Handle tools (modern format)
-	responseAPITools := make([]ResponseAPITool, 0, len(request.Tools)+len(request.Functions)+1)
+	// Sized from the tool list alone; append grows it for legacy functions and
+	// web search without an overflow-prone sum of request-controlled lengths.
+	responseAPITools := make([]ResponseAPITool, 0, len(request.Tools))
 	webSearchAdded := false
 
 	if len(request.Tools) > 0 {

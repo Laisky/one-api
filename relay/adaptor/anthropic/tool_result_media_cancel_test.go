@@ -43,10 +43,11 @@ func TestToolResultMediaRemoteFetchStopsOnCancel(t *testing.T) {
 	time.AfterFunc(100*time.Millisecond, cancel)
 
 	budget := newRequestMediaBudget(ctx, maxRequestMediaBytes)
-	// 203.0.113.0/24 is a public documentation range, so the SSRF guard admits
-	// it without DNS while the injected transport keeps the fetch pending.
+	// A globally reachable IP literal passes the SSRF guard without DNS, and
+	// the injected transport keeps the fetch pending without sending a packet.
+	// Documentation ranges such as 203.0.113.0/24 are refused by the guard.
 	started := time.Now()
-	_, err := convertToolResultMediaBlocks(budget, []model.MessageContent{toolMediaImage("http://203.0.113.10/view.png")})
+	_, err := convertToolResultMediaBlocks(budget, []model.MessageContent{toolMediaImage("http://8.8.8.8/view.png")})
 	elapsed := time.Since(started)
 
 	require.Error(t, err)
