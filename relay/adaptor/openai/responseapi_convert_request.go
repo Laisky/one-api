@@ -11,7 +11,20 @@ import (
 
 // ConvertResponseAPIToChatCompletionRequest converts a Response API request into a
 // ChatCompletion request for providers that do not support Response API natively.
+// It builds the fallback tool catalog from request itself; see
+// ConvertResponseAPIToChatCompletionRequestWithCatalog for the parameters.
 func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nativeMedia ...bool) (*model.GeneralOpenAIRequest, error) {
+	return ConvertResponseAPIToChatCompletionRequestWithCatalog(request, nil, nativeMedia...)
+}
+
+// ConvertResponseAPIToChatCompletionRequestWithCatalog converts a Response API
+// request into a ChatCompletion request using a fallback tool catalog the
+// caller already built and validated from the same request, so the converter
+// and the response renderer share one identity map. Parameters: request is
+// the (hydrated) Responses request; catalog is BuildResponseFallbackToolCatalog
+// of request, or nil to build it here; nativeMedia marks native Google
+// channels. Returns the Chat request or a wrapped validation error.
+func ConvertResponseAPIToChatCompletionRequestWithCatalog(request *ResponseAPIRequest, catalog *ResponseFallbackToolCatalog, nativeMedia ...bool) (*model.GeneralOpenAIRequest, error) {
 	if request == nil {
 		return nil, errors.New("response api request is nil")
 	}
@@ -35,6 +48,30 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 		request.ToolChoice = normalized
 	}
 
+	// Namespaces, custom tools, client tool search and loaded catalogs are
+	// flattened into one reversible tool list; history items that reference
+	// them are lowered onto that list before the Chat message loop below.
+	if catalog == nil {
+		built, err := BuildResponseFallbackToolCatalog(request)
+		if err != nil {
+			return nil, errors.Wrap(err, "build response fallback tool catalog")
+		}
+		catalog = built
+	}
+	input, effortOverride, err := lowerResponseFallbackToolItems(request.Input, catalog)
+	if err != nil {
+		return nil, errors.Wrap(err, "lower response fallback tool history")
+	}
+	reasoning := request.Reasoning
+	if effortOverride != "" {
+		updated := model.OpenAIResponseReasoning{}
+		if reasoning != nil {
+			updated = *reasoning
+		}
+		updated.Effort = &effortOverride
+		reasoning = &updated
+	}
+
 	chatReq := &model.GeneralOpenAIRequest{
 		Thinking:     request.Thinking,
 		OutputConfig: request.OutputConfig,
@@ -43,7 +80,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 		Store:        request.Store,
 		Metadata:     request.Metadata,
 		Stream:       request.Stream != nil && *request.Stream,
-		Reasoning:    request.Reasoning,
+		Reasoning:    reasoning,
 		ServiceTier:  request.ServiceTier,
 		Temperature:  request.Temperature,
 		TopP:         request.TopP,
@@ -88,12 +125,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 		chatReq.Verbosity = request.Text.Verbosity
 	}
 
-	if len(request.Tools) > 0 {
-		chatReq.Tools = convertResponseAPITools(request.Tools)
-		if len(chatReq.Tools) == 0 {
-			chatReq.Tools = nil
-		}
-	}
+	chatReq.Tools = catalog.Tools()
 
 	if chatReq.ToolChoice != nil {
 		chatReq.ToolChoice = sanitizeToolChoiceAgainstTools(chatReq.ToolChoice, chatReq.Tools)
@@ -144,7 +176,11 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 	// assistant message; a reasoning item that trails its message is written back into that
 	// message directly. See the "reasoning" case for why both orders must work.
 	pendingReasoning := ""
-	for _, item := range request.Input {
+	// pendingClaudeBlocks mirrors pendingReasoning for gateway Claude thinking
+	// envelopes: verbatim blocks staged until their turn's assistant message
+	// exists. They only reach Claude; other upstreams have them stripped.
+	var pendingClaudeBlocks []model.ClaudeThinkingBlock
+	for _, item := range input {
 		currentToolCallMsgIdx := openToolCallMsgIdx
 		openToolCallMsgIdx = -1
 		switch v := item.(type) {
@@ -152,6 +188,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 			chatReq.Messages = append(chatReq.Messages, model.Message{Role: "user", Content: v})
 			clear(pendingToolCallIDs)
 			pendingReasoning = ""
+			pendingClaudeBlocks = nil
 		case map[string]any:
 			if typeVal, ok := v["type"].(string); ok {
 				switch strings.ToLower(typeVal) {
@@ -170,6 +207,17 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 					// and the tool messages answering it: the in-flight tool calls stay
 					// answerable across it.
 					openToolCallMsgIdx = currentToolCallMsgIdx
+
+					// A gateway envelope restores the exact Claude block. It joins the
+					// open assistant message of this turn, or waits for it, following
+					// the same placement rules as the plaintext reasoning below.
+					if block, ok := responseReasoningClaudeThinkingBlock(v); ok {
+						if currentToolCallMsgIdx >= 0 && chatReq.Messages[currentToolCallMsgIdx].Role == "assistant" {
+							attachClaudeThinkingBlocks(&chatReq.Messages[currentToolCallMsgIdx], []model.ClaudeThinkingBlock{block})
+						} else {
+							pendingClaudeBlocks = append(pendingClaudeBlocks, block)
+						}
+					}
 
 					reasoning := extractResponseAPIReasoningContent(v)
 					if reasoning == "" {
@@ -204,12 +252,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 				case "function_call":
 					fcID, _ := v["id"].(string)
 					callID, _ := v["call_id"].(string)
-					normalizedID := convertResponseAPIIDToToolCall(fcID, callID)
-					if normalizedID == "" && callID != "" {
-						normalizedID = callID
-					} else if normalizedID == "" && fcID != "" {
-						normalizedID = fcID
-					}
+					normalizedID := responseToolCallPairingID(fcID, callID)
 
 					name, _ := v["name"].(string)
 					arguments := stringifyFunctionCallArguments(v["arguments"])
@@ -270,6 +313,8 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 							chatReq.Messages[currentToolCallMsgIdx].ReasoningContent = &reasoning
 						}
 						pendingReasoning = ""
+						attachClaudeThinkingBlocks(&chatReq.Messages[currentToolCallMsgIdx], pendingClaudeBlocks)
+						pendingClaudeBlocks = nil
 						openToolCallMsgIdx = currentToolCallMsgIdx
 						continue
 					}
@@ -284,6 +329,8 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 						assistantMessage.ReasoningContent = &reasoning
 					}
 					pendingReasoning = ""
+					attachClaudeThinkingBlocks(&assistantMessage, pendingClaudeBlocks)
+					pendingClaudeBlocks = nil
 					chatReq.Messages = append(chatReq.Messages, assistantMessage)
 					openToolCallMsgIdx = len(chatReq.Messages) - 1
 					toolCallIDsMessageIdx = openToolCallMsgIdx
@@ -291,16 +338,18 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 				case "function_call_output":
 					fcID, _ := v["id"].(string)
 					callID, _ := v["call_id"].(string)
-					normalizedID := convertResponseAPIIDToToolCall(fcID, callID)
-					if normalizedID == "" && callID != "" {
-						normalizedID = callID
-					} else if normalizedID == "" && fcID != "" {
-						normalizedID = fcID
-					}
+					normalizedID := responseToolCallPairingID(fcID, callID)
 
-					output := stringifyFunctionCallOutput(v["output"])
-					if output == "" {
-						output = stringifyFunctionCallOutput(v["content"])
+					// Image-bearing outputs keep their images: the tool message holds
+					// the text and ToolResultParts the ordered parts (see
+					// attachToolResultMediaCarriers); other shapes stay stringified.
+					outputValue := responseToolOutputValue(v)
+					mediaParts, hasMedia := responseToolOutputMediaParts(outputValue)
+					var output string
+					if hasMedia {
+						output = responseToolOutputText(mediaParts)
+					} else {
+						output = stringifyFunctionCallOutput(outputValue)
 					}
 
 					role := "tool"
@@ -324,22 +373,36 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 						} else {
 							pendingToolCallIDs[normalizedID] = queue[1:]
 						}
-						chatReq.Messages = append(chatReq.Messages, model.Message{
+						toolMessage := model.Message{
 							Role:       role,
 							ToolCallId: queue[0],
 							Content:    output,
-						})
+						}
+						if hasMedia {
+							toolMessage.ToolResultParts = mediaParts
+						}
+						chatReq.Messages = append(chatReq.Messages, toolMessage)
 						continue
 					}
 
+					if output == "" {
+						// Claude rejects a message with no content blocks; keep the
+						// orphan output's position with an explicit empty marker.
+						output = responseEmptyToolOutputText
+					}
 					chatReq.Messages = append(chatReq.Messages, model.Message{
 						Role:    "user",
 						Content: output,
 					})
+					if hasMedia {
+						// User messages carry images natively, in their original order.
+						chatReq.Messages[len(chatReq.Messages)-1].Content = mediaParts
+					}
 					// The downgraded user message breaks adjacency, so any tool calls still
 					// awaiting a response can no longer be answered by a subsequent tool message.
 					clear(pendingToolCallIDs)
 					pendingReasoning = ""
+					pendingClaudeBlocks = nil
 					continue
 				}
 			}
@@ -347,11 +410,28 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 			if err != nil {
 				return nil, errors.Wrap(err, "convert response api content to chat message")
 			}
+			if msg.Role == "assistant" && len(pendingToolCallIDs) > 0 && currentToolCallMsgIdx >= 0 &&
+				chatReq.Messages[currentToolCallMsgIdx].Role == "assistant" {
+				// Streaming clients such as Codex record a turn's function_call items
+				// before its assistant text when the bridge flushes tool items first,
+				// so the text arrives between the calls and their outputs. It belongs
+				// to the same assistant turn; closing the turn here would orphan every
+				// following tool output.
+				mergeAssistantTurnText(&chatReq.Messages[currentToolCallMsgIdx], msg, &pendingReasoning)
+				attachClaudeThinkingBlocks(&chatReq.Messages[currentToolCallMsgIdx], pendingClaudeBlocks)
+				pendingClaudeBlocks = nil
+				openToolCallMsgIdx = currentToolCallMsgIdx
+				continue
+			}
 			if pendingReasoning != "" && msg.Role == "assistant" {
 				reasoning := pendingReasoning
 				msg.ReasoningContent = &reasoning
 			}
 			pendingReasoning = ""
+			if msg.Role == "assistant" {
+				attachClaudeThinkingBlocks(msg, pendingClaudeBlocks)
+			}
+			pendingClaudeBlocks = nil
 			chatReq.Messages = append(chatReq.Messages, *msg)
 			// A non-tool content message ends the current tool-call turn.
 			clear(pendingToolCallIDs)
@@ -367,6 +447,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 		}
 	}
 
+	chatReq.Messages = attachToolResultMediaCarriers(chatReq.Messages)
 	return chatReq, nil
 }
 

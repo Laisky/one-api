@@ -10,6 +10,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
 	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/state"
 )
 
@@ -28,7 +29,7 @@ func TestHydrateHostedToolStateNotPortable(t *testing.T) {
 		Status:            state.StatusCompleted,
 		InputItems:        []state.ItemEnvelope{mustEnv(t, `{"type":"message","role":"user","content":"search please"}`)},
 		OutputItems: []state.ItemEnvelope{
-			mustEnv(t, `{"type":"web_search_call","id":"ws_1","status":"completed"}`),
+			mustEnv(t, `{"type":"code_interpreter_call","id":"ci_1","status":"completed"}`),
 		},
 	})
 
@@ -41,6 +42,62 @@ func TestHydrateHostedToolStateNotPortable(t *testing.T) {
 	require.NotNil(t, serr)
 	require.Equal(t, codeStateNotPortable, serr.Code)
 	require.Equal(t, http.StatusConflict, serr.StatusCode)
+}
+
+// TestHydrateWebSearchCallReachesFallbackConverter verifies that a hydrated
+// chain whose prior output carries web_search_call items keeps them through
+// hydration on every fallback target, so the converter can see that the stored
+// Claude response ran provider searches: it then omits that response's thinking
+// (Claude rejects replayed thinking whose server-tool blocks are missing) and
+// annotates the answer with the searches, instead of replaying the envelope.
+func TestHydrateWebSearchCallReachesFallbackConverter(t *testing.T) {
+	store := enableStateForTest(t)
+	envelope, err := relaymodel.EncodeClaudeThinkingEnvelope(relaymodel.ClaudeThinkingBlock{Type: "thinking", Signature: "sig_search"})
+	require.NoError(t, err)
+
+	id, err := state.NewResponseID()
+	require.NoError(t, err)
+	seedResponse(t, store, &state.ResponseStateRecord{
+		GatewayResponseID: id,
+		Owner:             testOwner(),
+		Status:            state.StatusCompleted,
+		InputItems:        []state.ItemEnvelope{mustEnv(t, `{"type":"message","role":"user","content":"search please"}`)},
+		OutputItems: []state.ItemEnvelope{
+			mustEnv(t, `{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"`+envelope+`"}`),
+			mustEnv(t, `{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"q"}}`),
+			mustEnv(t, `{"type":"message","role":"assistant","content":[{"type":"output_text","text":"found it"}]}`),
+		},
+	})
+
+	for _, target := range []hydrationTarget{targetChatFallback, targetClaudeFallback} {
+		req := &openai.ResponseAPIRequest{
+			Model:              "claude-opus-5-5",
+			PreviousResponseId: &id,
+			Input:              openai.ResponseAPIInput{"and then?"},
+		}
+		hydrated, serr := hydrateResponseAPIRequestForFallback(context.Background(), testMeta(), req, target)
+		require.Nil(t, serr)
+		searches := 0
+		for _, item := range hydrated.Input {
+			if fields, ok := item.(map[string]any); ok && fields["type"] == "web_search_call" {
+				searches++
+			}
+		}
+		require.Equal(t, 1, searches, "web_search_call must reach the converter on target %v", target)
+
+		converted, err := openai.ConvertResponseAPIToChatCompletionRequest(hydrated)
+		require.NoError(t, err)
+		var assistant *relaymodel.Message
+		for i := range converted.Messages {
+			if converted.Messages[i].Role == "assistant" {
+				assistant = &converted.Messages[i]
+			}
+		}
+		require.NotNil(t, assistant)
+		require.Empty(t, assistant.ClaudeThinkingBlocks, "thinking of a searched response must not be replayed")
+		require.Equal(t, "[Web search: q]\nfound it", assistant.StringContent())
+		require.Equal(t, "and then?", converted.Messages[len(converted.Messages)-1].StringContent())
+	}
 }
 
 // TestHydrateUnknownItemTypeNotPortable verifies an unknown future Responses item
@@ -128,7 +185,9 @@ func TestHydratePriorItemReferenceResolves(t *testing.T) {
 func TestResponseFallbackTarget(t *testing.T) {
 	require.Equal(t, targetChatFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.OpenAI}))
 	require.Equal(t, targetClaudeFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.Anthropic}))
-	require.Equal(t, targetClaudeFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.AwsClaude}))
+	require.Equal(t, targetClaudeFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.AwsClaude, ActualModelName: "claude-opus-5-5"}))
+	// Bedrock follows its registry: a non-Claude family is lowered as Chat.
+	require.Equal(t, targetChatFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.AwsClaude, ActualModelName: "llama3-70b"}))
 	require.Equal(t, targetClaudeFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.VertexAI, ActualModelName: "claude-sonnet-5"}))
 	require.Equal(t, targetChatFallback, responseFallbackTarget(&metalib.Meta{APIType: apitype.VertexAI, ActualModelName: "gemini-2.5-pro"}))
 }

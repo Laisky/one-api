@@ -49,9 +49,13 @@ func IsRequireGlobalEndpoint(model string) bool {
 type Adaptor struct {
 }
 
+// Init prepares the adaptor for one request; Vertex AI keeps no per-request state.
 func (a *Adaptor) Init(meta *meta.Meta) {
 }
 
+// ConvertImageRequest converts an image request through the Vertex image
+// sub-adaptor of the mapped model. It returns an error for unsupported response
+// formats or models without an image sub-adaptor.
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {
 	meta := meta.GetByContext(c)
 
@@ -68,6 +72,9 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 	return converted, errors.WithStack(err)
 }
 
+// ConvertRequest converts a Chat request through the Vertex sub-adaptor of the
+// mapped model (Gemini, Claude, partner models). It returns an error when the
+// model has no sub-adaptor or conversion fails.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	meta := meta.GetByContext(c)
 
@@ -80,6 +87,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	return converted, errors.WithStack(err)
 }
 
+// ConvertClaudeRequest converts a Claude Messages request through the Vertex
+// sub-adaptor of the mapped model; Claude models use the Vertex Claude
+// sub-adaptor. It returns an error for a nil request, a model without a
+// sub-adaptor, or a failed conversion.
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
@@ -214,6 +225,8 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	return converted, errors.WithStack(err)
 }
 
+// DoResponse delegates response handling to the sub-adaptor of the mapped
+// model and returns its usage, or a relay error when the model has none.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	adaptor := GetAdaptor(meta.ActualModelName)
 	if adaptor == nil {
@@ -247,6 +260,7 @@ func (a *Adaptor) GetModelList() []string {
 	return slices.Compact(models)
 }
 
+// GetChannelName returns the channel display name.
 func (a *Adaptor) GetChannelName() string {
 	return channelName
 }
@@ -297,6 +311,8 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return pricing
 }
 
+// GetModelRatio returns the aggregated bundled input ratio of modelName, or the
+// Vertex default when the model has no bundled pricing.
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
 	pricing := a.GetDefaultModelPricing()
 	if price, exists := pricing[modelName]; exists {
@@ -306,6 +322,8 @@ func (a *Adaptor) GetModelRatio(modelName string) float64 {
 	return 0.5 * ratio.MilliTokensUsd // Default quota-based pricing
 }
 
+// GetCompletionRatio returns the aggregated bundled completion ratio of
+// modelName, or the Vertex default when the model has no bundled pricing.
 func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
 	pricing := a.GetDefaultModelPricing()
 	if price, exists := pricing[modelName]; exists {
@@ -368,6 +386,8 @@ func getModelEndpointType(modelName string) ModelEndpointType {
 	}
 }
 
+// GetRequestURL returns the Vertex endpoint for the mapped model family and
+// relay mode, or an error when it cannot be built.
 func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	// Validate required VertexAI configuration
 	if meta.Config.VertexAIProjectID == "" {
@@ -453,13 +473,19 @@ func (a *Adaptor) buildVeoURL(meta *meta.Meta) (string, error) {
 		baseHost, meta.Config.VertexAIProjectID, location, meta.ActualModelName), nil
 }
 
-// buildClaudeURL builds URL for Claude models
+// buildClaudeURL builds the URL for Claude models: streamRawPredict for a
+// streaming request (whose body carries "stream": true) and rawPredict
+// otherwise, the pairing Google documents and Anthropic's Vertex client uses.
+// Parameters: meta carries the project, region, model and IsStream. Returns
+// the URL.
 func (a *Adaptor) buildClaudeURL(meta *meta.Meta) (string, error) {
-	// Claude models use rawPredict
 	baseHost, location := a.getDefaultHostAndLocation(meta)
-
-	return fmt.Sprintf("https://%s/v1/projects/%s/locations/%s/publishers/anthropic/models/%s:rawPredict",
-		baseHost, meta.Config.VertexAIProjectID, location, meta.ActualModelName), nil
+	specifier := "rawPredict"
+	if meta.IsStream {
+		specifier = "streamRawPredict"
+	}
+	return fmt.Sprintf("https://%s/v1/projects/%s/locations/%s/publishers/anthropic/models/%s:%s",
+		baseHost, meta.Config.VertexAIProjectID, location, meta.ActualModelName, specifier), nil
 }
 
 // buildGeminiURL builds URL for Gemini and other text models
@@ -598,6 +624,8 @@ func getQwenEndpointConfig(model string) (baseHost, defaultRegion string) {
 	}
 }
 
+// SetupRequestHeader sets the common headers and a Vertex OAuth bearer token on
+// req. It returns an error when the token cannot be obtained.
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	adaptor.SetupCommonRequestHeader(c, req, meta)
 	token, err := getToken(c, meta.ChannelId, meta.Config.VertexAIADC)
@@ -615,7 +643,7 @@ func (a *Adaptor) DoRequest(c *gin.Context, m *meta.Meta, requestBody io.Reader)
 		if err != nil {
 			return nil, err
 		}
-		prepared, err := vertexaiClaude.PrepareRequestBody(normalized)
+		prepared, err := vertexaiClaude.PrepareRequestBody(normalized, m.IsStream)
 		if err != nil {
 			return nil, err
 		}

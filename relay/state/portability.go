@@ -3,6 +3,8 @@ package state
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // PortabilityClass describes whether a canonical item can be replayed onto a
@@ -36,6 +38,7 @@ const (
 	KindFunctionCallOutput = "function_call_output"
 	KindItemReference      = "item_reference"
 	KindThinking           = "thinking"
+	KindWebSearchCall      = "web_search_call"
 )
 
 // hostedToolCallKinds are provider-hosted/built-in tool items whose state is
@@ -105,10 +108,14 @@ const (
 // Section 5.8 portability table:
 //
 //   - portable items (messages, function calls, function-call outputs, and
-//     already-resolved references) carry;
+//     already-resolved references) carry, as do client-executed custom tool,
+//     tool-search, additional_tools, agent_message and configuration_update
+//     items, which the fallback converter lowers itself;
 //   - reasoning and thinking degrade to a display-only sidecar: their opaque
 //     provider-bound state is dropped and the request proceeds;
-//   - hosted/built-in tool-call state and unknown future item types have no
+//   - web_search_call items are dropped too: the search results are already
+//     summarized by the assistant message that follows them;
+//   - other hosted/built-in tool-call state and unknown future item types have no
 //     sanctioned degradation and fail closed with state_not_portable (rows P04,
 //     I05, E05).
 //
@@ -119,10 +126,54 @@ func FallbackLowering(raw json.RawMessage) (action, kind string) {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case KindMessage, KindFunctionCall, KindFunctionCallOutput, KindItemReference, "":
 		return FallbackActionCarry, kind
+	case "custom_tool_call", "custom_tool_call_output", "tool_search_call", "tool_search_output",
+		"additional_tools", "agent_message", "configuration_update":
+		// Client-executed tool and harness items: the fallback converter lowers
+		// them faithfully (flattened names, raw custom input, loaded catalogs) and
+		// rejects any variant it cannot represent, such as encrypted agent content.
+		return FallbackActionCarry, kind
+	case KindWebSearchCall:
+		// The converter must see a replayed web_search_call: it marks the model
+		// response that ran provider searches, whose Claude thinking cannot be
+		// replayed without the server-tool blocks, and it is rendered as a short
+		// note on that response's answer. The converter drops the item itself.
+		return FallbackActionCarry, kind
 	case KindReasoning, KindThinking:
 		return FallbackActionDrop, kind
 	}
 	return FallbackActionFail, kind
+}
+
+// FallbackLoweringForClaude applies FallbackLowering for a stateless Claude
+// Messages target. A reasoning item whose encrypted_content is a valid gateway
+// Claude thinking envelope stays provider-bound but is carried, because the
+// target is the provider family that issued it and the converter replays the
+// exact block; any other reasoning or thinking state still degrades. It returns
+// the action and the parsed item kind exactly like FallbackLowering.
+func FallbackLoweringForClaude(raw json.RawMessage) (action, kind string) {
+	action, kind = FallbackLowering(raw)
+	if action == FallbackActionDrop && strings.EqualFold(strings.TrimSpace(kind), KindReasoning) &&
+		rawCarriesClaudeThinkingEnvelope(raw) {
+		return FallbackActionCarry, kind
+	}
+	return action, kind
+}
+
+// rawCarriesClaudeThinkingEnvelope reports whether a raw reasoning item holds a
+// strictly valid gateway Claude thinking envelope in encrypted_content.
+func rawCarriesClaudeThinkingEnvelope(raw json.RawMessage) bool {
+	// Decode into a map so only the exact lowercase key counts, matching the
+	// converter; a struct decode would also accept case-folded variants.
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return false
+	}
+	var envelope string
+	if err := json.Unmarshal(probe["encrypted_content"], &envelope); err != nil || !model.IsClaudeThinkingEnvelope(envelope) {
+		return false
+	}
+	_, err := model.DecodeClaudeThinkingEnvelope(envelope)
+	return err == nil
 }
 
 // probeItemKind extracts the "type" field of a raw canonical item, or "" when the

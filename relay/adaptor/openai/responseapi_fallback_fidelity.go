@@ -1,14 +1,12 @@
 package openai
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/one-api/relay/model"
 )
-
-// ErrResponseNamespaceUnsupported identifies call identities that require native Responses support.
-var ErrResponseNamespaceUnsupported = errors.New("tool namespaces require native Responses support")
 
 // ErrResponseFallbackNotRepresentable identifies input with no faithful stateless representation.
 var ErrResponseFallbackNotRepresentable = errors.New("response input cannot be represented on this fallback route")
@@ -20,12 +18,26 @@ var ErrResponseFallbackStateNotPortable = errors.Wrap(ErrResponseFallbackNotRepr
 // ValidateResponseAPIFallbackFidelity rejects semantic loss before fallback work.
 // allowReferences permits owner-scoped resolution before hydration only. Reasoning
 // and thinking retain their existing sidecar degradation policy; this validation
-// does not promote opaque state into text or inspect function arguments/results.
+// does not promote opaque state into text or inspect function arguments. Function
+// and custom tool results are inspected only when they carry input_image parts:
+// those are validated like user-message content and capped at
+// maxResponseFallbackToolOutputImages, while every other result shape keeps its
+// historical JSON stringification. agent_message items are admitted only when
+// lowerResponseAgentMessage can lower them: string content or an array of text
+// parts. It returns nil, or an error wrapping ErrResponseFallbackNotRepresentable
+// (ErrResponseFallbackStateNotPortable for unknown item kinds) that names the
+// rejected shape without quoting input content.
 func ValidateResponseAPIFallbackFidelity(input []any, allowReferences bool, nativeMedia ...bool) error {
+	toolOutputImages := 0
 	for _, raw := range input {
 		item, ok := raw.(map[string]any)
 		if !ok {
 			if _, ok := raw.(string); ok {
+				continue
+			}
+			if responseFallbackDiscoveryItem(raw) {
+				// Discovery items stay raw to keep exact literals; their shape is
+				// validated by discovery admission and lowered by the catalog.
 				continue
 			}
 			return errors.Wrap(ErrResponseFallbackNotRepresentable, "unsupported input item")
@@ -33,14 +45,42 @@ func ValidateResponseAPIFallbackFidelity(input []any, allowReferences bool, nati
 		kind, _ := item["type"].(string)
 		switch strings.ToLower(kind) {
 		case "function_call", "function_call_output", "custom_tool_call", "custom_tool_call_output":
-			if namespace, exists := item["namespace"]; exists && namespace != nil && namespace != "" {
-				return errors.WithStack(ErrResponseNamespaceUnsupported)
+			// Namespaced and custom calls are flattened through the fallback tool
+			// catalog, which keeps the qualified identity reversible.
+			if namespace, exists := item["namespace"]; exists && namespace != nil {
+				if _, ok := namespace.(string); !ok {
+					return errors.Wrap(ErrResponseFallbackNotRepresentable, "tool call namespace must be a string")
+				}
 			}
-			if strings.HasPrefix(strings.ToLower(kind), "custom_") {
-				return errors.Wrap(ErrResponseFallbackStateNotPortable, "custom tool history requires native Responses support")
+			if strings.HasSuffix(strings.ToLower(kind), "_output") {
+				// Image-bearing outputs (Codex view_image and similar) are lowered
+				// as images, so they are validated like user-message content and
+				// bounded; every other output shape keeps its stringification.
+				images, err := validateResponseFallbackToolOutput(responseToolOutputValue(item))
+				if err != nil {
+					return err
+				}
+				toolOutputImages += images
+				if toolOutputImages > maxResponseFallbackToolOutputImages {
+					return errors.Wrapf(ErrResponseFallbackNotRepresentable,
+						"tool outputs carry more than %d images", maxResponseFallbackToolOutputImages)
+				}
+			}
+		case "tool_search_call", "tool_search_output", "additional_tools", "configuration_update":
+			// Client discovery and harness controls are validated by the
+			// discovery admission and lowered by lowerResponseFallbackToolItems.
+		case "agent_message":
+			// Admission runs the same lowering the converter uses, so content
+			// that would lose the agent's text is rejected before dispatch.
+			if _, err := lowerResponseAgentMessage(item); err != nil {
+				return err
 			}
 		case "reasoning", "thinking":
 			// These provider-bound sidecars intentionally degrade on fallback.
+		case "web_search_call":
+			// Hosted search history (for example Codex replaying its own turns)
+			// is dropped: the assistant text already carries what the search
+			// found, and no stateless upstream can resume provider search state.
 		case "item_reference":
 			if !allowReferences {
 				return errors.Wrap(ErrResponseFallbackNotRepresentable, "unresolved item reference")
@@ -149,5 +189,26 @@ func cloneResponseAPIJSONValue(value any) any {
 		return append([]string(nil), value...)
 	default:
 		return value
+	}
+}
+
+// responseFallbackDiscoveryItem reports whether raw is a raw-preserved client
+// discovery item (tool_search_call, tool_search_output or additional_tools).
+func responseFallbackDiscoveryItem(raw any) bool {
+	data, ok := raw.(json.RawMessage)
+	if !ok {
+		return false
+	}
+	var probe struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(probe.Type)) {
+	case "tool_search_call", "tool_search_output", "additional_tools":
+		return true
+	default:
+		return false
 	}
 }

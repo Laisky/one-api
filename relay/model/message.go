@@ -58,6 +58,30 @@ type Message struct {
 	// -------------------------------------
 	Thinking  *string `json:"thinking,omitempty"`
 	Signature *string `json:"signature,omitempty"`
+
+	// -------------------------------------
+	// Gateway-internal tool result media (never serialized)
+	// -------------------------------------
+	// ToolResultParts carries the ordered text and image parts of a tool
+	// result whose Content holds only its text. Chat upstreams keep receiving
+	// that text-only tool message (plus a ToolResultMediaCarrier message);
+	// converters that can place images inside a tool result, such as Claude
+	// tool_result blocks, rebuild the result from these parts instead.
+	ToolResultParts []MessageContent `json:"-"`
+	// ToolResultMediaCarrier marks a synthetic user message that only
+	// re-delivers the images held in the ToolResultParts of the directly
+	// preceding run of tool messages. Converters that consume ToolResultParts
+	// skip it; every other path forwards it as an ordinary user message.
+	ToolResultMediaCarrier bool `json:"-"`
+	// ClaudeThinkingBlocks carries Claude thinking/redacted_thinking blocks
+	// verbatim (text, signature or redacted data, and position) between the
+	// Claude adaptor and the Responses API bridge. It is populated only for
+	// Responses fallback requests and is stripped before any non-Claude upstream.
+	ClaudeThinkingBlocks []ClaudeThinkingBlock `json:"oneapi_claude_thinking_blocks,omitempty"`
+	// WebSearchCalls is a gateway response extension carrying provider-executed
+	// web searches (Claude server_tool_use web_search) observed on a converted
+	// upstream, so the Responses fallback can render web_search_call items.
+	WebSearchCalls []WebSearchCall `json:"web_search_calls,omitempty"`
 }
 
 type AnnotationItem struct {

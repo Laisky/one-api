@@ -22,6 +22,19 @@ func convertResponseAPIIDToToolCall(fcID, callID string) string {
 	return callID
 }
 
+// responseToolCallPairingID returns the key that pairs a Responses tool call
+// item with its output item. Parameters: itemID is the item's own id, callID
+// its call_id. call_id is the Responses pairing field, so it is preferred and
+// the item id is used only when call_id is absent; the gateway's fc_/call_
+// prefixes are stripped so gateway-rendered IDs round-trip. Returns "" when
+// both are empty.
+func responseToolCallPairingID(itemID, callID string) string {
+	if callID != "" {
+		return convertResponseAPIIDToToolCall("", callID)
+	}
+	return convertResponseAPIIDToToolCall(itemID, "")
+}
+
 // convertToolCallIDToResponseAPI converts a ChatCompletion tool call ID to Response API format
 // The Response API expects IDs with "fc_" prefix for function calls and "call_" prefix for call_id
 func convertToolCallIDToResponseAPI(originalID string) (fcID, callID string) {

@@ -6,7 +6,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/random"
@@ -27,7 +29,17 @@ type chatToResponseStreamBridge struct {
 
 	messageItemID      string
 	messageOutputIndex int
+	// messageOpened reports whether the primary message item was announced.
+	// It opens lazily with its first text, so it follows the items (reasoning,
+	// thinking, searches) that preceded the text and clients that track one
+	// active item (Codex) show every text delta; a tool-only turn has none.
+	messageOpened bool
+	// sealedMessages are primary message items completed before the stream
+	// ended because another item followed them, in output order.
+	sealedMessages     []sealedReasoningItem
 	outputIndexCounter int
+	// sequenceNumber is the sequence_number of the next emitted event.
+	sequenceNumber int
 
 	textBuilder      strings.Builder
 	reasoningBuilder strings.Builder
@@ -47,6 +59,11 @@ type chatToResponseStreamBridge struct {
 	toolOrder       []string
 	choiceToolOrder map[int][]string
 
+	// webSearches renders provider-executed web searches as web_search_call
+	// items, keyed by upstream invocation ID, in arrival order.
+	webSearches    map[string]*streamWebSearchState
+	webSearchOrder []*streamWebSearchState
+
 	lastFinishReason string
 	incomplete       *openai.IncompleteDetails
 
@@ -54,6 +71,19 @@ type chatToResponseStreamBridge struct {
 	upstreamDone              bool
 	streamStarted             bool
 	requiredActionInitialized bool
+
+	// toolsEcho is the request's tools in the Response object's spec shape,
+	// encoded once for response.created and the terminal response.
+	toolsEcho json.RawMessage
+
+	// toolCatalog restores namespaced, custom and tool_search identities that
+	// fallback flattened into Chat function tools. Nil renders plain calls.
+	toolCatalog *openai.ResponseFallbackToolCatalog
+
+	// includeEncrypted reports whether the client asked for
+	// reasoning.encrypted_content; gateway Claude envelopes are always persisted
+	// with committed state but reach the client only when it opted in.
+	includeEncrypted bool
 
 	// pendingCommit, when set, causes the terminal event to commit a gateway
 	// response node. The gateway response ID is pre-minted at construction so it is
@@ -79,8 +109,19 @@ type responseChoiceState struct {
 	reasoningIndex       int
 	reasoningInitialized bool
 	finishReason         string
+	// sealedReasoning holds reasoning items already completed by verbatim Claude
+	// thinking blocks, with their envelopes, in output order.
+	sealedReasoning []sealedReasoningItem
 }
 
+// sealedReasoningItem is a completed reasoning item and its output index.
+type sealedReasoningItem struct {
+	index int
+	item  openai.OutputItem
+}
+
+// rawMessageFromString encodes value as a JSON string literal for a delta
+// field. It returns nil for an empty value or when encoding fails.
 func rawMessageFromString(value string) json.RawMessage {
 	if value == "" {
 		return nil
@@ -92,6 +133,12 @@ func rawMessageFromString(value string) json.RawMessage {
 	return json.RawMessage(encoded)
 }
 
+// newChatToResponseStreamBridge builds the handler that rewrites an upstream
+// Chat Completions stream into Responses API SSE events for a fallback request.
+// Parameters: c is the request context, meta the mapped request metadata and
+// request the hydrated Responses request (its tools drive call rendering).
+// Returns: the stream rewrite handler; when gateway state is active it carries
+// a pre-minted gateway response ID and the pending state commit.
 func newChatToResponseStreamBridge(c *gin.Context, meta *metalib.Meta, request *openai.ResponseAPIRequest) openai_compatible.StreamRewriteHandler {
 	handler := &chatToResponseStreamBridge{
 		meta:       meta,
@@ -104,6 +151,9 @@ func newChatToResponseStreamBridge(c *gin.Context, meta *metalib.Meta, request *
 	if handler.model == "" {
 		handler.model = request.Model
 	}
+	handler.toolCatalog = responseFallbackCatalogForRender(c, request)
+	handler.toolsEcho = responseToolsEcho(gmw.GetLogger(c), request.Tools)
+	handler.includeEncrypted = responseIncludesReasoningEncryptedContent(request)
 
 	// If gateway state is active for this request, pre-mint a gateway response ID
 	// and remember the pre-hydration commit snapshot so the terminal event can
@@ -117,7 +167,7 @@ func newChatToResponseStreamBridge(c *gin.Context, meta *metalib.Meta, request *
 	}
 
 	handler.messageItemID = "msg_" + random.GetRandomString(16)
-	handler.messageOutputIndex = handler.nextOutputIndex()
+	handler.messageOutputIndex = -1
 
 	return handler
 }
@@ -138,11 +188,19 @@ func (h *chatToResponseStreamBridge) commitStreamedResponse(c *gin.Context, resp
 	}
 }
 
+// HandleUpstreamDone records that the upstream sent its [DONE] marker; the
+// terminal events are emitted later by HandleDone. It returns handled=true and
+// stop=false.
 func (h *chatToResponseStreamBridge) HandleUpstreamDone(_ *gin.Context) (bool, bool) {
 	h.upstreamDone = true
 	return true, false
 }
 
+// HandleDone completes the bridged stream once the upstream signalled [DONE]:
+// it flushes every tool call's completion events and output_item.done, closes
+// the message and reasoning items, commits gateway state when pending, and
+// emits the terminal response event. Parameters: c is the request context.
+// Returns: whether the done marker was handled and whether streaming must stop.
 func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 	if h.streamDone {
 		return true, true
@@ -155,33 +213,34 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		h.ensureInitialized(c, &openai_compatible.ChatCompletionsStreamResponse{})
 	}
 
+	if !h.messageOpened && h.outputIndexCounter == 0 {
+		// A response with no output at all still carries one (empty)
+		// assistant message, as it always has.
+		h.openPrimaryMessage(c)
+	}
 	text := h.textBuilder.String()
-
-	h.emitEvent(c, "response.output_text.done", openai.ResponseAPIStreamEvent{
-		Type:         "response.output_text.done",
-		ItemId:       h.messageItemID,
-		OutputIndex:  h.messageOutputIndex,
-		ContentIndex: 0,
-		Text:         text,
-	})
-
-	h.emitEvent(c, "response.content_part.done", openai.ResponseAPIStreamEvent{
-		Type:         "response.content_part.done",
-		ItemId:       h.messageItemID,
-		OutputIndex:  h.messageOutputIndex,
-		ContentIndex: 0,
-		Part: &openai.OutputContent{
-			Type: "output_text",
-			Text: text,
-		},
-	})
-
 	messageItem := openai.OutputItem{
 		Id:      h.messageItemID,
 		Type:    "message",
 		Status:  "completed",
 		Role:    "assistant",
 		Content: []openai.OutputContent{{Type: "output_text", Text: text}},
+	}
+	if h.messageOpened {
+		h.emitEvent(c, "response.output_text.done", openai.ResponseAPIStreamEvent{
+			Type:         "response.output_text.done",
+			ItemId:       h.messageItemID,
+			OutputIndex:  h.messageOutputIndex,
+			ContentIndex: 0,
+			Text:         text,
+		})
+		h.emitEvent(c, "response.content_part.done", openai.ResponseAPIStreamEvent{
+			Type:         "response.content_part.done",
+			ItemId:       h.messageItemID,
+			OutputIndex:  h.messageOutputIndex,
+			ContentIndex: 0,
+			Part:         &openai.OutputContent{Type: "output_text", Text: text},
+		})
 	}
 
 	// Emit tool-call terminals BEFORE the message item's output_item.done so that
@@ -201,26 +260,12 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 	// downstream. Tool-call events are flushed first to preserve the spec
 	// ordering for every function_call regardless of whether the response also
 	// carried a text message.
+	h.finishPendingWebSearches(c)
 	toolItems := make([]openai.OutputItem, 0, len(h.toolOrder))
 	for _, id := range h.toolOrder {
 		state := h.toolCalls[id]
-		args := state.arguments.String()
-
-		h.emitEvent(c, "response.function_call_arguments.done", openai.ResponseAPIStreamEvent{
-			Type:        "response.function_call_arguments.done",
-			ItemId:      state.id,
-			OutputIndex: state.index,
-			Arguments:   args,
-		})
-
-		toolItem := openai.OutputItem{
-			Id:        state.id,
-			Type:      "function_call",
-			Status:    "completed",
-			CallId:    state.id,
-			Name:      state.name,
-			Arguments: args,
-		}
+		toolItem := h.toolItem(state, "completed", true)
+		h.emitToolArgumentsDone(c, state, toolItem)
 
 		// output_item.done MUST come after function_call_arguments.done for the
 		// same call_id and MUST carry the full buffered arguments string (not a
@@ -235,11 +280,13 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		toolItems = append(toolItems, toolItem)
 	}
 
-	h.emitEvent(c, "response.output_item.done", openai.ResponseAPIStreamEvent{
-		Type:        "response.output_item.done",
-		OutputIndex: h.messageOutputIndex,
-		Item:        &messageItem,
-	})
+	if h.messageOpened {
+		h.emitEvent(c, "response.output_item.done", openai.ResponseAPIStreamEvent{
+			Type:        "response.output_item.done",
+			OutputIndex: h.messageOutputIndex,
+			Item:        &messageItem,
+		})
+	}
 	for _, choice := range h.choiceOrder {
 		h.finishChoice(c, choice)
 	}
@@ -248,7 +295,13 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		index int
 		item  openai.OutputItem
 	}
-	indexed := []indexedItem{{h.messageOutputIndex, messageItem}}
+	var indexed []indexedItem
+	for _, sealed := range h.sealedMessages {
+		indexed = append(indexed, indexedItem{sealed.index, sealed.item})
+	}
+	if h.messageOpened {
+		indexed = append(indexed, indexedItem{h.messageOutputIndex, messageItem})
+	}
 	for _, choice := range h.choiceOrder {
 		if choice.index != h.primaryChoiceIndex {
 			indexed = append(indexed, indexedItem{choice.messageIndex, h.choiceMessage(choice, "completed")})
@@ -256,6 +309,12 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		if reasoning := h.choiceReasoning(choice, "completed"); reasoning != nil {
 			indexed = append(indexed, indexedItem{choice.reasoningIndex, *reasoning})
 		}
+		for _, sealed := range choice.sealedReasoning {
+			indexed = append(indexed, indexedItem{sealed.index, sealed.item})
+		}
+	}
+	for _, search := range h.webSearchOrder {
+		indexed = append(indexed, indexedItem{search.index, h.webSearchItem(search)})
 	}
 	for i, key := range h.toolOrder {
 		indexed = append(indexed, indexedItem{h.toolCalls[key].index, toolItems[i]})
@@ -287,9 +346,17 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 	// Commit the gateway response node exactly once at the terminal event so the
 	// streamed fallback ID is backed by a retrievable record (closes B13).
 	h.commitStreamedResponse(c, response, status)
+	response.Output = clientVisibleResponseOutput(response.Output, h.includeEncrypted)
 
-	h.emitEvent(c, "response.completed", openai.ResponseAPIStreamEvent{
-		Type:     "response.completed",
+	// The spec ends an incomplete response (e.g. max_output_tokens) with
+	// response.incomplete; clients such as Codex and the OpenAI SDKs act on the
+	// event type, not only on response.status.
+	terminalEvent := "response.completed"
+	if status == "incomplete" {
+		terminalEvent = "response.incomplete"
+	}
+	h.emitEvent(c, terminalEvent, openai.ResponseAPIStreamEvent{
+		Type:     terminalEvent,
 		Response: response,
 	})
 	if h.writeErr != nil {
@@ -301,6 +368,8 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 	return true, true
 }
 
+// FinalizeUsage stores the settled upstream usage for the terminal response
+// event. A nil usage leaves the previous value unchanged.
 func (h *chatToResponseStreamBridge) FinalizeUsage(usage *model.Usage) {
 	if usage == nil {
 		return
@@ -308,6 +377,10 @@ func (h *chatToResponseStreamBridge) FinalizeUsage(usage *model.Usage) {
 	h.usage = (&openai.ResponseAPIUsage{}).FromModelUsage(usage)
 }
 
+// ensureInitialized starts the Responses stream on the first chunk: it emits
+// response.created plus the primary message item and its output_text part.
+// Parameters: c is the request context and chunk supplies the upstream model
+// and creation time when present.
 func (h *chatToResponseStreamBridge) ensureInitialized(c *gin.Context, chunk *openai_compatible.ChatCompletionsStreamResponse) {
 	h.streamStarted = true
 
@@ -337,7 +410,7 @@ func (h *chatToResponseStreamBridge) ensureInitialized(c *gin.Context, chunk *op
 		Temperature:        h.original.Temperature,
 		Text:               h.original.Text,
 		ToolChoice:         h.original.ToolChoice,
-		Tools:              convertResponseAPITools(h.original.Tools),
+		ToolsEcho:          h.toolsEcho,
 		TopP:               h.original.TopP,
 		Truncation:         h.original.Truncation,
 		User:               h.original.User,
@@ -354,7 +427,22 @@ func (h *chatToResponseStreamBridge) ensureInitialized(c *gin.Context, chunk *op
 		Type:     "response.created",
 		Response: response,
 	})
+}
 
+// openPrimaryMessage announces the primary message item and its output_text
+// part the first time text arrives (or at completion when the response has no
+// output at all), allocating its output_index then so the item follows every
+// item that preceded the text. It is a no-op once the message is open.
+func (h *chatToResponseStreamBridge) openPrimaryMessage(c *gin.Context) {
+	if h.messageOpened {
+		return
+	}
+	h.beforeItemAdded(c, nil, itemKindMessage)
+	h.messageOpened = true
+	h.messageOutputIndex = h.nextOutputIndex()
+	if choice := h.choices[h.primaryChoiceIndex]; choice != nil && h.primaryChoiceBound {
+		choice.messageID, choice.messageIndex = h.messageItemID, h.messageOutputIndex
+	}
 	messageItem := openai.OutputItem{
 		Id:      h.messageItemID,
 		Type:    "message",
@@ -362,29 +450,27 @@ func (h *chatToResponseStreamBridge) ensureInitialized(c *gin.Context, chunk *op
 		Role:    "assistant",
 		Content: make([]openai.OutputContent, 0),
 	}
-
 	h.emitEvent(c, "response.output_item.added", openai.ResponseAPIStreamEvent{
 		Type:        "response.output_item.added",
 		OutputIndex: h.messageOutputIndex,
 		Item:        &messageItem,
 	})
-
 	h.emitEvent(c, "response.content_part.added", openai.ResponseAPIStreamEvent{
 		Type:         "response.content_part.added",
 		ItemId:       h.messageItemID,
 		OutputIndex:  h.messageOutputIndex,
 		ContentIndex: 0,
-		Part: &openai.OutputContent{
-			Type: "output_text",
-			Text: "",
-		},
+		Part:         &openai.OutputContent{Type: "output_text"},
 	})
 }
 
+// appendTextDelta streams one text delta of the primary message and records
+// it once the event was written. Empty deltas are ignored.
 func (h *chatToResponseStreamBridge) appendTextDelta(c *gin.Context, delta string) {
 	if delta == "" {
 		return
 	}
+	h.openPrimaryMessage(c)
 
 	if h.emitEvent(c, "response.output_text.delta", openai.ResponseAPIStreamEvent{
 		Type:         "response.output_text.delta",
@@ -397,15 +483,28 @@ func (h *chatToResponseStreamBridge) appendTextDelta(c *gin.Context, delta strin
 	}
 }
 
+// appendReasoningDelta forwards one streamed reasoning delta verbatim so word
+// boundaries that fall on chunk edges survive. Leading whitespace is dropped
+// only before any reasoning has accumulated, so a whitespace-only first delta
+// never opens an empty reasoning item.
 func (h *chatToResponseStreamBridge) appendReasoningDelta(c *gin.Context, delta string) {
-	trimmed := strings.TrimSpace(delta)
-	if trimmed == "" {
+	choice := h.choices[h.activeChoiceIndex]
+	if choice == nil {
 		return
 	}
-	choice := h.choices[h.activeChoiceIndex]
-	h.appendChoiceReasoning(c, choice, trimmed)
+	if choice.reasoning.Len() == 0 {
+		delta = strings.TrimLeftFunc(delta, unicode.IsSpace)
+	}
+	if delta == "" {
+		return
+	}
+	h.appendChoiceReasoning(c, choice, delta)
 }
 
+// handleToolCalls applies one chunk's tool-call deltas: it opens each call's
+// output item on first sight and forwards function argument deltas, while
+// custom-tool input and tool_search arguments are buffered until completion.
+// Parameters: c is the request context, tools the chunk's tool-call deltas.
 func (h *chatToResponseStreamBridge) handleToolCalls(c *gin.Context, tools []model.Tool) {
 	for _, tool := range tools {
 		state := h.ensureToolCallState(c, &tool)
@@ -416,6 +515,14 @@ func (h *chatToResponseStreamBridge) handleToolCalls(c *gin.Context, tools []mod
 
 		args := h.stringifyArguments(tool.Function.Arguments)
 		if args == "" {
+			continue
+		}
+
+		if h.toolKind(state) != openai.ResponseFallbackToolFunction {
+			// Custom input and tool_search arguments are JSON envelopes upstream;
+			// buffer them and release the decoded value when the call completes.
+			state.arguments.WriteString(args)
+			h.emitRequiredActionDelta(c, false)
 			continue
 		}
 
@@ -432,6 +539,10 @@ func (h *chatToResponseStreamBridge) handleToolCalls(c *gin.Context, tools []mod
 	}
 }
 
+// ensureToolCallState returns the accumulated state for one upstream tool call,
+// matching deltas by stream index or ID, and emits response.output_item.added
+// with the kind-specific item when the call is first seen. Parameters: c is the
+// request context, tool the tool-call delta. Returns: the call's stream state.
 func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *model.Tool) *streamToolCallState {
 	// Text-only streams never use tool state, so allocate these maps only when
 	// the first tool delta arrives instead of on every bridged response.
@@ -481,6 +592,7 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 				break
 			}
 		}
+		h.beforeItemAdded(c, h.choices[choice], itemKindOther)
 		state = &streamToolCallState{
 			id:    id,
 			index: h.nextOutputIndex(),
@@ -528,13 +640,7 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 	if created {
 		// Clients such as pi derive the tool call identity from call_id on the added
 		// event and never revisit it, so the added item must already carry call_id.
-		item := openai.OutputItem{
-			Id:     state.id,
-			Type:   "function_call",
-			Status: "in_progress",
-			CallId: state.id,
-			Name:   state.name,
-		}
+		item := h.toolItem(state, "in_progress", false)
 
 		h.emitEvent(c, "response.output_item.added", openai.ResponseAPIStreamEvent{
 			Type:        "response.output_item.added",
@@ -548,6 +654,8 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 	return state
 }
 
+// stringifyArguments returns upstream tool-call arguments as a JSON string:
+// strings and byte slices verbatim, other values JSON-encoded, nil as "".
 func (h *chatToResponseStreamBridge) stringifyArguments(args any) string {
 	switch v := args.(type) {
 	case string:
@@ -564,74 +672,9 @@ func (h *chatToResponseStreamBridge) stringifyArguments(args any) string {
 	}
 }
 
-// emitRequiredActionDelta streams the required_action payload so clients can observe tool call progress.
-// When markDone is true, a terminal done event is emitted after the delta message.
-func (h *chatToResponseStreamBridge) emitRequiredActionDelta(c *gin.Context, markDone bool) {
-	required := h.buildRequiredActionSnapshot()
-	if required == nil {
-		return
-	}
-
-	eventType := "response.required_action.delta"
-	if !h.requiredActionInitialized {
-		eventType = "response.required_action.added"
-		h.requiredActionInitialized = true
-	}
-
-	h.emitEvent(c, eventType, openai.ResponseAPIStreamEvent{
-		RequiredAction: required,
-	})
-
-	if markDone {
-		h.emitEvent(c, "response.required_action.done", openai.ResponseAPIStreamEvent{
-			RequiredAction: required,
-		})
-	}
-}
-
-// buildRequiredActionSnapshot constructs the Response API required_action object based on current tool call state.
-func (h *chatToResponseStreamBridge) buildRequiredActionSnapshot() *openai.ResponseAPIRequiredAction {
-	toolCalls := h.currentToolCallSnapshots()
-	if len(toolCalls) == 0 {
-		return nil
-	}
-
-	return &openai.ResponseAPIRequiredAction{
-		Type: "submit_tool_outputs",
-		SubmitToolOutputs: &openai.ResponseAPISubmitToolOutputs{
-			ToolCalls: toolCalls,
-		},
-	}
-}
-
-// currentToolCallSnapshots returns copies of the accumulated tool call information in stream order.
-func (h *chatToResponseStreamBridge) currentToolCallSnapshots() []openai.ResponseAPIToolCall {
-	if len(h.toolOrder) == 0 {
-		return nil
-	}
-
-	calls := make([]openai.ResponseAPIToolCall, 0, len(h.toolOrder))
-	for _, id := range h.toolOrder {
-		state := h.toolCalls[id]
-		if state == nil {
-			continue
-		}
-
-		callID := ensureResponseAPICallID(state.id)
-		state.id = callID
-		calls = append(calls, openai.ResponseAPIToolCall{
-			Id:   callID,
-			Type: "function",
-			Function: &openai.ResponseAPIFunctionCall{
-				Name:      state.name,
-				Arguments: state.arguments.String(),
-			},
-		})
-	}
-
-	return calls
-}
-
+// buildFinalResponse assembles the terminal Response object. Parameters:
+// status is the final status, outputs the items in output_index order and
+// requiredAction the optional tool-call snapshot. Returns the response.
 func (h *chatToResponseStreamBridge) buildFinalResponse(status string, outputs []openai.OutputItem, requiredAction *openai.ResponseAPIRequiredAction) *openai.ResponseAPIResponse {
 	if outputs == nil {
 		outputs = make([]openai.OutputItem, 0)
@@ -654,7 +697,7 @@ func (h *chatToResponseStreamBridge) buildFinalResponse(status string, outputs [
 		Temperature:        h.original.Temperature,
 		Text:               h.original.Text,
 		ToolChoice:         h.original.ToolChoice,
-		Tools:              convertResponseAPITools(h.original.Tools),
+		ToolsEcho:          h.toolsEcho,
 		TopP:               h.original.TopP,
 		Truncation:         h.original.Truncation,
 		User:               h.original.User,
@@ -674,6 +717,9 @@ func (h *chatToResponseStreamBridge) buildFinalResponse(status string, outputs [
 	return response
 }
 
+// finalStatus derives the terminal status from the choices' finish reasons:
+// cancelled, incomplete (max_output_tokens) for a length finish, or completed.
+// It returns the status and the incomplete details when applicable.
 func (h *chatToResponseStreamBridge) finalStatus() (string, *openai.IncompleteDetails) {
 	for _, choice := range h.choiceOrder {
 		if strings.EqualFold(strings.TrimSpace(choice.finishReason), "cancelled") {
@@ -710,6 +756,9 @@ func (h *chatToResponseStreamBridge) HandleError(c *gin.Context, failure *model.
 		item  openai.OutputItem
 	}
 	items := []indexedItem{}
+	for _, sealed := range h.sealedMessages {
+		items = append(items, indexedItem{sealed.index, sealed.item})
+	}
 	for _, choice := range h.choiceOrder {
 		item := h.choiceMessage(choice, "incomplete")
 		if item.Content[0].Text != "" {
@@ -718,10 +767,13 @@ func (h *chatToResponseStreamBridge) HandleError(c *gin.Context, failure *model.
 		if reasoning := h.choiceReasoning(choice, "incomplete"); reasoning != nil {
 			items = append(items, indexedItem{choice.reasoningIndex, *reasoning})
 		}
+		for _, sealed := range choice.sealedReasoning {
+			items = append(items, indexedItem{sealed.index, sealed.item})
+		}
 	}
 	for _, id := range h.toolOrder {
 		call := h.toolCalls[id]
-		items = append(items, indexedItem{call.index, openai.OutputItem{Id: call.id, Type: "function_call", Status: "incomplete", CallId: call.id, Name: call.name, Arguments: call.arguments.String()}})
+		items = append(items, indexedItem{call.index, h.toolItem(call, "incomplete", true)})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].index < items[j].index })
 	output := make([]openai.OutputItem, 0, len(items))
@@ -731,6 +783,7 @@ func (h *chatToResponseStreamBridge) HandleError(c *gin.Context, failure *model.
 	response := h.buildFinalResponse("failed", output, nil)
 	response.Error = &failure.Error
 	h.commitStreamedResponse(c, response, "failed")
+	response.Output = clientVisibleResponseOutput(response.Output, h.includeEncrypted)
 	h.emitEvent(c, "response.failed", openai.ResponseAPIStreamEvent{Type: "response.failed", Response: response})
 	return true, true
 }

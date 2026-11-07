@@ -13,6 +13,7 @@ import (
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
+// TestConvertOpenAIResponseToClaudeResponse_ChatCompletionsWithThinking verifies thinking content converts to a thinking block.
 func TestConvertOpenAIResponseToClaudeResponse_ChatCompletionsWithThinking(t *testing.T) {
 	t.Parallel()
 	// Build a chat completion response with thinking content
@@ -72,6 +73,7 @@ func TestConvertOpenAIResponseToClaudeResponse_ChatCompletionsWithThinking(t *te
 	assert.True(t, hasText, "Should have text content block")
 }
 
+// TestConvertOpenAIResponseToClaudeResponse_ChatCompletionsWithReasoningContent verifies reasoning_content converts to a thinking block.
 func TestConvertOpenAIResponseToClaudeResponse_ChatCompletionsWithReasoningContent(t *testing.T) {
 	t.Parallel()
 	// Build a chat completion response with reasoning_content (fallback case)

@@ -63,24 +63,6 @@ func ValidateExternalURL(ctx context.Context, rawURL string) (*url.URL, error) {
 	return parsed, nil
 }
 
-// IsForbiddenIP reports whether ip is loopback, private, link-local, multicast, or otherwise non-public.
-func IsForbiddenIP(ip net.IP) bool {
-	if ip == nil {
-		return true
-	}
-
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast() {
-		return true
-	}
-
-	if isCarrierGradeNAT(ip) {
-		return true
-	}
-
-	return false
-}
-
 // isLocalHostname reports whether the host is a localhost-style name.
 func isLocalHostname(host string) bool {
 	lower := strings.ToLower(strings.TrimSuffix(host, "."))
@@ -88,14 +70,4 @@ func isLocalHostname(host string) bool {
 		return true
 	}
 	return strings.HasSuffix(lower, ".localhost")
-}
-
-// isCarrierGradeNAT reports whether ip falls within 100.64.0.0/10.
-func isCarrierGradeNAT(ip net.IP) bool {
-	ipv4 := ip.To4()
-	if ipv4 == nil {
-		return false
-	}
-
-	return ipv4[0] == 100 && (ipv4[1]&0xC0) == 0x40
 }

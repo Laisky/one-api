@@ -26,9 +26,14 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	return (&anthropic.Adaptor{}).ConvertClaudeRequest(c, request)
 }
 
-// PrepareRequestBody changes only fields owned by the Vertex transport in the prepared body.
-// It never rereads the original inbound request or logs payloads and credentials.
-func PrepareRequestBody(reader io.Reader) (io.Reader, error) {
+// PrepareRequestBody changes only fields owned by the Vertex transport in the
+// prepared body: it removes model (carried in the URL), sets the Vertex
+// anthropic_version, and makes stream match the endpoint the adaptor calls
+// (streamRawPredict expects "stream": true, rawPredict no stream field), as
+// Anthropic's own Vertex client does. Parameters: reader is the prepared
+// Claude body and stream whether the request streams. It never rereads the
+// original inbound request or logs payloads and credentials.
+func PrepareRequestBody(reader io.Reader, stream bool) (io.Reader, error) {
 	if reader == nil {
 		return nil, errors.New("missing Vertex Claude body")
 	}
@@ -49,6 +54,9 @@ func PrepareRequestBody(reader io.Reader) (io.Reader, error) {
 	}
 	delete(fields, "model")
 	delete(fields, "stream")
+	if stream {
+		fields["stream"] = json.RawMessage("true")
+	}
 	fields["anthropic_version"] = json.RawMessage(`"vertex-2023-10-16"`)
 	// Raw field values retain signatures, exact integers and opaque future fields.
 	var body bytes.Buffer

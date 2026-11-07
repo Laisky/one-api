@@ -64,7 +64,7 @@ func TestClientCompatibilityCodexJSONSchemaStrict(t *testing.T) {
 	}
 }
 
-// TestClientCompatibilityCodexNamespaceHistory rejects ambiguous same-leaf calls even without Tools.
+// TestClientCompatibilityCodexNamespaceHistory keeps same-leaf calls in different namespaces distinct even without Tools.
 func TestClientCompatibilityCodexNamespaceHistory(t *testing.T) {
 	t.Parallel()
 	for _, namespaced := range []bool{false, true} {
@@ -76,15 +76,18 @@ func TestClientCompatibilityCodexNamespaceHistory(t *testing.T) {
 			request := clientCompatibilityCodexRequest(t, `{"model":"fixture","input":[{"type":"message","role":"user","content":"lookup"},{"type":"function_call","id":"fc_alpha","call_id":"call_alpha","name":"lookup","arguments":"{}"`+alpha+`},{"type":"function_call","id":"fc_beta","call_id":"call_beta","name":"lookup","arguments":"{}"`+beta+`},{"type":"function_call_output","call_id":"call_alpha","output":"alpha-result"},{"type":"function_call_output","call_id":"call_beta","output":"beta-result"}]}`)
 			require.Empty(t, request.Tools)
 			converted, err := ConvertResponseAPIToChatCompletionRequest(request)
-			if namespaced {
-				require.Error(t, err, "same leaf names cannot silently lose namespace identity")
-				require.Nil(t, converted)
-				return
-			}
 			require.NoError(t, err)
 			require.Len(t, converted.Messages, 4)
 			calls := converted.Messages[1].ToolCalls
 			require.Len(t, calls, 2)
+			if namespaced {
+				// Same leaf names keep their namespace identity through flattening.
+				require.Equal(t, "alpha__lookup", calls[0].Function.Name)
+				require.Equal(t, "beta__lookup", calls[1].Function.Name)
+			} else {
+				require.Equal(t, "lookup", calls[0].Function.Name)
+				require.Equal(t, "lookup", calls[1].Function.Name)
+			}
 			require.NotEqual(t, calls[0].Id, calls[1].Id)
 			require.Equal(t, calls[0].Id, converted.Messages[2].ToolCallId)
 			require.Equal(t, calls[1].Id, converted.Messages[3].ToolCallId)

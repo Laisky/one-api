@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/relay/adaptor/common/claudeconformance"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 )
@@ -181,7 +182,11 @@ func TestConvertStreamingToClaudeResponse_Basic(t *testing.T) {
 	require.Contains(t, converted, "\"text_delta\"", "missing text delta")
 	require.Contains(t, converted, "Hello from Gemini", "missing response text")
 	require.Contains(t, converted, "\"input_tokens\":4", "missing usage input tokens")
-	require.Contains(t, converted, "data: [DONE]", "missing done marker")
+	// Claude streams end at message_stop; a [DONE] sentinel is not Claude SSE.
+	require.NotContains(t, converted, "[DONE]")
+	report := claudeconformance.ValidateStream(convertedBody)
+	require.Empty(t, report.Violations)
+	require.Equal(t, "Hello from Gemini", report.Message.Text())
 }
 
 // TestConvertStreamingToClaudeResponse_OversizedChunk verifies oversized Gemini SSE lines convert to Claude SSE.
@@ -234,7 +239,10 @@ func TestConvertStreamingToClaudeResponse_OversizedChunk(t *testing.T) {
 	converted := string(convertedBody)
 	require.Contains(t, converted, largeText[:1024])
 	require.Contains(t, converted, largeText[len(largeText)-1024:])
-	require.Contains(t, converted, "data: [DONE]")
+	require.NotContains(t, converted, "[DONE]")
+	report := claudeconformance.ValidateStream(convertedBody)
+	require.Empty(t, report.Violations)
+	require.Equal(t, largeText, report.Message.Text())
 }
 
 // TestConvertStreamingToClaudeResponse_StructuredJSON verifies Gemini JSON text streams remain visible after Claude conversion.
@@ -292,5 +300,6 @@ func TestConvertStreamingToClaudeResponse_StructuredJSON(t *testing.T) {
 	require.Contains(t, converted, "confidence")
 	require.Contains(t, converted, "text_delta")
 	require.Contains(t, converted, "message_stop")
-	require.Contains(t, converted, "data: [DONE]")
+	require.NotContains(t, converted, "[DONE]")
+	require.Empty(t, claudeconformance.ValidateStream(convertedBody).Violations)
 }

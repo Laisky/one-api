@@ -19,6 +19,8 @@ type httpContentBlock struct {
 	toolIndex int
 	arguments bool
 	closed    bool
+	// server holds streamed state for provider-side blocks (server tools).
+	server *streamServerBlock
 }
 
 type httpStreamState struct {
@@ -34,6 +36,16 @@ type httpStreamState struct {
 	tools     int
 	id        string
 	created   int64
+	// thinking rebuilds complete thinking blocks for the Responses bridge;
+	// it is nil for Chat clients and native Claude Messages streams.
+	thinking *ThinkingBlockTracker
+	// searchQueries maps a started web search ID to its query until the
+	// matching web_search_tool_result block arrives.
+	searchQueries map[string]string
+	// textEmitted and separatorPending place one claudeServerTextSeparator
+	// between text written before and after a server-tool round.
+	textEmitted      bool
+	separatorPending bool
 }
 
 // consume validates one Anthropic event, merges receipts, and forwards content.
@@ -184,7 +196,15 @@ func (s *httpStreamState) consume(c *gin.Context, raw []byte) error {
 		if native {
 			return writeHTTPSSE(c, envelope.Type, raw)
 		}
+		if isClaudeServerSideBlock(block.kind) {
+			// Provider-executed tools are never caller tool calls; web searches
+			// are surfaced as WebSearchCalls and other server blocks are hidden.
+			return s.consumeServerBlock(c, envelope.Type, raw, block)
+		}
 		if envelope.Type == "content_block_stop" {
+			if completed := s.thinking.Complete(index); completed != nil {
+				return s.writeChat(c, ThinkingBlockChunk(*completed))
+			}
 			if block.kind == "tool_use" && !block.arguments {
 				index := block.toolIndex
 				chunk := &openai.ChatCompletionsStreamResponse{Choices: []openai.ChatCompletionsStreamResponseChoice{{}}}
@@ -196,9 +216,13 @@ func (s *httpStreamState) consume(c *gin.Context, raw []byte) error {
 		if err := decodeClaudeJSON(raw, &event); err != nil {
 			return err
 		}
+		s.thinking.Observe(index, &event)
 		chunk, _ := StreamResponseClaude2OpenAI(c, &event)
 		if chunk == nil {
 			return nil
+		}
+		if block.kind == "text" {
+			s.separateServerText(chunk)
 		}
 		for i := range chunk.Choices {
 			chunk.Choices[i].FinishReason = nil

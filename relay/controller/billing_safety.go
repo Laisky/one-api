@@ -15,6 +15,7 @@ import (
 	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/adaptor/cohere"
 	"github.com/Laisky/one-api/relay/adaptor/jina"
 	"github.com/Laisky/one-api/relay/billing"
@@ -316,6 +317,8 @@ func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 	c.Set(ctxkey.WebSearchCallCount, 0)
 	c.Set(ctxkey.ToolInvocationSummary, (*model.ToolUsageSummary)(nil))
 	c.Set(ctxkey.DeepSeekConservativeToolAllowance, nil)
+	c.Set(ctxkey.ResponseFallbackToolAllowanceQuota, int64(0))
+	anthropic.SetConvertedWebSearchTool(c, nil)
 }
 
 // refundGoroutineReleaseForTest, when non-nil, blocks the asynchronous refund

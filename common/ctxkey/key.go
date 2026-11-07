@@ -136,6 +136,14 @@ const (
 	// DeepSeekConservativeToolAllowance stores the admitted paid Search/Fetch
 	// attempt floors and per-call prices for the current, retry-isolated attempt.
 	DeepSeekConservativeToolAllowance = "deepseek_conservative_tool_allowance"
+	// ResponseFallbackToolAllowanceQuota stores the paid server-tool allowance (int64 quota)
+	// that the Responses fallback forwards to a converted upstream (Claude web search).
+	// Set per attempt by relayResponseAPIThroughChat and added to its Chat reservation.
+	ResponseFallbackToolAllowanceQuota = "response_fallback_tool_allowance_quota"
+	// ClaudeConvertedWebSearchTool stores the *anthropic.Tool web search declaration the
+	// Responses fallback asks the Claude request converter to append for this attempt.
+	// A nil value means converted requests carry no server-side web search.
+	ClaudeConvertedWebSearchTool = "claude_converted_web_search_tool"
 
 	// Group is the user group resolved for the current user (affects routing & ratios).
 	// Set in: middleware/distributor (via model.CacheGetUserGroup).
@@ -299,6 +307,21 @@ const (
 	// Read in: controller/claude_messages to return converted responses.
 	ConvertedResponse = "converted_response"
 
+	// ConvertedResponseUsage holds the authoritative *relay/model.Usage, in
+	// OpenAI semantics (prompt includes cache reads and writes), that a
+	// converting adaptor measured for the Claude Messages response it stored in
+	// ConvertedResponse. The converted body presents Anthropic semantics
+	// (input_tokens excludes cache buckets), so billing must not re-derive usage
+	// from it. Server-only; never derived from client input.
+	// Set in: openai_compatible.ConvertOpenAIResponseToClaudeResponse, the openai
+	// adaptor's non-stream Claude conversion, and the gemini adaptor's Claude
+	// conversion (nil when the upstream reported no counters).
+	// Cleared in: controller RelayClaudeMessagesHelper at the start of every
+	// attempt, with the other per-attempt Claude delivery receipts.
+	// Read in: controller/claude_messages to settle converted responses; absent
+	// or nil falls back to parsing the converted body.
+	ConvertedResponseUsage = "converted_response_usage"
+
 	// ResponseAPIUpstreamID carries the raw upstream Responses id (resp_...) observed
 	// when a Chat Completions or Claude Messages request was served by a
 	// Responses-format upstream. It is set by the openai Chat/Claude<-Responses render
@@ -333,6 +356,11 @@ const (
 	// ResponseAPIRequestOriginal keeps the original Response API request payload so that
 	// downstream converters can hydrate metadata when rewriting responses.
 	ResponseAPIRequestOriginal = "response_api_request_original"
+
+	// ResponseFallbackToolCatalog stores the *openai.ResponseFallbackToolCatalog that
+	// admission built from the hydrated Responses request, so conversion and output
+	// rendering share one validated tool identity map instead of rebuilding it.
+	ResponseFallbackToolCatalog = "response_fallback_tool_catalog"
 
 	// ResponseStreamRewriteHandler stores a streaming rewrite adapter that can transform
 	// upstream chat completion SSE chunks into another streaming format (e.g., Response API)

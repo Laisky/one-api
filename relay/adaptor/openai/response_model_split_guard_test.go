@@ -145,7 +145,7 @@ func TestResponseAPIInputTokensDetails_MarshalPreservesAdditional(t *testing.T) 
 func TestResponseAPITokenDetails_MarshalRequiredZeroValues(t *testing.T) {
 	inputData, err := json.Marshal(ResponseAPIInputTokensDetails{})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"cached_tokens":0}`, string(inputData))
+	require.JSONEq(t, `{"cached_tokens":0,"cache_write_tokens":0}`, string(inputData))
 
 	outputData, err := json.Marshal(ResponseAPIOutputTokensDetails{})
 	require.NoError(t, err)

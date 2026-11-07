@@ -1,6 +1,8 @@
 package router
 
 import (
+	"slices"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/graceful"
@@ -51,10 +53,13 @@ func SetRelayRouter(router *gin.Engine) {
 	// requests and transparently delegates legacy initialize/session clients.
 	router.Any("/mcp", middleware.TokenAuth(), controller.MCPProxyLatest)
 
-	relayMws := []gin.HandlerFunc{
+	relayEntryMws := []gin.HandlerFunc{
 		// Track in-flight requests for graceful shutdown/drain
 		func(c *gin.Context) { done := graceful.BeginRequest(); defer done(); c.Next() },
-		middleware.RelayPanicRecover(), middleware.TokenAuth(),
+		middleware.RelayPanicRecover(),
+	}
+	tokenAuth := middleware.TokenAuth()
+	relayDistributionMws := []gin.HandlerFunc{
 		middleware.GlobalRelayRateLimit(),
 		relaycontroller.ReplayAsyncVideoTask,
 		middleware.BindAsyncTaskChannel(),
@@ -62,6 +67,22 @@ func SetRelayRouter(router *gin.Engine) {
 		middleware.LowBalanceRelayRateLimit(),
 		middleware.ChannelRateLimit(),
 	}
+	relayMws := slices.Concat(relayEntryMws, []gin.HandlerFunc{tokenAuth}, relayDistributionMws)
+
+	// Claude token counting (used by Claude Code for /context) is free. It runs
+	// the same authentication, model permission, rate limit and channel
+	// selection as POST /v1/messages but its handler never reserves or settles
+	// quota and never calls a generation endpoint. Its body is bounded before
+	// authentication reads it, and a body without a usable model is rejected in
+	// Anthropic format before distribution.
+	countTokensMws := slices.Concat(relayEntryMws,
+		[]gin.HandlerFunc{
+			middleware.ClaudeCountTokensBodyLimit(),
+			tokenAuth,
+			middleware.ClaudeCountTokensRequestGuard(),
+		},
+		relayDistributionMws)
+	router.POST(middleware.ClaudeCountTokensPath, append(countTokensMws, relaycontroller.RelayClaudeCountTokens)...)
 
 	// -------------------------------------
 	relayV1Router := router.Group("/v1")

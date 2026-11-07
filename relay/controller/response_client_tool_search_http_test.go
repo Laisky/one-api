@@ -281,11 +281,39 @@ func TestResponseClientToolSearchHTTPRejectsBeforeEffects(t *testing.T) {
 	}
 }
 
-// TestResponseClientToolSearchHTTPFallbackRejectsBeforeState checks unsupported
-// definitions and history before parent hydration or pending-state snapshots.
-// Parameters: t owns Chat/Claude fixtures. Returns: nothing; explicit fallback
-// errors must precede all provider, state, quota and financial side effects.
-func TestResponseClientToolSearchHTTPFallbackRejectsBeforeState(t *testing.T) {
+// responseClientSearchFallbackPayload builds the fallback request for one
+// discovery history shape. Parameters: history selects definition, call,
+// output or additional_tools; parent appends an unresolvable
+// previous_response_id. Returns the request JSON.
+func responseClientSearchFallbackPayload(history string, parent bool) string {
+	input, tools := `"continue"`, `[]`
+	switch history {
+	case "definition":
+		tools = `[` + responseClientSearchDefinition + `]`
+	case "call":
+		input = `[` + responseClientSearchCall + `]`
+	case "output":
+		input = `[{"type":"tool_search_output","call_id":"search_1","execution":"client","tools":` + responseClientSearchDiscovered + `}]`
+	case "additional_tools":
+		input = `[{"type":"additional_tools","role":"developer","tools":[` + responseClientSearchDefinition + `,` + responseClientSearchDiscovered[1:] + `},{"role":"user","content":"hello"}]`
+	}
+	toolField := `,"tools":` + tools
+	if history == "additional_tools" {
+		toolField = ""
+	}
+	selector := ""
+	if parent {
+		selector = `,"previous_response_id":"resp_ffffffffffffffffffffffffffffffff"`
+	}
+	return `{"model":"alias","max_output_tokens":32,"input":` + input + selector + toolField + `}`
+}
+
+// TestResponseClientToolSearchHTTPFallbackMissingParentHasNoEffects checks
+// that client tool-search definitions and history with an unresolvable
+// previous_response_id still fail during admission (previous_response_not_found)
+// before any provider, pending-state, quota or financial side effect.
+// Parameters: t owns Chat/Claude fixtures. Returns: nothing.
+func TestResponseClientToolSearchHTTPFallbackMissingParentHasNoEffects(t *testing.T) {
 	for _, channel := range []int{channeltype.OpenAICompatible, channeltype.Anthropic} {
 		for _, history := range []string{"definition", "call", "output", "additional_tools"} {
 			t.Run(fmt.Sprintf("channel=%d/%s", channel, history), func(t *testing.T) {
@@ -301,22 +329,7 @@ func TestResponseClientToolSearchHTTPFallbackRejectsBeforeState(t *testing.T) {
 				oldClient := client.HTTPClient
 				client.HTTPClient = provider.Client()
 				t.Cleanup(func() { client.HTTPClient = oldClient })
-				input, tools := `"continue"`, `[]`
-				switch history {
-				case "definition":
-					tools = `[` + responseClientSearchDefinition + `]`
-				case "call":
-					input = `[` + responseClientSearchCall + `]`
-				case "output":
-					input = `[{"type":"tool_search_output","call_id":"search_1","execution":"client","tools":` + responseClientSearchDiscovered + `}]`
-				case "additional_tools":
-					input = `[{"type":"additional_tools","role":"developer","tools":[` + responseClientSearchDefinition + `,` + responseClientSearchDiscovered[1:] + `}]`
-				}
-				toolField := `,"tools":` + tools
-				if history == "additional_tools" {
-					toolField = ""
-				}
-				payload := `{"model":"alias","input":` + input + `,"previous_response_id":"resp_ffffffffffffffffffffffffffffffff"` + toolField + `}`
+				payload := responseClientSearchFallbackPayload(history, true)
 				c, _, id := protocolContext(t, channel, "client-search-fixture", "/v1/responses", payload, provider.URL, balance, 1, false, &model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2})
 				responseNamespaceCleanLedger(t, id)
 				require.False(t, supportsNativeResponseAPI(metalib.GetByContext(c)))
@@ -324,9 +337,72 @@ func TestResponseClientToolSearchHTTPFallbackRejectsBeforeState(t *testing.T) {
 				drainCriticalTasks(t)
 				require.NotNil(t, apiErr)
 				require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-				require.Equal(t, "tool_search_not_supported", apiErr.Code, "reject before missing-parent hydration")
+				require.Equal(t, "previous_response_not_found", apiErr.Code, "client tool search is representable; the missing parent is the rejection")
 				require.Nil(t, pendingCommitFromContext(c))
 				responseClientSearchNoEffects(t, c, id, balance, &calls)
+			})
+		}
+	}
+}
+
+// TestResponseClientToolSearchHTTPFallbackDispatchesFlattenedTools checks that
+// client tool-search definitions, calls, outputs and additional_tools catalogs
+// now reach Chat and Claude fallback upstreams: the search definition becomes
+// a "tool_search" function, discovered namespaces flatten in catalog order, a
+// replayed search call keeps its exact argument literals, a loaded catalog is
+// summarized as the tool result, and token-only billing settles.
+// Parameters: t owns Chat/Claude fixtures. Returns: nothing.
+func TestResponseClientToolSearchHTTPFallbackDispatchesFlattenedTools(t *testing.T) {
+	discovered := []string{"calendar__lookup", "calendar__patch", "apply_patch"}
+	for _, channel := range []int{channeltype.OpenAICompatible, channeltype.Anthropic} {
+		for _, history := range []string{"definition", "call", "output", "additional_tools"} {
+			t.Run(fmt.Sprintf("channel=%d/%s", channel, history), func(t *testing.T) {
+				const balance = int64(1_000_000)
+				xaiVideoSetup(t, balance, false)
+				enableStateForTest(t)
+				provider, observed, calls := responseNamespaceFallbackProvider(t, channel)
+				payload := responseClientSearchFallbackPayload(history, false)
+				c, recorder, id := protocolContext(t, channel, "client-search-fixture", "/v1/responses", payload, provider.URL, balance, 1, false, &model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2})
+				responseNamespaceCleanLedger(t, id)
+				require.False(t, supportsNativeResponseAPI(metalib.GetByContext(c)))
+				apiErr := RelayResponseAPIHelper(c)
+				drainCriticalTasks(t)
+				require.Nil(t, apiErr)
+				require.Equal(t, http.StatusOK, recorder.Code)
+				require.EqualValues(t, 1, calls.Load())
+				got := <-observed
+				require.NoError(t, got.Err)
+				require.Equal(t, fallbackUpstreamPath(channel), got.Path)
+				require.True(t, metalib.GetByContext(c).ResponseAPIFallback)
+				wire := decodeFallbackWire(t, channel, got.Body)
+				switch history {
+				case "definition":
+					require.Equal(t, []string{"tool_search"}, fallbackWireToolNames(wire))
+					search := fallbackWireToolByName(t, wire, "tool_search")
+					require.Equal(t, "Find deferred tools", search.Description)
+					require.JSONEq(t, `{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer"}},"required":["query"]}`, string(search.Schema))
+					requireFallbackWireTurns(t, []fallbackWireTurn{{Role: "user", Text: "continue"}}, wire.Turns)
+				case "call":
+					require.Empty(t, wire.Tools)
+					require.Contains(t, string(got.Body), "9007199254740993", "search arguments keep exact integer literals")
+					require.Len(t, wire.Turns, 1)
+					require.Equal(t, "assistant", wire.Turns[0].Role)
+					require.Len(t, wire.Turns[0].Calls, 1, "the replayed search call lowers to one call of the search function")
+					require.NotEmpty(t, wire.Turns[0].Calls[0].ID)
+					require.Equal(t, "tool_search", wire.Turns[0].Calls[0].Name)
+					require.JSONEq(t, `{"query":"calendar","limit":2,"large":9007199254740993}`, wire.Turns[0].Calls[0].Arguments)
+				case "output":
+					require.Equal(t, discovered, fallbackWireToolNames(wire))
+					require.Equal(t, "[Deferred client tools]", fallbackWireToolByName(t, wire, "calendar__lookup").Description)
+					require.JSONEq(t, codexFallbackCustomInputSchema, string(fallbackWireToolByName(t, wire, "calendar__patch").Schema))
+					require.Len(t, wire.Turns, 1, "an output without its call downgrades to one user message")
+					require.Equal(t, "user", wire.Turns[0].Role)
+					require.Equal(t, "Tool search loaded 3 tool(s); they are now available to call:\n- calendar__lookup\n- calendar__patch\n- apply_patch", wire.Turns[0].Text)
+				case "additional_tools":
+					require.Equal(t, append([]string{"tool_search"}, discovered...), fallbackWireToolNames(wire))
+					requireFallbackWireTurns(t, []fallbackWireTurn{{Role: "user", Text: "hello"}}, wire.Turns)
+				}
+				requireFallbackTokenSettlement(t, c, id, balance, got.User, got.Token)
 			})
 		}
 	}
