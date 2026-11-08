@@ -1,9 +1,11 @@
 import { Badge } from '@/components/ui/badge';
 import { MarkdownRenderer } from '@/components/ui/markdown';
+import { withTextBoundaries } from '@/components/ui/text-boundaries';
 import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
+/** ThinkingBubbleProps describes reasoning content, streaming state, expansion state and its toggle callback. */
 export interface ThinkingBubbleProps {
   content: string | null;
   isExpanded: boolean;
@@ -11,6 +13,7 @@ export interface ThinkingBubbleProps {
   isStreaming: boolean;
 }
 
+/** ThinkingBubble renders the supplied reasoning content and streaming state with an optional expandable body. */
 export const ThinkingBubble: React.FC<ThinkingBubbleProps> = ({ content, isExpanded, onToggle, isStreaming }) => {
   const { t } = useTranslation();
 
@@ -39,7 +42,7 @@ export const ThinkingBubble: React.FC<ThinkingBubbleProps> = ({ content, isExpan
 
             <span className="font-medium text-sm text-foreground flex items-center gap-2">
               <Brain className="h-4 w-4" />
-              {isStreaming ? t('playground.reasoning.streaming') : t('playground.reasoning.title')}
+              {withTextBoundaries(isStreaming ? t('playground.reasoning.streaming') : t('playground.reasoning.title'))}
             </span>
 
             {!isStreaming && (

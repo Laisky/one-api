@@ -41,7 +41,7 @@ export function Footer() {
           {!isMobile && (
             <div className="ml-auto flex items-center space-x-4 text-xs text-muted-foreground">
               <span>
-                {t('common.version', 'Version')}: {version}
+                {`${t('common.version', 'Version')}: ${version}`}
               </span>
             </div>
           )}

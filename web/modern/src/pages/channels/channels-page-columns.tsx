@@ -83,7 +83,7 @@ const isLikelyChatModelName = (modelName: string) => {
 const formatResponseTime = (time?: number) => {
   if (!time) return '-';
   const color = time < 1000 ? 'text-success' : time < 3000 ? 'text-warning' : 'text-destructive';
-  return <span className={cn('font-mono text-sm', color)}>{time}ms</span>;
+  return <span className={cn('font-mono text-sm', color)}>{`${time}ms`}</span>;
 };
 
 /** ChannelColumnsOptions supplies localized renderers and page actions to the channel table columns. */

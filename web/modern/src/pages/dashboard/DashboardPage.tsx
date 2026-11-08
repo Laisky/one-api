@@ -134,7 +134,7 @@ export function DashboardPage() {
           </div>
           {lastUpdated && (
             <span className="text-xs text-muted-foreground flex items-center gap-1">
-              {t('dashboard.overview.updated')}
+              <span>{t('dashboard.overview.updated')}</span>
               <TimestampDisplay timestamp={lastUpdated} className="font-mono" />
             </span>
           )}

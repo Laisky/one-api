@@ -119,14 +119,19 @@ export function ExportConversationDialog({
             <FileDown className="h-4 w-4" />
             {t('playground.export.title')}
           </DialogTitle>
-          <DialogDescription className="space-y-2">
-            <div>{t('playground.export.description')}</div>
-            {messages.length > 0 && (
-              <div className="text-sm text-muted-foreground">
-                {t('playground.export.ready_to_export', { count: messages.length, plural: messages.length === 1 ? '' : 's' })}
-                {selectedModel && t('playground.export.from_model', { model: selectedModel })}
-              </div>
-            )}
+          <DialogDescription asChild>
+            <div className="space-y-2">
+              <div>{t('playground.export.description')}</div>
+              {messages.length > 0 && (
+                <div className="text-sm text-muted-foreground">
+                  {/* Keep translated text inside stable elements during model discovery updates. */}
+                  <span>
+                    {t('playground.export.ready_to_export', { count: messages.length, plural: messages.length === 1 ? '' : 's' })}
+                  </span>
+                  {selectedModel && <span>{t('playground.export.from_model', { model: selectedModel })}</span>}
+                </div>
+              )}
+            </div>
           </DialogDescription>
         </DialogHeader>
 

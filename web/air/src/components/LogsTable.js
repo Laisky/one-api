@@ -74,7 +74,8 @@ function renderUseTime(type) {
 }
 
 const LogsTable = () => {
-  const columns = [{
+  /** getColumns builds table columns after state and sort helpers have initialized and returns their definitions. */
+  const getColumns = () => [{
     title: '时间', dataIndex: 'timestamp2string'
   }, {
     title: '渠道',
@@ -476,11 +477,12 @@ const LogsTable = () => {
     }
   };
 
+  /** getSortIcon returns a stable element for the active column's direction, or null for an inactive column. */
   const getSortIcon = (columnKey) => {
     if (columnKey !== sortBy) {
       return null;
     }
-    return sortOrder === 'asc' ? ' ↑' : ' ↓';
+    return <span>{sortOrder === 'asc' ? ' ↑' : ' ↓'}</span>;
   };
 
   const refresh = async (localLogType) => {
@@ -631,7 +633,7 @@ const LogsTable = () => {
       <Table
         className="logs-table"
         style={{ marginTop: 5 }}
-        columns={columns}
+        columns={getColumns()}
         dataSource={pageData}
         onRow={(record) => ({
           onClick: () => handleRowClick(record),

@@ -2,6 +2,7 @@ import * as React from 'react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 
 import { cn } from '@/lib/utils';
+import { withTextBoundaries } from './text-boundaries';
 
 const Tabs = TabsPrimitive.Root;
 
@@ -16,10 +17,11 @@ const TabsList = React.forwardRef<React.ElementRef<typeof TabsPrimitive.List>, R
 );
 TabsList.displayName = TabsPrimitive.List.displayName;
 
+/** TabsTrigger forwards tab props and ref with stable boundaries around translatable text children. */
 const TabsTrigger = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => (
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
@@ -27,7 +29,9 @@ const TabsTrigger = React.forwardRef<
       className
     )}
     {...props}
-  />
+  >
+    {withTextBoundaries(children)}
+  </TabsPrimitive.Trigger>
 ));
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
 

@@ -52,6 +52,8 @@ i18n
     fallbackLng: 'en',
     supportedLngs: supportedLanguages,
     partialBundledLanguages: true,
+    // Keep rich Trans translations updatable after browser translators replace text nodes.
+    react: { transWrapTextNodes: 'span' },
     debug: process.env.NODE_ENV === 'development',
     interpolation: { escapeValue: false },
     detection: {

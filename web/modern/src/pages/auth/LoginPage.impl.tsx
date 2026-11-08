@@ -534,7 +534,7 @@ export function LoginPage() {
                 </Link>
                 {passwordRegisterEnabled && (
                   <div>
-                    {t('auth.login.no_account')}{' '}
+                    <span>{t('auth.login.no_account')}</span>{' '}
                     <Link to="/register" className="text-primary hover:underline">
                       {t('auth.login.sign_up')}
                     </Link>

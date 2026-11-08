@@ -98,7 +98,7 @@ export function ToolUsageCharts({
                 }}
               ></span>
               <span style={{ fontWeight: '600', color: 'var(--foreground)' }}>
-                {entry.name}: {formatValue(entry.value as number)}
+                {`${entry.name ?? ''}: ${formatValue(entry.value as number)}`}
               </span>
             </div>
           ))}
